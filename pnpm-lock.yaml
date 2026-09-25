@@ -2897,6 +2897,10 @@ importers:
         version: 5.9.3
 
   packages/pretui:
+    dependencies:
+      ember-modifier:
+        specifier: ^4.1.0
+        version: 4.3.0(@babel/core@7.29.7)
     devDependencies:
       '@cardstack/boxel-icons':
         specifier: workspace:*
@@ -2907,6 +2911,9 @@ importers:
       '@cardstack/local-types':
         specifier: workspace:*
         version: link:../local-types
+      '@cardstack/runtime-common':
+        specifier: workspace:*
+        version: link:../runtime-common
       '@ember/test-helpers':
         specifier: 'catalog:'
         version: 5.4.3(@babel/core@7.29.7)

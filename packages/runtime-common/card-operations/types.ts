@@ -261,7 +261,10 @@ export type PolicyIssueCode =
   // nor the annotated `{ bxl, snapshot }` form.
   | 'invalid-grant'
   // A `where` that does not parse, or that the `policy` profile refuses.
-  | 'invalid-predicate';
+  | 'invalid-predicate'
+  // A grant on a query whose `where` does not compile to a search filter. The
+  // grant is kept, and admits no search.
+  | 'policy-not-filterable';
 
 // A problem found while compiling a realm's policy. Recorded, never thrown,
 // for the reason lowering records rather than throws: the edit that caused it

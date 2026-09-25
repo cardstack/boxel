@@ -27,6 +27,7 @@ import {
   type SpawningIndexPass,
 } from '../jobs/prerender-html.ts';
 import type { JobInfo, Stats, IndexPhaseTimings } from '../worker.ts';
+import { queueClaimOf, type QueueClaim } from '../jobs/queue-claim.ts';
 
 export { fromScratchIndex, incrementalIndex };
 const DEFAULT_FROM_SCRATCH_JOB_TIMEOUT_SEC = 60 * 60;
@@ -146,6 +147,11 @@ export interface IncrementalResult {
   // Between-visit phase decomposition of the job wall (see IndexPhaseTimings).
   // Optional so a result from a worker predating the instrumentation parses.
   phaseTimings?: IndexPhaseTimings;
+  // How the queue claimed this job: its wait between enqueue and claim, and
+  // the lane and lane family it was claimed in. With `phaseTimings.totalMs` it
+  // splits a save's index wait into queue wait and the pass's own run. Absent
+  // when no queue claimed the job, and on a result from a worker predating it.
+  queueClaim?: QueueClaim;
   // Present only when the job ran with `deferPrerenderHtml`: the invalidation
   // set no prerender_html job was enqueued for. The caller either carries it
   // into a later pass of the same write or enqueues it itself.
@@ -205,6 +211,8 @@ export interface FromScratchResult {
   baseGeneration?: number;
   // See IncrementalResult.phaseTimings.
   phaseTimings?: IndexPhaseTimings;
+  // See IncrementalResult.queueClaim.
+  queueClaim?: QueueClaim;
 }
 
 export function isObjectLike(value: unknown): value is JSONTypes.Object {
@@ -539,6 +547,29 @@ function spawningIndexPassFor(
   return jobInfo && jobInfo.jobId > 0 ? { jobId: jobInfo.jobId, passId } : null;
 }
 
+// The args of the follow-up job a pass's commit enqueues when peer commits
+// keep leaving its rows stale (see `CommitValidation.followUpJobArgs`). No
+// publisher waits on it, so it carries no callers, and it announces its own
+// pass when it lands (see `incrementalIndex`).
+function followUpIncrementalArgs(
+  realmURL: string,
+  realmUsername: string,
+): (
+  changes: IncrementalChange[],
+  ignoreData: Record<string, string>,
+) => IncrementalArgs {
+  return (changes, ignoreData) => ({
+    realmURL,
+    realmUsername,
+    changes,
+    ignoreData,
+    coalescedCallers: [],
+    deferPrerenderHtml: false,
+    carriedPrerenderHtmlChanges: [],
+    readsOwnWrite: false,
+  });
+}
+
 registerQueueJobDefinition({
   jobType: 'incremental-index',
   coalesce: chooseIncrementalCoalesceDecision,
@@ -638,6 +669,7 @@ const fromScratchIndex: Task<FromScratchArgs, FromScratchResult> = ({
           );
         });
       },
+      followUpJobArgs: followUpIncrementalArgs(realmURL, realmUsername),
       auth,
       fetch: _fetch,
       prerenderer,
@@ -681,6 +713,7 @@ const fromScratchIndex: Task<FromScratchArgs, FromScratchResult> = ({
     // `clearRealmIndexCachesAndBroadcast()`. Best-effort, same as above.
     await notifyRealmIndexUpdated(dbAdapter, args.realmURL);
     reportStatus(args.jobInfo, 'finish');
+    let queueClaim = queueClaimOf(jobInfo);
     return {
       invalidations,
       ignoreData: { ...ignoreData },
@@ -688,6 +721,7 @@ const fromScratchIndex: Task<FromScratchArgs, FromScratchResult> = ({
       ...(generation !== undefined ? { generation } : {}),
       ...(baseGeneration !== undefined ? { baseGeneration } : {}),
       ...(phaseTimings !== undefined ? { phaseTimings } : {}),
+      ...(queueClaim ? { queueClaim } : {}),
     };
   };
 
@@ -705,6 +739,7 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
   virtualNetwork,
   queuePublisher,
   createPrerenderAuth,
+  reportRealmEvent,
 }) =>
   async function (args) {
     let { jobInfo, realmUsername, changes, realmURL } = args;
@@ -756,10 +791,13 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
           // The caller owns this set now — either it carries it into a later
           // pass of the same write, or it enqueues the job itself. Anything
           // an earlier pass handed us rides along rather than being dropped
-          // on the floor by a pass that enqueues nothing.
+          // on the floor by a pass that enqueues nothing. A pass announces
+          // more than once when its commit re-visits for a peer, so each
+          // announcement adds to what the earlier ones deferred, and the
+          // latest loader epoch is the one the set renders under.
           deferredPrerenderHtml = {
             changes: mergePrerenderHtmlChanges(
-              carriedPrerenderHtmlChanges,
+              deferredPrerenderHtml?.changes ?? carriedPrerenderHtmlChanges,
               changes,
             ),
             loaderEpoch,
@@ -795,6 +833,7 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
           );
         });
       },
+      followUpJobArgs: followUpIncrementalArgs(realmURL, realmUsername),
       auth,
       fetch: _fetch,
       prerenderer,
@@ -821,7 +860,25 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
         .map(({ url, operation }) => `${operation}:${url}`)
         .join(',')}:\n${JSON.stringify({ ...stats, invalidations }, null, 2)}`,
     );
+    let coalescedCallers = getCoalescedCallers(args);
+    if (coalescedCallers.length === 0) {
+      // No publisher waits on this job — it is the follow-up a commit
+      // enqueued when peer commits kept leaving its rows stale — so nothing
+      // else will announce the pass. Hosts hear which cards moved, and every
+      // replica drops the index-derived caches a publisher's realm would have
+      // dropped after its own pass. The event names no types, so every live
+      // query re-runs rather than trusting a set nothing bounded.
+      reportRealmEvent?.({
+        eventName: 'index',
+        indexType: 'incremental',
+        invalidations: invalidations.map((href) => href.replace(/\.json$/, '')),
+        ...(generation !== undefined ? { generation } : {}),
+        realmURL,
+      });
+      await notifyRealmIndexUpdated(dbAdapter, realmURL);
+    }
     reportStatus(jobInfo, 'finish');
+    let queueClaim = queueClaimOf(jobInfo);
     return {
       ignoreData: { ...ignoreData },
       invalidations,
@@ -830,8 +887,9 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
       ...(generation !== undefined ? { generation } : {}),
       ...(baseGeneration !== undefined ? { baseGeneration } : {}),
       ...(phaseTimings !== undefined ? { phaseTimings } : {}),
+      ...(queueClaim ? { queueClaim } : {}),
       ...(deferredPrerenderHtml !== undefined ? { deferredPrerenderHtml } : {}),
-      coalescedCallers: getCoalescedCallers(args),
+      coalescedCallers,
     };
   };
 

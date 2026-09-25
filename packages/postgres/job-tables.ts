@@ -9,6 +9,11 @@ export interface JobsTable {
   id: number;
   job_type: string;
   concurrency_group: string | null;
+  // The lane family the job's group belongs to, or null for a job published
+  // without one. Null, or equal to `concurrency_group`, is the family's
+  // exclusive work; anything else is a writer lane. See
+  // `QueuePublishRequest.laneFamily`.
+  lane_family: string | null;
   timeout: number;
   priority: number;
   args: PgPrimitive;
@@ -23,7 +28,9 @@ export interface JobsTable {
 }
 
 // A lease holding one concurrency group's jobs un-claimable. See the
-// add-job-claim-holds migration for what it is for.
+// add-job-claim-holds migration for what it is for. The claim query matches it
+// against a job's group or its lane family, so a hold naming a family holds
+// every lane in it.
 export interface JobClaimHoldsTable {
   concurrency_group: string;
   // Half the primary key, with the group. A group is held while any live lease

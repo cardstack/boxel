@@ -444,8 +444,8 @@ import {
   type ResourceIndexEntry,
 } from './publishability.ts';
 import {
-  cancelAllJobsInConcurrencyGroup,
-  cancelRunningJobsInConcurrencyGroup,
+  cancelAllJobsInLaneFamily,
+  cancelRunningJobsInLaneFamily,
 } from './job-utils.ts';
 
 export const REALM_ROOM_RETENTION_POLICY_MAX_LIFETIME = 60 * 60 * 1000;
@@ -2972,12 +2972,12 @@ export class Realm {
     }
 
     if (cancelPending) {
-      await cancelAllJobsInConcurrencyGroup(
+      await cancelAllJobsInLaneFamily(
         this.#dbAdapter,
         indexingConcurrencyGroup(this.url),
       );
     } else {
-      await cancelRunningJobsInConcurrencyGroup(
+      await cancelRunningJobsInLaneFamily(
         this.#dbAdapter,
         indexingConcurrencyGroup(this.url),
       );
@@ -8981,9 +8981,21 @@ export class Realm {
         [CACHE_HEADER]: CACHE_MISS_VALUE,
       };
       if (bypassCache) {
+        // Validated on the content, not on the modification time alone: the
+        // time is kept to the whole second, so a rewrite within the second a
+        // client last read would match its validator, answer 304, and leave it
+        // holding the bytes from before the write. That client is often a
+        // prerender tab reading a linked card for an index render, which would
+        // then commit a row built from the old bytes. This branch streams the
+        // file rather than hashing a copy, so the fingerprint is read off the
+        // file itself, in bounded ranges that leave the body's stream alone.
+        // Not the hash the realm recorded at write time: only the file's size
+        // vouches for that record, so an out-of-band rewrite of the same length
+        // would keep it.
         return await this.serveLocalFile(request, served, requestContext, {
           defaultHeaders,
           etagVariant: SOURCE_ETAG_VARIANT,
+          etagBase: await contentHashFromRanges(handle),
           createdAt: source.created,
         });
       } else {
@@ -9983,7 +9995,7 @@ export class Realm {
         if (!settled) {
           this.#log.warn(
             `conditional ${request.method} of ${url.href} refused: ` +
-              `${indexingConcurrencyGroup(this.url)} did not settle, so the ` +
+              `the index lane family ${indexingConcurrencyGroup(this.url)} did not settle, so the ` +
               `index cannot be compared against`,
           );
           throw new OperationFailure({

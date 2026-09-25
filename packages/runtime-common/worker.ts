@@ -76,7 +76,7 @@ export interface IndexPhaseTimings {
   writeMs?: number;
   // The final atomic swap: `batch.done()` (realm-meta update, pending → main
   // promotion, obsolete-row prune) in one transaction, then the cleanup of
-  // the pending rows it promoted.
+  // the pending rows it promoted. Excludes `validationMs`.
   swapMs?: number;
   // How many times the swap's transaction ran. More than 1 means a deadlock
   // or serialization failure against a concurrent commit to the same rows
@@ -97,6 +97,22 @@ export interface IndexPhaseTimings {
   // cleanup failed. Absent when the cleanup failed before the janitor ran.
   janitorRowsCleared?: number;
   janitorStagingsCleared?: number;
+  // Present only when a peer pass of the realm committed while this one ran,
+  // so its commit checked what the peer's commit made stale. `validationMs`
+  // is the wall of those checks plus every round that rolled the commit back
+  // to re-visit. `validationRounds` counts the rounds: 0 means the peers
+  // touched nothing this pass read. `revisitCount` is the URLs the rounds
+  // re-visited, and `extendCount` the peer-committed URLs the pass extended
+  // to because they depend on it, both summed across rounds. Each re-visited
+  // row carries its round as `boxel_index.diagnostics.validationRound`.
+  validationMs?: number;
+  validationRounds?: number;
+  revisitCount?: number;
+  extendCount?: number;
+  // The `incremental-index` job the commit enqueued in its own transaction,
+  // when the rounds ran out and peers still left rows stale. It re-indexes
+  // what was left, in the pass's lane.
+  followUpJobId?: number;
 }
 
 export interface StreamFileRef {
@@ -132,6 +148,13 @@ export interface JobInfo extends JSONTypes.Object {
   // index-signature reason as `priority`; null means the queue couldn't
   // compute it (or the JobInfo is synthetic).
   queueWaitMs: number | null;
+  // The lane the job was claimed in, and the lane family it belongs to, as the
+  // queue row records them. Together with `queueWaitMs` they say what a job
+  // waited behind: another job of its own lane, or the family's exclusive work
+  // (see `QueuePublishRequest.laneFamily`). Null on a synthetic JobInfo, and
+  // `laneFamily` is null on any job published without a family.
+  concurrencyGroup: string | null;
+  laneFamily: string | null;
 }
 
 export interface StatusArgs {

@@ -18,6 +18,10 @@ module(basename(import.meta.filename), function () {
       await runSharedTest(screenshotCardTaskTests, assert, {});
     });
 
+    test('threads the realm loader epoch into the capture render options', async function (assert) {
+      await runSharedTest(screenshotCardTaskTests, assert, {});
+    });
+
     test('refuses a runner with no access to the realm', async function (assert) {
       await runSharedTest(screenshotCardTaskTests, assert, {});
     });

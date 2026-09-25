@@ -535,7 +535,7 @@ export class PgAdapter implements DBAdapter {
   // CS-10898 plumbed the pinned querier through the realm-destruction
   // helpers (removeRealmDatabaseArtifacts, removeRealmPermissions,
   // deleteRegistryRowByUrl, deletePublishedRowsBySourceUrl,
-  // cancelRunningJobsInConcurrencyGroup); when callers pass `txQuerier` to
+  // cancelRunningJobsInLaneFamily); when callers pass `txQuerier` to
   // those helpers, all their writes commit or roll back together with the
   // advisory lock's own transaction. Queries `fn` issues through the shared
   // dbAdapter still go via separate pool connections and are NOT part of

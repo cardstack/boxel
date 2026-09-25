@@ -9,6 +9,7 @@ import type { CodeRef, ResolvedCodeRef } from './code-ref.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
 import type { RenderRouteOptions } from './render-route-options.ts';
 import type { Definition } from './definitions.ts';
+import type { QueueClaim } from './jobs/queue-claim.ts';
 import type { OperationsTransport } from './card-operations/client.ts';
 import type { OperationLoweringIssue } from './card-operations/types.ts';
 import type {
@@ -1045,6 +1046,19 @@ export interface Diagnostics
   //
   // Absent on a tombstoned row and on rows written before the stamp existed.
   writeSeq?: number;
+  // On a row a commit's validation round wrote: the round, 1 for the first.
+  // The pass's commit found that a peer pass of the realm had committed
+  // something this row was read against, rolled back, and re-visited the row
+  // (or reached it by extending to the peer's rows that depend on the pass).
+  // Tombstones a round writes carry it too. Absent on every row a pass wrote
+  // outside a round, which is every row of a pass no peer overlapped.
+  validationRound?: number;
+  // How the queue claimed the job that wrote this row: how long it waited
+  // between enqueue and claim, and the lane and lane family it was claimed in.
+  // The same object as the job's `jobs.result.queueClaim`, so a row's share of
+  // a save's wait splits into queue wait and the pass's own run without a join
+  // to `jobs`. Absent on a row no queue-claimed job wrote.
+  queueClaim?: QueueClaim;
   // On a `prerendered_html` row written by the `prerender_html` job: the
   // generation of the live `boxel_index` row (same URL and type) that the
   // row's own generation was read from once the job's spawning index passes
@@ -1599,6 +1613,11 @@ export type ScreenshotPrerenderArgs = {
   format: ScreenshotFormat;
   // Optional per-capture overrides (viewport, scale, fullPage, clip).
   captureSpec?: ScreenshotCaptureSpec;
+  // Render-route options for the capture. The capture path always renders a
+  // card (`cardRender`), so only `loaderEpoch` is meaningful here today: it
+  // synchronizes the pooled tab's module graph to the realm's current
+  // timeline, exactly as an indexing visit's `renderOptions` do.
+  renderOptions?: RenderRouteOptions;
   // Worker-job priority threaded through from the producer side. See
   // ModulePrerenderArgs for the contract.
   priority?: number;
@@ -1701,6 +1720,7 @@ export {
   CONTENT_HASH_HEAD_BYTES,
   CONTENT_HASH_TAIL_BYTES,
 } from './content-hash.ts';
+export { uint8ArrayToBase64 } from './base64.ts';
 export type { FileSizeLimits } from './write-size-validation.ts';
 export {
   isSplicedSource,

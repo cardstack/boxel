@@ -293,7 +293,7 @@ export default class RenderRoute extends Route<Model> {
     if (!isTesting()) {
       // tests have their own way of dealing with window level errors in card-prerender.gts
       this.#attachWindowErrorListeners();
-      this.realm.restoreSessionsFromStorage();
+      this.realm.restoreSessionsFromStorage({ startingVisit: true });
     }
 
     // activate() doesn't run early enough for this to be set before the model()
@@ -822,7 +822,7 @@ export default class RenderRoute extends Route<Model> {
             this.loaderService.loader,
           );
 
-          await this.realm.ensureRealmMeta(realmURL);
+          await this.#ensureVisitRealmMeta(realmURL);
           let screenshotsMeta = await this.declarationScreenshotsMeta(
             doc,
             canonicalId,
@@ -926,6 +926,39 @@ export default class RenderRoute extends Route<Model> {
     }
     this.store.resetCache();
     this.lastStoreResetKey = resetKey;
+  }
+
+  // The realm info is fetched from whichever known realm `realmURL` resolves
+  // to, which is not always `realmURL`'s own: a known realm whose URL prefixes
+  // it answers first. Its fetch then fails naming a realm this render never
+  // asked about, so the failure is extended to say which realm the render asked
+  // for, which one answered, and which realm the answering one's session was
+  // issued for. A session issued for `realmURL` is this realm's own, handed to
+  // the ancestor by a registration that went through `knownRealm`; one issued
+  // for the answering realm is that realm's own, carried by this visit or left
+  // by an earlier one; no session means the tab identified the answering realm
+  // without one. The error doc then reads as a resolution fault on its own.
+  async #ensureVisitRealmMeta(realmURL: string): Promise<void> {
+    try {
+      await this.realm.ensureRealmMeta(realmURL);
+    } catch (err) {
+      let resolved = this.realm.url(realmURL);
+      let vn = this.network.virtualNetwork;
+      if (
+        err instanceof Error &&
+        resolved &&
+        vn.unresolveURL(resolved) !== vn.unresolveURL(realmURL)
+      ) {
+        let sessionRealm = this.realm.realms.get(resolved)?.claims?.realm;
+        err.message =
+          `${err.message} (this render's realm ${realmURL} resolved to the ` +
+          `known realm ${resolved}, which ` +
+          (sessionRealm
+            ? `holds a session issued for ${sessionRealm})`
+            : 'holds no session)');
+      }
+      throw err;
+    }
   }
 
   // What the card branch would otherwise read off its own `card+source` GET,
