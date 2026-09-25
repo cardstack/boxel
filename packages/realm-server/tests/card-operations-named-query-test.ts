@@ -139,8 +139,9 @@ module(basename(import.meta.filename), function () {
       ...ANCHOR,
       eq: { 'item.status': 'open' },
     });
-    assert.false(
-      'operation' in resolved || 'on' in resolved || 'params' in resolved,
+    assert.deepEqual(
+      Object.keys(resolved).sort(),
+      ['filter', 'realms'],
       'and what it resolves to is an ad-hoc query, carrying none of the members that named it',
     );
   });
