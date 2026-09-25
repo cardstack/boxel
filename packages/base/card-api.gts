@@ -3314,6 +3314,17 @@ export function getCaptures(
   }[] = [];
   let current: unknown = cardOrFileClass;
   while (typeof current === 'function') {
+    // A declaration under the name these slots used to carry would otherwise
+    // be read by nothing: the card would index clean and simply have no
+    // captures, which is the one failure here that never surfaces. Refuse it
+    // by name instead, so the card's own error doc says what to rename.
+    if (Object.getOwnPropertyDescriptor(current, 'screenshots')) {
+      throw new Error(
+        `${captureOwnerName(
+          current as typeof BaseDef,
+        )} declares 'static screenshots', which is no longer read — rename it to 'static captures'`,
+      );
+    }
     let descriptor = Object.getOwnPropertyDescriptor(current, 'captures');
     if (descriptor) {
       let declarations = descriptor.get

@@ -10,6 +10,10 @@ import type {
   ResponseWithNodeStream,
 } from '@cardstack/runtime-common';
 import {
+  CAPTURE_SERVING_PREFIX,
+  LEGACY_CAPTURE_SERVING_PREFIX,
+  isCaptureServingPath,
+  withoutCaptureServingPrefix,
   MEDIA_CACHE_MAX_AGE_SECONDS,
   MEDIA_CACHE_STALE_WHILE_REVALIDATE_SECONDS,
   MEDIA_CACHE_TOUCH_THROTTLE_MS,
@@ -85,6 +89,36 @@ module(basename(import.meta.filename), function (hooks) {
     });
     return row!.lastAccessedAt;
   }
+
+  // Both prefixes are served, so both must also be refused as write
+  // destinations and both must strip to the same instance path — a capture URL
+  // is meant to be stored, and the previously installed auth service worker
+  // matches capture requests on the old prefix until the browser updates it.
+  test('the capture-serving subtree covers the prefix it was renamed from', function (assert) {
+    for (let prefix of [
+      CAPTURE_SERVING_PREFIX,
+      LEGACY_CAPTURE_SERVING_PREFIX,
+    ]) {
+      assert.true(
+        isCaptureServingPath(`${prefix}Person/fadhlan.png`),
+        `${prefix} is a capture-serving path`,
+      );
+      assert.strictEqual(
+        withoutCaptureServingPrefix(`${prefix}Person/fadhlan.png`),
+        'Person/fadhlan.png',
+        `${prefix} strips to the addressed instance`,
+      );
+    }
+    assert.false(
+      isCaptureServingPath('Person/fadhlan.json'),
+      'an ordinary realm path is untouched',
+    );
+    assert.strictEqual(
+      withoutCaptureServingPrefix('Person/fadhlan.json'),
+      'Person/fadhlan.json',
+      'a non-capture path strips to itself',
+    );
+  });
 
   test('a hit streams the bytes with content-hash validators', async function (assert) {
     let response = await serve();

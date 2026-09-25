@@ -112,6 +112,7 @@ import {
   RealmPaths,
   ensureTrailingSlash,
   isCaptureServingPath,
+  withoutCaptureServingPrefix,
   isPartialWritePath,
   join,
   partialWritePath,
@@ -6271,7 +6272,7 @@ export class Realm {
           this.serveCapture(
             request,
             requestContext,
-            localPath.slice(CAPTURE_SERVING_PREFIX.length),
+            withoutCaptureServingPrefix(localPath),
           ),
       };
     }

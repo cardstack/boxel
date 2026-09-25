@@ -1417,7 +1417,9 @@ export function buildPrerenderManagerApp(options?: {
   router.post('/run-command', (ctxt) =>
     proxyPrerenderRequest(ctxt, 'run-command', 'command'),
   );
-  router.post('/prerender-capture', (ctxt) =>
+  // Both names proxy to the capture route; the manager is deployed ahead of
+  // the callers that were renamed with it.
+  router.post(['/prerender-capture', '/prerender-screenshot'], (ctxt) =>
     proxyPrerenderRequest(ctxt, 'prerender-capture', 'capture'),
   );
 

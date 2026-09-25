@@ -27,6 +27,31 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       assert.strictEqual(response.status, 401, 'HTTP 401 without auth');
     });
 
+    test('still answers to /_screenshot-card', async function (assert) {
+      // A released boxel-cli is installed and pinned independently of this
+      // server and still posts to the endpoint's former name. 401 rather than
+      // 404 is the assertion that matters: it says the path is routed to the
+      // same handler, which is what an unrenamed client depends on.
+      let response = await context.request
+        .post('/_screenshot-card')
+        .set('Content-Type', 'application/vnd.api+json')
+        .send({
+          data: {
+            type: 'capture-card',
+            attributes: {
+              realmURL: testRealmURL.href,
+              cardId: `${testRealmURL.href}Person/fadhlan`,
+              format: 'isolated',
+            },
+          },
+        });
+      assert.strictEqual(
+        response.status,
+        401,
+        'routed to the capture handler, not unrouted',
+      );
+    });
+
     test('rejects missing realmURL', async function (assert) {
       let matrixUserId = '@capture-test1:localhost';
       await insertUser(

@@ -545,6 +545,36 @@ module('Unit | declared captures', function (hooks) {
     );
   });
 
+  test("a 'static screenshots' declaration is refused by name", function (assert) {
+    class Legacy extends cardApi.CardDef {
+      static screenshots: any = {
+        hero: { format: 'isolated', width: 800, height: 600 },
+      };
+    }
+    // Read by nothing if it were allowed through: the card would index clean
+    // and simply have no captures, which is the failure that never surfaces.
+    assert.throws(
+      () => cardApi.getCaptures(Legacy),
+      /'static screenshots', which is no longer read — rename it to 'static captures'/,
+    );
+  });
+
+  test('an inherited screenshots declaration is refused too', function (assert) {
+    class Base extends cardApi.CardDef {
+      static screenshots: any = { hero: { format: 'isolated' } };
+    }
+    class Child extends Base {
+      static captures: Captures = {
+        thumb: { format: 'fitted', width: 300, height: 200 },
+      };
+    }
+    assert.throws(
+      () => cardApi.getCaptures(Child),
+      /no longer read/,
+      'a valid own declaration does not mask an ancestor that still uses the old name',
+    );
+  });
+
   test('captureURLs maps declared names to captured URLs from meta', function (assert) {
     class Product extends cardApi.CardDef {
       static captures: Captures = {

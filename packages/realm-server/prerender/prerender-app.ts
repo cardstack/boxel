@@ -879,7 +879,9 @@ export function buildPrerenderApp(options: {
   };
 
   function registerPrerenderRoute<R, A extends RouteBaseArgs = PrerenderArgs>(
-    path: string,
+    // Several paths register one handler, which is how a route keeps
+    // answering a name it has been renamed away from.
+    path: string | string[],
     options: {
       requestDescription: string;
       responseType: string;
@@ -1137,11 +1139,14 @@ export function buildPrerenderApp(options: {
   );
 
   registerPrerenderRoute<CapturePrerenderResponse, CaptureRouteArgs>(
-    '/prerender-capture',
+    // The prerender server rolls out ahead of the workers and realm servers
+    // that call it, so the previous revision is still asking for
+    // `/prerender-screenshot` while this one is already serving.
+    ['/prerender-capture', '/prerender-screenshot'],
     {
       requestDescription: 'capture prerender request',
       responseType: 'capture-result',
-      infoLabel: 'card captureted',
+      infoLabel: 'card captured',
       warnTimeoutMessage: (url) => `capture of ${url} timed out`,
       errorContext: '/prerender-capture',
       parseAttributes: parseCaptureAttributes,
