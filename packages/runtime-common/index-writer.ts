@@ -68,6 +68,11 @@ import {
   parseScopedCSSRequest,
   encodeHashedScopedCSSRequest,
 } from './scoped-css.ts';
+import {
+  INCREMENTAL_INDEX_JOB_TIMEOUT_SEC,
+  indexingConcurrencyGroup,
+  systemInitiatedIndexPriority,
+} from './jobs/indexing.ts';
 
 export class IndexWriter {
   #dbAdapter: DBAdapter;
@@ -409,6 +414,14 @@ const INDEX_COMMIT_LEDGER_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 // realm-sized array on the ledger for every such commit.
 const INDEX_COMMIT_LEDGER_MAX_URLS = 2000;
 
+// How many times a commit rolls back to re-visit what peer commits made stale
+// (see `CommitValidation`) before it commits anyway and leaves the rest to a
+// follow-up job. A round re-visits only what the peers that committed during
+// the previous one touched, so it is normally far smaller than the pass. The
+// cap is for a realm whose peers keep committing over the same cards, which
+// would otherwise hold the pass open for as long as they do.
+export const COMMIT_VALIDATION_MAX_ROUNDS = 3;
+
 // One `boxel_index` row as `existingIndexTypes` reads it back.
 interface ExistingIndexRowType {
   type: BoxelIndexTable['type'];
@@ -447,6 +460,93 @@ export interface BatchDoneResult extends PendingCleanupResult {
   // for another pass of the same realm to finish committing. Absent for a
   // `prerenderHtmlOnly` batch, which takes no commit lock.
   commitLockWaitMs?: number;
+  // Present when the commit checked peer passes that committed while this one
+  // ran (see `CommitValidation`). `validationMs` is the wall of every check
+  // and every re-visit round, `validationRounds` how many times the commit
+  // rolled back to re-visit, `revisitCount` the URLs those rounds re-visited,
+  // and `extendCount` the peer-committed URLs the pass extended to, both
+  // summed across rounds.
+  validationMs?: number;
+  validationRounds?: number;
+  revisitCount?: number;
+  extendCount?: number;
+  // The `incremental-index` job the commit enqueued, in its own transaction,
+  // when the rounds ran out with rows still stale.
+  followUpJobId?: number;
+}
+
+// What a commit does about peer passes of its realm that committed while it
+// ran. Handed to `Batch.done` only by a pass that can re-visit a URL: the
+// index runner's from-scratch and incremental passes. A batch that cannot —
+// the setup-error recording, the worker's failed-entry marking, a copy —
+// commits without it, and so without checking its peers.
+export interface CommitValidation {
+  // Re-visits `round.urls` into this batch the way the pass's visit loop did,
+  // against the files and the index as they stand now. Called between commit
+  // attempts, with the commit lock released.
+  revisit(round: CommitValidationRound): Promise<void>;
+  // The args of the `incremental-index` job that re-indexes `urls` when the
+  // rounds run out and peers still leave some of this pass's rows stale.
+  // Absent when the pass has no way to build them; the commit then goes
+  // ahead without one and says so in the log.
+  followUpJobArgs?(urls: string[]): Record<string, unknown>;
+}
+
+export interface CommitValidationRound {
+  // 1 for the first re-visit.
+  round: number;
+  // Every URL to re-visit, sorted: the pass's own URLs a peer's commit made
+  // stale, and the fan-out of the peer-committed URLs the pass extends to.
+  urls: string[];
+  // What the extension added to the pass: index-visited URLs new to its
+  // invalidation set, and new render-only dependents. Nothing the pass has
+  // announced to its HTML job names these.
+  addedURLs: string[];
+  addedRenderOnlyURLs: string[];
+  // Whether the loader epoch the pass renders under moved since its visits
+  // ran. A peer's commit or a module write minted one, so a warm tab can hold
+  // modules older than the ones on disk.
+  loaderEpochChanged: boolean;
+}
+
+// What a validation check found against the peer commits since the pass last
+// validated (see `Batch.#findPeerConflicts`).
+interface PeerConflicts {
+  // The committed generation the check read under the commit lock. Every
+  // peer commit up to it is accounted for.
+  generation: number;
+  // The realm's loader epoch, read under the same lock.
+  loaderEpoch: string;
+  // How many generations the check covered.
+  peerCommits: number;
+  // This pass's URLs to re-visit.
+  revisit: string[];
+  // Peer-committed URLs outside this pass that the pass extends to.
+  extend: string[];
+}
+
+// What a commit's validation did, reported on `BatchDoneResult` once a check
+// has run. A check runs only when a peer committed since the pass last
+// validated.
+interface ValidationReport {
+  checked: boolean;
+  validationMs: number;
+  validationRounds: number;
+  revisitCount: number;
+  extendCount: number;
+  followUpJobId?: number;
+}
+
+// Thrown inside a commit's transaction to roll it back when a validation
+// check finds work to re-visit and rounds remain.
+class PeerCommitConflict extends Error {
+  readonly conflicts: PeerConflicts;
+  constructor(conflicts: PeerConflicts) {
+    super(
+      `peer commits up to generation ${conflicts.generation} left rows this pass staged stale`,
+    );
+    this.conflicts = conflicts;
+  }
 }
 
 // What clearing the pending tables after a commit did (see
@@ -632,6 +732,15 @@ export class Batch {
   // The `current_generation` the pass was set up against: the committed state
   // its fan-out was computed from.
   #baseGeneration = 0;
+  // The committed generation this pass's rows have been checked against. The
+  // base generation until a validation round re-visits for its peers, then
+  // the generation that round's check read: every peer commit up to it has
+  // been accounted for, so the next check reads only the ones after it.
+  #validatedGeneration = 0;
+  // 0 until the commit rolls back to re-visit for its peers, then the number
+  // of the round in progress. Stamped as `diagnostics.validationRound` on
+  // every row the round writes.
+  #validationRound = 0;
   // Allocated inside the swap's transaction, while the commit lock is held, so
   // generations follow commit order. Set on every attempt of the transaction;
   // `#committedGeneration` is set only once one of them has committed.
@@ -1725,7 +1834,15 @@ export class Batch {
       passId: this.#passId,
       indexedAt: Date.now(),
       writeSeq: seq,
+      ...this.#validationRoundStamp(),
     };
+  }
+
+  // `validationRound`, on a row a validation round writes.
+  #validationRoundStamp(): Pick<Diagnostics, 'validationRound'> {
+    return this.#validationRound > 0
+      ? { validationRound: this.#validationRound }
+      : {};
   }
 
   // Build the sanitized `boxel_index_pending` row payload — and the paired
@@ -2479,6 +2596,11 @@ export class Batch {
     // This batch rebuilt the whole realm rather than an incremental fan-out.
     // Recorded on the commit's ledger row.
     fullRealm?: true;
+    // Checks the pass against the peer passes that committed while it ran,
+    // and re-visits what they made stale before committing. Without it the
+    // commit accounts for its peers only through the adoption chains
+    // `recordPeerCommittedTypes` reads.
+    validation?: CommitValidation;
   }): Promise<BatchDoneResult> {
     // Drain any rows the visit loop left buffered before the swap reads the
     // pending table. A no-op for a prerenderHtmlOnly batch (which never
@@ -2526,15 +2648,111 @@ export class Batch {
     if (opts?.fullRealm) {
       this.#fullRealm = true;
     }
+    let validation = opts?.validation;
+    let report: ValidationReport = {
+      checked: false,
+      validationMs: 0,
+      validationRounds: 0,
+      revisitCount: 0,
+      extendCount: 0,
+    };
     // Set by the attempt that commits; an attempt that rolls back and runs
     // again overwrites it.
     let commitLockWaitMs = 0;
-    let commit = await this.#commit(async () => {
+    let commit: { swapAttempts: number; swapRetryMs: number } | undefined;
+    while (!commit) {
+      try {
+        let stagedDeps = validation
+          ? await this.#stagedDepsWhenPeersCommitted()
+          : undefined;
+        commit = await this.commitAttempt(
+          columns,
+          validation && { validation, stagedDeps },
+          report,
+          (ms) => {
+            commitLockWaitMs = ms;
+          },
+        );
+      } catch (e) {
+        if (!(e instanceof PeerCommitConflict) || !validation) {
+          throw e;
+        }
+        let roundStart = Date.now();
+        let round = await this.#prepareRevisit(e.conflicts);
+        this.#log.info(
+          `${jobIdentity(this.jobInfo)} commit of ${this.realmURL.href} rolled back for ${e.conflicts.peerCommits} peer commit(s) through generation ${e.conflicts.generation}: ` +
+            `re-visiting ${round.urls.length} URL(s) (${e.conflicts.revisit.length} of its own, extended to ${e.conflicts.extend.length} peer-committed) in round ${round.round} of ${COMMIT_VALIDATION_MAX_ROUNDS}`,
+        );
+        await validation.revisit(round);
+        await this.flushWriteBuffer();
+        report.validationMs += Date.now() - roundStart;
+        report.validationRounds = round.round;
+        report.revisitCount += round.urls.length;
+        report.extendCount += e.conflicts.extend.length;
+      }
+    }
+    this.#committedGeneration = this.commitGeneration;
+    let cleanup = await this.clearPendingRows();
+
+    let totalIndexEntries = await this.numberOfIndexEntries();
+    let { checked, followUpJobId, ...validated } = report;
+    return {
+      totalIndexEntries,
+      ...commit,
+      commitLockWaitMs,
+      ...(checked
+        ? {
+            ...validated,
+            ...(followUpJobId !== undefined ? { followUpJobId } : {}),
+          }
+        : {}),
+      ...cleanup,
+    };
+  }
+
+  // One run of the commit's transaction. With `validation`, the first thing
+  // it does under the commit lock is check the peer commits since the pass
+  // last validated. Stale rows with rounds to spare throw `PeerCommitConflict`,
+  // which rolls the transaction back having written nothing; with the rounds
+  // spent the commit goes ahead and enqueues a follow-up for what is left.
+  private async commitAttempt(
+    columns: { boxelIndex: string[]; prerenderedHtml: string[] },
+    check:
+      | {
+          validation: CommitValidation;
+          // Read ahead of the lock (see `#stagedDepsWhenPeersCommitted`).
+          stagedDeps: Map<string, string[]> | undefined;
+        }
+      | undefined,
+    report: ValidationReport,
+    onLockHeld: (commitLockWaitMs: number) => void,
+  ): Promise<{ swapAttempts: number; swapRetryMs: number }> {
+    let validation = check?.validation;
+    return await this.#commit(async () => {
       // First, so every statement below stamps the generation this commit
       // takes, and so the rest of the swap runs with the realm's commits
       // serialized behind it.
-      commitLockWaitMs = await this.allocateCommitGeneration();
-      if (this.commitGeneration - 1 > this.#baseGeneration) {
+      onLockHeld(await this.allocateCommitGeneration());
+      let observedGeneration = this.commitGeneration - 1;
+      let leftStale: string[] | undefined;
+      if (validation && observedGeneration > this.#validatedGeneration) {
+        let checkStart = Date.now();
+        let conflicts = await this.#findPeerConflicts(
+          observedGeneration,
+          check?.stagedDeps,
+        );
+        report.checked = true;
+        report.validationMs += Date.now() - checkStart;
+        if (conflicts.revisit.length > 0 || conflicts.extend.length > 0) {
+          if (this.#validationRound < COMMIT_VALIDATION_MAX_ROUNDS) {
+            throw new PeerCommitConflict(conflicts);
+          }
+          leftStale = [
+            ...new Set([...conflicts.revisit, ...conflicts.extend]),
+          ].sort();
+        }
+      }
+      if (observedGeneration > this.#baseGeneration) {
         await this.recordPeerCommittedTypes();
       }
       await this.applyBatchUpdates(columns);
@@ -2548,14 +2766,384 @@ export class Batch {
         channels: { index: true, html: this.#publishedPrerenderedHtml },
         bumpAllTypes: !this.typeSetIsComplete,
       });
+      if (validation && leftStale) {
+        // Set on every run of the transaction, so a run that a deadlock
+        // rolled back cannot leave the id of a job that no longer exists.
+        report.followUpJobId = await this.#enqueueFollowUp(
+          validation,
+          leftStale,
+        );
+      }
       await this.recordCommit();
       await this.publishGeneration();
     });
-    this.#committedGeneration = this.commitGeneration;
-    let cleanup = await this.clearPendingRows();
+  }
 
-    let totalIndexEntries = await this.numberOfIndexEntries();
-    return { totalIndexEntries, ...commit, commitLockWaitMs, ...cleanup };
+  // Backward validation of this pass against every peer commit since
+  // `#validatedGeneration`, read under the commit lock so no further peer can
+  // commit before this pass does. The `realm_index_commits` ledger names the
+  // URLs each peer promoted. A peer row that lists none (a full-realm pass, or
+  // one too wide to list), and a generation with no ledger row at all, read as
+  // every URL in the realm.
+  //
+  // A peer's commit leaves this pass stale in two ways:
+  //  - revisit: the peer committed a URL this pass also visited, or one that a
+  //    row this pass staged depends on. This pass read those against what the
+  //    peer has since replaced.
+  //  - extend: the peer committed a row, outside this pass, that depends on a
+  //    URL of this pass. The peer rendered it against that URL as it stood
+  //    before this pass commits, so it needs visiting again once this pass
+  //    has, and its dependents with it. A row that already depended on this
+  //    pass's URLs when the pass began is in the pass's invalidation set, so
+  //    what this finds is a dependency the peer's commit introduced.
+  //
+  // Both read `deps`, so neither sees a query-backed field whose results a
+  // peer's commit moved: a query's matches are not recorded as dependencies.
+  //
+  // `stagedDeps` are this pass's own staged deps, read before the lock was
+  // taken. They are read here instead when a peer committed after that read
+  // and the pre-lock read found nothing to do.
+  async #findPeerConflicts(
+    generation: number,
+    stagedDeps: Map<string, string[]> | undefined,
+  ): Promise<PeerConflicts> {
+    let [epochRow] = (await this.#query([
+      'SELECT loader_epoch FROM realm_generations WHERE realm_url =',
+      param(this.realmURL.href),
+    ])) as Pick<RealmGenerationsTable, 'loader_epoch'>[];
+    let peers = (await this.#query([
+      'SELECT generation, urls FROM realm_index_commits WHERE',
+      ...every([
+        ['realm_url =', param(this.realmURL.href)],
+        ['generation >', param(this.#validatedGeneration)],
+        ['generation <=', param(generation)],
+      ]),
+    ] as Expression)) as Pick<RealmIndexCommitsTable, 'generation' | 'urls'>[];
+    let peerCommits = generation - this.#validatedGeneration;
+    let everyURL =
+      peers.length < peerCommits || peers.some(({ urls }) => urls == null);
+    let peerURLs = new Set(peers.flatMap(({ urls }) => urls ?? []));
+    let ours = [...this.#invalidations];
+    let oursSet = new Set(ours);
+
+    let revisit: Set<string>;
+    if (everyURL) {
+      revisit = new Set(ours);
+    } else {
+      revisit = new Set(ours.filter((url) => peerURLs.has(url)));
+      let peerForms = new Set(this.#dependencyForms(peerURLs));
+      for (let [url, deps] of stagedDeps ?? (await this.#readStagedDeps())) {
+        if (oursSet.has(url) && deps.some((dep) => peerForms.has(dep))) {
+          revisit.add(url);
+        }
+      }
+    }
+
+    let extend = new Set<string>();
+    let candidates = everyURL
+      ? undefined
+      : [...peerURLs].filter((url) => !oursSet.has(url));
+    if (candidates === undefined || candidates.length > 0) {
+      for (let url of await this.#productionDependents(
+        this.#dependencyForms(ours),
+        candidates,
+      )) {
+        if (!oursSet.has(url)) {
+          extend.add(url);
+        }
+      }
+    }
+
+    return {
+      generation,
+      loaderEpoch: epochRow?.loader_epoch ?? '0',
+      peerCommits,
+      revisit: [...revisit].sort(),
+      extend: [...extend].sort(),
+    };
+  }
+
+  // Every form a row's `deps` can name one of `urls` in: the URL, the
+  // extension-less form a module dependency is stored in, and the
+  // registered-prefix spelling of either — the same forms the invalidation
+  // fan-out matches (see `itemsThatReference`).
+  #dependencyForms(urls: Iterable<string>): string[] {
+    let forms = new Set<string>();
+    for (let url of urls) {
+      for (let form of [url, trimExecutableExtension(rri(url))]) {
+        forms.add(form);
+        let unresolved = this.unresolveURL(form);
+        if (unresolved !== form && this.isRegisteredPrefix(unresolved)) {
+          forms.add(unresolved);
+        }
+      }
+    }
+    return [...forms];
+  }
+
+  // This pass's staged `deps` by URL, for a commit whose check will need
+  // them: one run when a peer has committed since the pass last validated,
+  // and nothing otherwise, so a pass no peer overlapped reads nothing more.
+  // Read before the commit lock is taken. The pass writes nothing more before
+  // it commits, so the rows cannot move under the check, and a read the size
+  // of the pass stays out of the time the realm's commits wait on the lock.
+  async #stagedDepsWhenPeersCommitted(): Promise<
+    Map<string, string[]> | undefined
+  > {
+    let [row] = (await this.#query([
+      'SELECT current_generation FROM realm_generations WHERE realm_url =',
+      param(this.realmURL.href),
+    ])) as Pick<RealmGenerationsTable, 'current_generation'>[];
+    if (!row || Number(row.current_generation) <= this.#validatedGeneration) {
+      return undefined;
+    }
+    return await this.#readStagedDeps();
+  }
+
+  // The `deps` of every live row this pass has staged, by URL, across the
+  // channels it writes: the index channel, and on the fused path the HTML
+  // channel too.
+  async #readStagedDeps(): Promise<Map<string, string[]>> {
+    let staged = new Map<string, string[]>();
+    for (let table of this.#splitPrerenderHtml
+      ? ['boxel_index_pending']
+      : PENDING_TABLES) {
+      let rows = (await this.#query([
+        `SELECT url, deps FROM ${table} WHERE`,
+        ...every([
+          ['realm_url =', param(this.realmURL.href)],
+          ['staging_id =', param(this.#stagingId)],
+          any([['is_deleted = false'], ['is_deleted IS NULL']]),
+          ['deps IS NOT NULL'],
+        ]),
+      ] as Expression)) as Pick<BoxelIndexTable, 'url' | 'deps'>[];
+      for (let { url, deps } of rows) {
+        staged.set(url, [...(staged.get(url) ?? []), ...(deps ?? [])]);
+      }
+    }
+    return staged;
+  }
+
+  // The URLs of this realm's live production rows whose `deps` name any of
+  // `depForms`, narrowed to `urls` when given. On Postgres the match is the
+  // `?|` operator, which the GIN index on `boxel_index.deps` serves, so a
+  // check that has to read the whole realm does not unnest every row's deps.
+  async #productionDependents(
+    depForms: string[],
+    urls?: string[],
+  ): Promise<Set<string>> {
+    let found = new Set<string>();
+    if (depForms.length === 0 || urls?.length === 0) {
+      return found;
+    }
+    // Both lists bind one parameter per entry, so both are chunked to stay
+    // within the budget `#upsertWithinBindBudget` keeps to.
+    let bindBudget = this.#dbAdapter.kind === 'sqlite' ? 900 : 60000;
+    let urlChunks: (string[] | undefined)[] = [undefined];
+    if (urls) {
+      urlChunks = [];
+      let urlsPerQuery = Math.floor(bindBudget / 2);
+      for (let i = 0; i < urls.length; i += urlsPerQuery) {
+        urlChunks.push(urls.slice(i, i + urlsPerQuery));
+      }
+    }
+    for (let urlChunk of urlChunks) {
+      let formsPerQuery = bindBudget - (urlChunk?.length ?? 0) - 1;
+      for (let i = 0; i < depForms.length; i += formsPerQuery) {
+        let formParams = separatedByCommas(
+          depForms.slice(i, i + formsPerQuery).map((form) => [param(form)]),
+        ) as Expression;
+        let rows = (await this.#query([
+          dbExpression({
+            pg: `SELECT i.url FROM boxel_index AS i WHERE`,
+            sqlite: `SELECT DISTINCT i.url FROM boxel_index AS i CROSS JOIN json_each(i.deps) AS dep_entry WHERE`,
+          }),
+          ...every([
+            ['i.realm_url =', param(this.realmURL.href)],
+            any([['i.is_deleted = false'], ['i.is_deleted IS NULL']]),
+            ...(urlChunk
+              ? [
+                  [
+                    'i.url IN',
+                    ...addExplicitParens(
+                      separatedByCommas(urlChunk.map((url) => [param(url)])),
+                    ),
+                  ] as Expression,
+                ]
+              : []),
+            [
+              dbExpression({
+                pg: ['i.deps ?| CAST(ARRAY[', ...formParams, '] AS text[])'],
+                sqlite: [
+                  'dep_entry.value IN',
+                  ...addExplicitParens(formParams),
+                ] as Expression,
+              }),
+            ],
+          ]),
+        ] as Expression)) as Pick<BoxelIndexTable, 'url'>[];
+        for (let { url } of rows) {
+          found.add(url);
+        }
+      }
+    }
+    return found;
+  }
+
+  // Readies the batch to re-visit what `conflicts` found. The pass extends to
+  // the peer-committed URLs that depend on it, through the same fan-out
+  // `invalidate()` runs. Every URL the round re-visits is put back in the
+  // state `invalidate()` leaves a URL in, a tombstone over the row
+  // production holds now, so a file a peer deleted stays deleted when the
+  // re-visit finds nothing to read. And the batch takes up any loader epoch
+  // minted since it read one.
+  async #prepareRevisit(
+    conflicts: PeerConflicts,
+  ): Promise<CommitValidationRound> {
+    this.#validationRound++;
+    this.#validatedGeneration = conflicts.generation;
+    let loaderEpochChanged = this.#adoptLoaderEpoch(conflicts.loaderEpoch);
+    let staged = new Set(this.#invalidations);
+    let renderOnly = new Set(this.#renderOnlyInvalidations);
+    // Recomputed against the set as it stands, so the walk stops at URLs the
+    // pass already holds instead of re-walking what its own fan-out reached.
+    this.#nodeResolvedInvalidations = undefined;
+    let extended =
+      conflicts.extend.length > 0
+        ? await this.#fanOut(conflicts.extend.map((url) => new URL(url)))
+        : new Set<string>();
+    let urls = [...new Set([...conflicts.revisit, ...extended])].sort();
+    await this.#restageForRevisit(urls.filter((url) => staged.has(url)));
+    return {
+      round: this.#validationRound,
+      urls,
+      addedURLs: [...this.#invalidations].filter((url) => !staged.has(url)),
+      addedRenderOnlyURLs: [...this.#renderOnlyInvalidations].filter(
+        (url) => !renderOnly.has(url),
+      ),
+      loaderEpochChanged,
+    };
+  }
+
+  // Takes up a loader epoch minted since this batch last read one, by a peer
+  // pass's commit or a module write, and says whether it moved. A batch that
+  // minted its own takes a fresh one instead: its renders ran under a token
+  // issued before the modules the newer epoch covers changed, so a tab that
+  // cleared for it can still hold those modules.
+  #adoptLoaderEpoch(observed: string): boolean {
+    if (observed === this.#priorLoaderEpoch) {
+      return false;
+    }
+    this.#priorLoaderEpoch = observed;
+    if (this.#mintedLoaderEpoch !== undefined) {
+      this.#mintedLoaderEpoch = uuidv4();
+    }
+    return true;
+  }
+
+  // Drops what this batch staged for `urls` and tombstones them against
+  // production afresh. The rows being replaced were read against state a peer
+  // has since changed, including an earlier attempt's resumed rows, which
+  // are no longer authoritative either.
+  async #restageForRevisit(urls: string[]): Promise<void> {
+    if (urls.length === 0) {
+      return;
+    }
+    this.forgetResumedRows(urls);
+    for (let url of urls) {
+      this.#tombstonedLiveTypes.delete(url);
+      this.#prerenderedHtmlTombstonedLiveTypes.delete(url);
+    }
+    let tables = this.#splitPrerenderHtml
+      ? ['boxel_index_pending']
+      : PENDING_TABLES;
+    let bindBudget = this.#dbAdapter.kind === 'sqlite' ? 900 : 60000;
+    let urlsPerDelete = bindBudget - 2;
+    for (let table of tables) {
+      for (let i = 0; i < urls.length; i += urlsPerDelete) {
+        await this.#query([
+          `DELETE FROM ${table} WHERE`,
+          ...every([
+            ['realm_url =', param(this.realmURL.href)],
+            ['staging_id =', param(this.#stagingId)],
+            [
+              'url IN',
+              ...addExplicitParens(
+                separatedByCommas(
+                  urls.slice(i, i + urlsPerDelete).map((url) => [param(url)]),
+                ),
+              ),
+            ],
+          ]),
+        ] as Expression);
+      }
+    }
+    await this.tombstoneEntries(urls);
+  }
+
+  // Enqueues, inside the commit's transaction, the `incremental-index` job
+  // that re-indexes what the validation rounds left stale. It takes the lane,
+  // priority and initiators of this pass's own job row, so it runs where the
+  // pass would have and waits on behalf of the same writers. Because it is in
+  // the commit's transaction, the job exists exactly when the commit does: a
+  // commit that rolls back enqueues nothing, and one that lands cannot lose
+  // its follow-up to a crash in between. A batch outside a job, or whose job
+  // row is gone, takes the realm's index lane at the system tier.
+  //
+  // There is no job queue under SQLite, so there the commit goes ahead with
+  // nothing enqueued, as it does when the pass gave no way to build the args.
+  async #enqueueFollowUp(
+    validation: CommitValidation,
+    urls: string[],
+  ): Promise<number | undefined> {
+    if (this.#dbAdapter.kind !== 'pg' || !validation.followUpJobArgs) {
+      this.#log.warn(
+        `${jobIdentity(this.jobInfo)} commit of ${this.realmURL.href} is going ahead after ${COMMIT_VALIDATION_MAX_ROUNDS} validation rounds with ${urls.length} URL(s) still stale and no follow-up job to re-index them: ${urls.slice(0, 5).join(', ')}${urls.length > 5 ? ', …' : ''}`,
+      );
+      return undefined;
+    }
+    let args = JSON.stringify(validation.followUpJobArgs(urls));
+    let rows: { id: number | string }[] = [];
+    if (this.jobInfo && this.jobInfo.jobId > 0) {
+      rows = (await this.#query([
+        'INSERT INTO jobs (args, job_type, concurrency_group, priority, timeout, initiated_by)',
+        'SELECT',
+        ...separatedByCommas([
+          ['CAST(', param(args), 'AS jsonb)'],
+          ['CAST(', param('incremental-index'), 'AS varchar)'],
+          ['j.concurrency_group'],
+          ['j.priority'],
+          ['CAST(', param(INCREMENTAL_INDEX_JOB_TIMEOUT_SEC), 'AS integer)'],
+          ['j.initiated_by'],
+        ]),
+        'FROM jobs j WHERE j.id =',
+        param(this.jobInfo.jobId),
+        'RETURNING id',
+      ] as Expression)) as { id: number | string }[];
+    }
+    if (rows.length === 0) {
+      rows = (await this.#query([
+        'INSERT INTO jobs (args, job_type, concurrency_group, priority, timeout) VALUES',
+        ...addExplicitParens(
+          separatedByCommas([
+            ['CAST(', param(args), 'AS jsonb)'],
+            [param('incremental-index')],
+            [param(indexingConcurrencyGroup(this.realmURL.href))],
+            [param(systemInitiatedIndexPriority(this.realmURL.href))],
+            [param(INCREMENTAL_INDEX_JOB_TIMEOUT_SEC)],
+          ]),
+        ),
+        'RETURNING id',
+      ] as Expression)) as { id: number | string }[];
+    }
+    // Delivered when the transaction commits, so no worker looks for the job
+    // before it exists.
+    await this.#query(['NOTIFY jobs'] as Expression);
+    let followUpJobId = Number(rows[0].id);
+    this.#log.warn(
+      `${jobIdentity(this.jobInfo)} commit of ${this.realmURL.href} is going ahead after ${COMMIT_VALIDATION_MAX_ROUNDS} validation rounds with ${urls.length} URL(s) still stale; enqueued follow-up job ${followUpJobId} to re-index them`,
+    );
+    return followUpJobId;
   }
 
   // Deletes the rows this batch staged, now that its commit has promoted
@@ -3655,6 +4243,7 @@ export class Batch {
       ] as Expression);
     }
     this.#baseGeneration = row ? Number(row.current_generation) : 0;
+    this.#validatedGeneration = this.#baseGeneration;
     this.#provisionalGeneration = this.#baseGeneration + 1;
   }
 
@@ -3763,6 +4352,7 @@ export class Batch {
       invalidationId: this.#currentInvalidationId,
       passId: this.#passId,
       indexedAt: Date.now(),
+      ...this.#validationRoundStamp(),
     };
     // `diagnostics` is a jsonb column. This helper uses
     // `upsertMultipleRows` which passes each value through `param()`
@@ -4034,6 +4624,16 @@ export class Batch {
     this.#currentInvalidationId = uuidv4();
     this.#writeSeq = 0;
     this.#writePositions.clear();
+    await this.#fanOut(urls);
+  }
+
+  // Adds `urls` and everything that depends on them to the pass, tombstoning
+  // each, and returns every URL the walk put in the index visit, including
+  // any the pass already held. `invalidate()` runs it for the pass's
+  // triggering change. A validation round runs it for the peer-committed URLs
+  // the pass extends to, under the existing correlation id, because that
+  // round continues the same pass.
+  async #fanOut(urls: URL[]): Promise<Set<string>> {
     let start = Date.now();
     this.#perfLog.debug(
       `${jobIdentity} starting invalidation of ${urls.map((u) => u.href).join()}`,
@@ -4093,7 +4693,7 @@ export class Batch {
     }
 
     if (invalidations.size === 0) {
-      return;
+      return invalidations;
     }
 
     let insertStart = Date.now();
@@ -4110,6 +4710,7 @@ export class Batch {
     );
 
     this.#invalidations = new Set([...this.#invalidations, ...invalidations]);
+    return invalidations;
   }
 
   // Returns the minimum projection (url, type, deps) needed to order

@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 
+import { uint8ArrayToBase64 } from '@cardstack/runtime-common';
 import { DEFAULT_IMAGE_GENERATION_LLM } from '@cardstack/runtime-common/matrix-constants';
 
 import HostBaseTool from '../lib/host-base-tool';
@@ -11,27 +12,6 @@ import WriteBinaryFileTool from './write-binary-file';
 import type * as CardAPI from '@cardstack/base/card-api';
 import type { CardDef } from '@cardstack/base/card-api';
 import type * as BaseToolModule from '@cardstack/base/command';
-
-function arrayBufferToBase64(buffer: ArrayBuffer): string {
-  const maybeBuffer = (globalThis as any).Buffer;
-
-  if (typeof maybeBuffer !== 'undefined') {
-    return maybeBuffer.from(buffer).toString('base64');
-  }
-
-  let binary = '';
-  const bytes = new Uint8Array(buffer);
-
-  for (let i = 0; i < bytes.byteLength; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-
-  if (typeof btoa !== 'undefined') {
-    return btoa(binary);
-  }
-
-  throw new Error('Unable to convert image to base64 in this environment');
-}
 
 function mimeTypeToExtension(mimeType: string): string {
   const map: Record<string, string> = {
@@ -117,7 +97,7 @@ export default class GenerateThumbnailTool extends HostBaseTool<
         const contentType =
           imageResponse.headers.get('content-type') ?? 'image/png';
         const arrayBuffer = await imageResponse.arrayBuffer();
-        const base64 = arrayBufferToBase64(arrayBuffer);
+        const base64 = uint8ArrayToBase64(new Uint8Array(arrayBuffer));
         imageUrlForMessage = `data:${contentType};base64,${base64}`;
       }
     }
@@ -208,7 +188,6 @@ export default class GenerateThumbnailTool extends HostBaseTool<
         path: filePath,
         realm: targetRealmIdentifier,
         base64Content,
-        contentType: mimeType,
         useNonConflictingFilename: true,
       },
     );

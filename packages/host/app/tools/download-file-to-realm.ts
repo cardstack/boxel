@@ -1,5 +1,7 @@
 import { service } from '@ember/service';
 
+import { uint8ArrayToBase64 } from '@cardstack/runtime-common';
+
 import HostBaseTool from '../lib/host-base-tool';
 
 import WriteBinaryFileTool from './write-binary-file';
@@ -7,27 +9,6 @@ import WriteBinaryFileTool from './write-binary-file';
 import type NetworkService from '../services/network';
 import type RealmService from '../services/realm';
 import type * as BaseToolModule from '@cardstack/base/command';
-
-// Encode raw bytes as base64 without a text round-trip. `Buffer` when it exists
-// (Node / prerender); otherwise `btoa` over the binary string, chunked so a
-// large file doesn't blow the argument limit of `String.fromCharCode`.
-function uint8ArrayToBase64(bytes: Uint8Array): string {
-  const maybeBuffer = (globalThis as any).Buffer as
-    | { from(input: Uint8Array): { toString(encoding: string): string } }
-    | undefined;
-  if (typeof maybeBuffer !== 'undefined') {
-    return maybeBuffer.from(bytes).toString('base64');
-  }
-  if (typeof btoa === 'function') {
-    let binary = '';
-    const CHUNK = 0x8000;
-    for (let i = 0; i < bytes.length; i += CHUNK) {
-      binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
-    }
-    return btoa(binary);
-  }
-  throw new Error('No base64 encoder available in this environment');
-}
 
 export default class DownloadFileToRealmTool extends HostBaseTool<
   typeof BaseToolModule.DownloadFileToRealmInput,

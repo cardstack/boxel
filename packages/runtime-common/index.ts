@@ -1045,6 +1045,13 @@ export interface Diagnostics
   //
   // Absent on a tombstoned row and on rows written before the stamp existed.
   writeSeq?: number;
+  // On a row a commit's validation round wrote: the round, 1 for the first.
+  // The pass's commit found that a peer pass of the realm had committed
+  // something this row was read against, rolled back, and re-visited the row
+  // (or reached it by extending to the peer's rows that depend on the pass).
+  // Tombstones a round writes carry it too. Absent on every row a pass wrote
+  // outside a round, which is every row of a pass no peer overlapped.
+  validationRound?: number;
   // On a `prerendered_html` row written by the `prerender_html` job: the
   // generation of the live `boxel_index` row (same URL and type) that the
   // row's own generation was read from once the job's spawning index passes
@@ -1701,6 +1708,7 @@ export {
   CONTENT_HASH_HEAD_BYTES,
   CONTENT_HASH_TAIL_BYTES,
 } from './content-hash.ts';
+export { uint8ArrayToBase64 } from './base64.ts';
 export type { FileSizeLimits } from './write-size-validation.ts';
 export {
   isSplicedSource,
@@ -1784,6 +1792,20 @@ export * from './card-operations/client.ts';
 // `@cardstack/runtime-common/card-operations` directly and takes that cost on
 // purpose.
 export type * from './card-operations/types.ts';
+// The compiled-policy cache reaches bxl only through a specifier TypeScript
+// cannot follow, so exporting it from the barrel costs no consumer that
+// typecheck program. The realm server announces other realms' index moves to
+// it through `noteRealmIndexMoved`.
+export {
+  noteRealmIndexMoved,
+  realmPolicyRef,
+} from './card-operations/policy.ts';
+export type {
+  CompiledOperationGrant,
+  CompiledPolicyPredicate,
+  CompiledPolicyRule,
+  CompiledRealmPolicy,
+} from './card-operations/policy.ts';
 export * from './query-canonicalization.ts';
 export * from './searchable-routes.ts';
 export * from './catalog.ts';

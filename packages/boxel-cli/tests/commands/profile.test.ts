@@ -461,6 +461,40 @@ describe('ProfileManager', () => {
     expect(freshManager.listProfiles()).toEqual([]);
   });
 
+  // An unreadable store must be distinguishable from an empty one: discovery
+  // reports the former as an error rather than as "no profiles".
+  it('records a load error for a corrupted config file', () => {
+    fs.writeFileSync(path.join(tmpDir, 'profiles.json'), 'not valid json{{{');
+
+    const freshManager = new ProfileManager(tmpDir);
+    expect(freshManager.listProfiles()).toEqual([]);
+    expect(freshManager.getLoadError()).toMatch(/Could not read profiles file/);
+  });
+
+  it('records a load error for valid JSON with an unrecognized shape', () => {
+    fs.writeFileSync(
+      path.join(tmpDir, 'profiles.json'),
+      JSON.stringify({ foo: 'bar' }),
+    );
+
+    const freshManager = new ProfileManager(tmpDir);
+    expect(freshManager.listProfiles()).toEqual([]);
+    expect(freshManager.getLoadError()).toMatch(/not a recognizable profiles/);
+  });
+
+  it('has no load error when the store is genuinely absent', () => {
+    const freshManager = new ProfileManager(tmpDir);
+    expect(freshManager.listProfiles()).toEqual([]);
+    expect(freshManager.getLoadError()).toBeNull();
+  });
+
+  it('has no load error for a well-formed store', async () => {
+    await manager.addProfile('@testuser:stack.cards', 'password123');
+
+    const freshManager = new ProfileManager(tmpDir);
+    expect(freshManager.getLoadError()).toBeNull();
+  });
+
   it('rejects unknown domains without explicit URLs', async () => {
     await expect(
       manager.addProfile('@alice:custom.domain', 'password123'),
