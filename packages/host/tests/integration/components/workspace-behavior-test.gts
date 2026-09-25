@@ -1,10 +1,11 @@
-import { click, find } from '@ember/test-helpers';
+import { click, find, render, waitUntil } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import type { Loader } from '@cardstack/runtime-common';
 
+import { percySnapshot } from '../../helpers';
 import {
   CardDef,
   Workspace,
@@ -14,7 +15,9 @@ import {
 import { renderCard } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
+import type { Format } from '@cardstack/base/card-api';
 import type * as MarkdownFileDefModule from '@cardstack/base/markdown-file-def';
+import type { ComponentLike } from '@glint/template';
 
 const HOME = '[data-test-workspace-tab="home"]';
 const LIBRARY = '[data-test-workspace-tab="library"]';
@@ -73,6 +76,116 @@ module('Integration | Card | workspace | segments', function (hooks) {
     assert
       .dom('[data-test-selected-filter="Everything"]')
       .exists('the Library opens on Everything');
+  });
+});
+
+module('Integration | Card | workspace | Library rail', function (hooks) {
+  setupRenderingTest(hooks);
+  setupBaseRealm(hooks);
+  setupWorkspaceCard(hooks);
+
+  let loader: Loader;
+
+  hooks.beforeEach(function () {
+    loader = getService('loader-service').loader;
+  });
+
+  const RAIL = '[data-test-library-rail]';
+  const RAIL_SLOT = '[data-test-library-rail-slot]';
+  const TOGGLE = '[data-test-rail-toggle]';
+
+  test('the rail can be hidden and shown again without losing its selection', async function (assert) {
+    await renderCard(loader, new Workspace({}), 'isolated');
+    await click(LIBRARY);
+
+    assert
+      .dom(RAIL_SLOT)
+      .doesNotHaveAttribute('inert', 'the rail is open at a comfortable width');
+    assert.dom(TOGGLE).exists({ count: 1 }, 'there is a single toggle');
+    assert.dom(TOGGLE).hasAria('expanded', 'true');
+    assert.dom(TOGGLE).hasAria('label', 'Hide Sidebar');
+    assert
+      .dom(TOGGLE)
+      .hasAria('controls', find(RAIL)!.id, 'the toggle names the rail');
+
+    await click(TOGGLE);
+    assert.dom(RAIL_SLOT).hasAttribute('inert', '', 'the rail is hidden');
+    assert.dom(TOGGLE).hasAria('expanded', 'false');
+    assert.dom(TOGGLE).hasAria('label', 'Show Sidebar');
+    assert.dom(TOGGLE).isFocused('focus stays on the toggle');
+    assert
+      .dom('[data-test-cards-grid-header]')
+      .containsText('Everything', 'the header still names the active filter');
+
+    await click(TOGGLE);
+    assert.dom(RAIL_SLOT).doesNotHaveAttribute('inert', 'the rail is back');
+    assert.dom(TOGGLE).hasAria('expanded', 'true');
+    assert.dom(TOGGLE).isFocused('focus stays on the toggle');
+    assert
+      .dom('[data-test-selected-filter="Everything"]')
+      .exists('with its selection intact');
+  });
+
+  test('a narrow pane starts with the rail closed, and the toggle opens it', async function (assert) {
+    let api = await loader.import<typeof import('@cardstack/base/card-api')>(
+      '@cardstack/base/card-api',
+    );
+    let Comp = api.getComponent(new Workspace({})) as ComponentLike<{
+      Args: { format?: Format };
+    }>;
+
+    // Narrower than the 40rem the rail collapses under.
+    await render(
+      <template>
+        {{! template-lint-disable no-inline-styles }}
+        <div style='width: 30rem; height: 30rem'>
+          <Comp @format='isolated' />
+        </div>
+      </template>,
+    );
+    await click(LIBRARY);
+
+    // The width arrives through a ResizeObserver, a beat after render.
+    await waitUntil(() => find(RAIL_SLOT)?.hasAttribute('inert'));
+    assert
+      .dom(RAIL_SLOT)
+      .hasAttribute('inert', '', 'the rail starts closed in a narrow pane');
+    assert.dom(TOGGLE).hasAria('expanded', 'false');
+
+    assert
+      .dom('[data-test-cards-grid-cards]')
+      .doesNotHaveAttribute(
+        'inert',
+        'the grid is usable while the rail is shut',
+      );
+    assert
+      .dom('[data-test-cards-grid-content]')
+      .hasAttribute('tabindex', '0', 'the grid scroll region is a tab stop');
+
+    await click(TOGGLE);
+    assert
+      .dom(RAIL_SLOT)
+      .doesNotHaveAttribute('inert', 'the toggle still opens it');
+    assert.dom(TOGGLE).hasAria('expanded', 'true');
+    assert
+      .dom('[data-test-cards-grid-cards]')
+      .hasAttribute(
+        'inert',
+        '',
+        'the grid the open rail pushes aside is inert',
+      );
+    assert
+      .dom('[data-test-cards-grid-content]')
+      .hasAttribute(
+        'tabindex',
+        '-1',
+        'the covered grid scroll region drops out of the tab order',
+      );
+    assert.strictEqual(
+      find(TOGGLE)?.closest('[inert]'),
+      null,
+      'the toggle stays usable to close it',
+    );
   });
 });
 
@@ -168,5 +281,75 @@ module('Integration | Card | workspace | README', function (hooks) {
       body().clientHeight,
       'Read more renders the whole document',
     );
+  });
+});
+
+module('Integration | Card | workspace | visual', function (hooks) {
+  setupRenderingTest(hooks);
+  setupBaseRealm(hooks);
+  setupWorkspaceCard(hooks);
+
+  let loader: Loader;
+
+  hooks.beforeEach(function () {
+    loader = getService('loader-service').loader;
+  });
+
+  const RAIL_SLOT = '[data-test-library-rail-slot]';
+  const TOGGLE = '[data-test-rail-toggle]';
+
+  // Fixed boxes so the container queries resolve the same on every run.
+  async function renderAt(width: string, height: string) {
+    let api = await loader.import<typeof import('@cardstack/base/card-api')>(
+      '@cardstack/base/card-api',
+    );
+    let Comp = api.getComponent(new Workspace({})) as ComponentLike<{
+      Args: { format?: Format };
+    }>;
+    let style = `width: ${width}; height: ${height}`;
+    await render(
+      <template>
+        {{! template-lint-disable no-inline-styles }}
+        <div style={{style}}>
+          <Comp @format='isolated' />
+        </div>
+      </template>,
+    );
+  }
+
+  test('wide pane', async function (assert) {
+    await renderAt('64rem', '40rem');
+    await percySnapshot('Integration | Card | workspace | visual | wide home');
+
+    await click(LIBRARY);
+    assert
+      .dom(RAIL_SLOT)
+      .doesNotHaveAttribute('inert', 'the rail is open at a wide width');
+    await percySnapshot(
+      'Integration | Card | workspace | visual | wide library with rail open',
+    );
+  });
+
+  test('narrow pane', async function (assert) {
+    await renderAt('30rem', '40rem');
+    await click(LIBRARY);
+    // The width arrives through a ResizeObserver, a beat after render.
+    await waitUntil(() => find(RAIL_SLOT)?.hasAttribute('inert'));
+    assert.dom(RAIL_SLOT).hasAttribute('inert', '', 'the rail starts closed');
+    await percySnapshot(
+      'Integration | Card | workspace | visual | narrow library with rail closed',
+    );
+
+    await click(TOGGLE);
+    assert.dom(RAIL_SLOT).doesNotHaveAttribute('inert', 'the rail is open');
+    await percySnapshot(
+      'Integration | Card | workspace | visual | narrow library with rail open',
+    );
+  });
+
+  test('phone width', async function (assert) {
+    await renderAt('22rem', '40rem');
+    assert.dom(HOME).hasAria('current', 'true', 'Home is active');
+    await percySnapshot('Integration | Card | workspace | visual | phone home');
   });
 });
