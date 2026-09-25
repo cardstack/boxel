@@ -13,7 +13,7 @@ import {
   type getCard as GetCardType,
   type Realm,
   type SearchEntries,
-  type SearchEntryWireQuery,
+  type NamedSearchWireQuery,
 } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
@@ -277,7 +277,7 @@ module('Integration | operations query', function (hooks) {
   });
 
   test('the wire query a call resolves to is the one the search component takes', async function (assert) {
-    let query = saved('openReports').query() as SearchEntryWireQuery;
+    let query = saved('openReports').query() as NamedSearchWireQuery;
 
     assert.deepEqual(
       query,
@@ -291,8 +291,10 @@ module('Integration | operations query', function (hooks) {
           },
         ],
         realms: [testRealmURL],
+        operation: 'openReports',
+        on: reportRef(),
       },
-      'the classes became the type they name, and the card-rooted query became the entry-addressed one',
+      'the classes became the type they name, the card-rooted query became the entry-addressed one, and the request names the operation the realm resolves it from',
     );
 
     await render(

@@ -18,7 +18,12 @@ import type {
 import type { SearchEntryRendering } from '../search-results-component.ts';
 import { lowerQueryOperation, lowerQueryTemplate } from './query.ts';
 import type { QueryDefinition } from './query.ts';
-import { isOperationFailure, isWrite, type BaseOperation } from './types.ts';
+import {
+  isOperationFailure,
+  isWrite,
+  type BaseOperation,
+  type NamedQueryInvocation,
+} from './types.ts';
 
 // ============================================================================
 // The client side of the operations envelope: what a caller says, and the
@@ -734,8 +739,15 @@ export interface QueryMember {
   query(
     payload?: Record<string, unknown>,
     opts?: SearchInvokeOptions,
-  ): SearchEntryWireQuery | undefined;
+  ): NamedSearchWireQuery | undefined;
 }
+
+// A saved search as it goes on the wire: the operation it names, with the
+// query this side resolved it to alongside. The realm answers with its own
+// resolution of the named operation, so the query carried here is what the
+// host's client-side search arm matches local instances against rather than
+// what the realm runs.
+export type NamedSearchWireQuery = SearchEntryWireQuery & NamedQueryInvocation;
 
 // A query is the one operation that answers with a resource rather than a
 // value, because it is the one carried out by the search engine: results are a
@@ -820,7 +832,7 @@ function resolvedOrIdle(
   payload: Record<string, unknown> | undefined,
   opts: SearchInvokeOptions | undefined,
   mode?: { parkWhenUnscoped: true },
-): SearchEntryWireQuery | undefined {
+): NamedSearchWireQuery | undefined {
   try {
     return resolveQuery(subject, env, name, info, payload, opts, mode);
   } catch (err: unknown) {
@@ -838,6 +850,12 @@ function resolvedOrIdle(
 // thing wherever it is read — and the markers it leaves standing are filled
 // from this invocation: the caller's identity for `actor()`, the payload for
 // `params()`.
+//
+// The request names the operation, its type and the payload, and the realm
+// resolves that name from its own definition and serves the query it resolves
+// to. The query resolved here rides along for the host's client-side search
+// arm, which matches local instances against it; a definition this side holds
+// stale makes that arm's match drift, never what the realm returns.
 function resolveQuery(
   subject: OperationsSubject,
   env: OperationsEnvironment,
@@ -850,7 +868,7 @@ function resolveQuery(
   // caller's to hear about; on a recompute it means the search has nothing to
   // cover and parks.
   mode?: { parkWhenUnscoped: true },
-): SearchEntryWireQuery | undefined {
+): NamedSearchWireQuery | undefined {
   let search = searchBridge(env, name);
   let declaration = info.query;
   if (!declaration?.query) {
@@ -893,7 +911,17 @@ function resolveQuery(
       } — a query with no realms searches every realm this session can read`,
     );
   }
-  return query;
+  return {
+    ...query,
+    operation: name,
+    on: typeRef(subject, name),
+    // Copied, since a tracked payload is the same object on every recompute
+    // and a search re-runs only when its query differs from the last run's.
+    // The realm's definition may read a param this side's does not, so a
+    // change to one has to register here even when the filter resolved
+    // alongside it stays put.
+    ...(payload === undefined ? {} : { params: { ...payload } }),
+  };
 }
 
 // The realms an invocation supplies, when it supplies any. A declaration that

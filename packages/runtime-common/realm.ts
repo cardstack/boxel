@@ -261,6 +261,10 @@ import {
   type ResolvedEnvelopeEntry,
 } from './card-operations/envelope.ts';
 import { resolveQueryTargets } from './card-operations/find-targets.ts';
+import {
+  isNamedQueryPayload,
+  resolveNamedQuery,
+} from './card-operations/named-query.ts';
 import { settledWithin, STAGING_WIDTH } from './card-operations/coordinator.ts';
 import {
   OperationFailure,
@@ -11834,6 +11838,30 @@ export class Realm {
         },
         requestContext,
       });
+    }
+
+    if (isNamedQueryPayload(payload)) {
+      // A named query searches this realm and no other, so this realm is the
+      // whole of the scope it may resolve to.
+      try {
+        payload = await resolveNamedQuery(this.operationCore, payload, {
+          actor: requestContext.authenticatedUser,
+          realms: [this.url],
+          duringRender: isDuringPrerenderRequest(request),
+        });
+      } catch (err: unknown) {
+        if (!isOperationFailure(err)) {
+          throw err;
+        }
+        return createResponse({
+          body: JSON.stringify(errorsDocument(err.error), null, 2),
+          init: {
+            status: err.error.status,
+            headers: { 'content-type': SupportedMimeType.CardJson },
+          },
+          requestContext,
+        });
+      }
     }
 
     try {
