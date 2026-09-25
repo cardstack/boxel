@@ -47,6 +47,10 @@ interface RenderFileForIndexingOptions {
   // for this batch's visits and strips it from concurrent non-batch
   // traffic that happens to land on the same warm tab.
   batchId: string;
+  // Which of the pass's views this visit reads: 0 for the pass's own visit
+  // loop, and the round's number for a commit-time validation round, which
+  // re-reads after peer commits moved the realm (see `renderScopeFor`).
+  renderScopeRound: number;
   prerenderer: Prerenderer;
   virtualNetwork: VirtualNetwork;
   consumeClearCacheForRender(): boolean;
@@ -139,6 +143,7 @@ export async function renderFileForIndexing({
   jobPriority,
   auth,
   batchId,
+  renderScopeRound,
   prerenderer,
   virtualNetwork,
   consumeClearCacheForRender,
@@ -258,7 +263,13 @@ export async function renderFileForIndexing({
     batchId,
     ...(cardSource ? { cardSource } : {}),
     ...(jobInfo
-      ? { renderScope: renderScopeFor(realmURL.href, jobInfo.jobId) }
+      ? {
+          renderScope: renderScopeFor(
+            realmURL.href,
+            jobInfo.jobId,
+            renderScopeRound,
+          ),
+        }
       : {}),
     ...(jobPriority !== undefined ? { priority: jobPriority } : {}),
     ...(jobInfo ? { jobId: `${jobInfo.jobId}.${jobInfo.reservationId}` } : {}),

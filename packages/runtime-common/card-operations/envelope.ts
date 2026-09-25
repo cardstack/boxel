@@ -16,6 +16,7 @@ import type { BatchEntryResult, BatchNode } from './coordinator.ts';
 import { assertParamsSupplied, type OperationScope } from './dispatch.ts';
 import { runInputTransform, type TransformContext } from './transforms.ts';
 import type { BatchEntry } from './executors.ts';
+import type { GateDecision } from './gate.ts';
 import { isCodeRef } from '../card-document-shape.ts';
 import type { CardResource } from '../resource-types.ts';
 import type { SearchEntryWireFilter } from '../search-entry.ts';
@@ -632,6 +633,9 @@ export interface ResolvedEnvelopeEntry {
   entry: EnvelopeEntry;
   target: OperationTarget;
   definition: OperationDefinition;
+  // What the policy gate decided about this entry. A `pending` write is one
+  // whose admission still rests on a predicate.
+  decision: GateDecision;
   // This entry's own view of the batch's scope: the batch's caller and row
   // memo, and — once `stageWriteEntry` has run — the document a create would
   // write.

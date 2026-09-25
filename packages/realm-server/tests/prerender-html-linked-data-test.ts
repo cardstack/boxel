@@ -256,11 +256,11 @@ module(basename(import.meta.filename), function (hooks) {
     }
   });
 
-  // The newest job id in one of the realm's lanes, and that job's row.
+  // The newest job in one of the realm's lane families, and that job's row.
   async function newestJob(lane: string, afterJobId: number) {
     let rows = (await testDbAdapter.execute(
       `SELECT id, args, result FROM jobs
-        WHERE concurrency_group = $1 AND id > $2
+        WHERE (concurrency_group = $1 OR lane_family = $1) AND id > $2
         ORDER BY id DESC LIMIT 1`,
       { bind: [`${lane}:${realm.url}`, afterJobId] },
     )) as {
@@ -274,7 +274,7 @@ module(basename(import.meta.filename), function (hooks) {
   async function newestJobId(lane: string) {
     let rows = (await testDbAdapter.execute(
       `SELECT COALESCE(MAX(id), 0)::int AS max_id FROM jobs
-        WHERE concurrency_group = $1`,
+        WHERE concurrency_group = $1 OR lane_family = $1`,
       { bind: [`${lane}:${realm.url}`] },
     )) as { max_id: number }[];
     return rows[0]?.max_id ?? 0;

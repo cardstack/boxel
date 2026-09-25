@@ -4,6 +4,7 @@ import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-con
 import { trimJsonExtension } from '@cardstack/runtime-common';
 import type { DBAdapter, Expression } from '@cardstack/runtime-common';
 import { every, param, query } from '@cardstack/runtime-common';
+import { laneFamilyPredicate } from '@cardstack/runtime-common/jobs/lane-family';
 import type {
   IncrementalIndexEventContent,
   IncrementalIndexInitiationContent,
@@ -294,7 +295,8 @@ export async function prerenderedHtmlRowFor(
   return rows[0];
 }
 
-// The highest prerender_html job id currently on the realm's HTML channel
+// The highest prerender_html job id currently on the realm's HTML channel, in
+// any of its lanes
 // (0 when the channel is empty). Capture this BEFORE a write, then pass it to
 // settlePrerenderHtmlJobs as `afterJobId`. The index pass enqueues the
 // prerender_html job fire-and-forget, so a settle that runs before that row is
@@ -310,7 +312,7 @@ export async function maxPrerenderHtmlJobId(
   let concurrencyGroup = `prerender-html:${typeof realmURL === 'string' ? realmURL : realmURL.href}`;
   let rows = (await query(dbAdapter, [
     `SELECT COALESCE(MAX(id), 0)::int AS max_id FROM jobs WHERE`,
-    ...every([['concurrency_group =', param(concurrencyGroup)]]),
+    ...laneFamilyPredicate(concurrencyGroup),
   ] as Expression)) as { max_id: number }[];
   return rows[0]?.max_id ?? 0;
 }
@@ -330,7 +332,7 @@ export async function rejectedPrerenderHtmlJobIds(
   let concurrencyGroup = `prerender-html:${typeof realmURL === 'string' ? realmURL : realmURL.href}`;
   let rows = (await query(dbAdapter, [
     `SELECT j.id FROM jobs j WHERE j.status = 'rejected' AND`,
-    ...every([['j.concurrency_group =', param(concurrencyGroup)]]),
+    ...laneFamilyPredicate(concurrencyGroup, 'j'),
   ] as Expression)) as { id: number }[];
   return rows.map((row) => row.id);
 }
@@ -338,8 +340,9 @@ export async function rejectedPrerenderHtmlJobIds(
 // HTML lands on its own channel: the index pass fires a `prerender_html`
 // job (fire-and-forget) and completes without waiting for it, so a test
 // that writes and then asserts prerendered HTML must settle that channel
-// first. Waits until the realm's `prerender-html:<realm>` concurrency
-// group has no unfulfilled jobs and no active reservations, and fails
+// first. Waits until the realm's `prerender-html:<realm>` lane family — its
+// exclusive lane and every writer's lane — has no unfulfilled jobs and no
+// active reservations, and fails
 // loudly if any of its jobs rejected — a broken render should fail the
 // test, not silently satisfy the wait.
 //
@@ -380,7 +383,7 @@ export async function settlePrerenderHtmlJobs(
               FROM job_reservations r
              WHERE r.job_id = j.id AND r.completed_at IS NULL) AS reservation_age_sec
          FROM jobs j WHERE`,
-        ...every([['j.concurrency_group =', param(concurrencyGroup)]]),
+        ...laneFamilyPredicate(concurrencyGroup, 'j'),
       ] as Expression)) as {
         id: number;
         status: string;

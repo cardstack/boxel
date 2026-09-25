@@ -290,13 +290,14 @@ to one query changes nothing about the others.
 
 ## Two writers on one realm, and the fairness reading
 
-Indexing runs **one lane per realm**: the concurrency group is keyed on the
-realm alone, and the queue will not claim a job whose group already holds a
-live reservation. So two people editing unrelated cards in one realm serialize,
-and the second one's write pays the first one's fan-out. Whether that lane
-should be keyed on the writer instead turns on a single number — of the index
-passes that waited, how many waited behind a _different_ person's pass — and
-that number cannot be produced by a run in which every write comes from one
+A realm's incremental index passes run **one lane per writer**: each person's
+passes run in their own lane of the realm's index family, so two people
+editing unrelated cards in one realm index side by side, while one writer's own
+passes still run in order. Exclusive work — a from-scratch reindex, a copy —
+still runs alone and holds every writer lane while it does. Whether that
+isolation holds up under load turns on a single number — of the index passes
+that waited, how many waited behind a _different_ person's pass — and that
+number cannot be produced by a run in which every write comes from one
 identity.
 
 ### Composing the run

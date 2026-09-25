@@ -47,6 +47,7 @@ import {
   serializableError,
 } from './error.ts';
 import type { IndexingProgressEvent } from './worker.ts';
+import { progressLaneOf } from './jobs/queue-claim.ts';
 import { IndexRunnerDependencyManager } from './index-runner/dependency-resolver.ts';
 import { resolveModuleCacheContext } from './index-runner/prewarm-modules.ts';
 import {
@@ -213,6 +214,11 @@ export class IndexRunner {
   // order the rounds added them. Reported with the pass's invalidations, so
   // the event announcing the pass names them too.
   #validationAddedURLs: string[] = [];
+  // The number of the commit-time validation round now re-visiting, or 0
+  // outside one. Each round renders under a scope of its own: a peer's commit
+  // moved what the pass read, and a prerender tab reuses what it read under
+  // one scope without checking it again (see `renderScopeFor`).
+  #renderScopeRound = 0;
   readonly stats: Stats = {
     instancesIndexed: 0,
     filesIndexed: 0,
@@ -378,6 +384,7 @@ export class IndexRunner {
       type: 'indexing-started',
       realmURL: current.realmURL.href,
       jobId: current.#jobInfo.jobId,
+      ...progressLaneOf(current.#jobInfo),
       jobType: 'from-scratch',
       totalFiles: 0,
       files: [],
@@ -520,6 +527,7 @@ export class IndexRunner {
         type: 'indexing-finished',
         realmURL: current.realmURL.href,
         jobId: current.#jobInfo.jobId,
+        ...progressLaneOf(current.#jobInfo),
         stats: current.stats,
       });
       // Release the batch's ownership of this realm's affinity on the
@@ -611,6 +619,7 @@ export class IndexRunner {
       type: 'indexing-started',
       realmURL: current.realmURL.href,
       jobId: current.#jobInfo.jobId,
+      ...progressLaneOf(current.#jobInfo),
       jobType: 'incremental',
       totalFiles: 0,
       files: [],
@@ -774,6 +783,7 @@ export class IndexRunner {
         type: 'indexing-finished',
         realmURL: current.realmURL.href,
         jobId: current.#jobInfo.jobId,
+        ...progressLaneOf(current.#jobInfo),
         stats: current.stats,
       });
       // Release the batch's ownership of this realm's affinity on the
@@ -891,6 +901,7 @@ export class IndexRunner {
   ): Promise<void> {
     this.#indexingInstances.clear();
     this.#dependencyResolver.reset();
+    this.#renderScopeRound = round.round;
     this.#shouldResetStoreForNextRender = true;
     if (round.loaderEpochChanged || passInvalidatesExecutables(round.urls)) {
       this.#scheduleClearCacheForNextRender();
@@ -965,6 +976,7 @@ export class IndexRunner {
         jobPriority: this.#jobPriority,
         auth: this.#auth,
         batchId: this.#batchId,
+        renderScopeRound: this.#renderScopeRound,
         prerenderer: this.#prerenderer,
         virtualNetwork: this.#virtualNetwork,
         consumeClearCacheForRender: () => this.#consumeClearCacheForRender(),

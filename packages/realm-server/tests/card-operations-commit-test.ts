@@ -407,7 +407,7 @@ module(basename(import.meta.filename), function (hooks) {
   async function indexJobIds(): Promise<number[]> {
     let rows = (await testDbAdapter.execute(
       `select id from jobs where job_type = 'incremental-index'
-         and concurrency_group = $1 order by id`,
+         and (concurrency_group = $1 or lane_family = $1) order by id`,
       { bind: [`indexing:${realm.url}`] },
     )) as { id: number | string }[];
     return rows.map((row) => Number(row.id));
@@ -694,7 +694,8 @@ module(basename(import.meta.filename), function (hooks) {
   async function pendingIndexCallers(): Promise<(string | null)[]> {
     let rows = (await testDbAdapter.execute(
       `select args from jobs where job_type = 'incremental-index'
-         and concurrency_group = $1 and status = 'unfulfilled'`,
+         and (concurrency_group = $1 or lane_family = $1)
+         and status = 'unfulfilled'`,
       { bind: [`indexing:${realm.url}`] },
     )) as {
       args: { coalescedCallers?: { clientRequestId: string | null }[] };

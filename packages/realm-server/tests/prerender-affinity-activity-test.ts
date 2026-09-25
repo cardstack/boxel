@@ -185,4 +185,66 @@ module(basename(import.meta.filename), function () {
     let snap = tracker.sameAffinityActivity(REALM_A);
     assert.strictEqual(snap[0]!.priority, 0, 'default priority is 0');
   });
+
+  test('entries carry the batch their call belongs to', function (assert) {
+    // An affinity can carry several batches at once, so a stalled render's
+    // siblings have to say which batch they belong to.
+    let { tracker } = trackerAt(1_000_000);
+    let self = tracker.record(
+      REALM_A,
+      'http://localhost/a.json',
+      'visit',
+      'file',
+      0,
+      'job-1-aaaa',
+    );
+    tracker.record(
+      REALM_A,
+      'http://localhost/b.json',
+      'visit',
+      'file',
+      0,
+      'job-2-bbbb',
+    );
+    tracker.record(REALM_A, 'http://localhost/c.gts', 'module', 'module', 0);
+    let snap = tracker.sameAffinityActivity(REALM_A, self.handle);
+    assert.deepEqual(
+      snap.map((s) => [s.url, s.batchId]),
+      [
+        ['http://localhost/b.json', 'job-2-bbbb'],
+        ['http://localhost/c.gts', undefined],
+      ],
+      'a batch visit names its batch; a call outside any batch names none',
+    );
+    assert.false(
+      'batchId' in snap[1]!,
+      'a call outside any batch carries no batchId key at all',
+    );
+  });
+
+  test('hasBatchInFlight answers per affinity and per batch, until the call releases', function (assert) {
+    let { tracker } = trackerAt(1_000_000);
+    let visit = tracker.record(
+      REALM_A,
+      'http://localhost/a.json',
+      'visit',
+      'file',
+      0,
+      'job-1-aaaa',
+    );
+    assert.true(tracker.hasBatchInFlight(REALM_A, 'job-1-aaaa'));
+    assert.false(
+      tracker.hasBatchInFlight(REALM_A, 'job-2-bbbb'),
+      'another batch on the same affinity is not in flight',
+    );
+    assert.false(
+      tracker.hasBatchInFlight(REALM_B, 'job-1-aaaa'),
+      'the same batch on another affinity is not in flight',
+    );
+    visit.release();
+    assert.false(
+      tracker.hasBatchInFlight(REALM_A, 'job-1-aaaa'),
+      'released once its call completes',
+    );
+  });
 });

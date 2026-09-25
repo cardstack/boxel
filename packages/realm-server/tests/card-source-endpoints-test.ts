@@ -87,7 +87,8 @@ module(basename(import.meta.filename), function () {
     > {
       return (await dbAdapter.execute(
         `select id, status from jobs
-           where job_type = 'incremental-index' and concurrency_group = $1
+           where job_type = 'incremental-index'
+             and (concurrency_group = $1 or lane_family = $1)
            order by id`,
         { bind: [`indexing:${testRealm.url}`] },
       )) as { id: number; status: string }[];

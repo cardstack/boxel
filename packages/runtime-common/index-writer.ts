@@ -73,7 +73,7 @@ import {
   indexingConcurrencyGroup,
   systemInitiatedIndexPriority,
 } from './jobs/indexing.ts';
-import { queueClaimOf } from './jobs/queue-claim.ts';
+import { queueClaimOf, withoutQueueClaim } from './jobs/queue-claim.ts';
 
 export class IndexWriter {
   #dbAdapter: DBAdapter;
@@ -283,8 +283,7 @@ export interface PrerenderedHtmlChange {
 // group names the user whose pass wrote the row, which the `diagnostics`
 // column keeps for operators and a reader of the card has no need for.
 function errorDocDiagnostics(diagnostics: Diagnostics): Diagnostics {
-  let { queueClaim: _queueClaim, ...rest } = diagnostics;
-  return rest;
+  return withoutQueueClaim(diagnostics);
 }
 
 // The HTML half of a fused-visit index entry, in the shape the
