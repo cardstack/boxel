@@ -4346,4 +4346,192 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(commits.length, 0, 'and nothing is committed');
     });
   });
+
+  // An entry whose authorization rests on the state it is about to change is
+  // decided under the lock, by the `admit` it carries. What a response shows
+  // is the same whether that ran inside the lock or before it, so these pin
+  // where it runs and what it is handed.
+  module('an entry admitted under the lock', function () {
+    function update(href: string, firstName: string): BatchEntry {
+      return {
+        op: 'update',
+        href,
+        document: {
+          data: {
+            type: 'card',
+            attributes: { firstName },
+            meta: { adoptsFrom: PERSON },
+          },
+        },
+      };
+    }
+
+    test('is decided inside the lock, after the drain, against the bytes staging reads, before anything stages', async function (assert) {
+      let original = cardFile({ firstName: 'Original' }, PERSON);
+      let serializations = 0;
+      let s = stub({
+        stored: { 'person-1.json': original },
+        serialize: (doc: any) => {
+          serializations++;
+          return doc;
+        },
+      });
+      let observed:
+        | {
+            source: string | undefined;
+            lockDepth: number;
+            drains: number;
+            serializations: number;
+            readsOutsideLock: number;
+          }
+        | undefined;
+      await commitBatch(s.core, [
+        {
+          ...update(`${REALM}person-1`, 'Updated'),
+          admit: async (source) => {
+            observed = {
+              source,
+              lockDepth: s.lockDepth(),
+              drains: s.drainCount(),
+              serializations,
+              readsOutsideLock: s.readsOutsideLock(),
+            };
+          },
+        },
+      ]);
+
+      assert.ok(observed, 'the entry was admitted');
+      assert.strictEqual(
+        observed?.source,
+        original,
+        'handed the card’s stored source as the batch read it',
+      );
+      assert.strictEqual(observed?.lockDepth, 1, 'with the lock held');
+      assert.strictEqual(observed?.drains, 1, 'after the drain');
+      assert.strictEqual(
+        observed?.readsOutsideLock,
+        0,
+        'having read nothing outside the lock',
+      );
+      assert.strictEqual(
+        observed?.serializations,
+        0,
+        'before any entry was staged',
+      );
+      assert.strictEqual(
+        s.sourceReads(),
+        1,
+        'and the card was read once, for both the admission and the staging',
+      );
+      assert.strictEqual(s.commits.length, 1, 'the write then proceeds');
+    });
+
+    test('a refusal leaves every entry unstaged and uncommitted, whichever group holds it', async function (assert) {
+      let serializations = 0;
+      let { core, commits } = stub({
+        stored: {
+          'person-1.json': cardFile({ firstName: 'One' }, PERSON),
+          'person-2.json': cardFile({ firstName: 'Two' }, PERSON),
+          'person-3.json': cardFile({ firstName: 'Three' }, PERSON),
+        },
+        serialize: (doc: any) => {
+          serializations++;
+          return doc;
+        },
+      });
+      let failure = await commitBatch(core, [
+        update(`${REALM}person-1`, 'First'),
+        {
+          op: 'parallel',
+          members: [
+            update(`${REALM}person-2`, 'Second'),
+            {
+              ...update(`${REALM}person-3`, 'Third'),
+              label: '[1].boxel:operations[1]',
+              admit: async () => {
+                throw new OperationFailure({
+                  id: `${REALM}person-3`,
+                  status: 403,
+                  code: 'operation-not-permitted',
+                  title: 'Operation not permitted',
+                  detail: 'not permitted',
+                });
+              },
+            },
+          ],
+        },
+      ]).then(
+        () => undefined,
+        (err: unknown) => (isOperationFailure(err) ? err.error : err),
+      );
+
+      assert.deepEqual(
+        failure,
+        {
+          id: `${REALM}person-3`,
+          status: 403,
+          code: 'operation-not-permitted',
+          title: 'Operation not permitted',
+          detail: 'not permitted',
+          meta: { entry: '[1].boxel:operations[1]' },
+        },
+        'the refusal is the batch’s, naming the refused entry',
+      );
+      assert.strictEqual(
+        serializations,
+        0,
+        'neither the entry before it nor its sibling in the group was staged',
+      );
+      assert.strictEqual(commits.length, 0, 'and nothing is committed');
+    });
+
+    test('an append’s target, which staging never reads whole, is read for its admission under the lock', async function (assert) {
+      let stored = eventLog([{ label: 'first' }]);
+      let s = stub({
+        stored: { 'log-1.json': stored },
+        definitions: {
+          EventLog: eventLogDefinition(),
+          LogEvent: logEventDefinition(),
+        },
+      });
+      let handed: string | undefined;
+      await commitBatch(s.core, [
+        {
+          op: 'appendContainsMany',
+          href: `${REALM}log-1`,
+          field: 'events',
+          items: [{ label: 'second' }],
+          admit: async (source) => {
+            handed = source;
+          },
+        },
+      ]);
+      assert.strictEqual(handed, stored, 'handed the card’s stored source');
+      assert.strictEqual(s.readsOutsideLock(), 0, 'read inside the lock');
+      assert.strictEqual(s.commits.length, 1);
+    });
+
+    test('a create that names no stored card is handed nothing to judge', async function (assert) {
+      let { core, commits } = stub();
+      let handed: string | undefined = 'unset';
+      await commitBatch(core, [
+        {
+          op: 'create',
+          lid: 'new-person',
+          document: {
+            data: {
+              type: 'card',
+              attributes: { firstName: 'New' },
+              meta: { adoptsFrom: PERSON },
+            },
+          },
+          admit: async (source) => {
+            handed = source;
+          },
+        },
+      ]);
+      assert.strictEqual(handed, undefined);
+      assert.strictEqual(commits.length, 1);
+    });
+  });
 });

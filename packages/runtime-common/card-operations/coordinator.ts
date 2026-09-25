@@ -472,6 +472,9 @@ export async function commitBatch(
       let stageStart = Date.now();
       try {
         let { stored, storedMeta } = await readPreState(core, entries, paths);
+        // After the pre-state read, so an entry is admitted against exactly
+        // the bytes it is about to stage from, and before any entry stages.
+        await admitEntries(core, entries, positions, paths, stored);
         let state: StagingState = {
           stored,
           storedMeta,
@@ -1393,6 +1396,45 @@ async function readPreState(
       }),
   ]);
   return { stored, storedMeta };
+}
+
+// Decides every entry whose admission was left to the lock (`admit`), in batch
+// order, against the target card's stored source as this batch holds it.
+//
+// All of them are decided before any entry stages. That is what keeps a
+// refusal here from needing anything undone: an entry refused after a sibling
+// had staged would abandon the batch just the same, since nothing commits
+// until everything has staged, but deciding first means no sibling runs a
+// program over a batch that is already refused. Whichever group an entry sits
+// in, a refusal here leaves the realm with no write, no index job and no
+// event.
+//
+// A card whose bytes the batch already read is judged by those bytes. One it
+// did not read, an append's target, is read here, under the same lock. The
+// append still never reads it for staging; only an entry that has to be
+// judged pays for the read.
+async function admitEntries(
+  core: BatchCore,
+  entries: readonly BatchEntry[],
+  positions: readonly EntryPosition[],
+  paths: RealmPaths,
+  stored: ReadonlyMap<LocalPath, StoredFile>,
+): Promise<void> {
+  for (let [index, entry] of entries.entries()) {
+    if (!entry.admit) {
+      continue;
+    }
+    try {
+      let path = entry.href ? cardSourcePathOf(entry.href, paths) : undefined;
+      let source = path
+        ? (stored.get(path)?.content ??
+          (await core.readSourceFile(path))?.content)
+        : undefined;
+      await entry.admit(source);
+    } catch (err: unknown) {
+      throw atEntry(err, positions[index]);
+    }
+  }
 }
 
 // One range of a stored file, as bytes. Bounded by whatever the caller asked

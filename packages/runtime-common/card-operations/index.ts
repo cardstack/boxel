@@ -13,11 +13,17 @@ export type {
   RealmPolicyCacheEnvironment,
 } from './policy.ts';
 export type { LoweringContext } from './lowering.ts';
-export { notPermitted, policyGateStats } from './gate.ts';
+export {
+  dischargePendingDecision,
+  notPermitted,
+  policyGateStats,
+} from './gate.ts';
 export type {
   GateDecision,
   MatchedGrant,
   OperationPolicyAccess,
+  PendingDecision,
+  PendingWrite,
   PolicyGateStats,
 } from './gate.ts';
 export {

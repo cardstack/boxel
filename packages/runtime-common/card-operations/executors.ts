@@ -186,6 +186,14 @@ interface EntryCommon {
   // the write conditional in the reporting sense: the result says whether the
   // target was still at that version, and the write happens either way.
   baseVersion?: string;
+  // Whether this entry may be carried out at all, where that rests on the
+  // state the entry is about to change and so can only be decided under the
+  // lock. Handed the target card's stored source as the batch read it there,
+  // or undefined where the entry names no stored card, and refuses by
+  // throwing. Absent for an entry that was admitted in full before the batch
+  // was composed, which is every entry but a policy-granted write whose grant
+  // carries a predicate.
+  admit?: (storedSource: string | undefined) => Promise<void>;
 }
 
 export interface CreateEntry extends EntryCommon {

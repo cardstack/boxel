@@ -463,7 +463,7 @@ module(basename(import.meta.filename), function (hooks) {
       assert.strictEqual(batch.status, 200, 'the admin batch commits');
       assert.deepEqual(
         gateStats(),
-        { policyLoads: 0, predicateEvaluations: 0 },
+        { policyLoads: 0, predicateEvaluations: 0, pendingDischarges: 0 },
         'the gate did nothing for any of them',
       );
       assert.strictEqual(
@@ -481,7 +481,7 @@ module(basename(import.meta.filename), function (hooks) {
       );
       assert.deepEqual(
         gateStats(),
-        { policyLoads: 1, predicateEvaluations: 1 },
+        { policyLoads: 1, predicateEvaluations: 1, pendingDischarges: 0 },
         'through one policy load and one predicate',
       );
     });
@@ -740,17 +740,21 @@ module(basename(import.meta.filename), function (hooks) {
       );
     });
 
-    test('a write whose grant rests on a predicate is refused before anything is staged', async function (assert) {
+    test('a write whose predicate does not hold is refused before anything is staged', async function (assert) {
       let response = await operations(
         EDUCATION,
         AUTH.teacher(),
         invoke('rename', { href: HOMEROOM, data: { title: 'Renamed' } }),
-        invoke('delete', { href: ROOM_204 }),
+        invoke('delete', { href: ROOM_205 }),
       );
-      assertNotPermitted(assert, response, 'the delete of a classroom taught');
+      assertNotPermitted(
+        assert,
+        response,
+        'the delete of a classroom not taught',
+      );
       assert.strictEqual(
-        await titleOf(ROOM_204),
-        'Room 204',
+        await titleOf(ROOM_205),
+        'Room 205',
         'the classroom is still there',
       );
       assert.strictEqual(
@@ -759,9 +763,9 @@ module(basename(import.meta.filename), function (hooks) {
         'and the rename in the same batch did not land',
       );
       assert.strictEqual(
-        gateStats().predicateEvaluations,
-        0,
-        'the write’s predicate was not evaluated',
+        gateStats().pendingDischarges,
+        1,
+        'the write’s predicate was decided under the write lock',
       );
     });
 
@@ -1029,6 +1033,7 @@ module(basename(import.meta.filename), function (hooks) {
       assert.deepEqual(gateStats(), {
         policyLoads: 0,
         predicateEvaluations: 0,
+        pendingDischarges: 0,
       });
     });
 

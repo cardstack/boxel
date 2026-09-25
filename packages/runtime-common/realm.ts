@@ -223,8 +223,9 @@ import {
 } from './card-operations/dispatch.ts';
 import type { ReadShape } from './card-operations/dispatch.ts';
 import {
-  notPermitted,
+  dischargePendingDecision,
   policyGateStats,
+  type PendingWrite,
   type PolicyGateStats,
 } from './card-operations/gate.ts';
 import {
@@ -2031,6 +2032,7 @@ export class Realm {
   #adapter: RealmAdapter;
   #router: Router;
   #testOnlyCoarseAdmission: CoarseAdmission | undefined;
+  #testOnlyBeforeBatchLock: (() => Promise<void>) | undefined;
   #log = logger('realm');
   // Anchors the render-hold cap across back-to-back bulk commits, per render
   // lane held; see `_commitBatchUnlocked`. A lane has an entry only while a
@@ -5174,10 +5176,13 @@ export class Realm {
   // read. A caller the realm's own read/write permission declines may still
   // invoke an operation the realm's policy grants them: every entry is
   // resolved through the policy gate with the permission's refusal on it, and
-  // an entry no grant admits refuses the batch before any of it runs. An
-  // operation's program can read `actor()` and an `assert` can refuse on what
-  // it finds, but neither decides who may invoke it. Treat every operation's
-  // result as reachable by any caller permitted to invoke it.
+  // an entry no grant admits refuses the batch with nothing written. A write
+  // whose grant rests on a predicate is decided under the write lock, against
+  // the state it is about to change, and before anything in the batch is
+  // staged. An operation's program can read `actor()` and an `assert` can
+  // refuse on what it finds, but neither decides who may invoke it. Treat
+  // every operation's result as reachable by any caller permitted to invoke
+  // it.
   private async handleOperations(
     request: Request,
     requestContext: RequestContext,
@@ -5329,18 +5334,6 @@ export class Realm {
       }
     }
 
-    // A write the policy gate could admit only on a predicate. The predicate
-    // has to judge the state the write will change, which only the write lock
-    // holds still, and this batch evaluates none there. So the write is
-    // refused, before anything in the batch runs.
-    let pending = resolved.find(({ decision }) => decision.kind === 'pending');
-    if (pending) {
-      throw atEntry(
-        notPermitted(pending.target, pending.entry.name),
-        pending.entry.position,
-      );
-    }
-
     // An anonymous caller on a realm anyone may read or write has no identity
     // for an operation to read, and whether an operation reads one is settled
     // by its stored definition — so the batch is refused here, before any of
@@ -5406,6 +5399,12 @@ export class Realm {
       // runs in the order `runOperation` runs them for a read. The transformed
       // entry keeps its `position`, which is the key both the staging schedule
       // and the results are looked up by.
+      //
+      // A write the policy gate could admit only on a predicate carries that
+      // predicate to the coordinator, which decides it under the write lock
+      // against the state the write is about to change. A create's scope has
+      // its proposed document by now, which is what a create against a type
+      // is judged by.
       let staged = new Map<EntryPosition, BatchEntry>();
       for (let [index, write] of writes.entries()) {
         try {
@@ -5413,12 +5412,29 @@ export class Realm {
             write,
             this.#transformContext(write.entry, caller),
           );
-          let { entry, definition } = writes[index];
-          staged.set(entry.position, batchEntryFor(entry, definition));
+          let { entry, target, definition, decision, scope } = writes[index];
+          let pending: PendingWrite | undefined =
+            decision.kind === 'pending'
+              ? { target, name: entry.name, definition, decision, scope }
+              : undefined;
+          staged.set(entry.position, {
+            ...batchEntryFor(entry, definition),
+            ...(pending
+              ? {
+                  admit: (storedSource: string | undefined) =>
+                    dischargePendingDecision(
+                      this.operationCore,
+                      pending,
+                      storedSource,
+                    ),
+                }
+              : {}),
+          });
         } catch (err: unknown) {
           throw atEntry(err, write.entry.position);
         }
       }
+      await this.#testOnlyBeforeBatchLock?.();
       // The tree the caller sent, with the entries that only read taken out of
       // it: the groups are the batch's staging schedule, so the coordinator is
       // handed the shape rather than a flat list of what writes.
@@ -6509,6 +6525,14 @@ export class Realm {
   // regardless. Pass `undefined` to restore the real decision.
   __testOnlySetCoarseAdmission(admit: CoarseAdmission | undefined): void {
     this.#testOnlyCoarseAdmission = admit;
+  }
+
+  // Runs in an `/_operations` batch that writes, after every entry has been
+  // resolved through the policy gate and before the coordinator takes the
+  // write lock, so a test can change what a pending write's predicate reads in
+  // the window between the two. Pass `undefined` to remove it.
+  __testOnlySetBeforeBatchLock(hook: (() => Promise<void>) | undefined): void {
+    this.#testOnlyBeforeBatchLock = hook;
   }
 
   // Read fresh (no memoization) for the same reason createRequestContext
