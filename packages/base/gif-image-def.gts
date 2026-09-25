@@ -1,4 +1,4 @@
-import { readFirstBytes } from '@cardstack/runtime-common';
+import { readBytesUntil } from '@cardstack/runtime-common';
 import GifIcon from '@cardstack/boxel-icons/gif';
 import {
   RasterImageDef,
@@ -14,9 +14,10 @@ import {
 
 // The dimensions and the global color table's size sit in the first 13 bytes
 // (signature plus logical screen descriptor), but deciding whether the file
-// animates means walking its blocks to a second frame or the trailer. The walk
-// stops early on either, so the window only bounds a large still GIF or a huge
-// first frame; past it `animation` is left unset rather than guessed.
+// animates means walking its blocks to a second frame or the trailer. The read
+// stops as soon as the walk decides, so the cap bounds only a large still GIF
+// or a huge first frame; past it `animation` is left unset, which the srcset
+// gate treats as possibly animated.
 const GIF_READ_WINDOW_BYTES = 1_048_576;
 
 export class GifDef extends RasterImageDef {
@@ -32,7 +33,11 @@ export class GifDef extends RasterImageDef {
     SerializedFile<{ width: number; height: number } & RasterImageAttributes>
   > {
     let base = await super.extractAttributes(url, getStream, options);
-    let bytes = await readFirstBytes(await getStream(), GIF_READ_WINDOW_BYTES);
+    let bytes = await readBytesUntil(
+      await getStream(),
+      GIF_READ_WINDOW_BYTES,
+      (prefix) => extractGifAnimated(prefix) !== undefined,
+    );
     let { width, height } = extractGifDimensions(bytes);
 
     return {

@@ -98,6 +98,51 @@ export async function readFirstBytes(
   return merged.slice(0, n);
 }
 
+// Reads a prefix of `stream`, like `readFirstBytes`, but stops as soon as
+// `decided` reports that the bytes read so far are enough. For readers that
+// walk a file's structure (a GIF's frames, a PNG's chunks) and usually reach
+// an answer long before `maxBytes`, this bounds the fetch by the answer rather
+// than by the cap. `decided` sees the whole prefix read so far after each
+// chunk arrives. The stream is cancelled either way, so an unread remainder
+// never holds the connection open.
+export async function readBytesUntil(
+  stream: ByteStream,
+  maxBytes: number,
+  decided: (bytes: Uint8Array) => boolean,
+): Promise<Uint8Array> {
+  if (stream instanceof Uint8Array) {
+    return stream.slice(0, maxBytes);
+  }
+  let reader = stream.getReader();
+  let buffer = new Uint8Array(0);
+  let total = 0;
+  try {
+    while (total < maxBytes) {
+      let { done, value } = await reader.read();
+      if (done || !value) {
+        break;
+      }
+      if (total + value.length > buffer.length) {
+        // Grow geometrically so a many-chunk read copies O(n) bytes overall.
+        let grown = new Uint8Array(
+          Math.max(total + value.length, buffer.length * 2),
+        );
+        grown.set(buffer.subarray(0, total));
+        buffer = grown;
+      }
+      buffer.set(value, total);
+      total += value.length;
+      if (decided(buffer.subarray(0, Math.min(total, maxBytes)))) {
+        break;
+      }
+    }
+  } finally {
+    reader.releaseLock();
+    stream.cancel().catch(() => {});
+  }
+  return buffer.slice(0, Math.min(total, maxBytes));
+}
+
 export async function fileContentToText({
   content,
 }: Pick<FileRef, 'content'>): Promise<string> {
