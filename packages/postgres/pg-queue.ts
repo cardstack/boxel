@@ -638,29 +638,33 @@ export class PgQueueRunner implements QueueRunner {
             // - A family's exclusive work runs alone: it waits for every
             //   running member of the family, and every member waits for it.
             // - Writer lanes of one family run alongside each other, up to
-            //   `#maxWriterLanesPerFamily` at once.
+            //   `#maxWriterLanesPerFamily` at once, and one at a time while an
+            //   older exclusive job of the family is pending. An exclusive job
+            //   waits for the family to empty, and two writer lanes whose
+            //   passes keep overlapping would keep it occupied indefinitely.
+            //   With one lane at a time the family empties after each writer's
+            //   pass unless another save is already queued, and a worker that
+            //   can claim the exclusive job then takes it as the older of the
+            //   two. That is a chance, not a guarantee: a family whose next save
+            //   is always queued before the current pass ends keeps the
+            //   exclusive job waiting.
             // - A writer job does not start ahead of an older pending exclusive
             //   job of its family at the writer's priority tier or above (the
             //   tiers are user-initiated and system; see `isUserInitiatedTier`).
-            //   An exclusive job waits for the family to empty, and without
-            //   this barrier two writers whose passes keep overlapping would
-            //   keep it occupied indefinitely. Every worker that can claim the
-            //   writer job can claim the exclusive job too, so the exclusive
-            //   job takes its turn after the work that was running when it was
-            //   queued.
-            // - An older pending exclusive job at a lower tier does not hold a
-            //   writer job back. Instead, while it is pending, the family runs
-            //   one writer lane at a time. The workers that serve the higher
-            //   tier never claim a lower-tier job, so a system-tier from-scratch
-            //   pass waits for an all-priority worker to reach it behind every
-            //   realm's system work, which after a deploy that reindexes every
-            //   realm takes hours. A barrier would hold each save in the realm
-            //   for all of that. With one writer lane at a time the family
-            //   empties after each writer's pass unless another save is already
-            //   queued, and an all-priority worker that reaches the exclusive
-            //   job then claims it. That is a chance, not a guarantee: a family
-            //   whose next save is always queued before the current pass ends
-            //   keeps the exclusive job waiting.
+            //   With the pools the worker manager starts, a worker that can
+            //   claim a writer job can also claim any exclusive job of its
+            //   family at the writer's tier, so the one-lane rule already gives
+            //   that exclusive job its turn. This barrier keeps the turn when a
+            //   free worker can take the writer job but not the exclusive one,
+            //   such as a worker whose floor sits inside the tier.
+            // - Below the writer's tier there is no barrier. The workers that
+            //   serve the higher tier never claim a lower-tier job, so a
+            //   system-tier from-scratch pass waits for an all-priority worker
+            //   to reach it behind every realm's system work, which after a
+            //   deploy that reindexes every realm takes hours. A barrier would
+            //   hold each save in the realm for all of that. The one-lane rule
+            //   is what gives such a pass its chance: an all-priority worker
+            //   that reaches it while the family is empty claims it.
             //
             // Jobs published without a family are all exclusive, each in a
             // family of its own group, so for them these reduce to the first

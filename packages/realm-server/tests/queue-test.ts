@@ -2461,6 +2461,7 @@ module(basename(import.meta.filename), function () {
     let gates: Map<string, Deferred<void>>;
     let starts: Map<string, Deferred<void>>;
     let published: Promise<unknown>[];
+    let dones: Map<string, Promise<unknown>>;
 
     hooks.beforeEach(async function () {
       prepareTestDB();
@@ -2484,6 +2485,7 @@ module(basename(import.meta.filename), function () {
       gates = new Map();
       starts = new Map();
       published = [];
+      dones = new Map();
       for (let [i, runner] of runners.entries()) {
         runner.register('laneJob', async ({ name }: { name: string }) => {
           events.push(`${name} start`);
@@ -2537,6 +2539,7 @@ module(basename(import.meta.filename), function () {
         args: { name },
       });
       published.push(job.done);
+      dones.set(name, job.done);
       return job;
     }
 
@@ -2572,8 +2575,12 @@ module(basename(import.meta.filename), function () {
       return events.includes(`${name} start`);
     }
 
+    // Lets a job finish, and wakes every runner once its completion has
+    // committed. A runner woken before that still sees the job holding its
+    // lane, and would otherwise sleep until its next poll.
     async function finish(name: string) {
       gates.get(name)!.fulfill();
+      await dones.get(name);
       await kick();
     }
 
@@ -2741,8 +2748,8 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    // Without the barrier, writes arriving faster than they finish would keep
-    // the family occupied, and the exclusive job would never find it empty.
+    // Writes arriving faster than they finish must not keep the family
+    // occupied, or the exclusive job would never find it empty.
     test('a writer job does not start ahead of an older pending exclusive job', async function (assert) {
       await publishLaneJob('writer-a', {
         concurrencyGroup: lane('a'),
@@ -3140,6 +3147,70 @@ module(basename(import.meta.filename), function () {
           'writer-b start',
         ],
         'the exclusive job ran in its turn',
+      );
+    });
+  });
+
+  // The other lane-family modules put every runner's floor at the bottom of a
+  // tier, where a runner that can claim a writer job can also claim an
+  // exclusive job at the writer's tier. A runner floored inside the tier, like
+  // the index-only pool the worker manager can start at the user indexing
+  // priority, can claim the writer job and not the exclusive one.
+  module('queue - lane families within a tier', function (hooks) {
+    const allPriority = systemInitiatedPrerenderHtmlPriority;
+
+    let {
+      family,
+      lane,
+      events,
+      publishLaneJob,
+      started,
+      hasStarted,
+      finish,
+      afterAControlStarts,
+      floorOf,
+    } = setupLaneFamilies(hooks, [userInitiatedPriority, allPriority]);
+
+    test('a writer job does not start ahead of an older same-tier exclusive job its free runner cannot claim', async function (assert) {
+      // Keeps the all-priority runner busy, so the exclusive job stays pending.
+      await publishLaneJob('other realm', {
+        concurrencyGroup: 'indexing:http://test-realm/other/',
+        priority: systemInitiatedPriority,
+      });
+      await started('other realm');
+      await publishLaneJob('exclusive', {
+        concurrencyGroup: family,
+        laneFamily: family,
+        priority: userInitiatedPrerenderHtmlPriority,
+      });
+      await publishLaneJob('writer', {
+        concurrencyGroup: lane('a'),
+        laneFamily: family,
+        priority: userInitiatedPriority,
+      });
+      await afterAControlStarts('control', { priority: userInitiatedPriority });
+      assert.false(
+        hasStarted('writer'),
+        'the runner floored at the writer job passed it over, since the exclusive job queued first is in its tier',
+      );
+
+      await finish('other realm');
+      await started('exclusive');
+      await finish('exclusive');
+      await started('writer');
+      assert.deepEqual(
+        {
+          events: events.filter(
+            (event) =>
+              !event.startsWith('control') && !event.startsWith('other realm'),
+          ),
+          writerRanOn: floorOf('writer'),
+        },
+        {
+          events: ['exclusive start', 'exclusive finish', 'writer start'],
+          writerRanOn: allPriority,
+        },
+        'the all-priority runner took the exclusive job first and the writer job after it',
       );
     });
   });
