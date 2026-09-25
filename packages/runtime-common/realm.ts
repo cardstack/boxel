@@ -8060,15 +8060,8 @@ export class Realm {
   async #readStoredSource(
     caller: OperationCaller,
     localPath: LocalPath,
-    opts: {
-      headersOnly?: true;
-      skipStoredFileMeta?: true;
-      // The caller validates on the read's `version`, so it needs one even for
-      // a file the realm recorded no hash for.
-      validatesOnVersion?: true;
-    } = {},
+    opts: { headersOnly?: true; skipStoredFileMeta?: true } = {},
   ): Promise<OperationSourceResult | undefined> {
-    let { validatesOnVersion, ...readOpts } = opts;
     let result: OperationResult;
     try {
       result = await runOperation(
@@ -8081,14 +8074,11 @@ export class Realm {
           name: 'readSource',
           ...caller,
         },
-        // A caller that builds its own validator, from the bytes it caches,
-        // should not pay to have a `version` read off disk for a file whose
-        // hash the realm never recorded. One that validates on `version` has
-        // to.
-        {
-          ...readOpts,
-          ...(validatesOnVersion ? {} : { skipContentFingerprint: true }),
-        },
+        // No route reaching here validates on the read's `version` — each
+        // builds its own validator, from the bytes it caches or from the
+        // modification time — so none should pay to have one read off disk
+        // for it.
+        { ...opts, skipContentFingerprint: true },
       );
     } catch (e) {
       if (!isOperationFailure(e)) {
@@ -8868,7 +8858,7 @@ export class Realm {
       let source = await this.#readStoredSource(
         this.#callerOf(request, requestContext),
         handle.path,
-        { headersOnly, ...(bypassCache ? { validatesOnVersion: true } : {}) },
+        { headersOnly },
       );
       if (!source) {
         return notFound(request, requestContext, `${localName} not found`);
@@ -8888,13 +8878,15 @@ export class Realm {
         // holding the bytes from before the write. That client is often a
         // prerender tab reading a linked card for an index render, which would
         // then commit a row built from the old bytes. This branch streams the
-        // file rather than hashing it, so the fingerprint is the read's
-        // `version` — the hash the realm recorded when it wrote the file, or
-        // one read off disk when it recorded none.
+        // file rather than hashing a copy, so the fingerprint is read off the
+        // file itself, in bounded ranges that leave the body's stream alone.
+        // Not the hash the realm recorded at write time: only the file's size
+        // vouches for that record, so an out-of-band rewrite of the same length
+        // would keep it.
         return await this.serveLocalFile(request, served, requestContext, {
           defaultHeaders,
           etagVariant: SOURCE_ETAG_VARIANT,
-          etagBase: source.version ?? undefined,
+          etagBase: await contentHashFromRanges(handle),
           createdAt: source.created,
         });
       } else {
