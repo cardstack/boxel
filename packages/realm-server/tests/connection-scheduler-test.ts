@@ -445,12 +445,12 @@ module(basename(import.meta.filename), function () {
   });
 
   test('a quiet tenant’s shared work is served ahead of a heavy tenant’s queued shared work', async function (assert) {
-    let scheduler = new ConnectionScheduler({ limit: 4, tenantShare: 2 });
+    let scheduler = new ConnectionScheduler({ limit: 6, tenantShare: 2 });
     let heavy = openScope(REALM_A);
     let quiet = openScope(REALM_B);
 
     let heavyHeld = await heavy.run(() =>
-      Promise.all(Array.from({ length: 4 }, () => scheduler.acquire())),
+      Promise.all(Array.from({ length: 6 }, () => scheduler.acquire())),
     );
     let order: string[] = [];
     let track = (label: string, acquisition: Promise<() => void>) =>
@@ -490,7 +490,12 @@ module(basename(import.meta.filename), function () {
     let next = await settledWithin(heavyShared[0], 50);
     assert.true(
       next.settled,
-      'the heavy tenant’s shared work is granted though the tenant is at its share',
+      'the heavy tenant’s shared work is granted while its three connections keep it past its share',
+    );
+    assert.strictEqual(
+      scheduler.waitingAtShare,
+      5,
+      'its other work still waits at its share',
     );
 
     quietReadRelease();
