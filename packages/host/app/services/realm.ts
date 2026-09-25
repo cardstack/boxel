@@ -1073,24 +1073,67 @@ export default class RealmService extends Service {
     });
   }
 
-  restoreSessionsFromStorage(): void {
+  // `startingVisit` is for the routes a prerender visit enters through. The
+  // prerender server writes each visit's sessions into storage just before the
+  // visit, replacing the ones it wrote for the visit before — and the pool can
+  // hand a warm tab from one realm to another, so that visit may have been
+  // another realm's. Storage is then the whole truth about which realms this
+  // tab holds a session for, and a session it doesn't carry is dropped rather
+  // than kept beside the new ones. A realm left behind keeps answering
+  // `knownRealm`, which takes the first realm whose URL prefixes the one asked
+  // about: a leftover realm at an origin's root claims every realm under it,
+  // and a render of one of their cards fetches the root realm's info instead
+  // of its own.
+  //
+  // Only then: within a visit this service writes storage too — a relogin
+  // clears the whole blob before storing its own token — so a session missing
+  // from it mid-visit is not a stale one.
+  restoreSessionsFromStorage({
+    startingVisit = false,
+  }: { startingVisit?: boolean } = {}): void {
     let sessionsString = window.localStorage.getItem(SessionLocalStorageKey);
     if (sessionsString === this.lastRestoredSessionsString) {
       return;
     }
-    if (!sessionsString) {
+    if (!sessionsString && !startingVisit) {
       this.lastRestoredSessionsString = sessionsString;
       return;
     }
-    let tokens = JSON.parse(sessionsString) as Record<string, string>;
+    let tokens = (sessionsString ? JSON.parse(sessionsString) : {}) as Record<
+      string,
+      string
+    >;
     // Record the memo only after a successful parse, so a malformed blob can't
     // poison it and suppress a later retry.
     this.lastRestoredSessionsString = sessionsString;
+    if (startingVisit) {
+      this.dropSessionsNotCarriedBy(tokens);
+    }
     for (let [realmURL, token] of Object.entries(tokens)) {
       let resource = this.getOrCreateRealmResource(realmURL, token);
       if (token && resource.token !== token) {
         resource.token = token;
       }
+    }
+  }
+
+  // Only realms holding a session go: one this tab identified without a
+  // session holds nothing a caller was handed. Compared the way `knownRealm`
+  // compares, so a realm filed under one identifier form is not taken for
+  // missing because storage names it by another.
+  private dropSessionsNotCarriedBy(tokens: Record<string, string>): void {
+    let vn = this.network.virtualNetwork;
+    let carried = new Set(
+      Object.keys(tokens).map((realmURL) => vn.unresolveURL(realmURL)),
+    );
+    let stale = [...this._realms]
+      .filter(
+        ([realmURL, resource]) =>
+          resource.token && !carried.has(vn.unresolveURL(realmURL)),
+      )
+      .map(([realmURL]) => realmURL);
+    for (let realmURL of stale) {
+      this.removeRealm(realmURL);
     }
   }
 

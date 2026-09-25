@@ -293,7 +293,7 @@ export default class RenderRoute extends Route<Model> {
     if (!isTesting()) {
       // tests have their own way of dealing with window level errors in card-prerender.gts
       this.#attachWindowErrorListeners();
-      this.realm.restoreSessionsFromStorage();
+      this.realm.restoreSessionsFromStorage({ startingVisit: true });
     }
 
     // activate() doesn't run early enough for this to be set before the model()
@@ -822,7 +822,7 @@ export default class RenderRoute extends Route<Model> {
             this.loaderService.loader,
           );
 
-          await this.realm.ensureRealmMeta(realmURL);
+          await this.#ensureVisitRealmMeta(realmURL);
           let screenshotsMeta = await this.declarationScreenshotsMeta(
             doc,
             canonicalId,
@@ -926,6 +926,30 @@ export default class RenderRoute extends Route<Model> {
     }
     this.store.resetCache();
     this.lastStoreResetKey = resetKey;
+  }
+
+  // The realm info is fetched from whichever known realm `realmURL` resolves
+  // to, which is not always `realmURL`'s own: a realm the tab still knows whose
+  // URL prefixes it answers first. Its fetch then fails naming a realm this
+  // render never asked about, so the failure is extended to say which realm the
+  // render asked for, which one answered, and whether that one holds a session:
+  // one holding a session the visit's sessions carry, or one identified without
+  // a session along the way. The error doc then reads as a resolution fault on
+  // its own.
+  async #ensureVisitRealmMeta(realmURL: string): Promise<void> {
+    try {
+      await this.realm.ensureRealmMeta(realmURL);
+    } catch (err) {
+      let resolved = this.realm.url(realmURL);
+      if (err instanceof Error && resolved && resolved !== realmURL) {
+        let holdsSession = Boolean(this.realm.realms.get(resolved)?.token);
+        err.message =
+          `${err.message} (this render's realm ${realmURL} resolved to the ` +
+          `known realm ${resolved}, which ` +
+          `${holdsSession ? 'holds a' : 'holds no'} session)`;
+      }
+      throw err;
+    }
   }
 
   // What the card branch would otherwise read off its own `card+source` GET,
