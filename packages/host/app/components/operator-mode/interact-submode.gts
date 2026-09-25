@@ -455,7 +455,10 @@ export default class InteractSubmode extends Component {
       }
     });
     this.boundaryCrossingToken = token;
-    let budgetToken = this.hostMotion.beginBitmap();
+    // A card opened into a new stack leaves its source card on top of its own
+    // stack: it is no buried underlay, and every stack reflows to make room.
+    let newStack = stackIndex >= this.stacks.length;
+    let budgetToken = this.hostMotion.beginBitmap({ reflowStacks: newStack });
     // Tests settle only once the crossing and its deferred body are done.
     let waiterToken = waiter.beginAsync();
     try {
@@ -475,7 +478,9 @@ export default class InteractSubmode extends Component {
         (finish) => {
           this.hostMotion.onBitmapReady(budgetToken, finish);
         },
-        source.closest<HTMLElement>('.stack-item-card') ?? undefined,
+        newStack
+          ? undefined
+          : (source.closest<HTMLElement>('.stack-item-card') ?? undefined),
       );
     } finally {
       this.hostMotion.endBitmap(budgetToken);

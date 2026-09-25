@@ -401,6 +401,12 @@ export default class SubmodeLayout extends Component<Signature> {
     );
   }
 
+  // A crossing into a new stack leaves the existing stacks live beneath it,
+  // reflowing to make room; every other crossing owns the whole scene.
+  private get stacksInstant() {
+    return this.bitmapCrossingActive && !this.hostMotion.stacksReflowing;
+  }
+
   @action private async handleCardSelectFromSearch(
     cardId: string,
     kind?: SearchResultKind,
@@ -552,7 +558,7 @@ export default class SubmodeLayout extends Component<Signature> {
   <template>
     <StackMotion
       @onPerform={{this.onMotionPerform}}
-      @instant={{this.bitmapCrossingActive}}
+      @instant={{this.stacksInstant}}
       @portalActive={{bool this.operatorModeStateService.workspacePortal}}
       {{handleWindowResizeModifier this.onWindowResize}}
       class={{cn 'submode-layout' this.aiAssistantVisibilityClass}}

@@ -16,6 +16,9 @@ export default class HostMotionService extends Service {
   @tracked dragging = false;
   @tracked workspaceActive = false;
   @tracked private bitmapToken?: number;
+  // A crossing that opens a new stack leaves the existing stacks live under
+  // the view transition; they reflow with Choreo while the card flies.
+  @tracked private bitmapReflow = false;
   private nextToken = 0;
   private contexts = new Map<'stack' | 'sheet', ChoreoContext>();
   private bitmapFinish?: () => void;
@@ -35,6 +38,11 @@ export default class HostMotionService extends Service {
     return this.bitmapToken !== undefined;
   }
 
+  // Whether the running crossing leaves the stacks free to reflow.
+  get stacksReflowing() {
+    return this.bitmapActive && this.bitmapReflow;
+  }
+
   bind(kind: 'stack' | 'sheet', context: ChoreoContext) {
     this.contexts.set(kind, context);
     return () => {
@@ -45,7 +53,7 @@ export default class HostMotionService extends Service {
   isArmed(kind: 'stack' | 'sheet') {
     return (
       !this.dragging &&
-      !this.bitmapActive &&
+      (!this.bitmapActive || (kind === 'stack' && this.bitmapReflow)) &&
       !this.workspaceActive &&
       this.arming.active() &&
       (this.choreography === kind ||
@@ -58,7 +66,12 @@ export default class HostMotionService extends Service {
   }
 
   begin(kind: HostChoreography, primaryId?: string) {
-    if (this.dragging || this.bitmapActive || this.workspaceActive) {
+    let reflowing = this.bitmapActive && this.bitmapReflow && kind === 'stack';
+    if (
+      this.dragging ||
+      (this.bitmapActive && !reflowing) ||
+      this.workspaceActive
+    ) {
       traceMotionPhase(`begin-refused:${kind}`);
       return;
     }
@@ -67,12 +80,15 @@ export default class HostMotionService extends Service {
       traceMotionPhase(`begin-unbound:${kind}`);
       return;
     }
-    traceMotionPhase(`begin:${kind}`);
+    traceMotionPhase(`begin:${kind}${reflowing ? ':reflow' : ''}`);
     // Replacing the score within one region lets Choreo retain velocity.
-    // A different scene yields its allocation before this one starts.
-    if (this.choreography && this.choreography !== kind) this.finish();
+    // A different scene yields its allocation before this one starts, but
+    // never the crossing this reflow accompanies.
+    if (this.choreography && this.choreography !== kind && !reflowing)
+      this.finish();
     this.choreography = kind;
-    this.primaryId = primaryId;
+    // The crossing owns the new card; every existing stack moves.
+    this.primaryId = reflowing ? undefined : primaryId;
     this.arming.begin(context);
   }
 
@@ -85,10 +101,13 @@ export default class HostMotionService extends Service {
     this.workspaceActive = false;
   }
 
-  beginBitmap() {
+  beginBitmap({ reflowStacks = false } = {}) {
     this.finish();
     let token = ++this.nextToken;
-    if (!this.dragging) this.bitmapToken = token;
+    if (!this.dragging) {
+      this.bitmapToken = token;
+      this.bitmapReflow = reflowStacks;
+    }
     return token;
   }
 
@@ -101,6 +120,7 @@ export default class HostMotionService extends Service {
   endBitmap(token: number) {
     if (this.bitmapToken !== token) return;
     this.bitmapToken = undefined;
+    this.bitmapReflow = false;
     this.bitmapFinish = undefined;
   }
 
@@ -120,6 +140,7 @@ export default class HostMotionService extends Service {
     this.bitmapFinish?.();
     this.bitmapFinish = undefined;
     this.bitmapToken = undefined;
+    this.bitmapReflow = false;
     for (let context of this.contexts.values()) {
       let run = context.run;
       if (run && !run.isDone()) run.time = run.duration;
