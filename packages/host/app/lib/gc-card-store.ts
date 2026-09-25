@@ -345,16 +345,6 @@ export default class CardStoreWithGarbageCollection implements CardStore {
   // Returns whether a boundary was actually crossed, so that a caller holding
   // state of its own keyed to the same scope — `StoreService`'s in-flight maps
   // — can drop it in step rather than on every visit.
-  // The render scope this store is bound to, and how many card instances it
-  // holds, for a render's account of what it could reuse.
-  get heldRenderScope(): string | undefined {
-    return this.#jobScopedStateJobId;
-  }
-
-  get residentCardCount(): number {
-    return this.#cardInstances.size;
-  }
-
   observeIndexingJob(): boolean {
     let scope = currentRenderScope();
     if (scope === undefined) {

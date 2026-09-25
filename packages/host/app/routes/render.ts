@@ -493,8 +493,6 @@ export default class RenderRoute extends Route<Model> {
     // owner in this scope from reducing over a copy the last one left behind,
     // and doing it first means no straggler from an abandoned render can drop
     // residency midway through the render that follows it.
-    let scopeHeld = this.store.heldRenderScope;
-    let residentBeforeScope = this.store.residentCardCount;
     this.store.observeIndexingJob();
     this.cardContextStore.observeIndexingJob();
     // Which synchronization dropped this tab's loader, for the row's
@@ -809,7 +807,6 @@ export default class RenderRoute extends Route<Model> {
 
     let instance: CardDef | undefined;
     let settleWaits: StoreSettleWait[] | undefined;
-    let storeScope: BuildModelDiagnostics['storeScope'];
     try {
       if ('errors' in doc) {
         this.#dispositionModel(model, 'error');
@@ -849,13 +846,6 @@ export default class RenderRoute extends Route<Model> {
           };
 
           enterStage('buildModel:hydrating', 'hydrate');
-          storeScope = {
-            held: scopeHeld,
-            observed: this.store.heldRenderScope,
-            residentBeforeScope,
-            residentAtHydrate: this.store.residentCardCount,
-            rootResident: this.store.peek(canonicalId) !== undefined,
-          };
           let hydratedInstance = await this.store.add(enhancedDoc, {
             relativeTo: rri(id),
             realm: realmURL,
@@ -910,7 +900,6 @@ export default class RenderRoute extends Route<Model> {
       ),
       ...(loaderResetReason ? { loaderResetReason } : {}),
       ...(cardSourceFrom ? { cardSourceFrom } : {}),
-      ...(storeScope ? { storeScope } : {}),
       ...(moduleEvaluationsMs ? { moduleEvaluationsMs } : {}),
       ...(prunedHydrateFieldsMs
         ? { hydrateFieldsMs: prunedHydrateFieldsMs }

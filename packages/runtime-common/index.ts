@@ -331,21 +331,6 @@ export interface BuildModelDiagnostics {
   // prerender-html visit stashes and consumes a source the same way but never
   // enters that route, so its own choice is reported nowhere.
   cardSourceFrom?: 'stash' | 'fetch';
-  // What the tab's store held when this build began, which decides what the
-  // render can reuse rather than read. `held` is the render scope the store
-  // was bound to before this build and `observed` the one the build runs
-  // under; they differ when the build crossed a scope boundary, which drops
-  // resident instances. `residentBeforeScope` and `residentAtHydrate` count
-  // the resident card instances before that boundary and when hydration
-  // began, and `rootResident` says whether the card being rendered was among
-  // them — a resident root is updated in place, links already loaded and all.
-  storeScope?: {
-    held?: string;
-    observed?: string;
-    residentBeforeScope: number;
-    residentAtHydrate: number;
-    rootResident: boolean;
-  };
   // Per-field hydration wall-clock, keyed by dotted field path from the
   // card's root — the deserialization sibling of `searchDocFieldsMs`, and
   // the breakdown of `buildModelMs.hydrate`. Same bounding, so a cheap card

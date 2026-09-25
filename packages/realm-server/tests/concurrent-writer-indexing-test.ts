@@ -5,7 +5,6 @@ import type { SuperTest, Test } from 'supertest';
 import {
   Batch,
   Deferred,
-  type BuildModelDiagnostics,
   IndexWriter,
   SupportedMimeType,
   Worker,
@@ -23,7 +22,6 @@ import {
   type RunCommandResponse,
   type ScreenshotPrerenderArgs,
   type ScreenshotPrerenderResponse,
-  type ResponseWithNodeStream,
   type VirtualNetwork,
 } from '@cardstack/runtime-common';
 import { prerenderHtmlWriterLane } from '@cardstack/runtime-common/jobs/prerender-html';
@@ -169,12 +167,13 @@ function holdWriterPassesBeforeCommit(
   };
 }
 
-// The test prerenderer, recording the scope each visit carried. A prerender
-// tab reuses what it read under one scope without reading it again, so the
-// scope a visit carries is what decides whether it can read another writer's
-// commit — and a single-page test prerenderer clears its only tab on every
-// scope change, which hides a stale read the scope would have allowed on a
-// larger pool.
+// The test prerenderer, recording the scope each visit carried and what its
+// render read. A prerender tab reuses what it read under one scope without
+// reading it again, so the scope a visit carries is what decides whether it
+// can read another writer's commit. Which tab a visit lands on is the pool's
+// choice, and the suite's prerender server runs one tab or several depending
+// on its environment, so the assertions pin the scopes rather than which tab
+// reused what.
 class RecordingPrerenderer implements Prerenderer {
   visits: RecordedVisit[] = [];
   #startedAt = Date.now();
@@ -184,18 +183,9 @@ class RecordingPrerenderer implements Prerenderer {
     return (this.#inner ??= getTestPrerenderer());
   }
 
-  // The realm's answers to the tabs' reads of the student, which a render
-  // takes its linked student from.
-  studentReads: RecordedRead[] = [];
-
   reset() {
     this.visits = [];
-    this.studentReads = [];
     this.#startedAt = Date.now();
-  }
-
-  now(): number {
-    return Date.now() - this.#startedAt;
   }
 
   async prerenderVisit(args: PrerenderVisitArgs): Promise<RenderVisitResponse> {
@@ -212,13 +202,14 @@ class RecordingPrerenderer implements Prerenderer {
     let response = await (await this.#prerenderer()).prerenderVisit(args);
     visit.endMs = Date.now() - this.#startedAt;
     let card = response.card;
+    let diagnostics = (response.meta?.diagnostics ?? {}) as {
+      tabReused?: boolean;
+      loaderResetReason?: string;
+    };
     visit.studentName = card?.searchDoc?.studentName;
     visit.title = card?.searchDoc?.title;
-    // The render's own diagnostics are lifted onto the response's meta.
-    let diagnostics = response.meta?.diagnostics;
-    visit.tabReused = diagnostics?.tabReused;
-    visit.loaderResetReason = diagnostics?.loaderResetReason;
-    visit.storeScope = diagnostics?.storeScope;
+    visit.tabReused = diagnostics.tabReused;
+    visit.loaderResetReason = diagnostics.loaderResetReason;
     visit.error = card?.error?.error?.message;
     return response;
   }
@@ -276,14 +267,6 @@ class RecordingPrerenderer implements Prerenderer {
           ...(visit.loaderResetReason
             ? [`loaderReset=${visit.loaderResetReason}`]
             : []),
-          ...(visit.storeScope
-            ? [
-                `store(held=${visit.storeScope.held?.replace(realmURL.href, '')}`,
-                `observed=${visit.storeScope.observed?.replace(realmURL.href, '')}`,
-                `resident=${visit.storeScope.residentBeforeScope}->${visit.storeScope.residentAtHydrate}`,
-                `rootResident=${visit.storeScope.rootResident})`,
-              ]
-            : []),
           ...(visit.title !== undefined ? [`title=${visit.title}`] : []),
           ...(visit.studentName !== undefined
             ? [`studentName=${visit.studentName}`]
@@ -291,81 +274,8 @@ class RecordingPrerenderer implements Prerenderer {
           ...(visit.error ? [`error=${visit.error}`] : []),
         ].join(' '),
       )
-      .concat(
-        this.studentReads.map((read) =>
-          [
-            `read student-1 at ${read.ms}ms`,
-            `accept=${read.accept}`,
-            `if-none-match=${read.ifNoneMatch}`,
-            `-> ${read.status}`,
-            `etag=${read.etag}`,
-            ...(read.cardCache ? [`card-cache=${read.cardCache}`] : []),
-            ...(read.name !== undefined ? [`name=${read.name}`] : []),
-          ].join(' '),
-        ),
-      )
       .join('\n');
   }
-}
-
-interface RecordedRead {
-  // Milliseconds since the test began, on the visits' clock.
-  ms: number;
-  accept: string | null;
-  ifNoneMatch: string | null;
-  status: number;
-  etag: string | null;
-  cardCache: string | null;
-  // The student's name in a full answer.
-  name?: unknown;
-}
-
-// Records every GET of the student the realm answers, around the realm's
-// request handler, so a render's linked student can be traced to the answer
-// it was built from. Undone by the returned function.
-function recordStudentReads(
-  realm: Realm,
-  recorder: RecordingPrerenderer,
-): () => void {
-  let target = realm as unknown as {
-    internalHandle: (
-      request: Request,
-      isLocal: boolean,
-    ) => Promise<ResponseWithNodeStream | null>;
-  };
-  let original = target.internalHandle;
-  target.internalHandle = async (request: Request, isLocal: boolean) => {
-    let response = await original.call(realm, request, isLocal);
-    if (
-      request.method === 'GET' &&
-      new URL(request.url).pathname
-        .replace(/\.json$/, '')
-        .endsWith('/student-1') &&
-      response
-    ) {
-      let read: RecordedRead = {
-        ms: recorder.now(),
-        accept: request.headers.get('accept'),
-        ifNoneMatch: request.headers.get('if-none-match'),
-        status: response.status,
-        etag: response.headers.get('etag'),
-        cardCache: response.headers.get('x-boxel-card-cache'),
-      };
-      if (response.status === 200 && !response.nodeStream) {
-        try {
-          let doc = await response.clone().json();
-          read.name = doc?.data?.attributes?.name;
-        } catch {
-          // not a JSON body; the status and validator still say what happened
-        }
-      }
-      recorder.studentReads.push(read);
-    }
-    return response;
-  };
-  return () => {
-    target.internalHandle = original;
-  };
 }
 
 interface RecordedVisit {
@@ -383,8 +293,6 @@ interface RecordedVisit {
   studentName?: unknown;
   tabReused?: boolean;
   loaderResetReason?: string;
-  // What the tab's store held when the render's model build began.
-  storeScope?: BuildModelDiagnostics['storeScope'];
   error?: string;
 }
 
@@ -529,12 +437,10 @@ module(basename(import.meta.filename), function () {
     // before it is torn down.
     module('with three workers', function (hooks) {
       let runners: PgQueueRunner[] = [];
-      let stopRecordingReads: (() => void) | undefined;
       let hold: ReturnType<typeof holdWriterPassesBeforeCommit> | undefined;
 
       hooks.beforeEach(async function () {
         recorder.reset();
-        stopRecordingReads = recordStudentReads(realm, recorder);
         for (let n of [2, 3]) {
           let runner = new PgQueueRunner({
             adapter: dbAdapter,
@@ -561,8 +467,6 @@ module(basename(import.meta.filename), function () {
         hold?.release();
         hold?.restore();
         hold = undefined;
-        stopRecordingReads?.();
-        stopRecordingReads = undefined;
         for (let runner of runners) {
           await runner.destroy();
         }
