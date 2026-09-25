@@ -324,7 +324,7 @@ module('Integration | content-only file preview components', function (hooks) {
 
   test('ImagePreview assembles srcset from the captured rendition slots', async function (assert) {
     let { ImagePreview } = fileFormats;
-    // A wire-shape model carrying the same `screenshotsMeta` key a FileDef
+    // A wire-shape model carrying the same `capturesMeta` key a FileDef
     // instance exposes: the reading formats offer the captured renditions as
     // narrower candidates with the original as the largest.
     let image = {
@@ -334,22 +334,22 @@ module('Integration | content-only file preview components', function (hooks) {
       contentType: 'image/png',
       width: 3000,
       height: 2250,
-      screenshotsMeta: {
+      capturesMeta: {
         thumb: {
-          url: 'http://example.com/_screenshot/img/hero.png?name=thumb',
+          url: 'http://example.com/_capture/img/hero.png?name=thumb',
           width: 170,
           height: 250,
           deviceScaleFactor: 2,
           useAsThumbnail: true,
         },
         'rendition-640': {
-          url: 'http://example.com/_screenshot/img/hero.png?name=rendition-640',
+          url: 'http://example.com/_capture/img/hero.png?name=rendition-640',
           width: 640,
           height: 480,
           deviceScaleFactor: 1,
         },
         'rendition-1280': {
-          url: 'http://example.com/_screenshot/img/hero.png?name=rendition-1280',
+          url: 'http://example.com/_capture/img/hero.png?name=rendition-1280',
           width: 1280,
           height: 960,
           deviceScaleFactor: 1,
@@ -398,9 +398,9 @@ module('Integration | content-only file preview components', function (hooks) {
       contentType: 'image/gif',
       width: 3000,
       height: 2250,
-      screenshotsMeta: {
+      capturesMeta: {
         'rendition-640': {
-          url: 'http://example.com/_screenshot/img/loop.gif?name=rendition-640',
+          url: 'http://example.com/_capture/img/loop.gif?name=rendition-640',
           width: 640,
           height: 480,
           deviceScaleFactor: 1,
@@ -431,9 +431,9 @@ module('Integration | content-only file preview components', function (hooks) {
       contentType: 'image/webp',
       width: 3000,
       height: 2250,
-      screenshotsMeta: {
+      capturesMeta: {
         'rendition-640': {
-          url: 'http://example.com/_screenshot/img/loop.webp?name=rendition-640',
+          url: 'http://example.com/_capture/img/loop.webp?name=rendition-640',
           width: 640,
           height: 480,
           deviceScaleFactor: 1,
@@ -464,15 +464,15 @@ module('Integration | content-only file preview components', function (hooks) {
       contentType: 'image/png',
       width: 2250,
       height: 3000,
-      screenshotsMeta: {
+      capturesMeta: {
         'rendition-640': {
-          url: 'http://example.com/_screenshot/img/tall.png?name=rendition-640',
+          url: 'http://example.com/_capture/img/tall.png?name=rendition-640',
           width: 640,
           height: 480,
           deviceScaleFactor: 1,
         },
         'rendition-1280': {
-          url: 'http://example.com/_screenshot/img/tall.png?name=rendition-1280',
+          url: 'http://example.com/_capture/img/tall.png?name=rendition-1280',
           width: 1280,
           height: 960,
           deviceScaleFactor: 1,

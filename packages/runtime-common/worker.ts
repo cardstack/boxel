@@ -341,11 +341,8 @@ export class Worker {
         ),
       'run-command': () =>
         this.#queue.register(`run-command`, Tasks['runCommand'](taskArgs)),
-      'screenshot-card': () =>
-        this.#queue.register(
-          `screenshot-card`,
-          Tasks['screenshotCard'](taskArgs),
-        ),
+      'capture-card': () =>
+        this.#queue.register(`capture-card`, Tasks['captureCard'](taskArgs)),
     };
     let jobTypes = this.#indexJobsOnly
       ? (INDEX_JOB_TYPES as readonly string[])

@@ -102,8 +102,8 @@ import {
   assembledLinkResourceBudget,
 } from './search-bounds.ts';
 import {
-  screenshotsMetaFromManifest,
-  type ScreenshotManifest,
+  capturesMetaFromManifest,
+  type CaptureManifest,
 } from './capture-spec.ts';
 
 // We allow up to this many traversals into the same card type per
@@ -264,11 +264,11 @@ export interface SearchResultDoc {
   // invalidation does not cascade indexed_at (see
   // `index-writer.ts.calculateInvalidations` realm_url filter).
   deps: string[] | null;
-  // The primary card's declared-screenshot manifest
-  // (`prerendered_html.screenshots`). Like `generation`, kept off the
-  // assembled `doc` and joined into per-instance `meta.screenshots` only by
+  // The primary card's declared-capture manifest
+  // (`prerendered_html.captures`). Like `generation`, kept off the
+  // assembled `doc` and joined into per-instance `meta.captures` only by
   // the realm's card+json GET handler.
-  screenshots: ScreenshotManifest | null;
+  captures: CaptureManifest | null;
   // Whether assembling this document applied any query-backed field — a
   // field whose targets are found by running a query now rather than by
   // following a stored link. Such a document is not a function of this
@@ -928,7 +928,7 @@ export class RealmIndexQueryEngine {
       version: instance.sourceContentHash,
       indexedAt: instance.indexedAt,
       deps: instance.deps,
-      screenshots: instance.screenshots,
+      captures: instance.captures,
       queryBacked,
     };
   }
@@ -964,24 +964,24 @@ export class RealmIndexQueryEngine {
     return await this.#indexQueryEngine.liveInstanceGeneration(url, opts);
   }
 
-  // The live instance's declared-screenshot manifest with the row's
+  // The live instance's declared-capture manifest with the row's
   // canonical url (undefined when not live, manifest null when live but
   // uncaptured) — the `?name=` serving route's addressing read; liveness
   // gate, ledger spelling, and manifest in one narrow read.
-  async liveInstanceScreenshots(
+  async liveInstanceCaptures(
     url: URL,
     opts?: QueryOptions,
-  ): Promise<{ url: string; manifest: ScreenshotManifest | null } | undefined> {
-    return await this.#indexQueryEngine.liveInstanceScreenshots(url, opts);
+  ): Promise<{ url: string; manifest: CaptureManifest | null } | undefined> {
+    return await this.#indexQueryEngine.liveInstanceCaptures(url, opts);
   }
 
-  // The file-row twin of `liveInstanceScreenshots` — the `?name=` route's
+  // The file-row twin of `liveInstanceCaptures` — the `?name=` route's
   // fallback addressing read for paths that resolve to no live instance.
-  async liveFileScreenshots(
+  async liveFileCaptures(
     url: URL,
     opts?: QueryOptions,
-  ): Promise<{ url: string; manifest: ScreenshotManifest | null } | undefined> {
-    return await this.#indexQueryEngine.liveFileScreenshots(url, opts);
+  ): Promise<{ url: string; manifest: CaptureManifest | null } | undefined> {
+    return await this.#indexQueryEngine.liveFileCaptures(url, opts);
   }
 
   async file(url: URL, opts?: QueryOptions): Promise<IndexedFile | undefined> {
@@ -2321,24 +2321,21 @@ export class RealmIndexQueryEngine {
             let maybeResult = instanceMap.get(entry.linkURL.href);
             if (maybeResult) {
               linkResource = maybeResult.resource;
-              // Join the linked instance's declared-screenshot manifest into
+              // Join the linked instance's declared-capture manifest into
               // its `meta`, mirroring what the serving realm's own card+json
               // GET stamps — a cross-realm link gets the same key from that
               // realm's GET, so consumers see one shape either way. (This
               // layer already rewrites the resource's relationships in
               // place; the row's resources are parsed fresh per query.)
-              if (maybeResult.screenshots) {
+              if (maybeResult.captures) {
                 linkResource.meta = {
                   ...linkResource.meta,
-                  screenshots: screenshotsMetaFromManifest(
-                    maybeResult.screenshots,
-                    {
-                      realmURL: realmURL.href,
-                      instanceLocalPath: realmPath
-                        .local(new URL(maybeResult.canonicalURL))
-                        .replace(/\.json$/, ''),
-                    },
-                  ),
+                  captures: capturesMetaFromManifest(maybeResult.captures, {
+                    realmURL: realmURL.href,
+                    instanceLocalPath: realmPath
+                      .local(new URL(maybeResult.canonicalURL))
+                      .replace(/\.json$/, ''),
+                  }),
                 };
               }
             }
@@ -2770,13 +2767,13 @@ function fileResourceFromIndex(
       adoptsFrom: adoptsFrom as CodeRef,
       realmURL: fileEntry.realmURL as RealmIdentifier,
       ...fileMetaTimestamps(lastModified, createdAt),
-      // The file row's declared-screenshot manifest, joined here so a linked
-      // FileDef carries `meta.screenshots` the way a linked instance does
+      // The file row's declared-capture manifest, joined here so a linked
+      // FileDef carries `meta.captures` the way a linked instance does
       // (see the loadLinks instance branch) — a file's own GET stamps the
       // same key via `fileMetaDocumentFromIndex`.
-      ...(fileEntry.screenshots && fileURL.href.startsWith(fileEntry.realmURL)
+      ...(fileEntry.captures && fileURL.href.startsWith(fileEntry.realmURL)
         ? {
-            screenshots: screenshotsMetaFromManifest(fileEntry.screenshots, {
+            captures: capturesMetaFromManifest(fileEntry.captures, {
               realmURL: fileEntry.realmURL,
               instanceLocalPath: fileURL.href.slice(fileEntry.realmURL.length),
             }),

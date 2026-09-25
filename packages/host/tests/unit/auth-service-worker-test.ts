@@ -9,7 +9,7 @@ import { SessionLocalStorageKey } from '@cardstack/host/utils/local-storage-keys
 // the SW environment. The actual SW is at public/auth-service-worker.js.
 //
 // We duplicate the core logic here (token matching, fetch interception,
-// on-miss client fallback, `_screenshot/` 503 absorption) to test it in a
+// on-miss client fallback, `_capture/` 503 absorption) to test it in a
 // standard QUnit context where service workers aren't available. The
 // mirrored logic can drift from the shipped file, so the "shipped worker"
 // module at the bottom evaluates the real public/auth-service-worker.js
@@ -39,11 +39,11 @@ function createServiceWorkerEnv(
     // Mirrors TOKEN_REQUEST_REFRESH_TIMEOUT_MS — the extended budget
     // applied after the client posts `{type:'pending'}`.
     tokenRequestRefreshTimeoutMs?: number;
-    // Network stub for the `_screenshot/` 503-absorption loop. Receives the
+    // Network stub for the `_capture/` 503-absorption loop. Receives the
     // Request the SW would fetch on each attempt. Absorption paths require
     // it; leaving it unset makes any unexpected engagement of the loop fail
     // loudly.
-    screenshotFetch?: (request: Request) => Promise<Response>;
+    captureFetch?: (request: Request) => Promise<Response>;
   } = {},
 ) {
   const realmTokens = new Map<string, string>();
@@ -170,22 +170,22 @@ function createServiceWorkerEnv(
     return new Request(request, { headers, mode: 'cors' });
   }
 
-  // Mirrors the SCREENSHOT_* constants and helpers in auth-service-worker.js.
-  const SCREENSHOT_PATH_SEGMENT = '/_screenshot/';
-  const SCREENSHOT_RETRY_BUDGET_MS = 90000;
+  // Mirrors the CAPTURE_* constants and helpers in auth-service-worker.js.
+  const CAPTURE_PATH_SEGMENT = '/_capture/';
+  const CAPTURE_RETRY_BUDGET_MS = 90000;
 
-  function isScreenshotRoute(request: Request): boolean {
+  function isCaptureRoute(request: Request): boolean {
     if (request.method !== 'GET') {
       return false;
     }
     try {
-      return new URL(request.url).pathname.includes(SCREENSHOT_PATH_SEGMENT);
+      return new URL(request.url).pathname.includes(CAPTURE_PATH_SEGMENT);
     } catch {
       return false;
     }
   }
 
-  function screenshotRetryDelayMs(response: Response): number | undefined {
+  function captureRetryDelayMs(response: Response): number | undefined {
     if (response.status !== 503) {
       return undefined;
     }
@@ -211,19 +211,19 @@ function createServiceWorkerEnv(
     clock += ms;
   };
 
-  async function fetchScreenshotAbsorbing503s(
+  async function fetchCaptureAbsorbing503s(
     buildRequest: () => Request,
   ): Promise<Response> {
-    let doFetch = opts.screenshotFetch;
+    let doFetch = opts.captureFetch;
     if (!doFetch) {
       throw new Error(
-        'screenshot absorption engaged but no screenshotFetch was configured',
+        'capture absorption engaged but no captureFetch was configured',
       );
     }
-    let deadline = now() + SCREENSHOT_RETRY_BUDGET_MS;
+    let deadline = now() + CAPTURE_RETRY_BUDGET_MS;
     for (;;) {
       let response = await doFetch(buildRequest());
-      let delayMs = screenshotRetryDelayMs(response);
+      let delayMs = captureRetryDelayMs(response);
       if (delayMs === undefined) {
         return response;
       }
@@ -237,8 +237,8 @@ function createServiceWorkerEnv(
 
   // Returns:
   //   - Request: the SW would respondWith fetch of this authed Request
-  //   - Response: the `_screenshot/` absorption loop ran the network via
-  //     opts.screenshotFetch and this is what the page would receive
+  //   - Response: the `_capture/` absorption loop ran the network via
+  //     opts.captureFetch and this is what the page would receive
   //   - 'pass-through': the SW would not intercept (returns from fetch handler)
   //   - 'fallthrough-fetch': the SW called respondWith but with the original
   //     request (client had no token); will hit the network unauth'd
@@ -255,8 +255,8 @@ function createServiceWorkerEnv(
     let url = request.url;
     let matchedToken = lookupToken(url);
     if (matchedToken) {
-      if (isScreenshotRoute(request)) {
-        return fetchScreenshotAbsorbing503s(() =>
+      if (isCaptureRoute(request)) {
+        return fetchCaptureAbsorbing503s(() =>
           buildRealmRequest(request, lookupToken(url)),
         );
       }
@@ -275,15 +275,15 @@ function createServiceWorkerEnv(
 
     let token = await requestTokenFromClient(url);
     if (token) {
-      if (isScreenshotRoute(request)) {
-        return fetchScreenshotAbsorbing503s(() =>
+      if (isCaptureRoute(request)) {
+        return fetchCaptureAbsorbing503s(() =>
           buildRealmRequest(request, lookupToken(url) ?? token),
         );
       }
       return buildRealmRequest(request, token);
     }
-    if (isScreenshotRoute(request) && realmHosts.has(origin)) {
-      return fetchScreenshotAbsorbing503s(() =>
+    if (isCaptureRoute(request) && realmHosts.has(origin)) {
+      return fetchCaptureAbsorbing503s(() =>
         buildRealmRequest(request, lookupToken(url)),
       );
     }
@@ -769,9 +769,9 @@ module('Unit | auth-service-worker', function () {
     });
   });
 
-  module('_screenshot/ 503 absorption', function () {
+  module('_capture/ 503 absorption', function () {
     const REALM_URL = 'http://localhost:4201/user/realm/';
-    const SCREENSHOT_URL = `${REALM_URL}_screenshot/Card/1.png?w=800&h=600`;
+    const CAPTURE_URL = `${REALM_URL}_capture/Card/1.png?w=800&h=600`;
 
     function response(status: number, retryAfter?: string) {
       return new Response(null, {
@@ -785,11 +785,11 @@ module('Unit | auth-service-worker', function () {
     function makeSw(responses: Response[], extraOpts = {}) {
       let fetched: Request[] = [];
       let sw = createServiceWorkerEnv({
-        screenshotFetch: async (request) => {
+        captureFetch: async (request) => {
           fetched.push(request);
           let next = responses.shift();
           if (!next) {
-            throw new Error('screenshotFetch called more times than expected');
+            throw new Error('captureFetch called more times than expected');
           }
           return next;
         },
@@ -803,14 +803,14 @@ module('Unit | auth-service-worker', function () {
       return { sw, fetched };
     }
 
-    test('injects Authorization on query-param _screenshot URLs and resolves with the eventual 200 after absorbing 503s', async function (assert) {
+    test('injects Authorization on query-param _capture URLs and resolves with the eventual 200 after absorbing 503s', async function (assert) {
       let { sw, fetched } = makeSw([
         response(503, '2'),
         response(503, '3'),
         response(200),
       ]);
 
-      let result = await sw.processFetch(new Request(SCREENSHOT_URL));
+      let result = await sw.processFetch(new Request(CAPTURE_URL));
 
       assert.ok(result instanceof Response, 'the page receives a Response');
       assert.strictEqual((result as Response).status, 200);
@@ -833,7 +833,7 @@ module('Unit | auth-service-worker', function () {
     test('a 503 without Retry-After is let through untouched', async function (assert) {
       let { sw, fetched } = makeSw([response(503)]);
 
-      let result = await sw.processFetch(new Request(SCREENSHOT_URL));
+      let result = await sw.processFetch(new Request(CAPTURE_URL));
 
       assert.strictEqual((result as Response).status, 503);
       assert.strictEqual(fetched.length, 1, 'no retry');
@@ -844,7 +844,7 @@ module('Unit | auth-service-worker', function () {
         response(503, 'Wed, 21 Oct 2026 07:28:00 GMT'),
       ]);
 
-      let result = await sw.processFetch(new Request(SCREENSHOT_URL));
+      let result = await sw.processFetch(new Request(CAPTURE_URL));
 
       assert.strictEqual((result as Response).status, 503);
       assert.strictEqual(fetched.length, 1, 'no retry');
@@ -856,7 +856,7 @@ module('Unit | auth-service-worker', function () {
       // synchronized poll loops.
       let { sw, fetched } = makeSw([response(404, '1')]);
 
-      let result = await sw.processFetch(new Request(SCREENSHOT_URL));
+      let result = await sw.processFetch(new Request(CAPTURE_URL));
 
       assert.strictEqual((result as Response).status, 404);
       assert.strictEqual(fetched.length, 1, 'no retry');
@@ -873,7 +873,7 @@ module('Unit | auth-service-worker', function () {
         response(503, '30'),
       ]);
 
-      let result = await sw.processFetch(new Request(SCREENSHOT_URL));
+      let result = await sw.processFetch(new Request(CAPTURE_URL));
 
       assert.strictEqual(
         (result as Response).status,
@@ -890,7 +890,7 @@ module('Unit | auth-service-worker', function () {
       // rather than surfacing the 503 immediately.
       let { sw, fetched } = makeSw([response(503, '600'), response(200)]);
 
-      let result = await sw.processFetch(new Request(SCREENSHOT_URL));
+      let result = await sw.processFetch(new Request(CAPTURE_URL));
 
       assert.strictEqual((result as Response).status, 200);
       assert.strictEqual(fetched.length, 2, 'exactly one deadline retry');
@@ -904,7 +904,7 @@ module('Unit | auth-service-worker', function () {
     test('a 503 on the deadline retry is let through', async function (assert) {
       let { sw, fetched } = makeSw([response(503, '600'), response(503, '30')]);
 
-      let result = await sw.processFetch(new Request(SCREENSHOT_URL));
+      let result = await sw.processFetch(new Request(CAPTURE_URL));
 
       assert.strictEqual((result as Response).status, 503);
       assert.strictEqual(fetched.length, 2, 'no retries past the deadline');
@@ -913,7 +913,7 @@ module('Unit | auth-service-worker', function () {
     test('sub-second Retry-After values are clamped to a 1s pause', async function (assert) {
       let { sw } = makeSw([response(503, '0'), response(200)]);
 
-      await sw.processFetch(new Request(SCREENSHOT_URL));
+      await sw.processFetch(new Request(CAPTURE_URL));
 
       assert.deepEqual(sw.sleeps, [1000]);
     });
@@ -923,7 +923,7 @@ module('Unit | auth-service-worker', function () {
       let fetched: Request[] = [];
       let responses = [response(503, '1'), response(200)];
       let sw = createServiceWorkerEnv({
-        screenshotFetch: async (request) => {
+        captureFetch: async (request) => {
           fetched.push(request);
           if (fetched.length === 1) {
             // Token rotates while the first attempt is being absorbed.
@@ -943,7 +943,7 @@ module('Unit | auth-service-worker', function () {
         token: 'original-token',
       });
 
-      await sw.processFetch(new Request(SCREENSHOT_URL));
+      await sw.processFetch(new Request(CAPTURE_URL));
 
       assert.deepEqual(
         fetched.map((r) => r.headers.get('Authorization')),
@@ -960,7 +960,7 @@ module('Unit | auth-service-worker', function () {
       let fetched: Request[] = [];
       let responses = [response(503, '1'), response(401)];
       let sw = createServiceWorkerEnv({
-        screenshotFetch: async (request) => {
+        captureFetch: async (request) => {
           fetched.push(request);
           if (fetched.length === 1) {
             swRef.sw!.processMessage({ type: 'clear-tokens' });
@@ -975,7 +975,7 @@ module('Unit | auth-service-worker', function () {
         token: 'original-token',
       });
 
-      let result = await sw.processFetch(new Request(SCREENSHOT_URL));
+      let result = await sw.processFetch(new Request(CAPTURE_URL));
 
       assert.deepEqual(
         fetched.map((r) => r.headers.get('Authorization')),
@@ -989,8 +989,8 @@ module('Unit | auth-service-worker', function () {
       );
     });
 
-    test('non-_screenshot GETs never engage absorption', async function (assert) {
-      // The screenshotFetch stub would throw if invoked with no responses
+    test('non-_capture GETs never engage absorption', async function (assert) {
+      // The captureFetch stub would throw if invoked with no responses
       // queued; a plain image URL must instead come back as an authed
       // Request for the ordinary single-fetch path.
       let { sw } = makeSw([]);
@@ -1005,11 +1005,11 @@ module('Unit | auth-service-worker', function () {
       );
     });
 
-    test('HEAD requests to _screenshot URLs keep single-fetch behavior', async function (assert) {
+    test('HEAD requests to _capture URLs keep single-fetch behavior', async function (assert) {
       let { sw } = makeSw([]);
 
       let result = await sw.processFetch(
-        new Request(SCREENSHOT_URL, { method: 'HEAD' }),
+        new Request(CAPTURE_URL, { method: 'HEAD' }),
       );
 
       assert.ok(
@@ -1018,7 +1018,7 @@ module('Unit | auth-service-worker', function () {
       );
     });
 
-    test('tokenless _screenshot requests on a known realm origin absorb via a cors request without Authorization', async function (assert) {
+    test('tokenless _capture requests on a known realm origin absorb via a cors request without Authorization', async function (assert) {
       // A public realm the page holds no session for: the client lookup
       // yields nothing, but the origin is a known realm host. The request
       // is rebuilt as cors (a no-cors response would be opaque, hiding the
@@ -1027,7 +1027,7 @@ module('Unit | auth-service-worker', function () {
       let responses = [response(503, '1'), response(200)];
       let sw = createServiceWorkerEnv({
         clientTokenLookup: async () => undefined,
-        screenshotFetch: async (request) => {
+        captureFetch: async (request) => {
           fetched.push(request);
           return responses.shift()!;
         },
@@ -1041,7 +1041,7 @@ module('Unit | auth-service-worker', function () {
 
       let result = await sw.processFetch(
         new Request(
-          'http://localhost:4201/public/realm/_screenshot/Card/1.png?w=800',
+          'http://localhost:4201/public/realm/_capture/Card/1.png?w=800',
         ),
       );
 
@@ -1053,11 +1053,11 @@ module('Unit | auth-service-worker', function () {
       }
     });
 
-    test('_screenshot requests on unknown origins pass through untouched', async function (assert) {
+    test('_capture requests on unknown origins pass through untouched', async function (assert) {
       let { sw } = makeSw([]);
 
       let result = await sw.processFetch(
-        new Request('https://unrelated.example.com/x/_screenshot/Card/1.png'),
+        new Request('https://unrelated.example.com/x/_capture/Card/1.png'),
       );
 
       assert.strictEqual(result, 'pass-through');
@@ -1242,12 +1242,12 @@ module(
 // an edit to the shipped parse/clamp/loop that the mirror misses fails here.
 module('Unit | auth-service-worker | shipped worker', function () {
   interface ShippedWorker {
-    isScreenshotRoute: (request: Request) => boolean;
-    screenshotRetryDelayMs: (response: Response) => number | undefined;
-    fetchScreenshotAbsorbing503s: (
+    isCaptureRoute: (request: Request) => boolean;
+    captureRetryDelayMs: (response: Response) => number | undefined;
+    fetchCaptureAbsorbing503s: (
       buildRequest: () => Request,
     ) => Promise<Response>;
-    SCREENSHOT_RETRY_BUDGET_MS: number;
+    CAPTURE_RETRY_BUDGET_MS: number;
     dispatchMessage: (data: unknown) => void;
     // Drives the shipped fetch listener; resolves with the Response the SW
     // would respondWith, or 'pass-through' when the listener declined to
@@ -1310,8 +1310,8 @@ module('Unit | auth-service-worker | shipped worker', function () {
       'setTimeout',
       'Date',
       `${source}
-      ;return { isScreenshotRoute, screenshotRetryDelayMs,
-        fetchScreenshotAbsorbing503s, SCREENSHOT_RETRY_BUDGET_MS };`,
+      ;return { isCaptureRoute, captureRetryDelayMs,
+        fetchCaptureAbsorbing503s, CAPTURE_RETRY_BUDGET_MS };`,
     );
     let exported = factory(
       selfStub,
@@ -1320,10 +1320,10 @@ module('Unit | auth-service-worker | shipped worker', function () {
       dateStub,
     ) as Pick<
       ShippedWorker,
-      | 'isScreenshotRoute'
-      | 'screenshotRetryDelayMs'
-      | 'fetchScreenshotAbsorbing503s'
-      | 'SCREENSHOT_RETRY_BUDGET_MS'
+      | 'isCaptureRoute'
+      | 'captureRetryDelayMs'
+      | 'fetchCaptureAbsorbing503s'
+      | 'CAPTURE_RETRY_BUDGET_MS'
     >;
     return {
       ...exported,
@@ -1352,7 +1352,7 @@ module('Unit | auth-service-worker | shipped worker', function () {
     };
   }
 
-  test('shipped screenshotRetryDelayMs implements the 503 + numeric Retry-After contract', async function (assert) {
+  test('shipped captureRetryDelayMs implements the 503 + numeric Retry-After contract', async function (assert) {
     let sw = await loadShippedWorker([]);
     let response = (status: number, retryAfter?: string) =>
       new Response(null, {
@@ -1360,48 +1360,48 @@ module('Unit | auth-service-worker | shipped worker', function () {
         headers: retryAfter !== undefined ? { 'Retry-After': retryAfter } : {},
       });
 
-    assert.strictEqual(sw.screenshotRetryDelayMs(response(503, '2')), 2000);
+    assert.strictEqual(sw.captureRetryDelayMs(response(503, '2')), 2000);
     assert.strictEqual(
-      sw.screenshotRetryDelayMs(response(503, '0')),
+      sw.captureRetryDelayMs(response(503, '0')),
       1000,
       'sub-second values clamp to 1s',
     );
     assert.strictEqual(
-      sw.screenshotRetryDelayMs(response(503)),
+      sw.captureRetryDelayMs(response(503)),
       undefined,
       'a 503 without Retry-After is not absorbable',
     );
     assert.strictEqual(
-      sw.screenshotRetryDelayMs(response(503, 'Wed, 21 Oct 2026 07:28:00 GMT')),
+      sw.captureRetryDelayMs(response(503, 'Wed, 21 Oct 2026 07:28:00 GMT')),
       undefined,
       'an HTTP-date Retry-After is not absorbable',
     );
     assert.strictEqual(
-      sw.screenshotRetryDelayMs(response(404, '1')),
+      sw.captureRetryDelayMs(response(404, '1')),
       undefined,
       'only status 503 absorbs',
     );
   });
 
-  test('shipped isScreenshotRoute matches GET _screenshot/ requests only', async function (assert) {
+  test('shipped isCaptureRoute matches GET _capture/ requests only', async function (assert) {
     let sw = await loadShippedWorker([]);
 
     assert.true(
-      sw.isScreenshotRoute(
+      sw.isCaptureRoute(
         new Request(
-          'http://localhost:4201/user/realm/_screenshot/Card/1.png?w=800',
+          'http://localhost:4201/user/realm/_capture/Card/1.png?w=800',
         ),
       ),
     );
     assert.false(
-      sw.isScreenshotRoute(
-        new Request('http://localhost:4201/user/realm/_screenshot/Card/1.png', {
+      sw.isCaptureRoute(
+        new Request('http://localhost:4201/user/realm/_capture/Card/1.png', {
           method: 'HEAD',
         }),
       ),
     );
     assert.false(
-      sw.isScreenshotRoute(
+      sw.isCaptureRoute(
         new Request('http://localhost:4201/user/realm/images/photo.png'),
       ),
     );
@@ -1421,12 +1421,11 @@ module('Unit | auth-service-worker | shipped worker', function () {
       retryAfter30(),
     ]);
 
-    let result = await sw.fetchScreenshotAbsorbing503s(
-      () =>
-        new Request('http://localhost:4201/user/realm/_screenshot/Card/1.png'),
+    let result = await sw.fetchCaptureAbsorbing503s(
+      () => new Request('http://localhost:4201/user/realm/_capture/Card/1.png'),
     );
 
-    assert.strictEqual(sw.SCREENSHOT_RETRY_BUDGET_MS, 90000);
+    assert.strictEqual(sw.CAPTURE_RETRY_BUDGET_MS, 90000);
     assert.strictEqual(result.status, 503, 'exhaustion surfaces the 503');
     assert.strictEqual(sw.fetched.length, 4);
     assert.deepEqual(sw.sleeps, [30000, 30000, 30000]);
@@ -1438,9 +1437,8 @@ module('Unit | auth-service-worker | shipped worker', function () {
       new Response(null, { status: 200 }),
     ]);
 
-    let result = await sw.fetchScreenshotAbsorbing503s(
-      () =>
-        new Request('http://localhost:4201/user/realm/_screenshot/Card/1.png'),
+    let result = await sw.fetchCaptureAbsorbing503s(
+      () => new Request('http://localhost:4201/user/realm/_capture/Card/1.png'),
     );
 
     assert.strictEqual(result.status, 200);
@@ -1465,7 +1463,7 @@ module('Unit | auth-service-worker | shipped worker', function () {
 
     let result = await sw.dispatchFetch(
       new Request(
-        'http://localhost:4201/user/realm/_screenshot/Card/1.png?w=800&h=600',
+        'http://localhost:4201/user/realm/_capture/Card/1.png?w=800&h=600',
       ),
     );
 
@@ -1480,7 +1478,7 @@ module('Unit | auth-service-worker | shipped worker', function () {
     }
   });
 
-  test('shipped fetch listener leaves non-screenshot requests on the single-fetch path', async function (assert) {
+  test('shipped fetch listener leaves non-capture requests on the single-fetch path', async function (assert) {
     let sw = await loadShippedWorker([
       new Response(null, { status: 503, headers: { 'Retry-After': '1' } }),
     ]);
@@ -1499,6 +1497,6 @@ module('Unit | auth-service-worker | shipped worker', function () {
       503,
       'the 503 reaches the page unabsorbed',
     );
-    assert.strictEqual(sw.fetched.length, 1, 'no retry outside _screenshot/');
+    assert.strictEqual(sw.fetched.length, 1, 'no retry outside _capture/');
   });
 });

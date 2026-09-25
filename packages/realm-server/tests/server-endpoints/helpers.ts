@@ -39,7 +39,7 @@ type ServerEndpointsTestOptions = {
   // (bot-commands, webhooks, realm lifecycle, etc.) don't read card
   // content out of the testRealm and want the lightest possible
   // template build. Tests that DO read the kitchen sink (e.g.
-  // screenshot-card referencing Person/fadhlan) pass `'realistic'`.
+  // capture-card referencing Person/fadhlan) pass `'realistic'`.
   fixture?: RealmFixtureName;
   // Author the testRealm's contents outright, for a test whose subject is a
   // module it needs to write itself (a realm-defined command, say). Mutually

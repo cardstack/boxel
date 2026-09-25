@@ -298,8 +298,8 @@ module(basename(import.meta.filename), function () {
             `the link-target read fetches the stored document — got: ${select}`,
           );
           assert.ok(
-            select.includes('screenshots'),
-            `and the declared-screenshot manifest it joins into meta — got: ${select}`,
+            select.includes('captures'),
+            `and the declared-capture manifest it joins into meta — got: ${select}`,
           );
         }
       } finally {
@@ -310,7 +310,7 @@ module(basename(import.meta.filename), function () {
     // The one prerendered_html column this read keeps. It travels on a channel
     // the index row does not follow, so it is written here directly rather
     // than captured, and read back through the side-loading path.
-    test('a side-loaded target still carries the declared-screenshot manifest joined into its meta', async function (assert) {
+    test('a side-loaded target still carries the declared-capture manifest joined into its meta', async function (assert) {
       let targetURL = `${testRealm.href}target-0.json`;
       let manifest = {
         hero: {
@@ -323,7 +323,7 @@ module(basename(import.meta.filename), function () {
         },
       };
       await testDbAdapter.execute(
-        `UPDATE prerendered_html SET screenshots = $1 WHERE url = $2 AND type = 'instance'`,
+        `UPDATE prerendered_html SET captures = $1 WHERE url = $2 AND type = 'instance'`,
         { bind: [JSON.stringify(manifest), targetURL] },
       );
 
@@ -339,13 +339,13 @@ module(basename(import.meta.filename), function () {
 
       let target = result.included?.find((r) => r.id?.endsWith('/target-0'));
       assert.ok(target, 'the target is side-loaded');
-      let screenshots = (
-        target?.meta as { screenshots?: Record<string, unknown> } | undefined
-      )?.screenshots;
+      let captures = (
+        target?.meta as { captures?: Record<string, unknown> } | undefined
+      )?.captures;
       assert.ok(
-        screenshots?.hero,
+        captures?.hero,
         `the manifest reaches the side-loaded resource's meta, got ${JSON.stringify(
-          screenshots,
+          captures,
         )}`,
       );
     });
@@ -432,7 +432,7 @@ module(basename(import.meta.filename), function () {
             'last_modified',
             'resource_created_at',
             'realm_url',
-            'screenshots',
+            'captures',
           ]) {
             assert.ok(
               select.includes(column),
@@ -499,7 +499,7 @@ module(basename(import.meta.filename), function () {
     });
 
     // Error state is one of the two things the narrow read still takes from
-    // the prerendered_html join — the screenshot manifest asserted above is
+    // the prerendered_html join — the capture manifest asserted above is
     // the other — so the join answers to both. An errored target is left out
     // of the closure, and the relationship naming it keeps the fallback form
     // the document carries when a target cannot be resolved.

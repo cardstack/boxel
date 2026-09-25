@@ -9,7 +9,7 @@ import type {
   ModuleRenderResponse,
   FileExtractResponse,
   RenderRouteOptions,
-  ScreenshotCaptureSpec,
+  CaptureRequestSpec,
 } from '@cardstack/runtime-common';
 import type { Realm as RuntimeRealm } from '@cardstack/runtime-common';
 import type { Prerenderer } from '../prerender/index.ts';
@@ -276,7 +276,7 @@ interface RgbaImage {
 }
 
 // Decode a base64 PNG into raw RGBA pixels — enough of the format to
-// pixel-compare two Chromium screenshots, without pulling in an image
+// pixel-compare two Chromium captures, without pulling in an image
 // library (the header-only `decodePng` above shares this no-dependency
 // stance). Handles what `page.screenshot` actually emits: 8-bit,
 // non-interlaced, truecolor with (colorType 6) or without (colorType 2) an
@@ -439,7 +439,7 @@ function regionMismatch(
 
 // Assert a clip image exactly equals the region of `full` anchored at
 // (originX, originY). Exact, not tolerant: both rects are integer-valued at
-// deviceScaleFactor 1, so puppeteer passes them to Page.captureScreenshot
+// deviceScaleFactor 1, so puppeteer passes them to Page.runCapture
 // unchanged and there is no rounding to absorb — any nonzero mismatch is a
 // finding. On failure, the ±1px whole-pixel offset neighborhood is searched
 // purely to enrich the message: a best offset of (±1, ±1) with mismatches
@@ -1070,7 +1070,7 @@ module(basename(import.meta.filename), function () {
     });
   });
 
-  module('prerender - screenshot capture', function (hooks) {
+  module('prerender - capture', function (hooks) {
     let realmURL = 'http://127.0.0.1:4461/test/';
     let prerenderServerURL = new URL(realmURL).origin;
     let testUserId = '@user1:localhost';
@@ -1090,12 +1090,12 @@ module(basename(import.meta.filename), function () {
       return JSON.stringify(sessions);
     };
 
-    let screenshot = (
+    let capture = (
       cardURL: string,
-      captureSpec?: ScreenshotCaptureSpec,
+      captureSpec?: CaptureRequestSpec,
       format: 'isolated' | 'embedded' | 'fitted' = 'isolated',
     ) =>
-      prerenderer.prerenderScreenshot({
+      prerenderer.prerenderCapture({
         realm: realmURL,
         url: cardURL,
         auth: auth(),
@@ -1284,7 +1284,7 @@ module(basename(import.meta.filename), function () {
             `,
             // Tall under screen media — ~29 pages at Chrome's default paper
             // (1056px of content per page at 96dpi letter with no margins),
-            // comfortably past SCREENSHOT_PDF_MAX_PAGES — so a pdf capture of
+            // comfortably past CAPTURE_PDF_MAX_PAGES — so a pdf capture of
             // it must error on the page cap rather than paginate it all.
             'skyscraper.gts': `
               import { CardDef, field, contains, StringField, Component } from '@cardstack/base/card-api';
@@ -1333,8 +1333,8 @@ module(basename(import.meta.filename), function () {
     });
 
     test('default capture is a PNG at the 800x600 viewport', async function (assert) {
-      let { response } = await screenshot(`${realmURL}1`);
-      assert.strictEqual(response.status, 'ready', 'screenshot succeeded');
+      let { response } = await capture(`${realmURL}1`);
+      assert.strictEqual(response.status, 'ready', 'capture succeeded');
       assert.ok(response.base64, 'returns base64 image data');
       let png = decodePng(response.base64!);
       assert.true(png.isPng, 'payload is a PNG (magic bytes)');
@@ -1345,10 +1345,10 @@ module(basename(import.meta.filename), function () {
     });
 
     test('viewport override widens the capture to 1280', async function (assert) {
-      let { response } = await screenshot(`${realmURL}1`, {
+      let { response } = await capture(`${realmURL}1`, {
         viewport: { width: 1280, height: 720 },
       });
-      assert.strictEqual(response.status, 'ready', 'screenshot succeeded');
+      assert.strictEqual(response.status, 'ready', 'capture succeeded');
       let png = decodePng(response.base64!);
       assert.true(png.isPng, 'payload is a PNG');
       assert.strictEqual(png.width, 1280, 'PNG is 1280px wide');
@@ -1357,10 +1357,10 @@ module(basename(import.meta.filename), function () {
     });
 
     test('fullPage captures beyond the viewport height for a long card', async function (assert) {
-      let { response } = await screenshot(`${realmURL}tall`, {
+      let { response } = await capture(`${realmURL}tall`, {
         fullPage: true,
       });
-      assert.strictEqual(response.status, 'ready', 'screenshot succeeded');
+      assert.strictEqual(response.status, 'ready', 'capture succeeded');
       let png = decodePng(response.base64!);
       assert.true(png.isPng, 'payload is a PNG');
       assert.strictEqual(png.width, 800, 'PNG keeps the 800px viewport width');
@@ -1376,10 +1376,10 @@ module(basename(import.meta.filename), function () {
     });
 
     test('clip captures exactly the requested region', async function (assert) {
-      let { response } = await screenshot(`${realmURL}tall`, {
+      let { response } = await capture(`${realmURL}tall`, {
         clip: { x: 0, y: 0, width: 400, height: 300 },
       });
-      assert.strictEqual(response.status, 'ready', 'screenshot succeeded');
+      assert.strictEqual(response.status, 'ready', 'capture succeeded');
       let png = decodePng(response.base64!);
       assert.true(png.isPng, 'payload is a PNG');
       assert.strictEqual(png.width, 400, 'PNG matches the clip width');
@@ -1393,13 +1393,13 @@ module(basename(import.meta.filename), function () {
       // fullPage capture. All three captures come from one batch — a single
       // settled render — so this compares crops of one DOM, not
       // independently-hydrated renders. Neither entry changes the viewport:
-      // both reduce to a single Page.captureScreenshot with
+      // both reduce to a single Page.runCapture with
       // captureBeyondViewport, so nothing reflows between entries. The `tall`
       // card is a top-anchored 1500px vertical gradient with its name at the
       // top-left: the gradient makes a 1px *vertical* shift change every
       // sampled color, and the name's text glyphs make a 1px *horizontal*
       // shift detectable (the gradient alone is horizontally uniform).
-      let { response } = await screenshot(`${realmURL}tall`, {
+      let { response } = await capture(`${realmURL}tall`, {
         captures: [
           { name: 'full', fullPage: true },
           // Top-left region including the card name; kept clear of the
@@ -1446,7 +1446,7 @@ module(basename(import.meta.filename), function () {
       // scroll size), so the capture path enforces the physical-pixel cap:
       // a 6000px-tall document at 3× is ~18k physical px, past the 16384
       // Chromium texture cap.
-      let { response } = await screenshot(`${realmURL}huge`, {
+      let { response } = await capture(`${realmURL}huge`, {
         fullPage: true,
         deviceScaleFactor: 3,
       });
@@ -1460,10 +1460,10 @@ module(basename(import.meta.filename), function () {
     test('fullPage within the cap still captures at scale', async function (assert) {
       // The same document is fine at 1× (6000 < 16384) — the cap composes
       // with the scale factor rather than banning tall documents outright.
-      let { response } = await screenshot(`${realmURL}huge`, {
+      let { response } = await capture(`${realmURL}huge`, {
         fullPage: true,
       });
-      assert.strictEqual(response.status, 'ready', 'screenshot succeeded');
+      assert.strictEqual(response.status, 'ready', 'capture succeeded');
       let png = decodePng(response.base64!);
       assert.true(
         png.height > 5000,
@@ -1480,14 +1480,12 @@ module(basename(import.meta.filename), function () {
       // A leaked viewport would silently resize the next capture (and any index
       // prerender) reusing this pooled page. Custom capture in the middle, plain
       // captures on either side must both stay at the default viewport.
-      let before = decodePng(
-        (await screenshot(`${realmURL}1`)).response.base64!,
-      );
+      let before = decodePng((await capture(`${realmURL}1`)).response.base64!);
       assert.strictEqual(before.width, 800, 'first plain capture is 800 wide');
 
       let custom = decodePng(
         (
-          await screenshot(`${realmURL}1`, {
+          await capture(`${realmURL}1`, {
             viewport: { width: 1280, height: 900 },
             deviceScaleFactor: 2,
           })
@@ -1499,9 +1497,7 @@ module(basename(import.meta.filename), function () {
         'custom capture is 1280 * 2x wide',
       );
 
-      let after = decodePng(
-        (await screenshot(`${realmURL}1`)).response.base64!,
-      );
+      let after = decodePng((await capture(`${realmURL}1`)).response.base64!);
       assert.strictEqual(
         after.width,
         800,
@@ -1524,7 +1520,7 @@ module(basename(import.meta.filename), function () {
 
       // Capture at a large custom viewport + 2x scale on the same affinity's
       // pooled page.
-      await screenshot(cardURL, {
+      await capture(cardURL, {
         viewport: { width: 1440, height: 2000 },
         deviceScaleFactor: 2,
       });
@@ -1542,12 +1538,12 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(
         cleanWhiteSpace(after.response.isolatedHTML ?? ''),
         cleanWhiteSpace(baseline.response.isolatedHTML ?? ''),
-        'indexed isolated HTML is identical before and after the screenshot',
+        'indexed isolated HTML is identical before and after the capture',
       );
     });
 
     test('a batch of 3 yields 3 named captures from one settle', async function (assert) {
-      let { response } = await screenshot(`${realmURL}tall`, {
+      let { response } = await capture(`${realmURL}tall`, {
         captures: [
           { name: 'wide', viewport: { width: 1280, height: 720 } },
           { name: 'full', fullPage: true },
@@ -1590,7 +1586,7 @@ module(basename(import.meta.filename), function () {
       // viewport must resolve from the page's base viewport (800), not inherit
       // the first entry's 1280. This also guards `sameViewport`'s switch-back —
       // if it wrongly kept 1280, the bare entry would capture at 1280.
-      let { response } = await screenshot(`${realmURL}tall`, {
+      let { response } = await capture(`${realmURL}tall`, {
         captures: [
           { name: 'wide', viewport: { width: 1280, height: 720 } },
           { name: 'base' },
@@ -1613,8 +1609,8 @@ module(basename(import.meta.filename), function () {
     });
 
     test('singular-shape request stays byte-compatible under the new response', async function (assert) {
-      let singular = await screenshot(`${realmURL}1`);
-      let batchOfOne = await screenshot(`${realmURL}1`, {
+      let singular = await capture(`${realmURL}1`);
+      let batchOfOne = await capture(`${realmURL}1`, {
         captures: [{ name: 'default' }],
       });
 
@@ -1647,7 +1643,7 @@ module(basename(import.meta.filename), function () {
     });
 
     test('a pdf capture paginates the settled render', async function (assert) {
-      let { response } = await screenshot(`${realmURL}tall`, { type: 'pdf' });
+      let { response } = await capture(`${realmURL}tall`, { type: 'pdf' });
       assert.strictEqual(response.status, 'ready', 'pdf capture succeeded');
       assert.strictEqual(
         response.contentType,
@@ -1673,7 +1669,7 @@ module(basename(import.meta.filename), function () {
 
       // Pooled-page hygiene: the same page then serves a raster capture with
       // the canonical geometry, undisturbed by the pdf leg.
-      let raster = await screenshot(`${realmURL}1`);
+      let raster = await capture(`${realmURL}1`);
       assert.strictEqual(raster.response.status, 'ready');
       let png = decodePng(raster.response.base64!);
       assert.deepEqual(
@@ -1689,7 +1685,7 @@ module(basename(import.meta.filename), function () {
       // and 60000px under print — a print render would page past the cap and
       // error, a screen render stays within it. The spec asks for the default
       // (screen), so the capture must emulate screen and succeed.
-      let { response } = await screenshot(`${realmURL}print-probe-card`, {
+      let { response } = await capture(`${realmURL}print-probe-card`, {
         type: 'pdf',
       });
       assert.strictEqual(
@@ -1709,7 +1705,7 @@ module(basename(import.meta.filename), function () {
       // The acceptance: print media engages the card's `@page`/`break-*` CSS,
       // so the paged card's `@page { size: A4 }` sets the paper and its three
       // `break-after: page` sheets produce a multi-page A4 document.
-      let { response } = await screenshot(`${realmURL}paged-card`, {
+      let { response } = await capture(`${realmURL}paged-card`, {
         type: 'pdf',
         media: 'print',
       });
@@ -1750,10 +1746,10 @@ module(basename(import.meta.filename), function () {
       // bytes: one Letter page, no card.
       //
       // So: leave the page on one card's render, then capture a different one.
-      let first = await screenshot(`${realmURL}1`, { type: 'pdf' });
+      let first = await capture(`${realmURL}1`, { type: 'pdf' });
       assert.strictEqual(first.response.status, 'ready', 'first pdf captured');
 
-      let { response } = await screenshot(`${realmURL}paged-card`, {
+      let { response } = await capture(`${realmURL}paged-card`, {
         type: 'pdf',
         media: 'print',
       });
@@ -1762,10 +1758,10 @@ module(basename(import.meta.filename), function () {
         'ready',
         `second pdf captured (got ${response.status}: ${response.error ?? ''})`,
       );
-      let capture = response.captures?.[0];
+      let entry = response.captures?.[0];
       assert.ok(
-        (capture?.pageCount ?? 0) >= 2,
-        `paginated the paged card's own flow, not a one-page loading screen (got ${capture?.pageCount})`,
+        (entry?.pageCount ?? 0) >= 2,
+        `paginated the paged card's own flow, not a one-page loading screen (got ${entry?.pageCount})`,
       );
       let box = firstMediaBox(Buffer.from(response.base64!, 'base64'));
       let isA4 =
@@ -1781,7 +1777,7 @@ module(basename(import.meta.filename), function () {
     test('print media does not bleed into the next pooled capture', async function (assert) {
       // Media emulation is sticky per pooled page, so a print capture must
       // restore screen media in its `finally`. Engage print on the page…
-      let printed = await screenshot(`${realmURL}paged-card`, {
+      let printed = await capture(`${realmURL}paged-card`, {
         type: 'pdf',
         media: 'print',
       });
@@ -1790,7 +1786,7 @@ module(basename(import.meta.filename), function () {
       // …then a default (screen) pdf of the print-probe must settle under
       // screen again — 200px, a page or two — not the 60000px print layout a
       // leaked emulation would render and page past the cap on.
-      let probe = await screenshot(`${realmURL}print-probe-card`, {
+      let probe = await capture(`${realmURL}print-probe-card`, {
         type: 'pdf',
       });
       assert.strictEqual(
@@ -1804,7 +1800,7 @@ module(basename(import.meta.filename), function () {
       );
 
       // …and a plain raster still renders at the canonical viewport.
-      let raster = await screenshot(`${realmURL}1`);
+      let raster = await capture(`${realmURL}1`);
       assert.strictEqual(raster.response.status, 'ready');
       let png = decodePng(raster.response.base64!);
       assert.deepEqual(
@@ -1821,7 +1817,7 @@ module(basename(import.meta.filename), function () {
       // layout as-is — the probe's print-only magenta reaches its pixels only
       // if the settle itself ran under print media.
       let magenta: [number, number, number] = [255, 0, 254];
-      let printed = await screenshot(`${realmURL}print-probe-card`, {
+      let printed = await capture(`${realmURL}print-probe-card`, {
         media: 'print',
       });
       assert.strictEqual(
@@ -1839,7 +1835,7 @@ module(basename(import.meta.filename), function () {
       // render-level restore is all that keeps this capture's print emulation
       // off the pooled page — the same probe under the default (screen) media
       // must show none of the print-only color.
-      let after = await screenshot(`${realmURL}print-probe-card`);
+      let after = await capture(`${realmURL}print-probe-card`);
       assert.strictEqual(after.response.status, 'ready');
       let afterPng = decodePngRGBA(after.response.base64!);
       assert.strictEqual(
@@ -1853,7 +1849,7 @@ module(basename(import.meta.filename), function () {
       // The skyscraper fixture is 30000px tall under screen media — well past
       // the page cap at Chrome's default paper — so the capture must refuse
       // it by name, never truncate it to a partial document.
-      let { response } = await screenshot(`${realmURL}skyscraper-card`, {
+      let { response } = await capture(`${realmURL}skyscraper-card`, {
         type: 'pdf',
       });
       assert.strictEqual(response.status, 'error', 'capture is refused');
@@ -1873,7 +1869,7 @@ module(basename(import.meta.filename), function () {
       // `title` field is a fixed 200×50, so the crop dimensions are predictable.
       // Pixel-exact crop equivalence is the acceptance sweep's job; this pins
       // the dimensional contract.
-      let { response } = await screenshot(`${realmURL}disco-card`, {
+      let { response } = await capture(`${realmURL}disco-card`, {
         target: '[data-card-field="title"]',
       });
       assert.strictEqual(response.status, 'ready', 'target capture succeeded');
@@ -1894,7 +1890,7 @@ module(basename(import.meta.filename), function () {
     });
 
     test('a target matching no element is a named capture error', async function (assert) {
-      let { response } = await screenshot(`${realmURL}disco-card`, {
+      let { response } = await capture(`${realmURL}disco-card`, {
         target: '[data-card-field="does-not-exist"]',
       });
       assert.strictEqual(response.status, 'error', 'a missing target errors');
@@ -1908,7 +1904,7 @@ module(basename(import.meta.filename), function () {
       // The parse does not special-case XPath; the capture path resolves the
       // selector with `document.querySelector`, which cannot execute XPath, so
       // an XPath-shaped string dead-ends as a named "invalid selector" error.
-      let { response } = await screenshot(`${realmURL}disco-card`, {
+      let { response } = await capture(`${realmURL}disco-card`, {
         target: '//div[@data-card-field]',
       });
       assert.strictEqual(response.status, 'error', 'an XPath target errors');
@@ -1922,7 +1918,7 @@ module(basename(import.meta.filename), function () {
       // The canonical fitted matrix renders one card at many box sizes off a
       // single hydrate: each entry re-transitions the same card into a new
       // envelope box and the capture is sized to that box.
-      let { response } = await screenshot(
+      let { response } = await capture(
         `${realmURL}1`,
         {
           captures: [
@@ -1975,7 +1971,7 @@ module(basename(import.meta.filename), function () {
     });
 
     test('a fitted envelope capture leaves indexed HTML unchanged', async function (assert) {
-      // The envelope wrapper only exists on the screenshot render (it rides on
+      // The envelope wrapper only exists on the capture render (it rides on
       // query params). A pooled page reused by indexing must not inherit it.
       let cardURL = `${realmURL}1`;
       await realm.realmIndexUpdater.fullIndex();
@@ -1988,7 +1984,7 @@ module(basename(import.meta.filename), function () {
         auth: auth(),
       });
 
-      let { response } = await screenshot(
+      let { response } = await capture(
         cardURL,
         { envelope: { width: 250, height: 275 } },
         'fitted',
@@ -2016,7 +2012,7 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(
         cleanWhiteSpace(after.response.isolatedHTML ?? ''),
         cleanWhiteSpace(baseline.response.isolatedHTML ?? ''),
-        'indexed isolated HTML is identical before and after the fitted screenshot',
+        'indexed isolated HTML is identical before and after the fitted capture',
       );
     });
   });

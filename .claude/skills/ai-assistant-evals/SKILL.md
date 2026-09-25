@@ -309,7 +309,7 @@ Check these before blaming the model. Status as of 2026-09-08.
 
 ## What the runner cannot tell you
 
-- Whether the card looks right. Look at the screenshot.
+- Whether the card looks right. Look at the capture.
 - Why the host froze, when it did. That needs the tab's console; the runner
   keeps the room and the trace.
 - Whether the card still works after the run. The snapshot holds the code and

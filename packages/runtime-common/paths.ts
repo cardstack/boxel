@@ -315,10 +315,40 @@ export function isMarkdownFile(id: string): boolean {
 // and each one reads the reservation from here so a change to it reaches all
 // of them. Removals stay admitted everywhere, being the recovery path for
 // anything already stored under it.
-export const CAPTURE_SERVING_PREFIX = '_screenshot/';
+export const CAPTURE_SERVING_PREFIX = '_capture/';
+
+// The prefix captures served under before they were named captures. Still
+// answered, because a durable capture URL is meant to be stored: a card may
+// hold one minted under the old name, and a browser keeps serving the
+// previously installed auth service worker — which matches capture requests on
+// the prefix to attach credentials — until it next updates. Reserved against
+// writes for as long as it is served, so nothing can be stored where a GET
+// would never read it back.
+export const LEGACY_CAPTURE_SERVING_PREFIX = '_screenshot/';
+
+const CAPTURE_SERVING_PREFIXES = [
+  CAPTURE_SERVING_PREFIX,
+  LEGACY_CAPTURE_SERVING_PREFIX,
+] as const;
 
 export function isCaptureServingPath(localPath: LocalPath): boolean {
-  return localPath.startsWith(CAPTURE_SERVING_PREFIX);
+  return captureServingPrefixOf(localPath) !== undefined;
+}
+
+// Which prefix a capture-serving path came in under, or undefined when it is
+// not one. Callers that need the addressed instance path use
+// `withoutCaptureServingPrefix` rather than slicing a fixed width.
+export function captureServingPrefixOf(
+  localPath: LocalPath,
+): string | undefined {
+  return CAPTURE_SERVING_PREFIXES.find((prefix) =>
+    localPath.startsWith(prefix),
+  );
+}
+
+export function withoutCaptureServingPrefix(localPath: LocalPath): LocalPath {
+  let prefix = captureServingPrefixOf(localPath);
+  return prefix ? localPath.slice(prefix.length) : localPath;
 }
 
 // The name a file's content is assembled under while it is being written from

@@ -4262,7 +4262,7 @@ export default class StoreService extends Service implements StoreInterface {
     // derive from the instance — `adoptsFrom`, the realm, and the per-field
     // metadata, which the mutation legitimately moves. Everything else the card
     // was served with (`realmInfo`, `lastModified`, `resourceCreatedAt`,
-    // `screenshots`, and the `version` / `generation` the next operation and
+    // `captures`, and the `version` / `generation` the next operation and
     // the store's own event rules read) is absent from it, so assigning it
     // wholesale would drop realm branding and modification times until
     // something re-read the card.

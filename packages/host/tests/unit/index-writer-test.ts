@@ -1538,7 +1538,7 @@ module('Unit | index-writer', function (hooks) {
     );
   });
 
-  test('copyFrom duplicates declared-lane MediaCache ledger rows for copied screenshot manifests', async function (assert) {
+  test('copyFrom duplicates declared-lane MediaCache ledger rows for copied capture manifests', async function (assert) {
     let resource: CardResource = {
       id: testRRI('1'),
       type: 'card',
@@ -1582,7 +1582,7 @@ module('Unit | index-writer', function (hooks) {
           deps: [],
           types: [],
           isolated_html: `<div class="isolated">Isolated HTML</div>`,
-          screenshots: manifest,
+          captures: manifest,
         },
       ],
     );
@@ -1619,14 +1619,14 @@ module('Unit | index-writer', function (hooks) {
     await batch.done();
 
     let [copiedRow] = (await adapter.execute(
-      `SELECT screenshots, generation FROM prerendered_html WHERE url = $1`,
+      `SELECT captures, generation FROM prerendered_html WHERE url = $1`,
       {
         bind: [`${testRealmURL2}1.json`],
-        coerceTypes: { screenshots: 'JSON' },
+        coerceTypes: { captures: 'JSON' },
       },
-    )) as unknown as Pick<PrerenderedHtmlTable, 'screenshots' | 'generation'>[];
+    )) as unknown as Pick<PrerenderedHtmlTable, 'captures' | 'generation'>[];
     assert.deepEqual(
-      copiedRow.screenshots,
+      copiedRow.captures,
       manifest,
       'the manifest rides the copied row (object keys are content-addressed, nothing to rewrite)',
     );
@@ -2679,7 +2679,7 @@ module('Unit | index-writer', function (hooks) {
         types: null,
         indexedAt: null,
         deps: null,
-        screenshots: null,
+        captures: null,
         // An error row reports one too: it is carried forward from the last
         // good pass alongside the `pristine_doc` it describes, so the two
         // always name the same bytes. Null here because this row was seeded
@@ -2829,7 +2829,7 @@ module('Unit | index-writer', function (hooks) {
         fittedHtml: null,
         headHtml: null,
         markdown: null,
-        screenshots: null,
+        captures: null,
         sourceContentHash: null,
       });
     } else {
@@ -2934,7 +2934,7 @@ module('Unit | index-writer', function (hooks) {
         atomHtml: null,
         headHtml: null,
         markdown: null,
-        screenshots: null,
+        captures: null,
         sourceContentHash: 'abc123',
       });
     } else {

@@ -100,7 +100,7 @@ class RenderHtmlTemplate extends Component<Signature> {
   // Inline sizing for the envelope box. The dimensions are per-capture data
   // (they change between batch entries), so they can't live in scoped CSS.
   // `position: fixed; top/left: 0` pins the box to the viewport origin so the
-  // screenshot path can size the viewport to the envelope and capture it whole,
+  // capture path can size the viewport to the envelope and capture it whole,
   // independent of any body margin. `overflow: hidden` clips the fitted card to
   // the box the same way the host's fitted-card container does.
   private get envelopeStyle() {
@@ -123,7 +123,7 @@ class RenderHtmlTemplate extends Component<Signature> {
         route-template whitespace does not leak into the captured markdown.
         Only applies when format === 'markdown'; other formats are unaffected. }}
     {{#if this.envelopeStyle}}
-      {{! Screenshot capture of the fitted format: render the card into a
+      {{! Capture of the fitted format: render the card into a
           fixed-size, non-scrolling box so its `@container fitted-card` queries
           fire against the envelope rather than the viewport. The base
           field-component wrapper (fitted-format: width/height 100%,

@@ -99,20 +99,20 @@ import {
   cardTypeName,
   fileNameFromUrl,
   referenceNamesFile,
-  isDeclaredScreenshotFormat,
-  isValidScreenshotName,
-  DECLARED_SCREENSHOT_FORMATS,
-  SCREENSHOT_NAME_MAX_LENGTH,
-  SCREENSHOT_NAME_PATTERN,
-  SCREENSHOT_MAX_VIEWPORT_WIDTH,
-  SCREENSHOT_MAX_VIEWPORT_HEIGHT,
-  SCREENSHOT_MAX_DEVICE_SCALE_FACTOR,
-  SCREENSHOT_MAX_PHYSICAL_EDGE_PX,
-  SCREENSHOT_DEFAULT_DEVICE_SCALE_FACTOR,
-  type DeclaredScreenshotRoster,
-  type DeclaredScreenshotSpecPayload,
-  type DeclaredScreenshotFormat,
-  type ScreenshotsMeta,
+  isDeclaredCaptureFormat,
+  isValidCaptureName,
+  DECLARED_CAPTURE_FORMATS,
+  CAPTURE_NAME_MAX_LENGTH,
+  CAPTURE_NAME_PATTERN,
+  CAPTURE_MAX_VIEWPORT_WIDTH,
+  CAPTURE_MAX_VIEWPORT_HEIGHT,
+  CAPTURE_MAX_DEVICE_SCALE_FACTOR,
+  CAPTURE_MAX_PHYSICAL_EDGE_PX,
+  DECLARED_CAPTURE_DEFAULT_DEVICE_SCALE_FACTOR,
+  type DeclaredCaptureRoster,
+  type DeclaredCaptureSpecPayload,
+  type DeclaredCaptureFormat,
+  type CapturesMeta,
 } from '@cardstack/runtime-common';
 import {
   captureQueryFieldSeedData,
@@ -141,7 +141,7 @@ import FileDefFittedTemplate from './default-templates/file-def-fitted';
 import FileDefIsolatedTemplate from './default-templates/file-def-isolated';
 import type { FilePreviewComponent } from './file-formats/file-preview-stage';
 import { ImagePreview } from './file-formats/image-preview';
-import { IMAGE_THUMB_SCREENSHOTS } from './file-formats/image-captures';
+import { IMAGE_THUMB_CAPTURES } from './file-formats/image-captures';
 import CaptionsIcon from '@cardstack/boxel-icons/captions';
 import FileIcon from '@cardstack/boxel-icons/file';
 import ImageIcon from '@cardstack/boxel-icons/image';
@@ -2579,7 +2579,7 @@ interface InternalFieldInitializer {
 // userland `@field` under one of these would shadow the getter via the
 // prototype chain silently, so the decorator refuses them by name (the
 // `boxel/no-reserved-field-names` lint rule is the authoring-time backstop).
-const RESERVED_FIELD_NAMES = ['screenshotURLs', 'screenshotsMeta'];
+const RESERVED_FIELD_NAMES = ['captureURLs', 'capturesMeta'];
 
 // our decorators are implemented by Babel, not TypeScript, so they have a
 // different signature than Typescript thinks they do.
@@ -2963,12 +2963,12 @@ export type BaseDefComponent = ComponentLike<{
   };
 }>;
 
-// One declared screenshot (an entry in a CardDef/FileDef `static
-// screenshots` slot): exactly one of `render` or `format` names what to
+// One declared capture (an entry in a CardDef/FileDef `static
+// captures` slot): exactly one of `render` or `format` names what to
 // draw, and the rest parameterizes the capture box.
 //
 // `render` is a *capture-only* component: referenced only from this
-// declaration and rendered only by the screenshot render route — never
+// declaration and rendered only by the capture render route — never
 // exposed through the card's format API or `@fields`. Capture-only restricts
 // where the component renders, not what it may use: it gets the full author
 // surface (`@model`/`@fields`/`@context`) and may render linked data.
@@ -2976,7 +2976,7 @@ export type BaseDefComponent = ComponentLike<{
 // A capture-only component whose content readies asynchronously (a video
 // frame seeked onto a canvas, a PDF page paint, a WebGL first frame — work
 // invisible to image-paint waiting) signals readiness through the DOM: while
-// unready it renders a `data-screenshot-pending` attribute on any element,
+// unready it renders a `data-capture-pending` attribute on any element,
 // and removes it when painted. The capture engine waits (bounded) for no
 // such element to remain; a component that never resolves its pending
 // element fails that slot's capture rather than persisting an unready frame.
@@ -2985,7 +2985,7 @@ export type BaseDefComponent = ComponentLike<{
 // A component that learns its content can never become ready — a corrupt or
 // password-protected document, an undecodable video — should not leave the
 // pending attribute standing until the engine's timeout: swap in a
-// `data-screenshot-failed` attribute instead (remove the pending attribute,
+// `data-capture-failed` attribute instead (remove the pending attribute,
 // set the failed one), which fails the slot immediately. Set the attribute's
 // value to a short human-readable cause; the engine carries it into the
 // slot's failure diagnostics, so an unreadable file is distinguishable from
@@ -2994,18 +2994,18 @@ export type BaseDefComponent = ComponentLike<{
 // resolving readiness over an unpainted box would persist a blank frame as
 // if it were real content.
 //
-// Clear the attribute with `el.removeAttribute('data-screenshot-pending')`
+// Clear the attribute with `el.removeAttribute('data-capture-pending')`
 // from the async continuation (and set the failure signal with
-// `el.setAttribute('data-screenshot-failed', cause)`) — never by
+// `el.setAttribute('data-capture-failed', cause)`) — never by
 // re-rendering it off a tracked property
-// (`data-screenshot-pending={{if this.pending 'true'}}`). Capture
+// (`data-capture-pending={{if this.pending 'true'}}`). Capture
 // pages run in backgrounded tabs, where the browser throttles the timers a
 // tracked update's render flush rides, so the flip can sit unflushed past
 // the engine's whole wait; the engine watches for the DOM mutation itself,
 // which a direct attribute mutation produces immediately.
 //
 // `format` reuses one of the card's display formats instead. A format-based
-// screenshot referenced by that same format's own markup (say, a fitted
+// capture referenced by that same format's own markup (say, a fitted
 // template that embeds its own `format: 'fitted'` capture) is circular —
 // use a dedicated `render` component there.
 //
@@ -3021,24 +3021,24 @@ export type BaseDefComponent = ComponentLike<{
 // deterministically too: seek to an exact timestamp rather than "current
 // frame", position WebGL cameras explicitly, and avoid ambient animation
 // loops. Nondeterministic output doesn't break anything visibly — the row
-// publishes and the durable screenshot URLs don't change — but every
+// publishes and the durable capture URLs don't change — but every
 // reindex captures "new" bytes, wasting renders and storage churn and
 // defeating image caching (each rotation changes the image's ETag, so
 // every viewer re-downloads it).
 // What the capture renders: a capture-only `render` component, or one of the
 // card's own display formats. Shared by both output kinds below.
-type ScreenshotSpecSource =
+type CaptureSpecSource =
   | { render: BaseDefComponent; format?: undefined }
-  | { format: DeclaredScreenshotFormat; render?: undefined };
+  | { format: DeclaredCaptureFormat; render?: undefined };
 
-// A raster screenshot: a pixel tile of the render, sized by a capture box.
-type RasterScreenshotSpec = {
+// A raster capture: a pixel tile of the render, sized by a capture box.
+type RasterCaptureSpec = {
   // CSS px of the capture box (the fitted envelope).
   width: number;
   height: number;
   // Output px = size × deviceScaleFactor. Defaults to
-  // SCREENSHOT_DEFAULT_DEVICE_SCALE_FACTOR (2). Each edge × the effective
-  // scale must stay within SCREENSHOT_MAX_PHYSICAL_EDGE_PX.
+  // DECLARED_CAPTURE_DEFAULT_DEVICE_SCALE_FACTOR (2). Each edge × the effective
+  // scale must stay within CAPTURE_MAX_PHYSICAL_EDGE_PX.
   deviceScaleFactor?: number;
   // 'transparent' or any CSS color. Default 'white'. 'transparent' requires
   // an alpha-capable `type` ('png' or 'webp') — jpeg has no alpha channel.
@@ -3053,7 +3053,7 @@ type RasterScreenshotSpec = {
   // the capture envelope, used exactly as given; for a format-based capture
   // the rendered variant is emergent from the template's own container-query
   // breakpoints, deterministic per box. Preview a candidate box with
-  // `?format=fitted&envelope=WxH` via the `_screenshot/` DSL on a dev realm,
+  // `?format=fitted&envelope=WxH` via the `_capture/` DSL on a dev realm,
   // then codify it here. A box declared near one of the template's
   // breakpoints can flip variants when those breakpoints are tuned — the
   // same fragility any responsive design has.
@@ -3068,13 +3068,13 @@ type RasterScreenshotSpec = {
   // edit), or — for file-backed defs — the file's content hash, so a
   // metadata-only edit skips recapture. Default 'generation'.
   // 'file-content' is only legal on FileDef chains: a CardDef has no file
-  // bytes to key by, so getScreenshots refuses it there.
+  // bytes to key by, so getCaptures refuses it there.
   keyBy?: 'generation' | 'file-content';
   // Encoded image type. Default 'png'.
   type?: 'png' | 'jpeg' | 'webp';
-} & ScreenshotSpecSource;
+} & CaptureSpecSource;
 
-// A pdf screenshot: a paged document of the render, laid out under the card's
+// A pdf capture: a paged document of the render, laid out under the card's
 // own print CSS. It has no capture box — `width`/`height` (and the raster-only
 // `deviceScaleFactor`/`background`) are refused, and paper comes from the
 // card's `@page { size }` rule (Chrome's default paper otherwise). Its source
@@ -3083,7 +3083,7 @@ type RasterScreenshotSpec = {
 // (`isolated`/`embedded`) — the box formats (`fitted`/`atom`) need an envelope
 // a pdf entry cannot give. A pdf is never a thumbnail — that fallback chain
 // wants an image — so `useAsThumbnail` is refused too.
-type PdfScreenshotSpec = {
+type PdfCaptureSpec = {
   type: 'pdf';
   width?: undefined;
   height?: undefined;
@@ -3092,11 +3092,11 @@ type PdfScreenshotSpec = {
   useAsThumbnail?: undefined;
   // What invalidates the capture; see the raster note above.
   keyBy?: 'generation' | 'file-content';
-} & ScreenshotSpecSource;
+} & CaptureSpecSource;
 
-export type ScreenshotSpec = RasterScreenshotSpec | PdfScreenshotSpec;
+export type CaptureSpec = RasterCaptureSpec | PdfCaptureSpec;
 
-const SCREENSHOT_SPEC_FIELDS = new Set([
+const DECLARED_CAPTURE_SPEC_FIELDS = new Set([
   'render',
   'format',
   'width',
@@ -3107,10 +3107,10 @@ const SCREENSHOT_SPEC_FIELDS = new Set([
   'keyBy',
   'type',
 ]);
-const SCREENSHOT_KEY_BY_VALUES = new Set(['generation', 'file-content']);
-const SCREENSHOT_IMAGE_TYPES = new Set(['png', 'jpeg', 'webp']);
+const DECLARED_CAPTURE_KEY_BY_VALUES = new Set(['generation', 'file-content']);
+const RASTER_OUTPUT_TYPES = new Set(['png', 'jpeg', 'webp']);
 
-function screenshotOwnerName(owner: typeof BaseDef): string {
+function captureOwnerName(owner: typeof BaseDef): string {
   return owner.name || owner.displayName || 'card';
 }
 
@@ -3118,15 +3118,15 @@ function screenshotOwnerName(owner: typeof BaseDef): string {
 // capture engine cannot honor is refused by name rather than ignored, so a
 // typo'd declaration fails loudly at read time instead of silently capturing
 // something other than what the author meant.
-function assertValidScreenshotSpec(
+function assertValidCaptureSpec(
   owner: typeof BaseDef,
   name: string,
   spec: unknown,
-): asserts spec is ScreenshotSpec {
-  let prefix = `screenshot "${name}" on ${screenshotOwnerName(owner)}`;
-  if (!isValidScreenshotName(name)) {
+): asserts spec is CaptureSpec {
+  let prefix = `capture "${name}" on ${captureOwnerName(owner)}`;
+  if (!isValidCaptureName(name)) {
     throw new Error(
-      `${prefix}: name must be a URL-safe path segment (${SCREENSHOT_NAME_PATTERN.source}, at most ${SCREENSHOT_NAME_MAX_LENGTH} characters)`,
+      `${prefix}: name must be a URL-safe path segment (${CAPTURE_NAME_PATTERN.source}, at most ${CAPTURE_NAME_MAX_LENGTH} characters)`,
     );
   }
   if (spec === null || typeof spec !== 'object' || Array.isArray(spec)) {
@@ -3134,7 +3134,7 @@ function assertValidScreenshotSpec(
   }
   let entry = spec as Record<string, unknown>;
   for (let key of Object.keys(entry)) {
-    if (!SCREENSHOT_SPEC_FIELDS.has(key)) {
+    if (!DECLARED_CAPTURE_SPEC_FIELDS.has(key)) {
       throw new Error(`${prefix}: unknown field "${key}"`);
     }
   }
@@ -3152,9 +3152,9 @@ function assertValidScreenshotSpec(
   ) {
     throw new Error(`${prefix}: render must be a component`);
   }
-  if (hasFormat && !isDeclaredScreenshotFormat(entry.format)) {
+  if (hasFormat && !isDeclaredCaptureFormat(entry.format)) {
     throw new Error(
-      `${prefix}: format must be one of ${DECLARED_SCREENSHOT_FORMATS.map(
+      `${prefix}: format must be one of ${DECLARED_CAPTURE_FORMATS.map(
         (f) => `"${f}"`,
       ).join(', ')}`,
     );
@@ -3174,7 +3174,7 @@ function assertValidScreenshotSpec(
       entry.format !== 'embedded'
     ) {
       throw new Error(
-        `${prefix}: a pdf screenshot's format must be 'isolated' or 'embedded' — the box formats ('fitted', 'atom') need an envelope a pdf entry cannot describe`,
+        `${prefix}: a pdf capture's format must be 'isolated' or 'embedded' — the box formats ('fitted', 'atom') need an envelope a pdf entry cannot describe`,
       );
     }
     for (let field of [
@@ -3185,21 +3185,21 @@ function assertValidScreenshotSpec(
     ] as const) {
       if (entry[field] !== undefined) {
         throw new Error(
-          `${prefix}: '${field}' is a raster capture field and cannot appear on a pdf screenshot — paper comes from the card's print CSS (@page)`,
+          `${prefix}: '${field}' is a raster capture field and cannot appear on a pdf capture — paper comes from the card's print CSS (@page)`,
         );
       }
     }
     if (entry.useAsThumbnail !== undefined) {
       throw new Error(
-        `${prefix}: useAsThumbnail cannot appear on a pdf screenshot — a thumbnail must be an image`,
+        `${prefix}: useAsThumbnail cannot appear on a pdf capture — a thumbnail must be an image`,
       );
     }
     if (
       entry.keyBy !== undefined &&
-      !SCREENSHOT_KEY_BY_VALUES.has(entry.keyBy as string)
+      !DECLARED_CAPTURE_KEY_BY_VALUES.has(entry.keyBy as string)
     ) {
       throw new Error(
-        `${prefix}: keyBy must be one of ${[...SCREENSHOT_KEY_BY_VALUES]
+        `${prefix}: keyBy must be one of ${[...DECLARED_CAPTURE_KEY_BY_VALUES]
           .map((v) => `"${v}"`)
           .join(', ')}`,
       );
@@ -3207,8 +3207,8 @@ function assertValidScreenshotSpec(
     return;
   }
   for (let [field, max] of [
-    ['width', SCREENSHOT_MAX_VIEWPORT_WIDTH],
-    ['height', SCREENSHOT_MAX_VIEWPORT_HEIGHT],
+    ['width', CAPTURE_MAX_VIEWPORT_WIDTH],
+    ['height', CAPTURE_MAX_VIEWPORT_HEIGHT],
   ] as const) {
     let value = entry[field];
     if (
@@ -3228,10 +3228,10 @@ function assertValidScreenshotSpec(
       typeof dsf !== 'number' ||
       !Number.isFinite(dsf) ||
       dsf <= 0 ||
-      dsf > SCREENSHOT_MAX_DEVICE_SCALE_FACTOR
+      dsf > CAPTURE_MAX_DEVICE_SCALE_FACTOR
     ) {
       throw new Error(
-        `${prefix}: deviceScaleFactor must be a number between 0 (exclusive) and ${SCREENSHOT_MAX_DEVICE_SCALE_FACTOR}`,
+        `${prefix}: deviceScaleFactor must be a number between 0 (exclusive) and ${CAPTURE_MAX_DEVICE_SCALE_FACTOR}`,
       );
     }
   }
@@ -3242,14 +3242,14 @@ function assertValidScreenshotSpec(
   let effectiveScale =
     typeof entry.deviceScaleFactor === 'number'
       ? entry.deviceScaleFactor
-      : SCREENSHOT_DEFAULT_DEVICE_SCALE_FACTOR;
+      : DECLARED_CAPTURE_DEFAULT_DEVICE_SCALE_FACTOR;
   for (let field of ['width', 'height'] as const) {
     if (
       (entry[field] as number) * effectiveScale >
-      SCREENSHOT_MAX_PHYSICAL_EDGE_PX
+      CAPTURE_MAX_PHYSICAL_EDGE_PX
     ) {
       throw new Error(
-        `${prefix}: ${field} × deviceScaleFactor must be <= ${SCREENSHOT_MAX_PHYSICAL_EDGE_PX} physical pixels (deviceScaleFactor defaults to ${SCREENSHOT_DEFAULT_DEVICE_SCALE_FACTOR})`,
+        `${prefix}: ${field} × deviceScaleFactor must be <= ${CAPTURE_MAX_PHYSICAL_EDGE_PX} physical pixels (deviceScaleFactor defaults to ${DECLARED_CAPTURE_DEFAULT_DEVICE_SCALE_FACTOR})`,
       );
     }
   }
@@ -3269,20 +3269,20 @@ function assertValidScreenshotSpec(
   }
   if (
     entry.keyBy !== undefined &&
-    !SCREENSHOT_KEY_BY_VALUES.has(entry.keyBy as string)
+    !DECLARED_CAPTURE_KEY_BY_VALUES.has(entry.keyBy as string)
   ) {
     throw new Error(
-      `${prefix}: keyBy must be one of ${[...SCREENSHOT_KEY_BY_VALUES]
+      `${prefix}: keyBy must be one of ${[...DECLARED_CAPTURE_KEY_BY_VALUES]
         .map((v) => `"${v}"`)
         .join(', ')}`,
     );
   }
   if (
     entry.type !== undefined &&
-    !SCREENSHOT_IMAGE_TYPES.has(entry.type as string)
+    !RASTER_OUTPUT_TYPES.has(entry.type as string)
   ) {
     throw new Error(
-      `${prefix}: type must be one of ${[...SCREENSHOT_IMAGE_TYPES]
+      `${prefix}: type must be one of ${[...RASTER_OUTPUT_TYPES]
         .map((v) => `"${v}"`)
         .join(', ')}`,
     );
@@ -3297,15 +3297,15 @@ function assertValidScreenshotSpec(
   }
 }
 
-// The one read path for `static screenshots`: merges declarations by name up
+// The one read path for `static captures`: merges declarations by name up
 // the prototype chain (a subclass adds new names and overrides inherited
 // ones wholesale, per name), validating each entry and the merged result's
 // at-most-one-`useAsThumbnail` constraint. Read through this rather than the
 // static directly — a plain property read sees only the nearest declaration,
 // dropping everything an ancestor declared.
-export function getScreenshots(
+export function getCaptures(
   cardOrFileClass: typeof CardDef | typeof FileDef,
-): Record<string, ScreenshotSpec> {
+): Record<string, CaptureSpec> {
   // Collect declaration levels base-most first so a subclass's entry lands
   // after (and thus overrides) its ancestor's.
   let levels: {
@@ -3314,7 +3314,18 @@ export function getScreenshots(
   }[] = [];
   let current: unknown = cardOrFileClass;
   while (typeof current === 'function') {
-    let descriptor = Object.getOwnPropertyDescriptor(current, 'screenshots');
+    // A declaration under the name these slots used to carry would otherwise
+    // be read by nothing: the card would index clean and simply have no
+    // captures, which is the one failure here that never surfaces. Refuse it
+    // by name instead, so the card's own error doc says what to rename.
+    if (Object.getOwnPropertyDescriptor(current, 'screenshots')) {
+      throw new Error(
+        `${captureOwnerName(
+          current as typeof BaseDef,
+        )} declares 'static screenshots', which is no longer read — rename it to 'static captures'`,
+      );
+    }
+    let descriptor = Object.getOwnPropertyDescriptor(current, 'captures');
     if (descriptor) {
       let declarations = descriptor.get
         ? descriptor.get.call(current)
@@ -3322,7 +3333,7 @@ export function getScreenshots(
       if (declarations != null) {
         if (typeof declarations !== 'object' || Array.isArray(declarations)) {
           throw new Error(
-            `static screenshots on ${screenshotOwnerName(
+            `static captures on ${captureOwnerName(
               current as typeof BaseDef,
             )} must be an object mapping names to specs`,
           );
@@ -3332,7 +3343,7 @@ export function getScreenshots(
     }
     current = Object.getPrototypeOf(current);
   }
-  let merged: Record<string, ScreenshotSpec> = {};
+  let merged: Record<string, CaptureSpec> = {};
   // keyBy 'file-content' needs file bytes to key by, so it is only legal
   // when the class being read is file-backed. Checked against the merge
   // target rather than the declaring owner — a FileDef chain can never feed
@@ -3342,10 +3353,10 @@ export function getScreenshots(
     cardOrFileClass === FileDef || cardOrFileClass.prototype instanceof FileDef;
   for (let { owner, declarations } of levels) {
     for (let [name, spec] of Object.entries(declarations)) {
-      assertValidScreenshotSpec(owner, name, spec);
+      assertValidCaptureSpec(owner, name, spec);
       if (spec.keyBy === 'file-content' && !isFileBacked) {
         throw new Error(
-          `screenshot "${name}" on ${screenshotOwnerName(
+          `capture "${name}" on ${captureOwnerName(
             owner,
           )}: keyBy 'file-content' requires a file-backed def (FileDef or a subclass); a card has no file content to key by — use 'generation' or omit keyBy`,
         );
@@ -3358,9 +3369,9 @@ export function getScreenshots(
   );
   if (thumbnails.length > 1) {
     throw new Error(
-      `${screenshotOwnerName(
+      `${captureOwnerName(
         cardOrFileClass,
-      )} declares more than one useAsThumbnail screenshot (${thumbnails
+      )} declares more than one useAsThumbnail capture (${thumbnails
         .map((name) => `"${name}"`)
         .join(
           ', ',
@@ -3375,14 +3386,14 @@ export function getScreenshots(
 // capture-only component, which cannot serialize — it is flagged
 // `render: true` and re-resolved in-page by slot name when its capture
 // renders.
-export function serializeDeclaredScreenshots(
+export function serializeDeclaredCaptures(
   cardOrFileClass: typeof CardDef | typeof FileDef,
-): DeclaredScreenshotRoster {
-  let roster: DeclaredScreenshotRoster = {};
-  for (let [name, spec] of Object.entries(getScreenshots(cardOrFileClass))) {
+): DeclaredCaptureRoster {
+  let roster: DeclaredCaptureRoster = {};
+  for (let [name, spec] of Object.entries(getCaptures(cardOrFileClass))) {
     // A pdf entry carries none of the raster geometry (validation refuses it);
     // its width/height/deviceScaleFactor/background are all absent here.
-    let payload: DeclaredScreenshotSpecPayload = {};
+    let payload: DeclaredCaptureSpecPayload = {};
     if (spec.width !== undefined) {
       payload.width = spec.width;
     }
@@ -3414,32 +3425,32 @@ export function serializeDeclaredScreenshots(
   return roster;
 }
 
-// Shared body of the `screenshotURLs` getter on CardDef and FileDef (two
-// sites, matching how `static screenshots` itself is declared — FieldDef has
+// Shared body of the `captureURLs` getter on CardDef and FileDef (two
+// sites, matching how `static captures` itself is declared — FieldDef has
 // no addressable URL, so it gets neither). Every declared slot name appears
 // as a key; the value is the capture's durable served URL when
-// `meta.screenshots` (the serve-time join, or the prerender render context's
+// `meta.captures` (the serve-time join, or the prerender render context's
 // declaration-derived form) holds the name, and `undefined` otherwise —
 // not-yet-captured, capture-errored, or an unsaved instance. `undefined`
 // rather than a placeholder URL is deliberate: it is the absence signal
 // consumption fallback chains (e.g. a thumbnail falling through to an icon
 // default) rely on, which a placeholder would defeat.
-function composeScreenshotURLs(
+function composeCaptureURLs(
   instance: CardDef | FileDef,
 ): Record<string, string | undefined> {
   let urls: Record<string, string | undefined> = {};
   try {
     for (let name of Object.keys(
-      getScreenshots(instance.constructor as typeof CardDef | typeof FileDef),
+      getCaptures(instance.constructor as typeof CardDef | typeof FileDef),
     )) {
       urls[name] = undefined;
     }
   } catch {
     // An invalid declaration fails loudly at its authoring surfaces (the
-    // capture roster read, `getScreenshots` callers); a consuming template
+    // capture roster read, `getCaptures` callers); a consuming template
     // must stay render-safe, so here it reads as "nothing declared".
   }
-  let captured = getCardMeta(instance, 'screenshots');
+  let captured = getCardMeta(instance, 'captures');
   if (captured) {
     for (let [name, entry] of Object.entries(captured)) {
       urls[name] = entry.url;
@@ -3450,24 +3461,22 @@ function composeScreenshotURLs(
 
 // The durable URL of the capture feeding `cardThumbnailURL`: the declared
 // slot flagged `useAsThumbnail` (at most one across the merged declarations,
-// enforced by `getScreenshots`), read with `screenshotURLs`' semantics — a
-// URL exactly when `meta.screenshots` holds the slot, `undefined` otherwise.
+// enforced by `getCaptures`), read with `captureURLs`' semantics — a
+// URL exactly when `meta.captures` holds the slot, `undefined` otherwise.
 // On live loads meta joins the persisted manifest, so an uncaptured slot
 // reads `undefined` and the fallback chain's terminal rung (the icon
 // default) engages. In the prerender render context meta is
-// declaration-derived (`screenshotsMetaFromRoster`), so this rung asserts
+// declaration-derived (`capturesMetaFromRoster`), so this rung asserts
 // the durable URL before any capture exists: persisted HTML embeds a URL
 // that 404s until the capture lands, then self-heals — and a slot whose
 // capture never succeeds stays a 404 (a blank tile), not the icon default.
-// Same render-safety posture as `composeScreenshotURLs`: an invalid
+// Same render-safety posture as `composeCaptureURLs`: an invalid
 // declaration reads as "no thumbnail capture".
-function thumbnailScreenshotURL(
-  instance: CardDef | FileDef,
-): string | undefined {
+function thumbnailCaptureURL(instance: CardDef | FileDef): string | undefined {
   let name: string | undefined;
   try {
     name = Object.entries(
-      getScreenshots(instance.constructor as typeof CardDef | typeof FileDef),
+      getCaptures(instance.constructor as typeof CardDef | typeof FileDef),
     ).find(([, spec]) => spec.useAsThumbnail)?.[0];
   } catch {
     return undefined;
@@ -3475,7 +3484,7 @@ function thumbnailScreenshotURL(
   if (!name) {
     return undefined;
   }
-  return getCardMeta(instance, 'screenshots')?.[name]?.url;
+  return getCardMeta(instance, 'captures')?.[name]?.url;
 }
 
 export class FieldDef extends BaseDef {
@@ -3903,18 +3912,18 @@ export class FileDef extends BaseDef {
     return this[meta]?.resourceCreatedAt;
   }
 
-  // See CardDef.screenshotURLs — the same reserved, meta-derived getter for
+  // See CardDef.captureURLs — the same reserved, meta-derived getter for
   // file-backed defs. The prerender pass captures a URL's file rendering
   // alongside its instance rendering, so a file family's declared names
   // resolve here just as a card's do.
-  get screenshotURLs(): Record<string, string | undefined> {
-    return composeScreenshotURLs(this);
+  get captureURLs(): Record<string, string | undefined> {
+    return composeCaptureURLs(this);
   }
 
-  // See CardDef.screenshotsMeta — the same reserved, meta-derived getter for
+  // See CardDef.capturesMeta — the same reserved, meta-derived getter for
   // file-backed defs.
-  get screenshotsMeta(): ScreenshotsMeta | undefined {
-    return getCardMeta(this, 'screenshots');
+  get capturesMeta(): CapturesMeta | undefined {
+    return getCardMeta(this, 'captures');
   }
 
   // The four shared format shells own identity, facts, budgets, and state for
@@ -3950,11 +3959,11 @@ export class FileDef extends BaseDef {
   // less surprising.
   static markdown: BaseDefComponent = DefaultMarkdownFallbackTemplate;
 
-  // Opt-in declared screenshots (see CardDef.screenshots): merged by name up
-  // the prototype chain via `getScreenshots`. File families whose capture
+  // Opt-in declared captures (see CardDef.captures): merged by name up
+  // the prototype chain via `getCaptures`. File families whose capture
   // derives from the file's bytes (a video's poster frame, say) declare
   // `keyBy: 'file-content'` so a metadata-only edit skips recapture.
-  static screenshots?: Record<string, ScreenshotSpec>;
+  static captures?: Record<string, CaptureSpec>;
 
   static async extractAttributes(
     url: string,
@@ -4047,7 +4056,7 @@ export class ImageDef extends FileDef {
   // excludes vectors, so an SVG must not pay for captures nothing reads.
   // File-content-keyed, so a metadata-only edit never re-decodes the pixels.
   // See `image-captures` for the boxes and the capture-only components.
-  static screenshots: Record<string, ScreenshotSpec> = IMAGE_THUMB_SCREENSHOTS;
+  static captures: Record<string, CaptureSpec> = IMAGE_THUMB_CAPTURES;
 
   // CS-10787: emit a markdown image reference. If no URL is available we
   // fall back to a placeholder that names the image — useful to downstream
@@ -4122,7 +4131,7 @@ export class CardDef extends BaseDef {
     },
   });
   // The thumbnail fallback chain: an author-set URL wins, then an authored
-  // ImageDef link, then the capture the card's `static screenshots` flags
+  // ImageDef link, then the capture the card's `static captures` flags
   // `useAsThumbnail` — so every opted-in card gets a live preview with no
   // template edits (the default fitted template already renders this field).
   // Falsy past all three rungs is the absence signal consumers use to fall
@@ -4136,7 +4145,7 @@ export class CardDef extends BaseDef {
       return (
         this.cardInfo.cardThumbnailURL ||
         this.cardInfo.cardThumbnail?.url ||
-        thumbnailScreenshotURL(this)
+        thumbnailCaptureURL(this)
       );
     },
   });
@@ -4177,12 +4186,12 @@ export class CardDef extends BaseDef {
   // turndown (registered on `globalThis` by `packages/host`). Subclasses can
   // override `static markdown` to author bespoke markdown directly.
   static markdown: BaseDefComponent = DefaultMarkdownFallbackTemplate;
-  // Opt-in declared screenshots: captures rendered at indexing time and
-  // served from the realm's `_screenshot/…?name=` route. Names are URL path
+  // Opt-in declared captures: captures rendered at indexing time and
+  // served from the realm's `_capture/…?name=` route. Names are URL path
   // segments. Declarations merge by name up the prototype chain — read them
-  // via `getScreenshots`, never off the static directly, or ancestors'
+  // via `getCaptures`, never off the static directly, or ancestors'
   // entries are dropped. FieldDef has no addressable URL, so it has no slot.
-  static screenshots?: Record<string, ScreenshotSpec>;
+  static captures?: Record<string, CaptureSpec>;
 
   static get hasCustomEditTemplate(): boolean {
     return this.edit !== CardDef.edit;
@@ -4221,33 +4230,33 @@ export class CardDef extends BaseDef {
     return realmURLString ? new URL(realmURLString) : undefined;
   }
 
-  // The durable served URLs of this instance's declared screenshots, keyed
-  // by slot name — one key per `static screenshots` declaration, `undefined`
-  // until a capture exists (see `composeScreenshotURLs`). `undefined` is the
+  // The durable served URLs of this instance's declared captures, keyed
+  // by slot name — one key per `static captures` declaration, `undefined`
+  // until a capture exists (see `composeCaptureURLs`). `undefined` is the
   // deliberate absence signal, so a template must guard its `<img>` —
   // Glimmer omits the attribute for an undefined value, which renders a
   // broken/empty image:
   //
-  //   {{#if @model.screenshotURLs.card}}
-  //     <img src={{@model.screenshotURLs.card}} alt='preview' />
+  //   {{#if @model.captureURLs.card}}
+  //     <img src={{@model.captureURLs.card}} alt='preview' />
   //   {{/if}}
   //
   // A getter rather than a `@field` (like FileDef's timestamp getters) so it
   // never round-trips on a write; the name is reserved by the `@field`
   // decorator so a userland field can't shadow it.
-  get screenshotURLs(): Record<string, string | undefined> {
-    return composeScreenshotURLs(this);
+  get captureURLs(): Record<string, string | undefined> {
+    return composeCaptureURLs(this);
   }
 
-  // The instance's `meta.screenshots` entries verbatim — the dimensional
-  // companion to `screenshotURLs` for consumers that need more than the URL:
+  // The instance's `meta.captures` entries verbatim — the dimensional
+  // companion to `captureURLs` for consumers that need more than the URL:
   // each captured slot's width/height/deviceScaleFactor (a `srcset`
   // assembler's inputs) and its `useAsThumbnail` flag. Same absence
-  // semantics: a slot appears only once `meta.screenshots` holds it, so an
+  // semantics: a slot appears only once `meta.captures` holds it, so an
   // uncaptured live instance reads `undefined` here. Reserved like
-  // `screenshotURLs`, so a userland field can't shadow it.
-  get screenshotsMeta(): ScreenshotsMeta | undefined {
-    return getCardMeta(this, 'screenshots');
+  // `captureURLs`, so a userland field can't shadow it.
+  get capturesMeta(): CapturesMeta | undefined {
+    return getCardMeta(this, 'captures');
   }
 
   [getMenuItems](params: GetMenuItemParams): MenuItemOptions[] {

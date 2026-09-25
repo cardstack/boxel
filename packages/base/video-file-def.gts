@@ -3,7 +3,7 @@ import { NumberField, contains, field } from './card-api';
 import { FileDef } from './file-api';
 import { MediaEncodingField } from './file-formats/metadata-fields';
 import type { FilePreviewComponent } from './file-formats/file-preview-stage';
-import { VIDEO_FAMILY_SCREENSHOTS } from './file-formats/video-captures';
+import { VIDEO_FAMILY_CAPTURES } from './file-formats/video-captures';
 import { VideoPreview } from './file-formats/video-preview';
 import { displayDimensions, type VideoEncoding } from './video-metadata';
 
@@ -38,7 +38,7 @@ export class VideoDef extends FileDef {
   // frame, keyed on the file's bytes and flagged useAsThumbnail, so the
   // fitted cell shows a real frame through the view model's thumbnail seam
   // with the current placeholder as the fallback.
-  static screenshots = VIDEO_FAMILY_SCREENSHOTS;
+  static captures = VIDEO_FAMILY_CAPTURES;
 }
 
 export default VideoDef;

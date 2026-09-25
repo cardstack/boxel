@@ -12,7 +12,7 @@ import type {
 } from '@cardstack/runtime-common';
 import {
   asExpressions,
-  DECLARED_SCREENSHOT_CAPTURE_RETRY_CAP,
+  DECLARED_CAPTURE_RETRY_CAP,
   GATEWAY_FAILURE_RETRY_CAP,
   STALE_SHELL_FAILURE_RETRY_CAP,
   findPrerenderHtmlRejectionStreaks,
@@ -1251,8 +1251,8 @@ module(basename(import.meta.filename), function (hooks) {
     assert.strictEqual((await prerenderHtmlJobs(realmURL)).length, 0);
   });
 
-  test('a healthy row with a screenshot-capture failure below the cap is re-rendered once it ages past the minimum', async function (assert) {
-    const realmURL = 'http://example.com/screenshot-retry/';
+  test('a healthy row with a capture-capture failure below the cap is re-rendered once it ages past the minimum', async function (assert) {
+    const realmURL = 'http://example.com/capture-retry/';
     await seedOwner(realmURL);
     await seedRealmGeneration(realmURL, 5, 'epoch-a');
     await seedIndexRow({
@@ -1267,14 +1267,14 @@ module(basename(import.meta.filename), function (hooks) {
       realmURL,
       generation: 5,
       diagnostics: {
-        screenshotErrors: [
+        captureErrors: [
           {
             name: 'hero',
             message: 'render never painted',
             consecutiveFailures: 1,
           },
         ],
-        screenshotCaptureFailureRenders: 1,
+        captureFailureRenders: 1,
       },
       renderedMinutesAgo: 60,
     });
@@ -1297,8 +1297,8 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
-  test('a screenshot-failure entry recorded without a run count reads as a run of one', async function (assert) {
-    const realmURL = 'http://example.com/screenshot-legacy/';
+  test('a capture-failure entry recorded without a run count reads as a run of one', async function (assert) {
+    const realmURL = 'http://example.com/capture-legacy/';
     await seedOwner(realmURL);
     await seedRealmGeneration(realmURL, 5);
     await seedIndexRow({
@@ -1311,7 +1311,7 @@ module(basename(import.meta.filename), function (hooks) {
       realmURL,
       generation: 5,
       diagnostics: {
-        screenshotErrors: [{ name: '*', message: 'roster read failed' }],
+        captureErrors: [{ name: '*', message: 'roster read failed' }],
       },
       renderedMinutesAgo: 60,
     });
@@ -1325,7 +1325,7 @@ module(basename(import.meta.filename), function (hooks) {
   });
 
   test('a row whose every recorded slot has reached the capture-retry cap is terminal', async function (assert) {
-    const realmURL = 'http://example.com/screenshot-capped/';
+    const realmURL = 'http://example.com/capture-capped/';
     await seedOwner(realmURL);
     await seedRealmGeneration(realmURL, 5);
     await seedIndexRow({
@@ -1338,16 +1338,16 @@ module(basename(import.meta.filename), function (hooks) {
       realmURL,
       generation: 5,
       diagnostics: {
-        screenshotErrors: [
+        captureErrors: [
           {
             name: 'hero',
             message: 'render never painted',
-            consecutiveFailures: DECLARED_SCREENSHOT_CAPTURE_RETRY_CAP,
+            consecutiveFailures: DECLARED_CAPTURE_RETRY_CAP,
           },
           {
             name: 'poster',
             message: 'capture engine returned no bytes for "poster"',
-            consecutiveFailures: DECLARED_SCREENSHOT_CAPTURE_RETRY_CAP + 1,
+            consecutiveFailures: DECLARED_CAPTURE_RETRY_CAP + 1,
           },
         ],
       },
@@ -1358,13 +1358,13 @@ module(basename(import.meta.filename), function (hooks) {
     assert.deepEqual(
       result,
       { realmsRepaired: 0, urlsEnqueued: 0, realmsInBackoff: 0 },
-      'the recorded absences stand — the card stays served without the screenshots',
+      'the recorded absences stand — the card stays served without the captures',
     );
     assert.strictEqual((await prerenderHtmlJobs(realmURL)).length, 0);
   });
 
   test('a row whose failing-render counter is at the cap is terminal even when per-slot runs are not', async function (assert) {
-    const realmURL = 'http://example.com/screenshot-row-capped/';
+    const realmURL = 'http://example.com/capture-row-capped/';
     await seedOwner(realmURL);
     await seedRealmGeneration(realmURL, 5);
     await seedIndexRow({
@@ -1381,14 +1381,14 @@ module(basename(import.meta.filename), function (hooks) {
       realmURL,
       generation: 5,
       diagnostics: {
-        screenshotErrors: [
+        captureErrors: [
           {
             name: '*',
-            message: 'declared screenshot capture failed',
+            message: 'declared capture failed',
             consecutiveFailures: 1,
           },
         ],
-        screenshotCaptureFailureRenders: DECLARED_SCREENSHOT_CAPTURE_RETRY_CAP,
+        captureFailureRenders: DECLARED_CAPTURE_RETRY_CAP,
       },
       renderedMinutesAgo: 600,
     });
@@ -1403,7 +1403,7 @@ module(basename(import.meta.filename), function (hooks) {
   });
 
   test('one slot below the cap keeps a row retryable even when another slot is capped', async function (assert) {
-    const realmURL = 'http://example.com/screenshot-mixed/';
+    const realmURL = 'http://example.com/capture-mixed/';
     await seedOwner(realmURL);
     await seedRealmGeneration(realmURL, 5);
     await seedIndexRow({
@@ -1418,11 +1418,11 @@ module(basename(import.meta.filename), function (hooks) {
       // No row-level counter recorded (a legacy row) — it reads as one
       // failing render, so the per-slot term decides here.
       diagnostics: {
-        screenshotErrors: [
+        captureErrors: [
           {
             name: 'hero',
             message: 'render never painted',
-            consecutiveFailures: DECLARED_SCREENSHOT_CAPTURE_RETRY_CAP,
+            consecutiveFailures: DECLARED_CAPTURE_RETRY_CAP,
           },
           {
             name: 'poster',
@@ -1442,8 +1442,8 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
-  test('a screenshot-capture failure younger than the minimum age is not retried yet', async function (assert) {
-    const realmURL = 'http://example.com/screenshot-fresh/';
+  test('a capture-capture failure younger than the minimum age is not retried yet', async function (assert) {
+    const realmURL = 'http://example.com/capture-fresh/';
     await seedOwner(realmURL);
     await seedRealmGeneration(realmURL, 5);
     await seedIndexRow({
@@ -1456,7 +1456,7 @@ module(basename(import.meta.filename), function (hooks) {
       realmURL,
       generation: 5,
       diagnostics: {
-        screenshotErrors: [
+        captureErrors: [
           {
             name: 'hero',
             message: 'render never painted',
@@ -1664,7 +1664,7 @@ module(basename(import.meta.filename), function (hooks) {
   });
 
   test('a healthy row with capture timings but no capture failures is not residue', async function (assert) {
-    const realmURL = 'http://example.com/screenshot-healthy/';
+    const realmURL = 'http://example.com/capture-healthy/';
     await seedOwner(realmURL);
     await seedRealmGeneration(realmURL, 5);
     await seedIndexRow({
@@ -1677,7 +1677,7 @@ module(basename(import.meta.filename), function (hooks) {
       realmURL,
       generation: 5,
       diagnostics: {
-        screenshotTimingsMs: { hero: 1200 },
+        captureTimingsMs: { hero: 1200 },
       },
       renderedMinutesAgo: 600,
     });

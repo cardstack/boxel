@@ -20,18 +20,18 @@ import {
   formattedError,
   loadCardDef,
   snapshotRuntimeDependencies,
-  screenshotsMetaFromRoster,
+  capturesMetaFromRoster,
   SupportedMimeType,
   isCardError,
   isJsonContentType,
   rri,
   type CardErrorsJSONAPI,
   type CardSourceVisitArgs,
-  type DeclaredScreenshotRoster,
+  type DeclaredCaptureRoster,
   type LooseSingleCardDocument,
   type RealmIdentifier,
   type RenderError,
-  type ScreenshotsMeta,
+  type CapturesMeta,
   parseRenderRouteOptions,
   serializeRenderRouteOptions,
   logger as runtimeLogger,
@@ -606,19 +606,19 @@ export default class RenderRoute extends Route<Model> {
       }
       let { resource } = fileRenderData;
       // The file-half twin of the card branch's declaration-derived
-      // `meta.screenshots` injection below (`declarationScreenshotsMeta`):
+      // `meta.captures` injection below (`declarationCapturesMeta`):
       // the FileDef family's declared roster asserts each slot's durable URL
       // so the file's own prerendered formats can embed it on the very first
       // pass, before that pass's captures persist.
-      let fileScreenshotsMeta = await this.fileDeclarationScreenshotsMeta(
+      let fileCapturesMeta = await this.fileDeclarationCapturesMeta(
         fileRenderData.fileDefCodeRef,
         resource,
         fileRenderData.realmURL,
       );
-      if (fileScreenshotsMeta) {
+      if (fileCapturesMeta) {
         resource = {
           ...resource,
-          meta: { ...resource.meta, screenshots: fileScreenshotsMeta },
+          meta: { ...resource.meta, captures: fileCapturesMeta },
         };
       }
       let doc = { data: resource };
@@ -823,7 +823,7 @@ export default class RenderRoute extends Route<Model> {
           );
 
           await this.realm.ensureRealmMeta(realmURL);
-          let screenshotsMeta = await this.declarationScreenshotsMeta(
+          let capturesMeta = await this.declarationCapturesMeta(
             doc,
             canonicalId,
             realmURL,
@@ -840,7 +840,7 @@ export default class RenderRoute extends Route<Model> {
                 lastModified: lastModified.getTime(),
                 realmURL: realmURL as RealmIdentifier,
                 realmInfo: { ...this.realm.info(id) },
-                ...(screenshotsMeta ? { screenshots: screenshotsMeta } : {}),
+                ...(capturesMeta ? { captures: capturesMeta } : {}),
               },
             },
           };
@@ -1145,7 +1145,7 @@ export default class RenderRoute extends Route<Model> {
     this.#scheduleReady(model);
   }
 
-  // The file rendering's variant of `declarationScreenshotsMeta` below (see
+  // The file rendering's variant of `declarationCapturesMeta` below (see
   // that comment for the shared rationale — declaration-derived rosters,
   // 404-then-self-heal, no `hash`): the roster comes from the file's FileDef
   // family class (resolved by extension), and the addressed path keeps its
@@ -1156,14 +1156,14 @@ export default class RenderRoute extends Route<Model> {
   // in-browser prerender twin stashes no realm on purpose — it never
   // captures, so injection must stay off there, or the baked durable URLs
   // would 404 with no capture ever landing to self-heal them.
-  private async fileDeclarationScreenshotsMeta(
+  private async fileDeclarationCapturesMeta(
     fileDefCodeRef: { module: string; name: string },
     resource: {
       id?: string;
       meta?: { realmURL?: string };
     },
     visitRealmURL: string | undefined,
-  ): Promise<ScreenshotsMeta | undefined> {
+  ): Promise<CapturesMeta | undefined> {
     try {
       let id = resource.id;
       // The stashed visit realm is the authority; an extract-built resource
@@ -1173,7 +1173,7 @@ export default class RenderRoute extends Route<Model> {
         return undefined;
       }
       let api = await this.cardService.getAPI();
-      if (typeof api.serializeDeclaredScreenshots !== 'function') {
+      if (typeof api.serializeDeclaredCaptures !== 'function') {
         return undefined;
       }
       let resolvedId = this.network.virtualNetwork.toURL(id);
@@ -1189,28 +1189,28 @@ export default class RenderRoute extends Route<Model> {
           relativeTo: resolvedId,
         },
       );
-      let roster = api.serializeDeclaredScreenshots(
+      let roster = api.serializeDeclaredCaptures(
         Klass as typeof CardDef,
-      ) as DeclaredScreenshotRoster;
+      ) as DeclaredCaptureRoster;
       if (Object.keys(roster).length === 0) {
         return undefined;
       }
-      return screenshotsMetaFromRoster(roster, {
+      return capturesMetaFromRoster(roster, {
         realmURL,
         instanceLocalPath: resolvedId.href.slice(realmURL.length),
       });
     } catch {
-      // Same posture as `declarationScreenshotsMeta`: a class that fails to
+      // Same posture as `declarationCapturesMeta`: a class that fails to
       // load fails the render itself moments later; this auxiliary read must
       // never be what surfaces it.
       return undefined;
     }
   }
 
-  // The render context's `meta.screenshots`: derived from the class's
+  // The render context's `meta.captures`: derived from the class's
   // declared roster rather than a persisted manifest, so a card's own
   // rendered output can embed its declared captures' durable URLs
-  // (`screenshotURLs`) even on the instance's very first prerender pass —
+  // (`captureURLs`) even on the instance's very first prerender pass —
   // captures run later in that same pass, after the display-format renders,
   // so a manifest join could never see them. A URL embedded ahead of its
   // capture 404s with a short max-age until the capture lands, then
@@ -1218,11 +1218,11 @@ export default class RenderRoute extends Route<Model> {
   // (`getCard`), preserving `undefined` as the not-captured absence signal.
   // Roster entries carry no `hash` for the same reason — no capture is being
   // asserted.
-  private async declarationScreenshotsMeta(
+  private async declarationCapturesMeta(
     doc: LooseSingleCardDocument,
     canonicalId: string,
     realmURL: string,
-  ): Promise<ScreenshotsMeta | undefined> {
+  ): Promise<CapturesMeta | undefined> {
     try {
       let adoptsFrom = doc.data?.meta?.adoptsFrom;
       if (!adoptsFrom) {
@@ -1231,8 +1231,8 @@ export default class RenderRoute extends Route<Model> {
       let api = await this.cardService.getAPI();
       // A stale base/card-api build loaded during a deploy overlap may
       // predate this export; no roster then means no declared captures, not
-      // an error (mirrors the render.screenshots route).
-      if (typeof api.serializeDeclaredScreenshots !== 'function') {
+      // an error (mirrors the render.captures route).
+      if (typeof api.serializeDeclaredCaptures !== 'function') {
         return undefined;
       }
       let resolvedId = this.network.virtualNetwork.toURL(canonicalId);
@@ -1240,16 +1240,16 @@ export default class RenderRoute extends Route<Model> {
         loader: this.loaderService.loader,
         relativeTo: resolvedId,
       });
-      let roster = api.serializeDeclaredScreenshots(
+      let roster = api.serializeDeclaredCaptures(
         Klass as typeof CardDef,
-      ) as DeclaredScreenshotRoster;
+      ) as DeclaredCaptureRoster;
       if (Object.keys(roster).length === 0) {
         return undefined;
       }
       if (!resolvedId.href.startsWith(realmURL)) {
         return undefined;
       }
-      return screenshotsMetaFromRoster(roster, {
+      return capturesMetaFromRoster(roster, {
         realmURL,
         instanceLocalPath: resolvedId.href.slice(realmURL.length),
       });
@@ -1348,7 +1348,7 @@ export default class RenderRoute extends Route<Model> {
     (globalThis as any).__boxelRenderCapturedDeps =
       this.network.virtualNetwork.unresolveURLs(model.capturedDeps);
     // The dependency tracker keeps accumulating for this card's session after
-    // settle — child-route renders (a declared screenshot's capture-only
+    // settle — child-route renders (a declared capture's capture-only
     // component, ancestor format renders) load through the same tracker but
     // land after the snapshot above was taken. This hook lets the capture
     // engine re-snapshot once those renders are done, so a capture-only
@@ -1555,7 +1555,7 @@ export default class RenderRoute extends Route<Model> {
       }
       if (typeof routeName === 'string' && routeName.startsWith('render.')) {
         let normalized = [...params];
-        // A trailing query-params object (e.g. the fitted-screenshot
+        // A trailing query-params object (e.g. the fitted-capture
         // envelope) is not a positional route param — peel it off before the
         // base-param length heuristic below, then re-append it to the final
         // transition so router.transitionTo receives it as its query-params arg.

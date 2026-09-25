@@ -6,7 +6,7 @@ import {
   type RenderVisitResponse,
   type RenderRouteOptions,
   type RunCommandResponse,
-  type ScreenshotPrerenderResponse,
+  type CapturePrerenderResponse,
   logger,
 } from '@cardstack/runtime-common';
 import {
@@ -295,7 +295,7 @@ export function createRemotePrerenderer(
       batchId,
       priority,
       jobId,
-      screenshots,
+      captures,
       renderScope,
       cardSource,
     }: PrerenderVisitArgs): Promise<RenderVisitResponse> {
@@ -316,7 +316,7 @@ export function createRemotePrerenderer(
           ...(batchId ? { batchId } : {}),
           ...(priority !== undefined ? { priority } : {}),
           ...(jobId ? { jobId } : {}),
-          ...(screenshots ? { screenshots } : {}),
+          ...(captures ? { captures } : {}),
           ...(renderScope ? { renderScope } : {}),
           ...(cardSource ? { cardSource } : {}),
         },
@@ -336,7 +336,7 @@ export function createRemotePrerenderer(
         },
       );
     },
-    async prerenderScreenshot({
+    async prerenderCapture({
       realm,
       url,
       auth,
@@ -345,9 +345,9 @@ export function createRemotePrerenderer(
       priority,
       jobId,
     }) {
-      return await requestWithRetry<ScreenshotPrerenderResponse>(
-        'prerender-screenshot',
-        'screenshot-request',
+      return await requestWithRetry<CapturePrerenderResponse>(
+        'prerender-capture',
+        'capture-request',
         {
           affinityType: 'realm',
           affinityValue: realm,

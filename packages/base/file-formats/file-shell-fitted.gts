@@ -98,7 +98,7 @@ export class FileFittedShell extends GlimmerComponent<FileFittedShellSignature> 
     );
   }
 
-  // A waveform is semantic SVG rather than a screenshot crop, so it renders
+  // A waveform is semantic SVG rather than a capture crop, so it renders
   // live in the thumbnail rail even when a cached rendition exists — and it
   // needs horizontal measure, which a square rail would destroy.
   get isWaveform() {

@@ -1,6 +1,6 @@
 import { ImageDef, contains, field } from './card-api';
-import type { ScreenshotSpec } from './card-api';
-import { IMAGE_RENDITION_SCREENSHOTS } from './file-formats/image-captures';
+import type { CaptureSpec } from './card-api';
+import { IMAGE_RENDITION_CAPTURES } from './file-formats/image-captures';
 import {
   ColorProfileField,
   ExifMetadataField,
@@ -27,12 +27,11 @@ export class RasterImageDef extends ImageDef {
   static displayName = 'Raster Image';
 
   // The srcset renditions, merged over `ImageDef`'s `thumb` by
-  // `getScreenshots`. Declared here and not on `ImageDef` so vectors never
+  // `getCaptures`. Declared here and not on `ImageDef` so vectors never
   // pay for them: srcset excludes SVG, and class placement is the only
   // exclusion lever the declaration system offers. See `image-captures` for
   // the boxes and the GIF residual.
-  static screenshots: Record<string, ScreenshotSpec> =
-    IMAGE_RENDITION_SCREENSHOTS;
+  static captures: Record<string, CaptureSpec> = IMAGE_RENDITION_CAPTURES;
 
   // What the camera recorded: body, lens, exposure, and where the shutter was
   // pressed. Empty for anything generated rather than photographed, which is

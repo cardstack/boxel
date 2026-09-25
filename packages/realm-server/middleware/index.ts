@@ -187,7 +187,7 @@ export function healthCheck(ctxt: Koa.Context, next: Koa.Next) {
 
 // The request URL as the log lines print it: any `token` query param is
 // masked, because two token-bearing families travel there — capture-URL
-// tokens on `_screenshot/` GETs and full session JWTs on `_download-realm`
+// tokens on `_capture/` GETs and full session JWTs on `_download-realm`
 // links — and these lines ship to Loki. (ALB access logs still record the
 // raw request line; the capture token's single-URL scope and short TTL are
 // the mitigation there.)

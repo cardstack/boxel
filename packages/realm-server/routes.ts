@@ -84,7 +84,7 @@ import {
 } from './handlers/handle-webhook-commands.ts';
 import handleWebhookReceiverRequest from './handlers/handle-webhook-receiver.ts';
 import handleRunCommand from './handlers/handle-run-command.ts';
-import handleScreenshotCard from './handlers/handle-screenshot-card.ts';
+import handleCaptureCard from './handlers/handle-capture-card.ts';
 import { buildCreatePrerenderAuth } from './prerender/auth.ts';
 import type { RealmRegistryReconciler } from './lib/realm-registry-reconciler.ts';
 
@@ -92,13 +92,13 @@ export type CreateRoutesArgs = {
   serverURL: string;
   dbAdapter: DBAdapter;
   definitionLookup: DefinitionLookup;
-  // MediaCache object store; absent means the POST screenshot endpoint
+  // MediaCache object store; absent means the POST capture endpoint
   // captures without persisting (and returns no served URL).
   mediaCacheAdapter?: MediaCacheAdapter;
-  // Bounded sync-wait budget for the POST screenshot endpoint. Defaults to
-  // SCREENSHOT_SYNC_WAIT_BUDGET_MS; tests shrink it to exercise the
+  // Bounded sync-wait budget for the POST capture endpoint. Defaults to
+  // CAPTURE_SYNC_WAIT_BUDGET_MS; tests shrink it to exercise the
   // 503 + Retry-After path without holding real time.
-  screenshotSyncWaitMs?: number;
+  captureSyncWaitMs?: number;
   matrixClient: MatrixClient;
   realmServerSecretSeed: string;
   grafanaSecret: string;
@@ -314,9 +314,18 @@ export function createRoutes(args: CreateRoutesArgs) {
     }),
   );
   router.post(
+    '/_capture-card',
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleCaptureCard(args),
+  );
+  // The name this endpoint answered to before captures were called captures.
+  // `boxel-cli` is installed and pinned independently of this server, so a
+  // released version still posts here; it is answered by the same handler for
+  // as long as those versions are in use.
+  router.post(
     '/_screenshot-card',
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
-    handleScreenshotCard(args),
+    handleCaptureCard(args),
   );
   router.post(
     '/_publish-realm',

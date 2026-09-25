@@ -9,7 +9,7 @@ import type {
 } from './realm-identifiers.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
 import type { Query } from './query.ts';
-import type { ScreenshotsMeta } from './capture-spec.ts';
+import type { CapturesMeta } from './capture-spec.ts';
 
 // Metadata for a query-based linksTo/linksToMany field on a FileDef subclass,
 // extracted during file prerendering so that file-meta responses can populate
@@ -159,14 +159,14 @@ export type CardResourceMeta = Meta & {
   // a client send it as the base its next write is computed against.
   //
   // Never persisted into the source file and stripped from incoming writes,
-  // like `realmInfo` / `realmURL` / `screenshots`.
+  // like `realmInfo` / `realmURL` / `captures`.
   version?: string;
-  // The instance's declared-screenshot captures, joined at serve time from
-  // the prerendered manifest (`prerendered_html.screenshots`) — never
+  // The instance's declared captures, joined at serve time from
+  // the prerendered manifest (`prerendered_html.captures`) — never
   // persisted into the index or the source file, and stripped from incoming
-  // writes like `realmInfo`/`realmURL`. The `screenshotURLs` getter on
+  // writes like `realmInfo`/`realmURL`. The `captureURLs` getter on
   // CardDef/FileDef reads this.
-  screenshots?: ScreenshotsMeta;
+  captures?: CapturesMeta;
 };
 
 export type FileMetaResourceResourceMeta = Meta & {
@@ -186,11 +186,11 @@ export type FileMetaResourceResourceMeta = Meta & {
   // See CardResourceMeta.error — a file-meta serialization can likewise carry
   // the result's error doc when it failed to render.
   error?: ErrorEntry;
-  // See CardResourceMeta.screenshots. Stamped at serve time from the file
+  // See CardResourceMeta.captures. Stamped at serve time from the file
   // row's prerendered manifest — the file-meta GET and linked-file resources
   // join it exactly as a card+json GET joins an instance row's, so FileDef's
-  // `screenshotURLs` getter reads both kinds uniformly.
-  screenshots?: ScreenshotsMeta;
+  // `captureURLs` getter reads both kinds uniformly.
+  captures?: CapturesMeta;
 };
 
 // The single home for how a file's timestamps land in `meta`: the card key

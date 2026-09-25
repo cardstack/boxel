@@ -971,7 +971,7 @@ module(basename(import.meta.filename), function () {
                   adoptsFrom: PERSON,
                   realmInfo: { name: 'Spoofed' },
                   realmURL: 'http://elsewhere.example/',
-                  screenshots: { poster: 'http://elsewhere.example/shot.png' },
+                  captures: { poster: 'http://elsewhere.example/shot.png' },
                 },
               } as any,
             },
@@ -987,9 +987,9 @@ module(basename(import.meta.filename), function () {
         'a client cannot persist realm info',
       );
       assert.strictEqual(
-        data.meta.screenshots,
+        data.meta.captures,
         undefined,
-        'a client cannot persist a screenshot manifest',
+        'a client cannot persist a capture manifest',
       );
       // What keeps a client's `realmURL` out of the file is the realm stamping
       // its own over it on the way to storage, not the strip in the merge —
@@ -1102,7 +1102,7 @@ module(basename(import.meta.filename), function () {
         {
           op: 'create',
           lid: 'shot',
-          directory: '_screenshot',
+          directory: '_capture',
           document: {
             data: {
               type: 'card',

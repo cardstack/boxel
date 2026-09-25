@@ -1,13 +1,13 @@
-# Disallow `@field` declarations under names the system reserves for its own getters (e.g. `screenshotURLs`) (`@cardstack/boxel/no-reserved-field-names`)
+# Disallow `@field` declarations under names the system reserves for its own getters (e.g. `captureURLs`) (`@cardstack/boxel/no-reserved-field-names`)
 
 💼 This rule is enabled in the ✅ `recommended` config.
 
 <!-- end auto-generated rule header -->
 
 Certain property names are provided by the system as getters on
-`CardDef`/`FileDef` — `screenshotURLs`, which exposes the durable served URLs
-of a card's declared screenshots, and `screenshotsMeta`, which exposes those
-captures' `meta.screenshots` entries (dimensions, thumbnail flag). A userland
+`CardDef`/`FileDef` — `captureURLs`, which exposes the durable served URLs
+of a card's declared captures, and `capturesMeta`, which exposes those
+captures' `meta.captures` entries (dimensions, thumbnail flag). A userland
 `@field` under one of these names would shadow the system getter via the
 prototype chain. card-api's
 `field` decorator refuses these names at runtime; this rule surfaces the
@@ -22,7 +22,7 @@ import { field, contains, CardDef } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 
 class Product extends CardDef {
-  @field screenshotURLs = contains(StringField);
+  @field captureURLs = contains(StringField);
 }
 ```
 
@@ -34,8 +34,8 @@ import { CardDef, Component } from 'https://cardstack.com/base/card-api';
 class Product extends CardDef {
   static fitted = class extends Component<typeof Product> {
     <template>
-      {{#if @model.screenshotURLs.card}}
-        <img src={{@model.screenshotURLs.card}} alt='preview' />
+      {{#if @model.captureURLs.card}}
+        <img src={{@model.captureURLs.card}} alt='preview' />
       {{/if}}
     </template>
   };

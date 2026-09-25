@@ -1,6 +1,6 @@
 import type { Readable } from 'stream';
 import type { CodeRef } from '../code-ref.ts';
-import type { ScreenshotManifest } from '../capture-spec.ts';
+import type { CaptureManifest } from '../capture-spec.ts';
 import type {
   SingleCardDocument,
   SingleFileMetaDocument,
@@ -401,7 +401,7 @@ export interface OperationDocumentResult {
 
 // What the index row behind a read says about itself: the values the card+json
 // response headers are computed from — the validator, the modification time,
-// and the index-data generation and screenshot manifest that go into it.
+// and the index-data generation and capture manifest that go into it.
 // Carried by both read modes, since the document mode reports the row its body
 // came from alongside the body.
 export interface OperationRowHeaders {
@@ -414,7 +414,7 @@ export interface OperationRowHeaders {
   indexedAt: number | null;
   lastModified: number | null;
   generation: number | null;
-  screenshots: ScreenshotManifest | null;
+  captures: CaptureManifest | null;
   // The target's index-row dependencies. Carried because a validator is only
   // safe when none of them live in another realm: cross-realm invalidation
   // does not cascade `indexed_at`, so a stable local one does not mean the

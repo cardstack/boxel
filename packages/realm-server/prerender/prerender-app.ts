@@ -7,21 +7,21 @@ import {
   Deferred,
   type AffinityType,
   logger,
-  isScreenshotFormat,
-  parseScreenshotCaptureSpec,
-  SCREENSHOT_FORMATS,
+  isOnDemandCaptureFormat,
+  parseCaptureRequestSpec,
+  ON_DEMAND_CAPTURE_FORMATS,
   MAX_STASHED_CARD_SOURCE_LENGTH,
   type CardSourceVisitArgs,
-  type DeclaredScreenshotVisitArgs,
+  type DeclaredCaptureVisitArgs,
   type PrerenderVisitType,
   type RenderRouteOptions,
   type ModuleRenderResponse,
   type RenderVisitResponse,
   type RunCommandResponse,
-  type ScreenshotCaptureSpec,
-  type ScreenshotCaptureSpecParse,
-  type ScreenshotFormat,
-  type ScreenshotPrerenderResponse,
+  type CaptureRequestSpec,
+  type CaptureRequestSpecParse,
+  type OnDemandCaptureFormat,
+  type CapturePrerenderResponse,
 } from '@cardstack/runtime-common';
 import {
   ecsMetadata,
@@ -654,16 +654,16 @@ export function buildPrerenderApp(options: {
     commandInput?: unknown;
   };
 
-  type ScreenshotRouteArgs = RouteBaseArgs & {
+  type CaptureRouteArgs = RouteBaseArgs & {
     affinityType: 'realm';
     affinityValue: string;
     realm: string;
     url: string;
-    format: ScreenshotFormat;
+    format: OnDemandCaptureFormat;
     // Pass-through of the caller's per-capture overrides. Already validated by
     // the realm-server handler; the capture path guards the one hard invariant
     // (fullPage + clip) defensively.
-    captureSpec?: ScreenshotCaptureSpec;
+    captureSpec?: CaptureRequestSpec;
   };
 
   type RouteParseResult<A extends RouteBaseArgs> = {
@@ -803,9 +803,9 @@ export function buildPrerenderApp(options: {
     };
   };
 
-  let parseScreenshotAttributes = (
+  let parseCaptureAttributes = (
     attrs: any,
-  ): RouteParseResult<ScreenshotRouteArgs> => {
+  ): RouteParseResult<CaptureRouteArgs> => {
     let rawUrl = attrs.url;
     let rawAuth = attrs.auth;
     let rawRealm = attrs.realm;
@@ -814,16 +814,16 @@ export function buildPrerenderApp(options: {
     let rawFormat = attrs.format;
     let renderOptions = parseRenderOptions(attrs);
     let priority = parsePriority(attrs);
-    let formatIsValid = isScreenshotFormat(rawFormat);
-    // Same strict parse + bounds as the realm-server's POST /_screenshot-card
+    let formatIsValid = isOnDemandCaptureFormat(rawFormat);
+    // Same strict parse + bounds as the realm-server's POST /_capture-card
     // body: this route is its own HTTP surface, and an unvalidated spec here
     // would reach `page.setViewport` on a pooled page with none of the cost
     // caps applied. The parse also normalizes (defaults elided, empty spec
     // -> null), so the capture path sees one canonical shape from every
     // caller. It is format-aware (fitted requires an envelope), so it
     // runs only once the format itself is valid.
-    let captureSpecParse: ScreenshotCaptureSpecParse = formatIsValid
-      ? parseScreenshotCaptureSpec(attrs.captureSpec, rawFormat)
+    let captureSpecParse: CaptureRequestSpecParse = formatIsValid
+      ? parseCaptureRequestSpec(attrs.captureSpec, rawFormat)
       : { captureSpec: null };
     let missing = missingAttrs([
       { value: rawUrl, name: 'url' },
@@ -852,7 +852,7 @@ export function buildPrerenderApp(options: {
               realm: rawRealm as string,
               url: rawUrl as string,
               auth: rawAuth as string,
-              format: rawFormat as ScreenshotFormat,
+              format: rawFormat as OnDemandCaptureFormat,
               renderOptions,
               ...(captureSpecParse.captureSpec
                 ? { captureSpec: captureSpecParse.captureSpec }
@@ -863,7 +863,7 @@ export function buildPrerenderApp(options: {
       missingMessage:
         captureSpecParse.error !== undefined
           ? captureSpecParse.error
-          : `Missing or invalid required attributes: url, auth, realm, affinityType, affinityValue, format (${SCREENSHOT_FORMATS.join('|')})`,
+          : `Missing or invalid required attributes: url, auth, realm, affinityType, affinityValue, format (${ON_DEMAND_CAPTURE_FORMATS.join('|')})`,
       logTarget: (rawUrl as string | undefined) ?? '<missing>',
       responseId: (rawUrl as string | undefined) ?? 'unknown',
       rejectionLogDetails: `affinityType=${
@@ -879,7 +879,9 @@ export function buildPrerenderApp(options: {
   };
 
   function registerPrerenderRoute<R, A extends RouteBaseArgs = PrerenderArgs>(
-    path: string,
+    // Several paths register one handler, which is how a route keeps
+    // answering a name it has been renamed away from.
+    path: string | string[],
     options: {
       requestDescription: string;
       responseType: string;
@@ -1136,17 +1138,20 @@ export function buildPrerenderApp(options: {
     },
   );
 
-  registerPrerenderRoute<ScreenshotPrerenderResponse, ScreenshotRouteArgs>(
-    '/prerender-screenshot',
+  registerPrerenderRoute<CapturePrerenderResponse, CaptureRouteArgs>(
+    // The prerender server rolls out ahead of the workers and realm servers
+    // that call it, so the previous revision is still asking for
+    // `/prerender-screenshot` while this one is already serving.
+    ['/prerender-capture', '/prerender-screenshot'],
     {
-      requestDescription: 'screenshot prerender request',
-      responseType: 'screenshot-result',
-      infoLabel: 'card screenshotted',
-      warnTimeoutMessage: (url) => `screenshot of ${url} timed out`,
-      errorContext: '/prerender-screenshot',
-      parseAttributes: parseScreenshotAttributes,
+      requestDescription: 'capture prerender request',
+      responseType: 'capture-result',
+      infoLabel: 'card captured',
+      warnTimeoutMessage: (url) => `capture of ${url} timed out`,
+      errorContext: '/prerender-capture',
+      parseAttributes: parseCaptureAttributes,
       execute: (args, { signal }) =>
-        prerenderer.prerenderScreenshot({
+        prerenderer.prerenderCapture({
           realm: args.realm,
           url: args.url,
           auth: args.auth,
@@ -1216,14 +1221,14 @@ export function buildPrerenderApp(options: {
             (t): t is string => typeof t === 'string',
           )
         : undefined;
-      // Declared-screenshot capture opt-in. Presence (even `{}`) turns the
+      // Declared-capture opt-in. Presence (even `{}`) turns the
       // capture step on for a prerender-html visit; the fields inside are
       // carry-forward inputs the capture step treats as advisory.
-      let screenshots: DeclaredScreenshotVisitArgs | undefined =
-        attrs.screenshots &&
-        typeof attrs.screenshots === 'object' &&
-        !Array.isArray(attrs.screenshots)
-          ? (attrs.screenshots as DeclaredScreenshotVisitArgs)
+      let captures: DeclaredCaptureVisitArgs | undefined =
+        attrs.captures &&
+        typeof attrs.captures === 'object' &&
+        !Array.isArray(attrs.captures)
+          ? (attrs.captures as DeclaredCaptureVisitArgs)
           : undefined;
       let isNonEmptyString = (value: unknown): value is string =>
         typeof value === 'string' && value.trim().length > 0;
@@ -1386,7 +1391,7 @@ export function buildPrerenderApp(options: {
         ...(batchId ? { batchId } : {}),
         ...(priority !== undefined ? { priority } : {}),
         ...(jobId ? { jobId } : {}),
-        ...(screenshots ? { screenshots } : {}),
+        ...(captures ? { captures } : {}),
         ...(renderScope ? { renderScope } : {}),
         ...(cardSource ? { cardSource } : {}),
         signal: ac.signal,

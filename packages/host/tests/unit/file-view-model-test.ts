@@ -194,9 +194,9 @@ module('Unit | file-formats', function (hooks) {
     });
 
     // The thumbnail is the declared capture flagged `useAsThumbnail`, read
-    // from the model's `meta.screenshots` projection (`screenshotsMeta` on a
+    // from the model's `meta.captures` projection (`capturesMeta` on a
     // real instance; a wire-shape object carries the same key).
-    test('derives the thumbnail from the useAsThumbnail screenshot entry', function (assert) {
+    test('derives the thumbnail from the useAsThumbnail capture entry', function (assert) {
       let base = {
         url: 'http://test.com/photo.png',
         name: 'photo.png',
@@ -204,25 +204,25 @@ module('Unit | file-formats', function (hooks) {
       assert.strictEqual(
         fileViewModel({
           ...base,
-          screenshotsMeta: {
+          capturesMeta: {
             'rendition-640': {
-              url: 'http://test.com/_screenshot/photo.png?name=rendition-640',
+              url: 'http://test.com/_capture/photo.png?name=rendition-640',
             },
             thumb: {
-              url: 'http://test.com/_screenshot/photo.png?name=thumb',
+              url: 'http://test.com/_capture/photo.png?name=thumb',
               useAsThumbnail: true,
             },
           },
         }).thumbnailUrl,
-        'http://test.com/_screenshot/photo.png?name=thumb',
+        'http://test.com/_capture/photo.png?name=thumb',
       );
       // Captured slots without the flag never masquerade as the thumbnail.
       assert.strictEqual(
         fileViewModel({
           ...base,
-          screenshotsMeta: {
+          capturesMeta: {
             'rendition-640': {
-              url: 'http://test.com/_screenshot/photo.png?name=rendition-640',
+              url: 'http://test.com/_capture/photo.png?name=rendition-640',
             },
           },
         }).thumbnailUrl,

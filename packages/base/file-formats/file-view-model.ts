@@ -333,12 +333,12 @@ function linkedFileURL(value: any): string {
 }
 
 // The durable URL of the capture the file's family flags `useAsThumbnail`
-// among its declared screenshots. Duck-typed off the model rather than
+// among its declared captures. Duck-typed off the model rather than
 // imported from card-api (this module sits inside card-api's dependency
-// graph): a FileDef instance exposes `screenshotsMeta`, and a plain
+// graph): a FileDef instance exposes `capturesMeta`, and a plain
 // wire-shape object may carry the same key.
-function screenshotThumbnailURL(file: FileModelLike): string {
-  let entries = file.screenshotsMeta as
+function captureThumbnailURL(file: FileModelLike): string {
+  let entries = file.capturesMeta as
     | Record<string, { url?: string; useAsThumbnail?: boolean } | undefined>
     | undefined;
   if (!entries || typeof entries !== 'object') {
@@ -400,13 +400,13 @@ export function fileViewModel(
   // A generated poster (video) is a separate linked FileDef, never bytes in
   // card JSON.
   let posterUrl = linkedFileURL(file.posterImage);
-  // The thumbnail is the declared-screenshot capture the family flags
-  // `useAsThumbnail`, read from `meta.screenshots` via the instance's
-  // `screenshotsMeta` getter (a plain wire-shape object may carry the same
+  // The thumbnail is the declared-capture the family flags
+  // `useAsThumbnail`, read from `meta.captures` via the instance's
+  // `capturesMeta` getter (a plain wire-shape object may carry the same
   // key). Staleness is not modeled: a file-content-keyed slot recaptures
   // when the bytes change and serves its prior capture until then, so there
   // is no "rendered from bytes the file no longer has" state to expose.
-  let thumbnailUrl = screenshotThumbnailURL(file);
+  let thumbnailUrl = captureThumbnailURL(file);
 
   let width = file.width;
   let height = file.height;

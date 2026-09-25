@@ -742,7 +742,7 @@ export async function stageUpdate(
   // land the same bytes because they are the same code.
   //
   // Realm-managed keys never come from a patch: `realmInfo` and `realmURL` are
-  // stamped by the realm serving the card, `screenshots` is joined from the
+  // stamped by the realm serving the card, `captures` is joined from the
   // prerendered manifest at serve time, `version` / `lastModified` /
   // `resourceCreatedAt` describe the stored file and are reported on a write
   // response, and `type` is fixed by the document shape. A client echoing back
@@ -765,7 +765,7 @@ export async function stageUpdate(
   delete (patch as { type?: unknown }).type;
   delete patch.meta.realmInfo;
   delete patch.meta.realmURL;
-  delete patch.meta.screenshots;
+  delete patch.meta.captures;
   delete patch.meta.version;
   delete patch.meta.lastModified;
   delete patch.meta.resourceCreatedAt;

@@ -19,7 +19,7 @@ export default class DownloadFileToRealmTool extends HostBaseTool<
 
   static actionVerb = 'Download';
   description =
-    "Download a file from a URL and write it into a realm. Give the destination a path with the right extension (e.g. 'Screenshots/card.png') — the realm infers the file type from it. `realm` selects the target realm; when omitted, the default writable realm is used.";
+    "Download a file from a URL and write it into a realm. Give the destination a path with the right extension (e.g. 'Captures/card.png') — the realm infers the file type from it. `realm` selects the target realm; when omitted, the default writable realm is used.";
 
   async getInputType() {
     let commandModule = await this.loadToolModule();
@@ -54,7 +54,7 @@ export default class DownloadFileToRealmTool extends HostBaseTool<
     }
 
     // `authedFetch` attaches the per-realm token when the URL belongs to a
-    // known realm (so a gated realm's `_screenshot/` URL downloads), and is a
+    // known realm (so a gated realm's `_capture/` URL downloads), and is a
     // plain fetch for anything else. We read the body as bytes, not text, so a
     // binary file survives the download intact.
     let response = await this.network.authedFetch(sourceUrl, { method: 'GET' });

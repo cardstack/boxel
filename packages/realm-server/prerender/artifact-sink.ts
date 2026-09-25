@@ -90,7 +90,7 @@ export interface ArtifactKeyParts {
   jobId?: string;
   // Card / module url being rendered.
   card?: string;
-  // Render step / pass (e.g. `card isolated/0`, `screenshot png`).
+  // Render step / pass (e.g. `card isolated/0`, `capture png`).
   step?: string;
   kind: ArtifactKind;
 }

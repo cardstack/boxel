@@ -37,7 +37,7 @@ interface PendingBatch {
 }
 
 // Mints and caches signed capture URLs — the `?token=` variants that
-// authorize a `_screenshot/` GET without an Authorization header, for the
+// authorize a `_capture/` GET without an Authorization header, for the
 // fetches the auth service worker cannot reach (`<object>`/`<embed>` loads,
 // new-tab navigations). One memo per durable URL, re-minted when its token
 // nears expiry; concurrent requests against the same realm coalesce into a
@@ -142,7 +142,7 @@ export default class CaptureUrlSignerService extends Service {
 }
 
 // The realm root a capture URL serves from: everything up to its
-// `_screenshot/` segment. Throws on anything else, so a mistyped URL fails
+// `_capture/` segment. Throws on anything else, so a mistyped URL fails
 // at the call site rather than as a realm-server 400.
 export function realmRootOfCaptureURL(durableUrl: string): string {
   let marker = durableUrl.indexOf(CAPTURE_SERVING_PREFIX);

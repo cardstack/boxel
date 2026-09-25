@@ -2,7 +2,7 @@ import FileTypePptIcon from '@cardstack/boxel-icons/file-type-ppt';
 import { contains, field } from './card-api';
 import { FileDef, type ByteStream, type SerializedFile } from './file-api';
 import { OfficeMetadataField } from './file-formats/metadata-fields';
-import { OFFICE_FAMILY_SCREENSHOTS } from './file-formats/office-captures';
+import { OFFICE_FAMILY_CAPTURES } from './file-formats/office-captures';
 import { OfficePreview } from './file-formats/office-preview';
 import { extractPptxMetadata } from './pptx-meta-extractor';
 import { extractOfficeMetadata } from './office-extract';
@@ -34,7 +34,7 @@ export class PptxDef extends FileDef {
   // The fitted poster: a capture-only render of the extracted structure's
   // first unit, keyed on the file's bytes and flagged useAsThumbnail. The
   // typed placeholder stays the fallback until a capture serves.
-  static screenshots = OFFICE_FAMILY_SCREENSHOTS;
+  static captures = OFFICE_FAMILY_CAPTURES;
 
   static async extractAttributes(
     url: string,

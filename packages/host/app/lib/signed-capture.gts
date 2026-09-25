@@ -1,6 +1,6 @@
 // Card-facing affordances for signed capture URLs, importable as
 // `@cardstack/boxel-host/lib/signed-capture`. A durable capture URL
-// (`{realm}_screenshot/…`) needs an Authorization header on a private realm,
+// (`{realm}_capture/…`) needs an Authorization header on a private realm,
 // which the auth service worker injects only for the loads it can see —
 // `<object>`/`<embed>` loads and new-tab navigations bypass it. These two
 // components hide the whole signing flow (minting, memoization, popup-blocker
