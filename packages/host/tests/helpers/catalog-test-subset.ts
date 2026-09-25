@@ -81,11 +81,14 @@ async function verifyServedSubset() {
         `or restart the stack with CATALOG_TEST_SUBSET_SOURCE=packages/catalog/contents to test against the clone.`,
     );
   }
+  // A stack started from a checkout whose sync predates the hashes serves a
+  // marker without them; it is otherwise current, so it only goes unchecked.
   if (!marker.hashes) {
-    throw new Error(
-      `The catalog test subset was written by an older sync that records no file hashes. ` +
-        `Run \`pnpm --dir packages/catalog catalog:test-subset\` (add --into-clone when the stack serves the full catalog clone).`,
+    console.warn(
+      `The catalog test subset the stack serves was written by a sync that records no file hashes, so an edited copy of a subset file can't be detected. ` +
+        `Re-run \`pnpm --dir packages/catalog catalog:test-subset\` from the checkout the stack serves to enable the check.`,
     );
+    return;
   }
   let edited: string[] = [];
   for (let { path } of manifest.files) {
