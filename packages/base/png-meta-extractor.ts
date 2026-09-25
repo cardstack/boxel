@@ -3,6 +3,7 @@ import {
   prunedColorProfile,
   type ImageColorProfile,
 } from './image-color-profile';
+import { animatedFromVerdict, type AnimationVerdict } from './image-animation';
 
 // PNG 8-byte magic signature
 const PNG_SIGNATURE = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
@@ -107,9 +108,19 @@ const CHUNK_CRC_BYTES = 4;
 // chunks between them (`iCCP`, `sRGB`, `pHYs`, text, …) are walked past, and
 // each is skipped by its declared length without reading its data.
 //
-// Returns undefined when `bytes` ends before either chunk — the caller's read
-// window may stop inside a large ancillary chunk.
-export function extractPngAnimated(bytes: Uint8Array): boolean | undefined {
+// `needs-bytes` when `bytes` ends before either chunk — the caller's read
+// window may stop inside a large ancillary chunk. `undecidable` for bytes that
+// aren't a PNG, or a chunk type that isn't four ASCII letters, since the chunk
+// framing can't be trusted past that point.
+const CHUNK_TYPE_RE = /^[A-Za-z]{4}$/;
+
+export function pngAnimationVerdict(bytes: Uint8Array): AnimationVerdict {
+  let signatureBytes = Math.min(bytes.length, PNG_SIGNATURE.length);
+  for (let i = 0; i < signatureBytes; i++) {
+    if (bytes[i] !== PNG_SIGNATURE[i]) {
+      return 'undecidable';
+    }
+  }
   let view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   let offset = PNG_SIGNATURE.length;
   while (offset + CHUNK_HEADER_BYTES <= bytes.length) {
@@ -120,13 +131,20 @@ export function extractPngAnimated(bytes: Uint8Array): boolean | undefined {
       bytes[offset + 6]!,
       bytes[offset + 7]!,
     );
+    if (!CHUNK_TYPE_RE.test(type)) {
+      return 'undecidable';
+    }
     if (type === 'acTL') {
-      return true;
+      return 'animated';
     }
     if (type === 'IDAT' || type === 'IEND') {
-      return false;
+      return 'still';
     }
     offset += CHUNK_HEADER_BYTES + length + CHUNK_CRC_BYTES;
   }
-  return undefined;
+  return 'needs-bytes';
+}
+
+export function extractPngAnimated(bytes: Uint8Array): boolean | undefined {
+  return animatedFromVerdict(pngAnimationVerdict(bytes));
 }

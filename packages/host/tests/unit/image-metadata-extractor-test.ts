@@ -10,7 +10,7 @@
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import type { Loader } from '@cardstack/runtime-common';
+import { readBytesUntil, type Loader } from '@cardstack/runtime-common';
 
 import { setupRenderingTest } from '../helpers/setup';
 
@@ -387,6 +387,8 @@ module('Unit | image metadata extractors', function (hooks) {
   let extractWebpColorProfile: typeof WebpModule.extractWebpColorProfile;
   let extractAvifColorProfile: typeof AvifModule.extractAvifColorProfile;
   let extractGifAnimated: typeof GifModule.extractGifAnimated;
+  let gifAnimationVerdict: typeof GifModule.gifAnimationVerdict;
+  let pngAnimationVerdict: typeof PngModule.pngAnimationVerdict;
   let extractPngAnimated: typeof PngModule.extractPngAnimated;
   let extractWebpAnimated: typeof WebpModule.extractWebpAnimated;
   let extractAvifAnimated: typeof AvifModule.extractAvifAnimated;
@@ -397,15 +399,17 @@ module('Unit | image metadata extractors', function (hooks) {
     ({ extractExifFromJpeg, parseExifTiffBlock } = await loader.import<
       typeof ExifModule
     >('@cardstack/base/exif-meta-extractor'));
-    ({ extractPngColorProfile, extractPngAnimated } = await loader.import<
-      typeof PngModule
-    >('@cardstack/base/png-meta-extractor'));
+    ({ extractPngColorProfile, extractPngAnimated, pngAnimationVerdict } =
+      await loader.import<typeof PngModule>(
+        '@cardstack/base/png-meta-extractor',
+      ));
     ({ extractJpgColorProfile } = await loader.import<typeof JpgModule>(
       '@cardstack/base/jpg-meta-extractor',
     ));
-    ({ extractGifColorProfile, extractGifAnimated } = await loader.import<
-      typeof GifModule
-    >('@cardstack/base/gif-meta-extractor'));
+    ({ extractGifColorProfile, extractGifAnimated, gifAnimationVerdict } =
+      await loader.import<typeof GifModule>(
+        '@cardstack/base/gif-meta-extractor',
+      ));
     ({ extractWebpColorProfile, extractWebpAnimated } = await loader.import<
       typeof WebpModule
     >('@cardstack/base/webp-meta-extractor'));
@@ -985,6 +989,80 @@ module('Unit | image metadata extractors', function (hooks) {
         extractGifAnimated(new Uint8Array([...bytes, 0x99])),
         undefined,
       );
+    });
+
+    test('a walker separates a prefix too short to decide from bytes it can never decide', function (assert) {
+      let gif = buildGifBody([{ kind: 'frame', dataBytes: 200 }]);
+      assert.strictEqual(
+        gifAnimationVerdict(gif.subarray(0, 100)),
+        'needs-bytes',
+        'a GIF cut off mid-frame may still be decided by more bytes',
+      );
+      assert.strictEqual(
+        gifAnimationVerdict(new TextEncoder().encode('plain text, not a GIF')),
+        'undecidable',
+        'bytes without a GIF signature never become decidable',
+      );
+      let unknownBlock = buildGifBody([{ kind: 'frame' }], { trailer: false });
+      assert.strictEqual(
+        gifAnimationVerdict(new Uint8Array([...unknownBlock, 0x99])),
+        'undecidable',
+      );
+
+      let png = buildPngChunks([
+        { type: 'iCCP', dataBytes: 3000 },
+        { type: 'IDAT' },
+      ]);
+      assert.strictEqual(
+        pngAnimationVerdict(png.subarray(0, 1000)),
+        'needs-bytes',
+      );
+      assert.strictEqual(
+        pngAnimationVerdict(new TextEncoder().encode('plain text, not a PNG')),
+        'undecidable',
+      );
+      let garbledChunk = new Uint8Array([
+        ...png.subarray(0, 33),
+        0,
+        0,
+        0,
+        4,
+        0xff,
+        0x00,
+        0x13,
+        0x37,
+      ]);
+      assert.strictEqual(
+        pngAnimationVerdict(garbledChunk),
+        'undecidable',
+        'a chunk type that is not four letters means the framing is lost',
+      );
+    });
+
+    test('an undecidable file stops the streamed read at the first chunk', async function (assert) {
+      let pulled = 0;
+      let text = new TextEncoder().encode('plain text, not a GIF '.repeat(100));
+      let stream = new ReadableStream<Uint8Array>({
+        pull(controller) {
+          pulled++;
+          if (pulled > 50) {
+            controller.close();
+            return;
+          }
+          controller.enqueue(text);
+        },
+      });
+      let bytes = await readBytesUntil(
+        stream,
+        1_048_576,
+        (prefix) => gifAnimationVerdict(prefix) !== 'needs-bytes',
+      );
+      assert.strictEqual(
+        bytes.length,
+        text.length,
+        'one chunk was enough to give up',
+      );
+      assert.ok(pulled <= 2, `the stream was not drained (pulled ${pulled})`);
     });
 
     test('an acTL chunk before the image data makes a PNG animated', function (assert) {

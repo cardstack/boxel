@@ -5,9 +5,11 @@ import {
   rasterImageAttributes,
   type RasterImageAttributes,
 } from './image-file-def';
+import { isFinalAnimationVerdict } from './image-animation';
 import type { ByteStream, SerializedFile } from './file-api';
 import {
   extractPngAnimated,
+  pngAnimationVerdict,
   extractPngColorProfile,
   extractPngDimensions,
 } from './png-meta-extractor';
@@ -38,7 +40,7 @@ export class PngDef extends RasterImageDef {
     let bytes = await readBytesUntil(
       await getStream(),
       PNG_READ_WINDOW_BYTES,
-      (prefix) => extractPngAnimated(prefix) !== undefined,
+      (prefix) => isFinalAnimationVerdict(pngAnimationVerdict(prefix)),
     );
     let { width, height } = extractPngDimensions(bytes);
 

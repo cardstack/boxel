@@ -5,9 +5,11 @@ import {
   rasterImageAttributes,
   type RasterImageAttributes,
 } from './image-file-def';
+import { isFinalAnimationVerdict } from './image-animation';
 import type { ByteStream, SerializedFile } from './file-api';
 import {
   extractGifAnimated,
+  gifAnimationVerdict,
   extractGifColorProfile,
   extractGifDimensions,
 } from './gif-meta-extractor';
@@ -36,7 +38,7 @@ export class GifDef extends RasterImageDef {
     let bytes = await readBytesUntil(
       await getStream(),
       GIF_READ_WINDOW_BYTES,
-      (prefix) => extractGifAnimated(prefix) !== undefined,
+      (prefix) => isFinalAnimationVerdict(gifAnimationVerdict(prefix)),
     );
     let { width, height } = extractGifDimensions(bytes);
 
