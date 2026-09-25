@@ -289,12 +289,14 @@ export async function connectionTenantsDuring<T>(
 
 // Statements that read the realm index — the rows a search is answering from,
 // as opposed to the bookkeeping around it.
-export function indexReads(statements: { sql: string }[]) {
+export function indexReads<S extends { sql: string }>(statements: S[]): S[] {
   return statements.filter(({ sql }) => /\bFROM\s+boxel_index\b/i.test(sql));
 }
 
 // Statements that read the module definition cache.
-export function definitionCacheReads(statements: { sql: string }[]) {
+export function definitionCacheReads<S extends { sql: string }>(
+  statements: S[],
+): S[] {
   return statements.filter(({ sql }) => /\bFROM\s+modules\b/i.test(sql));
 }
 
