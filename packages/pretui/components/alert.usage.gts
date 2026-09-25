@@ -1,7 +1,7 @@
 // Pretui — Alert usage page.
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { FreestyleUsage } from '../freestyle';
+import { FreestyleUsage } from './freestyle-usage';
 import { Alert } from './alert';
 import { Button } from './button';
 

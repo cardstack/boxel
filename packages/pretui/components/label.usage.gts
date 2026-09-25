@@ -1,7 +1,7 @@
 // Pretui — Label usage page.
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { FreestyleUsage } from '../freestyle';
+import { FreestyleUsage } from './freestyle-usage';
 import { Label } from './label';
 
 const LABEL_TAGS = ['label', 'span', 'legend'];

@@ -1,6 +1,6 @@
 // Pretui — Stat usage page.
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
-import { FreestyleUsage } from '../freestyle';
+import { FreestyleUsage } from './freestyle-usage';
 import { Stat } from './stat';
 
 const StatUsage: TemplateOnlyComponent = <template>

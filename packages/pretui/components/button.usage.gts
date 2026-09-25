@@ -2,7 +2,7 @@
 // live example, knobs for every arg, and the API table the kit teaches from.
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { FreestyleUsage } from '../freestyle';
+import { FreestyleUsage } from './freestyle-usage';
 import { Button } from './button';
 import {
   PRETUI_APPEARANCES,

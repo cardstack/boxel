@@ -1,3 +1,62 @@
+// Pretui — json-tree: a JSON viewer (`JsonTree`) and a structural JSON editor
+// (`JsonEditor`), both built on the `json-model.ts` document model.
+//
+// PORTED, NOT VENDORED. The reference is JsonTree.js v4.7.1 (MIT, (c) 2025
+// William Troup / Bunoon), read from the local checkout at tag `4.7.1`,
+// commit ac7208d79d59dae85933330b93b691b8661d10d7, clean tree. Not one line
+// of its code ships here and nothing of it is bundled into the realm. Three
+// reasons, in order of severity:
+//
+//   1. Its parser falls back to `eval()` when `JSON.parse` throws
+//      (src/ts/data/convert.ts, `jsonStringToObject`). Running that over text
+//      a user typed is arbitrary code execution. Disqualifying on its own.
+//   2. Its editing surface is `contenteditable` spans dressed by its own
+//      stylesheet — and a side-effect CSS import fails realm indexing, so the
+//      stylesheet could never come along. An editor whose controls are not
+//      OUR controls has the wrong typography, the wrong focus ring, the wrong
+//      dark behaviour, and no label wiring.
+//   3. Its edit semantics lose data. See json-model.ts's header for the four
+//      specific failures. We wanted the interaction model, not the rules.
+//
+// So the library is a SPECIFICATION here: its feature list, its expand and
+// collapse behaviour, its type vocabulary and its edge cases were the design
+// input. Everything is re-implemented in Glimmer over Pretui controls.
+//
+// BETTER THAN THE INSPIRATION:
+//   · Upstream has no ARIA at all — no roles, no `aria-expanded`, no keyboard
+//     path whatsoever; the tree is divs and mouse handlers. `JsonTree`
+//     implements the APG treeview in full and `JsonEditor` the APG treegrid.
+//   · Upstream deletes a property when you clear its value, so `""` is
+//     unreachable. Here removal is always an explicit, announced action.
+//   · Upstream cannot change a value's type — every edit is coerced back to
+//     the original type, and dropped silently when it will not fit. Here type
+//     is a first-class operation and nothing is ever coerced behind the user.
+//   · Upstream has no undo. Here undo and redo are structural.
+//   · Upstream truncates nothing — a 50k-element array renders 50k rows. Here
+//     containers page with an explicit, focusable "Showing N of M".
+//
+// REUSE: `Tree` (structure-data.gts) is the closest neighbour and this is a
+// SIBLING rather than an extension — deliberately. `Tree`'s contract is
+// `TreeNode { label, icon, badge, meta, children }`, a DISPLAY node. Routing
+// JSON through it would force every value into `label: string`, erasing
+// exactly the distinctions this component exists to show: `42` vs `"42"`,
+// `""` vs `null`, `[]` vs `{}`. And `JsonEditor` needs `role='treegrid'`,
+// which `Tree` cannot be talked into. What IS reused is the foundation
+// Appendix L names — `focus.gts` (`focusWhen`, `rovingTabindex`, `listen`) —
+// plus `Tree`'s flat-rows + roving-tabindex architecture, copied faithfully
+// including the load-bearing `onFocusIn` early return.
+//
+// REALM LAWS OBSERVED: no timers, no rAF, no `Date.now()`, no `Math.random()`;
+// no side-effect CSS import; no named container queries; no `.dark` branch and
+// no `prefers-color-scheme` (every value is `var(--token, lightFallback)`);
+// no `!important` / `:deep()` / `:global()`; no backtick-with-interpolation
+// inside `<template>`; boolean attributes bound as `true | undefined`. User
+// data is NEVER interpolated into an inline style — the only style value here
+// is an indent level this module computed and clamped, routed through
+// `cssStyle` regardless.
+//
+// (the json-tree group)
+
 // Pretui — the shared base and vocabulary for JsonTree and JsonEditor: flat rows, roving focus, type badges.
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';

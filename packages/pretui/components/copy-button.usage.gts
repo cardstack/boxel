@@ -1,7 +1,7 @@
 // Pretui — CopyButton usage page.
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { FreestyleUsage } from '../freestyle';
+import { FreestyleUsage } from './freestyle-usage';
 import { CopyButton } from './copy-button';
 
 const COPY_VARIANTS = ['primary', 'secondary', 'ghost', 'destructive'];

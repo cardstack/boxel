@@ -1,6 +1,6 @@
 // Pretui — KeyValue usage page.
 import Component from '@glimmer/component';
-import { FreestyleUsage } from '../freestyle';
+import { FreestyleUsage } from './freestyle-usage';
 import { Token } from './token';
 import { KeyValue } from './key-value';
 

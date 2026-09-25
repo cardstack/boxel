@@ -1,7 +1,7 @@
 // Pretui — RelativeTime usage page.
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { FreestyleUsage } from '../freestyle';
+import { FreestyleUsage } from './freestyle-usage';
 import { RelativeTime } from './relative-time';
 
 // ── RelativeTime — from webawesome's relative-time semantics ──────────────

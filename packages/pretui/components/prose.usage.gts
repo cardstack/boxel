@@ -1,6 +1,6 @@
 // Pretui — Prose usage page.
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
-import { FreestyleUsage } from '../freestyle';
+import { FreestyleUsage } from './freestyle-usage';
 import { Prose } from './prose';
 
 const ProseUsage: TemplateOnlyComponent = <template>

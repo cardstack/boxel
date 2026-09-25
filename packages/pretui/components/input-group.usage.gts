@@ -2,7 +2,7 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
-import { FreestyleUsage } from '../freestyle';
+import { FreestyleUsage } from './freestyle-usage';
 import { InputGroup } from './input-group';
 
 const INPUT_GROUP_TYPES = ['text', 'email', 'password', 'number', 'search', 'url'];

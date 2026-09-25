@@ -1,7 +1,7 @@
 // Pretui — BrokenLink usage page.
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { FreestyleUsage } from '../freestyle';
+import { FreestyleUsage } from './freestyle-usage';
 import { BrokenLink } from './broken-link';
 
 // ── BrokenLink ← broken-link/usage.gts ───────────────────────────────────

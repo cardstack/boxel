@@ -1,3 +1,11 @@
+// Pretui — feedback territory. Translated from pretui-design-system
+// (components/feedback + css/structure.css). Alert takes tones through Law 2
+// (never baked semantic hexes); Progress (quantitative) must look different
+// from Meter (qualitative). Realm adaptation: LoadingState's elapsed clock is
+// caller-supplied (@elapsed) — no timers in realm components.
+//
+// (the feedback group)
+
 // Pretui — pixel sizing shared by Spinner and ProgressRadial.
 import { resolveSize } from '../pretui-primitives';
 import type { PretuiSize } from '../pretui-primitives';

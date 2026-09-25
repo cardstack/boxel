@@ -7,7 +7,7 @@
 import { module, test } from 'qunit';
 import { render } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
-import { FreestyleUsage } from '../freestyle';
+import { FreestyleUsage } from './freestyle-usage';
 
 function root(): HTMLElement {
   return document.querySelector('.FreestyleUsage') as HTMLElement;

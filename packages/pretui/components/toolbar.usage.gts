@@ -1,7 +1,7 @@
 // Pretui — Toolbar usage page.
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { FreestyleUsage } from '../freestyle';
+import { FreestyleUsage } from './freestyle-usage';
 import { Toolbar } from './toolbar';
 import { Button } from './button';
 

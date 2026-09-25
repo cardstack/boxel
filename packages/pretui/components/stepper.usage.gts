@@ -1,7 +1,7 @@
 // Pretui — Stepper usage page.
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { FreestyleUsage } from '../freestyle';
+import { FreestyleUsage } from './freestyle-usage';
 import { Stepper } from './stepper';
 
 // ── Stepper — fresh (no boxel-ui counterpart) ────────────────────────────

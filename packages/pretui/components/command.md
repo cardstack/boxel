@@ -1,6 +1,6 @@
 ## What it is
 
-**CommandPalette** under the name shadcn and cmdk use. The export is the same class — `import { Command } from '../menu'` resolves to CommandPalette — so the tile exists for a port of a shadcn `Command` block or an agent whose first guess is that word. The contract and the depth are on **CommandPalette**; this page maps cmdk's parts onto it. **Menu** renders the same tree in place; **ContextMenu** and **Menubar** are the other surfaces over it.
+**CommandPalette** under the name shadcn and cmdk use. The export is the same class — `import { Command } from './command';` resolves to CommandPalette — so the tile exists for a port of a shadcn `Command` block or an agent whose first guess is that word. The contract and the depth are on **CommandPalette**; this page maps cmdk's parts onto it. **Menu** renders the same tree in place; **ContextMenu** and **Menubar** are the other surfaces over it.
 
 ## The contract
 

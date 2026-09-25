@@ -1,6 +1,6 @@
 // Pretui — Delta usage page.
 import Component from '@glimmer/component';
-import { FreestyleUsage } from '../freestyle';
+import { FreestyleUsage } from './freestyle-usage';
 import { Delta } from './delta';
 
 class DeltaUsage extends Component {

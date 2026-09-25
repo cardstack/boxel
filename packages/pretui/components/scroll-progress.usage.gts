@@ -2,7 +2,7 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { array } from '@ember/helper';
-import { FreestyleUsage } from '../freestyle';
+import { FreestyleUsage } from './freestyle-usage';
 import { TASKS } from '../examples';
 import { ScrollProgress } from './scroll-progress';
 

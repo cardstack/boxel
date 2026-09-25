@@ -2,7 +2,7 @@
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
-import { FreestyleUsage } from '../freestyle';
+import { FreestyleUsage } from './freestyle-usage';
 import { Button } from './button';
 import { Dialog } from './dialog';
 

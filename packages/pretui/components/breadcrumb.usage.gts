@@ -1,6 +1,6 @@
 // Pretui — Breadcrumb usage page.
 import Component from '@glimmer/component';
-import { FreestyleUsage } from '../freestyle';
+import { FreestyleUsage } from './freestyle-usage';
 import { Breadcrumb } from './breadcrumb';
 
 const CRUMBS = [

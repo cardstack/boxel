@@ -1,3 +1,16 @@
+// Pretui — overlay territory (foundation pass, merge-sequence step 3).
+// Ported from Web Awesome's overlay layer (MIT, (c) Fonticons), re-cut for
+// realm constraints: wa-popup's floating-ui positioning becomes a ~50-line
+// measuring modifier (flip + shift + align) that only ever runs while an
+// overlay is open — so it never executes during prerender; wa-dialog/
+// wa-drawer ride the native <dialog> top layer (focus trap, Escape via
+// 'cancel', stacking — no JS dismissible-stack needed); Popover generalizes
+// the Select backdrop-close pattern. Entry/exit motion is pure CSS via
+// @starting-style (Motion Rule: encodes open state; reduced-motion gets the
+// end state).
+//
+// (the overlay group)
+
 // Pretui — overlay plumbing shared by Popup, Dialog, Drawer and Popover:
 // placement aliases, the measuring anchor modifier, the open-arg aliases and
 // the native <dialog> modal behaviour. Not a component.

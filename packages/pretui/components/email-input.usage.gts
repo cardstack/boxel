@@ -1,7 +1,7 @@
 // Pretui — EmailInput usage page.
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { FreestyleUsage } from '../freestyle';
+import { FreestyleUsage } from './freestyle-usage';
 import { EmailInput } from './email-input';
 
 // ── EmailInput ← email-input/usage.gts ───────────────────────────────────

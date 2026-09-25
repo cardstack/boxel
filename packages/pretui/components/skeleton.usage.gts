@@ -1,7 +1,7 @@
 // Pretui — Skeleton usage page.
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { FreestyleUsage } from '../freestyle';
+import { FreestyleUsage } from './freestyle-usage';
 import { Skeleton } from './skeleton';
 
 // ── Skeleton ← skeleton-placeholder/usage.gts ────────────────────────────

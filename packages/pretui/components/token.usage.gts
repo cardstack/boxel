@@ -1,6 +1,6 @@
 // Pretui — Token usage page.
 import Component from '@glimmer/component';
-import { FreestyleUsage } from '../freestyle';
+import { FreestyleUsage } from './freestyle-usage';
 import { Token } from './token';
 
 class TokenUsage extends Component {

@@ -1,7 +1,7 @@
 // Pretui — TimeInput usage page.
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { FreestyleUsage } from '../freestyle';
+import { FreestyleUsage } from './freestyle-usage';
 import { TimeInput } from './time-input';
 
 const HOUR_CYCLES = ['24', '12'];

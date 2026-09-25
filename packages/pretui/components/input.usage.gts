@@ -1,7 +1,7 @@
 // Pretui — Input usage page.
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { FreestyleUsage } from '../freestyle';
+import { FreestyleUsage } from './freestyle-usage';
 import { Input } from './input';
 import { Field } from './field';
 

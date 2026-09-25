@@ -3,7 +3,7 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { array, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
-import { FreestyleUsage } from '../freestyle';
+import { FreestyleUsage } from './freestyle-usage';
 import { TASKS } from '../examples';
 import { SlidingHighlight, slidingHighlight } from './sliding-highlight';
 

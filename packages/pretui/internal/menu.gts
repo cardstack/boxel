@@ -1,3 +1,72 @@
+// Pretui — the menu tier: one `MenuNode` tree, two surfaces.
+//
+// `Menu` renders the tree IN PLACE, one level at a time, navigated by arrows.
+// `CommandPalette` renders the SAME tree flattened and filtered, navigated by
+// typing, with a breadcrumb when the reader descends into a nested scope. A
+// command defined once therefore appears in both with one shortcut definition
+// and one enabled rule — which is the whole reason they are one module, and
+// why `SelectionMenu`/`ContextMenu` are this component with a different
+// anchor rather than two more implementations.
+//
+// ── What the previous Menu was, and what changed ─────────────────────────
+// The old `structure.gts` Menu took `(MenuItemSpec | '---')[]`, rendered
+// `role='menu'` with `<button role='menuitem'>` children and closed via a
+// backdrop <button>. Measured against a platform menu it had no submenus, no
+// toggles, no radio groups, no mixed state, no section headers, no arrow
+// keys, no Home/End, no type-ahead, no Escape-closes-one-level, no roving
+// tabindex and no `aria-haspopup`/`aria-expanded` on the trigger. It was a
+// click-only popover list — unusable by keyboard past Tab.
+//
+// Worse, it wrote `disabled={{item.disabled}}` on the button. A disabled
+// button is REMOVED FROM THE FOCUS ORDER, so a dimmed item silently vanished
+// for keyboard and screen-reader users while staying visible to everyone
+// else — the exact failure Apple's "dim, don't remove" rule exists to
+// prevent, reintroduced through markup. Every item here uses
+// `aria-disabled='true'` and skips activation in the handler instead: the
+// item stays focusable and announced, so the menu's shape is learnable by
+// every reader. That rule belongs to every roving-focus collection in the
+// kit, not just this one.
+//
+// `@items` and `@align` are unchanged and `MenuItemSpec` is now an alias of
+// `CommandNode`, so every existing call site keeps working untouched.
+//
+// ── Deviations from Appendix N, with reasons ─────────────────────────────
+// * **Markup is `<menu>`/`<li>`, not `<button>`.** `menuitemcheckbox` and
+//   `menuitemradio` are children-presentational roles, and realm lint's
+//   `require-presentational-children` rejects every descendant that is not a
+//   span/div — including `<kbd>` and every component invocation. Rather than
+//   ship two item markups, all four kinds share one, and the shortcut
+//   renders as a styled span. `<kbd>` survives as the exported `Kbd` token
+//   for prose and the palette footer. `<menu>` is HTML's own
+//   list-of-commands element, so this is not a div soup: it is `<ul>`
+//   semantics with the menu role layered on, which is what the APG asks for.
+// * **The shortcut is `aria-hidden` and mirrored into `aria-keyshortcuts`.**
+//   Letting "⌘B" fall into the accessible name is what most kits do and it
+//   makes screen readers announce glyph soup. `aria-keyshortcuts` is the
+//   property actually specified for this: the eye gets glyphs, assistive
+//   tech gets `Meta+B`.
+// * **`alt` is `Partial<MenuNodeBase>`**, not `Partial<MenuNode>` — a
+//   partial of a discriminated union cannot express "same kind, different
+//   label", which is the only thing dynamic items are for.
+// * **`CommandPalette` is a combobox, not a menu button.** Appendix N names
+//   the APG menu-button pattern as normative for both. That is right for
+//   `Menu` and wrong for the palette, whose primary control is a text input
+//   filtering a list — the combobox-with-listbox pattern
+//   (`aria-activedescendant`, `role='option'`). Menu roles there would mean a
+//   `role='menu'` whose focus lives in a textbox, which no screen reader
+//   handles well.
+// * **Point anchoring is not built.** `Menu` anchors to an ELEMENT, so a true
+//   right-click context menu (anchored at pointer coordinates) needs a
+//   virtual anchor `anchorTo` does not take. Named rather than half-shipped
+//   (Law 7); `@anchorElement` already covers selection menus and toolbars.
+//
+// Timers: hover-intent, the safe-triangle grace and the type-ahead buffer all
+// use `setTimeout` under the 2026-08-13 ownership ruling — every handle
+// belongs to an `OwnedTimers` set that an `ember-modifier` adopts and
+// releases. Nothing here calls `Date.now()` or `Math.random()`.
+//
+// (the menu group)
+
 // Pretui — the menu tree model shared by Menu, MenuPanel, Menubar and
 // CommandPalette: the node taxonomy, shortcut parsing and rendering, and the
 // row model a level is drawn from. Not a component.

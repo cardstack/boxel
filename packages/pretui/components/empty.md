@@ -1,6 +1,6 @@
 ## What it is
 
-**EmptyState** under the name shadcn and Ant use. The export is the same class — `import { Empty } from '../structure'` resolves to EmptyState — so the tile exists for a port of a shadcn `Empty` block or an agent whose first guess is the shorter word. The contract and the depth are on **EmptyState**; this page maps the shadcn parts onto it. A page-level 404 or success scene is **Result**; a missing linked card is **BrokenLink**; a region that is _loading_ is **Skeleton**, not empty.
+**EmptyState** under the name shadcn and Ant use. The export is the same class — `import { Empty } from './empty';` resolves to EmptyState — so the tile exists for a port of a shadcn `Empty` block or an agent whose first guess is the shorter word. The contract and the depth are on **EmptyState**; this page maps the shadcn parts onto it. A page-level 404 or success scene is **Result**; a missing linked card is **BrokenLink**; a region that is _loading_ is **Skeleton**, not empty.
 
 ## The contract
 

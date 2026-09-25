@@ -1,7 +1,7 @@
 // Pretui — RangeSlider usage page.
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { FreestyleUsage } from '../freestyle';
+import { FreestyleUsage } from './freestyle-usage';
 import { RangeSlider } from './range-slider';
 
 class RangeSliderUsage extends Component {

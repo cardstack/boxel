@@ -1,6 +1,6 @@
 // Pretui — AvatarGroup usage page.
 import Component from '@glimmer/component';
-import { FreestyleUsage } from '../freestyle';
+import { FreestyleUsage } from './freestyle-usage';
 import { Avatar } from './avatar';
 import { AvatarGroup } from './avatar-group';
 

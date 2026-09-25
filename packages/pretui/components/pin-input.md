@@ -1,6 +1,6 @@
 ## What it is
 
-**OtpInput** under the name Mantine and Chakra use. The export is the same class — `import { PinInput } from './composites'` resolves to OtpInput — so the tile exists for a port of a Mantine `PinInput` or an agent whose first guess is that word. The contract and the depth, including a known focus defect, are on **OtpInput**; this page maps the Mantine and shadcn names onto it. For a code with a resend or expiry affordance, the surrounding form owns those.
+**OtpInput** under the name Mantine and Chakra use. The export is the same class — `import { PinInput } from './pin-input';` resolves to OtpInput — so the tile exists for a port of a Mantine `PinInput` or an agent whose first guess is that word. The contract and the depth, including a known focus defect, are on **OtpInput**; this page maps the Mantine and shadcn names onto it. For a code with a resend or expiry affordance, the surrounding form owns those.
 
 ## The contract
 

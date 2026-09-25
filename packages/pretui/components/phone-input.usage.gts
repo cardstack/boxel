@@ -1,7 +1,7 @@
 // Pretui — PhoneInput usage page.
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { FreestyleUsage } from '../freestyle';
+import { FreestyleUsage } from './freestyle-usage';
 import { PhoneInput } from './phone-input';
 
 // ── PhoneInput ← phone-input/usage.gts ───────────────────────────────────

@@ -5,12 +5,10 @@ import { module, test } from 'qunit';
 import { click, fillIn, render } from '@ember/test-helpers';
 import { array } from '@ember/helper';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
-import {
-  UsageArray,
-  UsageBool,
-  UsageNumber,
-  UsageString,
-} from './freestyle';
+import { UsageArray } from './components/usage-array';
+import { UsageBool } from './components/usage-bool';
+import { UsageNumber } from './components/usage-number';
+import { UsageString } from './components/usage-string';
 
 class Sink {
   stringValue: string | undefined = undefined;

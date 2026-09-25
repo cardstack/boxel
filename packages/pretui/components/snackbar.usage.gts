@@ -1,6 +1,6 @@
 // Pretui — Snackbar usage page.
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
-import { FreestyleUsage } from '../freestyle';
+import { FreestyleUsage } from './freestyle-usage';
 import { Button } from './button';
 import { Snackbar } from './snackbar';
 

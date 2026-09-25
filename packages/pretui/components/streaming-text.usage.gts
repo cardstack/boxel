@@ -1,6 +1,6 @@
 // Pretui — StreamingText usage page.
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
-import { FreestyleUsage } from '../freestyle';
+import { FreestyleUsage } from './freestyle-usage';
 import { StreamingText } from './streaming-text';
 
 const StreamingTextUsage: TemplateOnlyComponent = <template>

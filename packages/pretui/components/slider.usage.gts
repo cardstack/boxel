@@ -2,7 +2,7 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
-import { FreestyleUsage } from '../freestyle';
+import { FreestyleUsage } from './freestyle-usage';
 import { Slider } from './slider';
 
 export class SliderSingleUsage extends Component {
