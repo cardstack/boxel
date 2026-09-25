@@ -1,6 +1,7 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
-import { basename } from 'path';
+import { basename, join } from 'path';
+import { utimesSync, writeFileSync } from 'fs';
 import type { Realm } from '@cardstack/runtime-common';
 import { SupportedMimeType } from '@cardstack/runtime-common';
 import {
@@ -35,6 +36,7 @@ module(basename(import.meta.filename), function () {
     let realmURL = new URL('http://127.0.0.1:4444/test/');
     let testRealmHref = realmURL.href;
     let testRealm: Realm;
+    let testRealmPath: string;
     let request: RealmRequest;
 
     // A card def rather than a bare export: the transpile only visibly does
@@ -98,6 +100,7 @@ module(basename(import.meta.filename), function () {
         },
         onRealmSetup: (args) => {
           testRealm = args.testRealm;
+          testRealmPath = args.testRealmPath;
           request = withRealmPath(args.request, realmURL);
         },
       });
@@ -394,6 +397,54 @@ module(basename(import.meta.filename), function () {
         }
       });
 
+      // A shared-cache row outlives a write that never tombstones it — one
+      // whose tombstone failed, or one made around the realm with no watcher
+      // listening. The row's validator is the file's fingerprint when it was
+      // compiled, so a request whose validator the file now contradicts
+      // compiles the file rather than taking the row.
+      test('a shared-cache row compiled from an overwritten version is compiled over rather than served', async function (assert) {
+        let modulePath = 'stale-row.gts';
+        await testRealm.write(modulePath, cardSource('StaleRowBefore'));
+
+        // Opting out of the in-memory cache leaves the shared one as the only
+        // layer that can answer.
+        let first = await request
+          .get(`/${modulePath}`)
+          .set('Accept', SupportedMimeType.All)
+          .set('X-Boxel-Disable-Module-Cache', 'true');
+        assert.true(
+          first.text.includes('StaleRowBefore'),
+          'the first response compiled what was written',
+        );
+
+        // Around the realm, so nothing drops the row the request above read.
+        writeFileSync(
+          join(testRealmPath, modulePath),
+          cardSource('StaleRowAfter'),
+        );
+        let before = testRealm.__testOnlyGetTranspileCallCount();
+        let second = await request
+          .get(`/${modulePath}`)
+          .set('Accept', SupportedMimeType.All)
+          .set('X-Boxel-Disable-Module-Cache', 'true');
+
+        assert.strictEqual(second.status, 200, 'HTTP 200 status');
+        assert.true(
+          second.text.includes('StaleRowAfter'),
+          'the response is compiled from the file as it stands',
+        );
+        assert.strictEqual(
+          testRealm.__testOnlyGetTranspileCallCount(),
+          before + 1,
+          'by compiling it, not by taking the row',
+        );
+        assert.notStrictEqual(
+          second.headers['etag'],
+          first.headers['etag'],
+          'under the validator of the version it compiled',
+        );
+      });
+
       test('an extension-less request resolves to the module and names what it resolved to', async function (assert) {
         await testRealm.write('extensionless.gts', cardSource('Extensionless'));
 
@@ -570,11 +621,66 @@ module(basename(import.meta.filename), function () {
           after.text.includes('RecompiledAfter'),
           'and the next response compiled the text written over it',
         );
-        // What the two responses' validators say about each other is left
-        // alone here. A module's validator is built from the file's
-        // modification time in whole seconds, so whether a rewrite produces a
-        // different one depends on which second the two writes land in —
-        // pinning it would pin the clock.
+        assert.notStrictEqual(
+          after.headers['etag'],
+          before.headers['etag'],
+          'under a validator of its own, whichever second the two writes land in',
+        );
+      });
+
+      // A prerender tab revalidates every module it imports, so a rewrite in
+      // the second it last read has to move the validator it holds, or the
+      // tab goes on evaluating the module compiled from the earlier text.
+      test('a rewrite within the same whole second is not answered 304 against the earlier validator', async function (assert) {
+        let modulePath = 'same-second.gts';
+        let absolutePath = join(testRealmPath, modulePath);
+        let pinnedMtime = new Date('2026-01-01T00:00:00Z');
+
+        // Writing a module indexes it, and indexing compiles it before the
+        // time below is pinned, so what that compile left cached describes a
+        // time the file no longer carries. Dropping it has the realm answer
+        // from the file as it now stands, as it would had the write landed
+        // in the pinned second.
+        async function writePinned(source: string) {
+          await testRealm.write(modulePath, source);
+          utimesSync(absolutePath, pinnedMtime, pinnedMtime);
+          testRealm.__testOnlyClearCaches();
+        }
+
+        // Equal lengths, so the size alone cannot tell the two apart.
+        await writePinned(cardSource('PinnedFirst'));
+        let first = await request
+          .get(`/${modulePath}`)
+          .set('Accept', SupportedMimeType.All);
+        assert.strictEqual(first.status, 200, 'HTTP 200 status');
+        let etag = first.headers['etag'];
+        assert.ok(etag, 'the first response carries a validator');
+
+        await writePinned(cardSource('PinnedAfter'));
+        let conditional = await request
+          .get(`/${modulePath}`)
+          .set('Accept', SupportedMimeType.All)
+          .set('If-None-Match', etag);
+
+        assert.strictEqual(
+          conditional.headers['last-modified'],
+          first.headers['last-modified'],
+          'the two versions share a modification time',
+        );
+        assert.strictEqual(
+          conditional.status,
+          200,
+          'the earlier validator does not match the rewritten module',
+        );
+        assert.true(
+          conditional.text.includes('PinnedAfter'),
+          'the body is compiled from the rewritten text',
+        );
+        assert.notStrictEqual(
+          conditional.headers['etag'],
+          etag,
+          'under a validator of its own',
+        );
       });
     });
 
