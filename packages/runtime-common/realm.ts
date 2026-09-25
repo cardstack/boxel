@@ -6634,6 +6634,16 @@ export class Realm {
             defaultHeaders: {
               'content-type': source.contentType,
             },
+            // Validated on the content, not on the modification time alone:
+            // the time is kept to the whole second, so a rewrite within the
+            // second a client last read would match its validator and answer
+            // 304 with the bytes from before the write. A prerender tab
+            // fetching a file a card links to revalidates on every read, and
+            // would build the render from those bytes. The fingerprint is read
+            // off the file in bounded ranges, the way the `card+source`
+            // route's streamed branch reads it, so the body's stream is left
+            // for the response to open.
+            etagBase: await contentHashFromRanges(fileRef),
             createdAt: source.created,
           },
         ),
@@ -6654,7 +6664,22 @@ export class Realm {
       return { kind: 'shimmed', response };
     }
 
-    let etag = buildEtag(fileRef.lastModified, MODULE_ETAG_VARIANT);
+    // Validated on a fingerprint of the source, not on its modification time
+    // alone: the time is kept to the whole second, so a rewrite within the
+    // second a client last read would keep the validator and be answered 304
+    // below, leaving the client evaluating the module compiled from the earlier
+    // text — and a prerender tab revalidates every module it imports. The 304
+    // is answered before any cache or compile is reached, so the fingerprint
+    // is read off the file itself, in the bounded ranges the byte serve above
+    // reads. An adapter that cannot serve those ranges leaves the time alone
+    // to validate on.
+    let etag = buildEtag(
+      totalEtagBase(
+        await contentHashFromRanges(fileRef),
+        fileRef.lastModified,
+      ) ?? fileRef.lastModified,
+      MODULE_ETAG_VARIANT,
+    );
     if (etag && request.headers.get('if-none-match') === etag) {
       let headers: Record<string, string> = {
         'cache-control': 'public, max-age=0',
@@ -7130,13 +7155,14 @@ export class Realm {
     // through one read of them however they were asked for.
     //
     // The path handed to the read is the resolved one, extension fallback
-    // included; the handle the caller resolved with is not read from. Its stat
-    // is what the `ETag` was built from and what the `Last-Modified` below
-    // reports, and the bytes are this read's — the same pairing of a stat with
-    // bytes read after it that a byte route reading one handle has.
+    // included; the bytes compiled are not read from the handle the caller
+    // resolved with. That handle's stat and fingerprint are what the `ETag`
+    // was built from, its stat is what the `Last-Modified` below reports, and
+    // the bytes are this read's — the same pairing of a validator with bytes
+    // read after it that a byte route reading one handle has.
     //
     // Nothing below reads the realm's own record of the path — the validator
-    // is the modification time's — so the read is told to leave that row
+    // is built from the file itself — so the read is told to leave that row
     // alone. Here that is a requirement and not a saving: a coordinated
     // compile runs this inside a window where it holds one pool connection
     // pinned, and a second checkout from inside that window is what the

@@ -1,6 +1,7 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
-import { basename } from 'path';
+import { basename, join } from 'path';
+import { utimesSync } from 'fs';
 import type { Realm } from '@cardstack/runtime-common';
 import {
   setupPermissionedRealmCached,
@@ -17,8 +18,8 @@ import {
 //
 // Its neighbour on the same path is the `card+source` route, which a client
 // selects with `Accept: application/vnd.card+source`. The two serve the same
-// bytes and differ in what they resolve and what they validate on, so several
-// of the assertions here exist to hold that difference still.
+// bytes and differ in what they resolve and in the validator each builds, so
+// several of the assertions here exist to hold that difference still.
 //
 // Reaching this serve at all means choosing an `Accept` no route claims, which
 // is narrower than it looks: `text/markdown`, `text/html`, `application/json`
@@ -31,6 +32,7 @@ module(basename(import.meta.filename), function () {
     let realmURL = new URL('http://127.0.0.1:4444/test/');
     let testRealmHref = realmURL.href;
     let testRealm: Realm;
+    let testRealmPath: string;
     let request: RealmRequest;
 
     // Bytes that are not valid UTF-8, so a response that decoded them as text
@@ -73,6 +75,7 @@ module(basename(import.meta.filename), function () {
         },
         onRealmSetup: (args) => {
           testRealm = args.testRealm;
+          testRealmPath = args.testRealmPath;
           request = withRealmPath(args.request, realmURL);
         },
       });
@@ -167,6 +170,55 @@ module(basename(import.meta.filename), function () {
           'the 304 still carries the modification time',
         );
         assert.notOk(second.text, 'a 304 carries no body');
+      });
+
+      // A prerender tab revalidates every file a render fetches, so a rewrite
+      // in the second it last read has to move the validator it holds, or the
+      // render is built from the bytes from before the write.
+      test('a rewrite within the same whole second is not answered 304 against the earlier validator', async function (assert) {
+        let path = 'same-second.png';
+        let absolutePath = join(testRealmPath, path);
+        let pinnedMtime = new Date('2026-01-01T00:00:00Z');
+        // One byte changed, so the size alone cannot tell the two apart.
+        let rewrittenBytes = pngBytes.slice();
+        rewrittenBytes[rewrittenBytes.length - 1] = 0x02;
+
+        await upload(`/${path}`, pngBytes);
+        utimesSync(absolutePath, pinnedMtime, pinnedMtime);
+        let first = await request.get(`/${path}`).set('Accept', 'image/*');
+        assert.strictEqual(first.status, 200, 'HTTP 200 status');
+        let etag = first.headers['etag'];
+        assert.ok(etag, 'the first response carries a validator');
+
+        await upload(`/${path}`, rewrittenBytes);
+        utimesSync(absolutePath, pinnedMtime, pinnedMtime);
+        let conditional = await request
+          .get(`/${path}`)
+          .set('Accept', 'image/*')
+          .set('If-None-Match', etag)
+          .buffer(true)
+          .parse(binaryParser);
+
+        assert.strictEqual(
+          conditional.headers['last-modified'],
+          first.headers['last-modified'],
+          'the two versions share a modification time',
+        );
+        assert.strictEqual(
+          conditional.status,
+          200,
+          'the earlier validator does not match the rewritten file',
+        );
+        assert.deepEqual(
+          new Uint8Array(conditional.body),
+          rewrittenBytes,
+          'the body is the rewritten bytes',
+        );
+        assert.notStrictEqual(
+          conditional.headers['etag'],
+          etag,
+          'under a validator of its own',
+        );
       });
 
       test('the byte serve advertises byte ranges and honors one', async function (assert) {
