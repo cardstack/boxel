@@ -450,15 +450,21 @@ export default class InteractSubmode extends Component {
     }
     let cardId = this.cardToDelete.id;
     let isFile = this.cardToDelete.isFile ?? false;
+    // Selections are stored with the `.json` extension stripped (see
+    // `selectCards`), while a file's delete id keeps it — so a `.json` file's
+    // selection outlives the delete unless the prune is normalized the same
+    // way. Extensionless ids (cards, non-`.json` files) are unaffected.
+    let selectionId = removeCardJsonExtension(cardId) ?? cardId;
 
     for (let stack of this.stacks) {
-      // remove all selections for the deleted card
+      // Remove the deleted card/file from both selection stores. The parent
+      // mirror here (drives the copy button count) keys on the
+      // extension-stripped id; the stack item's own set (drives the selection
+      // chip and per-row checkmarks) is pruned through its component API, which
+      // matches on the extensionless form itself.
       for (let item of stack) {
-        let selections = cardSelections.get(item);
-        if (!selections) {
-          continue;
-        }
-        selections.delete(cardId);
+        cardSelections.get(item)?.delete(selectionId);
+        stackItemComponentAPI.get(item)?.deselectCard(cardId);
       }
     }
     await this.withTestWaiters(async () => {

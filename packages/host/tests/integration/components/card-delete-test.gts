@@ -606,6 +606,58 @@ module('Integration | card-delete', function (hooks) {
       .doesNotExist('recent item removed');
   });
 
+  test('clears the selection when a selected file is deleted', async function (assert) {
+    setCardInOperatorModeState([`${testRealmURL}index`]);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+    assert.ok(
+      await adapter.openFile('notes.txt'),
+      'file exists in file system',
+    );
+
+    await click('[data-test-boxel-filter-list-button="All Files"]');
+    await triggerEvent(
+      `[data-test-cards-grid-item="${testRealmURL}notes.txt"] .field-component-card`,
+      'mouseenter',
+    );
+    await click(
+      `[data-test-overlay-card="${testRealmURL}notes.txt"] [data-test-overlay-select]`,
+    );
+    assert
+      .dom('[data-test-selection-dropdown-trigger]')
+      .containsText('1', 'the file is selected');
+
+    // Re-hover to resurface the per-row more-options menu, then delete.
+    await triggerEvent(
+      `[data-test-cards-grid-item="${testRealmURL}notes.txt"] .field-component-card`,
+      'mouseenter',
+    );
+    await click(
+      `[data-test-overlay-card="${testRealmURL}notes.txt"] [data-test-overlay-more-options]`,
+    );
+    await click('[data-test-boxel-menu-item-text="Delete"]');
+    await waitFor(`[data-test-delete-modal="${testRealmURL}notes.txt"]`);
+    await click('[data-test-confirm-delete-button]');
+
+    await waitUntil(
+      () =>
+        !document.querySelector(
+          `[data-test-cards-grid-item="${testRealmURL}notes.txt"]`,
+        ),
+    );
+    assert.strictEqual(
+      await adapter.openFile('notes.txt'),
+      undefined,
+      'file does not exist',
+    );
+    assert
+      .dom('[data-test-selection-dropdown-trigger]')
+      .doesNotExist('the selection is cleared after the file is deleted');
+  });
+
   test('can delete a card that is a selected item', async function (assert) {
     setCardInOperatorModeState(
       [`${testRealmURL}index`],
