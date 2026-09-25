@@ -130,10 +130,10 @@ type LocalTransformProgramContext = NonNullable<
   Parameters<BxlTransformModule['runBxlTransform']>[2]
 >;
 
-// The same guard for the policy compiler. `policy.ts` states the one parser
-// call it makes structurally, and a profile issue whose `code` or `message`
-// changed shape would change which predicates it refuses without anything
-// failing to compile.
+// The same guard for the policy compiler. `policy.ts` states the two calls it
+// makes structurally, the parse and the profile check a query grant's filter
+// passes, and a profile issue whose `code` or `message` changed shape would
+// change which predicates it refuses without anything failing to compile.
 export type BxlPolicyParserReachesLocal = Assignable<
   BxlPolicyParser,
   typeof import('@cardstack/bxl')
