@@ -68,8 +68,25 @@ async function openCreateChooser() {
 
 async function showAllInSection() {
   await click(`${section} [data-test-search-sheet-show-only]`);
-  await waitUntil(() => shownIds().length === 100);
+  await waitUntilLabeled('the first page', () => shownIds().length === 100);
   await click(`${section} [data-test-show-more-cards]`);
+}
+
+async function waitUntilLabeled(label: string, check: () => boolean) {
+  try {
+    await waitUntil(check, { timeout: 10000 });
+  } catch {
+    throw new Error(
+      `timed out waiting for ${label}; section shows "${sectionCountText()}" with ${shownIds().length} rows`,
+    );
+  }
+}
+
+function sectionCountText() {
+  return document
+    .querySelector(`${section} [data-test-results-count]`)
+    ?.textContent?.replace(/\s+/g, ' ')
+    .trim();
 }
 
 function shownIds() {
@@ -184,7 +201,7 @@ module('Integration | card-chooser | paging', function (hooks) {
       .containsText('Show 5 more results (5 not shown)');
 
     await click(`${section} [data-test-show-more-cards]`);
-    await waitUntil(() => shownIds().length === totalCount);
+    await waitUntilLabeled('every row', () => shownIds().length === totalCount);
     let ids = shownIds();
     assert.strictEqual(
       ids[ids.length - 1],
@@ -196,7 +213,7 @@ module('Integration | card-chooser | paging', function (hooks) {
   });
 
   test('Select All keeps a row selected from past the first page', async function (assert) {
-    void chooseCard(
+    let chosen = chooseCard(
       {
         filter: { type: { module: rri(`${baseRealm.url}spec`), name: 'Spec' } },
       },
@@ -225,6 +242,9 @@ module('Integration | card-chooser | paging', function (hooks) {
     assert
       .dom(`${section} [data-test-item-button-selected]`)
       .exists({ count: totalCount }, 'every loaded row is selected');
+
+    await click('[data-test-card-chooser-cancel-button]');
+    await chosen;
   });
 
   test('a failed page fetch can be retried from the show-more button', async function (assert) {
@@ -244,21 +264,25 @@ module('Integration | card-chooser | paging', function (hooks) {
 
     failing = false;
     await click(`${section} [data-test-show-more-cards]`);
-    await waitUntil(() => shownIds().length === totalCount);
+    await waitUntilLabeled(
+      'every row after retry',
+      () => shownIds().length === totalCount,
+    );
     assert.dom(`${section} [data-test-show-more-cards]`).doesNotExist();
   });
 
   test('a changed search does not show the previous search rows while paging catches up', async function (assert) {
     await openCreateChooser();
     await fillIn('[data-test-search-field]', 'Widget');
-    await waitUntil(
-      () =>
-        document
-          .querySelector(`${section} [data-test-results-count]`)
-          ?.textContent?.trim() === `${specCount} results`,
+    await waitUntilLabeled(
+      'the Widget search count',
+      () => sectionCountText() === `${specCount} results`,
     );
     await showAllInSection();
-    await waitUntil(() => shownIds().length === specCount);
+    await waitUntilLabeled(
+      'every Widget row',
+      () => shownIds().length === specCount,
+    );
     assert.strictEqual(shownIds()[0], widgetSpecId(1));
 
     let release = new Deferred<void>();
@@ -270,12 +294,9 @@ module('Integration | card-chooser | paging', function (hooks) {
     });
     // The held fetch keeps the app unsettled, so don't wait on the fill.
     let cleared = fillIn('[data-test-search-field]', '');
-    await waitUntil(
-      () =>
-        document
-          .querySelector(`${section} [data-test-results-count]`)
-          ?.textContent?.trim() === `${totalCount} results`,
-      { timeout: 10000 },
+    await waitUntilLabeled(
+      'the cleared search count',
+      () => sectionCountText() === `${totalCount} results`,
     );
     assert.strictEqual(
       shownIds()[0],
@@ -286,7 +307,11 @@ module('Integration | card-chooser | paging', function (hooks) {
 
     release.fulfill();
     await cleared;
-    await waitUntil(() => shownIds().length === specCount);
+    // The section keeps the row count it was showing before the search changed.
+    await waitUntilLabeled(
+      'the paged rows of the cleared search',
+      () => shownIds().length === specCount,
+    );
     assert.strictEqual(shownIds()[0], gizmoSpecId(1));
   });
 });
