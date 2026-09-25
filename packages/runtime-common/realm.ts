@@ -223,10 +223,13 @@ import {
 } from './card-operations/dispatch.ts';
 import type { ReadShape } from './card-operations/dispatch.ts';
 import {
+  dischargePendingDecision,
   notPermitted,
+  pendingWriteHolds,
   policyGateStats,
   type PolicyGateStats,
 } from './card-operations/gate.ts';
+import type { AdmissionSubject } from './card-operations/executors.ts';
 import {
   runOutputTransform,
   type TransformContext,
@@ -249,6 +252,7 @@ import {
   needsActor,
   paramsFor,
   parseOperationsEnvelope,
+  pendingWriteOf,
   projectedResult,
   readResult,
   resultsTree,
@@ -2031,6 +2035,7 @@ export class Realm {
   #adapter: RealmAdapter;
   #router: Router;
   #testOnlyCoarseAdmission: CoarseAdmission | undefined;
+  #testOnlyBeforeBatchLock: (() => Promise<void>) | undefined;
   #log = logger('realm');
   // Anchors the render-hold cap across back-to-back bulk commits, per render
   // lane held; see `_commitBatchUnlocked`. A lane has an entry only while a
@@ -5174,10 +5179,13 @@ export class Realm {
   // read. A caller the realm's own read/write permission declines may still
   // invoke an operation the realm's policy grants them: every entry is
   // resolved through the policy gate with the permission's refusal on it, and
-  // an entry no grant admits refuses the batch before any of it runs. An
-  // operation's program can read `actor()` and an `assert` can refuse on what
-  // it finds, but neither decides who may invoke it. Treat every operation's
-  // result as reachable by any caller permitted to invoke it.
+  // an entry no grant admits refuses the batch with nothing written. A write
+  // whose grant rests on a predicate is decided under the write lock, against
+  // the card it changes as the batch holds it there, and a refusal there
+  // leaves nothing written either. An operation's program can read `actor()`
+  // and an `assert` can refuse on what it finds, but neither decides who may
+  // invoke it. Treat every operation's result as reachable by any caller
+  // permitted to invoke it.
   private async handleOperations(
     request: Request,
     requestContext: RequestContext,
@@ -5299,185 +5307,222 @@ export class Realm {
     let outcomes = await settledWithin(STAGING_WIDTH, entries, (entry) =>
       this.#resolveEnvelopeEntry(entry, scope),
     );
-    let refused = outcomes.find((outcome) => outcome.status === 'rejected');
-    if (refused) {
-      throw refused.reason;
-    }
-    let resolved = outcomes.map(
-      (outcome) =>
-        (outcome as PromiseFulfilledResult<ResolvedEnvelopeEntry>).value,
+    let fulfilled = (outcome: (typeof outcomes)[number]) =>
+      (outcome as PromiseFulfilledResult<ResolvedEnvelopeEntry>).value;
+    let refusedAt = outcomes.findIndex(
+      (outcome) => outcome.status === 'rejected',
     );
-
-    // `QUERY` is the read-only spelling, and the realm derives the permission
-    // it checks from the method — so a write reaching here arrived on a
-    // request that was only authorized to read. Refused before anything is
-    // staged rather than let through to a permission check that already
-    // passed for the wrong question.
-    if (request.method === 'QUERY') {
-      let write = resolved.find(({ definition }) => isWrite(definition.base));
-      if (write) {
-        throw new OperationFailure({
-          ...(write.entry.href ? { id: write.entry.href } : {}),
-          status: 400,
-          code: 'wrong-entry-point',
-          title: 'Write in a read-only batch',
-          detail:
-            `operation "${write.entry.name}" writes, and a QUERY batch is ` +
-            `authorized to read; send a batch that writes as a POST`,
-          meta: { entry: write.entry.position },
-        });
-      }
-    }
-
-    // A write the policy gate could admit only on a predicate. The predicate
-    // has to judge the state the write will change, which only the write lock
-    // holds still, and this batch evaluates none there. So the write is
-    // refused, before anything in the batch runs.
-    let pending = resolved.find(({ decision }) => decision.kind === 'pending');
-    if (pending) {
-      throw atEntry(
-        notPermitted(pending.target, pending.entry.name),
-        pending.entry.position,
+    if (refusedAt !== -1) {
+      // The entries ahead of the refused one all resolved, and one of those
+      // may be a write the gate left pending. A card that does not exist is
+      // refused where it sits, so the position a refusal names says whether
+      // the entries ahead of it resolved, and it is weighed against theirs.
+      throw await this.#disclosableFailure(
+        (outcomes[refusedAt] as PromiseRejectedResult).reason,
+        coarseDeclined,
+        outcomes.slice(0, refusedAt).map(fulfilled),
+        new Set(),
       );
     }
+    let resolved = outcomes.map(fulfilled);
 
-    // An anonymous caller on a realm anyone may read or write has no identity
-    // for an operation to read, and whether an operation reads one is settled
-    // by its stored definition — so the batch is refused here, before any of
-    // it runs, rather than part-way through by whichever entry reached the
-    // actor first. No identity is invented to stand in: a fabricated id would
-    // be written into cards and compared in filters as though someone had
-    // acted.
-    if (!caller.actor) {
-      let needing = resolved.find(({ definition }) => needsActor(definition));
-      if (needing) {
-        throw new OperationFailure({
-          ...(needing.entry.href ? { id: needing.entry.href } : {}),
-          status: 401,
-          code: 'actor-required',
-          title: 'Operation needs an identity',
-          detail:
-            `operation "${needing.entry.name}" reads the invoking actor, and ` +
-            `this request authenticated nobody`,
-          meta: { entry: needing.entry.position },
-        });
-      }
-    }
-
-    // Reads run first and against the state the batch started from, which is
-    // what "an entry sees pre-batch state" means for a mixed batch: a read
-    // entry never observes what a write entry in the same batch stages, and
-    // reading before the coordinator takes the write lock is what keeps a read
-    // from waiting on one.
-    //
-    // In request order, whatever the tree says. A group is a staging
-    // schedule, and a read stages nothing: it reads the state the batch
-    // started from wherever in the tree it sits, so which group holds it
-    // cannot change its answer. What it would change is how many reads this
-    // realm has in flight for one request, which is a decision about the
-    // realm's own load rather than about what the caller asked for.
-    //
-    // Keyed by position rather than by index, because a position is a path
-    // through the tree for an entry inside a group and there is no array for
-    // one to be an index into.
+    // The writes the policy gate left pending that the write lock has since
+    // decided, admitted or refused. What a batch that fails may tell a caller
+    // the realm ACL declined outright depends on the ones it has not.
+    let decided = new Set<EntryPosition>();
     let results = new Map<EntryPosition, EnvelopeResult>();
-    for (let { entry, target, definition } of resolved) {
-      if (isWrite(definition.base)) {
-        continue;
-      }
-      let result: OperationResult;
-      try {
-        result = await runOperation(this.operationCore, {
-          target,
-          name: entry.name,
-          ...(entry.data ? { params: paramsFor(entry) } : {}),
-          ...caller,
-          ...this.#readDeclined(requestContext),
-        });
-      } catch (err: unknown) {
-        throw atEntry(err, entry.position);
-      }
-      results.set(entry.position, readResult(entry, result));
-    }
-
-    let writes = resolved.filter(({ definition }) => isWrite(definition.base));
-    if (writes.length > 0) {
-      // Each entry's `input` stage and `params` check, which `stageWriteEntry`
-      // runs in the order `runOperation` runs them for a read. The transformed
-      // entry keeps its `position`, which is the key both the staging schedule
-      // and the results are looked up by.
-      let staged = new Map<EntryPosition, BatchEntry>();
-      for (let [index, write] of writes.entries()) {
-        try {
-          writes[index] = await stageWriteEntry(
-            write,
-            this.#transformContext(write.entry, caller),
-          );
-          let { entry, definition } = writes[index];
-          staged.set(entry.position, batchEntryFor(entry, definition));
-        } catch (err: unknown) {
-          throw atEntry(err, write.entry.position);
+    try {
+      // `QUERY` is the read-only spelling, and the realm derives the permission
+      // it checks from the method — so a write reaching here arrived on a
+      // request that was only authorized to read. Refused before anything is
+      // staged rather than let through to a permission check that already
+      // passed for the wrong question.
+      if (request.method === 'QUERY') {
+        let write = resolved.find(({ definition }) => isWrite(definition.base));
+        if (write) {
+          throw new OperationFailure({
+            ...(write.entry.href ? { id: write.entry.href } : {}),
+            status: 400,
+            code: 'wrong-entry-point',
+            title: 'Write in a read-only batch',
+            detail:
+              `operation "${write.entry.name}" writes, and a QUERY batch is ` +
+              `authorized to read; send a batch that writes as a POST`,
+            meta: { entry: write.entry.position },
+          });
         }
       }
-      // The tree the caller sent, with the entries that only read taken out of
-      // it: the groups are the batch's staging schedule, so the coordinator is
-      // handed the shape rather than a flat list of what writes.
+
+      // An anonymous caller on a realm anyone may read or write has no identity
+      // for an operation to read, and whether an operation reads one is settled
+      // by its stored definition — so the batch is refused here, before any of
+      // it runs, rather than part-way through by whichever entry reached the
+      // actor first. No identity is invented to stand in: a fabricated id would
+      // be written into cards and compared in filters as though someone had
+      // acted.
+      if (!caller.actor) {
+        let needing = resolved.find(({ definition }) => needsActor(definition));
+        if (needing) {
+          throw new OperationFailure({
+            ...(needing.entry.href ? { id: needing.entry.href } : {}),
+            status: 401,
+            code: 'actor-required',
+            title: 'Operation needs an identity',
+            detail:
+              `operation "${needing.entry.name}" reads the invoking actor, and ` +
+              `this request authenticated nobody`,
+            meta: { entry: needing.entry.position },
+          });
+        }
+      }
+
+      // Reads run first and against the state the batch started from, which is
+      // what "an entry sees pre-batch state" means for a mixed batch: a read
+      // entry never observes what a write entry in the same batch stages, and
+      // reading before the coordinator takes the write lock is what keeps a read
+      // from waiting on one.
       //
-      // Every staged entry carries the position the caller sent it under, so a
-      // refusal from the coordinator names that one rather than the position
-      // it took among the entries that write — in the key, in the key beside
-      // it naming a conflicting entry, and in the prose.
-      let committed = await commitBatch(
-        this.batchCore,
-        stagedTree(tree, staged),
-        {
-          clientRequestId: caller.clientRequestId || null,
-          actor: caller.actor || undefined,
-          // One request, several cards, and not all of them from the same
-          // place — which is the case the event's authorship naming exists
-          // for, and the only front door that produces it.
-          reportAuthorship: true,
-        },
-      );
-      // The coordinator answers in the flat order of the entries it staged,
-      // which is the order they were sent in.
-      for (let [index, { entry, definition }] of writes.entries()) {
-        let result = writeResult(committed[index], (url) =>
-          this.#virtualNetwork.unresolveURL(url),
-        );
-        if (!definition.output) {
-          results.set(entry.position, result);
+      // In request order, whatever the tree says. A group is a staging
+      // schedule, and a read stages nothing: it reads the state the batch
+      // started from wherever in the tree it sits, so which group holds it
+      // cannot change its answer. What it would change is how many reads this
+      // realm has in flight for one request, which is a decision about the
+      // realm's own load rather than about what the caller asked for.
+      //
+      // Keyed by position rather than by index, because a position is a path
+      // through the tree for an entry inside a group and there is no array for
+      // one to be an index into.
+      for (let { entry, target, definition } of resolved) {
+        if (isWrite(definition.base)) {
           continue;
         }
-        // The `output` stage runs after the commit, over the result the wire
-        // would otherwise carry. It projects what the caller is told about the
-        // write and cannot unmake one: a program that fails here answers 400
-        // over a card that has already changed, which is the one place the
-        // batch's all-or-nothing does not reach.
-        //
-        // Lowering narrows what can get here but does not close it. It refuses
-        // a program that does not parse or reaches outside the dialect; it
-        // does not ask how many values one yields, what shape they are, or
-        // whether it names a context slot this transport fills. So a
-        // declaration can be shipped whose write commits and whose projection
-        // refuses on every call, and the author learns it at the first
-        // invocation rather than at the edit.
+        let result: OperationResult;
         try {
-          results.set(
-            entry.position,
-            projectedResult(
-              entry,
-              await runOutputTransform(
-                definition,
-                result,
-                this.#transformContext(entry, caller),
-              ),
-            ),
-          );
+          result = await runOperation(this.operationCore, {
+            target,
+            name: entry.name,
+            ...(entry.data ? { params: paramsFor(entry) } : {}),
+            ...caller,
+            ...this.#readDeclined(requestContext),
+          });
         } catch (err: unknown) {
           throw atEntry(err, entry.position);
         }
+        results.set(entry.position, readResult(entry, result));
       }
+
+      let writes = resolved.filter(({ definition }) =>
+        isWrite(definition.base),
+      );
+      if (writes.length > 0) {
+        // Each entry's `input` stage and `params` check, which `stageWriteEntry`
+        // runs in the order `runOperation` runs them for a read. The transformed
+        // entry keeps its `position`, which is the key both the staging schedule
+        // and the results are looked up by.
+        //
+        // A write the policy gate could admit only on a predicate carries that
+        // predicate to the coordinator, which decides it under the write lock
+        // where the write stages: against the card it changes, or, for a
+        // create against a type, the card it would mint.
+        let staged = new Map<EntryPosition, BatchEntry>();
+        for (let [index, write] of writes.entries()) {
+          try {
+            writes[index] = await stageWriteEntry(
+              write,
+              this.#transformContext(write.entry, caller),
+            );
+            let { entry, definition } = writes[index];
+            let pending = pendingWriteOf(writes[index]);
+            staged.set(entry.position, {
+              ...batchEntryFor(entry, definition),
+              ...(pending
+                ? {
+                    admit: async (judged: AdmissionSubject | undefined) => {
+                      try {
+                        await dischargePendingDecision(
+                          this.operationCore,
+                          pending,
+                          judged,
+                        );
+                      } finally {
+                        decided.add(entry.position);
+                      }
+                    },
+                  }
+                : {}),
+            });
+          } catch (err: unknown) {
+            throw atEntry(err, write.entry.position);
+          }
+        }
+        await this.#testOnlyBeforeBatchLock?.();
+        // The tree the caller sent, with the entries that only read taken out of
+        // it: the groups are the batch's staging schedule, so the coordinator is
+        // handed the shape rather than a flat list of what writes.
+        //
+        // Every staged entry carries the position the caller sent it under, so a
+        // refusal from the coordinator names that one rather than the position
+        // it took among the entries that write — in the key, in the key beside
+        // it naming a conflicting entry, and in the prose.
+        let committed = await commitBatch(
+          this.batchCore,
+          stagedTree(tree, staged),
+          {
+            clientRequestId: caller.clientRequestId || null,
+            actor: caller.actor || undefined,
+            // One request, several cards, and not all of them from the same
+            // place — which is the case the event's authorship naming exists
+            // for, and the only front door that produces it.
+            reportAuthorship: true,
+          },
+        );
+        // The coordinator answers in the flat order of the entries it staged,
+        // which is the order they were sent in.
+        for (let [index, { entry, definition }] of writes.entries()) {
+          let result = writeResult(committed[index], (url) =>
+            this.#virtualNetwork.unresolveURL(url),
+          );
+          if (!definition.output) {
+            results.set(entry.position, result);
+            continue;
+          }
+          // The `output` stage runs after the commit, over the result the wire
+          // would otherwise carry. It projects what the caller is told about the
+          // write and cannot unmake one: a program that fails here answers 400
+          // over a card that has already changed, which is the one place the
+          // batch's all-or-nothing does not reach.
+          //
+          // Lowering narrows what can get here but does not close it. It refuses
+          // a program that does not parse or reaches outside the dialect; it
+          // does not ask how many values one yields, what shape they are, or
+          // whether it names a context slot this transport fills. So a
+          // declaration can be shipped whose write commits and whose projection
+          // refuses on every call, and the author learns it at the first
+          // invocation rather than at the edit.
+          try {
+            results.set(
+              entry.position,
+              projectedResult(
+                entry,
+                await runOutputTransform(
+                  definition,
+                  result,
+                  this.#transformContext(entry, caller),
+                ),
+              ),
+            );
+          } catch (err: unknown) {
+            throw atEntry(err, entry.position);
+          }
+        }
+      }
+    } catch (err: unknown) {
+      throw await this.#disclosableFailure(
+        err,
+        coarseDeclined,
+        resolved,
+        decided,
+      );
     }
 
     return this.#operationsResponse(
@@ -5546,6 +5591,51 @@ export class Realm {
     } catch (err: unknown) {
       throw atEntry(err, entry.position);
     }
+  }
+
+  // What a batch that failed may tell its caller, for a caller the realm ACL
+  // declined outright whose batch holds a write the policy gate left pending
+  // and the write lock has not decided.
+  //
+  // Such a write's target resolved, and the gate matched a grant on it, which
+  // never happens for a card that does not exist. So a refusal the batch makes
+  // past that write's resolution would tell the caller that the card exists
+  // and what its type declares, before anything decided they may know either.
+  // That covers a missing param, a failing `input` stage, a malformed entry,
+  // another entry refused while staging, and a later entry refused at
+  // resolution, whose position alone says the entries ahead of it resolved.
+  // A write whose predicate does not hold is answered with the gate's refusal
+  // instead, exactly as a card that does not exist is answered. A write whose
+  // predicate holds lets the caller have the answer the batch actually has. A
+  // write the lock already decided is not judged again: one it admitted may
+  // be told, and one it refused is the refusal.
+  //
+  // The write is judged against its card as stored now, outside the lock.
+  // That decides only what the refusal says, never whether anything is
+  // written, since a batch that reaches here writes nothing.
+  async #disclosableFailure(
+    err: unknown,
+    coarseDeclined: CoarseDeclined,
+    resolved: readonly ResolvedEnvelopeEntry[],
+    decided: ReadonlySet<EntryPosition>,
+  ): Promise<unknown> {
+    if (coarseDeclined !== 'all') {
+      return err;
+    }
+    for (let entry of resolved) {
+      let pending = pendingWriteOf(entry);
+      if (
+        pending &&
+        !decided.has(entry.entry.position) &&
+        !(await pendingWriteHolds(this.operationCore, pending))
+      ) {
+        return atEntry(
+          notPermitted(pending.target, pending.name),
+          entry.entry.position,
+        );
+      }
+    }
+    return err;
   }
 
   // A batch's answer is never HTTP-cached. It is not a resource with a
@@ -6509,6 +6599,14 @@ export class Realm {
   // regardless. Pass `undefined` to restore the real decision.
   __testOnlySetCoarseAdmission(admit: CoarseAdmission | undefined): void {
     this.#testOnlyCoarseAdmission = admit;
+  }
+
+  // Runs in an `/_operations` batch that writes, after every entry has been
+  // resolved through the policy gate and before the coordinator takes the
+  // write lock, so a test can change what a pending write's predicate reads in
+  // the window between the two. Pass `undefined` to remove it.
+  __testOnlySetBeforeBatchLock(hook: (() => Promise<void>) | undefined): void {
+    this.#testOnlyBeforeBatchLock = hook;
   }
 
   // Read fresh (no memoization) for the same reason createRequestContext

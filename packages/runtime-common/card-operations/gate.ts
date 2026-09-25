@@ -6,7 +6,7 @@ import { isCardResource } from '../card-document-shape.ts';
 import type { CardResource } from '../resource-types.ts';
 import { localPathFor, pathsFor } from './dispatch.ts';
 import type { OperationCore, OperationScope } from './dispatch.ts';
-import type { BxlMutationModule } from './executors.ts';
+import type { AdmissionSubject, BxlMutationModule } from './executors.ts';
 import type {
   CompiledOperationGrant,
   CompiledPolicyPredicate,
@@ -94,16 +94,32 @@ export type GateDecision =
   // A write whose every matching grant carries a predicate. A write's
   // predicate has to judge the state the write will change, and only the
   // write lock holds that state still. So its predicates are not evaluated
-  // here: they are carried to whatever takes the lock. Any one of them
-  // holding admits the write.
-  | { kind: 'pending'; grants: MatchedGrant[] };
+  // here: they are carried to whatever takes the lock, which decides them
+  // with `dischargePendingDecision`. Any one of them holding admits the write.
+  | PendingDecision;
 
-// How often the gate loads a policy and evaluates a predicate, per core. A
-// test asserts on these rather than on outcomes alone, since an outcome cannot
-// show that a caller the ACL allowed never reached the policy.
+export interface PendingDecision {
+  kind: 'pending';
+  grants: MatchedGrant[];
+  // The target type's definition-cache entry, which describes the source a
+  // predicate reads.
+  typeDefinition: Definition | undefined;
+  // For a card target, the key the index records the card's own type under,
+  // as it stood when the grants were matched. The grants hold for that type,
+  // so a card stored as some other type by the time the lock is taken is not
+  // one they admit.
+  matchedType?: string;
+}
+
+// How often the gate loads a policy and evaluates a predicate, per core, and
+// how many pending writes were decided under a write lock. A test asserts on
+// these rather than on outcomes alone, since an outcome cannot show that a
+// caller the ACL allowed never reached the policy, or that a read never
+// reached a lock.
 export interface PolicyGateStats {
   policyLoads: number;
   predicateEvaluations: number;
+  pendingDischarges: number;
 }
 
 const statsByCore = new WeakMap<OperationCore, PolicyGateStats>();
@@ -111,7 +127,7 @@ const statsByCore = new WeakMap<OperationCore, PolicyGateStats>();
 export function policyGateStats(core: OperationCore): PolicyGateStats {
   let stats = statsByCore.get(core);
   if (!stats) {
-    stats = { policyLoads: 0, predicateEvaluations: 0 };
+    stats = { policyLoads: 0, predicateEvaluations: 0, pendingDischarges: 0 };
     statsByCore.set(core, stats);
   }
   return stats;
@@ -189,17 +205,131 @@ export async function gateOperation(
     return { kind: 'granted', grant: unconditional };
   }
   if (base !== 'read') {
-    return { kind: 'pending', grants: matched };
+    return {
+      kind: 'pending',
+      grants: matched,
+      typeDefinition,
+      ...(row.types[0] ? { matchedType: row.types[0] } : {}),
+    };
   }
   // A read has one state to judge, and nothing to wait for, so its predicate
   // is evaluated here, against the target as it is stored now.
-  let subject = await predicateSubject(core, url, typeDefinition);
-  if (!subject) {
+  let content = await core.readFileAsText(
+    `${localPathFor(core, url)}.json` as LocalPath,
+  );
+  let resource = content === undefined ? undefined : cardResourceIn(content);
+  let subject = resource
+    ? await storedSubject(core, url, typeDefinition, resource)
+    : undefined;
+  let granted = subject
+    ? await firstHolding(core, matched, subject, scope)
+    : undefined;
+  if (!granted) {
     throw refuse();
   }
+  return { kind: 'granted', grant: granted };
+}
+
+// A write the gate left pending, and what deciding it reads.
+export interface PendingWrite {
+  target: OperationTarget;
+  // The name the operation was invoked under, which a refusal names.
+  name: string;
+  decision: PendingDecision;
+  // The write's own scope, which says who the caller is.
+  scope: OperationScope;
+}
+
+// Decide a pending write under the write lock it holds.
+//
+// A write's predicate judges the state the write changes, and only the lock
+// holds that still: between the gate matching a write's grants and the write
+// taking its lock, another writer can change the very field a predicate reads.
+// So whatever takes the lock hands in the card the write is judged by, as it
+// holds it where the write stages, and the predicates are evaluated against
+// that rather than against anything read before the lock.
+//
+// Only the predicates run again. The grants, and the compiled predicates on
+// them, were matched at the gate from the policy it loaded, and they travel
+// here on the decision, so nothing loads the policy a second time.
+//
+// What a predicate judges is the target the grants were matched on. A write to
+// a card judges the card it changes. That includes a named create anchored on
+// a card: the grants were matched on the card's type, and its predicates read
+// that card's fields. A create against a type has nothing stored to judge, so
+// its predicates read the card it would mint, as its template or its resource
+// leaves it, which is what it writes. The payload it was sent is not: a
+// template writes the fields it fills, not the members the caller named.
+//
+// Refuses by throwing the gate's refusal, so a write refused here is refused
+// in the same words as one refused at the gate.
+export async function dischargePendingDecision(
+  core: OperationCore,
+  pending: PendingWrite,
+  // The card the write is judged by: its target as the lock holds it, or, for
+  // a create against a type, the card it would mint. Undefined where there is
+  // no such card.
+  judged: AdmissionSubject | undefined,
+): Promise<void> {
+  policyGateStats(core).pendingDischarges++;
+  if (!(await admits(core, pending, judged))) {
+    throw notPermitted(pending.target, pending.name);
+  }
+}
+
+// Whether a pending write would be admitted against its target card as stored
+// now, outside any lock. This never admits anything: the write is still
+// decided under the lock. It answers only what a caller may be told when a
+// batch fails before the write was decided. A create against a type has no
+// card to judge until it is staged, so it is never taken as admitted here.
+export async function pendingWriteHolds(
+  core: OperationCore,
+  pending: PendingWrite,
+): Promise<boolean> {
+  let { target } = pending;
+  let url = target.kind === 'instance' ? parseURL(target.url) : undefined;
+  if (!url) {
+    return false;
+  }
+  let source = await core.readFileAsText(
+    `${localPathFor(core, url)}.json` as LocalPath,
+  );
+  return await admits(
+    core,
+    pending,
+    source === undefined ? undefined : { id: url.href, source },
+  );
+}
+
+async function admits(
+  core: OperationCore,
+  { target, decision, scope }: PendingWrite,
+  judged: AdmissionSubject | undefined,
+): Promise<boolean> {
+  let subject =
+    target.kind === 'instance'
+      ? await lockedSubject(core, target.url, decision, judged?.source)
+      : await mintedSubject(core, judged);
+  return (
+    subject !== undefined &&
+    (await firstHolding(core, decision.grants, subject, scope)) !== undefined
+  );
+}
+
+// The first grant whose predicate holds for this caller against `subject`.
+async function firstHolding(
+  core: OperationCore,
+  grants: MatchedGrant[],
+  subject: PredicateSubject,
+  scope: OperationScope,
+): Promise<MatchedGrant | undefined> {
+  let stats = policyGateStats(core);
   let actor = scope.caller.kind === 'user' ? scope.caller.actor : undefined;
-  for (let candidate of matched) {
-    let where = candidate.grant.where!;
+  for (let candidate of grants) {
+    let where = candidate.grant.where;
+    if (!where) {
+      return candidate;
+    }
     // A predicate annotated as reading a snapshot tier asks for computed or
     // linked values, and the gate reads the stored source alone. So it is
     // never evaluated, and its grant admits nothing.
@@ -208,10 +338,10 @@ export async function gateOperation(
     }
     stats.predicateEvaluations++;
     if (await holds(core, where, subject, actor)) {
-      return { kind: 'granted', grant: candidate };
+      return candidate;
     }
   }
-  throw refuse();
+  return undefined;
 }
 
 // Whether the realm ACL declined this invocation. A caller declined only
@@ -277,44 +407,131 @@ async function ruleTypeKeys(
 // are not there, since those come from the index and lag the stored source.
 interface PredicateSubject {
   input: unknown;
-  instance: Record<string, unknown>;
+  // What `instance()` answers. Absent where there is no card for it to name.
+  instance?: Record<string, unknown>;
 }
 
-async function predicateSubject(
+// A card's stored source as a predicate reads it.
+async function storedSubject(
   core: OperationCore,
   url: URL,
   typeDefinition: Definition | undefined,
+  resource: CardResource,
 ): Promise<PredicateSubject | undefined> {
-  if (!typeDefinition) {
-    return undefined;
-  }
   let sourcePath = `${localPathFor(core, url)}.json` as LocalPath;
-  let content = await core.readFileAsText(sourcePath);
-  let resource = content === undefined ? undefined : cardResourceIn(content);
-  if (!resource) {
+  let input = await projectedSource(core, typeDefinition, resource, {
+    relativeTo: url,
+    linksRelativeTo: pathsFor(core).fileURL(sourcePath),
+    targetId: url.href,
+  });
+  return input === undefined
+    ? undefined
+    : {
+        input,
+        // What `instance()` answers, as it does for a mutation program.
+        instance: { id: url.href, ...(resource.attributes ?? {}) },
+      };
+}
+
+// A pending write's target card as the lock holds it. A card that is gone, or
+// that is stored as a type other than the one its grants were matched on, is
+// not what those grants admit, and is judged by nothing.
+async function lockedSubject(
+  core: OperationCore,
+  href: string,
+  decision: PendingDecision,
+  storedSource: string | undefined,
+): Promise<PredicateSubject | undefined> {
+  let url = parseURL(href);
+  let resource =
+    storedSource === undefined ? undefined : cardResourceIn(storedSource);
+  if (!url || !resource || !core.policy) {
     return undefined;
   }
-  let fileURL = pathsFor(core).fileURL(sourcePath);
+  let adoptsFrom = resource.meta?.adoptsFrom;
+  let storedType = adoptsFrom
+    ? core.resolveCodeRef(adoptsFrom, url)
+    : undefined;
+  if (!storedType || !decision.matchedType) {
+    return undefined;
+  }
+  let keys: string[];
+  try {
+    keys = await core.policy.typeKeys(storedType);
+  } catch {
+    return undefined;
+  }
+  if (!keys.includes(decision.matchedType)) {
+    return undefined;
+  }
+  return await storedSubject(core, url, decision.typeDefinition, resource);
+}
+
+// The card a create against a type would mint, as a predicate reads it:
+// projected through that card's own type, which for a named create is the type
+// its declaration mints rather than the type it is declared on.
+async function mintedSubject(
+  core: OperationCore,
+  minted: AdmissionSubject | undefined,
+): Promise<PredicateSubject | undefined> {
+  let url = minted ? parseURL(minted.id) : undefined;
+  let resource = minted ? cardResourceIn(minted.source) : undefined;
+  let adoptsFrom = resource?.meta?.adoptsFrom;
+  let type =
+    url && adoptsFrom ? core.resolveCodeRef(adoptsFrom, url) : undefined;
+  if (!url || !resource || !type) {
+    return undefined;
+  }
+  let definition: Definition | undefined;
+  try {
+    definition = await core.definitionLookup.lookupDefinition(type);
+  } catch {
+    return undefined;
+  }
+  let input = await projectedSource(core, definition, resource, {
+    relativeTo: url,
+    linksRelativeTo: new URL(`${url.href}.json`),
+    targetId: url.href,
+  });
+  return input === undefined
+    ? undefined
+    : { input, instance: { id: url.href, ...(resource.attributes ?? {}) } };
+}
+
+// A card resource projected the way a mutation program sees it. Undefined
+// where the type's definition is not in hand or the resource does not fit it.
+async function projectedSource(
+  core: OperationCore,
+  typeDefinition: Definition | undefined,
+  resource: CardResource,
+  at: {
+    // What the type's own code refs resolve against.
+    relativeTo: URL;
+    // The file the resource's relationship links are spelled relative to.
+    linksRelativeTo: URL;
+    // The card the resource is, where there is one yet.
+    targetId?: string;
+  },
+): Promise<unknown> {
+  if (!typeDefinition || !core.policy) {
+    return undefined;
+  }
+  let policy = core.policy;
   try {
     let bxl = await loadBxlMutation();
     let schema = await bxl.mutationSchemaForCardSource(typeDefinition, {
       lookupDefinition: async (codeRef) => {
-        let resolved = core.resolveCodeRef(codeRef, url);
+        let resolved = core.resolveCodeRef(codeRef, at.relativeTo);
         return resolved
           ? await core.definitionLookup.lookupDefinition(resolved)
           : undefined;
       },
     });
-    let input = bxl.snapshotBxlCardSource({ data: resource }, schema, {
-      targetId: url.href,
+    return bxl.snapshotBxlCardSource({ data: resource }, schema, {
+      ...(at.targetId ? { targetId: at.targetId } : {}),
       resolveReference: (reference) =>
-        core.policy!.resolvedLink(reference, fileURL),
+        policy.resolvedLink(reference, at.linksRelativeTo),
     });
-    return {
-      input,
-      // What `instance()` answers, as it does for a mutation program.
-      instance: { id: url.href, ...(resource.attributes ?? {}) },
-    };
   } catch {
     return undefined;
   }
@@ -347,7 +564,7 @@ async function holds(
       subject.input,
       {
         ...(actor === undefined ? {} : { actor }),
-        instance: subject.instance,
+        ...(subject.instance ? { instance: subject.instance } : {}),
         ...(realmConfig === undefined ? {} : { realmConfig }),
       },
       { syntax: 'solidified' },

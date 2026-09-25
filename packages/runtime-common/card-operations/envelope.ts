@@ -16,7 +16,7 @@ import type { BatchEntryResult, BatchNode } from './coordinator.ts';
 import { assertParamsSupplied, type OperationScope } from './dispatch.ts';
 import { runInputTransform, type TransformContext } from './transforms.ts';
 import type { BatchEntry } from './executors.ts';
-import type { GateDecision } from './gate.ts';
+import type { GateDecision, PendingWrite } from './gate.ts';
 import { isCodeRef } from '../card-document-shape.ts';
 import type { CardResource } from '../resource-types.ts';
 import type { SearchEntryWireFilter } from '../search-entry.ts';
@@ -640,6 +640,17 @@ export interface ResolvedEnvelopeEntry {
   // memo, and — once `stageWriteEntry` has run — the document a create would
   // write.
   scope: OperationScope;
+}
+
+// The write the policy gate left pending on this entry, in the form the write
+// lock decides it in. Undefined for an entry the gate decided outright.
+export function pendingWriteOf(
+  resolved: ResolvedEnvelopeEntry,
+): PendingWrite | undefined {
+  let { entry, target, decision, scope } = resolved;
+  return decision.kind === 'pending'
+    ? { target, name: entry.name, decision, scope }
+    : undefined;
 }
 
 // The two behaviors that are reached somewhere other than here.
