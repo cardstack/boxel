@@ -480,7 +480,7 @@ class TypeChip extends GlimmerComponent<{
       {{#if this.iconHtml}}
         <span class='type-chip-icon'>{{this.iconHtml}}</span>
       {{/if}}
-      {{@option.displayName}}
+      <span class='type-chip-label'>{{@option.displayName}}</span>
       <span class='type-chip-count' data-test-type-chip-count>{{@count}}</span>
     </Button>
     <style scoped>
@@ -492,6 +492,13 @@ class TypeChip extends GlimmerComponent<{
         --boxel-button-default-background: var(--card);
         --boxel-button-default-foreground: var(--card-foreground);
         gap: var(--boxel-sp-2xs);
+        max-width: 100%;
+      }
+      .type-chip-label {
+        min-width: 0;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
       }
       .type-chip:hover {
         border-color: var(--border-strong);
@@ -1054,6 +1061,7 @@ class Isolated extends Component<typeof Workspace> {
             </div>
           </div>
           <CardsGridLayout
+            class='library-grid'
             @format='fitted'
             @displaySidebar={{false}}
             @context={{@context}}
@@ -1611,6 +1619,9 @@ class Isolated extends Component<typeof Workspace> {
         overflow-y: auto;
         padding: var(--boxel-sp-xl);
         display: grid;
+        /* minmax(0, …): an auto column grows to its widest unwrappable line
+           (setup name, recent activity, chip labels) and overflows the card */
+        grid-template-columns: minmax(0, 1fr);
         align-content: start;
         gap: var(--boxel-sp-xl);
       }
@@ -1704,6 +1715,7 @@ class Isolated extends Component<typeof Workspace> {
       }
       .zone {
         display: grid;
+        grid-template-columns: minmax(0, 1fr);
         gap: var(--boxel-sp-sm);
       }
       /* ── Activity dock: collapsing panel (). The full panel is the
@@ -2066,7 +2078,7 @@ class Isolated extends Component<typeof Workspace> {
       }
       .inventory-group {
         display: grid;
-        grid-template-columns: 2.75rem 1fr;
+        grid-template-columns: 2.75rem minmax(0, 1fr);
         gap: var(--boxel-sp-sm);
         align-items: start;
       }
@@ -2368,8 +2380,9 @@ class Isolated extends Component<typeof Workspace> {
       /* space details strip */
       .space-details {
         display: flex;
+        flex-wrap: wrap;
         align-items: center;
-        gap: var(--boxel-sp-2xs);
+        gap: var(--boxel-sp-4xs) var(--boxel-sp-2xs);
         padding-top: var(--boxel-sp-3xs);
         color: var(--muted-foreground);
       }
@@ -2391,8 +2404,12 @@ class Isolated extends Component<typeof Workspace> {
       }
       .welcome-actions {
         display: flex;
+        flex-wrap: wrap;
         align-items: center;
         gap: var(--boxel-sp-xs);
+      }
+      .welcome-cta {
+        padding-inline: var(--boxel-sp-lg);
       }
       .empty-state {
         display: grid;
@@ -2423,20 +2440,8 @@ class Isolated extends Component<typeof Workspace> {
         .frame {
           padding-inline: var(--boxel-sp);
         }
-        /* the search takes its own row at full width instead of wrapping
-           under the tabs at its fixed width */
-        .frame-actions {
-          flex-basis: 100%;
-        }
-        .search-box {
-          flex-grow: 1;
-        }
-        .search-box .search-input,
-        .search-results {
-          width: 100%;
-        }
         .stage {
-          padding: var(--boxel-sp);
+          padding: var(--boxel-sp) var(--boxel-sp) var(--boxel-sp-xl);
           gap: var(--boxel-sp-lg);
         }
         .dock {
@@ -2446,8 +2451,37 @@ class Isolated extends Component<typeof Workspace> {
         .card-grid .dock-mini {
           padding-inline: var(--boxel-sp);
         }
+        /* the rail pushes the grid aside instead of narrowing it, so nothing
+           in the grid reflows while the rail slides; clip rather than hidden,
+           so focus can't scroll the covered part into view */
         .library {
           --boxel-cards-grid-layout-padding: var(--boxel-sp);
+          overflow: clip;
+        }
+        .library-grid {
+          flex-shrink: 0;
+        }
+        /* the percentage already reports progress; the bar is the first thing
+           to give up its width */
+        .setup-track {
+          display: none;
+        }
+        .readme-body {
+          padding: var(--boxel-sp);
+        }
+      }
+      /* only once the frame is too narrow for the search to sit beside the
+         tabs does it take its own row at full width */
+      @container (width < 30rem) {
+        .frame-actions {
+          flex-basis: 100%;
+        }
+        .search-box {
+          flex-grow: 1;
+        }
+        .search-box .search-input,
+        .search-results {
+          width: 100%;
         }
       }
       @media (prefers-reduced-motion: reduce) {
