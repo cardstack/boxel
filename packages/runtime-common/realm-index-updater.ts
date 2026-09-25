@@ -14,6 +14,7 @@ import {
 } from './index.ts';
 import {
   indexingConcurrencyGroup,
+  indexingWriterLane,
   INCREMENTAL_INDEX_JOB_TIMEOUT_SEC,
   makeIncrementalArgsWithCallerMetadata,
   mapIncrementalDoneResult,
@@ -235,11 +236,7 @@ export class RealmIndexUpdater {
   // This is the widest gate a request waits on. Its consumers are the readers
   // of the index as a whole — the publishability report, the indexing-error
   // report, and the cheap "is anything pending at all" check the
-  // read-your-writes drain starts from — plus one writer that is not a reader
-  // at all: a bulk commit times its render-hold release off this gate, and
-  // that one must stay wide. The hold has to outlive every pass the commit
-  // spawned whatever it touched, so narrowing it would free the render lane
-  // early and collapse the merge window a bulk import depends on.
+  // read-your-writes drain starts from.
   //
   // A write about to stage wants `incrementalIndexingAffectingStaging()`
   // instead; waiting here would make one card's fan-out gate every other
@@ -253,6 +250,27 @@ export class RealmIndexUpdater {
         (deferred) => deferred.promise,
       ),
     ).then(() => undefined);
+  }
+
+  // Awaits the incremental and copy jobs of one writer's lane: those
+  // `initiatedBy` wrote, or with it absent, the work nobody initiated (the
+  // owner's lane). A bulk commit times its render-hold release off this. The
+  // hold names the writer's render lane, and every pass the commit spawns
+  // carries the commit's writer, so this outlives each of them whatever it
+  // touched — which is what keeps the merge window a bulk import depends on —
+  // without waiting on another writer's passes, whose renders the hold never
+  // delayed.
+  incrementalIndexingOfWriter(
+    initiatedBy: string | null | undefined,
+  ): Promise<void> | undefined {
+    let writer = initiatedBy ?? undefined;
+    let pending = [...this.#incrementalIndexingDeferreds.entries()]
+      .filter(([, entry]) => entry.initiatedBy === writer)
+      .map(([deferred]) => deferred.promise);
+    if (pending.length === 0) {
+      return undefined;
+    }
+    return Promise.all(pending).then(() => undefined);
   }
 
   // Awaits only the incremental jobs whose write was initiated by `user` —
@@ -462,7 +480,9 @@ export class RealmIndexUpdater {
       );
       job = await this.#queue.publish<IncrementalDoneResult>({
         jobType: 'incremental-index',
-        concurrencyGroup: indexingConcurrencyGroup(this.#realm.url),
+        // The writer's own lane, so this pass neither waits behind another
+        // writer's pass nor coalesces with one.
+        ...indexingWriterLane(this.#realm.url, opts?.initiatedBy),
         timeout: INCREMENTAL_INDEX_JOB_TIMEOUT_SEC,
         priority: userInitiatedPriority,
         args: jobArgs,

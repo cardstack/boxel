@@ -18,19 +18,19 @@ import { baseRealm, baseRealmRRI } from '../constants.ts';
 import { systemInitiatedPriority, userInitiatedPriority } from '../queue.ts';
 import { Deferred } from '../deferred.ts';
 import { parseSpawningIndexPasses } from './prerender-html.ts';
-import { laneFamilyPredicate } from './lane-family.ts';
+import { laneFamilyPredicate, writerLane, type Lane } from './lane-family.ts';
 import { v4 as uuidv4 } from '@lukeed/uuid';
 import { isObjectLike } from 'lodash-es';
 
 export const INCREMENTAL_INDEX_JOB_TIMEOUT_SEC = 10 * 60;
 
-// The name of a realm's index lane, and of the lane family its writer lanes
-// belong to (see `QueuePublishRequest.laneFamily`). A job published to this
-// group is the family's exclusive work: it runs with nothing else of the
-// realm's index. Every job that writes the realm's index is published here —
-// from-scratch, incremental, copy — and so is work that must not overlap a
-// running pass without writing the index itself, today `scoped-css-gc` (see
-// `runtime-common/scoped-css-gc.ts`).
+// The name of a realm's index lane family (see `QueuePublishRequest.laneFamily`),
+// and of the family's exclusive lane. A job published to this group runs with
+// nothing else of the realm's index: from-scratch and copy, which rewrite the
+// realm's index wholesale, and work that must not overlap a running pass
+// without writing the index itself, today `scoped-css-gc` (see
+// `runtime-common/scoped-css-gc.ts`). An incremental pass runs in its writer's
+// lane of the family instead (see `indexingWriterLane`).
 //
 // Readers ask about the family rather than this group, through
 // `laneFamilyPredicate`, so a job in a writer lane counts wherever an
@@ -44,6 +44,21 @@ export const INCREMENTAL_INDEX_JOB_TIMEOUT_SEC = 10 * 60;
 // every member and should not narrow.
 export function indexingConcurrencyGroup(realmURL: string): string {
   return `indexing:${realmURL}`;
+}
+
+// The lane an incremental pass for `initiatedBy`'s writes runs in: that
+// writer's lane of the realm's index family, or the owner's lane for work
+// nobody initiated. Two people editing one realm index side by side, so a
+// cheap save does not wait out another user's long pass. One writer's passes
+// share a lane, so they coalesce with each other and run in order, which is
+// what read-your-writes and the in-flight join rely on. Passes that overlap
+// are reconciled when they commit (see `Batch.done`'s validation), not by
+// the queue.
+export function indexingWriterLane(
+  realmURL: string,
+  initiatedBy: string | null | undefined,
+): Lane {
+  return writerLane(indexingConcurrencyGroup(realmURL), initiatedBy);
 }
 
 // The priority a system-initiated index of `realmURL` is enqueued at.
@@ -67,9 +82,9 @@ export function indexingConcurrencyGroup(realmURL: string): string {
 // costs. Every job that writes a realm's index is in the lane family
 // `indexingConcurrencyGroup(realmURL)`, and the claim query runs one job per
 // lane and never runs a family's exclusive work beside anything else in it —
-// so base's exclusive index work occupies one worker at a time, and its writer
-// lanes, when a publish uses them, at most the queue's cap on concurrent
-// writer lanes per family. And the elevation stops at the index: follow-on
+// so base's exclusive index work occupies one worker at a time, and its
+// incremental passes, which run in writer lanes, at most the queue's cap on
+// concurrent writer lanes per family. And the elevation stops at the index: follow-on
 // prerender-html work derives its tier from `prerenderSpawnedPriority` below
 // rather than from the elevated value, so a realm-wide HTML sweep for base cannot take a second
 // worker out of the same pool. Each further realm elevated would add another

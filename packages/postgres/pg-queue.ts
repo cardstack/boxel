@@ -621,11 +621,15 @@ export class PgQueueRunner implements QueueRunner {
             // - Writer lanes of one family run alongside each other, up to
             //   `#maxWriterLanesPerFamily` at once.
             // - A writer job does not start ahead of an older pending exclusive
-            //   job of its family at the same or a higher priority. Without
-            //   this barrier a steady stream of writes would keep the family
-            //   occupied, and the exclusive job would never find it empty. A
-            //   writer job at a higher priority than the exclusive job still
-            //   starts, the way it would pass any lower-priority work.
+            //   job of its family, whatever the two priorities. Without this
+            //   barrier a steady stream of writes would keep the family
+            //   occupied, and the exclusive job would never find it empty.
+            //   Priority can't exempt a writer: writers run at the
+            //   user-initiated tier and a from-scratch pass at the system
+            //   tier, so two writers that keep overlapping would hold it off
+            //   indefinitely. This is the order one shared lane gave the
+            //   family: the exclusive job takes its turn after the work
+            //   running when it was queued.
             //
             // Jobs published without a family are all exclusive, each in a
             // family of its own group, so for them these reduce to the first
@@ -709,7 +713,6 @@ export class PgQueueRunner implements QueueRunner {
                      WHERE p.status = 'unfulfilled'
                        AND p.concurrency_group = j.lane_family
                        AND ${isExclusiveLane('p')}
-                       AND p.priority >= j.priority
                        AND (p.created_at, p.id) < (j.created_at, j.id)
                   )
                   AND (

@@ -183,6 +183,15 @@ export const prerenderRequestTimeoutMs = parseTimeoutMs(
   defaultPrerenderRequestTimeoutMs,
 );
 
+// How long an indexing batch on an affinity may go without starting a visit,
+// with nothing of its in flight there, before the prerender server takes it
+// for finished: its hold on the affinity is dropped (see
+// `batch-ownership-gate.ts`) and its icon memo with it. One visit's whole
+// request budget — within a live batch, visits follow one another with only
+// the pass's own bookkeeping between them, so a gap that long means the batch
+// has stopped visiting.
+export const batchStaleAfterMs = prerenderRequestTimeoutMs;
+
 export function resolvePrerenderManagerRequestTimeoutMs(): number {
   return parseTimeoutMs(
     process.env.PRERENDER_MANAGER_REQUEST_TIMEOUT_MS,

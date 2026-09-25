@@ -29,6 +29,7 @@ import {
   type BatchOwner,
   computeBatchClearCacheGate,
 } from './batch-ownership-gate.ts';
+import { batchStaleAfterMs } from './prerender-constants.ts';
 import {
   AffinitySnapshotSampler,
   type PeakRegistration,
@@ -70,12 +71,14 @@ export class Prerenderer {
   // visit following a cancelled render must acquire a fresh page rather
   // than detour through the restart recovery lane.
   #browserRestartCount = 0;
-  // `clearCache` batch ownership (CS-10758 step 3). Maps affinityKey to
-  // `{ batchId, since }` for the batch that currently owns the affinity's
-  // warm loader. See `#gateClearCache` for the full policy. Populated on
-  // any batch'd `clearCache: true` visit and cleared on `releaseBatch`,
-  // successor-batch replacement, or affinity disposal.
-  #batchOwnership = new Map<string, BatchOwner>();
+  // `clearCache` batch ownership. Maps affinityKey to the batches holding the
+  // affinity's warm loader, batch id → when each last started a visit there.
+  // Several at once is normal: index passes of one realm run one per writer
+  // lane, each beside its own `prerender_html` job. See `#gateClearCache` and
+  // `batch-ownership-gate.ts` for the policy. A batch's entry is added on its
+  // visits and removed by its own `releaseBatch`, by a successor dropping it
+  // as finished, or by affinity disposal.
+  #batchOwnership = new Map<string, Map<string, number>>();
 
   // CS-10872 (affinity-snapshot diagnostic): per-affinity tracker of
   // in-flight + queued Prerenderer calls. Populated on every
@@ -297,26 +300,27 @@ export class Prerenderer {
     }
   }
 
-  // Release this batch's ownership of an affinity's warm loader (CS-10758
-  // step 3). Called from `IndexRunner`'s `finally` blocks and via the
-  // `/release-batch` HTTP endpoint. No-ops if the caller isn't the current
-  // owner — a successor batch that acquired ownership before the prior
-  // batch got around to releasing should not have its ownership cleared.
+  // Release this batch's hold on an affinity's warm loader. Called from
+  // `IndexRunner`'s `finally` blocks and via the `/release-batch` HTTP
+  // endpoint. Removes only the releasing batch's entry, so a concurrent batch
+  // on the same affinity keeps its protection.
   async releaseBatch({
     batchId,
     affinityType,
     affinityValue,
   }: ReleaseBatchArgs): Promise<void> {
     let affinityKey = toAffinityKey({ affinityType, affinityValue });
-    let owner = this.#batchOwnership.get(affinityKey);
-    if (owner?.batchId === batchId) {
-      this.#batchOwnership.delete(affinityKey);
-      // The job's icon memo has no readers once its batch releases the
-      // affinity (a later job carries a different job key), so drop it
-      // rather than letting it idle until the next job replaces it.
-      this.#renderRunner.clearIconMemo(affinityKey);
-      log.debug(`batch ${batchId} released ownership of ${affinityKey}`);
+    let owners = this.#batchOwnership.get(affinityKey);
+    if (owners?.delete(batchId)) {
+      if (owners.size === 0) {
+        this.#batchOwnership.delete(affinityKey);
+      }
+      log.debug(`batch ${batchId} released its hold on ${affinityKey}`);
     }
+    // The batch's icon memo has no readers once it releases (a later job
+    // carries a different job key), so drop it rather than letting it idle.
+    // Only this batch's: a concurrent job's memo is still being read.
+    this.#renderRunner.releaseIconMemo(affinityKey, batchId);
   }
 
   // Read-only observability accessor used by tests. Callers outside of
@@ -329,18 +333,17 @@ export class Prerenderer {
   // Read-only observability accessor used by tests. Callers outside of
   // tests should not rely on this shape; it's a debugging surface, not a
   // stable API.
-  getBatchOwnership(
-    affinityKey: string,
-  ): { batchId: string; since: number } | undefined {
-    let owner = this.#batchOwnership.get(affinityKey);
-    return owner ? { batchId: owner.batchId, since: owner.since } : undefined;
+  getBatchOwnership(affinityKey: string): BatchOwner[] {
+    return [...(this.#batchOwnership.get(affinityKey) ?? [])].map(
+      ([batchId, since]) => ({ batchId, since }),
+    );
   }
 
   // Read-only observability accessor used by tests. Callers outside of
   // tests should not rely on this shape; it's a debugging surface, not a
   // stable API.
-  getIconMemo(affinityKey: string) {
-    return this.#renderRunner.getIconMemo(affinityKey);
+  getIconMemo(affinityKey: string, jobId?: string) {
+    return this.#renderRunner.getIconMemo(affinityKey, jobId);
   }
 
   // Back-compat static re-export: older callers / tests reference
@@ -357,19 +360,27 @@ export class Prerenderer {
       affinityType: args.affinityType,
       affinityValue: args.affinityValue,
     });
-    let owner = this.#batchOwnership.get(affinityKey);
-    let decision = computeBatchClearCacheGate(args, owner, Date.now());
-    if (decision.newOwner === null) {
+    let owners = this.#batchOwnership.get(affinityKey);
+    let decision = computeBatchClearCacheGate(args, owners, Date.now(), {
+      staleAfterMs: batchStaleAfterMs,
+      isInFlight: (batchId) =>
+        this.#affinityActivity.hasBatchInFlight(affinityKey, batchId),
+    });
+    for (let batchId of decision.drop ?? []) {
+      owners?.delete(batchId);
+      this.#renderRunner.releaseIconMemo(affinityKey, batchId);
+    }
+    if (decision.claim) {
+      if (!owners) {
+        owners = new Map();
+        this.#batchOwnership.set(affinityKey, owners);
+      }
+      owners.set(decision.claim.batchId, decision.claim.since);
+    } else if (owners?.size === 0) {
       this.#batchOwnership.delete(affinityKey);
-    } else if (decision.newOwner) {
-      this.#batchOwnership.set(affinityKey, decision.newOwner);
     }
     if (decision.log) {
-      if (decision.log.level === 'info') {
-        log.info(decision.log.message);
-      } else if (decision.log.level === 'warn') {
-        log.warn(decision.log.message);
-      }
+      log[decision.log.level](decision.log.message);
     }
     return decision.gatedArgs as T;
   }
@@ -738,6 +749,7 @@ export class Prerenderer {
       opts,
       priority,
       jobId,
+      batchId,
       screenshots,
       renderScope,
       cardSource,
@@ -753,6 +765,7 @@ export class Prerenderer {
       'visit',
       'file',
       priority,
+      batchId,
     );
     let onTabAcquired = (info: { pageId: string }) => {
       activity.markRunning();
@@ -801,6 +814,7 @@ export class Prerenderer {
             cardTypes,
             priority,
             jobId,
+            batchId,
             screenshots,
             renderScope,
             cardSource,
@@ -839,6 +853,7 @@ export class Prerenderer {
               cardTypes,
               priority,
               jobId,
+              batchId,
               screenshots,
               renderScope,
               cardSource,

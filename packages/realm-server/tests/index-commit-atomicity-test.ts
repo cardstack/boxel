@@ -149,7 +149,8 @@ module(basename(import.meta.filename), function (hooks) {
   async function latestIndexJobId(): Promise<number> {
     let [row] = (await dbAdapter.execute(
       `SELECT coalesce(max(id), 0)::int AS id FROM jobs
-         WHERE job_type = 'incremental-index' AND concurrency_group = $1`,
+         WHERE job_type = 'incremental-index'
+           AND (concurrency_group = $1 OR lane_family = $1)`,
       { bind: [`indexing:${realm.url}`] },
     )) as { id: number }[];
     return row?.id ?? 0;
@@ -162,7 +163,8 @@ module(basename(import.meta.filename), function (hooks) {
       async () => {
         let [job] = (await dbAdapter.execute(
           `SELECT id, status, result FROM jobs
-             WHERE job_type = 'incremental-index' AND concurrency_group = $1
+             WHERE job_type = 'incremental-index'
+               AND (concurrency_group = $1 OR lane_family = $1)
                AND id > $2 AND status <> 'unfulfilled'
              ORDER BY id LIMIT 1`,
           { bind: [`indexing:${realm.url}`, afterJobId] },
