@@ -5832,11 +5832,14 @@ export class Realm {
         unresolveInstanceIds: (doc) => this.#serveInstanceIdsAsRRI(doc),
         // Read on the realm server's own authority, as the compiled-policy
         // cache reads the policy card. The type keys are the ones the index
-        // engine's own type filter matches an adoption chain against.
+        // engine's own type filter matches an adoption chain against, and a
+        // type's chain is the one its definition-cache entry records.
         policy: {
           compiledPolicy: () => this.getCompiledPolicy(),
           typeKeys: (codeRef) =>
             this.#realmIndexQueryEngine.typeKeysFor(codeRef),
+          adoptionChain: (codeRef) =>
+            this.#definitionLookup.lookupDefinitionTypes(codeRef),
           resolvedLink: (selfLink, relativeTo) =>
             resolvedRelationshipLink(
               selfLink,
