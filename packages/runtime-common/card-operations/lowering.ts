@@ -262,6 +262,13 @@ export async function lowerOperationDeclarations(
     }
     operations[name] = operation;
   }
+  // Carried onto every entry the declaration produced, an invalid one
+  // included, so no finding against a declaration makes it grantable.
+  for (let name of Object.keys(operations)) {
+    if (raw[name]?.nonGrantable === true) {
+      operations[name].nonGrantable = true;
+    }
+  }
   return { operations, issues };
 }
 
@@ -270,7 +277,7 @@ export async function lowerOperationDeclarations(
 // and nothing else.
 class IssueSink {
   readonly issues: OperationLoweringIssue[] = [];
-  private operation: string;
+  readonly operation: string;
 
   constructor(operation: string) {
     this.operation = operation;
@@ -416,7 +423,10 @@ async function lowerOperation(
       operation.query = query;
     }
   }
-  if (base === 'appendContainsMany') {
+  if (
+    base === 'appendContainsMany' &&
+    !isBuiltInAppend(sink.operation, declaration as AppendContainsManyClauses)
+  ) {
     let items = await lowerAppendContainsMany(
       declaration as AppendContainsManyClauses,
       paramNames,
@@ -1526,6 +1536,22 @@ interface AppendContainsManyClauses {
   field?: unknown;
   item?: unknown;
   fields?: Record<string, unknown>;
+}
+
+// An append declared under its own name that names nothing to append is the
+// built-in append, which takes its field and items from each invocation. It
+// lowers to no items, which is what the executor reads as the built-in. Under
+// any other name an append that names nothing is incomplete.
+function isBuiltInAppend(
+  name: string,
+  declaration: AppendContainsManyClauses,
+): boolean {
+  return (
+    name === 'appendContainsMany' &&
+    declaration.field === undefined &&
+    declaration.item === undefined &&
+    declaration.fields === undefined
+  );
 }
 
 // `field: 'events', item: {…}` → `items: { events: {…} }`, and `fields: {…}`

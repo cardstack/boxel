@@ -141,6 +141,16 @@ export interface OperationDefinition {
   // recorded reports. A definition-cache entry is rebuilt on demand, so such
   // an entry is replaced rather than corrected.
   readsActor?: true;
+  // Whether a realm's policy may grant this operation. Set, it may not: the
+  // operation is invocable only by a caller the realm's own ACL allows,
+  // whatever any policy says. It marks the operations that edit or disclose
+  // authorization itself, since a grant that reached one could widen every
+  // other grant.
+  //
+  // Absent means grantable, which is what every operation is unless its
+  // declaration asks otherwise, and what a built-in behavior nothing declared
+  // reports.
+  nonGrantable?: true;
   // Set when lowering found problems. The operation is stored either way, so
   // invoking it reports what is wrong with it rather than "unknown
   // operation".

@@ -5843,6 +5843,7 @@ export class Realm {
               relativeTo,
               this.#virtualNetwork,
             ),
+          policyCard: async () => (await this.getRealmPolicy())?.card,
         },
       };
     }
