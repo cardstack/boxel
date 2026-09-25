@@ -579,7 +579,7 @@ class Isolated extends Component<typeof Workspace> {
             {{! workspace signage; the purpose annotation shows on hover or focus
             and is read after the badge text }}
             {{#if @model.purpose}}
-              <Tooltip @placement='bottom'>
+              <Tooltip class='signage-tooltip' @placement='bottom'>
                 <:trigger>
                   <span class='signage kicker' tabindex='0'>
                     {{@model.signage}}<span class='boxel-sr-only'>:
@@ -1442,8 +1442,9 @@ class Isolated extends Component<typeof Workspace> {
       }
       .frame-lead {
         display: flex;
+        flex-wrap: wrap;
         align-items: center;
-        gap: var(--boxel-sp);
+        gap: var(--boxel-sp-xs) var(--boxel-sp);
         min-width: 0;
       }
       .tabs {
@@ -1489,7 +1490,13 @@ class Isolated extends Component<typeof Workspace> {
         border-radius: var(--boxel-border-radius-sm);
         color: var(--muted-foreground);
         white-space: nowrap;
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
         cursor: default;
+      }
+      .signage-tooltip {
+        max-width: 100%;
       }
       .space-desc {
         font-size: var(--boxel-font-size-sm);

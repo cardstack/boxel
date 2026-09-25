@@ -141,8 +141,9 @@ export default class CardsGridLayout extends Component<Signature> {
       {{/unless}}
       <section
         class='content scroll-container'
-        tabindex='0'
+        tabindex={{if @isContentInert '-1' '0'}}
         aria-label={{@activeFilter.displayName}}
+        data-test-cards-grid-content
       >
         <header class='content-header' data-test-cards-grid-header>
           <div class='content-header-group content-header-lead'>

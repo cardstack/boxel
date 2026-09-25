@@ -108,7 +108,7 @@ module('Integration | Card | workspace | Library rail', function (hooks) {
       .hasAria('controls', find(RAIL)!.id, 'the toggle names the rail');
 
     await click(TOGGLE);
-    assert.dom(RAIL_SLOT).hasAttribute('inert', 'the rail is hidden');
+    assert.dom(RAIL_SLOT).hasAttribute('inert', '', 'the rail is hidden');
     assert.dom(TOGGLE).hasAria('expanded', 'false');
     assert.dom(TOGGLE).hasAria('label', 'Show Sidebar');
     assert.dom(TOGGLE).isFocused('focus stays on the toggle');
@@ -148,7 +148,7 @@ module('Integration | Card | workspace | Library rail', function (hooks) {
     await waitUntil(() => find(RAIL_SLOT)?.hasAttribute('inert'));
     assert
       .dom(RAIL_SLOT)
-      .hasAttribute('inert', 'the rail starts closed in a narrow pane');
+      .hasAttribute('inert', '', 'the rail starts closed in a narrow pane');
     assert.dom(TOGGLE).hasAria('expanded', 'false');
 
     assert
@@ -157,6 +157,9 @@ module('Integration | Card | workspace | Library rail', function (hooks) {
         'inert',
         'the grid is usable while the rail is shut',
       );
+    assert
+      .dom('[data-test-cards-grid-content]')
+      .hasAttribute('tabindex', '0', 'the grid scroll region is a tab stop');
 
     await click(TOGGLE);
     assert
@@ -165,10 +168,23 @@ module('Integration | Card | workspace | Library rail', function (hooks) {
     assert.dom(TOGGLE).hasAria('expanded', 'true');
     assert
       .dom('[data-test-cards-grid-cards]')
-      .hasAttribute('inert', 'the grid the open rail pushes aside is inert');
+      .hasAttribute(
+        'inert',
+        '',
+        'the grid the open rail pushes aside is inert',
+      );
     assert
-      .dom(TOGGLE)
-      .doesNotHaveAttribute('inert', 'the toggle stays usable to close it');
+      .dom('[data-test-cards-grid-content]')
+      .hasAttribute(
+        'tabindex',
+        '-1',
+        'the covered grid scroll region drops out of the tab order',
+      );
+    assert.strictEqual(
+      find(TOGGLE)?.closest('[inert]'),
+      null,
+      'the toggle stays usable to close it',
+    );
   });
 });
 
