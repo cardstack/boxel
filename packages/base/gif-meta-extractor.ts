@@ -3,6 +3,7 @@ import {
   prunedColorProfile,
   type ImageColorProfile,
 } from './image-color-profile';
+import { animatedFromVerdict, type AnimationVerdict } from './image-animation';
 
 // GIF files start with either "GIF87a" or "GIF89a" (6 bytes)
 const GIF87A_SIGNATURE = new Uint8Array([0x47, 0x49, 0x46, 0x38, 0x37, 0x61]);
@@ -78,4 +79,98 @@ export function extractGifColorProfile(
       : undefined,
     channels: 3,
   });
+}
+
+// GIF block introducers, as they appear after the header and global color
+// table.
+const EXTENSION_INTRODUCER = 0x21;
+const IMAGE_DESCRIPTOR = 0x2c;
+const TRAILER = 0x3b;
+const LOCAL_COLOR_TABLE_FLAG = 0x80;
+const COLOR_TABLE_SIZE_MASK = 0x07;
+const IMAGE_DESCRIPTOR_BYTES = 10;
+
+// A GIF animates when it holds more than one image, and nothing short of
+// walking its blocks says how many it holds: the NETSCAPE2.0 loop extension
+// is conventional but optional, so a multi-frame GIF without it still plays
+// once. The walk skips every extension and every frame's data sub-blocks,
+// stopping at a second image descriptor (animated) or the trailer (still).
+//
+// `needs-bytes` when `bytes` runs out first — the caller's read window may end
+// mid-frame. `undecidable` for bytes that aren't a GIF, or a block introducer
+// the walk doesn't recognize, since reading further can't change either.
+export function gifAnimationVerdict(bytes: Uint8Array): AnimationVerdict {
+  let signatureBytes = Math.min(bytes.length, GIF89A_SIGNATURE.length);
+  let isGifPrefix = [GIF87A_SIGNATURE, GIF89A_SIGNATURE].some((signature) =>
+    signature.subarray(0, signatureBytes).every((b, i) => bytes[i] === b),
+  );
+  if (!isGifPrefix) {
+    return 'undecidable';
+  }
+  if (bytes.length <= LOGICAL_SCREEN_PACKED_OFFSET + 2) {
+    return 'needs-bytes';
+  }
+  let packed = bytes[LOGICAL_SCREEN_PACKED_OFFSET]!;
+  let offset = LOGICAL_SCREEN_PACKED_OFFSET + 3;
+  if (packed & GLOBAL_COLOR_TABLE_FLAG) {
+    offset += 3 * 2 ** ((packed & GLOBAL_COLOR_TABLE_SIZE_MASK) + 1);
+  }
+
+  // Skips a run of data sub-blocks (each a length byte then that many bytes,
+  // ended by a zero length), returning the offset past the terminator.
+  let skipSubBlocks = (start: number): number | undefined => {
+    let at = start;
+    while (at < bytes.length) {
+      let length = bytes[at]!;
+      at += 1;
+      if (length === 0) {
+        return at;
+      }
+      at += length;
+    }
+    return undefined;
+  };
+
+  let frames = 0;
+  while (offset < bytes.length) {
+    let introducer = bytes[offset]!;
+    if (introducer === TRAILER) {
+      return 'still';
+    }
+    if (introducer === EXTENSION_INTRODUCER) {
+      // Introducer, label, then the extension's sub-blocks.
+      let next = skipSubBlocks(offset + 2);
+      if (next === undefined) {
+        return 'needs-bytes';
+      }
+      offset = next;
+      continue;
+    }
+    if (introducer !== IMAGE_DESCRIPTOR) {
+      return 'undecidable';
+    }
+    frames += 1;
+    if (frames > 1) {
+      return 'animated';
+    }
+    if (offset + IMAGE_DESCRIPTOR_BYTES > bytes.length) {
+      return 'needs-bytes';
+    }
+    let descriptorPacked = bytes[offset + IMAGE_DESCRIPTOR_BYTES - 1]!;
+    offset += IMAGE_DESCRIPTOR_BYTES;
+    if (descriptorPacked & LOCAL_COLOR_TABLE_FLAG) {
+      offset += 3 * 2 ** ((descriptorPacked & COLOR_TABLE_SIZE_MASK) + 1);
+    }
+    // The LZW minimum code size byte, then the frame's data sub-blocks.
+    let next = skipSubBlocks(offset + 1);
+    if (next === undefined) {
+      return 'needs-bytes';
+    }
+    offset = next;
+  }
+  return 'needs-bytes';
+}
+
+export function extractGifAnimated(bytes: Uint8Array): boolean | undefined {
+  return animatedFromVerdict(gifAnimationVerdict(bytes));
 }
