@@ -15,10 +15,10 @@ import UpdateRoomSkillsTool from '@cardstack/boxel-host/commands/update-room-ski
 import { Button, FieldContainer } from '@cardstack/boxel-ui/components';
 
 const SKILL_OPTIONS: Array<{ id: string; title: string }> = [
-  { id: 'Skill/boxel-environment', title: 'Boxel Environment' },
-  { id: 'Skill/boxel-development', title: 'Boxel Development' },
-  { id: 'Skill/source-code-editing', title: 'Source Code Editing' },
-  { id: 'Skill/catalog-listing', title: 'Catalog Listing' },
+  { id: 'skills/boxel-environment/SKILL.md', title: 'Boxel Environment' },
+  { id: 'skills/boxel/SKILL.md', title: 'Boxel Development' },
+  { id: 'skills/source-code-editing/SKILL.md', title: 'Source Code Editing' },
+  { id: 'skills/catalog-listing/SKILL.md', title: 'Catalog Listing' },
 ];
 
 function ensureTrailingSlash(url: string) {
@@ -336,7 +336,7 @@ class Isolated extends Component<typeof UpdateRoomSkillsExample> {
           <textarea
             rows='3'
             value={{@model.manualActivationTargets}}
-            placeholder='boxel-environment, catalog-listing'
+            placeholder='skills/boxel-environment/SKILL.md, skills/catalog-listing/SKILL.md'
             {{on 'input' (fn this.updateManualList 'activate')}}
           ></textarea>
           <p class='hint'>Comma or newline separated list.</p>
@@ -346,7 +346,7 @@ class Isolated extends Component<typeof UpdateRoomSkillsExample> {
           <textarea
             rows='3'
             value={{@model.manualDeactivationTargets}}
-            placeholder='source-code-editing'
+            placeholder='skills/source-code-editing/SKILL.md'
             {{on 'input' (fn this.updateManualList 'deactivate')}}
           ></textarea>
           <p class='hint'>Comma or newline separated list.</p>

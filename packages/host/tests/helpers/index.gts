@@ -122,9 +122,7 @@ export function testModuleRRI(path: string): RealmResourceIdentifier {
 export {
   catalogRealmURL,
   skillsRealmURL,
-  skillCardURL,
   skillFileURL,
-  devSkillId,
   skillsIndexId,
 } from '@cardstack/host/lib/utils';
 
