@@ -151,11 +151,24 @@ module('Integration | Card | workspace | Library rail', function (hooks) {
       .hasAttribute('inert', 'the rail starts closed in a narrow pane');
     assert.dom(TOGGLE).hasAria('expanded', 'false');
 
+    assert
+      .dom('[data-test-cards-grid-cards]')
+      .doesNotHaveAttribute(
+        'inert',
+        'the grid is usable while the rail is shut',
+      );
+
     await click(TOGGLE);
     assert
       .dom(RAIL_SLOT)
       .doesNotHaveAttribute('inert', 'the toggle still opens it');
     assert.dom(TOGGLE).hasAria('expanded', 'true');
+    assert
+      .dom('[data-test-cards-grid-cards]')
+      .hasAttribute('inert', 'the grid the open rail pushes aside is inert');
+    assert
+      .dom(TOGGLE)
+      .doesNotHaveAttribute('inert', 'the toggle stays usable to close it');
   });
 });
 

@@ -995,7 +995,11 @@ class Isolated extends Component<typeof Workspace> {
           {{! Stays mounted so it can slide shut; inert while closed keeps its
             controls out of the tab order and the accessibility tree. }}
           <div
-            class='rail-slot {{if this.isRailOpen "open"}}'
+            class={{cn
+              'rail-slot'
+              open=this.isRailOpen
+              animates=this.railAnimates
+            }}
             inert={{if this.isRailOpen false true}}
             data-test-library-rail-slot
           >
@@ -1064,6 +1068,7 @@ class Isolated extends Component<typeof Workspace> {
             class='library-grid'
             @format='fitted'
             @displaySidebar={{false}}
+            @isContentInert={{this.isGridCovered}}
             @context={{@context}}
             @query={{this.query}}
             @realms={{this.realms}}
@@ -1224,12 +1229,14 @@ class Isolated extends Component<typeof Workspace> {
               <div class='feed'>
                 {{#each this.visibleFeed as |item|}}
                   {{#if item.showDay}}
-                    <div class='feed-day'>
+                    {{! a heading, not a div: the rows' zebra striping counts
+                      divs, so a div here would shift it at every day }}
+                    <h3 class='feed-day'>
                       <span
                         class='feed-day-label kicker'
                       >{{item.dayLabel}}</span>
                       <span class='feed-day-rule' />
-                    </div>
+                    </h3>
                   {{/if}}
                   <div class='feed-row' data-test-feed-row>
                     <time
@@ -1355,6 +1362,11 @@ class Isolated extends Component<typeof Workspace> {
         --grid-search-width: 10.625rem;
         --grid-search-results-size: 20rem;
         --grid-frame-height: 3.375rem;
+        /* the tab strip's height: an extra-small tab plus the strip's padding
+           and border; the search input matches it */
+        --grid-tabs-height: calc(
+          var(--boxel-button-xs) + 2 * var(--boxel-sp-4xs) + 2px
+        );
         --grid-bar-height: 2.875rem;
         --grid-readme-width: 45rem;
         --grid-readme-collapsed-height: 12.5rem;
@@ -1440,8 +1452,7 @@ class Isolated extends Component<typeof Workspace> {
         padding: var(--boxel-sp-4xs);
         background-color: var(--muted);
         border: 1px solid var(--grid-chip-border);
-        /* outer radius = the tabs' radius + the strip padding */
-        border-radius: var(--boxel-border-radius);
+        border-radius: var(--boxel-border-radius-sm);
       }
       .nav-tab {
         --boxel-button-border: none;
@@ -1515,7 +1526,10 @@ class Isolated extends Component<typeof Workspace> {
         color: var(--subtle-foreground);
       }
       .search-box .search-input {
-        --boxel-input-height: 0;
+        /* BoxelInput draws its border from --border; this is the input
+           element itself, so nothing inherits it. Same edge as the tabs. */
+        --border: var(--grid-chip-border);
+        --boxel-input-height: var(--grid-tabs-height);
         --boxel-form-control-border-radius: var(--boxel-border-radius-sm);
         width: var(--grid-search-width);
         /* right padding clears the widest hint (Ctrl+K) while it shows */
@@ -1641,6 +1655,11 @@ class Isolated extends Component<typeof Workspace> {
         justify-content: flex-end;
         width: 0;
         overflow: hidden;
+      }
+      /* only a toggle slides it; the first width reading and resizes across
+         the breakpoint snap, so a narrow card doesn't open the Library with
+         the rail sliding shut */
+      .rail-slot.animates {
         transition: width var(--grid-slide) var(--grid-ease-out);
       }
       .rail-slot.open {
@@ -2132,6 +2151,7 @@ class Isolated extends Component<typeof Workspace> {
         display: flex;
         align-items: center;
         gap: var(--boxel-sp-xs);
+        font-size: inherit;
         margin-top: var(--boxel-sp-2xs);
       }
       .feed-day:first-child {
@@ -2178,6 +2198,8 @@ class Isolated extends Component<typeof Workspace> {
         .feed-row {
           grid-template-columns: 4.5rem minmax(0, 1fr);
           gap: var(--boxel-sp-xs);
+          padding: var(--boxel-sp-2xs);
+          border-radius: var(--boxel-sp-xs);
         }
         .feed-row:nth-of-type(even) {
           background-color: var(--stripe);
@@ -2470,18 +2492,26 @@ class Isolated extends Component<typeof Workspace> {
           padding: var(--boxel-sp);
         }
       }
-      /* only once the frame is too narrow for the search to sit beside the
-         tabs does it take its own row at full width */
+      /* phone widths: the tabs and the search each take a full row, and the
+         results match the search's width */
       @container (width < 30rem) {
+        .frame-lead,
         .frame-actions {
           flex-basis: 100%;
         }
+        .tabs,
         .search-box {
           flex-grow: 1;
+        }
+        .nav-tab {
+          flex: 1;
         }
         .search-box .search-input,
         .search-results {
           width: 100%;
+        }
+        .search-box .search-input {
+          background-color: var(--field);
         }
       }
       @media (prefers-reduced-motion: reduce) {
@@ -2492,7 +2522,7 @@ class Isolated extends Component<typeof Workspace> {
         }
         .card-grid .dock-mini,
         .dock-mini-fill,
-        .rail-slot {
+        .rail-slot.animates {
           transition: none;
         }
       }
@@ -2539,11 +2569,19 @@ class Isolated extends Component<typeof Workspace> {
     return this.railPreference ?? !this.isLibraryNarrow;
   }
 
+  @tracked private railAnimates = false;
+
+  // Under the breakpoint the open rail pushes part of the grid out of view.
+  private get isGridCovered(): boolean {
+    return this.isLibraryNarrow && this.isRailOpen;
+  }
+
   private get railToggleLabel(): string {
     return this.isRailOpen ? 'Hide Sidebar' : 'Show Sidebar';
   }
 
   @action private toggleRail() {
+    this.railAnimates = true;
     this.railPreference = !this.isRailOpen;
   }
 

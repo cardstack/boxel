@@ -107,6 +107,9 @@ interface Signature {
     onChangeSort: (sort: SortOption) => void;
     onChangeView: (viewId: ViewOption['id']) => void;
     displaySidebar?: boolean;
+    // Takes everything but the contentHeaderStart block out of interaction,
+    // for when something else covers the pane, such as a sliding sidebar.
+    isContentInert?: boolean;
   };
   Blocks: {
     content: [];
@@ -162,7 +165,10 @@ export default class CardsGridLayout extends Component<Signature> {
               </h2>
             </div>
           </div>
-          <div class='content-header-group content-header-actions'>
+          <div
+            class='content-header-group content-header-actions'
+            inert={{if @isContentInert true false}}
+          >
             {{#if this.displayActions}}
               <ViewSelector
                 @items={{@viewOptions}}
@@ -179,7 +185,11 @@ export default class CardsGridLayout extends Component<Signature> {
           </div>
         </header>
         {{#if (eq @activeFilter.displayName 'Highlights')}}
-          <div class='highlights-layout' data-test-highlights-layout>
+          <div
+            class='highlights-layout'
+            inert={{if @isContentInert true false}}
+            data-test-highlights-layout
+          >
             {{#if this.aiAppGeneratorCard}}
               <div
                 class='highlights-section'
@@ -242,6 +252,7 @@ export default class CardsGridLayout extends Component<Signature> {
             @format={{@format}}
             @cards={{@activeFilter.cards}}
             @viewOption={{@activeViewId}}
+            inert={{if @isContentInert true false}}
             data-test-cards-grid-cards
           />
         {{/if}}
