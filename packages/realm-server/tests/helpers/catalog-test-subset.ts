@@ -19,7 +19,7 @@ import { localCatalogRealm } from './index.ts';
 // Written by packages/catalog/scripts/sync-test-subset.ts next to the files.
 const MARKER_FILE = 'catalog-test-subset.txt';
 
-export interface CatalogTestSubsetManifest {
+interface Manifest {
   repository: string;
   revision: string;
   files: { path: string }[];
@@ -42,7 +42,7 @@ export function setupCatalogTestSubset(hooks: NestedHooks) {
   });
 }
 
-export function catalogTestSubsetManifest(): CatalogTestSubsetManifest {
+function readManifest(): Manifest {
   return JSON.parse(
     readFileSync(
       join(
@@ -59,7 +59,7 @@ export function catalogTestSubsetManifest(): CatalogTestSubsetManifest {
 }
 
 // A subset file's source as the stack's catalog realm serves it.
-export async function servedCatalogSubsetFile(path: string): Promise<string> {
+async function servedFile(path: string): Promise<string> {
   let url = `${localCatalogRealm}${path}`;
   let response = await fetch(url, {
     headers: { Accept: SupportedMimeType.CardSource },
@@ -71,7 +71,7 @@ export async function servedCatalogSubsetFile(path: string): Promise<string> {
 }
 
 async function verifyServedSubset() {
-  let manifest = catalogTestSubsetManifest();
+  let manifest = readManifest();
   let markerURL = `${localCatalogRealm}${MARKER_FILE}`;
   let response = await fetch(markerURL, {
     headers: { Accept: SupportedMimeType.CardSource },
@@ -84,27 +84,33 @@ async function verifyServedSubset() {
     );
   }
   let marker = (await response.json()) as Marker;
+  // A marker from a local checkout names no pin to compare with, but what it
+  // served can still diverge or be edited, so only the pin checks are skipped.
   if (marker.source === 'local') {
     console.warn(
       `The catalog test subset is served from a local catalog checkout (CATALOG_TEST_SUBSET_SOURCE), not the pinned ${manifest.revision}.`,
     );
-    return;
-  }
-  let expectedFiles = manifest.files.map((f) => f.path).sort();
-  if (
-    marker.revision !== manifest.revision ||
-    JSON.stringify([...marker.files].sort()) !== JSON.stringify(expectedFiles)
-  ) {
-    throw new Error(
-      `The catalog test subset is stale: the stack serves ${marker.revision}, the manifest pins ${manifest.revision}. ` +
-        `Run \`pnpm --dir packages/catalog catalog:test-subset\` (add --into-clone when the stack serves the full catalog clone); the running realm picks the files up without a restart.`,
-    );
+  } else {
+    let expectedFiles = manifest.files.map((f) => f.path).sort();
+    if (
+      marker.revision !== manifest.revision ||
+      JSON.stringify([...marker.files].sort()) !== JSON.stringify(expectedFiles)
+    ) {
+      throw new Error(
+        `The catalog test subset is stale: the stack serves ${marker.revision}, the manifest pins ${manifest.revision}. ` +
+          `Run \`pnpm --dir packages/catalog catalog:test-subset\` (add --into-clone when the stack serves the full catalog clone); the running realm picks the files up without a restart.`,
+      );
+    }
   }
   if (marker.divergent.length > 0) {
     throw new Error(
-      `The catalog clone the stack serves differs from the pinned ${manifest.revision} for ${marker.divergent.join(', ')}. ` +
-        `Bump the pin in packages/catalog/test-subset.json, reset those files in packages/catalog/contents, ` +
-        `or restart the stack with CATALOG_TEST_SUBSET_SOURCE=packages/catalog/contents to test against the clone.`,
+      marker.source === 'local'
+        ? `The catalog clone the stack serves has its own copy of ${marker.divergent.join(', ')}, which differs from the local checkout the sync read (CATALOG_TEST_SUBSET_SOURCE). ` +
+            `The stack serves the clone's copy, so these tests would not see your change. ` +
+            `Serve the checkout on a stack that serves only the subset (CATALOG_SOURCE=test-subset, as \`mise run test-services:realm-server\` does), or make the change in packages/catalog/contents itself.`
+        : `The catalog clone the stack serves differs from the pinned ${manifest.revision} for ${marker.divergent.join(', ')}. ` +
+            `Bump the pin in packages/catalog/test-subset.json, reset those files in packages/catalog/contents, ` +
+            `or restart the stack with CATALOG_TEST_SUBSET_SOURCE=packages/catalog/contents to test against the clone.`,
     );
   }
   // A stack started from a checkout whose sync predates the hashes serves a
@@ -119,7 +125,7 @@ async function verifyServedSubset() {
   let edited: string[] = [];
   for (let { path } of manifest.files) {
     let served = createHash('sha256')
-      .update(await servedCatalogSubsetFile(path))
+      .update(await servedFile(path))
       .digest('hex');
     if (served !== marker.hashes[path]) {
       edited.push(path);
@@ -127,10 +133,13 @@ async function verifyServedSubset() {
   }
   if (edited.length > 0) {
     throw new Error(
-      `The catalog realm serves an edited copy of ${edited.join(', ')}: it differs from what the sync wrote from the pinned ${manifest.revision}. ` +
-        `A subset definition is changed in ${manifest.repository}, never in packages/catalog/test-subset or the catalog clone. ` +
-        `To test a change, serve a catalog checkout with CATALOG_TEST_SUBSET_SOURCE=<dir> (see .claude/skills/catalog-test-subset). ` +
-        `To restore the pinned files, delete packages/catalog/test-subset and re-run \`pnpm --dir packages/catalog catalog:test-subset\`, or reset the file in packages/catalog/contents when the stack serves the clone.`,
+      marker.source === 'local'
+        ? `The catalog realm serves ${edited.join(', ')}, which differs from what the sync copied from the local checkout (CATALOG_TEST_SUBSET_SOURCE). ` +
+            `Re-run \`pnpm --dir packages/catalog catalog:test-subset\` after each edit to the checkout, and never edit packages/catalog/test-subset, which the sync overwrites.`
+        : `The catalog realm serves an edited copy of ${edited.join(', ')}: it differs from what the sync wrote from the pinned ${manifest.revision}. ` +
+            `A subset definition is changed in ${manifest.repository}, never in packages/catalog/test-subset or the catalog clone. ` +
+            `To test a change, serve a catalog checkout with CATALOG_TEST_SUBSET_SOURCE=<dir> (see .claude/skills/catalog-test-subset). ` +
+            `To restore the pinned files, delete packages/catalog/test-subset and re-run \`pnpm --dir packages/catalog catalog:test-subset\`, or reset the file in packages/catalog/contents when the stack serves the clone.`,
     );
   }
 }

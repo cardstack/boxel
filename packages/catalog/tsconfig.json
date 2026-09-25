@@ -52,5 +52,5 @@
     "types": ["@cardstack/local-types", "qunit", "qunit-dom"]
   },
   "include": ["../host/types/**/*", "**/*.d.ts", "**/*.ts", "**/*.gts"],
-  "exclude": ["node_modules", "test-subset"]
+  "exclude": ["node_modules", "test-subset", "scripts"]
 }

@@ -7,6 +7,10 @@
 //   node scripts/sync-test-subset.ts --remove-from-clone
 //   node scripts/sync-test-subset.ts --bump          re-pin to catalog main
 //   node scripts/sync-test-subset.ts --check-pin     fail unless main contains the pin
+//                                                    and matches it on every subset file
+//   node scripts/sync-test-subset.ts --check-no-copies=<dir>
+//                                                    fail when <dir> holds a copy of a
+//                                                    subset definition
 //   node scripts/sync-test-subset.ts --touch=<test-subset|clone>
 //
 // `test-subset/` is served as the catalog realm by stacks that start with
@@ -35,7 +39,7 @@ import {
   rmSync,
   writeFileSync,
 } from 'node:fs';
-import { dirname, join, relative, resolve } from 'node:path';
+import { basename, dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const catalogDir = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -420,7 +424,16 @@ function mergeIntoClone(
   if (added.length) {
     log(`added to the catalog clone: ${added.join(', ')}`);
   }
-  if (divergent.length) {
+  if (divergent.length && source === 'local') {
+    // The clone's own copy is what the stack serves, so the checkout the
+    // files were read from never reaches it.
+    console.warn(
+      `catalog test subset: the catalog clone has its own copy of ${divergent.join(', ')}, which differs from ${process.env.CATALOG_TEST_SUBSET_SOURCE}. ` +
+        `A stack serving the clone serves the clone's copy, so tests that use these definitions will fail rather than test your checkout. ` +
+        `Serve the checkout on a stack that serves only the subset (CATALOG_SOURCE=test-subset, as mise run test-services:realm-server does), ` +
+        `or make the change in packages/catalog/contents itself.`,
+    );
+  } else if (divergent.length) {
     console.warn(
       `catalog test subset: the catalog clone's copy differs from the pinned revision for ${divergent.join(', ')}. ` +
         `Tests that use these definitions will fail until the clone matches the pin: ` +
@@ -428,6 +441,63 @@ function mergeIntoClone(
         `or set CATALOG_TEST_SUBSET_SOURCE=packages/catalog/contents to test against the clone.`,
     );
   }
+}
+
+// A subset definition's only source is the catalog. A copy of one in this
+// repo, whether a file named like a subset file or a class named like one a
+// subset file exports, drifts from the definition deployments serve while
+// tests keep passing against it.
+function checkNoCopies(
+  manifest: Manifest,
+  contents: Map<string, string>,
+  dir: string,
+) {
+  let classNames = new Set<string>();
+  for (let source of contents.values()) {
+    for (let [, name] of source.matchAll(
+      /^export\s+(?:default\s+)?class\s+(\w+)/gm,
+    )) {
+      classNames.add(name);
+    }
+  }
+  let fileNames = new Set([...contents.keys()].map((path) => basename(path)));
+  let declaration = classNames.size
+    ? new RegExp(`\\bclass\\s+(${[...classNames].join('|')})\\b`)
+    : undefined;
+  let copies: string[] = [];
+  let visit = (current: string) => {
+    for (let entry of readdirSync(current, { withFileTypes: true })) {
+      let path = join(current, entry.name);
+      if (entry.isDirectory()) {
+        if (
+          !entry.name.startsWith('.') &&
+          !['node_modules', 'dist', 'declarations', 'tmp'].includes(entry.name)
+        ) {
+          visit(path);
+        }
+      } else if (/\.g?[jt]s$/.test(entry.name)) {
+        if (fileNames.has(entry.name)) {
+          copies.push(`${relative(repoRoot, path)} has a subset file's name`);
+        }
+        let match =
+          declaration && readFileSync(path, 'utf8').match(declaration);
+        if (match) {
+          copies.push(`${relative(repoRoot, path)} declares ${match[1]}`);
+        }
+      }
+    }
+  };
+  visit(dir);
+  if (copies.length) {
+    fail(
+      `${relative(repoRoot, dir)} holds a copy of a catalog test subset definition:\n  ${copies.join('\n  ')}\n` +
+        `The definitions packages/catalog/test-subset.json lists live only in ${manifest.repository}. ` +
+        `Change them there and re-pin (see .claude/skills/catalog-test-subset).`,
+    );
+  }
+  log(
+    `${relative(repoRoot, dir)} holds no copy of a subset definition (${[...classNames].join(', ')})`,
+  );
 }
 
 function bump(manifest: Manifest) {
@@ -527,6 +597,7 @@ function touch(where: string) {
 async function main() {
   let args = new Set(process.argv.slice(2));
   let touchArg = [...args].find((a) => a.startsWith('--touch='));
+  let noCopiesArg = [...args].find((a) => a.startsWith('--check-no-copies='));
   if (touchArg) {
     touch(touchArg.slice('--touch='.length));
     return;
@@ -556,6 +627,14 @@ async function main() {
     fail(message);
   }
   let { contents, source } = loaded;
+  if (noCopiesArg) {
+    checkNoCopies(
+      manifest,
+      contents,
+      resolve(noCopiesArg.slice('--check-no-copies='.length)),
+    );
+    return;
+  }
   checkClosure(contents);
 
   if ('unchanged' in loaded && loaded.unchanged) {
