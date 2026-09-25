@@ -46,12 +46,12 @@ import type { OperationQueryFilterTemplate } from './types.ts';
 //   whole values, so a filter can refuse a card that `contains` admits. And
 //   the index answers `not` element by element: a card is admitted by
 //   `not member` as soon as any one element differs.
-// - A card's id. The predicate reads every id as the URL it resolves to. The
-//   index holds a link it could not follow as the stored source wrote it, and
-//   a card in a prefixed realm under its prefixed identifier, so it can find
-//   two ids unequal that the predicate finds equal. An id is compared only
-//   with an absolute URL for the same reason: a constant spelled the way the
-//   index can hold an id would match there, and never the URL the predicate
+// - A card's id. The predicate reads every link as the URL it resolves to,
+//   and the index holds a link it could not follow as the stored source wrote
+//   it, so the index can find two ids unequal that the predicate finds equal.
+//   The same difference is why an id is compared only with an absolute URL,
+//   in a `not` or out of one: a constant spelled the way the stored source
+//   wrote a link would match the index, and never the URL the predicate
 //   reads.
 //
 // What the checks do not reach:
