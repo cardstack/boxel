@@ -7,7 +7,7 @@
 import { module, test } from 'qunit';
 import { render, fillIn } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
-import { UsageCssVariable } from '../freestyle';
+import { UsageCssVariable } from './usage-css-variable';
 
 module('Pretui | components/usage-css-variable', function (hooks) {
   setupCardTest(hooks);

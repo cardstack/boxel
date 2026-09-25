@@ -1,28 +1,12 @@
 // Pretui — where each component's usage page and examples live, loaded on
 // demand.
 //
-// A page lives at components/<kebab-name>.usage unless DEMO_MODULES names
-// another module. Nothing here imports a page: the Spec card loads the one it
+// A page lives at components/<kebab-name>.usage, beside the component it
+// documents. Nothing here imports a page: the Spec card loads the one it
 // shows when it renders, so the card's import closure stays the modules it
 // draws rather than every page and every component they reach.
 import type { Loader } from '@cardstack/runtime-common';
 import type { ExampleSpec } from './examples-kit';
-
-/** Pages the naming rule does not find: shared usage pages. Every entry names a module in this package. */
-export const DEMO_MODULES: Record<string, string> = {
-  CopyButton: './components/extras.usage',
-  EmailInput: './components/extras.usage',
-  InputGroup: './components/extras.usage',
-  Label: './components/extras.usage',
-  NumberInput: './components/extras.usage',
-  OtpInput: './components/composites.usage',
-  PasswordInput: './components/extras.usage',
-  PhoneInput: './components/extras.usage',
-  SearchInput: './components/extras.usage',
-  Stepper: './components/extras.usage',
-  TimeInput: './components/composites.usage',
-  UrlInput: './components/extras.usage',
-};
 
 export interface DemoSubject {
   name: string;
@@ -37,13 +21,9 @@ function kebabName(name: string): string {
 /**
  * The module holding `subject`'s usage page, relative to the realm root, or
  * undefined when it has none to look for. Planned, host and Runtime entries
- * have no page unless DEMO_MODULES names one.
+ * have no page.
  */
 export function demoModuleFor(subject: DemoSubject): string | undefined {
-  let named = DEMO_MODULES[subject.name];
-  if (named) {
-    return named;
-  }
   if (
     subject.stage === 'planned' ||
     subject.stage === 'host' ||

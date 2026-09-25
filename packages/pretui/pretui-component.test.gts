@@ -4,7 +4,7 @@ import { module, test } from 'qunit';
 import { render, waitFor, click, fillIn } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
 import { PretUISpec } from './pretui-component';
-import { DEMO_MODULES, loadDemo, siblingHref } from './demo-locations';
+import { loadDemo, siblingHref } from './demo-locations';
 import { PretuiNote } from './pretui-note';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -48,9 +48,22 @@ module('Pretui | PretUISpec', function (hooks) {
     assert.dom('[data-demo-policy="excluded"]').exists();
   });
 
-  test('every named usage module holds its page', async function (assert) {
-    for (let name of Object.keys(DEMO_MODULES)) {
-      assert.ok(await loadDemo({ name }), `${name} at ${DEMO_MODULES[name]}`);
+  test('each input page loads from its own usage module', async function (assert) {
+    for (let name of [
+      'OtpInput',
+      'TimeInput',
+      'Label',
+      'CopyButton',
+      'Stepper',
+      'InputGroup',
+      'EmailInput',
+      'PhoneInput',
+      'NumberInput',
+      'PasswordInput',
+      'SearchInput',
+      'UrlInput',
+    ]) {
+      assert.ok(await loadDemo({ name }), name);
     }
   });
 

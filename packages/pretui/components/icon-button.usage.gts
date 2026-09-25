@@ -1,7 +1,7 @@
 // Pretui — IconButton usage page.
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { FreestyleUsage } from '../freestyle';
+import { FreestyleUsage } from './freestyle-usage';
 import { IconButton } from './icon-button';
 import type { ButtonVariant } from './button';
 

@@ -1,9 +1,9 @@
 // Pretui — Alert usage page.
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { FreestyleUsage } from '../freestyle';
-import { Alert } from '../feedback';
-import { Button } from '../controls';
+import { FreestyleUsage } from './freestyle-usage';
+import { Alert } from './alert';
+import { Button } from './button';
 
 // ── Alert ← alert/usage.gts ──────────────────────────────────────────────
 // feedback.gts keeps AlertTone module-private; mirror it for the cast getter.

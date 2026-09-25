@@ -1,8 +1,8 @@
 // Pretui — PinInput usage page.
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { FreestyleUsage } from '../freestyle';
-import { PinInput } from './composites';
+import { FreestyleUsage } from './freestyle-usage';
+import { PinInput } from './pin-input';
 
 class PinInputUsage extends Component {
   @tracked value = '';

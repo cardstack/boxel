@@ -7,7 +7,7 @@
 import { module, test } from 'qunit';
 import { render } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
-import { UsageArgument } from '../freestyle';
+import { UsageArgument } from './usage-argument';
 
 function cellTexts(): string[] {
   return Array.from(document.querySelectorAll('tr.FreestyleUsageArgument td')).map((td) => td.textContent?.replace(/\s+/g, ' ').trim() ?? '');

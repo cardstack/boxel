@@ -12,24 +12,18 @@ import { module, test } from 'qunit';
 import { render, click, fillIn } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
 import { tracked } from '@glimmer/tracking';
-import {
-  Button,
-  Checkbox,
-  IconButton,
-  Field,
-  Input,
-  Rating,
-  Select,
-  Switch,
-  Tabs,
-  Textarea,
-  firstDefined,
-  resolveSize,
-  resolveTone,
-  PRETUI_TONES,
-} from './controls';
-import { SearchInput, Stepper } from './controls-extras';
-import { Alert } from './feedback';
+import { Checkbox } from './components/checkbox';
+import { Field } from './components/field';
+import { Input } from './components/input';
+import { Rating } from './components/rating';
+import { Select } from './components/select';
+import { Switch } from './components/switch';
+import { Tabs } from './components/tabs';
+import { Textarea } from './components/textarea';
+import { firstDefined, resolveSize, resolveTone, PRETUI_TONES } from './pretui-primitives';
+import { SearchInput } from './components/search-input';
+import { Stepper } from './components/stepper';
+import { Alert } from './components/alert';
 
 class Sink {
   @tracked last: unknown = undefined;
@@ -107,23 +101,6 @@ module('Pretui | React-dialect aliases — controls', function (hooks) {
     );
   });
 
-  // ── Button (barrel contract) ───────────────────────────────────────────
-  // Button itself lives in components/button and is tested there. What this
-  // proves is the re-export: Button reaches callers through './controls', and
-  // IconButton — which renders <Button> from inside this module — still does.
-  test('Button and IconButton resolve through the controls barrel', async function (assert) {
-    await render(<template>
-      <Button data-test-barrel-button>Act</Button>
-      <IconButton @label='Close' data-test-barrel-icon-button>x</IconButton>
-    </template>);
-    assert.ok(q('[data-test-barrel-button]'), 'Button is re-exported');
-    assert.ok(
-      q('[data-test-barrel-icon-button]'),
-      'IconButton composes Button across the new module boundary',
-    );
-  });
-
-  // ── Input / Textarea ───────────────────────────────────────────────────
   test('Input accepts isInvalid / isRequired / readOnly and notifies through onChange', async function (assert) {
     let sink = new Sink();
     await render(<template>

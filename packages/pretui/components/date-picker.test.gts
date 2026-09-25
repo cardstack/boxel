@@ -9,7 +9,7 @@
 import { module, test } from 'qunit';
 import { render, click, triggerKeyEvent } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
-import { DatePicker } from '../reading-extras';
+import { DatePicker } from './date-picker';
 
 function triggerEl(): HTMLElement {
   return document.querySelector('.pretui-datepicker-trigger') as HTMLElement;

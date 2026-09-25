@@ -1,8 +1,8 @@
 // Pretui — EmptyState usage page.
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
-import { FreestyleUsage } from '../freestyle';
-import { Button } from '../controls';
-import { EmptyState } from '../structure';
+import { FreestyleUsage } from './freestyle-usage';
+import { Button } from './button';
+import { EmptyState } from './empty-state';
 
 const EmptyStateUsage: TemplateOnlyComponent = <template>
     <FreestyleUsage @name='EmptyState' @description='A named absence with optional action. Texture is confined to this low-information surface and never competes with data.' @source='<EmptyState @title="No lots match" @message="Try clearing…">…</EmptyState>'>

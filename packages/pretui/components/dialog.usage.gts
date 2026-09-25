@@ -2,9 +2,9 @@
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
-import { FreestyleUsage } from '../freestyle';
-import { Button } from '../controls';
-import { Dialog } from '../overlay';
+import { FreestyleUsage } from './freestyle-usage';
+import { Button } from './button';
+import { Dialog } from './dialog';
 
 const DIALOG_SIZES = ['s', 'm', 'l'];
 

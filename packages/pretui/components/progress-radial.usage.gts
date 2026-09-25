@@ -1,8 +1,8 @@
 // Pretui — ProgressRadial usage page.
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { FreestyleUsage } from '../freestyle';
-import { ProgressRadial } from '../feedback';
+import { FreestyleUsage } from './freestyle-usage';
+import { ProgressRadial } from './progress-radial';
 
 // ── ProgressRadial ← progress-radial/usage.gts ───────────────────────────
 class ProgressRadialUsage extends GlimmerComponent {

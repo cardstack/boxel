@@ -9,7 +9,7 @@
 import { module, test } from 'qunit';
 import { render } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
-import { InView } from '../motion-core';
+import { InView } from './in-view';
 
 function root(): HTMLElement {
   return document.querySelector('[data-test-pretui-inview]') as HTMLElement;
@@ -29,7 +29,7 @@ module('Pretui | components/in-view', function (hooks) {
   test('installs hidden — data-inview="false" is written before the observer ever reports', async function (assert) {
     // Off-screen and @once, so the observer's first report (not intersecting)
     // writes nothing: the attribute can only come from the install write. That
-    // polarity is the accessibility fix motion-core.gts describes — the resting
+    // polarity is the accessibility fix components/in-view.gts describes — the resting
     // style is the visible end state, and only JS opts into the hidden pre-state.
     await render(
       <template>

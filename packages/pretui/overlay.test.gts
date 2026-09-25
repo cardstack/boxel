@@ -10,14 +10,10 @@ import { on } from '@ember/modifier';
 import { render, click } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
 import { tracked } from '@glimmer/tracking';
-import {
-  Dialog,
-  Drawer,
-  Popover,
-  resolveDrawerPlacement,
-  resolveOpen,
-  resolvePlacement,
-} from './overlay';
+import { Dialog } from './components/dialog';
+import { Drawer } from './components/drawer';
+import { Popover } from './components/popover';
+import { resolveDrawerPlacement, resolveOpen, resolvePlacement } from './internal/overlay';
 
 class Sink {
   @tracked last: unknown = undefined;

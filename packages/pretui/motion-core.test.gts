@@ -1,5 +1,5 @@
 import { module, test } from 'qunit';
-import { normalizeRootMargin } from './motion-core';
+import { normalizeRootMargin } from './components/in-view';
 
 module('Pretui | InView rootMargin', function () {
   test('preserves valid CSS IntersectionObserver margins', function (assert) {

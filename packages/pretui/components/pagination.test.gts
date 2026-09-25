@@ -7,7 +7,7 @@
 import { module, test } from 'qunit';
 import { render, click } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
-import { Pagination } from '../structure';
+import { Pagination } from './pagination';
 
 function q(sel: string): HTMLElement {
   return document.querySelector(sel) as HTMLElement;

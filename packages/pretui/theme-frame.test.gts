@@ -5,7 +5,7 @@
 import { module, test } from 'qunit';
 import { render, click } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
-import { ThemeFrame } from './freestyle';
+import { ThemeFrame } from './components/theme-frame';
 
 const THEME = {
   id: 'https://test.example/theme/probe',

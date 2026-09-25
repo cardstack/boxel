@@ -1,5 +1,5 @@
-// Pretui — semantics proof for ink.gts (Chip, StatusChip, Token, Delta,
-// Meter, Avatar, AvatarGroup).
+// Pretui — semantics proof for Chip, StatusChip, Token, Delta, Meter, Avatar
+// and AvatarGroup.
 //
 // Nothing here asserts a computed style: the components' own `<style scoped>`
 // is inert in this harness (the scoped-css attribute is stamped, the rules are
@@ -9,16 +9,14 @@ import { module, test } from 'qunit';
 import { render, settled } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
 
-import {
-  Avatar,
-  AvatarGroup,
-  Chip,
-  Delta,
-  Meter,
-  StatusChip,
-  Token,
-  statusHue,
-} from './ink';
+import { Avatar } from './components/avatar';
+import { AvatarGroup } from './components/avatar-group';
+import { Chip } from './components/chip';
+import { Delta } from './components/delta';
+import { Meter } from './components/meter';
+import { StatusChip } from './components/status-chip';
+import { Token } from './components/token';
+import { statusHue } from './internal/ink';
 
 function q(sel: string): HTMLElement {
   return document.querySelector(sel) as HTMLElement;

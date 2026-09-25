@@ -1,4 +1,4 @@
-// Pretui — proof for the menu tier (menu.gts + focus.gts).
+// Pretui — proof for the menu tier (Menu, MenuPanel, CommandPalette, Kbd, and focus.gts).
 //
 // Two halves, deliberately:
 //
@@ -26,16 +26,10 @@ import {
   safeEdgeFor,
   typeaheadIndex,
 } from './focus';
-import {
-  CommandPalette,
-  Menu,
-  ariaKeyShortcuts,
-  formatShortcut,
-  fuzzyMatch,
-  matchSegments,
-  parseShortcut,
-} from './menu';
-import type { MenuEntry } from './menu';
+import { CommandPalette, fuzzyMatch, matchSegments } from './components/command-palette';
+import { Menu } from './components/menu';
+import { ariaKeyShortcuts, formatShortcut, parseShortcut } from './internal/menu';
+import type { MenuEntry } from './internal/menu';
 
 // ── 1. The safe triangle ─────────────────────────────────────────────────
 //

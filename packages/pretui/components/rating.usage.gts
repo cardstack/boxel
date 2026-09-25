@@ -1,9 +1,9 @@
 // Pretui — Rating usage page.
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { FreestyleUsage } from '../freestyle';
+import { FreestyleUsage } from './freestyle-usage';
 import { Rating } from './rating';
-import { Token } from '../ink';
+import { Token } from './token';
 
 const PRECISIONS = ['1', '0.5'];
 

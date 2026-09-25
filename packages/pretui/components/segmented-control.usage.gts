@@ -1,7 +1,7 @@
 // Pretui — SegmentedControl usage page.
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { FreestyleUsage } from '../freestyle';
+import { FreestyleUsage } from './freestyle-usage';
 import { SegmentedControl } from './segmented-control';
 
 const VIEW_OPTIONS = [

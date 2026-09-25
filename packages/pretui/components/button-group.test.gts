@@ -7,7 +7,7 @@
 import { module, test } from 'qunit';
 import { render } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
-import { ButtonGroup } from './composites';
+import { ButtonGroup } from './button-group';
 import { Button } from './button';
 
 function q(sel: string): HTMLElement {

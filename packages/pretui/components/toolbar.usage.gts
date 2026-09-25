@@ -1,9 +1,9 @@
 // Pretui — Toolbar usage page.
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { FreestyleUsage } from '../freestyle';
-import { Toolbar } from '../structure';
-import { Button } from '../controls';
+import { FreestyleUsage } from './freestyle-usage';
+import { Toolbar } from './toolbar';
+import { Button } from './button';
 
 // ── Toolbar ← header/usage.gts ───────────────────────────────────────────
 // Dropped knobs: size (Toolbar has a single scale); hasBackground and

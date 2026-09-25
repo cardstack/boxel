@@ -7,7 +7,7 @@
 import { module, test } from 'qunit';
 import { render } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
-import { UsageObject } from '../freestyle';
+import { UsageObject } from './usage-object';
 
 module('Pretui | components/usage-object', function (hooks) {
   setupCardTest(hooks);

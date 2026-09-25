@@ -1,7 +1,7 @@
 // Pretui — Tabs usage page.
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { FreestyleUsage } from '../freestyle';
+import { FreestyleUsage } from './freestyle-usage';
 import { Tabs } from './tabs';
 
 // ── Tabs ← tabbed-header/usage.gts ───────────────────────────────────────

@@ -1,7 +1,7 @@
 // Pretui — Prose usage page.
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
-import { FreestyleUsage } from '../freestyle';
-import { Prose } from '../reading';
+import { FreestyleUsage } from './freestyle-usage';
+import { Prose } from './prose';
 
 const ProseUsage: TemplateOnlyComponent = <template>
     <FreestyleUsage @name='Prose' @description='A restrained reading measure for authored text. Paragraph rhythm and inline machine values are styled without becoming a document renderer.' @source='<Prose><p>…</p></Prose>'>

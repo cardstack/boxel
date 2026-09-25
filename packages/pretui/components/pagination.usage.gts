@@ -1,8 +1,8 @@
 // Pretui — Pagination usage page.
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { FreestyleUsage } from '../freestyle';
-import { Pagination } from '../structure';
+import { FreestyleUsage } from './freestyle-usage';
+import { Pagination } from './pagination';
 
 class PaginationUsage extends Component {
   @tracked page = 4;

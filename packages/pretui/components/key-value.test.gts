@@ -7,8 +7,8 @@
 import { module, test } from 'qunit';
 import { render } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
-import { KeyValue } from '../reading';
-import type { KeyValueItem } from '../reading';
+import { KeyValue } from './key-value';
+import type { KeyValueItem } from './key-value';
 
 function q(sel: string): HTMLElement {
   return document.querySelector(sel) as HTMLElement;

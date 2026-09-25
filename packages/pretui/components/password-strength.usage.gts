@@ -1,8 +1,8 @@
 // Pretui — PasswordStrength usage page.
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { FreestyleUsage } from '../freestyle';
-import { PasswordStrength } from '../password-strength';
+import { FreestyleUsage } from './freestyle-usage';
+import { PasswordStrength } from './password-strength';
 
 class PasswordStrengthUsage extends Component {
   @tracked score = 2;
