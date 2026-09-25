@@ -171,6 +171,10 @@ function stub(opts: StubOptions): Stub {
       async lookupDefinition(codeRef) {
         return codeRef.module === ACTIVITY.module ? definition : undefined;
       },
+      async lookupDefinitionEntry(codeRef) {
+        let definition = await this.lookupDefinition(codeRef);
+        return definition ? { definition, types: [] } : undefined;
+      },
     },
     indexQueryEngine: {
       async searchEntries(query, searchOpts) {
