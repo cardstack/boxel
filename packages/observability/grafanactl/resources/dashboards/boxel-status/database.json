@@ -35,7 +35,7 @@
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
         },
-        "description": "On-disk size of the boxel database (data + indexes + TOAST). Includes the boxel_index_working shadow table during reindexing.",
+        "description": "On-disk size of the boxel database (data + indexes + TOAST). Includes the boxel_index_pending staging table during reindexing.",
         "fieldConfig": {
           "defaults": {
             "color": {

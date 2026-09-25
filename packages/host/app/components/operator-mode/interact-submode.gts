@@ -38,6 +38,7 @@ import {
   codeRefWithAbsoluteIdentifier,
   identifyCard,
   isCardInstance,
+  isFileDefInstance,
   isResolvedCodeRef,
   CardError,
   loadCardDef,
@@ -79,6 +80,7 @@ import { fetchIsolatedPlaceholder } from '@cardstack/host/lib/prerendered-placeh
 
 import {
   detectStackItemTypeForTarget,
+  takesFileDeleteRoute,
   StackItem,
   type StackItemType,
 } from '@cardstack/host/lib/stack-item';
@@ -123,7 +125,12 @@ import type RealmServer from '../../services/realm-server';
 import type RecentCardsService from '../../services/recent-cards-service';
 import type StoreService from '../../services/store';
 import type ToolService from '../../services/tool-service';
-import type { CardContext, CardDef, Format } from '@cardstack/base/card-api';
+import type {
+  CardContext,
+  CardDef,
+  FileDef,
+  Format,
+} from '@cardstack/base/card-api';
 import type { Spec } from '@cardstack/base/spec';
 
 const waiter = buildWaiter('operator-mode:interact-submode-waiter');
@@ -155,6 +162,7 @@ const CodeSubmodeNewFileOptions: TemplateOnlyComponent = <template>
 interface CardToDelete {
   id: string;
   title: string;
+  isFile?: boolean;
 }
 
 function isInteractiveTarget(target: EventTarget | null): boolean {
@@ -621,19 +629,30 @@ export default class InteractSubmode extends Component {
       return;
     }
     let cardId = this.cardToDelete.id;
+    let isFile = this.cardToDelete.isFile ?? false;
+    // Selections are stored with the `.json` extension stripped (see
+    // `selectCards`), while a file's delete id keeps it — so a `.json` file's
+    // selection outlives the delete unless the prune is normalized the same
+    // way. Extensionless ids (cards, non-`.json` files) are unaffected.
+    let selectionId = removeCardJsonExtension(cardId) ?? cardId;
 
     for (let stack of this.stacks) {
-      // remove all selections for the deleted card
+      // Remove the deleted card/file from both selection stores. The parent
+      // mirror here (drives the copy button count) keys on the
+      // extension-stripped id; the stack item's own set (drives the selection
+      // chip and per-row checkmarks) is pruned through its component API, which
+      // matches on the extensionless form itself.
       for (let item of stack) {
-        let selections = cardSelections.get(item);
-        if (!selections) {
-          continue;
-        }
-        selections.delete(cardId);
+        cardSelections.get(item)?.delete(selectionId);
+        stackItemComponentAPI.get(item)?.deselectCard(cardId);
       }
     }
     await this.withTestWaiters(async () => {
-      await this.operatorModeStateService.deleteCard(cardId);
+      // The dialog already classified this target; `deleteCard` would have to
+      // re-derive it from store residency, which can have moved on since.
+      await (isFile
+        ? this.operatorModeStateService.deleteFile(cardId)
+        : this.operatorModeStateService.deleteCard(cardId));
       await timeout(500); // task running message can be displayed long enough for the user to read it
     });
 
@@ -730,6 +749,26 @@ export default class InteractSubmode extends Component {
   @action
   private async requestDeleteCard(card: CardDef | URL | string): Promise<void> {
     let cardToDelete: CardToDelete | undefined;
+    let id =
+      typeof card === 'string' || card instanceof URL
+        ? new URL(card).href
+        : card.id;
+    if (takesFileDeleteRoute(card, id, this.store)) {
+      let fileDef = isFileDefInstance<FileDef>(card)
+        ? card
+        : await this.store.get<FileDef>(id, { type: 'file-meta' });
+      // A file whose metadata fails to load is still deletable; fall back to
+      // its URL's filename for the dialog.
+      let title = isFileDefInstance<FileDef>(fileDef)
+        ? fileDef.name
+        : undefined;
+      this.cardToDelete = {
+        id,
+        title: title || decodeURIComponent(id.split('/').pop() ?? id),
+        isFile: true,
+      };
+      return;
+    }
     if (typeof card === 'object' && 'id' in card) {
       let loadedCard = card as CardDef;
       cardToDelete = {
@@ -1206,7 +1245,8 @@ export default class InteractSubmode extends Component {
             @isDeleteRunning={{this.delete.isRunning}}
           >
             <:content>
-              Delete the card
+              Delete the
+              {{if this.cardToDelete.isFile 'file' 'card'}}
               <strong>{{this.cardToDelete.title}}</strong>?
             </:content>
           </DeleteModal>

@@ -196,6 +196,9 @@ export type RealmRequest = {
   patch(path: string): Test;
   delete(path: string): Test;
   head(path: string): Test;
+  // A CORS preflight, which a browser sends before any cross-origin request
+  // carrying a header outside the safelist.
+  options(path: string): Test;
 };
 
 export function withRealmPath(
@@ -222,6 +225,7 @@ export function withRealmPath(
     patch: (path: string) => request.patch(prefixPath(path)),
     delete: (path: string) => request.delete(prefixPath(path)),
     head: (path: string) => request.head(prefixPath(path)),
+    options: (path: string) => request.options(prefixPath(path)),
   };
 }
 
@@ -261,6 +265,12 @@ export const testRealm = 'http://test-realm/';
 export const localBaseRealm = isEnvironmentMode()
   ? `${serviceURL('realm-server')}/base`
   : 'http://localhost:4201/base';
+// The catalog realm the test stack serves: the pinned catalog test subset
+// (packages/catalog/test-subset.json), at the URL the prerender host bundle
+// resolves `@cardstack/catalog/` to.
+export const localCatalogRealm = isEnvironmentMode()
+  ? `${serviceURL('realm-server')}/catalog/`
+  : 'http://localhost:4201/catalog/';
 export const matrixURL = new URL(
   isEnvironmentMode() ? serviceURL('matrix') : 'http://localhost:8008',
 );
@@ -407,6 +417,9 @@ export function createVirtualNetwork() {
   // @cardstack/base/ realm-prefix mapping so unresolveURL on either
   // form canonicalises to the same RRI.
   virtualNetwork.addRealmMapping('@cardstack/base/', localBaseRealm);
+  // The prerender host registers the catalog prefix too, so this side has to
+  // agree with it for module keys to match across the two processes.
+  virtualNetwork.addRealmMapping('@cardstack/catalog/', localCatalogRealm);
   return virtualNetwork;
 }
 
@@ -1059,6 +1072,11 @@ async function startTestPrerenderServer(): Promise<string> {
   let server = createPrerenderHttpServer({
     maxPages: 1,
     fatalExitOnUncaught: false, // tests share the qunit process; see CS-10813
+    // The suite reaches this server directly through
+    // createRemotePrerenderer(url). Registering it would let a machine-wide
+    // prerender manager route other stacks' index passes to it, rendering
+    // them with this process's host bundle and sharing its single page.
+    registerWithManager: false,
   });
   prerenderServer = server;
   trackServer(server);
@@ -3191,6 +3209,9 @@ export function realmConfigCardJSON(
     // The realm's own settings, which a card operation reads with
     // `realmConfig("key")`.
     config?: Record<string, unknown>;
+    // The pointer to the realm's policy card. Typed loosely so a test can
+    // write a malformed one.
+    policy?: unknown;
   } = {},
 ): string {
   let attrs: Record<string, unknown> = {};
@@ -3212,6 +3233,9 @@ export function realmConfigCardJSON(
   }
   if (config.config !== undefined) {
     attrs.config = config.config;
+  }
+  if (config.policy !== undefined) {
+    attrs.policy = config.policy;
   }
   return JSON.stringify({
     data: {

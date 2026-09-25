@@ -10,6 +10,7 @@ import type { PgAdapter } from '@cardstack/postgres';
 
 import {
   CONTENT_HASH_WHOLE_LIMIT_BYTES,
+  Deferred,
   computeContentHash,
   computeContentHashFromRanges,
   rri,
@@ -27,6 +28,8 @@ import type {
   DBAdapter,
   LocalPath,
   LooseSingleCardDocument,
+  QueuePublisher,
+  QueueRunner,
   Realm,
   RealmAdapter,
 } from '@cardstack/runtime-common';
@@ -327,6 +330,11 @@ function makeFileSystem(): Record<string, string | LooseSingleCardDocument> {
         'append-sibling',
         'commit-write',
         'commit-delete',
+        'shared-pass-first',
+        'shared-pass-second',
+        'shared-pass-both',
+        'shared-pass-mixed-card',
+        'shared-pass-mixed-peer',
         'version-target',
         'patch-over-http',
         'patch-over-batch',
@@ -358,6 +366,8 @@ module(basename(import.meta.filename), function (hooks) {
   let serverRequest: SuperTest<Test>;
   let testRealmHttpServer: Server;
   let dir: DirResult;
+  let queuePublisher: QueuePublisher;
+  let queueRunner: QueueRunner;
 
   setupPermissionedRealmCached(hooks, {
     mode: 'before',
@@ -376,6 +386,8 @@ module(basename(import.meta.filename), function (hooks) {
       serverRequest = args.request;
       testRealmHttpServer = args.testRealmHttpServer;
       dir = args.dir;
+      queuePublisher = args.publisher;
+      queueRunner = args.runner;
     },
   });
 
@@ -395,7 +407,7 @@ module(basename(import.meta.filename), function (hooks) {
   async function indexJobIds(): Promise<number[]> {
     let rows = (await testDbAdapter.execute(
       `select id from jobs where job_type = 'incremental-index'
-         and concurrency_group = $1 order by id`,
+         and (concurrency_group = $1 or lane_family = $1) order by id`,
       { bind: [`indexing:${realm.url}`] },
     )) as { id: number | string }[];
     return rows.map((row) => Number(row.id));
@@ -651,6 +663,320 @@ module(basename(import.meta.filename), function (hooks) {
       [...indexEvents[0].invalidations].sort(),
       [`${testRealmHref}commit-write`, `${testRealmHref}commit-delete`].sort(),
       'the one event covers both the write and the removal',
+    );
+    assert.strictEqual(
+      indexEvents[0].coalescedWrites,
+      undefined,
+      'a pass that indexed one publish announces it in the single-writer form',
+    );
+  });
+
+  // Holds the realm's indexing lane, so publishes that arrive meanwhile fold
+  // into one pending pass the way concurrent writers' saves do under load.
+  async function holdIndexingLane() {
+    let started = new Deferred<void>();
+    let release = new Deferred<void>();
+    queueRunner.register('hold-indexing-lane', async () => {
+      started.fulfill();
+      await release.promise;
+      return null;
+    });
+    let holder = await queuePublisher.publish<void>({
+      jobType: 'hold-indexing-lane',
+      concurrencyGroup: `indexing:${realm.url}`,
+      timeout: 30,
+      args: null,
+    });
+    await started.promise;
+    return { holder, release };
+  }
+
+  async function pendingIndexCallers(): Promise<(string | null)[]> {
+    let rows = (await testDbAdapter.execute(
+      `select args from jobs where job_type = 'incremental-index'
+         and (concurrency_group = $1 or lane_family = $1)
+         and status = 'unfulfilled'`,
+      { bind: [`indexing:${realm.url}`] },
+    )) as {
+      args: { coalescedCallers?: { clientRequestId: string | null }[] };
+    }[];
+    return rows.flatMap((row) =>
+      (row.args.coalescedCallers ?? []).map((caller) => caller.clientRequestId),
+    );
+  }
+
+  test('writes from two clients that share one index pass are announced once, naming both', async function (assert) {
+    let first = `${testRealmHref}shared-pass-first`;
+    let second = `${testRealmHref}shared-pass-second`;
+    let patch = (firstName: string) => ({
+      data: {
+        type: 'card',
+        attributes: { firstName },
+        meta: { adoptsFrom: PERSON },
+      },
+    });
+    let jobsBefore = await indexJobIds();
+    let { holder, release } = await holdIndexingLane();
+    let since = Date.now();
+    let writes: Promise<unknown>[] = [];
+    try {
+      writes.push(
+        Promise.resolve(
+          request
+            .patch('/shared-pass-first')
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-Boxel-Client-Request-Id', 'instance:first-tab')
+            .send(patch('First')),
+        ),
+      );
+      // The second write goes out only once the first is queued, so the two
+      // meet in one pending job rather than racing to create it.
+      await waitUntil(async () =>
+        (await pendingIndexCallers()).includes('instance:first-tab'),
+      );
+      writes.push(
+        Promise.resolve(
+          request
+            .patch('/shared-pass-second')
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-Boxel-Client-Request-Id', 'instance:second-tab')
+            .send(patch('Second')),
+        ),
+      );
+      await waitUntil(async () =>
+        (await pendingIndexCallers()).includes('instance:second-tab'),
+      );
+    } finally {
+      release.fulfill();
+    }
+    let responses = (await Promise.all(writes)) as { status: number }[];
+    await holder.done;
+    assert.deepEqual(
+      responses.map((response) => response.status),
+      [200, 200],
+      'both writes are served',
+    );
+    let newJobs = (await indexJobIds()).filter(
+      (id) => !jobsBefore.includes(id),
+    );
+    assert.strictEqual(
+      newJobs.length,
+      1,
+      `the two writes share one index pass (got ${newJobs.length})`,
+    );
+
+    let eventsForPass = async () =>
+      (await incrementalIndexEventsSince(since)).filter(
+        (event) =>
+          event.invalidations.includes(first) ||
+          event.invalidations.includes(second),
+      );
+    await waitUntil(async () => (await eventsForPass()).length > 0);
+    // Room for a second copy to arrive, if one is coming: every caller
+    // announces the moment its own wait on the pass resolves, so a duplicate
+    // lands within the same few ticks the first one did.
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    let events = await eventsForPass();
+    assert.strictEqual(
+      events.length,
+      1,
+      `the shared pass is announced once (got ${events.length}, under ${events
+        .map((event) => event.clientRequestId)
+        .join(', ')})`,
+    );
+    let [event] = events;
+    assert.deepEqual(
+      [...event.invalidations].sort(),
+      [first, second].sort(),
+      'the one event carries both writes',
+    );
+    assert.deepEqual(
+      (event.coalescedWrites ?? [])
+        .map(({ clientRequestId, changed }) => ({ clientRequestId, changed }))
+        .sort((a, b) =>
+          String(a.clientRequestId).localeCompare(String(b.clientRequestId)),
+        ),
+      [
+        { clientRequestId: 'instance:first-tab', changed: [first] },
+        { clientRequestId: 'instance:second-tab', changed: [second] },
+      ],
+      'the event names every writer the pass indexed, and the card each one changed',
+    );
+    assert.strictEqual(
+      event.clientRequestId,
+      'instance:first-tab',
+      'the first writer to join the pass announces it',
+    );
+  });
+
+  test('a write whose module flush was shared names its own instances in the event it announces', async function (assert) {
+    let instance = `${testRealmHref}shared-pass-mixed-card`;
+    let peerCard = `${testRealmHref}shared-pass-mixed-peer`;
+    let { holder, release } = await holdIndexingLane();
+    let since = Date.now();
+    let mixedWrite: Promise<unknown> | undefined;
+    let peerWrite: Promise<unknown> | undefined;
+    try {
+      // A module ahead of an instance, so the write flushes the module in a
+      // pass of its own before the pass that indexes the instance.
+      mixedWrite = realm.writeMany(
+        new Map([
+          [
+            'shared-pass-mixed.gts',
+            `import { CardDef } from "@cardstack/base/card-api";\nexport class SharedPassMixed extends CardDef {}\n`,
+          ],
+          [
+            'shared-pass-mixed-card.json',
+            JSON.stringify({
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Mixed' },
+                meta: { adoptsFrom: PERSON },
+              },
+            }),
+          ],
+        ]),
+        {
+          clientRequestId: 'instance:mixed-tab',
+          clientAuthored: [instance],
+        },
+      );
+      await waitUntil(async () =>
+        (await pendingIndexCallers()).includes('instance:mixed-tab'),
+      );
+      // Another client's write joins that pending module flush, and so
+      // announces it; the instance pass that follows is the mixed write's
+      // alone. It is one that does not wait for indexing before it writes —
+      // a write that does would first drain the pending module pass, and so
+      // could never join it from this replica.
+      peerWrite = realm.write(
+        'shared-pass-mixed-peer.json',
+        JSON.stringify({
+          data: {
+            type: 'card',
+            attributes: { firstName: 'Peer' },
+            meta: { adoptsFrom: PERSON },
+          },
+        }),
+        { clientRequestId: 'instance:peer-tab', waitForIndex: false },
+      );
+      await waitUntil(async () =>
+        (await pendingIndexCallers()).includes('instance:peer-tab'),
+      );
+    } finally {
+      release.fulfill();
+    }
+    await Promise.all([mixedWrite, peerWrite, holder.done]);
+    await realm.incrementalIndexing();
+
+    let mixedEvent = async () =>
+      (await incrementalIndexEventsSince(since)).find(
+        (event) =>
+          event.clientRequestId === 'instance:mixed-tab' &&
+          event.invalidations.includes(instance),
+      );
+    await waitUntil(async () => (await mixedEvent()) !== undefined);
+    let event = (await mixedEvent())!;
+    assert.true(
+      event.invalidations.includes(peerCard),
+      "the event carries the shared flush's invalidations, the other writer's card among them",
+    );
+    let own = (event.coalescedWrites ?? []).filter(
+      ({ clientRequestId }) => clientRequestId === 'instance:mixed-tab',
+    );
+    assert.true(
+      own.some(({ changed }) => changed?.includes(instance)),
+      'the writer is listed as having changed its own instance',
+    );
+    assert.true(
+      (event.coalescedWrites ?? []).some(
+        ({ clientRequestId, changed }) =>
+          clientRequestId === 'instance:peer-tab' &&
+          !!changed?.includes(peerCard),
+      ),
+      'beside the other writer and the card it changed',
+    );
+  });
+
+  test("a shared pass does not report the announcer's version for a card another writer also changed", async function (assert) {
+    let card = `${testRealmHref}shared-pass-both`;
+    let patch = (firstName: string) => ({
+      data: {
+        type: 'card',
+        attributes: { firstName },
+        meta: { adoptsFrom: PERSON },
+      },
+    });
+    let { holder, release } = await holdIndexingLane();
+    let since = Date.now();
+    let writes: Promise<unknown>[] = [];
+    try {
+      writes.push(
+        Promise.resolve(
+          request
+            .patch('/shared-pass-both')
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-Boxel-Client-Request-Id', 'instance:earlier-tab')
+            .send(patch('Earlier')),
+        ),
+      );
+      await waitUntil(async () =>
+        (await pendingIndexCallers()).includes('instance:earlier-tab'),
+      );
+      // The same card again, from another client, while the pass that will
+      // index the first write is still pending — so the pass reads these
+      // bytes, not the ones the announcer wrote.
+      writes.push(
+        Promise.resolve(
+          request
+            .patch('/shared-pass-both')
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-Boxel-Client-Request-Id', 'instance:later-tab')
+            .send(patch('Later')),
+        ),
+      );
+      await waitUntil(async () =>
+        (await pendingIndexCallers()).includes('instance:later-tab'),
+      );
+    } finally {
+      release.fulfill();
+    }
+    let responses = (await Promise.all(writes)) as { status: number }[];
+    await holder.done;
+    assert.deepEqual(
+      responses.map((response) => response.status),
+      [200, 200],
+      'both writes are served',
+    );
+    assert.true(
+      readFileSync(realmFile('shared-pass-both.json'), 'utf8').includes(
+        'Later',
+      ),
+      'the card holds the later write',
+    );
+
+    let eventsForCard = async () =>
+      (await incrementalIndexEventsSince(since)).filter((event) =>
+        event.invalidations.includes(card),
+      );
+    await waitUntil(async () => (await eventsForCard()).length > 0);
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    let events = await eventsForCard();
+    assert.strictEqual(
+      events.length,
+      1,
+      `the shared pass is announced once (got ${events.length})`,
+    );
+    let [event] = events;
+    assert.strictEqual(
+      event.clientRequestId,
+      'instance:earlier-tab',
+      'the earlier writer announces the pass',
+    );
+    assert.strictEqual(
+      event.versions?.[card],
+      undefined,
+      "the event does not report the announcer's version for a card the pass read from another writer's bytes",
     );
   });
 
@@ -1797,6 +2123,69 @@ module(basename(import.meta.filename), function (hooks) {
       ).length,
       1,
       'and broadcasts one index event',
+    );
+  });
+
+  test('the first line creates the file, which the realm announces as added', async function (assert) {
+    let since = Date.now();
+    let jobsBefore = await indexJobIds();
+    assert.false(
+      existsSync(realmFile('created.log')),
+      'the path holds nothing before the append',
+    );
+
+    let [result] = await commit(
+      [
+        {
+          op: 'appendLine',
+          href: `${testRealmHref}created.log`,
+          params: { line: 'deploy 41' },
+        },
+      ],
+      'append-creates',
+    );
+
+    assert.strictEqual(
+      readFileSync(realmFile('created.log'), 'utf8'),
+      'deploy 41\n',
+      'the file holds the line and its terminator and nothing else, so the ' +
+        'first append wrote a file rather than adding to one',
+    );
+    assert.strictEqual(
+      result?.meta.version,
+      computeContentHash('deploy 41\n'),
+      'and the version reported is the one those bytes hash to',
+    );
+
+    // Which of the two the realm says it did is the whole difference between
+    // a file the batch created and one it added to, and a subscriber acts on
+    // it: a path it has never seen arriving as an update names a file it
+    // holds nothing for.
+    await waitUntil(
+      async () =>
+        eventsNaming(await realmEventsSince(since), 'created.log').length > 0,
+    );
+    let updates = (await realmEventsSince(since)).filter(
+      (event) => event.eventName === 'update',
+    );
+    assert.deepEqual(
+      updates.flatMap((event) => event.added ?? []),
+      ['created.log'],
+      'the realm announces the path as an added file',
+    );
+    assert.deepEqual(
+      updates.flatMap((event) => event.updated ?? []),
+      [],
+      'and not as an updated one',
+    );
+
+    let newJobs = (await indexJobIds()).filter(
+      (id) => !jobsBefore.includes(id),
+    );
+    assert.strictEqual(
+      newJobs.length,
+      1,
+      `the created file is indexed like any other write (got ${newJobs.length})`,
     );
   });
 

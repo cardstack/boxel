@@ -26,6 +26,7 @@ import {
 import type { SerializedError } from '@cardstack/runtime-common/error';
 import type { ConsoleErrorEntry, PagePool } from './page-pool.ts';
 import { toAffinityKey } from './affinity.ts';
+import { batchStaleAfterMs } from './prerender-constants.ts';
 import {
   abortable,
   PrerenderCancelledError,
@@ -94,12 +95,16 @@ type PoolInfo = {
 
 // One indexing job's icon renderings for one affinity: the captured icon
 // markup keyed by the type's internal key, plus hit/miss counters for the
-// stats line emitted when the memo is replaced or released.
+// stats line emitted when the memo is released. `batchIds` are the batches
+// whose visits used it, so a batch's release drops its own memo; `lastUsedAt`
+// lets a memo whose release never arrived be dropped once it goes idle.
 type IconMemo = {
   jobKey: string;
   icons: Map<string, string>;
   hits: number;
   misses: number;
+  batchIds: Set<string>;
+  lastUsedAt: number;
 };
 
 const CLEAR_CACHE_RETRY_SIGNATURES: readonly (readonly string[])[] = [
@@ -155,17 +160,19 @@ export class RenderRunner {
     byAffinity: new Map<string, { unusable: number; timeout: number }>(),
   };
   #lastAuthByAffinity = new Map<string, string>();
-  // Job-scoped icon memo, one slot per affinity. Icon HTML is a pure
-  // function of the card's type — the type's static `icon` component, never
-  // the instance — so within one indexing job the first visit for a type
-  // renders the icon and every later visit of that type reuses the captured
-  // markup, skipping the icon route. Indexing serializes per realm (= per
-  // affinity), so at most one job is active per slot: a visit carrying a
-  // different job key (jobId + loader epoch) replaces the slot outright. A
-  // module edit arrives as a new job with a new key, so stale markup cannot
+  // Job-scoped icon memo, one slot per (affinity, job key). Icon HTML is a
+  // pure function of the card's type — the type's static `icon` component,
+  // never the instance — so within one indexing job the first visit for a
+  // type renders the icon and every later visit of that type reuses the
+  // captured markup, skipping the icon route. A realm's affinity can carry
+  // several index jobs at once, one per writer lane, so each job key (jobId +
+  // loader epoch) has a slot of its own and one job never replaces another's.
+  // A module edit arrives as a new job with a new key, so stale markup cannot
   // leak across module changes. Visits without a jobId (on-demand renders)
-  // never touch the memo.
-  #iconMemoByAffinity = new Map<string, IconMemo>();
+  // never touch the memo. A slot goes when its batch releases the affinity,
+  // when the affinity is disposed, or when it has sat unused for
+  // `batchStaleAfterMs` and another job opens a slot on the affinity.
+  #iconMemosByAffinity = new Map<string, Map<string, IconMemo>>();
 
   constructor(options: { pagePool: PagePool; boxelHostURL: string }) {
     this.#pagePool = options.pagePool;
@@ -213,38 +220,86 @@ export class RenderRunner {
     affinityKey: string,
     jobId: string | undefined,
     loaderEpoch: string | undefined,
+    batchId: string | undefined,
   ): IconMemo | undefined {
     if (!jobId) {
       return undefined;
     }
+    let now = Date.now();
     let jobKey = `${jobId}|${loaderEpoch ?? ''}`;
-    let memo = this.#iconMemoByAffinity.get(affinityKey);
-    if (!memo || memo.jobKey !== jobKey) {
-      if (memo) {
-        this.#logIconMemoStats(affinityKey, memo, 'superseded');
+    let memos = this.#iconMemosByAffinity.get(affinityKey);
+    if (!memos) {
+      memos = new Map();
+      this.#iconMemosByAffinity.set(affinityKey, memos);
+    }
+    let memo = memos.get(jobKey);
+    if (!memo) {
+      // Memory hygiene for a job whose release never reached this server:
+      // opening a slot drops the affinity's slots nobody has used lately.
+      for (let [key, idle] of memos) {
+        if (now - idle.lastUsedAt > batchStaleAfterMs) {
+          this.#logIconMemoStats(affinityKey, idle, 'idle');
+          memos.delete(key);
+        }
       }
-      memo = { jobKey, icons: new Map(), hits: 0, misses: 0 };
-      this.#iconMemoByAffinity.set(affinityKey, memo);
+      memo = {
+        jobKey,
+        icons: new Map(),
+        hits: 0,
+        misses: 0,
+        batchIds: new Set(),
+        lastUsedAt: now,
+      };
+      memos.set(jobKey, memo);
+    }
+    memo.lastUsedAt = now;
+    if (batchId) {
+      memo.batchIds.add(batchId);
     }
     return memo;
   }
 
-  // Drop an affinity's icon memo. Called when the indexing batch that owns
-  // the affinity releases it; the job-key check in #iconMemoFor already
-  // guarantees a later job never reads another job's entries, so this is
-  // memory hygiene, not a correctness gate.
+  // Drop every icon memo an affinity holds, with the rest of its warm state
+  // when the affinity is disposed.
   clearIconMemo(affinityKey: string) {
-    let memo = this.#iconMemoByAffinity.get(affinityKey);
-    if (memo) {
-      this.#logIconMemoStats(affinityKey, memo, 'released');
-      this.#iconMemoByAffinity.delete(affinityKey);
+    let memos = this.#iconMemosByAffinity.get(affinityKey);
+    if (memos) {
+      for (let memo of memos.values()) {
+        this.#logIconMemoStats(affinityKey, memo, 'released');
+      }
+      this.#iconMemosByAffinity.delete(affinityKey);
+    }
+  }
+
+  // Drop the icon memos `batchId`'s visits used on an affinity, when that
+  // batch releases it. A concurrent job's memo on the same affinity stays.
+  // The job-key check in #iconMemoFor already guarantees a later job never
+  // reads another job's entries, so this is memory hygiene, not a
+  // correctness gate.
+  releaseIconMemo(affinityKey: string, batchId: string) {
+    let memos = this.#iconMemosByAffinity.get(affinityKey);
+    if (!memos) {
+      return;
+    }
+    for (let [key, memo] of memos) {
+      if (memo.batchIds.has(batchId)) {
+        this.#logIconMemoStats(affinityKey, memo, 'released');
+        memos.delete(key);
+      }
+    }
+    if (memos.size === 0) {
+      this.#iconMemosByAffinity.delete(affinityKey);
     }
   }
 
   // Read-only observability accessor used by tests. Callers outside of
   // tests should not rely on this shape; it's a debugging surface, not a
-  // stable API.
-  getIconMemo(affinityKey: string):
+  // stable API. Returns `jobId`'s memo on the affinity, or without one the
+  // most recently used.
+  getIconMemo(
+    affinityKey: string,
+    jobId?: string,
+  ):
     | {
         jobKey: string;
         types: string[];
@@ -252,7 +307,13 @@ export class RenderRunner {
         misses: number;
       }
     | undefined {
-    let memo = this.#iconMemoByAffinity.get(affinityKey);
+    let memos = [
+      ...(this.#iconMemosByAffinity.get(affinityKey)?.values() ?? []),
+    ];
+    let memo =
+      jobId !== undefined
+        ? memos.find((m) => m.jobKey.startsWith(`${jobId}|`))
+        : memos.sort((a, b) => b.lastUsedAt - a.lastUsedAt)[0];
     return memo
       ? {
           jobKey: memo.jobKey,
@@ -526,6 +587,7 @@ export class RenderRunner {
     auth,
     format,
     captureSpec,
+    renderOptions: callerRenderOptions,
     opts,
     priority,
     signal,
@@ -537,6 +599,7 @@ export class RenderRunner {
     auth: string;
     format: ScreenshotFormat;
     captureSpec?: ScreenshotCaptureSpec;
+    renderOptions?: RenderRouteOptions;
     opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
     priority?: number;
     signal?: AbortSignal;
@@ -582,12 +645,33 @@ export class RenderRunner {
       await abortable(signal, () =>
         page.evaluate((sessionAuth) => {
           localStorage.setItem('boxel-session', sessionAuth);
+          // A capture renders through the same card branch as a visit, on a
+          // tab drawn from the same affinity queue — and it names the card a
+          // visit's stash would name, so the route's URL check cannot tell a
+          // leftover apart from a stash meant for this render. Clear both
+          // stashes here for the same reason a visit clears them at its start:
+          // this render reads current bytes, never what some earlier visit
+          // read.
+          delete (globalThis as any).__boxelFileRenderData;
+          delete (globalThis as any).__boxelCardRenderData;
         }, auth),
       );
 
       let renderStart = Date.now();
       let nonce = String(this.#nonce);
-      let renderOptions: RenderRouteOptions = { cardRender: true };
+      // A capture is always a card render. The only caller option it honors is
+      // the realm's `loaderEpoch`, which resets a pooled tab holding a
+      // superseded module graph before this render (see the render route's
+      // loader-epoch synchronization) rather than capturing the old module.
+      // Take just that field rather than spreading the caller's options, so a
+      // capture can never be handed a second, conflicting render kind
+      // (`fileRender` / `fileExtract`).
+      let renderOptions: RenderRouteOptions = {
+        cardRender: true,
+        ...(callerRenderOptions?.loaderEpoch !== undefined
+          ? { loaderEpoch: callerRenderOptions.loaderEpoch }
+          : {}),
+      };
       let serializedOptions = serializeRenderRouteOptions(renderOptions);
       const captureOptions: CaptureOptions = {
         expectedId: url.replace(/\.json$/i, ''),
@@ -885,8 +969,10 @@ export class RenderRunner {
     cardTypes,
     priority,
     jobId,
+    batchId,
     screenshots,
     renderScope,
+    cardSource,
     signal,
     onTabAcquired,
   }: PrerenderVisitArgs & {
@@ -958,6 +1044,7 @@ export class RenderRunner {
     let response: RenderVisitResponse = {};
     let baseOptions: RenderRouteOptions = { ...(renderOptions ?? {}) };
     let didStashFileRenderData = false;
+    let didStashCardRenderData = false;
     // Per-format wall-clock of the html-route steps, recorded directly onto
     // `response.meta.diagnostics.renderFormatsMs` as each step completes so
     // every return path — including the early short-circuits — carries
@@ -1077,12 +1164,16 @@ export class RenderRunner {
           `visit prerender url=${url} affinity=${affinityKey} fusing fileExtract into render.meta`,
         );
       }
-      // defense-in-depth: clear any stale file render data left on globalThis
-      // from a prior visit before we start running passes.
+      // defense-in-depth: clear any stale render data left on globalThis from a
+      // prior visit before we start running passes. The card stash is also
+      // keyed on its URL and checked by the route, so a survivor is inert
+      // rather than wrong; this keeps one visit's bytes from outliving it on a
+      // shared tab regardless.
       await abortable(signal, () =>
         page
           .evaluate(() => {
             delete (globalThis as any).__boxelFileRenderData;
+            delete (globalThis as any).__boxelCardRenderData;
           })
           .catch(() => {
             /* best-effort */
@@ -1091,9 +1182,13 @@ export class RenderRunner {
 
       // Serialized options carry the pass flags into the route — the host
       // render/module routes consume these to decide which mode to run. The
-      // first pass in the visit keeps any clearCache flag; subsequent passes
-      // must not attempt another loader reset, so we strip it after first use.
+      // first pass in the visit keeps any clearCache / resetStore flag;
+      // subsequent passes must not reset anything, so both are stripped after
+      // first use. A later pass in the same visit renders against what the
+      // earlier ones loaded, so a second reset would discard the visit's own
+      // work rather than a previous pass's.
       let clearCacheConsumed = false;
+      let resetStoreConsumed = false;
       let optionsForPass = (
         pass: 'fileExtract' | 'cardRender' | 'fileRender' | 'fusedIndex',
       ) => {
@@ -1115,6 +1210,12 @@ export class RenderRunner {
           clearCacheConsumed = true;
         } else {
           delete optionsForThisPass.clearCache;
+        }
+        if (!resetStoreConsumed && baseOptions.resetStore) {
+          optionsForThisPass.resetStore = true;
+          resetStoreConsumed = true;
+        } else {
+          delete optionsForThisPass.resetStore;
         }
         // Clean undefined keys so serializeRenderRouteOptions stays stable.
         for (let k of Object.keys(
@@ -1289,6 +1390,27 @@ export class RenderRunner {
       // ── cardRender pass ────────────────────────────────────────────────
       throwIfAborted(signal, 'rendering');
       if (requested.cardRender) {
+        // Stash the card's stored source for the render route's model hook,
+        // the way the fileRender pass below stashes its file data. A caller
+        // that already read these bytes sends them along, and the card branch
+        // builds its model from them instead of fetching the instance's source
+        // back out of the realm — a round-trip that crosses the public balancer
+        // from here. The visit's URL rides along so the route can confirm the
+        // stash names the card it is rendering: a tab serves many cards, and a
+        // mismatch has to fall back to the fetch rather than render another
+        // card's document. No stash means the route fetches, which is how an
+        // on-demand render of a live card still works.
+        if (cardSource) {
+          await abortable(signal, () =>
+            page.evaluate(
+              (data) => {
+                (globalThis as any).__boxelCardRenderData = data;
+              },
+              { ...cardSource, url },
+            ),
+          );
+          didStashCardRenderData = true;
+        }
         let cardOptions = optionsForPass(
           fusedIndexPass ? 'fusedIndex' : 'cardRender',
         );
@@ -1458,6 +1580,7 @@ export class RenderRunner {
               affinityKey,
               jobId,
               baseOptions.loaderEpoch,
+              batchId,
             );
             let iconTypeKey = meta.types?.[0];
             // A clearCache visit is asked for a pristine render, so it
@@ -1823,7 +1946,12 @@ export class RenderRunner {
           // read (see the card pass).
           let iconMemo = runHtmlSteps
             ? undefined
-            : this.#iconMemoFor(affinityKey, jobId, baseOptions.loaderEpoch);
+            : this.#iconMemoFor(
+                affinityKey,
+                jobId,
+                baseOptions.loaderEpoch,
+                batchId,
+              );
           let iconTypeKey = effectiveTypes?.[0];
           let memoizedIconHTML =
             iconMemo && iconTypeKey !== undefined && !baseOptions.clearCache
@@ -2158,7 +2286,7 @@ export class RenderRunner {
         poolInfo,
       );
     } finally {
-      if (didStashFileRenderData) {
+      if (didStashFileRenderData || didStashCardRenderData) {
         // The stash only matters to a page that will render again, and
         // against a wedged page this evaluate can hang until the
         // protocol timeout — so race it against the signal and swallow
@@ -2170,6 +2298,7 @@ export class RenderRunner {
           page
             .evaluate(() => {
               delete (globalThis as any).__boxelFileRenderData;
+              delete (globalThis as any).__boxelCardRenderData;
             })
             .catch(() => {
               /* best-effort cleanup */

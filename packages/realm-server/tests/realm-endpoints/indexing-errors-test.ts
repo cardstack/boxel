@@ -131,22 +131,20 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       };
       let diagnostics = { invalidationId: 'inv-test-1', ms: 42 };
       let cardURL = `${sourceRealm.url}broken-instance.json`;
-      for (let table of ['boxel_index', 'boxel_index_working']) {
-        await dbAdapter.execute(
-          `UPDATE ${table}
-           SET has_error = TRUE,
-               error_doc = $1::jsonb,
-               diagnostics = $2::jsonb
-           WHERE url = $3 AND type = 'instance'`,
-          {
-            bind: [
-              JSON.stringify(errorDoc),
-              JSON.stringify(diagnostics),
-              cardURL,
-            ],
-          },
-        );
-      }
+      await dbAdapter.execute(
+        `UPDATE boxel_index
+         SET has_error = TRUE,
+             error_doc = $1::jsonb,
+             diagnostics = $2::jsonb
+         WHERE url = $3 AND type = 'instance'`,
+        {
+          bind: [
+            JSON.stringify(errorDoc),
+            JSON.stringify(diagnostics),
+            cardURL,
+          ],
+        },
+      );
 
       let response = await request
         .get(`${new URL(sourceRealm.url).pathname}_indexing-errors`)
@@ -186,6 +184,48 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
         entry.attributes.diagnostics,
         diagnostics,
         'diagnostics is included',
+      );
+    });
+
+    test('leaves out the queue claim, which names the writer whose pass wrote the row', async function (assert) {
+      await sourceRealm.realmIndexUpdater.fullIndex();
+
+      let cardURL = `${sourceRealm.url}broken-instance.json`;
+      await dbAdapter.execute(
+        `UPDATE boxel_index
+         SET has_error = TRUE,
+             error_doc = $1::jsonb,
+             diagnostics = $2::jsonb
+         WHERE url = $3 AND type = 'instance'`,
+        {
+          bind: [
+            JSON.stringify({ message: 'render failed', status: 500 }),
+            JSON.stringify({
+              invalidationId: 'inv-test-2',
+              queueClaim: {
+                queueWaitMs: 12,
+                concurrencyGroup: `indexing:${sourceRealm.url}#user:@someone-else:localhost`,
+                laneFamily: `indexing:${sourceRealm.url}`,
+              },
+            }),
+            cardURL,
+          ],
+        },
+      );
+
+      let response = await request
+        .get(`${new URL(sourceRealm.url).pathname}_indexing-errors`)
+        .set('Accept', SupportedMimeType.JSONAPI)
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(sourceRealm, ownerUserId, DEFAULT_PERMISSIONS)}`,
+        );
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      assert.deepEqual(
+        response.body.data[0]?.attributes.diagnostics,
+        { invalidationId: 'inv-test-2' },
+        'the rest of the diagnostics are served, and the queue claim is not',
       );
     });
 

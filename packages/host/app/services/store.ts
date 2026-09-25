@@ -53,6 +53,7 @@ import {
   applySearchPageBound,
   assertRealmsBound,
   isJsonContentType,
+  QUERY_FIELD_SEARCH_CONCURRENCY_CAP,
   SEARCH_CONCURRENCY_CAP,
   SKIP_INDEX_WAIT_HEADER,
   SupportedMimeType,
@@ -97,7 +98,11 @@ import {
   type VirtualNetwork,
 } from '@cardstack/runtime-common';
 
-import CardStore, { getDeps, type ReferenceCount } from '../lib/gc-card-store';
+import CardStore, {
+  currentRenderScope,
+  getDeps,
+  type ReferenceCount,
+} from '../lib/gc-card-store';
 
 import {
   consumingRealmHeader,
@@ -136,6 +141,7 @@ import type * as CardAPI from '@cardstack/base/card-api';
 import type { CardDef, BaseDef } from '@cardstack/base/card-api';
 import type { FileDef } from '@cardstack/base/file-api';
 import type {
+  CoalescedIndexWrite,
   IncrementalIndexEventContent,
   RealmEventContent,
 } from '@cardstack/base/matrix-event';
@@ -204,6 +210,16 @@ export function resolveOutboundJobPriority({
   return valid ?? userInitiatedPriority;
 }
 
+// A request id minted for a write whose content this tab sent — a card saved
+// from an open instance — as opposed to a source edit or a bot's patch, whose
+// resulting state this tab does not already hold.
+function isInstanceWriteRequestId(clientRequestId: string): boolean {
+  return (
+    clientRequestId.startsWith('instance:') ||
+    clientRequestId.startsWith('editor-with-instance')
+  );
+}
+
 function jobPriorityHeader(): Record<string, string> {
   let g = globalThis as unknown as {
     __boxelRenderContext?: boolean;
@@ -223,6 +239,16 @@ const queryFieldSeedFromSearchSymbol = Symbol.for(
 );
 
 type PersistOptions = CreateOptions & { clientRequestId?: string };
+
+// Which of a store service's search concurrency lanes a throttled search takes:
+// the card `@context` surface's, or query-field resolution's.
+export type SearchThrottleLane = 'card' | 'query-field';
+
+// What an index event said the state of a card would be, carried alongside the
+// reload it scheduled so a second delivery of that event can recognize it as
+// already answered. Both members are optional because both are optional on the
+// event, and an absent one is no information rather than a claim.
+type ReloadTarget = { generation?: number; version?: string };
 type DependencyTrackingOptions = {
   dependencyTrackingContext?: RuntimeDependencyTrackingContext;
 };
@@ -273,6 +299,7 @@ export default class StoreService extends Service implements StoreInterface {
   @service declare private realmServer: RealmServerService;
   private subscriptions: Map<string, { unsubscribe: () => void }> = new Map();
   private cardInvalidationSubscribers: Map<string, Set<() => void>> = new Map();
+  private cardReloadSubscribers: Set<(instance: CardDef) => void> = new Set();
   private referenceCount: ReferenceCount = new Map();
   private newReferencePromises: Promise<void>[] = [];
   private autoSaveStates: TrackedMap<string, AutoSaveState> = new TrackedMap();
@@ -293,7 +320,49 @@ export default class StoreService extends Service implements StoreInterface {
     Promise<FileDef | CardErrorJSONAPI>
   > = new Map();
   private inflightCardMutations: Map<string, Promise<void>> = new Map();
+  // The cards whose own create is on the wire — a save creating the card, or a
+  // batch minting cards this store holds — keyed by local id. Distinct from
+  // `inflightCardMutations`: an entry here exists only between the write being
+  // sent and its response being applied, so whoever waits on one is waiting on
+  // a request, never on a lock. See `#serializeForSave`.
+  private inflightCardCreates: Map<string, Promise<void>> = new Map();
   private inflightCardLoads: Map<string, Deferred<void>> = new Map();
+  // The index state a reload now in flight will bring a card to, keyed by the
+  // instance's local id — the one id that survives the realm assigning a
+  // remote one, which the invalidation loop itself can do.
+  //
+  // The rules in `#indexStateAlreadyHeld` read the instance, and an instance
+  // does not reflect a reload until that reload returns. Two deliveries of one
+  // event inside that window would both compare against the pre-reload
+  // instance, so both would reload — and the second lands after the first,
+  // over anything typed in between. That is the loss this filter exists to
+  // prevent, so the question the rules ask is "does the store hold this state,
+  // or has it already gone to fetch it".
+  //
+  // Not a memory of events seen: an entry describes one reload and is released
+  // when that reload settles, whatever it settles into. A reload that fails
+  // leaves nothing behind, so the next event retries.
+  #reloadTargets: Map<string, ReloadTarget> = new Map();
+  // The fields of an instance the user has edited that the realm has not yet
+  // acknowledged, each stamped with the `#localEditSeq` of its latest edit.
+  // A reload merges server state into the instance around these fields, so an
+  // edit in progress survives server state arriving underneath it — whoever
+  // wrote that state, and however the event naming it was attributed. The
+  // local edit is newer than anything the realm holds for that field, and the
+  // pending autosave is what will tell the realm about it.
+  //
+  // An entry clears when a save that began after the edit succeeds; a failed
+  // save leaves it, so the edit keeps winning until one lands.
+  #localEdits: WeakMap<CardDef, Map<string, number>> = new WeakMap();
+  #localEditSeq = 0;
+  // The top-level fields an optimistic operation has changed on the live
+  // instance while its chain is still pending, keyed by the instance's local
+  // id. A reload never keeps these as local edits: the value holds the
+  // operation's effect, which the realm has not confirmed, and the ledger
+  // re-applies every unsent operation onto whatever the reload leaves — so
+  // keeping it would apply the operation twice. While an operation is pending
+  // on a field, the operation owns it. Released when the card's chain drains.
+  #optimisticFields: Map<string, Set<string>> = new Map();
   // Coalesce concurrent same-(realms, query) `_federated-search` HTTP
   // calls during a prerender. Gated on `__boxelRenderContext` so live
   // user searches stay uncoalesced — write-then-read freshness story
@@ -304,15 +373,19 @@ export default class StoreService extends Service implements StoreInterface {
   // a prerender. Layered *above* `inflightSearch`: a cache hit skips
   // the network round-trip entirely; a miss falls through to the
   // in-flight Map and the cache is populated on resolve. Keyed by
-  // (jobId, consumingRealm, query) — gated to same-realm-only so a
+  // (render scope, consumingRealm, query) — gated to same-realm-only so a
   // cross-realm read can't freeze a value while a peer realm-server
   // replica swaps mid-job.
   //
-  // Lifetime: the entire indexing job. One job typically spans many
-  // card renders in the same prerender tab (each navigation activates
-  // and deactivates the render route but all those visits share one
-  // `__boxelJobId`); the cache must survive those route bounces so
-  // earlier renders' work is reusable by later ones. Only clear when
+  // Lifetime: the render scope (`currentRenderScope`, falling back to
+  // `__boxelJobId`), which names one view of the realm with no commit in
+  // between. One scope typically spans many card renders in the same
+  // prerender tab (each navigation activates and deactivates the render
+  // route but all those visits share one scope); the cache must survive
+  // those route bounces so earlier renders' work is reusable by later ones.
+  // A scope changes whenever the view could have — another writer's pass
+  // committing to the realm mid-job is the case a job id alone would miss —
+  // so a cached answer never outlives the view it was read from. Only clear when
   // the job actually changes — `fetchSearchDoc` does this at
   // fetch-entry via the jobId-change check, and `resetState` /
   // `resetCache` do it on harder service resets. The render route's
@@ -322,12 +395,11 @@ export default class StoreService extends Service implements StoreInterface {
   // storing resolved docs rather than promises (avoids tail-latency
   // stalls on slow first populate).
   private searchCache: Map<string, SearchEntryResults> = new Map();
-  // The jobId the `searchCache` entries belong to. When a request
-  // arrives carrying a different `__boxelJobId` we drop the cache
-  // before serving — belt-and-braces beside `resetState()` and the
-  // render-route deactivate clear, in case a prerender tab is reused
-  // across jobs without driving either of those paths.
-  private searchCacheJobId: string | undefined = undefined;
+  // The render scope the `searchCache` entries belong to. When a request
+  // arrives under a different scope we drop the cache before serving —
+  // belt-and-braces beside `resetState()`, in case a prerender tab moves to
+  // another scope without driving it.
+  private searchCacheScope: string | undefined = undefined;
   // Monotonic counter bumped on every clear of `searchCache` (every
   // path that empties the map: `clearSearchCache`, `resetState`,
   // `resetCache`, the jobId-change clear at fetch-entry). A
@@ -399,6 +471,7 @@ export default class StoreService extends Service implements StoreInterface {
     clearInterval(this.gcInterval);
     this.subscriptions = new Map();
     this.cardInvalidationSubscribers = new Map();
+    this.cardReloadSubscribers = new Set();
     this.onSaveSubscriber = undefined;
     this.referenceCount = new Map();
     this.newReferencePromises = [];
@@ -406,10 +479,12 @@ export default class StoreService extends Service implements StoreInterface {
     this.inflightGetCards = new Map();
     this.inflightGetFileMeta = new Map();
     this.inflightCardMutations = new Map();
+    this.inflightCardCreates = new Map();
     this.inflightCardLoads = new Map();
+    this.#reloadTargets = new Map();
     this.inflightSearch = new Map();
     this.searchCache = new Map();
-    this.searchCacheJobId = undefined;
+    this.searchCacheScope = undefined;
     this.searchCacheGeneration++;
     this.autoSaveQueues = new Map();
     this.autoSavePromises = new Map();
@@ -459,22 +534,24 @@ export default class StoreService extends Service implements StoreInterface {
     this.inflightGetCards = new Map();
     this.inflightGetFileMeta = new Map();
     this.inflightCardLoads = new Map();
+    this.#reloadTargets = new Map();
     this.inflightSearch = new Map();
-    // `inflightCardMutations` is deliberately kept: a render context blocks
-    // persistence, so there is nothing of this job's in it, and dropping a
-    // save that somehow were in flight would lose the only handle on it.
+    // `inflightCardMutations` and `inflightCardCreates` are deliberately kept:
+    // a render context blocks persistence, so there is nothing of this job's
+    // in them, and dropping a save that somehow were in flight would lose the
+    // only handle on it.
   }
 
   // Drop every resolved-doc search-cache entry. Used for hard resets
   // (`resetState`, `resetCache`) and by tests; NOT called from the
   // render route's per-visit deactivate, because the cache is meant
-  // to survive across renders within a single indexing job. Cross-job
+  // to survive across renders within a single render scope. Cross-scope
   // invalidation is handled by `fetchSearchDoc`'s entry-time
-  // jobId-change clear, which fires the first time a new
-  // `__boxelJobId` is observed.
+  // scope-change clear, which fires the first time a new scope is
+  // observed.
   clearSearchCache(): void {
     this.searchCache.clear();
-    this.searchCacheJobId = undefined;
+    this.searchCacheScope = undefined;
     this.searchCacheGeneration++;
   }
 
@@ -489,10 +566,12 @@ export default class StoreService extends Service implements StoreInterface {
     this.inflightGetCards = new Map();
     this.inflightGetFileMeta = new Map();
     this.inflightCardMutations = new Map();
+    this.inflightCardCreates = new Map();
     this.inflightCardLoads = new Map();
+    this.#reloadTargets = new Map();
     this.inflightSearch = new Map();
     this.searchCache = new Map();
-    this.searchCacheJobId = undefined;
+    this.searchCacheScope = undefined;
     this.searchCacheGeneration++;
     this.autoSaveQueues = new Map();
     this.autoSavePromises = new Map();
@@ -1004,6 +1083,7 @@ export default class StoreService extends Service implements StoreInterface {
       getQueryableValue: api.getQueryableValue,
       formatQueryValue: api.formatQueryValue,
       peekAtField: api.peekAtField,
+      isQueryTaintedField: api.isQueryTaintedField,
       isNonPresentLink: api.isNonPresentLink,
       getCardMeta: api.getCardMeta as CardAPIForMatching['getCardMeta'],
       primitive: api.primitive,
@@ -1096,10 +1176,20 @@ export default class StoreService extends Service implements StoreInterface {
     return api.serializeFileDef(fileDef, {}) as SingleFileMetaDocument;
   }
 
-  async delete(id: string): Promise<void> {
+  // `opts.type` is host-only: the card-facing `Store` interface declares
+  // `delete(id)` alone, so card code reaches the card route and nothing else.
+  async delete(id: string, opts?: { type?: StoreReadType }): Promise<void> {
     id = asURL(id, this.network.virtualNetwork);
     if (!id) {
       // the card isn't actually saved yet, so do nothing
+      return;
+    }
+    if (opts?.type === 'file-meta') {
+      // A file is deleted through its source route: the card+json DELETE
+      // only knows how to remove card instances.
+      this.store.delete(id);
+      await this.cardService.deleteSource(new URL(id));
+      this.notifyCardInvalidationSubscribers(id);
       return;
     }
     // Snapshot the consumers BEFORE removing the deleted instance from the
@@ -1281,10 +1371,11 @@ export default class StoreService extends Service implements StoreInterface {
       // page size, realms fan-out, and the concurrency throttle — none of which
       // constrain the host app's own direct search calls.
       cardInitiated?: boolean;
-      // Run under the concurrency throttle without the other card caps, for a
-      // caller whose result set must not be reshaped but whose volume still has
-      // to be bounded — query-field resolution, which fires a search per query
-      // field per deserialized card. Implied by `cardInitiated`.
+      // Run under the query-field concurrency lane without the other card caps,
+      // for a caller whose result set must not be reshaped but whose volume
+      // still has to be bounded — query-field resolution, which fires a search
+      // per query field per deserialized card. Ignored with `cardInitiated`,
+      // which takes the card lane instead.
       throttled?: boolean;
       // Asked once, when a queued search reaches the front of the throttle.
       // Waiting is where a consumer can go away — the resource that wanted this
@@ -1337,15 +1428,19 @@ export default class StoreService extends Service implements StoreInterface {
         opts?.dependencyTrackingContext,
         opts?.scope,
       );
-    let result =
-      opts?.cardInitiated || opts?.throttled
-        ? await this.performThrottledSearch(async () => {
-            if (opts?.isObsolete?.()) {
-              return { instances: [] as T[], meta: { page: { total: 0 } } };
-            }
-            return await run();
-          })
-        : await run();
+    let lane: SearchThrottleLane | undefined = opts?.cardInitiated
+      ? 'card'
+      : opts?.throttled
+        ? 'query-field'
+        : undefined;
+    let result = lane
+      ? await this.performThrottledSearch(async () => {
+          if (opts?.isObsolete?.()) {
+            return { instances: [] as T[], meta: { page: { total: 0 } } };
+          }
+          return await run();
+        }, lane)
+      : await run();
     return opts?.includeMeta ? result : result.instances;
   }
 
@@ -1411,16 +1506,13 @@ export default class StoreService extends Service implements StoreInterface {
       : this.realmServer.availableRealmIdentifiers;
   }
 
-  // This store service's ceiling on concurrent item-leg searches. The task is a
-  // class field, so each store service carries its own — the interactive app's
-  // and a render store's are separate ceilings, not one shared tab-wide number.
-  // Within one it bounds the store and not a single card: every search routed
-  // through it competes for the same slots. Two callers route: the card
-  // `@context` surface (`getCards` and the card-facing store, via
-  // `cardInitiated`), and query-field resolution (via `throttled`), which fires
-  // a search per query field per deserialized card and is the larger fan-out of
-  // the two. The host app's own direct `store.search` / `getSearch` calls do
-  // not, so the trusted host is never throttled.
+  // This store service's ceilings on concurrent item-leg searches, one lane per
+  // caller. The tasks are class fields, so each store service carries its own
+  // pair — the interactive app's and a render store's are separate ceilings,
+  // not one shared tab-wide number. Within one lane the ceiling bounds the
+  // store and not a single card: every search routed into it competes for the
+  // same slots. The host app's own direct `store.search` / `getSearch` calls
+  // take neither lane, so the trusted host is never throttled.
   //
   // `enqueue` + `maxConcurrency` queues excess searches rather than dropping
   // them, so nothing a card asked for goes unanswered — a burst becomes a
@@ -1429,20 +1521,43 @@ export default class StoreService extends Service implements StoreInterface {
   // realm-server's per-request heap all scale with. The server's per-request
   // bounds (page / realms / time) are the un-overridable backstop; this keeps
   // well-behaved cards from tripping them in the first place.
-  private searchThrottle = task(
+  //
+  // The card lane serves the card `@context` surface (`getCards` and the
+  // card-facing store, via `cardInitiated`).
+  private cardSearchThrottle = task(
     { maxConcurrency: SEARCH_CONCURRENCY_CAP, enqueue: true },
     async (run: () => Promise<unknown>): Promise<unknown> => {
       return await run();
     },
   );
 
-  // Run `run` under this store's search concurrency ceiling (`enqueue` +
-  // maxConcurrency), so no more than the cap hit the realm-server at once and
+  // The query-field lane serves query-field resolution (via `throttled`), which
+  // fires a search per query field per deserialized card — the larger fan-out
+  // of the two, and one that feeds itself, since each result it hydrates
+  // resolves its own query fields in turn. `enqueue` is a single FIFO with no
+  // priority, and a slot is held across the hydration as well as the fetch, so
+  // on a shared lane a search a card asks for after a page starts loading
+  // would wait out that whole drain. Its own lane keeps the fan-out from
+  // holding the slots the card lane needs.
+  private queryFieldSearchThrottle = task(
+    { maxConcurrency: QUERY_FIELD_SEARCH_CONCURRENCY_CAP, enqueue: true },
+    async (run: () => Promise<unknown>): Promise<unknown> => {
+      return await run();
+    },
+  );
+
+  // Run `run` in `lane` under that lane's concurrency ceiling (`enqueue` +
+  // maxConcurrency), so no more than its cap hit the realm-server at once and
   // the rest queue. Called from `search` when `cardInitiated` or `throttled`.
   // Typed as a plain Promise since the caller only awaits the result. Public so
   // a test can exercise the throttle with controllable work.
-  performThrottledSearch<R>(run: () => Promise<R>): Promise<R> {
-    return this.searchThrottle.perform(run) as unknown as Promise<R>;
+  performThrottledSearch<R>(
+    run: () => Promise<R>,
+    lane: SearchThrottleLane,
+  ): Promise<R> {
+    let throttle =
+      lane === 'card' ? this.cardSearchThrottle : this.queryFieldSearchThrottle;
+    return throttle.perform(run) as unknown as Promise<R>;
   }
 
   // The store handed to cards as `@context.store`, bound to the realm the
@@ -1541,19 +1656,20 @@ export default class StoreService extends Service implements StoreInterface {
     scope?: SearchEntryScope,
   ): Promise<SearchEntryResults> {
     let inPrerender = Boolean((globalThis as any).__boxelRenderContext);
-    let jobId = inPrerender
-      ? ((globalThis as any).__boxelJobId as string | undefined)
-      : undefined;
+    let renderScope = inPrerender ? currentRenderScope() : undefined;
     let consumingRealm = inPrerender
       ? ((globalThis as any).__boxelConsumingRealm as string | undefined)
       : undefined;
 
-    // Belt-and-braces jobId-change clear at fetch-entry. `resetState`
-    // and the render-route deactivate hook are the primary paths; this
-    // catches a prerender tab reused across jobs without either firing.
-    if (typeof jobId === 'string' && jobId !== this.searchCacheJobId) {
+    // Scope-change clear at fetch-entry: the first request under a new
+    // render scope drops what the previous scope cached, since the realm
+    // view it was read from may since have moved.
+    if (
+      typeof renderScope === 'string' &&
+      renderScope !== this.searchCacheScope
+    ) {
       this.searchCache.clear();
-      this.searchCacheJobId = jobId;
+      this.searchCacheScope = renderScope;
       this.searchCacheGeneration++;
     }
 
@@ -1565,17 +1681,17 @@ export default class StoreService extends Service implements StoreInterface {
     // `scope` would split them and defeat the dedup.
     let wireScope = this.resolveWireScope(query, scope);
 
-    // Resolved-doc cache eligibility: prerender + jobId + same-realm.
+    // Resolved-doc cache eligibility: prerender + render scope + same-realm.
     // Cross-realm reads bypass — see field comment.
     let cacheKey: string | undefined;
     if (
       inPrerender &&
-      typeof jobId === 'string' &&
+      typeof renderScope === 'string' &&
       typeof consumingRealm === 'string' &&
       realms.length === 1 &&
       realms[0] === consumingRealm
     ) {
-      cacheKey = searchCacheKey(jobId, consumingRealm, query, wireScope);
+      cacheKey = searchCacheKey(renderScope, consumingRealm, query, wireScope);
       if (cacheKey !== undefined) {
         let cached = this.searchCache.get(cacheKey);
         if (cached !== undefined) {
@@ -1871,10 +1987,10 @@ export default class StoreService extends Service implements StoreInterface {
       // `getDefaultRealm`. Left unset by non-`@context` callers (query-field
       // support, the render-store hook), which are not subject to the caps.
       cardInitiated?: boolean;
-      // Set by query-field resolution: take a slot in this store's search
-      // concurrency ceiling, leaving the rest of the card caps off. See
-      // `searchThrottle`. Forced off for a render store, which must not wait on
-      // a queue mid-render.
+      // Set by query-field resolution: take a slot in this store's query-field
+      // search lane, leaving the rest of the card caps off. See
+      // `queryFieldSearchThrottle`. Forced off for a render store, which must
+      // not wait on a queue mid-render.
       throttled?: boolean;
       getDefaultRealm?: () => string | undefined;
       seed?: {
@@ -2294,9 +2410,10 @@ export default class StoreService extends Service implements StoreInterface {
       return;
     }
     let invalidations = event.invalidations as string[];
-    let ownWrite = event.clientRequestId
-      ? this.cardService.clientRequestIds.has(event.clientRequestId)
-      : false;
+    let ownWrite = [
+      event.clientRequestId,
+      ...(event.coalescedWrites ?? []).map((write) => write.clientRequestId),
+    ].some((id) => !!id && this.cardService.clientRequestIds.has(id));
 
     // The invalidation triggers a rebuild when it touches an already-loaded
     // executable module: the loader must be flushed so the updated code is
@@ -2364,6 +2481,50 @@ export default class StoreService extends Service implements StoreInterface {
     }
   };
 
+  // Whether a card named by a pass that indexed several publishes has to be
+  // re-read. The pass is announced once for all of them, so the event's own
+  // `clientRequestId` names just one writer; the rule the single-writer event
+  // gets from it is asked of every writer that changed this card instead.
+  //
+  // Skipped only when every writer that changed the card is one of ours, of
+  // the kind whose content we sent, and says it wrote this card verbatim —
+  // which is when this tab holds what the card says, or something newer typed
+  // while the write was in flight. A second writer changing the same card in
+  // the same pass means the index holds whichever landed last, which this tab
+  // cannot know it holds. A card no writer changed is a dependent, whose state
+  // the realm computed.
+  #sharedPassNeedsReload(
+    writes: CoalescedIndexWrite[],
+    invalidation: string,
+  ): boolean {
+    let changedBy = writes.filter(
+      (write) => write.changed === null || write.changed.includes(invalidation),
+    );
+    if (changedBy.length === 0) {
+      realmEventsLogger.debug(
+        `reloading card ${invalidation} because no write in its shared pass changed it directly`,
+      );
+      return true;
+    }
+    let stranger = changedBy.find(
+      ({ clientRequestId, changed, clientAuthored }) =>
+        !clientRequestId ||
+        !this.cardService.clientRequestIds.has(clientRequestId) ||
+        !isInstanceWriteRequestId(clientRequestId) ||
+        !(clientAuthored ?? changed ?? []).includes(invalidation),
+    );
+    if (stranger) {
+      realmEventsLogger.debug(
+        `reloading card ${invalidation} because request ${stranger.clientRequestId ?? 'with no id'} in its shared pass changed it and did not carry our content for it`,
+      );
+      return true;
+    }
+    realmEventsLogger.debug(
+      `ignoring invalidation for card ${invalidation} because every write in its shared pass that changed it is ours and carried its content`,
+    );
+    return false;
+  }
+
   // Reload the individual cards / file-meta resources named by an incremental
   // invalidation that did not trigger a full rebuild. Returns the number of
   // reloads kicked off (for realm-event telemetry).
@@ -2389,6 +2550,7 @@ export default class StoreService extends Service implements StoreInterface {
         reloadsTriggered++;
       }
       let clientRequestId = event.clientRequestId ?? undefined;
+      let clientAuthored = event.clientAuthored;
 
       let instance = this.peekError(invalidation) ?? this.peek(invalidation);
       if (instance) {
@@ -2416,19 +2578,39 @@ export default class StoreService extends Service implements StoreInterface {
           // the auto save request and the arrival realm event.
           let reloadFile = false;
 
-          if (!clientRequestId) {
+          if (event.coalescedWrites) {
+            reloadFile = this.#sharedPassNeedsReload(
+              event.coalescedWrites,
+              invalidation,
+            );
+          } else if (!clientRequestId) {
             reloadFile = true;
             realmEventsLogger.debug(
               `reloading file resource ${invalidation} because event has no clientRequestId`,
             );
           } else if (this.cardService.clientRequestIds.has(clientRequestId)) {
-            if (
-              clientRequestId.startsWith('instance:') ||
-              clientRequestId.startsWith('editor-with-instance')
-            ) {
-              realmEventsLogger.debug(
-                `ignoring invalidation for card ${invalidation} because request id ${clientRequestId} is ours and an instance type`,
-              );
+            if (isInstanceWriteRequestId(clientRequestId)) {
+              // Our own write, of the kind whose content we sent — so this
+              // instance already holds what the card says, and may hold
+              // something newer that was typed while the write was in flight.
+              // Re-reading it is how that edit gets lost.
+              //
+              // One request can write several cards, though, and only some of
+              // them carry what we sent: the rest took state the realm
+              // computed, which we do not hold and which nothing else will
+              // bring us. A writer that says which is which narrows the skip
+              // to those cards; one that says nothing leaves the whole pass
+              // skipped, which is what a single-card write means by it.
+              if (clientAuthored && !clientAuthored.includes(invalidation)) {
+                reloadFile = true;
+                realmEventsLogger.debug(
+                  `reloading card ${invalidation} because request id ${clientRequestId} is ours but did not carry this card's content`,
+                );
+              } else {
+                realmEventsLogger.debug(
+                  `ignoring invalidation for card ${invalidation} because request id ${clientRequestId} is ours and an instance type`,
+                );
+              }
             } else {
               reloadFile = true;
               realmEventsLogger.debug(
@@ -2443,12 +2625,41 @@ export default class StoreService extends Service implements StoreInterface {
             );
           }
 
+          let alreadyHeld: string | undefined;
           if (reloadFile) {
-            this.reloadTask.perform(instance);
+            alreadyHeld = this.#indexStateAlreadyHeld(
+              event,
+              invalidation,
+              instance,
+            );
+            if (alreadyHeld) {
+              reloadFile = false;
+            }
+          }
+
+          if (reloadFile) {
+            // Record what this reload will bring before starting it, so a
+            // duplicate arriving while it is in flight has something to
+            // compare against. See `#reloadTargets`.
+            let target: ReloadTarget | undefined;
+            if (
+              typeof event.generation === 'number' ||
+              event.versions?.[invalidation] !== undefined
+            ) {
+              target = {
+                generation: event.generation,
+                version: event.versions?.[invalidation],
+              };
+              this.#reloadTargets.set(instance[localIdSymbol], target);
+            }
+            this.reloadTask.perform(instance, target);
             reloadsTriggered++;
           } else {
+            // One line per skip, naming the rule that decided it.
             realmEventsLogger.debug(
-              `ignoring invalidation ${invalidation} for request id ${clientRequestId}`,
+              alreadyHeld
+                ? `ignoring invalidation ${invalidation} because ${alreadyHeld}`
+                : `ignoring invalidation ${invalidation} for request id ${clientRequestId}`,
             );
           }
         } else {
@@ -2502,6 +2713,110 @@ export default class StoreService extends Service implements StoreInterface {
     }
 
     return reloadsTriggered;
+  }
+
+  // Does this event describe a state of `invalidation` that the store already
+  // holds, or has already gone to fetch? Returns why when it does, so the
+  // decision says itself in the log, and `undefined` when it cannot tell —
+  // which reloads, as it did before.
+  //
+  // Not reloading matters for more than the round trip it saves. A reload
+  // overwrites the in-memory instance with server state, so each one is a
+  // window in which an edit typed since the write is discarded. That is the
+  // window own-request suppression above exists to close; these two rules
+  // close cases it cannot reach.
+  //
+  // `generation` orders, and the two numbers it compares are not quite the
+  // same number. The one in hand is the card's own row generation, stamped
+  // onto the card+json GET; the one on the event is the generation of the pass
+  // that broadcast it. They coincide for a card that pass rewrote, since a
+  // pass stamps every row it writes with its own — and there an event at or
+  // below the generation in hand describes a pass this card has already been
+  // read past, which is what makes a duplicate delivery, and an event
+  // overtaken by a newer one, a no-op without keeping any memory of the events
+  // already seen.
+  //
+  // They come apart for a card invalidated by the earlier half of a mixed
+  // batch. `performIndex` runs once per module/instance group, each its own
+  // batch at its own generation, while `invalidations` accumulates across both
+  // and the one broadcast carries the union stamped with the closing pass's
+  // number — so a card the module flush invalidated keeps the flush's lower
+  // generation, and every event naming it reads as newer. This rule then never
+  // fires for it and it reloads as it did before. A missed skip and never a
+  // wrong one, which is the direction to fail in, and back-to-back duplicates
+  // are still bounded by the in-flight target below — but the comparison is
+  // not exact, so nothing should be built on it as though it were.
+  //
+  // `version` says something narrower and in a different currency: the file
+  // the realm holds for this card is the file this tab's own last write
+  // produced. It is worth being exact about what that licenses, because a
+  // card's *document* can move while its file stands still. A commit that
+  // rewrites a card with the bytes it already held still reports a version for
+  // it, and if that same commit changed something the card links to, the pass
+  // re-indexes the card as a dependent and it arrives in `invalidations` as
+  // well — so the two can intersect on a card nobody edited. Skipping is still
+  // right there, because what a document adds to the file is computed values,
+  // which this client recomputes from the live graph rather than trusting what
+  // it was served, and a link closure whose members carry their own
+  // invalidations and reload on those. Neither is state only the realm has.
+  //
+  // What the version is really for is answering after the request-id memory is
+  // gone, which is why it sits beside the generation rule rather than
+  // duplicating it. `clientRequestIds` is a `LimitedSet(250)`, so a tab that
+  // has written that many times since has evicted the id its own echo carries,
+  // and the echo then arrives indistinguishable from a stranger's —
+  // unrecognized request id, higher generation — and reloads over whatever has
+  // been typed since. A version is a property of the card rather than of a
+  // request, so it outlives that.
+  //
+  // Each rule answers in one direction only. An absent generation on either
+  // side, an absent `versions` map, an absent recorded version — all mean no
+  // information, and no information reloads. Three degradations rest on that:
+  // a realm too old to report a generation; a `versions` map dropped whole —
+  // rather than truncated — because the event it rides in would not otherwise
+  // fit, since a subscriber cannot tell a partial map from a complete one and
+  // a missing key must never read as "this card was not written"; and the
+  // broadcast a failed indexing pass sends, which names the URLs it was handed
+  // and carries neither member, so nothing here can suppress the re-read that
+  // finds whatever it swapped in.
+  #indexStateAlreadyHeld(
+    event: IncrementalIndexEventContent,
+    invalidation: string,
+    instance: CardDef,
+  ): string | undefined {
+    let held = instance[meta];
+    // What a reload already in flight will bring, which is as good an answer
+    // as holding it: the fetch is out, and a second one would only land on top
+    // of it. See `#reloadTargets`.
+    let incoming = this.#reloadTargets.get(instance[localIdSymbol]);
+    let generation = Math.max(
+      typeof held?.generation === 'number' ? held.generation : -Infinity,
+      typeof incoming?.generation === 'number'
+        ? incoming.generation
+        : -Infinity,
+    );
+    if (
+      typeof event.generation === 'number' &&
+      Number.isFinite(generation) &&
+      event.generation <= generation
+    ) {
+      return `the store is at index generation ${generation}, at or past this event's ${event.generation}`;
+    }
+    // Read by the spelling this loop is already holding. `versions` spells a
+    // card the way `invalidations` does — the realm href with a trailing
+    // `.json` removed — so the two join by construction. That is deliberately
+    // not how a write response spells it: response ids are canonicalized to
+    // registered-prefix form, which is also what `instance.id` and the
+    // identity map carry, so a lookup by `instance.id` would miss on every
+    // prefix-mapped realm and pass on the rest.
+    let version = event.versions?.[invalidation];
+    if (
+      version !== undefined &&
+      (version === held?.version || version === incoming?.version)
+    ) {
+      return `the store is at version ${version}`;
+    }
+    return undefined;
   }
 
   private loadInstanceTask = task(
@@ -2742,73 +3057,88 @@ export default class StoreService extends Service implements StoreInterface {
     }
   });
 
-  private reloadTask = task(async (instance: CardDef) => {
-    let reloadTracker = this.startTrackingCardLoad(instance.id);
-    let maybeReloadedInstance: CardDef | CardErrorJSONAPI | undefined;
-    let isDelete = false;
+  private reloadTask = task(
+    async (instance: CardDef, reloadTarget?: ReloadTarget) => {
+      let reloadTracker = this.startTrackingCardLoad(instance.id);
+      let maybeReloadedInstance: CardDef | CardErrorJSONAPI | undefined;
+      let isDelete = false;
 
-    try {
       try {
-        maybeReloadedInstance = await this.reloadInstance(instance);
-      } catch (err: any) {
-        let cardError = processCardError(instance.id, err).errors[0];
-        if (cardError?.awaitingIndex) {
-          // The realm holds this card's source and has not indexed it yet.
-          // That is a statement about the index, not about the instance this
-          // tab is already running — so keep it exactly as it is, autosave and
-          // all, and let the index event that follows bring the fresh state.
-          // Treating it as a deletion would evict a card that still exists;
-          // recording it as an error would stand a placeholder in front of one
-          // the user is working in.
-          maybeReloadedInstance = instance;
-        } else if (err.status === 404) {
-          // in this case the document was invalidated in the index because the
-          // file was deleted
-          isDelete = true;
-        } else {
-          maybeReloadedInstance = cardError;
+        try {
+          maybeReloadedInstance = await this.reloadInstance(instance);
+        } catch (err: any) {
+          let cardError = processCardError(instance.id, err).errors[0];
+          if (cardError?.awaitingIndex) {
+            // The realm holds this card's source and has not indexed it yet.
+            // That is a statement about the index, not about the instance this
+            // tab is already running — so keep it exactly as it is, autosave and
+            // all, and let the index event that follows bring the fresh state.
+            // Treating it as a deletion would evict a card that still exists;
+            // recording it as an error would stand a placeholder in front of one
+            // the user is working in.
+            maybeReloadedInstance = instance;
+          } else if (err.status === 404) {
+            // in this case the document was invalidated in the index because the
+            // file was deleted
+            isDelete = true;
+          } else {
+            maybeReloadedInstance = cardError;
+          }
         }
-      }
-      // Detach the original instance's autosave subscription when it's been
-      // superseded: either the reload errored, or the card's type changed and
-      // reloadInstance built a fresh instance of the new type and swapped it
-      // into the identity map. When the reload updated the same object in
-      // place (the common case), keep its subscription.
-      if (
-        !isCardInstance(maybeReloadedInstance) ||
-        maybeReloadedInstance !== instance
-      ) {
-        await this.stopAutoSaving(instance);
-      }
-      if (maybeReloadedInstance) {
-        this.setIdentityContext(maybeReloadedInstance);
-        await this.startAutoSaving(maybeReloadedInstance);
-      }
-      if (isDelete) {
-        await this.stopAutoSaving(instance);
-        // Snapshot the consumers BEFORE removing the deleted instance from
-        // the store. `consumersOf` walks the loaded cards and reads their
-        // linksTo refs — every consumer that has the now-deleted card in
-        // its bucket needs its slot rewritten to a link-not-found sentinel
-        // so the placeholder render takes over the slot without a
-        // navigation. Without this, the consumer's render stays stale on
-        // the now-orphaned card object until something else forces a
-        // re-render.
-        let api = await this.cardService.getAPI();
-        let consumers = this.store.consumersOf(api, instance);
-        this.store.delete(instance.id);
-        for (let consumer of consumers) {
-          api.notifyLinksToTargetDeleted(consumer, instance.id);
+        // Detach the original instance's autosave subscription when it's been
+        // superseded: either the reload errored, or the card's type changed and
+        // reloadInstance built a fresh instance of the new type and swapped it
+        // into the identity map. When the reload updated the same object in
+        // place (the common case), keep its subscription.
+        if (
+          !isCardInstance(maybeReloadedInstance) ||
+          maybeReloadedInstance !== instance
+        ) {
+          await this.stopAutoSaving(instance);
         }
-        // Notify direct-reference holders after the local eviction so their
-        // re-evaluation does not return the cached pre-delete instance.
-        // (The server is already gone — we got here from a 404 reload.)
-        this.notifyCardInvalidationSubscribers(instance.id);
+        if (maybeReloadedInstance) {
+          this.setIdentityContext(maybeReloadedInstance);
+          await this.startAutoSaving(maybeReloadedInstance);
+        }
+        if (!isDelete && maybeReloadedInstance === instance) {
+          // The same object, refreshed in place: whatever a reader computed on
+          // top of its previous state is gone, and only this case leaves that
+          // reader still holding the card it computed against.
+          this.notifyCardReloadSubscribers(instance);
+        }
+        if (isDelete) {
+          await this.stopAutoSaving(instance);
+          // Snapshot the consumers BEFORE removing the deleted instance from
+          // the store. `consumersOf` walks the loaded cards and reads their
+          // linksTo refs — every consumer that has the now-deleted card in
+          // its bucket needs its slot rewritten to a link-not-found sentinel
+          // so the placeholder render takes over the slot without a
+          // navigation. Without this, the consumer's render stays stale on
+          // the now-orphaned card object until something else forces a
+          // re-render.
+          let api = await this.cardService.getAPI();
+          let consumers = this.store.consumersOf(api, instance);
+          this.store.delete(instance.id);
+          for (let consumer of consumers) {
+            api.notifyLinksToTargetDeleted(consumer, instance.id);
+          }
+          // Notify direct-reference holders after the local eviction so their
+          // re-evaluation does not return the cached pre-delete instance.
+          // (The server is already gone — we got here from a 404 reload.)
+          this.notifyCardInvalidationSubscribers(instance.id);
+        }
+      } finally {
+        // Released only if it is still this reload's: a newer event may have
+        // scheduled its own while this one was in flight, and that one is what
+        // the rules should go on reading.
+        let localId = instance[localIdSymbol];
+        if (reloadTarget && this.#reloadTargets.get(localId) === reloadTarget) {
+          this.#reloadTargets.delete(localId);
+        }
+        this.finishTrackingCardLoad(instance.id, reloadTracker);
       }
-    } finally {
-      this.finishTrackingCardLoad(instance.id, reloadTracker);
-    }
-  });
+    },
+  );
 
   private reloadFileMetaTask = task(async (url: string) => {
     let waiterLabel = `reloadFileMeta ${url}`;
@@ -2831,11 +3161,90 @@ export default class StoreService extends Service implements StoreInterface {
     }
     if (isCardInstance(instance)) {
       this._instanceMutationVersion++;
+      this.#recordLocalEdit(instance, fieldName);
       let autoSaveState = this.initOrGetAutoSaveState(instance);
       autoSaveState.hasUnsavedChanges = true;
       this.doAutoSave(instance);
     }
   };
+
+  // A nested path (`address.street`, `items.2`) records its top-level field:
+  // that is the unit a card document carries, and so the unit a merge can
+  // keep or take.
+  #recordLocalEdit(instance: CardDef, fieldName: string) {
+    let edits = this.#localEdits.get(instance);
+    if (!edits) {
+      edits = new Map();
+      this.#localEdits.set(instance, edits);
+    }
+    edits.set(fieldName.split('.')[0], ++this.#localEditSeq);
+  }
+
+  // Clears the edits a successful save carried: those made before it
+  // serialized the instance, i.e. stamped at or below `sentSeq`.
+  #acknowledgeLocalEdits(instance: CardDef, sentSeq: number) {
+    let edits = this.#localEdits.get(instance);
+    if (!edits) {
+      return;
+    }
+    for (let [fieldName, seq] of edits) {
+      if (seq <= sentSeq) {
+        edits.delete(fieldName);
+      }
+    }
+  }
+
+  // The fields a reload keeps as the user has them: those with an edit the
+  // realm has not acknowledged, less any an optimistic operation still owns.
+  #pinnedFields(instance: CardDef): Set<string> {
+    let pinned = new Set(this.#localEdits.get(instance)?.keys() ?? []);
+    for (let field of this.#optimisticFields.get(instance[localIdSymbol]) ??
+      []) {
+      pinned.delete(field);
+    }
+    return pinned;
+  }
+
+  // Which top-level fields an operation's local run changed, compared against
+  // the source it ran over. A relationship key names its field before any
+  // `.<n>` member suffix.
+  #recordOptimisticFields(
+    instance: CardDef,
+    basis: LooseCardResource,
+    result: LooseCardResource,
+  ) {
+    let changed = new Set<string>();
+    for (let member of ['attributes', 'relationships'] as const) {
+      let before = (basis[member] ?? {}) as Record<string, unknown>;
+      let after = (result[member] ?? {}) as Record<string, unknown>;
+      for (let key of new Set([
+        ...Object.keys(before),
+        ...Object.keys(after),
+      ])) {
+        if (!isEqual(before[key], after[key])) {
+          changed.add(key.split('.')[0]);
+        }
+      }
+    }
+    if (changed.size === 0) {
+      return;
+    }
+    let localId = instance[localIdSymbol];
+    let fields = this.#optimisticFields.get(localId);
+    if (!fields) {
+      fields = new Set();
+      this.#optimisticFields.set(localId, fields);
+    }
+    for (let field of changed) {
+      fields.add(field);
+    }
+  }
+
+  // The card's operation chain has drained: no optimistic effect on it is
+  // unconfirmed any more, so its fields are the user's to keep again.
+  releaseOptimisticFields(localId: string) {
+    this.#optimisticFields.delete(localId);
+  }
 
   private setIdentityContext(
     instanceOrError: CardDef | FileDef | CardErrorJSONAPI,
@@ -3576,16 +3985,8 @@ export default class StoreService extends Service implements StoreInterface {
       return await this.withCardMutationLock(
         instance[localIdSymbol],
         async () => {
+          let endCreate: (() => void) | undefined;
           try {
-            let doc = await this.cardService.serializeCard(instance, {
-              // for a brand new card that has no id yet, we don't know what we are
-              // relativeTo because its up to the realm server to assign us an ID, so
-              // URL's should be absolute
-              useAbsoluteURL: true,
-              withLocalResourcesIncluded: true,
-              omitQueryFields: true,
-            });
-
             // send doc over the wire with absolute URL's. The realm server will convert
             // to relative URL's as it serializes the cards
             let realmURL = instance[realmURLSymbol];
@@ -3599,6 +4000,10 @@ export default class StoreService extends Service implements StoreInterface {
               }
               realmURL = new URL(defaultRealmHref);
             }
+            let doc: LooseSingleCardDocument;
+            let sentSeq: number;
+            ({ doc, sentSeq, endCreate } =
+              await this.#serializeForSave(instance));
             let json = await this.saveCardDocument(doc, {
               realm: realmURL.href,
               localDir: opts?.localDir,
@@ -3621,6 +4026,8 @@ export default class StoreService extends Service implements StoreInterface {
             if (isNew) {
               await this.assignRemoteIdentity(instance, json.data.id!);
             }
+            this.#recordWrittenVersion(instance, json);
+            this.#acknowledgeLocalEdits(instance, sentSeq);
             if (this.onSaveSubscriber) {
               this.onSaveSubscriber(
                 this.network.virtualNetwork.toURL(json.data.id!),
@@ -3641,10 +4048,94 @@ export default class StoreService extends Service implements StoreInterface {
               this.store.addCardInstanceOrError(remoteId, cardError);
             }
             return cardError;
+          } finally {
+            endCreate?.();
           }
         },
       );
     });
+  }
+
+  // A save sends, as cards to create, the linked cards that have no id yet.
+  // Having no id is also what a card looks like while its own create is on the
+  // wire: the realm may already hold its file, and only the response carrying
+  // the id has yet to arrive. Sending such a card again asks the realm to
+  // create a card it already stores, which it refuses, failing the whole save.
+  //
+  // So the save waits for each of those creates to answer and serializes
+  // again, by which time the card holds its id and goes out as a plain link.
+  // What it waits on is a request, not a lock: an entry in
+  // `inflightCardCreates` exists only once its create has done all of its own
+  // waiting, so two new cards linking to each other cannot end up waiting on
+  // one another. A create that fails still settles its entry, leaving the card
+  // without an id — and a card with no id and no create on the wire is one to
+  // create alongside this save, as any unsaved link is.
+  //
+  // The check and, for a create, the registration of this save's own entry
+  // happen in one synchronous step with nothing awaited between them and the
+  // send. A create that registers in between would otherwise be missed by a
+  // save that checked before it, and both would go out.
+  //
+  // Covers a card's own create — this path, and a batch minting cards it was
+  // handed — and not a linked card created as a side-load of another write.
+  // That card takes its id from the realm's index event rather than from the
+  // write's response, so there is no response here that would hand it one.
+  //
+  // `sentSeq` is the edit sequence sampled before the serialization that is
+  // returned: every edit stamped up to it is in that document.
+  async #serializeForSave(instance: CardDef): Promise<{
+    doc: LooseSingleCardDocument;
+    sentSeq: number;
+    endCreate?: () => void;
+  }> {
+    for (;;) {
+      let sentSeq = this.#localEditSeq;
+      let doc = await this.cardService.serializeCard(instance, {
+        // for a brand new card that has no id yet, we don't know what we are
+        // relativeTo because its up to the realm server to assign us an ID, so
+        // URL's should be absolute
+        useAbsoluteURL: true,
+        withLocalResourcesIncluded: true,
+        omitQueryFields: true,
+      });
+      let pendingCreates = (doc.included ?? []).flatMap((resource) => {
+        let pending =
+          !resource.id && 'lid' in resource && resource.lid
+            ? this.inflightCardCreates.get(resource.lid)
+            : undefined;
+        return pending ? [pending] : [];
+      });
+      if (pendingCreates.length === 0) {
+        return {
+          doc,
+          sentSeq,
+          ...(doc.data.id
+            ? {}
+            : { endCreate: this.beginCreates([instance[localIdSymbol]]) }),
+        };
+      }
+      await Promise.all(pendingCreates);
+    }
+  }
+
+  // Marks the cards named by these local ids as having a create on the wire,
+  // for a save linking to one of them to wait on; the returned function ends
+  // that, and must be called once the write's response has been applied or
+  // has failed. Called only once the write has done all of its own waiting
+  // and is about to be sent — see `#serializeForSave`.
+  beginCreates(localIds: readonly string[]): () => void {
+    let sent = new Deferred<void>();
+    for (let localId of localIds) {
+      this.inflightCardCreates.set(localId, sent.promise);
+    }
+    return () => {
+      for (let localId of localIds) {
+        if (this.inflightCardCreates.get(localId) === sent.promise) {
+          this.inflightCardCreates.delete(localId);
+        }
+      }
+      sent.fulfill();
+    };
   }
 
   // Serializes mutations of one instance, keyed by its local id, so a save
@@ -3674,6 +4165,210 @@ export default class StoreService extends Service implements StoreInterface {
     }
   }
 
+  // Runs a batch write under the same per-instance lock a save takes, for every
+  // card the caller is already holding that the batch is about to mint. An
+  // autosave of one of those cards that starts while the batch is in flight
+  // waits for it and then PATCHes the card the batch named, rather than posting
+  // a second one.
+  //
+  // Nested rather than acquired as a set: each lock is a queue for one local id
+  // and the batch is the only thing that holds more than one, so there is no
+  // second holder to deadlock against — and folding keeps this the same
+  // primitive a save takes rather than a second kind of lock.
+  //
+  // Each id is taken once. A caller naming the same card twice would otherwise
+  // have the inner acquisition wait on the deferred the outer one is still
+  // holding, and a batch that names one card twice is a batch that deadlocks
+  // before the realm ever gets to refuse it for saying the same card is two
+  // cards.
+  async withMutationLocks<T>(
+    localIds: readonly string[],
+    fn: () => Promise<T>,
+  ): Promise<T> {
+    let [first, ...rest] = [...new Set(localIds)];
+    if (first === undefined) {
+      return await fn();
+    }
+    return await this.withCardMutationLock(first, () =>
+      this.withMutationLocks(rest, fn),
+    );
+  }
+
+  // Fires whenever this store re-reads a card from its realm and keeps the
+  // same instance — which is what a foreign write looks like from outside the
+  // store.
+  //
+  // Distinct from `subscribeToCardInvalidation`, which fires only when a card
+  // is deleted. A reader holding something computed on top of the card's
+  // previous state — the optimistic ledger's unsent entries — needs to know
+  // that state is gone, and a deletion notice never tells it.
+  //
+  // Not fired for a reload that replaced the instance (the card's type
+  // changed) or that resolved to an error: in neither case is there a card
+  // whose earlier state a subscriber could still be reasoning about.
+  onCardReloaded(cb: (instance: CardDef) => void): () => void {
+    this.cardReloadSubscribers.add(cb);
+    return () => {
+      this.cardReloadSubscribers.delete(cb);
+    };
+  }
+
+  private notifyCardReloadSubscribers(instance: CardDef) {
+    // Snapshotted so a subscriber unsubscribing from its own callback does not
+    // mutate the set being walked, and isolated so one subscriber's throw does
+    // not cost the others their notice.
+    for (let subscriber of [...this.cardReloadSubscribers]) {
+      try {
+        subscriber(instance);
+      } catch (err) {
+        console.error(`card reload subscriber threw for ${instance.id}`, err);
+      }
+    }
+  }
+
+  // The version this session believes the card's stored bytes carry, and the
+  // recording of a new one.
+  //
+  // The same channel `#recordWrittenVersion` uses for a card+json write, and
+  // for the same reason: a version reaches an instance from a response that
+  // carries one and from nowhere else, since nothing here can compute a hash
+  // of bytes it did not write. Exposed so an operation's write result feeds
+  // the reload-suppression rules the way a save's does — an operation that
+  // wrote a card without recording its version leaves its own echo looking
+  // like a stranger's.
+  operationVersionOf(instance: CardDef): string | undefined {
+    return instance[meta]?.version;
+  }
+
+  recordOperationVersion(instance: CardDef, version: string) {
+    this.#recordWrittenVersion(instance, {
+      data: { meta: { version } },
+    } as SingleCardDocument);
+  }
+
+  // Put a source document an operation produced onto a held instance.
+  //
+  // `updateFromSerialized` writes the instance's data bucket directly and
+  // announces nothing to change subscribers, so this does not mark the card
+  // dirty or schedule a save — the same reason a reload does not. That is the
+  // point: the write is already on its way to the realm as an operation, and
+  // an autosave racing it would send the card a second time.
+  //
+  // The realm-managed members of `meta` are carried across by hand. A
+  // serialization built from an instance rebuilds `meta` from scratch —
+  // `adoptsFrom`, the realm, the per-field metadata — and the deserializer
+  // assigns what it is handed wholesale, so applying one would otherwise drop
+  // the `version` and `generation` this store holds. Those are exactly what
+  // the next operation names as its base and what the index event rules read
+  // to decide whether to re-read the card, so losing them here would turn
+  // every optimistic write after the first into an unconfirmable one.
+  async applyOperationSource(
+    instance: CardDef,
+    resource: LooseCardResource,
+    basis: LooseCardResource,
+  ): Promise<void> {
+    let api = await this.cardService.getAPI();
+    let held = instance[meta];
+    this.#recordOptimisticFields(instance, basis, resource);
+    await api.updateFromSerialized(
+      instance,
+      { data: resource } as LooseSingleCardDocument,
+      this.store,
+    );
+    // The served metadata underneath, the serialization's on top. A
+    // serialization rebuilds `meta` from scratch and produces only what it can
+    // derive from the instance — `adoptsFrom`, the realm, and the per-field
+    // metadata, which the mutation legitimately moves. Everything else the card
+    // was served with (`realmInfo`, `lastModified`, `resourceCreatedAt`,
+    // `screenshots`, and the `version` / `generation` the next operation and
+    // the store's own event rules read) is absent from it, so assigning it
+    // wholesale would drop realm branding and modification times until
+    // something re-read the card.
+    instance[meta] = {
+      ...held,
+      ...instance[meta],
+    } as CardResourceMeta;
+  }
+
+  // Re-read a card from its realm, discarding whatever this tab holds for it
+  // apart from fields the user has edited that the realm has not yet
+  // acknowledged and no pending operation has changed. An optimistic
+  // application is always discarded: a field an operation changed is never
+  // kept, even when the user also typed into it (see `#optimisticFields`).
+  //
+  // The rollback an optimistic operation takes when the realm reports it ran
+  // from a different base. Routed through the same task an index event's
+  // reload takes, so a rollback and an invalidation leave the store in the
+  // same place — the autosave re-subscription and the identity bookkeeping
+  // included.
+  async reloadForRollback(instance: CardDef): Promise<void> {
+    await this.reloadTask.perform(instance);
+  }
+
+  // Pairs every card a committed batch minted with the instance this store was
+  // already holding for it, and promotes that instance the way a save does.
+  //
+  // A pair naming a card the store never held is skipped rather than refused: a
+  // batch mints cards from plain data as readily as from an instance, and one
+  // nothing here is holding has no identity to assign. What is refused is a
+  // pairing that contradicts one the store already made — the identity map
+  // throws on it, and doing so from inside an event handler would surface it
+  // far from the batch that caused it, so it is caught here where the caller is
+  // still waiting.
+  async adoptMintedIdentities(
+    minted: readonly { lid: string; id: string }[],
+  ): Promise<void> {
+    // Every pairing is judged before any is made, so which cards get promoted
+    // does not depend on where in the list a conflict happened to sit.
+    let conflicts: { lid: string; id: string; held: CardDef }[] = [];
+    let pairs: { lid: string; id: string }[] = [];
+    for (let { lid, id } of minted) {
+      let held = this.store.getCard(rri(id));
+      if (held && held[localIdSymbol] !== lid) {
+        conflicts.push({ lid, id, held });
+      } else {
+        pairs.push({ lid, id });
+      }
+    }
+
+    // The batch committed, so every card it wrote exists and every pairing the
+    // store can honor is one the realm already agrees with. Promoting them is
+    // not a partial success to be undone — it is the rest of the batch, and
+    // withholding it would leave those instances unaddressable over a quarrel
+    // about a different card.
+    for (let { lid, id } of pairs) {
+      let instance = this.store.getCard(lid);
+      if (!instance || instance.id) {
+        continue;
+      }
+      await this.assignRemoteIdentity(instance, rri(id));
+    }
+
+    if (conflicts.length === 0) {
+      return;
+    }
+
+    // A conflicting card is the one case where the realm's own event cannot
+    // put things right on its own. The write names that card as carrying this
+    // client's content — which it does, for the local id the batch sent — so
+    // the event is read as one to skip, while the instance this store actually
+    // holds for that URL belongs to a different local id and is now stale with
+    // nothing coming to refresh it. Re-reading it here is what closes that.
+    for (let { held } of conflicts) {
+      // Only one that has a URL of its own can be re-read. An instance filed
+      // under a remote id without holding one has nothing to fetch, and its
+      // being in that state is the disagreement being reported rather than
+      // something a read would settle.
+      if (held.id) {
+        this.reloadTask.perform(held);
+      }
+    }
+    let [{ id, lid, held }] = conflicts;
+    throw new Error(
+      `the batch committed, but its card ${id} cannot be paired with local id ${lid}: this store already holds that card under local id ${held[localIdSymbol]}. The realm has the write, the batch's other cards are paired, and this tab's copy of that card is being re-read.`,
+    );
+  }
+
   // Promotes an instance the realm has just named from local-id-only to fully
   // addressable. The steps are ordered and every one of them is required, so
   // any code path that learns a new instance's remote id routes through here
@@ -3687,6 +4382,12 @@ export default class StoreService extends Service implements StoreInterface {
   //   5. the identity map indexes the instance under both ids, so lookups by
   //      either return this same object;
   //   6. autosave takes over subsequent edits.
+  //
+  // Runs while the create that named the instance still holds its entry in
+  // `inflightCardCreates`, and a save of a card linking to this one may be
+  // waiting on that entry while holding its own mutation lock. So nothing here
+  // may wait on another card's save: `updateForeignConsumersOf` starts the
+  // consumers' saves without awaiting them for exactly that reason.
   private async assignRemoteIdentity(
     instance: CardDef,
     remoteId: RealmResourceIdentifier,
@@ -3700,6 +4401,27 @@ export default class StoreService extends Service implements StoreInterface {
     await this.updateForeignConsumersOf(instance);
     this.setIdentityContext(instance);
     await this.startAutoSaving(instance);
+  }
+
+  // Keep the version a card+json write reported — the fingerprint of the bytes
+  // the realm stored. A card+json read reports one too, and
+  // `_updateFromSerialized` assigns a served `meta` onto the instance wholesale,
+  // so a read lands one without passing through here; this records the write's,
+  // which no read is guaranteed to follow. `#indexStateAlreadyHeld` reads
+  // whichever is held.
+  //
+  // Recorded rather than left to the server-state merge above, which runs only
+  // when the identity or the realm info moved and so skips the ordinary save.
+  // A response carrying no version (a realm old enough not to report one)
+  // clears whatever was held instead of leaving it: a version that no longer
+  // describes the bytes the realm holds would suppress a reload that is needed.
+  #recordWrittenVersion(instance: CardDef, json: SingleCardDocument) {
+    let held = instance[meta];
+    let version = json.data.meta?.version;
+    if (version === held?.version) {
+      return;
+    }
+    instance[meta] = { ...held, version } as CardResourceMeta;
   }
 
   // in the case we are making a cross realm relationship with a link that
@@ -3720,6 +4442,8 @@ export default class StoreService extends Service implements StoreInterface {
     for (let consumer of consumers) {
       let consumerRealm = consumer[realmURLSymbol]?.href;
       if (consumerRealm !== instanceRealm && consumer.id) {
+        // Not awaited: the consumer's save may be waiting on this card's
+        // create, which is still in flight — see `assignRemoteIdentity`.
         this.save(consumer.id);
       }
     }
@@ -3734,6 +4458,10 @@ export default class StoreService extends Service implements StoreInterface {
     let waiterLabel = `reloadInstance ${instance.id}`;
     return await this.withTestWaiters(waiterLabel, async () => {
       let api = await this.cardService.getAPI();
+      // Fields pinned when the read goes out stay pinned for this reload even
+      // if a save acknowledges them while it is in flight: the realm may have
+      // answered the read before that save wrote.
+      let pinnedAtRead = this.#pinnedFields(instance);
       let incomingDoc: SingleCardDocument = (await this.cardService.fetchJSON(
         instance.id,
         undefined,
@@ -3802,11 +4530,38 @@ export default class StoreService extends Service implements StoreInterface {
         return rebuilt;
       }
 
+      // Asked again as each field is written rather than once here, so a
+      // field the user starts editing while the read or the deserialization is
+      // still running is kept too.
+      let kept = new Set<string>();
       await api.updateFromSerialized<typeof CardDef>(
         instance,
         incomingDoc,
         this.store,
+        undefined,
+        (fieldName) => {
+          let keep =
+            this.#pinnedFields(instance).has(fieldName) ||
+            (pinnedAtRead.has(fieldName) &&
+              !this.#optimisticFields
+                .get(instance[localIdSymbol])
+                ?.has(fieldName));
+          if (keep) {
+            kept.add(fieldName);
+          }
+          return keep;
+        },
       );
+      if (kept.size > 0) {
+        realmEventsLogger.debug(
+          `reload of ${instance.id} keeps local edits to ${[...kept].join(', ')}`,
+        );
+        // The instance now holds the user's edits over the realm's state, and
+        // a save already on the wire was serialized before that state arrived,
+        // so it carries the old values of the fields this reload just took.
+        // One more save, queued behind it, writes the merged card.
+        this.doAutoSave(instance);
+      }
       return instance;
     });
   }
@@ -4035,7 +4790,7 @@ export function asURL(
   // virtual/url-mapped alias unchanged, so that spelling would split from the
   // RRI and orphan an inflight-load deferred. gc-card-store and render-service
   // key the same way. Locals stay as-is.
-  return isLocalId(id) ? id : vn.toRealURLHref(id);
+  return isLocalId(id) ? id : vn.keyForIdentifier(id);
 }
 
 function isSystemCardDefaultId(

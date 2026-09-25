@@ -6,6 +6,19 @@ export interface BoxelIndexTable {
   url: string;
   file_alias: string;
   generation: number;
+  // Which host bundle rendered this row, as the ordering position the realm
+  // server assigned that shell on first observing it. Distinct from
+  // `generation` above, which counts this realm's own writes: that one says
+  // when the row was written, this one says what rendered it, and a repair of
+  // deploy-skewed rows needs the second question.
+  //
+  // `null` means no number reached the render — a realm server that could not
+  // reach its database reports the shell token alone, and a prerender server
+  // deployed ahead of one that reports the number sends none. Unknown rather
+  // than old: the repair predicate is `< current`, which excludes null.
+  //
+  // A write stamp. Nothing that decides row liveness may read it.
+  host_shell_generation: number | null;
   realm_url: string;
   type: 'instance' | 'file';
   has_error: boolean | null;
@@ -26,6 +39,27 @@ export interface BoxelIndexTable {
   // The icon renders in the index visit, so it lives here rather than on
   // `prerendered_html` with the other rendered output.
   icon_html: string | null;
+  // The content hash of the source bytes this row's document was built from,
+  // served as `meta.version` on the single-card card+json GET. A client sends
+  // it back as the base its next write is computed against, and the realm
+  // answers `baseMatched` by comparing that base against the bytes it executed
+  // from — so the value has to identify the bytes behind `pristine_doc` and
+  // nothing else. A version naming newer bytes than the document beside it
+  // would turn a client's honest "I cannot confirm this" into a false
+  // confirmation.
+  //
+  // Stamped from the render's own read of the source, which is the read whose
+  // result is serialized into `pristine_doc`. The worker's separate read of the
+  // same file (`reader.readFile` in the visit) is a different read that can see
+  // different bytes, so it is not the one this comes from.
+  //
+  // Instance rows only. A file row's hash already rides inside its
+  // `pristine_doc` as the file-meta resource's `contentHash`.
+  //
+  // Null means no pass has stamped the row, or the pass produced no document.
+  // The GET then reports no version, which is what it did before this column
+  // existed. Nothing that decides row liveness may read it.
+  source_content_hash: string | null;
   indexed_at: string | null; // pg represents big integers as strings in javascript
   last_modified: string | null; // pg represents big integers as strings in javascript
   resource_created_at: string | null; // pg represents big integers as strings in javascript
@@ -38,12 +72,16 @@ export interface BoxelIndexTable {
   // so operators can post-hoc investigate slow (but not failing) renders
   // and enumerate cards with broken links. See `Diagnostics` in `index.ts`.
   diagnostics: Record<string, unknown> | null;
-  // Originating worker job id. Stamped on every working-table write so
-  // a retry of the same job can find (and skip) URLs the previous
-  // attempt already processed. Only present on `boxel_index_working`
-  // — the production `boxel_index` mirror does not carry this column,
-  // hence the field is optional.
+  // Originating worker job id. Only present on the staging tables
+  // (`boxel_index_pending`, and the unused `boxel_index_working`) —
+  // the production `boxel_index` does not carry this column, hence the field
+  // is optional.
   job_id?: number | null;
+  // Which pass's staging a `boxel_index_pending` row belongs to: `job:<id>`,
+  // shared by every attempt of that job so a retry can find (and skip) URLs
+  // an earlier attempt already processed, or `adhoc:<pass id>` for a batch
+  // that runs outside a job. Only present on the pending table.
+  staging_id?: string;
 }
 
 // Prerendered HTML lives on its own channel, separate from the search-doc
@@ -90,10 +128,14 @@ export interface PrerenderedHtmlTable {
   // configured) or the card declares none; a slot whose capture failed is
   // simply absent (see `diagnostics.screenshotErrors`).
   screenshots: Record<string, unknown> | null;
-  // Originating worker job id. Only present on `prerendered_html_working`;
-  // the production `prerendered_html` mirror does not carry this column,
+  // Originating worker job id. Only present on the staging tables
+  // (`prerendered_html_pending`, and the unused
+  // `prerendered_html_working`); the production `prerendered_html` does not carry this column,
   // hence the field is optional.
   job_id?: number | null;
+  // See `BoxelIndexTable.staging_id`. Only present on
+  // `prerendered_html_pending`.
+  staging_id?: string;
 }
 
 export interface RealmGenerationsTable {
@@ -105,6 +147,32 @@ export interface RealmGenerationsTable {
   // from the one the tab last cleared for. '0' is the no-epoch-yet
   // sentinel (a realm no pass with executables has committed against).
   loader_epoch: string;
+}
+
+// One row per committed index pass: the ledger of which pass took each
+// generation of a realm. `realm_generations` holds only the newest generation;
+// this says what every recent one was — which URLs its commit promoted, and
+// what committed state the pass had started from. A row whose
+// `base_generation` is below `generation - 1` belongs to a pass that ran while
+// a peer committed.
+export interface RealmIndexCommitsTable {
+  realm_url: string;
+  generation: number;
+  // The `current_generation` the pass was set up against.
+  base_generation: number;
+  // Minted per batch, so the attempts of a retried job tell apart.
+  pass_id: string;
+  job_id: number | null;
+  // The URLs the commit promoted, sorted. NULL for a full-realm pass, and for
+  // a pass that moved too many rows to list; either way, read NULL as every
+  // URL in the realm.
+  urls: string[] | null;
+  // The render-only dependents the commit restamped without promoting, sorted.
+  // NULL exactly when `urls` is.
+  render_only_urls: string[] | null;
+  full_realm: boolean;
+  // Epoch milliseconds.
+  committed_at: number;
 }
 
 // The catch-all `realm_type_generations.type_key`. A lookup always folds this
@@ -181,6 +249,27 @@ export function normalizeRealmMetaValue(raw: unknown): RealmMetaValue {
     instances: value.instances ?? [],
     files: value.files ?? [],
   };
+}
+
+// Whether `raw` already carries both arms, so `normalizeRealmMetaValue` would
+// hand it back as-is rather than synthesizing an arm it never had.
+//
+// The legacy shape is a bare `CardTypeSummary[]` of instances, and normalizing
+// it fabricates `files: []`. That empty array is indistinguishable from a realm
+// that genuinely has no file rows, so a caller that carries a prior value
+// forward instead of recomputing it has to ask this first — otherwise it
+// publishes the fabricated arm as though a pass had established it, and the
+// realm's file types vanish from the sidebar. Recomputing is what re-establishes
+// the arm, so a realm still on the legacy shape has to keep recomputing until
+// one pass has written the partitioned one.
+export function isPartitionedRealmMetaValue(
+  raw: unknown,
+): raw is RealmMetaValue {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return false;
+  }
+  let value = raw as Partial<RealmMetaValue>;
+  return Array.isArray(value.instances) && Array.isArray(value.files);
 }
 
 export const coerceTypes = Object.freeze({

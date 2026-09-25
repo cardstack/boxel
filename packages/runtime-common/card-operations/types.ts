@@ -217,7 +217,12 @@ export type OperationLoweringIssueCode =
   // which wins. The decorator refuses each, so one only reaches a stored
   // entry — where appending nothing, or a literal `null`, is worse than
   // refusing.
-  | 'incomplete-append';
+  | 'incomplete-append'
+  // An `instance(…)` inside an `appendContainsMany` item. An append edits the
+  // card's stored bytes without ever assembling its document, which is the
+  // whole reason the behavior exists, so the card's own values are not there
+  // to read — an item that needs one belongs on a `transform`.
+  | 'instance-out-of-scope';
 
 // A problem found while lowering one operation. Recorded, never thrown:
 // definition build is decoupled in time from the edit that introduced the
@@ -239,6 +244,38 @@ export interface LowerOperationDeclarationsResult {
   // same issues are on the operations that carry them; this is the flat view
   // a module's diagnostics are built from.
   issues: OperationLoweringIssue[];
+}
+
+export type PolicyIssueCode =
+  // The realm's `policy` pointer names a card the index does not hold.
+  | 'policy-card-missing'
+  // The pointer names a card the index holds only as an error.
+  | 'policy-card-unloadable'
+  // The pointer names a card that is not a `RealmPolicy`.
+  | 'not-a-policy'
+  // A rule whose `targetType` is not a code ref.
+  | 'invalid-rule'
+  // A rule whose `targetType` resolves to no definition.
+  | 'unresolved-type'
+  // A grant with no operation name, or a `where` that is neither BXL source
+  // nor the annotated `{ bxl, snapshot }` form.
+  | 'invalid-grant'
+  // A `where` that does not parse, or that the `policy` profile refuses.
+  | 'invalid-predicate'
+  // A grant on a query whose `where` does not compile to a search filter. The
+  // grant is kept, and admits no search.
+  | 'policy-not-filterable';
+
+// A problem found while compiling a realm's policy. Recorded, never thrown,
+// for the reason lowering records rather than throws: the edit that caused it
+// is not the request that finds it.
+export interface PolicyIssue {
+  code: PolicyIssueCode;
+  // Where in the policy card, as a path into its attributes —
+  // `rules[0].targetType`, `rules[1].grants[0].where` — or the empty string
+  // for a problem with the card as a whole.
+  path: string;
+  message: string;
 }
 
 // ============================================================================
@@ -275,6 +312,28 @@ export function isDefinitionFreeBaseOperation(name: string): boolean {
   return (DEFINITION_FREE_BASE_OPERATIONS as readonly string[]).includes(name);
 }
 
+// The behaviors that change stored state, which is what decides the permission
+// the request needed and therefore which method may carry the batch.
+//
+// Exhaustive over the base operations on purpose: a further behavior has to
+// say here whether it writes, rather than defaulting to "read" and reaching a
+// commit from a request that was only authorized to read.
+const WRITES: Readonly<Record<BaseOperation, boolean>> = {
+  read: false,
+  readSource: false,
+  query: false,
+  create: true,
+  update: true,
+  delete: true,
+  transform: true,
+  appendContainsMany: true,
+  appendLine: true,
+};
+
+export function isWrite(base: BaseOperation): boolean {
+  return WRITES[base];
+}
+
 // What an operation runs against. An `instance` target is an existing card or
 // file, addressed by URL — the identity of a thing that already has stored
 // state. A `type` target names a class instead, for the operations that have
@@ -308,19 +367,38 @@ export interface OperationRequest {
   // unconditional write; present makes the write conditional, and the result's
   // `baseMatched` reports whether the target was still at that version.
   baseVersion?: string;
+  // Set when the realm ACL declined this request's caller. That is the one
+  // case the realm's policy decides whether the operation runs. Absent means
+  // the ACL allowed the caller, or never judged the request, as with a
+  // realm-internal dispatch.
+  coarseDeclined?: true;
 }
 
 // A read's answer: the assembled JSON:API document, exactly as the card+json
-// GET serves it.
+// GET serves it — or, where the operation declares an `output`, that document
+// as the projection left it.
 export interface OperationDocumentResult {
+  // What the caller is served. A projection replaces the assembled document
+  // rather than travelling beside it, so a consumer that forgot the stage
+  // exists serves the projection rather than the document it was meant to
+  // replace. A projection is still a JSON:API document — the read executor
+  // requires an object with an object `data`, since this is what a card+json
+  // response carries — but nothing below `data` is the platform's to promise,
+  // so read `projected` before reading into the document's own shape.
   document: SingleCardDocument | SingleFileMetaDocument;
+  // Whether `document` is an `output` projection. A projected body is not the
+  // realm's canonical representation of the card: it is per-operation, it may
+  // be per-actor, and the validator the index row yields describes the
+  // unprojected document, so a caller emitting HTTP headers has to keep it out
+  // of every shared cache and out of the conditional fast path.
+  projected: boolean;
   // What the index row this document was assembled from says about itself, in
   // the shape a headers-only read answers with. A caller computing HTTP
   // response headers needs both halves out of one read: a validator has to
   // describe the bytes it is sent with, and peeking again to obtain one lets a
   // write land in between and pairs a body with a validator for a different
   // one.
-  headers: OperationHeadResult;
+  headers: OperationRowHeaders;
   // Whether assembling this document applied a query-backed field. Such a
   // document is not a function of its own index row — a write to some other
   // card that enters or leaves the query changes it without moving this card's
@@ -329,11 +407,12 @@ export interface OperationDocumentResult {
   queryBacked: boolean;
 }
 
-// A headers-only read's answer. These are the values the card+json response
-// headers are computed from — the validator, the modification time, and the
-// index-data generation and screenshot manifest that go into it. No body is
-// assembled to produce them.
-export interface OperationHeadResult {
+// What the index row behind a read says about itself: the values the card+json
+// response headers are computed from — the validator, the modification time,
+// and the index-data generation and screenshot manifest that go into it.
+// Carried by both read modes, since the document mode reports the row its body
+// came from alongside the body.
+export interface OperationRowHeaders {
   // Which representation these headers describe, the same discrimination
   // `data.type` makes on the document a full read answers with. A caller
   // sending them has to know: a file's metadata document is derived from the
@@ -351,6 +430,16 @@ export interface OperationHeadResult {
   // anyway would serve a 304 against stale foreign content. Whoever computes
   // the headers makes that call, so they need what it rests on.
   deps: string[] | null;
+}
+
+// A headers-only read's answer: the row, and nothing assembled from it. No
+// body is produced, which is the whole difference between the two modes.
+export interface OperationHeadResult extends OperationRowHeaders {
+  // Whether the full read of this target would answer with an `output`
+  // projection. Reported by the headers mode although it projects nothing,
+  // because a `HEAD` states the headers the `GET` would send and those differ
+  // for a projected body — see `projected` on the document result.
+  projected: boolean;
 }
 
 // The stored bytes of a resource, and what the byte-serve headers are computed
@@ -551,6 +640,11 @@ export type OperationErrorCode =
   // nobody. Distinct from `invalid-params` because nothing the caller sent is
   // wrong: the remedy is credentials, which is what its 401 says.
   | 'actor-required'
+  // The realm ACL declined the caller, and no grant in the realm's policy
+  // admits this operation on this target. The detail is the same whether the
+  // target exists or not, and whatever the policy holds, so the refusal says
+  // nothing about the realm beyond the fact of the refusal.
+  | 'operation-not-permitted'
   // The bytes an operation would store are over the realm's ceiling for a
   // card or a file of that kind. Separate from `invalid-params` because the
   // payload is well formed and the remedy is to send less of it, and because

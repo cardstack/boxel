@@ -17,8 +17,10 @@ import type {
 import {
   Deferred,
   registerQueueJobDefinition,
+  systemInitiatedPriority,
   userInitiatedPriority,
 } from '@cardstack/runtime-common';
+import { JobClaimHold } from '@cardstack/runtime-common/jobs/claim-hold';
 import { runSharedTest } from '@cardstack/runtime-common/helpers';
 import {
   heartbeatJob,
@@ -79,6 +81,7 @@ module(basename(import.meta.filename), function () {
       args: IncrementalIndexEnqueueArgs;
       clientRequestId: string | null;
       priority?: number;
+      initiatedBy?: string[];
     }) {
       let priority = args.priority ?? userInitiatedPriority;
       return await publisher.publish<IncrementalDoneResult>({
@@ -90,6 +93,7 @@ module(basename(import.meta.filename), function () {
           args.args,
           args.clientRequestId,
         ),
+        ...(args.initiatedBy ? { initiatedBy: args.initiatedBy } : {}),
         mapResult: mapIncrementalDoneResult(args.clientRequestId),
       });
     }
@@ -1334,6 +1338,220 @@ module(basename(import.meta.filename), function () {
       }
     });
 
+    test('the row records every writer whose work a coalesced pass carries', async function (assert) {
+      // What a gate in another replica reads to decide whether anything of its
+      // own writer's is outstanding. A pass that merged two publishes is
+      // indexing both writers' bytes, so recording only whoever got there
+      // first would let the absorbed writer past a pass that has not indexed
+      // its write yet.
+      await runner.destroy();
+      let realmURL = 'http://example.com/initiated-by-union/';
+      let writer = '@writer:localhost';
+      let someoneElse = '@someone-else:localhost';
+
+      let first = await publishIncrementalIndexJob({
+        clientRequestId: 'request-1',
+        initiatedBy: [writer],
+        args: {
+          realmURL,
+          realmUsername: 'owner',
+          ignoreData: {},
+          changes: [{ url: `${realmURL}a`, operation: 'update' }],
+        },
+      });
+      let second = await publishIncrementalIndexJob({
+        clientRequestId: 'request-2',
+        initiatedBy: [someoneElse],
+        args: {
+          realmURL,
+          realmUsername: 'owner',
+          ignoreData: {},
+          changes: [{ url: `${realmURL}b`, operation: 'update' }],
+        },
+      });
+      assert.strictEqual(
+        first.id,
+        second.id,
+        'the two publishes coalesced onto one pending job',
+      );
+
+      let [row] = (await adapter.execute(
+        `SELECT initiated_by FROM jobs WHERE id = $1`,
+        { bind: [first.id] },
+      )) as { initiated_by: string[] | null }[];
+      assert.deepEqual(
+        [...(row.initiated_by ?? [])].sort(),
+        [someoneElse, writer].sort(),
+        'both writers are on the row',
+      );
+
+      // A publish naming nobody adds nobody rather than emptying the set: an
+      // untagged pass reads as the realm owner's, and a set emptied by one
+      // would stop gating the writers already on it.
+      let untagged = await publishIncrementalIndexJob({
+        clientRequestId: 'request-3',
+        args: {
+          realmURL,
+          realmUsername: 'owner',
+          ignoreData: {},
+          changes: [{ url: `${realmURL}c`, operation: 'update' }],
+        },
+      });
+      assert.strictEqual(untagged.id, first.id);
+      let [after] = (await adapter.execute(
+        `SELECT initiated_by FROM jobs WHERE id = $1`,
+        { bind: [first.id] },
+      )) as { initiated_by: string[] | null }[];
+      assert.deepEqual(
+        [...(after.initiated_by ?? [])].sort(),
+        [someoneElse, writer].sort(),
+        'and the publish that named nobody left them there',
+      );
+    });
+
+    test('a publish naming no writer leaves the row untagged', async function (assert) {
+      // Null, not an empty set: the gate reads null as the realm owner's, and
+      // an empty set would gate nobody at all.
+      await runner.destroy();
+      let realmURL = 'http://example.com/initiated-by-absent/';
+      let job = await publishIncrementalIndexJob({
+        clientRequestId: 'request-1',
+        args: {
+          realmURL,
+          realmUsername: 'owner',
+          ignoreData: {},
+          changes: [{ url: `${realmURL}a`, operation: 'update' }],
+        },
+      });
+      let [row] = (await adapter.execute(
+        `SELECT initiated_by FROM jobs WHERE id = $1`,
+        { bind: [job.id] },
+      )) as { initiated_by: string[] | null }[];
+      assert.strictEqual(row.initiated_by, null);
+    });
+
+    test('incremental dedup: a publish that reads its own write does not attach to a running pass', async function (assert) {
+      // A running pass reads each file it visits once, and it was claimed
+      // before this publish existed — so it may have already read the bytes
+      // this publish supersedes. Attaching a caller that is going to read the
+      // index for these URLs would settle it against a version of its own card
+      // that predates the write it just made. The echo this branch was built
+      // for reads nothing afterwards and is unaffected; a card write does.
+      //
+      // The second publish is a bystander with the same change set and no
+      // stake, which is what makes this about `readsOwnWrite` rather than
+      // about the change sets: it attaches where the third one does not.
+      await runner.destroy();
+      let realmURL = 'http://example.com/in-flight-reads-own-write/';
+      let started = new Deferred<void>();
+      let release = new Deferred<void>();
+
+      let worker = new PgQueueRunner({
+        adapter,
+        workerId: 'in-flight-reads-own-write-worker',
+      });
+      worker.register(
+        'incremental-index',
+        async (args: { changes: { url: string }[] }) => {
+          started.fulfill();
+          await release.promise;
+          return {
+            invalidations: args.changes.map((change) => change.url),
+            ignoreData: {},
+            stats: {
+              instancesIndexed: 0,
+              filesIndexed: 0,
+              instanceErrors: 0,
+              fileErrors: 0,
+              totalIndexEntries: 0,
+            },
+          };
+        },
+      );
+
+      try {
+        await worker.start();
+
+        let running = await publishIncrementalIndexJob({
+          clientRequestId: 'request-1',
+          args: {
+            realmURL,
+            realmUsername: 'owner',
+            ignoreData: {},
+            changes: [{ url: `${realmURL}a`, operation: 'update' }],
+          },
+        });
+        await started.promise;
+
+        let echo = await publishIncrementalIndexJob({
+          clientRequestId: 'request-2',
+          args: {
+            realmURL,
+            realmUsername: 'owner',
+            ignoreData: {},
+            changes: [{ url: `${realmURL}a`, operation: 'update' }],
+          },
+        });
+        assert.strictEqual(
+          echo.id,
+          running.id,
+          'a publish with no stake in the result still attaches to the running pass',
+        );
+
+        let writer = await publishIncrementalIndexJob({
+          clientRequestId: 'request-3',
+          args: {
+            realmURL,
+            realmUsername: 'owner',
+            ignoreData: {},
+            changes: [{ url: `${realmURL}a`, operation: 'update' }],
+            readsOwnWrite: true,
+          },
+        });
+        assert.notStrictEqual(
+          writer.id,
+          running.id,
+          'a publish that will read the index for these urls waits for a pass ' +
+            'that started after its bytes landed',
+        );
+
+        // And the one behind it merges into that pending job rather than
+        // inserting a second — which is what keeps a burst of saves to one
+        // card at the two passes read-your-writes costs, not one per save.
+        let nextWriter = await publishIncrementalIndexJob({
+          clientRequestId: 'request-4',
+          args: {
+            realmURL,
+            realmUsername: 'owner',
+            ignoreData: {},
+            changes: [{ url: `${realmURL}a`, operation: 'update' }],
+            readsOwnWrite: true,
+          },
+        });
+        assert.strictEqual(
+          nextWriter.id,
+          writer.id,
+          'the next writer merges into the pending job the first one inserted',
+        );
+
+        let rows = (await adapter.execute(
+          `SELECT id
+             FROM jobs
+             WHERE concurrency_group = $1
+               AND status = 'unfulfilled'`,
+          { bind: [`indexing:${realmURL}`] },
+        )) as { id: number }[];
+        assert.strictEqual(
+          rows.length,
+          2,
+          'one running pass and one pending pass, however many writers arrive',
+        );
+      } finally {
+        release.fulfill();
+        await worker.destroy();
+      }
+    });
+
     test('incremental does not coalesce onto pending from-scratch in same group', async function (assert) {
       await runner.destroy();
 
@@ -2206,6 +2424,481 @@ module(basename(import.meta.filename), function () {
         events.sort(),
         ['high priority 1', 'high priority 2'],
         'only the high priority jobs were processed',
+      );
+    });
+  });
+
+  // A lane family groups lanes: its exclusive work runs in a group named for
+  // the family and runs alone, and its writer lanes are groups of their own
+  // that run side by side. Each test gates its jobs, so a job starts when the
+  // queue lets it and finishes only when the test says.
+  //
+  // "Did not start" is only evidence once something shows a runner looked. So
+  // each such assertion publishes a control job after the one being held back,
+  // in an unrelated lane, and waits for the control to start: runners claim
+  // the oldest job they are allowed to, so a free runner that took the control
+  // passed over the held job because the queue would not let it start.
+  module('queue - lane families', function (hooks) {
+    const family = 'indexing:http://test-realm/lanes/';
+    const lane = (writer: string) => `${family}#user:${writer}`;
+
+    let publisher: QueuePublisher;
+    let adapters: PgAdapter[];
+    let runners: PgQueueRunner[];
+    let events: string[];
+    let gates: Map<string, Deferred<void>>;
+    let starts: Map<string, Deferred<void>>;
+    let published: Promise<unknown>[];
+
+    hooks.beforeEach(async function () {
+      prepareTestDB();
+      adapters = [
+        await createTestPgAdapter(),
+        new PgAdapter(),
+        new PgAdapter(),
+      ];
+      publisher = new PgQueuePublisher(adapters[0]);
+      runners = adapters.map(
+        (adapter, i) => new PgQueueRunner({ adapter, workerId: `lanes-${i}` }),
+      );
+      events = [];
+      gates = new Map();
+      starts = new Map();
+      published = [];
+      for (let runner of runners) {
+        runner.register('laneJob', async ({ name }: { name: string }) => {
+          events.push(`${name} start`);
+          starts.get(name)?.fulfill();
+          await gates.get(name)?.promise;
+          events.push(`${name} finish`);
+          return { name };
+        });
+        await runner.start();
+      }
+      for (let adapter of adapters) {
+        await adapter.execute('select 1');
+      }
+    });
+
+    hooks.afterEach(async function () {
+      for (let gate of gates.values()) {
+        gate.fulfill();
+      }
+      await kick();
+      await Promise.allSettled(published);
+      for (let runner of runners) {
+        await runner.destroy();
+      }
+      await publisher.destroy();
+      for (let adapter of adapters) {
+        await adapter.close();
+      }
+    });
+
+    // Enqueues a gated job, and resolves once the publish has committed.
+    async function publishLaneJob(
+      name: string,
+      opts: {
+        concurrencyGroup: string | null;
+        laneFamily?: string | null;
+        priority?: number;
+      },
+    ) {
+      gates.set(name, new Deferred());
+      starts.set(name, new Deferred());
+      let job = await publisher.publish({
+        jobType: 'laneJob',
+        concurrencyGroup: opts.concurrencyGroup,
+        ...(opts.laneFamily !== undefined
+          ? { laneFamily: opts.laneFamily }
+          : {}),
+        timeout: 60,
+        priority: opts.priority ?? 0,
+        args: { name },
+      });
+      published.push(job.done);
+      return job;
+    }
+
+    // Wakes every runner, so a job the queue has just let start does not wait
+    // out a runner's poll interval.
+    async function kick() {
+      await adapters[0].execute('NOTIFY jobs');
+    }
+
+    async function started(name: string, timeoutMs = 15_000) {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        await Promise.race([
+          starts.get(name)!.promise,
+          new Promise((_, reject) => {
+            timer = setTimeout(
+              () =>
+                reject(
+                  new Error(
+                    `${name} did not start within ${timeoutMs}ms; events=${JSON.stringify(events)}`,
+                  ),
+                ),
+              timeoutMs,
+            );
+          }),
+        ]);
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+
+    function hasStarted(name: string) {
+      return events.includes(`${name} start`);
+    }
+
+    async function finish(name: string) {
+      gates.get(name)!.fulfill();
+      await kick();
+    }
+
+    // Publishes a control job in a lane nothing else uses and waits for it to
+    // start. See the module comment.
+    async function afterAControlStarts(name: string) {
+      await publishLaneJob(name, { concurrencyGroup: `control:${name}` });
+      await started(name);
+    }
+
+    test('two writer lanes of one family run side by side', async function (assert) {
+      await publishLaneJob('a', {
+        concurrencyGroup: lane('a'),
+        laneFamily: family,
+      });
+      await started('a');
+      await publishLaneJob('b', {
+        concurrencyGroup: lane('b'),
+        laneFamily: family,
+      });
+      await started('b');
+      assert.deepEqual(
+        events,
+        ['a start', 'b start'],
+        "b's lane started while a's was still running",
+      );
+    });
+
+    test("a family's exclusive work waits for its running writer lanes", async function (assert) {
+      await publishLaneJob('writer', {
+        concurrencyGroup: lane('a'),
+        laneFamily: family,
+      });
+      await started('writer');
+      await publishLaneJob('exclusive', {
+        concurrencyGroup: family,
+        laneFamily: family,
+      });
+      await afterAControlStarts('control');
+      assert.false(
+        hasStarted('exclusive'),
+        'the exclusive job waits while a writer lane runs',
+      );
+
+      await finish('writer');
+      await started('exclusive');
+      assert.deepEqual(
+        events.filter((event) => !event.startsWith('control')),
+        ['writer start', 'writer finish', 'exclusive start'],
+        'it starts once the writer lane is done',
+      );
+    });
+
+    test("writer lanes wait for their family's running exclusive work", async function (assert) {
+      await publishLaneJob('exclusive', {
+        concurrencyGroup: family,
+        laneFamily: family,
+      });
+      await started('exclusive');
+      await publishLaneJob('writer', {
+        concurrencyGroup: lane('a'),
+        laneFamily: family,
+      });
+      await afterAControlStarts('control');
+      assert.false(
+        hasStarted('writer'),
+        'the writer lane waits while the exclusive job runs',
+      );
+
+      await finish('exclusive');
+      await started('writer');
+      assert.deepEqual(
+        events.filter((event) => !event.startsWith('control')),
+        ['exclusive start', 'exclusive finish', 'writer start'],
+        'it starts once the exclusive job is done',
+      );
+    });
+
+    // Every job published before families existed, and every job type that
+    // never runs in a writer lane, records no family. Such a job in the
+    // family's group has to exclude the family's writer lanes both ways, or
+    // switching lanes on would let them run beside it.
+    test('a job published without a family is its family’s exclusive work', async function (assert) {
+      await publishLaneJob('writer-1', {
+        concurrencyGroup: lane('a'),
+        laneFamily: family,
+      });
+      await started('writer-1');
+      await publishLaneJob('legacy', { concurrencyGroup: family });
+      await afterAControlStarts('control-1');
+      assert.false(
+        hasStarted('legacy'),
+        'a family-less job in the family group waits for a running writer lane',
+      );
+
+      await finish('writer-1');
+      await started('legacy');
+      await publishLaneJob('writer-2', {
+        concurrencyGroup: lane('b'),
+        laneFamily: family,
+      });
+      await afterAControlStarts('control-2');
+      assert.false(
+        hasStarted('writer-2'),
+        'and a writer lane waits for a running family-less job',
+      );
+
+      await finish('legacy');
+      await started('writer-2');
+      assert.deepEqual(
+        events.filter((event) => !event.startsWith('control')),
+        [
+          'writer-1 start',
+          'writer-1 finish',
+          'legacy start',
+          'legacy finish',
+          'writer-2 start',
+        ],
+        'the lanes took turns',
+      );
+    });
+
+    // Without the barrier, writes arriving faster than they finish would keep
+    // the family occupied, and the exclusive job would never find it empty.
+    test('a writer job does not start ahead of an older pending exclusive job', async function (assert) {
+      await publishLaneJob('writer-a', {
+        concurrencyGroup: lane('a'),
+        laneFamily: family,
+      });
+      await started('writer-a');
+      await publishLaneJob('exclusive', {
+        concurrencyGroup: family,
+        laneFamily: family,
+      });
+      await publishLaneJob('writer-b', {
+        concurrencyGroup: lane('b'),
+        laneFamily: family,
+      });
+      await afterAControlStarts('control');
+      assert.false(
+        hasStarted('writer-b'),
+        "b's lane could run beside a's, but not ahead of the exclusive job queued before it",
+      );
+
+      await finish('writer-a');
+      await started('exclusive');
+      await afterAControlStarts('control-2');
+      assert.false(hasStarted('writer-b'), 'nor beside it');
+
+      await finish('exclusive');
+      await started('writer-b');
+      assert.deepEqual(
+        events.filter((event) => !event.startsWith('control')),
+        [
+          'writer-a start',
+          'writer-a finish',
+          'exclusive start',
+          'exclusive finish',
+          'writer-b start',
+        ],
+        'the exclusive job ran in its turn',
+      );
+    });
+
+    // Writers run at the user-initiated tier and a from-scratch pass at the
+    // system tier. A barrier the higher tier could pass would let two writers
+    // that keep overlapping hold the exclusive job off indefinitely.
+    test('a writer job at a higher priority still does not start ahead of an older pending exclusive job', async function (assert) {
+      await publishLaneJob('writer-a', {
+        concurrencyGroup: lane('a'),
+        laneFamily: family,
+        priority: userInitiatedPriority,
+      });
+      await started('writer-a');
+      await publishLaneJob('exclusive', {
+        concurrencyGroup: family,
+        laneFamily: family,
+        priority: systemInitiatedPriority,
+      });
+      await publishLaneJob('writer-b', {
+        concurrencyGroup: lane('b'),
+        laneFamily: family,
+        priority: userInitiatedPriority,
+      });
+      await afterAControlStarts('control');
+      assert.false(
+        hasStarted('writer-b'),
+        "b's lane could run beside a's and outranks the exclusive job, but the exclusive job was queued first",
+      );
+
+      await finish('writer-a');
+      await started('exclusive');
+      await finish('exclusive');
+      await started('writer-b');
+      assert.deepEqual(
+        events.filter((event) => !event.startsWith('control')),
+        [
+          'writer-a start',
+          'writer-a finish',
+          'exclusive start',
+          'exclusive finish',
+          'writer-b start',
+        ],
+        'the exclusive job ran in its turn',
+      );
+    });
+
+    test('a family runs at most two writer lanes at once', async function (assert) {
+      for (let writer of ['a', 'b']) {
+        await publishLaneJob(writer, {
+          concurrencyGroup: lane(writer),
+          laneFamily: family,
+        });
+        await started(writer);
+      }
+      await publishLaneJob('c', {
+        concurrencyGroup: lane('c'),
+        laneFamily: family,
+      });
+      await afterAControlStarts('control');
+      assert.false(
+        hasStarted('c'),
+        'a third writer lane waits while two run: the runner that took the later control passed it over',
+      );
+
+      await finish('a');
+      await started('c');
+      assert.deepEqual(
+        events.filter((event) => !event.startsWith('control')),
+        ['a start', 'b start', 'a finish', 'c start'],
+        'it starts when one of the two finishes, beside the other',
+      );
+    });
+
+    test('a hold on a family holds every lane in it, and a hold on a lane holds that lane', async function (assert) {
+      let familyHold = await JobClaimHold.acquire(adapters[0], family, 60_000);
+      await publishLaneJob('writer', {
+        concurrencyGroup: lane('a'),
+        laneFamily: family,
+      });
+      await afterAControlStarts('control-1');
+      assert.false(
+        hasStarted('writer'),
+        'a hold on the family holds a writer lane',
+      );
+      await familyHold.release();
+      await started('writer');
+
+      let laneHold = await JobClaimHold.acquire(adapters[0], lane('b'), 60_000);
+      await publishLaneJob('held', {
+        concurrencyGroup: lane('b'),
+        laneFamily: family,
+      });
+      await publishLaneJob('free', {
+        concurrencyGroup: lane('c'),
+        laneFamily: family,
+      });
+      await started('free');
+      assert.false(
+        hasStarted('held'),
+        "a hold on one writer lane holds that lane and not the family's others",
+      );
+      await laneHold.release();
+      await finish('writer');
+      await started('held');
+      assert.true(
+        hasStarted('held'),
+        'the lane runs once its hold is released',
+      );
+    });
+
+    test('a running job with no concurrency group holds no other lane', async function (assert) {
+      await publishLaneJob('ungrouped', { concurrencyGroup: null });
+      await started('ungrouped');
+      await publishLaneJob('grouped', { concurrencyGroup: 'some-group' });
+      await started('grouped');
+      await publishLaneJob('ungrouped-2', { concurrencyGroup: null });
+      await afterAControlStarts('control');
+      assert.deepEqual(
+        {
+          grouped: hasStarted('grouped'),
+          secondUngrouped: hasStarted('ungrouped-2'),
+        },
+        { grouped: true, secondUngrouped: false },
+        'a lane with a group starts beside it, and jobs with no group take turns among themselves',
+      );
+    });
+
+    // Coalescing is per lane. A publish never merges into another writer's
+    // lane, pending or in flight, and a job published without a family merges
+    // with one that names its own group as the family: both are the family's
+    // exclusive work.
+    test('publishes coalesce within a lane and never across lanes', async function (assert) {
+      registerQueueJobDefinition({
+        jobType: 'laneCoalesceJob',
+        coalesce: ({ incoming, candidates }: QueueCoalesceContext) =>
+          candidates[0]
+            ? { type: 'join', jobId: candidates[0].id }
+            : { type: 'insert', job: incoming },
+      });
+      // Published before any runner can run the type, so every job is still
+      // pending when the next publish looks for one to join.
+      let publish = async (
+        concurrencyGroup: string,
+        laneFamily?: string | null,
+      ) =>
+        await publisher.publish({
+          jobType: 'laneCoalesceJob',
+          concurrencyGroup,
+          ...(laneFamily !== undefined ? { laneFamily } : {}),
+          timeout: 60,
+          args: null,
+        });
+      let a1 = await publish(lane('a'), family);
+      let b1 = await publish(lane('b'), family);
+      let a2 = await publish(lane('a'), family);
+      let exclusive = await publish(family, family);
+      let legacy = await publish(family);
+      assert.deepEqual(
+        {
+          secondInA: a2.id === a1.id,
+          bOwnJob: b1.id !== a1.id,
+          exclusiveOwnJob: exclusive.id !== a1.id && exclusive.id !== b1.id,
+          legacyJoinsExclusive: legacy.id === exclusive.id,
+        },
+        {
+          secondInA: true,
+          bOwnJob: true,
+          exclusiveOwnJob: true,
+          legacyJoinsExclusive: true,
+        },
+        'each lane coalesces its own publishes only',
+      );
+      let rows = (await adapters[0].execute(
+        `SELECT concurrency_group, lane_family FROM jobs
+          WHERE job_type = 'laneCoalesceJob' ORDER BY id`,
+      )) as { concurrency_group: string; lane_family: string | null }[];
+      assert.deepEqual(
+        rows,
+        [
+          { concurrency_group: lane('a'), lane_family: family },
+          { concurrency_group: lane('b'), lane_family: family },
+          { concurrency_group: family, lane_family: family },
+        ],
+        'the rows record the lane and family each was published with',
       );
     });
   });

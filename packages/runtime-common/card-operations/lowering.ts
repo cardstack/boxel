@@ -1,4 +1,4 @@
-import { isResolvedCodeRef, type CodeRef } from '../code-ref.ts';
+import { codeRefForDef, isResolvedCodeRef, type CodeRef } from '../code-ref.ts';
 import { getImmediateFieldDef } from '../definitions.ts';
 import type { Definition, FieldDefinition } from '../definitions.ts';
 import {
@@ -11,6 +11,7 @@ import {
   callsActor,
   usesVolatileCall,
 } from './bxl-emit.ts';
+import { isBxl, isMarker, lowerQueryTemplate } from './query.ts';
 import { isDefinitionFreeBaseOperation } from './types.ts';
 import type {
   LowerOperationDeclarationsResult,
@@ -19,12 +20,8 @@ import type {
   OperationLoweringIssueCode,
   OperationParamDefinition,
   OperationProgram,
-  OperationQueryTemplate,
   OperationTemplate,
 } from './types.ts';
-import type { Query, Filter, Sort } from '../query.ts';
-import { assertQuery, InvalidQueryError } from '../query.ts';
-import { searchEntryWireQueryFromQuery } from '../search-entry.ts';
 import type { BaseDef } from '@cardstack/base/card-api';
 import type {
   BaseOperationName,
@@ -410,10 +407,10 @@ async function lowerOperation(
     );
   }
   if (base === 'query') {
-    let query = lowerQuery(
+    let query = lowerQueryTemplate(
       (declaration as { query?: Record<string, unknown> }).query,
       sink,
-      context,
+      { codeRef: (value) => identify(value, context) },
     );
     if (query) {
       operation.query = query;
@@ -511,31 +508,11 @@ function lowerParams(
   return Object.keys(params).length > 0 ? params : undefined;
 }
 
-// A def class, or a thunk deferring one past its own class body. A thunk is
-// how an author names a class declared later in the module — including the
-// class the declaration is on.
 function identify(
   value: unknown,
   context: LoweringContext,
 ): CodeRef | undefined {
-  if (typeof value !== 'function') {
-    return undefined;
-  }
-  let direct = context.identifyCard(value as typeof BaseDef);
-  if (direct) {
-    return direct;
-  }
-  let resolved: unknown;
-  try {
-    resolved = (value as () => unknown)();
-  } catch {
-    // A thunk that throws names nothing yet; the caller reports the
-    // unresolved type.
-    return undefined;
-  }
-  return typeof resolved === 'function'
-    ? context.identifyCard(resolved as typeof BaseDef)
-    : undefined;
+  return codeRefForDef(value, context.identifyCard);
 }
 
 // ---------------------------------------------------------------------------
@@ -1172,6 +1149,10 @@ function actorIsNotACard(path: string): string {
   return `\`${path}\` asks for a card identity, and \`actor()\` is the caller's user id rather than a card — declare the person as a \`params\` member typed \`linkTo(…)\` and write that there`;
 }
 
+function instanceOutOfScope(path: string): string {
+  return `\`${path}\` reads the card's own stored values, and an append never assembles the card's document — declare what the item needs as a \`params\` member, or make it a \`transform\`, which does read the card`;
+}
+
 function notAList(path: string): string {
   return `\`${path}\` addresses a link collection, which holds a list of card identities — write a list, or append to the collection one edge at a time`;
 }
@@ -1447,13 +1428,12 @@ async function lowerCreate(
         );
       }
     }
-    fill[key] = templateOf(
-      value,
-      `fill.${key}`,
+    fill[key] = templateOf(value, {
+      path: `fill.${key}`,
       paramNames,
       sink,
-      fieldDef ? LINK_KINDS.includes(fieldDef.type) : false,
-    );
+      identifies: fieldDef ? LINK_KINDS.includes(fieldDef.type) : false,
+    });
   }
   operation.fill = fill;
 }
@@ -1462,16 +1442,22 @@ async function lowerCreate(
 // declaration wrote them, and everything else is the plain JSON it already
 // is. A raw program has no place in a template — nothing substitutes into a
 // document evaluates BXL — so one is reported rather than silently dropped.
-function templateOf(
-  value: unknown,
-  path: string,
-  paramNames: Set<string>,
-  sink: IssueSink,
+interface TemplateSlot {
+  path: string;
+  paramNames: Set<string>;
+  sink: IssueSink;
   // Whether the slot this fills is a link field, which is the one thing a
   // template's shape does not say for itself: a marker is carried through as
   // data, so what it stands for is decided by the field it lands in.
-  identifies = false,
-): OperationTemplate {
+  identifies?: boolean;
+  // Whether the card's stored document is in scope where this template is
+  // resolved. A `create` reads the card it was invoked from; an append reads
+  // nothing, so an `instance(…)` under one never resolves.
+  reads?: boolean;
+}
+
+function templateOf(value: unknown, slot: TemplateSlot): OperationTemplate {
+  let { path, paramNames, sink, identifies = false, reads = true } = slot;
   if (isMarker(value)) {
     if (value.$ref === 'params') {
       checkParamKey(String(value.key), paramNames, path, sink);
@@ -1479,10 +1465,17 @@ function templateOf(
     if (value.$ref === 'actor' && identifies) {
       sink.add('actor-not-a-card', path, actorIsNotACard(path));
     }
+    if (value.$ref === 'instance' && !reads) {
+      sink.add('instance-out-of-scope', path, instanceOutOfScope(path));
+    }
     if (value.$ref === 'card' && isMarker(value.value)) {
       // Inside `card(…)` every value is a card identity, whatever field the
       // wrapper itself fills.
-      templateOf(value.value, `${path}.value`, paramNames, sink, true);
+      templateOf(value.value, {
+        ...slot,
+        path: `${path}.value`,
+        identifies: true,
+      });
     }
     return value as OperationTemplate;
   }
@@ -1499,14 +1492,18 @@ function templateOf(
     // reading carries into every entry — a list is how a `linksToMany` is
     // filled, not a place where the question changes.
     return value.map((entry, index) =>
-      templateOf(entry, `${path}[${index}]`, paramNames, sink, identifies),
+      templateOf(entry, { ...slot, path: `${path}[${index}]`, identifies }),
     );
   }
   if (isPlainObject(value)) {
     return Object.fromEntries(
       Object.entries(value).map(([key, member]) => [
         key,
-        templateOf(member, `${path}.${key}`, paramNames, sink),
+        templateOf(member, {
+          ...slot,
+          path: `${path}.${key}`,
+          identifies: false,
+        }),
       ]),
     );
   }
@@ -1666,7 +1663,7 @@ function lowerItem(
   sink: IssueSink,
 ): OperationTemplate {
   if (!itemDefinition || isMarker(item) || !isPlainObject(item)) {
-    return templateOf(item, path, paramNames, sink);
+    return templateOf(item, { path, paramNames, sink, reads: false });
   }
   // Each member is lowered against its own field, the way a `fill`'s members
   // are: the item's shape does not say which of them hold a card identity, so
@@ -1691,215 +1688,23 @@ function lowerItem(
         )} is what an appended item holds`,
       );
     }
-    members[key] = templateOf(
-      member,
-      memberPath,
+    members[key] = templateOf(member, {
+      path: memberPath,
       paramNames,
       sink,
-      fieldDef ? LINK_KINDS.includes(fieldDef.type) : false,
-    );
+      identifies: fieldDef ? LINK_KINDS.includes(fieldDef.type) : false,
+      // An append never assembles the card's document, so its own values are
+      // not in scope for the item being built from it.
+      reads: false,
+    });
   }
   return members;
-}
-
-// ---------------------------------------------------------------------------
-// `query`
-// ---------------------------------------------------------------------------
-
-// A declared query becomes an entry-wire query template: the shape the realm's
-// `_search` and `_federated-search` endpoints take, with markers left where an
-// invocation supplies a value.
-//
-// Class references become code refs, and only where the grammar names a type —
-// a filter node's `on` or `type`, a sort entry's `on`. Under `eq` / `in` /
-// `contains` / `range` the keys are field names, so an `on` there is a field
-// called `on` and a class in that position would lower to nothing, leaving a
-// saved search that matches every card instead of one.
-//
-// The declaration is translated to the card-rooted query first and handed to
-// `searchEntryWireQueryFromQuery`, so the `item.` addressing comes from the
-// one function that defines it rather than from a second copy of the rule.
-function lowerQuery(
-  declaration: Record<string, unknown> | undefined,
-  sink: IssueSink,
-  context: LoweringContext,
-): OperationQueryTemplate | undefined {
-  if (!declaration) {
-    return undefined;
-  }
-  let filter = declaration.filter
-    ? (resolveTypes(declaration.filter, 'filter', context, sink) as Filter)
-    : undefined;
-  let sort = declaration.sort
-    ? (resolveTypes(declaration.sort, 'sortList', context, sink) as Sort)
-    : undefined;
-  let query: Query = {
-    ...(filter ? { filter } : {}),
-    ...(sort ? { sort } : {}),
-    ...(declaration.page ? { page: declaration.page as Query['page'] } : {}),
-  };
-  // The realm's own grammar, consulted as a second opinion — but only on a
-  // query it could accept as it stands. A marker stands in for a value the
-  // realm types concretely (a `matches` string, an `in` array), so a query
-  // still holding one is checked when the invocation resolves it.
-  if (!holdsMarker(query)) {
-    try {
-      assertQuery(query);
-    } catch (err: any) {
-      if (err instanceof InvalidQueryError) {
-        sink.add(
-          'invalid-query',
-          'query',
-          `\`query\` is not a query the realm accepts — ${err.message}`,
-        );
-        return undefined;
-      }
-      throw err;
-    }
-  }
-  let wire: OperationQueryTemplate;
-  try {
-    wire = searchEntryWireQueryFromQuery(query);
-  } catch (err: any) {
-    sink.add(
-      'invalid-query',
-      'query',
-      `\`query\` does not translate to a search request — ${err?.message ?? String(err)}`,
-    );
-    return undefined;
-  }
-  if (declaration.queryString !== undefined) {
-    // Full text is the wire grammar's `matches` predicate. Alongside a
-    // filter it becomes a conjunct, so both constraints hold rather than one
-    // replacing the other.
-    let matches = declaration.queryString as OperationTemplate;
-    wire.filter = wire.filter
-      ? { every: [wire.filter, { matches }] }
-      : { matches };
-  }
-  if (declaration.realms) {
-    wire.realms = [...(declaration.realms as string[])];
-  }
-  return wire;
-}
-
-// Where in a query the walk currently is. Only the positions that decide
-// whether a class belongs are named; everything else is data. Mirrors the
-// filter grammar: a filter node carries an optional `on` (or a `type`, for a
-// pure card-type filter) and one predicate, `any` / `every` hold further
-// nodes, `not` holds one, and a sort entry names the type its `by` path is
-// rooted in.
-type QueryPosition =
-  | 'query'
-  | 'filter'
-  | 'filterList'
-  | 'sortList'
-  | 'sortEntry'
-  | 'type'
-  | 'value';
-
-function positionUnder(position: QueryPosition, key: string): QueryPosition {
-  switch (position) {
-    case 'query':
-      if (key === 'filter') {
-        return 'filter';
-      }
-      return key === 'sort' ? 'sortList' : 'value';
-    case 'filter':
-      if (key === 'on' || key === 'type') {
-        return 'type';
-      }
-      if (key === 'any' || key === 'every') {
-        return 'filterList';
-      }
-      return key === 'not' ? 'filter' : 'value';
-    case 'sortEntry':
-      return key === 'on' ? 'type' : 'value';
-    default:
-      return 'value';
-  }
-}
-
-function positionInside(position: QueryPosition): QueryPosition {
-  switch (position) {
-    case 'filterList':
-      return 'filter';
-    case 'sortList':
-      return 'sortEntry';
-    default:
-      return 'value';
-  }
-}
-
-// Replace every class reference in a type position with its code ref,
-// leaving markers and plain data untouched.
-function resolveTypes(
-  node: unknown,
-  position: QueryPosition,
-  context: LoweringContext,
-  sink: IssueSink,
-  path = 'query',
-): unknown {
-  if (typeof node === 'function') {
-    let codeRef = identify(node, context);
-    if (!codeRef) {
-      sink.add(
-        'unresolved-type',
-        path,
-        `\`${path}\` names a class that no module exports, so there is no code ref to store for it`,
-      );
-      return undefined;
-    }
-    return codeRef;
-  }
-  if (Array.isArray(node)) {
-    let inside = positionInside(position);
-    return node.map((entry, index) =>
-      resolveTypes(entry, inside, context, sink, `${path}[${index}]`),
-    );
-  }
-  if (!isPlainObject(node) || isMarker(node)) {
-    return node;
-  }
-  return Object.fromEntries(
-    Object.entries(node).map(([key, value]) => [
-      key,
-      resolveTypes(
-        value,
-        positionUnder(position, key),
-        context,
-        sink,
-        `${path}.${key}`,
-      ),
-    ]),
-  );
-}
-
-function holdsMarker(node: unknown): boolean {
-  if (Array.isArray(node)) {
-    return node.some(holdsMarker);
-  }
-  if (!isPlainObject(node)) {
-    return false;
-  }
-  if (isMarker(node) || isBxl(node)) {
-    return true;
-  }
-  return Object.values(node).some(holdsMarker);
 }
 
 // ---------------------------------------------------------------------------
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function isMarker(value: unknown): value is Record<string, unknown> {
-  return isPlainObject(value) && typeof value.$ref === 'string';
-}
-
-function isBxl(value: unknown): value is { $bxl: string } {
-  return isPlainObject(value) && typeof value.$bxl === 'string';
 }
 
 function describeDefinition(

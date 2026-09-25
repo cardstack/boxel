@@ -24,7 +24,7 @@ import {
   type BxlMutationReadEvent,
 } from '../../src/mutation/index.ts';
 import { evaluateBxl } from '../../src/index.ts';
-import { mutationBuiltinLibraries } from '../../src/bxl/registry/index.ts';
+import { requestContextBuiltinLibraries } from '../../src/bxl/registry/index.ts';
 import { withRequestContext } from '../../src/jqtools/evaluate/runtimeState.ts';
 
 // A resource's `relationships` map holds either a single relationship or an
@@ -1573,7 +1573,7 @@ for (const notFinite of [NaN, Infinity, -Infinity] as const) {
   const hostInstance = { nested: { n: 1 } };
   const handed = withRequestContext({ instance: hostInstance }, () =>
     evaluateBxl('instance()', null, {
-      libraries: mutationBuiltinLibraries(),
+      libraries: requestContextBuiltinLibraries(),
     }),
   ).value as { nested: { n: number } };
   ok(handed !== hostInstance, 'the whole slot is handed over as a copy');
@@ -1591,7 +1591,7 @@ for (const notFinite of [NaN, Infinity, -Infinity] as const) {
   const hostPayload = { obj: { n: 1 } };
   const key = withRequestContext({ params: hostPayload }, () =>
     evaluateBxl('params("obj")', null, {
-      libraries: mutationBuiltinLibraries(),
+      libraries: requestContextBuiltinLibraries(),
     }),
   ).value as { n: number };
   ok(key !== hostPayload.obj, 'a keyed read is handed over as a copy too');
@@ -1989,7 +1989,7 @@ strictEqual(
         // diagnostic itself has to survive the throwing accessor.
         withRequestContext({ params: trapped }, () =>
           evaluateBxl('params("nope")', null, {
-            libraries: mutationBuiltinLibraries(),
+            libraries: requestContextBuiltinLibraries(),
           }),
         );
         return false;

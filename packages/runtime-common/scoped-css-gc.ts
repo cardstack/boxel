@@ -38,8 +38,13 @@ export const SCOPED_CSS_GC_GRACE_MS = 24 * 60 * 60 * 1000;
 // sweep from racing writers:
 //
 // - Callers run it inside the realm's indexing concurrency group
-//   (`indexingConcurrencyGroup(realmURL)`), so it never overlaps a running
-//   index pass for the realm.
+//   (`indexingConcurrencyGroup(realmURL)`), which is the exclusive lane of the
+//   realm's index lane family, so it never overlaps a running index pass for
+//   the realm in any of the family's lanes. Sharing that lane is mutual
+//   exclusion only: this
+//   sweep writes no index rows, so it must not read as outstanding index work.
+//   Readers that gate on the realm's index narrow to `INDEX_WRITING_JOB_TYPES`,
+//   which this job type is deliberately absent from.
 // - The `last_interned_at` grace window (see above) covers what serialization
 //   cannot: hashes interned by a pass that failed and has not yet resumed,
 //   and hashes the prerender-html channel (a separate concurrency group)

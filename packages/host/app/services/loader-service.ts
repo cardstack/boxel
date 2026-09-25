@@ -204,6 +204,16 @@ export default class LoaderService extends Service {
     return this.publish(loader);
   }
 
+  // Base modules compiled into the host bundle cannot read
+  // `import.meta.loader` — the platform evaluated them, not a Loader — so every
+  // loader that becomes this service's active one is also published as the one
+  // those modules fall back to.
+  //
+  // One module instance can read one loader, so the application's loader is
+  // the one it reads: a loader built for a narrower purpose — the one a test
+  // filesystem runs its cards through, say — does not publish itself, because
+  // taking the fallback over would redirect every bundled module in the
+  // application for as long as it lived.
   private publish(loader: Loader): Loader {
     Loader.setForBundledModules(loader);
     return loader;

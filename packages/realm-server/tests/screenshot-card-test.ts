@@ -56,13 +56,18 @@ module(basename(import.meta.filename), function () {
           return [];
         },
         async withFileWriteLocks(_url, _paths, fn) {
-          return await fn();
+          return await fn(() => {});
         },
         async withWriteLock(_url, fn) {
           return await fn(undefined);
         },
         async withUserCostLock(_userId, fn) {
           return await fn();
+        },
+        async withTransaction(fn) {
+          return await fn((expression, coerceTypes) =>
+            query(this, expression, coerceTypes),
+          );
         },
       };
     }

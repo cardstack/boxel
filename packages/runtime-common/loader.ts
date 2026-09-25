@@ -60,6 +60,11 @@ type EvaluatedModule = {
   state: 'evaluated';
   moduleInstance: object;
   consumedModules: Set<string>;
+  // A shim's consumed modules are declared by its registrar rather than
+  // observed while evaluating it, which makes them leaves: the loader never
+  // holds them, so it can neither learn their own edges nor be missing
+  // anything by not descending into them.
+  shimmed?: true;
 };
 
 type BrokenModule = {
@@ -251,24 +256,6 @@ export class Loader {
     { module: string; name: string }
   >();
   private static loaders = new WeakMap<Function, Loader>();
-  // Staging realm modules call loaderForModule(import.meta). This checkout's
-  // loader does not inject module-local metadata, so host-evaluated modules
-  // use the active application loader published by LoaderService.
-  static #forBundledModules: Loader | undefined;
-
-  static setForBundledModules(loader: Loader) {
-    Loader.#forBundledModules = loader;
-  }
-
-  static clearForBundledModules(loader: Loader) {
-    if (Loader.#forBundledModules === loader) {
-      Loader.#forBundledModules = undefined;
-    }
-  }
-
-  static forBundledModules(): Loader | undefined {
-    return Loader.#forBundledModules;
-  }
 
   private fetchImplementation: Fetch;
   private resolveImport: (moduleIdentifier: string) => string;
@@ -465,11 +452,22 @@ export class Loader {
         ? this.virtualNetwork.toURLHref(id)
         : new URL(id).href;
     let visited = new Set<string>();
-    let walk = async (id: string, href: string): Promise<void> => {
+    // `terminal` marks an identifier reached from a shim's declared
+    // dependencies. The loader does not hold it and importing it would fetch
+    // what the shim's own bundle already carries, so it is recorded and not
+    // descended into.
+    let walk = async (
+      id: string,
+      href: string,
+      terminal = false,
+    ): Promise<void> => {
       if (visited.has(href)) {
         return;
       }
       visited.add(href);
+      if (terminal) {
+        return;
+      }
 
       let module = this.getModule(href);
       if (!module || module.state === 'fetching') {
@@ -497,8 +495,9 @@ export class Loader {
       // per-state shapes `collectKnownModuleDependencies` does, so the two
       // walks describe one loader the same way at any instant.
       if (module) {
+        let shimmed = module.state === 'evaluated' && module.shimmed === true;
         for (let consumedModule of this.directModuleDependencies(module)) {
-          await walk(consumedModule, resolveHref(consumedModule));
+          await walk(consumedModule, resolveHref(consumedModule), shimmed);
         }
       }
     };
@@ -539,6 +538,32 @@ export class Loader {
       return Loader.loaders.get(value);
     }
     return undefined;
+  }
+
+  // A module a Loader evaluates discovers its loader through
+  // `import.meta.loader`, which the Loader injects at eval time. A module
+  // compiled into the host bundle is evaluated by the platform instead, so it
+  // has no such injection; the host publishes its active loader here for those
+  // modules to fall back to. Read only when `import.meta.loader` is absent.
+  static #forBundledModules: Loader | undefined;
+
+  static setForBundledModules(loader: Loader) {
+    Loader.#forBundledModules = loader;
+  }
+
+  // Withdraw a published loader as it is disposed, so a bundled module is told
+  // no loader is available rather than handed a disposed one — and with it,
+  // the module graph that loader holds. A loader that has already been
+  // superseded withdraws nothing: the publisher that replaced it is the live
+  // one.
+  static clearForBundledModules(loader: Loader) {
+    if (Loader.#forBundledModules === loader) {
+      Loader.#forBundledModules = undefined;
+    }
+  }
+
+  static forBundledModules(): Loader | undefined {
+    return Loader.#forBundledModules;
   }
 
   async import<T extends object>(
@@ -764,7 +789,17 @@ export class Loader {
       if (module.state === 'fetching') {
         complete = false;
       }
-      for (let dependency of this.directModuleDependencies(module)) {
+      let dependencies = this.directModuleDependencies(module);
+      if (module.state === 'evaluated' && module.shimmed) {
+        // Declared, not observed: this loader will never hold any of them, so
+        // descending would find a gap that is not one and give up memoizing a
+        // set that is already whole.
+        for (let dependency of dependencies) {
+          visited.add(dependency);
+        }
+        continue;
+      }
+      for (let dependency of dependencies) {
         pending.push(dependency);
       }
     }
@@ -1157,16 +1192,23 @@ export class Loader {
     init?: RequestInit,
   ): Promise<MaybeCachedResponse> => {
     try {
-      let shimmedModule = this.moduleShims.get(
-        this.asRequest(urlOrRequest, init).url,
-      );
+      let request = this.asRequest(urlOrRequest, init);
+      // A module shimmed on the virtual network is keyed by the URL its
+      // identifier resolves to, and the network's fetch pipeline only answers
+      // shims on the fake packages origin. This is the one path that knows a
+      // request is for a module (not a card instance that may live at the same
+      // realm URL), so the lookup belongs here, ahead of any fetch.
+      let shimmedModule =
+        this.moduleShims.get(request.url) ??
+        (await this.virtualNetwork?.getShimmedModule(request.url));
       if (shimmedModule) {
         let response = new Response();
         (response as any)[Symbol.for('shimmed-module')] = shimmedModule;
+        (response as any)[Symbol.for('shimmed-module-deps')] =
+          this.virtualNetwork?.getShimmedModuleDeps(request.url) ?? [];
         return response;
       }
 
-      let request = this.asRequest(urlOrRequest, init);
       return await cachedFetch(this.fetchImplementation, request);
     } catch (err: any) {
       let url =
@@ -1341,7 +1383,12 @@ export class Loader {
 
     let loaded:
       | { type: 'source'; source: string; url: string }
-      | { type: 'shimmed'; module: Record<string, unknown>; url: string };
+      | {
+          type: 'shimmed';
+          module: Record<string, unknown>;
+          url: string;
+          deps: string[];
+        };
 
     try {
       loaded = await this.load(moduleURL);
@@ -1394,7 +1441,21 @@ export class Loader {
       this.setModule(moduleIdentifier, {
         state: 'evaluated',
         moduleInstance: loaded.module,
-        consumedModules: new Set(),
+        // A shim has no dependency chain the loader can observe, so what it
+        // consumed is whatever its registrar declared. Declared deps are
+        // written as the module itself spells them — relative — and are
+        // resolved here against the module's own URL, so they read the same as
+        // the deps of a module this loader fetched.
+        consumedModules: new Set(
+          loaded.deps.map((dep) => {
+            try {
+              return new URL(dep, canonicalURL).href;
+            } catch {
+              return dep;
+            }
+          }),
+        ),
+        shimmed: true,
       });
       module.deferred.fulfill();
       return;
@@ -1570,11 +1631,14 @@ export class Loader {
     }
   }
 
-  private async load(
-    moduleURL: URL,
-  ): Promise<
+  private async load(moduleURL: URL): Promise<
     | { type: 'source'; source: string; url: string }
-    | { type: 'shimmed'; module: Record<string, unknown>; url: string }
+    | {
+        type: 'shimmed';
+        module: Record<string, unknown>;
+        url: string;
+        deps: string[];
+      }
   > {
     let response: MaybeCachedResponse;
     try {
@@ -1638,6 +1702,7 @@ export class Loader {
         type: 'shimmed',
         module: (response as any)[Symbol.for('shimmed-module')],
         url: canonicalURL,
+        deps: (response as any)[Symbol.for('shimmed-module-deps')] ?? [],
       };
     }
     let source = await response.text();
@@ -1728,8 +1793,18 @@ function isEvaluatable(
   return stateOrder[module.state] >= stateOrder['registered-completing-deps'];
 }
 
-// Accept the per-module loader used by newer realm code. The published host
-// loader is the compatibility path for modules evaluated by this checkout.
+// The Loader a module runs under, for code that has to reach one from inside a
+// module rather than being handed one.
+//
+// A Loader that evaluates a module injects `import.meta.loader` into it. A
+// module compiled into a host bundle is evaluated by the platform instead and
+// carries no injection, so it falls back to the loader the host publishes for
+// bundled modules.
+//
+// The caller passes its own `import.meta` because the injection is per-module:
+// were this to read one of its own, a bundled copy of this module would hand
+// every caller the published loader, including callers that were fetched and
+// have a loader of their own.
 export function loaderForModule(meta: { loader?: Loader }): Loader {
   let loader = meta.loader ?? Loader.forBundledModules();
   if (!loader) {

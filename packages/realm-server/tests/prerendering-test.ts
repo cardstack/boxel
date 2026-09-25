@@ -618,6 +618,119 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('the loader-reset reason tells an unsynchronized tab apart from a module change', async function (assert) {
+      // `moduleEvaluationCount` is the cost a reader wants attributed, and
+      // two unrelated things drive it up: a pass that changed a module and
+      // asked every tab to drop its graph, and a tab the pool routed this
+      // pass onto that had never synchronized to the realm's epoch series.
+      // `loaderResetReason` is what separates them, so each of the three
+      // states a visit can leave behind is pinned here.
+      //
+      // The module's `afterEach` disposes the affinity, and the wait below
+      // settles the refill that dispose kicked off. Both are needed: a
+      // `getPage` that finds no standby falls through to the cross-affinity
+      // steal, which hands back another affinity's warm tab and still reports
+      // `reused: false`, so `pool.reused` alone cannot say the page is new and
+      // the first assertion would read a real drop as a cold page.
+      await prerenderer.warmStandbys();
+      const cardURL = `${realmURL}1`;
+      let visit = (loaderEpoch: string) =>
+        prerenderCard(prerenderer, {
+          affinityType: 'realm',
+          affinityValue: realmURL,
+          realm: realmURL,
+          url: cardURL,
+          auth: auth(),
+          renderOptions: { loaderEpoch },
+        });
+
+      let cold = await visit('epoch-1');
+      assert.false(cold.pool.reused, 'the first visit gets a page of its own');
+      assert.strictEqual(
+        cold.meta?.diagnostics?.loaderResetReason,
+        'firstEpoch',
+        `a tab that has recorded no epoch names the pool's routing rather than a module change, got: ${JSON.stringify(cold.meta?.diagnostics?.loaderResetReason)}`,
+      );
+      assert.ok(
+        (cold.meta?.diagnostics?.moduleEvaluationCount ?? 0) > 0,
+        `and rebuilds the graph the reset discarded, got: ${JSON.stringify(cold.meta?.diagnostics?.moduleEvaluationCount)}`,
+      );
+
+      let warm = await visit('epoch-1');
+      assert.true(warm.pool.reused, 'the second visit reuses that page');
+      assert.strictEqual(
+        warm.meta?.diagnostics?.loaderResetReason,
+        undefined,
+        `an unchanged epoch clears nothing, got: ${JSON.stringify(warm.meta?.diagnostics?.loaderResetReason)}`,
+      );
+      assert.strictEqual(
+        warm.meta?.diagnostics?.moduleEvaluationCount,
+        0,
+        `so the graph the first visit evaluated is still there, got: ${JSON.stringify(warm.meta?.diagnostics?.moduleEvaluationCount)}`,
+      );
+
+      let changed = await visit('epoch-2');
+      assert.true(changed.pool.reused, 'the third visit reuses it too');
+      assert.strictEqual(
+        changed.meta?.diagnostics?.loaderResetReason,
+        'loaderEpoch',
+        `a moved epoch is a drop, and the page that paid for it names the epoch, got: ${JSON.stringify(changed.meta?.diagnostics?.loaderResetReason)}`,
+      );
+      assert.ok(
+        (changed.meta?.diagnostics?.moduleEvaluationCount ?? 0) > 0,
+        `and evaluates the graph again, got: ${JSON.stringify(changed.meta?.diagnostics?.moduleEvaluationCount)}`,
+      );
+    });
+
+    test('a page warmed without an epoch reports a discard the pass did not cause', async function (assert) {
+      // Not every visit carries an epoch. An on-demand render carries none,
+      // and the module route holds its epoch under a key of its own, so both
+      // leave a page with a warm loader and no epoch recorded against this
+      // route. The first epoch-carrying visit onto such a page discards a real
+      // graph without the pass having done anything to deserve it, which is
+      // the case `loaderEpoch` describes wrongly by billing the pass for it.
+      //
+      // Settles the refill for the same reason as the test above: a stolen
+      // tab arrives warm, so the warming visit would find nothing left to
+      // evaluate and the count assertion below would read zero.
+      await prerenderer.warmStandbys();
+      const cardURL = `${realmURL}1`;
+      let base = {
+        affinityType: 'realm' as const,
+        affinityValue: realmURL,
+        realm: realmURL,
+        url: cardURL,
+      };
+
+      let warming = await prerenderCard(prerenderer, { ...base, auth: auth() });
+      assert.false(warming.pool.reused, 'the warming visit gets a new page');
+      assert.strictEqual(
+        warming.meta?.diagnostics?.loaderResetReason,
+        undefined,
+        `a visit carrying no epoch runs no epoch synchronization, got: ${JSON.stringify(warming.meta?.diagnostics?.loaderResetReason)}`,
+      );
+      assert.ok(
+        (warming.meta?.diagnostics?.moduleEvaluationCount ?? 0) > 0,
+        `and leaves the loader holding the graph it evaluated, got: ${JSON.stringify(warming.meta?.diagnostics?.moduleEvaluationCount)}`,
+      );
+
+      let epochCarrying = await prerenderCard(prerenderer, {
+        ...base,
+        auth: auth(),
+        renderOptions: { loaderEpoch: 'epoch-1' },
+      });
+      assert.true(epochCarrying.pool.reused, 'and the next visit reuses it');
+      assert.strictEqual(
+        epochCarrying.meta?.diagnostics?.loaderResetReason,
+        'firstEpoch',
+        `the first epoch onto a warm page discards a graph the pass did not cause, got: ${JSON.stringify(epochCarrying.meta?.diagnostics?.loaderResetReason)}`,
+      );
+      assert.ok(
+        (epochCarrying.meta?.diagnostics?.moduleEvaluationCount ?? 0) > 0,
+        `and pays to rebuild it, got: ${JSON.stringify(epochCarrying.meta?.diagnostics?.moduleEvaluationCount)}`,
+      );
+    });
+
     test("a module's lowered operations report whether they read the actor", async function (assert) {
       // Lowering runs in the prerender host, and this is where the realm
       // server sees what it produced: the visit hands back the definitions it
@@ -1624,6 +1737,44 @@ module(basename(import.meta.filename), function () {
       assert.ok(
         isA4,
         `paper size is A4, not the Letter fallback (got ${box?.width}×${box?.height}pt)`,
+      );
+    });
+
+    test('a pdf capture paginates its own card, not the one the pooled page was already showing', async function (assert) {
+      // The pooled page keeps the previous capture's render route up while the
+      // next transition is in flight, and Ember holds the old URL through a
+      // loading substate. The route-arrival wait matches on the path suffix,
+      // which every card's render route shares (`/html/isolated/0`), so
+      // without an identity check it returns on the *previous* render and
+      // `page.pdf()` paginates the host's loading screen as valid-looking
+      // bytes: one Letter page, no card.
+      //
+      // So: leave the page on one card's render, then capture a different one.
+      let first = await screenshot(`${realmURL}1`, { type: 'pdf' });
+      assert.strictEqual(first.response.status, 'ready', 'first pdf captured');
+
+      let { response } = await screenshot(`${realmURL}paged-card`, {
+        type: 'pdf',
+        media: 'print',
+      });
+      assert.strictEqual(
+        response.status,
+        'ready',
+        `second pdf captured (got ${response.status}: ${response.error ?? ''})`,
+      );
+      let capture = response.captures?.[0];
+      assert.ok(
+        (capture?.pageCount ?? 0) >= 2,
+        `paginated the paged card's own flow, not a one-page loading screen (got ${capture?.pageCount})`,
+      );
+      let box = firstMediaBox(Buffer.from(response.base64!, 'base64'));
+      let isA4 =
+        box != null &&
+        Math.abs(box.width - 595) <= 3 &&
+        Math.abs(box.height - 842) <= 3;
+      assert.ok(
+        isA4,
+        `paper is the card's own A4 \`@page\`, not the Letter fallback a render without the card would use (got ${box?.width}×${box?.height}pt)`,
       );
     });
 
@@ -8939,6 +9090,79 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('a visit carrying the card source renders from it instead of fetching', async function (assert) {
+      // The out-of-process half of the read collapse: the caller's bytes have
+      // to survive the prerender-visit POST, the request boundary's validation
+      // and the CDP hand-off to the page. Stashing source that differs from
+      // what the realm holds is what makes the two distinguishable — 'Sequoia'
+      // can only have reached the template through the stash.
+      const cardFileURL = `${realmURL}maple.json`;
+      let result = await prerenderer.prerenderVisit({
+        affinityType: 'realm',
+        affinityValue: realmURL,
+        realm: realmURL,
+        url: cardFileURL,
+        auth: auth(),
+        renderOptions: { cardRender: true },
+        cardSource: {
+          source: JSON.stringify({
+            data: {
+              attributes: { name: 'Sequoia' },
+              meta: {
+                adoptsFrom: { module: rri('./person'), name: 'Person' },
+              },
+            },
+          }),
+          realmURL,
+          lastModified: Date.parse('2026-01-02T03:04:05Z'),
+        },
+      });
+
+      assert.notOk(result.response.pageUnusableError, 'no page-unusable error');
+      assert.ok(
+        result.response.card?.isolatedHTML?.includes('Sequoia'),
+        `the stashed source reached the render, got: ${result.response.card?.isolatedHTML}`,
+      );
+      // And the render says so itself. Without this the assertion above is the
+      // only evidence, and a visit whose stash was dropped somewhere on the
+      // wire would render the realm's copy and fail in a way that reads like a
+      // content bug rather than a plumbing one.
+      //
+      // Read off `meta.diagnostics`, not the card sub-response: the settlement
+      // step lifts the card's host-side diagnostics up here and deletes them
+      // from the sub-response, and this is the blob the indexer persists into
+      // `boxel_index.diagnostics`.
+      assert.strictEqual(
+        result.response.meta?.diagnostics?.cardSourceFrom,
+        'stash',
+        'the model build reports it took the stashed path',
+      );
+    });
+
+    test('a visit with no card source fetches, and says so', async function (assert) {
+      // The control for the test above, and the path an on-demand render of a
+      // live card takes forever: same visit, no stash, the realm's own bytes.
+      const cardFileURL = `${realmURL}maple.json`;
+      let result = await prerenderer.prerenderVisit({
+        affinityType: 'realm',
+        affinityValue: realmURL,
+        realm: realmURL,
+        url: cardFileURL,
+        auth: auth(),
+        renderOptions: { cardRender: true },
+      });
+
+      assert.ok(
+        result.response.card?.isolatedHTML?.includes('Maple'),
+        `the realm's own source was rendered, got: ${result.response.card?.isolatedHTML}`,
+      );
+      assert.strictEqual(
+        result.response.meta?.diagnostics?.cardSourceFrom,
+        'fetch',
+        'the model build reports it fetched for itself',
+      );
+    });
+
     test('cardRender-only visit leaves file sub-fields unset', async function (assert) {
       const cardFileURL = `${realmURL}maple.json`;
       let result = await prerenderer.prerenderVisit({
@@ -9769,6 +9993,63 @@ module(basename(import.meta.filename), function () {
           prerenderer.getIconMemo(affinityKey),
           undefined,
           'releasing the owning batch drops the memo',
+        );
+      });
+
+      test('concurrent jobs keep their own memos, and a release drops only its own batch', async function (assert) {
+        // Index passes of one realm run one per writer lane, so two jobs'
+        // visits interleave on one affinity. Neither may replace the
+        // other's memo, and one finishing must not strip the other's memo
+        // or its hold on the affinity.
+        let jobA = 'icon-memo-concurrent-a.1';
+        let jobB = 'icon-memo-concurrent-b.1';
+        await indexVisit('maple.json', { jobId: jobA, batchId: 'batch-a' });
+        await indexVisit('willow.json', { jobId: jobB, batchId: 'batch-b' });
+        await indexVisit('willow.json', { jobId: jobA, batchId: 'batch-a' });
+
+        let memoA = prerenderer.getIconMemo(affinityKey, jobA);
+        assert.strictEqual(
+          memoA?.misses,
+          2,
+          "job A rendered its icons once, although job B's visit came between",
+        );
+        assert.strictEqual(
+          memoA?.hits,
+          2,
+          'job A reused them on its next visit of the same type',
+        );
+        let memoB = prerenderer.getIconMemo(affinityKey, jobB);
+        assert.strictEqual(memoB?.misses, 2, 'job B rendered its own icons');
+        assert.deepEqual(
+          prerenderer
+            .getBatchOwnership(affinityKey)
+            .map(({ batchId }) => batchId)
+            .sort(),
+          ['batch-a', 'batch-b'],
+          'both batches hold the affinity',
+        );
+
+        await prerenderer.releaseBatch({
+          batchId: 'batch-b',
+          affinityType: 'realm',
+          affinityValue: realmURL,
+        });
+        assert.strictEqual(
+          prerenderer.getIconMemo(affinityKey, jobB),
+          undefined,
+          "the releasing batch's memo is dropped",
+        );
+        assert.strictEqual(
+          prerenderer.getIconMemo(affinityKey, jobA)?.hits,
+          2,
+          "the other job's memo survives its peer's release",
+        );
+        assert.deepEqual(
+          prerenderer
+            .getBatchOwnership(affinityKey)
+            .map(({ batchId }) => batchId),
+          ['batch-a'],
+          'the other batch still holds the affinity',
         );
       });
     });

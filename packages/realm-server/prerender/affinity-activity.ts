@@ -25,6 +25,12 @@ export interface ActivityEntry {
   // file render stuck behind a priority-0 module call sticks out
   // cleanly in the diagnostic snapshot.
   priority: number;
+  // The indexing batch the call belongs to, when it belongs to one. An
+  // affinity can carry several batches at once — index passes in different
+  // writer lanes, and each pass's `prerender_html` job — so a stalled render's
+  // siblings are told apart by batch. Also what batch ownership reads to know
+  // a holder is still at work (see `batch-ownership-gate.ts`).
+  batchId?: string;
 }
 
 export interface SameAffinityActivity {
@@ -34,6 +40,7 @@ export interface SameAffinityActivity {
   state: ActivityState;
   ageMs: number;
   priority: number;
+  batchId?: string;
 }
 
 export interface ActivityHandle {
@@ -56,6 +63,7 @@ export class AffinityActivityTracker {
     kind: ActivityKind,
     queue: PrerenderQueue,
     priority: number = 0,
+    batchId?: string,
   ): ActivityHandle {
     let handle = Symbol(`activity:${kind}:${url}`);
     let entries = this.#entries.get(affinityKey);
@@ -70,6 +78,7 @@ export class AffinityActivityTracker {
       state: 'queued',
       startedAt: this.#now(),
       priority,
+      ...(batchId ? { batchId } : {}),
     });
     return {
       handle,
@@ -106,8 +115,19 @@ export class AffinityActivityTracker {
         state: e.state,
         ageMs: now - e.startedAt,
         priority: e.priority,
+        ...(e.batchId ? { batchId: e.batchId } : {}),
       });
     }
     return out;
+  }
+
+  // Whether any call of `batchId` is queued or running on the affinity.
+  hasBatchInFlight(affinityKey: string, batchId: string): boolean {
+    for (let entry of this.#entries.get(affinityKey)?.values() ?? []) {
+      if (entry.batchId === batchId) {
+        return true;
+      }
+    }
+    return false;
   }
 }

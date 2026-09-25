@@ -1,13 +1,17 @@
 import type Koa from 'koa';
-import type { DBAdapter } from '@cardstack/runtime-common';
 import { logger } from '@cardstack/runtime-common';
 import * as Sentry from '@sentry/node';
-
-import type { AllowedProxyDestination } from './allowed-proxy-destinations.ts';
 
 const log = logger('proxy-forward');
 
 const KEEP_ALIVE_INTERVAL_MS = 15000;
+
+// The usage a stream reported, in the shape of a non-streaming response body,
+// so a credit strategy prices both the same way.
+export interface StreamUsage {
+  id: string | undefined;
+  usage: { cost: number | undefined };
+}
 
 /**
  * A signal that fires when this request's client goes away before it was
@@ -38,7 +42,7 @@ export function clientDisconnectSignal(ctxt: Koa.Context): AbortSignal {
  * A signal that follows `clientGone` only until the upstream answers.
  *
  * Cancelling the upstream call is the whole point while it is still running:
- * it ends the critical section instead of holding the cost lock for a response
+ * it gives the user's in-flight slot back instead of holding it for a response
  * nobody will read. Once the upstream has answered, the calculus inverts. The
  * provider has generated the tokens and billed us for them, so what is left —
  * reading the body and recording the usage cost — is how that charge gets
@@ -113,20 +117,17 @@ export function isClientDisconnectError(
 
 /**
  * Stream the upstream `text/event-stream` response back to the client, parsing
- * each `data:` line so we can capture the OpenRouter generation id / inline
- * cost and save the credit deduction at `[DONE]`.
+ * each `data:` line to capture the OpenRouter generation id / inline cost.
  *
- * Cost-save is awaited inline (not fire-and-forget). Callers run this inside
- * `dbAdapter.withUserCostLock(matrixUserId, ...)`, which serializes concurrent
- * same-user requests across replicas; the lock must be held until the cost
- * row commits so the next request can't kick off another billable upstream
- * call before the previous request's debit lands in the ledger.
+ * Resolves with what the stream reported about its usage once `[DONE]`
+ * arrives, for the caller to charge for, or undefined when there is nothing to
+ * charge: the upstream failed, the stream ended without `[DONE]`, or it
+ * carried neither a generation id nor a cost.
  *
  * `signal` fires when the client that asked for the stream goes away. It
  * cancels the upstream call and, with it, the body stream this function is
- * reading, which is how the cost lock is released instead of being held for
- * the rest of a generation nobody is receiving. A stream cut short never
- * reaches `[DONE]`, so no cost is saved for it.
+ * reading, so a generation nobody is receiving stops running. A stream cut
+ * short never reaches `[DONE]`, so nothing is charged for it.
  */
 export async function handleStreamingRequest(
   ctxt: Koa.Context,
@@ -134,11 +135,10 @@ export async function handleStreamingRequest(
   method: string,
   headers: Record<string, string>,
   requestBody: BodyInit | undefined,
-  endpointConfig: AllowedProxyDestination,
-  dbAdapter: DBAdapter,
   matrixUserId: string,
   signal: AbortSignal,
-): Promise<void> {
+): Promise<StreamUsage | undefined> {
+  let usage: StreamUsage | undefined;
   try {
     setupSSEHeaders(ctxt);
 
@@ -157,7 +157,7 @@ export async function handleStreamingRequest(
       ctxt.status = externalResponse.status;
       ctxt.res.write(`data: ${JSON.stringify({ error: errorData })}\n\n`);
       ctxt.res.write('data: [DONE]\n\n');
-      return;
+      return undefined;
     }
 
     // First write commits headers + status to the wire, so do this
@@ -183,11 +183,7 @@ export async function handleStreamingRequest(
               Number.isFinite(costInUsd) &&
               costInUsd > 0)
           ) {
-            await endpointConfig.creditStrategy.saveUsageCost(
-              dbAdapter,
-              matrixUserId,
-              { id: generationId, usage: { cost: costInUsd } },
-            );
+            usage = { id: generationId, usage: { cost: costInUsd } };
           } else {
             log.warn(
               `Streaming response for user ${matrixUserId} contained no generation ID or usage cost, skipping credit deduction`,
@@ -219,16 +215,16 @@ export async function handleStreamingRequest(
         }
       },
     );
+    return usage;
   } catch (error) {
     if (isClientDisconnectError(error, signal)) {
       // The read failed because the client hung up and we cancelled the
       // upstream call ourselves. There is no socket left to write the error
-      // frames to and no fault to page anyone about. A cost-save that fails
-      // on its own after the client left is not this, and falls through.
+      // frames to and no fault to page anyone about.
       log.info(
         `Client disconnected during streaming request for user ${matrixUserId}; upstream call cancelled`,
       );
-      return;
+      return undefined;
     }
     log.error('Error in streaming request:', error);
     Sentry.captureException(error);
@@ -236,6 +232,7 @@ export async function handleStreamingRequest(
       `data: ${JSON.stringify({ error: 'Streaming error occurred' })}\n\n`,
     );
     ctxt.res.write('data: [DONE]\n\n');
+    return undefined;
   }
 }
 

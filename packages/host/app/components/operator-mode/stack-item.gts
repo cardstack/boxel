@@ -76,6 +76,7 @@ import consumeContext from '../../helpers/consume-context';
 import ElementTracker, {
   type RenderedCardForOverlayActions,
 } from '../../resources/element-tracker';
+import { removeCardJsonExtension } from '../../utils/search/types';
 import CardRenderer from '../card-renderer';
 
 import ArchivedRealmState from './archived-realm-state';
@@ -99,6 +100,7 @@ import type {
 export interface StackItemComponentAPI {
   element: () => HTMLElement | undefined;
   clearSelections: () => void;
+  deselectCard: (cardId: string) => void;
   scrollIntoView: (selector: string) => Promise<void>;
   cardBoundary: (cardId: string) => CardOpenOrigin | undefined;
 }
@@ -183,6 +185,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
     this.args.setupStackItem(this.args.item, {
       element: () => this.containerEl,
       clearSelections: this.clearSelections,
+      deselectCard: this.deselectCard,
       scrollIntoView: this.scrollIntoViewTask.perform,
       cardBoundary: (cardId) => cardActionOrigin(this.containerEl, cardId),
     });
@@ -400,6 +403,26 @@ export default class OperatorModeStackItem extends Component<Signature> {
 
   private clearSelections = () => {
     this.selectedCards.clear();
+  };
+
+  // Drop one card/file from the selection when it is deleted out from under
+  // the grid, so the selection chip and per-row checkmark stop counting a row
+  // that no longer exists. The local set keys on `normalizeCardId` (a card
+  // id's `.json` extension intact), while the delete flow may hand either the
+  // extensionless card id or the `.json` file id, so match on the
+  // extensionless form rather than an exact string.
+  private deselectCard = (cardId: string) => {
+    let target = removeCardJsonExtension(cardId);
+    let removed = false;
+    for (let selectedId of [...this.selectedCards]) {
+      if (removeCardJsonExtension(selectedId) === target) {
+        this.selectedCards.delete(selectedId);
+        removed = true;
+      }
+    }
+    if (removed) {
+      this.args.onSelectedCards([...this.selectedCards], this.args.item);
+    }
   };
 
   private selectAll = () => {

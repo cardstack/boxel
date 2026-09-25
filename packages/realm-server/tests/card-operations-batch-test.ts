@@ -3,11 +3,13 @@ const { module, test } = QUnit;
 import { basename } from 'path';
 
 import {
+  batchEntryFor,
   commitBatch,
   isOperationFailure,
   OperationFailure,
   type BatchCore,
   type BatchEntry,
+  type EnvelopeEntry,
   type OperationDefinition,
 } from '@cardstack/runtime-common/card-operations';
 import {
@@ -54,6 +56,7 @@ interface Commit {
   writes: Record<string, string>;
   deletes: string[];
   clientRequestId: string | null | undefined;
+  clientAuthored: string[] | undefined;
   waitForIndex: boolean | undefined;
 }
 
@@ -77,6 +80,15 @@ interface Stub {
   // covers is not visible in any response, so a test that cares which writers
   // a batch excludes has to read it here.
   lockedPaths: () => string[];
+  // Whether the files are shut to other writers right now, as opposed to
+  // `lockDepth`, which is the high-water mark over the whole batch.
+  heldNow: () => number;
+  // Where the critical section ended relative to the commit, in order. What
+  // the lock covers in TIME is as invisible from a response as which files it
+  // covers, and it is the more expensive of the two to get wrong: a section
+  // that outlives the durable write charges every other writer of these files
+  // for this one's indexing.
+  lockSpan: () => string[];
 }
 
 interface StubOptions {
@@ -144,6 +156,7 @@ function stub(opts: StubOptions = {}): Stub {
   let calls: string[] = [];
   let sourceReads = 0;
   let lockedPaths: string[] = [];
+  let lockSpan: string[] = [];
 
   let core: BatchCore = {
     realmURL: REALM,
@@ -151,10 +164,23 @@ function stub(opts: StubOptions = {}): Stub {
       held++;
       maxHeld = Math.max(maxHeld, held);
       lockedPaths = [...localPaths].sort();
-      try {
-        return await fn();
-      } finally {
+      // The real lock ends at whichever comes first: the section saying it is
+      // done with the files, or the section returning. Modelled the same way
+      // here, so `held` means what it means in postgres — the files are shut
+      // to other writers right now — rather than "a batch is still running".
+      let released = false;
+      let release = () => {
+        if (released) {
+          return;
+        }
+        released = true;
         held--;
+        lockSpan.push('release');
+      };
+      try {
+        return await fn(release);
+      } finally {
+        release();
       }
     },
     async fileExists(localPath) {
@@ -222,8 +248,14 @@ function stub(opts: StubOptions = {}): Stub {
         writes,
         deletes: [...(batch.deletes ?? [])],
         clientRequestId: options?.clientRequestId,
+        clientAuthored: options?.clientAuthored,
         waitForIndex: options?.waitForIndex,
       });
+      lockSpan.push('commit');
+      // Where the realm's commit announces the same thing: the bytes are
+      // durable and what follows is indexing. A stub that swallowed it would
+      // hold the locks for the whole of every batch and no test could tell.
+      options?.onDurable?.();
       return {
         // A real commit fingerprints the bytes it wrote; the stub stands in
         // with the byte length, which is enough for a test to tell one
@@ -283,6 +315,8 @@ function stub(opts: StubOptions = {}): Stub {
     calls: () => [...calls],
     sourceReads: () => sourceReads,
     lockedPaths: () => lockedPaths,
+    heldNow: () => held,
+    lockSpan: () => [...lockSpan],
   };
 }
 
@@ -458,6 +492,185 @@ async function refusal(
 }
 
 module(basename(import.meta.filename), function () {
+  // Which cards a commit says it wrote from content its caller supplied.
+  //
+  // The distinction reaches the client as a member of the invalidation event,
+  // and it is the whole of what lets a client tell the cards it is already
+  // holding the state of from the ones the realm computed for it. A card
+  // reported here that the realm in fact computed would have its client
+  // decline to read state only the realm has; one not reported that the client
+  // did supply would have a client re-read a card over an edit made while the
+  // write was in flight.
+  module('what a commit says its caller wrote', function () {
+    test("a card minted under a name its caller chose is the caller's content", async function (assert) {
+      let { core, commits } = stub();
+      await commitBatch(
+        core,
+        [
+          {
+            op: 'create',
+            lid: 'mango',
+            document: {
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Mango' },
+                meta: { adoptsFrom: PERSON },
+              },
+            },
+          },
+        ],
+        { clientRequestId: 'req-1', reportAuthorship: true },
+      );
+
+      assert.deepEqual(
+        commits[0].clientAuthored,
+        [`${REALM}Person/mango`],
+        'named as the invalidation event names it, so the two can be matched',
+      );
+    });
+
+    test("a card the realm named is nobody else's to hold", async function (assert) {
+      let { core, commits } = stub();
+      await commitBatch(
+        core,
+        [
+          {
+            op: 'create',
+            document: {
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Mango' },
+                meta: { adoptsFrom: PERSON },
+              },
+            },
+          },
+        ],
+        { clientRequestId: 'req-1', reportAuthorship: true },
+      );
+
+      assert.deepEqual(
+        commits[0].clientAuthored,
+        [],
+        'a create that named no card of its own left the realm to name it, so no caller is holding it',
+      );
+    });
+
+    test('a card the batch only changed is state the realm computed', async function (assert) {
+      let { core, commits } = stub({
+        stored: {
+          'Person/existing.json': JSON.stringify({
+            data: {
+              type: 'card',
+              attributes: { firstName: 'Mango' },
+              meta: { adoptsFrom: PERSON },
+            },
+          }),
+        },
+      });
+      await commitBatch(
+        core,
+        [
+          {
+            op: 'update',
+            href: `${REALM}Person/existing`,
+            document: {
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Van Gogh' },
+                meta: { adoptsFrom: PERSON },
+              },
+            },
+          },
+        ],
+        { clientRequestId: 'req-1', reportAuthorship: true },
+      );
+
+      assert.deepEqual(
+        commits[0].clientAuthored,
+        [],
+        "the commit claims only the cards it minted under a caller's name",
+      );
+    });
+
+    // The distinction the store reads: a batch that authored nothing is a
+    // batch every card of which wants re-reading, and it has to be able to say
+    // so. Reported as an empty list rather than by omission, because omission
+    // is what a writer that does not answer the question looks like — and a
+    // client reading "I authored none of this" as "no information" skips the
+    // very cards only the realm can tell it about.
+    test('a front door that does not ask is told nothing about authorship', async function (assert) {
+      // The card and source routes write one card each, and their events have
+      // always been read as being about that card. Answering a question they
+      // never asked would change what every one of their events carries.
+      let { core, commits } = stub();
+      await commitBatch(
+        core,
+        [
+          {
+            op: 'create',
+            lid: 'mango',
+            document: {
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Mango' },
+                meta: { adoptsFrom: PERSON },
+              },
+            },
+          },
+        ],
+        { clientRequestId: 'req-1' },
+      );
+
+      assert.strictEqual(
+        commits[0].clientAuthored,
+        undefined,
+        'the commit says nothing about which of its cards the caller wrote',
+      );
+    });
+
+    test('a batch that authored nothing says so, rather than saying nothing', async function (assert) {
+      let { core, commits } = stub({
+        stored: {
+          'Person/existing.json': JSON.stringify({
+            data: {
+              type: 'card',
+              attributes: { firstName: 'Mango' },
+              meta: { adoptsFrom: PERSON },
+            },
+          }),
+        },
+      });
+      await commitBatch(
+        core,
+        [
+          {
+            op: 'update',
+            href: `${REALM}Person/existing`,
+            document: {
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Van Gogh' },
+                meta: { adoptsFrom: PERSON },
+              },
+            },
+          },
+        ],
+        { clientRequestId: 'req-1', reportAuthorship: true },
+      );
+
+      let answered = Array.isArray(commits[0].clientAuthored);
+      assert.true(
+        answered,
+        'the commit answered the question rather than leaving it open',
+      );
+      assert.strictEqual(
+        commits[0].clientAuthored?.length,
+        0,
+        'and its answer is that it authored none of what it wrote',
+      );
+    });
+  });
+
   module('card operations batch', function () {
     test('a create is staged at the path its local id names', async function (assert) {
       let { core, commits } = stub();
@@ -1634,6 +1847,110 @@ module(basename(import.meta.filename), function () {
         'nothing is locked for a card whose path no other writer can know',
       );
     });
+    test('a batch that removes a card keeps its locks past the durable write', async function (assert) {
+      // A removal's place in the order is not settled when its bytes are gone.
+      // An index pass resolves a removal and a write of one url as the
+      // removal, whichever reached it first, and then skips the visit without
+      // asking whether the file came back — so a writer that recreated the
+      // path while the removal's pass was still pending would be folded into
+      // it and the row dropped for a file that is on disk. The realm's commit
+      // is what withholds the boundary; this pins the coordinator carrying
+      // whatever it decides rather than announcing one of its own.
+      let s = stub({
+        stored: {
+          'person-1.json': cardFile({ firstName: 'Original' }, PERSON),
+        },
+      });
+      let observed: string[] = [];
+      let core: BatchCore = {
+        ...s.core,
+        async commitUnlocked(batch, options) {
+          let committed = await s.core.commitUnlocked(batch, {
+            ...options,
+            // What the realm does for a change set carrying a removal: the
+            // boundary is not announced, so the section runs to its end still
+            // holding the files.
+            onDurable: undefined,
+          });
+          observed.push(`indexWait:held=${s.heldNow()}`);
+          return committed;
+        },
+      };
+
+      await commitBatch(core, [{ op: 'delete', href: `${REALM}person-1` }], {});
+
+      assert.deepEqual(
+        observed,
+        ['indexWait:held=1'],
+        'the files stay shut while the removal is indexed',
+      );
+      assert.strictEqual(
+        s.heldNow(),
+        0,
+        'and are open again once the batch returns',
+      );
+    });
+    test('the lock ends where the write becomes durable, not where the batch does', async function (assert) {
+      // The locks order writers of one file against each other, and by the
+      // time the bytes are durable this batch's place in that order is
+      // settled. What a commit does next is queue an index job and wait for a
+      // worker to run it — seconds of it under load, and none of it needing
+      // the files held. A section that spans it makes the Nth concurrent
+      // writer of one card wait N index passes instead of one.
+      let s = stub({
+        stored: {
+          'person-1.json': cardFile({ firstName: 'Original' }, PERSON),
+        },
+      });
+      let observed: string[] = [];
+      let core: BatchCore = {
+        ...s.core,
+        async commitUnlocked(batch, options) {
+          observed.push(`staged:held=${s.heldNow()}`);
+          let committed = await s.core.commitUnlocked(batch, options);
+          // Stands in for the index wait, which is where a real commit is
+          // when it has written the bytes and is waiting on a worker.
+          observed.push(`indexWait:held=${s.heldNow()}`);
+          return committed;
+        },
+      };
+
+      await commitBatch(
+        core,
+        [
+          {
+            op: 'update',
+            href: `${REALM}person-1`,
+            document: {
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Changed' },
+                meta: { adoptsFrom: PERSON },
+              },
+            },
+          },
+        ],
+        {},
+      );
+
+      assert.deepEqual(
+        observed,
+        ['staged:held=1', 'indexWait:held=0'],
+        'the files are held across the read-merge-write and open again ' +
+          'while the write is indexed',
+      );
+      assert.deepEqual(
+        s.lockSpan(),
+        ['commit', 'release'],
+        'and the section ends at the commit rather than being let go of ' +
+          'early on its way in',
+      );
+      assert.strictEqual(
+        s.readsOutsideLock(),
+        0,
+        'nothing the batch acts on is read with the files open to others',
+      );
+    });
     test('a named create stages the type and attributes its declaration names', async function (assert) {
       let definition: OperationDefinition = {
         base: 'create',
@@ -1984,6 +2301,307 @@ module(basename(import.meta.filename), function () {
         code: 'invalid-params',
         entry: 0,
       });
+      assert.strictEqual(commits.length, 0, 'nothing is committed');
+    });
+    test('a side-load already stored as its type is linked to, not rewritten', async function (assert) {
+      let incumbent = cardFile({ firstName: 'Incumbent' }, PET);
+      let { core, commits } = stub({
+        stored: { 'Pet/side.json': incumbent },
+      });
+      await commitBatch(
+        core,
+        [
+          {
+            op: 'create',
+            lid: 'owner',
+            document: {
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Hassan' },
+                relationships: {
+                  friend: { data: { type: 'card', lid: 'side' } },
+                },
+                meta: { adoptsFrom: PERSON },
+              },
+              included: [
+                {
+                  type: 'card',
+                  lid: 'side',
+                  attributes: { firstName: 'Resent' },
+                  meta: { adoptsFrom: PET },
+                },
+              ],
+            },
+          },
+        ],
+        {},
+      );
+      assert.deepEqual(
+        Object.keys(commits[0].writes),
+        ['Person/owner.json'],
+        'only the card being created is written',
+      );
+      let staged = JSON.parse(commits[0].writes['Person/owner.json']);
+      assert.strictEqual(
+        staged.data.relationships.friend.links.self,
+        `${REALM}Pet/side`,
+        'and it links to the card already stored there',
+      );
+    });
+    test('a side-load linked to its stored card cannot be removed by the same batch', async function (assert) {
+      let { core, commits } = stub({
+        stored: { 'Pet/side.json': cardFile({ firstName: 'Incumbent' }, PET) },
+      });
+      let failed = await refusal(core, [
+        {
+          op: 'create',
+          lid: 'owner',
+          document: {
+            data: {
+              type: 'card',
+              attributes: { firstName: 'Hassan' },
+              relationships: {
+                friend: { data: { type: 'card', lid: 'side' } },
+              },
+              meta: { adoptsFrom: PERSON },
+            },
+            included: [
+              {
+                type: 'card',
+                lid: 'side',
+                attributes: { firstName: 'Resent' },
+                meta: { adoptsFrom: PET },
+              },
+            ],
+          },
+        },
+        { op: 'delete', href: `${REALM}Pet/side` },
+      ]);
+      assert.deepEqual(
+        failed,
+        { status: 400, code: 'invalid-params', entry: 0 },
+        'the batch is refused rather than committing a link to nothing',
+      );
+      assert.strictEqual(commits.length, 0, 'nothing is committed');
+    });
+    test('what only a linked side-load reached is not written', async function (assert) {
+      let { core, commits } = stub({
+        stored: { 'Pet/side.json': cardFile({ firstName: 'Incumbent' }, PET) },
+      });
+      await commitBatch(
+        core,
+        [
+          {
+            op: 'create',
+            lid: 'owner',
+            document: {
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Hassan' },
+                relationships: {
+                  friend: { data: { type: 'card', lid: 'side' } },
+                },
+                meta: { adoptsFrom: PERSON },
+              },
+              included: [
+                {
+                  type: 'card',
+                  lid: 'side',
+                  attributes: { firstName: 'Resent' },
+                  relationships: {
+                    friend: { data: { type: 'card', lid: 'deep' } },
+                  },
+                  meta: { adoptsFrom: PET },
+                },
+                {
+                  type: 'card',
+                  lid: 'deep',
+                  attributes: { firstName: 'Nested' },
+                  meta: { adoptsFrom: PET },
+                },
+                {
+                  type: 'card',
+                  lid: 'loose',
+                  attributes: { firstName: 'Unlinked' },
+                  meta: { adoptsFrom: PET },
+                },
+              ],
+            },
+          },
+        ],
+        {},
+      );
+      assert.deepEqual(
+        Object.keys(commits[0].writes).sort(),
+        ['Person/owner.json', 'Pet/loose.json'],
+        'the card only the linked side-load pointed at is left out, and a side-load nothing linked to is written as before',
+      );
+    });
+    test('a card another entry links to is written even when a linked side-load also reached it', async function (assert) {
+      let { core, commits } = stub({
+        stored: { 'Pet/side.json': cardFile({ firstName: 'Incumbent' }, PET) },
+      });
+      await commitBatch(
+        core,
+        [
+          {
+            op: 'create',
+            lid: 'owner',
+            document: {
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Hassan' },
+                relationships: {
+                  friend: { data: { type: 'card', lid: 'side' } },
+                },
+                meta: { adoptsFrom: PERSON },
+              },
+              included: [
+                {
+                  type: 'card',
+                  lid: 'side',
+                  attributes: { firstName: 'Resent' },
+                  relationships: {
+                    friend: { data: { type: 'card', lid: 'deep' } },
+                  },
+                  meta: { adoptsFrom: PET },
+                },
+                {
+                  type: 'card',
+                  lid: 'deep',
+                  attributes: { firstName: 'Nested' },
+                  meta: { adoptsFrom: PET },
+                },
+              ],
+            },
+          },
+          {
+            op: 'create',
+            lid: 'other',
+            document: {
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Other' },
+                relationships: {
+                  friend: { data: { type: 'card', lid: 'deep' } },
+                },
+                meta: { adoptsFrom: PERSON },
+              },
+            },
+          },
+        ],
+        {},
+      );
+      assert.deepEqual(Object.keys(commits[0].writes).sort(), [
+        'Person/other.json',
+        'Person/owner.json',
+        'Pet/deep.json',
+      ]);
+    });
+    test('a stored file that is not a card resource is not linked to in a side-load’s place', async function (assert) {
+      let { core, commits } = stub({
+        stored: {
+          'Pet/side.json': JSON.stringify({
+            data: { type: 'not-a-card', meta: { adoptsFrom: PET } },
+          }),
+        },
+      });
+      let failed = await refusal(core, [
+        {
+          op: 'create',
+          lid: 'owner',
+          document: {
+            data: {
+              type: 'card',
+              attributes: { firstName: 'Hassan' },
+              relationships: {
+                friend: { data: { type: 'card', lid: 'side' } },
+              },
+              meta: { adoptsFrom: PERSON },
+            },
+            included: [
+              {
+                type: 'card',
+                lid: 'side',
+                attributes: { firstName: 'Resent' },
+                meta: { adoptsFrom: PET },
+              },
+            ],
+          },
+        },
+      ]);
+      assert.deepEqual(failed, {
+        status: 409,
+        code: 'invalid-params',
+        entry: 0,
+      });
+      assert.strictEqual(commits.length, 0, 'nothing is committed');
+    });
+    test('a side-load stored as another type refuses the batch and is named', async function (assert) {
+      let { core, commits } = stub({
+        stored: {
+          'Pet/side.json': cardFile(
+            { firstName: 'Incumbent' },
+            { module: `${REALM}other-pet`, name: 'Pet' },
+          ),
+        },
+      });
+      let failure: unknown;
+      try {
+        await commitBatch(
+          core,
+          [
+            {
+              op: 'create',
+              lid: 'owner',
+              document: {
+                data: {
+                  type: 'card',
+                  attributes: { firstName: 'Hassan' },
+                  relationships: {
+                    friend: { data: { type: 'card', lid: 'side' } },
+                  },
+                  meta: { adoptsFrom: PERSON },
+                },
+                included: [
+                  {
+                    type: 'card',
+                    lid: 'side',
+                    attributes: { firstName: 'Resent' },
+                    meta: { adoptsFrom: PET },
+                  },
+                ],
+              },
+            },
+          ],
+          {},
+        );
+      } catch (err: unknown) {
+        failure = err;
+      }
+      assert.true(isOperationFailure(failure), 'the batch is refused');
+      let { error } = failure as OperationFailure;
+      assert.strictEqual(error.status, 409);
+      assert.deepEqual(
+        error.meta,
+        {
+          entry: 0,
+          included: {
+            lid: 'side',
+            id: `${REALM}Pet/side`,
+            adoptsFrom: PET,
+          },
+        },
+        'the refusal names the side-load as the card that collided',
+      );
+      assert.true(
+        error.detail.includes('"side"'),
+        `the message names the side-load: ${error.detail}`,
+      );
+      assert.false(
+        error.detail.includes('owner'),
+        `and not the card being created: ${error.detail}`,
+      );
       assert.strictEqual(commits.length, 0, 'nothing is committed');
     });
     test('a create names its card by the local id on the resource', async function (assert) {
@@ -3340,6 +3958,234 @@ module(basename(import.meta.filename), function () {
         'and no base match, since an append names no base',
       );
     });
+    // ==========================================================================
+    // A *declared* `appendContainsMany`
+    //
+    // The cases above name the field and send the item on the wire. A
+    // declaration instead carries the item as a template, the same shape a
+    // `create`'s `fill` does, and an invocation supplies only the values that
+    // template reads. What gets appended is therefore the declaration's to
+    // say, and the wire members an ad-hoc append is read from are not read
+    // for one at all.
+    // ==========================================================================
+    function declaredAppend(
+      items: Record<string, unknown>,
+      params?: Record<string, unknown>,
+    ): OperationDefinition {
+      return {
+        base: 'appendContainsMany',
+        deterministic: true,
+        of: EVENT_LOG,
+        ...(params ? { params } : {}),
+        items,
+      } as OperationDefinition;
+    }
+
+    function logStub(stored: string) {
+      return stub({
+        stored: { 'log-1.json': stored },
+        definitions: {
+          EventLog: eventLogDefinition(),
+          LogEvent: logEventDefinition(),
+        },
+      });
+    }
+
+    test('a declared append writes the item its declaration describes', async function (assert) {
+      let stored = eventLog([{ label: 'first' }]);
+      let { core, commits } = logStub(stored);
+      await commitBatch(
+        core,
+        [
+          {
+            op: 'appendContainsMany',
+            href: `${REALM}log-1`,
+            definition: declaredAppend(
+              { events: { label: { $ref: 'params', key: 'summary' } } },
+              { summary: { kind: 'field', codeRef: STRING } },
+            ),
+            params: { summary: 'second' },
+          },
+        ],
+        {},
+      );
+      assert.strictEqual(
+        commits[0].writes['log-1.json'],
+        loadModifyWrite(stored, (resource) => {
+          resource.attributes.events.push({ label: 'second' });
+        }),
+        'the field and the item come from the declaration, and the param ' +
+          'fills the one member that reads it',
+      );
+    });
+
+    test('a declared append stamps the caller rather than trusting the payload', async function (assert) {
+      // The point of resolving the item here rather than sending it: who
+      // appended a line is the realm's to say, and a caller cannot spell it.
+      let stored = eventLog([]);
+      let { core, commits } = logStub(stored);
+      await commitBatch(
+        core,
+        [
+          {
+            op: 'appendContainsMany',
+            href: `${REALM}log-1`,
+            definition: declaredAppend({
+              events: { label: { $ref: 'actor' } },
+            }),
+          },
+        ],
+        { actor: '@tester:localhost' },
+      );
+      assert.strictEqual(
+        commits[0].writes['log-1.json'],
+        loadModifyWrite(stored, (resource) => {
+          resource.attributes.events.push({ label: '@tester:localhost' });
+        }),
+        'the caller the realm authenticated is what landed in the item',
+      );
+    });
+
+    test('a declared append fills an item from the realm configuration', async function (assert) {
+      let stored = eventLog([]);
+      let { core, commits } = stub({
+        stored: { 'log-1.json': stored },
+        definitions: {
+          EventLog: eventLogDefinition(),
+          LogEvent: logEventDefinition(),
+        },
+        settings: { defaultName: 'Configured' },
+      });
+      await commitBatch(
+        core,
+        [
+          {
+            op: 'appendContainsMany',
+            href: `${REALM}log-1`,
+            definition: declaredAppend({
+              events: { label: { $ref: 'realmConfig', key: 'defaultName' } },
+            }),
+          },
+        ],
+        {},
+      );
+      assert.strictEqual(
+        commits[0].writes['log-1.json'],
+        loadModifyWrite(stored, (resource) => {
+          resource.attributes.events.push({ label: 'Configured' });
+        }),
+        'the marker resolved against the settings the realm supplied',
+      );
+    });
+
+    test('a declared append appends to every field its declaration names', async function (assert) {
+      // One item per field, because a declaration describes one thing to
+      // append — not a list to be spread across them.
+      let stored = eventLog([{ label: 'first' }], undefined, undefined, [
+        'kept',
+      ]);
+      let { core, commits } = logStub(stored);
+      await commitBatch(
+        core,
+        [
+          {
+            op: 'appendContainsMany',
+            href: `${REALM}log-1`,
+            definition: declaredAppend({
+              events: { label: 'second' },
+              notes: 'noted',
+            }),
+          },
+        ],
+        {},
+      );
+      assert.strictEqual(
+        commits[0].writes['log-1.json'],
+        loadModifyWrite(stored, (resource) => {
+          resource.attributes.events.push({ label: 'second' });
+          resource.attributes.notes.push('noted');
+        }),
+        'both arrays grew by exactly the one item declared for each',
+      );
+    });
+
+    test('a declared append requires every param its declaration names', async function (assert) {
+      let { core, commits } = logStub(eventLog([]));
+      let failed = await refusal(core, [
+        {
+          op: 'appendContainsMany',
+          href: `${REALM}log-1`,
+          definition: declaredAppend(
+            { events: { label: { $ref: 'params', key: 'summary' } } },
+            { summary: { kind: 'field', codeRef: STRING } },
+          ),
+        },
+      ]);
+      assert.deepEqual(failed, {
+        status: 400,
+        code: 'invalid-params',
+        entry: 0,
+      });
+      assert.strictEqual(commits.length, 0, 'nothing is committed');
+    });
+
+    test('a declared append that resolves to no item is refused', async function (assert) {
+      // An empty declaration would otherwise commit a rewrite of the file
+      // that changed nothing, which is a write the caller did not ask for.
+      let { core, commits } = logStub(eventLog([]));
+      let failed = await refusal(core, [
+        {
+          op: 'appendContainsMany',
+          href: `${REALM}log-1`,
+          definition: declaredAppend({}),
+        },
+      ]);
+      assert.deepEqual(failed, {
+        status: 400,
+        code: 'invalid-params',
+        entry: 0,
+      });
+      assert.strictEqual(commits.length, 0, 'nothing is committed');
+    });
+
+    test('a declared append keeps a param named for a wire member', async function (assert) {
+      // `field`, `items` and `fields` are the members an *ad-hoc* append is
+      // read from, so they are subtracted from its params. Nothing reserves
+      // those names against an author, and a declared append never reads the
+      // wire members — so subtracting them for one would make a declaration
+      // that happens to name a param `field` refused on every invocation,
+      // having lowered and indexed without a finding.
+      let entry: EnvelopeEntry = {
+        op: 'invoke',
+        position: 0,
+        name: 'note',
+        href: `${REALM}log-1`,
+        data: { field: 'audit', items: 'listed', fields: 'named' },
+      };
+      let declared = batchEntryFor(
+        entry,
+        declaredAppend(
+          { notes: { $ref: 'params', key: 'field' } },
+          { field: { kind: 'field', codeRef: STRING } },
+        ),
+      );
+      assert.deepEqual(
+        declared.params,
+        { field: 'audit', items: 'listed', fields: 'named' },
+        'a declared append is handed the payload the endpoint checked',
+      );
+
+      let adHoc = batchEntryFor(entry, {
+        base: 'appendContainsMany',
+        deterministic: true,
+      } as OperationDefinition);
+      assert.deepEqual(
+        adHoc.params,
+        {},
+        'while an ad-hoc one still reads those members for itself',
+      );
+    });
+
     test('a create with nothing to create is refused', async function (assert) {
       let { core, commits } = stub();
       let failed = await refusal(core, [{ op: 'create', lid: 'empty' }]);

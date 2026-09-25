@@ -23,6 +23,21 @@ import {
   describeConnectionSetup,
   measureConnectionSetup,
 } from '../scripts/load-harness/lib/connection.ts';
+import {
+  bootDocumentUrl,
+  buildLabel,
+  describeFleet,
+  describePin,
+  fleetDrift,
+  fleetStraddle,
+  parseServedBuild,
+  pinIsConfirmable,
+  pinIsReadable,
+  readFleet,
+  replicaIdFromHeaders,
+  type FleetReading,
+  type ServedBuild,
+} from '../scripts/load-harness/lib/deploy-pin.ts';
 import { LINK_SHAPE_LOAD_HALF_LIFE_MS } from '@cardstack/runtime-common';
 import {
   DEFAULT_LOAD_HALF_LIFE_MS,
@@ -42,6 +57,25 @@ import {
   typeKey,
   writeAttributes,
 } from '../scripts/load-harness/lib/workload.ts';
+import {
+  classify,
+  describeFairness,
+  fairnessScore,
+  readFairness,
+  type WriteRecord,
+} from '../scripts/load-harness/lib/fairness.ts';
+import {
+  decodeJwtClaims,
+  matrixDomainFor,
+  matrixIdFor,
+  realmPermissionsFor,
+} from '../scripts/load-harness/lib/permissions.ts';
+import type { Session } from '../scripts/load-harness/lib/auth.ts';
+import {
+  assignWriters,
+  idleSessions,
+  isAssignmentError,
+} from '../scripts/load-harness/lib/writers.ts';
 
 // The load harness runs against deployed environments with real credentials, so
 // none of it can be exercised from a test. Its decision-making can: the guard
@@ -376,11 +410,11 @@ module(basename(import.meta.filename), function () {
           [`${realm}schema/widget/Widget`],
         );
         assert.strictEqual(
-          workload.write!.path,
+          workload.writes[0]!.path,
           'Report',
           'the write path defaults to the type name',
         );
-        assert.deepEqual(workload.write!.adoptsFrom, {
+        assert.deepEqual(workload.writes[0]!.adoptsFrom, {
           module: `${realm}schema/report`,
           name: 'Report',
         });
@@ -455,7 +489,7 @@ module(basename(import.meta.filename), function () {
         let workload = loadWorkload(path, realm);
         assert.deepEqual(workload.secondaryQueries, []);
         assert.deepEqual(workload.extraQueries, []);
-        assert.deepEqual(workload.write!.attributes, {});
+        assert.deepEqual(workload.writes[0]!.attributes, {});
       });
     });
 
@@ -512,9 +546,9 @@ module(basename(import.meta.filename), function () {
           }),
           realm,
         );
-        assert.strictEqual(
-          workload.write,
-          undefined,
+        assert.deepEqual(
+          workload.writes,
+          [],
           'run-load refuses to start writers against this',
         );
       });
@@ -588,8 +622,8 @@ module(basename(import.meta.filename), function () {
         realm,
       );
       let written = typeKey(
-        workload.write!.adoptsFrom.module,
-        workload.write!.adoptsFrom.name,
+        workload.writes[0]!.adoptsFrom.module,
+        workload.writes[0]!.adoptsFrom.name,
       );
       assert.true(
         [...workload.queries, ...workload.secondaryQueries].some((q) =>
@@ -621,7 +655,7 @@ module(basename(import.meta.filename), function () {
             },
           },
         });
-        let { write } = loadWorkload(path, realm);
+        let [write] = loadWorkload(path, realm).writes;
         assert.ok(write, 'this workload declares a write block');
         let first = writeAttributes(write!, 1);
         let second = writeAttributes(write!, 2);
@@ -919,7 +953,7 @@ module(basename(import.meta.filename), function () {
       });
       let workload = parseWorkload(raw, realm, '_types');
       assert.deepEqual(
-        workload.write!.adoptsFrom,
+        workload.writes[0]!.adoptsFrom,
         { module: `${realm}author`, name: 'Author' },
         'Spec outranks it but is not addressable relative to this realm',
       );
@@ -930,7 +964,7 @@ module(basename(import.meta.filename), function () {
         'so each write invalidates something a reader is querying',
       );
       assert.deepEqual(
-        workload.write!.attributes,
+        workload.writes[0]!.attributes,
         {},
         'the summary reports counts, not field schemas, so nothing is guessed',
       );
@@ -954,7 +988,7 @@ module(basename(import.meta.filename), function () {
       );
       let workload = parseWorkload(raw, realm, '_types');
       assert.strictEqual(workload.queries.length, 2, 'the reads still stand');
-      assert.strictEqual(workload.write, undefined);
+      assert.deepEqual(workload.writes, []);
       assert.true(
         readOnlyReason(raw, 8).includes('Spec'),
         'the reason names the types that ranked, so the operator can judge it',
@@ -1190,6 +1224,573 @@ module(basename(import.meta.filename), function () {
       });
       assert.true(line.includes('under 3ms'));
       assert.true(line.includes('close to the server'));
+    });
+  });
+
+  module('deploy pin — did the deployment hold still', function () {
+    // The boot document the realm server serves, in the shape it serves it:
+    // the host's config in a percent-encoded meta, an inline script, the chunk
+    // preloads, and then the entry module in a `type="module"` script whose
+    // src points at whichever origin holds the assets.
+    function bootDocument({
+      bundle = 'main-CThYvmXC.js',
+      version = '0.0.0+38d67f96' as string | undefined,
+      assets = 'https://assets.example.test/',
+    }: {
+      bundle?: string;
+      version?: string;
+      assets?: string;
+    } = {}): string {
+      let config = encodeURIComponent(
+        JSON.stringify({
+          modulePrefix: '@cardstack/host',
+          environment: 'production',
+          ...(version ? { APP: { version } } : {}),
+          assetsURL: assets,
+        }),
+      );
+      return [
+        '<!DOCTYPE html><html lang="en"><head>',
+        `<meta name="@cardstack/host/config/environment" content="${config}">`,
+        '<script>globalThis.__boxelAssetsURL = "/";</script>',
+        `<link rel="modulepreload" href="${assets}assets/chunk-Bv0JxpqV.js">`,
+        `<link rel="modulepreload" href="${assets}assets/common-BZtn9ioa.js">`,
+        `<script type="module" crossorigin="" src="${assets}assets/${bundle}"></script>`,
+        `<link rel="stylesheet" crossorigin="" href="${assets}assets/main-BlRjxoZ5.css">`,
+        '</head><body></body></html>',
+      ].join('\n');
+    }
+
+    function bootResponse({
+      replicaId,
+      status = 200,
+      ...build
+    }: {
+      replicaId?: string;
+      status?: number;
+      bundle?: string;
+      version?: string | undefined;
+      assets?: string;
+    } = {}): Response {
+      let headers = new Headers({ 'content-type': 'text/html' });
+      if (replicaId) {
+        headers.set(
+          'x-ecs-container-metadata-uri-v4',
+          `http://169.254.170.2/v4/${replicaId}`,
+        );
+      }
+      return new Response(bootDocument(build), { status, headers });
+    }
+
+    // A load balancer handing each connection to the next replica, which is
+    // what makes a wave of concurrent probes a fan-out rather than a repeat.
+    function roundRobin(
+      replicas: Parameters<typeof bootResponse>[0][],
+    ): typeof fetch {
+      let next = 0;
+      return (() =>
+        Promise.resolve(
+          bootResponse(replicas[next++ % replicas.length]),
+        )) as unknown as typeof fetch;
+    }
+
+    const build = (
+      bundle: string | undefined,
+      hostVersion: string | undefined,
+    ): ServedBuild => ({ bundle, hostVersion });
+
+    // A reading, written as what each replica answered with: a build, or
+    // `undefined` for a replica that answered without a usable document.
+    function reading(
+      replicas: Record<string, ServedBuild | undefined>,
+      {
+        probes = 8,
+        responses = Object.keys(replicas).length,
+      }: { probes?: number; responses?: number } = {},
+    ): FleetReading {
+      // Mirrors what a reading can actually hold: a document that named
+      // neither identifier is not a build, so it never reaches `builds`.
+      let served = (
+        Object.values(replicas).filter(Boolean) as ServedBuild[]
+      ).filter((b) => b.bundle !== undefined || b.hostVersion !== undefined);
+      return {
+        replicas: new Set(Object.keys(replicas)),
+        builds: new Map(served.map((b) => [buildLabel(b), b])),
+        probes,
+        responses,
+      };
+    }
+
+    const EMPTY_READING: FleetReading = {
+      replicas: new Set(),
+      builds: new Map(),
+      probes: 8,
+      responses: 0,
+    };
+
+    test('reads the entry bundle and the host build version from a boot document', function (assert) {
+      let served = parseServedBuild(bootDocument());
+      assert.strictEqual(served.bundle, 'main-CThYvmXC.js');
+      assert.strictEqual(served.hostVersion, '0.0.0+38d67f96');
+    });
+
+    test('the entry is the module script, not the first script and not a preload', function (assert) {
+      // The document names dozens of chunks and one entry, and the chunks come
+      // first. Reading one of those, or the inline script that precedes the
+      // entry, would pin the run to something that changes on a different
+      // schedule from the build a browser boots.
+      let html = bootDocument();
+      assert.true(
+        html.indexOf('modulepreload') < html.indexOf('type="module"'),
+        'the preloads precede the entry, as they do in the served document',
+      );
+      assert.true(
+        html.indexOf('<script>') < html.indexOf('type="module"'),
+        'so does an inline script',
+      );
+      assert.strictEqual(parseServedBuild(html).bundle, 'main-CThYvmXC.js');
+    });
+
+    test('a document that is not the host app pins nothing rather than pinning a guess', function (assert) {
+      let served = parseServedBuild('<html><body>Bad Gateway</body></html>');
+      assert.strictEqual(served.bundle, undefined);
+      assert.strictEqual(served.hostVersion, undefined);
+      assert.false(
+        pinIsReadable(reading({ 'task-a': served })),
+        'an unreadable pin has to say so, or a number gets quoted as one build’s',
+      );
+    });
+
+    test('an unreadable config still leaves the bundle pinned', function (assert) {
+      let html = bootDocument().replace(
+        /content="[^"]*"/,
+        'content="%E0%A4%A"',
+      );
+      let served = parseServedBuild(html);
+      assert.strictEqual(served.bundle, 'main-CThYvmXC.js');
+      assert.strictEqual(served.hostVersion, undefined);
+      assert.true(pinIsReadable(reading({ 'task-a': served })));
+    });
+
+    test('the replica id comes off the container metadata header', function (assert) {
+      assert.strictEqual(
+        replicaIdFromHeaders(
+          new Headers({
+            'x-ecs-container-metadata-uri-v4':
+              'http://169.254.170.2/v4/6654a7425d164a77803fe13a88ae21ab-3236013547',
+          }),
+        ),
+        '6654a7425d164a77803fe13a88ae21ab-3236013547',
+      );
+      assert.strictEqual(
+        replicaIdFromHeaders(new Headers()),
+        undefined,
+        'a deployment that identifies no replica is not a deployment that turned over',
+      );
+    });
+
+    test('the boot document is probed on the host-app route', function (assert) {
+      assert.strictEqual(
+        bootDocumentUrl('https://realms.example.test'),
+        'https://realms.example.test/_standby',
+      );
+      assert.strictEqual(
+        bootDocumentUrl('https://realms.example.test/'),
+        'https://realms.example.test/_standby',
+      );
+    });
+
+    test('a wave probes concurrently, which is what reaches more than one replica', async function (assert) {
+      let inFlight = 0;
+      let peak = 0;
+      let fetchImpl = (() => {
+        inFlight++;
+        peak = Math.max(peak, inFlight);
+        return new Promise<Response>((resolve) =>
+          setTimeout(() => {
+            inFlight--;
+            resolve(bootResponse({ replicaId: 'task-a' }));
+          }, 0),
+        );
+      }) as unknown as typeof fetch;
+      await readFleet('https://realms.example.test/_standby', {
+        fetchImpl,
+        waveSize: 4,
+        maxWaves: 1,
+      });
+      assert.strictEqual(
+        peak,
+        4,
+        'all four probes of a wave were open at once',
+      );
+    });
+
+    test('every probe asks for its own connection, and for HTML', async function (assert) {
+      // Concurrency alone only widens the sample WITHIN a wave: by the time
+      // the next wave is issued the pool's sockets are free again, and undici
+      // prefers a free socket to a new one — so a keep-alive reading converges
+      // on the connections its first wave opened and never meets the rest of a
+      // fleet. Measured against a server reporting the socket each request
+      // arrived on: 4, 5, 5 distinct sockets over three waves of four with
+      // keep-alive; 4, 8, 12 without it. The Accept matters as much: the realm
+      // server answers a request that does not ask for HTML from a different
+      // handler, and the reading would name no build at all.
+      let sent: Record<string, string>[] = [];
+      let fetchImpl = ((_url: string, init: RequestInit) => {
+        sent.push(init.headers as Record<string, string>);
+        return Promise.resolve(bootResponse({ replicaId: 'task-a' }));
+      }) as unknown as typeof fetch;
+      await readFleet('https://realms.example.test/_standby', {
+        fetchImpl,
+        waveSize: 2,
+        maxWaves: 2,
+      });
+      assert.true(sent.length > 0, 'probes were issued');
+      for (let headers of sent) {
+        assert.strictEqual(headers.Connection, 'close');
+        assert.strictEqual(headers.Accept, 'text/html');
+      }
+    });
+
+    test('probing stops once a wave discovers nobody new', async function (assert) {
+      let fetchImpl = roundRobin([
+        { replicaId: 'task-a' },
+        { replicaId: 'task-b' },
+      ]);
+      let fleet = await readFleet('https://realms.example.test/_standby', {
+        fetchImpl,
+        waveSize: 4,
+        maxWaves: 4,
+      });
+      assert.deepEqual([...fleet.replicas], ['task-a', 'task-b']);
+      assert.strictEqual(
+        fleet.probes,
+        8,
+        'a second wave confirms the first found everyone; a third would only cost requests',
+      );
+      assert.strictEqual(fleet.responses, 8);
+    });
+
+    test('probing keeps going while a replica it was told to expect has not answered', async function (assert) {
+      // Which is what separates "this replica is gone" from "this reading did
+      // not happen to reach it" — and a departure refuses a run.
+      let calls = 0;
+      let lateFleet = () =>
+        (() =>
+          Promise.resolve(
+            bootResponse({ replicaId: ++calls > 8 ? 'task-b' : 'task-a' }),
+          )) as unknown as typeof fetch;
+
+      calls = 0;
+      let unaware = await readFleet('https://realms.example.test/_standby', {
+        fetchImpl: lateFleet(),
+        waveSize: 4,
+        maxWaves: 4,
+      });
+      assert.deepEqual(
+        [...unaware.replicas],
+        ['task-a'],
+        'a reading with nothing to look for stops as soon as a wave adds nobody',
+      );
+
+      calls = 0;
+      let expecting = await readFleet('https://realms.example.test/_standby', {
+        fetchImpl: lateFleet(),
+        waveSize: 4,
+        maxWaves: 4,
+        expect: ['task-a', 'task-b'],
+      });
+      assert.deepEqual([...expecting.replicas].sort(), ['task-a', 'task-b']);
+    });
+
+    test('probing is capped however much each wave keeps finding', async function (assert) {
+      let n = 0;
+      let fetchImpl = (() =>
+        Promise.resolve(
+          bootResponse({ replicaId: `task-${n++}` }),
+        )) as unknown as typeof fetch;
+      let fleet = await readFleet('https://realms.example.test/_standby', {
+        fetchImpl,
+        waveSize: 4,
+        maxWaves: 3,
+      });
+      assert.strictEqual(fleet.probes, 12, 'three waves of four, and no more');
+    });
+
+    test('a target that answers nothing is reported unpinned rather than unchanged', async function (assert) {
+      let fetchImpl = (() =>
+        Promise.reject(
+          new Error('connect ECONNREFUSED'),
+        )) as unknown as typeof fetch;
+      let fleet = await readFleet('https://realms.example.test/_standby', {
+        fetchImpl,
+        waveSize: 4,
+        maxWaves: 4,
+      });
+      assert.strictEqual(fleet.responses, 0);
+      assert.strictEqual(
+        fleet.probes,
+        8,
+        'one unlucky moment gets a second wave before the target is called unreachable',
+      );
+      assert.true(
+        describeFleet(fleet, 'https://realms.example.test/_standby').includes(
+          'not pinned',
+        ),
+      );
+    });
+
+    test('an error keeps the replica that sent it and drops only its document', async function (assert) {
+      // A replica answering 502 has still said it is there. Discarding its id
+      // with the unusable document would report it as departed at the close
+      // and refuse a run over a transient error.
+      let fetchImpl = roundRobin([{ replicaId: 'task-a', status: 502 }]);
+      let fleet = await readFleet('https://realms.example.test/_standby', {
+        fetchImpl,
+        waveSize: 2,
+        maxWaves: 2,
+      });
+      assert.deepEqual([...fleet.replicas], ['task-a']);
+      assert.strictEqual(fleet.builds.size, 0, 'and names no build');
+      assert.false(pinIsReadable(fleet));
+    });
+
+    test('a 200 that is not the boot document names no build', async function (assert) {
+      // A proxy's interstitial parses to a build with nothing in it. Recording
+      // that would stand a second "build" beside the real one — a straddle
+      // before the run, or a build that moved at the close, out of a fleet
+      // that never changed.
+      let interstitial = new Response(
+        '<html><body>Service temporarily unavailable</body></html>',
+        {
+          status: 200,
+          headers: new Headers({
+            'content-type': 'text/html',
+            'x-ecs-container-metadata-uri-v4': 'http://169.254.170.2/v4/task-b',
+          }),
+        },
+      );
+      let next = 0;
+      let fetchImpl = (() =>
+        Promise.resolve(
+          next++ % 2
+            ? bootResponse({ replicaId: 'task-a' })
+            : interstitial.clone(),
+        )) as unknown as typeof fetch;
+      let fleet = await readFleet('https://realms.example.test/_standby', {
+        fetchImpl,
+        waveSize: 4,
+      });
+      assert.deepEqual([...fleet.replicas].sort(), ['task-a', 'task-b']);
+      assert.deepEqual(
+        [...fleet.builds.keys()],
+        ['main-CThYvmXC.js (0.0.0+38d67f96)'],
+        'only the document that named something',
+      );
+      assert.deepEqual(fleetStraddle(fleet), []);
+    });
+
+    test('a replica erroring at the close is not a replica that left', function (assert) {
+      let good = build('main-CThYvmXC.js', '0.0.0+38d67f96');
+      let drift = fleetDrift(
+        reading({ 'task-a': good, 'task-b': good }),
+        reading({ 'task-a': good, 'task-b': undefined }),
+      );
+      assert.deepEqual(drift, []);
+    });
+
+    test('a close that answered only errors is unconfirmed, not unchanged', function (assert) {
+      // Every answer identifying a replica and none carrying a document would
+      // otherwise compare an empty build set against the opening one, find
+      // nothing missing, and report the pin as held.
+      let before = reading({
+        'task-a': build('main-CThYvmXC.js', '0.0.0+38d67f96'),
+      });
+      let after = reading({ 'task-a': undefined });
+      assert.false(pinIsConfirmable(after));
+      assert.deepEqual(fleetDrift(before, after), []);
+      assert.true(describePin(before, after).includes('NOT CONFIRMED'));
+    });
+
+    test('a fleet already serving two builds is caught before the run, not after', async function (assert) {
+      // Each replica caches the boot document for the life of its process, so
+      // replicas that started either side of a host deploy serve two builds at
+      // once and a browser gets whichever answers.
+      let fetchImpl = roundRobin([
+        { replicaId: 'task-a', bundle: 'main-BPZqYHJZ.js' },
+        { replicaId: 'task-b', bundle: 'main-CFoh7RJ4.js' },
+      ]);
+      let fleet = await readFleet('https://realms.example.test/_standby', {
+        fetchImpl,
+        waveSize: 4,
+      });
+      let straddle = fleetStraddle(fleet);
+      assert.strictEqual(straddle.length, 1);
+      assert.true(straddle[0].includes('main-BPZqYHJZ.js'));
+      assert.true(straddle[0].includes('main-CFoh7RJ4.js'));
+    });
+
+    test('a straddle is caught on a target that identifies no replicas at all', async function (assert) {
+      // Builds are recorded apart from replica identity for this case: file
+      // them under the replica key and every probe overwrites the last, so a
+      // fleet mid-rollout reports whichever response happened to finish last
+      // and the run proceeds across two builds.
+      let fetchImpl = roundRobin([
+        { bundle: 'main-BPZqYHJZ.js' },
+        { bundle: 'main-CFoh7RJ4.js' },
+      ]);
+      let fleet = await readFleet('https://realms.example.test/_standby', {
+        fetchImpl,
+        waveSize: 4,
+      });
+      assert.strictEqual(
+        fleet.replicas.size,
+        1,
+        'nothing identifies the replicas',
+      );
+      assert.strictEqual(fleet.builds.size, 2, 'both builds are kept anyway');
+      assert.strictEqual(fleetStraddle(fleet).length, 1);
+    });
+
+    test('one build across every replica is not a straddle', async function (assert) {
+      let fetchImpl = roundRobin([
+        { replicaId: 'task-a' },
+        { replicaId: 'task-b' },
+      ]);
+      let fleet = await readFleet('https://realms.example.test/_standby', {
+        fetchImpl,
+        waveSize: 4,
+      });
+      assert.deepEqual(fleetStraddle(fleet), []);
+      assert.true(
+        describeFleet(fleet, 'https://realms.example.test/_standby').includes(
+          '2 replicas',
+        ),
+      );
+    });
+
+    test('a run whose deployment held still reports no drift', function (assert) {
+      let before = reading({
+        'task-a': build('main-CThYvmXC.js', '0.0.0+38d67f96'),
+        'task-b': build('main-CThYvmXC.js', '0.0.0+38d67f96'),
+      });
+      let after = reading({
+        'task-b': build('main-CThYvmXC.js', '0.0.0+38d67f96'),
+        'task-a': build('main-CThYvmXC.js', '0.0.0+38d67f96'),
+      });
+      assert.deepEqual(
+        fleetDrift(before, after),
+        [],
+        'the same replicas serving the same build, in whatever order they answered',
+      );
+      let pin = describePin(before, after);
+      assert.true(pin.includes('main-CThYvmXC.js'), 'the bundle');
+      assert.true(pin.includes('0.0.0+38d67f96'), 'the host build version');
+    });
+
+    test('a host bundle that moved mid-run is reported with both builds', function (assert) {
+      let drift = fleetDrift(
+        reading({ 'task-a': build('main-BPZqYHJZ.js', '0.0.0+fdcc601a') }),
+        reading({ 'task-a': build('main-CFoh7RJ4.js', '0.0.0+fdcc601a') }),
+      );
+      assert.strictEqual(drift.length, 1);
+      assert.true(drift[0].includes('main-BPZqYHJZ.js'), 'what it was');
+      assert.true(drift[0].includes('main-CFoh7RJ4.js'), 'what it became');
+    });
+
+    test('a host version that moved is caught even when the bundle name did not', function (assert) {
+      // The two are separate facts about the same build, and a check that
+      // reads only one of them is a check that can be passed by the other.
+      let drift = fleetDrift(
+        reading({ 'task-a': build('main-CThYvmXC.js', '0.0.0+38d67f96') }),
+        reading({ 'task-a': build('main-CThYvmXC.js', '0.0.0+b707165c') }),
+      );
+      assert.strictEqual(drift.length, 1);
+      assert.true(drift[0].includes('0.0.0+b707165c'));
+    });
+
+    test('a replica that arrived mid-run is drift even when it serves the same build', function (assert) {
+      // A replaced task is a cold task: its caches are empty and the part of
+      // the window it served is not comparable to the rest.
+      let same = build('main-CThYvmXC.js', '0.0.0+38d67f96');
+      let drift = fleetDrift(
+        reading({ 'task-a': same, 'task-b': same }),
+        reading({ 'task-a': same, 'task-c': same }),
+      );
+      assert.strictEqual(drift.length, 1);
+      assert.true(drift[0].includes('1 replica arrived'));
+      assert.true(drift[0].includes('1 replica left'));
+    });
+
+    test('a replica that left mid-run is drift on its own', function (assert) {
+      // A fleet that shrank carried a different share of the load through the
+      // rest of the window, which is the number this harness reports.
+      let same = build('main-CThYvmXC.js', '0.0.0+38d67f96');
+      let drift = fleetDrift(
+        reading({ 'task-a': same, 'task-b': same }),
+        reading({ 'task-a': same }),
+      );
+      assert.strictEqual(drift.length, 1);
+      assert.true(drift[0].includes('1 replica left'));
+      assert.false(
+        drift[0].includes('arrived'),
+        'nothing arrived, and saying so would misdescribe the fleet',
+      );
+    });
+
+    test('a deployment that identifies no replicas reports its build moving, and nothing else', function (assert) {
+      // Every response files under one key, so there is no turnover to report
+      // — and filing builds by replica instead would turn one host deploy into
+      // a phantom fleet change as well.
+      let drift = fleetDrift(
+        reading({ unidentified: build('main-QY-TXAfv.js', '0.0.0+b707165c') }),
+        reading({ unidentified: build('main-CowsK790.js', '0.0.0+969ffde0') }),
+      );
+      assert.strictEqual(drift.length, 1);
+      assert.true(drift[0].includes('the host build moved'));
+    });
+
+    test('a local deployment that held still reports nothing', function (assert) {
+      let same = build('main-QY-TXAfv.js', '0.0.0+b707165c');
+      assert.deepEqual(
+        fleetDrift(
+          reading({ unidentified: same }),
+          reading({ unidentified: same }),
+        ),
+        [],
+      );
+    });
+
+    test('a closing probe that answered nothing reports an unconfirmed pin, not a deploy', function (assert) {
+      // Silence says the pin is unknown, not that the deployment moved —
+      // and the likeliest target to go quiet at the close is the one this
+      // harness just spent an hour saturating. Throwing that hour away on a
+      // question the probe could not ask is the wrong trade; saying the pin
+      // was never confirmed is not.
+      let before = reading({
+        'task-a': build('main-CThYvmXC.js', '0.0.0+38d67f96'),
+      });
+      assert.deepEqual(fleetDrift(before, EMPTY_READING), []);
+      assert.false(pinIsConfirmable(EMPTY_READING));
+      let pin = describePin(before, EMPTY_READING);
+      assert.true(pin.includes('NOT CONFIRMED'));
+      assert.true(pin.includes('main-CThYvmXC.js'), 'what it was pinned to');
+    });
+
+    test('an opening probe that answered nothing cannot manufacture drift', function (assert) {
+      // Nothing was pinned, so nothing can have moved — and a comparison
+      // against an empty reading would otherwise announce a build that moved
+      // from nothing to whatever the close saw.
+      let after = reading({
+        'task-a': build('main-CThYvmXC.js', '0.0.0+38d67f96'),
+      });
+      assert.deepEqual(fleetDrift(EMPTY_READING, after), []);
+      assert.true(describePin(EMPTY_READING, after).includes('not pinned'));
+    });
+
+    test('an unpinned run says so in the summary instead of claiming a build', function (assert) {
+      let unpinned = reading({ 'task-a': build(undefined, undefined) });
+      assert.true(describePin(unpinned, unpinned).includes('not pinned'));
     });
   });
 
@@ -1449,6 +2050,792 @@ module(basename(import.meta.filename), function () {
       assert.ok(
         summary.includes('boxel:link-shape-policy'),
         'and the reader is sent to the server figure this one bounds',
+      );
+    });
+  });
+
+  module('write blocks — two identities on one realm', function () {
+    const realm = 'https://example.test/owner/load-test/';
+
+    function parse(raw: Record<string, unknown>) {
+      return parseWorkload(
+        {
+          queries: [
+            {
+              label: 'W',
+              filter: { 'item.on': { module: '${realm}w', name: 'W' } },
+            },
+          ],
+          ...raw,
+        },
+        realm,
+        'workload.json',
+      );
+    }
+
+    test('a single "write" block is one entry in "writes"', function (assert) {
+      // The spelling every existing workload file uses, and the one
+      // derive-workload emits. It has to keep meaning what it meant.
+      let workload = parse({
+        write: {
+          adoptsFrom: { module: '${realm}schema/report', name: 'Report' },
+          attributes: { title: 'x' },
+        },
+      });
+      assert.strictEqual(workload.writes.length, 1);
+      assert.strictEqual(workload.writes[0].method, 'POST', 'the default');
+      assert.strictEqual(
+        workload.writes[0].path,
+        'Report',
+        'and a POST path still defaults to the type name',
+      );
+      assert.strictEqual(
+        workload.writes[0].label,
+        'Report',
+        'the label defaults to the type name, so a one-block run reads the same',
+      );
+    });
+
+    test('"writes" carries a block per kind of write', function (assert) {
+      let workload = parse({
+        writes: [
+          {
+            label: 'hub',
+            method: 'PATCH',
+            path: 'Course/intro',
+            everyMs: 30000,
+            adoptsFrom: { module: '${realm}course', name: 'Course' },
+            attributes: { title: 'rev ${n}' },
+          },
+          {
+            label: 'leaf',
+            username: 'loadtest02',
+            everyMs: 5000,
+            adoptsFrom: { module: '${realm}note', name: 'Note' },
+            attributes: { title: 'note ${n}' },
+          },
+        ],
+      });
+      assert.deepEqual(
+        workload.writes.map((w) => [
+          w.label,
+          w.method,
+          w.path,
+          w.everyMs,
+          w.username,
+        ]),
+        [
+          ['hub', 'PATCH', 'Course/intro', 30000, undefined],
+          ['leaf', 'POST', 'Note', 5000, 'loadtest02'],
+        ],
+      );
+      assert.strictEqual(
+        workload.writes[0].adoptsFrom.module,
+        `${realm}course`,
+        '${realm} expands inside a block like anywhere else',
+      );
+    });
+
+    test('naming both "write" and "writes" is refused', function (assert) {
+      // Two answers to one question. A precedence rule would be a thing to
+      // misremember while reading a run's numbers back.
+      assert.throws(
+        () =>
+          parse({
+            write: {
+              adoptsFrom: { module: '${realm}a', name: 'A' },
+            },
+            writes: [{ adoptsFrom: { module: '${realm}b', name: 'B' } }],
+          }),
+        /"write" and "writes" both name/,
+      );
+    });
+
+    test('two blocks cannot share a label', function (assert) {
+      // The label keys the fairness table, and the table exists precisely so
+      // an expensive block and a cheap one are not averaged together.
+      assert.throws(
+        () =>
+          parse({
+            writes: [
+              { label: 'w', adoptsFrom: { module: '${realm}a', name: 'A' } },
+              { label: 'w', adoptsFrom: { module: '${realm}b', name: 'B' } },
+            ],
+          }),
+        /labelled "w"/,
+      );
+    });
+
+    test('a PATCH block must name the card it patches', function (assert) {
+      // A POST addresses a collection and the realm names the card. There is
+      // no such thing as patching a collection, so there is no default.
+      assert.throws(
+        () =>
+          parse({
+            writes: [
+              {
+                method: 'PATCH',
+                adoptsFrom: { module: '${realm}a', name: 'A' },
+                attributes: { title: '${n}' },
+              },
+            ],
+          }),
+        /path" is required for a PATCH block/,
+      );
+    });
+
+    test('a PATCH block whose attributes never change is refused', function (assert) {
+      // The realm leaves an unchanged card's file exactly as it is, so such a
+      // block persists nothing and runs no index pass — it would sit in the
+      // run contributing no work while the summary counted it as a writer.
+      // That is a null result wearing a measurement's clothes.
+      assert.throws(
+        () =>
+          parse({
+            writes: [
+              {
+                method: 'PATCH',
+                path: 'A/one',
+                adoptsFrom: { module: '${realm}a', name: 'A' },
+                attributes: { title: 'always the same' },
+              },
+            ],
+          }),
+        /same on every write/,
+      );
+      assert.ok(
+        parse({
+          writes: [
+            {
+              method: 'PATCH',
+              path: 'A/one',
+              adoptsFrom: { module: '${realm}a', name: 'A' },
+              attributes: { nested: { tags: ['run-${n}'] } },
+            },
+          ],
+        }),
+        'a varying attribute anywhere in the tree satisfies it',
+      );
+    });
+
+    test('a PATCH varying only by ${date} is refused', function (assert) {
+      // `${date}` expands to today, the same string for every write in a run,
+      // so such a block resends identical attributes after its first patch.
+      // The realm leaves the file alone, no index pass runs, and the write
+      // still lands in the fairness ledger as a write — a block that looks
+      // like a writer and contributes nothing.
+      assert.throws(
+        () =>
+          parse({
+            writes: [
+              {
+                method: 'PATCH',
+                path: 'A/one',
+                adoptsFrom: { module: '${realm}a', name: 'A' },
+                attributes: { reportedOn: '${date}' },
+              },
+            ],
+          }),
+        /same on every write/,
+      );
+      // And the reason it is refused is real: the two expansions are equal.
+      let spec = {
+        label: 'a',
+        method: 'PATCH' as const,
+        path: 'A/one',
+        adoptsFrom: { module: `${realm}a`, name: 'A' },
+        attributes: { reportedOn: '${date}' },
+      };
+      assert.deepEqual(
+        writeAttributes(spec, 1),
+        writeAttributes(spec, 2),
+        'two successive writes of this block send byte-identical attributes',
+      );
+    });
+
+    test('a POST block needs no varying attribute', function (assert) {
+      // It creates a new card per write whatever the attributes say.
+      assert.strictEqual(
+        parse({
+          writes: [
+            {
+              adoptsFrom: { module: '${realm}a', name: 'A' },
+              attributes: { title: 'always the same' },
+            },
+          ],
+        }).writes.length,
+        1,
+      );
+    });
+
+    test('two blocks may share a username — that is self-contention', function (assert) {
+      // One identity writing two different blocks is a real thing to measure
+      // (it is what the `behind self` bucket is for), so it parses. What must
+      // not happen is one block being driven twice, which `assignWriters`
+      // refuses.
+      let workload = parse({
+        writes: [
+          {
+            label: 'a',
+            username: 'one',
+            adoptsFrom: { module: '${realm}a', name: 'A' },
+          },
+          {
+            label: 'b',
+            username: 'one',
+            adoptsFrom: { module: '${realm}b', name: 'B' },
+          },
+        ],
+      });
+      assert.deepEqual(
+        workload.writes.map((w) => w.username),
+        ['one', 'one'],
+      );
+    });
+
+    test('malformed block members are refused at load', function (assert) {
+      for (let [block, pattern] of [
+        [{ method: 'PUT' }, /must be "POST" or "PATCH"/],
+        // An array passes `typeof === 'object'` and is truthy, so without an
+        // explicit check it reaches the wire as the card's attributes.
+        [{ attributes: ['a', 'b'] }, /attributes" must be an object/],
+        [{ everyMs: 0 }, /positive number of ms/],
+        [{ everyMs: 'fast' }, /positive number of ms/],
+        [{ label: 7 }, /label" must be a string/],
+        [{ username: 7 }, /username" must be a string/],
+      ] as [Record<string, unknown>, RegExp][]) {
+        assert.throws(
+          () =>
+            parse({
+              writes: [
+                {
+                  adoptsFrom: { module: '${realm}a', name: 'A' },
+                  ...block,
+                },
+              ],
+            }),
+          pattern,
+          `${JSON.stringify(block)} is caught before any login happens`,
+        );
+      }
+      assert.throws(() => parse({ writes: [] }), /non-empty array/);
+
+      // An empty string is a string, and keeping it would POST to the realm
+      // root with a doubled slash rather than falling back to the type name.
+      assert.strictEqual(
+        parse({
+          writes: [
+            { path: '', adoptsFrom: { module: '${realm}a', name: 'A' } },
+          ],
+        }).writes[0].path,
+        'A',
+      );
+    });
+  });
+
+  module(
+    'fairness — did a write wait on somebody else’s indexing?',
+    function () {
+      function record(
+        block: string,
+        userId: string,
+        startedAt: number,
+        endedAt: number,
+      ): WriteRecord {
+        return { block, userId, startedAt, endedAt };
+      }
+
+      test('a write nothing overlapped is clear', function (assert) {
+        let records = [
+          record('leaf', '@a:test', 0, 100),
+          record('leaf', '@a:test', 200, 300),
+        ];
+        assert.strictEqual(classify(records[0], records), 'clear');
+        assert.strictEqual(classify(records[1], records), 'clear');
+      });
+
+      test('starting inside another identity’s window and finishing later is behind-other', function (assert) {
+        // The ordering one lane per realm forces: the second pass cannot be
+        // claimed until the first releases its reservation.
+        let hub = record('hub', '@a:test', 0, 1000);
+        let leaf = record('leaf', '@b:test', 100, 1100);
+        let records = [hub, leaf];
+        assert.strictEqual(classify(leaf, records), 'behind-other');
+        assert.strictEqual(
+          classify(hub, records),
+          'clear',
+          'the blocker itself waited on nobody',
+        );
+      });
+
+      test('the same identity blocking itself is reported apart', function (assert) {
+        // Self-contention is a real effect and a different ticket. Folding it
+        // in would inflate the figure that decides whether the lane should be
+        // keyed on the writer.
+        let first = record('leaf', '@a:test', 0, 1000);
+        let second = record('leaf', '@a:test', 100, 1100);
+        assert.strictEqual(classify(second, [first, second]), 'behind-self');
+      });
+
+      test('a different identity outranks a same-identity blocker', function (assert) {
+        let mine = record('leaf', '@a:test', 0, 1000);
+        let theirs = record('hub', '@b:test', 50, 1000);
+        let subject = record('leaf', '@a:test', 100, 1100);
+        assert.strictEqual(
+          classify(subject, [mine, theirs, subject]),
+          'behind-other',
+        );
+      });
+
+      test('writes that started in the same millisecond are unordered', function (assert) {
+        // Two writer timers can fire in the same tick, and then neither write
+        // was outstanding when the other began. Ordering them by which
+        // finished later would score the more expensive block as behind the
+        // cheaper one — and it would do so under per-writer lanes too, since
+        // an expensive write still ends last when nothing blocked it. That is
+        // a false positive the lane split cannot clear, which would cost this
+        // count the one property it is reported for.
+        let cheap = record('leaf', '@a:test', 500, 600);
+        let costly = record('hub', '@b:test', 500, 4000);
+        assert.strictEqual(classify(costly, [cheap, costly]), 'clear');
+        assert.strictEqual(classify(cheap, [cheap, costly]), 'clear');
+        let reading = readFairness([cheap, costly]);
+        assert.strictEqual(reading.behindOther, 0);
+        assert.strictEqual(
+          reading.overlappedOther,
+          2,
+          'they did overlap, and that is still reported',
+        );
+
+        // Identical windows are the same case, and were the only one the
+        // earlier spelling caught.
+        let a = record('leaf', '@a:test', 500, 1500);
+        let b = record('hub', '@b:test', 500, 1500);
+        assert.strictEqual(classify(a, [a, b]), 'clear');
+        assert.strictEqual(classify(b, [a, b]), 'clear');
+
+        // One millisecond apart is ordered again, so the guard is a tie-break
+        // rather than a hole.
+        let first = record('hub', '@b:test', 500, 4000);
+        let second = record('leaf', '@a:test', 501, 4001);
+        assert.strictEqual(classify(second, [first, second]), 'behind-other');
+      });
+
+      test('overlapping is not the same as being behind', function (assert) {
+        // A write can overlap another and still finish first, which is not the
+        // ordering a serial lane forces. Counting it as blocked would report
+        // contention wherever two writes merely coincided.
+        let long = record('hub', '@a:test', 0, 1000);
+        let quick = record('leaf', '@b:test', 100, 200);
+        let reading = readFairness([long, quick]);
+        assert.strictEqual(reading.behindOther, 0, 'neither ran behind');
+        assert.strictEqual(
+          reading.overlappedOther,
+          2,
+          'but both overlapped the other identity, and that is reported too',
+        );
+      });
+
+      test('behind-self and overlapped-another-identity are not exclusive', function (assert) {
+        // They answer different questions and are counted separately, so one
+        // write can land in both. `classify` returns a single state, which
+        // makes `behindSelf` and `behindOther` exclusive — but
+        // `overlappedOther` is computed apart from the classification and is
+        // not a fourth bucket of a partition. Pinned down because the comment
+        // justifying the rendered shape once claimed otherwise.
+        let mine = record('leaf', '@a:test', 50, 150);
+        let subject = record('leaf', '@a:test', 100, 200);
+        let stranger = record('hub', '@b:test', 180, 300);
+        let all = [mine, subject, stranger];
+
+        assert.strictEqual(
+          classify(subject, all),
+          'behind-self',
+          'it is behind its own earlier write, not the stranger it merely overlaps',
+        );
+        let reading = readFairness(all);
+        assert.strictEqual(reading.behindSelf, 1);
+        assert.strictEqual(
+          reading.behindOther,
+          1,
+          'the stranger started inside this write and finished later, so it is behind it',
+        );
+        assert.strictEqual(
+          reading.overlappedOther,
+          2,
+          'and the behind-self write is ALSO counted as overlapping a stranger — ' +
+            'the two sets are not exclusive',
+        );
+        assert.strictEqual(
+          reading.behindSelf + reading.behindOther + reading.overlappedOther,
+          4,
+          'three counts over three writes: they do not partition, which is why ' +
+            'the summary spells the nesting instead of printing them flat',
+        );
+      });
+
+      test('the score compares a block against itself, not against other blocks', function (assert) {
+        let records = [
+          // Leaf alone: 100ms each.
+          record('leaf', '@b:test', 0, 100),
+          record('leaf', '@b:test', 200, 300),
+          // Hub running long, with a leaf write caught inside it.
+          record('hub', '@a:test', 400, 2400),
+          record('leaf', '@b:test', 500, 2500),
+        ];
+        let reading = readFairness(records);
+        assert.strictEqual(reading.behindOther, 1);
+        let leaf = reading.blocks.find((b) => b.block === 'leaf')!;
+        assert.deepEqual(leaf.clear, [100, 100]);
+        assert.deepEqual(leaf.behindOther, [2000]);
+        assert.strictEqual(
+          fairnessScore(leaf)!.toFixed(2),
+          '0.05',
+          'the blocked leaf write cost twenty times what an unblocked one did',
+        );
+      });
+
+      test('an empty bucket is "not measured", never 1.00', function (assert) {
+        // The failure this whole capability exists to prevent. A run where the
+        // lane was never contended scoring a perfect 1.00 reports a property
+        // of the workload as a property of the fix.
+        let reading = readFairness([
+          record('leaf', '@a:test', 0, 100),
+          record('leaf', '@a:test', 200, 300),
+        ]);
+        let leaf = reading.blocks[0];
+        assert.strictEqual(fairnessScore(leaf), undefined);
+        let summary = describeFairness(reading);
+        assert.ok(
+          summary.includes('not measured'),
+          `the section says so in words: ${summary}`,
+        );
+        assert.notOk(
+          /fairness\s+1\.00/.test(summary),
+          'and never prints a score it did not measure',
+        );
+      });
+
+      test('a one-identity run says so rather than reporting a fair lane', function (assert) {
+        let summary = describeFairness(
+          readFairness([
+            record('leaf', '@a:test', 0, 1000),
+            record('leaf', '@a:test', 100, 1100),
+          ]),
+        );
+        assert.ok(
+          summary.includes('all 2 writes came from one identity'),
+          `the zero cross-writer count is attributed to the run's shape: ${summary}`,
+        );
+        assert.ok(summary.includes('@a:test'), 'and names the identity');
+      });
+
+      test('a read-only run says the question cannot be answered', function (assert) {
+        let summary = describeFairness(readFairness([]));
+        assert.ok(summary.includes('no writes completed'), summary);
+        assert.notOk(
+          /fairness\s+\d/.test(summary),
+          'and prints no score at all, rather than one built from nothing',
+        );
+      });
+
+      test('a reading that reaches the renderer still prints no unearned score', function (assert) {
+        // The read-only case above returns before the per-block loop, so the
+        // absence of a score there says nothing about the score function. This
+        // one has blocks to render and still must not produce a number.
+        let summary = describeFairness(
+          readFairness([
+            record('leaf', '@a:test', 0, 100),
+            record('leaf', '@b:test', 5000, 5100),
+          ]),
+        );
+        assert.ok(summary.includes('leaf'), 'the block is rendered');
+        assert.notOk(
+          /fairness\s+\d/.test(summary),
+          `no write ran behind another, so there is no score: ${summary}`,
+        );
+        assert.ok(summary.includes('not measured'), summary);
+      });
+
+      test('the section names the join that would confirm it', function (assert) {
+        // These are HTTP windows, not queue rows, and the output has to say
+        // where the server's own answer lives.
+        let summary = describeFairness(
+          readFairness([
+            record('hub', '@a:test', 0, 1000),
+            record('leaf', '@b:test', 100, 1100),
+            record('leaf', '@b:test', 2000, 2100),
+          ]),
+        );
+        assert.ok(summary.includes('x-boxel-logging-correlation-id'), summary);
+        assert.ok(summary.includes('awaitIndex'), summary);
+        assert.ok(summary.includes('cross-writer blocked: 1 of 3'), summary);
+      });
+    },
+  );
+
+  module('writer assignment — which identity drives which block', function () {
+    const realm = 'https://example.test/owner/load-test/';
+
+    function session(username: string): Session {
+      return {
+        userId: `@${username}:test`,
+        username,
+        accessToken: 'x',
+        serverToken: 'Bearer s',
+        realmTokens: {},
+      };
+    }
+
+    function block(label: string, username?: string) {
+      return {
+        label,
+        method: 'POST' as const,
+        path: label,
+        adoptsFrom: { module: `${realm}${label}`, name: label },
+        attributes: {},
+        ...(username ? { username } : {}),
+      };
+    }
+
+    function assign(
+      writes: ReturnType<typeof block>[],
+      sessions: Session[],
+      writerCount: number,
+      requestedReaders = sessions.length - writerCount,
+    ) {
+      return assignWriters({
+        writes,
+        sessions,
+        writerCount,
+        requestedWriters: writerCount,
+        requestedReaders,
+      });
+    }
+
+    // Narrowing helpers that throw rather than return, so a test that gets the
+    // wrong variant fails on the spot with the other variant's contents rather
+    // than on a downstream property access.
+    function assignmentOf(result: ReturnType<typeof assign>) {
+      if (isAssignmentError(result)) {
+        throw new Error(`expected an assignment, got refusal: ${result.error}`);
+      }
+      return result;
+    }
+
+    function refusalOf(result: ReturnType<typeof assign>): string {
+      if (!isAssignmentError(result)) {
+        throw new Error(
+          `expected a refusal, got ${result.assignments.length} assignments`,
+        );
+      }
+      return result.error;
+    }
+
+    test('unpinned blocks take sessions in file order, readers get the tail', function (assert) {
+      // What the harness did before pinning existed, and what it still does
+      // when no block names a username.
+      let sessions = [session('a'), session('b'), session('c')];
+      let result = assignmentOf(
+        assign([block('one'), block('two')], sessions, 2),
+      );
+      assert.deepEqual(
+        result.assignments.map((x) => [x.session.username, x.write.label]),
+        [
+          ['a', 'one'],
+          ['b', 'two'],
+        ],
+      );
+      assert.deepEqual(
+        result.readerSessions.map((s) => s.username),
+        ['c'],
+      );
+    });
+
+    test('a pinned block takes its own row wherever it sits in the file', function (assert) {
+      // The point of pinning: "writer A on realm R, writer B on realm R" stated
+      // in the workload rather than depending on how the CSV is sorted.
+      let sessions = [session('a'), session('b'), session('c')];
+      let result = assignmentOf(
+        assign([block('one'), block('two', 'c')], sessions, 2),
+      );
+      assert.deepEqual(
+        result.assignments.map((x) => [x.session.username, x.write.label]),
+        [
+          ['a', 'one'],
+          ['c', 'two'],
+        ],
+        'the pinned block took c, and the unpinned one took the first free row',
+      );
+      assert.deepEqual(
+        result.readerSessions.map((s) => s.username),
+        ['b'],
+        'and b reads rather than being skipped over',
+      );
+    });
+
+    test('a pinned block cannot be driven by two writer slots', function (assert) {
+      // `blockFor` cycles when slots outnumber blocks. An unpinned block takes
+      // another session each time round; a pinned one would put a second loop
+      // on the same identity writing the same block, doubling its cadence while
+      // the summary still called it one writer.
+      let sessions = [session('a'), session('b'), session('c'), session('d')];
+      let error = refusalOf(
+        assign([block('one'), block('two', 'c')], sessions, 4),
+      );
+      assert.ok(error.includes('"two" is pinned to c'), error);
+      assert.ok(
+        error.includes('slots 1 and 3'),
+        `it names both slots: ${error}`,
+      );
+    });
+
+    test('two blocks on one identity is allowed, and costs a session', function (assert) {
+      // Self-contention is a real thing to measure — it has its own bucket —
+      // so this assigns rather than refusing. What it must not do is quietly
+      // hand the freed-up session to a reader: reader count is what the rest of
+      // the summary is read against, so a run that grew one is not comparable
+      // to a run that asked for the same numbers.
+      let sessions = [
+        session('a'),
+        session('b'),
+        session('c'),
+        session('d'),
+        session('e'),
+        session('f'),
+      ];
+      let result = assignmentOf(
+        assign([block('one', 'a'), block('two', 'a')], sessions, 2, 4),
+      );
+      assert.deepEqual(
+        result.assignments.map((x) => [x.session.username, x.write.label]),
+        [
+          ['a', 'one'],
+          ['a', 'two'],
+        ],
+        'one identity drives both blocks',
+      );
+      assert.strictEqual(
+        result.readerSessions.length,
+        4,
+        'readers stay at --readers rather than absorbing the spare session',
+      );
+      assert.deepEqual(
+        idleSessions(sessions, result).map((s) => s.username),
+        ['f'],
+        'and the spare is reported as driving nothing rather than vanishing',
+      );
+    });
+
+    test('a pinned username with no session refuses, naming the rows in use', function (assert) {
+      let sessions = [session('a'), session('b')];
+      let error = refusalOf(
+        assign([block('one'), block('two', 'nobody')], sessions, 2),
+      );
+      assert.ok(error.includes('"nobody"'), error);
+      assert.ok(
+        error.includes('a, b'),
+        `and says which rows are in use: ${error}`,
+      );
+    });
+  });
+
+  module('realm write permission', function () {
+    const realm = 'https://example.test/owner/load-test/';
+
+    function sessionWith(claims: unknown, key = realm): Session {
+      let payload = Buffer.from(JSON.stringify(claims)).toString('base64url');
+      return {
+        userId: '@a:example.test',
+        username: 'a',
+        accessToken: 'x',
+        serverToken: 'Bearer server.token.here',
+        realmTokens: { [key]: `Bearer header.${payload}.signature` },
+      };
+    }
+
+    test('reads the permissions the realm put in the session token', function (assert) {
+      // `_realm-auth` states each user's permissions in the JWT it mints, so
+      // the answer is in hand before the run starts and costs no round trip —
+      // which matters, because the endpoint that would answer it directly is
+      // owner-only and a writer is not the owner.
+      assert.deepEqual(
+        realmPermissionsFor(sessionWith({ permissions: ['read'] }), realm),
+        ['read'],
+      );
+      assert.deepEqual(
+        realmPermissionsFor(
+          sessionWith({ permissions: ['read', 'write'] }),
+          realm,
+        ),
+        ['read', 'write'],
+      );
+    });
+
+    test('a realm the session has no token for is a definite no', function (assert) {
+      assert.deepEqual(
+        realmPermissionsFor(
+          sessionWith({ permissions: ['read', 'write'] }, 'https://other/'),
+          realm,
+        ),
+        [],
+        'no entry means no grant, which is an answer rather than a silence',
+      );
+    });
+
+    test('an unreadable token is "cannot tell", not "no"', function (assert) {
+      // A token shape the harness does not recognise must not refuse a run
+      // that would have worked. The realm still answers 403 if the grant is
+      // genuinely missing, and the summary reports a writer that landed
+      // nothing.
+      let session: Session = {
+        userId: '@a:example.test',
+        username: 'a',
+        accessToken: 'x',
+        serverToken: 'Bearer s',
+        realmTokens: { [realm]: 'not-a-jwt' },
+      };
+      assert.strictEqual(realmPermissionsFor(session, realm), undefined);
+      assert.strictEqual(
+        realmPermissionsFor(sessionWith({ user: '@a:example.test' }), realm),
+        undefined,
+        'and so is a token that simply does not state permissions',
+      );
+    });
+
+    test('decodes claims without verifying them', function (assert) {
+      assert.deepEqual(
+        decodeJwtClaims(
+          `Bearer h.${Buffer.from('{"user":"@a:t"}').toString('base64url')}.s`,
+        ),
+        { user: '@a:t' },
+      );
+      for (let bad of ['', 'one.two', 'a.b.c', 'h..s']) {
+        assert.strictEqual(
+          decodeJwtClaims(bad),
+          undefined,
+          `${bad} is not a token this can read`,
+        );
+      }
+    });
+
+    test('matrix ids are built the way the deployments spell them', function (assert) {
+      assert.strictEqual(
+        matrixDomainFor('https://matrix-staging.stack.cards'),
+        'stack.cards',
+      );
+      // The port is not part of a Matrix server name. Taking `host` here
+      // produced `@user:localhost:8008` in a run's own refusal message — an id
+      // no account has, offered to an operator to paste into a grant command.
+      assert.strictEqual(matrixDomainFor('http://localhost:8008'), 'localhost');
+      assert.strictEqual(
+        matrixIdFor('loadtest02', 'stack.cards'),
+        '@loadtest02:stack.cards',
+      );
+      assert.strictEqual(
+        matrixIdFor('@loadtest02:stack.cards', 'stack.cards'),
+        '@loadtest02:stack.cards',
+        'a row that already carries a full id is left alone',
       );
     });
   });

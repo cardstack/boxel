@@ -2,7 +2,7 @@
 //
 // Structural twin of the experiments-realm/screenshot-card-demo.gts (used by
 // `integrate-screenshot-card-format`), but invoking GenerateThumbnailCommand
-// instead of ScreenshotCardCommand. The call signature mirrors the host's
+// instead of ScreenshotCardTool. The call signature mirrors the host's
 // former `autoGenerateThumbnail` caller (retired from the host in CS-11372
 // when listing commands moved to the catalog realm).
 //
@@ -39,8 +39,8 @@ class Isolated extends Component<typeof ThumbnailCardAiDemo> {
   @tracked errorMessage: string | null = null;
   @tracked imageDefIdentifier: string | null = null;
 
-  get hasCommandContext() {
-    return Boolean(this.args.context?.commandContext);
+  get hasToolContext() {
+    return Boolean(this.args.context?.toolContext);
   }
 
   get hasPrompt() {
@@ -48,7 +48,7 @@ class Isolated extends Component<typeof ThumbnailCardAiDemo> {
   }
 
   get isDisabled() {
-    return this.isRunning || !this.hasCommandContext || !this.hasPrompt;
+    return this.isRunning || !this.hasToolContext || !this.hasPrompt;
   }
 
   get targetRealmIdentifier(): string | undefined {
@@ -61,8 +61,8 @@ class Isolated extends Component<typeof ThumbnailCardAiDemo> {
 
   @action
   async generate() {
-    let commandContext = this.args.context?.commandContext;
-    if (!commandContext) {
+    let toolContext = this.args.context?.toolContext;
+    if (!toolContext) {
       this.errorMessage =
         'Command context is unavailable. Open this card in host interact mode.';
       return;
@@ -89,7 +89,7 @@ class Isolated extends Component<typeof ThumbnailCardAiDemo> {
         this.args.model as any
       )?.sourceImageUrl?.trim?.();
 
-      let result = await new GenerateThumbnailCommand(commandContext).execute({
+      let result = await new GenerateThumbnailCommand(toolContext).execute({
         prompt,
         sourceImageUrl: sourceImageUrl || undefined,
         targetRealmIdentifier,
@@ -188,7 +188,7 @@ class Isolated extends Component<typeof ThumbnailCardAiDemo> {
         padding: var(--boxel-sp);
         border: 1px solid var(--boxel-200);
         border-radius: var(--boxel-border-radius-lg);
-        background: var(--boxel-50);
+        background-color: var(--boxel-50);
       }
       .result img {
         max-width: 100%;

@@ -4,7 +4,20 @@ import { logger, trimExecutableExtension } from './index.ts';
 export type ModuleLike = Record<string, any>;
 export type ModuleDescriptor =
   | { prefix: `${string}/`; resolve: (rest: string) => Promise<ModuleLike> }
-  | { id: string; resolve: () => Promise<ModuleLike> };
+  | {
+      id: string;
+      resolve: () => Promise<ModuleLike>;
+      // What this module would have reported as consumed had the loader
+      // fetched and evaluated it. A shim carries no dependency chain of its
+      // own, so anything that reads a module's dependencies — the indexer
+      // interning scoped CSS, most of all — sees nothing unless the registrar
+      // says otherwise.
+      //
+      // Read when the module is served, not when it is registered: a
+      // registrar may only learn what the module consumed once the module has
+      // been evaluated.
+      deps?: () => string[];
+    };
 
 function trimModuleIdentifier(moduleIdentifier: string): string {
   return trimExecutableExtension(rri(moduleIdentifier));
@@ -412,6 +425,9 @@ export class PackageShimHandler {
   // lives on a *different* shim. Best-effort: an async shim that hasn't
   // been served yet won't be searchable until it has.
   private resolvedExports = new Map<string, ModuleLike>();
+  // Declared dependencies per shimmed module, keyed the same way as
+  // `moduleIds`.
+  private moduleDeps = new Map<string, () => string[]>();
   private log = logger('shim-handler');
 
   constructor(resolveImport: (moduleIdentifier: string) => string) {
@@ -453,11 +469,28 @@ export class PackageShimHandler {
     return null;
   };
 
+  // Both spellings a shim can later be asked for: the URL its identifier
+  // resolves to under the mapping in force now, and the identifier as written.
+  // A realm prefix can be re-pointed after a shim is installed and a lookup
+  // resolves through whatever mapping is current, so the resolved key goes
+  // stale on a remap while the identifier does not. Registering under both is
+  // what lets `lookupModule` find the shim either way.
+  //
+  // One key when the identifier is not realm-mapped, which is every shim on
+  // main: `resolveImport` returns a fake-packages URL that `trimModuleIdentifier`
+  // folds back to the identifier, so the Set collapses to a single entry.
+  private registrationKeys(identifier: string): Set<string> {
+    return new Set([
+      trimModuleIdentifier(this.resolveImport(identifier)),
+      trimModuleIdentifier(identifier),
+    ]);
+  }
+
   shimModule(moduleIdentifier: string, module: ModuleLike) {
-    moduleIdentifier = this.resolveImport(moduleIdentifier);
-    let key = trimModuleIdentifier(moduleIdentifier);
-    this.moduleIds.set(key, async () => module);
-    this.rememberExports(key, module);
+    for (let key of this.registrationKeys(moduleIdentifier)) {
+      this.moduleIds.set(key, async () => module);
+      this.rememberExports(key, module);
+    }
   }
 
   // Records a resolved module's exports for `findExportSources`.
@@ -478,16 +511,20 @@ export class PackageShimHandler {
   // so the message (and the copy-paste import, which uses the first
   // entry) is stable regardless of shim registration/resolve order.
   private findExportSources = (symbol: string): string[] => {
-    let matches: string[] = [];
+    // By module rather than by key: a shim is registered under every spelling
+    // it can be asked for, so one module owns several entries here and would
+    // otherwise be named once per spelling in a message about which module to
+    // import from.
+    let matches = new Set<string>();
     for (let [moduleId, exports] of this.resolvedExports) {
       if (
         canOwnExports(exports) &&
         Object.prototype.hasOwnProperty.call(exports, symbol)
       ) {
-        matches.push(toImportSpecifier(moduleId));
+        matches.add(toImportSpecifier(moduleId));
       }
     }
-    return matches.sort();
+    return [...matches].sort();
   };
 
   shimAsyncModule(descriptor: ModuleDescriptor, retryDeps?: ShimRetryDeps) {
@@ -505,18 +542,77 @@ export class PackageShimHandler {
     // `isRetryableShimResolveError`.
     if ('prefix' in descriptor) {
       let label = `prefix:${descriptor.prefix}`;
-      this.modulePrefixes.set(
+      let resolver = withResolveRetry(
+        label,
+        this.log,
+        descriptor.resolve,
+        retryDeps,
+      );
+      // A prefix is a URL prefix rather than a module identifier, so it keeps
+      // its trailing slash: `trimModuleIdentifier` would only strip an
+      // executable extension, which a prefix does not carry.
+      for (let prefix of new Set([
         this.resolveImport(descriptor.prefix),
-        withResolveRetry(label, this.log, descriptor.resolve, retryDeps),
-      );
+        descriptor.prefix,
+      ])) {
+        this.modulePrefixes.set(prefix, resolver);
+      }
     } else {
-      let moduleIdentifier = this.resolveImport(descriptor.id);
       let label = `id:${descriptor.id}`;
-      this.moduleIds.set(
-        trimModuleIdentifier(moduleIdentifier),
-        withResolveRetry(label, this.log, descriptor.resolve, retryDeps),
+      let resolver = withResolveRetry(
+        label,
+        this.log,
+        descriptor.resolve,
+        retryDeps,
       );
+      for (let key of this.registrationKeys(descriptor.id)) {
+        this.moduleIds.set(key, resolver);
+        // Re-registering an id replaces the module, so its declared
+        // dependencies go with it: leaving the previous registration's thunk
+        // in place would answer for a module this handler no longer serves.
+        if (descriptor.deps) {
+          this.moduleDeps.set(key, descriptor.deps);
+        } else {
+          this.moduleDeps.delete(key);
+        }
+      }
     }
+  }
+
+  // Module lookup for the Loader's module-fetch path. That path sees the URL
+  // an identifier resolves to — for a realm-mapped prefix such as
+  // `@cardstack/base/`, the realm URL — which is also the key a shim for such
+  // an identifier is registered under. `handle` only answers on the fake
+  // packages origin because, in the general fetch pipeline, a realm URL may
+  // name a card instance as well as a module; the Loader knows it is asking
+  // for a module, so it may be served a shim registered under any URL.
+  //
+  // `identifier` is the same request written the way the shim was registered,
+  // which the caller derives from the mapping in force now. It is what finds a
+  // shim whose realm prefix has been re-pointed since it was installed.
+  async lookupModule(
+    url: string,
+    identifier?: string,
+  ): Promise<ModuleLike | undefined> {
+    let module =
+      (await this.getModule(url)) ??
+      (identifier ? await this.getModule(identifier) : undefined) ??
+      (await this.getModuleByPrefix(url)) ??
+      (identifier ? await this.getModuleByPrefix(identifier) : undefined);
+    return module
+      ? wrapWithStrictNamespace(url, module, this.findExportSources)
+      : undefined;
+  }
+
+  // The dependencies declared for a shimmed module, in the same lookup terms
+  // as `lookupModule`. Empty for a shim registered without them.
+  lookupModuleDeps(url: string, identifier?: string): string[] {
+    let deps =
+      this.moduleDeps.get(trimModuleIdentifier(url)) ??
+      (identifier
+        ? this.moduleDeps.get(trimModuleIdentifier(identifier))
+        : undefined);
+    return deps?.() ?? [];
   }
 
   private async getModule(url: string): Promise<ModuleLike | undefined> {

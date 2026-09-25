@@ -3,8 +3,11 @@ import { defineConfig } from '@playwright/test';
 // `render-desync=info` stays on so the desync detector's verdicts (warns
 // on detection, plus any debug logs we add later) make it into CI output;
 // everything else is at the same warn-baseline as before CS-10860.
+// `software-factory:harness:support=debug` records each serve:support
+// bring-up step's start and elapsed time in the child's output, so a failed
+// global setup shows which step consumed the wait.
 const defaultPlaywrightLogLevels =
-  '*=warn,software-factory:playwright=info,software-factory:playwright:support=info,software-factory:playwright:cache=info,render-desync=info,prerenderer-chrome=none';
+  '*=warn,software-factory:playwright=info,software-factory:playwright:support=info,software-factory:playwright:cache=info,software-factory:harness:support=debug,render-desync=info,prerenderer-chrome=none';
 process.env.LOG_LEVELS ??= defaultPlaywrightLogLevels;
 
 const realmPort = Number(process.env.TEST_HARNESS_REALM_PORT ?? 4205);

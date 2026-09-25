@@ -9,6 +9,7 @@ import {
   internalKeyFor,
   baseCardRef,
   coerceTypes,
+  jobStagingId,
   mergeErrorDetail,
   mergeErrorsByGeneration,
   ri,
@@ -38,6 +39,8 @@ import {
   makeRenderer,
   createPrerenderAuth,
 } from '../helpers';
+
+import type { TestIndexRow } from '../helpers';
 
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
@@ -82,6 +85,53 @@ const makeCardTypeSummary = (
   display_name: displayName,
   icon_html: iconHTML,
 });
+
+const writeInstance = async (
+  batch: Awaited<ReturnType<IndexWriter['createBatch']>>,
+  opts: {
+    id: string;
+    name: string;
+    adoptsFrom: { module: RealmResourceIdentifier; name: string };
+    displayNames: string[];
+    types: string[];
+    iconHTML: string;
+  },
+) => {
+  let timestamp = Date.now();
+  await batch.updateEntry(new URL(`${testRealmURL}${opts.id}.json`), {
+    type: 'instance',
+    resource: makeCardResource(opts.id, opts.name, opts.adoptsFrom),
+    lastModified: timestamp,
+    resourceCreatedAt: timestamp,
+    searchData: { name: opts.name },
+    deps: new Set([`${testRealmURL}${opts.adoptsFrom.name.toLowerCase()}`]),
+    displayNames: opts.displayNames,
+    types: opts.types,
+    iconHTML: opts.iconHTML,
+  });
+};
+
+const plantRealmMeta = async (
+  adapter: SQLiteAdapter,
+  generation: number,
+  // A bare array is the legacy shape realms written before `realm_meta` was
+  // partitioned still carry.
+  value:
+    | { instances: RealmMetaValue[]; files: RealmMetaValue[] }
+    | RealmMetaValue[],
+) =>
+  adapter.execute(
+    `INSERT INTO realm_meta (realm_url, generation, value, indexed_at)
+     VALUES ($1, $2, $3, $4)`,
+    {
+      bind: [
+        testRealmURL,
+        generation,
+        JSON.stringify(value),
+        String(Date.now()),
+      ],
+    },
+  );
 
 const fetchRealmMetaRows = async (adapter: SQLiteAdapter) =>
   adapter.execute(`SELECT value FROM realm_meta r WHERE r.realm_url = $1`, {
@@ -294,7 +344,7 @@ module('Unit | index-writer', function (hooks) {
     ]);
 
     let invalidatedEntries = await adapter.execute(
-      'SELECT url, realm_url, is_deleted FROM boxel_index_working WHERE generation = 2 ORDER BY url COLLATE "POSIX"',
+      'SELECT url, realm_url, is_deleted FROM boxel_index_pending WHERE generation = 2 ORDER BY url COLLATE "POSIX"',
       { coerceTypes: { is_deleted: 'BOOLEAN' } },
     );
     assert.deepEqual(
@@ -307,7 +357,7 @@ module('Unit | index-writer', function (hooks) {
       'the "work-in-progress" version of the index entries have been marked as deleted',
     );
     let otherRealms = await adapter.execute(
-      `SELECT url, realm_url, generation, is_deleted FROM boxel_index_working WHERE realm_url != '${testRealmURL}'`,
+      `SELECT url, realm_url, generation, is_deleted FROM boxel_index WHERE realm_url != '${testRealmURL}'`,
       { coerceTypes: { is_deleted: 'BOOLEAN' } },
     );
     assert.deepEqual(
@@ -446,7 +496,7 @@ module('Unit | index-writer', function (hooks) {
       'buffered URLs join the invalidation set synchronously',
     );
     let beforeFlush = await adapter.execute(
-      `SELECT url FROM boxel_index_working WHERE realm_url = $1`,
+      `SELECT url FROM boxel_index_pending WHERE realm_url = $1`,
       { bind: [testRealmURL] },
     );
     assert.deepEqual(beforeFlush, [], 'no rows are written while buffered');
@@ -463,13 +513,13 @@ module('Unit | index-writer', function (hooks) {
     // The flush wrote every buffered row, not only the one queried — so a
     // dependent's transitively-earlier writes are all visible too.
     let afterFlush = await adapter.execute(
-      `SELECT url FROM boxel_index_working WHERE realm_url = $1 ORDER BY url COLLATE "POSIX"`,
+      `SELECT url FROM boxel_index_pending WHERE realm_url = $1 ORDER BY url COLLATE "POSIX"`,
       { bind: [testRealmURL] },
     );
     assert.deepEqual(
       afterFlush,
       [{ url: depURL.href }, { url: dependentURL.href }],
-      'the flush coalesced all buffered rows into the working table',
+      'the flush coalesced all buffered rows into the pending table',
     );
   });
 
@@ -523,13 +573,11 @@ module('Unit | index-writer', function (hooks) {
   });
 
   test('invalidations reach dependents whose rows exist only in the production index', async function (assert) {
-    // A production row without a working counterpart is a reachable state:
-    // the working table is a staging area that only gains a row once a visit
-    // writes one in this deployment's lifetime — an index imported from a
-    // dump that carries only the production tables, or rows staged under a
-    // since-changed schema. The dependency fan-out must find such dependents
-    // or a module edit leaves their indexed computed values stale until each
-    // file is touched individually.
+    // Committed rows are the whole of what a pass's fan-out has to go on
+    // before it has staged anything: nothing is staged for them, and a pass
+    // reads no other pass's staging. The dependency fan-out must find such
+    // dependents or a module edit leaves their indexed computed values stale
+    // until each file is touched individually.
     await setupIndex(
       adapter,
       [{ realm_url: testRealmURL, current_generation: 1 }],
@@ -719,7 +767,7 @@ module('Unit | index-writer', function (hooks) {
     );
 
     let [wipVersion] = await adapter.execute(
-      `SELECT generation, pristine_doc, search_doc, deps, types FROM boxel_index_working WHERE url = $1`,
+      `SELECT generation, pristine_doc, search_doc, deps, types FROM boxel_index_pending WHERE url = $1`,
       {
         bind: [`${testRealmURL}1.json`],
         coerceTypes: {
@@ -864,7 +912,7 @@ module('Unit | index-writer', function (hooks) {
     });
 
     let [row] = await adapter.execute(
-      `SELECT pristine_doc, search_doc, display_names FROM boxel_index_working WHERE url = $1`,
+      `SELECT pristine_doc, search_doc, display_names FROM boxel_index_pending WHERE url = $1`,
       {
         bind: [`${testRealmURL}1.json`],
         coerceTypes: {
@@ -895,7 +943,7 @@ module('Unit | index-writer', function (hooks) {
       'lone surrogates are replaced while the valid emoji pair is preserved',
     );
     let [renderedRow] = await adapter.execute(
-      `SELECT markdown FROM prerendered_html_working WHERE url = $1`,
+      `SELECT markdown FROM prerendered_html_pending WHERE url = $1`,
       { bind: [`${testRealmURL}1.json`] },
     );
     assert.strictEqual(
@@ -1090,6 +1138,109 @@ module('Unit | index-writer', function (hooks) {
     assert.true(
       indexRow.is_deleted,
       'boxel_index row is tombstoned in lockstep',
+    );
+  });
+
+  // `tombstoneEntries` and `tombstonePrerenderedHtmlEntries` each build ONE
+  // multi-row upsert covering every invalidated URL. Every driver caps the
+  // bind parameters a single statement may carry — Postgres at 65,535,
+  // sqlite-wasm at 32,766 — so past a few thousand URLs the delete pass
+  // throws, the whole job is rejected, and the rows stay live with nothing
+  // scheduled to repair them. `#upsertIndexRows` already chunks against the
+  // adapter's budget; these two sites have to do the same.
+
+  // The budget the writer applies on sqlite. A tombstone row binds 10
+  // columns, so a chunked upsert never carries more than 90 rows * 10.
+  const SQLITE_BIND_BUDGET = 900;
+
+  const seedRenderedRows = (count: number): TestIndexRow[] => {
+    let rows: TestIndexRow[] = [];
+    for (let i = 1; i <= count; i++) {
+      rows.push({
+        url: `${testRealmURL}${i}.json`,
+        generation: 1,
+        realm_url: testRealmURL,
+        type: 'instance',
+        isolated_html: `<div class="isolated">${i}</div>`,
+      });
+    }
+    return rows;
+  };
+
+  const seededUrls = (rows: TestIndexRow[]) =>
+    rows.map((row) => new URL((row as { url: string }).url));
+
+  test('tombstone upserts are chunked and still tombstone every row', async function (assert) {
+    // 120 URLs * 10 columns = 1,200 binds in one statement: over the budget,
+    // but still under sqlite's hard ceiling, so this reports the invariant
+    // rather than dying on a driver error. Reaching the real ceiling needs
+    // more than 3,277 rows, and seeding that many costs more than the browser
+    // test timeout allows — so the budget is asserted directly, and the row
+    // counts guard the chunking against dropping a slice.
+    const URL_COUNT = 120;
+    let indexRows = seedRenderedRows(URL_COUNT);
+    await setupIndex(
+      adapter,
+      [{ realm_url: testRealmURL, current_generation: 1 }],
+      indexRows,
+    );
+
+    let oversized: { table: string; binds: number }[] = [];
+    type Executor = typeof adapter.execute;
+    let originalExecute: Executor = adapter.execute.bind(adapter);
+    let spy: Executor = async (sql, opts) => {
+      let table =
+        /INSERT INTO (boxel_index_pending|prerendered_html_pending)/.exec(
+          sql,
+        )?.[1];
+      let binds = opts?.bind?.length ?? 0;
+      if (table && binds > SQLITE_BIND_BUDGET) {
+        oversized.push({ table, binds });
+      }
+      return originalExecute(sql, opts);
+    };
+    adapter.execute = spy;
+    try {
+      let batch = await indexWriter.createBatch(
+        new URL(testRealmURL),
+        virtualNetwork,
+      );
+      await batch.invalidate(seededUrls(indexRows));
+      await batch.done();
+    } finally {
+      adapter.execute = originalExecute;
+    }
+
+    assert.deepEqual(
+      oversized,
+      [],
+      'every tombstone upsert is chunked within the adapter bind budget',
+    );
+
+    let indexed = (await adapter.execute(
+      `SELECT is_deleted FROM boxel_index WHERE realm_url = $1`,
+      {
+        bind: [testRealmURL],
+        coerceTypes: { is_deleted: 'BOOLEAN' },
+      },
+    )) as unknown as Pick<BoxelIndexTable, 'is_deleted'>[];
+    assert.strictEqual(
+      indexed.filter((row) => row.is_deleted).length,
+      URL_COUNT,
+      'every boxel_index row is tombstoned',
+    );
+
+    let rendered = (await adapter.execute(
+      `SELECT is_deleted FROM prerendered_html WHERE realm_url = $1`,
+      {
+        bind: [testRealmURL],
+        coerceTypes: { is_deleted: 'BOOLEAN' },
+      },
+    )) as unknown as Pick<PrerenderedHtmlTable, 'is_deleted'>[];
+    assert.strictEqual(
+      rendered.filter((row) => row.is_deleted).length,
+      URL_COUNT,
+      'every prerendered_html row is tombstoned',
     );
   });
 
@@ -1516,13 +1667,13 @@ module('Unit | index-writer', function (hooks) {
     );
   });
 
-  test('promotes prerendered_html_working rows resumed from a prior job attempt', async function (assert) {
+  test('promotes prerendered_html_pending rows resumed from a prior job attempt', async function (assert) {
     let url = `${testRealmURL}1.json`;
-    // Seed both working tables as if a prior attempt of job 42 wrote this row
-    // (a fused visit writes each entry's index half to boxel_index_working and
-    // its HTML half to prerendered_html_working). A resuming batch pre-seeds
+    // Seed both pending tables as if a prior attempt of job 42 staged this row
+    // (a fused visit writes each entry's index half to boxel_index_pending and
+    // its HTML half to prerendered_html_pending). A resuming batch pre-seeds
     // the URL into its invalidation set without re-running updateEntry, so the
-    // swap on done() must promote both channels' working rows.
+    // swap on done() must promote both channels' pending rows.
     await setupIndex(
       adapter,
       [{ realm_url: testRealmURL, current_generation: 1 }],
@@ -1534,6 +1685,7 @@ module('Unit | index-writer', function (hooks) {
             realm_url: testRealmURL,
             type: 'instance',
             job_id: 42,
+            staging_id: jobStagingId(42, 1),
             last_modified: String(1700000000),
             is_deleted: false,
             deps: [],
@@ -1549,7 +1701,14 @@ module('Unit | index-writer', function (hooks) {
     let batch = await indexWriter.createBatch(
       new URL(testRealmURL),
       virtualNetwork,
-      { jobId: 42, reservationId: 1, priority: 0, queueWaitMs: null },
+      {
+        jobId: 42,
+        reservationId: 2,
+        priority: 0,
+        queueWaitMs: null,
+        concurrencyGroup: null,
+        laneFamily: null,
+      },
     );
     await batch.done();
 
@@ -1747,6 +1906,8 @@ module('Unit | index-writer', function (hooks) {
         url: `${testRealmURL2}1.json`,
         file_alias: `${testRealmURL2}1`,
         generation: 2,
+        host_shell_generation: null,
+        source_content_hash: null,
         realm_url: testRealmURL2,
         type: 'instance',
         has_error: false,
@@ -1896,6 +2057,8 @@ module('Unit | index-writer', function (hooks) {
         url: `${testRealmURL}1.json`,
         file_alias: `${testRealmURL}1`,
         generation: 2,
+        host_shell_generation: null,
+        source_content_hash: null,
         realm_url: testRealmURL,
         type: 'instance',
         has_error: true,
@@ -2049,6 +2212,162 @@ module('Unit | index-writer', function (hooks) {
     );
   });
 
+  // The render says which host bundle its page was running; the write copies
+  // that number out of the diagnostics blob into a column of its own, because
+  // the query it serves is a range scan and jsonb has no index to offer it.
+  test("copies the render's host-shell generation onto the row", async function (assert) {
+    await setupIndex(
+      adapter,
+      [{ realm_url: testRealmURL, current_generation: 1 }],
+      [],
+    );
+    let batch = await indexWriter.createBatch(
+      new URL(testRealmURL),
+      virtualNetwork,
+    );
+    await batch.updateEntry(new URL(`${testRealmURL}rendered.json`), {
+      type: 'file',
+      lastModified: 1,
+      resourceCreatedAt: 1,
+      deps: new Set<string>(),
+      searchData: { name: 'rendered' },
+      diagnostics: { warmedHostShellGeneration: 9 },
+    });
+    // An error row is the one a repair most needs to find, so it has to carry
+    // the number too — not only the rows that succeeded.
+    await batch.updateEntry(new URL(`${testRealmURL}failed.json`), {
+      type: 'instance-error',
+      error: { message: 'boom', status: 500, additionalErrors: [] },
+      diagnostics: { warmedHostShellGeneration: 9 },
+    });
+    // A render that reported no number leaves the column null. Unknown, not
+    // old — `< current` must not reach it.
+    await batch.updateEntry(new URL(`${testRealmURL}unstamped.json`), {
+      type: 'file',
+      lastModified: 1,
+      resourceCreatedAt: 1,
+      deps: new Set<string>(),
+      searchData: { name: 'unstamped' },
+      diagnostics: { hostShellHash: 'b778fe76' },
+    });
+    await batch.done();
+
+    let rows = (await adapter.execute(
+      `SELECT url, host_shell_generation FROM boxel_index
+       WHERE realm_url = $1 ORDER BY url`,
+      { bind: [testRealmURL] },
+    )) as unknown as {
+      url: string;
+      host_shell_generation: number | null;
+    }[];
+    assert.deepEqual(
+      rows.map((r) => [
+        r.url.replace(testRealmURL, ''),
+        r.host_shell_generation,
+      ]),
+      [
+        ['failed.json', 9],
+        ['rendered.json', 9],
+        ['unstamped.json', null],
+      ],
+      'the number reaches the success row and the error row, and absence stays null',
+    );
+  });
+
+  // An error row for a URL that already has a published row carries that row's
+  // whole shape forward, its generation included. Which of the two numbers the
+  // row should keep depends on whose content it ends up serving, and the two
+  // error paths differ — so both are driven here.
+  module('an error row over a published row', function (hooks) {
+    const PUBLISHED_GENERATION = 3;
+    const RENDER_GENERATION = 9;
+
+    hooks.beforeEach(async function () {
+      await setupIndex(
+        adapter,
+        [{ realm_url: testRealmURL, current_generation: 1 }],
+        [
+          {
+            url: `${testRealmURL}1.json`,
+            generation: 1,
+            realm_url: testRealmURL,
+            host_shell_generation: PUBLISHED_GENERATION,
+            pristine_doc: {
+              id: `${testRealmURL}1.json`,
+              type: 'card',
+              attributes: { name: 'Mango' },
+              meta: {
+                adoptsFrom: { module: rri(`./person`), name: 'Person' },
+              },
+            } as LooseCardResource,
+            search_doc: { name: 'Mango' },
+          },
+        ],
+      );
+    });
+
+    let generationOnRow = async () => {
+      let [row] = (await adapter.execute(
+        `SELECT host_shell_generation FROM boxel_index WHERE url = $1`,
+        { bind: [`${testRealmURL}1.json`] },
+      )) as unknown as { host_shell_generation: number | null }[];
+      return row.host_shell_generation;
+    };
+
+    // The case a repair most needs to find. The error is this render's own
+    // output, so the row has to name the bundle that produced it — carrying
+    // the published row's number forward would make a failure on the current
+    // shell read as one from a bundle already replaced.
+    test("a published error takes the render's generation", async function (assert) {
+      let batch = await indexWriter.createBatch(
+        new URL(testRealmURL),
+        virtualNetwork,
+      );
+      await batch.updateEntry(new URL(`${testRealmURL}1.json`), {
+        type: 'instance-error',
+        error: { message: 'boom', status: 500, additionalErrors: [] },
+        diagnostics: { warmedHostShellGeneration: RENDER_GENERATION },
+      });
+      await batch.done();
+      assert.strictEqual(await generationOnRow(), RENDER_GENERATION);
+    });
+
+    // A withheld failure republishes the last good render untouched, so the
+    // row still shows that bundle's work. Restamping it with this render's
+    // number would claim the withheld attempt produced content it did not.
+    test('a withheld failure keeps the published generation', async function (assert) {
+      let batch = await indexWriter.createBatch(
+        new URL(testRealmURL),
+        virtualNetwork,
+      );
+      await batch.updateEntry(new URL(`${testRealmURL}1.json`), {
+        type: 'instance-error',
+        error: { message: 'boom', status: 500, additionalErrors: [] },
+        diagnostics: {
+          warmedHostShellGeneration: RENDER_GENERATION,
+          staleShellFailure: ['instance'],
+        },
+      });
+      await batch.done();
+      let [row] = (await adapter.execute(
+        `SELECT host_shell_generation, has_error FROM boxel_index WHERE url = $1`,
+        {
+          bind: [`${testRealmURL}1.json`],
+          coerceTypes: { has_error: 'BOOLEAN' },
+        },
+      )) as unknown as {
+        host_shell_generation: number | null;
+        has_error: boolean;
+      }[];
+      assert.false(row.has_error, 'the failure was withheld');
+      assert.strictEqual(
+        row.host_shell_generation,
+        PUBLISHED_GENERATION,
+        'the row still serves the published render, so it keeps its generation',
+      );
+    });
+  });
+
   test('error entry does not include last known good state when not available', async function (assert) {
     await setupIndex(
       adapter,
@@ -2089,6 +2408,8 @@ module('Unit | index-writer', function (hooks) {
         url: `${testRealmURL}1.json`,
         file_alias: `${testRealmURL}1`,
         generation: 2,
+        host_shell_generation: null,
+        source_content_hash: null,
         realm_url: testRealmURL,
         type: 'instance',
         has_error: true,
@@ -2359,6 +2680,11 @@ module('Unit | index-writer', function (hooks) {
         indexedAt: null,
         deps: null,
         screenshots: null,
+        // An error row reports one too: it is carried forward from the last
+        // good pass alongside the `pristine_doc` it describes, so the two
+        // always name the same bytes. Null here because this row was seeded
+        // with neither.
+        sourceContentHash: null,
       });
     } else {
       assert.ok(false, `expected index entry to not be a card document`);
@@ -2504,6 +2830,7 @@ module('Unit | index-writer', function (hooks) {
         headHtml: null,
         markdown: null,
         screenshots: null,
+        sourceContentHash: null,
       });
     } else {
       assert.ok(false, `expected index entry to not be an error document`);
@@ -2562,12 +2889,17 @@ module('Unit | index-writer', function (hooks) {
       deps: new Set(),
       displayNames: [],
       types: [],
+      // The fingerprint of the source the render read to produce `resource`.
+      // Written and read back alongside it, because the card+json GET serves
+      // the two together and a client uses the hash as the base its next write
+      // is computed against.
+      sourceContentHash: 'abc123',
     });
 
     let entry = await indexQueryEngine.getInstance(
       new URL(`${testRealmURL}1`),
       {
-        useWorkInProgressIndex: true,
+        pendingStagingId: batch.stagingId,
       },
     );
     if (entry?.type === 'instance') {
@@ -2603,6 +2935,7 @@ module('Unit | index-writer', function (hooks) {
         headHtml: null,
         markdown: null,
         screenshots: null,
+        sourceContentHash: 'abc123',
       });
     } else {
       assert.ok(false, `expected index entry to not be an error document`);
@@ -2647,7 +2980,7 @@ module('Unit | index-writer', function (hooks) {
 
     let entry = await indexQueryEngine.getInstance(
       new URL(`${testRealmURL}1`),
-      { useWorkInProgressIndex: true },
+      { pendingStagingId: batch.stagingId },
     );
     if (entry?.type === 'instance') {
       assert.strictEqual(
@@ -2713,7 +3046,7 @@ module('Unit | index-writer', function (hooks) {
     );
 
     let invalidatedEntries = (await adapter.execute(
-      'SELECT url, realm_url, is_deleted FROM boxel_index_working WHERE generation = 2 ORDER BY url COLLATE "POSIX"',
+      'SELECT url, realm_url, is_deleted FROM boxel_index_pending WHERE generation = 2 ORDER BY url COLLATE "POSIX"',
       { coerceTypes: { is_deleted: 'BOOLEAN' } },
     )) as Pick<BoxelIndexTable, 'url' | 'realm_url' | 'is_deleted'>[];
     assert.deepEqual(
@@ -2928,6 +3261,660 @@ module('Unit | index-writer', function (hooks) {
     );
   });
 
+  test('a failure inside the swap rolls back every statement the swap made', async function (assert) {
+    // The swap stamps `realm_type_generations` last, after promoting
+    // `boxel_index`, advancing `realm_generations` and writing `realm_meta`.
+    // A trigger that aborts that final write fails the swap at its latest
+    // point, so any earlier statement that had already committed on its own
+    // would still be visible afterwards.
+    let iconHTML = '<svg>test icon</svg>';
+    let personRef = { module: rri('./person'), name: 'Person' };
+    let personTypes = internalKeysFor(virtualNetwork, personRef, baseCardRef);
+    // Generation 1 of the test realm, with no rows.
+    await setupIndex(adapter);
+
+    let batch = await indexWriter.createBatch(
+      new URL(testRealmURL),
+      virtualNetwork,
+    );
+    await batch.invalidate([new URL(`${testRealmURL}1.json`)]);
+    await writeInstance(batch, {
+      id: '1',
+      name: 'Mango',
+      adoptsFrom: personRef,
+      displayNames: ['Person', 'Card'],
+      types: personTypes,
+      iconHTML,
+    });
+
+    await adapter.execute(
+      `CREATE TRIGGER index_writer_test_fail_swap
+       BEFORE INSERT ON realm_type_generations
+       BEGIN
+         SELECT RAISE(ABORT, 'injected index swap failure');
+       END`,
+    );
+    try {
+      // The SQLite worker surfaces a trigger abort as a bare Error, logging the
+      // trigger's message rather than carrying it, so this asserts only that
+      // the swap failed.
+      await assert.rejects(
+        batch.done(),
+        'the swap fails at its last statement',
+      );
+    } finally {
+      await adapter.execute(
+        'DROP TRIGGER IF EXISTS index_writer_test_fail_swap',
+      );
+    }
+
+    let promoted = await adapter.execute(
+      `SELECT url FROM boxel_index WHERE realm_url = $1`,
+      { bind: [testRealmURL] },
+    );
+    assert.deepEqual(promoted, [], 'no row reached boxel_index');
+    let generations = await adapter.execute(
+      `SELECT current_generation FROM realm_generations WHERE realm_url = $1`,
+      { bind: [testRealmURL] },
+    );
+    assert.deepEqual(
+      generations,
+      [{ current_generation: 1 }],
+      'the realm generation did not advance',
+    );
+    assert.deepEqual(
+      (await fetchRealmMetaRows(adapter)).length,
+      0,
+      'no realm_meta row was written',
+    );
+
+    // The rollback left the connection usable: the next statement is not
+    // inside a transaction the failure left open.
+    await adapter.execute('BEGIN');
+    await adapter.execute('COMMIT');
+    assert.ok(true, 'a new transaction starts cleanly after the rollback');
+  });
+
+  test('update realm meta carries forward the types a pass did not touch', async function (assert) {
+    // The rollup that publishes a pass recomputes only the types the pass
+    // moved and reuses the previous generation's entries for the rest. The
+    // planted Person entry is deliberately impossible — nothing in the
+    // index would ever aggregate to 42 — so it can only survive by
+    // being carried, which is what tells these assertions apart from a pass
+    // that quietly rebuilt the whole summary.
+    let iconHTML = '<svg>test icon</svg>';
+    let personRef = { module: rri('./person'), name: 'Person' };
+    let petRef = { module: rri('./pet'), name: 'Pet' };
+    let personTypes = internalKeysFor(virtualNetwork, personRef, baseCardRef);
+    let petTypes = internalKeysFor(virtualNetwork, petRef, baseCardRef);
+
+    await setupIndex(
+      adapter,
+      [{ realm_url: testRealmURL, current_generation: 1 }],
+      [
+        {
+          url: `${testRealmURL}1.json`,
+          generation: 1,
+          realm_url: testRealmURL,
+          type: 'instance',
+          pristine_doc: makeCardResource(
+            '1',
+            'Mango',
+            personRef,
+          ) as LooseCardResource,
+          search_doc: { name: 'Mango' },
+          display_names: ['Person'],
+          deps: [`${testRealmURL}person`],
+          types: personTypes,
+          icon_html: iconHTML,
+        },
+      ],
+    );
+    await plantRealmMeta(adapter, 1, {
+      instances: [
+        makeCardTypeSummary(
+          `${testRealmURL}person/Person`,
+          'Person',
+          iconHTML,
+          42,
+        ),
+      ],
+      files: [
+        makeCardTypeSummary(
+          `${testRealmURL}markdown-file-def/MarkdownDef`,
+          'Markdown',
+          iconHTML,
+          7,
+        ),
+      ],
+    });
+
+    let batch = await indexWriter.createBatch(
+      new URL(testRealmURL),
+      virtualNetwork,
+    );
+    await batch.invalidate([new URL(`${testRealmURL}2.json`)]);
+    await writeInstance(batch, {
+      id: '2',
+      name: 'Ringo',
+      adoptsFrom: petRef,
+      displayNames: ['Pet', 'Card'],
+      types: petTypes,
+      iconHTML,
+    });
+    await batch.done();
+
+    let realmMeta = await fetchRealmMeta(adapter);
+    assert.deepEqual(
+      realmMeta.value,
+      [
+        makeCardTypeSummary(
+          `${testRealmURL}person/Person`,
+          'Person',
+          iconHTML,
+          42,
+        ),
+        makeCardTypeSummary(`${testRealmURL}pet/Pet`, 'Pet', iconHTML, 1),
+      ],
+      'Person keeps the entry the previous generation held and Pet is recomputed, both in display-name order',
+    );
+    assert.deepEqual(
+      realmMeta.files,
+      [
+        makeCardTypeSummary(
+          `${testRealmURL}markdown-file-def/MarkdownDef`,
+          'Markdown',
+          iconHTML,
+          7,
+        ),
+      ],
+      'the file arm carries forward too, on a pass that touched no file rows',
+    );
+  });
+
+  test('update realm meta rebuilds when the previous generation predates the partitioned shape', async function (assert) {
+    // The legacy shape is a bare array of instance summaries and carries no
+    // file arm at all. Read as a partitioned value it gains an empty one, which
+    // is indistinguishable from a realm that genuinely has no file rows — so
+    // carrying it forward would publish this realm as having no file types and
+    // empty CardsGrid's "All Files" group. A pass reading one has to rebuild.
+    let iconHTML = '<svg>test icon</svg>';
+    let personRef = { module: rri('./person'), name: 'Person' };
+    let petRef = { module: rri('./pet'), name: 'Pet' };
+    let personTypes = internalKeysFor(virtualNetwork, personRef, baseCardRef);
+    let petTypes = internalKeysFor(virtualNetwork, petRef, baseCardRef);
+    let markdownTypes = internalKeysFor(
+      virtualNetwork,
+      { module: rri('./markdown-file-def'), name: 'MarkdownDef' },
+      { module: rri('./card-api'), name: 'FileDef' },
+    );
+
+    await setupIndex(
+      adapter,
+      [{ realm_url: testRealmURL, current_generation: 1 }],
+      [
+        {
+          url: `${testRealmURL}1.json`,
+          generation: 1,
+          realm_url: testRealmURL,
+          type: 'instance',
+          pristine_doc: makeCardResource(
+            '1',
+            'Mango',
+            personRef,
+          ) as LooseCardResource,
+          search_doc: { name: 'Mango' },
+          display_names: ['Person'],
+          deps: [`${testRealmURL}person`],
+          types: personTypes,
+          icon_html: iconHTML,
+        },
+        {
+          url: `${testRealmURL}notes/a.md`,
+          generation: 1,
+          realm_url: testRealmURL,
+          type: 'file',
+          search_doc: { name: 'a.md', url: `${testRealmURL}notes/a.md` },
+          display_names: ['Markdown', 'File'],
+          types: markdownTypes,
+          icon_html: iconHTML,
+        },
+      ],
+    );
+    await plantRealmMeta(adapter, 1, [
+      makeCardTypeSummary(
+        `${testRealmURL}person/Person`,
+        'Person',
+        iconHTML,
+        42,
+      ),
+    ]);
+
+    let batch = await indexWriter.createBatch(
+      new URL(testRealmURL),
+      virtualNetwork,
+    );
+    await batch.invalidate([new URL(`${testRealmURL}2.json`)]);
+    await writeInstance(batch, {
+      id: '2',
+      name: 'Ringo',
+      adoptsFrom: petRef,
+      displayNames: ['Pet', 'Card'],
+      types: petTypes,
+      iconHTML,
+    });
+    await batch.done();
+
+    let realmMeta = await fetchRealmMeta(adapter);
+    // The file arm first: it is the one the legacy shape cannot supply, so it
+    // is where carrying the synthesized value shows up as lost data rather
+    // than as a stale number.
+    assert.deepEqual(
+      realmMeta.files,
+      [
+        makeCardTypeSummary(
+          `${testRealmURL}markdown-file-def/MarkdownDef`,
+          'Markdown',
+          iconHTML,
+          1,
+        ),
+      ],
+      'the file arm the legacy shape never had is rebuilt rather than published empty',
+    );
+    assert.deepEqual(
+      realmMeta.value,
+      [
+        makeCardTypeSummary(
+          `${testRealmURL}person/Person`,
+          'Person',
+          iconHTML,
+          1,
+        ),
+        makeCardTypeSummary(`${testRealmURL}pet/Pet`, 'Pet', iconHTML, 1),
+      ],
+      'the planted count is recomputed rather than carried, so the pass rebuilt',
+    );
+  });
+
+  test('update realm meta publishes the same value whether or not the pass could scope its rollup', async function (assert) {
+    // A pass that read the prior adoption chain of every URL it promotes can
+    // scope the rollup; one that did not has to rebuild the whole summary.
+    // Both are run here over the same realm state, and they have to agree —
+    // the failure mode of getting this wrong is a summary that is quietly
+    // inaccurate rather than one that errors.
+    let iconHTML = '<svg>test icon</svg>';
+    let personRef = { module: rri('./person'), name: 'Person' };
+    let petRef = { module: rri('./pet'), name: 'Pet' };
+    // A second type deliberately shares Person's display name, and a third
+    // carries none at all. Display name is not a unique key, and `MAX(...)` is
+    // NULL for a type whose rows are unlabelled, so both are ties — and ties
+    // are the only state in which a merged summary and a rebuilt one can
+    // disagree, since the merged form would otherwise settle them by which arm
+    // of its union a row came out of. A fixture of distinct labels cannot see
+    // that.
+    let personaRef = { module: rri('./persona'), name: 'Persona' };
+    let namelessRef = { module: rri('./nameless'), name: 'Nameless' };
+    let personTypes = internalKeysFor(virtualNetwork, personRef, baseCardRef);
+    let petTypes = internalKeysFor(virtualNetwork, petRef, baseCardRef);
+    let personaTypes = internalKeysFor(virtualNetwork, personaRef, baseCardRef);
+    let namelessTypes = internalKeysFor(
+      virtualNetwork,
+      namelessRef,
+      baseCardRef,
+    );
+    let markdownTypes = internalKeysFor(
+      virtualNetwork,
+      { module: rri('./markdown-file-def'), name: 'MarkdownDef' },
+      { module: rri('./card-api'), name: 'FileDef' },
+    );
+
+    await setupIndex(
+      adapter,
+      [{ realm_url: testRealmURL, current_generation: 1 }],
+      [
+        {
+          url: `${testRealmURL}1.json`,
+          generation: 1,
+          realm_url: testRealmURL,
+          type: 'instance',
+          pristine_doc: makeCardResource(
+            '1',
+            'Mango',
+            personRef,
+          ) as LooseCardResource,
+          search_doc: { name: 'Mango' },
+          display_names: ['Person'],
+          deps: [`${testRealmURL}person`],
+          types: personTypes,
+          icon_html: iconHTML,
+        },
+        {
+          url: `${testRealmURL}3.json`,
+          generation: 1,
+          realm_url: testRealmURL,
+          type: 'instance',
+          pristine_doc: makeCardResource(
+            '3',
+            'Vincent',
+            personaRef,
+          ) as LooseCardResource,
+          search_doc: { name: 'Vincent' },
+          display_names: ['Person'],
+          deps: [`${testRealmURL}persona`],
+          types: personaTypes,
+          icon_html: iconHTML,
+        },
+        {
+          url: `${testRealmURL}4.json`,
+          generation: 1,
+          realm_url: testRealmURL,
+          type: 'instance',
+          pristine_doc: makeCardResource(
+            '4',
+            'Anon',
+            namelessRef,
+          ) as LooseCardResource,
+          search_doc: { name: 'Anon' },
+          display_names: [],
+          deps: [`${testRealmURL}nameless`],
+          types: namelessTypes,
+          icon_html: iconHTML,
+        },
+        {
+          url: `${testRealmURL}notes/a.md`,
+          generation: 1,
+          realm_url: testRealmURL,
+          type: 'file',
+          search_doc: { name: 'a.md', url: `${testRealmURL}notes/a.md` },
+          display_names: ['Markdown', 'File'],
+          types: markdownTypes,
+          icon_html: iconHTML,
+        },
+      ],
+    );
+
+    // The prior value is planted rather than produced by a first pass, and the
+    // tied pair is planted in reverse `code_ref` order. Deriving it from a
+    // rebuild would arrive already in the order a rebuild produces, so the
+    // merged form would agree with the rebuild whether or not the ordering is
+    // total — the tie would never get the chance to disagree, and this test
+    // could not fail. Totals are the true ones: this test is about the two
+    // forms ordering the same set identically, so a count only a carry could
+    // produce would make them differ for an unrelated reason.
+    await plantRealmMeta(adapter, 1, {
+      instances: [
+        makeCardTypeSummary(
+          `${testRealmURL}persona/Persona`,
+          'Person',
+          iconHTML,
+          1,
+        ),
+        makeCardTypeSummary(
+          `${testRealmURL}person/Person`,
+          'Person',
+          iconHTML,
+          1,
+        ),
+        makeCardTypeSummary(
+          `${testRealmURL}nameless/Nameless`,
+          null as unknown as string,
+          iconHTML,
+          1,
+        ),
+      ],
+      files: [
+        makeCardTypeSummary(
+          `${testRealmURL}markdown-file-def/MarkdownDef`,
+          'Markdown',
+          iconHTML,
+          1,
+        ),
+      ],
+    });
+
+    let batch = await indexWriter.createBatch(
+      new URL(testRealmURL),
+      virtualNetwork,
+    );
+    await batch.invalidate([new URL(`${testRealmURL}2.json`)]);
+    await writeInstance(batch, {
+      id: '2',
+      name: 'Ringo',
+      adoptsFrom: petRef,
+      displayNames: ['Pet', 'Card'],
+      types: petTypes,
+      iconHTML,
+    });
+    await batch.done();
+    let scoped = await fetchRealmMeta(adapter);
+
+    // The same row written again, this time without reading it first, which
+    // leaves the realm in the state it was already in and forces the rebuild.
+    batch = await indexWriter.createBatch(
+      new URL(testRealmURL),
+      virtualNetwork,
+    );
+    await writeInstance(batch, {
+      id: '2',
+      name: 'Ringo',
+      adoptsFrom: petRef,
+      displayNames: ['Pet', 'Card'],
+      types: petTypes,
+      iconHTML,
+    });
+    await batch.done();
+    let rebuilt = await fetchRealmMeta(adapter);
+
+    assert.deepEqual(
+      scoped.value,
+      rebuilt.value,
+      'the instance summaries are identical',
+    );
+    assert.deepEqual(
+      scoped.files,
+      rebuilt.files,
+      'the file summaries are identical',
+    );
+    // Content, keyed rather than positional: the order the two agree on is the
+    // database's, and pinning it literally here would only restate the ordering
+    // clause back to itself.
+    assert.deepEqual(
+      Object.fromEntries(scoped.value.map((s) => [s.code_ref, s.total])),
+      {
+        [`${testRealmURL}person/Person`]: 1,
+        [`${testRealmURL}persona/Persona`]: 1,
+        [`${testRealmURL}nameless/Nameless`]: 1,
+        [`${testRealmURL}pet/Pet`]: 1,
+      },
+      'and both describe the realm as it now stands',
+    );
+    assert.strictEqual(
+      scoped.value[scoped.value.length - 1].code_ref,
+      `${testRealmURL}nameless/Nameless`,
+      'the unlabelled type sorts last under NULLS LAST',
+    );
+  });
+
+  test('update realm meta drops a type whose last instance the pass deleted', async function (assert) {
+    // A deletion is the case the scoped rollup has to get right by reading
+    // the chain the row is leaving: the type it leaves behind is recomputed
+    // to nothing, so its entry has to disappear rather than be carried.
+    let iconHTML = '<svg>test icon</svg>';
+    let personRef = { module: rri('./person'), name: 'Person' };
+    let petRef = { module: rri('./pet'), name: 'Pet' };
+    let personTypes = internalKeysFor(virtualNetwork, personRef, baseCardRef);
+    let petTypes = internalKeysFor(virtualNetwork, petRef, baseCardRef);
+
+    await setupIndex(
+      adapter,
+      [{ realm_url: testRealmURL, current_generation: 1 }],
+      [
+        {
+          url: `${testRealmURL}1.json`,
+          generation: 1,
+          realm_url: testRealmURL,
+          type: 'instance',
+          pristine_doc: makeCardResource(
+            '1',
+            'Mango',
+            personRef,
+          ) as LooseCardResource,
+          search_doc: { name: 'Mango' },
+          display_names: ['Person'],
+          deps: [`${testRealmURL}person`],
+          types: personTypes,
+          icon_html: iconHTML,
+        },
+        {
+          url: `${testRealmURL}2.json`,
+          generation: 1,
+          realm_url: testRealmURL,
+          type: 'instance',
+          pristine_doc: makeCardResource(
+            '2',
+            'Ringo',
+            petRef,
+          ) as LooseCardResource,
+          search_doc: { name: 'Ringo' },
+          display_names: ['Pet'],
+          deps: [`${testRealmURL}pet`],
+          types: petTypes,
+          icon_html: iconHTML,
+        },
+      ],
+    );
+
+    // Person's planted count is one the index cannot produce, so it
+    // survives only by being carried — which is what makes this a test of the
+    // merge rather than of a rebuild that happens to agree with it.
+    await plantRealmMeta(adapter, 1, {
+      instances: [
+        makeCardTypeSummary(
+          `${testRealmURL}person/Person`,
+          'Person',
+          iconHTML,
+          42,
+        ),
+        makeCardTypeSummary(`${testRealmURL}pet/Pet`, 'Pet', iconHTML, 1),
+      ],
+      files: [],
+    });
+
+    // Invalidating without writing the URL back is a deletion: the pass
+    // tombstones the row and the swap promotes the tombstone.
+    let batch = await indexWriter.createBatch(
+      new URL(testRealmURL),
+      virtualNetwork,
+    );
+    await batch.invalidate([new URL(`${testRealmURL}2.json`)]);
+    await batch.done();
+
+    assert.deepEqual(
+      (await fetchRealmMeta(adapter)).value,
+      [
+        makeCardTypeSummary(
+          `${testRealmURL}person/Person`,
+          'Person',
+          iconHTML,
+          42,
+        ),
+      ],
+      'the emptied type is dropped from the carried arm while the untouched one keeps the entry it had',
+    );
+  });
+
+  test('update realm meta moves a count when a card changes what it adopts from', async function (assert) {
+    // The type a card leaves is only in the pass's touched set because
+    // `invalidate` read the production chain before the write overwrote it.
+    // Without that read the old type would keep a count it no longer has.
+    let iconHTML = '<svg>test icon</svg>';
+    let personRef = { module: rri('./person'), name: 'Person' };
+    let petRef = { module: rri('./pet'), name: 'Pet' };
+    let dogRef = { module: rri('./dog'), name: 'Dog' };
+    let personTypes = internalKeysFor(virtualNetwork, personRef, baseCardRef);
+    let petTypes = internalKeysFor(virtualNetwork, petRef, baseCardRef);
+    let dogTypes = internalKeysFor(virtualNetwork, dogRef, baseCardRef);
+
+    await setupIndex(
+      adapter,
+      [{ realm_url: testRealmURL, current_generation: 1 }],
+      [
+        {
+          url: `${testRealmURL}1.json`,
+          generation: 1,
+          realm_url: testRealmURL,
+          type: 'instance',
+          pristine_doc: makeCardResource(
+            '1',
+            'Mango',
+            personRef,
+          ) as LooseCardResource,
+          search_doc: { name: 'Mango' },
+          display_names: ['Person'],
+          deps: [`${testRealmURL}person`],
+          types: personTypes,
+          icon_html: iconHTML,
+        },
+        // A type the pass never names, so it can only reach the published
+        // summary by being carried.
+        {
+          url: `${testRealmURL}3.json`,
+          generation: 1,
+          realm_url: testRealmURL,
+          type: 'instance',
+          pristine_doc: makeCardResource(
+            '3',
+            'Rex',
+            dogRef,
+          ) as LooseCardResource,
+          search_doc: { name: 'Rex' },
+          display_names: ['Dog'],
+          deps: [`${testRealmURL}dog`],
+          types: dogTypes,
+          icon_html: iconHTML,
+        },
+      ],
+    );
+    // Dog's planted count is one the index cannot produce — it holds a
+    // single Dog row — so a rebuild would publish 1 and only the merge keeps 42.
+    await plantRealmMeta(adapter, 1, {
+      instances: [
+        makeCardTypeSummary(`${testRealmURL}dog/Dog`, 'Dog', iconHTML, 42),
+        makeCardTypeSummary(
+          `${testRealmURL}person/Person`,
+          'Person',
+          iconHTML,
+          1,
+        ),
+      ],
+      files: [],
+    });
+
+    let batch = await indexWriter.createBatch(
+      new URL(testRealmURL),
+      virtualNetwork,
+    );
+    await batch.invalidate([new URL(`${testRealmURL}1.json`)]);
+    await writeInstance(batch, {
+      id: '1',
+      name: 'Mango',
+      adoptsFrom: petRef,
+      displayNames: ['Pet', 'Card'],
+      types: petTypes,
+      iconHTML,
+    });
+    await batch.done();
+
+    assert.deepEqual(
+      (await fetchRealmMeta(adapter)).value,
+      [
+        makeCardTypeSummary(`${testRealmURL}dog/Dog`, 'Dog', iconHTML, 42),
+        makeCardTypeSummary(`${testRealmURL}pet/Pet`, 'Pet', iconHTML, 1),
+      ],
+      'the count moved onto the new type, the type it left is gone, and the type the pass never named was carried',
+    );
+  });
+
   test('update realm meta partitions file rows into the files array', async function (assert) {
     // CS-prep for "Include FileDefs in CardsGrid": file rows in boxel_index
     // (type='file') should be aggregated into `realm_meta.value.files`,
@@ -3012,7 +3999,7 @@ module('Unit | index-writer', function (hooks) {
       virtualNetwork,
     );
     // No new writes — just finalize so updateRealmMeta runs against the
-    // working table that setupIndex seeded.
+    // index that setupIndex seeded.
     await batch.done();
 
     let realmMeta = await fetchRealmMeta(adapter);
@@ -3353,6 +4340,7 @@ module('Unit | index-writer', function (hooks) {
             realm_url: testRealmURL,
             type: 'instance',
             job_id: 42,
+            staging_id: jobStagingId(42, 1),
             last_modified: String(lastModified),
             is_deleted: false,
             deps: [],
@@ -3368,9 +4356,11 @@ module('Unit | index-writer', function (hooks) {
       virtualNetwork,
       {
         jobId: 42,
-        reservationId: 1,
+        reservationId: 2,
         priority: 0,
         queueWaitMs: null,
+        concurrencyGroup: null,
+        laneFamily: null,
       },
     );
     assert.strictEqual(
@@ -3403,6 +4393,7 @@ module('Unit | index-writer', function (hooks) {
             realm_url: testRealmURL,
             type: 'instance',
             job_id: 42,
+            staging_id: jobStagingId(42, 1),
             last_modified: '1700000000',
             is_deleted: false,
             has_error: true,
@@ -3424,9 +4415,11 @@ module('Unit | index-writer', function (hooks) {
       virtualNetwork,
       {
         jobId: 42,
-        reservationId: 1,
+        reservationId: 2,
         priority: 0,
         queueWaitMs: null,
+        concurrencyGroup: null,
+        laneFamily: null,
       },
     );
     assert.strictEqual(
@@ -3453,6 +4446,7 @@ module('Unit | index-writer', function (hooks) {
             realm_url: testRealmURL,
             type: 'instance',
             job_id: 99,
+            staging_id: jobStagingId(99, 1),
             last_modified: '1700000000',
             is_deleted: false,
             deps: [],
@@ -3468,9 +4462,11 @@ module('Unit | index-writer', function (hooks) {
       virtualNetwork,
       {
         jobId: 42,
-        reservationId: 1,
+        reservationId: 2,
         priority: 0,
         queueWaitMs: null,
+        concurrencyGroup: null,
+        laneFamily: null,
       },
     );
     assert.strictEqual(
@@ -3480,58 +4476,275 @@ module('Unit | index-writer', function (hooks) {
     );
   });
 
-  test('working rows from another job are visible to dependency-walk queries but not to resumedRows', async function (assert) {
-    // The cumulative working table is the source of truth for the
-    // reverse-deps walk in `Batch.invalidate` (via
-    // `itemsThatReference`). Rows from completed prior batches must
-    // stay so subsequent jobs can find them. The `job_id` filter in
-    // `loadResumedRows` is what isolates the *current* job's
-    // resume-handoff from those rows.
-    let otherUrl = `${testRealmURL}other-job-row.json`;
+  test("another pass's staged rows are invisible to this pass's discovery, dependency reads and summary, and survive its commit", async function (assert) {
+    let iconHTML = '<svg>test icon</svg>';
+    let personTypes = internalKeysFor(
+      virtualNetwork,
+      { module: rri('./person'), name: 'Person' },
+      baseCardRef,
+    );
+    let petTypes = internalKeysFor(
+      virtualNetwork,
+      { module: rri('./pet'), name: 'Pet' },
+      baseCardRef,
+    );
+    let hubURL = `${testRealmURL}hub.json`;
+    let doomedURL = `${testRealmURL}doomed.json`;
+    let stagedURL = `${testRealmURL}staged-pet.json`;
+    let committedPerson = (url: string) => ({
+      url,
+      generation: 1,
+      realm_url: testRealmURL,
+      type: 'instance' as const,
+      deps: [`${testRealmURL}person`],
+      types: personTypes,
+      display_names: ['Person'],
+      icon_html: iconHTML,
+    });
     await setupIndex(
       adapter,
       [{ realm_url: testRealmURL, current_generation: 1 }],
+      [committedPerson(hubURL), committedPerson(doomedURL)],
+    );
+
+    // Stages the hub as `name` with its own HTML, so the two passes' versions
+    // of it read apart on both channels.
+    let stageHub = async (
+      stagingBatch: Awaited<ReturnType<IndexWriter['createBatch']>>,
+      name: string,
+    ) => {
+      let now = Date.now();
+      await stagingBatch.updateEntry(new URL(hubURL), {
+        type: 'instance',
+        resource: makeCardResource('hub', name, {
+          module: rri('./person'),
+          name: 'Person',
+        }),
+        lastModified: now,
+        resourceCreatedAt: now,
+        searchData: { name },
+        deps: new Set([`${testRealmURL}person`]),
+        displayNames: ['Person'],
+        types: personTypes,
+        iconHTML,
+        isolatedHtml: `<p>${name}</p>`,
+      });
+    };
+
+    // The peer stages its own version of the hub, a deletion of a committed
+    // card, and a new card that depends on the hub, then stops short of its
+    // commit.
+    let peer = await indexWriter.createBatch(
+      new URL(testRealmURL),
+      virtualNetwork,
       {
-        working: [
-          {
-            url: otherUrl,
-            generation: 1,
-            realm_url: testRealmURL,
-            type: 'instance',
-            job_id: 99,
-            last_modified: '1700000000',
-            is_deleted: false,
-            deps: [],
-            types: [],
-          },
-        ],
-        production: [],
+        jobId: 99,
+        reservationId: 1,
+        priority: 0,
+        queueWaitMs: null,
+        concurrencyGroup: null,
+        laneFamily: null,
       },
     );
+    await stageHub(peer, 'Peer Hub');
+    await peer.invalidate([new URL(doomedURL)]);
+    let timestamp = Date.now();
+    await peer.updateEntry(new URL(stagedURL), {
+      type: 'instance',
+      resource: makeCardResource('staged-pet', 'Staged', {
+        module: rri('./pet'),
+        name: 'Pet',
+      }),
+      lastModified: timestamp,
+      resourceCreatedAt: timestamp,
+      searchData: { name: 'Staged' },
+      deps: new Set([hubURL]),
+      displayNames: ['Pet'],
+      types: petTypes,
+      iconHTML,
+    });
 
     let batch = await indexWriter.createBatch(
       new URL(testRealmURL),
       virtualNetwork,
-      {
-        jobId: 42,
-        reservationId: 1,
-        priority: 0,
-        queueWaitMs: null,
-      },
     );
-    assert.strictEqual(
-      batch.resumedRows.size,
-      0,
-      'rows tagged with a different job_id are NOT in resumedRows',
-    );
-    let surviving = await adapter.execute(
-      'SELECT url FROM boxel_index_working WHERE realm_url = $1',
-      { bind: [testRealmURL] },
+    await batch.invalidate([new URL(hubURL)]);
+    assert.deepEqual(
+      batch.invalidations,
+      [hubURL],
+      "the fan-out does not follow the peer's staged dependency edge",
     );
     assert.deepEqual(
-      surviving.map((r) => r.url),
-      [otherUrl],
-      'cumulative working state is preserved (it is the source for reverse-deps walks)',
+      (await batch.getDependencyRows([stagedURL, doomedURL])).map((row) => ({
+        url: row.url,
+        isDeleted: row.isDeleted,
+      })),
+      [{ url: doomedURL, isDeleted: false }],
+      "dependency reads see the committed rows, not the peer's staged card or its tombstone",
+    );
+    assert.deepEqual(
+      await batch.getOrderingDependencyRows([stagedURL]),
+      [],
+      "ordering reads do not see the peer's staged card",
+    );
+    await stageHub(batch, 'Hub');
+    await batch.done();
+
+    assert.deepEqual(
+      (await fetchRealmMeta(adapter)).value,
+      [
+        makeCardTypeSummary(
+          `${testRealmURL}person/Person`,
+          'Person',
+          iconHTML,
+          2,
+        ),
+      ],
+      "the published summary counts only committed cards: the peer's staged card and deletion are not in it",
+    );
+    let production = (await adapter.execute(
+      `SELECT url, is_deleted FROM boxel_index WHERE realm_url = $1 ORDER BY url COLLATE "POSIX"`,
+      { bind: [testRealmURL], coerceTypes: { is_deleted: 'BOOLEAN' } },
+    )) as { url: string; is_deleted: boolean | null }[];
+    assert.deepEqual(
+      production.map((row) => [row.url, Boolean(row.is_deleted)]),
+      [
+        [doomedURL, false],
+        [hubURL, false],
+      ],
+      "the commit promotes none of the peer's other rows, and applies none of its deletions",
+    );
+    let hubVersions = async () => {
+      let [index] = (await adapter.execute(
+        `SELECT search_doc FROM boxel_index WHERE url = $1 AND type = 'instance'`,
+        { bind: [hubURL], coerceTypes: { search_doc: 'JSON' } },
+      )) as { search_doc: { name: string } }[];
+      let [html] = (await adapter.execute(
+        `SELECT isolated_html FROM prerendered_html WHERE url = $1 AND type = 'instance'`,
+        { bind: [hubURL] },
+      )) as { isolated_html: string | null }[];
+      return { index: index?.search_doc?.name, html: html?.isolated_html };
+    };
+    assert.deepEqual(
+      await hubVersions(),
+      { index: 'Hub', html: '<p>Hub</p>' },
+      "for a URL both passes staged, the commit promotes its own version on both channels, not the peer's",
+    );
+    let peerStaged = (await adapter.execute(
+      `SELECT url FROM boxel_index_pending WHERE staging_id = $1 ORDER BY url COLLATE "POSIX"`,
+      { bind: [peer.stagingId] },
+    )) as { url: string }[];
+    assert.deepEqual(
+      peerStaged.map((row) => row.url),
+      [doomedURL, hubURL, stagedURL],
+      "the commit leaves the peer's staged rows in place",
+    );
+
+    await peer.done();
+    assert.deepEqual(
+      (await fetchRealmMeta(adapter)).value,
+      [
+        makeCardTypeSummary(
+          `${testRealmURL}person/Person`,
+          'Person',
+          iconHTML,
+          1,
+        ),
+        makeCardTypeSummary(`${testRealmURL}pet/Pet`, 'Pet', iconHTML, 1),
+      ],
+      "the peer's own commit publishes what it staged",
+    );
+    assert.deepEqual(
+      await hubVersions(),
+      { index: 'Peer Hub', html: '<p>Peer Hub</p>' },
+      "the peer's commit promotes the peer's version of the hub",
+    );
+    let [doomed] = (await adapter.execute(
+      `SELECT is_deleted, types FROM boxel_index WHERE url = $1`,
+      {
+        bind: [doomedURL],
+        coerceTypes: { is_deleted: 'BOOLEAN', types: 'JSON' },
+      },
+    )) as { is_deleted: boolean; types: string[] }[];
+    assert.true(doomed.is_deleted, "the peer's deletion lands with its commit");
+    assert.deepEqual(
+      doomed.types,
+      personTypes,
+      'the promoted tombstone keeps the rest of the row it hides',
+    );
+  });
+
+  test('a commit clears ad-hoc staging idle past the abandonment window, and leaves recent staging alone', async function (assert) {
+    let iconHTML = '<svg>test icon</svg>';
+    let types = internalKeysFor(
+      virtualNetwork,
+      { module: rri('./person'), name: 'Person' },
+      baseCardRef,
+    );
+    let stageCard = async (id: string) => {
+      let batch = await indexWriter.createBatch(
+        new URL(testRealmURL),
+        virtualNetwork,
+      );
+      await writeInstance(batch, {
+        id,
+        name: id,
+        adoptsFrom: { module: rri('./person'), name: 'Person' },
+        displayNames: ['Person'],
+        types,
+        iconHTML,
+      });
+      return batch;
+    };
+    await setupIndex(
+      adapter,
+      [{ realm_url: testRealmURL, current_generation: 1 }],
+      [],
+    );
+    // Neither batch runs as a job, and neither reaches its commit.
+    let abandoned = await stageCard('abandoned');
+    let recent = await stageCard('recent');
+    let longAgo = Date.now() - 2 * 24 * 60 * 60 * 1000;
+    await adapter.execute(
+      `UPDATE boxel_index_pending SET indexed_at = $1, diagnostics = NULL WHERE staging_id = $2`,
+      { bind: [longAgo, abandoned.stagingId] },
+    );
+    await adapter.execute(
+      `UPDATE prerendered_html_pending SET rendered_at = $1, diagnostics = NULL WHERE staging_id = $2`,
+      { bind: [longAgo, abandoned.stagingId] },
+    );
+
+    let committer = await stageCard('committed');
+    let result = await committer.done();
+
+    let stagings = async (table: string) =>
+      (
+        (await adapter.execute(
+          `SELECT DISTINCT staging_id FROM ${table} WHERE realm_url = $1`,
+          { bind: [testRealmURL] },
+        )) as { staging_id: string }[]
+      )
+        .map((row) => row.staging_id)
+        .sort();
+    assert.deepEqual(
+      await stagings('boxel_index_pending'),
+      [recent.stagingId],
+      'the idle staging is cleared from the index channel; the recent one and the committed one are not left behind',
+    );
+    assert.deepEqual(
+      await stagings('prerendered_html_pending'),
+      [recent.stagingId],
+      'and from the HTML channel',
+    );
+    assert.strictEqual(
+      result.janitorStagingsCleared,
+      1,
+      'the janitor counts the one staging it cleared',
+    );
+    assert.strictEqual(
+      result.janitorRowsCleared,
+      2,
+      'its index row and its HTML row',
     );
   });
 
@@ -3548,6 +4761,7 @@ module('Unit | index-writer', function (hooks) {
             realm_url: testRealmURL,
             type: 'instance',
             job_id: 42,
+            staging_id: jobStagingId(42, 1),
             last_modified: '1700000000',
             deps: [],
             types: [],
@@ -3562,9 +4776,11 @@ module('Unit | index-writer', function (hooks) {
       virtualNetwork,
       {
         jobId: 42,
-        reservationId: 1,
+        reservationId: 2,
         priority: 0,
         queueWaitMs: null,
+        concurrencyGroup: null,
+        laneFamily: null,
       },
     );
     assert.true(
@@ -3603,6 +4819,7 @@ module('Unit | index-writer', function (hooks) {
             realm_url: testRealmURL,
             type: 'instance',
             job_id: 42,
+            staging_id: jobStagingId(42, 1),
             last_modified: '1700000000',
             is_deleted: false,
             has_error: false,
@@ -3621,9 +4838,11 @@ module('Unit | index-writer', function (hooks) {
       virtualNetwork,
       {
         jobId: 42,
-        reservationId: 1,
+        reservationId: 2,
         priority: 0,
         queueWaitMs: null,
+        concurrencyGroup: null,
+        laneFamily: null,
       },
     );
     // Note: no updateEntry / invalidate call — simulating a retry that
@@ -3650,6 +4869,16 @@ module('Unit | index-writer', function (hooks) {
   });
 
   module('getOrderingDependencyRows', function () {
+    // The working rows below are staged by this job, and each test reads them
+    // through a batch running as it: a pass reads only its own staging.
+    const stagingJob = {
+      jobId: 7,
+      reservationId: 1,
+      priority: 0,
+      queueWaitMs: null,
+      concurrencyGroup: null,
+      laneFamily: null,
+    };
     test('returns production row when URL exists only in boxel_index', async function (assert) {
       let url = `${testRealmURL}prod-only.json`;
       let depUrl = `${testRealmURL}prod-only-dep.json`;
@@ -3674,6 +4903,7 @@ module('Unit | index-writer', function (hooks) {
       let batch = await indexWriter.createBatch(
         new URL(testRealmURL),
         virtualNetwork,
+        stagingJob,
       );
       let rows = await batch.getOrderingDependencyRows([url]);
       assert.deepEqual(
@@ -3683,7 +4913,7 @@ module('Unit | index-writer', function (hooks) {
       );
     });
 
-    test('returns working row when URL exists only in boxel_index_working and is not deleted', async function (assert) {
+    test('returns the staged row when URL exists only in boxel_index_pending and is not deleted', async function (assert) {
       let url = `${testRealmURL}working-only.json`;
       let depUrl = `${testRealmURL}working-only-dep.json`;
       await setupIndex(
@@ -3696,6 +4926,11 @@ module('Unit | index-writer', function (hooks) {
               generation: 1,
               realm_url: testRealmURL,
               type: 'instance',
+              job_id: stagingJob.jobId,
+              staging_id: jobStagingId(
+                stagingJob.jobId,
+                stagingJob.reservationId,
+              ),
               is_deleted: false,
               deps: [depUrl],
               types: [],
@@ -3708,6 +4943,7 @@ module('Unit | index-writer', function (hooks) {
       let batch = await indexWriter.createBatch(
         new URL(testRealmURL),
         virtualNetwork,
+        stagingJob,
       );
       let rows = await batch.getOrderingDependencyRows([url]);
       assert.deepEqual(
@@ -3731,6 +4967,11 @@ module('Unit | index-writer', function (hooks) {
               generation: 1,
               realm_url: testRealmURL,
               type: 'instance',
+              job_id: stagingJob.jobId,
+              staging_id: jobStagingId(
+                stagingJob.jobId,
+                stagingJob.reservationId,
+              ),
               is_deleted: false,
               deps: [workingDep],
               types: [],
@@ -3752,6 +4993,7 @@ module('Unit | index-writer', function (hooks) {
       let batch = await indexWriter.createBatch(
         new URL(testRealmURL),
         virtualNetwork,
+        stagingJob,
       );
       let rows = await batch.getOrderingDependencyRows([url]);
       assert.deepEqual(
@@ -3775,6 +5017,11 @@ module('Unit | index-writer', function (hooks) {
               generation: 1,
               realm_url: testRealmURL,
               type: 'instance',
+              job_id: stagingJob.jobId,
+              staging_id: jobStagingId(
+                stagingJob.jobId,
+                stagingJob.reservationId,
+              ),
               is_deleted: true,
               deps: [workingDep],
               types: [],
@@ -3796,6 +5043,7 @@ module('Unit | index-writer', function (hooks) {
       let batch = await indexWriter.createBatch(
         new URL(testRealmURL),
         virtualNetwork,
+        stagingJob,
       );
       let rows = await batch.getOrderingDependencyRows([url]);
       assert.deepEqual(
@@ -3818,6 +5066,11 @@ module('Unit | index-writer', function (hooks) {
               generation: 1,
               realm_url: testRealmURL,
               type: 'instance',
+              job_id: stagingJob.jobId,
+              staging_id: jobStagingId(
+                stagingJob.jobId,
+                stagingJob.reservationId,
+              ),
               is_deleted: true,
               deps: [depUrl],
               types: [],
@@ -3830,6 +5083,7 @@ module('Unit | index-writer', function (hooks) {
       let batch = await indexWriter.createBatch(
         new URL(testRealmURL),
         virtualNetwork,
+        stagingJob,
       );
       let rows = await batch.getOrderingDependencyRows([url]);
       assert.deepEqual(
@@ -3857,6 +5111,11 @@ module('Unit | index-writer', function (hooks) {
               generation: 1,
               realm_url: testRealmURL,
               type: 'instance',
+              job_id: stagingJob.jobId,
+              staging_id: jobStagingId(
+                stagingJob.jobId,
+                stagingJob.reservationId,
+              ),
               is_deleted: false,
               deps: [workingOnlyDep],
               types: [],
@@ -3866,6 +5125,11 @@ module('Unit | index-writer', function (hooks) {
               generation: 1,
               realm_url: testRealmURL,
               type: 'instance',
+              job_id: stagingJob.jobId,
+              staging_id: jobStagingId(
+                stagingJob.jobId,
+                stagingJob.reservationId,
+              ),
               is_deleted: false,
               deps: [bothWorkingDep],
               types: [],
@@ -3895,6 +5159,7 @@ module('Unit | index-writer', function (hooks) {
       let batch = await indexWriter.createBatch(
         new URL(testRealmURL),
         virtualNetwork,
+        stagingJob,
       );
       let rows = await batch.getOrderingDependencyRows([
         workingOnlyUrl,
@@ -3936,6 +5201,11 @@ module('Unit | index-writer', function (hooks) {
               generation: 1,
               realm_url: testRealmURL,
               type: 'instance',
+              job_id: stagingJob.jobId,
+              staging_id: jobStagingId(
+                stagingJob.jobId,
+                stagingJob.reservationId,
+              ),
               is_deleted: false,
               has_error: true,
               error_doc: {
@@ -3956,6 +5226,7 @@ module('Unit | index-writer', function (hooks) {
       let batch = await indexWriter.createBatch(
         new URL(testRealmURL),
         virtualNetwork,
+        stagingJob,
       );
       let rows = await batch.getOrderingDependencyRows([url]);
       assert.strictEqual(rows.length, 1, 'one row returned');

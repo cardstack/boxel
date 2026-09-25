@@ -1,13 +1,19 @@
 import type { DBAdapter } from './db.ts';
 import {
   addExplicitParens,
+  every,
   param,
   query,
   separatedByCommas,
   type Expression,
 } from './expression.ts';
 import type { IncrementalChange } from './tasks/indexer.ts';
-import { prerenderHtmlConcurrencyGroup } from './jobs/prerender-html.ts';
+import {
+  parseSpawningIndexPasses,
+  prerenderHtmlConcurrencyGroup,
+  type SpawningIndexPass,
+} from './jobs/prerender-html.ts';
+import { laneFamiliesPredicate, laneFamilyOf } from './jobs/lane-family.ts';
 
 // The catch-up sweep's read side. It reconciles two independently-advancing
 // channels — the search-doc index (`boxel_index`) and the prerendered HTML
@@ -224,6 +230,16 @@ export async function findStalePrerenderedHtmlRows(
 // through the bounded retry lane in `findStalePrerenderedHtmlRows` until its
 // consecutive-failure cap. The per-row generation gate means an older job
 // never masks residue the index has moved past.
+//
+// A job spawned by index passes stamps each row from the live index once its
+// spawning passes have committed, so the generation it carries does not say
+// what it covers. It covers a URL at the newest generation those passes
+// committed, read from the `realm_index_commits` ledger — or at every
+// generation while one of them has yet to commit, since the job has not read
+// its stamps yet and will read them from a commit newer than any row the sweep
+// sees now. A job enqueued from committed state (a reconcile repair, or a job
+// from a worker predating `spawningIndexPasses`) covers at the generation it
+// carries.
 export async function findActivePrerenderHtmlJobCoverage(
   dbAdapter: DBAdapter,
 ): Promise<Map<string, Map<string, number>>> {
@@ -233,13 +249,14 @@ export async function findActivePrerenderHtmlJobCoverage(
        AND status = 'unfulfilled'`,
   ] as Expression)) as { args: unknown }[];
 
+  let jobs = rows
+    .map((row) => parseCoverageArgs(row.args))
+    .filter((parsed) => parsed !== undefined);
+  let committedByPass = await committedGenerationsByPass(dbAdapter, jobs);
   let byRealm = new Map<string, Map<string, number>>();
-  for (let row of rows) {
-    let parsed = parseCoverageArgs(row.args);
-    if (!parsed) {
-      continue;
-    }
-    let { realmURL, generation, changes } = parsed;
+  for (let parsed of jobs) {
+    let { realmURL, changes } = parsed;
+    let generation = coverageGeneration(parsed, committedByPass);
     let urls = byRealm.get(realmURL);
     if (!urls) {
       urls = new Map<string, number>();
@@ -258,11 +275,70 @@ export async function findActivePrerenderHtmlJobCoverage(
   return byRealm;
 }
 
-function parseCoverageArgs(
-  args: unknown,
-):
-  | { realmURL: string; generation: number; changes: IncrementalChange[] }
-  | undefined {
+interface CoverageArgs {
+  realmURL: string;
+  generation: number;
+  spawningIndexPasses: SpawningIndexPass[];
+  changes: IncrementalChange[];
+}
+
+// The generation each spawning index pass committed, keyed by pass id, for
+// the passes the given jobs wait on. One query per realm, so each is served by
+// the ledger's `(realm_url, pass_id)` index.
+async function committedGenerationsByPass(
+  dbAdapter: DBAdapter,
+  jobs: CoverageArgs[],
+): Promise<Map<string, number>> {
+  let passIdsByRealm = new Map<string, Set<string>>();
+  for (let job of jobs) {
+    for (let pass of job.spawningIndexPasses) {
+      let passIds = passIdsByRealm.get(job.realmURL) ?? new Set<string>();
+      passIds.add(pass.passId);
+      passIdsByRealm.set(job.realmURL, passIds);
+    }
+  }
+  let committed = new Map<string, number>();
+  for (let [realmURL, passIds] of passIdsByRealm) {
+    let rows = (await query(dbAdapter, [
+      'SELECT pass_id, generation FROM realm_index_commits WHERE',
+      ...every([
+        ['realm_url =', param(realmURL)],
+        [
+          'pass_id IN',
+          ...addExplicitParens(
+            separatedByCommas([...passIds].map((id) => [param(id)])),
+          ),
+        ],
+      ]),
+    ] as Expression)) as { pass_id: string; generation: number | string }[];
+    for (let row of rows) {
+      committed.set(row.pass_id, Number(row.generation));
+    }
+  }
+  return committed;
+}
+
+// The generation a pending job is on track to render its URLs at (see
+// `findActivePrerenderHtmlJobCoverage`).
+function coverageGeneration(
+  job: CoverageArgs,
+  committedByPass: Map<string, number>,
+): number {
+  if (job.spawningIndexPasses.length === 0) {
+    return job.generation;
+  }
+  let newest = -1;
+  for (let { passId } of job.spawningIndexPasses) {
+    let committed = committedByPass.get(passId);
+    if (committed === undefined) {
+      return Number.POSITIVE_INFINITY;
+    }
+    newest = Math.max(newest, committed);
+  }
+  return newest;
+}
+
+function parseCoverageArgs(args: unknown): CoverageArgs | undefined {
   let obj: unknown = args;
   if (typeof args === 'string') {
     try {
@@ -274,7 +350,7 @@ function parseCoverageArgs(
   if (!isObjectLike(obj)) {
     return undefined;
   }
-  let { realmURL, generation, changes } = obj;
+  let { realmURL, generation, spawningIndexPasses, changes } = obj;
   if (
     typeof realmURL !== 'string' ||
     typeof generation !== 'number' ||
@@ -291,7 +367,12 @@ function parseCoverageArgs(
       });
     }
   }
-  return { realmURL, generation, changes: normalized };
+  return {
+    realmURL,
+    generation,
+    spawningIndexPasses: parseSpawningIndexPasses(spawningIndexPasses) ?? [],
+    changes: normalized,
+  };
 }
 
 // The realm-level target for a repair: HTML is (re)rendered from current source
@@ -399,29 +480,27 @@ export async function findPrerenderHtmlRejectionStreaks(
   if (realmURLs.length === 0) {
     return streaks;
   }
-  let realmByGroup = new Map(
+  // Keyed by the realm's prerender-html lane family, so a job in any of the
+  // realm's lanes counts toward the realm's streak.
+  let realmByFamily = new Map(
     realmURLs.map((realmURL) => [
       prerenderHtmlConcurrencyGroup(realmURL),
       realmURL,
     ]),
   );
   let rows = (await query(dbAdapter, [
-    `SELECT concurrency_group, status,
+    `SELECT ${laneFamilyOf('jobs')} AS lane_family, status,
        (EXTRACT(EPOCH FROM (NOW() - finished_at)) * 1000)::bigint AS ms_since_finished
      FROM jobs
      WHERE job_type = 'prerender_html'
        AND status IN ('resolved', 'rejected')
        AND finished_at IS NOT NULL
        AND finished_at > NOW() - INTERVAL '${REJECTION_STREAK_LOOKBACK_HOURS} hours'
-       AND concurrency_group IN`,
-    ...addExplicitParens(
-      separatedByCommas(
-        [...realmByGroup.keys()].map((group) => [param(group)]),
-      ),
-    ),
+       AND`,
+    ...laneFamiliesPredicate([...realmByFamily.keys()]),
     `ORDER BY finished_at DESC`,
   ] as Expression)) as {
-    concurrency_group: string;
+    lane_family: string;
     status: string;
     ms_since_finished: number | string;
   }[];
@@ -431,7 +510,7 @@ export async function findPrerenderHtmlRejectionStreaks(
   // rejections before that realm's first non-rejected row.
   let settled = new Set<string>();
   for (let row of rows) {
-    let realmURL = realmByGroup.get(row.concurrency_group);
+    let realmURL = realmByFamily.get(row.lane_family);
     if (!realmURL || settled.has(realmURL)) {
       continue;
     }

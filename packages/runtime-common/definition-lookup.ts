@@ -1597,6 +1597,14 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     //
     // A read per populate, not per lookup: cache hits never reach here.
     let loaderEpoch = await readRealmLoaderEpoch(this.#dbAdapter, realmURL);
+    // One line per candidate, not per lookup: `populationCandidates` probes
+    // each executable extension in turn, so one miss on an extensionless URL
+    // reaches here several times and names modules that need not exist. The
+    // once-per-lookup cache-effectiveness signal is the MISS line in
+    // `loadDefinitionCacheEntryUncached`, which deliberately excludes these
+    // probes; this says only which candidate was sent, on the key channel that
+    // is off unless `LOG_LEVELS` asks for it.
+    keyLog.debug(`PRERENDER candidate=${moduleUrl} realm=${realmURL}`);
     return await this.#prerenderer.prerenderModule({
       affinityType: 'realm',
       affinityValue: realmURL,

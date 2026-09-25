@@ -41,16 +41,35 @@ node setup-realm.ts --csv ./accounts.csv --source ../some-realm-checkout
 ```
 
 That creates the realm as the credential file's first user, pushes the realm
-contents, and waits for the index. `--dry-run` prints the `boxel` commands
-without running them; `--skip-push` re-runs just the create and wait steps. This
-step needs the `boxel` CLI on `PATH`, so it runs from a workstation rather than
-from the in-region box that runs the driver.
+contents, waits for the index, and puts the other credential rows on the realm:
+`read` for all of them, and `read` + `write` for the first `--write-grants`
+(one by default). `--dry-run` prints what it would do without doing it;
+`--skip-push` re-runs just the create, wait and grant steps, which is how you
+re-grant on a realm that already exists; `--skip-grants` leaves access alone.
+Creating and pushing need the `boxel` CLI on `PATH`, so those run from a
+workstation rather than from the in-region box that runs the driver.
 
-**One manual step remains.** The other users need read access to the realm.
-Granting it is not a `boxel realm` subcommand, so it is a UI action or a direct
-API call. Each session authenticates as its own user: searches authorize per
-realm and realm events are broadcast into each user's own session room, so a
-single shared account reproduces neither.
+**`--grants-only` needs no CLI**, so the grant is reachable from wherever the
+driver is — which is where you find out you need it, because that is where a
+run refuses to start over a writer that cannot write:
+
+```sh
+node setup-realm.ts --csv ./accounts.csv --grants-only \
+  --realm <realm url> --write-grants 1
+```
+
+Each session authenticates as its own user: searches authorize per realm and
+realm events are broadcast into each user's own session room, so a single
+shared account reproduces neither.
+
+**The write grant is what makes a two-writer run possible.** A realm's write
+permission belongs to its owner, so without it every write in a run comes from
+one identity and the question in [Two writers on one
+realm](#two-writers-on-one-realm-and-the-fairness-reading) has no way to be
+asked. Granting is not a `boxel realm` subcommand, but the realm answers
+`PATCH /_permissions` to its owner, which is what the setup script calls.
+`realm-owner` can neither be granted nor modified there, so this hands out
+access and never the realm.
 
 ## Choosing a path: which document the searches ask for
 
@@ -269,6 +288,141 @@ Two things to get right:
 A shape that names no variants is sent exactly as before, so adding the member
 to one query changes nothing about the others.
 
+## Two writers on one realm, and the fairness reading
+
+A realm's incremental index passes run **one lane per writer**: each person's
+passes run in their own lane of the realm's index family, so two people
+editing unrelated cards in one realm index side by side, while one writer's own
+passes still run in order. Exclusive work — a from-scratch reindex, a copy —
+still runs alone and holds every writer lane while it does. Whether that
+isolation holds up under load turns on a single number — of the index passes
+that waited, how many waited behind a _different_ person's pass — and that
+number cannot be produced by a run in which every write comes from one
+identity.
+
+### Composing the run
+
+Three things have to be true at once, and each is easy to leave out.
+
+**Two identities that may both write.** A realm's write permission belongs to
+its owner. `setup-realm.ts --write-grants 1` puts a second account on the
+realm; without it that account's every POST is a 403. The driver checks this
+before the clock starts — `_realm-auth` states each user's permissions in the
+realm token it mints, so the answer is already in hand — and refuses the run
+naming the account and the grant rather than discovering it as a run full of
+write errors.
+
+**Work worth telling apart.** `writes` names one block per kind of write, and
+writer slots take them in order:
+
+```json
+"writes": [
+  {
+    "label": "hub",
+    "method": "PATCH",
+    "path": "Course/intro-to-fairness",
+    "everyMs": 30000,
+    "adoptsFrom": { "module": "${realm}course", "name": "Course" },
+    "attributes": { "title": "Intro (rev ${n})" }
+  },
+  {
+    "label": "leaf",
+    "username": "loadtest02",
+    "everyMs": 5000,
+    "adoptsFrom": { "module": "${realm}note", "name": "Note" },
+    "attributes": { "title": "Note ${n}" }
+  }
+]
+```
+
+`method: "PATCH"` is the only way to state an expensive write. A POST creates a
+card nothing links to yet, so its index pass visits one file however large the
+realm is; patching a card that many instances link to invalidates all of them.
+Pick a hub that really is one — the fan-out belongs to the realm's content, not
+to the block. A PATCH whose attributes are the same every time is refused at
+load, because the realm leaves an unchanged card's file exactly as it is and
+the block would run no index pass at all while the summary counted it as a
+writer.
+
+`username` pins a block to a credential row, so "writer A on realm R, writer B
+on realm R, A ≠ B" is stated in the file rather than being a property of how
+the CSV happens to be sorted. Unpinned blocks take sessions in file order.
+
+**Both halves of the reading, from one window.** `everyMs` is a per-block
+cadence. A hub every 30 s against a leaf every 5 s produces leaf writes that
+land inside a hub's index pass _and_ leaf writes that do not — which is what
+gives the blocked figure a baseline to be read against. Two blocks on one
+cadence fire in lockstep and leave no uncontended writes at all.
+
+`--writers` has to be at least as many as there are blocks, or a block never
+runs; the driver refuses rather than quietly dropping one. `write` (singular)
+still means a one-block workload.
+
+### Reading it
+
+```
+fairness — did a write wait on somebody else's indexing?
+  cross-writer blocked: 14 of 65 writes finished no earlier than a
+    different identity's overlapping write
+  same-writer blocked:  2  (a write behind an earlier write of its own)
+  overlapped another identity: 31, of which 14 finished no earlier
+    (the rest overlapped but finished first, which a serial lane does not forbid)
+
+  hub  (@loadtest01:stack.cards)
+    lane to itself n= 19  p50   6840ms
+    behind self    n=  0        —
+    behind other   n=  1  p50   7020ms
+    fairness      0.97
+
+  leaf  (@loadtest02:stack.cards)
+    lane to itself n= 30  p50    910ms
+    behind self    n=  2  p50   1180ms
+    behind other   n= 13  p50   7450ms
+    fairness      0.12
+```
+
+The three per-block buckets partition the run's writes: 19 + 0 + 1 for the hub
+and 30 + 2 + 13 for the leaf is 65, and the headline's 14 is the two
+`behind other` rows added up. `overlapped another identity` is a **superset**
+of that 14 rather than a fourth bucket — being behind a write means overlapping
+it — which is why it is printed with its nesting spelled out.
+
+The score is a block's median latency with the lane to itself over its median
+while blocked behind another identity. **1.00 means being blocked cost that
+block nothing.** The table above is the unfair case stated plainly: the hub
+pays nothing for company, while a blocked leaf write costs 7,450 ms against the
+910 ms an unblocked one costs — roughly eight times, which is what the 0.12
+says.
+
+**An empty bucket reads `not measured`, never `1.00`.** This is the reason the
+section exists in this shape. A run that produced no contention scoring a
+perfect fairness number is a statement about the workload, not about the lane —
+it is what made a staging window of 107 index passes, none of them blocked,
+look like a clean bill of health when it was a null result. A run whose writes
+all came from one identity says so in place of its counts, for the same reason.
+
+**What this is and is not.** The reading comes from the driver's own write
+windows, not from `jobs` rows — this harness runs from a CloudShell session
+with `fetch` as its whole dependency set and must not grow a database
+connection. It works because a card write blocks on its own index pass, so the
+HTTP window contains the lane wait. "Behind" means a write started strictly
+inside another's window _and_ finished no earlier — the shape a serial lane
+produces and a per-writer lane does not. A plain overlap is reported separately
+because it is the weaker relation, and two writes that started in the same
+millisecond are treated as unordered, because neither was outstanding when the
+other began.
+
+**The count is an estimate, and it errs in both directions.** A window ends
+when the response body has been read, which is some way past the index pass —
+`awaitIndex` closes and the realm still clears caches, serializes the card and
+sends bytes. So these are the ends of response _tails_ rather than of passes: a
+genuinely blocked write whose blocker had the longer tail ends first and is
+scored clear, and a slow tail can put a write behind one it never waited on.
+Every write carries an `x-boxel-logging-correlation-id`, so a specific one
+joins to the realm server's own write timing by its `corr=` id, where `enqueue`
+and `awaitIndex` are reported apart. That is the server's answer to the same
+question, and it is what settles a case the windows only bound.
+
 ## Running
 
 ```sh
@@ -277,24 +431,24 @@ node run-load.ts --csv ./accounts.csv \
   --workload ./workload.experiments.json
 ```
 
-| Option                | Default | Meaning                                                                         |
-| --------------------- | ------: | ------------------------------------------------------------------------------- |
-| `--readers`           |      12 | Sessions that only search.                                                      |
-| `--writers`           |       2 | Sessions that write, and search not at all. `0` is a read-only run.             |
-| `--minutes`           |      10 | Run length. `Ctrl-C` ends early and still prints the summary.                   |
-| `--write-every-ms`    |   20000 | Per-writer write interval — this sets the invalidation rate, which is the load. |
-| `--idle-re-run-ms`    |   60000 | Floor, so readers still poll a realm nobody is writing to.                      |
-| `--secondary-every`   |       3 | Every Nth reader also opens the workload's `secondaryQueries`.                  |
-| `--extra-queries`     |     off | Also issue the workload's `extraQueries`.                                       |
-| `--derive-workload`   |     off | Build the workload from the realm's own `_types` instead of a file.             |
-| `--derive-top`        |       8 | How many types a derived workload queries.                                      |
-| `--derive-page-size`  |      20 | Page size for derived queries; `0` leaves them unbounded.                       |
-| `--emit-workload`     |       — | Write the derived workload here and exit. `-` is stdout.                        |
-| `--fieldset`          | entries | Which path to measure: `entries` \| `item` \| `item-html`.                      |
-| `--prime-connections` |      on | Open each batch's connections before timing it. `=false` disables.              |
-| `--model-calls`       |     off | A forwarded request before each write (see below).                              |
-| `--subscribe`         |     off | React to real realm events instead of modelling them (see below).               |
-| `--load-half-life-ms` |  120000 | The window the target smooths its in-flight reading over.                       |
+| Option                | Default | Meaning                                                                                                                        |
+| --------------------- | ------: | ------------------------------------------------------------------------------------------------------------------------------ |
+| `--readers`           |      12 | Sessions that only search.                                                                                                     |
+| `--writers`           |       2 | Sessions that write, and search not at all. `0` is a read-only run.                                                            |
+| `--minutes`           |      10 | Run length. `Ctrl-C` ends early and still prints the summary.                                                                  |
+| `--write-every-ms`    |   20000 | Per-writer write interval — this sets the invalidation rate, which is the load. A `writes` block's own `everyMs` overrides it. |
+| `--idle-re-run-ms`    |   60000 | Floor, so readers still poll a realm nobody is writing to.                                                                     |
+| `--secondary-every`   |       3 | Every Nth reader also opens the workload's `secondaryQueries`.                                                                 |
+| `--extra-queries`     |     off | Also issue the workload's `extraQueries`.                                                                                      |
+| `--derive-workload`   |     off | Build the workload from the realm's own `_types` instead of a file.                                                            |
+| `--derive-top`        |       8 | How many types a derived workload queries.                                                                                     |
+| `--derive-page-size`  |      20 | Page size for derived queries; `0` leaves them unbounded.                                                                      |
+| `--emit-workload`     |       — | Write the derived workload here and exit. `-` is stdout.                                                                       |
+| `--fieldset`          | entries | Which path to measure: `entries` \| `item` \| `item-html`.                                                                     |
+| `--prime-connections` |      on | Open each batch's connections before timing it. `=false` disables.                                                             |
+| `--model-calls`       |     off | A forwarded request before each write (see below).                                                                             |
+| `--subscribe`         |     off | React to real realm events instead of modelling them (see below).                                                              |
+| `--load-half-life-ms` |  120000 | The window the target smooths its in-flight reading over.                                                                      |
 
 `--model-calls` puts a `_request-forward` call before each write, the position a
 card that generates before saving occupies. The destination is one the realm
@@ -314,6 +468,82 @@ tally is the expected shape.
 `extraQueries` is the place for a narrowed counterpart to one of the unbounded
 shapes, so a single run measures the same question asked both ways — the
 cheapest available demonstration that moving a filter server-side is worth doing.
+
+## The deploy pin
+
+A run's numbers describe one build of one fleet. A non-production deployment
+moves on its own schedule, and a window long enough to measure anything is long
+enough for a deploy to land inside it — during one 55-minute session the
+staging host bundle changed twice. A window that straddles a deploy holds two
+runs averaged together, and a moved number cannot be told from a moved
+deployment.
+
+So the driver reads the deployment before and after the run, and **refuses to
+print a summary if it moved**. Both readings come from the host app's boot
+document at `<realm server>/_standby`, over plain HTTP, with no AWS session:
+
+- **The host build** — the entry bundle the document loads
+  (`assets/main-<hash>.js`) and the host's own build version from its config
+  meta (`0.0.0+<sha>`). Either moving means the client half of a measurement
+  changed underneath it.
+- **Which replica answered** — the container id in
+  `X-ECS-Container-Metadata-URI-v4`. A fleet that turned over is visible even
+  when the task definition did not change, and a replaced task is a cold one.
+
+A run opens with the reading printed:
+
+```
+Deploy pin: host build main-CowsK790.js (0.0.0+969ffde0), 2 replicas over 8 probes.
+```
+
+**Reading the fleet is a sampling problem**, and the sampling decides what the
+comparison may conclude: a replica missed at the start reads as an arrival at
+the close, one missed at the close reads as a departure, and either would
+refuse a run that nothing happened to. Three properties keep the sample honest.
+Probes within a wave are concurrent; **every probe opens its own connection**,
+because undici prefers a free socket to a new one and a reading otherwise
+converges on the handful of connections its first wave opened (measured against
+a server reporting the socket each request arrived on: 4, 5, 5 distinct sockets
+over three waves of four with keep-alive, and 4, 8, 12 without it); and the
+closing reading keeps probing while any replica the opening one saw has yet to
+answer.
+
+Two outcomes end a run early rather than late:
+
+- **The fleet is already serving two builds** — refused before authentication,
+  so it costs a probe rather than the window. Each replica fetches the boot
+  document once and caches it for the life of its process, so replicas that
+  started either side of a host deploy serve different builds at the same
+  moment and a browser gets whichever answers. This is caught even on a target
+  that identifies no replicas, because the builds a reading saw are kept apart
+  from the replicas that served them.
+- **The build moved, or the fleet changed, by the close.** The summary is
+  replaced by what moved. A replica that arrived served part of the window
+  cold; one that left means the rest of the fleet carried a different share of
+  the load partway through. Both are reported, and a replaced task is both.
+
+Two more outcomes leave the run intact and say what is not known about it,
+because neither is evidence that anything moved:
+
+- **Nothing named a build at the start** — `build: not pinned`. A run cannot be
+  refused for failing a check it never passed.
+- **Nothing brought back a boot document at the close** — `build: … NOT
+CONFIRMED at the close`. Silence, or a fleet answering only errors, says the
+  pin is unknown rather than that the deployment moved — and the likeliest
+  target to go quiet at the close is the one the harness has just spent an hour
+  saturating. Throwing that hour away over a question the probe could not ask
+  is the wrong trade; quoting the numbers as one build's without saying so
+  would be worse.
+
+An answer that identifies its replica but carries no usable document — a
+transient `502` from a replica that is still there — keeps the replica and
+drops only the build. Discarding the id with the document would report that
+replica as departed and refuse the run over an error it recovered from.
+
+Nothing here replaces checking that a deploy has finished before a comparison —
+`aws ecs describe-services … deployments[0].rolloutState` must read `COMPLETED`
+with `updatedAt` earlier than the run — but a revision that lands mid-run
+always replaces tasks, and that is what the pin sees.
 
 ## Measuring invalidation rather than modelling it
 
@@ -417,11 +647,14 @@ server's own timing rather than inferred.
 
 ## Driving it hard enough to reach a threshold
 
-The realm server has two mechanisms that engage at a level of concurrency: the
-admission gate bounds in-flight searches at a cap, and the link-shape policy
-degrades a live read's link closure one rung earlier, at a time-weighted mean
-of the same count (a 120-second half-life by default, `LINK_SHAPE_LOAD_HALF_LIFE_MS`
-per deployment). Both are **per replica**, so a fleet of N tasks needs N times
+The realm server has two mechanisms that engage at a level of concurrency, on
+two different counts: the admission gate bounds concurrent search
+_computations_ at a cap, and the link-shape policy degrades a live read's link
+closure once a time-weighted mean of concurrent search _requests_ — joiners
+included, which the gate stops counting at the cache decision — crosses one of
+its rungs (a 120-second half-life by default, `LINK_SHAPE_LOAD_HALF_LIFE_MS`
+per deployment). The two are independent: the rungs are placed against
+sustained request load, not below the point where the gate starts shedding. Both are **per replica**, so a fleet of N tasks needs N times
 the load a single process would.
 
 The gate does not answer `429` at the cap. An arrival above it queues and is
@@ -436,24 +669,26 @@ that distinction available from the run itself — see below.
 
 **The credential pool is the ceiling.** Each session authenticates as its own
 user, one per CSV row, so a 20-row file caps a run at 19 readers. Against a
-deployed realm at `--derive-page-size 0`, 19 readers held a peak 120-second
-mean of **6.3** searches in flight. Read that against the rungs and the cap in
-`packages/runtime-common/search-bounds.ts`: this run cost about three readers
-per unit of mean, so the lower rung at 4 wants roughly 13 readers and the upper
-one at 12 roughly 36, **per replica**. A pool of this size therefore already
-clears the lower rung, while driving a fleet to the upper rung or to the
-admission cap still needs one several times larger. Treat those as a floor
-rather than an estimate — the scaling is only linear while service time holds,
-and service time is what rises first as a realm saturates. Growing the pool is
-what makes a load number realistic, and it is what puts the admission queue
-under enough pressure to shed.
+deployed two-replica realm server at `--derive-page-size 0`, 19 readers held
+the policy's reading — the 120-second mean of search requests in flight, per
+replica — at a p50 of about 14-17 and a peak of about 21-22. Read that against
+the rungs in `packages/runtime-common/search-bounds.ts`: a pool of this size
+clears the lower rung at 14 within a few minutes, and does not reach the upper
+one at 28. Driving a fleet to the upper rung needs a pool well beyond this one,
+and the scaling is only linear while service time holds — service time is
+what rises first as a realm saturates. Growing the pool is what makes a load
+number realistic.
 
-**Which means a default-sized unbounded run now degrades itself partway
-through, and its numbers have to be read accordingly.** Both figures this file
-reports for unbounded runs — the 5.3 concurrency in the derived-run table above
-and the 6.3 peak here — sit above the lower rung of 4. At a 120-second
-half-life the reading crosses it after a couple of half-lives of sustained
-load, so any run longer than a few minutes against a deployment at shipped
+The reading is in requests, not in the admission gate's slots: a request the
+live-search cache answers from another's computation hands its slot back
+early and goes on counting here. So the reading is several times the slot
+count on a workload whose readers share their queries, and the admission cap
+of 30 bounds slots, not this.
+
+**Which means a default-sized unbounded run degrades itself partway through,
+and its numbers have to be read accordingly.** At a 120-second half-life the
+reading crosses the lower rung after a couple of half-lives of sustained load,
+so any run longer than a few minutes against a deployment at shipped
 thresholds engages `multi-row` mid-run, and every search it answers after that
 point comes back links-only.
 
@@ -534,8 +769,11 @@ a request counts as in flight here for as long as its body is crossing the
 network, after the server had already released the slot. So a figure under a
 threshold is evidence this run did not reach it; a figure over one is not
 evidence that it did, and neither accounts for whatever else is reading the
-realm at the time. For the server's own reading, take the
-`boxel:link-shape-policy` heartbeat.
+realm at the time. For the server's own reading, take the target realm's
+`linkShapeLoad` on `boxel:search-shape`, or `realmSearchLoadMax=` on the health
+line — the ladder decides each realm on that realm's own reading. The
+`boxel:link-shape-policy` heartbeat's `load` is the process's, which is an
+upper bound on it.
 
 The realm-server health sampler covers the same window, and two of its numbers
 are what a saturation run is about:
@@ -562,17 +800,22 @@ purpose; doing that to production is an outage for real users.
 
 ## Files
 
-- `setup-realm.ts` — create the realm, push contents, wait for the index
+- `setup-realm.ts` — create the realm, push contents, wait for the index, grant the other accounts
 - `run-load.ts` — the driver
 - `workload.experiments.json` — the standard workload, for comparable numbers
 - `workload.example.json` — the shape of a workload file
 - `lib/derive-workload.ts` — ranking a realm's `_types` into a workload
 - `lib/auth.ts` — Matrix login → OpenID → `_server-session` → `_realm-auth`
-- `lib/workload.ts` — workload loading, the wire grammar, substitution
+- `lib/workload.ts` — workload loading, the wire grammar, substitution, write blocks
+- `lib/fairness.ts` — whether a write waited on somebody else's index pass
+- `lib/permissions.ts` — reading and granting a realm's permissions
 - `lib/realm-events.ts` — Matrix `/sync` subscription and the host's skip test
 - `lib/in-flight.ts` — the concurrency this driver holds, as a mean and a peak
+- `lib/deploy-pin.ts` — what the fleet is serving, and whether it held still
 - `lib/common.ts` — credential reading, the production guard, arg parsing, stats
 
 `tests/load-harness-test.ts` in this package covers the pure logic: credential
 parsing, the production guard, argument parsing, workload validation and
-derivation, and the skip test.
+derivation, the skip test, the deploy pin's parsing and drift rules, the write
+blocks, and the fairness classification — including its refusal to score a
+bucket it has no samples for.

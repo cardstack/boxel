@@ -8,7 +8,11 @@ import type { DirResult } from 'tmp';
 import type { PgAdapter } from '@cardstack/postgres';
 
 import {
+  baseFileRef,
+  baseRealmRRI,
+  baseRef,
   BOXEL_OPERATIONS_EXT,
+  codeRefFromInternalKey,
   rri,
   SupportedMimeType,
 } from '@cardstack/runtime-common';
@@ -25,6 +29,7 @@ import type {
 import type { RealmHttpServer as Server } from '../../server.ts';
 import {
   createJWT,
+  realmConfigCardJSON,
   setupMatrixRoom,
   setupPermissionedRealmCached,
   waitUntil,
@@ -66,9 +71,29 @@ function envelope(...operations: unknown[]) {
 
 function invoke(
   name: string,
-  rest: { href?: string; data?: unknown } = {},
+  rest: {
+    href?: string;
+    data?: unknown;
+    'boxel:target'?: Record<string, unknown>;
+  } = {},
 ): Record<string, unknown> {
   return { op: 'invoke', 'boxel:name': name, ...rest };
+}
+
+// A query target naming the reports whose headline is `headline`. Every report
+// this file finds by query carries a headline of its own, so a filter selects
+// the fixtures one test wrote and none of the ones another did.
+function findReports(
+  headline: string,
+  rest: { field?: string; expect?: 'one' | 'many' } = {},
+): Record<string, unknown> {
+  return {
+    query: {
+      'item.on': { module: `${testRealmHref}report`, name: 'ExternalReport' },
+      eq: { 'item.headline': headline },
+    },
+    ...rest,
+  };
 }
 
 function parallel(...operations: unknown[]): Record<string, unknown> {
@@ -163,7 +188,7 @@ function makeFileSystem(): Record<string, string | LooseSingleCardDocument> {
         @operation static restate = {
           base: 'transform',
           params: { headline: StringField },
-          input: bxl\`{headline: params("headline")}\`,
+          input: bxl\`. + {headline: (.headline // "Restated by default")}\`,
           set: { headline: params('headline') },
         };
 
@@ -180,6 +205,29 @@ function makeFileSystem(): Record<string, string | LooseSingleCardDocument> {
           query: { filter: { on: Person, eq: { firstName: 'Reviewer' } } },
         };
 
+        @operation static headlineOnly = {
+          base: 'read',
+          output: bxl\`{data: {type: "card", id: .data.id, attributes: {headline: .data.attributes.headline, readBy: actor()}}}\`,
+        };
+
+        @operation static retire = {
+          base: 'delete',
+          params: { confirm: StringField },
+          input: bxl\`.\`,
+        };
+
+        @operation static settled = {
+          base: 'transform',
+          set: { status: 'escalated' },
+          output: bxl\`{data: {escalatedIn: realmConfig("timezone")}}\`,
+        };
+
+        @operation static broken = {
+          base: 'transform',
+          set: { status: 'escalated' },
+          output: bxl\`{data: {status: instance("status")}}\`,
+        };
+
         static isolated = class Isolated extends Component<typeof this> {
           <template><h1><@fields.headline /></h1></template>
         }
@@ -191,6 +239,87 @@ function makeFileSystem(): Record<string, string | LooseSingleCardDocument> {
         }
       }
     `,
+    // A type whose *default* `read` is specialized, which is what makes the
+    // plain card+json `GET` of its cards a projected one.
+    'projected.gts': `
+      import { contains, field, CardDef, Component } from "@cardstack/base/card-api";
+      import StringField from "@cardstack/base/string";
+      import { operation, bxl } from "@cardstack/base/operations";
+
+      export class ProjectedReport extends CardDef {
+        @field headline = contains(StringField);
+        @field salary = contains(StringField);
+
+        @operation static read = {
+          base: 'read',
+          output: bxl\`{data: {type: "card", id: .data.id, attributes: {headline: .data.attributes.headline}, meta: .data.meta}}\`,
+        };
+
+        static isolated = class Isolated extends Component<typeof this> {
+          <template><h1><@fields.headline /></h1></template>
+        }
+        static embedded = class Embedded extends Component<typeof this> {
+          <template><h1><@fields.headline /></h1></template>
+        }
+        static fitted = class Fitted extends Component<typeof this> {
+          <template><h1><@fields.headline /></h1></template>
+        }
+      }
+    `,
+    // The realm's own config document, carrying the settings a transform reads
+    // with `realmConfig(…)`.
+    'realm.json': realmConfigCardJSON({
+      name: 'Card Operations Envelope Test Realm',
+      config: { timezone: 'UTC' },
+    }),
+    'staged.gts': `
+      import { contains, field, CardDef, Component } from "@cardstack/base/card-api";
+      import StringField from "@cardstack/base/string";
+      import { operation, bxl } from "@cardstack/base/operations";
+
+      export class StagedReadReport extends CardDef {
+        @field headline = contains(StringField);
+
+        @operation static read = {
+          base: 'read',
+          input: bxl\`.\`,
+        };
+
+        static isolated = class Isolated extends Component<typeof this> {
+          <template><h1><@fields.headline /></h1></template>
+        }
+        static embedded = class Embedded extends Component<typeof this> {
+          <template><h1><@fields.headline /></h1></template>
+        }
+        static fitted = class Fitted extends Component<typeof this> {
+          <template><h1><@fields.headline /></h1></template>
+        }
+      }
+    `,
+    'staged-report.json': {
+      data: {
+        type: 'card',
+        attributes: { headline: 'Quarterly Review' },
+        meta: {
+          adoptsFrom: {
+            module: rri(`${testRealmHref}staged`),
+            name: 'StagedReadReport',
+          },
+        },
+      },
+    },
+    'projected-report.json': {
+      data: {
+        type: 'card',
+        attributes: { headline: 'Quarterly Review', salary: '120000' },
+        meta: {
+          adoptsFrom: {
+            module: rri(`${testRealmHref}projected`),
+            name: 'ProjectedReport',
+          },
+        },
+      },
+    },
     'event-log.gts': `
       import { contains, containsMany, field, CardDef, FieldDef, Component } from "@cardstack/base/card-api";
       import StringField from "@cardstack/base/string";
@@ -247,7 +376,12 @@ function makeFileSystem(): Record<string, string | LooseSingleCardDocument> {
         'report-uncached',
         'report-canonical',
         'report-query',
-        'report-unserved',
+        'report-restated',
+        'report-restated-explicit',
+        'report-projected',
+        'report-broken-output',
+        'report-retired',
+        'report-settled',
         'report-position',
         // One per group test, for the same reason.
         'report-parallel-1',
@@ -261,6 +395,13 @@ function makeFileSystem(): Record<string, string | LooseSingleCardDocument> {
         'report-nested-3',
         'report-shape',
         'report-tree-write',
+        // One per base-version test, for the same reason.
+        'report-base-fresh',
+        'report-base-stale',
+        'report-base-absent',
+        'report-base-refused',
+        'report-base-read',
+        'report-base-read-stale',
       ].map((name) => [`${name}.json`, reportFile()]),
     ),
     // The one report that is not open, so an operation asserting that it is
@@ -277,12 +418,77 @@ function makeFileSystem(): Record<string, string | LooseSingleCardDocument> {
         meta: { adoptsFrom: EXTERNAL_REPORT },
       },
     },
+    // The cards a query target finds. Each carries a headline of its own, so a
+    // filter picks out exactly the fixtures one test is about — the shared
+    // `Quarterly Review` reports above would otherwise all answer to it.
+    ...Object.fromEntries(
+      [
+        ['find-one', 'Find One'],
+        ['find-two-a', 'Find Two'],
+        ['find-two-b', 'Find Two'],
+        ['find-many-a', 'Find Many'],
+        ['find-many-b', 'Find Many'],
+        ['find-conflict', 'Find Conflict'],
+        ['find-expanded-a', 'Find Expanded'],
+        ['find-closed', 'Find Closed'],
+      ].map(([name, headline]) => [
+        `${name}.json`,
+        {
+          data: {
+            type: 'card',
+            attributes: {
+              headline,
+              status: name === 'find-closed' ? 'closed' : 'open',
+              comments: [],
+            },
+            relationships: { owner: { links: { self: './reviewer' } } },
+            meta: { adoptsFrom: EXTERNAL_REPORT },
+          },
+        },
+      ]),
+    ),
+    // The second member of the `Find Expanded` pair, whose own operation
+    // refuses — so a refusal from inside an expansion has a position to name.
+    'find-expanded-b.json': {
+      data: {
+        type: 'card',
+        attributes: {
+          headline: 'Find Expanded',
+          status: 'closed',
+          comments: [],
+        },
+        relationships: { owner: { links: { self: './reviewer' } } },
+        meta: { adoptsFrom: EXTERNAL_REPORT },
+      },
+    },
+    // A report whose owner is its own, so following the link and writing what
+    // it points at is observable without disturbing the shared reviewer.
+    'find-hop.json': {
+      data: {
+        type: 'card',
+        attributes: { headline: 'Find Hop', status: 'open', comments: [] },
+        relationships: { owner: { links: { self: './find-hop-owner' } } },
+        meta: { adoptsFrom: EXTERNAL_REPORT },
+      },
+    },
+    'find-hop-owner.json': {
+      data: {
+        type: 'card',
+        attributes: { firstName: 'Owner' },
+        meta: { adoptsFrom: PERSON },
+      },
+    },
     'notes.md': '# Notes\n',
     'positions.log': 'boot\n',
     'group.log': 'boot\n',
     // A stored file the registered-extension table does not name, so its URL
     // classifies as a card and the executor is what tells the two apart.
-    'telemetry.log': 'boot\n',
+    'telemetry.conf': 'boot\n',
+    // Typed by the platform's extension table as base's `LogFile` and
+    // `JSONLFile`, whose declared `record` operations the realm reaches with
+    // no configuration of its own.
+    'audit.log': 'opened\n',
+    'events.jsonl': '{"what":"opened"}\n',
   };
 }
 
@@ -334,7 +540,7 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
     async function indexJobIds(): Promise<number[]> {
       let rows = (await testDbAdapter.execute(
         `select id from jobs where job_type = 'incremental-index'
-         and concurrency_group = $1 order by id`,
+         and (concurrency_group = $1 or lane_family = $1) order by id`,
         { bind: [`indexing:${realm.url}`] },
       )) as { id: number | string }[];
       return rows.map((row) => Number(row.id));
@@ -380,6 +586,44 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
     function query(body: string) {
       return post(body).set('X-HTTP-Method-Override', 'QUERY');
     }
+
+    // A browser reaches this endpoint across an origin boundary, and neither
+    // of this project's suites crosses one: the host's integration tests drive
+    // an in-browser realm with no network, and everything here runs on node
+    // `fetch`, which has no CORS. So the request being *deliverable* is pinned
+    // separately from the request being answered correctly.
+    module('cross-origin delivery', function () {
+      test('the preflight allows every header the envelope carries', async function (assert) {
+        let response = await request
+          .options('/_operations')
+          .set('Origin', 'https://localhost:4200')
+          .set('Access-Control-Request-Method', 'POST')
+          .set(
+            'Access-Control-Request-Headers',
+            'accept, authorization, content-type',
+          );
+
+        let allowed = String(
+          response.headers['access-control-allow-headers'] ?? '',
+        )
+          .split(',')
+          .map((header) => header.trim().toLowerCase());
+
+        // `Accept` is the one worth naming. It is normally CORS-safelisted, so
+        // its absence from the allow list looks impossible — but the safelist
+        // covers only values free of `"`, `:` and the rest of the forbidden
+        // set, and this endpoint's media type is
+        // `application/vnd.api+json;ext="…"`, which carries both. So the
+        // request preflights, and without `Accept` allowed the preflight is
+        // refused and no browser can invoke any operation at all.
+        for (let header of ['accept', 'authorization', 'content-type']) {
+          assert.true(
+            allowed.includes(header),
+            `the preflight allows ${header}: ${allowed.join(', ')}`,
+          );
+        }
+      });
+    });
 
     module('validation', function () {
       test('an href outside this realm is refused, naming the entry', async function (assert) {
@@ -675,28 +919,6 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
         assert.strictEqual(response.body.errors[0].meta.entry, 0);
       });
 
-      test('an operation whose declaration carries a stage a batch does not run is refused', async function (assert) {
-        let response = await post(
-          envelope(
-            invoke('restate', {
-              href: '/report-unserved',
-              data: { headline: 'Revised' },
-            }),
-          ),
-        );
-
-        assert.strictEqual(response.status, 501, 'HTTP 501 status');
-        assert.true(
-          response.body.errors[0].detail.includes('input'),
-          `the refusal names the stage: ${response.body.errors[0].detail}`,
-        );
-        assert.strictEqual(
-          storedCard('report-unserved.json').data.attributes?.headline,
-          'Quarterly Review',
-          'and nothing was written under a declaration half carried out',
-        );
-      });
-
       test('two entries claiming one local id are refused', async function (assert) {
         let response = await post(
           envelope(
@@ -907,7 +1129,7 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
         let response = await post(
           envelope(
             invoke('appendLine', {
-              href: '/telemetry.log',
+              href: '/telemetry.conf',
               data: { line: 'deployed' },
             }),
           ),
@@ -915,7 +1137,7 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
 
         assert.strictEqual(response.status, 200, 'HTTP 200 status');
         assert.strictEqual(
-          readFileSync(realmFile('telemetry.log'), 'utf8'),
+          readFileSync(realmFile('telemetry.conf'), 'utf8'),
           'boot\ndeployed\n',
           'the line is on the end of the file',
         );
@@ -1418,6 +1640,316 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       });
     });
 
+    module('query-defined targets', function () {
+      test('the one card a query matches is the card the entry runs against', async function (assert) {
+        let response = await post(
+          envelope(
+            invoke('escalate', { 'boxel:target': findReports('Find One') }),
+          ),
+        );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        assert.strictEqual(
+          storedCard('find-one.json').data.attributes?.status,
+          'escalated',
+          'the found card was written',
+        );
+        // The result is the one a named target produces, and its id is the
+        // card the query found — which is how a caller that did not know the
+        // URL learns it.
+        let [result] = response.body['atomic:results'];
+        assert.strictEqual(result.data.id, `${testRealmHref}find-one`);
+        assert.strictEqual(result.data.type, 'card');
+      });
+
+      test('a query matching nothing is refused, naming the entry', async function (assert) {
+        let response = await post(
+          envelope(
+            invoke('escalate', { href: '/report-kept' }),
+            invoke('escalate', { 'boxel:target': findReports('Find Nobody') }),
+          ),
+        );
+
+        assert.strictEqual(response.status, 400, 'HTTP 400 status');
+        let [error] = response.body.errors;
+        assert.strictEqual(error.code, 'invalid-params');
+        assert.strictEqual(error.meta.entry, 1);
+        assert.true(
+          error.detail.includes('matched no card'),
+          `detail names the count: ${error.detail}`,
+        );
+        assert.strictEqual(
+          storedCard('report-kept.json').data.attributes?.status,
+          'open',
+          'and the entry that would have succeeded wrote nothing',
+        );
+      });
+
+      test('a query matching several is refused, naming how many', async function (assert) {
+        let response = await post(
+          envelope(
+            invoke('escalate', { 'boxel:target': findReports('Find Two') }),
+          ),
+        );
+
+        assert.strictEqual(response.status, 400, 'HTTP 400 status');
+        let [error] = response.body.errors;
+        assert.true(
+          error.detail.includes('2 cards answer to it'),
+          `detail names the count: ${error.detail}`,
+        );
+        for (let card of ['find-two-a', 'find-two-b']) {
+          assert.strictEqual(
+            storedCard(`${card}.json`).data.attributes?.status,
+            'open',
+            `${card} was not written`,
+          );
+        }
+      });
+
+      test('an entry expecting many runs against every match and answers with an array', async function (assert) {
+        let jobsBefore = await indexJobIds();
+
+        let response = await post(
+          envelope(
+            invoke('escalate', {
+              'boxel:target': findReports('Find Many', { expect: 'many' }),
+            }),
+          ),
+        );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        for (let card of ['find-many-a', 'find-many-b']) {
+          assert.strictEqual(
+            storedCard(`${card}.json`).data.attributes?.status,
+            'escalated',
+            `${card} was written`,
+          );
+        }
+        // The entry's slot holds an array of the results its targets produced,
+        // in the order the index returned them — the shape a group's position
+        // already has, because the expansion is one.
+        let [results] = response.body['atomic:results'];
+        assert.deepEqual(
+          results.map((result: { data: { id: string } }) => result.data.id),
+          [`${testRealmHref}find-many-a`, `${testRealmHref}find-many-b`],
+        );
+        // Lean results: an identity and its version, never the document that
+        // was written.
+        assert.deepEqual(Object.keys(results[0].data).sort(), [
+          'id',
+          'meta',
+          'type',
+        ]);
+        // And the expansion is still one batch — the found targets commit
+        // together, under one job, the way the caller's own entries do.
+        assert.strictEqual(
+          (await indexJobIds()).length - jobsBefore.length,
+          1,
+          'the whole expansion indexed under one job',
+        );
+      });
+
+      test('an entry expecting many and matching nothing answers with an empty array', async function (assert) {
+        let jobsBefore = await indexJobIds();
+
+        let response = await post(
+          envelope(
+            invoke('escalate', {
+              'boxel:target': findReports('Find Nobody', { expect: 'many' }),
+            }),
+          ),
+        );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        assert.deepEqual(response.body['atomic:results'], [[]]);
+        // Nothing matched, so nothing staged: the batch takes no lock and has
+        // nothing to announce.
+        assert.strictEqual(
+          (await indexJobIds()).length,
+          jobsBefore.length,
+          'no index job was enqueued',
+        );
+      });
+
+      test('a refusal from inside an expansion names which of the found targets produced it', async function (assert) {
+        // The second `Find Expanded` report is closed, and the operation
+        // asserts that a report is open — so the expansion's second target is
+        // the one that refuses, and the position it is named by is the path to
+        // it through the entry that found it.
+        let response = await post(
+          envelope(
+            invoke('escalate', { href: '/report-kept' }),
+            invoke('openOnly', {
+              'boxel:target': findReports('Find Expanded', { expect: 'many' }),
+            }),
+          ),
+        );
+
+        assert.strictEqual(response.status, 400, 'HTTP 400 status');
+        let [error] = response.body.errors;
+        assert.strictEqual(error.code, 'assertion-failed');
+        assert.strictEqual(error.meta.entry, '[1].boxel:target[1]');
+        assert.strictEqual(
+          storedCard('find-expanded-a.json').data.attributes?.status,
+          'open',
+          'and the target before it in the same expansion wrote nothing',
+        );
+      });
+
+      test('a field on the matched card makes the card it links to the target', async function (assert) {
+        let response = await post(
+          envelope(
+            invoke('update', {
+              'boxel:target': findReports('Find Hop', { field: 'owner' }),
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Reassigned' },
+                meta: { adoptsFrom: PERSON },
+              },
+            }),
+          ),
+        );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        assert.strictEqual(
+          storedCard('find-hop-owner.json').data.attributes?.firstName,
+          'Reassigned',
+          'the linked card was written',
+        );
+        assert.strictEqual(
+          storedCard('find-hop.json').data.attributes?.headline,
+          'Find Hop',
+          'and the card the query matched was not',
+        );
+        let [result] = response.body['atomic:results'];
+        assert.strictEqual(result.data.id, `${testRealmHref}find-hop-owner`);
+      });
+
+      test('a field that is not a link is refused, naming what it is', async function (assert) {
+        let response = await post(
+          envelope(
+            invoke('escalate', {
+              'boxel:target': findReports('Find One', { field: 'status' }),
+            }),
+          ),
+        );
+
+        assert.strictEqual(response.status, 400, 'HTTP 400 status');
+        let [error] = response.body.errors;
+        assert.strictEqual(error.code, 'invalid-params');
+        assert.true(
+          error.detail.includes('is a contains field'),
+          `detail names the field's type: ${error.detail}`,
+        );
+      });
+
+      test('a card this batch creates is not one its own query can match', async function (assert) {
+        let jobsBefore = await indexJobIds();
+
+        let response = await post(
+          envelope(
+            invoke('create', {
+              data: {
+                type: 'card',
+                attributes: {
+                  headline: 'Find Created',
+                  status: 'open',
+                  comments: [],
+                },
+                meta: { adoptsFrom: EXTERNAL_REPORT },
+              },
+            }),
+            invoke('escalate', { 'boxel:target': findReports('Find Created') }),
+          ),
+        );
+
+        assert.strictEqual(response.status, 400, 'HTTP 400 status');
+        let [error] = response.body.errors;
+        assert.strictEqual(error.meta.entry, 1);
+        assert.true(
+          error.detail.includes(
+            'a card another entry of this batch creates is not one it can match',
+          ),
+          `detail says why: ${error.detail}`,
+        );
+        assert.strictEqual(
+          (await indexJobIds()).length,
+          jobsBefore.length,
+          'and the create the batch was refused over was not carried out',
+        );
+      });
+
+      test('a create cannot take its target from a query', async function (assert) {
+        let response = await post(
+          envelope(
+            invoke('create', { 'boxel:target': findReports('Find One') }),
+          ),
+        );
+
+        assert.strictEqual(response.status, 400, 'HTTP 400 status');
+        let [error] = response.body.errors;
+        assert.strictEqual(error.code, 'invalid-params');
+        assert.true(
+          error.detail.includes('takes its target from a query'),
+          `detail says why: ${error.detail}`,
+        );
+      });
+
+      test('a found target collides with a parallel sibling that named the same card', async function (assert) {
+        // The conflict rule reads the files each member staged a change to, so
+        // it does not matter that one member named its target and the other
+        // described it — which is the property the whole resolution rests on.
+        let response = await post(
+          envelope(
+            parallel(
+              invoke('escalate', { href: '/find-conflict' }),
+              invoke('addComment', {
+                'boxel:target': findReports('Find Conflict'),
+                data: { body: 'at the same time' },
+              }),
+            ),
+          ),
+        );
+
+        assert.strictEqual(response.status, 400, 'HTTP 400 status');
+        let [error] = response.body.errors;
+        assert.strictEqual(error.code, 'conflicting-targets');
+        assert.strictEqual(error.meta.entry, '[0].boxel:operations[1]');
+        assert.strictEqual(error.meta.conflictsWith, '[0].boxel:operations[0]');
+        assert.strictEqual(
+          storedCard('find-conflict.json').data.attributes?.status,
+          'open',
+          'and neither of them was written',
+        );
+      });
+
+      test('a read may describe its target too, and a read-only batch carries one', async function (assert) {
+        let response = await query(
+          envelope(invoke('read', { 'boxel:target': findReports('Find Two') })),
+        );
+
+        // Two cards answer to it, and a read is held to the same count rule as
+        // a write: what the entry answers with is one document, so which of
+        // the two it would be is not a question the realm picks for the caller.
+        assert.strictEqual(response.status, 400, 'HTTP 400 status');
+        assert.true(
+          response.body.errors[0].detail.includes('2 cards answer to it'),
+          response.body.errors[0].detail,
+        );
+
+        let found = await query(
+          envelope(
+            invoke('read', { 'boxel:target': findReports('Find Closed') }),
+          ),
+        );
+        assert.strictEqual(found.status, 200, 'HTTP 200 status');
+        let [result] = found.body['atomic:results'];
+        assert.strictEqual(result.data.id, `${testRealmHref}find-closed`);
+        assert.strictEqual(result.data.attributes.status, 'closed');
+      });
+    });
+
     module('identity', function () {
       test('an operation that reads the actor refuses a request that authenticated nobody', async function (assert) {
         let response = await anonymousPost(
@@ -1469,6 +2001,802 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           [{ body: 'Reviewed.', postedBy: TESTER }],
           'the comment records the caller the realm verified, and no other ' +
             'identity is invented for it',
+        );
+      });
+    });
+
+    // A caller that holds a card names the version it computed its write on top
+    // of, and the result says whether the realm executed from the same one.
+    //
+    // The comparison is the coordinator's and is made inside the write lock
+    // against the bytes it read there; what these are about is the wire — the
+    // spelling a caller sends a base version with, and that nothing reaches the
+    // stored file on the way through. A mismatch is reported and not refused:
+    // refusing a write on a stale base is what `If-Match` is for, on the card
+    // verbs, and a batch entry saying so would make the two mean the same
+    // thing.
+    module('base versions', function () {
+      // The version a write reports is the token the next write names as its
+      // base, so this reads one out of a result and sends it straight back.
+      test('an entry naming the version the card holds reports the base matched', async function (assert) {
+        let first = await post(
+          envelope(
+            invoke('addComment', {
+              href: '/report-base-fresh',
+              data: { body: 'First.' },
+            }),
+          ),
+        );
+        assert.strictEqual(first.status, 200, 'HTTP 200 status');
+        let version = first.body['atomic:results'][0].data.meta.version;
+        assert.strictEqual(
+          typeof version,
+          'string',
+          'the first write reported a version to name as a base',
+        );
+
+        let second = await post(
+          envelope(
+            invoke('addComment', {
+              href: '/report-base-fresh',
+              data: { body: 'Second.', meta: { baseVersion: version } },
+            }),
+          ),
+        );
+
+        assert.strictEqual(second.status, 200, 'HTTP 200 status');
+        let [result] = second.body['atomic:results'];
+        assert.true(
+          result.data.meta.baseMatched,
+          'the realm executed from the version the caller named',
+        );
+        assert.deepEqual(
+          storedCard('report-base-fresh.json').data.attributes?.comments,
+          [
+            { body: 'First.', postedBy: TESTER },
+            { body: 'Second.', postedBy: TESTER },
+          ],
+          'both writes landed',
+        );
+      });
+
+      // The base a first operation names cannot come from a write — there has
+      // not been one yet. So the read has to supply it, and these two tests are
+      // the round trip that makes the first operation on a card the client has
+      // only looked at reconcile like every one after it.
+      test('the version a GET reports is accepted as a base', async function (assert) {
+        let read = await request
+          .get('/report-base-read')
+          .set('Accept', 'application/vnd.card+json');
+        assert.strictEqual(read.status, 200, `HTTP 200 status: ${read.text}`);
+        let version = read.body.data.meta.version;
+        assert.strictEqual(
+          typeof version,
+          'string',
+          'the read reported a version to name as a base',
+        );
+
+        let response = await post(
+          envelope(
+            invoke('addComment', {
+              href: '/report-base-read',
+              data: {
+                body: 'On a base taken from a read.',
+                meta: { baseVersion: version },
+              },
+            }),
+          ),
+        );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        let [result] = response.body['atomic:results'];
+        assert.true(
+          result.data.meta.baseMatched,
+          'the realm executed from the bytes the read described',
+        );
+      });
+
+      // The other half of the same claim, and the one that says the version is
+      // bound to a state rather than being a constant the read hands out: a
+      // base taken from a read has to stop matching once someone else writes.
+      test('a version read before someone else’s write no longer matches', async function (assert) {
+        let read = await request
+          .get('/report-base-read-stale')
+          .set('Accept', 'application/vnd.card+json');
+        assert.strictEqual(read.status, 200, `HTTP 200 status: ${read.text}`);
+        let stale = read.body.data.meta.version;
+        assert.strictEqual(
+          typeof stale,
+          'string',
+          'the read reported a version to name as a base',
+        );
+
+        let foreign = await post(
+          envelope(
+            invoke('addComment', {
+              href: '/report-base-read-stale',
+              data: { body: 'Someone else got here first.' },
+            }),
+          ),
+        );
+        assert.strictEqual(foreign.status, 200, 'HTTP 200 status');
+
+        let reread = await request
+          .get('/report-base-read-stale')
+          .set('Accept', 'application/vnd.card+json');
+        assert.strictEqual(
+          reread.status,
+          200,
+          `HTTP 200 status: ${reread.text}`,
+        );
+        assert.strictEqual(
+          reread.body.data.meta.version,
+          foreign.body['atomic:results'][0].data.meta.version,
+          'a read after the write reports the version that write stored',
+        );
+
+        let response = await post(
+          envelope(
+            invoke('addComment', {
+              href: '/report-base-read-stale',
+              data: {
+                body: 'On a base that moved.',
+                meta: { baseVersion: stale },
+              },
+            }),
+          ),
+        );
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        assert.false(
+          response.body['atomic:results'][0].data.meta.baseMatched,
+          'the base read earlier no longer describes the card',
+        );
+      });
+
+      test('an entry naming a version the card has moved past applies anyway and reports the mismatch', async function (assert) {
+        let response = await post(
+          envelope(
+            invoke('addComment', {
+              href: '/report-base-stale',
+              data: {
+                body: 'Sent against a base that moved.',
+                meta: { baseVersion: 'a-version-this-card-never-held' },
+              },
+            }),
+          ),
+        );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        let [result] = response.body['atomic:results'];
+        assert.false(
+          result.data.meta.baseMatched,
+          'the realm reports that it executed from a different base',
+        );
+        assert.deepEqual(
+          storedCard('report-base-stale.json').data.attributes?.comments,
+          [{ body: 'Sent against a base that moved.', postedBy: TESTER }],
+          'the write still applied — a moved base is reported, not refused',
+        );
+      });
+
+      // Absent rather than `false`. A caller that named no base asked nothing,
+      // and answering `false` would tell it its base did not match — a claim
+      // about a base it never stated.
+      test('an entry naming no base version has no baseMatched key', async function (assert) {
+        let response = await post(
+          envelope(
+            invoke('addComment', {
+              href: '/report-base-absent',
+              data: { body: 'No base named.' },
+            }),
+          ),
+        );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        let [result] = response.body['atomic:results'];
+        // The positive control, for the reason absence assertions need one: a
+        // result carrying no meta at all would satisfy the check below just as
+        // well as one deliberately withholding the key. A write always reports
+        // a version, so finding one establishes that this meta is populated and
+        // the absence is about `baseMatched`.
+        assert.strictEqual(
+          typeof result.data.meta.version,
+          'string',
+          'the result carries a populated write meta',
+        );
+        assert.false(
+          'baseMatched' in result.data.meta,
+          `the result reports nothing about a base: ${JSON.stringify(
+            result.data.meta,
+          )}`,
+        );
+      });
+
+      // The base version is the envelope's to read, so it must not reach the
+      // patch the entry stages. `meta` legitimately carries `adoptsFrom` and
+      // `fields`, so it cannot be dropped wholesale — the member is lifted out
+      // of it, and this is what says so.
+      test('a base version is not written into the card it names', async function (assert) {
+        let response = await post(
+          envelope(
+            invoke('update', {
+              href: '/report-base-refused',
+              data: {
+                type: 'card',
+                attributes: { status: 'escalated' },
+                meta: {
+                  adoptsFrom: EXTERNAL_REPORT,
+                  baseVersion: 'a-version-this-card-never-held',
+                },
+              },
+            }),
+          ),
+        );
+
+        assert.strictEqual(
+          response.status,
+          200,
+          `HTTP 200 status: ${response.text}`,
+        );
+        let stored = storedCard('report-base-refused.json');
+        assert.strictEqual(
+          stored.data.attributes?.status,
+          'escalated',
+          'the patch landed',
+        );
+        assert.false(
+          'baseVersion' in (stored.data.meta as unknown as object),
+          `the stored card carries no base version: ${JSON.stringify(
+            stored.data.meta,
+          )}`,
+        );
+      });
+
+      test('a base version that is not a non-empty string is refused, naming the entry', async function (assert) {
+        for (let [label, baseVersion] of [
+          ['a number', 7],
+          ['an empty string', ''],
+        ] as const) {
+          let response = await post(
+            envelope(
+              invoke('addComment', {
+                href: '/report-base-absent',
+                data: { body: 'Refused.', meta: { baseVersion } },
+              }),
+            ),
+          );
+
+          assert.strictEqual(response.status, 400, `HTTP 400 status: ${label}`);
+          let [error] = response.body.errors;
+          assert.strictEqual(
+            error.meta.entry,
+            0,
+            `the entry is named: ${label}`,
+          );
+          assert.true(
+            error.detail.includes('baseVersion'),
+            `the refusal names the member: ${error.detail}`,
+          );
+        }
+      });
+
+      // A read never reaches the coordinator — it is answered before the batch
+      // is staged — so the refusal for an entry that cannot use a base version
+      // has to be made where every entry's definition is known. Without it a
+      // well-formed base version on a read is silently dropped, which is the
+      // same answer as a realm that does not report on bases at all, while a
+      // malformed one on the same read is a refusal.
+      test('a base version on an entry that writes nothing is refused, naming the entry', async function (assert) {
+        let response = await post(
+          envelope(
+            invoke('read', {
+              href: '/report-base-absent',
+              data: { meta: { baseVersion: 'a-version-a-read-cannot-use' } },
+            }),
+          ),
+        );
+
+        assert.strictEqual(response.status, 400, 'HTTP 400 status');
+        let [error] = response.body.errors;
+        assert.strictEqual(error.meta.entry, 0, 'the entry is named');
+        assert.true(
+          error.detail.includes('base version'),
+          `the refusal says a read has no base version: ${error.detail}`,
+        );
+        assert.strictEqual(
+          response.body['atomic:results'],
+          undefined,
+          'the batch answered nothing',
+        );
+      });
+
+      // A create has no prior state for a base version to describe and a delete
+      // has none left to report a match on, so naming one is a caller that
+      // believes it is writing conditionally when nothing is comparing
+      // anything. Refused rather than ignored, for that reason.
+      test('a base version on a create is refused, naming the entry', async function (assert) {
+        let response = await post(
+          envelope(
+            invoke('create', {
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Mango' },
+                meta: {
+                  adoptsFrom: PERSON,
+                  baseVersion: 'a-version-no-new-card-has',
+                },
+              },
+            }),
+          ),
+        );
+
+        assert.strictEqual(response.status, 400, 'HTTP 400 status');
+        let [error] = response.body.errors;
+        assert.strictEqual(error.meta.entry, 0, 'the entry is named');
+        assert.true(
+          error.detail.includes('base version'),
+          `the refusal says a create has no base version: ${error.detail}`,
+        );
+      });
+    });
+
+    // The two stages around an operation, end to end: what a declaration's
+    // `input` and `output` do to a real batch, and what a projected default
+    // `read` does to the card+json `GET` of the cards that carry it. The
+    // stages' own semantics are `card-operations-transforms-test.ts`; these
+    // are about a declaration reaching them through a lowered definition and a
+    // served response.
+    module('transforms', function () {
+      test('an input fills a value the params check would have refused', async function (assert) {
+        // No headline is sent, so the value the write stores is one only the
+        // program could have produced — and without the stage the entry does
+        // not reach the write at all, since `headline` is a declared param.
+        let response = await post(
+          envelope(invoke('restate', { href: '/report-restated' })),
+        );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        assert.strictEqual(
+          storedCard('report-restated.json').data.attributes?.headline,
+          'Restated by default',
+          'the write ran on the payload the input produced',
+        );
+      });
+
+      test("a caller's own value still wins over the input's default", async function (assert) {
+        let response = await post(
+          envelope(
+            invoke('restate', {
+              href: '/report-restated-explicit',
+              data: { headline: 'Revised' },
+            }),
+          ),
+        );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        assert.strictEqual(
+          storedCard('report-restated-explicit.json').data.attributes?.headline,
+          'Revised',
+        );
+      });
+
+      test("a write's output projects the result, and reads the realm's settings", async function (assert) {
+        // The same stage on the other transport: a read's `output` reaches the
+        // realm's settings through the operation core, and a write's reaches
+        // them through the batch handler, so one declaration cannot answer on
+        // one transport and refuse on the other.
+        let response = await post(
+          envelope(invoke('settled', { href: '/report-settled' })),
+        );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        assert.deepEqual(
+          response.body['atomic:results'][0],
+          { data: { escalatedIn: 'UTC' } },
+          'the projection is the whole of what the write answers with',
+        );
+        assert.strictEqual(
+          storedCard('report-settled.json').data.attributes?.status,
+          'escalated',
+          'and the write it projected landed',
+        );
+      });
+
+      test('an output projects a read, and the redacted field is gone', async function (assert) {
+        let response = await query(
+          envelope(invoke('headlineOnly', { href: '/report-projected' })),
+        );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        let [projected] = response.body['atomic:results'];
+        assert.deepEqual(
+          projected,
+          {
+            data: {
+              type: 'card',
+              id: `${testRealmHref}report-projected`,
+              attributes: { headline: 'Quarterly Review', readBy: TESTER },
+            },
+          },
+          'the projection is the whole answer: no status, no comments, no ' +
+            'owner relationship, and the caller it was projected for',
+        );
+      });
+
+      test('a failing output is a 400 over a write that has already landed', async function (assert) {
+        let response = await post(
+          envelope(invoke('broken', { href: '/report-broken-output' })),
+        );
+
+        assert.strictEqual(response.status, 400, 'HTTP 400 status');
+        let [error] = response.body.errors;
+        assert.strictEqual(error.code, 'invalid-params');
+        assert.strictEqual(error.meta.stage, 'output');
+        assert.strictEqual(error.meta.entry, 0);
+        assert.strictEqual(
+          storedCard('report-broken-output.json').data.attributes?.status,
+          'escalated',
+          'the stage projects the result of a commit, so the commit is ' +
+            'behind it: a refusal here says the caller cannot be told what ' +
+            'happened, not that nothing did',
+        );
+      });
+
+      test('the card+json GET of a projected type is served the projection, uncacheable', async function (assert) {
+        let response = await request
+          .get('/projected-report')
+          .set('Accept', SupportedMimeType.CardJson)
+          .set(
+            'Authorization',
+            `Bearer ${createJWT(realm, TESTER, ['read', 'write'])}`,
+          );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        assert.strictEqual(
+          response.body.data.attributes.headline,
+          'Quarterly Review',
+        );
+        assert.strictEqual(
+          response.body.data.attributes.salary,
+          undefined,
+          'the field the projection leaves out is not served',
+        );
+        assert.strictEqual(
+          response.get('Cache-Control'),
+          'private, no-store',
+          'a projected body is held by no cache, shared or otherwise',
+        );
+        assert.ok(
+          response.get('ETag'),
+          'and the validator is still emitted, for a conditional write',
+        );
+      });
+
+      test('a matching If-None-Match does not 304 a projected read', async function (assert) {
+        let path = '/projected-report';
+        let authorization = `Bearer ${createJWT(realm, TESTER, ['read', 'write'])}`;
+        let first = await request
+          .get(path)
+          .set('Accept', SupportedMimeType.CardJson)
+          .set('Authorization', authorization);
+        let etag = first.get('ETag');
+        assert.ok(etag, 'the first read emitted a validator');
+
+        let conditional = await request
+          .get(path)
+          .set('Accept', SupportedMimeType.CardJson)
+          .set('Authorization', authorization)
+          .set('If-None-Match', etag!);
+
+        assert.strictEqual(
+          conditional.status,
+          200,
+          'the validator describes the unprojected document, so it cannot ' +
+            'answer for this body',
+        );
+        assert.strictEqual(
+          conditional.body.data.attributes.headline,
+          'Quarterly Review',
+        );
+
+        let head = await request
+          .head(path)
+          .set('Accept', SupportedMimeType.CardJson)
+          .set('Authorization', authorization)
+          .set('If-None-Match', etag!);
+        assert.strictEqual(
+          head.status,
+          200,
+          'a HEAD states the headers the GET would send, 304 included',
+        );
+        assert.strictEqual(head.get('Cache-Control'), 'private, no-store');
+      });
+
+      test('a declared write is held to its params before anything is staged', async function (assert) {
+        // The behaviors read a payload differently enough that some would
+        // never notice one was missing — a `delete` reads none at all — so the
+        // check cannot be left to the executor that would carry the write out.
+        let response = await post(
+          envelope(invoke('retire', { href: '/report-retired' })),
+        );
+
+        assert.strictEqual(response.status, 400, 'HTTP 400 status');
+        let [error] = response.body.errors;
+        assert.strictEqual(error.code, 'invalid-params');
+        assert.true(
+          error.detail.includes('params("confirm")'),
+          `the refusal names the value it wanted: ${error.detail}`,
+        );
+        assert.true(
+          existsSync(realmFile('report-retired.json')),
+          'and the card the caller said too little to remove is still there',
+        );
+      });
+
+      test('a read carrying only an input still runs, so it is never answered 304', async function (assert) {
+        // An `input` changes no byte of the document a read serves, but it can
+        // refuse — so the conditional fast path, which answers without running
+        // the read at all, is off for one.
+        let path = '/staged-report';
+        let authorization = `Bearer ${createJWT(realm, TESTER, ['read', 'write'])}`;
+        let first = await request
+          .get(path)
+          .set('Accept', SupportedMimeType.CardJson)
+          .set('Authorization', authorization);
+
+        assert.strictEqual(first.status, 200, 'HTTP 200 status');
+        assert.strictEqual(
+          first.get('Cache-Control'),
+          'public, max-age=0, must-revalidate',
+          'nothing projected the body, so it is cacheable as any other is',
+        );
+
+        let conditional = await request
+          .get(path)
+          .set('Accept', SupportedMimeType.CardJson)
+          .set('Authorization', authorization)
+          .set('If-None-Match', first.get('ETag')!);
+        assert.strictEqual(
+          conditional.status,
+          200,
+          'the stage has to run, and a 304 would skip it',
+        );
+        assert.strictEqual(
+          conditional.body.data.attributes.headline,
+          'Quarterly Review',
+        );
+      });
+
+      test('a card whose type declares no read is served exactly as before', async function (assert) {
+        let path = '/report-projected';
+        let authorization = `Bearer ${createJWT(realm, TESTER, ['read', 'write'])}`;
+        let first = await request
+          .get(path)
+          .set('Accept', SupportedMimeType.CardJson)
+          .set('Authorization', authorization);
+
+        assert.strictEqual(first.status, 200, 'HTTP 200 status');
+        assert.strictEqual(
+          first.get('Cache-Control'),
+          'public, max-age=0, must-revalidate',
+          'the ordinary directive, on a realm anyone may read',
+        );
+        assert.strictEqual(
+          first.body.data.attributes.status,
+          'open',
+          'every field is served: the named projection above is not this read',
+        );
+
+        let conditional = await request
+          .get(path)
+          .set('Accept', SupportedMimeType.CardJson)
+          .set('Authorization', authorization)
+          .set('If-None-Match', first.get('ETag')!);
+        assert.strictEqual(
+          conditional.status,
+          304,
+          'and its conditional fast path is untouched',
+        );
+      });
+    });
+
+    // ========================================================================
+    // Log files.
+    //
+    // A stored `.log` is base's `LogFile` and a stored `.jsonl` is base's
+    // `JSONLFile`, by the platform's extension table alone — the realm's
+    // `realm.json` says nothing about either. Each class declares a named
+    // `record` built on `appendLine`, whose line the realm composes from its
+    // own clock and the authenticated caller.
+    // ========================================================================
+    module('log files', function () {
+      const TIMESTAMP = String.raw`\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}`;
+
+      function lines(localPath: string): string[] {
+        return readFileSync(realmFile(localPath), 'utf8')
+          .split('\n')
+          .filter((line) => line.length > 0);
+      }
+
+      test('a log is indexed as the base log class', async function (assert) {
+        let rows = (await testDbAdapter.execute(
+          `select types from boxel_index where url = $1 and type = 'file'`,
+          { bind: [`${testRealmHref}audit.log`] },
+        )) as { types: string[] | null }[];
+
+        assert.strictEqual(rows.length, 1, 'the file has an index row');
+        // The row's `types` are the extractor's walk of the real prototype
+        // chain, so they only start with `LogFile` if the text family's
+        // extraction accepted the `.log` rather than refusing it as a content
+        // mismatch.
+        let types = (rows[0].types ?? []).map((key) =>
+          codeRefFromInternalKey(key),
+        );
+        assert.deepEqual(
+          types[0],
+          { module: rri(`${baseRealmRRI}log-file-def`), name: 'LogFile' },
+          'the row is typed by the extension table',
+        );
+        assert.true(
+          types.some(
+            (ref) =>
+              ref?.name === 'TextFileDef' &&
+              ref.module === rri(`${baseRealmRRI}text-file-def`),
+          ),
+          'with the text class it extends on the chain',
+        );
+        assert.deepEqual(
+          types.slice(-2),
+          [baseFileRef, baseRef],
+          'and the chain the platform puts behind every file intact',
+        );
+      });
+
+      test('the document the realm serves for a log names the base log class', async function (assert) {
+        let response = await request
+          .get('/audit.log')
+          .set('Accept', SupportedMimeType.CardJson)
+          .set(
+            'Authorization',
+            `Bearer ${createJWT(realm, TESTER, ['read', 'write'])}`,
+          );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        let { module, name } = response.body.data.meta.adoptsFrom;
+        assert.strictEqual(
+          name,
+          'LogFile',
+          'a client hydrating this document builds the class that carries ' +
+            'the declared operation',
+        );
+        assert.true(
+          String(module).endsWith('/log-file-def'),
+          `and it names the base log module: ${module}`,
+        );
+      });
+
+      test("a log's declared record is invocable by name and stamps what the caller never sent", async function (assert) {
+        let before = lines('audit.log').length;
+        let response = await post(
+          envelope(
+            invoke('record', {
+              href: '/audit.log',
+              data: { what: 'consult requested' },
+            }),
+          ),
+        );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        let after = lines('audit.log');
+        assert.strictEqual(after.length, before + 1, 'one line was appended');
+        assert.true(
+          new RegExp(`^${TIMESTAMP} ${TESTER} consult requested$`).test(
+            after[after.length - 1],
+          ),
+          `the realm supplied the timestamp and the actor it authenticated: ${after[after.length - 1]}`,
+        );
+      });
+
+      test('a caller cannot forge the line a log composes', async function (assert) {
+        // `line` is what the base `appendLine` appends, and not a param
+        // `record` declares. The `input` program computes it over whatever
+        // the caller sent and its value lands last, so a `line` in the payload
+        // is overwritten rather than honoured.
+        let response = await post(
+          envelope(
+            invoke('record', {
+              href: '/audit.log',
+              data: {
+                what: 'follow-up scheduled',
+                line: '@someone-else:localhost approved',
+              },
+            }),
+          ),
+        );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        let after = lines('audit.log');
+        assert.true(
+          new RegExp(`^${TIMESTAMP} ${TESTER} follow-up scheduled$`).test(
+            after[after.length - 1],
+          ),
+          `the line is the one the realm composed: ${after[after.length - 1]}`,
+        );
+      });
+
+      test('the base appendLine stays on a log', async function (assert) {
+        let before = lines('audit.log').length;
+        let response = await post(
+          envelope(
+            invoke('appendLine', {
+              href: '/audit.log',
+              data: { line: 'appended directly' },
+            }),
+          ),
+        );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        let after = lines('audit.log');
+        assert.strictEqual(after.length, before + 1, 'one line was appended');
+        assert.strictEqual(
+          after[after.length - 1],
+          'appended directly',
+          'a declaration adds a name rather than replacing what the def kind ' +
+            'already carries',
+        );
+      });
+
+      test('a JSON Lines file is indexed as the base JSON Lines class', async function (assert) {
+        let rows = (await testDbAdapter.execute(
+          `select types from boxel_index where url = $1 and type = 'file'`,
+          { bind: [`${testRealmHref}events.jsonl`] },
+        )) as { types: string[] | null }[];
+
+        assert.strictEqual(rows.length, 1, 'the file has an index row');
+        assert.deepEqual(
+          codeRefFromInternalKey((rows[0].types ?? [])[0]),
+          { module: rri(`${baseRealmRRI}jsonl-file-def`), name: 'JSONLFile' },
+          'the row is typed by the extension table',
+        );
+      });
+
+      test("a JSON Lines file's declared record appends one JSON entry the realm stamps", async function (assert) {
+        let before = lines('events.jsonl').length;
+        let response = await post(
+          envelope(
+            invoke('record', {
+              href: '/events.jsonl',
+              data: {
+                what: 'consult requested\nwith a second line',
+                line: '{"actor":"@someone-else:localhost"}',
+              },
+            }),
+          ),
+        );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        let after = lines('events.jsonl');
+        assert.strictEqual(
+          after.length,
+          before + 1,
+          'one line was appended, the break inside the entry escaped',
+        );
+        let entry = JSON.parse(after[after.length - 1]);
+        assert.deepEqual(
+          Object.keys(entry).sort(),
+          ['actor', 'at', 'what'],
+          'the entry carries what happened, when, and who',
+        );
+        assert.strictEqual(
+          entry.actor,
+          TESTER,
+          'the actor is the one the realm authenticated, not the one the ' +
+            'caller sent',
+        );
+        assert.strictEqual(entry.what, 'consult requested\nwith a second line');
+        assert.true(
+          new RegExp(`^${TIMESTAMP}$`).test(entry.at),
+          `the timestamp is the realm's: ${entry.at}`,
         );
       });
     });

@@ -338,6 +338,27 @@ export const BXL_MUTATION_DENIED_CALLS = names([
 ]);
 
 /**
+ * `transform` bans side effects and runtime metadata, and keeps the rest —
+ * the request-context builtins included, since shaping a payload or projecting
+ * a result is exactly the work that reads what the request carries.
+ *
+ * One difference from `mutation`: a volatile call is allowed. A mutation plan
+ * is replayed by the client's optimistic path and so must be repeatable, while
+ * a transform shapes one request's payload or projects one request's result
+ * and is never stored or replayed. The operation that carries it records the
+ * volatility as `deterministic: false` rather than refusing it.
+ */
+export const BXL_TRANSFORM_DENIED_CALLS = names([
+  ...BXL_DERIVE_CONTROL_DENIED_CALLS,
+  ...BXL_METADATA_CALLS,
+  // Not in the derive set, and denied here for a reason of this dialect's
+  // own: a transform answers with exactly one value, so a program that can
+  // yield none is refused where it is written rather than at the invocation
+  // that would have produced nothing to serve.
+  'empty',
+]);
+
+/**
  * `derive` bans everything `mutation` does and the request-context builtins
  * besides, which is what separates the two: a mutation program is planned for
  * a single request, and reading that request's payload and caller is its job.
@@ -464,6 +485,16 @@ export const BXL_PROFILE_FUNCTION_POLICIES: Record<
       metadata:
         'runtime metadata calls are not stable mutation-plan expressions',
       volatile: 'volatile calls are not repeatable mutation-plan expressions',
+    },
+  },
+  transform: {
+    deniedCalls: BXL_TRANSFORM_DENIED_CALLS,
+    denyMessageByCategory: {
+      controlOrSideEffect:
+        'control/side-effect calls are not payload or result expressions',
+      metadata:
+        'runtime metadata calls are not payload or result expressions, and a ' +
+        'transform reads the values it is handed rather than the runtime',
     },
   },
 };

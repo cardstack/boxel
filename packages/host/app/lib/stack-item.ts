@@ -73,6 +73,24 @@ export function detectStackItemTypeForTarget(
   return 'card';
 }
 
+// Whether a delete on `id` should take the file route rather than the card one.
+// A `…/x.json` id names a card's own storage as readily as it names a standalone
+// file, and the two want opposite deletes: the source DELETE removes the bytes a
+// card is stored in while none of the card cleanup runs — no consumer rewrite to
+// the link-not-found placeholder, no recents removal, no stack trim on the card
+// id. Nothing available here tells the two apart, so `.json` keeps the card route
+// and a card's own row behaves as it always has.
+export function takesFileDeleteRoute(
+  cardOrURL: unknown,
+  id: string | undefined,
+  store: Pick<Store, 'peek' | 'peekError'>,
+): boolean {
+  if (!id || /\.json$/.test(id)) {
+    return false;
+  }
+  return detectStackItemTypeForTarget(cardOrURL, id, store) === 'file';
+}
+
 let nextInteractionSequence = 0;
 let nextStackItemInstanceId = 0;
 

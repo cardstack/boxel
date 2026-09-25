@@ -255,8 +255,9 @@ That task:
    is still generated, indexing keeps working, and you can run
    `mkcert -install` later when convenient.
 3. Generates `~/.local/share/boxel/dev-certs/{localhost.pem,
-localhost-key.pem}`. Idempotent — re-runs are a no-op until the
-   cert is within 7 days of expiry.
+localhost-key.pem}`. Idempotent — re-runs are a no-op unless the
+   cert is within 7 days of expiry, is missing a required SAN, or no
+   longer chains to mkcert's current root CA.
 
 After provisioning, `mise run dev` (and `mise run dev-all`) automatically
 brings the realm-server up on `https://localhost:4201` (and

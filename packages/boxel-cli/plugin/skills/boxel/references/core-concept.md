@@ -106,7 +106,7 @@ What it **cannot** do:
 
 #### 2. `linksTo` / `linksToMany` with `query:` — canonical query-backed relationships
 
-This IS the supported way to compute card relationships. The runtime executes the search at index time and populates the field with matching records.
+This IS the supported way to compute card relationships. The field resolves by running its search when the owner card is loaded, and re-resolves when a realm event reports a matching card changed.
 
 ```gts
 // Single card from a query (linksTo — first matching result or null)
@@ -134,7 +134,7 @@ Notes on this form:
 - Render via `@fields.matchingFriends` (correct chrome) or read values from `@model.matchingFriends` (an array of Friend instances).
 - The implicit `type` filter is merged at execution — you don't have to repeat the `on:` clause when querying the same type as the field's target.
 
-This is **schema-level**, runs server-side, and is reactive: when source fields change, the realm reindexes and the relationship is repopulated.
+This is **schema-level** and resolves against the index, so it reflects any card matching the query rather than a hand-listed set. It is live on a loaded card — but a card the query merely matched is not a dependency of the card holding the query, so the **indexed** document and the prerendered HTML built from it are not refreshed when matching cards change. See `query-systems.md` for what that means for a rollup.
 
 #### When to use which
 
@@ -142,7 +142,7 @@ This is **schema-level**, runs server-side, and is reactive: when source fields 
 |---|---|
 | Aggregate a number/string/bool from other fields | `computeVia` |
 | Walk a relationship to read its primitive fields | `computeVia` |
-| Pick one card or many from a Query at index time | `linksTo` / `linksToMany` with `query:` |
+| Pick one card or many from a Query, resolved when the card loads | `linksTo` / `linksToMany` with `query:` |
 | Live-tracked search inside a Component | `this.args.context?.getCards(this, () => query, () => realms, { isLive: true })` (see `automate-linked-to-me-lookup`). Returns a SearchResource with `.instances`. |
 
 **⚠️ `getCards` is NOT a free import.** It's exported only as a *type* from `card-api`. Importing `{ getCards }` as a value compiles cleanly and then crashes at runtime with `getCards is not a function`. The host injects the working function via `this.args.context.getCards`.
@@ -151,7 +151,7 @@ This is **schema-level**, runs server-side, and is reactive: when source fields 
 
 - **Computed accessing a relationship can throw if the link is broken.** A `linksTo` returning `null` mid-walk crashes a naive `this.foo.bar`. Wrap in `try/catch` or use `?.` everywhere.
 - **`formatDateTime` and other template helpers do NOT work in `computeVia`.** Format inside templates or use plain `Date` methods in the compute. See `date-math.md`.
-- **Don't stub a query-backed computed.** If you need a "live count" of linked tasks, declare `@field tasks = linksToMany(Task, { query: ... })` and read `@model.tasks.length` — don't create a `computeVia` that hard-returns 0.
+- **Don't stub a query-backed computed.** If you need a count of linked tasks on a loaded card, declare `@field tasks = linksToMany(Task, { query: ... })` and read `@model.tasks.length` — don't create a `computeVia` that hard-returns 0. That length counts one page of results and is current only on a loaded card; when the number has to be right in the indexed document, hold the links explicitly instead. See `query-systems.md`.
 
 **Source:** Boxel monorepo `packages/experiments-realm/query-field-playground.gts` (single-level), `packages/experiments-realm/nested-query-field-playground.gts` (inside a FieldDef).
 
@@ -280,7 +280,7 @@ The host renders against `this.cardTheme`. The DEFAULT computeVia just passes th
 });
 ```
 
-Two ways a card ends up themed — pick whichever fits the schema:
+Boxel's default token values come from `theme.css` and need no Theme card. When a card should use a specific Theme, there are two ways to install it — pick whichever fits the schema:
 
 **(A) Per-instance assignment via `cardInfo.theme`.** The user (or your seed JSON) links a Theme on the instance. The default computeVia picks it up. Simplest case — covers most card types without a natural parent to inherit from.
 
@@ -309,7 +309,7 @@ Other valid sources for a computed `cardTheme`: lookup by `cardId` pattern, by t
 **Practical implications for seed/instance JSON:**
 
 - Cards that have a custom computed `cardTheme` (e.g. a Task inheriting from its Project) don't need `relationships["cardInfo.theme"]` on every instance — the computeVia handles it.
-- Cards that rely on the default computeVia (`cardTheme = cardInfo.theme`) DO need the relationship set on the instance, otherwise no theme installs.
+- Cards that rely on the default computeVia (`cardTheme = cardInfo.theme`) need the relationship only to install a specific Theme. Without it, no Theme card installs and `theme.css` supplies Boxel's defaults.
 - `attributes.cardInfo` should still be present so the user can later add notes, name, or override the theme — but its absence isn't fatal when a computed `cardTheme` resolves.
 
 JSON shape for the per-instance link (when used):

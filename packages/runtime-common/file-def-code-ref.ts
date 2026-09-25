@@ -18,7 +18,6 @@ function baseModule(name: string): RealmResourceIdentifier {
 export const FILEDEF_CODE_REF_BY_EXTENSION: Readonly<
   Record<string, ResolvedCodeRef>
 > = {
-  // TODO: Replace with realm metadata configuration.
   '.markdown': { module: baseModule('markdown-file-def'), name: 'MarkdownDef' },
   '.md': { module: baseModule('markdown-file-def'), name: 'MarkdownDef' },
   '.html': { module: baseModule('html-file-def'), name: 'HtmlDef' },
@@ -34,7 +33,9 @@ export const FILEDEF_CODE_REF_BY_EXTENSION: Readonly<
   '.gts': { module: baseModule('gts-file-def'), name: 'GtsFileDef' },
   '.txt': { module: baseModule('text-file-def'), name: 'TextFileDef' },
   '.text': { module: baseModule('text-file-def'), name: 'TextFileDef' },
+  '.log': { module: baseModule('log-file-def'), name: 'LogFile' },
   '.json': { module: baseModule('json-file-def'), name: 'JsonFileDef' },
+  '.jsonl': { module: baseModule('jsonl-file-def'), name: 'JSONLFile' },
   '.csv': { module: baseModule('csv-file-def'), name: 'CsvFileDef' },
   '.pdf': { module: baseModule('pdf-file-def'), name: 'PdfDef' },
   '.docx': { module: baseModule('docx-file-def'), name: 'DocxDef' },
@@ -112,7 +113,10 @@ export function isFileDefCodeRef(
   return false;
 }
 
-function extensionOfName(name: string): string {
+// The extension of a file's last path segment as the tables here key on it:
+// lowercase with the leading dot, or '' for none. A leading dot alone
+// (`.gitignore`) names a file, not an extension.
+export function extensionOfName(name: string): string {
   let dot = name.lastIndexOf('.');
   return dot <= 0 ? '' : name.slice(dot).toLowerCase();
 }

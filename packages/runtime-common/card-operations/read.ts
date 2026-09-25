@@ -12,6 +12,7 @@ import {
   type OperationDefinition,
   type OperationDocumentResult,
   type OperationHeadResult,
+  type OperationRowHeaders,
   type OperationRequest,
 } from './types.ts';
 import type {
@@ -90,19 +91,22 @@ export async function readOperation(
   return await readDocument(core, url, localPath, opts);
 }
 
-// A declaration may specialize `read` — reshaping the payload with `input`,
-// projecting the result with `output`, running a `program` — and a declaration
-// rebound onto `read` may carry a clause that belongs to the base it came from.
-// None of it is carried out here, and serving the plain document as though the
-// declaration said nothing hands the caller a well-formed answer to a different
-// question. Refusing says so.
+// A declaration may specialize `read` by running a `program` over the target,
+// and a declaration rebound onto `read` may carry a clause that belongs to the
+// base it came from. Neither is carried out here, and serving the plain
+// document as though the declaration said nothing hands the caller a
+// well-formed answer to a different question. Refusing says so.
+//
+// The two transform stages are not on this list: `runOperation` runs them
+// around every executor, so a `read` specialized with `input` or `output` is
+// carried out rather than refused.
 function refuseUnservedStages(
   request: OperationRequest,
   definition: OperationDefinition,
 ): void {
-  let stages = (
-    ['program', 'input', 'output', 'fill', 'items', 'of', 'query'] as const
-  ).filter((stage) => definition[stage] !== undefined);
+  let stages = (['program', 'fill', 'items', 'of', 'query'] as const).filter(
+    (stage) => definition[stage] !== undefined,
+  );
   if (stages.length === 0) {
     return;
   }
@@ -150,14 +154,28 @@ async function readDocument(
   let { doc } = result;
   doc.data.links = { self: url.href };
   core.unresolveInstanceIds(doc);
-  // The index-data generation and the declared-screenshot manifest are joined
-  // at serve time onto a fresh `meta` — never a mutation of the cached
-  // pristine doc's own. The generation lets a consumer tell fresh index data
-  // from stale; the manifest is never written back into the index row or the
-  // source file.
+  // The index-data generation, the source version and the declared-screenshot
+  // manifest are joined at serve time onto a fresh `meta` — never a mutation of
+  // the cached pristine doc's own. The generation lets a consumer tell fresh
+  // index data from stale; the manifest is never written back into the index row
+  // or the source file.
+  //
+  // `version` is the content hash of the stored source this document was
+  // assembled from, recorded on the row by the pass that indexed those bytes. A
+  // client sends it back as the base its next write is computed against, so it
+  // has to describe the document it ships with and not the file's current
+  // state — which is why it is read off the row here rather than from
+  // `realm_file_meta` at serve time. Omitted entirely when the row carries none,
+  // so a caller reads "no version" rather than a value it cannot rely on.
+  //
+  // It travels with the response only. Both strips that stand between a client
+  // echoing a document back and the bytes on disk — `file-serializer.ts` and
+  // `stageUpdate` — drop it, so a version is never persisted into the very file
+  // it describes.
   doc.data.meta = {
     ...doc.data.meta,
     generation: result.generation,
+    ...(result.version != null ? { version: result.version } : {}),
     ...(result.screenshots
       ? {
           screenshots: screenshotsMetaFromManifest(result.screenshots, {
@@ -169,6 +187,11 @@ async function readDocument(
   };
   return {
     document: doc,
+    // The assembled document, unprojected. `runOperation` runs the `output`
+    // stage over what this returns and reports the projection there, so that
+    // one place decides what a caller is served whichever executor produced
+    // it.
+    projected: false,
     // Read off the assembly rather than off a peek taken before it: the two
     // can disagree when a write lands in between, and the validator a caller
     // builds from this has to describe the document it is returned with.
@@ -190,6 +213,7 @@ function fileMetaResult(
 ): OperationDocumentResult {
   return {
     document,
+    projected: false,
     headers: headersFromDisk(document),
     // Derived from the bytes on disk, so there is no query behind it.
     queryBacked: false,
@@ -214,6 +238,7 @@ async function readHeaders(
     let file = await core.indexQueryEngine.file(url);
     if (file) {
       return {
+        projected: false,
         type: 'file-meta',
         indexedAt: file.indexedAt,
         lastModified: file.lastModified,
@@ -224,7 +249,7 @@ async function readHeaders(
     }
     let fileMeta = await core.fileMetaDocument(localPath);
     if (fileMeta) {
-      return headersFromDisk(fileMeta);
+      return { projected: false, ...headersFromDisk(fileMeta) };
     }
     throw await missingTarget(core, url, localPath);
   }
@@ -246,6 +271,7 @@ async function readHeaders(
     });
   }
   return {
+    projected: false,
     type: 'card',
     indexedAt: row.indexedAt,
     lastModified: row.lastModified,
@@ -259,7 +285,7 @@ async function readHeaders(
 // behind these, so the values a row would carry are absent rather than guessed.
 function headersFromDisk(
   document: SingleFileMetaDocument,
-): OperationHeadResult {
+): OperationRowHeaders {
   return {
     type: 'file-meta',
     indexedAt: null,

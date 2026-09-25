@@ -3,6 +3,7 @@ import {
   computeContentHashFromRanges,
 } from '../content-hash.ts';
 import { isCardError } from '../error.ts';
+import { isCardResource } from '../resource-types.ts';
 import {
   CAPTURE_SERVING_PREFIX,
   PARTIAL_WRITE_SUFFIX,
@@ -99,9 +100,15 @@ export interface BatchCore {
   // merge needs, and holding the realm would charge every other writer in it —
   // including the writers of cards this batch never reads — for a guarantee
   // only these files require.
+  //
+  // And scoped in time to the read-merge-write, which is what `releaseLocks`
+  // is for: the commit announces the moment its bytes are durable, and the
+  // batch lets the locks go there rather than across the index wait that
+  // follows. Ordering is what the locks are for, and by then this batch's
+  // place in the order is settled.
   withWriteLocks<T>(
     localPaths: readonly LocalPath[],
-    fn: () => Promise<T>,
+    fn: (releaseLocks: () => void) => Promise<T>,
   ): Promise<T>;
   // A stored file's bytes and modification time. Called only inside the lock.
   readSourceFile(
@@ -119,12 +126,17 @@ export interface BatchCore {
   // coordinator carries through to the caller. Described content is held to
   // the same ceiling by its byte length, which it reports without being read.
   assertWriteSize(localPath: LocalPath, content: StagedContent): void;
-  // Waits for indexing already in flight. A card's serialization resolves the
-  // definitions its type is built from, and a module written moments earlier
-  // may still be indexing, so a batch drains before it stages rather than
-  // failing to resolve a type the realm already holds. A batch that opts out
-  // of waiting for its own indexing skips this too — see
-  // `CommitBatchOptions.waitForIndex`, which owns that trade.
+  // Waits for the indexing already in flight that can move what this batch
+  // resolves. A card's serialization resolves the definitions its type is
+  // built from, and a module written moments earlier may still be indexing,
+  // so a batch drains before it stages rather than failing to resolve a type
+  // the realm already holds, and the realm's settings are resolved partly out
+  // of its config document's index row, so a pass touching that is waited for
+  // too. A pass that touched neither is not: it rewrites index rows a staging
+  // batch resolves nothing from, so waiting for one would be paying another
+  // card's fan-out for nothing. A batch that opts out of waiting for its own
+  // indexing skips this too — see `CommitBatchOptions.waitForIndex`, which
+  // owns that trade.
   drainIndexing(): Promise<void>;
   // Whether the realm's ignore rules exclude this URL. An ignored file is
   // never visited by indexing, so it never gets an index row.
@@ -136,11 +148,15 @@ export interface BatchCore {
   // same answer to the question asked here: the index cannot speak for this
   // card.
   //
-  // This is the one read a batch makes of the index, and it is not a network
-  // capability: the engine is the realm's own, handed down narrowed to the
-  // single row a program's reads are layered from. Called only inside the
-  // lock, after the drain, so what it reports is the realm as the batch is
-  // about to change it.
+  // This is one of the two reads a batch makes of the index — `realmConfig`
+  // is the other — and it is not a network capability: the engine is the
+  // realm's own, handed down narrowed to the single row a program's reads are
+  // layered from. Called inside the lock, so
+  // no other writer of these files can move the row underneath the batch —
+  // but the row is the index as it stands, not as some other card's pending
+  // fan-out will leave it. A program reads indexed values eventually
+  // consistently, and a row that is absent or not yet caught up is reported
+  // as such rather than waited for.
   indexedCardValues(url: URL): Promise<IndexedCardValues | undefined>;
 
   // The realm's unlocked commit: writes, additions to the end of a file, and
@@ -154,6 +170,7 @@ export interface BatchCore {
     },
     options?: {
       clientRequestId?: string | null;
+      clientAuthored?: string[];
       waitForIndex?: boolean;
       initiatingUser?: string | null;
       // Where the commit stamps the stages it owns. The durable write, the
@@ -162,6 +179,10 @@ export interface BatchCore {
       // a slow write — so the commit marks them on the caller's timeline
       // rather than leaving the caller one bucket it cannot read.
       stageCursor?: StageCursor;
+      // Called once the commit's bytes are durable and before it indexes
+      // them, so a caller holding write locks over those files can end its
+      // critical section at the boundary the locks are actually for.
+      onDurable?: () => void;
     },
   ): Promise<{
     writes: {
@@ -204,6 +225,17 @@ export interface CommitBatchOptions {
   // The caller's own id for this batch. Echoed on the realm's index event so a
   // client can tell its own batch's event from anyone else's.
   clientRequestId?: string | null;
+  // Whether the index event should say which of this write's cards carried
+  // content the caller supplied.
+  //
+  // The question only has an interesting answer when one request writes
+  // several cards whose state came from different places, which is what a
+  // batch does. A front door that writes one card has nothing to distinguish:
+  // its request id already names that card's write, and a client reading the
+  // event has always taken the id to be about the card it sent. So the
+  // envelope answers and the card and source routes stay silent, which is what
+  // keeps their events exactly as they were.
+  reportAuthorship?: boolean;
   // The invoking actor, as the identity `actor()` resolves to. It comes from
   // the authenticated realm user the request's permission check verified.
   actor?: string;
@@ -221,9 +253,11 @@ export interface CommitBatchOptions {
   // It is not a choice about definition freshness, which is the tempting
   // reading: a definition resolves off disk rather than out of the index, so
   // an entry still serializes against a module written moments earlier
-  // whichever way this is set. See the drain in `commitBatch` for what the
-  // wait actually buys, and the realm's own card-write gate for the case
-  // stated at length.
+  // whichever way this is set. Nor is the drain it governs realm-wide: it
+  // waits only for passes that touched a module or the realm's config
+  // document. See the drain in
+  // `commitBatch` for what the wait actually buys, and the realm's own
+  // card-write gate for the case stated at length.
   //
   // A write made from inside a render must skip both, and there it is a
   // requirement rather than a preference: the job it would wait on needs the
@@ -370,7 +404,7 @@ export async function commitBatch(
   let realmConfig = () => (settings ??= core.realmConfig());
   return await core.withWriteLocks(
     lockPaths(entries, paths, lids),
-    async () => {
+    async (releaseLocks) => {
       timings?.add('lock', Date.now() - lockRequestedAt);
       // Drained inside the lock, before anything is staged. Staging serializes
       // each card against its type's definition, and a module written moments
@@ -394,6 +428,13 @@ export async function commitBatch(
       // realm states the case at its own card-write gate, which is the place to
       // read before widening or removing either copy.
       //
+      // The set it waits on is narrower too: only passes that touched an
+      // executable module or the realm's config document — the two things a
+      // batch resolves out of the index rather than off disk. An instance-only
+      // fan-out moves neither, so no batch has a reason to wait for one, which
+      // is what keeps a hub card's fan-out from gating every other writer in
+      // the realm.
+      //
       // So this is not reserved for entries that serialize nothing. A caller
       // whose response does not read indexed state can take it, and a
       // prerender-originated write *must*: the job it would wait on needs the
@@ -405,10 +446,10 @@ export async function commitBatch(
       // removals would wait for indexing it has no use for. That matters
       // because this wait happens with the batch's file locks held — a removal
       // issued while a bulk import drains would park here holding them, with
-      // every other writer of those files queued behind. The scope is narrower
-      // than it was, but the wait is not: the drain is for the realm's
-      // indexing, so a batch that parks here parks for work that has nothing
-      // to do with the files it holds.
+      // every other writer of those files queued behind. What is left to park
+      // for is another writer's module or config landing, and those are
+      // realm-wide by nature: neither a definition nor a realm setting is any
+      // one file's to hold.
       if (opts.waitForIndex !== false && entries.some(stagesContent)) {
         await timed('drain', () => core.drainIndexing());
       }
@@ -471,11 +512,14 @@ export async function commitBatch(
               lookupDefinition: core.lookupDefinition,
             }),
         });
+        // First, because linking a side-load to the card already stored
+        // takes its write out of the batch, and the checks after it have to
+        // see the batch that will commit.
+        await settleDestinations(core, paths, staged, positions);
         assertWritesAllowed(staged, positions);
         assertLinkedCardsSurvive(staged, paths, positions);
         assertWritesFit(core, staged, positions);
         await assertRemovalsAllowed(core, paths, staged, positions);
-        await assertDestinationsFree(core, staged, positions);
       } finally {
         timings?.add('stage', Date.now() - stageStart);
       }
@@ -497,6 +541,7 @@ export async function commitBatch(
           positions,
           opts,
           cursor,
+          releaseLocks,
         );
       } finally {
         cursor?.mark('commit');
@@ -743,6 +788,36 @@ interface StagingRun {
 // isomorphic and the coordinator's own callers are server-side, but the
 // bundle is not.
 const DEFAULT_STAGING_WIDTH = 8;
+
+// Every item's outcome, with at most `width` of them in flight at a time.
+//
+// `Promise.allSettled` over a mapped array is the shape this replaces, and the
+// two differ only in how many run at once: results still sit at their item's
+// index, and a rejection is still carried rather than thrown, so the earliest
+// refusal in request order is the one the caller is told about however the
+// work interleaved.
+export async function settledWithin<T, R>(
+  width: number,
+  items: readonly T[],
+  run: (item: T) => Promise<R>,
+): Promise<PromiseSettledResult<R>[]> {
+  let outcomes: PromiseSettledResult<R>[] = new Array(items.length);
+  let next = 0;
+  let worker = async () => {
+    while (next < items.length) {
+      let at = next++;
+      try {
+        outcomes[at] = { status: 'fulfilled', value: await run(items[at]) };
+      } catch (reason: unknown) {
+        outcomes[at] = { status: 'rejected', reason };
+      }
+    }
+  };
+  await Promise.all(
+    Array.from({ length: Math.min(width, items.length) }, worker),
+  );
+  return outcomes;
+}
 
 export const STAGING_WIDTH = ((): number => {
   let raw =
@@ -1075,7 +1150,7 @@ function atEntry(err: unknown, position: EntryPosition): OperationFailure {
 // client-named card to the path it will land at. A create that named no `lid`
 // is deliberately absent: its file is named after an id minted during staging,
 // so no other writer can be aimed at that path, and there is nothing for a
-// lock to exclude. `assertDestinationsFree` still refuses it if something is
+// lock to exclude. `settleDestinations` still refuses it if something is
 // somehow there.
 function lockPaths(
   entries: BatchEntry[],
@@ -1621,6 +1696,18 @@ function assertWritesFit(
 // destination refuses the batch, which is the answer the atomic endpoint
 // gives an `add` whose href is taken.
 //
+// A side-load is the exception, and it is not written either way. It is a
+// linked card the caller sent along so the link has something to point at, and
+// a card of the same type already stored at its destination gives the link
+// that just as well: the side-load is dropped and the stored bytes are left as
+// they are, so the entry's own card links to the card that is there. That is
+// the case a client re-sending a card whose create already landed presents,
+// and refusing it would fail a save that has nothing wrong with the card it is
+// saving. It grants nothing a link by URL does not already allow. A stored
+// card of a different type is not the card the caller described, so that one
+// still refuses the batch, and the refusal names the side-load rather than the
+// entry's own card.
+//
 // Checked inside the lock, against the same critical section the commit runs
 // in, so nothing can take the path between the check and the write.
 //
@@ -1630,8 +1717,9 @@ function assertWritesFit(
 // there. Skipping it hands that pair to the conflicting-entries check, which
 // names the entry it collides with instead of telling a caller that meant to
 // remove and re-mint a card to patch the one it just removed.
-async function assertDestinationsFree(
+async function settleDestinations(
   core: BatchCore,
+  paths: RealmPaths,
   staged: StagedChange[],
   positions: readonly EntryPosition[],
 ): Promise<void> {
@@ -1645,29 +1733,248 @@ async function assertDestinationsFree(
   }
   let occupied = await Promise.all(
     staged.map(async (change, index) => {
+      let taken: LocalPath[] = [];
       for (let path of change.mints) {
         if (removedBefore[index].has(path)) {
           continue;
         }
         if (await core.fileExists(path)) {
-          return { index, path };
+          taken.push(path);
         }
       }
-      return undefined;
+      return taken;
     }),
   );
-  let taken = occupied.find((entry) => entry !== undefined);
-  if (taken) {
-    throw new OperationFailure({
-      status: 409,
-      code: 'invalid-params',
-      title: 'Resource already exists',
-      detail:
-        `a card is already stored at ${taken.path}; a create mints a card ` +
-        `rather than replacing one`,
-      meta: { entry: positions[taken.index] },
-    });
+  for (let [index, change] of staged.entries()) {
+    let adopted = new Set<LocalPath>();
+    for (let path of occupied[index]) {
+      if (
+        change.sideLoadMints?.has(path) &&
+        (await sameStoredType(core, paths, change, path))
+      ) {
+        adopted.add(path);
+      }
+    }
+    let dropped = new Set([
+      ...adopted,
+      ...reachedOnlyThrough(change, paths, adopted, () =>
+        linkedFromElsewhere(staged, index, paths),
+      ),
+    ]);
+    for (let path of occupied[index]) {
+      if (dropped.has(path)) {
+        continue;
+      }
+      let lid = change.sideLoadMints?.get(path);
+      if (lid === undefined) {
+        throw new OperationFailure({
+          status: 409,
+          code: 'invalid-params',
+          title: 'Resource already exists',
+          detail:
+            `a card is already stored at ${path}; a create mints a card ` +
+            `rather than replacing one`,
+          meta: { entry: positions[index] },
+        });
+      }
+      let sent = stagedAdoptsFrom(change, path);
+      throw new OperationFailure({
+        status: 409,
+        code: 'invalid-params',
+        title: 'Resource already exists',
+        detail:
+          `the linked card included in this save as "${lid}" would be ` +
+          `stored at ${path}, where a card of another type is already ` +
+          `stored; a create mints a card rather than replacing one`,
+        meta: {
+          entry: positions[index],
+          included: {
+            lid,
+            id: cardIdOf(paths, path),
+            ...(sent ? { adoptsFrom: sent } : {}),
+          },
+        },
+      });
+    }
+    if (dropped.size === 0) {
+      continue;
+    }
+    change.writes = change.writes.filter((write) => !dropped.has(write.path));
+    change.mints = change.mints.filter((mint) => !dropped.has(mint));
+    // The entry now links to a card it does not write, which is what the
+    // check that a batch does not remove a card it links to reads.
+    change.links = [
+      ...(change.links ?? []),
+      ...[...adopted].map((path) => cardIdOf(paths, path)),
+    ];
   }
+}
+
+function cardIdOf(paths: RealmPaths, path: LocalPath): string {
+  return paths.fileURL(path).href.replace(/\.json$/, '');
+}
+
+// Whether the card stored at a side-load's destination is a card of the type
+// the side-load was sent as. Both types are resolved against the file they
+// live in, so a relative module spelling and an absolute one compare equal.
+async function sameStoredType(
+  core: BatchCore,
+  paths: RealmPaths,
+  change: StagedChange,
+  path: LocalPath,
+): Promise<boolean> {
+  let sent = stagedAdoptsFrom(change, path);
+  let stored = await storedAdoptsFrom(core, path);
+  if (!sent || !stored) {
+    return false;
+  }
+  let fileURL = paths.fileURL(path);
+  return core.codeRefKey(sent, fileURL) === core.codeRefKey(stored, fileURL);
+}
+
+// The side-loads an entry would write that nothing reaches once the adopted
+// ones are left out: cards the caller sent only because an adopted side-load
+// linked to them. The stored card that stands in for it has its own links, so
+// writing those would leave cards nothing points at. A side-load nothing
+// reached to begin with is not this check's to drop, and neither is one
+// another entry in the batch links to.
+function reachedOnlyThrough(
+  change: StagedChange,
+  paths: RealmPaths,
+  adopted: ReadonlySet<LocalPath>,
+  elsewhere: () => LocalPath[],
+): LocalPath[] {
+  if (adopted.size === 0 || !change.primaryPath) {
+    return [];
+  }
+  let contents = new Map<LocalPath, string>();
+  for (let write of change.writes) {
+    if (typeof write.content === 'string') {
+      contents.set(write.path, write.content);
+    }
+  }
+  let reach = (skip: ReadonlySet<LocalPath>) => {
+    let seen = new Set<LocalPath>();
+    let pending = [change.primaryPath!, ...roots];
+    while (pending.length > 0) {
+      let path = pending.pop()!;
+      if (seen.has(path) || skip.has(path)) {
+        continue;
+      }
+      seen.add(path);
+      for (let linked of linkedPaths(contents.get(path), path, paths)) {
+        if (contents.has(linked)) {
+          pending.push(linked);
+        }
+      }
+    }
+    return seen;
+  };
+  let roots = elsewhere();
+  let before = reach(new Set());
+  let after = reach(adopted);
+  return [...before].filter(
+    (path) =>
+      !after.has(path) && !adopted.has(path) && change.sideLoadMints?.has(path),
+  );
+}
+
+// The card files the other entries' staged documents link to.
+function linkedFromElsewhere(
+  staged: StagedChange[],
+  index: number,
+  paths: RealmPaths,
+): LocalPath[] {
+  let linked: LocalPath[] = [];
+  for (let [other, change] of staged.entries()) {
+    if (other === index) {
+      continue;
+    }
+    for (let write of change.writes) {
+      if (typeof write.content === 'string') {
+        linked.push(...linkedPaths(write.content, write.path, paths));
+      }
+    }
+  }
+  return linked;
+}
+
+// The card files a staged card document links to, resolved against the file
+// that holds it.
+function linkedPaths(
+  content: string | undefined,
+  path: LocalPath,
+  paths: RealmPaths,
+): LocalPath[] {
+  if (content === undefined) {
+    return [];
+  }
+  let relationships: unknown;
+  try {
+    relationships = JSON.parse(content)?.data?.relationships;
+  } catch {
+    return [];
+  }
+  if (!relationships || typeof relationships !== 'object') {
+    return [];
+  }
+  let fileURL = paths.fileURL(path);
+  let linked: LocalPath[] = [];
+  for (let relationship of Object.values(relationships)) {
+    let self = (relationship as { links?: { self?: unknown } })?.links?.self;
+    if (typeof self !== 'string') {
+      continue;
+    }
+    let target: string;
+    try {
+      target = new URL(self, fileURL).href;
+    } catch {
+      continue;
+    }
+    let local = cardSourcePathOf(target, paths);
+    if (local) {
+      linked.push(local);
+    }
+  }
+  return linked;
+}
+
+// The type a staged side-load was sent as, read back off the bytes staging
+// produced so it is spelled the way the stored card's is.
+function stagedAdoptsFrom(
+  change: StagedChange,
+  path: LocalPath,
+): CodeRef | undefined {
+  let write = change.writes.find((candidate) => candidate.path === path);
+  return typeof write?.content === 'string'
+    ? adoptsFromOf(write.content)
+    : undefined;
+}
+
+async function storedAdoptsFrom(
+  core: BatchCore,
+  path: LocalPath,
+): Promise<CodeRef | undefined> {
+  let stored = await core.readSourceFile(path);
+  return stored ? adoptsFromOf(stored.content) : undefined;
+}
+
+// Undefined for anything that is not a card document naming its type, which
+// is not a card a side-load can be linked to in its place.
+function adoptsFromOf(content: string): CodeRef | undefined {
+  let data: unknown;
+  try {
+    data = JSON.parse(content)?.data;
+  } catch {
+    return undefined;
+  }
+  if (!isCardResource(data)) {
+    return undefined;
+  }
+  let adoptsFrom = data.meta?.adoptsFrom;
+  return adoptsFrom && typeof adoptsFrom === 'object'
+    ? (adoptsFrom as CodeRef)
+    : undefined;
 }
 
 async function commitStaged(
@@ -1678,6 +1985,12 @@ async function commitStaged(
   positions: readonly EntryPosition[],
   opts: CommitBatchOptions,
   stageCursor: StageCursor | undefined,
+  // Handed straight to the commit, which calls it the moment the batch's bytes
+  // are durable. Everything from there on — the index pass, the results built
+  // from what it reported — runs with the files open to other writers again,
+  // and reads nothing off them: the results are assembled from what this batch
+  // staged and what the commit returned.
+  releaseLocks: () => void,
 ): Promise<BatchEntryResult[]> {
   // One entry per file, in batch order. Two entries may name one card, and
   // the second built on the first rather than racing it — it merged over the
@@ -1815,16 +2128,37 @@ async function commitStaged(
   // first stage — synchronous in-memory work reported as a wait for indexing
   // would be the exact confusion these stages exist to remove.
   stageCursor?.mark('commit');
+  // The cards this batch mints under a name its caller chose. Those cards hold
+  // what that caller sent, and a caller that was holding one when it sent it
+  // may have moved on since — so the event says so, and re-reading them is
+  // that caller's to decline. Every other card the batch touches took state
+  // the realm computed, which no caller holds and every one of them wants.
+  //
+  // Reported even when it is empty, and the emptiness is the report: a batch
+  // that only transformed cards authored none of them, which is a different
+  // statement from a writer that said nothing about the question. Collapsing
+  // the two would have a client read "I supplied none of this" as "no
+  // information" and skip the whole pass — the cards it most needs to re-read.
+  //
+  // A caller that does not ask says nothing at all, which is what every front
+  // door but the envelope does.
+  let clientAuthored = opts.reportAuthorship
+    ? staged
+        .filter((change): change is StagedChange => Boolean(change?.lid))
+        .map((change) => change.id)
+    : undefined;
   let committed = await core.commitUnlocked(
     { writes, appends, deletes },
     {
       clientRequestId: opts.clientRequestId ?? null,
+      ...(clientAuthored === undefined ? {} : { clientAuthored }),
       waitForIndex: opts.waitForIndex ?? true,
       // The batch's index job is tagged with the user whose request produced
       // it, the same as every other write path, so a reader draining its own
       // writes waits for this job rather than returning ahead of it.
       initiatingUser: opts.actor ?? null,
       ...(stageCursor ? { stageCursor } : {}),
+      onDurable: releaseLocks,
     },
   );
   // Emitted here rather than where the record was built: a staged entry is not

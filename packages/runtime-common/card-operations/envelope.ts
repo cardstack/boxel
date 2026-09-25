@@ -4,6 +4,7 @@ import {
   OperationFailure,
   isDocumentResult,
   isOperationFailure,
+  isWrite,
   type BaseOperation,
   type EntryPosition,
   type OperationDefinition,
@@ -12,9 +13,13 @@ import {
   type OperationTarget,
 } from './types.ts';
 import type { BatchEntryResult, BatchNode } from './coordinator.ts';
+import { assertParamsSupplied, type OperationScope } from './dispatch.ts';
+import { runInputTransform, type TransformContext } from './transforms.ts';
 import type { BatchEntry } from './executors.ts';
+import type { GateDecision } from './gate.ts';
 import { isCodeRef } from '../card-document-shape.ts';
 import type { CardResource } from '../resource-types.ts';
+import type { SearchEntryWireFilter } from '../search-entry.ts';
 
 // ============================================================================
 // The operations envelope: reading a batch off the wire, and writing its
@@ -70,6 +75,30 @@ export function carriesOperationsExt(contentType: string | null): boolean {
   return false;
 }
 
+// An entry that says which card it runs against by describing it rather than
+// by naming it: the filter that finds it, and optionally one link to follow
+// from what the filter matched.
+//
+// It stands in the same slot `href` does, and it resolves into one — see
+// `find-targets.ts`, which runs the filter against the realm's index before
+// anything stages. What is here is only the grammar.
+export interface QueryTarget {
+  // A `SearchEntryWireFilter`, the filter member of the query the realm's
+  // search endpoints take. The filter alone, not a whole query: the rest of
+  // that grammar addresses realms, pages and projections, none of which an
+  // entry chooses. The realm decides all three, which is what makes a result
+  // outside the endpoint realm impossible rather than merely refused.
+  query: SearchEntryWireFilter;
+  // A link to follow from each matched card, whose target the entry then runs
+  // against. One immediate field name — the hop is one link, so there is no
+  // path to walk.
+  field?: string;
+  // Whether this entry names one card or a set of them. `one` is the default,
+  // and the count is held to exactly one; `many` expands the entry into one
+  // per target and answers with an array, which an empty set answers as empty.
+  expect: 'one' | 'many';
+}
+
 // One `invoke` entry, with the parts the wire spells resolved into the terms
 // the core takes: an `href` that has been resolved against this realm and
 // found to be inside it, and the local id read out of the payload.
@@ -82,11 +111,27 @@ export interface EnvelopeEntry {
   // Absolute, and inside this realm. Absent on an entry that names no existing
   // resource, which is a create of a card that does not exist yet.
   href?: string;
+  // The query this entry's target is described by, before it has been run.
+  // Gone once it has: resolution answers entries carrying `href`, so nothing
+  // downstream of it distinguishes a target that was found from one that was
+  // named.
+  find?: QueryTarget;
+  // Set on an entry whose `href` a query produced. The one thing downstream
+  // still asks about a found target: a create mints a card, so there is
+  // nothing for a query to have found, and the refusal has to say that rather
+  // than report the href the caller never wrote.
+  found?: true;
   data?: Record<string, unknown>;
   // The caller's own id for a card this batch mints, read from `data.lid` —
   // the resource-level member JSON:API already reserves for exactly this, and
   // the key later entries link to the new card by.
   lid?: string;
+  // The version the caller believes it is writing on top of, read from
+  // `data.meta.baseVersion`. The result reports whether the target was still
+  // at it, and the write happens either way — a moved base is something the
+  // caller decides what to do about, where `If-Match` is how a caller asks for
+  // the write to be refused instead.
+  baseVersion?: string;
 }
 
 // A run of entries, which is itself an entry of whatever holds it.
@@ -234,7 +279,12 @@ function parseNode(
 // refusal rather than ignored: a group with an `href` on it is a caller that
 // believes the group targets something, and carrying it out would run its
 // members against targets they never named.
-const INVOCATION_MEMBERS = ['boxel:name', 'href', 'data'] as const;
+const INVOCATION_MEMBERS = [
+  'boxel:name',
+  'href',
+  'boxel:target',
+  'data',
+] as const;
 
 function parseGroup(
   operation: Record<string, unknown>,
@@ -333,6 +383,36 @@ function parseInvocation(
       position,
     );
   }
+  let baseVersion = baseVersionIn(data, position);
+  if (baseVersion !== undefined && data) {
+    // Lifted out of the payload, not merely read from it. `data` reaches the
+    // document arms of `batchEntryFor` as the JSON:API resource itself — a
+    // patch to merge, or a card to mint — so a member left on `meta` would be
+    // merged into the card's stored source, where `meta` legitimately carries
+    // `adoptsFrom` and `fields` and so cannot be dropped wholesale. It would
+    // also make an otherwise no-op patch look like a change.
+    //
+    // `meta` survives as an object even when the base version was all it held:
+    // a patch has to carry `adoptsFrom` to be read as a card resource at all,
+    // and the arms that take params drop `meta` themselves.
+    let { baseVersion: _lifted, ...meta } = data.meta as Record<
+      string,
+      unknown
+    >;
+    data = { ...data, meta };
+  }
+  if (operation.href !== undefined && operation['boxel:target'] !== undefined) {
+    // Both spellings of the same slot. Refused rather than resolved by a
+    // precedence rule, because the two disagree about something the caller
+    // knows and this does not: an href is the card the caller already has,
+    // and a query is the caller saying it does not know which card it means.
+    throw refuse(
+      `entry ${position} carries both an "href" and a "boxel:target"; an ` +
+        `entry either names the card it runs against or describes it, and ` +
+        `not both`,
+      position,
+    );
+  }
   return {
     op: 'invoke',
     position,
@@ -340,8 +420,110 @@ function parseInvocation(
     ...(operation.href === undefined
       ? {}
       : { href: hrefIn(operation.href, position, paths, opts) }),
+    ...(operation['boxel:target'] === undefined
+      ? {}
+      : { find: queryTargetIn(operation['boxel:target'], position) }),
     ...(data ? { data } : {}),
     ...(lid === undefined ? {} : { lid }),
+    ...(baseVersion === undefined ? {} : { baseVersion }),
+  };
+}
+
+// The base version out of an entry's `data.meta`, which is where the wire
+// carries the members that describe the resource rather than the operation's
+// own params — `meta` is already subtracted from the params for that reason.
+//
+// A non-string is refused rather than ignored, because the thing a caller does
+// with a base version is read the `baseMatched` that comes back: an ignored one
+// answers with no `baseMatched` at all, which a caller reads as "the realm does
+// not report on this" and not as "you sent the wrong shape". An empty string is
+// refused for the same reason and separately, since it is a caller that
+// interpolated a version it never had — and it would otherwise be compared
+// against the file's real hash and answer a confident `false`.
+function baseVersionIn(
+  data: Record<string, unknown> | undefined,
+  position: EntryPosition,
+): string | undefined {
+  if (!data || !isPlainRecord(data.meta)) {
+    return undefined;
+  }
+  let baseVersion = data.meta.baseVersion;
+  if (baseVersion === undefined) {
+    return undefined;
+  }
+  if (typeof baseVersion !== 'string' || baseVersion.length === 0) {
+    throw refuse(
+      `entry ${position} carries a "meta.baseVersion" that is not a ` +
+        `non-empty string; a base version is the version the caller last saw ` +
+        `the target at`,
+      position,
+    );
+  }
+  return baseVersion;
+}
+
+// The members a query target carries. Read as a closed set, unlike `data`,
+// whose unread members are the operation's own params: nothing here is passed
+// through to anything, so a member this does not know is a member nobody
+// reads — and the one a caller is likeliest to write, `expects`, would
+// silently leave the entry demanding exactly one match.
+const QUERY_TARGET_MEMBERS = ['query', 'field', 'expect'] as const;
+
+function queryTargetIn(target: unknown, position: EntryPosition): QueryTarget {
+  if (!isPlainRecord(target)) {
+    throw refuse(
+      `entry ${position} carries a "boxel:target" that is not an object`,
+      position,
+    );
+  }
+  for (let member of Object.keys(target)) {
+    if (!(QUERY_TARGET_MEMBERS as readonly string[]).includes(member)) {
+      throw refuse(
+        `entry ${position} carries "${member}" in its "boxel:target", which ` +
+          `describes a target with ${QUERY_TARGET_MEMBERS.map(
+            (known) => `"${known}"`,
+          ).join(', ')}`,
+        position,
+      );
+    }
+  }
+  // The filter's own grammar is the realm's, and it is checked where the
+  // query is assembled — here there is no realm to check it against, and
+  // restating the search parser's rules would be a second grammar to keep in
+  // step with the first.
+  if (!isPlainRecord(target.query)) {
+    throw refuse(
+      `entry ${position} carries a "boxel:target" with no "query" filter ` +
+        `saying which card it runs against`,
+      position,
+    );
+  }
+  if (
+    target.field !== undefined &&
+    (typeof target.field !== 'string' || target.field.length === 0)
+  ) {
+    throw refuse(
+      `entry ${position} carries a "boxel:target" whose "field" is not the ` +
+        `name of a field`,
+      position,
+    );
+  }
+  if (
+    target.expect !== undefined &&
+    target.expect !== 'one' &&
+    target.expect !== 'many'
+  ) {
+    throw refuse(
+      `entry ${position} carries a "boxel:target" expecting ` +
+        `${JSON.stringify(target.expect)}; an entry expects "one" card or ` +
+        `"many"`,
+      position,
+    );
+  }
+  return {
+    query: target.query as SearchEntryWireFilter,
+    ...(target.field === undefined ? {} : { field: target.field as string }),
+    expect: (target.expect as 'one' | 'many') ?? 'one',
   };
 }
 
@@ -451,28 +633,13 @@ export interface ResolvedEnvelopeEntry {
   entry: EnvelopeEntry;
   target: OperationTarget;
   definition: OperationDefinition;
-}
-
-// The behaviors that change stored state, which is what decides the permission
-// the request needed and therefore which method may carry the batch.
-//
-// Exhaustive over the base operations on purpose: a further behavior has to
-// say here whether it writes, rather than defaulting to "read" and reaching a
-// commit from a request that was only authorized to read.
-const WRITES: Readonly<Record<BaseOperation, boolean>> = {
-  read: false,
-  readSource: false,
-  query: false,
-  create: true,
-  update: true,
-  delete: true,
-  transform: true,
-  appendContainsMany: true,
-  appendLine: true,
-};
-
-export function isWrite(base: BaseOperation): boolean {
-  return WRITES[base];
+  // What the policy gate decided about this entry. A `pending` write is one
+  // whose admission still rests on a predicate.
+  decision: GateDecision;
+  // This entry's own view of the batch's scope: the batch's caller and row
+  // memo, and — once `stageWriteEntry` has run — the document a create would
+  // write.
+  scope: OperationScope;
 }
 
 // The two behaviors that are reached somewhere other than here.
@@ -501,6 +668,41 @@ export function assertTravelsInEnvelope(
           `engine rather than in a batch`
         : `operation "${entry.name}" reads stored bytes, which the card ` +
           `source and byte routes serve rather than a JSON batch`,
+    meta: { entry: entry.position },
+  });
+}
+
+// A base version names the state a write is computed on top of, so an entry
+// that does not write has nothing to compare one against.
+//
+// Refused rather than ignored, and refused here rather than left to the
+// coordinator, because the coordinator only ever sees the entries that write:
+// a `read`, a `readSource` or a `query` — the three bases that write nothing —
+// is answered before the batch is staged. An ignored
+// base version answers with no `baseMatched` at all, which is exactly the
+// reading a caller cannot distinguish from "the realm does not report on
+// this" — so a well-formed value on a read would be silently dropped while a
+// malformed one on the same read is a refusal, which is the inconsistency the
+// shape check exists to avoid.
+//
+// Which *writing* behaviors carry a base stays the coordinator's rule, since
+// it owns the comparison; this covers only the entries that never reach it.
+export function assertVersionableEntry(
+  entry: EnvelopeEntry,
+  definition: OperationDefinition,
+): void {
+  if (entry.baseVersion === undefined || isWrite(definition.base)) {
+    return;
+  }
+  throw new OperationFailure({
+    ...(entry.href ? { id: entry.href } : {}),
+    status: 400,
+    code: 'invalid-params',
+    title: 'Invalid base version',
+    detail:
+      `entry ${entry.position} invokes "${entry.name}", which is a ` +
+      `"${definition.base}" and writes nothing, and names a base version; ` +
+      `a base version describes the state a write is computed on top of`,
     meta: { entry: entry.position },
   });
 }
@@ -535,14 +737,39 @@ export function batchEntryFor(
   definition: OperationDefinition,
 ): BatchEntry {
   let { position, name } = entry;
-  assertStagesAreServed(entry, definition);
   // Every entry the coordinator stages carries the position the caller sent it
   // under, so a batch holding only some of an envelope's entries — and one
   // whose entries sat inside groups — still reports refusals against the
   // envelope's own numbering.
-  let common = { definition, label: position };
+  //
+  // The base version rides along on every arm rather than only on the two that
+  // can report a match. Which behaviors have a base to compare is the
+  // coordinator's rule and it already enforces it for in-process callers, so
+  // handing it through uniformly is what makes a `create` that names one answer
+  // the same refusal however it arrived, instead of one that silently drops it.
+  let common = {
+    definition,
+    label: position,
+    ...(entry.baseVersion === undefined
+      ? {}
+      : { baseVersion: entry.baseVersion }),
+  };
   switch (definition.base) {
     case 'create': {
+      if (entry.found) {
+        // A query says which existing card the entry runs against, and a
+        // create has none — the card it acts on is the one it is about to
+        // mint. Refused here rather than at parse, because the wire never
+        // says an entry creates: the operation's name does, and what that
+        // name means is read off the type the entry resolved against, which
+        // is a card the query had to find first.
+        throw refuse(
+          `entry ${position} invokes "${name}", which mints a card, and ` +
+            `takes its target from a query; a create has no existing card ` +
+            `for one to find`,
+          position,
+        );
+      }
       if (definition.of) {
         // A named create stages its card from the type and template its
         // declaration carries, so its payload is the operation's params and
@@ -621,6 +848,19 @@ export function batchEntryFor(
         href: hrefRequired(entry, 'appendLine'),
       };
     case 'appendContainsMany':
+      if (definition.items) {
+        // A declaration says what it appends, so `field`, `items` and
+        // `fields` are not read off the wire for one — which means they are
+        // ordinary param names here, and subtracting them would make a
+        // declaration naming one of them uninvokable. The endpoint checks the
+        // payload against the same unsubtracted map before staging.
+        return {
+          op: 'appendContainsMany',
+          ...common,
+          params: paramsFor(entry),
+          href: hrefRequired(entry, 'appendContainsMany'),
+        };
+      }
       return {
         op: 'appendContainsMany',
         ...common,
@@ -692,32 +932,79 @@ export function paramsFor(
   return params;
 }
 
-// A declaration may reshape its payload with an `input` program and project
-// its result with an `output` one. A batch runs neither, and carrying the
-// entry out as though the declaration said nothing answers a different
-// question well — the author's `input` was to produce the very value the
-// executor then reports as missing. So the refusal names the stage, the way
-// the read executor refuses a specialization it does not carry out.
-function assertStagesAreServed(
+// The entry as its `input` stage left it.
+//
+// The stage sees the payload — `data` without the members the envelope reads
+// for itself — and produces the payload the entry is staged from, so every arm
+// of `batchEntryFor` reads the transformed values wherever it reads `data`.
+// The envelope's own members are carried through rather than passed to the
+// program, and they win over what it produced: a `lid` is how a later entry
+// links to the card this one mints, and it is read off `data` into the entry
+// before a stage runs — so a program emitting one would leave the staged
+// resource and the key the coordinator is given naming different cards. The
+// program is handed neither member, so anything it emits under those names is
+// overwriting a value it could not read.
+export function entryWithPayload(
   entry: EnvelopeEntry,
-  definition: OperationDefinition,
-): void {
-  let stages = (['input', 'output'] as const).filter(
-    (stage) => definition[stage] !== undefined,
-  );
-  if (stages.length === 0) {
-    return;
+  payload: Record<string, unknown>,
+): EnvelopeEntry {
+  let carried: Record<string, unknown> = {};
+  for (let member of ENVELOPE_MEMBERS) {
+    if (entry.data && own(entry.data, member) !== undefined) {
+      carried[member] = entry.data[member];
+    }
   }
-  throw new OperationFailure({
+  return { ...entry, data: { ...payload, ...carried } };
+}
+
+// A write entry's two steps before it is staged, in the order `runOperation`
+// runs them for a read: the `input` stage over the payload, then the `params`
+// check against what it produced. A value an `input` supplies is what the
+// check then sees, which is most of what an `input` is for.
+//
+// The check belongs here and not in the executors: a declared param with no
+// value is the caller's mistake, and the behaviors read the payload
+// differently enough that some would never notice — a `delete` reads no
+// payload at all, so a declaration requiring one would be carried out over a
+// card the caller had not said enough to remove.
+//
+// A create's scope comes back carrying the payload as these two steps left it,
+// since that — not what the caller sent — is what the card would be minted
+// from. The transformed entry keeps its `position` and the envelope's own
+// members; only the payload moves.
+export async function stageWriteEntry(
+  write: ResolvedEnvelopeEntry,
+  ctx: TransformContext,
+): Promise<ResolvedEnvelopeEntry> {
+  let { entry, definition, scope } = write;
+  if (definition.input) {
+    entry = entryWithPayload(
+      entry,
+      await runInputTransform(definition, paramsFor(entry), ctx),
+    );
+  }
+  assertParamsSupplied(definition, paramsFor(entry), {
+    name: entry.name,
     ...(entry.href ? { id: entry.href } : {}),
-    status: 501,
-    code: 'internal-error',
-    title: 'Operation not implemented',
-    detail:
-      `operation "${entry.name}" specializes its behavior with ` +
-      `${stages.join(' and ')}, which a batch does not run`,
-    meta: { entry: entry.position },
   });
+  if (definition.base === 'create') {
+    // Read the way `batchEntryFor` stages it: a named create is filled from
+    // its params, which leave out the members the envelope reads for itself,
+    // and a plain create is minted from the whole resource, local id included.
+    scope = scope.derive({
+      proposed: definition.of ? paramsFor(entry) : (entry.data ?? {}),
+    });
+  }
+  return { ...write, entry, scope };
+}
+
+function own(
+  record: Record<string, unknown>,
+  key: string,
+): unknown | undefined {
+  return Object.prototype.hasOwnProperty.call(record, key)
+    ? record[key]
+    : undefined;
 }
 
 function hrefRequired(entry: EnvelopeEntry, base: BaseOperation): string {
@@ -785,6 +1072,37 @@ export function writeResult(
       },
     },
   };
+}
+
+// One entry's result as its `output` stage left it.
+//
+// `atomic:results` is a positional list of JSON:API result objects, so a
+// projection has to remain an object: a caller reading the list by position
+// would otherwise find a bare string where the entry it sent reports its
+// outcome. What the author leaves out of the object is the whole point of
+// projecting and is not checked.
+export function projectedResult(
+  entry: EnvelopeEntry,
+  projection: unknown,
+): EnvelopeResult {
+  if (
+    typeof projection !== 'object' ||
+    projection === null ||
+    Array.isArray(projection)
+  ) {
+    throw new OperationFailure({
+      ...(entry.href ? { id: entry.href } : {}),
+      status: 400,
+      code: 'invalid-params',
+      title: 'Cannot run transform',
+      detail:
+        `the \`output\` stage of operation "${entry.name}" produced ` +
+        `something other than a result object, and entry ${entry.position} ` +
+        `answers with one`,
+      meta: { entry: entry.position, operation: entry.name, stage: 'output' },
+    });
+  }
+  return projection as Record<string, unknown>;
 }
 
 export function readResult(

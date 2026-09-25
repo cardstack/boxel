@@ -106,6 +106,10 @@ jobs:
         if: ${{ !cancelled() }}
         run: pnpm run lint
         working-directory: packages/experiments-realm
+      - name: Lint Pret UI
+        if: ${{ !cancelled() }}
+        run: pnpm run lint
+        working-directory: packages/pretui
       - name: Lint Software Factory
         if: ${{ !cancelled() }}
         run: pnpm run lint
@@ -122,6 +126,10 @@ jobs:
         if: ${{ !cancelled() }}
         run: pnpm run lint
         working-directory: packages/ai-bot
+      - name: Lint AI Assistant Evals
+        if: ${{ !cancelled() }}
+        run: pnpm run lint
+        working-directory: packages/ai-assistant-evals
       - name: Lint Bot Runner
         if: ${{ !cancelled() }}
         run: pnpm run lint

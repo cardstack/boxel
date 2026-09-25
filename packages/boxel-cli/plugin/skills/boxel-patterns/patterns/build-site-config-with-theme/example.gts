@@ -12,6 +12,7 @@ import NumberField from '@cardstack/base/number';
 import StringField from '@cardstack/base/string';
 import UrlField from '@cardstack/base/url';
 import ThemeCard from '@cardstack/base/theme';
+import { Button } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 
 export class PageConfig extends CardDef {
@@ -52,7 +53,7 @@ export class SiteShell extends CardDef {
   static isolated = class Isolated extends Component<typeof SiteShell> {
     get sortedNavPages() {
       return (this.args.model.site?.pages ?? [])
-        .filter((page) => page.showInNav)
+        .filter((page) => page?.showInNav)
         .slice()
         .sort((a, b) => (a.navOrder ?? 0) - (b.navOrder ?? 0));
     }
@@ -79,14 +80,26 @@ export class SiteShell extends CardDef {
 
           <div class='actions'>
             {{#if @model.site.ctaSecondaryText}}
-              <a href={{@model.site.ctaSecondaryUrl}}>
+              <Button
+                class='cta'
+                @as='anchor'
+                @kind='secondary'
+                @size='small'
+                @href={{@model.site.ctaSecondaryUrl}}
+              >
                 {{@model.site.ctaSecondaryText}}
-              </a>
+              </Button>
             {{/if}}
             {{#if @model.site.ctaPrimaryText}}
-              <a class='primary' href={{@model.site.ctaPrimaryUrl}}>
+              <Button
+                class='cta'
+                @as='anchor'
+                @kind='primary'
+                @size='small'
+                @href={{@model.site.ctaPrimaryUrl}}
+              >
                 {{@model.site.ctaPrimaryText}}
-              </a>
+              </Button>
             {{/if}}
           </div>
         </nav>
@@ -99,9 +112,6 @@ export class SiteShell extends CardDef {
       <style scoped>
         .site-shell {
           min-height: 100%;
-          background: var(--background, #fff);
-          color: var(--foreground, #17202a);
-          font-family: var(--font-sans);
         }
 
         .navbar {
@@ -109,12 +119,13 @@ export class SiteShell extends CardDef {
           align-items: center;
           gap: 1rem;
           padding: 1rem 1.25rem;
-          border-bottom: 1px solid var(--border, #d8dee7);
+          border-bottom: 1px solid var(--border);
         }
 
-        .brand {
+        .brand,
+        .brand:hover {
+          color: var(--foreground);
           font-weight: 800;
-          color: var(--foreground, #17202a);
           text-decoration: none;
         }
 
@@ -130,21 +141,23 @@ export class SiteShell extends CardDef {
         }
 
         .nav-link {
-          color: var(--muted-foreground, #687385);
+          color: var(--muted-foreground);
           text-decoration: none;
         }
 
+        .nav-link:hover,
         .nav-link.active {
-          color: var(--foreground, #17202a);
-          font-weight: 700;
+          color: var(--foreground);
         }
 
-        .primary {
-          padding: 0.45rem 0.75rem;
-          border-radius: 6px;
-          background: var(--primary, #285de8);
-          color: var(--primary-foreground, #fff);
-          text-decoration: none;
+        .actions {
+          flex-shrink: 0;
+        }
+
+        .cta {
+          --boxel-button-padding: var(--boxel-sp-4xs) var(--boxel-sp-xs);
+          --boxel-button-min-width: 0;
+          white-space: nowrap;
         }
 
         .page {

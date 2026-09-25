@@ -1,13 +1,14 @@
 import type { DBAdapter, Expression, Querier } from '@cardstack/runtime-common';
 import {
   addExplicitParens,
-  cancelRunningJobsInConcurrencyGroup,
+  cancelRunningJobsInLaneFamily,
   dbAdapterQuerier,
   param,
   separatedByCommas,
 } from '@cardstack/runtime-common';
 import { indexingConcurrencyGroup } from '@cardstack/runtime-common/jobs/indexing';
 import { prerenderHtmlConcurrencyGroup } from '@cardstack/runtime-common/jobs/prerender-html';
+import { laneFamilyPredicate } from '@cardstack/runtime-common/jobs/lane-family';
 import fsExtra from 'fs-extra';
 const { pathExistsSync, readdirSync, removeSync } = fsExtra;
 import { join, relative } from 'path';
@@ -75,20 +76,20 @@ export async function removeRealmDatabaseArtifacts(args: {
 }) {
   let { dbAdapter, realmURL, querier } = args;
   let q = querier ?? dbAdapterQuerier(dbAdapter);
-  // Both of the realm's job lanes must be drained: a surviving
-  // prerender_html job would run against whatever realm later occupies this
-  // URL and stamp this realm's (higher) generation into its
-  // prerendered_html rows, silently pinning them against the monotonic swap
-  // guard until the new realm's generation catches up.
-  for (let concurrencyGroup of [
+  // Both of the realm's job lane families must be drained, every lane of
+  // each: a surviving prerender_html job would run against whatever realm
+  // later occupies this URL and stamp this realm's (higher) generation into
+  // its prerendered_html rows, silently pinning them against the monotonic
+  // swap guard until the new realm's generation catches up.
+  for (let laneFamily of [
     indexingConcurrencyGroup(realmURL),
     prerenderHtmlConcurrencyGroup(realmURL),
   ]) {
-    await cancelRunningJobsInConcurrencyGroup(dbAdapter, concurrencyGroup, q);
+    await cancelRunningJobsInLaneFamily(dbAdapter, laneFamily, q);
 
     let pendingJobs = (await q([
-      `SELECT id FROM jobs WHERE concurrency_group =`,
-      param(concurrencyGroup),
+      `SELECT id FROM jobs WHERE`,
+      ...laneFamilyPredicate(laneFamily),
       ` AND status = 'unfulfilled'`,
     ])) as { id: number }[];
 
@@ -104,22 +105,32 @@ export async function removeRealmDatabaseArtifacts(args: {
     }
 
     await q([
-      `DELETE FROM jobs WHERE concurrency_group =`,
-      param(concurrencyGroup),
+      `DELETE FROM jobs WHERE`,
+      ...laneFamilyPredicate(laneFamily),
       ` AND status = 'unfulfilled'`,
     ]);
   }
   await q([`DELETE FROM modules WHERE resolved_realm_url =`, param(realmURL)]);
   await q([
-    `DELETE FROM boxel_index_working WHERE realm_url =`,
+    `DELETE FROM boxel_index_pending WHERE realm_url =`,
     param(realmURL),
   ]);
   await q([`DELETE FROM boxel_index WHERE realm_url =`, param(realmURL)]);
   await q([
-    `DELETE FROM prerendered_html_working WHERE realm_url =`,
+    `DELETE FROM prerendered_html_pending WHERE realm_url =`,
     param(realmURL),
   ]);
   await q([`DELETE FROM prerendered_html WHERE realm_url =`, param(realmURL)]);
+  // No pass writes the shared working tables, but they can still hold a
+  // realm's rows from a release that staged there.
+  await q([
+    `DELETE FROM boxel_index_working WHERE realm_url =`,
+    param(realmURL),
+  ]);
+  await q([
+    `DELETE FROM prerendered_html_working WHERE realm_url =`,
+    param(realmURL),
+  ]);
   // A deleted realm never reindexes, so its interned stylesheets would
   // otherwise never be swept.
   await q([`DELETE FROM scoped_css WHERE realm_url =`, param(realmURL)]);
@@ -127,6 +138,10 @@ export async function removeRealmDatabaseArtifacts(args: {
   await q([`DELETE FROM realm_generations WHERE realm_url =`, param(realmURL)]);
   await q([
     `DELETE FROM realm_type_generations WHERE realm_url =`,
+    param(realmURL),
+  ]);
+  await q([
+    `DELETE FROM realm_index_commits WHERE realm_url =`,
     param(realmURL),
   ]);
   await q([`DELETE FROM realm_file_meta WHERE realm_url =`, param(realmURL)]);

@@ -26,7 +26,25 @@ on:
       # Traefik's static config: every env-mode job routes through it and
       # reads its access log in the diagnostics.
       - "traefik/**"
+  # Runnable by hand on any branch; `paths:` filters do not apply, so a
+  # dispatch always runs.
+  #
+  # The inputs exist because the jobs below otherwise read "not a pull request"
+  # as "push to main", and a hand-run branch is neither: Percy runs against a
+  # limited quota and the index cache is skipped, which together make a
+  # hand-run build both expensive and not comparable with the PR runs it would
+  # usually be measured against. Both default to the push-to-main behaviour, so
+  # a dispatch that sets nothing behaves exactly as before.
   workflow_dispatch:
+    inputs:
+      use_index_cache:
+        description: "Allow seeding the realms from the cached index, the way a pull_request run does. Still subject to the same changed-file check, so a branch touching indexing or rendering indexes from scratch anyway. Turn this on to compare timings against PR runs: from-scratch indexing costs roughly 1.5x per test, and unevenly, so a default dispatch run is not comparable with a PR run."
+        type: boolean
+        default: false
+      run_percy:
+        description: "Take Percy snapshots. Off by default because the quota is 10k snapshots/month and a hand-run build is usually a probe — the same reason draft PRs skip them."
+        type: boolean
+        default: false
 
 concurrency:
   group: ci-host-${{ github.head_ref || github.run_id }}
@@ -56,6 +74,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "percy_needed=${{ inputs.run_percy }}" >> "$GITHUB_OUTPUT"
+            echo "Hand-run build — Percy is ${{ inputs.run_percy }} (the run_percy input)"
+            exit 0
+          fi
+
           if [[ "${{ github.event_name }}" != "pull_request" ]]; then
             echo "percy_needed=true" >> "$GITHUB_OUTPUT"
             echo "Not a pull request — Percy will always run"
@@ -105,10 +129,15 @@ jobs:
     # signals that they'd index differently now. Those paths fall back to
     # from-scratch indexing.
     #
-    # Push-to-main and workflow_dispatch runs never use the cache: the
-    # freshest artifact predates the commit under test, and main runs feed
-    # the memory-baseline update, which shouldn't be measured against a
-    # differently-seeded index.
+    # Push-to-main runs never use the cache: the freshest artifact predates
+    # the commit under test, and main runs feed the memory-baseline update,
+    # which shouldn't be measured against a differently-seeded index.
+    #
+    # A hand-run build defaults to the same, and says so in its log. It can opt
+    # in with the `use_index_cache` input, because the reason above is about
+    # main specifically: for a branch, the cached artifact is exactly as fresh
+    # as it would be for a pull request on that branch. Anything comparing
+    # timings with PR runs wants it on.
     name: Check if cached index is usable
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -120,13 +149,26 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if [[ "${{ github.event_name }}" != "pull_request" ]]; then
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            if [[ "${{ inputs.use_index_cache }}" != "true" ]]; then
+              echo "use_cache=false" >> "$GITHUB_OUTPUT"
+              echo "Hand-run build — index cache off (the use_index_cache input)"
+              exit 0
+            fi
+            # The input is permission to use the cache, not an override of the
+            # check below: a branch that changes how indexing or rendering
+            # behaves would otherwise read rows main's code produced, and the
+            # run could miss the very regression the check exists to catch.
+            # Diffed from the merge base with main, which is the same set of
+            # files a pull request for this branch would report.
+            CHANGED_FILES=$(gh api "repos/${{ github.repository }}/compare/main...${{ github.sha }}" --paginate --jq '.files[].filename')
+          elif [[ "${{ github.event_name }}" != "pull_request" ]]; then
             echo "use_cache=false" >> "$GITHUB_OUTPUT"
             echo "Not a pull request — realms will index from scratch"
             exit 0
+          else
+            CHANGED_FILES=$(gh api repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files --paginate --jq '.[].filename')
           fi
-
-          CHANGED_FILES=$(gh api repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files --paginate --jq '.[].filename')
 
           # packages/realm-server, packages/runtime-common: how files are
           #   indexed and prerendered.
@@ -156,6 +198,45 @@ jobs:
           use_cache=true
           while IFS= read -r file; do
             case "$file" in
+              # Realm content whose name reads like a spec file. Matched ahead
+              # of the spec-file arm, which spans `/` and would otherwise treat
+              # it as inert; this keeps such a file gated by the package globs'
+              # own verdict.
+              #
+              # One prefix per package the spec arm covers, rather than
+              # `packages/*/`: a wildcard here reaches packages those globs
+              # never gated, and would make a fixture in one of them newly
+              # force a from-scratch index.
+              packages/realm-server/tests/fixtures/*|packages/runtime-common/tests/fixtures/*|\
+              packages/boxel-ui/tests/fixtures/*|packages/boxel-ui/docs-app/tests/fixtures/*)
+                use_cache=false
+                echo "Realm fixture change detected: $file"
+                break
+                ;;
+              # A spec file cannot change how anything indexes or renders: the
+              # realm servers this stack starts boot from main.ts / worker.ts,
+              # and the host bundle is built from app sources, so nothing under
+              # a package's `tests/` is ever loaded by either. Matched ahead of
+              # the package globs below, which would otherwise catch every one
+              # of them — editing a realm-server test was the single most
+              # common cause of a needless from-scratch index.
+              #
+              # Scoped to spec files, not to `tests/`: a fixture directory
+              # under `tests/` is realm content — `realm-server/tests/fixtures/
+              # realistic` is served as the node-test realm — and stays gated.
+              # The arm above is what keeps it that way, because the names
+              # overlap: `fixtures/realistic/code-ref-test.gts` is a card that
+              # reads as a spec file.
+              #
+              # `case` patterns are not path-aware — `*` spans `/` — which is
+              # what lets one pattern per package cover its nested spec
+              # directories, and equally what makes the fixtures arm above
+              # necessary rather than merely tidy.
+              packages/realm-server/tests/*-test.ts|packages/realm-server/tests/*-test.gts|\
+              packages/runtime-common/tests/*-test.ts|packages/runtime-common/tests/*-test.gts|\
+              packages/boxel-ui/tests/*-test.ts|packages/boxel-ui/tests/*-test.gts|\
+              packages/boxel-ui/docs-app/tests/*-test.ts|packages/boxel-ui/docs-app/tests/*-test.gts)
+                ;;
               packages/realm-server/*|packages/runtime-common/*|packages/postgres/*|packages/boxel-ui/*|package.json|pnpm-lock.yaml|pnpm-workspace.yaml)
                 use_cache=false
                 echo "Index-behavior change detected: $file"
@@ -189,7 +270,11 @@ jobs:
     uses: ./.github/workflows/test-web-assets.yaml
     with:
       caller: ci-host
-      skip_catalog: true
+      # The catalog prefix stays in the bundle: host tests load the pinned
+      # catalog test subset through `@cardstack/catalog/`, which host-test
+      # serves as the catalog realm. The test environment still keeps the
+      # catalog out of every test's realm list.
+      skip_catalog: false
       # Both jobs in this workflow (live-test and host-test) run their
       # chrome against the env-mode service stack at
       # `https://*.ci.localhost`, so environment.js needs to bake those
@@ -442,7 +527,8 @@ jobs:
       cancel-in-progress: true
     env:
       BOXEL_ENVIRONMENT: ci
-      SKIP_CATALOG: "true"
+      # Serve only the pinned catalog test subset as the catalog realm.
+      CATALOG_SOURCE: test-subset
       # env-vars.sh sets these only if the cert files exist at sourcing
       # time, but mise-action sources it before `actions/init` runs
       # `mise run infra:ensure-dev-cert` (which provisions the cert), so
@@ -620,6 +706,7 @@ jobs:
           mise run ci:wait-for-realms \
             realm=https://realm-server.ci.localhost/base/ \
             realm=https://realm-server.ci.localhost/skills/ \
+            realm=https://realm-server.ci.localhost/catalog/ \
             icons=https://icons.ci.localhost/@cardstack/boxel-icons/v1/icons/folder-pen.js \
             second-stage=https://realm-test.ci.localhost/test/ \
             stack-pid-file=/tmp/test-services.pid \
@@ -1283,8 +1370,8 @@ jobs:
       group: host-memory-baseline-update-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
     # host-test only: the memory reports come from its shards, and the junit
-    # report now comes from the merged PR's own run rather than from this
-    # run's merge-and-publish job.
+    # report comes from a qualifying PR run rather than from this run's
+    # merge-and-publish job.
     needs: [host-test]
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -1297,8 +1384,8 @@ jobs:
       contents: write
       # Resolving the merge commit to its PR, and that PR to its head.
       pull-requests: read
-      # Listing that head's workflow runs, inspecting one run's jobs, and
-      # downloading its merged junit artifact.
+      # Listing candidate workflow runs, inspecting their jobs, and
+      # downloading the chosen run's merged junit artifact.
       actions: read
 
     steps:
@@ -1317,22 +1404,25 @@ jobs:
           merge-multiple: true
 
       # The shard weights are consumed by `pull_request` runs, so they have to
-      # be measured on one. This push-to-main run is the least representative
-      # shape available: Percy is always on for a non-PR event, and the index
-      # cache is deliberately skipped (see `Check if cached index is usable`),
-      # which together cost about 1.5x per test. The penalty is uneven —
-      # fixture-heavy acceptance modules pay far more of it than unit tests —
-      # so weights taken here mis-*assign* work rather than merely mis-scale
-      # it, and greedy packing is scale-invariant so a uniform factor would
-      # have been harmless. Measured: a packer predicting a 1s spread produced
-      # a 239s one.
+      # be measured on one, and this push-to-main run is the wrong shape: the
+      # index cache is deliberately skipped for a non-PR event (see `Check if
+      # cached index is usable`), and a from-scratch index penalises
+      # fixture-heavy acceptance modules far more than unit tests. That
+      # unevenness mis-*assigns* work rather than merely mis-scaling it, which
+      # greedy packing would have absorbed. Measured: a packer predicting a 1s
+      # spread produced a 239s one.
       #
-      # Take the report from the run of the PR that produced this merge, and
-      # only when that run was representative and complete. Anything else
-      # leaves the file alone, because a stale-but-consistent set of weights
-      # balances better than a fresh set measured in the wrong environment —
-      # which is also why there is no fallback to this run's own report.
-      - name: Download merged junit report from the merged PR's run
+      # The cache is what separates the two shapes. Percy does not: it is on
+      # for a non-PR event and it is also on for almost every PR run — 23 of
+      # 25 sampled — so a Percy-loaded run is the median consumer, and the
+      # selection below requires rather than rejects it.
+      #
+      # Anything unqualifying leaves the file alone, because a
+      # stale-but-consistent set of weights balances better than a fresh set
+      # measured in the wrong environment — which is why there is still no
+      # fallback to this run's own report.
+      - name: Download a merged junit report from a qualifying PR run
+        id: timings-source
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
@@ -1355,63 +1445,189 @@ jobs:
           # not just the one that merged it — an open branch that merged main
           # in qualifies too, and the ordering is undocumented. Match on the
           # merge commit instead of taking the first.
-          pr=$(gh api "repos/$REPO/commits/$MERGE_SHA/pulls" \
-            --jq 'map(select(.merge_commit_sha == env.MERGE_SHA)) | .[0].number // empty') ||
-            broke "could not list the pull requests for $MERGE_SHA"
-          [ -n "$pr" ] || leave "no PR is associated with $MERGE_SHA"
+          # Best-effort, both of them: a merge with no associated PR, or a PR
+          # whose head cannot be resolved, just means there is no preferred
+          # candidate — the search below still has the recent-runs list to
+          # work from. Exiting here instead would skip the fallback in exactly
+          # the cases that most need it.
+          # `gh api --jq` prints the error body to stdout on a failed call, so
+          # a bare `|| true` would leave that JSON in `$pr` and the next
+          # request would be built from it. Take the value only on success,
+          # and only when it is actually a number.
+          pr=""
+          if pr_out=$(gh api "repos/$REPO/commits/$MERGE_SHA/pulls" \
+               --jq 'map(select(.merge_commit_sha == env.MERGE_SHA)) | .[0].number // empty'); then
+            case "$pr_out" in
+              ''|*[!0-9]*) ;;
+              *) pr="$pr_out" ;;
+            esac
+          fi
 
-          head_sha=$(gh api "repos/$REPO/pulls/$pr" --jq '.head.sha // empty') ||
-            broke "could not read PR #$pr"
-          [ -n "$head_sha" ] || leave "could not resolve the head commit of PR #$pr"
+          head_sha=""
+          if [ -n "$pr" ]; then
+            if head_out=$(gh api "repos/$REPO/pulls/$pr" --jq '.head.sha // empty'); then
+              case "$head_out" in
+                ''|*[!0-9a-f]*) ;;
+                *) head_sha="$head_out" ;;
+              esac
+            fi
+            [ -n "$head_sha" ] ||
+              echo "Could not resolve the head of PR #$pr — selecting from recent PR runs"
+          else
+            echo "No PR is associated with $MERGE_SHA — selecting from recent PR runs"
+          fi
 
-          # Newest successful CI Host run for that head. A run with failed
-          # shards reports only the modules that ran, and the generator keeps
-          # existing values for the rest — which is how weights from different
-          # eras end up mixed in one file.
+          # A run qualifies only if it is shaped like the runs these weights
+          # are consumed by. Each condition below is a way the measurement
+          # would describe a different environment:
           #
-          # First attempt only, for the same reason. "Re-run failed jobs"
-          # publishes a second artifact of the same name holding just the
-          # re-run shards, and `gh run download --name` resolves to the newer
-          # one: run 33021863111 carries 121,401 B from attempt 1 and 8,259 B
-          # from attempt 2, while its conclusion still reads success. Coverage
-          # cannot catch that — the generator measures attribution against the
-          # report's own total, so a report of 273 testcases is ~100%
-          # attributable and passes.
-          run_id=$(gh api "repos/$REPO/actions/runs?head_sha=$head_sha&event=pull_request&per_page=50" \
+          #   success + attempt 1  a run with failed shards reports only the
+          #                        modules that ran, and the generator keeps
+          #                        existing values for the rest, mixing eras.
+          #                        "Re-run failed jobs" is the same hazard
+          #                        wearing a green tick: it publishes a second
+          #                        artifact of the same name holding only the
+          #                        re-run shards, and `gh run download --name`
+          #                        resolves to the newer one. Coverage cannot
+          #                        catch it — a report of 273 testcases is
+          #                        ~100% attributable to itself.
+          #   Percy ran            Percy's cost is uneven — it roughly doubles
+          #                        the tests that snapshot and leaves the rest
+          #                        alone — so it changes which modules are
+          #                        heavy, not just how heavy they all are.
+          #                        Which means the weights have to be measured
+          #                        on whichever shape the runs that spend them
+          #                        actually have, and 23 of 25 sampled PR runs
+          #                        ran Percy. A Percy-free run is the outlier.
+          #   cache imported       a from-scratch index penalises
+          #                        fixture-heavy modules far more than unit
+          #                        tests, the same kind of unevenness.
+          #
+          # `Import cached realm index` is skipped rather than absent when the
+          # cache is unusable, so its conclusion distinguishes the two shapes;
+          # `Finalise Percy` is skipped when Percy did not run. An unreadable
+          # answer counts as not-Percy, so an unrecognised run is passed over
+          # rather than measured on a guess.
+          qualifies() {
+            local candidate="$1" jobs_json percy imported head merged
+            jobs_json=$(gh api "repos/$REPO/actions/runs/$candidate/jobs?per_page=100") || {
+              # Say so, rather than letting a transport or permissions failure
+              # read as a disqualification in the log.
+              echo "  run $candidate: could not read its jobs"
+              return 1
+            }
+            percy=$(printf '%s' "$jobs_json" |
+              jq -r '[.jobs[] | select(.name | test("Finalise Percy")) | .conclusion] | first // "unknown"')
+            [ "$percy" = "success" ] || { echo "  run $candidate: Finalise Percy is $percy, not a Percy-loaded run"; return 1; }
+            imported=$(printf '%s' "$jobs_json" |
+              jq -r '[.jobs[] | select(.name | startswith("Host Tests")) | .steps[]?
+                      | select(.name == "Import cached realm index" and .conclusion == "success")] | length')
+            [ "${imported:-0}" -gt 0 ] || { echo "  run $candidate: indexed from scratch"; return 1; }
+
+            # The run must measure code that landed. A PR run measures main
+            # plus that PR's diff, which is what makes it representative — but
+            # only if the diff is going to be there. An open PR that makes one
+            # module slow would otherwise be recorded as main's cost, and the
+            # generator's drift gate cannot catch it: it scores both packings
+            # against this run's own timings, so a large artificial change
+            # reads as a large improvement and is committed.
+            #
+            # `pull_requests[]` on the run object is empty often enough not to
+            # be usable, so ask the head commit which PRs contain it and
+            # whether any of them merged.
+            head=$(printf '%s' "$jobs_json" | jq -r 'first(.jobs[].head_sha) // empty')
+            [ -n "$head" ] || { echo "  run $candidate: no head commit to check"; return 1; }
+            merged=$(gh api "repos/$REPO/commits/$head/pulls" \
+              --jq '[.[] | select(.merged_at != null)] | length') || {
+              echo "  run $candidate: could not check whether its PR merged"
+              return 1
+            }
+            [ "${merged:-0}" -gt 0 ] || { echo "  run $candidate: its PR has not merged"; return 1; }
+            return 0
+          }
+
+          # Prefer the merging PR's own run, then fall back to the newest
+          # qualifying run from any recent PR.
+          #
+          # The fallback exists because the conjunction above is far more
+          # selective than any one of its parts. Requiring a single named run
+          # to satisfy all of them left the weights unrewritten across 17
+          # consecutive main runs, spanning the largest change to relative test
+          # cost in months — the exact failure this job exists to prevent.
+          #
+          # Taking another PR's run costs freshness of code, not correctness of
+          # shape: every condition in `qualifies` is checked on whichever run
+          # is used, including that its PR merged, so the measurement
+          # describes both the environment the weights are spent in and code
+          # that is actually on main. A run from a few hours ago is fresher
+          # than a file that cannot be rewritten at all.
+          # No older than a week, because the point is weights measured on
+          # roughly current code — an ancient run is not an improvement on a
+          # stale file, it is the same problem with a fresher commit date. The
+          # bound applies to the merging PR's own runs too: a PR can sit open
+          # long after its last push, and nothing about being this merge's PR
+          # makes a month-old measurement current.
+          cutoff=$(date -u -d '7 days ago' +%Y-%m-%dT%H:%M:%SZ 2>/dev/null ||
+                   date -u -v-7d +%Y-%m-%dT%H:%M:%SZ)
+
+          candidates=""
+          if [ -n "$head_sha" ]; then
+            candidates=$(CUTOFF="$cutoff" gh api "repos/$REPO/actions/runs?head_sha=$head_sha&event=pull_request&per_page=50" \
+              --jq '[.workflow_runs[]
+                     | select(.name == "CI Host" and .conclusion == "success"
+                              and .run_attempt == 1 and .created_at > env.CUTOFF)]
+                    | sort_by(.created_at) | reverse | .[].id' || true)
+            [ -n "$candidates" ] ||
+              echo "PR #$pr has no recent first-attempt CI Host run that passed outright — widening to recent PRs"
+          fi
+
+          # Bounded the other way too: newest-first and capped at a handful, so
+          # a long unqualifying streak costs a predictable number of API calls
+          # rather than walking history.
+          #
+          # Filtered client-side rather than with `event=`/`status=`: those
+          # have been observed serving a cached page, and a stale page is
+          # precisely how a long-superseded run would be picked. The age bound
+          # makes that harmless either way.
+          # The one call that has to work. Everything above degrades to "no
+          # preferred candidate", which is survivable; if this list cannot be
+          # fetched there is nothing to search, and a missing `actions: read`
+          # or an outage would otherwise end on the same quiet `leave` as a
+          # merge with nothing to qualify — a refresh silently disabled until
+          # someone notices the file has stopped moving.
+          recent=$(CUTOFF="$cutoff" gh api "repos/$REPO/actions/workflows/ci-host.yaml/runs?per_page=100" \
             --jq '[.workflow_runs[]
-                   | select(.name == "CI Host" and .conclusion == "success" and .run_attempt == 1)]
-                  | sort_by(.created_at) | last | .id // empty') ||
-            broke "could not list workflow runs for $head_sha"
-          [ -n "$run_id" ] || leave "PR #$pr has no first-attempt CI Host run that passed outright"
+                   | select(.event == "pull_request" and .conclusion == "success"
+                            and .run_attempt == 1 and .created_at > env.CUTOFF)]
+                  | sort_by(.created_at) | reverse | .[0:12] | .[].id') ||
+            broke "could not list recent CI Host runs"
+          candidates="$candidates
+          $recent"
 
-          # One jobs fetch answers both remaining questions.
-          jobs_json=$(gh api "repos/$REPO/actions/runs/$run_id/jobs?per_page=100") ||
-            broke "could not inspect the jobs of run $run_id"
-
-          # Percy roughly doubles some tests and leaves others alone, so a
-          # Percy-enabled run is no better a model of the median PR run than a
-          # push run is. Ask the run itself rather than the head's commit
-          # statuses: that endpoint pages at 30, depends on Percy having posted
-          # by now, and either miss would silently take the permissive branch.
-          # `Finalise Percy` is skipped when Percy did not run and succeeds
-          # when it did, which is authoritative for this run and needs no extra
-          # call. An answer we cannot read is treated as "ran": the whole point
-          # of this filter is to not measure a Percy-loaded run.
-          percy=$(printf '%s' "$jobs_json" |
-            jq -r '[.jobs[] | select(.name | test("Finalise Percy")) | .conclusion] | first // "unknown"')
-          [ "$percy" = "skipped" ] || leave "PR #$pr's run reports Finalise Percy as $percy"
-
-          # The other half of the 1.5x. `Import cached realm index` is skipped
-          # rather than absent when the cache is unusable, so its conclusion
-          # distinguishes the two shapes.
-          imported=$(printf '%s' "$jobs_json" |
-            jq -r '[.jobs[] | select(.name | startswith("Host Tests")) | .steps[]?
-                    | select(.name == "Import cached realm index" and .conclusion == "success")] | length')
-          [ "${imported:-0}" -gt 0 ] || leave "run $run_id indexed from scratch"
-
-          gh run download -R "$REPO" "$run_id" --name host-test-report-merged -D merged-junit-report \
-            || leave "run $run_id published no merged report"
-          echo "Shard timings will be regenerated from PR #$pr's run $run_id"
+          # Downloading is part of qualifying, not a step after it. A run whose
+          # merged report has expired or was never published is no more usable
+          # than one that ran Percy, and treating it as a late failure would
+          # abandon the refresh while untried candidates remained — the same
+          # single-run dependency this search exists to remove.
+          run_id=""
+          for candidate in $candidates; do
+            [ -n "$candidate" ] || continue
+            qualifies "$candidate" || continue
+            rm -rf merged-junit-report
+            if gh run download -R "$REPO" "$candidate" --name host-test-report-merged -D merged-junit-report; then
+              run_id="$candidate"
+              break
+            fi
+            echo "  run $candidate: no merged report to download"
+          done
+          if [ -z "$run_id" ]; then
+            rm -rf merged-junit-report
+            leave "no recent first-attempt CI Host run was Percy-loaded, cache-imported and still holds its merged report"
+          fi
+          echo "Shard timings will be regenerated from run $run_id"
+          # The generator's warning runs in the next step, which is a separate
+          # shell — naming the run from a variable set here would print empty.
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
 
       - name: Update memory baseline and shard timings
         # Retry from the latest main: another PR may merge to main while host
@@ -1462,7 +1678,7 @@ jobs:
               # below, which has nothing to do with shard timings.
               node packages/host/scripts/generate-test-module-timings.mjs merged-junit-report/host.xml \
                 --min-drift-seconds 60 --shard-count 16 ||
-                echo "::warning title=Shard timings not refreshed::the generator rejected the report from run $run_id"
+                echo "::warning title=Shard timings not refreshed::the generator rejected the report from run ${{ steps.timings-source.outputs.run_id }}"
             else
               echo "No merged junit report available — leaving shard timings unchanged."
             fi

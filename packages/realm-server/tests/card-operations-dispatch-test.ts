@@ -10,6 +10,7 @@ import {
   newOperationScope,
   resolveOperation,
   runOperation,
+  scopeCallerFor,
   type OperationCore,
   type OperationError,
   type OperationTarget,
@@ -151,6 +152,13 @@ function stub(opts: StubOptions = {}): Stub {
       },
     },
     indexQueryEngine: {
+      // A query is how an entry that describes its target finds one. Dispatch
+      // is handed a target that is already settled, so reaching this is the
+      // stub reporting that something asked the index a question it had no
+      // business asking.
+      async searchEntries() {
+        throw new Error('dispatch searched the index');
+      },
       async cardDocument(url) {
         calls.push('cardDocument');
         if (document === 'missing' || !isCanonicalKey(url)) {
@@ -300,6 +308,10 @@ function stub(opts: StubOptions = {}): Stub {
         content: file.createRangeStream(0, file.size - 1),
       });
       return { version: fromRanges, createdAt };
+    },
+    async realmConfig() {
+      calls.push('realmConfig');
+      return {};
     },
     async isIgnored() {
       return false;
@@ -722,13 +734,15 @@ module(basename(import.meta.filename), function () {
     });
     test('a declared read the executor cannot carry out is refused', async function (assert) {
       // Serving the plain document would be a well-formed answer to a different
-      // question than the declaration asked.
+      // question than the declaration asked. The two transform stages are
+      // carried out — see `card-operations-transforms-test.ts` — so what is
+      // left is a program over the target, which a read does not run.
       let { core } = stub({
         operations: {
           summary: {
             base: 'read',
             deterministic: true,
-            output: { source: 'PROJECT(.title)', syntax: 'solidified' },
+            program: { source: '.title = "x";', syntax: 'solidified' },
           },
         },
       });
@@ -737,7 +751,7 @@ module(basename(import.meta.filename), function () {
       );
       assert.strictEqual(error.status, 501);
       assert.true(
-        error.detail.includes('output'),
+        error.detail.includes('program'),
         `the refusal names the stage: ${error.detail}`,
       );
     });
@@ -796,6 +810,7 @@ module(basename(import.meta.filename), function () {
         headersOnly: true,
       });
       assert.deepEqual(fromRow, {
+        projected: false,
         type: 'file-meta',
         indexedAt: 1700,
         lastModified: 1699,
@@ -816,6 +831,7 @@ module(basename(import.meta.filename), function () {
         headersOnly: true,
       });
       assert.deepEqual(fromDisk, {
+        projected: false,
         type: 'file-meta',
         indexedAt: null,
         lastModified: 42,
@@ -852,7 +868,7 @@ module(basename(import.meta.filename), function () {
         read: {
           base: 'read' as const,
           deterministic: true,
-          output: { source: 'PROJECT(.title)', syntax: 'solidified' as const },
+          program: { source: '.title = "x";', syntax: 'solidified' as const },
         },
       };
       for (let spelling of [
@@ -997,17 +1013,11 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(error.status, 400);
     });
     test('a read refuses any clause it does not carry out', async function (assert) {
-      // Not only the program stages: a declaration rebound onto `read` may carry
-      // a clause belonging to the base it came from, and ignoring it is the same
-      // failure as ignoring a projection.
-      for (let clause of [
-        'program',
-        'input',
-        'output',
-        'fill',
-        'of',
-        'query',
-      ]) {
+      // Not only the program: a declaration rebound onto `read` may carry a
+      // clause belonging to the base it came from, and ignoring it is the same
+      // failure as ignoring a projection. `input` and `output` are absent
+      // because a read runs both.
+      for (let clause of ['program', 'fill', 'of', 'query']) {
         let { core } = stub({
           operations: {
             look: {
@@ -1455,6 +1465,80 @@ module(basename(import.meta.filename), function () {
         `the refusal names the base it was built on: ${error.detail}`,
       );
     });
+    test('a scope says who it resolves for, and absence is not an empty id', async function (assert) {
+      let { core } = stub();
+      let signedIn = newOperationScope(core, {
+        caller: scopeCallerFor('@someone:example.com'),
+      });
+      assert.deepEqual(signedIn.caller, {
+        kind: 'user',
+        actor: '@someone:example.com',
+      });
+      let anonymous = newOperationScope(core, { caller: scopeCallerFor('') });
+      assert.deepEqual(
+        anonymous.caller,
+        { kind: 'anonymous' },
+        'a transport’s empty actor is nobody signed in',
+      );
+      let emptyId = newOperationScope(core, {
+        caller: { kind: 'user', actor: '' },
+      });
+      assert.notDeepEqual(
+        emptyId.caller,
+        anonymous.caller,
+        'and is told apart from a caller whose id is empty',
+      );
+      assert.deepEqual(
+        newOperationScope(core).caller,
+        { kind: 'unattributed' },
+        'a scope built without naming a caller has none',
+      );
+      assert.strictEqual(newOperationScope(core).proposed, undefined);
+    });
+
+    test('a scope with a caller resolves exactly as one without', async function (assert) {
+      let { core } = stub({
+        operations: { rename: { base: 'transform', deterministic: true } },
+      });
+      let withCaller = newOperationScope(core, {
+        caller: scopeCallerFor('@someone:example.com'),
+      });
+      assert.deepEqual(
+        await resolveOperation(core, CARD, 'rename', withCaller),
+        await resolveOperation(core, CARD, 'rename', newOperationScope(core)),
+      );
+    });
+
+    test('a derived scope shares the row memo and carries the caller over', async function (assert) {
+      let { core, calls } = stub();
+      let url = new URL(`${REALM}person-1`);
+      let batch = newOperationScope(core, {
+        caller: scopeCallerFor('@someone:example.com'),
+      });
+      let entry = batch.derive({ proposed: { title: 'Q3' } });
+      await batch.peekInstance(url);
+      await entry.peekInstance(url);
+      assert.strictEqual(
+        calls.filter((call) => call === 'instance').length,
+        1,
+        'the two invocations read the row once between them',
+      );
+      assert.deepEqual(entry.caller, batch.caller);
+      assert.deepEqual(entry.proposed, { title: 'Q3' });
+      assert.strictEqual(
+        batch.proposed,
+        undefined,
+        'deriving leaves the scope it came from as it was',
+      );
+      let unattributed = entry.derive({ caller: { kind: 'unattributed' } });
+      assert.deepEqual(unattributed.caller, { kind: 'unattributed' });
+      assert.strictEqual(
+        unattributed.proposed,
+        undefined,
+        'a proposed document is one invocation’s and does not carry over',
+      );
+    });
+
     test('the row peek is memoized for one invocation and no longer', async function (assert) {
       let { core, calls } = stub();
       let url = new URL(`${REALM}person-1`);

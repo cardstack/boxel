@@ -196,6 +196,27 @@ export class VirtualNetwork {
     this.packageShimHandler.shimAsyncModule(descriptor);
   }
 
+  // Lets a Loader serve a module shimmed on this network from its module-fetch
+  // path, whatever URL the shim is registered under. The lookup folds every
+  // spelling of the identifier (realm-prefix form, virtual alias, url-mapped
+  // alias) onto the real URL, which is the form shims for realm-mapped
+  // identifiers are keyed by, so all spellings converge on one module.
+  getShimmedModule(url: string): Promise<ModuleLike | undefined> {
+    return this.packageShimHandler.lookupModule(
+      this.toRealURLHref(url),
+      this.unresolveURL(url),
+    );
+  }
+
+  // The dependencies a shimmed module declares, for the loader to record as
+  // its consumed modules.
+  getShimmedModuleDeps(url: string): string[] {
+    return this.packageShimHandler.lookupModuleDeps(
+      this.toRealURLHref(url),
+      this.unresolveURL(url),
+    );
+  }
+
   addURLMapping(from: URL, to: URL) {
     this.urlMappings.push([from.href, to.href]);
     // unresolveURL and toRealURLHref chase through urlMappings (the latter via
@@ -560,7 +581,19 @@ export class VirtualNetwork {
       return new URL(resolved);
     }
     // Not a registered prefix; parse as a plain URL.
-    return new URL(rri);
+    try {
+      return new URL(rri);
+    } catch {
+      // `Invalid URL` alone says neither which identifier failed nor that a
+      // prefix was looked for, and this throws from paths whose stack does not
+      // survive to the reader. Not an `Error` `cause`: this module is
+      // type-checked by packages whose lib predates it.
+      throw new Error(
+        `cannot resolve ${JSON.stringify(rri)} to a URL: it is not a URL, and ` +
+          `no registered realm prefix matches it (registered: ` +
+          `${[...this.realmMappings.keys()].join(', ')})`,
+      );
+    }
   }
 
   /**
@@ -590,6 +623,24 @@ export class VirtualNetwork {
    * same entry. `unresolveURL` alone is NOT usable as the key — it leaves a
    * virtual/url-mapped alias unchanged, so those spellings split from the RRI.
    */
+  // The key form of an identifier, for the stores that fold every spelling of
+  // one resource onto a single key. `toRealURLHref` where it resolves, and the
+  // identifier unchanged where it does not.
+  //
+  // An identifier minted from a realm prefix this network does not carry — one
+  // canonicalized by a network that had the mapping and then read by a network
+  // that never did — cannot be folded onto anything. It still needs a key, and
+  // being its own splits it from the spellings it should have joined, which
+  // costs a cache hit. Throwing instead costs the caller: these run inside
+  // tasks nobody awaits, where a throw is an unhandled rejection.
+  keyForIdentifier(id: string): string {
+    try {
+      return this.toRealURLHref(id);
+    } catch {
+      return id;
+    }
+  }
+
   toRealURLHref(id: string): string {
     let cached = this.realURLHrefCache.get(id);
     if (cached !== undefined) {

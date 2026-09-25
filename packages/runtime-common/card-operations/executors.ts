@@ -338,6 +338,13 @@ export interface StagedChange {
   // it — the same answer the atomic endpoint gives an `add` whose href is
   // taken.
   mints: LocalPath[];
+  // The mints that are side-loads rather than the entry's own card, keyed by
+  // path, with the local id each was sent under. A side-load is a linked card
+  // the caller sent along so the link has something to point at, which a card
+  // already stored at its destination answers for as well as a new one would —
+  // so the coordinator links to that card rather than refusing the batch, and
+  // names the side-load rather than the entry's own card when it cannot.
+  sideLoadMints?: Map<LocalPath, string>;
   // The card the entry's result reports.
   id: string;
   // Echoed on a create, so a client can match the URL the realm minted back to
@@ -484,6 +491,7 @@ export async function stageCreate(
       content: await serializeForStorage(primary, identity, ctx),
     },
   ];
+  let sideLoadMints = new Map<LocalPath, string>();
   for (let resource of includedResources(entry.document)) {
     // A side-loaded resource with no `lid` is not staged: it has no id to be
     // created under and nothing in the batch can link to it, so the client
@@ -499,7 +507,14 @@ export async function stageCreate(
     // Resolving them against the primary would resolve them against a card
     // one directory deep, which is not where the side-load lands and not
     // what a caller writing them meant.
-    writes.push(await stageSideLoaded(resource, resource.lid, undefined, ctx));
+    let sideLoad = await stageSideLoaded(
+      resource,
+      resource.lid,
+      undefined,
+      ctx,
+    );
+    writes.push(sideLoad);
+    sideLoadMints.set(sideLoad.path, resource.lid);
   }
   let lid = localIdOf(entry);
   return {
@@ -507,6 +522,7 @@ export async function stageCreate(
     appends: [],
     deletes: [],
     mints: writes.map((write) => write.path),
+    ...(sideLoadMints.size > 0 ? { sideLoadMints } : {}),
     id: identity.id,
     ...(lid ? { lid } : {}),
     primaryPath: identity.path,
@@ -727,13 +743,32 @@ export async function stageUpdate(
   //
   // Realm-managed keys never come from a patch: `realmInfo` and `realmURL` are
   // stamped by the realm serving the card, `screenshots` is joined from the
-  // prerendered manifest at serve time, and `type` is fixed by the document
-  // shape. A client echoing back what it was served must not persist any of
-  // them into the source file.
+  // prerendered manifest at serve time, `version` / `lastModified` /
+  // `resourceCreatedAt` describe the stored file and are reported on a write
+  // response, and `type` is fixed by the document shape. A client echoing back
+  // what it was served must not persist any of them into the source file.
+  //
+  // Dropped here and not only where the bytes are serialized, because these run
+  // ahead of the unchanged-patch comparison below, and a key that survives the
+  // merge sends an otherwise no-op patch down the re-serializing arm.
+  //
+  // What that costs depends on the card. Where the stored bytes already are
+  // what re-serialization produces, nothing observable follows: the serializer
+  // drops these keys before it stringifies, so the arm produces the bytes the
+  // file already holds and the commit's own content comparison leaves the file,
+  // its modification time and `changed` alone. Where the stored bytes are *not*
+  // canonical — a hand-authored fixture, or bytes an older serializer wrote —
+  // the arm canonicalizes them, which rewrites the file and moves its
+  // modification time for a request that changed nothing. It also spends a
+  // serialization that resolves the card's definition, and that can fail
+  // outright on a card the realm cannot currently type.
   delete (patch as { type?: unknown }).type;
   delete patch.meta.realmInfo;
   delete patch.meta.realmURL;
   delete patch.meta.screenshots;
+  delete patch.meta.version;
+  delete patch.meta.lastModified;
+  delete patch.meta.resourceCreatedAt;
 
   promoteStagedLinks(patch, ctx);
 
@@ -905,10 +940,17 @@ async function stageFileUpdate(
     }
   }
   if (!meta && !entry.rawSource) {
-    // Creating a file is not an operation — the realm's write routes own
-    // that — so an update has a file to replace or it has nothing to do. A
+    // An update has a file to replace or it has nothing to do: what it names
+    // is the content that should stand in place of the content already there,
+    // and at a path holding nothing there is no replacement to describe. A
     // verbatim replacement is the exception, since the routes it stands in
     // for create the files they write.
+    //
+    // An `appendLine` at a path holding nothing does create the file, and the
+    // two do not disagree. What an append names is the line, which is the
+    // whole of what the file is to hold when nothing is there yet — so the
+    // first append and every later one describe the same act, while a first
+    // replacement would be describing an act that has not happened.
     throw new OperationFailure({
       id: url.href,
       status: 404,
@@ -946,8 +988,29 @@ async function stageFileUpdate(
 // the realm's adapter adds it at the end of the file without reading it.
 //
 // So every check below is one that can be made without the bytes: what the
-// file's name says it holds, and whether anything is stored at the path, which
-// is a stat rather than a read.
+// file's name says it holds, and — where a check needs it — whether anything
+// is stored at the path, which is a stat rather than a read.
+//
+// The first line appended to a path holding nothing creates the file. For an
+// append-only file the first write and every later one are the same act, and
+// an author with no way to spell the first cannot own a log at all: creating
+// one would mean reaching the realm's file-write routes, which card code
+// cannot call.
+//
+// What keeps that from being a way to put arbitrary bytes at an arbitrary path
+// is the name checks below, and the rule they add up to is exactly this: a
+// created path is one the realm already serves as text. No extension, an
+// unknown extension, a dotfile, a dot mid-segment and a card's own id all
+// resolve to binary content and are refused; so does a card's stored source,
+// and so does anything whose type is JSON.
+//
+// Stated that narrowly on purpose, because the check that reads as "and not a
+// module" does not cover every spelling of one. `hasExecutableExtension` names
+// `.js`, `.gjs`, `.ts` and `.gts` and exempts `.d.ts`, so `.mjs`, `.cjs`,
+// `.jsx` and `.d.ts` are creatable here — inert to the realm, which evaluates
+// none of them, but not refused either. Anyone deciding whether some new
+// spelling is safe to create should read that helper rather than this
+// sentence.
 export async function stageAppendLine(
   entry: AppendLineEntry,
   ctx: StagingContext,
@@ -1030,21 +1093,14 @@ export async function stageAppendLine(
         `source endpoint, not by appending a line`,
     );
   }
-  // An earlier entry may have staged this file's content without it being on
-  // disk yet — a verbatim source write creates the file it writes — which is
-  // as good as stored for an append that lands after it in the same commit.
-  let staged = ctx.stored.has(path) || ctx.storedMeta.has(path);
-  if (!staged && !(await ctx.fileExists(path))) {
-    // Appending to a path holding nothing would create the file, and creating
-    // a file is not an operation.
-    throw new OperationFailure({
-      id: url.href,
-      status: 404,
-      code: 'target-not-found',
-      title: 'Not found',
-      detail: `${url.href} does not exist in realm ${ctx.realmURL}`,
-    });
-  }
+  // Nothing is asked about the path itself. A file already there is appended
+  // to and a path holding nothing is created, so the answer would not change
+  // what this stages — and the commit already tells the two apart on its own,
+  // announcing a created path as an added file rather than an updated one.
+  //
+  // Which is also why a path this creates is no mint. A mint is the claim
+  // that a path must be free, and the batch is refused where it is not; an
+  // append claims the opposite, being satisfied either way.
   return {
     writes: [],
     appends: [{ path, content: `${line}\n` }],
@@ -2360,7 +2416,9 @@ function identityOf(value: unknown, path: string): string {
 }
 
 interface TemplateScope {
-  entry: CreateEntry;
+  // Typed by what a template reads off an entry rather than by one entry kind:
+  // a named create and a declared append both resolve their templates here.
+  entry: EntryCommon & { href?: string };
   definition: OperationDefinition;
   ctx: StagingContext;
   anchor: { id: string; resource: CardResource } | undefined;
@@ -2667,7 +2725,11 @@ export async function stageAppendContainsMany(
   let url = targetURL(entry.href);
   let sourcePath = `${localPathIn(url, ctx)}.json` as LocalPath;
   let target: AppendTarget = { url, file: ctx.paths.fileURL(sourcePath) };
-  let requested = requestedItems(entry, url);
+  // A declared append writes what its declaration says; an ad-hoc one writes
+  // what the entry carries.
+  let requested = entry.definition?.items
+    ? await declaredItems(entry, entry.definition, ctx, url)
+    : requestedItems(entry, url);
   let bytes = await ctx.openSourceBytes(sourcePath);
   if (!bytes) {
     throw new OperationFailure({
@@ -2876,6 +2938,73 @@ export async function stageAppendContainsMany(
     id: url.href,
     primaryPath: sourcePath,
   };
+}
+
+// The items a *declared* append writes.
+//
+// A declaration carries its item as a template, the same shape a `create`'s
+// `fill` does, so the values an invocation supplies are substituted here
+// rather than sent: what a declared append writes is the declaration's to say,
+// and the wire members an ad-hoc append names (`field`, `items`, `fields`) are
+// not read for one.
+//
+// Each field gets exactly one item, because a declaration describes one thing
+// to append. Link members inside the item are not resolved here — the executor
+// splits an item against the *stored card's* definition further down, which is
+// where a subclass's own field types are known.
+async function declaredItems(
+  entry: AppendContainsManyEntry,
+  definition: OperationDefinition,
+  ctx: StagingContext,
+  url: URL,
+): Promise<Map<string, unknown[]>> {
+  for (let key of Object.keys(definition.params ?? {})) {
+    if (own(entry.params, key) === undefined) {
+      throw new OperationFailure({
+        id: url.href,
+        status: 400,
+        code: 'invalid-params',
+        title: 'Invalid params',
+        detail: `this append requires a value for params("${key}")`,
+      });
+    }
+  }
+  let templates = definition.items ?? {};
+  // No anchor: an append edits the card's stored bytes without ever loading
+  // the document, which is the whole reason the behavior exists. Offering
+  // `instance()` here would mean reading the very thing the operation avoids
+  // reading, so an item that needs the card's own values belongs on a
+  // `transform` instead.
+  let anchor = undefined;
+  // Only a declaration that names a setting waits for one.
+  let realmConfig = templateNamesRealmConfig(templates)
+    ? await ctx.realmConfig()
+    : {};
+  let requested = new Map<string, unknown[]>();
+  for (let [field, template] of Object.entries(templates)) {
+    let resolved = resolveTemplate(template, {
+      entry,
+      definition,
+      ctx,
+      anchor,
+      field,
+      realmConfig,
+    });
+    if (resolved.value === undefined) {
+      continue;
+    }
+    requested.set(field, [resolved.value]);
+  }
+  if (requested.size === 0) {
+    throw new OperationFailure({
+      id: url.href,
+      status: 400,
+      code: 'invalid-params',
+      title: 'Invalid append',
+      detail: `this append resolved to no item to append`,
+    });
+  }
+  return requested;
 }
 
 // The fields an append names and the items bound for each, from either

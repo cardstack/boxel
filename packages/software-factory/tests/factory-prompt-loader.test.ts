@@ -188,6 +188,45 @@ module('factory-prompt-loader > interpolate > #if blocks', function () {
     });
     assert.strictEqual(result, 'has checklist');
   });
+
+  test('splits a flat if/else on its own else', function (assert) {
+    let template = 'A{{#if x}}T{{else}}F{{/if}}B';
+    assert.strictEqual(interpolate(template, { x: false }), 'AFB');
+  });
+
+  test('renders a nested if with no else inside the true branch', function (assert) {
+    let template = 'A{{#if x}}T{{#if y}}N{{/if}}{{/if}}B';
+    assert.strictEqual(interpolate(template, { x: true, y: false }), 'ATB');
+  });
+
+  // The outer block's true branch ends at the outer {{else}}, not at the one
+  // belonging to the nested block. Splitting on the first {{else}} found
+  // truncated the true branch mid-nesting and leaked the raw inner tag.
+  test('a nested if/else does not donate its else to the outer block', function (assert) {
+    let template = 'A{{#if x}}T{{#if y}}Y{{else}}N{{/if}}{{else}}F{{/if}}B';
+    assert.strictEqual(interpolate(template, { x: true, y: false }), 'ATNB');
+  });
+
+  test('takes the outer false branch past a nested if/else', function (assert) {
+    let template = 'A{{#if x}}T{{#if y}}Y{{else}}M{{/if}}{{else}}N{{/if}}B';
+    assert.strictEqual(interpolate(template, { x: false, y: true }), 'ANB');
+  });
+
+  test('renders two sibling if blocks independently', function (assert) {
+    let template = 'A{{#if x}}X{{/if}}M{{#if y}}Y{{/if}}B';
+    assert.strictEqual(interpolate(template, { x: true, y: true }), 'AXMYB');
+  });
+
+  // The `each` handler has no else branch of its own, so the only guarantee
+  // here is that the enclosing `if` does not mistake one for its own.
+  test('a nested each does not donate its else to the enclosing if', function (assert) {
+    let template =
+      'A{{#if x}}{{#each items}}{{.}}{{else}}E{{/each}}{{else}}F{{/if}}B';
+    assert.strictEqual(
+      interpolate(template, { x: false, items: ['1'] }),
+      'AFB',
+    );
+  });
 });
 
 // ---------------------------------------------------------------------------

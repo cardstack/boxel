@@ -59,7 +59,7 @@
   --tooltip: var(--boxel-dark-80);
   --tooltip-foreground: var(--boxel-light);
   /* third ink step, fainter than --muted-foreground */
-  --subtle-foreground: var(--boxel-400);
+  --subtle-foreground: var(--boxel-450);
 
   /* roles */
   --primary: var(--boxel-highlight);
@@ -140,8 +140,8 @@
   --warning-foreground: var(--boxel-dark);
   --info: var(--boxel-blue);
   --info-foreground: var(--boxel-light);
-  --attention: var(--boxel-pink);
-  --attention-foreground: var(--boxel-light);
+  --attention: var(--boxel-amber);
+  --attention-foreground: var(--boxel-dark);
   --overlay: var(--boxel-dark-50);
 
   /* Hue as ink. `--x`/`--x-foreground` cover ink *on* a hue's fill; `--x-ink` is
@@ -192,7 +192,8 @@
 /* ── Themed-card boundary reset ─────────────────────────────────────────────
 
   Which values: the component knobs the light or dark block above sets, so
-  they can't inherit into a themed card.
+  they can't inherit into a themed card. Keep this list and the scheme-island
+  copy below the dark block in step.
 
   Not listed here, for two different reasons:
   - --success and --warning are already declared with the rest of the contract
@@ -302,6 +303,33 @@
   --boxel-button-disabled-background: #444051;
   --boxel-button-disabled-foreground: #817c93;
   --boxel-button-disabled-border: 1px solid#444051;
+}
+
+/* Scheme islands inside a themed card: a `.dark` / `[data-theme]` stamped
+   below the card's scope element matches the light or dark block again and
+   brings the chrome knobs back with it, so a button inside the island would
+   hover to Boxel's colors while the rest of the card hovers to the theme's.
+   Repeat the boundary reset there. Two attribute selectors outrank the
+   single-selector scheme blocks, and this comes after both of them. The
+   theme's own palette reaches the island via theme-scoped-css.ts. */
+[data-boxel-theme-scope] :is(.dark, [data-theme]) {
+  --boxel-switch-thumb: initial;
+  --boxel-switch-thumb-icon: initial;
+  --boxel-button-default-border: initial;
+  --boxel-button-default-active-background: initial;
+  --boxel-button-default-active-foreground: initial;
+  --boxel-button-default-active-border: initial;
+  --boxel-button-primary-active-background: initial;
+  --boxel-button-secondary-background: initial;
+  --boxel-button-secondary-foreground: initial;
+  --boxel-button-secondary-border: initial;
+  --boxel-button-secondary-active-border: initial;
+  --boxel-button-link-primary-foreground: initial;
+  --boxel-button-destructive-active-background: initial;
+  --boxel-button-disabled-opacity: initial;
+  --boxel-button-disabled-background: initial;
+  --boxel-button-disabled-border: initial;
+  --boxel-button-disabled-foreground: initial;
 }
 
 /* Dark defaults at themed-card boundaries. The light block re-declares the

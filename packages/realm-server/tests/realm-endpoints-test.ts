@@ -7,7 +7,7 @@ import type { RealmHttpServer as Server } from '../server.ts';
 import { dirSync, type DirResult } from 'tmp';
 import fsExtra from 'fs-extra';
 const { copySync, ensureDirSync, readFileSync, readJSONSync } = fsExtra;
-import { utimesSync } from 'fs';
+import { utimesSync, writeFileSync } from 'fs';
 import type { Realm } from '@cardstack/runtime-common';
 import {
   baseRealm,
@@ -734,6 +734,101 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    // A `noCache` read streams the file rather than hashing it, and it is how a
+    // prerender tab loads a linked card for an index render, so a same-second
+    // rewrite it could not see would be baked into the dependent's row.
+    test('a noCache source read distinguishes content even when on-disk lastModified collides', async function (assert) {
+      let cardPath = 'etag-collision-no-cache.json';
+      // Equal lengths, so the size alone cannot tell the two apart.
+      let initial = JSON.stringify({ value: 'initial' });
+      let updated = JSON.stringify({ value: 'changed' });
+      let collidingMtime = new Date('2026-01-01T00:00:00Z');
+      let absolutePath = join(testRealmPath, cardPath);
+      let authHeader = `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`;
+
+      await testRealm.write(cardPath, initial);
+      utimesSync(absolutePath, collidingMtime, collidingMtime);
+
+      let firstResponse = await request
+        .get(`/${cardPath}?noCache=true`)
+        .set('Accept', SupportedMimeType.CardSource)
+        .set('Authorization', authHeader);
+      assert.strictEqual(firstResponse.status, 200, 'first request succeeds');
+      assert.strictEqual(
+        firstResponse.text.trim(),
+        initial,
+        'first request serves the initial body',
+      );
+      let firstEtag = firstResponse.headers['etag'];
+      assert.ok(firstEtag, 'first response carries an ETag');
+
+      await testRealm.write(cardPath, updated);
+      utimesSync(absolutePath, collidingMtime, collidingMtime);
+
+      let conditionalResponse = await request
+        .get(`/${cardPath}?noCache=true`)
+        .set('Accept', SupportedMimeType.CardSource)
+        .set('Authorization', authHeader)
+        .set('If-None-Match', firstEtag);
+      assert.strictEqual(
+        conditionalResponse.status,
+        200,
+        'conditional GET with the prior ETag must not return 304',
+      );
+      assert.strictEqual(
+        conditionalResponse.text.trim(),
+        updated,
+        'conditional GET serves the updated body, not the cached prior body',
+      );
+      assert.notStrictEqual(
+        conditionalResponse.headers['etag'],
+        firstEtag,
+        'distinct content yields distinct ETags despite identical lastModified',
+      );
+    });
+
+    // An out-of-band rewrite goes around the realm, so the hash it recorded for
+    // the previous bytes stays behind, and at the same length only the file's
+    // content can tell the two apart.
+    test('a noCache source read distinguishes a same-length rewrite made out of band within the same second', async function (assert) {
+      let cardPath = 'etag-collision-out-of-band.json';
+      let initial = JSON.stringify({ value: 'initial' });
+      let updated = JSON.stringify({ value: 'changed' });
+      let collidingMtime = new Date('2026-01-01T00:00:00Z');
+      let absolutePath = join(testRealmPath, cardPath);
+      let authHeader = `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`;
+
+      await testRealm.write(cardPath, initial);
+      utimesSync(absolutePath, collidingMtime, collidingMtime);
+
+      let firstResponse = await request
+        .get(`/${cardPath}?noCache=true`)
+        .set('Accept', SupportedMimeType.CardSource)
+        .set('Authorization', authHeader);
+      assert.strictEqual(firstResponse.status, 200, 'first request succeeds');
+      let firstEtag = firstResponse.headers['etag'];
+      assert.ok(firstEtag, 'first response carries an ETag');
+
+      writeFileSync(absolutePath, updated);
+      utimesSync(absolutePath, collidingMtime, collidingMtime);
+
+      let conditionalResponse = await request
+        .get(`/${cardPath}?noCache=true`)
+        .set('Accept', SupportedMimeType.CardSource)
+        .set('Authorization', authHeader)
+        .set('If-None-Match', firstEtag);
+      assert.strictEqual(
+        conditionalResponse.status,
+        200,
+        'conditional GET with the prior ETag must not return 304',
+      );
+      assert.strictEqual(
+        conditionalResponse.text.trim(),
+        updated,
+        'conditional GET serves the rewritten body',
+      );
+    });
+
     test('returns 304 for module requests with matching ETag', async function (assert) {
       let modulePath = 'module-cache-not-modified.js';
       let authHeader = `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`;
@@ -935,6 +1030,7 @@ module(basename(import.meta.filename), function () {
           ],
           excludes: [`${baseRealmRRI}markdown-file-def/MarkdownDef`],
         });
+        assertVersions(assert, content, [newCardId]);
         assert.deepEqual(content, {
           eventName: 'index',
           indexType: 'incremental',
@@ -954,6 +1050,7 @@ module(basename(import.meta.filename), function () {
         delete json.data.meta.lastModified;
         delete json.data.meta.resourceCreatedAt;
         delete json.data.meta.generation;
+        delete json.data.meta.version;
         assert.strictEqual(
           response.get('X-boxel-realm-url'),
           testRealmHref,
@@ -1038,6 +1135,7 @@ module(basename(import.meta.filename), function () {
           getMessagesSince,
           realm: testRealmHref,
           clientRequestId: null,
+          versions: 'written',
         },
       );
 
@@ -1966,6 +2064,33 @@ function assertInvalidatedTypes(
     );
   }
   delete content.invalidatedTypes;
+}
+
+// The versions an index event reports, checked over its key set and removed so
+// the caller's structural comparison can be exact. The hash itself is a
+// function of the bytes the fixture stored, so only a caller that read them can
+// state it — which `card-endpoints-test.ts` does, against the file on disk.
+function assertVersions(
+  assert: Assert,
+  content: Record<string, any>,
+  urls: string[],
+) {
+  let versions = content.versions as Record<string, string> | undefined;
+  assert.deepEqual(
+    Object.keys(versions ?? {}).sort(),
+    [...urls].sort(),
+    'the event names a version for exactly the urls this request wrote',
+  );
+  for (let url of urls) {
+    let reported = versions?.[url];
+    assert.true(
+      typeof reported === 'string' && reported.length > 0,
+      `the version for ${url} is a non-empty string: ${JSON.stringify(
+        reported,
+      )}`,
+    );
+  }
+  delete content.versions;
 }
 
 function realmEventIsIndex(

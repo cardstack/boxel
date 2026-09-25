@@ -269,7 +269,7 @@ export async function resetRealmState(
           realmURL.href,
         ]);
         await client.query(
-          `DELETE FROM boxel_index_working WHERE realm_url = $1`,
+          `DELETE FROM boxel_index_pending WHERE realm_url = $1`,
           [realmURL.href],
         );
         await client.query(
@@ -277,7 +277,7 @@ export async function resetRealmState(
           [realmURL.href],
         );
         await client.query(
-          `DELETE FROM prerendered_html_working WHERE realm_url = $1`,
+          `DELETE FROM prerendered_html_pending WHERE realm_url = $1`,
           [realmURL.href],
         );
         await client.query(
@@ -286,6 +286,10 @@ export async function resetRealmState(
         );
         await client.query(
           `DELETE FROM realm_type_generations WHERE realm_url = $1`,
+          [realmURL.href],
+        );
+        await client.query(
+          `DELETE FROM realm_index_commits WHERE realm_url = $1`,
           [realmURL.href],
         );
         await client.query(`DELETE FROM realm_file_meta WHERE realm_url = $1`, [
@@ -404,23 +408,21 @@ export async function rewriteClonedRealmServerUrls(
         // prerendered_html holds the URL-bearing HTML/deps columns; rewrite
         // them so a cloned harness DB stays consistent with the rewritten
         // realm-server URL.
-        for (let table of ['prerendered_html', 'prerendered_html_working']) {
-          await client.query(
-            `UPDATE ${table}
-             SET url = replace(url, $1, $2),
-                 file_alias = replace(file_alias, $1, $2),
-                 realm_url = replace(realm_url, $1, $2),
-                 isolated_html = replace(isolated_html, $1, $2),
-                 atom_html = replace(atom_html, $1, $2),
-                 head_html = replace(head_html, $1, $2),
-                 embedded_html = replace(embedded_html::text, $1, $2)::jsonb,
-                 fitted_html = replace(fitted_html::text, $1, $2)::jsonb,
-                 deps = replace(deps::text, $1, $2)::jsonb,
-                 last_known_good_deps = replace(last_known_good_deps::text, $1, $2)::jsonb,
-                 error_doc = replace(error_doc::text, $1, $2)::jsonb`,
-            [fromURL, toURL],
-          );
-        }
+        await client.query(
+          `UPDATE prerendered_html
+           SET url = replace(url, $1, $2),
+               file_alias = replace(file_alias, $1, $2),
+               realm_url = replace(realm_url, $1, $2),
+               isolated_html = replace(isolated_html, $1, $2),
+               atom_html = replace(atom_html, $1, $2),
+               head_html = replace(head_html, $1, $2),
+               embedded_html = replace(embedded_html::text, $1, $2)::jsonb,
+               fitted_html = replace(fitted_html::text, $1, $2)::jsonb,
+               deps = replace(deps::text, $1, $2)::jsonb,
+               last_known_good_deps = replace(last_known_good_deps::text, $1, $2)::jsonb,
+               error_doc = replace(error_doc::text, $1, $2)::jsonb`,
+          [fromURL, toURL],
+        );
 
         await client.query(
           `UPDATE realm_generations
@@ -485,111 +487,21 @@ export async function rewriteClonedRealmServerUrls(
   );
 }
 
-export async function rebuildWorkingIndexFromIndex(
+// A database cloned from a template starts with no index pass in flight, so
+// nothing it staged should survive the clone: a pending row belongs to a pass
+// of the template build, and no pass of the clone will ever commit it.
+export async function clearPendingIndexRows(
   databaseName: string,
 ): Promise<void> {
   await logTimed(
     templateLog,
-    `rebuildWorkingIndexFromIndex ${databaseName}`,
+    `clearPendingIndexRows ${databaseName}`,
     async () => {
       let client = new PgClient(pgAdminConnectionConfig(databaseName));
       try {
         await client.connect();
-        await client.query('BEGIN');
-        await client.query(`DELETE FROM boxel_index_working`);
-        await client.query(
-          `INSERT INTO boxel_index_working (
-             url,
-             file_alias,
-             type,
-             generation,
-             realm_url,
-             pristine_doc,
-             search_doc,
-             error_doc,
-             deps,
-             types,
-             icon_html,
-             indexed_at,
-             is_deleted,
-             last_modified,
-             display_names,
-             resource_created_at,
-             has_error,
-             last_known_good_deps
-           )
-           SELECT
-             url,
-             file_alias,
-             type,
-             generation,
-             realm_url,
-             pristine_doc,
-             search_doc,
-             error_doc,
-             deps,
-             types,
-             icon_html,
-             indexed_at,
-             is_deleted,
-             last_modified,
-             display_names,
-             resource_created_at,
-             has_error,
-             last_known_good_deps
-           FROM boxel_index`,
-        );
-        // Mirror the working rebuild for the prerendered_html channel. `job_id`
-        // is omitted (defaults NULL), matching the boxel_index_working rebuild.
-        await client.query(`DELETE FROM prerendered_html_working`);
-        await client.query(
-          `INSERT INTO prerendered_html_working (
-             url,
-             file_alias,
-             realm_url,
-             type,
-             fitted_html,
-             embedded_html,
-             atom_html,
-             head_html,
-             isolated_html,
-             markdown,
-             deps,
-             last_known_good_deps,
-             generation,
-             is_deleted,
-             error_doc,
-             diagnostics,
-             rendered_at
-           )
-           SELECT
-             url,
-             file_alias,
-             realm_url,
-             type,
-             fitted_html,
-             embedded_html,
-             atom_html,
-             head_html,
-             isolated_html,
-             markdown,
-             deps,
-             last_known_good_deps,
-             generation,
-             is_deleted,
-             error_doc,
-             diagnostics,
-             rendered_at
-           FROM prerendered_html`,
-        );
-        await client.query('COMMIT');
-      } catch (error) {
-        try {
-          await client.query('ROLLBACK');
-        } catch {
-          // best effort cleanup
-        }
-        throw error;
+        await client.query(`DELETE FROM boxel_index_pending`);
+        await client.query(`DELETE FROM prerendered_html_pending`);
       } finally {
         await client.end();
       }

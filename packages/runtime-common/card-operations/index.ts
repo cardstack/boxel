@@ -1,22 +1,51 @@
 export { lowerOperationDeclarations } from './lowering.ts';
-export type { LoweringContext } from './lowering.ts';
 export {
+  noteRealmIndexMoved,
+  RealmPolicyCache,
+  realmPolicyRef,
+} from './policy.ts';
+export type {
+  CompiledOperationGrant,
+  CompiledPolicyPredicate,
+  CompiledPolicyRule,
+  CompiledRealmPolicy,
+  PolicyCompileEnvironment,
+  RealmPolicyCacheEnvironment,
+} from './policy.ts';
+export type { LoweringContext } from './lowering.ts';
+export { notPermitted, policyGateStats } from './gate.ts';
+export type {
+  GateDecision,
+  MatchedGrant,
+  OperationPolicyAccess,
+  PolicyGateStats,
+} from './gate.ts';
+export {
+  assertParamsSupplied,
   canonicalizeTarget,
   localPathFor,
   instanceTargetURL,
   newOperationScope,
+  scopeCallerFor,
   pathsFor,
+  readShape,
+  resolveGatedOperation,
   resolveOperation,
   runOperation,
 } from './dispatch.ts';
 export type {
   CanonicalizeOptions,
+  CoarseDeclined,
+  GatedOperation,
   OperationCore,
   OperationDefinitionLookup,
   OperationIndexQueryEngine,
   OperationScope,
+  ScopeCaller,
+  ScopeInvocation,
   OperationStoredFile,
   OperationStoredFileMeta,
+  ReadShape,
   RunOperationOptions,
 } from './dispatch.ts';
 export { readOperation, erroredTargetRow } from './read.ts';
@@ -86,16 +115,18 @@ export {
   atEntry,
   batchEntryFor,
   carriesOperationsExt,
+  entryWithPayload,
   errorsDocument,
   invocationsIn,
   isGroup,
-  isWrite,
   needsActor,
   paramsFor,
   parseOperationsEnvelope,
+  projectedResult,
   readResult,
   resultsTree,
   stagedTree,
+  stageWriteEntry,
   targetFor,
   writeResult,
 } from './envelope.ts';
@@ -105,10 +136,28 @@ export type {
   EnvelopeNode,
   EnvelopeResult,
   EnvelopeResults,
+  ParseEnvelopeOptions,
+  QueryTarget,
   ResolvedEnvelopeEntry,
 } from './envelope.ts';
-export { lowerQueryOperation } from './query.ts';
-export type { QueryInvocation } from './query.ts';
+export { resolveQueryTargets } from './find-targets.ts';
+export {
+  hasTransforms,
+  runInputTransform,
+  runOutputTransform,
+} from './transforms.ts';
+export type {
+  BxlTransformModule,
+  TransformContext,
+  TransformProgramError,
+} from './transforms.ts';
+export { lowerQueryOperation, lowerQueryTemplate } from './query.ts';
+export type {
+  QueryDefinition,
+  QueryInvocation,
+  QueryLoweringContext,
+  QueryLoweringSink,
+} from './query.ts';
 export {
   DEFINITION_FREE_BASE_OPERATIONS,
   OperationFailure,
@@ -118,6 +167,7 @@ export {
   isIdentityResult,
   isOperationFailure,
   isSourceResult,
+  isWrite,
 } from './types.ts';
 export type {
   BaseOperation,
@@ -135,6 +185,7 @@ export type {
   OperationProgram,
   OperationRequest,
   OperationResult,
+  OperationRowHeaders,
   OperationSourceBody,
   OperationSourceResult,
   OperationTarget,

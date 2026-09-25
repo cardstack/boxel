@@ -52,6 +52,7 @@ import {
   loadCardDef,
   loadCardDocument,
   Loader,
+  loaderForModule,
   localId,
   meta,
   primitive,
@@ -198,6 +199,7 @@ import {
   isLinkNotFound,
   isNonPresentLink,
   isNotLoadedValue,
+  isQueryTaintedField,
   markAuthoredEmptyLink,
   notifyCardTracking,
   peekAtField,
@@ -253,6 +255,7 @@ export {
   getFields,
   getRelationshipMembershipState,
   isNonPresentLink,
+  isQueryTaintedField,
   peekAtField,
   isCard,
   isField,
@@ -1538,6 +1541,29 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
       };
     }
     if (value == null) {
+      // In the used-only serialization the indexer runs (`!includeUnrenderedFields`,
+      // the same mode `getFields` filters never-authored links out of), a computed
+      // link that resolved to nothing is the absence of a relationship, not an
+      // authored `{ self: null }`. Omit it — the shape a never-set link takes —
+      // so a card gains a relationship entry only when the computed actually
+      // resolves a target. (`isFieldUsed` can't make this call: a computed never
+      // writes the data bucket it reads.) A full serialization
+      // (`includeUnrenderedFields`) still emits `{ self: null }`, matching how it
+      // renders every declared link.
+      //
+      // Absence here is not a positive assertion of emptiness. `LinksTo.getter`
+      // collapses a not-loaded source, a link-error, and a link-not-found target
+      // all to `undefined`, so a computed link that "derives nothing", one whose
+      // source was not resident, and one over a broken target arrive here alike
+      // and are all spelled the same way in the row: no entry. Nor does the
+      // `brokenLinks` diagnostic recover the distinction — `getBrokenLinks` skips
+      // `computeVia` fields, so a broken computed link is invisible there too.
+      // In practice the render route's settle loop drains the store before this
+      // runs, so a resolvable source is resident; the residual ambiguity is a
+      // genuinely broken target, which indexes clean and silent.
+      if (this.computeVia && !opts?.includeUnrenderedFields) {
+        return { relationships: {} };
+      }
       return {
         relationships: {
           [this.name]: {
@@ -2069,6 +2095,26 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
     }
 
     if (values == null || values.length === 0) {
+      // In the used-only serialization the indexer runs (`!includeUnrenderedFields`,
+      // the same mode `getFields` filters never-authored links out of), a computed
+      // relationship that resolved to no members is the absence of a relationship,
+      // not an authored empty (`{ self: null }`). Omit it — the shape a never-set
+      // link takes — so a card gains `cards`-style entries only when the computed
+      // actually resolves members. (`isFieldUsed` can't make this call: a computed
+      // never writes the data bucket it reads.) A full serialization
+      // (`includeUnrenderedFields`) still emits `{ self: null }`, matching how it
+      // renders every declared link.
+      //
+      // As with the singular case, absence is not a positive assertion of
+      // emptiness: a computed that legitimately derives no members, one whose
+      // source was not resident, and one whose members surfaced as broken
+      // (`isNonPresentLink` above catches the not-loaded/sentinel forms) can all
+      // land here as an empty/absent value, and `getBrokenLinks` does not see
+      // computed fields, so a broken computed link leaves no `brokenLinks` trace
+      // either. The render route's settle loop covers residency in practice.
+      if (this.computeVia && !opts?.includeUnrenderedFields) {
+        return { relationships: {} };
+      }
       return {
         relationships: {
           [this.name]: {
@@ -2979,7 +3025,14 @@ export type BaseDefComponent = ComponentLike<{
 // reindex captures "new" bytes, wasting renders and storage churn and
 // defeating image caching (each rotation changes the image's ETag, so
 // every viewer re-downloads it).
-export type ScreenshotSpec = {
+// What the capture renders: a capture-only `render` component, or one of the
+// card's own display formats. Shared by both output kinds below.
+type ScreenshotSpecSource =
+  | { render: BaseDefComponent; format?: undefined }
+  | { format: DeclaredScreenshotFormat; render?: undefined };
+
+// A raster screenshot: a pixel tile of the render, sized by a capture box.
+type RasterScreenshotSpec = {
   // CSS px of the capture box (the fitted envelope).
   width: number;
   height: number;
@@ -3019,10 +3072,29 @@ export type ScreenshotSpec = {
   keyBy?: 'generation' | 'file-content';
   // Encoded image type. Default 'png'.
   type?: 'png' | 'jpeg' | 'webp';
-} & (
-  | { render: BaseDefComponent; format?: undefined }
-  | { format: DeclaredScreenshotFormat; render?: undefined }
-);
+} & ScreenshotSpecSource;
+
+// A pdf screenshot: a paged document of the render, laid out under the card's
+// own print CSS. It has no capture box — `width`/`height` (and the raster-only
+// `deviceScaleFactor`/`background`) are refused, and paper comes from the
+// card's `@page { size }` rule (Chrome's default paper otherwise). Its source
+// is either a capture-only `render` component (which renders the full document
+// flow itself, the same slot pattern posters use) or a viewport-filling format
+// (`isolated`/`embedded`) — the box formats (`fitted`/`atom`) need an envelope
+// a pdf entry cannot give. A pdf is never a thumbnail — that fallback chain
+// wants an image — so `useAsThumbnail` is refused too.
+type PdfScreenshotSpec = {
+  type: 'pdf';
+  width?: undefined;
+  height?: undefined;
+  deviceScaleFactor?: undefined;
+  background?: undefined;
+  useAsThumbnail?: undefined;
+  // What invalidates the capture; see the raster note above.
+  keyBy?: 'generation' | 'file-content';
+} & ScreenshotSpecSource;
+
+export type ScreenshotSpec = RasterScreenshotSpec | PdfScreenshotSpec;
 
 const SCREENSHOT_SPEC_FIELDS = new Set([
   'render',
@@ -3086,6 +3158,53 @@ function assertValidScreenshotSpec(
         (f) => `"${f}"`,
       ).join(', ')}`,
     );
+  }
+  // A pdf entry is a paged document, not a raster tile: it takes none of the
+  // raster geometry, renders under print media, and paginates onto the card's
+  // own `@page` paper. Validate its distinct shape here and return before the
+  // raster checks below (which require a capture box a pdf entry never has).
+  if (entry.type === 'pdf') {
+    // Source is either a capture-only `render` component (which renders the
+    // full document flow itself) or a viewport-filling format. The box formats
+    // ('fitted', 'atom') need an envelope a pdf entry cannot describe, so a
+    // format-based pdf is limited to 'isolated'/'embedded'.
+    if (
+      hasFormat &&
+      entry.format !== 'isolated' &&
+      entry.format !== 'embedded'
+    ) {
+      throw new Error(
+        `${prefix}: a pdf screenshot's format must be 'isolated' or 'embedded' — the box formats ('fitted', 'atom') need an envelope a pdf entry cannot describe`,
+      );
+    }
+    for (let field of [
+      'width',
+      'height',
+      'deviceScaleFactor',
+      'background',
+    ] as const) {
+      if (entry[field] !== undefined) {
+        throw new Error(
+          `${prefix}: '${field}' is a raster capture field and cannot appear on a pdf screenshot — paper comes from the card's print CSS (@page)`,
+        );
+      }
+    }
+    if (entry.useAsThumbnail !== undefined) {
+      throw new Error(
+        `${prefix}: useAsThumbnail cannot appear on a pdf screenshot — a thumbnail must be an image`,
+      );
+    }
+    if (
+      entry.keyBy !== undefined &&
+      !SCREENSHOT_KEY_BY_VALUES.has(entry.keyBy as string)
+    ) {
+      throw new Error(
+        `${prefix}: keyBy must be one of ${[...SCREENSHOT_KEY_BY_VALUES]
+          .map((v) => `"${v}"`)
+          .join(', ')}`,
+      );
+    }
+    return;
   }
   for (let [field, max] of [
     ['width', SCREENSHOT_MAX_VIEWPORT_WIDTH],
@@ -3261,10 +3380,15 @@ export function serializeDeclaredScreenshots(
 ): DeclaredScreenshotRoster {
   let roster: DeclaredScreenshotRoster = {};
   for (let [name, spec] of Object.entries(getScreenshots(cardOrFileClass))) {
-    let payload: DeclaredScreenshotSpecPayload = {
-      width: spec.width,
-      height: spec.height,
-    };
+    // A pdf entry carries none of the raster geometry (validation refuses it);
+    // its width/height/deviceScaleFactor/background are all absent here.
+    let payload: DeclaredScreenshotSpecPayload = {};
+    if (spec.width !== undefined) {
+      payload.width = spec.width;
+    }
+    if (spec.height !== undefined) {
+      payload.height = spec.height;
+    }
     if (spec.deviceScaleFactor !== undefined) {
       payload.deviceScaleFactor = spec.deviceScaleFactor;
     }
@@ -5057,11 +5181,17 @@ export async function createFromSerialized<T extends BaseDefConstructor>(
   ) as BaseInstanceType<T>;
 }
 
+// `keepField` names top-level fields whose current value this update leaves
+// in place, whatever the document carries for them. It is read at the moment
+// the values are written, after every field has been deserialized, so a field
+// that becomes one to keep while deserialization is still running is kept too.
+// It applies to this instance only, never to the fields of nested values.
 export async function updateFromSerialized<T extends BaseDefConstructor>(
   instance: BaseInstanceType<T>,
   doc: LooseSingleCardDocument,
   store = getStore(instance),
   opts?: DeserializeOpts,
+  keepField?: (fieldName: string) => boolean,
 ): Promise<BaseInstanceType<T>> {
   stores.set(instance, store);
   if (!instance[relativeTo] && doc.data.id) {
@@ -5086,6 +5216,7 @@ export async function updateFromSerialized<T extends BaseDefConstructor>(
     doc,
     store,
     opts,
+    keepField,
   });
 }
 
@@ -5163,12 +5294,14 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
   doc,
   store,
   opts,
+  keepField,
 }: {
   instance: BaseInstanceType<T>;
   resource: LooseCardResource;
   doc: LooseSingleCardDocument | CardDocument;
   store: CardStore;
   opts?: DeserializeOpts;
+  keepField?: (fieldName: string) => boolean;
 }): Promise<BaseInstanceType<T>> {
   // because our store uses a tracked map for its identity map all the assembly
   // work that we are doing to deserialize the instance below is "live". so we
@@ -5475,6 +5608,9 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
 
     for (let [field, value] of values) {
       if (!field) {
+        continue;
+      }
+      if (field.name !== 'id' && keepField?.(field.name as string)) {
         continue;
       }
       if (field.name === 'id' && wasSaved && originalId !== value) {
@@ -5950,14 +6086,10 @@ export function resolveRef(
 }
 
 function myLoader(): Loader {
-  // we know this code is always loaded by an instance of our Loader, which sets
-  // import.meta.loader.
-
-  // When type-checking realm-server, tsc sees this file and thinks
-  // it will be transpiled to CommonJS and so it complains about this line. But
-  // this file is always loaded through our loader and always has access to import.meta.
+  // tsc checks this file as CommonJS output when it checks realm-server, and
+  // so rejects the `import.meta` read; the read is all that is suppressed.
   // @ts-ignore
-  return (import.meta as any).loader;
+  return loaderForModule(import.meta);
 }
 
 class FallbackCardStore implements CardStore {

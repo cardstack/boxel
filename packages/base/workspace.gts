@@ -1,14 +1,23 @@
 import { registerDestructor } from '@ember/destroyable';
 import { on } from '@ember/modifier';
+import { concat } from '@ember/helper';
 import { action } from '@ember/object';
+import { guidFor } from '@ember/object/internals';
 import { htmlSafe, type SafeString } from '@ember/template';
+import GlimmerComponent from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
 import { restartableTask, timeout } from 'ember-concurrency';
 import { modifier } from 'ember-modifier';
 import { TrackedArray, TrackedObject, TrackedSet } from 'tracked-built-ins';
 
-import { BoxelInput, Button } from '@cardstack/boxel-ui/components';
-import { eq } from '@cardstack/boxel-ui/helpers';
+import {
+  BoxelInput,
+  Button,
+  FilterList,
+  IconButton,
+  Tooltip,
+} from '@cardstack/boxel-ui/components';
+import { and, bool, cn, eq } from '@cardstack/boxel-ui/helpers';
 import BooleanField from './boolean';
 // host-mode mutation: publish and unpublish are registered host tools
 // (tools/index.ts shims them onto the loader's virtual network, so these
@@ -32,6 +41,10 @@ import LayoutGridIcon from '@cardstack/boxel-icons/layout-grid';
 import ActivityIcon from '@cardstack/boxel-icons/activity';
 import DoorOpenIcon from '@cardstack/boxel-icons/door-open';
 import SearchIcon from '@cardstack/boxel-icons/search';
+import XIcon from '@cardstack/boxel-icons/x';
+import PlusIcon from '@cardstack/boxel-icons/plus';
+import ArrowUpIcon from '@cardstack/boxel-icons/arrow-up';
+import ArrowDownIcon from '@cardstack/boxel-icons/arrow-down';
 
 import type { CardErrorJSONAPI } from '@cardstack/runtime-common';
 import {
@@ -78,6 +91,12 @@ import {
   type FileDef,
 } from './card-api';
 import { MarkdownDef } from './markdown-file-def'; // realm README
+// Content-only markdown renderer: the README's prose with no file shell chrome
+// (no file bar, metadata, or fixed-height scroll box). The card owns the frame.
+// Imported from its own module rather than the `file-formats/index` barrel,
+// which would also pull the audio renderer and the metadata field shapes into
+// this card's graph for nothing.
+import { MarkdownPreview } from './file-formats/markdown-preview';
 import type { RealmEventContent } from './matrix-event';
 import type { Spec } from './spec';
 import { now as clockNow, nowDate } from './helpers/clock';
@@ -92,6 +111,13 @@ const here: string = (import.meta as any).url;
 const [, StripView, GridView] = VIEW_OPTIONS;
 
 type Segment = 'home' | 'library' | 'activity';
+
+// The frame's three sections, in tab order.
+const SEGMENTS: { id: Segment; label: string; icon: typeof HouseIcon }[] = [
+  { id: 'home', label: 'Home', icon: HouseIcon },
+  { id: 'library', label: 'Library', icon: LayoutGridIcon },
+  { id: 'activity', label: 'Activity', icon: ActivityIcon },
+];
 
 // A rail row is a stock FilterOption plus the count shown right-aligned in
 // the sidebar; library-group counts are computed live via `countFor`.
@@ -419,6 +445,70 @@ function relativeTime(value: unknown): string | undefined {
   return `${Math.floor(hours / 24)}d ago`;
 }
 
+// One Browse pill: a card type or file kind with its instance count, opening
+// the Library filtered to it.
+class TypeChip extends GlimmerComponent<{
+  Args: { option: RailOption; count: number; onSelect: () => void };
+}> {
+  private get iconHtml(): SafeString | undefined {
+    return typeof this.args.option.icon === 'string'
+      ? htmlSafe(this.args.option.icon)
+      : undefined;
+  }
+
+  <template>
+    <Button
+      @kind='default'
+      @size='extra-small'
+      @pill={{true}}
+      class='type-chip'
+      {{on 'click' @onSelect}}
+      data-test-type-chip={{@option.id}}
+    >
+      {{#if this.iconHtml}}
+        <span class='type-chip-icon'>{{this.iconHtml}}</span>
+      {{/if}}
+      {{@option.displayName}}
+      <span class='type-chip-count' data-test-type-chip-count>{{@count}}</span>
+    </Button>
+    <style scoped>
+      .type-chip {
+        --boxel-button-default-border: var(
+          --grid-chip-border,
+          color-mix(in oklch, var(--border) 50%, transparent)
+        );
+        --boxel-button-default-background: var(--card);
+        --boxel-button-default-foreground: var(--card-foreground);
+        gap: var(--boxel-sp-2xs);
+      }
+      .type-chip:hover {
+        border-color: var(--border-strong);
+        box-shadow: var(--shadow-sm);
+      }
+      .type-chip-icon {
+        display: grid;
+        place-items: center;
+        width: 0.875rem;
+        height: 0.875rem;
+        flex-shrink: 0;
+        color: var(--muted-foreground);
+      }
+      .type-chip-icon :deep(svg) {
+        width: 0.875rem;
+        height: 0.875rem;
+        display: block;
+      }
+      .type-chip-count {
+        font-family: var(--font-mono);
+        font-size: var(--boxel-font-size-2xs);
+        font-weight: 500;
+        font-variant-numeric: tabular-nums;
+        color: var(--muted-foreground);
+      }
+    </style>
+  </template>
+}
+
 class Isolated extends Component<typeof Workspace> {
   <template>
     <section
@@ -438,55 +528,80 @@ class Isolated extends Component<typeof Workspace> {
       >{{this.progressAnnouncement}}</span>
       <header class='frame'>
         <nav class='tabs' aria-label='Sections'>
-          <button
-            type='button'
-            class='tab {{if (eq this.segment "home") "active"}}'
-            data-test-workspace-tab='home'
-            {{on 'click' (this.setSegment 'home')}}
-          ><HouseIcon class='tab-icon' /> Home</button>
-          <button
-            type='button'
-            class='tab {{if (eq this.segment "library") "active"}}'
-            data-test-workspace-tab='library'
-            {{on 'click' (this.setSegment 'library')}}
-          ><LayoutGridIcon class='tab-icon' /> Library</button>
-          <button
-            type='button'
-            class='tab {{if (eq this.segment "activity") "active"}}'
-            data-test-workspace-tab='activity'
-            {{on 'click' (this.setSegment 'activity')}}
-          ><ActivityIcon class='tab-icon' />
-            Activity{{#if this.runningJobs.length}}<span
-                class='attention-dot'
-                aria-hidden='true'
-              /><span class='boxel-sr-only'>({{this.runningJobs.length}}
-                in progress)</span>{{/if}}</button>
+          {{#each SEGMENTS as |tab|}}
+            {{#let (eq this.segment tab.id) as |isActive|}}
+              <Button
+                @kind={{if isActive 'default' 'muted'}}
+                @size='extra-small'
+                @rectangular={{true}}
+                class={{cn 'nav-tab' nav-tab--active=isActive}}
+                aria-current={{if isActive 'true'}}
+                {{on 'click' (this.setSegment tab.id)}}
+                data-test-workspace-tab={{tab.id}}
+              ><tab.icon
+                  width='14'
+                  height='14'
+                  class='tab-icon'
+                  aria-hidden='true'
+                />
+                {{tab.label}}
+                {{#if
+                  (and (eq tab.id 'activity') (bool this.runningJobs.length))
+                }}
+                  <span class='attention-dot' aria-hidden='true' />
+                  <span class='boxel-sr-only'>({{this.runningJobs.length}}
+                    in progress)</span>
+                {{/if}}</Button>
+            {{/let}}
+          {{/each}}
         </nav>
         {{#if @model.signage}}
-          {{! workspace signage — hover reveals the purpose annotation }}
-          <span class='signage' title={{@model.purpose}}>
-            {{@model.signage}}</span>
+          {{! workspace signage; the purpose annotation shows on hover or focus
+            and is read after the badge text }}
+          {{#if @model.purpose}}
+            <Tooltip @placement='bottom'>
+              <:trigger>
+                <span class='signage kicker' tabindex='0'>
+                  {{@model.signage}}<span class='boxel-sr-only'>:
+                    {{@model.purpose}}</span></span>
+              </:trigger>
+              <:content>{{@model.purpose}}</:content>
+            </Tooltip>
+          {{else}}
+            <span class='signage kicker'>{{@model.signage}}</span>
+          {{/if}}
         {{/if}}
-        <div class='frame-actions'>
-          <div class='search-box' {{this.setupSearchHotkey}}>
-            <SearchIcon class='search-icon' />
-            <input
+        <div class='frame-actions' data-test-frame-actions>
+          <div
+            class='search-box'
+            role='search'
+            aria-label='Search this space'
+            {{this.setupSearchHotkey}}
+            {{on 'focusout' this.onSearchFocusOut}}
+          >
+            <SearchIcon
+              width='13'
+              height='13'
+              class='search-icon'
+              aria-hidden='true'
+            />
+            <BoxelInput
+              @value={{this.searchTerm}}
+              @onInput={{this.onSearchInput}}
+              @onFocus={{this.onSearchFocus}}
+              @placeholder='Search'
               class='search-input'
-              type='text'
-              placeholder='Search'
               aria-label='Search this space'
               aria-keyshortcuts='Meta+K Control+K'
-              value={{this.searchTerm}}
-              {{on 'input' this.onSearchInput}}
               {{on 'keydown' this.onSearchKeydown}}
-              {{on 'focus' this.onSearchFocus}}
-              {{on 'focusout' this.onSearchBlur}}
+              data-test-workspace-search
             />
             {{! the visible hint is decorative — aria-keyshortcuts above carries
               the same thing to assistive tech, in both spellings }}
             <span
-              class='search-kbd'
+              class='search-kbd kicker'
               aria-hidden='true'
+              data-test-search-hotkey
             >{{SEARCH_HOTKEY_LABEL}}</span>
             {{! Results appear and refresh without any focus change, so nothing
               would reach a screen reader on its own. Announced as a count
@@ -503,26 +618,38 @@ class Isolated extends Component<typeof Workspace> {
               status region above carries the count instead. }}
             {{#if this.searchResults.length}}
               <div class='search-results'>
-                {{#each this.searchResults as |result|}}
-                  <button
-                    type='button'
-                    class='search-result'
-                    {{on 'click' (this.openResult result)}}
-                  >
-                    <span class='search-result-title'>{{result.title}}</span>
-                    <span class='search-result-type'>{{result.type}}</span>
-                  </button>
-                {{/each}}
-                <button
-                  type='button'
+                <ul class='search-result-list'>
+                  {{#each this.searchResults as |result|}}
+                    <li>
+                      <Button
+                        @kind='text-only'
+                        @size='auto'
+                        class='search-result'
+                        {{on 'click' (this.openResult result)}}
+                        {{on 'keydown' this.onSearchKeydown}}
+                      >
+                        <span
+                          class='search-result-title'
+                        >{{result.title}}</span>
+                        <span
+                          class='search-result-type kicker'
+                        >{{result.type}}</span>
+                      </Button>
+                    </li>
+                  {{/each}}
+                </ul>
+                <Button
+                  @kind='text-only'
+                  @size='auto'
                   class='search-see-all'
                   {{on 'click' this.seeAllResults}}
+                  {{on 'keydown' this.onSearchKeydown}}
                 >
                   See all
                   {{this.searchTotal}}
                   results
-                  <span class='search-scope-note'>Cards only</span>
-                </button>
+                  <span class='search-scope-note kicker'>Cards only</span>
+                </Button>
               </div>
             {{/if}}
           </div>
@@ -542,8 +669,9 @@ class Isolated extends Component<typeof Workspace> {
               two lines, gradient meter, green Activity link, and the
               survey teaser attached below }}
             <div class='setup-strip'>
-              <button
-                type='button'
+              <Button
+                @kind='text-only'
+                @size='auto'
                 class='setup-bar'
                 {{on 'click' (this.setSegment 'activity')}}
               >
@@ -558,7 +686,7 @@ class Isolated extends Component<typeof Workspace> {
                 <span class='setup-lines'>
                   <span class='setup-name'>Setting up
                     <strong>{{this.jobName job}}</strong></span>
-                  <span class='setup-data'>{{this.jobCount job}}{{#if
+                  <span class='setup-data data'>{{this.jobCount job}}{{#if
                       (this.jobEta job)
                     }}
                       ·
@@ -568,21 +696,24 @@ class Isolated extends Component<typeof Workspace> {
                     class='setup-fill'
                     style={{this.jobFillStyle job}}
                   /></span>
-                <span class='setup-pct'>{{this.jobPct job}}%</span>
-                <span class='setup-action'>View in Activity ›</span>
-              </button>
+                <span class='setup-pct data'>{{this.jobPct job}}%</span>
+                <span class='setup-action'>View in Activity
+                  <span aria-hidden='true'>›</span></span>
+              </Button>
               {{#if (this.surveyRemaining job)}}
-                <button
-                  type='button'
+                <Button
+                  @kind='text-only'
+                  @size='auto'
                   class='setup-tease'
                   {{on 'click' (this.openCard job.card.setupSurvey)}}
                 >
-                  <span class='setup-tease-mark'>✦</span>
+                  <span class='setup-tease-mark' aria-hidden='true'>✦</span>
                   Want it to arrive already yours?
                   <span class='setup-tease-link'>Answer
                     {{this.surveyRemaining job}}
-                    quick questions ›</span>
-                </button>
+                    quick questions
+                    <span aria-hidden='true'>›</span></span>
+                </Button>
               {{/if}}
             </div>
           {{/each}}
@@ -601,30 +732,40 @@ class Isolated extends Component<typeof Workspace> {
                     {{#each @fields.entryPoints as |Door index|}}
                       <article class='door'>
                         <div class='door-kicker'>
-                          <span class='door-kind'>{{this.doorKind index}}</span>
+                          <span class='door-kind kicker'>{{this.doorKind
+                              index
+                            }}</span>
                           {{#if @canEdit}}
-                            <button
-                              type='button'
+                            <IconButton
+                              @icon={{XIcon}}
+                              @variant='text-only'
+                              @size='extra-small'
+                              @width='12'
+                              @height='12'
                               class='door-unpin'
                               aria-label='Unpin'
                               title='Unpin'
                               {{on 'click' (this.unpinDoor index)}}
-                            >×</button>
+                            />
                           {{/if}}
                         </div>
                         <div class='door-face'>
-                          <Door @format='fitted' />
-                          <button
-                            type='button'
+                          <Door
+                            @format='fitted'
+                            @displayContainer={{false}}
+                            class='door-card'
+                          />
+                          <Button
+                            @kind='text-only'
+                            @size='auto'
                             class='tile-open'
                             aria-label='Open {{this.doorTitle index}}'
-                            title='Open in stack'
                             {{on 'click' (this.openDoor index)}}
-                          ></button>
+                          />
                           {{! Match Library fitted tiles: the read-only preview opens through viewCard }}
                         </div>
                         <div class='door-footer'>
-                          <span class='door-title'>{{this.doorTitle
+                          <span class='door-title data'>{{this.doorTitle
                               index
                             }}</span>
                           <Button
@@ -639,14 +780,15 @@ class Isolated extends Component<typeof Workspace> {
                     {{/each}}
                     {{#if @canEdit}}
                       {{! the pin affordance: a ghost tile ending the row }}
-                      <button
-                        type='button'
+                      <Button
+                        @kind='text-only'
+                        @size='auto'
                         class='door-add'
                         {{on 'click' this.pinCard}}
                       >
-                        <span class='door-add-mark'>＋</span>
+                        <span class='door-add-mark' aria-hidden='true'>＋</span>
                         <span class='door-add-label'>Pin a card…</span>
-                      </button>
+                      </Button>
                     {{/if}}
                   </div>
                 </section>
@@ -656,8 +798,14 @@ class Isolated extends Component<typeof Workspace> {
                 while the space has no pins — the landing content for a
                 realm that just got cloned or remixed. }}
                   {{#if @model.readme}}
-                    <div class='readme-embed'>
-                      <@fields.readme @format='embedded' />
+                    <div class='readme-embed' data-test-readme>
+                      <div class='readme-body' data-test-readme-body>
+                        <MarkdownPreview
+                          @model={{@model.readme}}
+                          @format='isolated'
+                          @displayContainer={{false}}
+                        />
+                      </div>
                     </div>
                   {{else}}
                     <p class='welcome-copy'>This space holds cards — documents,
@@ -673,9 +821,10 @@ class Isolated extends Component<typeof Workspace> {
                     >Open Library</Button>
                     {{#if @canEdit}}
                       <Button
-                        @kind='secondary'
+                        @kind='default'
                         class='welcome-alt'
                         {{on 'click' this.createNew}}
+                        data-test-welcome-new-card
                       >New card</Button>
                     {{/if}}
                   </div>
@@ -692,14 +841,28 @@ class Isolated extends Component<typeof Workspace> {
                     <div
                       class='readme-embed
                         {{unless this.readmeExpanded "collapsed"}}'
+                      data-test-readme
+                      data-test-readme-state={{if
+                        this.readmeExpanded
+                        'expanded'
+                        'collapsed'
+                      }}
                     >
-                      <@fields.readme @format='embedded' />
+                      <div class='readme-body' data-test-readme-body>
+                        <MarkdownPreview
+                          @model={{@model.readme}}
+                          @format='isolated'
+                          @displayContainer={{false}}
+                        />
+                      </div>
                     </div>
-                    <button
-                      type='button'
+                    <Button
+                      @kind='text-only'
+                      @size='auto'
                       class='readme-toggle'
                       {{on 'click' this.toggleReadme}}
-                    >{{if this.readmeExpanded 'Show less' 'Read more'}}</button>
+                      data-test-readme-toggle
+                    >{{if this.readmeExpanded 'Show less' 'Read more'}}</Button>
                   </section>
                 {{/if}}
               {{/if}}
@@ -713,52 +876,28 @@ class Isolated extends Component<typeof Workspace> {
                   <div class='inventory'>
                     {{#if this.contentCardChips.length}}
                       <div class='inventory-group'>
-                        <span class='inventory-label'>Cards</span>
+                        <span class='inventory-label kicker'>Cards</span>
                         <div class='inventory-chips'>
                           {{#each this.contentCardChips as |option|}}
-                            <button
-                              type='button'
-                              class='type-chip'
-                              data-test-type-chip={{option.id}}
-                              {{on 'click' (this.jumpToFilter option)}}
-                            >
-                              {{#if (this.iconHtml option)}}
-                                <span class='type-chip-icon'>{{this.iconHtml
-                                    option
-                                  }}</span>
-                              {{/if}}
-                              {{option.displayName}}
-                              <span
-                                class='type-chip-count'
-                                data-test-type-chip-count
-                              >{{this.countFor option}}</span>
-                            </button>
+                            <TypeChip
+                              @option={{option}}
+                              @count={{this.countFor option}}
+                              @onSelect={{this.jumpToFilter option}}
+                            />
                           {{/each}}
                         </div>
                       </div>
                     {{/if}}
                     {{#if this.fileChips.length}}
                       <div class='inventory-group'>
-                        <span class='inventory-label'>Files</span>
+                        <span class='inventory-label kicker'>Files</span>
                         <div class='inventory-chips'>
                           {{#each this.fileChips as |option|}}
-                            <button
-                              type='button'
-                              class='type-chip'
-                              data-test-type-chip={{option.id}}
-                              {{on 'click' (this.jumpToFilter option)}}
-                            >
-                              {{#if (this.iconHtml option)}}
-                                <span class='type-chip-icon'>{{this.iconHtml
-                                    option
-                                  }}</span>
-                              {{/if}}
-                              {{option.displayName}}
-                              <span
-                                class='type-chip-count'
-                                data-test-type-chip-count
-                              >{{this.countFor option}}</span>
-                            </button>
+                            <TypeChip
+                              @option={{option}}
+                              @count={{this.countFor option}}
+                              @onSelect={{this.jumpToFilter option}}
+                            />
                           {{/each}}
                         </div>
                       </div>
@@ -771,24 +910,29 @@ class Isolated extends Component<typeof Workspace> {
 
           {{#unless this.runningJobs.length}}
             {{#if this.latest}}
-              <button
-                type='button'
+              <Button
+                @kind='text-only'
+                @size='auto'
                 class='recent-preview'
                 {{on 'click' (this.setSegment 'activity')}}
               >
-                <span class='recent-text'>{{this.latest.title}}{{#if
+                <span class='recent-text data'>{{this.latest.title}}{{#if
                     this.latest.when
                   }}
                     ·
                     {{this.latest.when}}{{/if}}</span>
                 <span class='recent-action'>Open Activity</span>
-              </button>
+              </Button>
             {{/if}}
           {{/unless}}
 
           {{! Space details: quiet realm facts, data register }}
-          <div class='space-details'>
-            <span class='space-live' title='Live updates connected'></span>
+          <div class='space-details data'>
+            <span
+              class='space-live'
+              role='img'
+              aria-label='Live updates connected'
+            ></span>
             {{#if this.realmVisibility}}
               <span>{{this.realmVisibility}}</span>
               <span class='space-sep'>·</span>
@@ -815,107 +959,72 @@ class Isolated extends Component<typeof Workspace> {
             {{/if}}
             {{#if this.configInstance}}
               <span class='space-sep'>·</span>
-              <button
-                type='button'
+              <Button
+                @kind='link'
                 class='space-config'
                 {{on 'click' (this.openCard this.configInstance)}}
-              >Configuration</button>
+              >Configuration</Button>
             {{/if}}
           </div>
         </div>
       {{else if (eq this.segment 'library')}}
-        <div class='library'>
+        <div class='library' data-test-library>
           <nav class='rail scroll-container' aria-label='Library filters'>
-            <div class='rail-group'>
-              <h3 class='rail-label'>Library</h3>
-              {{#each this.libraryFilters as |option|}}
-                <button
-                  type='button'
-                  class='rail-row
-                    {{if (eq option.id this.activeFilter.id) "selected"}}'
-                  data-test-workspace-filter={{option.id}}
-                  {{on 'click' (this.selectFilter option)}}
-                >
-                  {{#let (this.iconComponent option) as |Icon|}}
-                    {{#if Icon}}<Icon class='rail-icon' />{{/if}}
-                  {{/let}}
-                  <span class='rail-name'>{{option.displayName}}</span>
-                  <span class='rail-count'>{{this.countFor option}}</span>
-                </button>
-              {{/each}}
+            <div class='rail-group' data-test-rail-group>
+              <h3 class='rail-label kicker'>Library</h3>
+              <FilterList
+                @filters={{this.libraryFilters}}
+                @activeFilter={{this.activeFilter}}
+                @onChanged={{this.onChangeFilter}}
+                class='rail-list'
+              />
             </div>
             {{#if this.cardTypeFilters.length}}
-              <div class='rail-group'>
-                <h3 class='rail-label'>Card types</h3>
-                {{#each this.cardTypeFilters as |option|}}
-                  {{! + New moved from the frame into the rail: each card
-                    type row grows a hover + that creates one of that type. }}
-                  <div class='rail-row-wrap'>
-                    <button
-                      type='button'
-                      class='rail-row type
-                        {{if (eq option.id this.activeFilter.id) "selected"}}'
-                      data-test-workspace-filter={{option.id}}
-                      {{on 'click' (this.selectFilter option)}}
-                    >
-                      {{#if (this.iconHtml option)}}
-                        <span class='rail-type-icon'>{{this.iconHtml
-                            option
-                          }}</span>
-                      {{else if (this.iconComponent option)}}
-                        {{#let (this.iconComponent option) as |Icon|}}
-                          {{#if Icon}}<Icon class='rail-icon' />{{/if}}
-                        {{/let}}
-                      {{else}}
-                        <span class='rail-swatch' />
-                      {{/if}}
-                      <span class='rail-name'>{{option.displayName}}</span>
-                      <span class='rail-count'>{{this.countFor option}}</span>
-                    </button>
+              <div class='rail-group' data-test-rail-group>
+                <h3 class='rail-label kicker'>Card types</h3>
+                <FilterList
+                  @filters={{this.cardTypeFilters}}
+                  @activeFilter={{this.activeFilter}}
+                  @onChanged={{this.onChangeFilter}}
+                  class='rail-list'
+                >
+                  <:action as |option|>
                     {{#if @canEdit}}
-                      <button
-                        type='button'
-                        class='rail-add'
-                        aria-label='New {{option.displayName}}'
-                        title='New {{option.displayName}}'
-                        {{on 'click' (this.createOfType option)}}
-                      >+</button>
+                      <Tooltip @placement='right'>
+                        <:trigger>
+                          <IconButton
+                            @icon={{PlusIcon}}
+                            @variant='text-only'
+                            @size='small'
+                            @width='12'
+                            @height='12'
+                            class='rail-add'
+                            aria-label='New {{option.displayName}}'
+                            {{on 'click' (this.createOfType option)}}
+                          />
+                        </:trigger>
+                        <:content>New {{option.displayName}}</:content>
+                      </Tooltip>
                     {{/if}}
-                  </div>
-                {{/each}}
+                  </:action>
+                </FilterList>
               </div>
             {{/if}}
             {{#if this.fileTypeFilters.length}}
-              <div class='rail-group'>
-                <h3 class='rail-label'>File types</h3>
-                {{#each this.fileTypeFilters as |option|}}
-                  <button
-                    type='button'
-                    class='rail-row type
-                      {{if (eq option.id this.activeFilter.id) "selected"}}'
-                    data-test-workspace-filter={{option.id}}
-                    {{on 'click' (this.selectFilter option)}}
-                  >
-                    {{#if (this.iconHtml option)}}
-                      <span class='rail-type-icon'>{{this.iconHtml
-                          option
-                        }}</span>
-                    {{else if (this.iconComponent option)}}
-                      {{#let (this.iconComponent option) as |Icon|}}
-                        {{#if Icon}}<Icon class='rail-icon' />{{/if}}
-                      {{/let}}
-                    {{else}}
-                      <span class='rail-swatch' />
-                    {{/if}}
-                    <span class='rail-name'>{{option.displayName}}</span>
-                    <span class='rail-count'>{{this.countFor option}}</span>
-                  </button>
-                {{/each}}
+              <div class='rail-group' data-test-rail-group>
+                <h3 class='rail-label kicker'>File types</h3>
+                <FilterList
+                  @filters={{this.fileTypeFilters}}
+                  @activeFilter={{this.activeFilter}}
+                  @onChanged={{this.onChangeFilter}}
+                  class='rail-list'
+                />
               </div>
             {{/if}}
           </nav>
           <CardsGridLayout
             @format='fitted'
+            @displaySidebar={{false}}
             @context={{@context}}
             @query={{this.query}}
             @realms={{this.realms}}
@@ -932,7 +1041,7 @@ class Isolated extends Component<typeof Workspace> {
           />
         </div>
       {{else}}
-        <div class='activity-pane'>
+        <div class='activity-pane' data-test-activity>
           {{! Collapsing dock: the full panel scrolls away with the log;
             a one-line summary pins under the frame while it is off-screen. }}
           {{#if this.runningJobs.length}}
@@ -940,10 +1049,11 @@ class Isolated extends Component<typeof Workspace> {
               its accessible name, and that text is the live summary of what is
               being set up. The action is appended instead, so the name carries
               both. }}
-            <button
-              type='button'
+            <Button
+              @kind='text-only'
+              @size='auto'
+              @disabled={{if this.dockCondensed false true}}
               class='dock-mini {{if this.dockCondensed "shown"}}'
-              disabled={{if this.dockCondensed false true}}
               {{on 'click' this.revealDock}}
             >
               <span class='dock-dot' aria-hidden='true' />
@@ -956,7 +1066,7 @@ class Isolated extends Component<typeof Workspace> {
                 />
               </span>
               <span class='boxel-sr-only'>Show progress details</span>
-            </button>
+            </Button>
           {{/if}}
           <div
             class='stage scroll-container
@@ -981,15 +1091,20 @@ class Isolated extends Component<typeof Workspace> {
                     {{#if SurveyComp}}
                       <div class='dock-duo'>
                         <div class='dock-pane build'>
-                          <span class='dock-pane-label'>Building</span>
+                          <span class='dock-pane-label kicker'>Building</span>
                           <div class='job-cell'>
-                            <job.component @format='embedded' />
-                            <button
-                              type='button'
+                            <job.component
+                              @format='embedded'
+                              @displayContainer={{false}}
+                              class='job-face'
+                            />
+                            <Button
+                              @kind='text-only'
+                              @size='auto'
                               class='tile-open'
                               aria-label='Open progress details'
                               {{on 'click' (this.openCard job.card)}}
-                            ></button>
+                            />
                           </div>
                         </div>
                         <div class='dock-pane invite'>
@@ -997,17 +1112,19 @@ class Isolated extends Component<typeof Workspace> {
                             click-through overlay; popping to the stack is
                             this explicit header affordance instead }}
                           <div class='dock-pane-head'>
-                            <span class='dock-pane-label'>While you wait ·
-                              Optional</span>
-                            <button
-                              type='button'
+                            <span class='dock-pane-label kicker'>While you wait
+                              · Optional</span>
+                            <Button
+                              @kind='text-only'
+                              @size='auto'
                               class='dock-pane-open'
                               title='Open as a card'
                               {{on
                                 'click'
                                 (this.openCard job.card.setupSurvey)
                               }}
-                            >Open ↗</button>
+                            >Open
+                              <span aria-hidden='true'>↗</span></Button>
                           </div>
                           <div class='job-cell wizard'>
                             <SurveyComp @format='embedded' />
@@ -1016,13 +1133,18 @@ class Isolated extends Component<typeof Workspace> {
                       </div>
                     {{else}}
                       <div class='job-cell'>
-                        <job.component @format='embedded' />
-                        <button
-                          type='button'
+                        <job.component
+                          @format='embedded'
+                          @displayContainer={{false}}
+                          class='job-face'
+                        />
+                        <Button
+                          @kind='text-only'
+                          @size='auto'
                           class='tile-open'
                           aria-label='Open progress details'
                           {{on 'click' (this.openCard job.card)}}
-                        ></button>
+                        />
                       </div>
                     {{/if}}
                   {{/let}}
@@ -1039,24 +1161,32 @@ class Isolated extends Component<typeof Workspace> {
                 {{#each this.visibleFeed as |item|}}
                   {{#if item.showDay}}
                     <div class='feed-day'>
-                      <span class='feed-day-label'>{{item.dayLabel}}</span>
+                      <span
+                        class='feed-day-label kicker'
+                      >{{item.dayLabel}}</span>
                       <span class='feed-day-rule' />
                     </div>
                   {{/if}}
-                  <div class='feed-row'>
-                    <span class='feed-when' title={{item.absolute}}>{{if
-                        item.when
-                        item.when
-                        '—'
-                      }}</span>
+                  <div class='feed-row' data-test-feed-row>
+                    <time
+                      class='feed-when data'
+                      datetime={{item.absoluteIso}}
+                      data-test-feed-when
+                    >
+                      {{if item.when item.when '—'}}
+                      {{#if item.absolute}}<span
+                          class='boxel-sr-only'
+                        >({{item.absolute}})</span>{{/if}}
+                    </time>
                     <div class='feed-card'>
-                      <item.component @format='embedded' />
-                      <button
-                        type='button'
+                      <item.component @format='embedded' class='feed-face' />
+                      <Button
+                        @kind='text-only'
+                        @size='auto'
                         class='tile-open'
                         aria-label='Open {{if item.title item.title "card"}}'
                         {{on 'click' (this.openFeedItem item)}}
-                      ></button>
+                      />
                     </div>
                     <div class='feed-note'>
                       {{! Rich event entry: verb + type (icon) meta row,
@@ -1064,20 +1194,31 @@ class Isolated extends Component<typeof Workspace> {
                         reads as a log line without the embedded card. }}
                       <div class='feed-meta'>
                         <span
-                          class='feed-verb
+                          class='feed-verb kicker
                             {{if (eq item.verb "Created") "created"}}
                             {{if (eq item.verb "Remixed") "remixed"}}'
+                          data-test-feed-verb={{item.verb}}
                         >{{item.verb}}</span>
-                        <span class='feed-type'>
-                          <item.typeIcon class='feed-type-icon' />
+                        <span class='feed-type kicker'>
+                          <item.typeIcon
+                            width='12'
+                            height='12'
+                            class='feed-type-icon'
+                          />
                           {{item.typeName}}</span>
                       </div>
                       {{#if item.title}}
-                        <p class='feed-title'>{{item.title}}</p>
+                        <p
+                          class='feed-title'
+                          data-test-feed-title
+                        >{{item.title}}</p>
                       {{/if}}
                       {{#let (this.remixSourceTitle item) as |source|}}
                         {{#if source}}
-                          <p class='feed-remix-source'>from {{source}}</p>
+                          <p
+                            class='feed-remix-source'
+                            data-test-feed-remix-source
+                          >from {{source}}</p>
                         {{/if}}
                       {{/let}}
                       {{#if item.note}}
@@ -1086,18 +1227,28 @@ class Isolated extends Component<typeof Workspace> {
                     </div>
                   </div>
                 {{else}}
-                  <p class='empty-note'>No activity yet.</p>
+                  <div class='empty-state'>
+                    <p class='empty-note'>No activity yet. Changes to cards and
+                      files in this space will appear here.</p>
+                    {{#if @canEdit}}
+                      <Button
+                        @kind='secondary'
+                        @size='extra-small'
+                        {{on 'click' this.createNew}}
+                      >New card</Button>
+                    {{/if}}
+                  </div>
                 {{/each}}
                 {{#if this.moreFeed}}
                   {{! reveal-on-scroll: the sentinel appends the next chunk }}
                   <div class='feed-more' {{this.watchFeedEnd}}>
-                    <span class='feed-more-note'>Showing
+                    <span class='feed-more-note data'>Showing
                       {{this.visibleFeed.length}}
                       of
                       {{this.feedItems.length}}</span>
                   </div>
                 {{else if this.feedAtCap}}
-                  <p class='feed-end-note'>Showing the last
+                  <p class='feed-end-note data'>Showing the last
                     {{this.activityFeedCap}}
                     changes.</p>
                 {{/if}}
@@ -1109,250 +1260,271 @@ class Isolated extends Component<typeof Workspace> {
     </section>
     <style scoped>
       .card-grid {
-        /* Derived light-surface tier. System constants — the
-           chrome's switchgear. The realm theme may tint exactly two
-           channels: surface (--background) and accent (--primary). */
-        --grid-ink: #272330;
-        --grid-ink-body: #5a586a;
-        --grid-ink-quiet: #8b8b93;
-        --grid-ink-kicker: #919191;
-        --grid-ink-meta: #a2a2ab;
-        --grid-ink-faint: #b7b7bd;
-        --grid-ink-ghost: #c0c0c7;
-        --grid-stage: var(--background, #f7f8fa);
-        --grid-surface: #ffffff;
-        --grid-shelf: #fafbfc;
-        --grid-control: #f6f7f9;
-        --grid-track: #eef0f4;
-        --grid-nav-ink: #3f3d49;
-        --grid-border: #e2e8f0;
-        --grid-hairline: #eceef1;
-        --grid-hover-border: #cbd0d8;
-        --grid-interactive: var(--primary, #0c9d7c);
-        --grid-live: #00c495;
-        --grid-accent: var(--boxel-teal, #00ffba);
-        --grid-accent-ink: #12241e;
-        --grid-attention: #d97706;
-        --grid-attention-text: #b45309;
-        --grid-attention-surface: #fff9f2;
-        --grid-attention-border: #f4e6d4;
-        --grid-attention-rule: #f0ddc0;
-        --grid-broken: var(--boxel-red, #ff5050);
-        --grid-shadow-rest: 0 2px 8px rgba(28, 28, 50, 0.05);
-        --grid-shadow-hover: 0 10px 26px rgba(28, 28, 50, 0.11);
-        --grid-mono: var(
-          --boxel-monospace-font-family,
-          'IBM Plex Mono',
-          monospace
+        /* Derived values only; everything else reads the theme contract
+           directly. Attention tints are mixes of --attention over --card so
+           the register moves with the theme as one. */
+        --grid-attention-soft: color-mix(
+          in oklch,
+          var(--attention) 60%,
+          var(--card)
         );
-        --grid-sans: var(--boxel-font-family, 'IBM Plex Sans', sans-serif);
-        --grid-serif: var(
-          --boxel-serif-font-family,
-          'IBM Plex Serif',
-          Georgia,
-          serif
+        --grid-attention-surface: color-mix(
+          in oklch,
+          var(--attention) 6%,
+          var(--card)
         );
+        --grid-attention-border: color-mix(
+          in oklch,
+          var(--attention) 18%,
+          var(--card)
+        );
+        --grid-attention-rule: color-mix(
+          in oklch,
+          var(--attention) 30%,
+          var(--card)
+        );
+        --grid-chip-border: color-mix(in oklch, var(--border) 50%, transparent);
+        /* looser leading for the welcome prose; no line-height token runs past 1.4 */
+        --grid-prose-leading: 1.6;
+        /* fixed geometry the layout is built around */
+        --grid-rail-width: 13.375rem;
+        --grid-search-width: 10.625rem;
+        --grid-search-results-size: 20rem;
+        --grid-frame-height: 3.375rem;
+        --grid-bar-height: 2.875rem;
+        --grid-readme-width: 45rem;
+        --grid-readme-collapsed-height: 12.5rem;
+        --grid-pill: 100rem;
         /* motion tokens (0.4s meter fill and 2s pulses stay as
-           deliberate exceptions) + the created-verb ink */
+           deliberate exceptions) */
         --grid-quick: 0.12s;
         --grid-soft: 0.18s;
-        --grid-created: #00893a;
-        --grid-remixed: #7c3aed;
 
         display: flex;
         flex-direction: column;
         width: 100%;
         height: 100%;
-        max-height: 100vh;
         overflow: hidden;
-        background-color: var(--grid-stage);
-        color: var(--grid-ink);
-        font-family: var(--grid-sans);
+      }
+
+      /* the chrome's buttons are Buttons; the component's own type and
+         letter-spacing yield to the surrounding text register */
+      .card-grid .search-result,
+      .card-grid .search-see-all,
+      .card-grid .setup-bar,
+      .card-grid .setup-tease,
+      .card-grid .door-unpin,
+      .card-grid .tile-open,
+      .card-grid .door-add,
+      .card-grid .readme-toggle,
+      .card-grid .type-chip,
+      .card-grid .recent-preview,
+      .card-grid .space-config,
+      .card-grid .dock-mini,
+      .card-grid .dock-pane-open {
+        line-height: inherit;
+        letter-spacing: inherit;
+      }
+
+      /* two text registers shared across the chrome: kickers (tracked mono
+         caps) and data (tabular mono) */
+      .kicker {
+        font-family: var(--font-mono);
+        font-size: var(--boxel-eyebrow-font-size);
+        font-weight: var(--boxel-eyebrow-font-weight);
+        line-height: var(--boxel-eyebrow-line-height);
+        letter-spacing: var(--boxel-eyebrow-letter-spacing);
+        text-transform: uppercase;
+      }
+      .data {
+        font-family: var(--font-mono);
+        font-size: var(--boxel-font-size-2xs);
+        font-weight: 500;
+        font-variant-numeric: tabular-nums;
       }
 
       /* ── Frame ─────────────────────────────────────────────── */
       .frame {
         display: flex;
+        flex-wrap: wrap;
         align-items: center;
-        gap: 14px;
-        min-height: 54px;
-        padding: 0 18px;
-        background-color: var(--grid-surface);
-        border-bottom: 1px solid var(--grid-border);
+        gap: var(--boxel-sp-xs) var(--boxel-sp);
+        min-height: var(--grid-frame-height);
+        padding: var(--boxel-sp-xs) var(--boxel-sp-lg);
+        background-color: var(--card);
+        color: var(--card-foreground);
+        border-bottom: 1px solid var(--border);
         flex-shrink: 0;
       }
       .tabs {
         display: flex;
-        gap: 2px;
-        padding: 2px;
-        background-color: var(--grid-track);
-        border: 1px solid var(--grid-border);
-        border-radius: 9px;
+        gap: var(--boxel-sp-4xs);
+        padding: var(--boxel-sp-4xs);
+        background-color: var(--muted);
+        border: 1px solid var(--grid-chip-border);
+        /* outer radius = the tabs' radius + the strip padding */
+        border-radius: var(--boxel-border-radius);
       }
-      .tab {
+      .nav-tab {
+        --boxel-button-border: none;
         position: relative;
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        border: none;
-        background: none;
-        padding: 5px 12px;
-        border-radius: 7px;
-        font: 500 12.5px var(--grid-sans);
-        color: var(--grid-ink-quiet);
-        cursor: pointer;
+        gap: var(--boxel-sp-3xs);
+        transition: none;
       }
-      .tab.active {
-        background-color: var(--grid-surface);
-        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
-        color: var(--grid-ink);
-        font-weight: 600;
+      .nav-tab--active {
+        --boxel-button-box-shadow: var(--shadow-sm);
       }
       .tab-icon {
-        width: 14px;
-        height: 14px;
         flex-shrink: 0;
       }
       .attention-dot {
         position: absolute;
-        top: 4px;
-        right: 4px;
-        width: 5px;
-        height: 5px;
+        top: var(--boxel-sp-4xs);
+        right: var(--boxel-sp-4xs);
+        width: 0.3125rem;
+        height: 0.3125rem;
         border-radius: 50%;
-        background-color: var(--grid-attention);
+        background-color: var(--attention);
         animation: softpulse 2s ease-in-out infinite;
       }
       .frame-actions {
-        margin-left: auto;
+        margin-inline-start: auto;
         display: flex;
         align-items: center;
-        gap: 8px;
+        gap: var(--boxel-sp-2xs);
       }
       /* workspace signage & description */
       .signage {
-        margin-left: 10px;
-        padding: 3px 8px;
-        border: 1px solid var(--grid-border);
-        border-radius: 5px;
-        font: 600 9.5px var(--grid-mono);
-        letter-spacing: 0.11em;
-        text-transform: uppercase;
-        color: var(--grid-ink-meta);
+        display: inline-block;
+        margin-inline-start: var(--boxel-sp-xs);
+        padding: var(--boxel-sp-5xs) var(--boxel-sp-2xs);
+        border: 1px solid var(--border);
+        border-radius: var(--boxel-border-radius-sm);
+        color: var(--muted-foreground);
         white-space: nowrap;
         cursor: default;
       }
       .space-desc {
-        margin: 0;
-        font: 400 13px/1.5 var(--grid-sans);
-        color: var(--grid-ink-quiet);
+        font-size: var(--boxel-font-size-sm);
+        font-weight: 400;
+        color: var(--muted-foreground);
       }
       .search-box {
         position: relative;
         display: inline-flex;
         align-items: center;
-        gap: 7px;
-        min-width: 170px;
-        border: 1px solid var(--grid-border);
-        border-radius: 8px;
-        padding: 6px 11px;
-        background-color: var(--grid-control);
+        gap: var(--boxel-sp-2xs);
       }
-      .search-box:focus-within {
-        border-color: var(--grid-interactive);
-        background-color: var(--grid-surface);
+      /* a plain BoxelInput with the card's own small glyph laid over it: the
+         component's search variant fixes a 20px primary icon and an inverted
+         fill. The plain input also darkens its border on hover by itself. */
+      /* icon and shortcut hint sit inside the field, over its padding zones;
+         neither takes pointer events */
+      .search-box .search-icon,
+      .search-box .search-kbd {
+        position: absolute;
+        top: 50%;
+        transform: translateY(-50%);
+        z-index: 1;
+        display: block;
+        pointer-events: none;
       }
-      .search-icon {
-        width: 13px;
-        height: 13px;
-        flex-shrink: 0;
-        color: var(--grid-ink-quiet);
+      .search-box .search-icon {
+        left: var(--boxel-sp-xs);
+        color: var(--muted-foreground);
       }
-      .search-input {
-        border: none;
-        background: none;
-        outline: none;
-        padding: 0;
-        width: 110px;
-        font: 500 12.5px var(--grid-sans);
-        color: var(--grid-ink);
+      .search-box .search-kbd {
+        right: var(--boxel-sp-xs);
+        font-weight: 500;
+        color: var(--subtle-foreground);
       }
-      .search-input::placeholder {
-        color: #9a9aa2;
+      .search-box .search-input {
+        --boxel-input-height: 0;
+        --boxel-form-control-border-radius: var(--boxel-border-radius-sm);
+        width: var(--grid-search-width);
+        /* right padding clears the widest hint (Ctrl+K) while it shows */
+        padding: var(--boxel-sp-3xs) var(--boxel-sp-3xl) var(--boxel-sp-3xs)
+          var(--boxel-sp-xl);
+        background-color: var(--muted);
+        font-size: var(--boxel-font-size-xs);
+        font-weight: 500;
       }
-      .search-kbd {
-        margin-left: auto;
-        font: 500 10px var(--grid-mono);
-        color: var(--grid-ink-ghost);
+      /* the hint is for finding the field; once it has focus it gets out of
+         the way of the text */
+      .search-box:focus-within .search-kbd {
+        display: none;
+      }
+      .search-box:focus-within .search-input {
+        padding-inline-end: var(--boxel-sp-sm);
       }
       .search-results {
         position: absolute;
-        top: calc(100% + 6px);
+        top: calc(100% + var(--boxel-sp-3xs));
         right: 0;
         z-index: 20;
-        width: 320px;
-        max-height: 320px;
+        width: var(--grid-search-results-size);
+        max-height: var(--grid-search-results-size);
         overflow-y: auto;
-        padding: 4px;
-        background-color: var(--grid-surface);
-        border: 1px solid var(--grid-border);
-        border-radius: 10px;
-        box-shadow: var(--grid-shadow-hover);
+        padding: var(--boxel-sp-4xs);
+        background-color: var(--card);
+        color: var(--card-foreground);
+        border: 1px solid var(--border);
+        border-radius: var(--boxel-border-radius);
+        box-shadow: var(--shadow-lg);
       }
-      .search-result {
+      .search-result-list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+      }
+      .card-grid .search-result {
+        justify-content: flex-start;
         display: flex;
         align-items: baseline;
-        gap: 10px;
+        gap: var(--boxel-sp-xs);
         width: 100%;
-        border: none;
-        background: none;
-        text-align: left;
-        padding: 7px 10px;
-        border-radius: 7px;
-        cursor: pointer;
+        text-align: start;
+        padding: var(--boxel-sp-2xs) var(--boxel-sp-xs);
+        border-radius: var(--boxel-border-radius-sm);
       }
-      .search-result:hover {
-        background-color: var(--grid-track);
+      .card-grid .search-result:hover {
+        background-color: var(--hover);
       }
       .search-result-title {
         flex: 1;
         min-width: 0;
-        font: 500 12.5px var(--grid-sans);
-        color: var(--grid-ink);
+        font-size: var(--boxel-font-size-xs);
+        font-weight: 500;
+        color: var(--foreground);
         overflow: hidden;
         white-space: nowrap;
         text-overflow: ellipsis;
       }
       .search-result-type {
         flex-shrink: 0;
-        font: 600 9px var(--grid-mono);
-        letter-spacing: 0.06em;
-        text-transform: uppercase;
-        color: var(--grid-ink-meta);
+        color: var(--muted-foreground);
       }
-      .search-see-all {
+      /* a flat footer row: a corner here would round the rule above it */
+      .card-grid .search-see-all {
+        --boxel-button-border-radius: 0;
+        --boxel-button-border: none;
         display: flex;
-        align-items: center;
         justify-content: space-between;
-        gap: 10px;
+        gap: var(--boxel-sp-xs);
         width: 100%;
-        border: 0;
-        border-top: 1px solid var(--grid-hairline);
-        padding: 8px 12px;
-        background: transparent;
-        font: 600 12px var(--grid-sans);
-        color: var(--grid-interactive);
-        text-align: left;
-        cursor: pointer;
+        border-top: 1px solid var(--border);
+        padding: var(--boxel-sp-2xs) var(--boxel-sp-sm);
+        font-size: var(--boxel-font-size-xs);
+        font-weight: 600;
+        color: var(--primary-ink);
+        text-align: start;
       }
-      .search-see-all:hover {
-        background-color: var(--grid-track);
+      .card-grid .search-see-all:hover {
+        background-color: var(--hover);
       }
       .search-scope-note {
-        font: 500 9px var(--grid-mono);
-        letter-spacing: 0.06em;
-        text-transform: uppercase;
-        color: var(--grid-ink-ghost);
+        font-weight: 500;
+        color: var(--muted-foreground);
       }
       @keyframes softpulse {
         0%,
@@ -1369,10 +1541,10 @@ class Isolated extends Component<typeof Workspace> {
         flex-grow: 1;
         min-height: 0;
         overflow-y: auto;
-        padding: 24px 26px 30px;
+        padding: var(--boxel-sp-xl);
         display: grid;
         align-content: start;
-        gap: 28px;
+        gap: var(--boxel-sp-xl);
       }
       .library {
         flex-grow: 1;
@@ -1382,146 +1554,50 @@ class Isolated extends Component<typeof Workspace> {
 
       /* ── Facet rail ────────────────────────────────────────── */
       .rail {
-        width: 214px;
+        width: var(--grid-rail-width);
         flex-shrink: 0;
         overflow-y: auto;
-        background-color: var(--grid-shelf);
-        border-right: 1px solid var(--grid-hairline);
-        padding: 16px 10px;
+        overflow-x: hidden;
+        background-color: var(--muted);
+        border-right: 1px solid var(--border);
+        padding: var(--boxel-sp) var(--boxel-sp-xs);
         display: flex;
         flex-direction: column;
-        gap: 18px;
+        gap: var(--boxel-sp-lg);
       }
       .rail-group {
         display: grid;
         gap: 1px;
       }
       .rail-label {
-        margin: 0;
-        padding: 4px 10px 6px;
-        font: 600 9.5px var(--grid-mono);
-        letter-spacing: 0.11em;
-        text-transform: uppercase;
-        color: var(--grid-ink-meta);
+        padding: var(--boxel-sp-4xs) var(--boxel-sp-xs) var(--boxel-sp-3xs);
+        color: var(--muted-foreground);
       }
-      .rail-row {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        border: none;
-        background: none;
-        text-align: left;
-        padding: 6px 10px;
-        border-radius: 7px;
-        font: 500 13px var(--grid-sans);
-        color: var(--grid-nav-ink);
-        cursor: pointer;
-        /* Without this the row keeps its max-content width instead of the
-           rail's, so a long type name pushes the count and the + past the
-           rail's right edge rather than ellipsizing. The ellipsis on
-           .rail-name only engages once the row itself is allowed to be
-           narrower than its content. */
+      /* FilterList paints its own rows; the selected and hover surfaces follow
+         the card's neutral tier through the component's knobs */
+      .rail-list {
+        --boxel-filter-hover-background: var(--hover);
+        --boxel-filter-hover-foreground: var(--foreground);
+        --boxel-filter-selected-background: var(--selected);
+        --boxel-filter-selected-foreground: var(--foreground);
+        --boxel-filter-selected-hover-background: var(--selected);
+        --boxel-filter-selected-hover-foreground: var(--foreground);
         min-width: 0;
       }
-      .rail-row.type {
-        padding: 5px 10px;
-      }
-      .rail-row:hover {
-        background-color: var(--grid-track);
-      }
-      .rail-row.selected {
-        color: #12463a;
-        background-color: rgba(0, 255, 186, 0.16);
-        box-shadow: inset 0 0 0 1px rgba(0, 201, 150, 0.4);
-      }
-      .rail-icon {
-        width: 14px;
-        height: 14px;
-        flex-shrink: 0;
-        color: var(--grid-ink-quiet);
-      }
-      .rail-row.selected .rail-icon {
-        color: var(--grid-interactive);
-      }
-      .rail-swatch {
-        width: 8px;
-        height: 8px;
-        border-radius: 2px;
-        background-color: var(--grid-ink-faint);
-        flex-shrink: 0;
-        margin: 0 3px;
-      }
-      /* hover + on card-type rows (the relocated New button) */
-      .rail-row-wrap {
-        position: relative;
-        display: grid;
-      }
-      .rail-row-wrap .rail-row {
-        padding-right: 30px;
-      }
+      /* quiet ink at rest, full ink when pointed at or focused; always at full
+         opacity so it clears the non-text contrast floor */
       .rail-add {
-        position: absolute;
-        right: 5px;
-        top: 50%;
-        transform: translateY(-50%);
-        width: 20px;
-        height: 20px;
-        display: grid;
-        place-items: center;
-        border: 0;
-        border-radius: 5px;
-        background-color: var(--grid-control);
-        color: var(--grid-ink-quiet);
-        font: 600 13px/1 var(--grid-sans);
-        cursor: pointer;
-        /* quietly present at rest — hover-only proved undiscoverable */
-        opacity: 0.45;
-        transition: opacity var(--grid-quick) ease;
-      }
-      .rail-row-wrap:hover .rail-add,
-      .rail-add:focus-visible {
-        opacity: 1;
-      }
-      .rail-add:hover {
-        opacity: 1;
-        background-color: var(--grid-accent);
-        color: var(--grid-accent-ink);
-      }
-      .rail-type-icon {
-        display: grid;
-        place-items: center;
-        width: 14px;
-        height: 14px;
+        --boxel-icon-button-color: var(--subtle-foreground);
         flex-shrink: 0;
-        color: var(--grid-ink-quiet);
+        margin-inline-end: var(--boxel-sp-4xs);
       }
-      .rail-type-icon :deep(svg) {
-        width: 14px;
-        height: 14px;
-        display: block;
-      }
-      .rail-row.selected .rail-type-icon {
-        color: var(--grid-interactive);
-      }
-      .rail-name {
-        overflow: hidden;
-        white-space: nowrap;
-        text-overflow: ellipsis;
-      }
-      .rail-count {
-        margin-left: auto;
-        font: 500 11px var(--grid-mono);
-        color: var(--grid-ink-meta);
-      }
-      .rail-row.selected .rail-count {
-        color: var(--grid-interactive);
-      }
-      .library :deep(.boxel-cards-grid-layout .sidebar) {
-        display: none;
+      .rail-add:hover,
+      .rail-add:focus-visible {
+        --boxel-icon-button-color: var(--foreground);
       }
       .zone {
         display: grid;
-        gap: 12px;
+        gap: var(--boxel-sp-sm);
       }
       /* ── Activity dock: collapsing panel (). The full panel is the
          first block inside the scrolling stage; once it scrolls off-screen
@@ -1541,72 +1617,49 @@ class Isolated extends Component<typeof Workspace> {
       .dock {
         position: relative;
         display: grid;
-        gap: 10px;
-        margin: 0 -26px; /* counter the stage side padding: flush edges */
-        padding: 14px 26px 16px;
+        gap: var(--boxel-sp-xs);
+        margin: 0 calc(-1 * var(--boxel-sp-xl)); /* counter the stage side padding: flush edges */
+        padding: var(--boxel-sp) var(--boxel-sp-xl) var(--boxel-sp);
         background-color: var(--grid-attention-surface);
+        color: var(--attention-ink);
         border-bottom: 1px solid var(--grid-attention-border);
         /* no overflow: hidden here — an overflow-hidden grid item's
            content contributes zero to its auto row, collapsing the panel
            to padding height. Nothing here needs clipping anyway. */
       }
-      .dock::after {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        height: 2px;
-        background: linear-gradient(
-          90deg,
-          transparent,
-          #f0a94b,
-          #d97706,
-          transparent
-        );
-        background-size: 200% 100%;
-        animation: scan 2.4s linear infinite;
-      }
       .dock-head {
         display: flex;
         align-items: baseline;
-        gap: 10px;
+        gap: var(--boxel-sp-xs);
       }
       .dock-dot {
-        width: 8px;
-        height: 8px;
+        width: 0.5rem;
+        height: 0.5rem;
         border-radius: 50%;
         flex-shrink: 0;
         align-self: center;
-        background-color: var(--grid-attention);
+        background-color: var(--attention);
         animation: softpulse 2s ease-in-out infinite;
       }
-      .dock-title {
-        margin: 0;
-        font: 600 15px/1.3 var(--grid-sans);
-        letter-spacing: -0.01em;
-        color: var(--grid-attention-text);
-      }
       .dock-hint {
-        font: 400 12px var(--grid-sans);
-        color: #c78b4a;
+        font-size: var(--boxel-font-size-xs);
+        font-weight: 400;
       }
-      .dock-mini {
+      .card-grid .dock-mini {
+        justify-content: flex-start;
         position: absolute;
         top: 0;
         left: 0;
         right: 0;
         z-index: 4;
         display: flex;
-        align-items: center;
-        gap: 10px;
-        padding: 9px 26px 11px;
-        border: 0;
+        gap: var(--boxel-sp-xs);
+        padding: var(--boxel-sp-xs) var(--boxel-sp-xl) var(--boxel-sp-sm);
         border-bottom: 1px solid var(--grid-attention-border);
         background-color: var(--grid-attention-surface);
-        box-shadow: 0 2px 8px rgba(28, 28, 50, 0.08);
-        text-align: left;
-        cursor: pointer;
+        color: var(--attention-ink);
+        box-shadow: var(--shadow-sm);
+        text-align: start;
         opacity: 0;
         transform: translateY(-6px);
         pointer-events: none;
@@ -1614,16 +1667,15 @@ class Isolated extends Component<typeof Workspace> {
           opacity var(--grid-soft) ease,
           transform var(--grid-soft) ease;
       }
-      .dock-mini.shown {
+      .card-grid .dock-mini.shown {
         opacity: 1;
         transform: translateY(0);
         pointer-events: auto;
       }
       .dock-mini-title {
         flex-shrink: 0;
-        font: 600 12.5px var(--grid-sans);
-        letter-spacing: -0.01em;
-        color: var(--grid-attention-text);
+        font-size: var(--boxel-font-size-xs);
+        font-weight: 600;
       }
       .dock-mini-summary {
         flex: 1;
@@ -1631,9 +1683,9 @@ class Isolated extends Component<typeof Workspace> {
         overflow: hidden;
         white-space: nowrap;
         text-overflow: ellipsis;
-        font: 400 12.5px var(--grid-sans);
+        font-size: var(--boxel-font-size-xs);
+        font-weight: 400;
         font-variant-numeric: tabular-nums;
-        color: #c78b4a;
       }
       .dock-mini-track {
         position: absolute;
@@ -1647,106 +1699,65 @@ class Isolated extends Component<typeof Workspace> {
       .dock-mini-fill {
         display: block;
         height: 100%;
-        background-color: var(--grid-attention);
+        background-color: var(--attention);
         transition: width 0.4s ease;
-      }
-      @keyframes scan {
-        from {
-          background-position: 200% 0;
-        }
-        to {
-          background-position: -200% 0;
-        }
       }
 
       /* Two-register typography: guidance speaks bold sans sentences (the
          Boxel voice), data speaks mono fragments. */
       .section-head {
         display: grid;
-        gap: 2px;
-      }
-      .section-title {
-        margin: 0;
-        font: 600 17px/1.3 var(--grid-sans);
-        letter-spacing: -0.01em;
-        color: var(--grid-ink);
+        gap: var(--boxel-sp-6xs);
       }
       .section-hint {
-        margin: 0;
-        font: 400 12px var(--grid-sans);
-        color: var(--grid-ink-quiet);
-      }
-      .notice .section-hint {
-        color: #c78b4a;
+        font-size: var(--boxel-font-size-xs);
+        font-weight: 400;
+        color: var(--muted-foreground);
       }
 
       /* ── Setup status bar (passive; one click target → Activity) ── */
-      .setup-bar {
+      .card-grid .setup-bar {
+        justify-content: flex-start;
         position: relative;
         overflow: hidden;
         display: flex;
-        align-items: center;
-        gap: 12px;
+        gap: var(--boxel-sp-sm);
         width: 100%;
-        min-height: 46px;
-        text-align: left;
+        min-height: var(--grid-bar-height);
+        text-align: start;
         border: 1px solid var(--grid-attention-border);
-        border-radius: 12px;
-        padding: 11px 16px;
+        border-radius: var(--boxel-border-radius-lg);
+        padding: var(--boxel-sp-sm) var(--boxel-sp);
         background-color: var(--grid-attention-surface);
-        cursor: pointer;
+        color: var(--attention-ink);
         transition:
           border-color var(--grid-quick) ease,
           box-shadow var(--grid-quick) ease;
       }
-      .setup-bar:hover {
-        border-color: #e6c893;
-        box-shadow: var(--grid-shadow-rest);
-      }
-      /* canvas `sweep`: a soft light pass keeps the bar alive */
-      .setup-bar::before {
-        content: '';
-        position: absolute;
-        inset: 0;
-        background: linear-gradient(
-          90deg,
-          transparent,
-          rgba(217, 119, 6, 0.07),
-          transparent
-        );
-        transform: translateX(-100%);
-        animation: sweep 2.2s ease-in-out infinite;
-        pointer-events: none;
-      }
-      @keyframes sweep {
-        0% {
-          transform: translateX(-100%);
-        }
-        60%,
-        100% {
-          transform: translateX(320%);
-        }
+      .card-grid .setup-bar:hover {
+        border-color: var(--grid-attention-rule);
+        box-shadow: var(--shadow-sm);
       }
       /* the HB strip anatomy. NO overflow:hidden here — an
          overflow-hidden grid item collapses to padding height (see
          learnings 2026-07-15); the children carry their own radii. */
       .setup-strip {
         border: 1px solid var(--grid-attention-border);
-        border-radius: 12px;
+        border-radius: var(--boxel-border-radius-lg);
       }
-      .setup-strip .setup-bar {
-        border: 0;
-        border-radius: 11px;
+      .card-grid .setup-strip .setup-bar {
+        border-radius: var(--boxel-border-radius);
       }
-      .setup-strip .setup-bar:not(:last-child) {
-        border-radius: 11px 11px 0 0;
+      .card-grid .setup-strip .setup-bar:not(:last-child) {
+        border-radius: var(--boxel-border-radius) var(--boxel-border-radius) 0 0;
       }
-      .setup-tease {
-        border-radius: 0 0 11px 11px;
+      .card-grid .setup-tease {
+        justify-content: flex-start;
+        border-radius: 0 0 var(--boxel-border-radius) var(--boxel-border-radius);
       }
       .setup-ring {
-        width: 20px;
-        height: 20px;
+        width: 1.25rem;
+        height: 1.25rem;
         border-radius: 50%;
         flex-shrink: 0;
         display: grid;
@@ -1754,8 +1765,8 @@ class Isolated extends Component<typeof Workspace> {
         animation: softpulse 3s ease-in-out infinite;
       }
       .setup-ring-hole {
-        width: 12px;
-        height: 12px;
+        width: 0.75rem;
+        height: 0.75rem;
         border-radius: 50%;
         background-color: var(--grid-attention-surface);
       }
@@ -1765,8 +1776,8 @@ class Isolated extends Component<typeof Workspace> {
         min-width: 0;
       }
       .setup-name {
-        font: 400 13px var(--grid-sans);
-        color: var(--grid-attention-text);
+        font-size: var(--boxel-font-size-sm);
+        font-weight: 400;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -1775,74 +1786,74 @@ class Isolated extends Component<typeof Workspace> {
         font-weight: 600;
       }
       .setup-data {
-        font: 500 10.5px var(--grid-mono);
-        color: #a35a00;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
-        font-variant-numeric: tabular-nums;
       }
       .setup-track {
         flex: 1;
-        min-width: 60px;
-        height: 6px;
-        border-radius: 100px;
-        background-color: #f2e2c8;
+        min-width: 3.75rem;
+        height: 0.375rem;
+        border-radius: var(--grid-pill);
+        background-color: var(--grid-attention-rule);
         overflow: hidden;
       }
       .setup-fill {
         display: block;
         height: 100%;
-        border-radius: 100px;
-        background: linear-gradient(90deg, #e0b878, #d97706);
+        border-radius: var(--grid-pill);
+        background: linear-gradient(
+          90deg,
+          var(--grid-attention-soft),
+          var(--attention)
+        );
       }
       .setup-pct {
         flex-shrink: 0;
-        font: 600 11px var(--grid-mono);
-        color: var(--grid-attention-text);
-        font-variant-numeric: tabular-nums;
+        font-weight: 600;
       }
       .setup-action {
         flex-shrink: 0;
-        font: 600 12.5px var(--grid-sans);
-        color: var(--grid-interactive);
+        font-size: var(--boxel-font-size-xs);
+        font-weight: 600;
       }
-      .setup-tease {
+      .card-grid .setup-tease {
         display: flex;
-        align-items: center;
-        gap: 7px;
+        gap: var(--boxel-sp-2xs);
         width: 100%;
-        padding: 9px 16px;
-        border: 0;
+        padding: var(--boxel-sp-xs) var(--boxel-sp);
         border-top: 1px dashed var(--grid-attention-border);
-        background-color: #fffdf8;
-        text-align: left;
-        font: 400 12.5px var(--grid-sans);
-        color: var(--grid-ink-body);
-        cursor: pointer;
+        background-color: var(--card);
+        text-align: start;
+        font-size: var(--boxel-font-size-xs);
+        font-weight: 400;
+        color: var(--muted-foreground);
       }
       .setup-tease-mark {
-        color: var(--grid-attention);
+        color: var(--attention);
       }
       .setup-tease-link {
         font-weight: 600;
-        color: var(--grid-interactive);
+        color: var(--primary-ink);
       }
       .setup-tease:hover .setup-tease-link {
         text-decoration: underline;
       }
-      .setup-tease:focus-visible {
-        outline: 2px solid var(--grid-interactive);
+      .card-grid .setup-tease:focus-visible {
+        outline: 2px solid var(--ring);
         outline-offset: -2px;
       }
 
       /* ── Doors ─────────────────────────────────────────────── */
       .doors {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+        grid-template-columns: repeat(
+          auto-fill,
+          minmax(var(--grid-search-results-size), 1fr)
+        );
         /* tile height set from DOOR_TILE_HEIGHT_* via doorsStyle */
         grid-auto-rows: var(--door-h);
-        gap: 20px;
+        gap: var(--boxel-sp-lg);
       }
       /* Containment: the fitted face IS the shadowed card (so the host's
          selection outline and overlay land exactly on the visible box); the
@@ -1856,61 +1867,45 @@ class Isolated extends Component<typeof Workspace> {
       .door-kicker {
         display: flex;
         align-items: baseline;
-        padding: 0 2px 8px;
+        padding: 0 var(--boxel-sp-6xs) var(--boxel-sp-2xs);
       }
       /* pin management affordances */
-      .door-unpin {
-        margin-left: auto;
-        width: 18px;
-        height: 18px;
-        display: grid;
-        place-items: center;
-        border: 0;
-        border-radius: 5px;
-        background: transparent;
-        color: var(--grid-ink-ghost);
-        font: 500 13px/1 var(--grid-sans);
-        cursor: pointer;
-        opacity: 0;
-        transition: opacity var(--grid-quick) ease;
+      /* quiet ink at rest so touch users can find it; full ink when pointed at */
+      .card-grid .door-unpin {
+        --boxel-icon-button-color: var(--subtle-foreground);
+        margin-inline-start: auto;
       }
-      .door:hover .door-unpin,
-      .door-unpin:focus-visible {
-        opacity: 1;
+      .card-grid .door-unpin:hover {
+        background-color: var(--hover);
+        color: var(--foreground);
       }
-      .door-unpin:hover {
-        background-color: var(--grid-track);
-        color: var(--grid-ink);
-      }
-      .door-add {
+      .card-grid .door-add {
         display: grid;
         place-content: center;
-        gap: 6px;
+        gap: var(--boxel-sp-3xs);
         justify-items: center;
-        border: 1.5px dashed var(--grid-border);
-        border-radius: 13px;
-        background: transparent;
-        color: var(--grid-ink-quiet);
-        cursor: pointer;
+        border: 1.5px dashed var(--border);
+        border-radius: var(--boxel-border-radius-lg);
+        color: var(--muted-foreground);
         transition:
           border-color var(--grid-quick) ease,
           color var(--grid-quick) ease;
       }
-      .door-add:hover {
-        border-color: var(--grid-interactive);
-        color: var(--grid-interactive);
+      .card-grid .door-add:hover {
+        border-color: var(--primary-ink);
+        color: var(--primary-ink);
       }
       .door-add-mark {
-        font: 300 30px/1 var(--grid-sans);
+        font-size: var(--boxel-font-size-xl);
+        font-weight: 300;
+        line-height: 1;
       }
       .door-add-label {
-        font: 600 12.5px var(--grid-sans);
+        font-size: var(--boxel-font-size-xs);
+        font-weight: 600;
       }
       .door-kind {
-        font: 600 9px var(--grid-mono);
-        letter-spacing: 0.11em;
-        text-transform: uppercase;
-        color: var(--grid-ink-kicker);
+        color: var(--muted-foreground);
         overflow: hidden;
         white-space: nowrap;
         text-overflow: ellipsis;
@@ -1919,37 +1914,34 @@ class Isolated extends Component<typeof Workspace> {
         min-height: 0;
         position: relative; /* Containing block for the shared click-to-open overlay */
       }
-      .door-face :deep(.field-component-card) {
+      /* the class lands on the pinned card's CardContainer; the card draws
+         the edge itself, so the host's boundary ring is off */
+      .door-card {
         height: 100%;
         max-height: 100%;
-        overflow: hidden;
-      }
-      .door-face :deep(.boxel-card-container) {
-        height: 100%;
-        border: 1px solid var(--grid-border);
-        border-radius: 12px;
-        box-shadow: var(--grid-shadow-rest);
-        overflow: hidden;
+        border: 1px solid var(--border);
+        border-radius: var(--boxel-border-radius-lg);
+        box-shadow: var(--shadow-sm);
         transition:
           box-shadow var(--grid-quick) ease,
           border-color var(--grid-quick) ease;
       }
-      .door:hover :deep(.boxel-card-container) {
-        border-color: var(--grid-hover-border);
-        box-shadow: var(--grid-shadow-hover);
+      .door:hover .door-card {
+        border-color: var(--border-strong);
+        box-shadow: var(--shadow-lg);
       }
       .door-footer {
         display: flex;
         align-items: center;
-        gap: 10px;
+        gap: var(--boxel-sp-xs);
         min-width: 0; /* Establish the flex shrink boundary for title + action */
-        padding: 10px 2px 0;
+        padding: var(--boxel-sp-xs) var(--boxel-sp-6xs) 0;
       }
       .door-title {
         flex: 1 1 auto; /* The label owns only the space left by Open */
         min-width: 0;
-        font: 500 10.5px var(--grid-mono);
-        color: var(--grid-ink-kicker);
+        font-size: var(--boxel-font-size-xs);
+        color: var(--muted-foreground);
         overflow: hidden;
         white-space: nowrap;
         text-overflow: ellipsis;
@@ -1963,194 +1955,156 @@ class Isolated extends Component<typeof Workspace> {
       /* ── Inventory (Home): what lives here, grouped by kind ── */
       .inventory {
         display: grid;
-        gap: 10px;
+        gap: var(--boxel-sp-xs);
       }
       .inventory-group {
         display: grid;
-        grid-template-columns: 44px 1fr;
-        gap: 12px;
+        grid-template-columns: 2.75rem 1fr;
+        gap: var(--boxel-sp-sm);
         align-items: start;
       }
       .inventory-label {
-        padding-top: 8px;
-        font: 600 9.5px var(--grid-mono);
-        letter-spacing: 0.11em;
-        text-transform: uppercase;
-        color: var(--grid-ink-meta);
+        padding-top: var(--boxel-sp-2xs);
+        color: var(--muted-foreground);
       }
       .inventory-chips {
         display: flex;
         flex-wrap: wrap;
-        gap: 8px;
-      }
-      .type-chip {
-        display: inline-flex;
-        align-items: center;
-        gap: 7px;
-        border: 1px solid var(--grid-border);
-        border-radius: 100px;
-        padding: 5px 12px 5px 9px;
-        background-color: var(--grid-surface);
-        font: 500 12.5px var(--grid-sans);
-        color: var(--grid-nav-ink);
-        cursor: pointer;
-      }
-      .type-chip:hover {
-        border-color: var(--grid-hover-border);
-        box-shadow: var(--grid-shadow-rest);
-      }
-      .type-chip-icon {
-        display: grid;
-        place-items: center;
-        width: 14px;
-        height: 14px;
-        flex-shrink: 0;
-        color: var(--grid-ink-quiet);
-      }
-      .type-chip-icon :deep(svg) {
-        width: 14px;
-        height: 14px;
-        display: block;
-      }
-      .type-chip-count {
-        font: 500 10.5px var(--grid-mono);
-        color: var(--grid-ink-meta);
+        gap: var(--boxel-sp-2xs);
       }
       /* ── Recent preview (passive, one row → Activity) ──────── */
-      .recent-preview {
+      .card-grid .recent-preview {
+        justify-content: flex-start;
         display: flex;
-        align-items: center;
-        gap: 12px;
+        gap: var(--boxel-sp-sm);
         width: 100%;
-        text-align: left;
-        border: 1px solid var(--grid-hairline);
-        border-radius: 10px;
-        padding: 10px 14px;
-        background-color: var(--grid-shelf);
-        cursor: pointer;
+        text-align: start;
+        border: 1px solid var(--border);
+        border-radius: var(--boxel-border-radius);
+        padding: var(--boxel-sp-xs) var(--boxel-sp);
+        background-color: var(--muted);
         transition: border-color var(--grid-quick) ease;
       }
-      .recent-preview:hover {
-        border-color: var(--grid-hover-border);
+      .card-grid .recent-preview:hover {
+        border-color: var(--border-strong);
       }
       .recent-text {
         flex: 1;
         min-width: 0;
-        font: 500 11px var(--grid-mono);
-        color: var(--grid-ink-body);
+        color: var(--muted-foreground);
         overflow: hidden;
         white-space: nowrap;
         text-overflow: ellipsis;
       }
       .recent-action {
         flex-shrink: 0;
-        font: 600 12.5px var(--grid-sans);
-        color: var(--grid-interactive);
+        font-size: var(--boxel-font-size-xs);
+        font-weight: 600;
+        color: var(--muted-foreground);
       }
 
       /* ── Activity log: when | what | why ───────────────────── */
       .feed {
+        container-type: inline-size;
         display: grid;
-        gap: 10px;
+        gap: var(--boxel-sp-xs);
       }
       .feed-day {
         display: flex;
         align-items: center;
-        gap: 10px;
-        margin-top: 8px;
+        gap: var(--boxel-sp-xs);
+        margin-top: var(--boxel-sp-2xs);
       }
       .feed-day:first-child {
         margin-top: 0;
       }
       .feed-day-label {
-        font: 600 9.5px var(--grid-mono);
-        letter-spacing: 0.11em;
-        text-transform: uppercase;
-        color: var(--grid-ink-meta);
+        color: var(--muted-foreground);
         white-space: nowrap;
       }
       .feed-day-rule {
         flex: 1;
         height: 1px;
-        background-color: var(--grid-hairline);
+        background-color: var(--border);
       }
       .feed-row {
         display: grid;
-        grid-template-columns: 72px minmax(0, 440px) minmax(160px, 1fr);
-        gap: 14px;
+        grid-template-columns: 4.5rem minmax(0, 27.5rem) minmax(10rem, 1fr);
+        gap: var(--boxel-sp);
         align-items: start;
       }
       .feed-when {
-        padding-top: 12px;
-        font: 500 10.5px var(--grid-mono);
-        color: var(--grid-ink-meta);
+        padding-top: var(--boxel-sp-sm);
+        font-size: var(--boxel-font-size-xs);
+        color: var(--muted-foreground);
         text-align: right;
         white-space: nowrap;
-        font-variant-numeric: tabular-nums;
       }
       .feed-card {
         min-width: 0;
       }
-      .feed-card :deep(.boxel-card-container) {
-        background-color: var(--grid-surface);
-        border: 1px solid var(--grid-border);
-        border-radius: 10px;
-        overflow: hidden;
+      /* the class lands on the child's CardContainer; its boundary ring
+         draws the edge and its corners follow the theme */
+      .feed-face {
+        background-color: var(--card);
+        color: var(--card-foreground);
       }
       .feed-note {
         min-width: 0;
-        padding-top: 10px;
+        padding-top: var(--boxel-sp-xs);
         display: grid;
-        gap: 3px;
+        gap: var(--boxel-sp-5xs);
+      }
+      @container (width < 40rem) {
+        .feed-row {
+          grid-template-columns: 4.5rem minmax(0, 1fr);
+        }
+        .feed-note {
+          grid-column: 2;
+          padding-top: 0;
+        }
       }
       .feed-meta {
         display: flex;
         align-items: center;
-        gap: 8px;
+        gap: var(--boxel-sp-2xs);
         min-width: 0;
       }
       .feed-verb {
         flex-shrink: 0;
-        font: 600 9.5px var(--grid-mono);
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-        color: var(--grid-ink-faint);
+        color: var(--muted-foreground);
       }
       .feed-verb.created {
-        color: var(--grid-created);
+        color: var(--success-ink);
       }
       .feed-verb.remixed {
-        color: var(--grid-remixed);
+        color: var(--info-ink);
       }
       .feed-type {
         display: inline-flex;
         align-items: center;
-        gap: 4px;
+        gap: var(--boxel-sp-4xs);
         min-width: 0;
         overflow: hidden;
         white-space: nowrap;
-        font: 500 9.5px var(--grid-mono);
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-        color: var(--grid-ink-meta);
+        font-weight: 500;
+        color: var(--muted-foreground);
       }
       .feed-type-icon {
-        width: 12px;
-        height: 12px;
         flex-shrink: 0;
       }
       .feed-title {
-        margin: 0;
-        font: 600 12.5px/1.35 var(--grid-sans);
-        color: var(--grid-ink);
+        font-size: var(--boxel-font-size-xs);
+        font-weight: 600;
+        color: var(--foreground);
         overflow: hidden;
         white-space: nowrap;
         text-overflow: ellipsis;
       }
       .feed-remix-source {
-        margin: 0;
-        font: 500 11px/1.35 var(--grid-sans);
-        color: var(--grid-ink-meta);
+        font-size: var(--boxel-font-size-xs);
+        font-weight: 500;
+        color: var(--muted-foreground);
         overflow: hidden;
         white-space: nowrap;
         text-overflow: ellipsis;
@@ -2159,24 +2113,20 @@ class Isolated extends Component<typeof Workspace> {
       .feed-more {
         display: grid;
         place-items: center;
-        padding: 10px 0 4px;
+        padding: var(--boxel-sp-xs) 0 var(--boxel-sp-4xs);
       }
       .feed-more-note,
       .feed-end-note {
-        margin: 0;
-        font: 500 10.5px var(--grid-mono);
-        letter-spacing: 0.04em;
-        color: var(--grid-ink-ghost);
-        font-variant-numeric: tabular-nums;
+        color: var(--muted-foreground);
       }
       .feed-end-note {
         text-align: center;
-        padding: 10px 0 4px;
+        padding: var(--boxel-sp-xs) 0 var(--boxel-sp-4xs);
       }
       .feed-note-text {
-        margin: 0;
-        font: 400 12.5px/1.5 var(--grid-sans);
-        color: var(--grid-ink-body);
+        font-size: var(--boxel-font-size-xs);
+        font-weight: 400;
+        color: var(--muted-foreground);
         overflow: hidden;
         display: -webkit-box;
         -webkit-box-orient: vertical;
@@ -2187,48 +2137,37 @@ class Isolated extends Component<typeof Workspace> {
       .dock-duo {
         display: flex;
         flex-wrap: wrap;
-        gap: 12px;
+        gap: var(--boxel-sp-sm);
         align-items: flex-start;
       }
       .dock-pane {
         display: grid;
-        gap: 6px;
+        gap: var(--boxel-sp-3xs);
         min-width: 0;
       }
       .dock-pane.build {
-        flex: 1.45 1 340px;
+        flex: 1.45 1 21.25rem;
       }
       .dock-pane.invite {
-        flex: 1 1 260px;
-      }
-      .dock-pane-label {
-        font: 600 9.5px var(--grid-mono);
-        letter-spacing: 0.11em;
-        text-transform: uppercase;
-        color: var(--grid-attention-text);
+        flex: 1 1 16.25rem;
       }
       .dock-pane-head {
         display: flex;
         align-items: baseline;
         justify-content: space-between;
-        gap: 10px;
+        gap: var(--boxel-sp-xs);
       }
-      .dock-pane-open {
-        border: 0;
-        background: none;
+      .card-grid .dock-pane-open {
         padding: 0;
-        font: 600 10px var(--grid-mono);
-        letter-spacing: 0.08em;
+        font-family: var(--font-mono);
+        font-size: var(--boxel-eyebrow-font-size);
+        font-weight: var(--boxel-eyebrow-font-weight);
+        line-height: var(--boxel-eyebrow-line-height);
+        letter-spacing: var(--boxel-eyebrow-letter-spacing);
         text-transform: uppercase;
-        color: var(--grid-attention-text);
-        cursor: pointer;
       }
-      .dock-pane-open:hover {
-        color: var(--grid-ink);
-      }
-      .dock-pane-open:focus-visible {
-        outline: 2px solid var(--grid-interactive);
-        outline-offset: 2px;
+      .card-grid .dock-pane-open:hover {
+        color: var(--foreground);
       }
       /* the wizard pane accepts input — never dim or intercept it */
       .job-cell.wizard {
@@ -2241,32 +2180,29 @@ class Isolated extends Component<typeof Workspace> {
       .feed-card {
         position: relative;
       }
-      .tile-open {
+      .card-grid .tile-open {
+        height: auto;
         position: absolute;
         inset: 0;
         z-index: 2;
-        border: 0;
-        padding: 0;
-        background: transparent;
-        cursor: pointer;
-        border-radius: 10px;
+        border-radius: var(--boxel-border-radius);
       }
-      .tile-open:focus-visible {
-        outline: 2px solid var(--grid-interactive);
+      .card-grid .tile-open:focus-visible {
+        outline: 2px solid var(--ring);
         outline-offset: -2px;
       }
 
       /* ── Jobs ──────────────────────────────────────────────── */
       /* Same containment rule: the card container is the visible box. */
       .job-cell + .job-cell {
-        margin-top: 12px;
+        margin-top: var(--boxel-sp-sm);
       }
-      .job-cell :deep(.boxel-card-container) {
-        background-color: var(--grid-surface);
-        border: 1px solid var(--grid-border);
-        border-radius: 13px;
-        box-shadow: var(--grid-shadow-rest);
-        overflow: hidden;
+      .job-face {
+        background-color: var(--card);
+        color: var(--card-foreground);
+        border: 1px solid var(--border);
+        border-radius: var(--boxel-border-radius-lg);
+        box-shadow: var(--shadow-sm);
       }
 
       /* ── Welcome & empties ─────────────────────────────────── */
@@ -2275,124 +2211,84 @@ class Isolated extends Component<typeof Workspace> {
         max-width: 44rem;
       }
       .welcome-copy {
-        margin: 0;
-        font: 400 14px/1.6 var(--grid-sans);
-        color: var(--grid-ink-body);
+        font-size: var(--boxel-font-size-sm);
+        font-weight: 400;
+        line-height: var(--grid-prose-leading);
+        color: var(--muted-foreground);
       }
-      /* README rendering: hero on empty spaces, collapsed once pinned */
+      /* README rendering: the realm's markdown document, content-only (no file
+         shell chrome). The card owns its own frame and its own collapse clamp,
+         so nothing reaches into the renderer's markup. */
       .readme-embed {
         position: relative;
         width: 100%;
-        max-width: 720px;
+        max-width: var(--grid-readme-width);
+        border: 1px solid var(--border);
+        border-radius: var(--boxel-border-radius-lg);
+        box-shadow: var(--shadow-sm);
+        /* Same panel surface as the rest of the card; the markdown inherits
+           the paired foreground. */
+        background-color: var(--card);
+        color: var(--card-foreground);
+        overflow: hidden;
       }
-      .readme-embed :deep(.boxel-card-container) {
-        border: 1px solid var(--grid-border);
-        border-radius: 12px;
-        box-shadow: var(--grid-shadow-rest);
+      .readme-body {
+        padding: var(--boxel-sp-lg) var(--boxel-sp-xl);
       }
-      /* b MarkdownDef's embedded format self-caps its content at 200px
-         with a fade mask (base def scoped style). Collapsed state = that
-         built-in preview. Everywhere else — hero on unpinned realms, or
-         after Read more — lift the inner cap so the whole document renders
-         inline. The extra .markdown-embedded hop outranks the scoped rule. */
-      .readme-embed:not(.collapsed)
-        :deep(.markdown-embedded .markdown-embedded__content) {
-        max-height: none;
-        mask-image: none;
-        -webkit-mask-image: none;
+      /* Collapsed (About this space, before Read more): bound the height and
+         fade the cut so it reads as "more below". The empty-space hero and the
+         expanded state render the whole document. */
+      .readme-embed.collapsed .readme-body {
+        max-height: var(--grid-readme-collapsed-height);
+        overflow: hidden;
+        -webkit-mask-image: linear-gradient(to bottom, black 72%, transparent);
+        mask-image: linear-gradient(to bottom, black 72%, transparent);
       }
-      .readme-toggle {
+      .card-grid .readme-toggle {
         justify-self: start;
-        border: 0;
-        background: none;
-        padding: 2px 0;
-        font: 600 12.5px var(--grid-sans);
-        color: var(--grid-interactive);
-        cursor: pointer;
+        padding: var(--boxel-sp-6xs) 0;
+        font-size: var(--boxel-font-size-xs);
+        font-weight: 600;
+        color: var(--primary-ink);
       }
       /* space details strip */
       .space-details {
         display: flex;
         align-items: center;
-        gap: 7px;
-        padding-top: 6px;
-        font: 500 10.5px var(--grid-mono);
-        letter-spacing: 0.03em;
-        color: var(--grid-ink-ghost);
-        font-variant-numeric: tabular-nums;
+        gap: var(--boxel-sp-2xs);
+        padding-top: var(--boxel-sp-3xs);
+        color: var(--muted-foreground);
       }
       .space-live {
-        width: 6px;
-        height: 6px;
+        width: 0.375rem;
+        height: 0.375rem;
         border-radius: 50%;
-        background-color: var(--grid-live);
+        background-color: var(--success);
         flex-shrink: 0;
       }
       .space-sep {
-        color: var(--grid-ink-ghost);
+        color: var(--subtle-foreground);
       }
+      /* the link kinds inherit family and weight; the size is the strip's.
+         A knob cannot say `inherit` (that would inherit the knob itself), so
+         the shorthand is spelled out. */
       .space-config {
-        border: 0;
-        background: none;
-        padding: 0;
-        font: 500 10.5px var(--grid-mono);
-        letter-spacing: 0.03em;
-        color: var(--grid-ink-quiet);
-        cursor: pointer;
-      }
-      .space-config:hover {
-        color: var(--grid-interactive);
+        --boxel-button-font: var(--boxel-font-size-2xs) var(--font-mono);
       }
       .welcome-actions {
         display: flex;
         align-items: center;
-        gap: 10px;
+        gap: var(--boxel-sp-xs);
+      }
+      .empty-state {
+        display: grid;
+        justify-items: start;
+        gap: var(--boxel-sp-xs);
       }
       .empty-note {
-        margin: 0;
-        font: 400 13px var(--grid-sans);
-        color: var(--grid-ink-body);
-      }
-
-      /* one focus language across the chrome: every
-         interactive chrome element earns the same ring */
-      .tab:focus-visible,
-      .search-result:focus-visible,
-      .search-see-all:focus-visible,
-      .setup-bar:focus-visible,
-      .type-chip:focus-visible,
-      .door-open:focus-visible,
-      .door-unpin:focus-visible,
-      .door-add:focus-visible,
-      .welcome-cta:focus-visible,
-      .welcome-alt:focus-visible,
-      .readme-toggle:focus-visible,
-      .space-config:focus-visible,
-      .recent-preview:focus-visible,
-      .rail-row:focus-visible,
-      .dock-mini:focus-visible,
-      .wait-open:focus-visible {
-        outline: 2px solid var(--grid-interactive);
-        outline-offset: 2px;
-      }
-      .search-input:focus-visible {
-        outline: none;
-      }
-      .search-box:focus-within {
-        border-color: var(--grid-interactive);
-      }
-
-      /* P1-4: the stock Library content header joins the
-         chrome's type ramp (typography only; structure stays stock) */
-      .library :deep(.boxel-cards-grid-layout .content-title) {
-        font: 600 17px/1.3 var(--grid-sans);
-        letter-spacing: -0.01em;
-        color: var(--grid-ink);
-      }
-      .library :deep(.boxel-cards-grid-layout .content-icon) {
-        width: 16px;
-        height: 16px;
-        color: var(--grid-ink-quiet);
+        font-size: var(--boxel-font-size-sm);
+        font-weight: 400;
+        color: var(--muted-foreground);
       }
 
       /* A buried card sits behind another in the stack, so it must not keep
@@ -2410,15 +2306,10 @@ class Isolated extends Component<typeof Workspace> {
       @media (prefers-reduced-motion: reduce) {
         .attention-dot,
         .setup-ring,
-        .dock-dot,
-        .setup-bar::before {
+        .dock-dot {
           animation: none;
         }
-        .dock::after {
-          animation: none;
-          background-position: 50% 0;
-        }
-        .dock-mini,
+        .card-grid .dock-mini,
         .dock-mini-fill {
           transition: none;
         }
@@ -2576,22 +2467,28 @@ class Isolated extends Component<typeof Workspace> {
     return () => window.removeEventListener('keydown', onKeydown);
   });
 
-  @action private onSearchInput(ev: Event) {
-    this.searchTerm = (ev.target as HTMLInputElement).value;
+  @action private onSearchInput(value: string) {
+    this.searchTerm = value;
     this.runSearch.perform();
   }
 
+  // Wired to the input and to every result button, so Escape dismisses the
+  // search from wherever focus is. Left to bubble, the operator mode reads
+  // Escape on anything but a text field as "close this card" and the whole
+  // workspace goes.
   @action private onSearchKeydown(ev: Event) {
     let ke = ev as KeyboardEvent;
+    let target = ev.target as HTMLElement;
     if (ke.key === 'Escape') {
+      ke.stopPropagation();
       this.searchTerm = '';
       this.searchResults.splice(0, this.searchResults.length);
       this.searchAnnouncement = ''; // dismissed, not "no matches"
       this.clearLibrarySearch(); // Esc also restores the rail selection
-      (ev.target as HTMLInputElement).blur();
-    } else if (ke.key === 'Enter') {
-      this.seeAllResults(); // Enter = full results in Library
-      (ev.target as HTMLInputElement).blur();
+      target.blur();
+    } else if (ke.key === 'Enter' && target instanceof HTMLInputElement) {
+      this.seeAllResults(); // Enter in the field = full results in Library
+      target.blur();
     }
   }
 
@@ -2602,8 +2499,15 @@ class Isolated extends Component<typeof Workspace> {
     }
   }
 
-  @action private onSearchBlur() {
-    // delayed so a click on a result lands before the dropdown closes
+  // Dismissal follows focus leaving the whole search box, not the input: Tab
+  // onto a result, or a click on one, keeps focus inside and must not close the
+  // list under the user. The delay covers a click that lands outside.
+  @action private onSearchFocusOut(ev: Event) {
+    let box = ev.currentTarget as HTMLElement;
+    let next = (ev as FocusEvent).relatedTarget as Node | null;
+    if (next && box.contains(next)) {
+      return;
+    }
     this.hideResults.perform();
   }
 
@@ -2764,7 +2668,7 @@ class Isolated extends Component<typeof Workspace> {
 
   ringStyle = (job: { card: JobCard }): SafeString => {
     return htmlSafe(
-      `background: conic-gradient(var(--grid-attention) ${this.jobPct(job)}%, var(--grid-attention-rule) 0)`,
+      `background: conic-gradient(var(--attention) ${this.jobPct(job)}%, var(--grid-attention-rule) 0)`,
     );
   };
 
@@ -3018,22 +2922,9 @@ class Isolated extends Component<typeof Workspace> {
     return typeof option.icon === 'string' ? htmlSafe(option.icon) : undefined;
   };
 
-  // Component form of `icon` (undefined when the icon is an HTML string, which
-  // `iconHtml` renders instead) — lets the template invoke `<Icon />` safely.
-  iconComponent = (option: RailOption): typeof SearchIcon | undefined =>
-    typeof option.icon === 'string' ? undefined : option.icon;
-
   @action private createNew() {
     this.createCard.perform();
   }
-
-  createOfType = (option: RailOption) => () => {
-    // rail hover +: create an instance of exactly this row's type
-    let filter = option.query?.filter;
-    if (filter && 'type' in filter) {
-      this.createCard.perform(filter.type as CodeRef); // Glint narrows query unions at the command boundary
-    }
-  };
 
   private get query(): Query | undefined {
     if (!this.activeFilter?.query) {
@@ -3110,10 +3001,14 @@ class Isolated extends Component<typeof Workspace> {
   // already-loaded links) instead of a query.
   @cached
   private get everythingFilter(): RailOption {
+    let self = this;
     return {
       id: 'everything',
       displayName: 'Everything',
       icon: LayoutGridIcon,
+      get count() {
+        return self.cardTotal + self.fileTotal;
+      },
       query: {
         filter: {
           every: [...excludeSelfReferentialCards()],
@@ -3132,6 +3027,9 @@ class Isolated extends Component<typeof Workspace> {
       id: 'entry-points',
       displayName: 'Entry points',
       icon: DoorOpenIcon,
+      get count() {
+        return model.entryPoints?.length ?? 0;
+      },
       get cards() {
         return (model.entryPoints ?? [])
           .filter(Boolean)
@@ -3144,10 +3042,14 @@ class Isolated extends Component<typeof Workspace> {
 
   @cached
   private get cardsFilter(): RailOption {
+    let self = this;
     return {
       id: 'cards',
       displayName: 'Cards',
       icon: Captions,
+      get count() {
+        return self.cardTotal;
+      },
       query: {
         filter: {
           every: [
@@ -3161,10 +3063,14 @@ class Isolated extends Component<typeof Workspace> {
 
   @cached
   private get filesFilter(): RailOption {
+    let self = this;
     return {
       id: 'files',
       displayName: 'Files',
       icon: FileIcon,
+      get count() {
+        return self.fileTotal;
+      },
       query: {
         filter: {
           type: this.fileDefRef,
@@ -3200,18 +3106,13 @@ class Isolated extends Component<typeof Workspace> {
     ];
   }
 
-  countFor = (option: RailOption) => {
-    switch (option.id) {
-      case 'everything':
-        return this.cardTotal + this.fileTotal;
-      case 'entry-points':
-        return this.args.model.entryPoints?.length ?? 0;
-      case 'cards':
-        return this.cardTotal;
-      case 'files':
-        return this.fileTotal;
-      default:
-        return option.count ?? 0;
+  countFor = (option: RailOption) => option.count ?? 0;
+
+  createOfType = (option: FilterOption) => () => {
+    // rail +: create an instance of exactly this row's type
+    let filter = option.query?.filter;
+    if (filter && 'type' in filter) {
+      this.createCard.perform(filter.type as CodeRef); // Glint narrows query unions at the command boundary
     }
   };
 
@@ -3499,6 +3400,7 @@ class Isolated extends Component<typeof Workspace> {
     component: BoxComponent;
     when: string | undefined;
     absolute: string | undefined;
+    absoluteIso: string | undefined;
     note: string | undefined;
     verb: ActivityVerb;
     dayLabel: string;
@@ -3641,6 +3543,8 @@ class Isolated extends Component<typeof Workspace> {
           when: modMs !== undefined ? relativeTime(modMs) : undefined,
           absolute:
             modMs !== undefined ? new Date(modMs).toLocaleString() : undefined,
+          absoluteIso:
+            modMs !== undefined ? new Date(modMs).toISOString() : undefined,
           note: card?.cardInfo?.notes ?? undefined,
           verb,
           dayLabel: day,
@@ -3674,6 +3578,9 @@ export class Workspace extends CardDef {
   // the edit format IS the workspace's settings page.
   // Five sections; every control wires to live behavior.
   static edit = class Edit extends Component<typeof Workspace> {
+    // distinct ids per render: the same card can be open in several stacks
+    private idBase = guidFor(this);
+
     get workspaceName() {
       return this.args.model.workspace?.cardInfo?.name ?? '';
     }
@@ -3897,7 +3804,7 @@ export class Workspace extends CardDef {
     <template>
       <div class='settings'>
         <header class='settings-head'>
-          <h2 class='settings-title'>Workspace settings</h2>
+          <h2 class='settings-title' data-test-settings-title>Workspace settings</h2>
           <p class='settings-lede'>Everything the Home, Library, and Activity
             tabs do — and the identity of the workspace behind them.</p>
         </header>
@@ -3925,18 +3832,26 @@ export class Workspace extends CardDef {
               </div>
               <div class='setting-control'>
                 <div class='choice'>
-                  <button
-                    type='button'
-                    class='choice-opt
-                      {{if (eq this.activePinnedSize "regular") "selected"}}'
-                    {{on 'click' (this.setPinnedSize 'regular')}}
-                  >Regular</button>
-                  <button
-                    type='button'
-                    class='choice-opt
-                      {{if (eq this.activePinnedSize "compact") "selected"}}'
-                    {{on 'click' (this.setPinnedSize 'compact')}}
-                  >Compact</button>
+                  {{#let (eq this.activePinnedSize 'regular') as |isSelected|}}
+                    <Button
+                      @kind={{if isSelected 'default' 'muted'}}
+                      @size='extra-small'
+                      @rectangular={{true}}
+                      class='choice-opt'
+                      aria-pressed={{if isSelected 'true' 'false'}}
+                      {{on 'click' (this.setPinnedSize 'regular')}}
+                    >Regular</Button>
+                  {{/let}}
+                  {{#let (eq this.activePinnedSize 'compact') as |isSelected|}}
+                    <Button
+                      @kind={{if isSelected 'default' 'muted'}}
+                      @size='extra-small'
+                      @rectangular={{true}}
+                      class='choice-opt'
+                      aria-pressed={{if isSelected 'true' 'false'}}
+                      {{on 'click' (this.setPinnedSize 'compact')}}
+                    >Compact</Button>
+                  {{/let}}
                 </div>
               </div>
             </div>
@@ -3984,20 +3899,30 @@ export class Workspace extends CardDef {
                 <div class='order-list'>
                   {{#each this.moduleList as |mod index|}}
                     <div class='order-row'>
-                      <span class='order-pos'>{{this.orderPos index}}</span>
+                      <span class='order-pos data'>{{this.orderPos
+                          index
+                        }}</span>
                       <span class='order-name'>{{this.moduleLabel mod}}</span>
-                      <button
-                        type='button'
+                      <IconButton
+                        @icon={{ArrowUpIcon}}
+                        @variant='default'
+                        @size='extra-small'
+                        @width='14'
+                        @height='14'
                         class='order-move'
                         aria-label='Move {{this.moduleLabel mod}} up'
                         {{on 'click' (this.moveModule mod -1)}}
-                      >↑</button>
-                      <button
-                        type='button'
+                      />
+                      <IconButton
+                        @icon={{ArrowDownIcon}}
+                        @variant='default'
+                        @size='extra-small'
+                        @width='14'
+                        @height='14'
                         class='order-move'
                         aria-label='Move {{this.moduleLabel mod}} down'
                         {{on 'click' (this.moveModule mod 1)}}
-                      >↓</button>
+                      />
                     </div>
                   {{/each}}
                 </div>
@@ -4039,18 +3964,26 @@ export class Workspace extends CardDef {
               </div>
               <div class='setting-control'>
                 <div class='choice'>
-                  <button
-                    type='button'
-                    class='choice-opt
-                      {{if (eq this.activeView "grid") "selected"}}'
-                    {{on 'click' (this.setView 'grid')}}
-                  >Grid</button>
-                  <button
-                    type='button'
-                    class='choice-opt
-                      {{if (eq this.activeView "strip") "selected"}}'
-                    {{on 'click' (this.setView 'strip')}}
-                  >Strip</button>
+                  {{#let (eq this.activeView 'grid') as |isSelected|}}
+                    <Button
+                      @kind={{if isSelected 'default' 'muted'}}
+                      @size='extra-small'
+                      @rectangular={{true}}
+                      class='choice-opt'
+                      aria-pressed={{if isSelected 'true' 'false'}}
+                      {{on 'click' (this.setView 'grid')}}
+                    >Grid</Button>
+                  {{/let}}
+                  {{#let (eq this.activeView 'strip') as |isSelected|}}
+                    <Button
+                      @kind={{if isSelected 'default' 'muted'}}
+                      @size='extra-small'
+                      @rectangular={{true}}
+                      class='choice-opt'
+                      aria-pressed={{if isSelected 'true' 'false'}}
+                      {{on 'click' (this.setView 'strip')}}
+                    >Strip</Button>
+                  {{/let}}
                 </div>
               </div>
             </div>
@@ -4066,11 +3999,15 @@ export class Workspace extends CardDef {
           <div class='group-card'>
             <div class='setting stack'>
               <div class='setting-text'>
-                <span class='setting-label'>Description</span>
+                <label
+                  class='setting-label'
+                  for={{concat this.idBase '-description'}}
+                >Description</label>
                 <p class='setting-help'>One line shown at the top of Home.</p>
               </div>
               <div class='setting-control'>
                 <BoxelInput
+                  @id={{concat this.idBase '-description'}}
                   @value={{this.description}}
                   @onInput={{this.setDescription}}
                   @placeholder='One line about this space'
@@ -4079,12 +4016,16 @@ export class Workspace extends CardDef {
             </div>
             <div class='setting stack'>
               <div class='setting-text'>
-                <span class='setting-label'>Signage</span>
+                <label
+                  class='setting-label'
+                  for={{concat this.idBase '-signage'}}
+                >Signage</label>
                 <p class='setting-help'>A short badge beside the tabs — a status
                   or role, like DESIGN LAB or STAGING.</p>
               </div>
               <div class='setting-control'>
                 <BoxelInput
+                  @id={{concat this.idBase '-signage'}}
                   @value={{@model.signage}}
                   @onInput={{this.setSignage}}
                   @placeholder='e.g. DESIGN LAB'
@@ -4093,12 +4034,16 @@ export class Workspace extends CardDef {
             </div>
             <div class='setting stack'>
               <div class='setting-text'>
-                <span class='setting-label'>Purpose</span>
+                <label
+                  class='setting-label'
+                  for={{concat this.idBase '-purpose'}}
+                >Purpose</label>
                 <p class='setting-help'>What this space is for. Shown when
                   hovering the signage badge.</p>
               </div>
               <div class='setting-control'>
                 <BoxelInput
+                  @id={{concat this.idBase '-purpose'}}
                   @value={{@model.purpose}}
                   @onInput={{this.setPurpose}}
                   @placeholder='What this space is for'
@@ -4119,12 +4064,16 @@ export class Workspace extends CardDef {
             {{#if @model.workspace}}
               <div class='setting stack'>
                 <div class='setting-text'>
-                  <span class='setting-label'>Name</span>
+                  <label
+                    class='setting-label'
+                    for={{concat this.idBase '-name'}}
+                  >Name</label>
                   <p class='setting-help'>Shown in the app frame and in
                     workspace lists. Applies to the whole workspace.</p>
                 </div>
                 <div class='setting-control'>
                   <BoxelInput
+                    @id={{concat this.idBase '-name'}}
                     @value={{this.workspaceName}}
                     @onInput={{this.setWorkspaceName}}
                     @placeholder='Workspace name'
@@ -4133,11 +4082,15 @@ export class Workspace extends CardDef {
               </div>
               <div class='setting stack'>
                 <div class='setting-text'>
-                  <span class='setting-label'>Icon URL</span>
+                  <label
+                    class='setting-label'
+                    for={{concat this.idBase '-icon-url'}}
+                  >Icon URL</label>
                   <p class='setting-help'>A square image shown beside the name.</p>
                 </div>
                 <div class='setting-control'>
                   <BoxelInput
+                    @id={{concat this.idBase '-icon-url'}}
                     @value={{this.workspaceIcon}}
                     @onInput={{this.setWorkspaceIcon}}
                     @placeholder='https://…'
@@ -4172,21 +4125,23 @@ export class Workspace extends CardDef {
                     <p class='setting-help'>Live on the web at this address.</p>
                   </div>
                   <div class='setting-control site'>
-                    <span class='site-host'>{{site.host}}</span>
+                    <span class='site-host data'>{{site.host}}</span>
                     {{#if site.when}}
                       <span class='site-when'>{{site.when}}</span>
                     {{/if}}
-                    <button
-                      type='button'
+                    <Button
+                      @kind='default'
+                      @size='extra-small'
+                      @rectangular={{true}}
+                      @disabled={{this.hostingBusy}}
                       class='publish-btn unpublish-btn'
-                      disabled={{this.hostingBusy}}
-                      data-test-unpublish-site={{site.url}}
                       {{on 'click' (this.unpublish site.url)}}
+                      data-test-unpublish-site={{site.url}}
                     >{{if
                         (this.isUnpublishing site.url)
                         'Unpublishing…'
                         'Unpublish'
-                      }}</button>
+                      }}</Button>
                   </div>
                 </div>
               {{/each}}
@@ -4197,13 +4152,15 @@ export class Workspace extends CardDef {
                     content.</p>
                 </div>
                 <div class='setting-control'>
-                  <button
-                    type='button'
+                  <Button
+                    @kind='default'
+                    @size='extra-small'
+                    @rectangular={{true}}
+                    @disabled={{this.hostingBusy}}
                     class='publish-btn'
-                    disabled={{this.hostingBusy}}
-                    data-test-republish
                     {{on 'click' this.republish}}
-                  >{{if this.publishBusy 'Publishing…' 'Republish'}}</button>
+                    data-test-republish
+                  >{{if this.publishBusy 'Publishing…' 'Republish'}}</Button>
                 </div>
               </div>
             {{else if this.isPublishable}}
@@ -4228,108 +4185,94 @@ export class Workspace extends CardDef {
       <style scoped>
         /* Shopify-pattern settings page in the grid's own voice: narrow
            column, group rail left, control card right, help under every
-           setting. Token subset mirrors the isolated chrome ladder. */
+           setting. */
         .settings {
-          --grid-ink: #272330;
-          --grid-ink-body: #5a586a;
-          --grid-ink-quiet: #8b8b93;
-          --grid-surface: #ffffff;
-          --grid-control: #f6f7f9;
-          --grid-border: #e2e8f0;
-          --grid-hairline: #eceef1;
-          --grid-hover-border: #cbd0d8;
-          --grid-interactive: var(--primary, #0c9d7c);
-          --grid-shadow-rest: 0 2px 8px rgba(28, 28, 50, 0.05);
-          --grid-mono: var(
-            --boxel-monospace-font-family,
-            'IBM Plex Mono',
-            monospace
-          );
-          --grid-sans: var(--boxel-font-family, 'IBM Plex Sans', sans-serif);
-
+          --grid-settings-width: 55rem;
+          --grid-pill: 100rem;
           container-type: inline-size;
-          max-width: 880px;
+          max-width: var(--grid-settings-width);
           margin: 0 auto;
           display: grid;
-          gap: 26px;
-          padding: 26px 22px 40px;
-          font-family: var(--grid-sans);
-          color: var(--grid-ink);
+          gap: var(--boxel-sp-xl);
+          padding: var(--boxel-sp-xl) var(--boxel-sp-lg) var(--boxel-sp-2xl);
+        }
+        .settings .order-move,
+        .settings .publish-btn {
+          line-height: inherit;
+          letter-spacing: inherit;
+        }
+        .data {
+          font-family: var(--font-mono);
+          font-size: var(--boxel-font-size-2xs);
+          font-weight: 500;
+          font-variant-numeric: tabular-nums;
         }
         .settings-head {
           display: grid;
-          gap: 4px;
-        }
-        .settings-title {
-          margin: 0;
-          font: 700 20px/1.25 var(--grid-sans);
-          letter-spacing: -0.02em;
+          gap: var(--boxel-sp-4xs);
         }
         .settings-lede {
-          margin: 0;
-          font: 400 13px/1.5 var(--grid-sans);
-          color: var(--grid-ink-quiet);
+          font-size: var(--boxel-font-size-sm);
+          font-weight: 400;
+          color: var(--muted-foreground);
         }
         .group {
           display: grid;
-          grid-template-columns: 220px minmax(0, 1fr);
-          gap: 22px;
+          grid-template-columns: 13.75rem minmax(0, 1fr);
+          gap: var(--boxel-sp-lg);
           align-items: start;
         }
-        @container (width < 680px) {
+        @container (width < 42.5rem) {
           .group {
             grid-template-columns: 1fr;
-            gap: 10px;
+            gap: var(--boxel-sp-xs);
           }
         }
         .group-info {
           display: grid;
-          gap: 4px;
-          padding-top: 4px;
-        }
-        .group-name {
-          margin: 0;
-          font: 600 13.5px/1.3 var(--grid-sans);
-          color: var(--grid-ink);
+          gap: var(--boxel-sp-4xs);
+          padding-top: var(--boxel-sp-4xs);
         }
         .group-desc {
-          margin: 0;
-          font: 400 12.5px/1.5 var(--grid-sans);
-          color: var(--grid-ink-quiet);
+          font-size: var(--boxel-font-size-xs);
+          font-weight: 400;
+          color: var(--muted-foreground);
         }
         .group-card {
-          background-color: var(--grid-surface);
-          border: 1px solid var(--grid-border);
-          border-radius: 13px;
-          box-shadow: var(--grid-shadow-rest);
+          background-color: var(--card);
+          color: var(--card-foreground);
+          border: 1px solid var(--border);
+          border-radius: var(--boxel-border-radius-lg);
+          box-shadow: var(--shadow-sm);
         }
         .setting {
           display: grid;
           grid-template-columns: minmax(0, 1fr) auto;
           align-items: center;
-          gap: 8px 20px;
-          padding: 14px 16px;
+          gap: var(--boxel-sp-2xs) var(--boxel-sp-lg);
+          padding: var(--boxel-sp);
         }
         .setting.stack {
           grid-template-columns: 1fr;
           align-items: start;
         }
         .setting + .setting {
-          border-top: 1px solid var(--grid-hairline);
+          border-top: 1px solid var(--border);
         }
         .setting-text {
           display: grid;
-          gap: 3px;
+          gap: var(--boxel-sp-5xs);
           min-width: 0;
         }
         .setting-label {
-          font: 600 13px/1.3 var(--grid-sans);
-          color: var(--grid-ink);
+          font-size: var(--boxel-font-size-sm);
+          font-weight: 600;
+          color: var(--foreground);
         }
         .setting-help {
-          margin: 0;
-          font: 400 12px/1.5 var(--grid-sans);
-          color: var(--grid-ink-quiet);
+          font-size: var(--boxel-font-size-xs);
+          font-weight: 400;
+          color: var(--muted-foreground);
         }
         .setting-control {
           min-width: 0;
@@ -4337,111 +4280,86 @@ export class Workspace extends CardDef {
         .setting-control.site {
           display: flex;
           align-items: baseline;
-          gap: 10px;
+          gap: var(--boxel-sp-xs);
         }
         .site-host {
-          font: 500 12.5px var(--grid-mono);
-          color: var(--grid-ink);
+          font-size: var(--boxel-font-size-xs);
+          color: var(--foreground);
         }
         .site-when {
-          font: 400 11px var(--grid-sans);
-          color: var(--grid-ink-quiet);
+          font-size: var(--boxel-font-size-xs);
+          font-weight: 400;
+          color: var(--muted-foreground);
         }
         .choice {
           display: inline-flex;
-          padding: 2px;
-          gap: 2px;
-          border: 1px solid var(--grid-border);
-          border-radius: 8px;
-          background-color: var(--grid-control);
+          padding: var(--boxel-sp-4xs);
+          gap: var(--boxel-sp-4xs);
+          border: 1px solid var(--border);
+          /* outer radius = the options' radius + the padding */
+          border-radius: var(--boxel-border-radius);
+          background-color: var(--muted);
         }
         .choice-opt {
-          border: 0;
-          border-radius: 6px;
-          padding: 5px 12px;
-          background: transparent;
-          font: 500 12.5px var(--grid-sans);
-          color: var(--grid-ink-body);
-          cursor: pointer;
-        }
-        .choice-opt.selected {
-          background-color: var(--grid-surface);
-          color: var(--grid-ink);
-          box-shadow: 0 1px 2px rgba(28, 28, 50, 0.1);
+          --boxel-button-border: none;
         }
         .order-list {
           display: grid;
-          gap: 6px;
+          gap: var(--boxel-sp-3xs);
         }
         .order-row {
           display: grid;
-          grid-template-columns: 22px minmax(0, 1fr) auto auto;
+          grid-template-columns: 1.375rem minmax(0, 1fr) auto auto;
           align-items: center;
-          gap: 8px;
-          padding: 7px 10px;
-          border: 1px solid var(--grid-border);
-          border-radius: 8px;
-          background-color: var(--grid-surface);
+          gap: var(--boxel-sp-2xs);
+          padding: var(--boxel-sp-2xs) var(--boxel-sp-xs);
+          border: 1px solid var(--border);
+          border-radius: var(--boxel-border-radius);
+          background-color: var(--card);
+          color: var(--card-foreground);
         }
         .order-pos {
-          font: 600 10.5px var(--grid-mono);
-          color: var(--grid-ink-quiet);
+          font-size: var(--boxel-font-size-xs);
+          font-weight: 600;
+          color: var(--muted-foreground);
         }
         .order-name {
-          font: 500 13px var(--grid-sans);
+          font-size: var(--boxel-font-size-sm);
+          font-weight: 500;
         }
-        .order-move {
-          width: 24px;
-          height: 24px;
+        .settings .order-move {
+          width: 1.5rem;
+          height: 1.5rem;
           display: grid;
           place-items: center;
-          border: 1px solid var(--grid-border);
-          border-radius: 6px;
-          background: none;
-          color: var(--grid-ink-body);
-          cursor: pointer;
+          border-radius: var(--boxel-border-radius-sm);
         }
-        .order-move:hover {
-          border-color: var(--grid-hover-border);
-          color: var(--grid-ink);
+        .settings .order-move:hover {
+          border-color: var(--border-strong);
+          color: var(--foreground);
         }
-        .publish-btn {
-          padding: 7px 14px;
-          border: 1px solid var(--grid-border);
-          border-radius: 8px;
-          background-color: var(--grid-surface);
-          font: 600 12.5px var(--grid-sans);
-          color: var(--grid-ink);
-          cursor: pointer;
+        .settings .publish-btn {
         }
-        .publish-btn:hover {
-          border-color: var(--grid-interactive);
-          color: var(--grid-interactive);
+        .settings .publish-btn:hover {
+          border-color: var(--primary-ink);
+          color: var(--primary-ink);
         }
-        .publish-btn:disabled {
+        .settings .publish-btn:disabled {
           opacity: 0.6;
           cursor: default;
         }
         /* Sits at the end of the site row, and reads as the destructive
           counterpart to Republish rather than a second primary action. */
-        .unpublish-btn {
-          margin-left: auto;
-          padding: 5px 10px;
-          font-size: 11.5px;
-          color: var(--grid-ink-quiet);
+        .settings .unpublish-btn {
+          margin-inline-start: auto;
+          color: var(--muted-foreground);
         }
-        .unpublish-btn:hover:not(:disabled) {
-          border-color: var(--grid-broken);
-          color: var(--grid-broken);
+        .settings .unpublish-btn:hover:not(:disabled) {
+          border-color: var(--destructive-ink);
+          color: var(--destructive-ink);
         }
         .hosting-error {
-          color: var(--grid-broken);
-        }
-        .choice-opt:focus-visible,
-        .order-move:focus-visible,
-        .publish-btn:focus-visible {
-          outline: 2px solid var(--grid-interactive);
-          outline-offset: 2px;
+          color: var(--destructive-ink);
         }
       </style>
     </template>

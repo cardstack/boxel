@@ -10,7 +10,9 @@ import {
   type PgPrimitive,
   type ExecuteOptions,
   type Querier,
+  type TransactionOptions,
   Deferred,
+  query,
 } from '@cardstack/runtime-common';
 
 export default class SQLiteAdapter implements DBAdapter {
@@ -74,13 +76,40 @@ export default class SQLiteAdapter implements DBAdapter {
 
   // SQLite has no cross-connection concurrency to coordinate, so the per-file
   // write lock is a passthrough too. The PG implementation provides the real
-  // serialization across replicas.
+  // serialization across replicas. Ending the section early is therefore a
+  // no-op here: there is nothing held to let go of.
   async withFileWriteLocks<T>(
     _realmUrl: string,
     _localPaths: readonly string[],
-    fn: () => Promise<T>,
+    fn: (releaseLocks: () => void) => Promise<T>,
   ): Promise<T> {
-    return await fn();
+    return await fn(() => {});
+  }
+
+  // The whole database is one connection, so BEGIN / COMMIT on it groups
+  // every statement `fn` issues. SQLite has no other connection to deadlock
+  // with, so a failure rolls back and is thrown, never retried.
+  async withTransaction<T>(
+    fn: (txQuerier: Querier) => Promise<T>,
+    _opts?: TransactionOptions,
+  ): Promise<T> {
+    await this.execute('BEGIN');
+    try {
+      let result = await fn((expression, coerceTypes) =>
+        query(this, expression, coerceTypes),
+      );
+      await this.execute('COMMIT');
+      return result;
+    } catch (err) {
+      try {
+        await this.execute('ROLLBACK');
+      } catch (rollbackErr) {
+        console.warn(
+          `ROLLBACK after a failed transaction failed: ${String(rollbackErr)}`,
+        );
+      }
+      throw err;
+    }
   }
 
   // SQLite has no cross-connection concurrency to coordinate, so the
