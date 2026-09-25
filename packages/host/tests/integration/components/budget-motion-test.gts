@@ -1,10 +1,10 @@
 import { on } from '@ember/modifier';
 import { service } from '@ember/service';
-import { click, find, waitUntil } from '@ember/test-helpers';
+import { click, find, settled, waitUntil } from '@ember/test-helpers';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
-import { motion } from 'glimmer-motion';
+import { Choreo, motion } from 'glimmer-motion';
 import { animationsSettled, setupMotion } from 'glimmer-motion/test-support';
 import { module, test } from 'qunit';
 
@@ -52,6 +52,26 @@ class BudgetFixture extends Component {
         >{{this.text}}</div>
       {{/if}}
     </StackMotion>
+  </template>
+}
+
+class GateState {
+  @tracked armed = false;
+  @tracked text = 'Card';
+}
+let gate = new GateState();
+class GateFixture extends Component {
+  state = gate;
+  <template>
+    <Choreo @armed={{this.state.armed}} as |c|>
+      <div
+        {{motion id='gated' role='stack-card'}}
+        data-test-gated
+      >{{this.state.text}}</div>
+      {{#if this.state.armed}}
+        <c.Tween @of={{c.kept 'stack-card'}} @opacity={{1}} @duration={{0}} />
+      {{/if}}
+    </Choreo>
   </template>
 }
 
@@ -131,5 +151,34 @@ module('Integration | budget motion', function (hooks) {
       'drag does not admit a competing score',
     );
     budget.endDrag();
+  });
+  test('an idle region measures nothing when unrelated content re-renders', async function (assert) {
+    gate = new GateState();
+    await renderComponent(GateFixture);
+    await animationsSettled();
+    let reads = 0;
+    let original = Element.prototype.getBoundingClientRect;
+    Element.prototype.getBoundingClientRect = function (
+      this: Element,
+      ...args: []
+    ) {
+      reads++;
+      return original.apply(this, args);
+    };
+    try {
+      gate.text = 'Updated while idle';
+      await settled();
+      assert.strictEqual(reads, 0, 'an unarmed render reads no layout');
+      gate.armed = true;
+      await settled();
+      await animationsSettled();
+      reads = 0;
+      gate.text = 'Updated while armed';
+      await settled();
+      assert.true(reads > 0, 'an armed render still measures its pass');
+    } finally {
+      Element.prototype.getBoundingClientRect = original;
+    }
+    assert.dom('[data-test-gated]').hasText('Updated while armed');
   });
 });

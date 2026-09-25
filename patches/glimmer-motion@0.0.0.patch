@@ -1,7 +1,28 @@
+diff --git a/declarations/choreo.d.ts b/declarations/choreo.d.ts
+index 0b5139d..480b130 100644
+--- a/declarations/choreo.d.ts
++++ b/declarations/choreo.d.ts
+@@ -110,6 +110,15 @@ interface Signature {
+          * the host's job (the crossing flag the gallery's entrances check).
+          */
+         quiet?: boolean;
++        /**
++         * Whether a pass could play anything. When `false` and the region has
++         * no run, leaver or retained participant in flight, a render measures
++         * nothing: the before/after rect reads of an idle pass force layout on
++         * every render of the page, only for the pass to compile no cues.
++         * Participants that mount meanwhile are treated as already at rest.
++         * Omit it to measure every render.
++         */
++        armed?: boolean;
+         /**
+          * Treat a subtree swap as one crossing pass (§4.7): scroll intent is
+          * applied inside the pass — after the swap renders, before final bounds
 diff --git a/dist/choreo/run.js b/dist/choreo/run.js
+index 9fd1aee..b6c11b4 100644
 --- a/dist/choreo/run.js
 +++ b/dist/choreo/run.js
-@@ -108,7 +108,9 @@
+@@ -108,7 +108,9 @@ function applyHold(ve, el, values) {
        priorStyle
      });
    }
@@ -12,7 +33,7 @@ diff --git a/dist/choreo/run.js b/dist/choreo/run.js
    return held;
  }
  function releaseHold(ve, el, held) {
-@@ -1664,7 +1666,13 @@
+@@ -1664,7 +1666,13 @@ class ChoreoRun {
      if (!layer || !el.isConnected || t.perch) {
        return;
      }
@@ -27,7 +48,7 @@ diff --git a/dist/choreo/run.js b/dist/choreo/run.js
      const layerBox = layer.getBoundingClientRect();
      const s = ChoreoRun.layerScale(layer, layerBox);
      const width = box.width / s.x;
-@@ -1682,6 +1690,11 @@
+@@ -1682,6 +1690,11 @@ class ChoreoRun {
      el.style.width = `${width}px`;
      el.style.height = `${height}px`;
      el.style.margin = '0';
@@ -39,7 +60,7 @@ diff --git a/dist/choreo/run.js b/dist/choreo/run.js
      if (t.cue.raise?.shadow) {
        el.style.filter = 'drop-shadow(0 18px 24px rgba(0,0,0,0.35))';
      }
-@@ -1930,8 +1943,8 @@
+@@ -1930,8 +1943,8 @@ class ChoreoRun {
        return;
      }
      const pts = flight.points;
@@ -50,7 +71,7 @@ diff --git a/dist/choreo/run.js b/dist/choreo/run.js
      const local = at - index;
      const a = pts[index];
      const b = pts[Math.min(index + 1, pts.length - 1)];
-@@ -2242,6 +2255,12 @@
+@@ -2242,6 +2255,12 @@ class ChoreoRun {
        t.platform?.forEach(a => a.cancel());
        t.platform = undefined;
        this.dropCameraAnimation(t);
@@ -63,16 +84,43 @@ diff --git a/dist/choreo/run.js b/dist/choreo/run.js
      }
      const touched = new Set();
      this.retired = {
-@@ -2421,4 +2440,4 @@
+@@ -2421,4 +2440,4 @@ function execute(compiled, options) {
  }
  
  export { ChoreoRun, activeRuns, execute };
 -//# sourceMappingURL=run.js.map
 +// The upstream source map predates the host promotion patch.
 diff --git a/dist/choreo.js b/dist/choreo.js
+index 83377bb..3ae25be 100644
 --- a/dist/choreo.js
 +++ b/dist/choreo.js
-@@ -1036,11 +1036,11 @@
+@@ -327,6 +327,15 @@ class Choreo extends Component {
+     // (`layout` / `layoutId`) snapshot here too, so `{{motion layout=true}}`
+     // works inside a <Choreo> without a <LayoutGroup> wrapped around it.
+     snapshotOnRender();
++    if (!this.passPending && this.idle()) {
++      // Nothing can play and nothing is in flight: an idle pass would read
++      // every participant's rect before and after the patch (forcing layout
++      // in the middle of rendering) only to compile no cues. What mounted
++      // meanwhile is at rest, and the region has rendered.
++      this.arrived.clear();
++      this.rendered = true;
++      return undefined;
++    }
+     if (!this.passPending) {
+       this.passPending = true;
+       this.snapshot();
+@@ -337,6 +346,9 @@ class Choreo extends Component {
+     return undefined;
+   }
+   /* eslint-enable ember/no-side-effects */
++  idle() {
++    return this.args.armed === false && !(this.run && !this.run.isDone()) && !this.orphans.size && !this.leaving.size && !this.claimed.size;
++  }
+   snapshot() {
+     this.snapshots.clear();
+     this.rootSnapshot = this.element?.getBoundingClientRect();
+@@ -1036,11 +1048,11 @@ class Choreo extends Component {
    * layers ride the frame with the content they annotate.
    */
    static {

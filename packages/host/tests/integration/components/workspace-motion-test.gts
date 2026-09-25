@@ -28,6 +28,9 @@ import { setupRenderingTest } from '../../helpers/setup';
 const imageA =
   'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="16" height="9"%3E%3Cpath fill="blue" d="M0 0h16v9H0z"/%3E%3C/svg%3E';
 const imageB = imageA.replace('blue', 'red');
+// Production arming: the stack region takes its flag from the host motion
+// service instead of an explicit test duration.
+let portalBudgeted = false;
 class PortalFixture extends Component {
   @tracked chooser = true;
   @tracked wide = false;
@@ -37,6 +40,7 @@ class PortalFixture extends Component {
   @tracked portal?: WorkspacePortal;
   @tracked cardIds = ['previous-workspace'];
   private origin?: WorkspaceOpenOrigin;
+  budgeted = portalBudgeted;
   private sequence = 0;
   private start(direction: WorkspacePortal['direction']) {
     if (!this.origin) return;
@@ -92,6 +96,7 @@ class PortalFixture extends Component {
       motion</button>
     <StackMotion
       @duration={{this.duration}}
+      @budgeted={{this.budgeted}}
       @onPerform={{this.complete}}
       @portalActive={{if this.portal true false}}
     >
@@ -376,5 +381,21 @@ module('Integration | workspace motion', function (hooks) {
     await animationsSettled();
     assert.dom('.stacks').hasStyle({ transform: 'none', opacity: '1' });
     cleanup(assert);
+  });
+  test('the portal completes when ordinary stack motion is not armed', async function (assert) {
+    portalBudgeted = true;
+    try {
+      await renderComponent(PortalFixture);
+      await animationsSettled();
+      await click('[data-test-tile="a"]');
+      await animationsSettled();
+      assert
+        .dom('[data-test-dashboard]')
+        .doesNotExist('the portal ran to its completion');
+      assert.dom('.stacks').hasStyle({ transform: 'none', opacity: '1' });
+      assert.dom('[data-test-card]').exists();
+    } finally {
+      portalBudgeted = false;
+    }
   });
 });

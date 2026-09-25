@@ -380,7 +380,7 @@ export default class SubmodeLayout extends Component<Signature> {
         : SearchSheetModes.SearchPrompt;
     }
 
-    this.searchElement?.focus();
+    this.searchElement?.focus({ preventScroll: true });
     this.args.onSearchSheetOpened?.();
   }
 
@@ -493,7 +493,9 @@ export default class SubmodeLayout extends Component<Signature> {
   @action
   private storeSearchElement(element: HTMLElement) {
     this.searchElement = element;
-    this.searchElement.focus();
+    // The sheet never scrolls into view; a plain focus() would force layout
+    // of the half-mounted panel to compute a scroll position.
+    this.searchElement.focus({ preventScroll: true });
   }
   @action
   private openSearchAndShowResults(term: string, typeRef?: ResolvedCodeRef) {
@@ -515,7 +517,7 @@ export default class SubmodeLayout extends Component<Signature> {
       if (this.searchSheetMode !== SearchSheetModes.SearchResults)
         this.hostMotion.begin('sheet');
       this.searchSheetMode = SearchSheetModes.SearchResults;
-      this.searchElement?.focus();
+      this.searchElement?.focus({ preventScroll: true });
       if (wasClosed) {
         this.args.onSearchSheetOpened?.();
       }

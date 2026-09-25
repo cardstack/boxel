@@ -65,6 +65,7 @@ export default class SearchSheetMotion extends Component<Signature> {
   <template>
     <Choreo
       class='search-sheet-motion'
+      @armed={{this.armed}}
       @onPerform={{this.repositionDropdowns}}
       {{this.capture}}
       as |c|

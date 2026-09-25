@@ -1002,7 +1002,17 @@ export default class OperatorModeStackItem extends Component<Signature> {
             {{ContentElement onSetup=this.setupContentEl}}
             data-test-stack-item-content
           >
-            {{#unless @item.deferContent}}
+            {{#if @item.deferContent}}
+              {{#if @item.placeholder}}
+                {{#let @item.placeholder as |Placeholder|}}
+                  <div
+                    class='stack-item-preview stack-item-placeholder'
+                    inert
+                    aria-hidden='true'
+                  ><Placeholder /></div>
+                {{/let}}
+              {{/if}}
+            {{else}}
               <CardRenderer
                 class='stack-item-preview'
                 @card={{this.card}}
@@ -1016,7 +1026,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
                 @selectedCards={{this.selectedCards}}
                 @viewCard={{this.cardCrudFunctions.viewCard}}
               />
-            {{/unless}}
+            {{/if}}
           </div>
         {{/if}}
       </CardContainer>

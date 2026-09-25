@@ -34,6 +34,23 @@ function headerParts(underlay?: HTMLElement) {
   });
 }
 
+// Motion's retimed pseudo-element animations fill forwards, so the document
+// keeps every finished one alive after its transition ends: about 34 per
+// crossing, accumulating for the session. Only finished ones are released;
+// a newer crossing's running animations are untouched.
+function releaseFinishedViewAnimations() {
+  for (let animation of document.getAnimations()) {
+    if (
+      animation.playState === 'finished' &&
+      (animation.effect as KeyframeEffect | null)?.pseudoElement?.startsWith(
+        '::view-transition',
+      )
+    ) {
+      animation.cancel();
+    }
+  }
+}
+
 function viewTransitionPlaying() {
   return document
     .getAnimations()
@@ -122,6 +139,18 @@ export async function crossfadeCardBitmap(
       ':scope > .stack-item-content',
     );
     let opening = !!underlay?.contains(source);
+    // A leaving source usually holds focus (its Close button was just
+    // clicked). Removing a focused element runs focus fixup, which
+    // recalculates style synchronously in the middle of the update. Release
+    // it while style is still clean; focus would land on <body> anyway.
+    let focused = document.activeElement;
+    if (
+      !opening &&
+      focused instanceof HTMLElement &&
+      source.contains(focused)
+    ) {
+      focused.blur();
+    }
     let bodySize =
       body && opening
         ? { width: body.offsetWidth, height: body.offsetHeight }
@@ -316,6 +345,7 @@ export async function crossfadeCardBitmap(
     else throw error;
   } finally {
     traceMotionPhase('finished');
+    releaseFinishedViewAnimations();
     bodyFrame?.remove();
     shadow?.release();
     if (underlayKey && underlay?.dataset.bitmapUnderlay === underlayKey) {

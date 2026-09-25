@@ -25,6 +25,7 @@ import { setupRenderingTest } from '../../helpers/setup';
 
 let completion: Promise<void> | undefined;
 let bitmapReady: Promise<void> | undefined;
+let focusAtUpdate: Element | null = null;
 class EmbeddedFixture extends Component {
   @tracked opened = false;
   @tracked duplicate = false;
@@ -50,6 +51,7 @@ class EmbeddedFixture extends Component {
           ? '.preview-surface'
           : '[data-boxel-card-format="fitted"]',
       () => {
+        focusAtUpdate = document.activeElement;
         this.opened = false;
       },
       motionDurations.boundaryReturn,
@@ -1262,6 +1264,79 @@ module('Integration | bitmap motion', function (hooks) {
       (find('[data-test-bitmap-source]') as HTMLElement).style
         .viewTransitionName,
       '',
+    );
+  });
+  test('closing releases focus inside the leaving card before capture', async function (assert) {
+    await renderComponent(EmbeddedFixture);
+    await click('[data-test-open-gallery]');
+    await completion;
+    let closeButton = find('[data-test-close-gallery]') as HTMLElement;
+    await waitUntil(() => !closeButton.style.viewTransitionName);
+    focusAtUpdate = null;
+    await click(closeButton);
+    await completion;
+    assert.strictEqual(
+      focusAtUpdate,
+      document.body,
+      'the focused Close button is released before the update removes it',
+    );
+  });
+  test('a skipped view transition still mounts the destination and releases the crossing', async function (assert) {
+    await renderComponent(EmbeddedFixture);
+    await click('[data-test-defer]');
+    let transition: ViewTransition | undefined;
+    let start = document.startViewTransition;
+    document.startViewTransition = function (
+      this: Document,
+      ...args: Parameters<typeof start>
+    ) {
+      transition = start.apply(this, args);
+      return transition;
+    } as typeof start;
+    let settledPromptly: boolean;
+    try {
+      await click('[data-test-open-gallery]');
+      await bitmapReady;
+      // A viewport resize makes the browser skip the transition and cancel
+      // its pseudo-element animations, which never settles motion's finished.
+      transition!.skipTransition();
+      for (let animation of document.getAnimations()) {
+        if (
+          (
+            animation.effect as KeyframeEffect | null
+          )?.pseudoElement?.startsWith('::view-transition')
+        ) {
+          animation.cancel();
+        }
+      }
+      window.dispatchEvent(new Event('resize'));
+      settledPromptly = await Promise.race([
+        completion!.then(() => true),
+        new Promise<boolean>((resolve) =>
+          setTimeout(() => resolve(false), 400),
+        ),
+      ]);
+    } finally {
+      document.startViewTransition = start;
+    }
+    assert.true(
+      settledPromptly,
+      'the crossing settles once the browser drops it',
+    );
+    assert
+      .dom('[data-test-opened-gallery] h1')
+      .exists('deferred destination body mounts');
+    assert.strictEqual(
+      document.querySelectorAll(
+        '[data-bitmap-shadow], [data-bitmap-shadowed], [data-bitmap-body], [data-bitmap-underlay]',
+      ).length,
+      0,
+      'temporary shadow layers and capture markers are released',
+    );
+    assert.strictEqual(
+      document.querySelectorAll('[style*="view-transition-name"]').length,
+      0,
+      'no participant keeps a transition name',
     );
   });
 });

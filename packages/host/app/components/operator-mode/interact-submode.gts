@@ -68,12 +68,14 @@ import {
   forgetCardActionOrigin,
   type CardOpenOrigin,
 } from '@cardstack/host/lib/card-open-origin';
+import { htmlComponent } from '@cardstack/host/lib/html-component';
 import {
   boundaryEase,
   boundaryReturnEase,
   motionDurations,
 } from '@cardstack/host/lib/motion-timing';
 import { traceMotionPhase } from '@cardstack/host/lib/motion-trace';
+import { fetchIsolatedPlaceholder } from '@cardstack/host/lib/prerendered-placeholder';
 
 import {
   detectStackItemTypeForTarget,
@@ -425,6 +427,21 @@ export default class InteractSubmode extends Component {
       open();
       return;
     }
+    // The live body mounts after the crossing lands. Meanwhile the index's
+    // prerendered isolated HTML stands in, inert, as soon as it arrives; the
+    // incoming view is live during the transition, so it fills in mid-flight.
+    void fetchIsolatedPlaceholder(
+      {
+        network: this.network,
+        realm: this.realm,
+        realmServer: this.realmServer,
+      },
+      cardId,
+    ).then((html) => {
+      if (html && newItem.deferContent && !this.isDestroying) {
+        newItem.placeholder = htmlComponent(html);
+      }
+    });
     this.boundaryCrossingToken = token;
     let budgetToken = this.hostMotion.beginBitmap();
     try {
@@ -460,6 +477,7 @@ export default class InteractSubmode extends Component {
         afterMotionPaint(() => {
           traceMotionPhase('content-mount');
           newItem.deferContent = false;
+          newItem.placeholder = undefined;
           resolve();
         });
       });
@@ -548,14 +566,12 @@ export default class InteractSubmode extends Component {
       return;
     }
 
-    // Removing the focused element makes the browser run focus fixup, which
-    // recalculates style synchronously in the middle of the update. Release
-    // focus while style is still clean; it would end up on <body> anyway.
+    // The crossing releases focus inside the leaving card before capture. An
+    // expanded card's header is portaled into the top bar, outside it.
     let focused = document.activeElement;
     if (
       focused instanceof HTMLElement &&
-      (source.contains(focused) ||
-        focused.closest('.expanded-card-header-pill'))
+      focused.closest('.expanded-card-header-pill')
     ) {
       focused.blur();
     }

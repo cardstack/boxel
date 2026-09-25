@@ -7,6 +7,7 @@ import type { Store, StoreReadType } from '@cardstack/runtime-common';
 import { knownFileMetaUrls } from './known-file-meta-urls';
 
 import type { CardOpenOrigin } from './card-open-origin';
+import type { HTMLComponent } from './html-component';
 import type { WorkspaceOpenOrigin } from './workspace-open-origin';
 
 import type { Format } from '@cardstack/base/card-api';
@@ -99,6 +100,9 @@ export class StackItem {
   readonly instanceId: string;
   @tracked openingOrigin?: CardOpenOrigin;
   @tracked deferContent = false;
+  // The index's prerendered isolated HTML, shown inert while the live body is
+  // deferred behind a crossing. Never persisted or cloned.
+  @tracked placeholder?: HTMLComponent;
   // Kept for the return portal; never persisted or cloned.
   @tracked workspaceOrigin?: WorkspaceOpenOrigin;
   #id: string;
