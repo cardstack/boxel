@@ -1,7 +1,7 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename, join } from 'path';
-import { utimesSync } from 'fs';
+import { utimesSync, writeFileSync } from 'fs';
 import type { Realm } from '@cardstack/runtime-common';
 import { SupportedMimeType } from '@cardstack/runtime-common';
 import {
@@ -395,6 +395,54 @@ module(basename(import.meta.filename), function () {
         } finally {
           reads.restore();
         }
+      });
+
+      // A shared-cache row outlives a write that never tombstones it — one
+      // whose tombstone failed, or one made around the realm with no watcher
+      // listening. The row's validator is the file's fingerprint when it was
+      // compiled, so a request whose validator the file now contradicts
+      // compiles the file rather than taking the row.
+      test('a shared-cache row compiled from an overwritten version is compiled over rather than served', async function (assert) {
+        let modulePath = 'stale-row.gts';
+        await testRealm.write(modulePath, cardSource('StaleRowBefore'));
+
+        // Opting out of the in-memory cache leaves the shared one as the only
+        // layer that can answer.
+        let first = await request
+          .get(`/${modulePath}`)
+          .set('Accept', SupportedMimeType.All)
+          .set('X-Boxel-Disable-Module-Cache', 'true');
+        assert.true(
+          first.text.includes('StaleRowBefore'),
+          'the first response compiled what was written',
+        );
+
+        // Around the realm, so nothing drops the row the request above read.
+        writeFileSync(
+          join(testRealmPath, modulePath),
+          cardSource('StaleRowAfter'),
+        );
+        let before = testRealm.__testOnlyGetTranspileCallCount();
+        let second = await request
+          .get(`/${modulePath}`)
+          .set('Accept', SupportedMimeType.All)
+          .set('X-Boxel-Disable-Module-Cache', 'true');
+
+        assert.strictEqual(second.status, 200, 'HTTP 200 status');
+        assert.true(
+          second.text.includes('StaleRowAfter'),
+          'the response is compiled from the file as it stands',
+        );
+        assert.strictEqual(
+          testRealm.__testOnlyGetTranspileCallCount(),
+          before + 1,
+          'by compiling it, not by taking the row',
+        );
+        assert.notStrictEqual(
+          second.headers['etag'],
+          first.headers['etag'],
+          'under the validator of the version it compiled',
+        );
       });
 
       test('an extension-less request resolves to the module and names what it resolved to', async function (assert) {

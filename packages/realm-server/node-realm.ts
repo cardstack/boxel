@@ -217,6 +217,7 @@ export class NodeAdapter implements RealmAdapter {
         return lazyStream;
       },
       lastModified: unixTime(stat.mtime.getTime()),
+      lastModifiedMs: stat.mtimeMs,
       size: stat.size,
       createRangeStream: (start: number, end: number) =>
         createReadStream(absolutePath, { start, end }),

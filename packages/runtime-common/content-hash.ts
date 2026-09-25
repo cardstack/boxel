@@ -29,8 +29,10 @@ function toBytes(content: string | Uint8Array): Uint8Array {
 // treats a sampled value:
 //   - upload dedupe (`FileDefManager`): refuses sampled values outright — a
 //     false match there would attach content the user never picked.
-//   - source ETag (`totalEtagBase` in realm.ts): joins a sampled value with the
-//     file's mtime, restoring a total identity before it can drive a 304.
+//   - byte and module ETags (`totalEtagBase` in realm.ts): join a sampled value
+//     with the file's modification time at the adapter's finest precision, so
+//     a 304 needs the ends, the length and that time to match; an edit
+//     confined to the middle collides only within the time's granularity.
 //   - thumbnail freshness (`file-view-model`): accepts sampled values; a false
 //     match is a cosmetically stale thumbnail.
 //

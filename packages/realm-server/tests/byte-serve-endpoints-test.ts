@@ -1,8 +1,13 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename, join } from 'path';
-import { utimesSync } from 'fs';
+import { utimesSync, writeFileSync } from 'fs';
 import type { Realm } from '@cardstack/runtime-common';
+import {
+  CONTENT_HASH_HEAD_BYTES,
+  CONTENT_HASH_TAIL_BYTES,
+  CONTENT_HASH_WHOLE_LIMIT_BYTES,
+} from '@cardstack/runtime-common';
 import {
   setupPermissionedRealmCached,
   createJWT,
@@ -218,6 +223,112 @@ module(basename(import.meta.filename), function () {
           conditional.headers['etag'],
           etag,
           'under a validator of its own',
+        );
+      });
+
+      // Written around the realm, so no invalidation reaches the fingerprint
+      // the first read left behind: only the file's own stat can say it is a
+      // different version, and at the same length and whole second that is
+      // the time below the second.
+      test('a same-length rewrite made out of band within the same second is not answered 304 against the earlier validator', async function (assert) {
+        let path = 'same-second-out-of-band.png';
+        let absolutePath = join(testRealmPath, path);
+        let rewrittenBytes = pngBytes.slice();
+        rewrittenBytes[rewrittenBytes.length - 1] = 0x02;
+        let firstTime = new Date('2026-01-01T00:00:00.100Z');
+        let secondTime = new Date('2026-01-01T00:00:00.600Z');
+
+        writeFileSync(absolutePath, pngBytes);
+        utimesSync(absolutePath, firstTime, firstTime);
+        let first = await request.get(`/${path}`).set('Accept', 'image/*');
+        assert.strictEqual(first.status, 200, 'HTTP 200 status');
+        let etag = first.headers['etag'];
+        assert.ok(etag, 'the first response carries a validator');
+
+        writeFileSync(absolutePath, rewrittenBytes);
+        utimesSync(absolutePath, secondTime, secondTime);
+        let conditional = await request
+          .get(`/${path}`)
+          .set('Accept', 'image/*')
+          .set('If-None-Match', etag)
+          .buffer(true)
+          .parse(binaryParser);
+
+        assert.strictEqual(
+          conditional.headers['last-modified'],
+          first.headers['last-modified'],
+          'the two versions share a whole-second modification time',
+        );
+        assert.strictEqual(
+          conditional.status,
+          200,
+          'the earlier validator does not match the rewritten file',
+        );
+        assert.deepEqual(
+          new Uint8Array(conditional.body),
+          rewrittenBytes,
+          'the body is the rewritten bytes',
+        );
+      });
+
+      // Above the whole-hash limit the fingerprint samples a file's head and
+      // tail, so an edit confined to the middle leaves it unchanged. What tells
+      // the two versions apart is the modification time the fingerprint is
+      // joined with, which has to be finer than the second the two share.
+      test("a same-length rewrite of a large file's unsampled middle within the same second is not answered 304", async function (assert) {
+        let path = 'same-second-large.mp4';
+        let absolutePath = join(testRealmPath, path);
+        let original = new Uint8Array(
+          CONTENT_HASH_WHOLE_LIMIT_BYTES + CONTENT_HASH_TAIL_BYTES,
+        ).fill(0x61);
+        let rewritten = original.slice();
+        // Past the sampled head and short of the sampled tail.
+        let editedOffset = CONTENT_HASH_HEAD_BYTES + 1024;
+        rewritten[editedOffset] = 0x62;
+        let firstTime = new Date('2026-01-01T00:00:00.100Z');
+        let secondTime = new Date('2026-01-01T00:00:00.600Z');
+
+        // Around the realm, which refuses a video this size at its default
+        // limit and has no need to index it for the serve to answer.
+        writeFileSync(absolutePath, original);
+        utimesSync(absolutePath, firstTime, firstTime);
+        let first = await request
+          .get(`/${path}`)
+          .set('Accept', 'video/*')
+          .buffer(true)
+          .parse(binaryParser);
+        assert.strictEqual(first.status, 200, 'HTTP 200 status');
+        let etag = first.headers['etag'];
+        assert.ok(etag, 'the first response carries a validator');
+
+        writeFileSync(absolutePath, rewritten);
+        utimesSync(absolutePath, secondTime, secondTime);
+        let conditional = await request
+          .get(`/${path}`)
+          .set('Accept', 'video/*')
+          .set('If-None-Match', etag)
+          .buffer(true)
+          .parse(binaryParser);
+
+        assert.strictEqual(
+          conditional.headers['last-modified'],
+          first.headers['last-modified'],
+          'the two versions share a whole-second modification time',
+        );
+        assert.strictEqual(
+          conditional.status,
+          200,
+          'the earlier validator does not match the rewritten file',
+        );
+        assert.strictEqual(
+          conditional.body.length,
+          rewritten.length,
+          'the whole file is served',
+        );
+        assert.strictEqual(
+          conditional.body[editedOffset],
+          0x62,
+          'with the rewritten middle',
         );
       });
 

@@ -728,6 +728,12 @@ export interface FileRef {
   path: LocalPath;
   content: ReadableStream<Uint8Array> | Readable | Uint8Array | string;
   lastModified: number;
+  // The modification time in milliseconds, at the precision the adapter's
+  // stat reports, when that is finer than the whole second `lastModified`
+  // keeps. `Last-Modified` reports the whole second; a validator that joins a
+  // sampled content fingerprint with the time uses this, so two writes inside
+  // one second stay distinguishable where the sample cannot see the change.
+  lastModifiedMs?: number;
   // Total byte size of `content`, when the adapter knows it without reading
   // the bytes (e.g. from the stat it already performed). Lets streamed file
   // responses carry a Content-Length, which browsers need before they will
@@ -1261,28 +1267,31 @@ type ModuleTranspileResult = {
 // surface a content fingerprint fall back to `lastModified` and keep the
 // pre-existing behavior.
 //
-// An `etagBase` must be a TOTAL identity of the body, because displacing
-// `lastModified` gives up the only signal that sees every write. A sampled
-// fingerprint (see `computeContentHash`) is not total — it cannot see a large
-// file's middle — so it is joined with `lastModified` rather than replacing
-// it: the hash resolves two writes inside one second, and the timestamp
-// covers a same-length middle-only edit the hash misses. An mtime-only touch
-// then busts the cache, which is the safe direction and already how every
-// file without a fingerprint behaves.
-// Joins a sampled fingerprint with the file's mtime so the ETag base is a
-// total identity again. Returns a whole fingerprint unchanged, and undefined
-// when there is none (the caller then falls back to mtime alone).
+// An `etagBase` stands in for the body, because displacing the modification
+// time gives up the only signal that sees every write. A whole fingerprint
+// identifies the body outright. A sampled one (see `computeContentHash`)
+// cannot see a large file's middle, so it is joined with the modification time
+// rather than replacing it: the hash resolves two writes inside one second,
+// and the time covers a same-length middle-only edit the hash misses. The time
+// is passed at the finest precision the adapter reports (`lastModifiedMs`), so
+// the pair misses only such an edit landing within the file system's own
+// timestamp granularity — or within the whole second, on an adapter that
+// reports nothing finer. An mtime-only touch busts the cache, which is the
+// safe direction and how every file without a fingerprint behaves.
+// Returns a whole fingerprint unchanged, a sampled one joined with the time,
+// and undefined when there is none (the caller then falls back to the time
+// alone).
 function totalEtagBase(
   etagBase: string | undefined,
-  lastModified: number | undefined,
+  modified: number | undefined,
 ): string | undefined {
   if (etagBase == null) {
     return undefined;
   }
-  if (lastModified == null || !isSampledContentHash(etagBase)) {
+  if (modified == null || !isSampledContentHash(etagBase)) {
     return etagBase;
   }
-  return `${etagBase}:${lastModified}`;
+  return `${etagBase}:${modified}`;
 }
 
 function buildEtag(
@@ -2062,6 +2071,15 @@ export class Realm {
   // the per-path map alongside any in-flight snapshot's `path` component.
   #sourceCacheGenerations: Map<LocalPath, number> = new Map();
   #sourceCacheGlobalGeneration = 0;
+  // Content fingerprints the byte and module serves validate on, per path,
+  // each with the stat it was read under. See #fileFingerprint. Dropped with
+  // the path's #sourceCache entry, so whatever invalidates cached bytes — a
+  // write through the realm, the file watcher, a peer's notification —
+  // invalidates the fingerprint too, under the same generation guard.
+  #fileFingerprints = new Map<
+    LocalPath,
+    { size: number | undefined; modified: number; fingerprint: string }
+  >();
   #transpiledModuleCache = new AliasCache<TranspiledModuleEntry>();
   // CS-11028: per-path generation counters for #transpiledModuleCache. Bumped
   // synchronously by invalidateCache(path) before any await. fallbackHandle
@@ -3722,6 +3740,7 @@ export class Realm {
       (this.#sourceCacheGenerations.get(canonicalPath) ?? 0) + 1,
     );
     this.#sourceCache.invalidate(canonicalPath);
+    this.#fileFingerprints.delete(canonicalPath);
   }
 
   // Source-cache analogue of #dropAllTranspiledModuleCacheEntries: wipe every
@@ -3732,8 +3751,47 @@ export class Realm {
   // in-flight snapshots after a wipe.
   #dropAllSourceCacheEntries(): void {
     this.#sourceCache.clear();
+    this.#fileFingerprints.clear();
     this.#sourceCacheGenerations.clear();
     this.#sourceCacheGlobalGeneration += 1;
+  }
+
+  // A file's content fingerprint, as `contentHashFromRanges` reads it off the
+  // handle, remembered for the stat it was read under. Reading it costs up to
+  // `CONTENT_HASH_WHOLE_LIMIT_BYTES` and a hash of what was read, and the
+  // serves that validate on it answer every request with it — a 304, and each
+  // range request of a player seeking through a video — so a file is read for
+  // its fingerprint once per version rather than once per request.
+  //
+  // The stat is the key's other half: a handle whose size or modification time
+  // differs from the one the fingerprint was read under is read again, with or
+  // without an invalidation. What the key cannot see — a rewrite to the same
+  // size within the file system's timestamp granularity — is covered by the
+  // invalidation that drops the entry, and remains open only where that
+  // invalidation has not arrived yet, as for every in-memory cache here.
+  //
+  // Stored only if nothing invalidated the path while it was being read, so a
+  // fingerprint of the bytes from before a write cannot outlive the write.
+  // A failed read is not stored, so the next request tries again.
+  async #fileFingerprint(handle: FileRef): Promise<string | undefined> {
+    let modified = handle.lastModifiedMs ?? handle.lastModified;
+    let known = this.#fileFingerprints.get(handle.path);
+    if (known && known.size === handle.size && known.modified === modified) {
+      return known.fingerprint;
+    }
+    let snapshot = this.#snapshotSourceCacheGeneration(handle.path);
+    let fingerprint = await contentHashFromRanges(handle);
+    if (
+      fingerprint !== undefined &&
+      !this.#sourceCacheGenerationChanged(handle.path, snapshot)
+    ) {
+      this.#fileFingerprints.set(handle.path, {
+        size: handle.size,
+        modified,
+        fingerprint,
+      });
+    }
+    return fingerprint;
   }
 
   // Snapshot generations for every path getSourceOrRedirect's
@@ -6640,10 +6698,10 @@ export class Realm {
             // 304 with the bytes from before the write. A prerender tab
             // fetching a file a card links to revalidates on every read, and
             // would build the render from those bytes. The fingerprint is read
-            // off the file in bounded ranges, the way the `card+source`
-            // route's streamed branch reads it, so the body's stream is left
-            // for the response to open.
-            etagBase: await contentHashFromRanges(fileRef),
+            // off the file in bounded ranges, so the body's stream is left for
+            // the response to open, and once per version of the file rather
+            // than per request (see #fileFingerprint).
+            etagBase: await this.#fileFingerprint(fileRef),
             createdAt: source.created,
           },
         ),
@@ -6670,13 +6728,13 @@ export class Realm {
     // below, leaving the client evaluating the module compiled from the earlier
     // text — and a prerender tab revalidates every module it imports. The 304
     // is answered before any cache or compile is reached, so the fingerprint
-    // is read off the file itself, in the bounded ranges the byte serve above
-    // reads. An adapter that cannot serve those ranges leaves the time alone
-    // to validate on.
+    // is the file's own, read the way the byte serve above reads it. An
+    // adapter that cannot serve those ranges leaves the time alone to validate
+    // on.
     let etag = buildEtag(
       totalEtagBase(
-        await contentHashFromRanges(fileRef),
-        fileRef.lastModified,
+        await this.#fileFingerprint(fileRef),
+        fileRef.lastModifiedMs ?? fileRef.lastModified,
       ) ?? fileRef.lastModified,
       MODULE_ETAG_VARIANT,
     );
@@ -6786,8 +6844,15 @@ export class Realm {
     // point serves bytes some earlier compile read, so no `readSource` is
     // dispatched for the request that reaches it. The same holds for the two
     // other returns of a cached row below.
+    //
+    // A row is answered from only when it was compiled from the file as it
+    // stands: its validator, built from the file's fingerprint when it was
+    // compiled, has to be the one this request built from the file. One that
+    // is not describes a version since overwritten — a tombstone that failed,
+    // or a row whose validator was built some other way — and is compiled
+    // over like a miss, at the generation it carries.
     let cached = await this.#readTranspileCacheRow(canonicalPath);
-    if (cached?.result) {
+    if (cached?.result && cached.result.headers.etag === etag) {
       return cached.result;
     }
     // capturedGeneration is the row's generation observed at this
@@ -6820,7 +6885,7 @@ export class Realm {
         // pool connection — the lock connection — rather than pinning it
         // and then checking out more for these queries.
         let recheck = await this.#readTranspileCacheRow(canonicalPath, querier);
-        if (recheck?.result) {
+        if (recheck?.result && recheck.result.headers.etag === etag) {
           return recheck.result;
         }
         let result = await this.#materializeAndTranspile(fileRef, etag, caller);
@@ -6843,7 +6908,7 @@ export class Realm {
     // wake, re-read; the row should be there if the winner succeeded.
     await coordinator.waitForKey(coalesceKey, COALESCE_NOTIFY_WAIT_MS);
     let postWait = await this.#readTranspileCacheRow(canonicalPath);
-    if (postWait?.result) {
+    if (postWait?.result && postWait.result.headers.etag === etag) {
       return postWait.result;
     }
     // Missed NOTIFY, peer crashed, or the winner skipped persist (e.g.
@@ -7091,9 +7156,10 @@ export class Realm {
       ]);
     } catch (err: unknown) {
       // Same best-effort posture as #writeTranspileCacheRow — the in-memory
-      // L1 cache for this path was already invalidated, so a stale L2 row
-      // is at worst a brief window before the next reader's transpile
-      // overwrites it (or the next invalidate retries the tombstone).
+      // L1 cache for this path was already invalidated, and a stale L2 row
+      // is not answered from: its validator no longer matches the one the
+      // next reader builds from the file, so that reader compiles over it (see
+      // #transpileWithLayers).
       this.#log.warn(
         `${MODULE_TRANSPILE_CACHE_TABLE} tombstone failed for ${this.url}${canonicalPath}: ${String(err)}`,
       );
@@ -8101,9 +8167,9 @@ export class Realm {
           ...caller,
         },
         // No route reaching here validates on the read's `version` — each
-        // builds its own validator, from the bytes it caches or from the
-        // modification time — so none should pay to have one read off disk
-        // for it.
+        // builds its own validator from a fingerprint of the file, hashed from
+        // the bytes it caches or read off the handle it resolved — so none
+        // should pay to have one read off disk for it.
         { ...opts, skipContentFingerprint: true },
       );
     } catch (e) {
@@ -8151,6 +8217,11 @@ export class Realm {
   // client can see about the content — the bytes, when they changed, what type
   // they are — is the operation's.
   //
+  // `lastModifiedMs` comes from the handle too. No client sees it: it is the
+  // sub-second time a validator joins with a sampled fingerprint, and the
+  // fingerprint is read off the handle, so the time it is joined with is that
+  // handle's stat as well.
+  //
   // `content` stays a getter so that resolving it remains the response
   // assembly's decision. A 304 and a 206 both send bytes this never opens, and
   // a headers-only read has none to open — which is sound for the same reason:
@@ -8176,6 +8247,9 @@ export class Realm {
         return source.body as FileRef['content'];
       },
       lastModified: source.lastModified,
+      ...(handle.lastModifiedMs != null
+        ? { lastModifiedMs: handle.lastModifiedMs }
+        : {}),
       ...(source.size != null ? { size: source.size } : {}),
       ...(handle.createRangeStream
         ? { createRangeStream: handle.createRangeStream }
@@ -8225,7 +8299,10 @@ export class Realm {
       ? `${cacheVisibility}, max-age=60, must-revalidate`
       : `${cacheVisibility}, max-age=0`;
     let etag = buildEtag(
-      totalEtagBase(options?.etagBase, ref.lastModified) ?? ref.lastModified,
+      totalEtagBase(
+        options?.etagBase,
+        ref.lastModifiedMs ?? ref.lastModified,
+      ) ?? ref.lastModified,
       options?.etagVariant,
     );
     let lastModified = formatRFC7231(ref.lastModified * 1000);
@@ -9017,6 +9094,9 @@ export class Realm {
       path: ref.path,
       content,
       lastModified: ref.lastModified,
+      ...(ref.lastModifiedMs != null
+        ? { lastModifiedMs: ref.lastModifiedMs }
+        : {}),
     };
     for (let symbol of Object.getOwnPropertySymbols(ref)) {
       (clone as any)[symbol] = (ref as any)[symbol];
@@ -9431,12 +9511,12 @@ export class Realm {
   // its call to make.
   //
   // Every path is fingerprinted, an image or a video included. Which validator
-  // a byte route builds is that route's own choice — `getSourceOrRedirect`
-  // rests its `ETag` on a content hash for a `.json` or an executable
-  // extension and on `lastModified` for everything else — but the read that
-  // produces a hash is bounded, so declining to answer for the paths one route
-  // happens not to ask about would withhold a content identity rather than
-  // save anything worth saving.
+  // a byte route builds is that route's own choice — the byte routes rest
+  // their `ETag`s on a fingerprint of their own, hashed from the bytes they
+  // cache or read off the handle they resolved, rather than on this one — but
+  // the read that produces a hash is bounded, so declining to answer for a
+  // path no route happens to ask about would withhold a content identity
+  // rather than save anything worth saving.
   //
   // Both values come from one row, so this is one query on
   // `realm_file_meta`'s primary key rather than a lookup per value — worth
