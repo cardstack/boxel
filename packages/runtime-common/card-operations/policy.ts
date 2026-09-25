@@ -456,7 +456,7 @@ async function compilePolicy(
   // or has none and records why. No other grant carries one.
   let withFilter = async (
     grant: CompiledOperationGrant,
-    predicate: unknown,
+    predicate: { body: unknown; snapshot: boolean } | undefined,
     targetType: ResolvedCodeRef,
     definition: Definition,
     grantPath: string,
@@ -594,7 +594,7 @@ async function compilePolicy(
               snapshot: where.snapshot,
             },
           },
-          outcome.body,
+          { body: outcome.body, snapshot: where.snapshot },
           resolved,
           definition,
           grantPath,

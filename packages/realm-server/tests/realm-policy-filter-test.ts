@@ -3,6 +3,7 @@ const { module, test } = QUnit;
 import { basename } from 'path';
 import {
   FilterRefersToNonexistentTypeError,
+  noteRealmIndexMoved,
   realmPolicyRef,
   rri,
   type CompiledOperationGrant,
@@ -23,6 +24,7 @@ import { runBxlTransform } from '@cardstack/bxl/transform';
 // database, no prerender.
 const ORG = 'http://policy-filter.test/org/';
 const EDUCATION = 'http://policy-filter.test/education/';
+const SHARED = 'http://policy-filter.test/shared/';
 const POLICY_CARD = `${ORG}policies/education`;
 const TEACHER = '@teacher:localhost';
 
@@ -30,22 +32,46 @@ const CLASSROOM: ResolvedCodeRef = {
   module: rri(`${EDUCATION}classroom`),
   name: 'Classroom',
 };
+// In a realm of its own, so that only the address's realm moving can tell the
+// policy its definition changed.
 const ADDRESS: ResolvedCodeRef = {
-  module: rri(`${EDUCATION}address`),
+  module: rri(`${SHARED}address`),
   name: 'Address',
 };
 const PERSON: ResolvedCodeRef = {
   module: rri(`${EDUCATION}person`),
   name: 'Person',
 };
+// Field types as a definition names them.
 const STRING_FIELD = {
-  module: rri('@cardstack/base/string'),
-  name: 'default',
+  module: rri('@cardstack/base/card-api'),
+  name: 'StringField',
 };
 const NUMBER_FIELD = {
   module: rri('@cardstack/base/number'),
   name: 'default',
 };
+const BOOLEAN_FIELD = {
+  module: rri('@cardstack/base/boolean'),
+  name: 'default',
+};
+const DATE_FIELD = { module: rri('@cardstack/base/date'), name: 'default' };
+const JSON_FIELD = {
+  module: rri('@cardstack/base/json-field'),
+  name: 'JsonField',
+};
+// A string field of the realm's own, which can index what it likes.
+const SLUG_FIELD = { module: rri(`${EDUCATION}slug`), name: 'Slug' };
+
+async function until(done: () => boolean, what: string) {
+  let started = Date.now();
+  while (!done()) {
+    if (Date.now() - started > 3_000) {
+      throw new Error(`timed out waiting until ${what}`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+}
 
 function field(
   type: FieldDefinition['type'],
@@ -96,8 +122,16 @@ function classroomDefinition(): Definition {
         fieldOrCard: NUMBER_FIELD,
         serializerName: 'number',
       }),
-      published: field('contains', { serializerName: 'boolean' }),
-      startsOn: field('contains', { serializerName: 'date' }),
+      published: field('contains', {
+        fieldOrCard: BOOLEAN_FIELD,
+        serializerName: 'boolean',
+      }),
+      startsOn: field('contains', {
+        fieldOrCard: DATE_FIELD,
+        serializerName: 'date',
+      }),
+      payload: field('contains', { fieldOrCard: JSON_FIELD }),
+      slug: field('contains', { fieldOrCard: SLUG_FIELD }),
       summary: field('contains', { isComputed: true }),
       address: field('contains', { isPrimitive: false, fieldOrCard: ADDRESS }),
       lead: field('linksTo', { isPrimitive: false, fieldOrCard: PERSON }),
@@ -131,6 +165,7 @@ function addressDefinition(fields: string[] = ['city']): Definition {
 }
 
 type Grant = { operation: string; where?: unknown };
+type Where = string | { bxl: string; snapshot: boolean };
 
 // A cache whose policy has one rule, on `Classroom`, holding `grants`. A test
 // swaps a definition through `definitions` and reads what the cache compiled.
@@ -192,7 +227,7 @@ function grantsOf(policy: CompiledRealmPolicy): CompiledOperationGrant[] {
 }
 
 // The filter one query grant compiles to, or the problem recorded for it.
-async function filterFor(where: string, operation = 'query') {
+async function filterFor(where: Where, operation = 'query') {
   let policy = await compile([{ operation, where }]);
   let [grant] = grantsOf(policy);
   return {
@@ -257,15 +292,16 @@ module(basename(import.meta.filename), function () {
   });
 
   test('membership in a list of links compiles to an `eq` on the ids of the cards they link to', async function (assert) {
+    let person = `${EDUCATION}people/1`;
     for (let where of [
-      '.teachers | any(.id == actor())',
-      '.teachers | contains([{id: actor()}])',
+      `.teachers | any(.id == "${person}")`,
+      `.teachers | contains([{id: "${person}"}])`,
     ]) {
       let { filter, issues } = await filterFor(where);
       assert.deepEqual(issues, [], where);
       assert.deepEqual(
         filter,
-        { ...ANCHOR, eq: { 'item.teachers.id': ACTOR } },
+        { ...ANCHOR, eq: { 'item.teachers.id': person } },
         where,
       );
     }
@@ -280,6 +316,26 @@ module(basename(import.meta.filename), function () {
       ...ANCHOR,
       eq: { 'item.lead.id': `${EDUCATION}people/1` },
     });
+  });
+
+  test("the card's own id compiles to an `eq` on `id`", async function (assert) {
+    let { filter, issues } = await filterFor(
+      `.id == "${EDUCATION}classrooms/1"`,
+    );
+    assert.deepEqual(issues, []);
+    assert.deepEqual(filter, {
+      ...ANCHOR,
+      eq: { 'item.id': `${EDUCATION}classrooms/1` },
+    });
+  });
+
+  test('a computed field compiles for a predicate annotated as reading a snapshot, whose values are what the index holds', async function (assert) {
+    let { filter, issues } = await filterFor({
+      bxl: '.summary == actor()',
+      snapshot: true,
+    });
+    assert.deepEqual(issues, []);
+    assert.deepEqual(filter, { ...ANCHOR, eq: { 'item.summary': ACTOR } });
   });
 
   test('a field of a contained value compiles to an `eq` on its dotted path', async function (assert) {
@@ -444,12 +500,27 @@ module(basename(import.meta.filename), function () {
       ['.teacherIds | any(. == actor()) | not', /inside a `not`/],
       // An id inside a `not`, which the index can spell differently.
       [`.lead.id != "${EDUCATION}people/1"`, /can spell one id two ways/],
+      // An id compared with anything but an absolute URL: the index can hold
+      // an unfollowed reference as written, and the predicate reads the URL.
+      [
+        '.lead.id == "@cardstack/catalog/people/1"',
+        /only with an absolute URL/,
+      ],
+      ['.lead.id == "../people/1"', /only with an absolute URL/],
+      ['.lead.id == actor()', /only with an absolute URL/],
+      ['.teachers | any(.id == actor())', /only with an absolute URL/],
+      ['.id == "@cardstack/catalog/classrooms/1"', /only with an absolute URL/],
       // A field the stored source does not hold.
-      ['.summary == actor()', /computed/],
+      ['.summary == actor()', /computed.*snapshot: true/],
       ['.roster | any(.id == actor())', /filled by a query/],
       // A field the index holds in a form the stored source does not.
       ['.published == true', /boolean field holds its unset value/],
-      ['.startsOn == "2026-09-01"', /date field/],
+      ['.published == null', /compares only the base string and number/],
+      ['.startsOn == "2026-09-01"', /compares only the base string and number/],
+      // `JsonField` indexes nothing, so every card would satisfy `== null`.
+      ['.payload == null', /compares only the base string and number/],
+      // A field type of the realm's own can index anything.
+      ['.slug == actor()', /Slug field/],
       // A link compared as a whole.
       [
         `.lead == "${EDUCATION}people/1"`,
@@ -458,7 +529,7 @@ module(basename(import.meta.filename), function () {
       // A value of the wrong kind for its field.
       ['.roomNumber == actor()', /holds a number/],
       ['.roomNumber > "200"', /only between a number field and a number/],
-      ['.scores | any(. == 3)', /list of number values/],
+      ['.scores | any(. == 3)', /list of numbers/],
       // Two fields, or a field alone.
       ['.providerId == .lead.id', /both sides are fields/],
       ['.published', /is a field, not a condition/],
@@ -501,15 +572,18 @@ module(basename(import.meta.filename), function () {
     assert.false(evaluate(104));
   });
 
-  test('a filter reading a contained value is recompiled when the contained type changes', async function (assert) {
+  test("a filter reading a contained value is recompiled when the contained type's realm moves", async function (assert) {
     let { cache, definitions } = setup([
       { operation: 'query', where: '.address.city == "Springfield"' },
     ]);
     let before = await cache.get();
     assert.deepEqual(before?.issues, []);
 
+    // The address lives in a realm the rule's own type does not, so only that
+    // realm's move can reach the compiled policy.
     definitions.set(ADDRESS.name, addressDefinition(['town']));
-    cache.clear();
+    noteRealmIndexMoved(SHARED);
+    await until(() => cache.stats.compiles === 2, 'the move recompiles');
     let after = await cache.get();
     assert.deepEqual(
       after?.issues.map(({ code }) => code),
@@ -517,16 +591,9 @@ module(basename(import.meta.filename), function () {
       'with `city` renamed, the filter that read it is gone',
     );
 
-    // Revalidating, rather than compiling from cold, notices the change too:
-    // the contained type is an input of the compiled policy.
     definitions.set(ADDRESS.name, addressDefinition(['city']));
-    (globalThis as { __boxelNow?: number }).__boxelNow = Date.now() + 60_000;
-    try {
-      let revalidated = await cache.get();
-      assert.deepEqual(revalidated?.issues, []);
-      assert.strictEqual(cache.stats.compiles, 2, 'the change recompiled it');
-    } finally {
-      delete (globalThis as { __boxelNow?: number }).__boxelNow;
-    }
+    noteRealmIndexMoved(SHARED);
+    await until(() => cache.stats.compiles === 3, 'the next move recompiles');
+    assert.deepEqual((await cache.get())?.issues, [], 'and it is back');
   });
 });

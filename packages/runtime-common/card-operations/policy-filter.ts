@@ -33,8 +33,9 @@ import type { OperationQueryFilterTemplate } from './types.ts';
 // list by its position. And it must never say more than the predicate does. A
 // filter reads a field as the index holds it, and a predicate reads it from
 // the card's stored source, so every field the predicate reads is checked
-// against the rule's type. A filter may come out narrower than its predicate.
-// It never comes out wider.
+// against the rule's type: its kind, whether the stored source holds it, and
+// whether its type indexes the value it stores. A filter may come out narrower
+// than its predicate. As far as those checks reach, it never comes out wider.
 //
 // A `not` is what makes that direction matter. Where a filter and its
 // predicate can disagree about a card, the filter must be the one refusing it,
@@ -45,11 +46,29 @@ import type { OperationQueryFilterTemplate } from './types.ts';
 //   whole values, so a filter can refuse a card that `contains` admits. And
 //   the index answers `not` element by element: a card is admitted by
 //   `not member` as soon as any one element differs.
-// - A card's id. The index can hold an id spelled differently from the one
-//   the predicate reads: for a link the index could not follow, it keeps the
-//   reference as the stored source wrote it, where the predicate reads the id
-//   that reference resolves to. So the filter can find two ids unequal that
-//   the predicate finds equal.
+// - A card's id. The predicate reads every id as the URL it resolves to. The
+//   index holds a link it could not follow as the stored source wrote it, and
+//   a card in a prefixed realm under its prefixed identifier, so it can find
+//   two ids unequal that the predicate finds equal. An id is compared only
+//   with an absolute URL for the same reason: a constant spelled the way the
+//   index can hold an id would match there, and never the URL the predicate
+//   reads.
+//
+// What the checks do not reach:
+//
+// - Other types. A filter is compiled against the rule's type and the types
+//   its path names for contained values. `item.on` also admits a card whose
+//   type descends from the rule's, and a contained value can be of a subtype
+//   of its field's type. Either can declare a field the predicate reads
+//   differently, computed where the rule's type stores it, and the index
+//   then holds what that type makes of it. The paths a filter reads are the
+//   keys of its `eq` and `range` members, so they can be checked against any
+//   other type's definition.
+// - A number field whose stored value is not a number. The index holds what
+//   the field makes of the stored value, so the string "150" is indexed as
+//   150, while BXL compares the string. Only a writer of the card can store
+//   such a value, and a writer can already move a card into or out of a grant
+//   by writing the fields its predicate reads.
 // ============================================================================
 
 export type PolicyFilterOutcome =
@@ -70,8 +89,9 @@ export interface PolicyFilterEnvironment {
 
 // Compile the predicate of a grant on a query, whose rule governs
 // `targetType`, into the filter the grant admits. `predicate` is the body of
-// the grant's `where` as BXL parsed it, or undefined for a grant with no
-// condition, which admits every card of the rule's type.
+// the grant's `where` as BXL parsed it, with the grant's `snapshot`
+// annotation, or undefined for a grant with no condition, which admits every
+// card of the rule's type.
 //
 // The filter is anchored on the rule's type. It admits only cards of that type
 // or of a type descending from it, and its field paths are resolved against
@@ -79,14 +99,16 @@ export interface PolicyFilterEnvironment {
 export async function compilePolicyFilter(
   targetType: ResolvedCodeRef,
   definition: Definition,
-  predicate: unknown,
+  predicate: { body: unknown; snapshot: boolean } | undefined,
   env: PolicyFilterEnvironment,
 ): Promise<PolicyFilterOutcome> {
   if (predicate === undefined) {
     return { filter: { 'item.on': targetType } };
   }
   let refusals = env
-    .validateBxlAst(inPredicateSpelling(predicate), { profile: 'predicate' })
+    .validateBxlAst(inPredicateSpelling(predicate.body), {
+      profile: 'predicate',
+    })
     .filter((issue) => issue.severity === 'error');
   if (refusals.length > 0) {
     return {
@@ -95,9 +117,9 @@ export async function compilePolicyFilter(
         .join('; ')}`,
     };
   }
-  let compiler = new FilterCompiler(definition, env);
+  let compiler = new FilterCompiler(definition, predicate.snapshot, env);
   try {
-    let filter = await compiler.predicate(predicate, 'positive');
+    let filter = await compiler.predicate(predicate.body, 'positive');
     return { filter: { 'item.on': targetType, ...filter } };
   } catch (e: unknown) {
     if (e instanceof Unfilterable) {
@@ -173,10 +195,16 @@ const MIRRORED: Record<string, string> = {
 
 class FilterCompiler {
   #definition: Definition;
+  #snapshot: boolean;
   #env: PolicyFilterEnvironment;
 
-  constructor(definition: Definition, env: PolicyFilterEnvironment) {
+  constructor(
+    definition: Definition,
+    snapshot: boolean,
+    env: PolicyFilterEnvironment,
+  ) {
     this.#definition = definition;
+    this.#snapshot = snapshot;
     this.#env = env;
   }
 
@@ -230,6 +258,9 @@ class FilterCompiler {
           `\`${field.path}\` is a card's id, and an id is compiled only where it admits a card, not inside a \`not\` or a \`!=\`: the index and the stored source can spell one id two ways`,
         );
       }
+      if (field.kind === 'identity' && constant.kind !== 'null') {
+        assertURL(field.path, constant);
+      }
       assertComparable(field, constant);
       let eq: Filter = { eq: { [`item.${field.path}`]: constant.value } };
       return operator === '!=' ? { not: eq } : eq;
@@ -268,6 +299,9 @@ class FilterCompiler {
         `membership in \`${list.path}\` must test for a string or \`actor()\`, not ${constant ? describeConstant(constant) : describeNode(member)}`,
       );
     }
+    if (through === 'id') {
+      assertURL(list.path, constant);
+    }
     // A list field matches `eq` when any one element does, which is what
     // makes this membership.
     return { eq: { [`item.${list.path}`]: constant.value } };
@@ -304,7 +338,7 @@ class FilterCompiler {
         if (index === 0 && name === 'id') {
           return { path: dotted, kind: 'identity' };
         }
-        return { path: dotted, kind: primitiveKind(field, dotted) };
+        return { path: dotted, kind: fieldHolds(field, dotted) };
       }
       if (last) {
         return refuse(
@@ -343,9 +377,9 @@ class FilterCompiler {
               `\`${dotted}\` is a list of values, and a filter tests one as it is: \`.${dotted} | any(. == value)\``,
             );
           }
-          if (field.serializerName !== undefined) {
+          if (fieldHolds(field, dotted) !== 'string') {
             return refuse(
-              `\`${dotted}\` is a list of ${field.serializerName} values, and a filter tests membership only in a list of strings or of links`,
+              `\`${dotted}\` is a list of numbers, and a filter tests membership only in a list of strings or of links`,
             );
           }
           return { path: dotted };
@@ -384,10 +418,12 @@ class FilterCompiler {
     // The predicate reads the card's stored source, and the filter reads the
     // index. A computed value is only in the index, and a query-backed
     // relationship is only in the index, so the two would read different
-    // things.
-    if (field.isComputed) {
+    // things. A predicate annotated `snapshot: true` says it reads what the
+    // index holds, which is what a filter reads, so its computed values are
+    // compared.
+    if (field.isComputed && !this.#snapshot) {
       return refuse(
-        `\`${dotted}\` is computed, so the card's stored source, which the predicate reads, does not hold it`,
+        `\`${dotted}\` is computed, so the card's stored source, which the predicate reads, does not hold it; a \`where\` annotated \`snapshot: true\` reads computed values`,
       );
     }
     if (field.query) {
@@ -412,23 +448,75 @@ class FilterCompiler {
   }
 }
 
-// What a primitive field holds, for a comparison. Only a field with no
-// serializer, which holds a string, and a number field are compared: a
-// serializer can make the index hold a field in a form its stored source does
-// not, as a boolean field's unset value is held as `false`.
-function primitiveKind(
+// The primitive field types a filter compares, and what each holds. Each one
+// indexes the value it stores unchanged. A field's definition names its type
+// and not the code behind it, and another type can index something else:
+// `JsonField` indexes nothing, so every card would satisfy `== null` on one,
+// a boolean field indexes an unset value as `false`, and any subclass of the
+// types here can change what it indexes. So a field of any other type is not
+// compared.
+const COMPARED_FIELD_TYPES: {
+  module: string;
+  name: string;
+  holds: 'string' | 'number';
+}[] = [
+  { module: '@cardstack/base/card-api', name: 'StringField', holds: 'string' },
+  {
+    module: '@cardstack/base/card-api',
+    name: 'TextAreaField',
+    holds: 'string',
+  },
+  {
+    module: '@cardstack/base/card-api',
+    name: 'MarkdownField',
+    holds: 'string',
+  },
+  {
+    module: '@cardstack/base/card-api',
+    name: 'ReadOnlyField',
+    holds: 'string',
+  },
+  { module: '@cardstack/base/card-api', name: 'NumberField', holds: 'number' },
+  { module: '@cardstack/base/number', name: 'default', holds: 'number' },
+];
+
+// What a primitive field holds, for a comparison.
+function fieldHolds(
   field: FieldDefinition,
   dotted: string,
 ): 'string' | 'number' {
-  if (field.serializerName === undefined) {
-    return 'string';
-  }
-  if (field.serializerName === 'number') {
-    return 'number';
-  }
-  return refuse(
-    `\`${dotted}\` is a ${field.serializerName} field, which a filter does not compare`,
+  let type = isResolvedCodeRef(field.fieldOrCard)
+    ? { module: field.fieldOrCard.module, name: field.fieldOrCard.name }
+    : undefined;
+  let compared = COMPARED_FIELD_TYPES.find(
+    ({ module, name }) => type?.module === module && type?.name === name,
   );
+  if (!compared) {
+    return refuse(
+      `\`${dotted}\` is a ${type ? (type.name === 'default' ? type.module : type.name) : 'custom'} field, and a filter compares only the base string and number fields, which the index holds as their stored source does`,
+    );
+  }
+  return compared.holds;
+}
+
+// An id is compared only with an absolute URL, the form the predicate reads
+// every id in.
+function assertURL(path: string, constant: Constant): void {
+  let url =
+    typeof constant.value === 'string' ? parseURL(constant.value) : undefined;
+  if (url?.protocol !== 'http:' && url?.protocol !== 'https:') {
+    refuse(
+      `\`${path}\` is a card's id, and an id is compared only with an absolute URL, which is how the predicate reads one; ${describeConstant(constant)} is not one`,
+    );
+  }
+}
+
+function parseURL(value: string): URL | undefined {
+  try {
+    return new URL(value);
+  } catch {
+    return undefined;
+  }
 }
 
 function assertComparable(
