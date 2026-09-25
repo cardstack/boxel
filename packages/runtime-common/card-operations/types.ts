@@ -643,7 +643,9 @@ export type OperationErrorCode =
   // The realm ACL declined the caller, and no grant in the realm's policy
   // admits this operation on this target. The detail is the same whether the
   // target exists or not, and whatever the policy holds, so the refusal says
-  // nothing about the realm beyond the fact of the refusal.
+  // nothing about the realm beyond the fact of the refusal. It reaches the
+  // wire only for a caller who may read the realm: one who may not is told
+  // `target-not-found` instead (see `refusalForNonReader`).
   | 'operation-not-permitted'
   // The bytes an operation would store are over the realm's ceiling for a
   // card or a file of that kind. Separate from `invalid-params` because the
@@ -702,4 +704,35 @@ export class OperationFailure extends Error {
 
 export function isOperationFailure(err: unknown): err is OperationFailure {
   return err instanceof OperationFailure;
+}
+
+// A refusal as a caller the realm ACL would not let read the realm is told it.
+//
+// Such a caller is not told which cards exist. A card no grant admits and a
+// card that is not there get one answer, the same byte for byte: the same
+// code, title and detail, and no `id` or `meta` beyond the entry position the
+// caller sent. The places that raise `target-not-found` write their details for
+// someone debugging the realm, and those details differ with where the absence
+// was noticed. So they are replaced here, where a refusal is serialized, rather
+// than flattened where each is raised. A caller who may read the realm can list
+// it anyway, so they get every detail, and the gate's own refusal as a 403.
+//
+// A refusal of any other kind passes through. The gate refuses such a caller
+// before an operation resolves, so nothing past that point is about a target
+// they were not admitted to.
+export function refusalForNonReader(error: OperationError): OperationError {
+  if (
+    error.code !== 'target-not-found' &&
+    error.code !== 'operation-not-permitted'
+  ) {
+    return error;
+  }
+  let entry = error.meta?.entry;
+  return {
+    status: 404,
+    code: 'target-not-found',
+    title: 'Not found',
+    detail: 'no such target',
+    ...(entry !== undefined ? { meta: { entry } } : {}),
+  };
 }

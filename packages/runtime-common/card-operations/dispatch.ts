@@ -11,6 +11,7 @@ import {
 } from './transforms.ts';
 import {
   gateOperation,
+  loadPolicy,
   notPermitted,
   type GateDecision,
   type OperationPolicyAccess,
@@ -600,13 +601,17 @@ export interface GatedOperation {
 // describe the target: no such operation on its type, a declaration that did
 // not lower, a type that does not resolve. Answered as themselves, they would
 // tell such a caller which cards exist and what their types declare, which is
-// what the gate's refusal is written not to say.
+// what the gate's refusal is written not to say. For the same reason such a
+// caller's policy is loaded before the target resolves, so a policy the realm
+// cannot load is answered the same way for every target.
 export async function resolveGatedOperation(
   core: OperationCore,
   target: OperationTarget,
   name: string,
   scope: OperationScope = newOperationScope(core),
 ): Promise<GatedOperation> {
+  let loaded =
+    scope.coarseDeclined === 'all' ? await loadPolicy(core) : undefined;
   let resolved: Awaited<ReturnType<typeof resolveUngated>>;
   try {
     resolved = await resolveUngated(core, target, name, scope);
@@ -624,6 +629,7 @@ export async function resolveGatedOperation(
     definition.base,
     typeDefinition,
     scope,
+    loaded,
   );
   return { definition, decision };
 }
