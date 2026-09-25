@@ -1,10 +1,8 @@
 // Pretui — AvatarGroup usage page.
 import Component from '@glimmer/component';
 import { FreestyleUsage } from '../freestyle';
-import {
-  Avatar,
-  AvatarGroup,
-} from '../ink';
+import { Avatar } from './avatar';
+import { AvatarGroup } from './avatar-group';
 
 const PEOPLE = [
   { name: 'Mei-Lin Chua', hue: 'var(--chart-1)' },

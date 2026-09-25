@@ -8,7 +8,7 @@ import { module, test } from 'qunit';
 import { render, settled } from '@ember/test-helpers';
 import { tracked } from '@glimmer/tracking';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
-import { Popup } from '../overlay';
+import { Popup } from './popup';
 
 module('Pretui | components/popup', function (hooks) {
   setupCardTest(hooks);

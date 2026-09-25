@@ -13,17 +13,25 @@
 // The fiction is the tea trade the kit showcase already inhabits: Wuyi
 // Origins, curing rooms, cupping panels, spring bookings.
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
-import { Button } from './controls';
-import { InputGroup } from './controls-extras';
-import { Avatar, AvatarGroup, Chip, Meter, StatusChip, Token } from './ink';
-import { KeyValue, Prose, Stat } from './reading';
-import type { KeyValueItem } from './reading';
-import { Alert, Toast } from './feedback';
+import { Button } from './components/button';
+import { InputGroup } from './components/input-group';
+import { Avatar } from './components/avatar';
+import { AvatarGroup } from './components/avatar-group';
+import { Chip } from './components/chip';
+import { Meter } from './components/meter';
+import { StatusChip } from './components/status-chip';
+import { Token } from './components/token';
+import { KeyValue } from './components/key-value';
+import { Prose } from './components/prose';
+import { Stat } from './components/stat';
+import type { KeyValueItem } from './components/key-value';
+import { Alert } from './components/alert';
+import { Toast } from './components/toast';
 
 // The seeded word engine, the word banks and the shared example scaffolding
 // live in ./examples-kit so per-component example modules can import them
-// without a cycle through this barrel. Re-exported here because ten territory
-// and demo modules already import them from './examples'.
+// without a cycle through this module. Re-exported here because usage pages
+// and example modules import them from './examples'.
 import {
   AMOUNTS,
   DATES,

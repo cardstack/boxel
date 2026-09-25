@@ -17,11 +17,12 @@ components/button.test.gts     the component's tests (run through the host test 
 components/button.md           the component's write-up
 components/button.usage.gts    the component's usage page (knobs + API docs)
 components/button.examples.gts the component's example gallery
+internal/<module>.gts          helpers shared by several components, not components themselves
 pretui-primitives.gts          shared axis types and resolvers
 pretui-component.gts           PretUISpec, the kit's Spec card
 ```
 
-Names are kebab-case. No folders: the realm loader resolves file extensions only and has no directory-implies-index fallback. A component file reaches the package root with `../`; a sibling component is `./select`.
+Names are kebab-case, and every component has exactly one module, named after it. Aliases (`Callout`, `PinInput`, …) are one-line modules re-exporting their target. Imports name the file itself: the realm loader resolves file extensions only and has no directory-implies-index fallback, so there are no barrels. A component file reaches the package root with `../`; a sibling component is `./select`.
 
 Spec instances for these components live in the catalog realm, not here.
 

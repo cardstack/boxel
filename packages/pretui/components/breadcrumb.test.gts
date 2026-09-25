@@ -7,8 +7,8 @@
 import { module, test } from 'qunit';
 import { render } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
-import { Breadcrumb } from '../structure';
-import type { CrumbSpec } from '../structure';
+import { Breadcrumb } from './breadcrumb';
+import type { CrumbSpec } from './breadcrumb';
 
 function q(sel: string): HTMLElement {
   return document.querySelector(sel) as HTMLElement;

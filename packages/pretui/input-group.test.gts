@@ -8,8 +8,9 @@ import { on } from '@ember/modifier';
 import { render, click, fillIn, settled } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
 import { tracked } from '@glimmer/tracking';
-import { InputGroup, PasswordInput } from './controls-extras';
-import { Select } from './controls';
+import { InputGroup } from './components/input-group';
+import { PasswordInput } from './components/password-input';
+import { Select } from './components/select';
 
 class IGState {
   @tracked type = 'text';

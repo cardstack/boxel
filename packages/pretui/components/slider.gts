@@ -1,7 +1,6 @@
 // Pretui — Slider: native range (one thumb or two overlaid). Keyboard,
 // touch and pointer stay with the platform.
 import Component from '@glimmer/component';
-import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import { htmlSafe } from '@ember/template';
@@ -328,34 +327,3 @@ export class Slider extends Component<SliderSignature> {
     </style>
   </template>
 }
-
-
-export interface RangeSliderSignature {
-  Args: Omit<
-    SliderSignature['Args'],
-    'range' | 'value' | 'defaultValue' | 'onChange' | 'onValueChange'
-  >;
-  Element: HTMLDivElement;
-}
-
-// Slider with range mode forced on, under the Mantine / Ant / MUI name; the
-// single-value args have no meaning here and are not forwarded.
-export const RangeSlider: TemplateOnlyComponent<RangeSliderSignature> =
-  <template>
-    <Slider
-      @range={{true}}
-      @values={{@values}}
-      @defaultValues={{@defaultValues}}
-      @onValuesChange={{@onValuesChange}}
-      @onRangeChange={{@onRangeChange}}
-      @label={{@label}}
-      @min={{@min}}
-      @max={{@max}}
-      @step={{@step}}
-      @ticks={{@ticks}}
-      @interval={{@interval}}
-      @formatValue={{@formatValue}}
-      @maxTicks={{@maxTicks}}
-      ...attributes
-    />
-  </template>;

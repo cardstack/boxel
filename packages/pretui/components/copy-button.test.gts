@@ -7,7 +7,7 @@
 import { module, test } from 'qunit';
 import { render, click, triggerEvent } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
-import { CopyButton } from './extras';
+import { CopyButton } from './copy-button';
 
 function q(sel: string): HTMLElement {
   return document.querySelector(sel) as HTMLElement;

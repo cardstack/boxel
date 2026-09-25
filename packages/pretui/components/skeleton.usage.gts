@@ -2,7 +2,7 @@
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { FreestyleUsage } from '../freestyle';
-import { Skeleton } from '../structure';
+import { Skeleton } from './skeleton';
 
 // ── Skeleton ← skeleton-placeholder/usage.gts ────────────────────────────
 // Dropped knobs: animation (wave/pulse/none — Pretui ships one shimmer;

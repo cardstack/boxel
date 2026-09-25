@@ -17,17 +17,11 @@ import { render, settled } from '@ember/test-helpers';
 import { tracked } from '@glimmer/tracking';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
 
-import {
-  FormatBytes,
-  FormatDate,
-  FormatNumber,
-  Odometer,
-  formatBytes,
-  formatClock,
-  rollPath,
-  toDate,
-  toNumber,
-} from './reading-format';
+import { FormatBytes, formatBytes } from './components/format-bytes';
+import { FormatDate } from './components/format-date';
+import { FormatNumber } from './components/format-number';
+import { Odometer, rollPath } from './components/odometer';
+import { formatClock, toDate, toNumber } from './internal/reading-format';
 
 function q(sel: string): HTMLElement {
   return document.querySelector(sel) as HTMLElement;

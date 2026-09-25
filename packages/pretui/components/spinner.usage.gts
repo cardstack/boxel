@@ -2,7 +2,7 @@
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { FreestyleUsage } from '../freestyle';
-import { Spinner } from '../feedback';
+import { Spinner } from './spinner';
 
 // ── Spinner ← loading-indicator/usage.gts + circle-spinner/usage.gts ─────
 // Dropped knobs: color (Spinner inherits currentColor — tint the wrapper,

@@ -1,8 +1,8 @@
 // Pretui — Callout usage page.
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { FreestyleUsage } from '../freestyle';
-import { Button } from '../controls';
-import { Callout } from '../feedback';
+import { Button } from './button';
+import { Callout } from './callout';
 
 const CalloutUsage: TemplateOnlyComponent = <template>
   <FreestyleUsage

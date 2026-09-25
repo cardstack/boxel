@@ -11,8 +11,8 @@
 import { module, test } from 'qunit';
 import { render, click, triggerKeyEvent } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
-import { Calendar } from '../reading-extras';
-import type { DateRangeValue } from '../reading-extras';
+import { Calendar } from './calendar';
+import type { DateRangeValue } from './calendar';
 
 function cal(): HTMLElement {
   return document.querySelector('[data-test-pretui-calendar]') as HTMLElement;

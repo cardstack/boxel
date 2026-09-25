@@ -7,7 +7,7 @@
 import { module, test } from 'qunit';
 import { render, fillIn, focus, blur } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
-import { UrlInput } from './extras';
+import { UrlInput } from './url-input';
 
 function q(sel: string): HTMLElement {
   return document.querySelector(sel) as HTMLElement;

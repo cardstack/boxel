@@ -9,7 +9,7 @@
 import { module, test } from 'qunit';
 import { render } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
-import { ScrollProgress } from '../motion-core';
+import { ScrollProgress } from './scroll-progress';
 
 function root(): HTMLElement {
   return document.querySelector('[data-test-pretui-scroll-progress]') as HTMLElement;

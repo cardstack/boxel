@@ -2,7 +2,7 @@
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { FreestyleUsage } from '../freestyle';
-import { RelativeTime } from '../reading-extras';
+import { RelativeTime } from './relative-time';
 
 // ── RelativeTime — from webawesome's relative-time semantics ──────────────
 const RT_FORMAT_OPTIONS = ['long', 'short', 'narrow'];

@@ -9,7 +9,7 @@
 import { module, test } from 'qunit';
 import { render } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
-import { SlidingHighlight, slidingHighlight } from '../motion-core';
+import { SlidingHighlight, slidingHighlight } from './sliding-highlight';
 
 function root(): HTMLElement {
   return document.querySelector('[data-test-pretui-sliding-highlight]') as HTMLElement;

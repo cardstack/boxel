@@ -9,7 +9,7 @@
 import { module, test } from 'qunit';
 import { render } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
-import { Presence } from '../motion-core';
+import { Presence } from './presence';
 
 function root(): HTMLElement {
   return document.querySelector('[data-test-pretui-presence]') as HTMLElement;

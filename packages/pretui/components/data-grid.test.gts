@@ -8,8 +8,8 @@ import { module, test } from 'qunit';
 import { render, click, settled } from '@ember/test-helpers';
 import { tracked } from '@glimmer/tracking';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
-import { DataGrid } from '../reading';
-import type { ColumnSpec, Row, SortSpec } from '../reading';
+import { DataGrid } from './data-grid';
+import type { ColumnSpec, Row, SortSpec } from './data-grid';
 
 function q(sel: string): HTMLElement {
   return document.querySelector(sel) as HTMLElement;

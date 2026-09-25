@@ -2,7 +2,7 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { FreestyleUsage } from '../freestyle';
-import { Pagination } from '../structure';
+import { Pagination } from './pagination';
 
 class PaginationUsage extends Component {
   @tracked page = 4;

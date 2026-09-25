@@ -2,7 +2,7 @@
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { FreestyleUsage } from '../freestyle';
-import { ProgressRadial } from '../feedback';
+import { ProgressRadial } from './progress-radial';
 
 // ── ProgressRadial ← progress-radial/usage.gts ───────────────────────────
 class ProgressRadialUsage extends GlimmerComponent {

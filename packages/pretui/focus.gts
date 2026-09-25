@@ -1,9 +1,7 @@
 // Pretui — the focus / keyboard / owned-timer foundation.
 //
-// Appendix L names "Focus & keyboard" as a foundation that was *duplicated*
-// rather than shared: `structure-data.gts` and `reading-extras.gts` each kept
-// a private copy of `focusWhen` + `rovingTabindex`. This module is the single
-// home. Both re-export from here so no caller breaks.
+// The single home of `focusWhen` and `rovingTabindex`; components import them
+// from here rather than keeping private copies.
 //
 // It also owns the two things the menu work needed and nobody had:
 //

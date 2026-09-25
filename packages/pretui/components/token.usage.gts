@@ -1,7 +1,7 @@
 // Pretui — Token usage page.
 import Component from '@glimmer/component';
 import { FreestyleUsage } from '../freestyle';
-import { Token } from '../ink';
+import { Token } from './token';
 
 class TokenUsage extends Component {
   values = ['records@2.4.0', 'LOT-B-103', 'ctse/pretui'];

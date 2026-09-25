@@ -13,19 +13,9 @@ import { module, test } from 'qunit';
 import { tracked } from '@glimmer/tracking';
 import { render, click, fillIn, waitUntil } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
-import { PasswordInput } from './controls-extras';
-import {
-  PasswordStrength,
-  OneShotDebounce,
-  SCORE_LABELS,
-  barLevel,
-  clampScore,
-  loadPasswordEstimator,
-  passwordEstimatorRequested,
-  strengthAnnouncement,
-  strengthLabel,
-  type TimerHost,
-} from './password-strength';
+import { PasswordInput } from './components/password-input';
+import { PasswordStrength, OneShotDebounce, SCORE_LABELS, barLevel, clampScore, loadPasswordEstimator, passwordEstimatorRequested, strengthAnnouncement, strengthLabel } from './components/password-strength';
+import type { TimerHost } from './components/password-strength';
 
 const SAMPLE_SUGGESTIONS = ['Add more words that are less common.'];
 const SAMPLE_USER_INPUTS = ['Chris', 'chris@example.com'];

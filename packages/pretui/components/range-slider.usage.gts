@@ -2,7 +2,7 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { FreestyleUsage } from '../freestyle';
-import { RangeSlider } from './slider';
+import { RangeSlider } from './range-slider';
 
 class RangeSliderUsage extends Component {
   @tracked values: [number, number] = [1960, 2000];

@@ -13,15 +13,13 @@ import { module, test } from 'qunit';
 import { render } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
 
-import {
-  BrokenLink,
-  LoadingState,
-  ProgressBar,
-  ProgressRadial,
-  Spinner,
-  Toast,
-  resolvePixelSize,
-} from './feedback';
+import { BrokenLink } from './components/broken-link';
+import { LoadingState } from './components/loading-state';
+import { ProgressBar } from './components/progress-bar';
+import { ProgressRadial } from './components/progress-radial';
+import { Spinner } from './components/spinner';
+import { Toast } from './components/toast';
+import { resolvePixelSize } from './internal/feedback';
 
 function q(sel: string): HTMLElement {
   return document.querySelector(sel) as HTMLElement;

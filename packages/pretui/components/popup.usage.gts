@@ -3,8 +3,8 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import { FreestyleUsage } from '../freestyle';
-import { Button } from '../controls';
-import { Popup } from '../overlay';
+import { Button } from './button';
+import { Popup } from './popup';
 
 class PopupUsage extends Component {
   @tracked open = false;

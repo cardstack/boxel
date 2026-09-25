@@ -1,8 +1,8 @@
 // Pretui — KeyValue usage page.
 import Component from '@glimmer/component';
 import { FreestyleUsage } from '../freestyle';
-import { Token } from '../ink';
-import { KeyValue } from '../reading';
+import { Token } from './token';
+import { KeyValue } from './key-value';
 
 const LOT_DETAILS = [
   { key: 'Lot', value: 'B-103' },

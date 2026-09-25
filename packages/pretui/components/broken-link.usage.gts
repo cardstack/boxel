@@ -2,7 +2,7 @@
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { FreestyleUsage } from '../freestyle';
-import { BrokenLink } from '../feedback';
+import { BrokenLink } from './broken-link';
 
 // ── BrokenLink ← broken-link/usage.gts ───────────────────────────────────
 // Dropped knobs: itemType + state + format (Pretui renders one inline token,

@@ -2,7 +2,7 @@
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { FreestyleUsage } from '../freestyle';
-import { ProgressBar } from '../feedback';
+import { ProgressBar } from './progress-bar';
 
 // ── ProgressBar ← progress-bar/usage.gts ─────────────────────────────────
 // Dropped knobs: position (the label/count header layout is fixed — label

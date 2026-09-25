@@ -1,7 +1,7 @@
 // Pretui — Stat usage page.
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { FreestyleUsage } from '../freestyle';
-import { Stat } from '../reading';
+import { Stat } from './stat';
 
 const StatUsage: TemplateOnlyComponent = <template>
     <FreestyleUsage @name='Stat' @description='A KPI headline that composes locale-aware rolling digits with a signed textual delta and comparison window.' @source='<Stat @label="Approved lots" @value={{1482}} @delta={{12}} … />'>

@@ -5,7 +5,7 @@ import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 import { guidFor } from '@ember/object/internals';
-import { slidingHighlight, SlidingHighlight } from '../motion-core';
+import { slidingHighlight, SlidingHighlight } from './sliding-highlight';
 import { emit, firstDefined } from '../pretui-primitives';
 
 export interface SegmentOption {

@@ -1,8 +1,8 @@
 // Pretui — Empty usage page.
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { FreestyleUsage } from '../freestyle';
-import { Button } from '../controls';
-import { Empty } from '../structure';
+import { Button } from './button';
+import { Empty } from './empty';
 
 const EmptyUsage: TemplateOnlyComponent = <template>
   <FreestyleUsage

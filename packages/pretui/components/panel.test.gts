@@ -7,7 +7,7 @@
 import { module, test } from 'qunit';
 import { render } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
-import { Panel } from '../structure';
+import { Panel } from './panel';
 
 function q(sel: string): HTMLElement {
   return document.querySelector(sel) as HTMLElement;

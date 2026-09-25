@@ -7,7 +7,8 @@
 import { module, test } from 'qunit';
 import { render } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
-import { Kbd, ariaKeyShortcuts, formatShortcut } from '../menu';
+import { Kbd } from './kbd';
+import { ariaKeyShortcuts, formatShortcut } from '../internal/menu';
 
 function kbd(): HTMLElement {
   return document.querySelector('[data-test-pretui-kbd]') as HTMLElement;

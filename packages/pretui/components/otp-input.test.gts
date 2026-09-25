@@ -13,7 +13,7 @@ import {
   triggerEvent,
 } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
-import { OtpInput } from './composites';
+import { OtpInput } from './otp-input';
 
 function q(sel: string): HTMLElement {
   return document.querySelector(sel) as HTMLElement;

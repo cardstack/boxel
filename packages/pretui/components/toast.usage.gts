@@ -1,8 +1,8 @@
 // Pretui — Toast usage page.
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { FreestyleUsage } from '../freestyle';
-import { Button } from '../controls';
-import { Toast } from '../feedback';
+import { Button } from './button';
+import { Toast } from './toast';
 
 const ToastUsage: TemplateOnlyComponent = <template>
     <FreestyleUsage @name='Toast' @description='A brief in-flow status receipt. Positioning and lifetime belong to its host; title, message and action remain ordinary content.' @source='<Toast @title="Lot saved" @message="B-103 is ready for review">…</Toast>'>

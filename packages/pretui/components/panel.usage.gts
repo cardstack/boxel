@@ -2,8 +2,8 @@
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { FreestyleUsage } from '../freestyle';
-import { Panel } from '../structure';
-import { Button } from '../controls';
+import { Panel } from './panel';
+import { Button } from './button';
 
 // ── Panel ← container/usage.gts + card-container/usage.gts ───────────────
 

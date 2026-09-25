@@ -2,7 +2,7 @@
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { FreestyleUsage } from '../freestyle';
-import { Meter } from '../ink';
+import { Meter } from './meter';
 
 class MeterUsage extends GlimmerComponent {
   @tracked level = 3;

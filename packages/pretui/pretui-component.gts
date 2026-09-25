@@ -27,16 +27,14 @@ import { fn } from '@ember/helper';
 import type { Query, RealmResourceIdentifier } from '@cardstack/runtime-common';
 import { ThemeFrame } from './components/theme-frame';
 import { EmptyState } from './components/empty-state';
-import {
-  StatusChip,
-  Token,
-  statusHue,
-} from './ink';
+import { StatusChip } from './components/status-chip';
+import { Token } from './components/token';
+import { statusHue } from './internal/ink';
 import { Button } from './components/button';
 import { Textarea } from './components/textarea';
-import { StepList } from './components/composites';
-import type { StepItem, StepState } from './components/composites';
-import { Popover } from './overlay';
+import { StepList } from './components/step-list';
+import type { StepItem, StepState } from './components/step-list';
+import { Popover } from './components/popover';
 import {
   demoModuleFor,
   loadDemo,

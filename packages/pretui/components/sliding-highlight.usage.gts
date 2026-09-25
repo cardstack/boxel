@@ -5,10 +5,7 @@ import { array, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { FreestyleUsage } from '../freestyle';
 import { TASKS } from '../examples';
-import {
-  SlidingHighlight,
-  slidingHighlight,
-} from '../motion-core';
+import { SlidingHighlight, slidingHighlight } from './sliding-highlight';
 
 // ── SlidingHighlight — fresh page (no upstream knob rig) ─────────────────
 class SlidingHighlightUsage extends Component {

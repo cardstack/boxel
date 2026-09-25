@@ -13,7 +13,7 @@ import {
   triggerKeyEvent,
 } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
-import { Tooltip } from '../structure';
+import { Tooltip } from './tooltip';
 
 function q(sel: string): HTMLElement {
   return document.querySelector(sel) as HTMLElement;

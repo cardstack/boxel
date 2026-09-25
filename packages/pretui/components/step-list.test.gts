@@ -7,8 +7,8 @@
 import { module, test } from 'qunit';
 import { render } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
-import { StepList } from './composites';
-import type { StepItem } from './composites';
+import { StepList } from './step-list';
+import type { StepItem } from './step-list';
 
 function q(sel: string): HTMLElement {
   return document.querySelector(sel) as HTMLElement;

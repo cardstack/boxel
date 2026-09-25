@@ -1,7 +1,7 @@
 // Pretui — StreamingText usage page.
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { FreestyleUsage } from '../freestyle';
-import { StreamingText } from '../reading';
+import { StreamingText } from './streaming-text';
 
 const StreamingTextUsage: TemplateOnlyComponent = <template>
     <FreestyleUsage @name='StreamingText' @description='Timer-free word reveal for agent output. The full sentence remains available to assistive technology and reduced-motion users.' @source='<StreamingText @text="Comparing supplier records…" @rate={{12}} />'>

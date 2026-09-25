@@ -9,7 +9,7 @@
 import { module, test } from 'qunit';
 import { render } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
-import { RelativeTime } from '../reading-extras';
+import { RelativeTime } from './relative-time';
 
 const NOW = '2026-09-04T12:00:00Z';
 

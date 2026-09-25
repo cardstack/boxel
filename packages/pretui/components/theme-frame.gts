@@ -5,7 +5,7 @@ import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { on } from '@ember/modifier';
 import { guidFor } from '@ember/object/internals';
 import { themeScope, themeScopedCss } from '@cardstack/boxel-ui/helpers';
-import { Popover } from '../overlay';
+import { Popover } from './popover';
 import { Select } from './select';
 import { SegmentedControl } from './segmented-control';
 

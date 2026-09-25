@@ -9,8 +9,8 @@
 import { module, test } from 'qunit';
 import { render, click } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
-import { DateRangePicker } from '../reading-extras';
-import type { DateRangeValue } from '../reading-extras';
+import { DateRangePicker } from './date-range-picker';
+import type { DateRangeValue } from './calendar';
 
 function root(): HTMLElement {
   return document.querySelector('[data-test-pretui-date-range-picker]') as HTMLElement;

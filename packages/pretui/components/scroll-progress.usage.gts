@@ -4,7 +4,7 @@ import { tracked } from '@glimmer/tracking';
 import { array } from '@ember/helper';
 import { FreestyleUsage } from '../freestyle';
 import { TASKS } from '../examples';
-import { ScrollProgress } from '../motion-core';
+import { ScrollProgress } from './scroll-progress';
 
 // ── ScrollProgress — fresh page (no upstream knob rig) ───────────────────
 class ScrollProgressUsage extends Component {

@@ -9,7 +9,7 @@
 import { module, test } from 'qunit';
 import { render } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
-import { Prose } from '../reading';
+import { Prose } from './prose';
 
 function q(sel: string): HTMLElement {
   return document.querySelector(sel) as HTMLElement;

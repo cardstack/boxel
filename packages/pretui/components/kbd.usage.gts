@@ -1,7 +1,7 @@
 // Pretui — Kbd usage page.
 import GlimmerComponent from '@glimmer/component';
 import { FreestyleUsage } from '../freestyle';
-import { Kbd } from '../menu';
+import { Kbd } from './kbd';
 
 // ── Kbd ──────────────────────────────────────────────────────────────────
 const KBD_SAMPLES = [

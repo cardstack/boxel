@@ -35,7 +35,8 @@ import {
   toPlainValue,
 } from './json-model';
 import type { JsonNode } from './json-model';
-import { JsonEditor, JsonTree } from './json-tree';
+import { JsonEditor } from './components/json-editor';
+import { JsonTree } from './components/json-tree';
 
 /** Parse or fail the test — most cases here are about a document that parses. */
 function parseOk(text: string): JsonNode {

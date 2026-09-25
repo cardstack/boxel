@@ -14,12 +14,16 @@ import { tracked } from '@glimmer/tracking';
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { hash } from '@ember/helper';
 // type-only gap: 'ember-modifier' resolves at realm runtime; glint can't see
-// it here (accepted parse baseline, same as overlay.gts / reading-extras.gts)
+// it here (accepted parse baseline, same as components/popup.gts)
 import { modifier } from 'ember-modifier';
-import { Table } from './reading';
-import { Select, Input, Switch, Slider, SegmentedControl } from './controls';
-import { CopyButton } from './controls-extras';
-import { JsonTree } from './json-tree';
+import { Table } from './components/table';
+import { Input } from './components/input';
+import { SegmentedControl } from './components/segmented-control';
+import { Select } from './components/select';
+import { Slider } from './components/slider';
+import { Switch } from './components/switch';
+import { CopyButton } from './components/copy-button';
+import { JsonTree } from './components/json-tree';
 
 function isPresent(v: unknown): boolean {
   return v !== undefined && v !== null && v !== '';
