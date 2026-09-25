@@ -11,13 +11,16 @@ import {
 import type {
   PgPrimitive,
   QueueCoalesceContext,
+  QueuePublishArgs,
   QueuePublisher,
   QueueRunner,
 } from '@cardstack/runtime-common';
 import {
   Deferred,
   registerQueueJobDefinition,
+  systemInitiatedPrerenderHtmlPriority,
   systemInitiatedPriority,
+  userInitiatedPrerenderHtmlPriority,
   userInitiatedPriority,
 } from '@cardstack/runtime-common';
 import { JobClaimHold } from '@cardstack/runtime-common/jobs/claim-hold';
@@ -2437,37 +2440,54 @@ module(basename(import.meta.filename), function () {
   // each such assertion publishes a control job after the one being held back,
   // in an unrelated lane, and waits for the control to start: runners claim
   // the oldest job they are allowed to, so a free runner that took the control
-  // passed over the held job because the queue would not let it start.
-  module('queue - lane families', function (hooks) {
+  // passed over the held job because the queue would not let it start. Where
+  // runners claim at different priority floors, the control is published at
+  // the held job's priority, so the runner that takes it is one that could
+  // have taken the held job.
+  //
+  // A module gets one runner per entry of `runnerFloors`, each claiming at
+  // that priority floor.
+  function setupLaneFamilies(hooks: NestedHooks, runnerFloors: number[]) {
     const family = 'indexing:http://test-realm/lanes/';
     const lane = (writer: string) => `${family}#user:${writer}`;
 
     let publisher: QueuePublisher;
-    let adapters: PgAdapter[];
     let runners: PgQueueRunner[];
-    let events: string[];
+    // Refilled in place for each test, so a module can destructure them once.
+    let adapters: PgAdapter[] = [];
+    let events: string[] = [];
+    // The floor of the runner that started each job.
+    let startedAtFloor = new Map<string, number>();
     let gates: Map<string, Deferred<void>>;
     let starts: Map<string, Deferred<void>>;
     let published: Promise<unknown>[];
 
     hooks.beforeEach(async function () {
       prepareTestDB();
-      adapters = [
+      adapters.splice(
+        0,
+        adapters.length,
         await createTestPgAdapter(),
-        new PgAdapter(),
-        new PgAdapter(),
-      ];
+        ...runnerFloors.slice(1).map(() => new PgAdapter()),
+      );
       publisher = new PgQueuePublisher(adapters[0]);
       runners = adapters.map(
-        (adapter, i) => new PgQueueRunner({ adapter, workerId: `lanes-${i}` }),
+        (adapter, i) =>
+          new PgQueueRunner({
+            adapter,
+            workerId: `lanes-${i}`,
+            priority: runnerFloors[i],
+          }),
       );
-      events = [];
+      events.length = 0;
+      startedAtFloor.clear();
       gates = new Map();
       starts = new Map();
       published = [];
-      for (let runner of runners) {
+      for (let [i, runner] of runners.entries()) {
         runner.register('laneJob', async ({ name }: { name: string }) => {
           events.push(`${name} start`);
+          startedAtFloor.set(name, runnerFloors[i]);
           starts.get(name)?.fulfill();
           await gates.get(name)?.promise;
           events.push(`${name} finish`);
@@ -2558,11 +2578,56 @@ module(basename(import.meta.filename), function () {
     }
 
     // Publishes a control job in a lane nothing else uses and waits for it to
-    // start. See the module comment.
-    async function afterAControlStarts(name: string) {
-      await publishLaneJob(name, { concurrencyGroup: `control:${name}` });
+    // start. See the comment above.
+    async function afterAControlStarts(
+      name: string,
+      { priority }: { priority?: number } = {},
+    ) {
+      await publishLaneJob(name, {
+        concurrencyGroup: `control:${name}`,
+        priority,
+      });
       await started(name);
     }
+
+    function floorOf(name: string) {
+      return startedAtFloor.get(name);
+    }
+
+    // Publishes through the current test's publisher.
+    function publishJob(args: QueuePublishArgs<PgPrimitive>) {
+      return publisher.publish(args);
+    }
+
+    return {
+      family,
+      lane,
+      adapters,
+      events,
+      publishJob,
+      publishLaneJob,
+      started,
+      hasStarted,
+      finish,
+      afterAControlStarts,
+      floorOf,
+    };
+  }
+
+  module('queue - lane families', function (hooks) {
+    // Three all-priority runners.
+    let {
+      family,
+      lane,
+      adapters,
+      events,
+      publishJob,
+      publishLaneJob,
+      started,
+      hasStarted,
+      finish,
+      afterAControlStarts,
+    } = setupLaneFamilies(hooks, [0, 0, 0]);
 
     test('two writer lanes of one family run side by side', async function (assert) {
       await publishLaneJob('a', {
@@ -2719,9 +2784,12 @@ module(basename(import.meta.filename), function () {
     });
 
     // Writers run at the user-initiated tier and a from-scratch pass at the
-    // system tier. A barrier the higher tier could pass would let two writers
-    // that keep overlapping hold the exclusive job off indefinitely.
-    test('a writer job at a higher priority still does not start ahead of an older pending exclusive job', async function (assert) {
+    // system tier, so a later writer job is not held behind the exclusive job.
+    // But while it is pending the family runs one writer lane at a time, so
+    // writer-b waits for writer-a rather than running beside it. When writer-a
+    // finishes, a runner that can claim both takes the oldest, which is the
+    // exclusive job.
+    test('on all-priority runners an older lower-tier exclusive job still runs before a later writer job', async function (assert) {
       await publishLaneJob('writer-a', {
         concurrencyGroup: lane('a'),
         laneFamily: family,
@@ -2741,7 +2809,7 @@ module(basename(import.meta.filename), function () {
       await afterAControlStarts('control');
       assert.false(
         hasStarted('writer-b'),
-        "b's lane could run beside a's and outranks the exclusive job, but the exclusive job was queued first",
+        "b's lane outranks the exclusive job, but while it is pending the family runs one writer lane at a time",
       );
 
       await finish('writer-a');
@@ -2757,7 +2825,7 @@ module(basename(import.meta.filename), function () {
           'exclusive finish',
           'writer-b start',
         ],
-        'the exclusive job ran in its turn',
+        'the runner took the older exclusive job before the later writer job',
       );
     });
 
@@ -2860,7 +2928,7 @@ module(basename(import.meta.filename), function () {
         concurrencyGroup: string,
         laneFamily?: string | null,
       ) =>
-        await publisher.publish({
+        await publishJob({
           jobType: 'laneCoalesceJob',
           concurrencyGroup,
           ...(laneFamily !== undefined ? { laneFamily } : {}),
@@ -2899,6 +2967,179 @@ module(basename(import.meta.filename), function () {
           { concurrency_group: family, lane_family: family },
         ],
         'the rows record the lane and family each was published with',
+      );
+    });
+  });
+
+  // A high-priority runner floors at the bottom of the user-initiated tier and
+  // never claims system-tier work; an all-priority runner claims everything. A
+  // deploy that reindexes every realm keeps the all-priority pool busy with
+  // system work for hours, so a realm's system-tier exclusive job, such as a
+  // from-scratch pass, can stay pending all that time while the realm's users
+  // keep saving.
+  module('queue - lane families across worker tiers', function (hooks) {
+    const highPriority = userInitiatedPrerenderHtmlPriority;
+    const allPriority = systemInitiatedPrerenderHtmlPriority;
+
+    let {
+      family,
+      lane,
+      events,
+      publishLaneJob,
+      started,
+      hasStarted,
+      finish,
+      afterAControlStarts,
+      floorOf,
+    } = setupLaneFamilies(hooks, [highPriority, highPriority, allPriority]);
+
+    // Occupies the all-priority runner with another realm's system work, as a
+    // deploy's reindex of every realm occupies the all-priority pool.
+    async function occupyTheAllPriorityRunner() {
+      await publishLaneJob('other realm', {
+        concurrencyGroup: 'indexing:http://test-realm/other/',
+        priority: systemInitiatedPriority,
+      });
+      await started('other realm');
+    }
+
+    function familyEvents() {
+      return events.filter(
+        (event) =>
+          !event.startsWith('control') && !event.startsWith('other realm'),
+      );
+    }
+
+    test('a user-initiated writer job starts past an older pending system-tier exclusive job', async function (assert) {
+      await occupyTheAllPriorityRunner();
+      await publishLaneJob('exclusive', {
+        concurrencyGroup: family,
+        laneFamily: family,
+        priority: systemInitiatedPriority,
+      });
+      await publishLaneJob('writer', {
+        concurrencyGroup: lane('a'),
+        laneFamily: family,
+        priority: userInitiatedPriority,
+      });
+      await started('writer');
+      assert.deepEqual(
+        {
+          writerRanOn: floorOf('writer'),
+          exclusiveStarted: hasStarted('exclusive'),
+        },
+        { writerRanOn: highPriority, exclusiveStarted: false },
+        'a high-priority runner took the save while the exclusive job waits for the all-priority runner',
+      );
+    });
+
+    test('while an older lower-tier exclusive job is pending the family runs one writer lane at a time', async function (assert) {
+      await occupyTheAllPriorityRunner();
+      await publishLaneJob('exclusive', {
+        concurrencyGroup: family,
+        laneFamily: family,
+        priority: systemInitiatedPriority,
+      });
+      await publishLaneJob('writer-a', {
+        concurrencyGroup: lane('a'),
+        laneFamily: family,
+        priority: userInitiatedPriority,
+      });
+      await started('writer-a');
+      await publishLaneJob('writer-b', {
+        concurrencyGroup: lane('b'),
+        laneFamily: family,
+        priority: userInitiatedPriority,
+      });
+      await afterAControlStarts('control', { priority: userInitiatedPriority });
+      assert.false(
+        hasStarted('writer-b'),
+        "b's lane waits for a's rather than running beside it",
+      );
+
+      await finish('writer-a');
+      await started('writer-b');
+      assert.deepEqual(
+        familyEvents(),
+        ['writer-a start', 'writer-a finish', 'writer-b start'],
+        'the writers took turns while the exclusive job stayed pending',
+      );
+    });
+
+    test('an older lower-tier exclusive job starts once its family is idle with no writer job pending', async function (assert) {
+      await occupyTheAllPriorityRunner();
+      await publishLaneJob('exclusive', {
+        concurrencyGroup: family,
+        laneFamily: family,
+        priority: systemInitiatedPriority,
+      });
+      await publishLaneJob('writer', {
+        concurrencyGroup: lane('a'),
+        laneFamily: family,
+        priority: userInitiatedPriority,
+      });
+      await started('writer');
+      await finish('other realm');
+      await finish('writer');
+      await started('exclusive');
+      assert.deepEqual(
+        {
+          events: familyEvents(),
+          exclusiveRanOn: floorOf('exclusive'),
+        },
+        {
+          events: ['writer start', 'writer finish', 'exclusive start'],
+          exclusiveRanOn: allPriority,
+        },
+        'the all-priority runner took the exclusive job once the family was idle',
+      );
+    });
+
+    // An exclusive job at the user-initiated tier, such as a from-scratch pass
+    // of the base realm, is one the high-priority runners claim too, so it
+    // keeps its turn ahead of the writer jobs queued after it.
+    test("an older pending exclusive job at the writer's own tier still holds the writer back", async function (assert) {
+      await publishLaneJob('writer-a', {
+        concurrencyGroup: lane('a'),
+        laneFamily: family,
+        priority: userInitiatedPriority,
+      });
+      await started('writer-a');
+      await publishLaneJob('exclusive', {
+        concurrencyGroup: family,
+        laneFamily: family,
+        priority: userInitiatedPriority,
+      });
+      await publishLaneJob('writer-b', {
+        concurrencyGroup: lane('b'),
+        laneFamily: family,
+        priority: userInitiatedPriority,
+      });
+      await afterAControlStarts('control', { priority: userInitiatedPriority });
+      assert.false(
+        hasStarted('writer-b'),
+        "b's lane does not start ahead of the exclusive job queued before it",
+      );
+
+      await finish('writer-a');
+      await started('exclusive');
+      await afterAControlStarts('control-2', {
+        priority: userInitiatedPriority,
+      });
+      assert.false(hasStarted('writer-b'), 'nor beside it');
+
+      await finish('exclusive');
+      await started('writer-b');
+      assert.deepEqual(
+        familyEvents(),
+        [
+          'writer-a start',
+          'writer-a finish',
+          'exclusive start',
+          'exclusive finish',
+          'writer-b start',
+        ],
+        'the exclusive job ran in its turn',
       );
     });
   });

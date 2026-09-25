@@ -30,6 +30,7 @@ import {
   registerJobHeartbeat,
   unregisterJobHeartbeat,
   userInitiatedPriority,
+  userInitiatedPrerenderHtmlPriority,
 } from '@cardstack/runtime-common';
 import { FROM_SCRATCH_JOB_TIMEOUT_SEC } from '@cardstack/runtime-common/tasks/indexer';
 // Side-effect imports: these modules call registerQueueJobDefinition() at
@@ -510,6 +511,24 @@ function familyKey(alias: 'j'): string {
   return `COALESCE(${laneFamilyOf(alias)}, '${NO_CONCURRENCY_GROUP_KEY}')`;
 }
 
+// Whether a row's priority is in the user-initiated tier rather than the
+// system tier (see the tier table in runtime-common's queue.ts). The
+// high-priority worker pool floors at the bottom of the user-initiated tier, so
+// only the all-priority pool can claim a system-tier job.
+function isUserInitiatedTier(alias: 'j' | 'p'): string {
+  return `(${alias}.priority >= ${userInitiatedPrerenderHtmlPriority})`;
+}
+
+// The claim query's search for a pending exclusive job `p` of writer job `j`'s
+// family that was queued before `j`, for the body of an EXISTS.
+function olderPendingExclusive(): string {
+  return `SELECT 1 FROM jobs p
+           WHERE p.status = 'unfulfilled'
+             AND p.concurrency_group = j.lane_family
+             AND ${isExclusiveLane('p')}
+             AND (p.created_at, p.id) < (j.created_at, j.id)`;
+}
+
 export class PgQueueRunner implements QueueRunner {
   #isDestroyed = false;
   #pgClient: PgAdapter;
@@ -621,15 +640,27 @@ export class PgQueueRunner implements QueueRunner {
             // - Writer lanes of one family run alongside each other, up to
             //   `#maxWriterLanesPerFamily` at once.
             // - A writer job does not start ahead of an older pending exclusive
-            //   job of its family, whatever the two priorities. Without this
-            //   barrier a steady stream of writes would keep the family
-            //   occupied, and the exclusive job would never find it empty.
-            //   Priority can't exempt a writer: writers run at the
-            //   user-initiated tier and a from-scratch pass at the system
-            //   tier, so two writers that keep overlapping would hold it off
-            //   indefinitely. This is the order one shared lane gave the
-            //   family: the exclusive job takes its turn after the work
-            //   running when it was queued.
+            //   job of its family at the writer's priority tier or above (the
+            //   tiers are user-initiated and system; see `isUserInitiatedTier`).
+            //   An exclusive job waits for the family to empty, and without
+            //   this barrier two writers whose passes keep overlapping would
+            //   keep it occupied indefinitely. Every worker that can claim the
+            //   writer job can claim the exclusive job too, so the exclusive
+            //   job takes its turn after the work that was running when it was
+            //   queued.
+            // - An older pending exclusive job at a lower tier does not hold a
+            //   writer job back. Instead, while it is pending, the family runs
+            //   one writer lane at a time. The workers that serve the higher
+            //   tier never claim a lower-tier job, so a system-tier from-scratch
+            //   pass waits for an all-priority worker to reach it behind every
+            //   realm's system work, which after a deploy that reindexes every
+            //   realm takes hours. A barrier would hold each save in the realm
+            //   for all of that. With one writer lane at a time the family
+            //   empties after each writer's pass unless another save is already
+            //   queued, and an all-priority worker that reaches the exclusive
+            //   job then claims it. That is a chance, not a guarantee: a family
+            //   whose next save is always queued before the current pass ends
+            //   keeps the exclusive job waiting.
             //
             // Jobs published without a family are all exclusive, each in a
             // family of its own group, so for them these reduce to the first
@@ -709,18 +740,18 @@ export class PgQueueRunner implements QueueRunner {
                 ))
                 OR (NOT ${isExclusiveLane('j')}
                   AND NOT EXISTS (
-                    SELECT 1 FROM jobs p
-                     WHERE p.status = 'unfulfilled'
-                       AND p.concurrency_group = j.lane_family
-                       AND ${isExclusiveLane('p')}
-                       AND (p.created_at, p.id) < (j.created_at, j.id)
+                    ${olderPendingExclusive()}
+                       AND (${isUserInitiatedTier('p')}
+                            OR NOT ${isUserInitiatedTier('j')})
                   )
+                  -- Past the barrier, an older pending exclusive job can only
+                  -- be at a lower tier.
                   AND (
                     SELECT COUNT(*) FROM active_jobs a
                      WHERE a.family_key = j.lane_family AND NOT a.exclusive
-                  ) <`,
+                  ) < CASE WHEN EXISTS (${olderPendingExclusive()}) THEN 1 ELSE`,
             param(this.#maxWriterLanesPerFamily),
-            `)
+            `END)
               )
               ORDER BY j.created_at, j.id
               LIMIT 1`,
