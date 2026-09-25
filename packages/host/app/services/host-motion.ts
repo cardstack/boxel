@@ -4,6 +4,8 @@ import { tracked } from '@glimmer/tracking';
 
 import { createArming, type ChoreoContext } from 'glimmer-motion';
 
+import { traceMotionPhase } from '@cardstack/host/lib/motion-trace';
+
 export type HostChoreography = 'stack' | 'header' | 'sheet';
 
 // Policy belongs to the host; Choreo owns clocks, interruption and endpoints.
@@ -56,9 +58,16 @@ export default class HostMotionService extends Service {
   }
 
   begin(kind: HostChoreography, primaryId?: string) {
-    if (this.dragging || this.bitmapActive || this.workspaceActive) return;
+    if (this.dragging || this.bitmapActive || this.workspaceActive) {
+      traceMotionPhase(`begin-refused:${kind}`);
+      return;
+    }
     let context = this.contexts.get(kind === 'header' ? 'stack' : kind);
-    if (!context) return;
+    if (!context) {
+      traceMotionPhase(`begin-unbound:${kind}`);
+      return;
+    }
+    traceMotionPhase(`begin:${kind}`);
     // Replacing the score within one region lets Choreo retain velocity.
     // A different scene yields its allocation before this one starts.
     if (this.choreography && this.choreography !== kind) this.finish();

@@ -352,7 +352,10 @@ export default class SubmodeLayout extends Component<Signature> {
     if (this.suppressSearchClose) {
       return;
     }
-    this.hostMotion.begin('sheet');
+    // Blur closes an already-closed sheet after most clicks. Starting a sheet
+    // scene then would finish whatever the click just started (a stack reflow).
+    if (this.searchSheetMode !== SearchSheetModes.Closed)
+      this.hostMotion.begin('sheet');
     this.searchSheetMode = SearchSheetModes.Closed;
     this.args.onSearchSheetClosed?.();
   }

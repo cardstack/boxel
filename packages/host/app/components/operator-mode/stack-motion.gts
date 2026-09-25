@@ -66,10 +66,12 @@ export default class StackMotion extends Component<Signature> {
     );
   }
 
+  // A scene without a primary card (a whole stack closing) reflows every
+  // kept card; otherwise only the primary spends the geometry budget.
   private get primaryId() {
     return this.args.duration !== undefined && !this.args.budgeted
       ? undefined
-      : (this.hostMotion.primaryId ?? '__no-primary__');
+      : this.hostMotion.primaryId;
   }
 
   private get headerDuration() {

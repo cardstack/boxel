@@ -489,6 +489,13 @@ export default class OperatorModeStateService extends Service {
     if (itemIndex === -1) {
       return;
     }
+    // Closing the last card removes its whole stack; the remaining stacks
+    // move into the freed width. A card crossing already owns the scene, in
+    // which case this is a no-op.
+    this.hostMotion.begin(
+      'stack',
+      itemIndex > 0 ? stack[itemIndex - 1].instanceId : undefined,
+    );
     stack.splice(itemIndex); // Remove anything above the item
 
     // If the resulting stack is now empty, remove it
