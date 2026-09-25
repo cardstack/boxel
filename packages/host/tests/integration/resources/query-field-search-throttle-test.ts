@@ -175,7 +175,7 @@ module(`Integration | query field search throttle`, function (hooks) {
       // directly: an instance built without a store gets the fallback one,
       // whose `getSearchResource` hands back a static empty resource that never
       // searches at all.
-      let parent: any = await storeService.add(
+      let parent: any = await storeService.addWithoutPersisting(
         {
           data: {
             type: 'card',
@@ -191,7 +191,7 @@ module(`Integration | query field search throttle`, function (hooks) {
             },
           },
         } as LooseSingleCardDocument,
-        { doNotPersist: true },
+        {},
       );
       assert.ok(
         parent?.[realmURLSymbol],

@@ -682,8 +682,8 @@ export class RoomResource extends Resource<Args> {
         `SKill card document has no id, this should not happen: ${JSON.stringify(doc, null, 2)}`,
       );
     }
-    let skillCard = await this.store.get<Skill>(cardId);
-    if (isCardInstance(skillCard)) {
+    let skillCard = await this.store.get(cardId);
+    if (isCardInstance<Skill>(skillCard)) {
       return skillCard;
     } else {
       // A known reason for this is that the skill has been renamed

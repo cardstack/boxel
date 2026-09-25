@@ -92,7 +92,7 @@ export default class ShowCardTool extends HostBaseTool<
   }
 
   private async loadCard(cardId: string): Promise<CardDef> {
-    let maybeCard = await this.store.get<CardDef>(cardId);
+    let maybeCard = await this.store.get(cardId);
     if (isCardErrorJSONAPI(maybeCard)) {
       throw new Error(maybeCard.message);
     }

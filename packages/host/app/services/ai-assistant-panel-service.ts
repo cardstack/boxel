@@ -384,7 +384,7 @@ export default class AiAssistantPanelService extends Service {
           if (cardId && !seenCardUrls.has(cardId)) {
             seenCardUrls.add(cardId);
             // We need to get the actual card from the store
-            const card = this.store.peek<CardDef>(cardId);
+            const card = this.store.peek(cardId);
             if (card && isCardInstance(card)) {
               attachedCards.push(card);
             }

@@ -3473,14 +3473,14 @@ export default class MatrixService extends Service {
     let loadedCard: SystemCard | undefined;
     let userChoiceFailed = false;
     if (userChoiceId) {
-      let result = await this.store.get<SystemCard>(userChoiceId);
+      let result = await this.store.get(userChoiceId);
       if (isCardErrorJSONAPI(result)) {
         console.error(
           `Error loading user-chosen system card: ${stringifyErrorForLog(result)}`,
         );
         userChoiceFailed = true;
       } else {
-        loadedCard = result;
+        loadedCard = result as SystemCard;
       }
     }
 
@@ -3489,14 +3489,14 @@ export default class MatrixService extends Service {
       if (envDefaultId === this._systemCard?.id) {
         loadedCard = this._systemCard;
       } else {
-        let result = await this.store.get<SystemCard>(envDefaultId);
+        let result = await this.store.get(envDefaultId);
         if (isCardErrorJSONAPI(result)) {
           console.error(
             `Error loading env default system card: ${stringifyErrorForLog(result)}`,
           );
           envDefaultFailed = true;
         } else {
-          loadedCard = result;
+          loadedCard = result as SystemCard;
         }
       }
     }

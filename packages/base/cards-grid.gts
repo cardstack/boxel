@@ -280,7 +280,7 @@ class Isolated extends Component<typeof CardsGrid> {
     let filter = this.activeFilter?.query?.filter;
     let activeFilterRef = filter && 'type' in filter ? filter.type : undefined;
 
-    let spec: Spec | CardErrorJSONAPI | undefined;
+    let spec: CardDef | CardErrorJSONAPI | undefined;
     if (activeFilterRef) {
       let instances = await this.args.context?.store.search({
         filter: {
@@ -309,7 +309,7 @@ class Isolated extends Component<typeof CardsGrid> {
         return;
       }
 
-      spec = await this.args.context?.store.get<Spec>(specId);
+      spec = await this.args.context?.store.get(specId);
     }
 
     if (spec && isCardInstance<Spec>(spec)) {

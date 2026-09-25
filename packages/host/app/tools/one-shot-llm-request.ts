@@ -106,7 +106,7 @@ export default class OneShotLlmRequestTool extends HostBaseTool<
         const skillCardPromises = input.skillCardIds.map(
           async (skillCardId) => {
             try {
-              return await this.store.get<Skill>(skillCardId);
+              return await this.store.get(skillCardId);
             } catch (e) {
               console.warn(`Failed to load skill card ${skillCardId}:`, e);
               return null;

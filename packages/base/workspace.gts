@@ -2419,7 +2419,7 @@ class Isolated extends Component<typeof Workspace> {
     if (!chosenId) {
       return;
     }
-    let card = await this.args.context?.store.get<CardDef>(chosenId);
+    let card = await this.args.context?.store.get(chosenId);
     if (card && isCardInstance(card)) {
       let existing = (this.args.model.entryPoints ?? []) as CardDef[];
       if (existing.some((c) => c?.id === card.id)) {
@@ -3181,7 +3181,7 @@ class Isolated extends Component<typeof Workspace> {
       presetRef ??
       (filter && 'type' in filter ? (filter.type as CodeRef) : undefined); // Glint-safe query projection
 
-    let spec: Spec | CardErrorJSONAPI | undefined;
+    let spec: CardDef | CardErrorJSONAPI | undefined;
     if (activeFilterRef) {
       let instances = await this.searchRealm({
         // Keep Spec lookup inside this realm.
@@ -3216,7 +3216,7 @@ class Isolated extends Component<typeof Workspace> {
         return;
       }
 
-      spec = await this.args.context?.store.get<Spec>(specId);
+      spec = await this.args.context?.store.get(specId);
     }
 
     if (spec && isCardInstance<Spec>(spec)) {

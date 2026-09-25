@@ -1871,6 +1871,8 @@ export * from './instance-filter-matcher.ts';
 export * from './search-utils.ts';
 export * from './search-shape.ts';
 export * from './search-resource-helpers.ts';
+import type { SearchEntryScope } from './search-entry.ts';
+
 export * from './search-entry.ts';
 export * from './search-bounds.ts';
 export * from './link-shape-policy.ts';
@@ -2201,51 +2203,64 @@ export interface AddOptions extends CreateOptions {
 
 export type StoreReadType = 'card' | 'file-meta';
 
+// What each read type yields. `peek`/`get` derive their instance type from the
+// `type` they are handed, so a file read is `FileDef`-typed without the caller
+// naming a type and a card read cannot be mis-asserted as a file.
+export interface InstanceForReadType {
+  card: CardDef;
+  'file-meta': FileDef;
+}
+
+// What each search scope yields, for the same reason: the element type follows
+// the runtime `scope` rather than a caller-supplied type parameter.
+export interface ElementForScope {
+  cards: CardDef;
+  files: FileDef;
+  all: CardDef | FileDef;
+}
+
 export interface Store {
   save(id: string): void;
   create(
     doc: LooseSingleCardDocument,
     opts?: CreateOptions,
   ): Promise<string | CardErrorJSONAPI>;
-  add<T extends CardDef>(
-    instanceOrDoc: T | LooseSingleCardDocument,
-    opts?: CreateOptions & { doNotPersist: true },
-  ): Promise<T>;
-  add<T extends CardDef>(
-    instanceOrDoc: T | LooseSingleCardDocument,
-    opts?: CreateOptions & { doNotWaitForPersist: true },
-  ): Promise<T>;
+  // Hydrates, persists, and waits for the write to land — so this is the one
+  // that can answer with a persistence error.
   add<T extends CardDef>(
     instanceOrDoc: T | LooseSingleCardDocument,
     opts?: CreateOptions,
   ): Promise<T | CardErrorJSONAPI>;
-  peek<T extends CardDef>(
+  // Hydrates into the store and stops there. No request is made, so there is
+  // no persistence outcome to report.
+  addWithoutPersisting<T extends CardDef>(
+    instanceOrDoc: T | LooseSingleCardDocument,
+    opts?: CreateOptions,
+  ): Promise<T>;
+  // Hydrates and starts the write, without waiting for it. The outcome lands
+  // on the auto-save state for `id`, not on this call.
+  addWithoutWaiting<T extends CardDef>(
+    instanceOrDoc: T | LooseSingleCardDocument,
+    opts?: CreateOptions,
+  ): Promise<T>;
+  peek<K extends StoreReadType = 'card'>(
     id: string,
-    opts?: { type?: 'card' },
-  ): T | CardErrorJSONAPI | undefined;
-  peek<T extends FileDef>(
-    id: string,
-    opts: { type: 'file-meta' },
-  ): T | CardErrorJSONAPI | undefined;
-  peekError(id: string, opts?: { type?: 'card' }): CardErrorJSONAPI | undefined;
+    opts?: { type?: K },
+  ): InstanceForReadType[K] | CardErrorJSONAPI | undefined;
   peekError(
     id: string,
-    opts: { type: 'file-meta' },
+    opts?: { type?: StoreReadType },
   ): CardErrorJSONAPI | undefined;
-  get<T extends CardDef>(
+  get<K extends StoreReadType = 'card'>(
     id: string,
-    opts?: { type?: 'card' },
-  ): Promise<T | CardErrorJSONAPI>;
-  get<T extends FileDef>(
-    id: string,
-    opts: { type: 'file-meta' },
-  ): Promise<T | CardErrorJSONAPI>;
+    opts?: { type?: K },
+  ): Promise<InstanceForReadType[K] | CardErrorJSONAPI>;
   delete(id: string): Promise<void>;
-  patch<T extends CardDef>(
+  patch(
     id: string,
     patchData: PatchData,
     opts?: { doNotPersist?: boolean; clientRequestId?: string },
-  ): Promise<T | CardErrorJSONAPI | undefined>;
+  ): Promise<CardDef | CardErrorJSONAPI | undefined>;
   // `scope` pins which rows the search returns and drives the element type:
   // 'files' → `FileDef[]`, 'all' → `(CardDef | FileDef)[]`, and 'cards' (or
   // omitted) → `CardDef[]`. When omitted the scope is inferred from the filter —
@@ -2258,21 +2273,11 @@ export interface Store {
   // The element type follows the runtime `scope` argument rather than a free
   // caller-supplied type parameter, so a file-scoped search is `FileDef`-typed
   // without a cast and a card-scoped search cannot be mis-asserted as files.
-  search(
-    query: Query,
-    realmURLs: string[] | undefined,
-    opts: { scope: 'files' },
-  ): Promise<FileDef[]>;
-  search(
-    query: Query,
-    realmURLs: string[] | undefined,
-    opts: { scope: 'all' },
-  ): Promise<(CardDef | FileDef)[]>;
-  search<T extends CardDef = CardDef>(
+  search<S extends SearchEntryScope = 'cards'>(
     query: Query,
     realmURLs?: string[],
-    opts?: { scope?: 'cards' },
-  ): Promise<T[]>;
+    opts?: { scope?: S },
+  ): Promise<ElementForScope[S][]>;
   getSaveState(id: string): AutoSaveState | undefined;
 }
 

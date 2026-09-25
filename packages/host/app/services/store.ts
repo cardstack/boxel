@@ -60,6 +60,8 @@ import {
   RealmPaths,
   type CardAPIForMatching,
   clearReplacedArrayFieldMeta,
+  type ElementForScope,
+  type InstanceForReadType,
   type Store as StoreInterface,
   type AddOptions,
   type CreateOptions,
@@ -279,6 +281,40 @@ function shedRetryDelayMs(retryAfter: string | null): number {
   }
   seconds = Math.min(seconds, MAX_SHED_RETRY_AFTER_SECONDS);
   return seconds * 1000 + Math.random() * 250;
+}
+
+// The knobs every search takes. `scope` drives the element type, so it is a
+// type parameter rather than a field the return type has to be kept in sync
+// with by hand.
+interface SearchOptions<S extends SearchEntryScope = 'cards'> {
+  dependencyTrackingContext?: RuntimeDependencyTrackingContext;
+  // Set only by the card `@context` surfaces (getCards + the card-facing
+  // store). Applies the caps that protect against untrusted card code —
+  // page size, realms fan-out, and the concurrency throttle — none of which
+  // constrain the host app's own direct search calls.
+  cardInitiated?: boolean;
+  // Run under the query-field concurrency lane without the other card caps,
+  // for a caller whose result set must not be reshaped but whose volume
+  // still has to be bounded — query-field resolution, which fires a search
+  // per query field per deserialized card. Ignored with `cardInitiated`,
+  // which takes the card lane instead.
+  throttled?: boolean;
+  // Asked once, when a queued search reaches the front of the throttle.
+  // Waiting is where a consumer can go away — the resource that wanted this
+  // result restarts on a new query, or is torn down — and a search that
+  // answers nobody should hand its slot to the live ones behind it rather
+  // than spend it on a fetch and a hydration. Only the queued path consults
+  // it; an unthrottled search never waits long enough for the answer to
+  // change.
+  isObsolete?: () => boolean;
+  // Pin which index rows the search returns: 'cards' (instance rows),
+  // 'files' (FileDef rows), or 'all' (both). When omitted, the scope is
+  // inferred from the filter — an untyped query defaults to 'cards'. Prefer
+  // passing this explicitly over shaping the filter to coax a scope.
+  // Note: 'all' returns a card's instance row *and* its dual-indexed
+  // `.json` file row, so an untyped `scope: 'all'` search yields each card
+  // twice unless the caller dedups (e.g. `excludeCardInstanceFileRows()`).
+  scope?: S;
 }
 
 export default class StoreService extends Service implements StoreInterface {
@@ -886,19 +922,40 @@ export default class StoreService extends Service implements StoreInterface {
     this.doAutoSave(id, { isImmediate: true });
   }
 
-  async add<T extends CardDef>(
-    instanceOrDoc: T | LooseSingleCardDocument,
-    opts?: TrackedCreateOptions & { doNotPersist: true },
-  ): Promise<T>;
-  async add<T extends CardDef>(
-    instanceOrDoc: T | LooseSingleCardDocument,
-    opts?: TrackedCreateOptions & { doNotWaitForPersist: true },
-  ): Promise<T>;
+  // Hydrates, persists, and waits for the write to land — so this is the one
+  // that can answer with a persistence error.
   async add<T extends CardDef>(
     instanceOrDoc: T | LooseSingleCardDocument,
     opts?: TrackedCreateOptions,
-  ): Promise<T | CardErrorJSONAPI>;
-  async add<T extends CardDef>(
+  ): Promise<T | CardErrorJSONAPI> {
+    return await this.addInternal<T>(instanceOrDoc, opts);
+  }
+
+  // Hydrates into the store and stops there. No request is made, so there is
+  // no persistence outcome to report.
+  async addWithoutPersisting<T extends CardDef>(
+    instanceOrDoc: T | LooseSingleCardDocument,
+    opts?: TrackedCreateOptions,
+  ): Promise<T> {
+    return (await this.addInternal<T>(instanceOrDoc, {
+      ...opts,
+      doNotPersist: true,
+    })) as T;
+  }
+
+  // Hydrates and starts the write without waiting for it. The outcome lands on
+  // the auto-save state for `id`, not on this call.
+  async addWithoutWaiting<T extends CardDef>(
+    instanceOrDoc: T | LooseSingleCardDocument,
+    opts?: TrackedCreateOptions,
+  ): Promise<T> {
+    return (await this.addInternal<T>(instanceOrDoc, {
+      ...opts,
+      doNotWaitForPersist: true,
+    })) as T;
+  }
+
+  private async addInternal<T extends CardDef>(
     instanceOrDoc: T | LooseSingleCardDocument,
     opts?: TrackedAddOptions,
   ): Promise<T | CardErrorJSONAPI> {
@@ -1024,24 +1081,16 @@ export default class StoreService extends Service implements StoreInterface {
 
   // peek will return a stale instance in the case the server has an error for
   // this id
-  peek<T extends CardDef>(
+  peek<K extends StoreReadType = 'card'>(
     id: string,
-    opts?: { type?: 'card' },
-  ): T | CardErrorJSONAPI | undefined;
-  peek<T extends FileDef>(
-    id: string,
-    opts: { type: 'file-meta' },
-  ): T | CardErrorJSONAPI | undefined;
-  peek<T extends CardDef | FileDef>(
-    id: string,
-    opts?: { type?: StoreReadType },
-  ): T | CardErrorJSONAPI | undefined {
+    opts?: { type?: K },
+  ): InstanceForReadType[K] | CardErrorJSONAPI | undefined {
     id = asURL(id, this.network.virtualNetwork);
-    let readType = opts?.type ?? 'card';
-    if (readType === 'file-meta') {
-      return this.store.getFileMetaInstanceOrError<T & FileDef>(id);
-    }
-    return this.store.getCardInstanceOrError<T & CardDef>(id);
+    let result =
+      (opts?.type ?? 'card') === 'file-meta'
+        ? this.store.getFileMetaInstanceOrError<FileDef>(id)
+        : this.store.getCardInstanceOrError<CardDef>(id);
+    return result as InstanceForReadType[K] | CardErrorJSONAPI | undefined;
   }
 
   // All hydrated (non-error) card instances currently in the Store. The result
@@ -1085,11 +1134,6 @@ export default class StoreService extends Service implements StoreInterface {
   }
 
   // peekError will always return the current server state regarding errors for this id
-  peekError(id: string, opts?: { type?: 'card' }): CardErrorJSONAPI | undefined;
-  peekError(
-    id: string,
-    opts: { type: 'file-meta' },
-  ): CardErrorJSONAPI | undefined;
   peekError(
     id: string,
     opts?: { type?: StoreReadType },
@@ -1102,64 +1146,46 @@ export default class StoreService extends Service implements StoreInterface {
     return this.store.getCardError(id);
   }
 
-  async get<T extends CardDef>(
+  async get<K extends StoreReadType = 'card'>(
     id: string,
     opts?: {
-      type?: 'card';
+      type?: K;
       dependencyTrackingContext?: RuntimeDependencyTrackingContext;
     },
-  ): Promise<T | CardErrorJSONAPI>;
-  async get<T extends FileDef>(
-    id: string,
-    opts: {
-      type: 'file-meta';
-      dependencyTrackingContext?: RuntimeDependencyTrackingContext;
-    },
-  ): Promise<T | CardErrorJSONAPI>;
-  async get<T extends CardDef | FileDef>(
-    id: string,
-    opts?: {
-      type?: StoreReadType;
-      dependencyTrackingContext?: RuntimeDependencyTrackingContext;
-    },
-  ): Promise<T | CardErrorJSONAPI> {
-    let readType = opts?.type ?? 'card';
-    if (readType === 'file-meta') {
-      return await this.getFileMetaInstance<T & FileDef>({
-        idOrDoc: id,
-        opts: { dependencyTrackingContext: opts?.dependencyTrackingContext },
-      });
-    }
-    return await this.getCardInstance<T & CardDef>({
-      idOrDoc: id,
-      opts: { dependencyTrackingContext: opts?.dependencyTrackingContext },
-    });
+  ): Promise<InstanceForReadType[K] | CardErrorJSONAPI> {
+    let result =
+      (opts?.type ?? 'card') === 'file-meta'
+        ? await this.getFileMetaInstance<FileDef>({
+            idOrDoc: id,
+            opts: {
+              dependencyTrackingContext: opts?.dependencyTrackingContext,
+            },
+          })
+        : await this.getCardInstance<CardDef>({
+            idOrDoc: id,
+            opts: {
+              dependencyTrackingContext: opts?.dependencyTrackingContext,
+            },
+          });
+    return result as InstanceForReadType[K] | CardErrorJSONAPI;
   }
 
   // Bypass cached state and fetch from source of truth
-  async getWithoutCache<T extends CardDef>(
+  async getWithoutCache<K extends StoreReadType = 'card'>(
     id: string,
-    opts?: { type?: 'card' },
-  ): Promise<T | CardErrorJSONAPI>;
-  async getWithoutCache<T extends FileDef>(
-    id: string,
-    opts: { type: 'file-meta' },
-  ): Promise<T | CardErrorJSONAPI>;
-  async getWithoutCache<T extends CardDef | FileDef>(
-    id: string,
-    opts?: { type?: StoreReadType },
-  ): Promise<T | CardErrorJSONAPI> {
-    let readType = opts?.type ?? 'card';
-    if (readType === 'file-meta') {
-      return await this.getFileMetaInstance<T & FileDef>({
-        idOrDoc: id,
-        opts: { noCache: true },
-      });
-    }
-    return await this.getCardInstance<T & CardDef>({
-      idOrDoc: id,
-      opts: { noCache: true },
-    });
+    opts?: { type?: K },
+  ): Promise<InstanceForReadType[K] | CardErrorJSONAPI> {
+    let result =
+      (opts?.type ?? 'card') === 'file-meta'
+        ? await this.getFileMetaInstance<FileDef>({
+            idOrDoc: id,
+            opts: { noCache: true },
+          })
+        : await this.getCardInstance<CardDef>({
+            idOrDoc: id,
+            opts: { noCache: true },
+          });
+    return result as InstanceForReadType[K] | CardErrorJSONAPI;
   }
 
   async serializeFileDefAsDocument(
@@ -1203,32 +1229,7 @@ export default class StoreService extends Service implements StoreInterface {
     this.notifyCardInvalidationSubscribers(id);
   }
 
-  async patch<T extends CardDef = CardDef>(
-    id: string,
-    patch: PatchData,
-    opts?: { doNotPersist?: true },
-  ): Promise<T | CardErrorJSONAPI | undefined>;
-  async patch<T extends CardDef = CardDef>(
-    id: string,
-    patch: PatchData,
-    opts?: { doNotWaitForPersist?: true },
-  ): Promise<T | CardErrorJSONAPI | undefined>;
-  async patch<T extends CardDef = CardDef>(
-    id: string,
-    patch: PatchData,
-    opts?: { doNotPersist?: true; doNotWaitForPersist?: true },
-  ): Promise<T | CardErrorJSONAPI | undefined>;
-  async patch<T extends CardDef = CardDef>(
-    id: string,
-    patch: PatchData,
-    opts?: { clientRequestId?: string },
-  ): Promise<T | CardErrorJSONAPI | undefined>;
-  async patch<T extends CardDef = CardDef>(
-    id: string,
-    patch: PatchData,
-    opts?: { doNotWaitForPersist?: true; clientRequestId?: string },
-  ): Promise<T | CardErrorJSONAPI | undefined>;
-  async patch<T extends CardDef = CardDef>(
+  async patch(
     id: string,
     patch: PatchData,
     opts?: {
@@ -1236,12 +1237,12 @@ export default class StoreService extends Service implements StoreInterface {
       doNotWaitForPersist?: true;
       clientRequestId?: string;
     },
-  ): Promise<T | CardErrorJSONAPI | undefined> {
+  ): Promise<CardDef | CardErrorJSONAPI | undefined> {
     if (this.renderContextBlocksPersistence()) {
       return;
     }
     // eslint-disable-next-line ember/classic-decorator-no-classic-methods
-    let instance = await this.get<T>(id);
+    let instance = await this.get(id);
     if (!instance || !isCardInstance(instance)) {
       return;
     }
@@ -1310,7 +1311,7 @@ export default class StoreService extends Service implements StoreInterface {
       }
     }
 
-    return persistedResult as T | CardErrorJSONAPI;
+    return persistedResult;
   }
 
   // Instances only: the query runs against the search requesting full
@@ -1319,65 +1320,30 @@ export default class StoreService extends Service implements StoreInterface {
   // renderings, field-limited serializations, the document itself) use
   // `searchEntries` — that surface lives on this service only, never on the
   // `Store` interface cards receive.
-  async search<T extends CardDef | FileDef = CardDef>(
+  // Results only. `searchWithMeta` is the same search with the page meta.
+  async search<S extends SearchEntryScope = 'cards'>(
     query: Query,
     realms?: string[],
-    opts?: {
-      includeMeta?: false;
-      dependencyTrackingContext?: RuntimeDependencyTrackingContext;
-      cardInitiated?: boolean;
-      throttled?: boolean;
-      isObsolete?: () => boolean;
-      scope?: SearchEntryScope;
-    },
-  ): Promise<T[]>;
-  async search<T extends CardDef | FileDef = CardDef>(
-    query: Query,
-    realms: string[] | undefined,
-    opts: {
-      includeMeta: true;
-      dependencyTrackingContext?: RuntimeDependencyTrackingContext;
-      cardInitiated?: boolean;
-      throttled?: boolean;
-      isObsolete?: () => boolean;
-      scope?: SearchEntryScope;
-    },
-  ): Promise<{ instances: T[]; meta: QueryResultsMeta }>;
-  async search<T extends CardDef | FileDef = CardDef>(
+    opts?: SearchOptions<S>,
+  ): Promise<ElementForScope[S][]> {
+    let { instances } = await this.searchInternal<S>(query, realms, opts);
+    return instances;
+  }
+
+  // The same search, with the page meta its results were counted against.
+  async searchWithMeta<S extends SearchEntryScope = 'cards'>(
     query: Query,
     realms?: string[],
-    opts?: {
-      includeMeta?: boolean;
-      dependencyTrackingContext?: RuntimeDependencyTrackingContext;
-      // Set only by the card `@context` surfaces (getCards + the card-facing
-      // store). Applies the caps that protect against untrusted card code —
-      // page size, realms fan-out, and the concurrency throttle — none of which
-      // constrain the host app's own direct search calls.
-      cardInitiated?: boolean;
-      // Run under the query-field concurrency lane without the other card caps,
-      // for a caller whose result set must not be reshaped but whose volume
-      // still has to be bounded — query-field resolution, which fires a search
-      // per query field per deserialized card. Ignored with `cardInitiated`,
-      // which takes the card lane instead.
-      throttled?: boolean;
-      // Asked once, when a queued search reaches the front of the throttle.
-      // Waiting is where a consumer can go away — the resource that wanted this
-      // result restarts on a new query, or is torn down — and a search that
-      // answers nobody should hand its slot to the live ones behind it rather
-      // than spend it on a fetch and a hydration. Only the queued path consults
-      // it; an unthrottled search never waits long enough for the answer to
-      // change.
-      isObsolete?: () => boolean;
-      // Pin which index rows the search returns: 'cards' (instance rows),
-      // 'files' (FileDef rows), or 'all' (both). When omitted, the scope is
-      // inferred from the filter — an untyped query defaults to 'cards'. Prefer
-      // passing this explicitly over shaping the filter to coax a scope.
-      // Note: 'all' returns a card's instance row *and* its dual-indexed
-      // `.json` file row, so an untyped `scope: 'all'` search yields each card
-      // twice unless the caller dedups (e.g. `excludeCardInstanceFileRows()`).
-      scope?: SearchEntryScope;
-    },
-  ): Promise<T[] | { instances: T[]; meta: QueryResultsMeta }> {
+    opts?: SearchOptions<S>,
+  ): Promise<{ instances: ElementForScope[S][]; meta: QueryResultsMeta }> {
+    return await this.searchInternal<S>(query, realms, opts);
+  }
+
+  private async searchInternal<S extends SearchEntryScope = 'cards'>(
+    query: Query,
+    realms?: string[],
+    opts?: SearchOptions<S>,
+  ): Promise<{ instances: ElementForScope[S][]; meta: QueryResultsMeta }> {
     if ('asData' in query && query.asData) {
       throw new Error(
         `store.search returns instances only — use store.searchEntries for the raw entry wire format`,
@@ -1392,9 +1358,7 @@ export default class StoreService extends Service implements StoreInterface {
       ? this.normalizeRealmPaths(realms)
       : this.normalizeSearchRealms(realms);
     if (searchRealms.length === 0) {
-      return opts?.includeMeta
-        ? { instances: [], meta: { page: { total: 0 } } }
-        : [];
+      return { instances: [], meta: { page: { total: 0 } } };
     }
     if (opts?.cardInitiated) {
       // Enforce the card-facing caps on the resolved request: the realms cap on
@@ -1405,7 +1369,7 @@ export default class StoreService extends Service implements StoreInterface {
       query = applySearchPageBound(query);
     }
     let run = () =>
-      this.fetchAndHydrateSearchResults<T>(
+      this.fetchAndHydrateSearchResults<ElementForScope[S]>(
         query,
         searchRealms,
         opts?.dependencyTrackingContext,
@@ -1419,12 +1383,15 @@ export default class StoreService extends Service implements StoreInterface {
     let result = lane
       ? await this.performThrottledSearch(async () => {
           if (opts?.isObsolete?.()) {
-            return { instances: [] as T[], meta: { page: { total: 0 } } };
+            return {
+              instances: [] as ElementForScope[S][],
+              meta: { page: { total: 0 } },
+            };
           }
           return await run();
         }, lane)
       : await run();
-    return opts?.includeMeta ? result : result.instances;
+    return result;
   }
 
   // The raw wire format: heterogeneous `entry` resources with the
@@ -3330,8 +3297,7 @@ export default class StoreService extends Service implements StoreInterface {
     // Mark resources that came from `_search` so query-field seed handling can
     // distinguish unresolved empty seeds from explicit empty card-GET results.
     (resource as any)[queryFieldSeedFromSearchSymbol] = true;
-    return this.add({ data: resource } as SingleCardDocument, {
-      doNotPersist: true,
+    return this.addWithoutPersisting({ data: resource } as SingleCardDocument, {
       relativeTo: resource.id,
       dependencyTrackingContext,
     }) as Promise<T>;

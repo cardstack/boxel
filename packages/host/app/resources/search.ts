@@ -1112,12 +1112,9 @@ export class SearchResource<
             dependencyTrackingContext,
           });
         } else {
-          await this.runtimeStore.add(
+          await this.runtimeStore.addWithoutPersisting(
             card as CardDef,
-            {
-              doNotPersist: true,
-              dependencyTrackingContext,
-            }, // search results always have id's
+            { dependencyTrackingContext }, // search results always have id's
           );
         }
       }
@@ -1254,11 +1251,10 @@ export class SearchResource<
           // a lane of its own, since clamping its page or its realms would
           // change which cards the field reports as members. Host-internal
           // searches pass neither flag and are unbounded.
-          let { instances, meta } = await this.runtimeStore.search<T>(
+          let { instances, meta } = await this.runtimeStore.searchWithMeta(
             query,
             this.realmsToSearch,
             {
-              includeMeta: true,
               dependencyTrackingContext,
               cardInitiated: this.#cardInitiated,
               throttled: this.#throttled,
@@ -1292,7 +1288,10 @@ export class SearchResource<
           }
           this._meta = meta;
           this._errors = undefined;
-          await this.updateInstances(instances, dependencyTrackingContext);
+          await this.updateInstances(
+            instances as T[],
+            dependencyTrackingContext,
+          );
         } catch (err) {
           if (didCancel(err)) {
             throw err;
