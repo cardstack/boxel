@@ -1073,26 +1073,33 @@ export default class RealmService extends Service {
     });
   }
 
-  // `startingVisit` is for the routes a prerender visit enters through. The
-  // prerender server writes each visit's sessions into storage just before the
-  // visit, replacing the ones it wrote for the visit before — and the pool can
-  // hand a warm tab from one realm to another, so that visit may have been
-  // another realm's. Storage is then the whole truth about which realms this
-  // tab holds a session for, and a session it doesn't carry is dropped rather
-  // than kept beside the new ones. A realm left behind keeps answering
-  // `knownRealm`, which takes the first realm whose URL prefixes the one asked
-  // about: a leftover realm at an origin's root claims every realm under it,
-  // and a render of one of their cards fetches the root realm's info instead
-  // of its own.
+  // `startingVisit` is for the routes each pass of a prerender visit enters
+  // through. The prerender server writes the visit's sessions into storage
+  // before its first pass, replacing the ones it wrote for the visit before —
+  // and the pool can hand a warm tab from one realm to another, so that visit
+  // may have been another realm's. A realm holding a session storage doesn't
+  // carry is then dropped rather than kept beside the new ones. A realm left
+  // behind keeps answering `knownRealm`, which takes the first realm whose URL
+  // prefixes the one asked about: a leftover realm at an origin's root claims
+  // every realm under it, and a render of one of their cards fetches the root
+  // realm's info instead of its own.
   //
-  // Only then: within a visit this service writes storage too — a relogin
-  // clears the whole blob before storing its own token — so a session missing
-  // from it mid-visit is not a stale one.
+  // The memo doesn't apply to it: an add-only restore — `token()`'s fallback —
+  // may have read the visit's sessions first, and that one keeps whatever the
+  // tab held. Every pass of a visit re-runs the drop, which finds nothing new
+  // after the first because storage only gains sessions within a visit: this
+  // service's own writes add or refresh a realm's token, and the one write that
+  // clears the others — reauthentication — doesn't run in a prerender tab.
+  //
+  // Each session is registered under its own realm (`exact`), so a known realm
+  // whose URL prefixes a session's realm is never handed that session — and,
+  // since assigning a token stores it, never written back into storage as a
+  // session this visit carries.
   restoreSessionsFromStorage({
     startingVisit = false,
   }: { startingVisit?: boolean } = {}): void {
     let sessionsString = window.localStorage.getItem(SessionLocalStorageKey);
-    if (sessionsString === this.lastRestoredSessionsString) {
+    if (!startingVisit && sessionsString === this.lastRestoredSessionsString) {
       return;
     }
     if (!sessionsString && !startingVisit) {
@@ -1110,7 +1117,9 @@ export default class RealmService extends Service {
       this.dropSessionsNotCarriedBy(tokens);
     }
     for (let [realmURL, token] of Object.entries(tokens)) {
-      let resource = this.getOrCreateRealmResource(realmURL, token);
+      let resource = this.getOrCreateRealmResource(realmURL, token, {
+        exact: true,
+      });
       if (token && resource.token !== token) {
         resource.token = token;
       }
@@ -1691,13 +1700,20 @@ export default class RealmService extends Service {
     return resource;
   }
 
+  // `exact` finds only the realm registered under `realmURL` itself, in any of
+  // its identifier forms. Without it the lookup is `knownRealm`'s, and a known
+  // realm whose URL merely prefixes `realmURL` is returned — and handed
+  // `token` — in its place.
   getOrCreateRealmResource(
     realmURL: string,
     token: string | undefined = undefined,
+    { exact = false }: { exact?: boolean } = {},
   ): RealmResource {
     // this should be the only place we do the untracked read. It needs to be
     // untracked so our `this._realms.set` below will not be an assertion.
-    let resource = this.knownRealm(realmURL, { tracked: false });
+    let resource = exact
+      ? this.registeredRealm(realmURL)
+      : this.knownRealm(realmURL, { tracked: false });
 
     if (resource && !resource?.token && token) {
       resource.token = token;
@@ -1711,6 +1727,17 @@ export default class RealmService extends Service {
       this.currentKnownRealms.add(realmURL);
     }
     return resource;
+  }
+
+  private registeredRealm(realmURL: string): RealmResource | undefined {
+    let vn = this.network.virtualNetwork;
+    let identity = vn.unresolveURL(realmURL);
+    for (let [key, resource] of this._realms) {
+      if (key === realmURL || vn.unresolveURL(key) === identity) {
+        return resource;
+      }
+    }
+    return undefined;
   }
 
   private identifyRealm = task(

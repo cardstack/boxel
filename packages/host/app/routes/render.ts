@@ -929,24 +929,33 @@ export default class RenderRoute extends Route<Model> {
   }
 
   // The realm info is fetched from whichever known realm `realmURL` resolves
-  // to, which is not always `realmURL`'s own: a realm the tab still knows whose
-  // URL prefixes it answers first. Its fetch then fails naming a realm this
-  // render never asked about, so the failure is extended to say which realm the
-  // render asked for, which one answered, and whether that one holds a session:
-  // one holding a session the visit's sessions carry, or one identified without
-  // a session along the way. The error doc then reads as a resolution fault on
-  // its own.
+  // to, which is not always `realmURL`'s own: a known realm whose URL prefixes
+  // it answers first. Its fetch then fails naming a realm this render never
+  // asked about, so the failure is extended to say which realm the render asked
+  // for, which one answered, and which realm the answering one's session was
+  // issued for. A session issued for `realmURL` is this realm's own, handed to
+  // the ancestor by a registration that went through `knownRealm`; one issued
+  // for the answering realm is that realm's own, carried by this visit or left
+  // by an earlier one; no session means the tab identified the answering realm
+  // without one. The error doc then reads as a resolution fault on its own.
   async #ensureVisitRealmMeta(realmURL: string): Promise<void> {
     try {
       await this.realm.ensureRealmMeta(realmURL);
     } catch (err) {
       let resolved = this.realm.url(realmURL);
-      if (err instanceof Error && resolved && resolved !== realmURL) {
-        let holdsSession = Boolean(this.realm.realms.get(resolved)?.token);
+      let vn = this.network.virtualNetwork;
+      if (
+        err instanceof Error &&
+        resolved &&
+        vn.unresolveURL(resolved) !== vn.unresolveURL(realmURL)
+      ) {
+        let sessionRealm = this.realm.realms.get(resolved)?.claims?.realm;
         err.message =
           `${err.message} (this render's realm ${realmURL} resolved to the ` +
           `known realm ${resolved}, which ` +
-          `${holdsSession ? 'holds a' : 'holds no'} session)`;
+          (sessionRealm
+            ? `holds a session issued for ${sessionRealm})`
+            : 'holds no session)');
       }
       throw err;
     }

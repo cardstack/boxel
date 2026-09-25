@@ -77,22 +77,50 @@ module('Unit | Service | realm | prerender visit sessions', function (hooks) {
     );
   });
 
-  test('a restore within a visit keeps sessions storage no longer carries', function (assert) {
-    let rootToken = sessionToken(ROOT_REALM);
-    writeVisitSessions({
-      [ROOT_REALM]: rootToken,
-      [OTHER_REALM]: sessionToken(OTHER_REALM),
-    });
+  test('a visit drops the earlier sessions even when an add-only restore read its sessions first', function (assert) {
+    writeVisitSessions({ [ROOT_REALM]: sessionToken(ROOT_REALM) });
     realm.restoreSessionsFromStorage({ startingVisit: true });
 
-    // A relogin mid-visit clears the whole blob before storing its own token.
-    writeVisitSessions({ [OTHER_REALM]: sessionToken(OTHER_REALM, 'b') });
+    let nestedToken = sessionToken(NESTED_REALM);
+    writeVisitSessions({ [NESTED_REALM]: nestedToken });
+    // `token()`'s fallback, reaching storage before the visit's first pass.
     realm.restoreSessionsFromStorage();
+    assert.deepEqual(
+      JSON.parse(window.localStorage.getItem(SessionLocalStorageKey)!),
+      { [NESTED_REALM]: nestedToken },
+      'the add-only restore stores no session for the root realm',
+    );
+
+    realm.restoreSessionsFromStorage({ startingVisit: true });
+    assert.strictEqual(
+      realm.url(`${NESTED_REALM}card`),
+      NESTED_REALM,
+      'the nested realm’s card resolves to its own realm',
+    );
+    assert.false(
+      realm.realms.has(ROOT_REALM),
+      'the root realm the earlier visit held a session for is gone',
+    );
+  });
+
+  test('a visit’s sessions register each realm under its own URL', function (assert) {
+    let rootToken = sessionToken(ROOT_REALM);
+    let nestedToken = sessionToken(NESTED_REALM);
+    writeVisitSessions({
+      [ROOT_REALM]: rootToken,
+      [NESTED_REALM]: nestedToken,
+    });
+    realm.restoreSessionsFromStorage({ startingVisit: true });
 
     assert.strictEqual(
       realm.realms.get(ROOT_REALM)?.token,
       rootToken,
-      'the root realm keeps the session the visit began with',
+      'the root realm holds its own session',
+    );
+    assert.strictEqual(
+      realm.realms.get(NESTED_REALM)?.token,
+      nestedToken,
+      'the nested realm is registered with its own session rather than handing it to the root realm',
     );
   });
 
