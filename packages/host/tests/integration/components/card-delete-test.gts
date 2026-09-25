@@ -234,7 +234,7 @@ module('Integration | card-delete', function (hooks) {
     );
     await click('[data-test-boxel-filter-list-button="All Files"]');
     await triggerEvent(
-      `[data-test-cards-grid-item="${testRealmURL}notes.txt"] .field-component-card`,
+      `[data-test-cards-grid-item="${testRealmURL}notes"] .field-component-card`,
       'mouseenter',
     );
     await click(
@@ -251,7 +251,7 @@ module('Integration | card-delete', function (hooks) {
     await waitUntil(
       () =>
         !document.querySelector(
-          `[data-test-cards-grid-item="${testRealmURL}notes.txt"]`,
+          `[data-test-cards-grid-item="${testRealmURL}notes"]`,
         ),
     );
     assert.strictEqual(
@@ -620,7 +620,7 @@ module('Integration | card-delete', function (hooks) {
 
     await click('[data-test-boxel-filter-list-button="All Files"]');
     await triggerEvent(
-      `[data-test-cards-grid-item="${testRealmURL}notes.txt"] .field-component-card`,
+      `[data-test-cards-grid-item="${testRealmURL}notes"] .field-component-card`,
       'mouseenter',
     );
     await click(
@@ -632,7 +632,7 @@ module('Integration | card-delete', function (hooks) {
 
     // Re-hover to resurface the per-row more-options menu, then delete.
     await triggerEvent(
-      `[data-test-cards-grid-item="${testRealmURL}notes.txt"] .field-component-card`,
+      `[data-test-cards-grid-item="${testRealmURL}notes"] .field-component-card`,
       'mouseenter',
     );
     await click(
@@ -645,7 +645,7 @@ module('Integration | card-delete', function (hooks) {
     await waitUntil(
       () =>
         !document.querySelector(
-          `[data-test-cards-grid-item="${testRealmURL}notes.txt"]`,
+          `[data-test-cards-grid-item="${testRealmURL}notes"]`,
         ),
     );
     assert.strictEqual(
