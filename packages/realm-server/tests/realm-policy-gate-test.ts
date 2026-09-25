@@ -1420,6 +1420,27 @@ module(basename(import.meta.filename), function (hooks) {
       );
     });
 
+    test('a target outside the realm is refused before the policy is loaded', async function (assert) {
+      await assert.rejects(
+        resolveGatedOperation(
+          education.operationCore,
+          { kind: 'instance', url: `${ORG}note` },
+          'read',
+          newOperationScope(education.operationCore, {
+            caller: scopeCallerFor(TEACHER),
+            coarseDeclined: 'all',
+          }),
+        ),
+        /operation-not-permitted/,
+        'the refusal every declined invocation gets',
+      );
+      assert.strictEqual(
+        gateStats().policyLoads,
+        0,
+        'and no policy was loaded',
+      );
+    });
+
     test('module source and the file tree are not there for a caller who may not read the realm', async function (assert) {
       let source = await getSource(`${EDUCATION}classroom.gts`, AUTH.teacher());
       let missingSource = await getSource(

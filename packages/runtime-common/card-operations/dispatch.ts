@@ -14,6 +14,7 @@ import {
   loadPolicy,
   notPermitted,
   type GateDecision,
+  type LoadedPolicy,
   type OperationPolicyAccess,
 } from './gate.ts';
 import {
@@ -610,16 +611,27 @@ export async function resolveGatedOperation(
   name: string,
   scope: OperationScope = newOperationScope(core),
 ): Promise<GatedOperation> {
-  let loaded =
-    scope.coarseDeclined === 'all' ? await loadPolicy(core) : undefined;
+  let refusal = (e: unknown): unknown =>
+    scope.coarseDeclined === 'all' && isOperationFailure(e)
+      ? notPermitted(target, name)
+      : e;
+  let loaded: LoadedPolicy | undefined;
+  if (scope.coarseDeclined === 'all') {
+    // A target outside this realm is refused before the policy is consulted
+    // at all. That refusal is arithmetic on the URL the caller sent, so it
+    // says nothing about what the realm holds.
+    try {
+      assertInRealm(core, target);
+    } catch (e: unknown) {
+      throw refusal(e);
+    }
+    loaded = await loadPolicy(core);
+  }
   let resolved: Awaited<ReturnType<typeof resolveUngated>>;
   try {
     resolved = await resolveUngated(core, target, name, scope);
   } catch (e: unknown) {
-    if (scope.coarseDeclined === 'all' && isOperationFailure(e)) {
-      throw notPermitted(target, name);
-    }
-    throw e;
+    throw refusal(e);
   }
   let { definition, typeDefinition } = resolved;
   let decision = await gateOperation(
