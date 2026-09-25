@@ -17,7 +17,8 @@ import type {
 
 // A realm's policy compiled for the gate: the RealmPolicy card that the realm's
 // `realm.json` names, with every `where` parsed and canonicalized under BXL's
-// `policy` profile.
+// `policy` profile, and every grant on a query carrying the search filter its
+// predicate compiles to.
 //
 // Only what compiled is here. A rule or grant that did not compile is left out
 // and recorded in `issues`. So a grant whose predicate failed can never be

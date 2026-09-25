@@ -45,9 +45,11 @@ import type { OperationQueryFilterTemplate } from './types.ts';
 //   whole values, so a filter can refuse a card that `contains` admits. And
 //   the index answers `not` element by element: a card is admitted by
 //   `not member` as soon as any one element differs.
-// - A card's id. The index and the stored source can spell one card's id
-//   differently, a URL in one and a prefixed identifier in the other, so the
-//   filter can find two ids unequal that the predicate finds equal.
+// - A card's id. The index can hold an id spelled differently from the one
+//   the predicate reads: for a link the index could not follow, it keeps the
+//   reference as the stored source wrote it, where the predicate reads the id
+//   that reference resolves to. So the filter can find two ids unequal that
+//   the predicate finds equal.
 // ============================================================================
 
 export type PolicyFilterOutcome =
