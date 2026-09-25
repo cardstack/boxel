@@ -367,6 +367,11 @@ export interface OperationRequest {
   // unconditional write; present makes the write conditional, and the result's
   // `baseMatched` reports whether the target was still at that version.
   baseVersion?: string;
+  // Set when the realm ACL declined this request's caller. That is the one
+  // case the realm's policy decides whether the operation runs. Absent means
+  // the ACL allowed the caller, or never judged the request, as with a
+  // realm-internal dispatch.
+  coarseDeclined?: true;
 }
 
 // A read's answer: the assembled JSON:API document, exactly as the card+json
@@ -635,6 +640,11 @@ export type OperationErrorCode =
   // nobody. Distinct from `invalid-params` because nothing the caller sent is
   // wrong: the remedy is credentials, which is what its 401 says.
   | 'actor-required'
+  // The realm ACL declined the caller, and no grant in the realm's policy
+  // admits this operation on this target. The detail is the same whether the
+  // target exists or not, and whatever the policy holds, so the refusal says
+  // nothing about the realm beyond the fact of the refusal.
+  | 'operation-not-permitted'
   // The bytes an operation would store are over the realm's ceiling for a
   // card or a file of that kind. Separate from `invalid-params` because the
   // payload is well formed and the remedy is to send less of it, and because
