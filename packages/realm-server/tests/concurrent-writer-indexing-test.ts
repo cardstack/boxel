@@ -174,26 +174,43 @@ function holdWriterPassesBeforeCommit(
 // scope change, which hides a stale read the scope would have allowed on a
 // larger pool.
 class RecordingPrerenderer implements Prerenderer {
-  visits: {
-    url: string;
-    visitType: string | undefined;
-    jobId: string | undefined;
-    renderScope: string | undefined;
-  }[] = [];
+  visits: RecordedVisit[] = [];
+  #startedAt = Date.now();
   #inner: Promise<Prerenderer> | undefined;
 
   #prerenderer(): Promise<Prerenderer> {
     return (this.#inner ??= getTestPrerenderer());
   }
 
+  reset() {
+    this.visits = [];
+    this.#startedAt = Date.now();
+  }
+
   async prerenderVisit(args: PrerenderVisitArgs): Promise<RenderVisitResponse> {
-    this.visits.push({
+    let visit: RecordedVisit = {
       url: args.url,
       visitType: args.visitType,
       jobId: args.jobId,
       renderScope: args.renderScope,
-    });
-    return await (await this.#prerenderer()).prerenderVisit(args);
+      resetStore: args.renderOptions?.resetStore === true,
+      clearCache: args.renderOptions?.clearCache === true,
+      startMs: Date.now() - this.#startedAt,
+    };
+    this.visits.push(visit);
+    let response = await (await this.#prerenderer()).prerenderVisit(args);
+    visit.endMs = Date.now() - this.#startedAt;
+    let card = response.card;
+    let diagnostics = (response.meta?.diagnostics ?? {}) as {
+      tabReused?: boolean;
+      loaderResetReason?: string;
+    };
+    visit.studentName = card?.searchDoc?.studentName;
+    visit.title = card?.searchDoc?.title;
+    visit.tabReused = diagnostics.tabReused;
+    visit.loaderResetReason = diagnostics.loaderResetReason;
+    visit.error = card?.error?.error?.message;
+    return response;
   }
 
   async prerenderModule(
@@ -230,6 +247,52 @@ class RecordingPrerenderer implements Prerenderer {
       )
       .map((visit) => visit.renderScope);
   }
+
+  // Every visit of the test in the order it started, one per line, for a
+  // failure message that shows which render read what and under which scope.
+  timeline(realmURL: URL): string {
+    return this.visits
+      .map((visit, index) =>
+        [
+          `#${index}`,
+          `${visit.startMs}-${visit.endMs ?? '?'}ms`,
+          `job=${visit.jobId}`,
+          visit.visitType ?? 'index',
+          visit.url.replace(realmURL.href, ''),
+          `scope=${visit.renderScope?.replace(realmURL.href, '')}`,
+          ...(visit.resetStore ? ['resetStore'] : []),
+          ...(visit.clearCache ? ['clearCache'] : []),
+          `tabReused=${visit.tabReused}`,
+          ...(visit.loaderResetReason
+            ? [`loaderReset=${visit.loaderResetReason}`]
+            : []),
+          ...(visit.title !== undefined ? [`title=${visit.title}`] : []),
+          ...(visit.studentName !== undefined
+            ? [`studentName=${visit.studentName}`]
+            : []),
+          ...(visit.error ? [`error=${visit.error}`] : []),
+        ].join(' '),
+      )
+      .join('\n');
+  }
+}
+
+interface RecordedVisit {
+  url: string;
+  visitType: string | undefined;
+  jobId: string | undefined;
+  renderScope: string | undefined;
+  resetStore: boolean;
+  clearCache: boolean;
+  // Milliseconds since the test began, so overlapping renders show as such.
+  startMs: number;
+  endMs?: number;
+  // What the render read, off its search document.
+  title?: unknown;
+  studentName?: unknown;
+  tabReused?: boolean;
+  loaderResetReason?: string;
+  error?: string;
 }
 
 async function prerenderJobsInLane(
@@ -299,17 +362,28 @@ async function indexRow(
       generation: number;
       pristine_doc: { attributes?: Record<string, unknown> } | null;
       search_doc: Record<string, unknown> | null;
+      // Which pass wrote the row, and in which of its validation rounds, for
+      // a failure message that says whose read went stale.
+      written_by: Record<string, unknown>;
     }
   | undefined
 > {
   let [row] = (await dbAdapter.execute(
-    `SELECT generation, pristine_doc, search_doc FROM boxel_index
+    `SELECT generation, pristine_doc, search_doc,
+            jsonb_build_object(
+              'passId', diagnostics->>'passId',
+              'validationRound', diagnostics->'validationRound',
+              'indexedAt', diagnostics->'indexedAt',
+              'queueClaim', diagnostics->'queueClaim'
+            ) AS written_by
+       FROM boxel_index
       WHERE url = $1 AND type = 'instance'`,
     { bind: [url] },
   )) as {
     generation: number;
     pristine_doc: { attributes?: Record<string, unknown> } | null;
     search_doc: Record<string, unknown> | null;
+    written_by: Record<string, unknown>;
   }[];
   return row === undefined
     ? undefined
@@ -365,7 +439,7 @@ module(basename(import.meta.filename), function () {
       let hold: ReturnType<typeof holdWriterPassesBeforeCommit> | undefined;
 
       hooks.beforeEach(async function () {
-        recorder.visits = [];
+        recorder.reset();
         for (let n of [2, 3]) {
           let runner = new PgQueueRunner({
             adapter: dbAdapter,
@@ -579,7 +653,7 @@ module(basename(import.meta.filename), function () {
         assert.strictEqual(
           row?.search_doc?.studentName,
           'Mango Abdel-Rahman',
-          "report-1's index row carries writer A's edit of the student it reads",
+          `report-1's index row carries writer A's edit of the student it reads (row generation ${row?.generation}, written by ${JSON.stringify(row?.written_by)})\n${recorder.timeline(realmURL)}`,
         );
         assert.strictEqual(
           row?.generation,
@@ -596,11 +670,11 @@ module(basename(import.meta.filename), function () {
           ?.isolated_html;
         assert.true(
           html?.includes('Reading log, week 2'),
-          `report-1's HTML carries writer B's title: ${html}`,
+          `report-1's HTML carries writer B's title: ${html}\n${recorder.timeline(realmURL)}`,
         );
         assert.true(
           html?.includes('Mango Abdel-Rahman'),
-          `report-1's HTML carries writer A's student name: ${html}`,
+          `report-1's HTML carries writer A's student name: ${html}\n${recorder.timeline(realmURL)}`,
         );
       });
 
@@ -650,18 +724,18 @@ module(basename(import.meta.filename), function () {
         );
         assert.ok(
           (reportPass?.validation_rounds ?? 0) >= 1,
-          `writer A's commit re-visited report-1 for writer B's commit (validationRounds ${reportPass?.validation_rounds})`,
+          `writer A's commit re-visited report-1 for writer B's commit (validationRounds ${reportPass?.validation_rounds})\n${recorder.timeline(realmURL)}`,
         );
 
         let reportScopes = recorder.scopesOf(reportPass!.id, report1);
         assert.ok(
           reportScopes.length >= 2,
-          `writer A visited report-1 and then re-visited it (scopes: ${JSON.stringify(reportScopes)})`,
+          `writer A visited report-1 and then re-visited it (scopes: ${JSON.stringify(reportScopes)})\n${recorder.timeline(realmURL)}`,
         );
         assert.notStrictEqual(
           reportScopes[reportScopes.length - 1],
           reportScopes[0],
-          "writer A's re-visit read under a scope other than the one its first visit cached under",
+          `writer A's re-visit read under a scope other than the one its first visit cached under\n${recorder.timeline(realmURL)}`,
         );
 
         await settlePrerenderHtmlJobs(dbAdapter, realmURL, {
@@ -677,7 +751,7 @@ module(basename(import.meta.filename), function () {
             assert.notStrictEqual(
               scope,
               reportScopes[0],
-              `writer A's HTML job ${htmlJob} did not render under the scope writer A's pass cached under before writer B's commit`,
+              `writer A's HTML job ${htmlJob} did not render under the scope writer A's pass cached under before writer B's commit\n${recorder.timeline(realmURL)}`,
             );
           }
         }
@@ -686,22 +760,22 @@ module(basename(import.meta.filename), function () {
         assert.strictEqual(
           row?.pristine_doc?.attributes?.title,
           'Reading log, revised',
-          "report-1's index row carries writer A's edit",
+          `report-1's index row carries writer A's edit\n${recorder.timeline(realmURL)}`,
         );
         assert.strictEqual(
           row?.search_doc?.studentName,
           'Mango Abdel-Rahman',
-          "report-1's index row carries writer B's edit of the student it reads",
+          `report-1's index row carries writer B's edit of the student it reads (row generation ${row?.generation}, written by ${JSON.stringify(row?.written_by)}; writer A committed ${reportPass?.generation}, writer B ${studentPass?.generation}; writer A's report-1 visits carried ${JSON.stringify(reportScopes)})\n${recorder.timeline(realmURL)}`,
         );
         let html = (await prerenderedHtmlRowFor(dbAdapter, report1))
           ?.isolated_html;
         assert.true(
           html?.includes('Reading log, revised'),
-          `report-1's HTML carries writer A's title: ${html}`,
+          `report-1's HTML carries writer A's title: ${html}\n${recorder.timeline(realmURL)}`,
         );
         assert.true(
           html?.includes('Mango Abdel-Rahman'),
-          `report-1's HTML carries writer B's student name: ${html}`,
+          `report-1's HTML carries writer B's student name: ${html}\n${recorder.timeline(realmURL)}`,
         );
       });
 
