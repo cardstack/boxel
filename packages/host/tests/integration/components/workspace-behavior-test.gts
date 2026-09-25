@@ -5,6 +5,7 @@ import { module, test } from 'qunit';
 
 import type { Loader } from '@cardstack/runtime-common';
 
+import { percySnapshot } from '../../helpers';
 import {
   CardDef,
   Workspace,
@@ -280,5 +281,75 @@ module('Integration | Card | workspace | README', function (hooks) {
       body().clientHeight,
       'Read more renders the whole document',
     );
+  });
+});
+
+module('Integration | Card | workspace | visual', function (hooks) {
+  setupRenderingTest(hooks);
+  setupBaseRealm(hooks);
+  setupWorkspaceCard(hooks);
+
+  let loader: Loader;
+
+  hooks.beforeEach(function () {
+    loader = getService('loader-service').loader;
+  });
+
+  const RAIL_SLOT = '[data-test-library-rail-slot]';
+  const TOGGLE = '[data-test-rail-toggle]';
+
+  // Fixed boxes so the container queries resolve the same on every run.
+  async function renderAt(width: string, height: string) {
+    let api = await loader.import<typeof import('@cardstack/base/card-api')>(
+      '@cardstack/base/card-api',
+    );
+    let Comp = api.getComponent(new Workspace({})) as ComponentLike<{
+      Args: { format?: Format };
+    }>;
+    let style = `width: ${width}; height: ${height}`;
+    await render(
+      <template>
+        {{! template-lint-disable no-inline-styles }}
+        <div style={{style}}>
+          <Comp @format='isolated' />
+        </div>
+      </template>,
+    );
+  }
+
+  test('wide pane', async function (assert) {
+    await renderAt('64rem', '40rem');
+    await percySnapshot('Integration | Card | workspace | visual | wide home');
+
+    await click(LIBRARY);
+    assert
+      .dom(RAIL_SLOT)
+      .doesNotHaveAttribute('inert', 'the rail is open at a wide width');
+    await percySnapshot(
+      'Integration | Card | workspace | visual | wide library with rail open',
+    );
+  });
+
+  test('narrow pane', async function (assert) {
+    await renderAt('30rem', '40rem');
+    await click(LIBRARY);
+    // The width arrives through a ResizeObserver, a beat after render.
+    await waitUntil(() => find(RAIL_SLOT)?.hasAttribute('inert'));
+    assert.dom(RAIL_SLOT).hasAttribute('inert', '', 'the rail starts closed');
+    await percySnapshot(
+      'Integration | Card | workspace | visual | narrow library with rail closed',
+    );
+
+    await click(TOGGLE);
+    assert.dom(RAIL_SLOT).doesNotHaveAttribute('inert', 'the rail is open');
+    await percySnapshot(
+      'Integration | Card | workspace | visual | narrow library with rail open',
+    );
+  });
+
+  test('phone width', async function (assert) {
+    await renderAt('22rem', '40rem');
+    assert.dom(HOME).hasAria('current', 'true', 'Home is active');
+    await percySnapshot('Integration | Card | workspace | visual | phone home');
   });
 });
