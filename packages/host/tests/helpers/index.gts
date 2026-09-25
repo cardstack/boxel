@@ -3,6 +3,7 @@ import Service from '@ember/service';
 import {
   type TestContext,
   getContext,
+  getRootElement,
   visit,
   settled,
 } from '@ember/test-helpers';
@@ -576,10 +577,11 @@ export async function capturePrerenderResult(
     ''
   ).trim();
   if (errorText.length > 0) {
-    return {
-      status: 'error',
-      value: normalizeCapturedErrorText(errorText),
-    };
+    let value = normalizeCapturedErrorText(errorText);
+    if (expectedStatus === 'ready') {
+      warnUnexpectedPrerenderError(errorElement!, value);
+    }
+    return { status: 'error', value };
   }
   if (!container) {
     throw new Error(
@@ -592,14 +594,34 @@ export async function capturePrerenderResult(
     | 'unusable'
     | undefined;
   if (status === 'error' || status === 'unusable') {
-    return {
-      status: 'error',
-      value: normalizeCapturedErrorText(
-        container.innerHTML!.replace(/}[^}]*$/, '}'),
-      ),
-    };
+    let value = normalizeCapturedErrorText(
+      container.innerHTML!.replace(/}[^}]*$/, '}'),
+    );
+    if (expectedStatus === 'ready') {
+      warnUnexpectedPrerenderError(container, value);
+    }
+    return { status: 'error', value };
   }
   return { status: 'ready', value: container.children[0][capture]! };
+}
+
+// A capture that waited for `ready` and read an error says where the error
+// came from. The queries above search the whole document, and a marker outside
+// the application's root element was not rendered by this test's app — the
+// page carried it in from an earlier test — so a failure reading it is about
+// test isolation rather than about this render.
+function warnUnexpectedPrerenderError(element: HTMLElement, value: string) {
+  let placement = getRootElement().contains(element)
+    ? 'inside the app root element'
+    : 'OUTSIDE the app root element (not rendered by this test)';
+  let marker = element.closest<HTMLElement>('[data-prerender]');
+  console.warn(
+    `capturePrerenderResult waited for 'ready' but read an error from ` +
+      `<${element.tagName.toLowerCase()}> ${placement}; ` +
+      `data-prerender-id=${marker?.dataset.prerenderId ?? 'none'} ` +
+      `data-prerender-status=${marker?.dataset.prerenderStatus ?? 'none'}: ` +
+      value,
+  );
 }
 
 export interface WaitForLoadedImageOptions {

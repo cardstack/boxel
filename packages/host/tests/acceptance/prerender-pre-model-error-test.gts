@@ -48,6 +48,20 @@ module('Acceptance | prerender | pre-model error', function (hooks) {
     resetOnerror();
   });
 
+  // A pre-model failure lands before any render template mounts, so the route
+  // puts the prerender markers on the page itself. Every later test on this
+  // page reads the document's first `[data-prerender-error]`, so the markers
+  // must leave with the app that created them. `after` runs once this module's
+  // app has been torn down.
+  hooks.after(function (assert) {
+    assert.strictEqual(
+      document.querySelectorAll('[data-prerender], [data-prerender-error]')
+        .length,
+      0,
+      'no prerender markers outlive the app that created them',
+    );
+  });
+
   function readErrorPayload(): { deps: string[]; message?: string } {
     let payloadText = document
       .querySelector('[data-prerender-error]')!
