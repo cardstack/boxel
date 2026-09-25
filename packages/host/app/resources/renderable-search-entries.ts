@@ -324,6 +324,14 @@ export class RenderableSearchEntries {
   get errors() {
     return this.resource.errors;
   }
+
+  get entriesQuery(): SearchEntryWireQuery | undefined {
+    return this.resource.entriesQuery;
+  }
+
+  retry(): void {
+    this.resource.retry();
+  }
 }
 
 // Build the render-stable view-model layer over a search. Call exactly once

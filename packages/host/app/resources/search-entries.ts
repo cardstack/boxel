@@ -125,6 +125,9 @@ export class SearchEntriesResource extends Resource<Args> {
     page: { total: 0 },
   };
   @tracked private _errors: ErrorEntry[] | undefined;
+  // The query whose full run produced the held entries; undefined while none
+  // has succeeded, so a consumer can tell the rows are a previous query's.
+  @tracked private _entriesQuery: SearchEntryWireQuery | undefined;
 
   // Realms whose index moved since the last fetch. A non-empty set scopes the
   // next run to just those realms (the per-realm partial refresh); rows from
@@ -310,6 +313,9 @@ export class SearchEntriesResource extends Resource<Args> {
           if (this._errors !== undefined) {
             this._errors = undefined;
           }
+          if (this._entriesQuery !== undefined) {
+            this._entriesQuery = undefined;
+          }
         });
       }
       return;
@@ -476,6 +482,24 @@ export class SearchEntriesResource extends Resource<Args> {
     return this._errors;
   }
 
+  get entriesQuery(): SearchEntryWireQuery | undefined {
+    return this._entriesQuery;
+  }
+
+  // Re-runs the current query, e.g. after a failed fetch: an unchanged query
+  // otherwise never re-issues.
+  retry(): void {
+    if (
+      isDestroyed(this) ||
+      isDestroying(this) ||
+      this.#previousQuery === undefined
+    ) {
+      return;
+    }
+    this.#hasSettled = false;
+    this.#trackSearchLoad(this.search.perform());
+  }
+
   // The deferred arm of the subscription callback: performs one search over
   // everything the window accumulated. Guarded the same way the callback is —
   // the query may have been cleared (or the resource destroyed) between arm
@@ -623,6 +647,7 @@ export class SearchEntriesResource extends Resource<Args> {
           this._entries.splice(0, this._entries.length, ...next);
           let realmTotals = this.realmTotalsFor(doc);
           this._meta = realmTotals ? { ...doc.meta, realmTotals } : doc.meta;
+          this._entriesQuery = query;
           this.hasCompletedFullRun = true;
         }
 
@@ -637,6 +662,7 @@ export class SearchEntriesResource extends Resource<Args> {
         if (!isPartialRefresh) {
           this._entries.splice(0, this._entries.length);
           this._meta = { page: { total: 0 } };
+          this._entriesQuery = undefined;
         }
         // On a failed partial refresh the stale rows stay (with the error
         // surfaced) and the realms stay marked, so the next event retries
