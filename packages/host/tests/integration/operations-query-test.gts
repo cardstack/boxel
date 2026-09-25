@@ -390,6 +390,22 @@ module('Integration | operations query', function (hooks) {
       'the realm answered with the open reports its declaration matches',
     );
 
+    // The gate resolves its anchors off the first typed event, which takes the
+    // re-run it would have taken anyway, and judges the ones after it. A
+    // closed report moves nothing here, so it only primes the gate.
+    await realm.write(
+      'reports/closed-2.json',
+      JSON.stringify(
+        reportFile({ headline: 'Closed again', status: 'closed' }),
+      ),
+    );
+    await settled();
+    assert.strictEqual(
+      (await settledEntries(reports)).length,
+      3,
+      'a closed report is not one the realm’s declaration matches',
+    );
+
     await realm.write(
       'reports/open-4.json',
       JSON.stringify(
