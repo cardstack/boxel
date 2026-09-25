@@ -69,6 +69,7 @@ import { upsertPublishedRealmInRegistry } from '../../lib/realm-registry-writes.
 
 import {
   currentConnectionTenant,
+  isSharedWork,
   PgAdapter,
   PgQueuePublisher,
   PgQueueRunner,
@@ -264,20 +265,29 @@ export async function waitUntil<T>(
 
 // Run `fn` and report each database statement issued while it ran, with the
 // connection tenant (see `withConnectionTenant` in `@cardstack/postgres`) it
-// was charged to — `undefined` for untagged work. The statements are still run
-// by the real adapter; this only reads the async context each one is issued
-// in, which is the context the adapter's connection scheduler reads too.
+// was charged to — `undefined` for untagged work — and whether it ran as
+// shared work (`withSharedWork`). The statements are still run by the real
+// adapter; this only reads the async context each one is issued in, which is
+// the context the adapter's connection scheduler reads too.
 export async function connectionTenantsDuring<T>(
   dbAdapter: PgAdapter,
   fn: () => Promise<T>,
 ): Promise<{
   result: T;
-  statements: { sql: string; tenant: string | undefined }[];
+  statements: { sql: string; tenant: string | undefined; shared: boolean }[];
 }> {
-  let statements: { sql: string; tenant: string | undefined }[] = [];
+  let statements: {
+    sql: string;
+    tenant: string | undefined;
+    shared: boolean;
+  }[] = [];
   let execute = dbAdapter.execute;
   dbAdapter.execute = function (this: PgAdapter, ...args) {
-    statements.push({ sql: args[0], tenant: currentConnectionTenant() });
+    statements.push({
+      sql: args[0],
+      tenant: currentConnectionTenant(),
+      shared: isSharedWork(),
+    });
     return execute.apply(this, args);
   };
   try {

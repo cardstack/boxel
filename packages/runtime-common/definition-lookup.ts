@@ -666,8 +666,8 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     //     used by every test that doesn't construct a coordinator and
     //     by sqlite/in-memory deployments.
     // Callers searching different realms share this entry — the key names a
-    // module and a cache scope, not a requester — so its database work is
-    // charged to none of them (see `DBAdapter.withoutConnectionTenant`).
+    // module and a cache scope, not a requester — so its database work runs as
+    // shared work (see `DBAdapter.withSharedWork`).
     let load = () =>
       this.#populateCoordinator
         ? this.loadDefinitionCacheEntryCoordinated(
@@ -676,7 +676,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
           )
         : this.loadDefinitionCacheEntryUncached(args);
     let core: Promise<DefinitionCacheEntry | undefined> =
-      this.#dbAdapter.withoutConnectionTenant?.(load) ?? load();
+      this.#dbAdapter.withSharedWork?.(load) ?? load();
     pending = core.finally(() => {
       // Identity-check before deletion: an invalidation path may have
       // dropped our entry mid-flight, after which a newer caller can

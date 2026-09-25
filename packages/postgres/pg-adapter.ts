@@ -18,7 +18,7 @@ import { Pool, Client, type PoolClient, type Notification } from 'pg';
 import {
   ConnectionScheduler,
   markConnectionHeld,
-  withoutConnectionTenant,
+  withSharedWork,
 } from './connection-scheduler.ts';
 import { postgresConfig } from './pg-config.ts';
 import migrationNameFixes from './scripts/migration-name-fixes.cjs';
@@ -329,9 +329,9 @@ export class PgAdapter implements DBAdapter {
     };
   }
 
-  // See `DBAdapter.withoutConnectionTenant`.
-  withoutConnectionTenant<T>(fn: () => Promise<T>): Promise<T> {
-    return withoutConnectionTenant(fn);
+  // See `DBAdapter.withSharedWork`.
+  withSharedWork<T>(fn: () => Promise<T>): Promise<T> {
+    return withSharedWork(fn);
   }
 
   get url() {

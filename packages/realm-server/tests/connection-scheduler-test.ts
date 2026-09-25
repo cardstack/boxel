@@ -5,8 +5,9 @@ import {
   ConnectionScheduler,
   currentConnectionTenant,
   markConnectionHeld,
+  isSharedWork,
   withConnectionTenant,
-  withoutConnectionTenant,
+  withSharedWork,
 } from '@cardstack/postgres';
 
 // The connection scheduler decides which of the database work waiting on a
@@ -395,7 +396,7 @@ module(basename(import.meta.filename), function () {
     scheduler.dispose();
   });
 
-  test('work run without a tenant inside a tenant’s scope is held to no share', async function (assert) {
+  test('shared work inside a tenant’s scope stays that tenant’s but is held to no share', async function (assert) {
     let scheduler = new ConnectionScheduler({ limit: 4, tenantShare: 1 });
     let a = openScope(REALM_A);
     let b = openScope(REALM_B);
@@ -414,17 +415,24 @@ module(basename(import.meta.filename), function () {
       'the tenant’s own work waits at its share with two connections free',
     );
 
-    let tenantInside: string | undefined = 'unset';
+    let inside: { tenant: string | undefined; shared: boolean } | undefined;
     let shared = await settledWithin(
       a.run(() =>
-        withoutConnectionTenant(() => {
-          tenantInside = currentConnectionTenant();
+        withSharedWork(() => {
+          inside = {
+            tenant: currentConnectionTenant(),
+            shared: isSharedWork(),
+          };
           return scheduler.acquire();
         }),
       ),
       50,
     );
-    assert.strictEqual(tenantInside, undefined, 'charged to no tenant');
+    assert.deepEqual(
+      inside,
+      { tenant: REALM_A, shared: true },
+      'still the tenant’s work, marked shared',
+    );
     assert.true(shared.settled, 'granted a free connection past the share');
 
     (shared as { value: () => void }).value();
@@ -436,7 +444,69 @@ module(basename(import.meta.filename), function () {
     scheduler.dispose();
   });
 
-  test('work run without a tenant keeps the exemption of a connection its caller holds', async function (assert) {
+  test('a quiet tenant’s shared work is served ahead of a heavy tenant’s queued shared work', async function (assert) {
+    let scheduler = new ConnectionScheduler({ limit: 4, tenantShare: 2 });
+    let heavy = openScope(REALM_A);
+    let quiet = openScope(REALM_B);
+
+    let heavyHeld = await heavy.run(() =>
+      Promise.all(Array.from({ length: 4 }, () => scheduler.acquire())),
+    );
+    let order: string[] = [];
+    let track = (label: string, acquisition: Promise<() => void>) =>
+      acquisition.then((release) => (order.push(label), release));
+    let heavyShared = Array.from({ length: 5 }, (_unused, n) =>
+      track(
+        `heavy-shared-${n}`,
+        heavy.run(() => withSharedWork(() => scheduler.acquire())),
+      ),
+    );
+    let heavyCapped = Array.from({ length: 5 }, (_unused, n) =>
+      track(
+        `heavy-${n}`,
+        heavy.run(() => scheduler.acquire()),
+      ),
+    );
+    let quietRead = track(
+      'quiet',
+      quiet.run(() => scheduler.acquire()),
+    );
+    let quietShared = track(
+      'quiet-shared',
+      quiet.run(() => withSharedWork(() => scheduler.acquire())),
+    );
+
+    heavyHeld.pop()!();
+    let quietReadRelease = await quietRead;
+    heavyHeld.pop()!();
+    let quietSharedRelease = await quietShared;
+    assert.deepEqual(
+      order,
+      ['quiet', 'quiet-shared'],
+      'the quiet tenant holds the fewest, so both its read and its shared work go first — ahead of shared work the heavy tenant queued earlier',
+    );
+
+    heavyHeld.pop()!();
+    let next = await settledWithin(heavyShared[0], 50);
+    assert.true(
+      next.settled,
+      'the heavy tenant’s shared work is granted though the tenant is at its share',
+    );
+
+    quietReadRelease();
+    quietSharedRelease();
+    quiet.close();
+    await quiet.closed;
+    await drain(
+      [...heavyHeld, (next as { value: () => void }).value],
+      [...heavyShared.slice(1), ...heavyCapped],
+    );
+    heavy.close();
+    await heavy.closed;
+    scheduler.dispose();
+  });
+
+  test('shared work keeps the exemption of a connection its caller holds', async function (assert) {
     let scheduler = new ConnectionScheduler({ limit: 2, tenantShare: 1 });
     let a = openScope(REALM_A);
     let b = openScope(REALM_B);
@@ -450,9 +520,7 @@ module(basename(import.meta.filename), function () {
     let untaggedEarlier = scheduler.acquire();
     let order: string[] = [];
     let nestedShared = a
-      .run(() =>
-        holding.run(() => withoutConnectionTenant(() => scheduler.acquire())),
-      )
+      .run(() => holding.run(() => withSharedWork(() => scheduler.acquire())))
       .then((release) => (order.push('nested'), release));
     void bBacklog[0].then(() => order.push('b'));
     void untaggedEarlier.then(() => order.push('untagged'));

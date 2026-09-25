@@ -39,11 +39,20 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 //   with no one else active is not held to it either, so a tenant working
 //   alone keeps the whole pool.
 // - Untagged work — anything not run under `withConnectionTenant`, which is
-//   everything but search, and work run under `withoutConnectionTenant` — is
-//   ordered with the tenants as one more of them but never held to the
-//   share, and never counts as another tenant with work open. Its
-//   connections do count toward whether the pool is oversubscribed. Writes,
-//   locks and the indexer's own commits keep the reach they had.
+//   everything but search — is ordered with the tenants as one more of them
+//   but never held to the share, and never counts as another tenant with work
+//   open. Its connections do count toward whether the pool is oversubscribed.
+//   Writes, locks and the indexer's own commits keep the reach they had.
+// - Shared work — run under `withSharedWork`, for a computation that callers
+//   on behalf of several tenants may end up waiting on — is ordered as the
+//   tenant whose context started it, but never held to the share. Held to the
+//   starter's share, every tenant that joined it would wait at that share,
+//   and the joiner's own open scope may be what holds the starter there.
+//   Untagged, every tenant's shared work would wait in one arrival-order
+//   queue, a quiet tenant's behind a heavy tenant's. Ordered as its starter,
+//   a tenant's own shared work is served lowest-held-first like the rest of
+//   its work, and shared work it joins is never capped, so it waits only on
+//   the ordering.
 // - Work that runs while its caller already holds a connection (inside
 //   `withConnection`) is granted ahead of everything and outside the share.
 //   It cannot finish, and so cannot give back the connection it is nested in,
@@ -70,7 +79,7 @@ export class ConnectionScheduler {
   #tenantShare: number;
   #inUse = 0;
   #held = new Map<TenantKey, number>();
-  #queues = new Map<TenantKey, Waiter[]>();
+  #queues = new Map<TenantKey, TenantQueues>();
   #nested: Waiter[] = [];
   #waiting = 0;
   #arrivals = 0;
@@ -107,9 +116,9 @@ export class ConnectionScheduler {
   // a free connection would not be handed to.
   get waitingAtShare(): number {
     let count = 0;
-    for (let [key, queue] of this.#queues) {
+    for (let [key, queues] of this.#queues) {
       if (!this.#eligible(key)) {
-        count += queue.length;
+        count += queues.capped.length;
       }
     }
     return count;
@@ -121,8 +130,12 @@ export class ConnectionScheduler {
     let scope = scopeStorage.getStore();
     let key: TenantKey = scope?.tenant ?? UNTAGGED;
     let nested = holdsConnection(scope?.holding);
+    let shared = scope?.shared === true;
     // This arrival counts toward the demand it is judged against.
-    if (this.#inUse < this.#limit && (nested || this.#eligible(key, 1))) {
+    if (
+      this.#inUse < this.#limit &&
+      (nested || shared || this.#eligible(key, 1))
+    ) {
       return Promise.resolve(this.#grant(key));
     }
     return new Promise((resolve) => {
@@ -131,12 +144,12 @@ export class ConnectionScheduler {
       if (nested) {
         this.#nested.push(waiter);
       } else {
-        let queue = this.#queues.get(key);
-        if (!queue) {
-          queue = [];
-          this.#queues.set(key, queue);
+        let queues = this.#queues.get(key);
+        if (!queues) {
+          queues = { capped: [], shared: [] };
+          this.#queues.set(key, queues);
         }
-        queue.push(waiter);
+        (shared ? queues.shared : queues.capped).push(waiter);
       }
     });
   }
@@ -193,28 +206,43 @@ export class ConnectionScheduler {
     }
   }
 
-  // The head of the queue belonging to the eligible tenant holding the fewest
-  // connections, the earlier arrival winning a tie.
+  // The next waiter of the tenant holding the fewest connections among those
+  // with a waiter a free connection may go to, the earlier arrival winning a
+  // tie. Within a tenant that is the earlier of its shared work, which is
+  // always eligible, and its other work, which is eligible only while the
+  // tenant is not held to its share.
   #takeNextTenantWaiter(): Waiter | undefined {
-    let best: { key: TenantKey; queue: Waiter[]; held: number } | undefined;
-    for (let [key, queue] of this.#queues) {
-      if (queue.length === 0 || !this.#eligible(key)) {
+    let best:
+      | { key: TenantKey; queues: TenantQueues; from: Waiter[]; held: number }
+      | undefined;
+    for (let [key, queues] of this.#queues) {
+      let from: Waiter[] | undefined = queues.shared.length
+        ? queues.shared
+        : undefined;
+      if (
+        queues.capped.length &&
+        (!from || queues.capped[0].arrival < from[0].arrival) &&
+        this.#eligible(key)
+      ) {
+        from = queues.capped;
+      }
+      if (!from) {
         continue;
       }
       let held = this.#held.get(key) ?? 0;
       if (
         !best ||
         held < best.held ||
-        (held === best.held && queue[0].arrival < best.queue[0].arrival)
+        (held === best.held && from[0].arrival < best.from[0].arrival)
       ) {
-        best = { key, queue, held };
+        best = { key, queues, from, held };
       }
     }
     if (!best) {
       return undefined;
     }
-    let waiter = best.queue.shift()!;
-    if (best.queue.length === 0) {
+    let waiter = best.from.shift()!;
+    if (best.queues.capped.length === 0 && best.queues.shared.length === 0) {
       this.#queues.delete(best.key);
     }
     return waiter;
@@ -248,20 +276,20 @@ export async function withConnectionTenant<T>(
   }
 }
 
-// Run `fn` with the database work it does charged to no tenant, for work that
-// several tenants may end up waiting on. A computation shared through a
-// coalescing cache runs in the async context of whichever caller started it,
-// so a tenant that joins it would otherwise wait in the starter's queue, at
-// the starter's share — and the joiner's own open scope may be what is
-// holding the starter to that share. Untagged, the shared work is held to no
-// one's. A connection the caller holds stays held: nested work keeps its
-// exemption.
-export function withoutConnectionTenant<T>(fn: () => Promise<T>): Promise<T> {
+// Run `fn` as shared work: a computation that callers on behalf of several
+// tenants may end up waiting on, such as one a coalescing cache hands to every
+// caller that asks for the same thing while it runs. Its database work stays
+// ordered as the tenant that started it but is never held to a share (see the
+// policy above). A connection the caller holds stays held: nested work keeps
+// its exemption.
+export function withSharedWork<T>(fn: () => Promise<T>): Promise<T> {
   let parent = scopeStorage.getStore();
-  return scopeStorage.run(
-    parent?.holding ? { holding: parent.holding } : {},
-    fn,
-  );
+  return scopeStorage.run({ ...parent, shared: true }, fn);
+}
+
+// Whether the calling async context is running shared work.
+export function isSharedWork(): boolean {
+  return scopeStorage.getStore()?.shared === true;
 }
 
 // Mark the work run through the returned `run` as holding a checked-out
@@ -282,10 +310,7 @@ export function markConnectionHeld(): {
     held: true,
     ...(parent?.holding ? { parent: parent.holding } : {}),
   };
-  let scope: ConnectionScope = {
-    ...(parent?.tenant ? { tenant: parent.tenant } : {}),
-    holding,
-  };
+  let scope: ConnectionScope = { ...parent, holding };
   return {
     run: (fn) => scopeStorage.run(scope, fn),
     end: () => {
@@ -302,6 +327,7 @@ export function currentConnectionTenant(): string | undefined {
 interface ConnectionScope {
   tenant?: string;
   holding?: HoldMarker;
+  shared?: boolean;
 }
 
 // One checked-out connection some enclosing frame holds. Chained, because a
@@ -325,6 +351,13 @@ interface Waiter {
   key: TenantKey;
   arrival: number;
   resolve: (release: () => void) => void;
+}
+
+// A tenant's waiters, split by whether the share applies to them, so that
+// shared work never waits behind the tenant's capped work to reach the front.
+interface TenantQueues {
+  capped: Waiter[];
+  shared: Waiter[];
 }
 
 // Untagged work shares one key. A symbol, so no tenant string can collide

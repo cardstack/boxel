@@ -143,16 +143,20 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       let reads = indexReads(statements);
       assert.true(reads.length > 0, 'the search read the index');
       assert.deepEqual(
-        [...new Set(reads.map(({ tenant }) => tenant))],
-        [realmHref],
-        'every index read is charged to the realm itself',
+        reads
+          .map(({ tenant, shared }) => JSON.stringify({ tenant, shared }))
+          .filter((r, i, all) => all.indexOf(r) === i),
+        [JSON.stringify({ tenant: realmHref, shared: false })],
+        'every index read is charged to the realm itself and held to its share',
       );
       let lookups = definitionCacheReads(statements);
       assert.true(lookups.length > 0, 'the search looked up card definitions');
       assert.deepEqual(
-        [...new Set(lookups.map(({ tenant }) => tenant))],
-        [undefined],
-        'definition lookups, which searches of other realms share, are charged to no tenant',
+        lookups
+          .map(({ tenant, shared }) => JSON.stringify({ tenant, shared }))
+          .filter((r, i, all) => all.indexOf(r) === i),
+        [JSON.stringify({ tenant: realmHref, shared: true })],
+        'definition lookups, which searches of other realms share, are ordered as the realm but run as shared work',
       );
     });
 
