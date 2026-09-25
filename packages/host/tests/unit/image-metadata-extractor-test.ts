@@ -301,6 +301,80 @@ function buildAvif(properties: {
   return new Uint8Array([...ftyp, ...meta]);
 }
 
+// A GIF body after the logical screen descriptor, as a list of blocks. Each
+// frame is an image descriptor with a one-sub-block payload; `extension`
+// blocks stand in for Graphic Control / Application extensions, which the
+// animation walk has to skip without counting them.
+type GifBlock =
+  | { kind: 'frame'; localColorTableExponent?: number; dataBytes?: number }
+  | { kind: 'extension'; label: number; dataBytes: number };
+
+function buildGifBody(
+  blocks: GifBlock[],
+  { trailer = true, globalColorTableExponent = 1 } = {},
+): Uint8Array {
+  let out = [0x47, 0x49, 0x46, 0x38, 0x39, 0x61]; // "GIF89a"
+  out.push(0x08, 0x00, 0x08, 0x00); // 8 × 8
+  out.push(0x80 | globalColorTableExponent, 0x00, 0x00);
+  out.push(...new Array(3 * 2 ** (globalColorTableExponent + 1)).fill(0));
+  for (let block of blocks) {
+    if (block.kind === 'extension') {
+      out.push(0x21, block.label, block.dataBytes);
+      out.push(...new Array(block.dataBytes).fill(0x2c)); // decoy introducers
+      out.push(0x00);
+      continue;
+    }
+    let lct = block.localColorTableExponent;
+    out.push(0x2c, 0, 0, 0, 0, 0x08, 0x00, 0x08, 0x00);
+    out.push(lct === undefined ? 0x00 : 0x80 | lct);
+    if (lct !== undefined) {
+      out.push(...new Array(3 * 2 ** (lct + 1)).fill(0x2c));
+    }
+    let dataBytes = block.dataBytes ?? 4;
+    out.push(0x02); // LZW minimum code size
+    out.push(dataBytes, ...new Array(dataBytes).fill(0x2c), 0x00);
+  }
+  if (trailer) {
+    out.push(0x3b);
+  }
+  return new Uint8Array(out);
+}
+
+// PNG signature, IHDR, then the named chunks, each with `dataBytes` of
+// payload. Only the chunk framing needs to be right for the animation walk.
+function buildPngChunks(
+  chunks: { type: string; dataBytes?: number }[],
+): Uint8Array {
+  let out = [...buildPng(8, 6)];
+  for (let { type, dataBytes = 4 } of chunks) {
+    out.push(
+      (dataBytes >>> 24) & 0xff,
+      (dataBytes >>> 16) & 0xff,
+      (dataBytes >>> 8) & 0xff,
+      dataBytes & 0xff,
+    );
+    out.push(...[...type].map((c) => c.charCodeAt(0)));
+    out.push(...new Array(dataBytes).fill(0));
+    out.push(0, 0, 0, 0); // CRC placeholder
+  }
+  return new Uint8Array(out);
+}
+
+// An `ftyp` box with the given major and compatible brands.
+function buildFtyp(major: string, compatible: string[]): Uint8Array {
+  let brand = (b: string) => [...b].map((c) => c.charCodeAt(0));
+  return new Uint8Array(
+    box('ftyp', [
+      ...brand(major),
+      0,
+      0,
+      0,
+      0, // minor version
+      ...compatible.flatMap(brand),
+    ]),
+  );
+}
+
 module('Unit | image metadata extractors', function (hooks) {
   setupRenderingTest(hooks);
 
@@ -312,6 +386,10 @@ module('Unit | image metadata extractors', function (hooks) {
   let extractGifColorProfile: typeof GifModule.extractGifColorProfile;
   let extractWebpColorProfile: typeof WebpModule.extractWebpColorProfile;
   let extractAvifColorProfile: typeof AvifModule.extractAvifColorProfile;
+  let extractGifAnimated: typeof GifModule.extractGifAnimated;
+  let extractPngAnimated: typeof PngModule.extractPngAnimated;
+  let extractWebpAnimated: typeof WebpModule.extractWebpAnimated;
+  let extractAvifAnimated: typeof AvifModule.extractAvifAnimated;
   let rasterImageAttributes: typeof ImageFileDefModule.rasterImageAttributes;
 
   hooks.beforeEach(async function () {
@@ -319,21 +397,21 @@ module('Unit | image metadata extractors', function (hooks) {
     ({ extractExifFromJpeg, parseExifTiffBlock } = await loader.import<
       typeof ExifModule
     >('@cardstack/base/exif-meta-extractor'));
-    ({ extractPngColorProfile } = await loader.import<typeof PngModule>(
-      '@cardstack/base/png-meta-extractor',
-    ));
+    ({ extractPngColorProfile, extractPngAnimated } = await loader.import<
+      typeof PngModule
+    >('@cardstack/base/png-meta-extractor'));
     ({ extractJpgColorProfile } = await loader.import<typeof JpgModule>(
       '@cardstack/base/jpg-meta-extractor',
     ));
-    ({ extractGifColorProfile } = await loader.import<typeof GifModule>(
-      '@cardstack/base/gif-meta-extractor',
-    ));
-    ({ extractWebpColorProfile } = await loader.import<typeof WebpModule>(
-      '@cardstack/base/webp-meta-extractor',
-    ));
-    ({ extractAvifColorProfile } = await loader.import<typeof AvifModule>(
-      '@cardstack/base/avif-meta-extractor',
-    ));
+    ({ extractGifColorProfile, extractGifAnimated } = await loader.import<
+      typeof GifModule
+    >('@cardstack/base/gif-meta-extractor'));
+    ({ extractWebpColorProfile, extractWebpAnimated } = await loader.import<
+      typeof WebpModule
+    >('@cardstack/base/webp-meta-extractor'));
+    ({ extractAvifColorProfile, extractAvifAnimated } = await loader.import<
+      typeof AvifModule
+    >('@cardstack/base/avif-meta-extractor'));
     ({ rasterImageAttributes } = await loader.import<typeof ImageFileDefModule>(
       '@cardstack/base/image-file-def',
     ));
@@ -851,6 +929,136 @@ module('Unit | image metadata extractors', function (hooks) {
     });
   });
 
+  module('animation', function () {
+    test('a GIF with one frame and a trailer is a still', function (assert) {
+      assert.false(extractGifAnimated(buildGifBody([{ kind: 'frame' }])));
+    });
+
+    test('a second image descriptor makes a GIF animated', function (assert) {
+      assert.true(
+        extractGifAnimated(
+          buildGifBody([{ kind: 'frame' }, { kind: 'frame' }], {
+            trailer: false,
+          }),
+        ),
+        'the walk answers at the second frame without needing the trailer',
+      );
+    });
+
+    test('the GIF walk skips extensions and local color tables without counting them', function (assert) {
+      // A loop extension and a Graphic Control Extension before one frame
+      // with its own color table: none of these are frames, and their bytes
+      // are full of values that look like image descriptors.
+      let still = buildGifBody([
+        { kind: 'extension', label: 0xff, dataBytes: 11 },
+        { kind: 'extension', label: 0xf9, dataBytes: 4 },
+        { kind: 'frame', localColorTableExponent: 2, dataBytes: 40 },
+      ]);
+      assert.false(extractGifAnimated(still));
+
+      let animated = buildGifBody([
+        { kind: 'extension', label: 0xf9, dataBytes: 4 },
+        { kind: 'frame', localColorTableExponent: 2 },
+        { kind: 'extension', label: 0xf9, dataBytes: 4 },
+        { kind: 'frame' },
+      ]);
+      assert.true(extractGifAnimated(animated));
+    });
+
+    test('a GIF cut off before a second frame or the trailer is unknown', function (assert) {
+      let full = buildGifBody([{ kind: 'frame', dataBytes: 200 }]);
+      assert.strictEqual(
+        extractGifAnimated(full.subarray(0, full.length - 50)),
+        undefined,
+        'a read window ending mid-frame says nothing either way',
+      );
+      assert.strictEqual(
+        extractGifAnimated(full.subarray(0, full.length - 1)),
+        undefined,
+        'one frame with no trailer in view could still be followed by more',
+      );
+    });
+
+    test('an unrecognized GIF block is unknown rather than a still', function (assert) {
+      let bytes = buildGifBody([{ kind: 'frame' }], { trailer: false });
+      assert.strictEqual(
+        extractGifAnimated(new Uint8Array([...bytes, 0x99])),
+        undefined,
+      );
+    });
+
+    test('an acTL chunk before the image data makes a PNG animated', function (assert) {
+      assert.true(
+        extractPngAnimated(
+          buildPngChunks([
+            { type: 'iCCP', dataBytes: 3000 },
+            { type: 'acTL', dataBytes: 8 },
+            { type: 'IDAT' },
+          ]),
+        ),
+      );
+    });
+
+    test('a PNG whose image data arrives with no acTL is a still', function (assert) {
+      assert.false(
+        extractPngAnimated(
+          buildPngChunks([
+            { type: 'sRGB', dataBytes: 1 },
+            { type: 'pHYs', dataBytes: 9 },
+            { type: 'IDAT' },
+            // An acTL after IDAT isn't APNG; the walk has already decided.
+            { type: 'acTL', dataBytes: 8 },
+          ]),
+        ),
+      );
+    });
+
+    test('a PNG window that ends inside an ancillary chunk is unknown', function (assert) {
+      let bytes = buildPngChunks([
+        { type: 'iCCP', dataBytes: 3000 },
+        { type: 'IDAT' },
+      ]);
+      assert.strictEqual(
+        extractPngAnimated(bytes.subarray(0, 1000)),
+        undefined,
+      );
+    });
+
+    test('only the extended WebP flavor can animate, per its animation flag', function (assert) {
+      assert.false(extractWebpAnimated(buildWebp('VP8 ', [])));
+      assert.false(extractWebpAnimated(buildWebp('VP8L', [0x2f])));
+      assert.true(extractWebpAnimated(buildWebp('VP8X', [0x02])));
+      assert.true(
+        extractWebpAnimated(buildWebp('VP8X', [0x12])),
+        'the alpha flag alongside it does not mask the animation flag',
+      );
+      assert.false(extractWebpAnimated(buildWebp('VP8X', [0x30])));
+      assert.strictEqual(
+        extractWebpAnimated(buildWebp('ANIM', [0x02])),
+        undefined,
+      );
+    });
+
+    test('the avis brand marks an AVIF image sequence', function (assert) {
+      assert.true(extractAvifAnimated(buildFtyp('avis', ['avif', 'msf1'])));
+      assert.true(
+        extractAvifAnimated(buildFtyp('mif1', ['avif', 'avis', 'miaf'])),
+        'a compatible brand counts as much as the major brand',
+      );
+      assert.false(extractAvifAnimated(buildFtyp('avif', ['mif1', 'miaf'])));
+    });
+
+    test('an AVIF without a readable ftyp box is unknown', function (assert) {
+      assert.strictEqual(extractAvifAnimated(new Uint8Array(24)), undefined);
+      let ftyp = buildFtyp('avif', ['mif1', 'miaf']);
+      assert.strictEqual(
+        extractAvifAnimated(ftyp.subarray(0, ftyp.length - 4)),
+        undefined,
+        'a truncated ftyp could still list avis in the brands it lost',
+      );
+    });
+  });
+
   module('attribute assembly', function () {
     test('the container header outranks the EXIF color-space tag', function (assert) {
       let attributes = rasterImageAttributes(
@@ -904,6 +1112,19 @@ module('Unit | image metadata extractors', function (hooks) {
         attributes.colorProfile,
         { hasAlpha: false },
         'knowing a format has no alpha channel is a fact worth persisting',
+      );
+    });
+
+    test('a still verdict is persisted, and an undetermined one adds nothing', function (assert) {
+      assert.deepEqual(rasterImageAttributes(undefined, undefined, false), {
+        animation: 'still',
+      });
+      assert.deepEqual(rasterImageAttributes(undefined, undefined, true), {
+        animation: 'animated',
+      });
+      assert.deepEqual(
+        rasterImageAttributes(undefined, undefined, undefined),
+        {},
       );
     });
   });

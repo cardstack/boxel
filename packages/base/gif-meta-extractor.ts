@@ -79,3 +79,85 @@ export function extractGifColorProfile(
     channels: 3,
   });
 }
+
+// GIF block introducers, as they appear after the header and global color
+// table.
+const EXTENSION_INTRODUCER = 0x21;
+const IMAGE_DESCRIPTOR = 0x2c;
+const TRAILER = 0x3b;
+const LOCAL_COLOR_TABLE_FLAG = 0x80;
+const COLOR_TABLE_SIZE_MASK = 0x07;
+const IMAGE_DESCRIPTOR_BYTES = 10;
+
+// A GIF animates when it holds more than one image, and nothing short of
+// walking its blocks says how many it holds: the NETSCAPE2.0 loop extension
+// is conventional but optional, so a multi-frame GIF without it still plays
+// once. The walk skips every extension and every frame's data sub-blocks,
+// stopping at a second image descriptor (animated) or the trailer (still).
+//
+// Returns undefined when `bytes` runs out first — the caller's read window
+// may end mid-frame — or a block introducer is unrecognized.
+export function extractGifAnimated(bytes: Uint8Array): boolean | undefined {
+  if (bytes.length <= LOGICAL_SCREEN_PACKED_OFFSET + 2) {
+    return undefined;
+  }
+  let packed = bytes[LOGICAL_SCREEN_PACKED_OFFSET]!;
+  let offset = LOGICAL_SCREEN_PACKED_OFFSET + 3;
+  if (packed & GLOBAL_COLOR_TABLE_FLAG) {
+    offset += 3 * 2 ** ((packed & GLOBAL_COLOR_TABLE_SIZE_MASK) + 1);
+  }
+
+  // Skips a run of data sub-blocks (each a length byte then that many bytes,
+  // ended by a zero length), returning the offset past the terminator.
+  let skipSubBlocks = (start: number): number | undefined => {
+    let at = start;
+    while (at < bytes.length) {
+      let length = bytes[at]!;
+      at += 1;
+      if (length === 0) {
+        return at;
+      }
+      at += length;
+    }
+    return undefined;
+  };
+
+  let frames = 0;
+  while (offset < bytes.length) {
+    let introducer = bytes[offset]!;
+    if (introducer === TRAILER) {
+      return false;
+    }
+    if (introducer === EXTENSION_INTRODUCER) {
+      // Introducer, label, then the extension's sub-blocks.
+      let next = skipSubBlocks(offset + 2);
+      if (next === undefined) {
+        return undefined;
+      }
+      offset = next;
+      continue;
+    }
+    if (introducer !== IMAGE_DESCRIPTOR) {
+      return undefined;
+    }
+    frames += 1;
+    if (frames > 1) {
+      return true;
+    }
+    if (offset + IMAGE_DESCRIPTOR_BYTES > bytes.length) {
+      return undefined;
+    }
+    let descriptorPacked = bytes[offset + IMAGE_DESCRIPTOR_BYTES - 1]!;
+    offset += IMAGE_DESCRIPTOR_BYTES;
+    if (descriptorPacked & LOCAL_COLOR_TABLE_FLAG) {
+      offset += 3 * 2 ** ((descriptorPacked & COLOR_TABLE_SIZE_MASK) + 1);
+    }
+    // The LZW minimum code size byte, then the frame's data sub-blocks.
+    let next = skipSubBlocks(offset + 1);
+    if (next === undefined) {
+      return undefined;
+    }
+    offset = next;
+  }
+  return undefined;
+}

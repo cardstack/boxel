@@ -138,10 +138,10 @@ export const IMAGE_THUMB_SCREENSHOTS: Record<string, ScreenshotSpec> = {
 // `thumb`, so an SVG's renditions would be pure prerender cost with no
 // consumer — and class placement is the only exclusion lever, since
 // `getScreenshots` merges every declaration level and has no
-// removal-by-subclass mechanism. Residual: `GifDef` is a raster, so GIFs
-// still pay for renditions the srcset gate never reads; that resolves if
-// renditions become consumable for stills, and the placement can be
-// revisited then. The renditions capture at deviceScaleFactor 1 so their
+// removal-by-subclass mechanism. Residual: srcset skips an animated file
+// (a rendition is a still of its first frame), yet an animated raster still
+// pays for its renditions, because a declaration applies per class and
+// cannot consult a file's `animation` attribute. The renditions capture at deviceScaleFactor 1 so their
 // declared width IS their physical width — the `w` descriptor srcset needs.
 export const IMAGE_RENDITION_SCREENSHOTS: Record<string, ScreenshotSpec> = {
   'rendition-640': {

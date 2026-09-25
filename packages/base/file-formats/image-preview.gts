@@ -37,6 +37,18 @@ export class ImagePreview extends GlimmerComponent<ContentPreviewSignature> {
     return this.model.previewKind === 'svg';
   }
 
+  // Containers whose animation is a routine use rather than an extension, so
+  // a file of this kind is presumed animated until its extracted `animation`
+  // says otherwise. GIF is recognized by preview kind, which also covers a GIF
+  // whose content type never arrived.
+  get isAnimationCapable() {
+    return (
+      this.model.previewKind === 'gif' ||
+      this.model.contentType === 'image/webp' ||
+      this.model.contentType === 'image/avif'
+    );
+  }
+
   // How the pixels meet the frame. A fitted cell is a fixed collection tile:
   // ordinary shapes fill it edge to edge, and only what `letterboxImage`
   // exempts (vectors, crop-destroying proportions) contains instead — the
@@ -70,10 +82,12 @@ export class ImagePreview extends GlimmerComponent<ContentPreviewSignature> {
   // candidate. Skipped where a substitute would lie about the picture or
   // shrink it:
   //  - an SVG scales crisply at any size with no bytes to save;
-  //  - a GIF's renditions are stills of its first frame, and WebP/AVIF can
-  //    animate too — no extracted signal says whether a given file does, so
-  //    both formats sit out until the meta extractors record an animated
-  //    flag;
+  //  - a rendition is a still of the first frame, so an animated source
+  //    keeps its original. GIF, WebP, and AVIF are animation-capable
+  //    containers and need the extracted `animation` to be `'still'`; an
+  //    unknown one (a reader that couldn't tell, or a row that predates the
+  //    field) sits out. Any other raster — an APNG is a PNG — is excluded
+  //    only when it is known to animate;
   //  - a fitted cell already prefers the `thumb` capture through the stage;
   //  - a source smaller than the smallest rendition has nothing to gain;
   //  - an image narrower than the renditions' 4:3 canvas would display
@@ -89,13 +103,10 @@ export class ImagePreview extends GlimmerComponent<ContentPreviewSignature> {
   // physical width) but the descriptor multiplies it anyway so a future dsf
   // change can't silently skew the browser's density math.
   get srcset(): string | undefined {
-    if (this.isSvg || this.model.previewKind === 'gif') {
+    if (this.isSvg || this.model.animation === 'animated') {
       return undefined;
     }
-    if (
-      this.model.contentType === 'image/webp' ||
-      this.model.contentType === 'image/avif'
-    ) {
+    if (this.isAnimationCapable && this.model.animation !== 'still') {
       return undefined;
     }
     if (this.format === 'fitted') {

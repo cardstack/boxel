@@ -96,3 +96,37 @@ export function extractPngColorProfile(
     hasAlpha: colorType?.hasAlpha,
   });
 }
+
+// Every chunk is a 4-byte length and 4-byte type, its data, then a 4-byte CRC.
+const CHUNK_HEADER_BYTES = 8;
+const CHUNK_CRC_BYTES = 4;
+
+// An animated PNG (APNG) declares itself with an `acTL` chunk, which the spec
+// requires to precede the first `IDAT`. So a chunk walk from IHDR decides it:
+// `acTL` first means animated, `IDAT` first means a still. Only the ancillary
+// chunks between them (`iCCP`, `sRGB`, `pHYs`, text, …) are walked past, and
+// each is skipped by its declared length without reading its data.
+//
+// Returns undefined when `bytes` ends before either chunk — the caller's read
+// window may stop inside a large ancillary chunk.
+export function extractPngAnimated(bytes: Uint8Array): boolean | undefined {
+  let view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  let offset = PNG_SIGNATURE.length;
+  while (offset + CHUNK_HEADER_BYTES <= bytes.length) {
+    let length = view.getUint32(offset);
+    let type = String.fromCharCode(
+      bytes[offset + 4]!,
+      bytes[offset + 5]!,
+      bytes[offset + 6]!,
+      bytes[offset + 7]!,
+    );
+    if (type === 'acTL') {
+      return true;
+    }
+    if (type === 'IDAT' || type === 'IEND') {
+      return false;
+    }
+    offset += CHUNK_HEADER_BYTES + length + CHUNK_CRC_BYTES;
+  }
+  return undefined;
+}

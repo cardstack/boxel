@@ -7,13 +7,17 @@ import {
 } from './image-file-def';
 import type { ByteStream, SerializedFile } from './file-api';
 import {
+  extractGifAnimated,
   extractGifColorProfile,
   extractGifDimensions,
 } from './gif-meta-extractor';
 
-// 6-byte signature plus the 7-byte logical screen descriptor, which holds the
-// dimensions and the global color table's size.
-const GIF_SCREEN_DESCRIPTOR_BYTES = 13;
+// The dimensions and the global color table's size sit in the first 13 bytes
+// (signature plus logical screen descriptor), but deciding whether the file
+// animates means walking its blocks to a second frame or the trailer. The walk
+// stops early on either, so the window only bounds a large still GIF or a huge
+// first frame; past it `animation` is left unset rather than guessed.
+const GIF_READ_WINDOW_BYTES = 1_048_576;
 
 export class GifDef extends RasterImageDef {
   static displayName = 'GIF Image';
@@ -28,10 +32,7 @@ export class GifDef extends RasterImageDef {
     SerializedFile<{ width: number; height: number } & RasterImageAttributes>
   > {
     let base = await super.extractAttributes(url, getStream, options);
-    let bytes = await readFirstBytes(
-      await getStream(),
-      GIF_SCREEN_DESCRIPTOR_BYTES,
-    );
+    let bytes = await readFirstBytes(await getStream(), GIF_READ_WINDOW_BYTES);
     let { width, height } = extractGifDimensions(bytes);
 
     return {
@@ -39,7 +40,11 @@ export class GifDef extends RasterImageDef {
       width,
       height,
       // GIF has no EXIF.
-      ...rasterImageAttributes(undefined, extractGifColorProfile(bytes)),
+      ...rasterImageAttributes(
+        undefined,
+        extractGifColorProfile(bytes),
+        extractGifAnimated(bytes),
+      ),
     };
   }
 }
