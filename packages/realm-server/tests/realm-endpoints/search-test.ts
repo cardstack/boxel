@@ -10,6 +10,9 @@ import {
 } from '@cardstack/runtime-common';
 import type { PgAdapter } from '@cardstack/postgres';
 import {
+  connectionTenantsDuring,
+  definitionCacheReads,
+  indexReads,
   setupPermissionedRealmCached,
   testRealmURLFor,
 } from '../helpers/index.ts';
@@ -128,6 +131,32 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
         html.attributes.html
           .replace(/\s+/g, ' ')
           .includes('Fitted Card Person: John'),
+      );
+    });
+
+    test('the index reads a realm’s own search does are charged to that realm', async function (assert) {
+      let { result: response, statements } = await connectionTenantsDuring(
+        dbAdapter,
+        () => postSearch({ filter: personFilter() }),
+      );
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      let reads = indexReads(statements);
+      assert.true(reads.length > 0, 'the search read the index');
+      assert.deepEqual(
+        reads
+          .map(({ tenant, shared }) => JSON.stringify({ tenant, shared }))
+          .filter((r, i, all) => all.indexOf(r) === i),
+        [JSON.stringify({ tenant: realmHref, shared: false })],
+        'every index read is charged to the realm itself and held to its share',
+      );
+      let lookups = definitionCacheReads(statements);
+      assert.true(lookups.length > 0, 'the search looked up card definitions');
+      assert.deepEqual(
+        lookups
+          .map(({ tenant, shared }) => JSON.stringify({ tenant, shared }))
+          .filter((r, i, all) => all.indexOf(r) === i),
+        [JSON.stringify({ tenant: realmHref, shared: true })],
+        'definition lookups, which searches of other realms share, are ordered as the realm but run as shared work',
       );
     });
 

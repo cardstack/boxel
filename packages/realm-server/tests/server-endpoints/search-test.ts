@@ -34,7 +34,10 @@ import {
 } from '../../search-inflight.ts';
 import {
   closeServer,
+  connectionTenantsDuring,
   createVirtualNetwork,
+  definitionCacheReads,
+  indexReads,
   setupDB,
   matrixURL,
   realmSecretSeed,
@@ -318,6 +321,37 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
       for (let { id } of janeHtml.relationships.styles.data) {
         assert.true(cssIds.has(id), `referenced stylesheet ${id} is included`);
       }
+    });
+
+    test('the index reads a federated search does are charged to the set of realms it names', async function (assert) {
+      let { result: response, statements } = await connectionTenantsDuring(
+        dbAdapter,
+        () =>
+          postSearch({
+            filter: personFilter(),
+            realms: [secondaryRealm.url, testRealm.url, secondaryRealm.url],
+          }),
+      );
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      let expected = [testRealm.url, secondaryRealm.url].sort().join(' ');
+      let reads = indexReads(statements);
+      assert.true(reads.length > 0, 'the search read the index');
+      assert.deepEqual(
+        reads
+          .map(({ tenant, shared }) => JSON.stringify({ tenant, shared }))
+          .filter((r, i, all) => all.indexOf(r) === i),
+        [JSON.stringify({ tenant: expected, shared: false })],
+        'every index read is charged to one tenant, the realm set, however the request ordered or repeated it, and held to its share',
+      );
+      let lookups = definitionCacheReads(statements);
+      assert.true(lookups.length > 0, 'the search looked up card definitions');
+      assert.deepEqual(
+        lookups
+          .map(({ tenant, shared }) => JSON.stringify({ tenant, shared }))
+          .filter((r, i, all) => all.indexOf(r) === i),
+        [JSON.stringify({ tenant: expected, shared: true })],
+        'definition lookups, which searches of other realms share, are ordered as the realm set that started them but run as shared work',
+      );
     });
 
     // A federated search payload that names an archived realm must not

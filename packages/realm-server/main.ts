@@ -515,7 +515,9 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
   // against whether the process's event loop was starved at the time, and heap
   // growth toward the OOM limit is visible (and alertable) on a calm process
   // before a search storm — not only inside saturation windows.
-  let stopHealthSampler = startHealthSampler();
+  let stopHealthSampler = startHealthSampler({
+    connectionStats: () => dbAdapter.connectionStats,
+  });
   let reconciler: RealmRegistryReconciler | undefined;
   let fileChangesListener: RealmFileChangesListener | undefined;
   let indexUpdatedListener: RealmIndexUpdatedListener | undefined;
