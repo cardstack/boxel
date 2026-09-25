@@ -22,8 +22,9 @@ on:
       - main
     paths:
       - "packages/boxel-icons/**"
-  # Re-run by hand to backfill the bucket after it has drifted, or to republish
-  # without an icon change.
+  # Re-run by hand to backfill objects missing from the bucket. On an
+  # icons-cache hit a run uploads only missing objects and ones whose size
+  # changed (see the sync step).
   workflow_dispatch:
 
 permissions:
@@ -82,6 +83,21 @@ jobs:
           role-to-assume: ${{ env.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
+      # `deploy:s3` stamps each object it uploads with an explicit
+      # Cache-Control. Without one, a browser falls back to heuristic
+      # freshness, a tenth of the object's age when it was fetched, and every
+      # upload resets that age. For days after a publish a returning browser
+      # would revalidate every icon a card imports, on every boot. One day
+      # fresh matches the distribution's default TTL. The stale-while-revalidate
+      # window lets a later boot use its cached copy while it refreshes in the
+      # background. Not `immutable`: an icon-set update can change the bytes
+      # behind an existing path. `aws s3 sync` stamps only what it uploads, and
+      # it skips a file whose size is unchanged and whose mtime is no newer
+      # than its object. A build restored from the icons cache keeps the mtimes
+      # of the run that saved it, so a dispatch on a cache hit re-uploads
+      # nothing that already exists. A new value reaches every object only
+      # when an input to the icons cache key changes and forces a fresh build.
+      # Editing the value in packages/boxel-icons/package.json is one such change.
       - name: Sync to S3
         run: pnpm --filter @cardstack/boxel-icons deploy:s3
 
