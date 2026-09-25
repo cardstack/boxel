@@ -12,7 +12,7 @@ The [BoxelUI preview app](https://boxel-ui.stack.cards) contains a preview of al
 
 `pnpm build` compiles the gts files to JS and produces typescript declaration files. The components are compiled all the way to wire format so they're directly loadable by @cardstack/host.
 
-`pnpm deploy:s3` synchronizes the built code to an S3 bucket where they're served at https://boxel-icons.boxel.ai (via CloudFront).
+`pnpm deploy:s3` synchronizes the built code to an S3 bucket where they're served at https://boxel-icons.boxel.ai (via CloudFront). CI runs it on every merge to `main` that touches this package (`.github/workflows/deploy-icons.yml`). Each object it uploads carries `Cache-Control: public, max-age=86400, stale-while-revalidate=2592000`, so browsers keep icons for a day and refresh them in the background after that. The workflow file explains why.
 
 ## Local Development
 

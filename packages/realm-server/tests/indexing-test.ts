@@ -1832,6 +1832,8 @@ module(basename(import.meta.filename), function () {
           reservationId: 1,
           priority: 0,
           queueWaitMs: null,
+          concurrencyGroup: null,
+          laneFamily: null,
         };
         let url = new URL(`${testRealm}resumed-only.json`);
         let resumedType = `${testRealm}resumed-only/ResumedOnly`;

@@ -13,6 +13,7 @@ import {
   prerenderHtmlConcurrencyGroup,
   type SpawningIndexPass,
 } from './jobs/prerender-html.ts';
+import { laneFamiliesPredicate, laneFamilyOf } from './jobs/lane-family.ts';
 
 // The catch-up sweep's read side. It reconciles two independently-advancing
 // channels — the search-doc index (`boxel_index`) and the prerendered HTML
@@ -479,29 +480,27 @@ export async function findPrerenderHtmlRejectionStreaks(
   if (realmURLs.length === 0) {
     return streaks;
   }
-  let realmByGroup = new Map(
+  // Keyed by the realm's prerender-html lane family, so a job in any of the
+  // realm's lanes counts toward the realm's streak.
+  let realmByFamily = new Map(
     realmURLs.map((realmURL) => [
       prerenderHtmlConcurrencyGroup(realmURL),
       realmURL,
     ]),
   );
   let rows = (await query(dbAdapter, [
-    `SELECT concurrency_group, status,
+    `SELECT ${laneFamilyOf('jobs')} AS lane_family, status,
        (EXTRACT(EPOCH FROM (NOW() - finished_at)) * 1000)::bigint AS ms_since_finished
      FROM jobs
      WHERE job_type = 'prerender_html'
        AND status IN ('resolved', 'rejected')
        AND finished_at IS NOT NULL
        AND finished_at > NOW() - INTERVAL '${REJECTION_STREAK_LOOKBACK_HOURS} hours'
-       AND concurrency_group IN`,
-    ...addExplicitParens(
-      separatedByCommas(
-        [...realmByGroup.keys()].map((group) => [param(group)]),
-      ),
-    ),
+       AND`,
+    ...laneFamiliesPredicate([...realmByFamily.keys()]),
     `ORDER BY finished_at DESC`,
   ] as Expression)) as {
-    concurrency_group: string;
+    lane_family: string;
     status: string;
     ms_since_finished: number | string;
   }[];
@@ -511,7 +510,7 @@ export async function findPrerenderHtmlRejectionStreaks(
   // rejections before that realm's first non-rejected row.
   let settled = new Set<string>();
   for (let row of rows) {
-    let realmURL = realmByGroup.get(row.concurrency_group);
+    let realmURL = realmByFamily.get(row.lane_family);
     if (!realmURL || settled.has(realmURL)) {
       continue;
     }

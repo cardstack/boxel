@@ -30,6 +30,8 @@ const jobInfo = {
   reservationId: 1,
   priority: 0,
   queueWaitMs: null,
+  concurrencyGroup: null,
+  laneFamily: null,
 };
 const log = logger('declared-capture-persist-test');
 

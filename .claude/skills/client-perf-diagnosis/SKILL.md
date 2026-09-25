@@ -337,6 +337,14 @@ curl -sG 'http://localhost:3100/loki/api/v1/query_range' \
 
 Each returned line's `values[][1]` is the full JSON object — read `top_frames`, `loaf_scripts`, `slowest_loads`, or `correlation_id` from there.
 
+## Profiling a load yourself
+
+When the telemetry points at a slow card and you record a DevTools (or chrome-devtools MCP) performance trace of it, two things in that trace are not what they look like.
+
+**The instrument's own profiler dominates a traced tab.** On a sampled-in session the telemetry service spawns a fresh JS self-profiler every harvest interval (`#spawnProfiler` / `#harvestProfiler`; in a minified build they read as two-letter private methods beside the `new Profiler` call). Normally a spawn costs a fraction of a millisecond. While a performance trace is recording, each one blocks the main thread for several hundred milliseconds to over a second. A trace can then show a third of its main-thread time under the spawn, and none of that happens in a user's browser. Exclude samples under those two frames before attributing anything, or record from a tab that was not sampled in. For attribution that the recording itself does not perturb, sample with CDP `Profiler.start` instead of `Tracing`. Or start a `Profiler` from an init script and read it back in the page.
+
+**A request's duration is not its network time.** Send→finish in the trace includes the time a response waited for a busy main thread to process it. Resource timing's `duration` and the `finishTime` on `ResourceFinish` do not, because both come from the network stack. A burst of requests the HTTP cache answered can each read over a second on the trace's span. Even on the network stack's clock, each can read a few hundred milliseconds, so a slow resource-timing `duration` does not prove a network fetch either. To decide cache versus network, read the network stack's own fields on the trace's `ResourceReceiveResponse` / `ResourceFinish` events: `fromCache`, `encodedDataLength`, and `timing.receiveHeadersEnd`. For a request the service worker answered (`fromServiceWorker: true`), the page-side record says nothing about the network, so count requests server-side instead.
+
 ## Calibrating thresholds
 
 The event fields are facts; the line between "fine" and "slow" is per-realm. A card-to-interactive that's normal for a heavy dashboard realm is alarming for a realm of trivial cards. Read a realm's own baseline (the overview row over a healthy window) before calling a number pathological, and prefer the high quantiles (p95/p99) and the topk panels over averages — a client complaint is a tail event, and averages hide tails.

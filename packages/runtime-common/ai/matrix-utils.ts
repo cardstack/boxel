@@ -1,6 +1,7 @@
 import type { IContent, MatrixClient } from 'matrix-js-sdk';
 import { Method } from 'matrix-js-sdk';
 import { findSearchReplaceBlock } from '../search-replace-markers.ts';
+import { uint8ArrayToBase64 } from '../base64.ts';
 import { logger } from '../log.ts';
 import { OpenAIError } from 'openai/error';
 import type { ToolRequest } from '../commands.ts';
@@ -398,26 +399,7 @@ export async function downloadFileAsBase64DataUrl(
 ): Promise<string> {
   let response = await fetchMatrixMediaWithFallback(client, url);
   let buffer = await response.arrayBuffer();
-  let bytes = new Uint8Array(buffer);
-  let maybeBuffer = (globalThis as any).Buffer;
-  if (maybeBuffer?.from) {
-    let base64 = maybeBuffer.from(bytes).toString('base64');
-    return `data:${contentType};base64,${base64}`;
-  }
-
-  let btoaFn = (globalThis as any).btoa;
-  if (typeof btoaFn !== 'function') {
-    throw new Error('No base64 encoder available in this runtime');
-  }
-
-  // Build binary string in chunks to avoid quadratic concatenation behavior.
-  let binaryChunks: string[] = [];
-  let chunkSize = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunkSize) {
-    let chunk = bytes.subarray(i, i + chunkSize);
-    binaryChunks.push(String.fromCharCode(...chunk));
-  }
-  let base64 = btoaFn(binaryChunks.join(''));
+  let base64 = uint8ArrayToBase64(new Uint8Array(buffer));
   return `data:${contentType};base64,${base64}`;
 }
 

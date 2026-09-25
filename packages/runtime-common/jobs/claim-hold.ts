@@ -7,6 +7,11 @@ import type { DBAdapter } from '../db.ts';
 // `unfulfilled` and so remain coalesce candidates: an incoming publish merges
 // into one rather than inserting alongside it.
 //
+// The claim query matches a hold against a job's group or its lane family, so
+// a hold naming a family — which is also the name of the family's exclusive
+// lane — holds every lane in it, writer lanes included, while a hold naming a
+// writer lane holds that lane alone.
+//
 // This is the lever for the case coalescing cannot reach on its own. Merging
 // only ever targets a job no worker has claimed yet, which means it helps most
 // when the queue is backed up and not at all when workers are free — the
