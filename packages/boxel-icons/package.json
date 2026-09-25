@@ -16,7 +16,7 @@
     "build": "concurrently \"pnpm:build:*\" --names \"build:\"",
     "build:js": "rollup --config",
     "build:types": "ember-tsc --declaration --emitDeclarationOnly --noEmit false",
-    "deploy:s3": "aws s3 sync dist s3://cardstack-boxel-icons-production --region us-east-1",
+    "deploy:s3": "aws s3 sync dist s3://cardstack-boxel-icons-production --region us-east-1 --cache-control 'public, max-age=86400, stale-while-revalidate=2592000'",
     "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
     "lint:fix": "concurrently \"pnpm:lint:*:fix\" --names \"fix:\"",
     "lint:js": "eslint . --report-unused-disable-directives --cache",

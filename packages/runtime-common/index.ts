@@ -1634,6 +1634,11 @@ export type ScreenshotPrerenderArgs = {
   format: ScreenshotFormat;
   // Optional per-capture overrides (viewport, scale, fullPage, clip).
   captureSpec?: ScreenshotCaptureSpec;
+  // Render-route options for the capture. The capture path always renders a
+  // card (`cardRender`), so only `loaderEpoch` is meaningful here today: it
+  // synchronizes the pooled tab's module graph to the realm's current
+  // timeline, exactly as an indexing visit's `renderOptions` do.
+  renderOptions?: RenderRouteOptions;
   // Worker-job priority threaded through from the producer side. See
   // ModulePrerenderArgs for the contract.
   priority?: number;
