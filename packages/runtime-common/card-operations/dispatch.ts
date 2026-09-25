@@ -621,7 +621,7 @@ export async function resolveGatedOperation(
     core,
     target,
     name,
-    definition.base,
+    definition,
     typeDefinition,
     scope,
   );

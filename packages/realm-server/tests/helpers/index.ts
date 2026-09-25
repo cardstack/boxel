@@ -267,10 +267,13 @@ export const localBaseRealm = isEnvironmentMode()
   : 'http://localhost:4201/base';
 // The catalog realm the test stack serves: the pinned catalog test subset
 // (packages/catalog/test-subset.json), at the URL the prerender host bundle
-// resolves `@cardstack/catalog/` to.
+// resolves `@cardstack/catalog/` to. The stack serves it over TLS, and an
+// http URL for it answers with a redirect that a module load in the
+// prerenderer cannot follow, so a definition the realm looks up in a catalog
+// module would never load.
 export const localCatalogRealm = isEnvironmentMode()
   ? `${serviceURL('realm-server')}/catalog/`
-  : 'http://localhost:4201/catalog/';
+  : 'https://localhost:4201/catalog/';
 export const matrixURL = new URL(
   isEnvironmentMode() ? serviceURL('matrix') : 'http://localhost:8008',
 );

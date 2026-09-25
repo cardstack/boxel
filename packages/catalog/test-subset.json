@@ -17,6 +17,7 @@
       "catalog-test-subset-test",
       "realm-policy-compile-test",
       "realm-policy-gate-test",
+      "realm-policy-non-grantable-test",
       "realm-policy-query-filter-test"
     ]
   }
