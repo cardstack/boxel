@@ -21,8 +21,8 @@ const stubDefinitionLookup: DefinitionLookup = {
       'lookupDefinition should not be called for top-level matches filter tests',
     );
   },
-  async lookupDefinitionTypes() {
-    return [];
+  async lookupDefinitionEntry(): Promise<never> {
+    throw new Error('lookupDefinitionEntry is not used by these tests');
   },
   async lookupCachedDefinition() {
     return undefined;

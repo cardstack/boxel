@@ -10,6 +10,7 @@ import {
   type TransformContext,
 } from './transforms.ts';
 import {
+  GATE_REFUSED,
   gateOperation,
   type GateSubject,
   notPermitted,
@@ -183,9 +184,14 @@ export interface OperationStoredFileMeta {
   createdAt?: number;
 }
 
-// `CachingDefinitionLookup`, narrowed to the one read an operation makes.
+// `CachingDefinitionLookup`, narrowed to the reads an operation makes.
 export interface OperationDefinitionLookup {
   lookupDefinition(codeRef: ResolvedCodeRef): Promise<Definition | undefined>;
+  // A type's definition with the adoption chain recorded beside it, from one
+  // read of its entry, for a type target the policy gate judges by that chain.
+  lookupDefinitionEntry(
+    codeRef: ResolvedCodeRef,
+  ): Promise<{ definition: Definition; types: string[] } | undefined>;
 }
 
 // `RealmIndexQueryEngine`, narrowed to the reads an operation makes.
@@ -618,34 +624,32 @@ export async function resolveGatedOperation(
     }
     throw e;
   }
-  let { definition, typeDefinition, typeRef } = resolved;
+  let { definition, typeDefinition, typeChain } = resolved;
   let decision = await gateOperation(
     core,
-    gateSubject(core, target, typeRef),
+    gateSubject(target, typeChain),
     name,
     definition,
     typeDefinition,
     scope,
-    () => notPermitted(target, name),
   );
+  if (decision.kind === GATE_REFUSED.kind) {
+    throw notPermitted(target, name);
+  }
   return { definition, decision };
 }
 
 // The target as the gate judges it. A card is judged by the row the index
-// holds for its URL. A type is judged by the chain the definition cache
-// records for the entry resolution found, read through the ref resolution
-// looked that entry up by. The ref is bound here and never handed on, so what
-// the gate holds is the realm's answer about the type and not the caller's
-// claim about it.
+// holds for its URL. A type is judged by the chain recorded on the entry its
+// definition came from, read in the same lookup, so the gate holds the realm's
+// answer about the type and never the caller's claim about it.
 function gateSubject(
-  core: OperationCore,
   target: OperationTarget,
-  typeRef: ResolvedCodeRef | undefined,
+  typeChain: string[] | undefined,
 ): GateSubject {
   if (target.kind === 'type') {
-    let access = core.policy;
-    return typeRef && access
-      ? { kind: 'type', adoptionChain: () => access.adoptionChain(typeRef) }
+    return typeChain
+      ? { kind: 'type', types: typeChain }
       : { kind: 'unmatched' };
   }
   let url = parseTargetURL(target.url);
@@ -661,10 +665,10 @@ async function resolveUngated(
   scope: OperationScope,
 ): Promise<{
   definition: OperationDefinition;
-  // The target type's own entry, where one resolved, and the ref it was
-  // looked up by.
+  // The target type's own entry, where one resolved, and for a type target
+  // the adoption chain recorded on it.
   typeDefinition?: Definition;
-  typeRef?: ResolvedCodeRef;
+  typeChain?: string[];
 }> {
   assertInRealm(core, target);
   if (isDefinitionFreeOperation(name)) {
@@ -681,7 +685,7 @@ async function resolveUngated(
   }
   let typeEntry = await definitionFor(core, target, scope);
   let definition = typeEntry?.definition;
-  let typeRef = typeEntry?.ref;
+  let typeChain = typeEntry?.types;
   if (target.kind === 'type' && !definition) {
     // Nothing else can be said about a type nobody can resolve: whether it
     // carries the operation is a question about a definition that is not
@@ -731,7 +735,7 @@ async function resolveUngated(
     if (!carries(target, kind, declared.base)) {
       throw notAllowed(target, name, kind, declared.base);
     }
-    return { definition: declared, typeDefinition: definition, typeRef };
+    return { definition: declared, typeDefinition: definition, typeChain };
   }
   if (!isBaseOperation(name)) {
     throw new OperationFailure({
@@ -750,7 +754,7 @@ async function resolveUngated(
   // construction.
   return {
     definition: { base: name, deterministic: true },
-    ...(definition ? { typeDefinition: definition, typeRef } : {}),
+    ...(definition ? { typeDefinition: definition, typeChain } : {}),
   };
 }
 
@@ -1266,15 +1270,20 @@ function assertInRealm(core: OperationCore, target: OperationTarget): void {
   }
 }
 
-// The type entry a target's operations are declared on, with the resolved ref
-// it was found by. Undefined where it cannot be read — an unresolvable ref, an
-// index row with no `adoptsFrom`, an unreachable module. Callers decide what
-// that means for them.
+// The type entry a target's operations are declared on. Undefined where it
+// cannot be read — an unresolvable ref, an index row with no `adoptsFrom`, an
+// unreachable module. Callers decide what that means for them.
+//
+// A type target's entry is read whole, its definition with the adoption chain
+// recorded beside it, because the policy gate judges the type by that chain.
+// Read apart, a module edit landing between the two reads would pair one
+// type's declarations with another's chain. A card's chain is its own row's,
+// so an instance target reads the definition alone.
 async function definitionFor(
   core: OperationCore,
   target: OperationTarget,
   scope: OperationScope,
-): Promise<{ definition: Definition; ref: ResolvedCodeRef } | undefined> {
+): Promise<{ definition: Definition; types?: string[] } | undefined> {
   let codeRef: CodeRef | undefined;
   let relativeTo: URL;
   if (target.kind === 'type') {
@@ -1302,8 +1311,11 @@ async function definitionFor(
     return undefined;
   }
   try {
+    if (target.kind === 'type') {
+      return await core.definitionLookup.lookupDefinitionEntry(resolved);
+    }
     let definition = await core.definitionLookup.lookupDefinition(resolved);
-    return definition ? { definition, ref: resolved } : undefined;
+    return definition ? { definition } : undefined;
   } catch {
     return undefined;
   }

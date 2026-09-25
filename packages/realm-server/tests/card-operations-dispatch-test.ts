@@ -84,6 +84,9 @@ interface StubOptions {
   // The ref the type entry names itself by, where it is not the ref it was
   // looked up by, as for a type reached through a module that re-exports it.
   definitionCodeRef?: CodeRef;
+  // The adoption chain recorded on the type entry. By default the type the
+  // entry names and `CardDef`.
+  definitionTypes?: string[];
   // What the policy gate reads for a caller the realm ACL declined.
   policy?: OperationCore['policy'];
 }
@@ -138,18 +141,14 @@ function stub(opts: StubOptions = {}): Stub {
     sizelessAdapter = false,
     rangelessAdapter = false,
     definitionCodeRef,
+    definitionTypes,
     policy,
   } = opts;
 
-  let core: OperationCore = {
-    realmURL: REALM,
-    definitionLookup: {
-      async lookupDefinition(codeRef) {
-        calls.push('lookupDefinition');
-        if (definitionType === 'unresolvable') {
-          return undefined;
-        }
-        return {
+  let definitionOf = (codeRef: CodeRef): Definition | undefined =>
+    definitionType === 'unresolvable'
+      ? undefined
+      : {
           type: definitionType,
           codeRef: definitionCodeRef ?? codeRef,
           displayName: 'Person',
@@ -157,6 +156,26 @@ function stub(opts: StubOptions = {}): Stub {
           fieldDefs: {},
           ...(operations ? { operations } : {}),
         };
+
+  let core: OperationCore = {
+    realmURL: REALM,
+    definitionLookup: {
+      async lookupDefinition(codeRef) {
+        calls.push('lookupDefinition');
+        return definitionOf(codeRef);
+      },
+      async lookupDefinitionEntry(codeRef) {
+        calls.push('lookupDefinitionEntry');
+        let definition = definitionOf(codeRef);
+        return definition
+          ? {
+              definition,
+              types: definitionTypes ?? [
+                typeKey(definition.codeRef),
+                typeKey(CARD_DEF),
+              ],
+            }
+          : undefined;
       },
     },
     indexQueryEngine: {
@@ -352,20 +371,13 @@ function typeKey(ref: CodeRef) {
   return 'module' in ref ? `${ref.module}/${ref.name}` : JSON.stringify(ref);
 }
 
-// A policy of `rules`, over types keyed as `module/name`. It records every ref
-// whose adoption chain the gate asks for. `chainOf` is the chain the definition
-// cache records for the entry a ref reaches, which by default is the ref's own
-// type and `CardDef`.
-function policyStub(
-  rules: { targetType: CodeRef; grants: string[] }[],
-  chainOf: (ref: CodeRef) => string[] = (ref) => [
-    typeKey(ref),
-    typeKey(CARD_DEF),
-  ],
-) {
-  let chainsAskedFor: CodeRef[] = [];
+// A policy of `rules`, over types keyed as `module/name`. It counts how often
+// it is loaded.
+function policyStub(rules: { targetType: CodeRef; grants: string[] }[]) {
+  let loads = { count: 0 };
   let access: NonNullable<OperationCore['policy']> = {
     async compiledPolicy() {
+      loads.count++;
       return {
         card: `${REALM}policy`,
         version: '1',
@@ -379,13 +391,9 @@ function policyStub(
     async typeKeys(codeRef) {
       return [typeKey(codeRef)];
     },
-    async adoptionChain(codeRef) {
-      chainsAskedFor.push(codeRef);
-      return chainOf(codeRef);
-    },
     resolvedLink: (selfLink) => selfLink,
   };
-  return { access, chainsAskedFor };
+  return { access, loads };
 }
 
 const CARD_DEF: CodeRef = {
@@ -1614,8 +1622,8 @@ module(basename(import.meta.filename), function () {
   });
 
   // A create names its type in the payload, and the realm resolves that ref
-  // to a definition. Here the ref reaches `Person` through another module, as
-  // a re-export does, so the chain the definition cache records for it is
+  // to a definition-cache entry. Here the ref reaches `Person` through another
+  // module, as a re-export does, so the chain recorded on that entry is
   // `Person`'s. A gate that matched on the ref the caller sent would answer
   // differently from one that matches on that chain.
   module('the policy gate on a type target', function () {
@@ -1628,7 +1636,7 @@ module(basename(import.meta.filename), function () {
       codeRef: CLAIMED,
       realm: REALM,
     };
-    const personChain = () => [typeKey(PERSON), typeKey(CARD_DEF)];
+    const reExported = { definitionCodeRef: PERSON };
     function declined(core: OperationCore) {
       return newOperationScope(core, {
         caller: scopeCallerFor('@teacher:localhost'),
@@ -1637,11 +1645,8 @@ module(basename(import.meta.filename), function () {
     }
 
     test('matches rules on the adoption chain recorded for the type the ref resolved to', async function (assert) {
-      let { access } = policyStub(
-        [{ targetType: PERSON, grants: ['create'] }],
-        personChain,
-      );
-      let { core } = stub({ definitionCodeRef: PERSON, policy: access });
+      let { access } = policyStub([{ targetType: PERSON, grants: ['create'] }]);
+      let { core } = stub({ ...reExported, policy: access });
       let { decision } = await resolveGatedOperation(
         core,
         target,
@@ -1652,11 +1657,10 @@ module(basename(import.meta.filename), function () {
     });
 
     test('a rule on the ref the caller named does not match a type that resolved to another', async function (assert) {
-      let { access } = policyStub(
-        [{ targetType: CLAIMED, grants: ['create'] }],
-        personChain,
-      );
-      let { core } = stub({ definitionCodeRef: PERSON, policy: access });
+      let { access } = policyStub([
+        { targetType: CLAIMED, grants: ['create'] },
+      ]);
+      let { core } = stub({ ...reExported, policy: access });
       let failure = await refusalFrom(() =>
         resolveGatedOperation(core, target, 'create', declined(core)),
       );
@@ -1664,11 +1668,10 @@ module(basename(import.meta.filename), function () {
     });
 
     test('a rule on an ancestor in the recorded chain applies', async function (assert) {
-      let { access } = policyStub(
-        [{ targetType: CARD_DEF, grants: ['create'] }],
-        personChain,
-      );
-      let { core } = stub({ definitionCodeRef: PERSON, policy: access });
+      let { access } = policyStub([
+        { targetType: CARD_DEF, grants: ['create'] },
+      ]);
+      let { core } = stub({ ...reExported, policy: access });
       let { decision } = await resolveGatedOperation(
         core,
         target,
@@ -1678,26 +1681,37 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(decision.kind, 'granted');
     });
 
-    test('a type whose chain cannot be read is refused', async function (assert) {
+    test('the definition and its chain are read from one entry', async function (assert) {
       let { access } = policyStub([{ targetType: PERSON, grants: ['create'] }]);
-      let { core } = stub({
-        definitionCodeRef: PERSON,
-        policy: {
-          ...access,
-          async adoptionChain() {
-            throw new Error('the definition entry is gone');
-          },
-        },
-      });
-      let failure = await refusalFrom(() =>
-        resolveGatedOperation(core, target, 'create', declined(core)),
+      let { core, calls } = stub({ ...reExported, policy: access });
+      await resolveGatedOperation(core, target, 'create', declined(core));
+      assert.deepEqual(
+        calls.filter((call) => call.startsWith('lookupDefinition')),
+        ['lookupDefinitionEntry'],
+        'one read of the entry, and no separate read of its definition',
       );
-      assert.strictEqual(failure.code, 'operation-not-permitted');
     });
 
-    test('reads no chain for a caller the realm ACL allowed', async function (assert) {
-      let { access, chainsAskedFor } = policyStub([]);
-      let { core } = stub({ definitionCodeRef: PERSON, policy: access });
+    test('a type is matched only for a create', async function (assert) {
+      let { access } = policyStub([
+        { targetType: PERSON, grants: ['read', 'update', 'delete'] },
+      ]);
+      let { core } = stub({ ...reExported, policy: access });
+      for (let name of ['read', 'update', 'delete']) {
+        let failure = await refusalFrom(() =>
+          resolveGatedOperation(core, target, name, declined(core)),
+        );
+        assert.strictEqual(
+          failure.code,
+          'operation-not-permitted',
+          `a ${name} granted on the type is not granted on a type target`,
+        );
+      }
+    });
+
+    test('a caller the realm ACL allowed never loads the policy', async function (assert) {
+      let { access, loads } = policyStub([]);
+      let { core } = stub({ ...reExported, policy: access });
       let { decision } = await resolveGatedOperation(
         core,
         target,
@@ -1708,11 +1722,11 @@ module(basename(import.meta.filename), function () {
         }),
       );
       assert.strictEqual(decision.kind, 'coarse');
-      assert.deepEqual(chainsAskedFor, [], 'the gate asked for nothing');
+      assert.strictEqual(loads.count, 0, 'the policy was not loaded');
     });
 
     test('a type target scoped to another realm is refused before its type is looked up', async function (assert) {
-      let { access, chainsAskedFor } = policyStub([
+      let { access, loads } = policyStub([
         { targetType: PERSON, grants: ['create'] },
       ]);
       let { core, calls } = stub({ policy: access });
@@ -1735,7 +1749,7 @@ module(basename(import.meta.filename), function () {
         failure.detail,
       );
       assert.deepEqual(calls, [], 'nothing was looked up');
-      assert.deepEqual(chainsAskedFor, [], 'and no chain was read');
+      assert.strictEqual(loads.count, 0, 'and the policy was not loaded');
     });
   });
 });

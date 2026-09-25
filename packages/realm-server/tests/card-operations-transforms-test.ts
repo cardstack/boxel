@@ -78,6 +78,10 @@ function stub(operations?: Definition['operations']): OperationCore {
           ...(operations ? { operations } : {}),
         };
       },
+      async lookupDefinitionEntry(codeRef: CodeRef) {
+        let definition = await this.lookupDefinition(codeRef);
+        return definition ? { definition, types: [] } : undefined;
+      },
     },
     indexQueryEngine: {
       async cardDocument(url: URL) {
