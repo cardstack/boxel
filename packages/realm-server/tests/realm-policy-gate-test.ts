@@ -61,9 +61,10 @@ function adoptsFrom(ref: { module: string; name: string }) {
   return { module: rri(ref.module), name: ref.name };
 }
 
-// Is the caller one of the classroom's teachers. BXL's `contains` answers
-// whether an array holds every member of another array, so a membership test
-// against one id is written with `any`.
+// Is the caller one of the classroom's teachers. Written with `any` and `==`
+// because that is exact. BXL's `contains` matches substrings, so
+// `contains([actor()])` would also admit a caller whose id is part of a
+// listed one, and `contains(actor())` never matches a list at all.
 const TEACHES = '.teacherIds | any(. == actor())';
 const LEADS = '.leadTeacherIds | any(. == actor())';
 
