@@ -739,8 +739,9 @@ module(basename(import.meta.filename), function () {
     // rewrite it could not see would be baked into the dependent's row.
     test('a noCache source read distinguishes content even when on-disk lastModified collides', async function (assert) {
       let cardPath = 'etag-collision-no-cache.json';
+      // Equal lengths, so the size alone cannot tell the two apart.
       let initial = JSON.stringify({ value: 'initial' });
-      let updated = JSON.stringify({ value: 'updated, and longer' });
+      let updated = JSON.stringify({ value: 'changed' });
       let collidingMtime = new Date('2026-01-01T00:00:00Z');
       let absolutePath = join(testRealmPath, cardPath);
       let authHeader = `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`;
@@ -786,13 +787,13 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    // The realm records a hash only for what it writes itself. A file changed
-    // out of band has none the new size vouches for, so the read fingerprints
-    // the file instead.
-    test('a noCache source read distinguishes content rewritten out of band within the same second', async function (assert) {
+    // An out-of-band rewrite goes around the realm, so the hash it recorded for
+    // the previous bytes stays behind, and at the same length only the file's
+    // content can tell the two apart.
+    test('a noCache source read distinguishes a same-length rewrite made out of band within the same second', async function (assert) {
       let cardPath = 'etag-collision-out-of-band.json';
       let initial = JSON.stringify({ value: 'initial' });
-      let updated = JSON.stringify({ value: 'updated, and longer' });
+      let updated = JSON.stringify({ value: 'changed' });
       let collidingMtime = new Date('2026-01-01T00:00:00Z');
       let absolutePath = join(testRealmPath, cardPath);
       let authHeader = `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`;
