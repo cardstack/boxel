@@ -398,7 +398,43 @@ function setupAfterOwnerTeardown(
     currentOwner = undefined;
     getRestoreFetch()?.();
     getTestRealmRegistry().clear();
+    failOnStrandedPrerenderMarkers();
   });
+}
+
+// Everything a test renders leaves with its root element, and the render route
+// removes the prerender markers it appended to the page itself when it is
+// destroyed. A `[data-prerender]` or `[data-prerender-error]` still on the page
+// once the owner is gone would be read by the next test here that queries the
+// document for one — whichever test happens to load after this one in its
+// shard. So it is removed, and the test that stranded it fails instead.
+function failOnStrandedPrerenderMarkers() {
+  let stranded = [
+    ...document.querySelectorAll<HTMLElement>(
+      '[data-prerender], [data-prerender-error]',
+    ),
+  ];
+  if (stranded.length === 0) {
+    return;
+  }
+  let described = stranded.map(
+    (element) =>
+      `<${element.tagName.toLowerCase()} data-prerender-id=${
+        element.dataset.prerenderId ?? 'none'
+      } data-prerender-status=${element.dataset.prerenderStatus ?? 'none'}>`,
+  );
+  let payload = (
+    document.querySelector('[data-prerender-error]')?.textContent ?? ''
+  )
+    .trim()
+    .slice(0, 500);
+  for (let element of stranded) {
+    element.remove();
+  }
+  throw new Error(
+    `${stranded.length} prerender marker(s) outlived this test's app: ` +
+      `${described.join(', ')}${payload ? `; error payload: ${payload}` : ''}`,
+  );
 }
 
 function describeOwnerState(): string {
