@@ -990,20 +990,21 @@ async function runBaseOperation(
       // resolving it definition-free just took out.
       return await readSourceOperation(core, canonical, opts);
     case 'query':
-      // A declared query is a saved search, not work the realm carries out
-      // here: an invocation resolves its markers with `lowerQueryOperation`
-      // and runs the result on the search engine, which is the one place a
-      // query is planned and executed. Reaching this with a perfectly valid
-      // declaration means the caller used the wrong entry point, so it is
-      // theirs to correct rather than a fault to page someone about.
+      // A declared query is a saved search, invoked by naming it in a request
+      // to `_search` or `_federated-search`. The realm resolves it there, from
+      // its own definition of the type, and the search engine plans and
+      // executes the query it resolves to; nothing in an operation batch runs
+      // one. Reaching this with a perfectly valid declaration means the caller
+      // used the wrong entry point, so it is theirs to correct rather than a
+      // fault to page someone about.
       throw new OperationFailure({
         id: targetId(canonical.target),
         status: 400,
         code: 'wrong-entry-point',
         title: 'Operation not executable here',
         detail:
-          `operation "${canonical.name}" is a query; resolve it with ` +
-          `lowerQueryOperation and run it on the search engine`,
+          `operation "${canonical.name}" is a query; name it in a request ` +
+          `to _search or _federated-search, which runs it on the search engine`,
       });
     case 'create':
     case 'update':

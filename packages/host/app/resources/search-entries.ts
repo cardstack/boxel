@@ -39,6 +39,7 @@ import {
   type Saved,
   type StoreReadType,
   type EntryCollectionDocument,
+  type NamedQueryInvocation,
   type SearchEntryRendering,
   type SearchEntryWireQuery,
 } from '@cardstack/runtime-common';
@@ -150,7 +151,10 @@ export class SearchEntriesResource extends Resource<Args> {
   // handled below by refreshing the members the event carries newer HTML for,
   // which already costs nothing when it names none of them.
   #typeGate = new LiveSearchTypeGate({
-    anchors: () => wireFilterTypeAnchors(this.#previousQuery?.filter),
+    anchors: () =>
+      namesItsOperation(this.#previousQuery)
+        ? undefined
+        : wireFilterTypeAnchors(this.#previousQuery?.filter),
     loader: () => this.loaderService.loader,
     virtualNetwork: () => this.network.virtualNetwork,
     isDestroyed: () => isDestroyed(this),
@@ -555,7 +559,8 @@ export class SearchEntriesResource extends Resource<Args> {
       let isPartialRefresh =
         this.hasCompletedFullRun &&
         this.realmsNeedingRefresh.size > 0 &&
-        query.page === undefined;
+        query.page === undefined &&
+        !namesItsOperation(query);
       let realmsToFetch = isPartialRefresh
         ? [...this.realmsNeedingRefresh]
         : this.realmsToSearch;
@@ -655,7 +660,7 @@ export class SearchEntriesResource extends Resource<Args> {
     if (query === undefined || !this.hasCompletedFullRun) {
       return false;
     }
-    if (query.page !== undefined) {
+    if (query.page !== undefined || namesItsOperation(query)) {
       return false;
     }
     if (wireFilterHasMatches(query.filter)) {
@@ -909,6 +914,20 @@ export class SearchEntriesResource extends Resource<Args> {
       };
     });
   }
+}
+
+// Whether a query names the declared operation it runs. The realm answers such
+// a query with its own resolution of that operation, so the filter, sort and
+// page it carries are only this side's resolution of it, and they differ from
+// the realm's whenever this side's definition is stale. None of the shortcuts
+// that judge from a query's shape which realm events can move its results, or
+// whether a partial fetch can stand in for a full one, can trust them, so a
+// named query takes the full re-run on every event that reaches it.
+function namesItsOperation(query: SearchEntryWireQuery | undefined): boolean {
+  return (
+    (query as Partial<NamedQueryInvocation> | undefined)?.operation !==
+    undefined
+  );
 }
 
 function buildRendering(

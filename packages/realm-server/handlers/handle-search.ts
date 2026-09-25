@@ -35,6 +35,7 @@ import {
   fetchRequestFromContext,
   releaseSearchAdmission,
   sendResponseForBadRequest,
+  sendResponseForNotFound,
   setContextResponse,
   withSearchConnectionTenant,
 } from '../middleware/index.ts';
@@ -56,6 +57,12 @@ import type {
   Realm,
   VirtualNetwork,
 } from '@cardstack/runtime-common';
+import {
+  errorsDocument,
+  isNamedQueryPayload,
+  isOperationFailure,
+  resolveNamedQuery,
+} from '@cardstack/runtime-common/card-operations';
 import {
   PRERENDER_JOB_ID_HEADER,
   PRERENDER_JOB_PRIORITY_HEADER,
@@ -106,17 +113,87 @@ export default function handleSearch(opts: {
   let linkShapePolicy = opts.linkShapePolicy ?? LinkShapePolicy.pinned('full');
   let liveSearchCache = opts.liveSearchCache ?? new LiveSearchCache();
   return async function (ctxt: Koa.Context) {
-    let { realmList } = getMultiRealmAuthorization(ctxt);
+    let { realmList, user } = getMultiRealmAuthorization(ctxt);
+    let payload = getSearchRequestPayload(ctxt);
+    if (isNamedQueryPayload(payload)) {
+      // Resolving reads the declaration's definition, so it draws on the
+      // database as a search of the realms the request names, the same as the
+      // search it resolves to.
+      let named = payload;
+      let resolved = await withSearchConnectionTenant(ctxt, realmList, () =>
+        resolveNamedSearch(ctxt, named, realmList, user),
+      );
+      if (!resolved) {
+        return;
+      }
+      payload = resolved;
+      realmList = resolved.realms!;
+    }
     // The realms this search names are known from here: each one's link-shape
     // level follows the requests that name it, and the database connections
     // the search draws on are shared out by them.
     attributeSearchRequest(ctxt, realmList);
     await withSearchConnectionTenant(ctxt, realmList, () =>
-      respond(ctxt, realmList),
+      respond(ctxt, realmList, payload),
     );
   };
 
-  async function respond(ctxt: Koa.Context, realmList: string[]) {
+  // The ad-hoc query a named one resolves to, or nothing once the refusal has
+  // been answered. The declaration is read through a realm the request names:
+  // one this process already holds where there is one, so resolving mounts a
+  // realm only when none of them is mounted. For a type whose module this
+  // server serves, the definition entry belongs to the module's own realm
+  // whichever realm reads it; for one served elsewhere, it is read with the
+  // reading realm owner's credentials. The realms the query may search are the
+  // ones the middleware authorized, so resolving it never widens what the
+  // caller can reach.
+  async function resolveNamedSearch(
+    ctxt: Koa.Context,
+    payload: Record<string, unknown>,
+    realmList: string[],
+    user: string | undefined,
+  ) {
+    let resolvingRealm =
+      realmList.map((url) => reconciler.mounted.get(url)).find(Boolean) ??
+      (
+        await resolveRealmsForFederatedRequest(
+          reconciler,
+          realmList.slice(0, 1),
+        )
+      )[0];
+    if (!resolvingRealm) {
+      await sendResponseForNotFound(
+        ctxt,
+        `Realm not available to resolve a named query: ${realmList[0]}`,
+      );
+      return undefined;
+    }
+    try {
+      return await resolveNamedQuery(resolvingRealm.operationCore, payload, {
+        actor: user,
+        realms: realmList,
+        duringRender: ctxt.get(DURING_PRERENDER_HEADER).length > 0,
+      });
+    } catch (e) {
+      if (!isOperationFailure(e)) {
+        throw e;
+      }
+      await setContextResponse(
+        ctxt,
+        new Response(JSON.stringify(errorsDocument(e.error)), {
+          status: e.error.status,
+          headers: { 'content-type': SupportedMimeType.CardJson },
+        }),
+      );
+      return undefined;
+    }
+  }
+
+  async function respond(
+    ctxt: Koa.Context,
+    realmList: string[],
+    payload: unknown,
+  ) {
     let handlerStart = Date.now();
     // Slots the query-shape line is assembled from. `shape` is filled in as
     // soon as the query parses — a request that never gets that far has no
@@ -135,13 +212,12 @@ export default function handleSearch(opts: {
     let parsed;
     let request = await fetchRequestFromContext(ctxt);
     try {
-      let parseRequest = async () => {
-        let payload = getSearchRequestPayload(ctxt);
-        if (payload === undefined) {
-          payload = await parseSearchRequestPayload(request);
-        }
-        return parseSearchEntryQueryFromPayload(payload);
-      };
+      let parseRequest = async () =>
+        parseSearchEntryQueryFromPayload(
+          payload === undefined
+            ? await parseSearchRequestPayload(request)
+            : payload,
+        );
       parsed = timings
         ? await timings.time('parse', parseRequest)
         : await parseRequest();
