@@ -14,7 +14,7 @@ Hybrid controlled/uncontrolled, the kit-wide idiom: `@value ?? @internal`, defau
 
 **Only one panel exists.** The block is yielded the active value and renders once; there is no per-tab panel, no `forceMount`, no keep-alive. This is why panel state resets on switch, and it is the right default for a card kit — but it means an expensive panel re-renders on every switch.
 
-**The active underline is not painted by the tab.** It is a single shared `<SlidingHighlight @variant='underline' @thickness={{2}} @radius={{0}} />` driven by `motion-core`'s `slidingHighlight` modifier on the rail. The modifier reads the `data-state='active'` attribute the styling already used, so nothing had to hand over its DOM or thread an index through. The selection _travels_ between tabs rather than cross-fading, and — the actual reason — the measuring code, first-paint suppression and reduced-motion fallback live in exactly one place for Tabs, SegmentedControl, and anything that adopts the primitive next.
+**The active underline is not painted by the tab.** It is a single shared `<SlidingHighlight @variant='underline' @thickness={{2}} @radius={{0}} />` driven by the `slidingHighlight` modifier (`components/sliding-highlight.gts`) on the rail. The modifier reads the `data-state='active'` attribute the styling already used, so nothing had to hand over its DOM or thread an index through. The selection _travels_ between tabs rather than cross-fading, and — the actual reason — the measuring code, first-paint suppression and reduced-motion fallback live in exactly one place for Tabs, SegmentedControl, and anything that adopts the primitive next.
 
 ## Prior art
 

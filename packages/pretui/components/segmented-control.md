@@ -11,7 +11,7 @@ A compact row of mutually exclusive options, all visible, with a pill that slide
 
 Hybrid controlled/uncontrolled: `@value ?? @internal`, initialised from `@defaultValue ?? options[0].value`. Unlike RadioGroup there is no empty state — a segmented control always has a selection, which is the semantic difference from a set of toggle buttons.
 
-**The selected segment's face is not painted by the segment.** It is one `<SlidingHighlight @variant='pill' />` that travels, driven by `motion-core`'s `slidingHighlight` modifier on the rail. The modifier reads the `data-state='active'` attribute the styling already used, so the control did not have to hand over its DOM or thread an active index through. This is the kit's Law 5 second canonical mechanism, and adopting the shared primitive rather than keeping a local copy means the measuring code, first-paint suppression and reduced-motion fallback exist once for SegmentedControl, Tabs and whatever adopts it next.
+**The selected segment's face is not painted by the segment.** It is one `<SlidingHighlight @variant='pill' />` that travels, driven by the `slidingHighlight` modifier (`components/sliding-highlight.gts`) on the rail. The modifier reads the `data-state='active'` attribute the styling already used, so the control did not have to hand over its DOM or thread an active index through. This is the kit's Law 5 second canonical mechanism, and adopting the shared primitive rather than keeping a local copy means the measuring code, first-paint suppression and reduced-motion fallback exist once for SegmentedControl, Tabs and whatever adopts it next.
 
 ## Prior art
 
