@@ -744,8 +744,9 @@ export class PgQueueRunner implements QueueRunner {
                        AND (${isUserInitiatedTier('p')}
                             OR NOT ${isUserInitiatedTier('j')})
                   )
-                  -- Past the barrier, an older pending exclusive job can only
-                  -- be at a lower tier.
+                  -- Past the barrier, any older pending exclusive job is at a
+                  -- lower tier, and while there is one the family runs one
+                  -- writer lane at a time.
                   AND (
                     SELECT COUNT(*) FROM active_jobs a
                      WHERE a.family_key = j.lane_family AND NOT a.exclusive
