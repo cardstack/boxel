@@ -527,6 +527,14 @@ export default class StoreService extends Service implements StoreInterface {
   // needs a read still in flight when the next visit builds its model, which
   // is what `#waitForRenderLoadStability` stands between; it is the residual
   // this design leaves, not something the drop closes.
+  get heldRenderScope(): string | undefined {
+    return this.store.heldRenderScope;
+  }
+
+  get residentCardCount(): number {
+    return this.store.residentCardCount;
+  }
+
   observeIndexingJob(): void {
     if (!this.store.observeIndexingJob()) {
       return;
