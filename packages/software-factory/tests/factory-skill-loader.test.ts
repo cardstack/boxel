@@ -109,6 +109,10 @@ module('factory-skill-loader > DefaultSkillResolver', function () {
       'software-factory-operations',
       'boxel-file-structure',
       'boxel-workspace-cardinal-rules',
+      // Reuse has to be front-loaded: a skill the agent must decide to read
+      // is one it reads after it has already started authoring.
+      'catalog-reuse',
+      'boxel-ui-component-discovery',
     ]);
   });
 

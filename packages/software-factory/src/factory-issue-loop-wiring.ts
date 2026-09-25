@@ -114,11 +114,12 @@ export interface IssueLoopWiringConfig {
    */
   retryBlocked?: boolean;
   /**
-   * Feature flag — enables the boxel-ui-component-discovery skill and the
-   * system-prompt catalog-search exception. When omitted, the agent has no
-   * awareness of boxel-ui components. See CS-10527.
+   * Sanctions reading the catalog realm — loads the `catalog-reuse` and
+   * `boxel-ui-component-discovery` skills and opens the system prompt's
+   * cross-realm firewall to catalog searches. Reuse is the normal path, so
+   * this defaults on: only an explicit `false` turns it off.
    */
-  enableBoxelUiDiscovery?: boolean;
+  enableCatalogReuse?: boolean;
   /** Brief title — names the live-blog RunLog card. */
   runTitle?: string;
   /** Context forking: prime once, fork every implementation turn. */
@@ -282,7 +283,8 @@ export async function runFactoryIssueLoop(
     skillResolver: new DefaultSkillResolver(),
     skillLoader: new SkillLoader(),
     issueLoader,
-    enableBoxelUiDiscovery: config.enableBoxelUiDiscovery === true,
+    // Default on, matching the entrypoint: only an explicit `false` opts out.
+    enableCatalogReuse: config.enableCatalogReuse !== false,
     hostToolImports,
   });
 

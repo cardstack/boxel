@@ -88,27 +88,20 @@ and repeats. You run one command and watch it go.
 pnpm factory:go \
   --brief-url <BRIEF_URL> \
   --target-realm <TARGET_REALM_URL> \
-  --enable-boxel-ui-discovery \
   --debug
 ```
 
 - `--brief-url` — the source brief card describing what to build.
 - `--target-realm` — the realm the factory creates and writes to
   (trailing slash, URL form).
-- `--enable-boxel-ui-discovery` — let the agent discover and reuse
-  existing boxel-ui components.
 - `--debug` — verbose logs: LLM prompts, tool calls + results, and
   QUnit `console.log` output as tests run.
 
-> **Testing discovery?** `--enable-boxel-ui-discovery` is not on
-> `main` yet — it lives on the
-> `cs-10527-component-specs-for-searchable-reusable-ui-components`
-> branch (CS-10527). Check that branch out before running with the
-> flag, otherwise `factory:go` rejects it as an unknown argument:
->
-> ```bash
-> git checkout cs-10527-component-specs-for-searchable-reusable-ui-components
-> ```
+> **Catalog reuse is on by default.** The agent consults the catalog
+> before authoring and gets the `catalog-reuse` and
+> `boxel-ui-component-discovery` skills. Pass `--no-catalog-reuse` to
+> run without it — useful for measuring what the reuse path is worth,
+> but not a normal run.
 
 **Concrete example (local):**
 
@@ -116,7 +109,6 @@ pnpm factory:go \
 pnpm factory:go \
   --brief-url https://localhost:4201/software-factory/Wiki/sticky-note \
   --target-realm https://localhost:4201/user/sticky-note/ \
-  --enable-boxel-ui-discovery \
   --debug
 ```
 
@@ -129,7 +121,6 @@ then point both URLs at `realms-staging.stack.cards`:
 pnpm factory:go \
   --brief-url https://realms-staging.stack.cards/software-factory/Wiki/sticky-note \
   --target-realm https://realms-staging.stack.cards/<your-username>/sticky-note/ \
-  --enable-boxel-ui-discovery \
   --debug
 ```
 

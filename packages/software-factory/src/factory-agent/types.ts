@@ -246,12 +246,17 @@ export interface AgentContext {
   /** Brief URL for bootstrap issues. */
   briefUrl?: string;
   /**
-   * Feature flag — when true, the system prompt enables the catalog-search
-   * exception for boxel-ui component discovery and `boxel-ui-component-discovery`
-   * is among the loaded skills. When false, neither is visible to the agent.
-   * See CS-10527.
+   * Sanctions reading the catalog realm. When true the system prompt opens
+   * the cross-realm firewall to catalog searches and the `catalog-reuse` and
+   * `boxel-ui-component-discovery` skills are loaded; when false neither the
+   * permission nor the skills are visible to the agent.
+   *
+   * One flag rather than two: the skills describe each other as the general
+   * and specialized forms of one discipline, so a state where reuse is
+   * sanctioned and discovery is not would hand the agent a mandate to use a
+   * skill it was not given.
    */
-  enableBoxelUiDiscovery?: boolean;
+  enableCatalogReuse?: boolean;
   /**
    * Context forking: when set, the backend resumes this session —
    * branching to a new session id when `fork` is true (the default) — so
