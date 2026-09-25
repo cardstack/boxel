@@ -106,6 +106,9 @@ function makeDefinitionLookup(): DefinitionLookup {
         `unexpected definition lookup: ${codeRef.module}/${codeRef.name}`,
       );
     },
+    async lookupDefinitionTypes() {
+      return [];
+    },
     async lookupCachedDefinition() {
       return undefined;
     },

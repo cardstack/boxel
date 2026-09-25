@@ -263,6 +263,9 @@ module('Unit | query', function (hooks) {
             });
         }
       },
+      async lookupDefinitionTypes(): Promise<string[]> {
+        return [];
+      },
       async lookupCachedDefinition(): Promise<undefined> {
         return undefined;
       },

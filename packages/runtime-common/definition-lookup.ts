@@ -365,6 +365,14 @@ export interface DefinitionLookup {
     codeRef: ResolvedCodeRef,
     opts?: DefinitionLookupOptions,
   ): Promise<Definition>;
+  // The adoption chain the type's entry records: the type itself and every
+  // type it descends from, up to the root of its family, each keyed the way an
+  // index row's `types` records a card's. Resolved exactly as
+  // `lookupDefinition` resolves the type, and refused where it would be.
+  lookupDefinitionTypes(
+    codeRef: ResolvedCodeRef,
+    opts?: DefinitionLookupOptions,
+  ): Promise<string[]>;
   // Like lookupDefinition but does not trigger a prerenderer call or
   // populate missing definitions. It may still perform lookup-context
   // resolution (including remote visibility probing) before reading from the
@@ -541,9 +549,22 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     codeRef: ResolvedCodeRef,
     opts?: DefinitionLookupOptions,
   ): Promise<Definition> {
-    return await this.lookupDefinitionWithContext(codeRef, {
-      ...(opts?.priority !== undefined ? { priority: opts.priority } : {}),
-    });
+    return (
+      await this.lookupDefinitionEntryWithContext(codeRef, {
+        ...(opts?.priority !== undefined ? { priority: opts.priority } : {}),
+      })
+    ).definition;
+  }
+
+  async lookupDefinitionTypes(
+    codeRef: ResolvedCodeRef,
+    opts?: DefinitionLookupOptions,
+  ): Promise<string[]> {
+    return (
+      await this.lookupDefinitionEntryWithContext(codeRef, {
+        ...(opts?.priority !== undefined ? { priority: opts.priority } : {}),
+      })
+    ).types;
   }
 
   async lookupCachedDefinition(
@@ -1051,10 +1072,10 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     return entry;
   }
 
-  private async lookupDefinitionWithContext(
+  private async lookupDefinitionEntryWithContext(
     codeRef: ResolvedCodeRef,
     contextOpts?: LookupContext,
-  ): Promise<Definition> {
+  ): Promise<ModuleDefinitionResult> {
     let canonicalModuleURL = canonicalURL(
       codeRef.module,
       undefined,
@@ -1146,7 +1167,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     }
 
     if (defOrError.type === 'definition') {
-      return defOrError.definition;
+      return defOrError;
     }
 
     throw new FilterRefersToNonexistentTypeError(codeRef, {
@@ -1362,10 +1383,25 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     realm: LocalRealm,
     opts?: DefinitionLookupOptions,
   ): Promise<Definition> {
-    return await this.lookupDefinitionWithContext(codeRef, {
-      requestingRealm: realm,
-      ...(opts?.priority !== undefined ? { priority: opts.priority } : {}),
-    });
+    return (
+      await this.lookupDefinitionEntryWithContext(codeRef, {
+        requestingRealm: realm,
+        ...(opts?.priority !== undefined ? { priority: opts.priority } : {}),
+      })
+    ).definition;
+  }
+
+  async lookupDefinitionTypesForRealm(
+    codeRef: ResolvedCodeRef,
+    realm: LocalRealm,
+    opts?: DefinitionLookupOptions,
+  ): Promise<string[]> {
+    return (
+      await this.lookupDefinitionEntryWithContext(codeRef, {
+        requestingRealm: realm,
+        ...(opts?.priority !== undefined ? { priority: opts.priority } : {}),
+      })
+    ).types;
   }
 
   private async buildLookupContext(
@@ -2243,6 +2279,17 @@ class RealmScopedDefinitionLookup implements DefinitionLookup {
     opts?: DefinitionLookupOptions,
   ): Promise<Definition> {
     return await this.#inner.lookupDefinitionForRealm(
+      codeRef,
+      this.#realm,
+      opts,
+    );
+  }
+
+  async lookupDefinitionTypes(
+    codeRef: ResolvedCodeRef,
+    opts?: DefinitionLookupOptions,
+  ): Promise<string[]> {
+    return await this.#inner.lookupDefinitionTypesForRealm(
       codeRef,
       this.#realm,
       opts,

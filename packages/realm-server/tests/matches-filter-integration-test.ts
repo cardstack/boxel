@@ -21,6 +21,9 @@ const stubDefinitionLookup: DefinitionLookup = {
       'lookupDefinition should not be called for top-level matches filter tests',
     );
   },
+  async lookupDefinitionTypes() {
+    return [];
+  },
   async lookupCachedDefinition() {
     return undefined;
   },
