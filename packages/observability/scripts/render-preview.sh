@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
-# render-preview.sh — Render a per-PR preview tree for staging Grafana.
+# render-preview.sh — Render a per-PR preview tree for a Grafana environment.
 #
 # Output: prints a tempdir path on stdout. The tree contains only the
 # dashboards the PR changed (vs --base-ref) plus the folder(s) they live in,
 # with `metadata.name` (UID), `spec.title`, and each dashboard's
 # `metadata.annotations["grafana.app/folder"]` rewritten so the resources
-# can coexist with the canonical staging copies. Push or delete the result
-# with `grafanactl resources push|delete --path <out>`.
+# can coexist with the canonical copies in whichever environment they are
+# pushed to. Push or delete the result with
+# `grafanactl resources push|delete --path <out>`.
 #
 # When the PR doesn't change any dashboards, exits 0 with no stdout.
 #
@@ -14,8 +15,8 @@
 #   ./scripts/render-preview.sh --pr <n> --base-ref <ref> [--env <name>]
 #
 # --env defaults to staging and only affects the apply-style template
-# substitutions (REALM_SERVER_URL, GRAFANA_SECRET, __ENV__) — the preview
-# rewrites are env-independent.
+# substitutions (REALM_SERVER_URL, __ENV__) — the preview rewrites are
+# env-independent.
 #
 # Scope: dashboards + folders only. Data sources, alert rules, and the home-
 # dashboard preference are file-provisioned at Grafana startup and can't be
@@ -24,9 +25,9 @@
 #
 # Cross-dashboard drill-through links inside the dashboard JSON (`/d/<uid>/`
 # strings) are intentionally NOT rewritten — they stay pointing at the
-# canonical staging dashboards (CS-11106 design call). UID references inside
-# `datasource.uid` fields are data-source UIDs, not dashboard UIDs, and are
-# also left alone.
+# canonical dashboards of whichever environment the preview lands in
+# (CS-11106 design call). UID references inside `datasource.uid` fields are
+# data-source UIDs, not dashboard UIDs, and are also left alone.
 set -eo pipefail
 
 usage_error() { echo "error: $1" >&2; exit 2; }
@@ -93,24 +94,30 @@ if [[ -z "$changed_paths" ]]; then
   exit 0
 fi
 
-# Per-env substitution defaults mirror apply.sh exactly so the rendered
-# preview matches what `apply.sh --env <env>` would push.
+# A preview never carries the real operator secret. The canonical
+# dashboards get it from apply.sh; here the `grafana_secret` constant is
+# stamped with an inert placeholder, so the operator buttons on a preview
+# dashboard (Reindex, Add Credit, Grant Permission, Delete Job) get a 401
+# instead of acting on the environment.
+#
+# This is what lets the preview workflow run under an IAM role that cannot
+# read GRAFANA_SECRET at all — which matters because that workflow runs
+# pull-request-controlled code. Assigning unconditionally (rather than
+# honouring an exported GRAFANA_SECRET) keeps it true even if a caller is
+# handed broader credentials later. Review an operator-button change
+# against the canonical dashboards after merge.
+grafana_secret="preview-operator-actions-disabled"
+
+# REALM_SERVER_URL still mirrors apply.sh, so a previewed panel resolves
+# the same endpoint the canonical copy would.
 case "$env_name" in
   local)
     realm_server_url="${REALM_SERVER_URL:-http://localhost:4201/}"
-    if [[ -n "${GRAFANA_SECRET:-}" ]]; then
-      grafana_secret="$GRAFANA_SECRET"
-    else
-      grafana_secret="shhh! it's a secret"
-    fi
     ;;
   staging | production)
     [[ -n "${REALM_SERVER_URL:-}" ]] \
       || { echo "error: REALM_SERVER_URL not set; required for --env=$env_name (CI fetches it from /${env_name}/boxel-grafana/realm_server_url)" >&2; exit 1; }
-    [[ -n "${GRAFANA_SECRET:-}" ]] \
-      || { echo "error: GRAFANA_SECRET not set; required for --env=$env_name" >&2; exit 1; }
     realm_server_url="$REALM_SERVER_URL"
-    grafana_secret="$GRAFANA_SECRET"
     ;;
   *)
     usage_error "unknown env: $env_name (expected local|staging|production)" ;;
@@ -244,5 +251,27 @@ if [[ -z "$(find "$rendered/dashboards" -type f -name '*.json' 2>/dev/null)" ]];
   rm -rf "$rendered"
   exit 0
 fi
+
+# Fail closed if any emitted manifest kept a canonical UID. The rewrites
+# above already guarantee the `pr<n>-` prefix on every dashboard, every
+# folder, and every dashboard's folder pointer; this check makes that
+# guarantee explicit so a future change to them cannot silently produce a
+# tree that overwrites a real dashboard. The tree is pushed to production as
+# well as staging, so losing the prefix would cost a live production
+# dashboard.
+while IFS= read -r -d '' f; do
+  uid="$(jq -r '.metadata.name // ""' "$f")"
+  if [[ "$uid" != "pr${pr_number}-"* ]]; then
+    echo "error: $f carries UID '$uid', which lacks the pr${pr_number}- prefix" >&2
+    rm -rf "$rendered"
+    exit 1
+  fi
+  folder="$(jq -r '(.metadata.annotations // {})["grafana.app/folder"] // ""' "$f")"
+  if [[ -n "$folder" && "$folder" != "pr${pr_number}-"* ]]; then
+    echo "error: $f points at folder '$folder', which lacks the pr${pr_number}- prefix" >&2
+    rm -rf "$rendered"
+    exit 1
+  fi
+done < <(find "$rendered" -type f -name '*.json' -print0)
 
 echo "$rendered"
