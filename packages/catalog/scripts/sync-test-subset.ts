@@ -20,7 +20,9 @@
 //
 // Each run writes a marker, served next to the definitions, that test helpers
 // compare with the manifest so a stale subset fails loudly instead of running
-// assertions against old definitions.
+// assertions against old definitions. The marker also records a hash of each
+// file as written, so a copy edited in place — which neither CI nor a
+// deployment would ever see — fails just as loudly.
 
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -68,6 +70,9 @@ interface Marker {
   revision: string;
   files: string[];
   divergent: string[];
+  // sha256 of each file's content as the sync wrote it: the pinned revision's
+  // content, or the local checkout's under CATALOG_TEST_SUBSET_SOURCE.
+  hashes: Record<string, string>;
 }
 
 function readManifest(): Manifest {
@@ -146,10 +151,24 @@ async function loadContents(manifest: Manifest) {
     marker?.source === 'pin' &&
     marker.revision === manifest.revision &&
     marker.listHash === listHash(manifest) &&
+    marker.hashes !== undefined &&
     manifest.files.every(({ path }) => existsSync(join(subsetDir, path)));
   if (current) {
+    let edited: string[] = [];
     for (let { path } of manifest.files) {
-      contents.set(path, readFileSync(join(subsetDir, path), 'utf8'));
+      let text = readFileSync(join(subsetDir, path), 'utf8');
+      if (sha256(text) !== marker!.hashes[path]) {
+        edited.push(path);
+      }
+      contents.set(path, text);
+    }
+    if (edited.length) {
+      fail(
+        `${edited.join(', ')} in ${relative(repoRoot, subsetDir)} was edited after the sync wrote it. ` +
+          `That directory is generated from ${manifest.repository}@${manifest.revision}, so an edit there reaches neither CI nor a deployment. ` +
+          `Make the change in a ${manifest.repository} checkout and serve it with CATALOG_TEST_SUBSET_SOURCE=<dir> (see .claude/skills/catalog-test-subset), ` +
+          `or delete ${relative(repoRoot, subsetDir)} and re-run the sync to discard the edit.`,
+      );
     }
     return { contents, source: 'pin' as const, unchanged: true };
   }
@@ -208,6 +227,12 @@ function checkClosure(contents: Map<string, string>) {
   }
 }
 
+function hashes(contents: Map<string, string>) {
+  return Object.fromEntries(
+    [...contents].map(([path, text]) => [path, sha256(text)]),
+  );
+}
+
 function writeMarker(dir: string, marker: Marker, manifest: Manifest) {
   writeFileSync(
     join(dir, MARKER_FILE),
@@ -252,6 +277,7 @@ function writeSubsetDir(
       revision: manifest.revision,
       files: [...contents.keys()],
       divergent: [],
+      hashes: hashes(contents),
     },
     manifest,
   );
@@ -387,6 +413,7 @@ function mergeIntoClone(
       revision: manifest.revision,
       files: [...contents.keys()],
       divergent,
+      hashes: hashes(contents),
     },
     manifest,
   );
@@ -424,7 +451,10 @@ function bump(manifest: Manifest) {
 }
 
 // The deployed catalog realm serves boxel-catalog's main, so a pin that main
-// does not contain describes definitions no deployment has.
+// does not contain describes definitions no deployment has. A pin that main
+// contains can still be behind it: once main changes a subset file, boxel's
+// tests run against a definition deployments no longer serve, so that fails
+// too.
 async function checkPin(manifest: Manifest) {
   let headers: Record<string, string> = {
     accept: 'application/vnd.github+json',
@@ -445,6 +475,37 @@ async function checkPin(manifest: Manifest) {
     );
   }
   log(`${manifest.revision} is on ${manifest.repository} main`);
+
+  // The contents API answers with each file's blob sha, so comparing a file
+  // at two refs needs no download. A file main no longer has answers 404.
+  let blobSha = async (path: string, ref: string) => {
+    let url = `https://api.github.com/repos/${manifest.repository}/contents/${path}?ref=${ref}`;
+    let response = await fetch(url, { headers });
+    if (response.status === 404) {
+      return undefined;
+    }
+    if (!response.ok) {
+      fail(`GET ${url} answered ${response.status}`);
+    }
+    return ((await response.json()) as { sha: string }).sha;
+  };
+  let changed: string[] = [];
+  for (let { path } of manifest.files) {
+    if (
+      (await blobSha(path, 'main')) !== (await blobSha(path, manifest.revision))
+    ) {
+      changed.push(path);
+    }
+  }
+  if (changed.length) {
+    fail(
+      `${manifest.repository} main has changed ${changed.join(', ')} since ${manifest.revision}, so boxel's tests would run against definitions deployments no longer serve. ` +
+        `Re-pin to main (pnpm catalog:test-subset --bump), run the manifest's tests against it, and commit the new pin.`,
+    );
+  }
+  log(
+    `the subset files at ${manifest.revision} match ${manifest.repository} main`,
+  );
 }
 
 // A realm's compiled-module cache is keyed by path and cleared by the running

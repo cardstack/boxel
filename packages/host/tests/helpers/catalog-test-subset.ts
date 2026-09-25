@@ -12,7 +12,8 @@ import manifest from '../../../catalog/test-subset.json';
 // A test module that uses them calls `setupCatalogTestSubset(hooks)`, which
 // fails every test in the module when the catalog realm the stack serves is
 // not the pinned subset — a stale subset would otherwise run the assertions
-// against old definitions.
+// against old definitions, and a copy edited in place would run them against
+// definitions neither CI nor a deployment has.
 
 const CATALOG_PREFIX = '@cardstack/catalog/';
 // Written by packages/catalog/scripts/sync-test-subset.ts next to the files.
@@ -23,6 +24,7 @@ interface Marker {
   revision: string;
   files: string[];
   divergent: string[];
+  hashes?: Record<string, string>;
 }
 
 let verified: Promise<void> | undefined;
@@ -79,4 +81,41 @@ async function verifyServedSubset() {
         `or restart the stack with CATALOG_TEST_SUBSET_SOURCE=packages/catalog/contents to test against the clone.`,
     );
   }
+  if (!marker.hashes) {
+    throw new Error(
+      `The catalog test subset was written by an older sync that records no file hashes. ` +
+        `Run \`pnpm --dir packages/catalog catalog:test-subset\` (add --into-clone when the stack serves the full catalog clone).`,
+    );
+  }
+  let edited: string[] = [];
+  for (let { path } of manifest.files) {
+    let url = network.resolveImport(`${CATALOG_PREFIX}${path}`);
+    let fileResponse = await network.fetch(url, {
+      headers: { Accept: SupportedMimeType.CardSource },
+    });
+    if (!fileResponse.ok) {
+      throw new Error(`GET ${url} answered ${fileResponse.status}`);
+    }
+    if ((await sha256(await fileResponse.text())) !== marker.hashes[path]) {
+      edited.push(path);
+    }
+  }
+  if (edited.length > 0) {
+    throw new Error(
+      `The catalog realm serves an edited copy of ${edited.join(', ')}: it differs from what the sync wrote from the pinned ${manifest.revision}. ` +
+        `A subset definition is changed in ${manifest.repository}, never in packages/catalog/test-subset or the catalog clone. ` +
+        `To test a change, serve a catalog checkout with CATALOG_TEST_SUBSET_SOURCE=<dir> (see .claude/skills/catalog-test-subset). ` +
+        `To restore the pinned files, delete packages/catalog/test-subset and re-run \`pnpm --dir packages/catalog catalog:test-subset\`, or reset the file in packages/catalog/contents when the stack serves the clone.`,
+    );
+  }
+}
+
+async function sha256(text: string) {
+  let digest = await crypto.subtle.digest(
+    'SHA-256',
+    new TextEncoder().encode(text),
+  );
+  return [...new Uint8Array(digest)]
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('');
 }
