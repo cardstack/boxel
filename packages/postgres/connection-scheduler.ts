@@ -36,13 +36,14 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 //   connections are free. Below that point nothing is held back: a pool
 //   with room for everyone's work is not a pool anyone is being crowded out
 //   of, and a search's own fan-out keeps all the parallelism it has. A tenant
-//   with no one else active is not held to it either, so a realm searching
+//   with no one else active is not held to it either, so a tenant working
 //   alone keeps the whole pool.
 // - Untagged work — anything not run under `withConnectionTenant`, which is
-//   everything but search — is ordered with the tenants as one more of them
-//   but never held to the share, and its activity does not hold anyone else
-//   to it. Writes, locks and the indexer's own commits keep the reach they
-//   had.
+//   everything but search, and work run under `withoutConnectionTenant` — is
+//   ordered with the tenants as one more of them but never held to the
+//   share, and never counts as another tenant with work open. Its
+//   connections do count toward whether the pool is oversubscribed. Writes,
+//   locks and the indexer's own commits keep the reach they had.
 // - Work that runs while its caller already holds a connection (inside
 //   `withConnection`) is granted ahead of everything and outside the share.
 //   It cannot finish, and so cannot give back the connection it is nested in,
@@ -245,6 +246,22 @@ export async function withConnectionTenant<T>(
       }
     }
   }
+}
+
+// Run `fn` with the database work it does charged to no tenant, for work that
+// several tenants may end up waiting on. A computation shared through a
+// coalescing cache runs in the async context of whichever caller started it,
+// so a tenant that joins it would otherwise wait in the starter's queue, at
+// the starter's share — and the joiner's own open scope may be what is
+// holding the starter to that share. Untagged, the shared work is held to no
+// one's. A connection the caller holds stays held: nested work keeps its
+// exemption.
+export function withoutConnectionTenant<T>(fn: () => Promise<T>): Promise<T> {
+  let parent = scopeStorage.getStore();
+  return scopeStorage.run(
+    parent?.holding ? { holding: parent.holding } : {},
+    fn,
+  );
 }
 
 // Mark the work run through the returned `run` as holding a checked-out

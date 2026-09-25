@@ -11,6 +11,8 @@ import {
 import type { PgAdapter } from '@cardstack/postgres';
 import {
   connectionTenantsDuring,
+  definitionCacheReads,
+  indexReads,
   setupPermissionedRealmCached,
   testRealmURLFor,
 } from '../helpers/index.ts';
@@ -132,18 +134,26 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       );
     });
 
-    test('the database work a realm’s own search does is charged to that realm', async function (assert) {
-      let { result: response, tenants } = await connectionTenantsDuring(
+    test('the index reads a realm’s own search does are charged to that realm', async function (assert) {
+      let { result: response, statements } = await connectionTenantsDuring(
         dbAdapter,
         () => postSearch({ filter: personFilter() }),
       );
       assert.strictEqual(response.status, 200, 'HTTP 200 status');
-      let tagged = tenants.filter((tenant) => tenant !== undefined);
-      assert.true(
-        tagged.length > 0,
-        'the search ran statements under a connection tenant',
+      let reads = indexReads(statements);
+      assert.true(reads.length > 0, 'the search read the index');
+      assert.deepEqual(
+        [...new Set(reads.map(({ tenant }) => tenant))],
+        [realmHref],
+        'every index read is charged to the realm itself',
       );
-      assert.deepEqual([...new Set(tagged)], [realmHref], 'the realm itself');
+      let lookups = definitionCacheReads(statements);
+      assert.true(lookups.length > 0, 'the search looked up card definitions');
+      assert.deepEqual(
+        [...new Set(lookups.map(({ tenant }) => tenant))],
+        [undefined],
+        'definition lookups, which searches of other realms share, are charged to no tenant',
+      );
     });
 
     test('a disjunctive htmlQuery returns several renderings per entry', async function (assert) {

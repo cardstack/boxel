@@ -36,6 +36,8 @@ import {
   closeServer,
   connectionTenantsDuring,
   createVirtualNetwork,
+  definitionCacheReads,
+  indexReads,
   setupDB,
   matrixURL,
   realmSecretSeed,
@@ -321,25 +323,29 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
       }
     });
 
-    test('the database work a federated search does is charged to the set of realms it names', async function (assert) {
-      let { result: response, tenants } = await connectionTenantsDuring(
+    test('the index reads a federated search does are charged to the set of realms it names', async function (assert) {
+      let { result: response, statements } = await connectionTenantsDuring(
         dbAdapter,
         () =>
           postSearch({
             filter: personFilter(),
-            realms: [secondaryRealm.url, testRealm.url],
+            realms: [secondaryRealm.url, testRealm.url, secondaryRealm.url],
           }),
       );
       assert.strictEqual(response.status, 200, 'HTTP 200 status');
-      let tagged = tenants.filter((tenant) => tenant !== undefined);
-      assert.true(
-        tagged.length > 0,
-        'the search ran statements under a connection tenant',
-      );
+      let reads = indexReads(statements);
+      assert.true(reads.length > 0, 'the search read the index');
       assert.deepEqual(
-        [...new Set(tagged)],
+        [...new Set(reads.map(({ tenant }) => tenant))],
         [[testRealm.url, secondaryRealm.url].sort().join(' ')],
-        'one tenant, the realm set, whatever order the request named it in',
+        'every index read is charged to one tenant, the realm set, however the request ordered or repeated it',
+      );
+      let lookups = definitionCacheReads(statements);
+      assert.true(lookups.length > 0, 'the search looked up card definitions');
+      assert.deepEqual(
+        [...new Set(lookups.map(({ tenant }) => tenant))],
+        [undefined],
+        'definition lookups, which searches of other realms share, are charged to no tenant',
       );
     });
 

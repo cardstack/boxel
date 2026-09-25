@@ -6,6 +6,7 @@ import {
   currentConnectionTenant,
   markConnectionHeld,
   withConnectionTenant,
+  withoutConnectionTenant,
 } from '@cardstack/postgres';
 
 // The connection scheduler decides which of the database work waiting on a
@@ -388,6 +389,92 @@ module(basename(import.meta.filename), function () {
     b.close();
     await b.closed;
     await drain(bHeld, [...bBacklog, afterEnd]);
+    a.close();
+    await a.closed;
+    assert.strictEqual(scheduler.inUse, 0);
+    scheduler.dispose();
+  });
+
+  test('work run without a tenant inside a tenant’s scope is held to no share', async function (assert) {
+    let scheduler = new ConnectionScheduler({ limit: 4, tenantShare: 1 });
+    let a = openScope(REALM_A);
+    let b = openScope(REALM_B);
+
+    let aHeld = await a.run(() =>
+      Promise.all(Array.from({ length: 4 }, () => scheduler.acquire())),
+    );
+    let aBacklog = Array.from({ length: 5 }, () =>
+      a.run(() => scheduler.acquire()),
+    );
+    aHeld.pop()!();
+    aHeld.pop()!();
+    assert.strictEqual(
+      scheduler.waitingAtShare,
+      5,
+      'the tenant’s own work waits at its share with two connections free',
+    );
+
+    let tenantInside: string | undefined = 'unset';
+    let shared = await settledWithin(
+      a.run(() =>
+        withoutConnectionTenant(() => {
+          tenantInside = currentConnectionTenant();
+          return scheduler.acquire();
+        }),
+      ),
+      50,
+    );
+    assert.strictEqual(tenantInside, undefined, 'charged to no tenant');
+    assert.true(shared.settled, 'granted a free connection past the share');
+
+    (shared as { value: () => void }).value();
+    b.close();
+    await b.closed;
+    await drain(aHeld, aBacklog);
+    a.close();
+    await a.closed;
+    scheduler.dispose();
+  });
+
+  test('work run without a tenant keeps the exemption of a connection its caller holds', async function (assert) {
+    let scheduler = new ConnectionScheduler({ limit: 2, tenantShare: 1 });
+    let a = openScope(REALM_A);
+    let b = openScope(REALM_B);
+
+    let outer = await a.run(() => scheduler.acquire());
+    let holding = await a.run(async () => markConnectionHeld());
+    let bHeld = await b.run(() => scheduler.acquire());
+    let bBacklog = Array.from({ length: 3 }, () =>
+      b.run(() => scheduler.acquire()),
+    );
+    let untaggedEarlier = scheduler.acquire();
+    let order: string[] = [];
+    let nestedShared = a
+      .run(() =>
+        holding.run(() => withoutConnectionTenant(() => scheduler.acquire())),
+      )
+      .then((release) => (order.push('nested'), release));
+    void bBacklog[0].then(() => order.push('b'));
+    void untaggedEarlier.then(() => order.push('untagged'));
+
+    bHeld();
+    let granted = await settledWithin(nestedShared, 50);
+    assert.true(
+      granted.settled,
+      'the freed connection goes to the nested work',
+    );
+    assert.deepEqual(
+      order,
+      ['nested'],
+      'ahead of earlier arrivals, as nested work is granted',
+    );
+
+    holding.end();
+    outer();
+    (granted as { value: () => void }).value();
+    b.close();
+    await b.closed;
+    await drain([], [...bBacklog, untaggedEarlier]);
     a.close();
     await a.closed;
     assert.strictEqual(scheduler.inUse, 0);

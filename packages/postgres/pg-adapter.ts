@@ -18,6 +18,7 @@ import { Pool, Client, type PoolClient, type Notification } from 'pg';
 import {
   ConnectionScheduler,
   markConnectionHeld,
+  withoutConnectionTenant,
 } from './connection-scheduler.ts';
 import { postgresConfig } from './pg-config.ts';
 import migrationNameFixes from './scripts/migration-name-fixes.cjs';
@@ -158,9 +159,10 @@ function configuredPoolMax(): number {
 
 // How many of the pool's connections one tenant may hold while the pool is
 // oversubscribed and another tenant has work open (see `ConnectionScheduler`).
-// The tenants are the realms a search names, so this is the share of a
-// replica's database concurrency one realm's searches keep when they want
-// more than the pool has and another realm is searching too.
+// The tenants are the realm sets searches name — usually a single realm — so
+// this is the share of a replica's database concurrency one realm's searches
+// keep when they want more than the pool has and another realm is searching
+// too.
 //
 // Sized at the concurrency past which the database stops getting faster. On
 // the staging instance (2 vCPU), a single realm's saturating search load drove
@@ -325,6 +327,11 @@ export class PgAdapter implements DBAdapter {
       waiting: this.#scheduler.waiting,
       waitingAtShare: this.#scheduler.waitingAtShare,
     };
+  }
+
+  // See `DBAdapter.withoutConnectionTenant`.
+  withoutConnectionTenant<T>(fn: () => Promise<T>): Promise<T> {
+    return withoutConnectionTenant(fn);
   }
 
   get url() {

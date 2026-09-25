@@ -87,4 +87,12 @@ export interface DBAdapter {
     matrixUserId: string,
     fn: () => Promise<T>,
   ) => Promise<T>;
+  // Run `fn` with its database work charged to no connection tenant. For a
+  // computation that callers on behalf of different realms may share through
+  // a coalescing cache: PgAdapter shares its connections out by the realm a
+  // search names, and shared work left charged to whichever realm started it
+  // would make every realm that joins it wait at that realm's share. Adapters
+  // that do not share connections out by tenant leave it undefined, and
+  // callers run `fn` as it is.
+  withoutConnectionTenant?: <T>(fn: () => Promise<T>) => Promise<T>;
 }
