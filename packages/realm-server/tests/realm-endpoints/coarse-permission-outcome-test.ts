@@ -406,6 +406,22 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       );
     });
 
+    test('exactly the routes that serve code and the file tree are coarse-read-only', async function (assert) {
+      assert.deepEqual(
+        testRealm
+          .routeDescriptions()
+          .filter((route) => route.coarseReadOnly)
+          .map((route) => `${route.method} ${route.mimeType} ${route.path}`)
+          .sort(),
+        [
+          `GET ${SupportedMimeType.CardSource} /.*`,
+          `GET ${SupportedMimeType.DirectoryListing} .*/`,
+          'GET * *',
+        ].sort(),
+        'the card+source read, the directory listing and the fallback file and module serve',
+      );
+    });
+
     test('every consuming route hands an admitted caller to the policy gate', async function (assert) {
       let consumers = testRealm
         .routeDescriptions()
@@ -421,10 +437,14 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       testRealm.__testOnlySetCoarseAdmission(() => true);
       try {
         for (let probe of gatedProbes) {
+          let before = testRealm.__testOnlyPolicyGateStats().policyLoads;
           let response = await probe.send(request, testRealm.url);
-          assert.strictEqual(response.status, 403, `${probe.route}: status`);
-          assert.true(
-            response.text.includes('is not permitted on'),
+          // The caller is anonymous, so the ACL would not let them read the
+          // realm, and the gate's refusal reaches them as a not-found.
+          assert.strictEqual(response.status, 404, `${probe.route}: status`);
+          assert.strictEqual(
+            testRealm.__testOnlyPolicyGateStats().policyLoads,
+            before + 1,
             `${probe.route}: the refusal is the gate’s, for a realm with no policy`,
           );
         }
@@ -487,16 +507,18 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           'admitting: _permissions reached through the card+json catch-all is refused',
         );
 
+        let before = testRealm.__testOnlyPolicyGateStats().policyLoads;
         let card = await request
           .get('/person-1')
           .set('Accept', SupportedMimeType.CardJson);
         assert.strictEqual(
           card.status,
-          403,
+          404,
           'admitting: an anonymous card+json read reaches its handler, and the policy gate refuses it for a realm with no policy',
         );
-        assert.true(
-          card.text.includes('is not permitted on'),
+        assert.strictEqual(
+          testRealm.__testOnlyPolicyGateStats().policyLoads,
+          before + 1,
           'admitting: the refusal is the gate’s',
         );
 

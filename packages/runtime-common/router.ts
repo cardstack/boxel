@@ -261,11 +261,18 @@ export interface RouteOptions {
   // which is the one place anything may admit it. Every other route is
   // refused with the ACL's own refusal before its handler runs.
   consumesCoarseOutcome?: true;
+  // No policy grant reaches what the route serves: module source, a file's
+  // stored bytes, the file tree. Only the realm ACL admits a caller to it. In
+  // a realm with a policy, a caller the ACL does not let read the realm is
+  // told nothing is there, as they are told of every card no grant admits
+  // them to, rather than that they may not look.
+  coarseReadOnly?: true;
 }
 
 export interface Route {
   handler: Handler;
   consumesCoarseOutcome: boolean;
+  coarseReadOnly: boolean;
 }
 
 export interface RouteDescription {
@@ -273,6 +280,7 @@ export interface RouteDescription {
   mimeType: SupportedMimeType;
   path: string;
   consumesCoarseOutcome: boolean;
+  coarseReadOnly: boolean;
 }
 
 export class Router {
@@ -361,6 +369,7 @@ export class Router {
     routes.set(path, {
       handler,
       consumesCoarseOutcome: opts.consumesCoarseOutcome === true,
+      coarseReadOnly: opts.coarseReadOnly === true,
     });
   }
 
@@ -377,6 +386,7 @@ export class Router {
             mimeType,
             path,
             consumesCoarseOutcome: route.consumesCoarseOutcome,
+            coarseReadOnly: route.coarseReadOnly,
           });
         }
       }

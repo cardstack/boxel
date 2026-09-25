@@ -19,6 +19,7 @@ import {
   isWrite,
   type BaseOperation,
   type OperationTarget,
+  type PolicyIssueCode,
 } from './types.ts';
 
 // ============================================================================
@@ -45,10 +46,24 @@ import {
 // anything, and what keeps a realm writer editing their own realm from paying
 // for a policy load or a predicate evaluation.
 //
-// Every way the gate can fail denies. A policy that is gone, a compiled policy
-// with no rule for the type, a predicate that throws or answers anything but
-// `true`, and a target whose type the index cannot vouch for are each a
-// refusal, never an opening.
+// Every way the gate can fail denies. A compiled policy with no rule for the
+// type, a predicate that answers anything but `true`, and a target whose type
+// the index cannot vouch for are each a refusal, never an opening. A policy the
+// realm names but cannot load, and a predicate that throws, are faults in the
+// policy rather than answers from it, so each is a 500 as well as a refusal.
+//
+// What a refusal tells the caller follows from whether the realm ACL lets them
+// read the realm. One who may can list the realm anyway, and is told the gate
+// refused them. One who may not is told the target is not there, exactly as
+// they are told of a target that is not (see `refusalForNonReader`). Two things
+// still set those apart, and neither is closed here. Time: a refusal that
+// evaluated a predicate takes longer than one that found no card, so a caller
+// who measures carefully can tell the two apart. And the 500: a predicate only
+// runs against a card that exists and whose type a rule names, and whether it
+// throws depends on the card's stored values. So a predicate that throws tells
+// any caller who reaches it that such a card is there, and something about what
+// it holds: `(.title | tonumber) > 0` answers 500 for a card whose title is not
+// a number and 404 for one whose title is a number no greater than zero.
 //
 // What a grant admits is the invocation, and the operation then runs as it
 // runs for anyone. A granted `read` assembles the card's whole representation:
@@ -119,7 +134,9 @@ export function policyGateStats(core: OperationCore): PolicyGateStats {
 
 // The refusal the gate gives. It names the operation and the target as the
 // caller named them, and nothing the realm knows: not whether the target
-// exists, not its type, and not what the policy holds.
+// exists, not its type, and not what the policy holds. A caller who may read
+// the realm is told it as a 403. One who may not is told the target is not
+// there, which the realm decides where it serializes the refusal.
 export function notPermitted(
   target: OperationTarget,
   name: string,
@@ -137,10 +154,51 @@ export function notPermitted(
   });
 }
 
+// The realm's compiled policy, as the gate reads it. Undefined for a realm with
+// no policy, or a core that cannot read one.
+export interface LoadedPolicy {
+  policy: CompiledRealmPolicy | undefined;
+}
+
+// What a policy that recorded one of these can grant is unknown rather than
+// nothing: the realm names a policy and could not read it as one.
+const UNAVAILABLE_POLICY: ReadonlySet<PolicyIssueCode> = new Set([
+  'policy-card-missing',
+  'policy-card-unloadable',
+  'not-a-policy',
+]);
+
+// Load the realm's compiled policy for a caller the realm ACL declined, and
+// refuse with a 500 when the realm names a policy it cannot load.
+//
+// For a caller who may not read the realm, this runs before the target
+// resolves. That keeps the 500 independent of the target: answered only once a
+// card had been found, it would tell such a caller which cards exist.
+export async function loadPolicy(core: OperationCore): Promise<LoadedPolicy> {
+  if (!core.policy) {
+    return { policy: undefined };
+  }
+  policyGateStats(core).policyLoads++;
+  let policy = await core.policy.compiledPolicy();
+  if (
+    policy?.issues.some(
+      (issue) => issue.path === '' && UNAVAILABLE_POLICY.has(issue.code),
+    )
+  ) {
+    throw new OperationFailure({
+      status: 500,
+      code: 'internal-error',
+      title: 'Policy unavailable',
+      detail: `the realm's policy could not be loaded`,
+    });
+  }
+  return { policy };
+}
+
 // Decide whether a caller the realm ACL declined may invoke `name`, which
 // resolved to `base`, on `target`. `typeDefinition` is the target type's
 // definition-cache entry, which describes the stored source a predicate
-// reads.
+// reads. `loaded` is the policy, where the caller already loaded it.
 export async function gateOperation(
   core: OperationCore,
   target: OperationTarget,
@@ -148,6 +206,7 @@ export async function gateOperation(
   base: BaseOperation,
   typeDefinition: Definition | undefined,
   scope: OperationScope,
+  loaded?: LoadedPolicy,
 ): Promise<GateDecision> {
   if (!declines(scope, base)) {
     return { kind: 'coarse' };
@@ -169,14 +228,24 @@ export async function gateOperation(
     throw refuse();
   }
   let row = await scope.peekInstance(url);
+  // Nothing is there. A caller who may read the realm is told so, as the
+  // operation would have told them; one who may not is told the same thing
+  // they are told of a card the gate refuses.
+  if (!row) {
+    throw new OperationFailure({
+      id: url.href,
+      status: 404,
+      code: 'target-not-found',
+      title: 'Not found',
+      detail: `${url.href} does not exist in realm ${core.realmURL}`,
+    });
+  }
   // An error row describes why the card could not be indexed, and says
   // nothing the gate can trust about what the card is.
-  if (row?.type !== 'instance' || !row.types) {
+  if (row.type !== 'instance' || !row.types) {
     throw refuse();
   }
-  let stats = policyGateStats(core);
-  stats.policyLoads++;
-  let policy = await core.policy.compiledPolicy();
+  let { policy } = loaded ?? (await loadPolicy(core));
   if (!policy) {
     throw refuse();
   }
@@ -198,6 +267,11 @@ export async function gateOperation(
     throw refuse();
   }
   let actor = scope.caller.kind === 'user' ? scope.caller.actor : undefined;
+  let stats = policyGateStats(core);
+  // A predicate that throws is a fault in the policy, but another grant can
+  // still hold. Grants union, so the fault is reported only when none does,
+  // and the answer is the same whatever order the grants are in.
+  let threw = false;
   for (let candidate of matched) {
     let where = candidate.grant.where!;
     // A predicate annotated as reading a snapshot tier asks for computed or
@@ -207,9 +281,22 @@ export async function gateOperation(
       continue;
     }
     stats.predicateEvaluations++;
-    if (await holds(core, where, subject, actor)) {
+    let outcome = await evaluate(core, where, subject, actor);
+    if (outcome === 'holds') {
       return { kind: 'granted', grant: candidate };
     }
+    threw ||= outcome === 'threw';
+  }
+  if (threw) {
+    throw new OperationFailure({
+      id: url.href,
+      status: 500,
+      code: 'internal-error',
+      title: 'Policy predicate failed',
+      detail:
+        `a predicate in the realm's policy failed while deciding whether ` +
+        `operation "${name}" is permitted on ${url.href}`,
+    });
   }
   throw refuse();
 }
@@ -321,7 +408,7 @@ async function predicateSubject(
 }
 
 // Whether one predicate holds for this caller. Only `true` holds. Anything
-// else it answers, and any way it fails, does not.
+// else it answers fails, and any way its evaluation throws is reported as that.
 //
 // It runs through the transform runner, the one BXL entry that carries the
 // request context a predicate reads. `params()` is not supplied, so a
@@ -331,12 +418,12 @@ async function predicateSubject(
 // follow the index pass of `realm.json`, so a changed setting reaches a
 // predicate when that pass lands, as an edit to the policy card reaches it
 // when the card's pass lands.
-async function holds(
+async function evaluate(
   core: OperationCore,
   where: CompiledPolicyPredicate,
   subject: PredicateSubject,
   actor: string | undefined,
-): Promise<boolean> {
+): Promise<'holds' | 'fails' | 'threw'> {
   try {
     let bxl = await loadBxlTransform();
     let realmConfig = where.canonical.includes('realmConfig')
@@ -352,9 +439,9 @@ async function holds(
       },
       { syntax: 'solidified' },
     );
-    return answer === true;
+    return answer === true ? 'holds' : 'fails';
   } catch {
-    return false;
+    return 'threw';
   }
 }
 

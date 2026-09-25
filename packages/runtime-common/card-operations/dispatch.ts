@@ -11,8 +11,10 @@ import {
 } from './transforms.ts';
 import {
   gateOperation,
+  loadPolicy,
   notPermitted,
   type GateDecision,
+  type LoadedPolicy,
   type OperationPolicyAccess,
 } from './gate.ts';
 import {
@@ -600,21 +602,36 @@ export interface GatedOperation {
 // describe the target: no such operation on its type, a declaration that did
 // not lower, a type that does not resolve. Answered as themselves, they would
 // tell such a caller which cards exist and what their types declare, which is
-// what the gate's refusal is written not to say.
+// what the gate's refusal is written not to say. For the same reason such a
+// caller's policy is loaded before the target resolves, so a policy the realm
+// cannot load is answered the same way for every target.
 export async function resolveGatedOperation(
   core: OperationCore,
   target: OperationTarget,
   name: string,
   scope: OperationScope = newOperationScope(core),
 ): Promise<GatedOperation> {
+  let refusal = (e: unknown): unknown =>
+    scope.coarseDeclined === 'all' && isOperationFailure(e)
+      ? notPermitted(target, name)
+      : e;
+  let loaded: LoadedPolicy | undefined;
+  if (scope.coarseDeclined === 'all') {
+    // A target outside this realm is refused before the policy is consulted
+    // at all. That refusal is arithmetic on the URL the caller sent, so it
+    // says nothing about what the realm holds.
+    try {
+      assertInRealm(core, target);
+    } catch (e: unknown) {
+      throw refusal(e);
+    }
+    loaded = await loadPolicy(core);
+  }
   let resolved: Awaited<ReturnType<typeof resolveUngated>>;
   try {
     resolved = await resolveUngated(core, target, name, scope);
   } catch (e: unknown) {
-    if (scope.coarseDeclined === 'all' && isOperationFailure(e)) {
-      throw notPermitted(target, name);
-    }
-    throw e;
+    throw refusal(e);
   }
   let { definition, typeDefinition } = resolved;
   let decision = await gateOperation(
@@ -624,6 +641,7 @@ export async function resolveGatedOperation(
     definition.base,
     typeDefinition,
     scope,
+    loaded,
   );
   return { definition, decision };
 }

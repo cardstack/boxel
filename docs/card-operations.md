@@ -546,15 +546,27 @@ try {
 The codes are `unknown-operation`, `operation-not-allowed`,
 `invalid-operation`, `invalid-params`, `target-not-found`,
 `target-not-indexed`, `target-errored`, `assertion-failed`, `version-conflict`,
-`precondition-unverifiable`, `actor-required`, `payload-too-large`,
-`wrong-entry-point`, `conflicting-targets` and `internal-error`.
+`precondition-unverifiable`, `actor-required`, `operation-not-permitted`,
+`payload-too-large`, `wrong-entry-point`, `conflicting-targets` and
+`internal-error`.
 
-Two worth recognizing:
+Three worth recognizing:
 
 - `assertion-failed` — a precondition did not hold. Nothing was written.
 - `actor-required` — the operation reads the actor and the request
   authenticated nobody. Nothing the caller sent is wrong; the remedy is
   credentials.
+- `operation-not-permitted` — the realm's permissions declined the caller and
+  no grant in the realm's policy admits the operation. Only a caller who may
+  read the realm is told this, as a 403. A caller who may not is told
+  `target-not-found`, in a 404 identical to the one for a card that does not
+  exist, so the refusal does not tell them which cards are there. Two things
+  still can, and neither is concealed: a refusal that evaluated a policy
+  predicate takes measurably longer than one that found no card, and a
+  predicate that throws answers 500 rather than 404. Whether a predicate throws
+  depends on the card's stored values, so the 500 also says something about
+  what the card holds; write predicates that cannot throw on any value the
+  card can store.
 
 ## Where to look next
 
