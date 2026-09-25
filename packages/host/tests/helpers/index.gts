@@ -606,14 +606,14 @@ export async function capturePrerenderResult(
 }
 
 // A capture that waited for `ready` and read an error says where the error
-// came from. The queries above search the whole document, and a marker outside
-// the application's root element was not rendered by this test's app — the
-// page carried it in from an earlier test — so a failure reading it is about
-// test isolation rather than about this render.
+// came from. The queries above search the whole document. Everything the app
+// renders sits inside its root element; a marker outside it was appended to
+// the page by the render route's own fallback for a failure before any render
+// template mounted — this test's, or an earlier test's that nothing removed.
 function warnUnexpectedPrerenderError(element: HTMLElement, value: string) {
   let placement = getRootElement().contains(element)
     ? 'inside the app root element'
-    : 'OUTSIDE the app root element (not rendered by this test)';
+    : 'OUTSIDE the app root element (appended by the render route fallback)';
   let marker = element.closest<HTMLElement>('[data-prerender]');
   console.warn(
     `capturePrerenderResult waited for 'ready' but read an error from ` +
