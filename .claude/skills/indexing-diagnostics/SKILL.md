@@ -1879,7 +1879,7 @@ The claim query applies these rules (`PgQueueRunner.processJobs`):
 1. One job at a time per lane.
 2. Exclusive work runs alone: it waits for every running member of its family, and every member waits for it.
 3. Writer lanes of one family run side by side, at most two at once.
-4. A writer job does not start ahead of an older pending exclusive job of its family at the same or a higher priority (the barrier). A writer job at a higher priority does.
+4. A writer job does not start ahead of an older pending exclusive job of its family, whatever the two priorities (the barrier). So a system-tier from-scratch pass takes its turn after the writer passes running when it was queued, and writers queued after it wait for it.
 
 A claim hold (`job_claim_holds`) naming a family holds every lane in it. A hold naming a writer lane holds that lane alone.
 
@@ -1988,7 +1988,7 @@ Passes that never waited behind anything have no blocker and drop out of the joi
 - **`held_by = {exclusive work}`**: a job in the family's exclusive lane held the pass: a from-scratch, copy or GC job, or the follow-up a from-scratch pass left behind. Exclusive work runs alone, so every writer lane waits for it.
 - **`held_by` includes `own lane`**: the same writer's earlier pass, in its own writer lane. A writer's own passes stay serial by design, so read-your-writes holds. Coalescing is what shortens these.
 - **`held_by = {another writer lane}`** with two writer lanes running: the family was at its cap of two concurrent writer lanes.
-- **A long wait with an exclusive job queued, not running, between the pass's enqueue and its claim**: the barrier. The pass was a writer job and waited for an older exclusive job of no lower priority to run first.
+- **A long wait with an exclusive job queued, not running, between the pass's enqueue and its claim**: the barrier. The pass was a writer job and waited for an older exclusive job of its family to run first, whatever its priority.
 - **`tax_ratio`** is the wait as a multiple of the pass's own run. A cheap save with a high ratio is the one a user notices.
 
 ### Step 3: score fairness per writer

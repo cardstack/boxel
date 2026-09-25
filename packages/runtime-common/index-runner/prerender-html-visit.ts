@@ -681,7 +681,7 @@ async function committedPasses(
 // bucket shared by every such pass; it carries no scope then and the page
 // falls back to the job id, which is narrower and so never unsound. Same rule
 // as `visit-file.ts`. Without a database there is no ledger to check, and the
-// job shares the spawning pass's scope as it always has.
+// job shares the spawning pass's scope.
 async function renderScopeForJob({
   dbAdapter,
   realmURL,
