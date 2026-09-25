@@ -8060,8 +8060,15 @@ export class Realm {
   async #readStoredSource(
     caller: OperationCaller,
     localPath: LocalPath,
-    opts: { headersOnly?: true; skipStoredFileMeta?: true } = {},
+    opts: {
+      headersOnly?: true;
+      skipStoredFileMeta?: true;
+      // The caller validates on the read's `version`, so it needs one even for
+      // a file the realm recorded no hash for.
+      validatesOnVersion?: true;
+    } = {},
   ): Promise<OperationSourceResult | undefined> {
+    let { validatesOnVersion, ...readOpts } = opts;
     let result: OperationResult;
     try {
       result = await runOperation(
@@ -8074,11 +8081,14 @@ export class Realm {
           name: 'readSource',
           ...caller,
         },
-        // No route reaching here validates on the read's `version` — each
-        // builds its own validator, from the bytes it caches or from the
-        // modification time — so none should pay to have one read off disk
-        // for it.
-        { ...opts, skipContentFingerprint: true },
+        // A caller that builds its own validator, from the bytes it caches,
+        // should not pay to have a `version` read off disk for a file whose
+        // hash the realm never recorded. One that validates on `version` has
+        // to.
+        {
+          ...readOpts,
+          ...(validatesOnVersion ? {} : { skipContentFingerprint: true }),
+        },
       );
     } catch (e) {
       if (!isOperationFailure(e)) {
@@ -8858,7 +8868,7 @@ export class Realm {
       let source = await this.#readStoredSource(
         this.#callerOf(request, requestContext),
         handle.path,
-        { headersOnly },
+        { headersOnly, ...(bypassCache ? { validatesOnVersion: true } : {}) },
       );
       if (!source) {
         return notFound(request, requestContext, `${localName} not found`);
@@ -8872,9 +8882,19 @@ export class Realm {
         [CACHE_HEADER]: CACHE_MISS_VALUE,
       };
       if (bypassCache) {
+        // Validated on the content, not on the modification time alone: the
+        // time is kept to the whole second, so a rewrite within the second a
+        // client last read would match its validator, answer 304, and leave it
+        // holding the bytes from before the write. That client is often a
+        // prerender tab reading a linked card for an index render, which would
+        // then commit a row built from the old bytes. This branch streams the
+        // file rather than hashing it, so the fingerprint is the read's
+        // `version` — the hash the realm recorded when it wrote the file, or
+        // one read off disk when it recorded none.
         return await this.serveLocalFile(request, served, requestContext, {
           defaultHeaders,
           etagVariant: SOURCE_ETAG_VARIANT,
+          etagBase: source.version ?? undefined,
           createdAt: source.created,
         });
       } else {
