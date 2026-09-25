@@ -254,7 +254,21 @@ export async function lowerOperationDeclarations(
       issues.push(...operation.issues!);
       continue;
     }
-    let operation = await lowerOperation(raw[name], sink, context);
+    let operation: OperationDefinition;
+    try {
+      operation = await lowerOperation(raw[name], sink, context);
+    } catch (e: unknown) {
+      // Lowering records rather than throws, so this is a defect in it. It
+      // costs this operation its validity and nothing else, and the entry
+      // stays stored, flags and all, rather than leaving its name to fall
+      // back to the built-in behavior of the same name.
+      sink.add(
+        'lowering-failed',
+        '',
+        `lowering this operation failed: ${e instanceof Error ? e.message : String(e)}`,
+      );
+      operation = { base: raw[name].base, deterministic: true };
+    }
     if (sink.issues.length > 0) {
       operation.invalid = true;
       operation.issues = sink.issues;

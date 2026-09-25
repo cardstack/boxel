@@ -47,11 +47,17 @@ import {
 // anything, and what keeps a realm writer editing their own realm from paying
 // for a policy load or a predicate evaluation.
 //
-// Authorization infrastructure is outside the grant model. An operation
-// declared `nonGrantable`, on the target's type or on any type it descends
-// from, and any write to the card the realm's policy key names, are refused to
-// every caller the ACL declined, before any rule is matched. Were either
-// grantable, one grant could be made into every grant.
+// Authorization infrastructure is outside the grant model. Were any of it
+// grantable, one grant could be made into every grant. So these are refused to
+// every caller the ACL declined, however the compiled policy came to grant
+// them:
+//
+// - An operation declared `nonGrantable` on the target's type, refused before
+//   any rule is matched, or on any type the target's type descends from,
+//   refused before a matching grant admits anything.
+// - Any write to the card the realm's policy key names.
+// - Any write to the realm's config card, which holds that key and the
+//   settings a predicate reads through `realmConfig()`.
 //
 // Every way the gate can fail denies. A policy that is gone, a compiled policy
 // with no rule for the type, a predicate that throws or answers anything but
@@ -187,11 +193,16 @@ export async function gateOperation(
   if (!url || urlNamesFile(url) || !core.policy) {
     throw refuse();
   }
-  // The card the realm's policy key names governs every grant, whatever its
-  // type. A card that is not a RealmPolicy compiles to a policy that grants
-  // nothing, and a write can change what type a card adopts from, so the rule
-  // follows the card's identity rather than its type.
-  if (isWrite(base) && (await namesPolicyCard(core.policy, url))) {
+  // The realm's config card and the card its policy key names together
+  // decide every grant, so no grant writes either, whatever their types
+  // declare. A type marks only the operations it declares, and the policy
+  // card's own type may leave one unmarked, so the rule follows the cards'
+  // identities rather than their types.
+  if (
+    isWrite(base) &&
+    (namesRealmConfigCard(core, url) ||
+      (await namesPolicyCard(core.policy, url)))
+  ) {
     throw refuse();
   }
   let row = await scope.peekInstance(url);
@@ -206,13 +217,15 @@ export async function gateOperation(
   if (!policy) {
     throw refuse();
   }
-  // After the load, so a realm with no policy pays no definition reads for a
-  // refusal it was giving anyway.
-  if (await nonGrantableInChain(core, url, row.types, name)) {
-    throw refuse();
-  }
   let matched = await matchingGrants(policy, row.types, name, core.policy);
   if (matched.length === 0) {
+    throw refuse();
+  }
+  // Once a grant would admit the invocation, and not before, so an
+  // invocation that nothing grants pays no definition reads for a refusal it
+  // was getting anyway. The target's own type is left out: the name resolved
+  // against its entry, whose flag was read above.
+  if (await nonGrantableInChain(core, url, row.types.slice(1), name)) {
     throw refuse();
   }
   let unconditional = matched.find(({ grant }) => !grant.where);
@@ -260,11 +273,17 @@ function cardId(href: string): string {
   return href.endsWith('.json') ? href.slice(0, -'.json'.length) : href;
 }
 
-// Whether any type in a card's adoption chain declares `name` non-grantable.
+// Whether `url` is the realm's config card, the card stored at `realm.json`.
+function namesRealmConfigCard(core: OperationCore, url: URL): boolean {
+  return cardId(pathsFor(core).fileURL('realm.json').href) === url.href;
+}
+
+// Whether any of these types, keys from a card's adoption chain, declares
+// `name` non-grantable.
 //
 // A declaration a subclass writes takes the place of the one it inherits,
 // flag and all, and the subclass's author decides what its definition entry
-// says. So the flag is read from every type the index recorded the card under,
+// says. So the flag is read from the types the index recorded the card under,
 // not only from the definition the name resolved to: a subclass cannot make
 // grantable what the type it extends kept out of a policy's reach.
 //
@@ -276,30 +295,30 @@ export async function nonGrantableInChain(
   types: string[],
   name: string,
 ): Promise<boolean> {
-  for (let key of types) {
-    let codeRef = codeRefFromInternalKey(key);
-    let resolved = codeRef
-      ? core.resolveCodeRef(codeRef, relativeTo)
-      : undefined;
-    if (!resolved) {
-      return true;
-    }
-    let definition: Definition | undefined;
-    try {
-      definition = await core.definitionLookup.lookupDefinition(resolved);
-    } catch {
-      return true;
-    }
-    let operations = definition?.operations;
-    if (
-      operations &&
-      Object.prototype.hasOwnProperty.call(operations, name) &&
-      operations[name].nonGrantable
-    ) {
-      return true;
-    }
-  }
-  return false;
+  let answers = await Promise.all(
+    types.map(async (key) => {
+      let codeRef = codeRefFromInternalKey(key);
+      let resolved = codeRef
+        ? core.resolveCodeRef(codeRef, relativeTo)
+        : undefined;
+      if (!resolved) {
+        return true;
+      }
+      let definition: Definition | undefined;
+      try {
+        definition = await core.definitionLookup.lookupDefinition(resolved);
+      } catch {
+        return true;
+      }
+      let operations = definition?.operations;
+      return Boolean(
+        operations &&
+        Object.prototype.hasOwnProperty.call(operations, name) &&
+        operations[name].nonGrantable,
+      );
+    }),
+  );
+  return answers.includes(true);
 }
 
 // Whether the realm ACL declined this invocation. A caller declined only

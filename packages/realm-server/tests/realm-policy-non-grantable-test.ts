@@ -535,4 +535,39 @@ module(basename(import.meta.filename), function (hooks) {
       assert.strictEqual((await attributesOf(POLICY_CARD)).motto, 'Teach');
     });
   });
+
+  module('the realm’s config card', function () {
+    // The card stored at `realm.json`, which holds the policy key. Rewriting
+    // it to name a card the caller controls would replace the whole policy.
+    const REALM_CONFIG_CARD = `${SCHOOL}realm`;
+
+    function repoint(policy: string) {
+      let { data } = JSON.parse(
+        realmConfigCardJSON({ name: 'School', policy }),
+      ) as { data: Record<string, unknown> };
+      return invoke('update', { href: REALM_CONFIG_CARD, data });
+    }
+
+    test('no grant admits a write to it', async function (assert) {
+      assertNotPermitted(
+        assert,
+        await operations(AUTH.reader(), repoint(DRAFT_POLICY)),
+        'an update granted on CardDef that would repoint the policy',
+      );
+      assert.strictEqual(
+        (await attributesOf(REALM_CONFIG_CARD)).policy,
+        POLICY_CARD,
+        'the realm still names its policy card',
+      );
+    });
+
+    test('a realm writer still writes it', async function (assert) {
+      let response = await operations(AUTH.admin(), repoint(DRAFT_POLICY));
+      assert.strictEqual(response.status, 200);
+      assert.strictEqual(
+        (await attributesOf(REALM_CONFIG_CARD)).policy,
+        DRAFT_POLICY,
+      );
+    });
+  });
 });

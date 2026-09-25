@@ -228,6 +228,9 @@ export type OperationLoweringIssueCode =
   // entry — where appending nothing, or a literal `null`, is worse than
   // refusing.
   | 'incomplete-append'
+  // Lowering itself failed on this operation, rather than finding something
+  // wrong with it. The entry is stored as invalid so that invoking it says so.
+  | 'lowering-failed'
   // An `instance(…)` inside an `appendContainsMany` item. An append edits the
   // card's stored bytes without ever assembling its document, which is the
   // whole reason the behavior exists, so the card's own values are not there
