@@ -3,7 +3,9 @@ import { hash } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
+import { schedule } from '@ember/runloop';
 import { service } from '@ember/service';
+import { isTesting } from '@embroider/macros';
 
 import Component from '@glimmer/component';
 
@@ -61,9 +63,17 @@ import {
 } from '@cardstack/runtime-common';
 
 import {
+  crossfadeCardBitmap,
+  supportsBitmapCrossing,
+} from '@cardstack/host/lib/bitmap-crossing';
+import {
   cardActionOrigin,
   type CardOpenOrigin,
 } from '@cardstack/host/lib/card-open-origin';
+import {
+  boundaryEase,
+  motionDurations,
+} from '@cardstack/host/lib/motion-timing';
 import {
   stackItemTypeToStoreReadType,
   type StackItem,
@@ -87,6 +97,7 @@ import DockCardMotion from './dock-card-motion';
 import OperatorModeOverlays from './operator-mode-overlays';
 
 import type CardService from '../../services/card-service';
+import type HostMotionService from '../../services/host-motion';
 import type NetworkService from '../../services/network';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type RealmService from '../../services/realm';
@@ -141,6 +152,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   declare private cardCrudFunctions: CardCrudFunctions;
 
   @service declare private cardService: CardService;
+  @service declare private hostMotion: HostMotionService;
   @service declare private network: NetworkService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private realm: RealmService;
@@ -367,12 +379,52 @@ export default class OperatorModeStackItem extends Component<Signature> {
       this.operatorModeStateService.isStackItemExpanded(top.instanceId),
     );
   }
-  private toggleExpanded = () => {
+  private expandSequence = 0;
+  private toggleExpanded = async () => {
     if (!this.isTopCard) return;
-    this.operatorModeStateService.setStackItemExpanded(
-      this.itemExpandKey,
-      !this.isExpandedIntent,
-    );
+    let expand = !this.isExpandedIntent;
+    let apply = () =>
+      this.operatorModeStateService.setStackItemExpanded(
+        this.itemExpandKey,
+        expand,
+      );
+    // The card keeps its element and only its frame changes. Cross its own
+    // two faces so the content tweens with the frame instead of snapping.
+    let card = this.containerEl;
+    let duration = isTesting() ? 0 : motionDurations.boundary;
+    if (
+      !card ||
+      duration === 0 ||
+      !supportsBitmapCrossing() ||
+      this.hostMotion.dragging
+    ) {
+      apply();
+      return;
+    }
+    let key = `stack-expand-${++this.expandSequence}`;
+    card.dataset.bitmapExpand = key;
+    let budgetToken = this.hostMotion.beginBitmap();
+    try {
+      await crossfadeCardBitmap(
+        card,
+        `[data-bitmap-expand="${key}"]`,
+        async () => {
+          apply();
+          await new Promise<void>((resolve) =>
+            schedule('afterRender', resolve),
+          );
+        },
+        duration,
+        boundaryEase,
+        (finish) => this.hostMotion.onBitmapReady(budgetToken, finish),
+        undefined,
+        [],
+        expand ? 'late' : 'crossfade',
+      );
+    } finally {
+      this.hostMotion.endBitmap(budgetToken);
+      if (card.dataset.bitmapExpand === key) delete card.dataset.bitmapExpand;
+    }
   };
 
   private _closeItem = dropTask(async () => {

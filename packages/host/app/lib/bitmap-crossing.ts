@@ -116,6 +116,12 @@ export async function crossfadeCardBitmap(
   ease: ViewTransitionOptions['ease'] = motionEase,
   onReady?: (finish: () => void) => void,
   underlay?: HTMLElement,
+  // Whole scenes around the crossing: a departing one fades out in the first
+  // part of the move, an arriving one fades in over the last part.
+  scenes: { selector: string; fade: 'in' | 'out' }[] = [],
+  // 'late' keeps the source face for most of the move and hands over near
+  // the landing, so a face growing into a wider layout is never squeezed.
+  handoff: 'crossfade' | 'late' = 'crossfade',
 ) {
   if (
     !supportsBitmapCrossing() ||
@@ -220,8 +226,19 @@ export async function crossfadeCardBitmap(
       .class('boxel-card-bitmap')
       .group(false)
       .crop(true);
-    builder.old({ opacity: [1, 0] });
-    builder.new({ opacity: [0, 1] });
+    if (handoff === 'late') {
+      builder.old(
+        { opacity: [1, 1, 0] },
+        { times: [0, 0.82, 1], ease: 'linear' },
+      );
+      builder.new(
+        { opacity: [0, 0, 1] },
+        { times: [0, 0.82, 1], ease: 'linear' },
+      );
+    } else {
+      builder.old({ opacity: [1, 0] });
+      builder.new({ opacity: [0, 1] });
+    }
     for (let layer of shadow.layers) {
       builder.add(layer).class('boxel-card-shadow').group(false).crop(false);
       builder.old({ opacity: [1, 0] });
@@ -309,6 +326,22 @@ export async function crossfadeCardBitmap(
           .crop(false);
         builder.old({ opacity: 0 }, { duration: 0 });
         builder.new({ opacity: [1, 1], transform: part.transform });
+      }
+    }
+    for (let scene of scenes) {
+      builder.add(scene.selector).class('boxel-scene').group(false).crop(false);
+      if (scene.fade === 'out') {
+        builder.old(
+          { opacity: [1, 0, 0] },
+          { times: [0, 0.45, 1], ease: 'linear' },
+        );
+        builder.new({ opacity: 0 }, { duration: 0 });
+      } else {
+        builder.old({ opacity: 0 }, { duration: 0 });
+        builder.new(
+          { opacity: [0, 0, 1] },
+          { times: [0, 0.55, 1], ease: 'linear' },
+        );
       }
     }
     // View Transition layers are above DOM z-index. Capture persistent chrome
