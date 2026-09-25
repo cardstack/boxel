@@ -7,6 +7,10 @@
 //   node scripts/sync-test-subset.ts --remove-from-clone
 //   node scripts/sync-test-subset.ts --bump          re-pin to catalog main
 //   node scripts/sync-test-subset.ts --check-pin     fail unless main contains the pin
+//                                                    and matches it on every subset file
+//   node scripts/sync-test-subset.ts --check-no-copies=<dir>
+//                                                    fail when <dir> holds a copy of a
+//                                                    subset definition
 //   node scripts/sync-test-subset.ts --touch=<test-subset|clone>
 //
 // `test-subset/` is served as the catalog realm by stacks that start with
@@ -20,7 +24,9 @@
 //
 // Each run writes a marker, served next to the definitions, that test helpers
 // compare with the manifest so a stale subset fails loudly instead of running
-// assertions against old definitions.
+// assertions against old definitions. The marker also records a hash of each
+// file as written, so a copy edited in place — which neither CI nor a
+// deployment would ever see — fails just as loudly.
 
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -33,7 +39,7 @@ import {
   rmSync,
   writeFileSync,
 } from 'node:fs';
-import { dirname, join, relative, resolve } from 'node:path';
+import { basename, dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const catalogDir = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -68,6 +74,9 @@ interface Marker {
   revision: string;
   files: string[];
   divergent: string[];
+  // sha256 of each file's content as the sync wrote it: the pinned revision's
+  // content, or the local checkout's under CATALOG_TEST_SUBSET_SOURCE.
+  hashes: Record<string, string>;
 }
 
 function readManifest(): Manifest {
@@ -146,10 +155,24 @@ async function loadContents(manifest: Manifest) {
     marker?.source === 'pin' &&
     marker.revision === manifest.revision &&
     marker.listHash === listHash(manifest) &&
+    marker.hashes !== undefined &&
     manifest.files.every(({ path }) => existsSync(join(subsetDir, path)));
   if (current) {
+    let edited: string[] = [];
     for (let { path } of manifest.files) {
-      contents.set(path, readFileSync(join(subsetDir, path), 'utf8'));
+      let text = readFileSync(join(subsetDir, path), 'utf8');
+      if (sha256(text) !== marker!.hashes[path]) {
+        edited.push(path);
+      }
+      contents.set(path, text);
+    }
+    if (edited.length) {
+      fail(
+        `${edited.join(', ')} in ${relative(repoRoot, subsetDir)} was edited after the sync wrote it. ` +
+          `That directory is generated from ${manifest.repository}@${manifest.revision}, so an edit there reaches neither CI nor a deployment. ` +
+          `Make the change in a ${manifest.repository} checkout and serve it with CATALOG_TEST_SUBSET_SOURCE=<dir> (see .claude/skills/catalog-test-subset), ` +
+          `or delete ${relative(repoRoot, subsetDir)} and re-run the sync to discard the edit.`,
+      );
     }
     return { contents, source: 'pin' as const, unchanged: true };
   }
@@ -208,6 +231,12 @@ function checkClosure(contents: Map<string, string>) {
   }
 }
 
+function hashes(contents: Map<string, string>) {
+  return Object.fromEntries(
+    [...contents].map(([path, text]) => [path, sha256(text)]),
+  );
+}
+
 function writeMarker(dir: string, marker: Marker, manifest: Manifest) {
   writeFileSync(
     join(dir, MARKER_FILE),
@@ -252,6 +281,7 @@ function writeSubsetDir(
       revision: manifest.revision,
       files: [...contents.keys()],
       divergent: [],
+      hashes: hashes(contents),
     },
     manifest,
   );
@@ -387,13 +417,23 @@ function mergeIntoClone(
       revision: manifest.revision,
       files: [...contents.keys()],
       divergent,
+      hashes: hashes(contents),
     },
     manifest,
   );
   if (added.length) {
     log(`added to the catalog clone: ${added.join(', ')}`);
   }
-  if (divergent.length) {
+  if (divergent.length && source === 'local') {
+    // The clone's own copy is what the stack serves, so the checkout the
+    // files were read from never reaches it.
+    console.warn(
+      `catalog test subset: the catalog clone has its own copy of ${divergent.join(', ')}, which differs from ${process.env.CATALOG_TEST_SUBSET_SOURCE}. ` +
+        `A stack serving the clone serves the clone's copy, so tests that use these definitions will fail rather than test your checkout. ` +
+        `Serve the checkout on a stack that serves only the subset (CATALOG_SOURCE=test-subset, as mise run test-services:realm-server does), ` +
+        `or make the change in packages/catalog/contents itself.`,
+    );
+  } else if (divergent.length) {
     console.warn(
       `catalog test subset: the catalog clone's copy differs from the pinned revision for ${divergent.join(', ')}. ` +
         `Tests that use these definitions will fail until the clone matches the pin: ` +
@@ -401,6 +441,63 @@ function mergeIntoClone(
         `or set CATALOG_TEST_SUBSET_SOURCE=packages/catalog/contents to test against the clone.`,
     );
   }
+}
+
+// A subset definition's only source is the catalog. A copy of one in this
+// repo, whether a file named like a subset file or a class named like one a
+// subset file exports, drifts from the definition deployments serve while
+// tests keep passing against it.
+function checkNoCopies(
+  manifest: Manifest,
+  contents: Map<string, string>,
+  dir: string,
+) {
+  let classNames = new Set<string>();
+  for (let source of contents.values()) {
+    for (let [, name] of source.matchAll(
+      /^export\s+(?:default\s+)?class\s+(\w+)/gm,
+    )) {
+      classNames.add(name);
+    }
+  }
+  let fileNames = new Set([...contents.keys()].map((path) => basename(path)));
+  let declaration = classNames.size
+    ? new RegExp(`\\bclass\\s+(${[...classNames].join('|')})\\b`)
+    : undefined;
+  let copies: string[] = [];
+  let visit = (current: string) => {
+    for (let entry of readdirSync(current, { withFileTypes: true })) {
+      let path = join(current, entry.name);
+      if (entry.isDirectory()) {
+        if (
+          !entry.name.startsWith('.') &&
+          !['node_modules', 'dist', 'declarations', 'tmp'].includes(entry.name)
+        ) {
+          visit(path);
+        }
+      } else if (/\.g?[jt]s$/.test(entry.name)) {
+        if (fileNames.has(entry.name)) {
+          copies.push(`${relative(repoRoot, path)} has a subset file's name`);
+        }
+        let match =
+          declaration && readFileSync(path, 'utf8').match(declaration);
+        if (match) {
+          copies.push(`${relative(repoRoot, path)} declares ${match[1]}`);
+        }
+      }
+    }
+  };
+  visit(dir);
+  if (copies.length) {
+    fail(
+      `${relative(repoRoot, dir)} holds a copy of a catalog test subset definition:\n  ${copies.join('\n  ')}\n` +
+        `The definitions packages/catalog/test-subset.json lists live only in ${manifest.repository}. ` +
+        `Change them there and re-pin (see .claude/skills/catalog-test-subset).`,
+    );
+  }
+  log(
+    `${relative(repoRoot, dir)} holds no copy of a subset definition (${[...classNames].join(', ')})`,
+  );
 }
 
 function bump(manifest: Manifest) {
@@ -424,7 +521,10 @@ function bump(manifest: Manifest) {
 }
 
 // The deployed catalog realm serves boxel-catalog's main, so a pin that main
-// does not contain describes definitions no deployment has.
+// does not contain describes definitions no deployment has. A pin that main
+// contains can still be behind it: once main changes a subset file, boxel's
+// tests run against a definition deployments no longer serve, so that fails
+// too.
 async function checkPin(manifest: Manifest) {
   let headers: Record<string, string> = {
     accept: 'application/vnd.github+json',
@@ -445,6 +545,37 @@ async function checkPin(manifest: Manifest) {
     );
   }
   log(`${manifest.revision} is on ${manifest.repository} main`);
+
+  // The contents API answers with each file's blob sha, so comparing a file
+  // at two refs needs no download. A file main no longer has answers 404.
+  let blobSha = async (path: string, ref: string) => {
+    let url = `https://api.github.com/repos/${manifest.repository}/contents/${path}?ref=${ref}`;
+    let response = await fetch(url, { headers });
+    if (response.status === 404) {
+      return undefined;
+    }
+    if (!response.ok) {
+      fail(`GET ${url} answered ${response.status}`);
+    }
+    return ((await response.json()) as { sha: string }).sha;
+  };
+  let changed: string[] = [];
+  for (let { path } of manifest.files) {
+    if (
+      (await blobSha(path, 'main')) !== (await blobSha(path, manifest.revision))
+    ) {
+      changed.push(path);
+    }
+  }
+  if (changed.length) {
+    fail(
+      `${manifest.repository} main has changed ${changed.join(', ')} since ${manifest.revision}, so boxel's tests would run against definitions deployments no longer serve. ` +
+        `Re-pin to main (pnpm catalog:test-subset --bump), run the manifest's tests against it, and commit the new pin.`,
+    );
+  }
+  log(
+    `the subset files at ${manifest.revision} match ${manifest.repository} main`,
+  );
 }
 
 // A realm's compiled-module cache is keyed by path and cleared by the running
@@ -466,6 +597,7 @@ function touch(where: string) {
 async function main() {
   let args = new Set(process.argv.slice(2));
   let touchArg = [...args].find((a) => a.startsWith('--touch='));
+  let noCopiesArg = [...args].find((a) => a.startsWith('--check-no-copies='));
   if (touchArg) {
     touch(touchArg.slice('--touch='.length));
     return;
@@ -495,6 +627,14 @@ async function main() {
     fail(message);
   }
   let { contents, source } = loaded;
+  if (noCopiesArg) {
+    checkNoCopies(
+      manifest,
+      contents,
+      resolve(noCopiesArg.slice('--check-no-copies='.length)),
+    );
+    return;
+  }
   checkClosure(contents);
 
   if ('unchanged' in loaded && loaded.unchanged) {

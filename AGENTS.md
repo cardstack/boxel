@@ -98,6 +98,7 @@ mise exec -- pnpm build-common-deps   # builds @cardstack/boxel-icons `dist` (co
 ```
 
 Diagnosing a stuck test page fast (do this FIRST, before assuming it's a slow build):
+
 - The blocker is almost always a single unresolved import breaking the whole test module graph. Read the Vite error overlay directly instead of polling for QUnit — it names the exact import in seconds:
   `document.querySelector('vite-error-overlay')?.shadowRoot?.querySelector('.message')?.textContent`
 - `Failed to resolve import "@cardstack/bxl"` (or any `@cardstack/*` workspace package) ⇒ run `pnpm install`.
@@ -253,6 +254,12 @@ Symptom differs from triggers 1–2: the template body is silently dropped, so t
 ## Base realm imports
 
 - Only card definitions (files run through the card loader) can use static ESM imports from `@cardstack/base/*`. Host-side modules must load the module at runtime via `loader.import(`${baseRealm.url}...`)`. Static value imports from the HTTPS specifier inside host code trigger build-time `webpackMissingModule` failures. Type imports are OK using static ESM syntax.
+
+## Catalog-owned definitions
+
+- Some definitions that platform code and tests depend on live in the `cardstack/boxel-catalog` repo, not in this one. Examples are the operation-permission policy cards `RealmPolicy`, `PolicyRule` and `OperationGrant`, and `PolicyPredicateField`. Boxel's tests load them from a pinned revision through `@cardstack/catalog/`. `packages/catalog/test-subset.json` lists every such file.
+- To change one, change it in boxel-catalog, then pin the new revision here. Never add a copy to `packages/base`, and never edit `packages/catalog/test-subset/` (generated from the pin) or `packages/catalog/contents/` (a clone of catalog `main`). Guards fail on each of these.
+- Load the `catalog-test-subset` skill for the procedure: paired branches, testing a catalog change against boxel's tests, pinning, and merge order.
 
 ## Linear Ticket Process (Reusable)
 

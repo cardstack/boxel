@@ -3,8 +3,10 @@ name: Catalog Test Subset
 # Validates the catalog test subset declared in packages/catalog/test-subset.json:
 # the pinned boxel-catalog revision must be on boxel-catalog's main, since the
 # deployed catalog realm serves main and a pin main lacks describes
-# definitions no deployment has; and the pinned files must fetch and form a
-# closed set a test stack can load.
+# definitions no deployment has; main must not have changed a subset file
+# since the pin, or boxel's tests would run against a definition deployments
+# no longer serve; and the pinned files must fetch and form a closed set a
+# test stack can load.
 #
 # Path-scoped, so it runs only for PRs that change the subset or its tooling.
 
@@ -35,7 +37,7 @@ jobs:
         with:
           node-version: "24"
 
-      - name: Pin is on boxel-catalog main
+      - name: Pin is on boxel-catalog main and current with it
         run: node packages/catalog/scripts/sync-test-subset.ts --check-pin
         env:
           GITHUB_TOKEN: ${{ github.token }}
