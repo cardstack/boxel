@@ -148,6 +148,13 @@ export interface JobInfo extends JSONTypes.Object {
   // index-signature reason as `priority`; null means the queue couldn't
   // compute it (or the JobInfo is synthetic).
   queueWaitMs: number | null;
+  // The lane the job was claimed in, and the lane family it belongs to, as the
+  // queue row records them. Together with `queueWaitMs` they say what a job
+  // waited behind: another job of its own lane, or the family's exclusive work
+  // (see `QueuePublishRequest.laneFamily`). Null on a synthetic JobInfo, and
+  // `laneFamily` is null on any job published without a family.
+  concurrencyGroup: string | null;
+  laneFamily: string | null;
 }
 
 export interface StatusArgs {

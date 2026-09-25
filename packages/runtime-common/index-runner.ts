@@ -309,6 +309,8 @@ export class IndexRunner {
       reservationId: -1,
       priority: 0,
       queueWaitMs: null,
+      concurrencyGroup: null,
+      laneFamily: null,
     };
     this.#jobPriority = jobPriority ?? jobInfo?.priority ?? 0;
     this.#batchId = `${this.#jobInfo.jobId}-${uuidv4().slice(0, 8)}`;
