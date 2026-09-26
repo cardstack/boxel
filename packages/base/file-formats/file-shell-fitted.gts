@@ -76,6 +76,13 @@ export class FileFittedShell extends GlimmerComponent<FileFittedShellSignature> 
     return b.length > 12 ? b.slice(-6) : '';
   }
 
+  // Hidden from visual comparison in the template, not here: the value is
+  // correct for a user's own realm, where `lastModified` is a real
+  // modification time. CI normalizes the base and skills realms' mtimes to a
+  // hash of each file's contents (`scripts/normalize-realm-mtimes.mjs`), so in
+  // a snapshot this renders an age derived from a number that is not a date,
+  // and an ordinary content edit moves it between `relativeDate`'s buckets.
+  // Comparing it there reports a rendering change when only the bytes differ.
   get modified() {
     return relativeDate(this.args.model?.lastModified);
   }
@@ -201,7 +208,7 @@ export class FileFittedShell extends GlimmerComponent<FileFittedShellSignature> 
                 class='sub-fact'
               >{{@model.heroFact}}</span>{{/if}}
             {{#if this.modified}}<span class='sub-mod'>·
-                {{this.modified}}</span>
+                <span data-test-percy-hide>{{this.modified}}</span></span>
             {{/if}}
           </span>
           <span class='sub-right'>
@@ -234,7 +241,8 @@ export class FileFittedShell extends GlimmerComponent<FileFittedShellSignature> 
         <div class='row-facts'>
           {{#if @model.heroFact}}<span class='fact'>{{@model.heroFact}}</span>
           {{/if}}
-          {{#if this.modified}}<span class='fact'>· {{this.modified}}</span>
+          {{#if this.modified}}<span class='fact'>·
+              <span data-test-percy-hide>{{this.modified}}</span></span>
           {{/if}}
           {{#each @model.facts as |fact|}}<span class='fact'>· {{fact}}</span>
           {{/each}}
