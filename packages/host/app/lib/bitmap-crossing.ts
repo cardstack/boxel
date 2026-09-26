@@ -132,6 +132,31 @@ export interface CrossingScene {
   seed?: (face: HTMLElement) => HTMLElement | null | undefined;
 }
 
+// Samples opacity and transform on one timeline, so each can keep its own
+// window while sharing a keyframe list.
+function sampled(
+  frame: (t: number) => { opacity: number; transform: string },
+  origin = '50% 50%',
+) {
+  let times: number[] = [];
+  let opacity: number[] = [];
+  let transform: string[] = [];
+  let steps = 24;
+  for (let step = 0; step <= steps; step++) {
+    let t = step / steps;
+    let pose = frame(t);
+    times.push(t);
+    opacity.push(pose.opacity);
+    transform.push(pose.transform);
+  }
+  return {
+    keyframes: { opacity, transform, transformOrigin: origin },
+    options: { times, ease: 'linear' as const },
+  };
+}
+
+const clamp01 = (value: number) => Math.min(1, Math.max(0, value));
+
 const unseededScale = 0.6;
 
 // The frame's centre travels with the crossing card on the motion curve
@@ -144,10 +169,9 @@ function platterKeyframes(
   frame?: DOMRect,
   seed?: DOMRect,
 ) {
-  let clamp = (value: number) => Math.min(1, Math.max(0, value));
   let start =
     layer && seed
-      ? clamp(
+      ? clamp01(
           (1.2 * Math.max(seed.width, seed.height)) /
             Math.max(layer.width, layer.height),
         )
@@ -158,24 +182,14 @@ function platterKeyframes(
     layer && frame
       ? frame.y + frame.height / 2 - layer.y - layer.height / 2
       : 0;
-  let times: number[] = [];
-  let opacity: number[] = [];
-  let transform: string[] = [];
-  let steps = 24;
-  for (let step = 0; step <= steps; step++) {
-    let t = step / steps;
+  return sampled((t) => {
     let grown = arriving ? motionEaseAt(t) : 1 - motionEaseAt(t);
     let away = 1 - grown;
-    times.push(t);
-    opacity.push(arriving ? clamp((t - 0.05) / 0.35) : 1 - clamp(t / 0.7));
-    transform.push(
-      `translate(${(away * dx).toFixed(2)}px, ${(away * dy).toFixed(2)}px) scale(${(start + (1 - start) * grown).toFixed(4)})`,
-    );
-  }
-  return {
-    keyframes: { opacity, transform },
-    options: { times, ease: 'linear' as const },
-  };
+    return {
+      opacity: arriving ? clamp01((t - 0.05) / 0.35) : 1 - clamp01(t / 0.7),
+      transform: `translate(${(away * dx).toFixed(2)}px, ${(away * dy).toFixed(2)}px) scale(${(start + (1 - start) * grown).toFixed(4)})`,
+    };
+  });
 }
 
 // A small object crossing alongside the card as a matched layer of its own
@@ -186,6 +200,34 @@ export interface CrossingCompanion {
   // Nothing means the companion fades out.
   to: (landing: HTMLElement | undefined) => HTMLElement | null | undefined;
 }
+
+// 'replace': another card takes the departing one's place in the same slot.
+// The departing face recedes toward the slot's top centre, where buried
+// parents peek out, and is gone by 40%; the landing surfaces there from just
+// behind, opaque between 20% and 60%, settling on the motion curve.
+const recede = () =>
+  sampled(
+    (t) => ({
+      opacity: 1 - clamp01(t / 0.4),
+      transform: `scale(${(1 - 0.03 * motionEaseAt(t)).toFixed(4)})`,
+    }),
+    '50% 0',
+  );
+const surface = () =>
+  sampled(
+    (t) => ({
+      opacity: clamp01((t - 0.2) / 0.4),
+      transform: `scale(${(0.94 + 0.06 * motionEaseAt(t)).toFixed(4)})`,
+    }),
+    '50% 0',
+  );
+
+const persistentChrome = [
+  '[data-workspace-chooser-toggle]',
+  '.profile-icon-button',
+  '.search-sheet.closed',
+  '.chat-btn',
+];
 
 export interface BitmapCrossing {
   // The departing face: its snapshot is where the move starts.
@@ -200,8 +242,9 @@ export interface BitmapCrossing {
   ease?: ViewTransitionOptions['ease'];
   // 'crossfade' blends the faces across the move; 'late' keeps the departing
   // face until near the landing so a face growing into a wider layout is
-  // never squeezed.
-  handoff?: 'crossfade' | 'late';
+  // never squeezed; 'replace' is a different card taking the departing
+  // one's place, so the faces never share a frame (see `recede`).
+  handoff?: 'crossfade' | 'late' | 'replace';
   // A card trading depth with `from` (its stack parent): its tray, body,
   // header and title move as matched layers of their own.
   parent?: HTMLElement;
@@ -292,7 +335,8 @@ export async function crossfadeCardBitmap({
         ]),
     );
     let parts = headerParts(underlay);
-    shadow = prepareBitmapShadow(source);
+    // A replacement is two cards, not one travelling: no shadow travels.
+    shadow = handoff === 'replace' ? undefined : prepareBitmapShadow(source);
     // Keep document-scoped capture: Chromium 153 can abort element-scoped
     // capture when Ember replaces the named source node during the update.
     let builder = animateView(
@@ -384,11 +428,23 @@ export async function crossfadeCardBitmap({
       },
       { duration: duration / inspectionSpeed(), ease },
     )
-      .add(source, landingSelector)
+      .add(source, handoff === 'replace' ? undefined : landingSelector)
       .class('boxel-card-bitmap')
       .group(false)
-      .crop(true);
-    if (handoff === 'late') {
+      .crop(handoff !== 'replace');
+    if (handoff === 'replace') {
+      let { keyframes, options } = recede();
+      builder.old(keyframes, options);
+      builder.new({ opacity: 0 }, { duration: 0 });
+      builder
+        .add(landingSelector)
+        .class('boxel-card-bitmap')
+        .group(false)
+        .crop(false);
+      let arrival = surface();
+      builder.old({ opacity: 0 }, { duration: 0 });
+      builder.new(arrival.keyframes, arrival.options);
+    } else if (handoff === 'late') {
       builder.old(
         { opacity: [1, 1, 0] },
         { times: [0, 0.82, 1], ease: 'linear' },
@@ -401,7 +457,7 @@ export async function crossfadeCardBitmap({
       builder.old({ opacity: [1, 0] });
       builder.new({ opacity: [0, 1] });
     }
-    for (let layer of shadow.layers) {
+    for (let layer of shadow?.layers ?? []) {
       builder.add(layer).class('boxel-card-shadow').group(false).crop(false);
       builder.old({ opacity: [1, 0] });
       builder.new({ opacity: [0, 1] });
@@ -573,12 +629,31 @@ export async function crossfadeCardBitmap({
     // Corner/edge affordances are a separate foreground plane. In particular,
     // the closed search dock must not disappear behind an enlarging card.
     builder
-      .add('.search-sheet.closed, .add-card-to-neighbor-stack, .chat-btn')
+      .add('.add-card-to-neighbor-stack')
       .class('boxel-edge-chrome')
       .group(false)
       .crop(false);
     builder.old({ opacity: 0 }, { duration: 0 });
     builder.new({ opacity: 1 }, { duration: 0 });
+    // The app's own controls (Boxel, account, search, AI) are on screen in
+    // every scene: each is its own layer on the topmost plane, never fading
+    // with the surface beneath. On screen before and after, its two faces
+    // cross additively, so an unchanged control never dips and one that
+    // restyles (the Boxel button on the dashboard) trades looks in place.
+    for (let control of persistentChrome) {
+      builder
+        .add(control)
+        .class('boxel-persistent-chrome')
+        .group(false)
+        .crop(false);
+      if (document.querySelector(control)) {
+        builder.old({ opacity: [1, 0] });
+        builder.new({ opacity: [0, 1] });
+      } else {
+        builder.old({ opacity: 0 }, { duration: 0 });
+        builder.new({ opacity: 1 }, { duration: 0 });
+      }
+    }
     // motion-dom 13's declaration omits the controls delivered by then();
     // its runtime resolves GroupAnimation, whose finished promise owns cleanup.
     let run = await (builder as unknown as PromiseLike<{

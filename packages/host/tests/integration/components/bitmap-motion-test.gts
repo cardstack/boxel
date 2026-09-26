@@ -314,6 +314,41 @@ class BitmapFixture extends Component {
     </style>
   </template>
 }
+class ReplaceFixture extends Component {
+  @tracked replaced = false;
+  replace = (event: Event) => {
+    completion = crossfadeCardBitmap({
+      from: event.currentTarget as HTMLElement,
+      to: () => document.querySelector<HTMLElement>('[data-test-replacement]'),
+      update: () => {
+        this.replaced = true;
+      },
+      duration: 0.8,
+      handoff: 'replace',
+    });
+  };
+  <template>
+    <div class='slot'>
+      {{#if this.replaced}}
+        <div class='card' data-test-replacement>Index</div>
+      {{else}}
+        <button
+          type='button'
+          class='card'
+          {{on 'click' this.replace}}
+          data-test-replaced
+        >Last card</button>
+      {{/if}}
+    </div>
+    <style scoped>
+      .card {
+        width: 30rem;
+        height: 22rem;
+      }
+    </style>
+  </template>
+}
+
 module('Integration | bitmap motion', function (hooks) {
   setupRenderingTest(hooks);
   test('custom viewCard actions use the activated button and retain a parent-scoped reverse address', async function (assert) {
@@ -1066,6 +1101,69 @@ module('Integration | bitmap motion', function (hooks) {
       .dom('[data-bitmap-body]')
       .doesNotExist('return content frame released');
   });
+  test('a replacement surfaces behind the card it replaces instead of morphing from it', async function (assert) {
+    await renderComponent(ReplaceFixture);
+    let departing = find('[data-test-replaced]') as HTMLElement;
+    await click(departing);
+    await waitUntil(
+      () =>
+        (find('[data-test-replacement]') as HTMLElement | null)?.style
+          .viewTransitionName,
+      { timeout: 3000 },
+    );
+    let arriving = find('[data-test-replacement]') as HTMLElement;
+    let arrivingName = arriving.style.viewTransitionName;
+    let departingName = departing.style.viewTransitionName;
+    assert.notStrictEqual(
+      arrivingName,
+      departingName,
+      'the two cards never share a frame',
+    );
+    await waitUntil(() =>
+      document
+        .getAnimations()
+        .some((animation) =>
+          (animation.effect as KeyframeEffect)?.pseudoElement?.includes(
+            `view-transition-new(${arrivingName})`,
+          ),
+        ),
+    );
+    let face = (type: string, name: string) =>
+      getComputedStyle(
+        document.documentElement,
+        `::view-transition-${type}(${name})`,
+      );
+    let scale = (style: CSSStyleDeclaration) =>
+      new DOMMatrixReadOnly(style.transform).a;
+    let animations = document.getAnimations();
+    for (let animation of animations) animation.currentTime = 0;
+    assert.strictEqual(
+      face('new', arrivingName).opacity,
+      '0',
+      'the replacement starts hidden',
+    );
+    assert.ok(
+      Math.abs(scale(face('new', arrivingName)) - 0.94) < 0.005,
+      'the replacement starts just behind its slot',
+    );
+    assert.ok(
+      face('new', arrivingName).transformOrigin.endsWith(' 0px'),
+      'it grows from the top of its slot, where buried parents peek out',
+    );
+    for (let animation of animations) animation.currentTime = 400;
+    assert.strictEqual(
+      face('old', departingName).opacity,
+      '0',
+      'the departing card is gone by halfway',
+    );
+    assert.ok(
+      scale(face('old', departingName)) < 1,
+      'the departing card recedes rather than flying anywhere',
+    );
+    for (let animation of animations) animation.finish();
+    await completion;
+    assert.dom('[data-test-replacement]').exists();
+  });
   test('search and card faces crossfade as proportionally cropped browser bitmaps', async function (assert) {
     await renderComponent(BitmapFixture);
     await click('[data-test-bitmap-source]');
@@ -1109,7 +1207,11 @@ module('Integration | bitmap motion', function (hooks) {
       !!chrome.style.viewTransitionName,
       'stationary chrome has its own snapshot above the crossing',
     );
-    for (let edge of edges) {
+    let [searchDock, edgeControl] = edges;
+    for (let [edge, plane] of [
+      [edgeControl, '9'],
+      [searchDock, '10'],
+    ] as const) {
       assert.true(
         !!edge.style.viewTransitionName,
         'edge control owns a snapshot plane',
@@ -1119,10 +1221,18 @@ module('Integration | bitmap motion', function (hooks) {
           root,
           `::view-transition-group(${edge.style.viewTransitionName})`,
         ).zIndex,
-        '9',
-        'edge plane stays above the card and toolbar planes',
+        plane,
+        'edge controls stay above the card and toolbar, the app controls on top',
       );
     }
+    assert.strictEqual(
+      getComputedStyle(
+        root,
+        `::view-transition-old(${searchDock.style.viewTransitionName})`,
+      ).mixBlendMode,
+      'plus-lighter',
+      'an app control on screen throughout crosses its faces without dimming',
+    );
     assert.strictEqual(
       getComputedStyle(root).viewTransitionName,
       'none',

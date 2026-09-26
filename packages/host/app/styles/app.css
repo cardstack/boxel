@@ -137,6 +137,22 @@
   z-index: 9;
 }
 
+/* Boxel, account, search and AI stay above every scene. Their faces add up
+   while they cross, so a control that does not change never dims. */
+::view-transition-group(.boxel-persistent-chrome) {
+  z-index: 10;
+}
+
+::view-transition-old(.boxel-persistent-chrome),
+::view-transition-new(.boxel-persistent-chrome) {
+  mix-blend-mode: plus-lighter;
+  /* Natural size from the top left: the Boxel button's icon stays put while
+     the dashboard's wordmark fades in beside it, never stretched. */
+  width: auto;
+  height: auto;
+  object-fit: none;
+}
+
 /* JIT capture surfaces live outside card overflow. Their ink is already
    painted into the snapshots; the browser interpolates only snapshot geometry
    and opacity. Same bounds as the primary face; never scale the caster alone. */

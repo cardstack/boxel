@@ -1657,6 +1657,14 @@ export default class OperatorModeStateService extends Service {
     );
   }
 
+  // Closing the only card on screen when it is not the realm's index card
+  // puts the index card in its place (see trimItemsFromStack).
+  closesToIndex(item: StackItem) {
+    let [stack, ...others] = this._state.stacks;
+    if (others.length || stack?.length !== 1 || stack[0] !== item) return false;
+    return !this.closesWorkspace(item);
+  }
+
   // Leaves the workspace by closing its last card, with the same crossing
   // back to the dashboard as the dashboard button.
   async closeWorkspace(remove: () => void) {

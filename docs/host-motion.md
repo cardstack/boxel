@@ -134,6 +134,10 @@ Layers, back to front:
   buried strip in both directions, with its title and realm icon matched
   separately so the title scales between its full and buried sizes.
 - **card bitmap** — the departing and landing faces in one morphing frame.
+  `handoff: 'replace'` is a different card taking the departing one's
+  place (the realm's index card when its last card closes): the faces never
+  share a frame; the departing card recedes toward the top of its slot and
+  the replacement surfaces there from just behind.
   `handoff: 'late'` keeps the departing face until 82% of the move (expand,
   so a face growing into a wider layout is never squeezed).
 - **shadows** — `lib/bitmap-shadow.ts` paints contact and pool shadows as
@@ -141,8 +145,12 @@ Layers, back to front:
   flight and restored at its resting value with transitions held off through
   the landing paint.
 - **stationary chrome** — the top bar and assistant, then edge controls
-  (search dock, neighbour-stack buttons, chat button), captured so the flying
-  card never covers them. `chrome: 'crossfade'` trades the top bar instead,
+  (neighbour-stack buttons), captured so the flying card never covers them.
+- **persistent chrome** — the app's own controls (the Boxel button,
+  account, search and AI) on the topmost plane, each its own layer, at
+  natural size. On screen before and after, their faces cross additively
+  (`plus-lighter`), so they never fade with the surface beneath, even
+  between the dashboard and a workspace. `chrome: 'crossfade'` trades the top bar instead,
   for crossings between the dashboard and a workspace, whose bars differ.
 
 A deferred card body (`StackItem.deferContent`) mounts one paint after

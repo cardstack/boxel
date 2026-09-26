@@ -559,6 +559,28 @@ export default class InteractSubmode extends Component {
       await this.operatorModeStateService.closeWorkspace(remove);
       return;
     }
+    // The realm's index card takes the last card's place: it surfaces in the
+    // same slot as the closing card recedes.
+    let closing = stackItemComponentAPI.get(item)?.element();
+    if (
+      animate &&
+      closing &&
+      this.operatorModeStateService.closesToIndex(item)
+    ) {
+      await this.hostMotion.cross({
+        from: closing,
+        to: () =>
+          Array.from(
+            document.querySelectorAll<HTMLElement>(
+              '.stacks .operator-mode-stack .stack-item-card',
+            ),
+          ).find((card) => !closing.contains(card)),
+        update: remove,
+        duration: isTesting() ? 0 : motionDurations.boundary,
+        handoff: 'replace',
+      });
+      return;
+    }
     let stack = this.stacks[item.stackIndex];
     let parent = stack?.at(-2);
     // A card that opened into its own stack settles back into the tile it
