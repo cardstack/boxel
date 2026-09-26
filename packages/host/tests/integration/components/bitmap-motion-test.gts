@@ -520,10 +520,6 @@ module('Integration | bitmap motion', function (hooks) {
     let from = source.getBoundingClientRect();
     let index = find('[data-test-index]') as HTMLElement;
     let indexFrom = index.getBoundingClientRect();
-    let titleFrom = index
-      .querySelector('.card-type-display-name')!
-      .getBoundingClientRect();
-    let iconFrom = index.querySelector('.realm-icon')!.getBoundingClientRect();
     await click('[data-test-open-gallery]');
     await bitmapReady;
     await waitUntil(
@@ -544,15 +540,19 @@ module('Integration | bitmap motion', function (hooks) {
         `::view-transition-${type}(${part.style.viewTransitionName})`,
       );
     assert.strictEqual(
-      new Set([
-        name,
-        indexName,
-        header.style.viewTransitionName,
-        title.style.viewTransitionName,
-        icon.style.viewTransitionName,
-      ]).size,
-      5,
-      'header surface, title, and realm icon have distinct matches',
+      new Set([name, indexName, header.style.viewTransitionName]).size,
+      3,
+      'card, parent, and its entering header have distinct matches',
+    );
+    assert.strictEqual(
+      title.style.viewTransitionName,
+      '',
+      'title rides in the entering header snapshot',
+    );
+    assert.strictEqual(
+      icon.style.viewTransitionName,
+      '',
+      'realm icon rides in the entering header snapshot',
     );
     assert.notStrictEqual(indexName, name, 'two independent boundary matches');
     await waitUntil(() =>
@@ -667,65 +667,21 @@ module('Integration | bitmap motion', function (hooks) {
       'header sits above the body',
     );
     assert.strictEqual(
-      partPose(title).zIndex,
-      '3',
-      'title sits above its header surface',
-    );
-    assert.strictEqual(
-      partPose(icon).zIndex,
-      '3',
-      'realm icon shares the header content layer',
-    );
-    assert.strictEqual(
       pose().zIndex,
       '5',
       'selected Gallery stays above the complete parent',
     );
-    for (let [part, fromPart] of [
-      [title, titleFrom],
-      [icon, iconFrom],
-    ] as const) {
-      assert.ok(
-        Math.abs(painted(partPose(part)).width - fromPart.width) < 1,
-        'header part starts at its old measured boundary despite DOM replacement',
-      );
-    }
+    let headerOffset = () =>
+      new DOMMatrixReadOnly(partPose(header, 'new').transform).f;
+    assert.ok(
+      Math.abs(headerOffset() + parseFloat(partPose(header, 'new').height)) < 1,
+      'the buried header starts one header-height above its strip',
+    );
     assert.strictEqual(
       indexPose().overflow,
       'visible',
       'parent shadow is never clipped during travel',
     );
-    let partScale = (part: HTMLElement) =>
-      new DOMMatrixReadOnly(partPose(part, 'new').transform);
-    assert.ok(
-      Math.abs(partScale(title).a - 16 / 14) < 0.001,
-      'title begins at its source glyph size using a transform',
-    );
-    assert.ok(
-      Math.abs(partScale(icon).a - 32 / 24) < 0.001,
-      'icon uses its own independent scale',
-    );
-    for (let part of [title, icon]) {
-      assert.strictEqual(
-        partScale(part).a,
-        partScale(part).d,
-        'part scales uniformly',
-      );
-      assert.true(
-        animations
-          .filter((a) =>
-            (a.effect as KeyframeEffect)?.pseudoElement?.includes(
-              part.style.viewTransitionName,
-            ),
-          )
-          .every((a) =>
-            (a.effect as KeyframeEffect)
-              .getKeyframes()
-              .every((frame) => !('fontSize' in frame)),
-          ),
-        'no font-size animation',
-      );
-    }
     assert.strictEqual(
       Math.round(painted(pose()).width),
       Math.round(from.width),
@@ -810,26 +766,10 @@ module('Integration | bitmap motion', function (hooks) {
       '0',
       'empty buried frame never paints a duplicate body',
     );
-    assert.strictEqual(
-      partPose(title, 'old').objectFit,
-      'none',
-      'old title keeps natural-size glyphs',
+    assert.ok(
+      headerOffset() < 0,
+      'the header is still sliding down while the card travels',
     );
-    assert.strictEqual(
-      partPose(title, 'new').objectFit,
-      'none',
-      'new title keeps natural-size glyphs',
-    );
-    assert.strictEqual(
-      partPose(icon, 'new').objectFit,
-      'none',
-      'realm bitmap keeps its natural size before its uniform transform',
-    );
-    let titleInterpolates =
-      partScale(title).a > 1 && partScale(title).a < 16 / 14;
-    let iconInterpolates = partScale(icon).a > 1 && partScale(icon).a < 32 / 24;
-    assert.ok(titleInterpolates, 'title interpolates between measured sizes');
-    assert.ok(iconInterpolates, 'icon interpolates on its own scale');
     assert.dom(title).hasStyle({ fontSize: '14px', transform: 'none' });
     for (let time of [90, 300, 359]) {
       for (let animation of animations) animation.currentTime = time;
@@ -852,12 +792,7 @@ module('Integration | bitmap motion', function (hooks) {
       }
     }
     for (let animation of animations) animation.currentTime = 360;
-    for (let part of [title, icon])
-      assert.strictEqual(
-        partScale(part).a,
-        1,
-        'part reaches its exact final scale',
-      );
+    assert.ok(Math.abs(headerOffset()) < 0.5, 'the header lands in its strip');
     for (let shadow of shadows)
       assert.ok(
         Math.abs(
@@ -866,14 +801,12 @@ module('Integration | bitmap motion', function (hooks) {
         ) < 1,
         'shadow reaches the exact endpoint',
       );
-    for (let part of [header, title, icon]) {
-      assert.ok(
-        Math.abs(
-          painted(partPose(part)).width - part.getBoundingClientRect().width,
-        ) < 1,
-        'header match reaches its final measured width',
-      );
-    }
+    assert.ok(
+      Math.abs(
+        painted(partPose(header)).width - header.getBoundingClientRect().width,
+      ) < 1,
+      'header match has its final measured width',
+    );
     assert.strictEqual(
       Math.round(painted(indexPose()).width),
       Math.round(index.getBoundingClientRect().width),

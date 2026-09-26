@@ -183,6 +183,12 @@ export async function crossfadeCardBitmap(
           // Only the raster transform animates; live font/layout is final.
           part.transform[0] = `scale(${to > 0 ? part.from / to : 1})`;
         }
+        // Stacking: the parent's header enters its buried strip as a new
+        // layer only; it is not matched to where it used to be.
+        if (opening && underlayKey)
+          underlay
+            ?.querySelector<HTMLElement>('.stack-item-header')
+            ?.setAttribute('data-bitmap-header-entry', underlayKey);
         traceMotionPhase('header-measured');
         let destinationPainted = shadow?.update(
           document.querySelector<HTMLElement>(destination),
@@ -305,7 +311,17 @@ export async function crossfadeCardBitmap(
         builder.new({ opacity: opening ? 0 : [0, 1] });
       }
       let header = underlay.querySelector<HTMLElement>('.stack-item-header');
-      if (header) {
+      if (header && opening) {
+        // The buried title slides down into its strip from above, from under
+        // the stationary top bar, instead of being uncovered from below as the
+        // new card rises over it. Its old place fades with the parent's face.
+        builder
+          .add(`[data-bitmap-header-entry="${underlayKey}"]`)
+          .class('boxel-stack-header')
+          .group(false)
+          .crop(false);
+        builder.new({ transform: ['translateY(-100%)', 'translateY(0)'] });
+      } else if (header) {
         builder
           .add(
             header,
@@ -319,7 +335,7 @@ export async function crossfadeCardBitmap(
         builder.old({ opacity: 0 }, { duration: 0 });
         builder.new({ opacity: 1 }, { duration: 0 });
       }
-      for (let part of parts) {
+      for (let part of opening ? [] : parts) {
         builder
           .add(
             part.source,
@@ -388,5 +404,9 @@ export async function crossfadeCardBitmap(
     if (underlayKey && underlay?.dataset.bitmapUnderlay === underlayKey) {
       delete underlay.dataset.bitmapUnderlay;
     }
+    if (underlayKey)
+      document
+        .querySelector(`[data-bitmap-header-entry="${underlayKey}"]`)
+        ?.removeAttribute('data-bitmap-header-entry');
   }
 }
