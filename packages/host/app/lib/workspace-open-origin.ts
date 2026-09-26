@@ -49,6 +49,7 @@ export function workspaceOriginFromElement(
     return;
   let background = getComputedStyle(tile, '::before');
   return {
+    source: tile,
     x: box.x,
     y: box.y,
     width: box.width,

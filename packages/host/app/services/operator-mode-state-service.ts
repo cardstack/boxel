@@ -1,8 +1,9 @@
 import { getOwner } from '@ember/application';
 import type Owner from '@ember/owner';
 import type RouterService from '@ember/routing/router-service';
-import { scheduleOnce } from '@ember/runloop';
+import { schedule, scheduleOnce } from '@ember/runloop';
 import Service, { service } from '@ember/service';
+import { isTesting } from '@embroider/macros';
 
 import { tracked, cached } from '@glimmer/tracking';
 
@@ -33,6 +34,14 @@ import {
 
 import type { Submode } from '@cardstack/host/components/submode-switcher';
 import { Submodes } from '@cardstack/host/components/submode-switcher';
+import {
+  crossfadeCardBitmap,
+  supportsBitmapCrossing,
+} from '@cardstack/host/lib/bitmap-crossing';
+import {
+  boundaryEase,
+  motionDurations,
+} from '@cardstack/host/lib/motion-timing';
 import {
   StackItem,
   takesFileDeleteRoute,
@@ -1542,6 +1551,62 @@ export default class OperatorModeStateService extends Service {
     if (!realmUrl.endsWith('/')) {
       realmUrl = realmUrl + '/';
     }
+    // The tile element is consumed by the crossing, never kept on the stack.
+    let { source, ...rest } = workspaceOrigin ?? {};
+    let origin = workspaceOrigin ? (rest as WorkspaceOpenOrigin) : undefined;
+    if (source && this.workspaceCrossingDuration > 0) {
+      // Like a fitted card opening to isolated: the tile's wallpaper crosses
+      // into the realm background while the dashboard fades out beneath it
+      // and the index card fades in over the landing.
+      let budgetToken = this.hostMotion.beginBitmap();
+      try {
+        await crossfadeCardBitmap(
+          source,
+          '.workspace-wallpaper',
+          async () => {
+            this.enterWorkspace(realmUrl, origin, false);
+            await new Promise<void>((resolve) =>
+              schedule('afterRender', resolve),
+            );
+          },
+          this.workspaceCrossingDuration,
+          boundaryEase,
+          (finish) => this.hostMotion.onBitmapReady(budgetToken, finish),
+          undefined,
+          [
+            { selector: '.workspace-chooser', fade: 'out' },
+            { selector: '.stacks', fade: 'in' },
+          ],
+        );
+      } finally {
+        this.hostMotion.endBitmap(budgetToken);
+      }
+    } else {
+      this.enterWorkspace(realmUrl, origin, true);
+    }
+
+    let lastOpenedFile = this.recentFilesService.recentFiles.find(
+      (file: RecentFile) => file.realmURL.href === realmUrl,
+    );
+    let id = rri(`${realmUrl}index`);
+    await this.updateCodePath(
+      lastOpenedFile
+        ? new URL(`${lastOpenedFile.realmURL}${lastOpenedFile.filePath}`)
+        : id,
+    );
+  };
+
+  private get workspaceCrossingDuration() {
+    return isTesting() || !supportsBitmapCrossing() || this.hostMotion.dragging
+      ? 0
+      : motionDurations.workspace;
+  }
+
+  private enterWorkspace(
+    realmUrl: string,
+    workspaceOrigin: WorkspaceOpenOrigin | undefined,
+    portal: boolean,
+  ) {
     let id = rri(`${realmUrl}index`);
     let stackItem = new StackItem({
       id,
@@ -1552,7 +1617,8 @@ export default class OperatorModeStateService extends Service {
     });
     // Change the scene and its ownership in one render. Awaiting code-path
     // metadata between these changes lets the old card start a separate exit.
-    if (workspaceOrigin) this.startWorkspacePortal(workspaceOrigin, 'opening');
+    if (workspaceOrigin && portal)
+      this.startWorkspacePortal(workspaceOrigin, 'opening');
     else this.workspacePortal = undefined;
     let existing = this._state.stacks[0]?.[0];
     if (
@@ -1572,16 +1638,7 @@ export default class OperatorModeStateService extends Service {
     this.updateSubmode(Submodes.Interact);
     this._state.workspaceChooserOpened = false;
     this.cachedRealmURL = new URL(realmUrl);
-
-    let lastOpenedFile = this.recentFilesService.recentFiles.find(
-      (file: RecentFile) => file.realmURL.href === realmUrl,
-    );
-    await this.updateCodePath(
-      lastOpenedFile
-        ? new URL(`${lastOpenedFile.realmURL}${lastOpenedFile.filePath}`)
-        : id,
-    );
-  };
+  }
 
   get workspaceChooserOpened() {
     return this.state.workspaceChooserOpened ?? false;
@@ -1594,6 +1651,17 @@ export default class OperatorModeStateService extends Service {
           ? this._state.stacks[0]?.[0]?.workspaceOrigin
           : undefined;
       if (origin && this.state.submode === Submodes.Interact) {
+        let wallpaper = document.querySelector<HTMLElement>(
+          '.workspace-wallpaper',
+        );
+        if (
+          workspaceChooserOpened &&
+          wallpaper &&
+          this.workspaceCrossingDuration > 0
+        ) {
+          void this.returnToWorkspaceTile(wallpaper, origin);
+          return;
+        }
         this.startWorkspacePortal(
           origin,
           workspaceChooserOpened ? 'closing' : 'opening',
@@ -1602,6 +1670,55 @@ export default class OperatorModeStateService extends Service {
     }
     this._state.workspaceChooserOpened = workspaceChooserOpened;
     this.schedulePersist();
+  }
+
+  private workspaceReturnSequence = 0;
+  // The reverse of opening from a tile: the realm background crosses back
+  // into its dashboard tile while the cards fade out and the dashboard in.
+  private async returnToWorkspaceTile(
+    wallpaper: HTMLElement,
+    origin: WorkspaceOpenOrigin,
+  ) {
+    this.workspacePortal = undefined;
+    let key = `workspace-return-${++this.workspaceReturnSequence}`;
+    let tile: HTMLElement | undefined;
+    let budgetToken = this.hostMotion.beginBitmap();
+    try {
+      await crossfadeCardBitmap(
+        wallpaper,
+        `[data-bitmap-return="${key}"]`,
+        async () => {
+          this._state.workspaceChooserOpened = true;
+          this.schedulePersist();
+          await new Promise<void>((resolve) =>
+            schedule('afterRender', resolve),
+          );
+          tile =
+            Array.from(
+              document.querySelectorAll<HTMLElement>('[data-workspace-realm]'),
+            )
+              .find(
+                (element) =>
+                  element.dataset.workspaceRealm === origin.realmURL &&
+                  !!element.closest('.workspace-card.is-enlarged') ===
+                    !!origin.favorite,
+              )
+              ?.querySelector<HTMLElement>('.tile-icon') ?? undefined;
+          if (tile) tile.dataset.bitmapReturn = key;
+        },
+        this.workspaceCrossingDuration,
+        boundaryEase,
+        (finish) => this.hostMotion.onBitmapReady(budgetToken, finish),
+        undefined,
+        [
+          { selector: '.stacks', fade: 'out' },
+          { selector: '.workspace-chooser', fade: 'in' },
+        ],
+      );
+    } finally {
+      this.hostMotion.endBitmap(budgetToken);
+      if (tile?.dataset.bitmapReturn === key) delete tile.dataset.bitmapReturn;
+    }
   }
 
   // Operator mode state is persisted in a query param, which lives in the index controller
