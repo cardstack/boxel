@@ -2725,9 +2725,17 @@ export class Realm {
     let startupSettledAt = Date.now();
     let inflight = this.indexing();
     if (inflight && !(await settledBy(inflight, requestDeadline))) {
+      // Name the passes. One this process queued can sit behind unrelated
+      // work on the queue — on a single-worker stack, the realm's own boot
+      // prerender pass — and hold this gate for far longer than any one
+      // request's budget; the job ids are what find that work.
+      let passes = this.#realmIndexUpdater.describeIndexing();
       this.#log.warn(
         `readiness check for ${this.url} is still waiting on in-flight indexing after ${Date.now() - startupSettledAt}ms ` +
-          `(realm startup used ${startupSettledAt - waitStartedAt}ms of the ${READINESS_REQUEST_BUDGET_MS}ms budget)`,
+          `(realm startup used ${startupSettledAt - waitStartedAt}ms of the ${READINESS_REQUEST_BUDGET_MS}ms budget): ` +
+          (passes.length
+            ? passes.join(', ')
+            : 'the passes settled after the gate expired'),
       );
       return notReady('index');
     }
