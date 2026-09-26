@@ -44,6 +44,8 @@ import {
 } from '@cardstack/host/lib/stack-item';
 import {
   adoptTileCorners,
+  tileRealmIcon,
+  workspaceHeaderIcon,
   workspaceOriginFromElement,
   workspaceReturnTile,
   type WorkspaceOpenOrigin,
@@ -1556,6 +1558,7 @@ export default class OperatorModeStateService extends Service {
       // into the realm background while the dashboard fades out beneath it
       // and the index card fades in over the landing.
       let restoreCorners = adoptTileCorners(source);
+      let tileIcon = tileRealmIcon(source);
       try {
         await this.hostMotion.cross({
           from: source,
@@ -1563,10 +1566,16 @@ export default class OperatorModeStateService extends Service {
           update: () => this.enterWorkspace(realmUrl, origin, false),
           duration: motionDurations.workspace,
           ease: boundaryEase,
+          // The platter of cards grows out of the tile's realm icon while
+          // the icon flies to its place in the card header.
           scenes: [
             { selector: '.workspace-chooser', fade: 'out' },
-            { selector: '.stacks', fade: 'rise' },
+            { selector: '.stacks', fade: 'rise', seed: () => tileIcon },
           ],
+          companions: tileIcon
+            ? [{ from: tileIcon, to: workspaceHeaderIcon }]
+            : [],
+          chrome: 'crossfade',
         });
       } finally {
         restoreCorners();
@@ -1718,19 +1727,31 @@ export default class OperatorModeStateService extends Service {
   ) {
     this.workspacePortal = undefined;
     let restoreCorners = () => {};
+    let tile: HTMLElement | undefined;
+    let headerIcon = workspaceHeaderIcon();
     try {
       await this.hostMotion.cross({
         from: wallpaper,
         to: () => {
-          let tile = workspaceReturnTile(realmURL, favorite);
+          tile = workspaceReturnTile(realmURL, favorite);
           if (tile) restoreCorners = adoptTileCorners(tile);
           return tile;
         },
+        // The platter shrinks into the tile's realm icon as the header's
+        // icon flies back to it.
+        companions: headerIcon
+          ? [{ from: headerIcon, to: () => tile && tileRealmIcon(tile) }]
+          : [],
+        chrome: 'crossfade',
         update: leave,
         duration: motionDurations.workspace,
         ease: boundaryEase,
         scenes: [
-          { selector: '.stacks', fade: 'fall' },
+          {
+            selector: '.stacks',
+            fade: 'fall',
+            seed: () => tile && tileRealmIcon(tile),
+          },
           { selector: '.workspace-chooser', fade: 'in' },
         ],
       });

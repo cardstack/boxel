@@ -108,12 +108,22 @@
   mix-blend-mode: plus-lighter !important;
 }
 
-::view-transition-group(.boxel-stationary-chrome) {
+/* A platter of cards grown out of a crossing card's seed sits above the card
+   (a realm background), and the companion flying to its header above both. */
+::view-transition-group(.boxel-platter) {
   z-index: 6;
 }
 
-::view-transition-group(.boxel-edge-chrome) {
+::view-transition-group(.boxel-companion) {
   z-index: 7;
+}
+
+::view-transition-group(.boxel-stationary-chrome) {
+  z-index: 8;
+}
+
+::view-transition-group(.boxel-edge-chrome) {
+  z-index: 9;
 }
 
 /* JIT capture surfaces live outside card overflow. Their ink is already

@@ -1112,7 +1112,7 @@ module('Integration | bitmap motion', function (hooks) {
           root,
           `::view-transition-group(${edge.style.viewTransitionName})`,
         ).zIndex,
-        '7',
+        '9',
         'edge plane stays above the card and toolbar planes',
       );
     }

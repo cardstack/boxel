@@ -91,9 +91,18 @@ only in tests.
 Layers, back to front:
 
 - **scenes** — whole surrounding surfaces: `out` fades over the first 45%,
-  `in` over the last 45% (dashboard ↔ stacks), `morph` crosses a persistent
+  `in` from 25% to 80% (the dashboard arriving), `morph` crosses a persistent
   element's faces while its frame moves (neighbouring stacks taking freed
-  width).
+  width). `rise` grows an arriving scene out of a `seed` element and `fall`
+  shrinks a departing one into it, both on the boundary spring across the
+  whole crossing: the workspace's platter of cards grows out of the realm
+  icon on its dashboard tile and shrinks back into it. They paint above the
+  card (`.boxel-platter`), since the card there is the realm background.
+- **companions** — small objects matched as layers of their own, above the
+  platter: the realm icon flies between the tile and the first card's header.
+  Scaling the platter about the icon keeps its header's icon slot close to
+  the flying icon throughout, and naming the icon keeps it out of the tile
+  bitmap, which would otherwise blow it up across the background.
 - **parent** — when a card opens over (or returns to) its stack parent, the
   parent's tray, body and header move as matched layers of their own. On
   **open** the parent's header enters its buried strip as a new layer,
@@ -109,7 +118,8 @@ Layers, back to front:
   the landing paint.
 - **stationary chrome** — the top bar and assistant, then edge controls
   (search dock, neighbour-stack buttons, chat button), captured so the flying
-  card never covers them.
+  card never covers them. `chrome: 'crossfade'` trades the top bar instead,
+  for crossings between the dashboard and a workspace, whose bars differ.
 
 A deferred card body (`StackItem.deferContent`) mounts one paint after
 landing; until then the index's prerendered isolated HTML stands in
@@ -131,6 +141,8 @@ returns:
   never persisted). Closing it, when that card is still on top and the tile is
   visible, crosses back into the tile while the other stacks `morph` into the
   freed width.
+- Closing the workspace's last card, its index card, takes the same crossing
+  back to the dashboard as the dashboard button.
 - Opening the dashboard crosses the realm background back into that realm's
   tile on screen, found after the update (`workspaceReturnTile`), preferring
   the favourite or catalogue copy it was opened from. It needs no stored

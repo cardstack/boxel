@@ -122,3 +122,18 @@ export function workspaceReturnTile(
   let card = preferred.find(onScreen) ?? cards.find(onScreen);
   return card?.querySelector<HTMLElement>('.tile-icon') ?? undefined;
 }
+
+// The realm icon on a dashboard tile: the seed a workspace grows out of.
+export function tileRealmIcon(tile: HTMLElement) {
+  return tile.querySelector<HTMLElement>('.realm-icon-wrapper') ?? undefined;
+}
+
+// The realm icon in the header of the workspace's first card, where a tile's
+// icon lands.
+export function workspaceHeaderIcon() {
+  return (
+    document.querySelector<HTMLElement>(
+      '.stacks .operator-mode-stack .stack-item-header .realm-icon',
+    ) ?? undefined
+  );
+}
