@@ -68,6 +68,7 @@ function viewTransitionPlaying() {
 // certainly run out.
 function playbackSettled(
   run: { finished: Promise<void>; complete: () => void },
+  // seconds, like every crossing duration
   duration: number,
 ) {
   return new Promise<void>((resolve) => {
@@ -86,13 +87,16 @@ function playbackSettled(
         if (!viewTransitionPlaying()) settle();
       }, 100);
     };
-    let deadline = setTimeout(() => {
-      try {
-        run.complete();
-      } finally {
-        settle();
-      }
-    }, duration + 500);
+    let deadline = setTimeout(
+      () => {
+        try {
+          run.complete();
+        } finally {
+          settle();
+        }
+      },
+      duration * 1000 + 500,
+    );
     window.addEventListener('resize', onResize);
     run.finished.then(settle, settle);
   });

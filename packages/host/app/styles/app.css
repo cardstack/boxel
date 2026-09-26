@@ -131,6 +131,13 @@
   box-shadow: none !important;
 }
 
+/* The bitmap shadow hands back at its resting value. Without this the card's
+   own box-shadow transition would fade in from none after the landing. */
+[data-bitmap-shadowed],
+[data-bitmap-shadow-landing] {
+  transition: none !important;
+}
+
 /* Fit the whole content viewport uniformly; no cover crop or font distortion. */
 ::view-transition-old(.boxel-stack-body),
 ::view-transition-new(.boxel-stack-body) {

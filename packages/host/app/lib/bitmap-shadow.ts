@@ -1,3 +1,5 @@
+import { afterMotionPaint } from './after-motion-paint';
+
 // The primary card owns two shadow snapshots. Paint at the two endpoints;
 // Choreo crossfades the raster faces while moving their shared border box.
 // No per-frame shadow, filter, DOM measurement, or second animation clock.
@@ -83,9 +85,19 @@ export function prepareBitmapShadow(source: HTMLElement) {
     },
     release() {
       for (let layer of layers) layer.remove();
+      let landed: HTMLElement[] = [];
       for (let element of suppressed)
-        if (element.getAttribute('data-bitmap-shadowed') === token)
+        if (element.getAttribute('data-bitmap-shadowed') === token) {
+          element.setAttribute('data-bitmap-shadow-landing', token);
           element.removeAttribute('data-bitmap-shadowed');
+          landed.push(element);
+        }
+      // Keep transitions off through the paint that restores the shadow.
+      afterMotionPaint(() => {
+        for (let element of landed)
+          if (element.getAttribute('data-bitmap-shadow-landing') === token)
+            element.removeAttribute('data-bitmap-shadow-landing');
+      });
     },
   };
 }

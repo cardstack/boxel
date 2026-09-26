@@ -732,7 +732,7 @@ patchedDependencies:
   magic-string@0.25.9: 32dda55b40f0bc860d0a8e93bee54d8005c34ed7ac5faed23ce9f5e5f57eea39
   matrix-js-sdk@38.3.0: cee0baf579283943dc5a6b48977e8ed40a13fc111b5de9c91814893f9a4989fb
   monaco-editor@0.52.2: bdefe071221b87c7c15e1add6739d24d486f543dbad0d714ae586085204626cd
-  motion-dom@13.3.0: e833d9cfd4fb27428d04a1b4c6f3adb38b8ff5d041f7b3bbd687085c2b651731
+  motion-dom@13.3.0: f3868b651ecd1dd61694bc2a447b57e71cc37b1b48e8d6ca41301647df7ce67e
   object-inspect: bd295adbd162403eccfdace2cf14691901d878d9d5d6e993bf76eedf238ac5de
   openai: 6833f1bcf56cde16edb25881777c31d2745994c6ea992d1e2051d1248d213449
   style-loader@2.0.0: 579dd92e6adabd45669f9a99a01c6c28c97488c7bf4ee0d6c1c622a14592e4c8
@@ -2635,7 +2635,7 @@ importers:
         version: 5.0.2
       glimmer-motion:
         specifier: file:../../vendor/glimmer-motion-0.0.0.tgz
-        version: file:vendor/glimmer-motion-0.0.0.tgz(patch_hash=deae345b246eda2731e679657a6d02757eb274bf2ae78814547f9044778f7904)(@babel/core@7.29.7)(@ember/test-helpers@5.4.3(@babel/core@7.29.7))(@glimmer/component@2.1.1)(@glimmer/tracking@1.1.2)(ember-modifier@4.3.0(@babel/core@7.29.7))(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5))(motion-dom@13.3.0(patch_hash=e833d9cfd4fb27428d04a1b4c6f3adb38b8ff5d041f7b3bbd687085c2b651731))(motion-utils@13.3.0)
+        version: file:vendor/glimmer-motion-0.0.0.tgz(patch_hash=deae345b246eda2731e679657a6d02757eb274bf2ae78814547f9044778f7904)(@babel/core@7.29.7)(@ember/test-helpers@5.4.3(@babel/core@7.29.7))(@glimmer/component@2.1.1)(@glimmer/tracking@1.1.2)(ember-modifier@4.3.0(@babel/core@7.29.7))(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5))(motion-dom@13.3.0(patch_hash=f3868b651ecd1dd61694bc2a447b57e71cc37b1b48e8d6ca41301647df7ce67e))(motion-utils@13.3.0)
       glimmer-scoped-css:
         specifier: 'catalog:'
         version: 0.8.1
@@ -2668,7 +2668,7 @@ importers:
         version: 0.52.2(patch_hash=bdefe071221b87c7c15e1add6739d24d486f543dbad0d714ae586085204626cd)
       motion-dom:
         specifier: ^13.3.0
-        version: 13.3.0(patch_hash=e833d9cfd4fb27428d04a1b4c6f3adb38b8ff5d041f7b3bbd687085c2b651731)
+        version: 13.3.0(patch_hash=f3868b651ecd1dd61694bc2a447b57e71cc37b1b48e8d6ca41301647df7ce67e)
       motion-utils:
         specifier: ^13.3.0
         version: 13.3.0
@@ -26112,7 +26112,7 @@ snapshots:
 
   github-slugger@2.0.0: {}
 
-  glimmer-motion@file:vendor/glimmer-motion-0.0.0.tgz(patch_hash=deae345b246eda2731e679657a6d02757eb274bf2ae78814547f9044778f7904)(@babel/core@7.29.7)(@ember/test-helpers@5.4.3(@babel/core@7.29.7))(@glimmer/component@2.1.1)(@glimmer/tracking@1.1.2)(ember-modifier@4.3.0(@babel/core@7.29.7))(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5))(motion-dom@13.3.0(patch_hash=e833d9cfd4fb27428d04a1b4c6f3adb38b8ff5d041f7b3bbd687085c2b651731))(motion-utils@13.3.0):
+  glimmer-motion@file:vendor/glimmer-motion-0.0.0.tgz(patch_hash=deae345b246eda2731e679657a6d02757eb274bf2ae78814547f9044778f7904)(@babel/core@7.29.7)(@ember/test-helpers@5.4.3(@babel/core@7.29.7))(@glimmer/component@2.1.1)(@glimmer/tracking@1.1.2)(ember-modifier@4.3.0(@babel/core@7.29.7))(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5))(motion-dom@13.3.0(patch_hash=f3868b651ecd1dd61694bc2a447b57e71cc37b1b48e8d6ca41301647df7ce67e))(motion-utils@13.3.0):
     dependencies:
       '@embroider/addon-shim': 1.10.3
       '@glimmer/component': 2.1.1
@@ -26120,7 +26120,7 @@ snapshots:
       decorator-transforms: 2.4.0(@babel/core@7.29.7)
       ember-modifier: 4.3.0(@babel/core@7.29.7)
       ember-source: 6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5)
-      motion-dom: 13.3.0(patch_hash=e833d9cfd4fb27428d04a1b4c6f3adb38b8ff5d041f7b3bbd687085c2b651731)
+      motion-dom: 13.3.0(patch_hash=f3868b651ecd1dd61694bc2a447b57e71cc37b1b48e8d6ca41301647df7ce67e)
       motion-utils: 13.3.0
     optionalDependencies:
       '@ember/test-helpers': 5.4.3(@babel/core@7.29.7)
@@ -27928,7 +27928,7 @@ snapshots:
 
   morphdom@2.7.8: {}
 
-  motion-dom@13.3.0(patch_hash=e833d9cfd4fb27428d04a1b4c6f3adb38b8ff5d041f7b3bbd687085c2b651731):
+  motion-dom@13.3.0(patch_hash=f3868b651ecd1dd61694bc2a447b57e71cc37b1b48e8d6ca41301647df7ce67e):
     dependencies:
       motion-utils: 13.3.0
 

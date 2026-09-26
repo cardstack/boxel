@@ -11,6 +11,62 @@ import type { ChoreoContext } from 'glimmer-motion';
 // Read the request at module startup: route serialization can remove these
 // diagnostic query parameters before the motion region mounts or remounts.
 const inspectionParams = new URLSearchParams(location.search);
+
+interface LayerFrame {
+  time: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  old: number;
+  new: number;
+  clock: number;
+}
+
+// Per layer: frames where geometry reverses against the layer's overall
+// direction (a snap back), frames that move several times their neighbours
+// (a spike), and face-opacity jumps. Plus frame gaps over 24 ms.
+function summarizeJank(layers: Record<string, LayerFrame[]>, frames: number[]) {
+  let keys = ['x', 'y', 'width', 'height'] as const;
+  let byLayer: Record<string, string[]> = {};
+  for (let [name, rows] of Object.entries(layers)) {
+    let notes: string[] = [];
+    for (let key of keys) {
+      let direction = Math.sign(rows.at(-1)![key] - rows[0]![key]);
+      for (let i = 1; i < rows.length; i++) {
+        let step = rows[i]![key] - rows[i - 1]![key];
+        let before = i > 1 ? rows[i - 1]![key] - rows[i - 2]![key] : step;
+        if (
+          Math.abs(step) > 0.75 &&
+          direction &&
+          Math.sign(step) === -direction
+        )
+          notes.push(
+            `${key} reverses ${step.toFixed(1)} at ${rows[i]!.time}ms`,
+          );
+        else if (Math.abs(step) > 3 * Math.abs(before) + 12)
+          notes.push(`${key} spikes ${step.toFixed(1)} at ${rows[i]!.time}ms`);
+      }
+    }
+    for (let face of ['old', 'new'] as const)
+      for (let i = 1; i < rows.length; i++) {
+        let step = rows[i]![face] - rows[i - 1]![face];
+        if (Math.abs(step) > 0.3)
+          notes.push(
+            `${face} face jumps ${step.toFixed(2)} at ${rows[i]!.time}ms`,
+          );
+      }
+    if (notes.length) byLayer[name] = notes.slice(0, 12);
+  }
+  let elapsed = 0;
+  let gaps: string[] = [];
+  for (let gap of frames) {
+    elapsed += gap;
+    if (gap > 24)
+      gaps.push(`${Math.round(gap)}ms frame ending ${Math.round(elapsed)}ms`);
+  }
+  return { layers: byLayer, gaps };
+}
 export default modifier((anchor: HTMLElement, [context]: [ChoreoContext]) => {
   let detailed = inspectionParams.has('motionInspect');
   if (!detailed && !inspectionParams.has('motionTrace')) return;
@@ -94,10 +150,44 @@ export default modifier((anchor: HTMLElement, [context]: [ChoreoContext]) => {
       });
       frameObserver.observe({ type: 'long-animation-frame' });
     }
+    // Every painted frame of every view-transition layer: geometry, face
+    // opacity and its geometry animation's clock. A one-frame snap back is
+    // invisible at the 45 ms geometry sampling below.
+    let layers: Record<string, LayerFrame[]> = {};
+    let track = (time: number) => {
+      let root = document.documentElement;
+      for (let animation of document.getAnimations()) {
+        let effect = animation.effect as KeyframeEffect | null;
+        let pseudo = effect?.pseudoElement;
+        let name = pseudo?.match(/^::view-transition-group\((.*)\)$/)?.[1];
+        if (!name || layers[name]?.at(-1)?.time === time) continue;
+        let group = getComputedStyle(root, pseudo);
+        let matrix = new DOMMatrixReadOnly(group.transform);
+        (layers[name] ??= []).push({
+          time,
+          x: round(matrix.e),
+          y: round(matrix.f),
+          width: round(parseFloat(group.width)),
+          height: round(parseFloat(group.height)),
+          old: round(
+            Number(
+              getComputedStyle(root, `::view-transition-old(${name})`).opacity,
+            ),
+          ),
+          new: round(
+            Number(
+              getComputedStyle(root, `::view-transition-new(${name})`).opacity,
+            ),
+          ),
+          clock: round(Number(animation.currentTime ?? 0)),
+        });
+      }
+    };
     let sample = () => {
       let now = performance.now();
       frames.push(round(now - last));
       last = now;
+      if (detailed) track(round(now - start));
       let current = detailed ? pose() : [];
       if (
         detailed &&
@@ -190,6 +280,8 @@ export default modifier((anchor: HTMLElement, [context]: [ChoreoContext]) => {
               time: round(entry.startTime - start),
             })),
           samples,
+          layers,
+          jank: detailed ? summarizeJank(layers, frames) : undefined,
         });
         records = records.slice(-10);
         output.textContent = JSON.stringify(records);

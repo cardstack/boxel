@@ -1,5 +1,5 @@
 diff --git a/dist/cjs/index.js b/dist/cjs/index.js
-index 6b8092d8fd1ab2d678b07780bf51281d7d37f55e..a14c173a4fb17cca3be4c7caca5300539c168cdc 100644
+index 6b8092d8fd1ab2d678b07780bf51281d7d37f55e..bcd4a0eb92d8d13d14d3bccdc9eee00da4eacf37 100644
 --- a/dist/cjs/index.js
 +++ b/dist/cjs/index.js
 @@ -6523,8 +6523,30 @@ const isGeneratedName = (name) => name.startsWith("motion-view-");
@@ -339,13 +339,38 @@ index 6b8092d8fd1ab2d678b07780bf51281d7d37f55e..a14c173a4fb17cca3be4c7caca530053
          transition = document.startViewTransition(callback);
      }
      catch (error) {
-@@ -11852,4 +11927,3 @@ exports.variantProps = variantProps;
+@@ -7303,8 +7378,22 @@ function startViewAnimation(builder) {
+                             : mapEasingToNativeEasing(animationTransition.ease, animationTransition.duration),
+                     };
+                 }
+-                effect.updateTiming(timing);
+-                animations.push(new NativeAnimationWrapper(animation));
++                /**
++                 * Replace, don't retime, the browser-generated animation. Chrome samples
++                 * a retimed CSSAnimation inconsistently - some frames use the effect
++                 * easing, others the CSS (forced linear) timing - so the geometry lurches
++                 * back and forth. A WAAPI copy of its keyframes has one timing source.
++                 */
++                const keyframes = effect
++                    .getKeyframes()
++                    .map(({ computedOffset, ...keyframe }) => keyframe);
++                animation.cancel();
++                const replacement = document.documentElement.animate(keyframes, {
++                    ...timing,
++                    fill: "both",
++                    pseudoElement,
++                });
++                animations.push(new NativeAnimationWrapper(replacement));
+             }
+             /**
+              * Round each cropped layer's clip. Its `::view-transition-group`
+@@ -11852,4 +11941,3 @@ exports.variantProps = variantProps;
  exports.vh = vh;
  exports.visualElementStore = visualElementStore;
  exports.vw = vw;
 -//# sourceMappingURL=index.js.map
 diff --git a/dist/es/view/start.mjs b/dist/es/view/start.mjs
-index 869be6c425d12e11f1a1f2eabc1106762fea2904..c7f8ed8b1fb41e4b3d770e04e4f9fe120791a769 100644
+index 869be6c425d12e11f1a1f2eabc1106762fea2904..59c23b934423d6720c051da4e25ea3ac316ec711 100644
 --- a/dist/es/view/start.mjs
 +++ b/dist/es/view/start.mjs
 @@ -7,9 +7,9 @@ import { mapEasingToNativeEasing } from '../animation/waapi/easing/map-easing.mj
@@ -491,7 +516,32 @@ index 869be6c425d12e11f1a1f2eabc1106762fea2904..c7f8ed8b1fb41e4b3d770e04e4f9fe12
          transition = document.startViewTransition(callback);
      }
      catch (error) {
-@@ -697,4 +696,3 @@ function mergeTransition(base, override) {
+@@ -610,8 +609,22 @@ function startViewAnimation(builder) {
+                             : mapEasingToNativeEasing(animationTransition.ease, animationTransition.duration),
+                     };
+                 }
+-                effect.updateTiming(timing);
+-                animations.push(new NativeAnimationWrapper(animation));
++                /**
++                 * Replace, don't retime, the browser-generated animation. Chrome samples
++                 * a retimed CSSAnimation inconsistently - some frames use the effect
++                 * easing, others the CSS (forced linear) timing - so the geometry lurches
++                 * back and forth. A WAAPI copy of its keyframes has one timing source.
++                 */
++                const keyframes = effect
++                    .getKeyframes()
++                    .map(({ computedOffset, ...keyframe }) => keyframe);
++                animation.cancel();
++                const replacement = document.documentElement.animate(keyframes, {
++                    ...timing,
++                    fill: "both",
++                    pseudoElement,
++                });
++                animations.push(new NativeAnimationWrapper(replacement));
+             }
+             /**
+              * Round each cropped layer's clip. Its `::view-transition-group`
+@@ -697,4 +710,3 @@ function mergeTransition(base, override) {
  }
  
  export { startViewAnimation };
