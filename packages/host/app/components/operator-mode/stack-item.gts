@@ -71,6 +71,7 @@ import {
 } from '@cardstack/host/lib/stack-item';
 import { urlForRealmLookup } from '@cardstack/host/lib/utils';
 import cardActivation from '@cardstack/host/modifiers/card-activation';
+import cssVariables from '@cardstack/host/modifiers/css-variables';
 import headerMotionParts from '@cardstack/host/modifiers/header-motion-parts';
 
 import consumeContext from '../../helpers/consume-context';
@@ -1022,11 +1023,8 @@ export default class OperatorModeStackItem extends Component<Signature> {
                 @finishEditingShortcutHint={{this.keyboardShortcutLabels.finishEditing}}
                 @closeShortcutHint={{this.keyboardShortcutLabels.close}}
                 class='stack-item-header'
-                {{motion
-                  id=this.headerMotionId
-                  role='stack-header'
-                  style=this.headerStyle
-                }}
+                {{motion id=this.headerMotionId role='stack-header'}}
+                {{cssVariables this.headerStyle}}
                 {{headerMotionParts this.headerMotionId}}
                 role={{if this.isBuried 'button' 'banner'}}
                 {{on
