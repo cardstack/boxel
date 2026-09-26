@@ -92,7 +92,12 @@ function rebaseSpecifier(
 // and the copy the bundler puts in the chunk exposes the same class from that
 // same chunk. Anything else a bundled module imports has to be bundled too —
 // `Integration | bundled base modules` fails when it is not.
-export const FETCHED_RE_EXPORTS = new Set(['string', 'markdown', 'text-area']);
+export const FETCHED_RE_EXPORTS = new Set([
+  'string',
+  'markdown',
+  'text-area',
+  'file-api',
+]);
 
 export const BUNDLED_BASE_MODULES: Record<
   string,
@@ -122,7 +127,7 @@ export const BUNDLED_BASE_MODULES: Record<
   //
   // `file-api`, `command`, `commands/search-card-result`, `theme`, `index`,
   // `command-field`, `frontmatter-parse` and `file-formats/index` are out on
-  // the same rule; `FETCHED_RE_EXPORTS` lists the three a bundled module still
+  // the same rule; `FETCHED_RE_EXPORTS` lists the ones a bundled module still
   // imports, which are the ones the closure check has to allow.
   'card-api': () => import('@cardstack/base/card-api'),
   '-private': () => import('@cardstack/base/-private'),
@@ -170,9 +175,10 @@ export const BUNDLED_BASE_MODULES: Record<
   // walks past it. Card code importing it keeps fetching it from the realm,
   // where evaluation loads card-api first and the identity comes out right.
   //
-  // Nothing bundled imports it at runtime — card-serialization's import is
-  // `import type`, which erases — so leaving it out keeps the bundled set
-  // closed under imports.
+  // The file-def modules import it at runtime, which `FETCHED_RE_EXPORTS`
+  // allows on the same argument that covers `string`: the bundler resolves the
+  // re-export inside the importing chunk, so what it reaches is card-api's own
+  // class, from the chunk card-api is already in.
   'file-formats/file-image': () =>
     import('@cardstack/base/file-formats/file-image'),
   'file-formats/file-presentation': () =>
@@ -333,6 +339,75 @@ export const BUNDLED_BASE_MODULES: Record<
   website: () => import('@cardstack/base/website'),
   'cards-grid': () => import('@cardstack/base/cards-grid'),
   'datetime-stamp': () => import('@cardstack/base/datetime-stamp'),
+  'audio-metadata': () => import('@cardstack/base/audio-metadata'),
+  'audio-waveform': () => import('@cardstack/base/audio-waveform'),
+  'avif-meta-extractor': () => import('@cardstack/base/avif-meta-extractor'),
+  'csv-file-def': () => import('@cardstack/base/csv-file-def'),
+  'docx-file-def': () => import('@cardstack/base/docx-file-def'),
+  'docx-meta-extractor': () => import('@cardstack/base/docx-meta-extractor'),
+  'exif-meta-extractor': () => import('@cardstack/base/exif-meta-extractor'),
+  'file-formats/audio-preview': () =>
+    import('@cardstack/base/file-formats/audio-preview'),
+  'file-formats/file-resources': () =>
+    import('@cardstack/base/file-formats/file-resources'),
+  'file-formats/font-specimen': () =>
+    import('@cardstack/base/file-formats/font-specimen'),
+  'file-formats/html-preview': () =>
+    import('@cardstack/base/file-formats/html-preview'),
+  'file-formats/markdown-preview': () =>
+    import('@cardstack/base/file-formats/markdown-preview'),
+  'file-formats/metadata-fields': () =>
+    import('@cardstack/base/file-formats/metadata-fields'),
+  'file-formats/midi-preview': () =>
+    import('@cardstack/base/file-formats/midi-preview'),
+  'file-formats/model3d-captures': () =>
+    import('@cardstack/base/file-formats/model3d-captures'),
+  'file-formats/office-captures': () =>
+    import('@cardstack/base/file-formats/office-captures'),
+  'file-formats/office-preview': () =>
+    import('@cardstack/base/file-formats/office-preview'),
+  'file-formats/pdf-viewer': () =>
+    import('@cardstack/base/file-formats/pdf-viewer'),
+  'file-formats/video-captures': () =>
+    import('@cardstack/base/file-formats/video-captures'),
+  'file-formats/video-preview': () =>
+    import('@cardstack/base/file-formats/video-preview'),
+  'flac-meta-extractor': () => import('@cardstack/base/flac-meta-extractor'),
+  'font-meta-extractor': () => import('@cardstack/base/font-meta-extractor'),
+  'gif-meta-extractor': () => import('@cardstack/base/gif-meta-extractor'),
+  'gltf-meta-extractor': () => import('@cardstack/base/gltf-meta-extractor'),
+  'html-file-def': () => import('@cardstack/base/html-file-def'),
+  'html-meta-extractor': () => import('@cardstack/base/html-meta-extractor'),
+  'id3v2-parser': () => import('@cardstack/base/id3v2-parser'),
+  'image-color-profile': () => import('@cardstack/base/image-color-profile'),
+  'iso-bmff': () => import('@cardstack/base/iso-bmff'),
+  'jpg-meta-extractor': () => import('@cardstack/base/jpg-meta-extractor'),
+  'json-file-def': () => import('@cardstack/base/json-file-def'),
+  'm4a-meta-extractor': () => import('@cardstack/base/m4a-meta-extractor'),
+  'midi-audio-def': () => import('@cardstack/base/midi-audio-def'),
+  'midi-meta-extractor': () => import('@cardstack/base/midi-meta-extractor'),
+  'mp3-meta-extractor': () => import('@cardstack/base/mp3-meta-extractor'),
+  'mp4-meta-extractor': () => import('@cardstack/base/mp4-meta-extractor'),
+  'office-extract': () => import('@cardstack/base/office-extract'),
+  'ogg-meta-extractor': () => import('@cardstack/base/ogg-meta-extractor'),
+  ooxml: () => import('@cardstack/base/ooxml'),
+  'pdf-meta-extractor': () => import('@cardstack/base/pdf-meta-extractor'),
+  'png-meta-extractor': () => import('@cardstack/base/png-meta-extractor'),
+  'pptx-file-def': () => import('@cardstack/base/pptx-file-def'),
+  'pptx-meta-extractor': () => import('@cardstack/base/pptx-meta-extractor'),
+  'stl-meta-extractor': () => import('@cardstack/base/stl-meta-extractor'),
+  'svg-meta-extractor': () => import('@cardstack/base/svg-meta-extractor'),
+  'text-file-def': () => import('@cardstack/base/text-file-def'),
+  'three-mf-meta-extractor': () =>
+    import('@cardstack/base/three-mf-meta-extractor'),
+  'vorbis-comment-parser': () =>
+    import('@cardstack/base/vorbis-comment-parser'),
+  'wav-meta-extractor': () => import('@cardstack/base/wav-meta-extractor'),
+  'webm-meta-extractor': () => import('@cardstack/base/webm-meta-extractor'),
+  'webp-meta-extractor': () => import('@cardstack/base/webp-meta-extractor'),
+  'xlsx-file-def': () => import('@cardstack/base/xlsx-file-def'),
+  'xlsx-meta-extractor': () => import('@cardstack/base/xlsx-meta-extractor'),
+  'zip-file-def': () => import('@cardstack/base/zip-file-def'),
 };
 
 // Registers on the virtual network, so every loader that shares it serves the

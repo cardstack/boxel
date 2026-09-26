@@ -9,7 +9,7 @@
 
 // @ts-ignore no public types for `precompileTemplate`
 import { precompileTemplate } from '@ember/template-compilation';
-import { render } from '@ember/test-helpers';
+import { render, waitUntil } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
@@ -251,6 +251,17 @@ module('Integration | FileDef resource primitives', function (hooks) {
         strictMode: true,
         scope: () => ({ FileAudio, file }),
       }),
+    );
+    // The blob load runs outside the runloop — the modifier starts it without
+    // handing the promise to anything Ember settles on — so `render` returns
+    // while the fetch is still in flight. What the resource promises is that
+    // playback degrades to the canonical source, not that it does so within a
+    // render, so wait for that source rather than for any source: the blob URL
+    // this falls back from would also satisfy "has a src".
+    await waitUntil(
+      () =>
+        document.querySelector('audio')?.getAttribute('src') ===
+        'http://example.com/a/take.mp3',
     );
     assert
       .dom('audio')
