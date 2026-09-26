@@ -1,0 +1,152 @@
+{
+  "apiVersion": 1,
+  "groups": [
+    {
+      "orgId": 1,
+      "name": "indexing-status-group",
+      "folder": "defd2d156sav4d",
+      "interval": "60s",
+      "rules": [
+        {
+          "id": 1,
+          "uid": "idxfileextractfb",
+          "orgID": 1,
+          "folderUID": "defd2d156sav4d",
+          "ruleGroup": "indexing-status-group",
+          "title": "File Extract Fallback",
+          "condition": "B",
+          "data": [
+            {
+              "refId": "A",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 10800,
+                "to": 0
+              },
+              "datasourceUid": "cef5x9o3yzawwf",
+              "model": {
+                "datasource": {
+                  "type": "cloudwatch",
+                  "uid": "cef5x9o3yzawwf"
+                },
+                "dimensions": {},
+                "expression": "filter @message like /extractor fallback while indexing file/\n| stats count() by bin(5m)",
+                "id": "",
+                "intervalMs": 1000,
+                "label": "",
+                "logGroups": [
+                  {
+                    "accountId": "${WORKER_LOG_GROUP_ACCOUNT_ID}",
+                    "arn": "arn:aws:logs:us-east-1:${WORKER_LOG_GROUP_ACCOUNT_ID}:log-group:${WORKER_LOG_GROUP_NAME}",
+                    "name": "${WORKER_LOG_GROUP_NAME}"
+                  }
+                ],
+                "matchExact": true,
+                "maxDataPoints": 43200,
+                "metricEditorMode": 0,
+                "metricName": "",
+                "metricQueryType": 0,
+                "namespace": "",
+                "period": "",
+                "queryMode": "Logs",
+                "refId": "A",
+                "region": "default",
+                "sqlExpression": "",
+                "statistic": "Average",
+                "statsGroups": ["bin(5m)"]
+              }
+            },
+            {
+              "refId": "B",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 10800,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "params": [0, 0],
+                      "type": "gt"
+                    },
+                    "operator": {
+                      "type": "and"
+                    },
+                    "query": {
+                      "params": []
+                    },
+                    "reducer": {
+                      "params": [],
+                      "type": "avg"
+                    },
+                    "type": "query"
+                  }
+                ],
+                "datasource": {
+                  "name": "Expression",
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                },
+                "expression": "C",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "refId": "B",
+                "type": "threshold"
+              }
+            },
+            {
+              "refId": "C",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "params": [0, 0],
+                      "type": "gt"
+                    },
+                    "operator": {
+                      "type": "and"
+                    },
+                    "query": {
+                      "params": []
+                    },
+                    "reducer": {
+                      "params": [],
+                      "type": "avg"
+                    },
+                    "type": "query"
+                  }
+                ],
+                "datasource": {
+                  "name": "Expression",
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                },
+                "expression": "A",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "reducer": "max",
+                "refId": "C",
+                "type": "reduce"
+              }
+            }
+          ],
+          "updated": "2026-09-01T00:00:00Z",
+          "noDataState": "OK",
+          "execErrState": "Alerting",
+          "for": "30s",
+          "provenance": "api",
+          "isPaused": false,
+          "notification_settings": null
+        }
+      ]
+    }
+  ]
+}
