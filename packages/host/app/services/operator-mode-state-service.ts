@@ -45,6 +45,7 @@ import {
 import {
   adoptTileCorners,
   workspaceOriginFromElement,
+  workspaceReturnTile,
   type WorkspaceOpenOrigin,
   type WorkspacePortal,
 } from '@cardstack/host/lib/workspace-open-origin';
@@ -1628,38 +1629,52 @@ export default class OperatorModeStateService extends Service {
   }
 
   set workspaceChooserOpened(workspaceChooserOpened: boolean) {
-    if (workspaceChooserOpened !== this.workspaceChooserOpened) {
+    if (
+      workspaceChooserOpened !== this.workspaceChooserOpened &&
+      this.state.submode === Submodes.Interact
+    ) {
       let origin =
         this._state.stacks.length === 1
           ? this._state.stacks[0]?.[0]?.workspaceOrigin
           : undefined;
-      if (origin && this.state.submode === Submodes.Interact) {
-        let wallpaper = document.querySelector<HTMLElement>(
-          '.workspace-wallpaper',
-        );
-        if (
-          workspaceChooserOpened &&
-          wallpaper &&
-          this.hostMotion.canCross(wallpaper, motionDurations.workspace)
-        ) {
-          void this.returnToWorkspaceTile(wallpaper, origin);
-          return;
-        }
+      // The return needs only the realm whose background is showing, not how
+      // the workspace was entered: after a reload, a pasted URL, or with
+      // several stacks open there is no stored tile origin.
+      let wallpaper = workspaceChooserOpened
+        ? document.querySelector<HTMLElement>('.workspace-wallpaper')
+        : null;
+      let realmURL = origin?.realmURL ?? this.workspaceRealmURL;
+      if (
+        wallpaper &&
+        realmURL &&
+        this.hostMotion.canCross(wallpaper, motionDurations.workspace)
+      ) {
+        void this.returnToWorkspaceTile(wallpaper, realmURL, origin?.favorite);
+        return;
+      }
+      if (origin)
         this.startWorkspacePortal(
           origin,
           workspaceChooserOpened ? 'closing' : 'opening',
         );
-      }
     }
     this._state.workspaceChooserOpened = workspaceChooserOpened;
     this.schedulePersist();
   }
 
+  // The realm behind the stacks: its background is the workspace wallpaper.
+  private get workspaceRealmURL(): string | undefined {
+    let id = this._state.stacks[0]?.[0]?.id;
+    return (id && this.realm.url(id)) || undefined;
+  }
+
   // The reverse of opening from a tile: the realm background crosses back
   // into its dashboard tile while the cards fade out and the dashboard in.
+  // With no tile on screen the background simply fades.
   private async returnToWorkspaceTile(
     wallpaper: HTMLElement,
-    origin: WorkspaceOpenOrigin,
+    realmURL: string,
+    favorite?: boolean,
   ) {
     this.workspacePortal = undefined;
     let restoreCorners = () => {};
@@ -1667,16 +1682,7 @@ export default class OperatorModeStateService extends Service {
       await this.hostMotion.cross({
         from: wallpaper,
         to: () => {
-          let tile = Array.from(
-            document.querySelectorAll<HTMLElement>('[data-workspace-realm]'),
-          )
-            .find(
-              (element) =>
-                element.dataset.workspaceRealm === origin.realmURL &&
-                !!element.closest('.workspace-card.is-enlarged') ===
-                  !!origin.favorite,
-            )
-            ?.querySelector<HTMLElement>('.tile-icon');
+          let tile = workspaceReturnTile(realmURL, favorite);
           if (tile) restoreCorners = adoptTileCorners(tile);
           return tile;
         },

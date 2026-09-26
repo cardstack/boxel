@@ -88,3 +88,37 @@ export function adoptTileCorners(tile: HTMLElement): () => void {
     tile.style.borderRadius = previous;
   };
 }
+
+// The dashboard tile a workspace returns to: the realm's tile that is on
+// screen, preferring the favourite or catalogue copy it was opened from.
+export function workspaceReturnTile(
+  realmURL: string,
+  favorite?: boolean,
+): HTMLElement | undefined {
+  let slashed = (url: string) => (url.endsWith('/') ? url : `${url}/`);
+  let cards = Array.from(
+    document.querySelectorAll<HTMLElement>('[data-workspace-realm]'),
+  ).filter(
+    (card) => slashed(card.dataset.workspaceRealm ?? '') === slashed(realmURL),
+  );
+  let onScreen = (card: HTMLElement) => {
+    let tile = card.querySelector<HTMLElement>('.tile-icon');
+    if (!tile?.checkVisibility()) return false;
+    let box = tile.getBoundingClientRect();
+    return (
+      box.width > 0 &&
+      box.bottom > 0 &&
+      box.top < innerHeight &&
+      box.right > 0 &&
+      box.left < innerWidth
+    );
+  };
+  let preferred =
+    favorite === undefined
+      ? []
+      : cards.filter(
+          (card) => !!card.closest('.workspace-card.is-enlarged') === favorite,
+        );
+  let card = preferred.find(onScreen) ?? cards.find(onScreen);
+  return card?.querySelector<HTMLElement>('.tile-icon') ?? undefined;
+}
