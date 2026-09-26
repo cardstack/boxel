@@ -458,6 +458,7 @@ export default class InteractSubmode extends Component {
     // A card opened into a new stack leaves its source card on top of its own
     // stack: it is no buried underlay, and every stack reflows to make room.
     let newStack = stackIndex >= this.stacks.length;
+    if (newStack) newItem.returnTo = sourceItem;
     let budgetToken = this.hostMotion.beginBitmap({ reflowStacks: newStack });
     // Tests settle only once the crossing and its deferred body are done.
     let waiterToken = waiter.beginAsync();
@@ -570,8 +571,19 @@ export default class InteractSubmode extends Component {
     };
     let stack = this.stacks[item.stackIndex];
     let parent = stack?.at(-2);
+    // A card that opened into its own stack settles back into the tile it
+    // came from in another stack, while the remaining stacks take its width.
+    let home =
+      !parent &&
+      stack?.length === 1 &&
+      item.returnTo &&
+      this.stacks[item.returnTo.stackIndex]?.at(-1) === item.returnTo
+        ? item.returnTo
+        : undefined;
     let source = stackItemComponentAPI.get(item)?.element();
-    let underlay = parent && stackItemComponentAPI.get(parent)?.element();
+    let underlay =
+      (parent ?? home) &&
+      stackItemComponentAPI.get((parent ?? home)!)?.element();
     let returnDuration = isTesting() ? 0 : motionDurations.boundaryReturn;
     let skip = !animate
       ? 'unanimated'
@@ -611,6 +623,14 @@ export default class InteractSubmode extends Component {
     let token = ++this.boundarySequence;
     let key = `stack-return-${token}`;
     let destination: HTMLElement | undefined;
+    // Every other stack's top card changes width when this stack goes.
+    let neighbours = home
+      ? this.stacks
+          .filter((other) => other !== stack)
+          .map((other) => stackItemComponentAPI.get(other.at(-1)!)?.element())
+          .filter((element): element is HTMLElement => !!element)
+      : [];
+    for (let element of neighbours) element.dataset.bitmapReflow = key;
     this.boundaryCrossingToken = token;
     let budgetToken = this.hostMotion.beginBitmap();
     let waiterToken = waiter.beginAsync();
@@ -632,10 +652,16 @@ export default class InteractSubmode extends Component {
         returnDuration,
         boundaryReturnEase,
         (finish) => this.hostMotion.onBitmapReady(budgetToken, finish),
-        underlay,
+        home ? undefined : underlay,
+        home
+          ? [{ selector: `[data-bitmap-reflow="${key}"]`, fade: 'morph' }]
+          : [],
       );
     } finally {
       this.hostMotion.endBitmap(budgetToken);
+      for (let element of neighbours)
+        if (element.dataset.bitmapReflow === key)
+          delete element.dataset.bitmapReflow;
       forgetCardActionOrigin(underlay, item.id);
       if (destination?.dataset.bitmapReturn === key)
         delete destination.dataset.bitmapReturn;

@@ -122,7 +122,7 @@ export async function crossfadeCardBitmap(
   underlay?: HTMLElement,
   // Whole scenes around the crossing: a departing one fades out in the first
   // part of the move, an arriving one fades in over the last part.
-  scenes: { selector: string; fade: 'in' | 'out' }[] = [],
+  scenes: { selector: string; fade: 'in' | 'out' | 'morph' }[] = [],
   // 'late' keeps the source face for most of the move and hands over near
   // the landing, so a face growing into a wider layout is never squeezed.
   handoff: 'crossfade' | 'late' = 'crossfade',
@@ -349,6 +349,19 @@ export async function crossfadeCardBitmap(
       }
     }
     for (let scene of scenes) {
+      if (scene.fade === 'morph') {
+        // A persistent element whose box changes around the crossing (a
+        // neighbouring stack taking the freed width): its two faces cross
+        // while its frame moves, like a card expanding.
+        builder
+          .add(scene.selector)
+          .class('boxel-scene')
+          .group(false)
+          .crop(true);
+        builder.old({ opacity: [1, 0] });
+        builder.new({ opacity: [0, 1] });
+        continue;
+      }
       builder.add(scene.selector).class('boxel-scene').group(false).crop(false);
       if (scene.fade === 'out') {
         builder.old(

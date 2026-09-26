@@ -36,9 +36,7 @@ export function cardActionOrigin(
   // ambiguous by identity alone; the preview that was clicked is the origin.
   let target = live?.target instanceof Node ? live.target : undefined;
   let clicked = target
-    ? embeddedCardElements(boundary, cardId).find((element) =>
-        element.contains(target),
-      )
+    ? clickedPreview(target, embeddedCardElements(boundary, cardId), boundary)
     : undefined;
   let embedded = clicked
     ? visibleCardOrigin(clicked, boundary)
@@ -68,6 +66,22 @@ export function cardActionOrigin(
   let origin = visibleCardOrigin(element, boundary);
   if (origin) returns.set(boundary, { cardId, element: new WeakRef(element) });
   return origin;
+}
+
+// The preview holding the click, or else the one nearest to it: an action
+// beside its tile (an open-in-new-stack strip) belongs to that tile.
+function clickedPreview(
+  target: Node,
+  candidates: HTMLElement[],
+  boundary: HTMLElement,
+) {
+  for (let node: Node | null = target; node && node !== boundary; ) {
+    let inside = candidates.filter((element) => node!.contains(element));
+    if (inside.length === 1) return inside[0];
+    if (inside.length > 1) return undefined;
+    node = node.parentNode;
+  }
+  return undefined;
 }
 
 export function forgetCardActionOrigin(boundary: HTMLElement, cardId: string) {

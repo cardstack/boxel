@@ -121,6 +121,9 @@ export class StackItem {
   // The index's prerendered isolated HTML, shown inert while the live body is
   // deferred behind a crossing. Never persisted or cloned.
   @tracked placeholder?: HTMLComponent;
+  // A card opened into a new stack from another stack's card: where it
+  // settles back to on close. In memory only; never persisted or cloned.
+  returnTo?: StackItem;
   // Kept for the return portal; never persisted or cloned.
   @tracked workspaceOrigin?: WorkspaceOpenOrigin;
   #id: string;
