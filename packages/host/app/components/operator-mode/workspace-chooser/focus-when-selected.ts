@@ -28,8 +28,10 @@ function focusIsAvailable(): boolean {
 }
 
 // When a workspace-chooser tile becomes the keyboard-selected item, move DOM
-// focus to it and scroll it into view, so the selection is visible and the
-// tile is reachable as arrow-key navigation walks the list.
+// focus to it. Arrow-key navigation (focus coming from another tile) also
+// scrolls it into view. Opening the chooser, or a tile re-created by its
+// realm info arriving, must not scroll: the dashboard would move under the
+// crossing that is landing a workspace in its tile.
 export default modifier(
   (element: HTMLElement, [isSelected]: [boolean | undefined]) => {
     let selected = !!isSelected;
@@ -40,8 +42,9 @@ export default modifier(
       document.activeElement !== element &&
       focusIsAvailable()
     ) {
-      element.focus();
-      element.scrollIntoView({ block: 'nearest' });
+      let navigating = !!document.activeElement?.closest('[data-nav-index]');
+      element.focus({ preventScroll: true });
+      if (navigating) element.scrollIntoView({ block: 'nearest' });
     }
   },
 );

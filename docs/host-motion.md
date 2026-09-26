@@ -116,10 +116,18 @@ Layers, back to front:
 - **companions** — small objects matched as layers of their own, above the
   platter: the realm icon flies between the tile and the first card's
   header. Naming the icon keeps it out of the tile bitmap, which would
-  otherwise blow it up across the background. A companion with nowhere to
-  land fades in place and marks `companion-unlanded:<index>`; entering a
-  cold realm, the update waits up to 300 ms for the header's icon
-  (`workspaceHeaderRendered`).
+  otherwise blow it up across the background. When the header has no icon
+  there is still a slot: while a cold realm's index card loads, a copy of the
+  tile's icon stands where the header's will sit; a realm without an icon
+  URL (its header renders an empty slot) gets an empty stand-in, so the icon
+  dissolves into the slot or fades in from it. The entry waits up to 150 ms
+  for the real header first (`workspaceHeaderRendered`). A companion that
+  still has nowhere to land fades in place and marks
+  `companion-unlanded:<index>`.
+- **the dashboard holds still** — the chooser focuses its default tile
+  without scrolling (`focusWhenSelected` scrolls only for arrow-key
+  navigation); tiles re-created as realm info arrives would otherwise
+  scroll the dashboard under a landing crossing.
 - **parent** — when a card opens over (or returns to) its stack parent, the
   parent's tray, body and header move as matched layers of their own. On
   **open** the parent's header enters its buried strip as a new layer,

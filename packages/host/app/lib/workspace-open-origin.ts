@@ -157,8 +157,13 @@ export function workspaceEntry(tile: HTMLElement): {
   restore: () => void;
 } {
   let icon = tileRealmIcon(tile);
+  let restoreCorners = adoptTileCorners(tile);
+  let standIn: HTMLElement | undefined;
   return {
-    restore: adoptTileCorners(tile),
+    restore: () => {
+      restoreCorners();
+      standIn?.remove();
+    },
     crossing: {
       from: tile,
       to: () => document.querySelector<HTMLElement>('.workspace-wallpaper'),
@@ -169,9 +174,59 @@ export function workspaceEntry(tile: HTMLElement): {
         { selector: dashboard, fade: 'out' },
         { selector: platter, fade: 'rise', seed: tileRealmIcon },
       ],
-      companions: icon ? [{ from: icon, to: workspaceHeaderIcon }] : [],
+      companions: icon
+        ? [
+            {
+              from: icon,
+              to: () =>
+                workspaceHeaderIcon() ?? (standIn = headerIconStandIn(icon)),
+            },
+          ]
+        : [],
     },
   };
+}
+
+// Somewhere for the flying icon to land when the header has no realm icon.
+// A cold realm's index card is still loading, so a copy of the tile's icon
+// image stands where the header's icon will sit: top left of the card,
+// centred in the header's height, sized by the header's own variables. A
+// header whose realm has no icon URL renders an empty icon slot: an empty
+// stand-in there lets the icon dissolve into the slot, since no icon comes.
+// Removed when the crossing ends.
+function headerIconStandIn(tileIcon?: HTMLElement): HTMLElement | undefined {
+  let card = document.querySelector<HTMLElement>(
+    '.stacks .operator-mode-stack .stack-item-card',
+  );
+  let image = tileIcon?.querySelector<HTMLElement>('.realm-icon');
+  if (!card) return undefined;
+  let slot = card.querySelector<HTMLElement>(
+    '.stack-item-header .realm-icon-container',
+  );
+  let standIn = document.createElement('div');
+  let size = 'var(--boxel-card-header-realm-icon-size, var(--boxel-icon-sm))';
+  standIn.setAttribute('aria-hidden', 'true');
+  Object.assign(standIn.style, {
+    width: size,
+    height: size,
+    flexShrink: '0',
+    pointerEvents: 'none',
+  });
+  if (slot) {
+    slot.append(standIn);
+    return standIn;
+  }
+  let inset = `calc((var(--stack-item-header-height) - ${size}) / 2)`;
+  Object.assign(standIn.style, {
+    position: 'absolute',
+    top: inset,
+    left: inset,
+    borderRadius: 'var(--realm-icon-border-radius, 4px)',
+    backgroundImage: image ? getComputedStyle(image).backgroundImage : 'none',
+    backgroundSize: 'cover',
+  });
+  card.append(standIn);
+  return standIn;
 }
 
 // The mirror: the realm background crosses back into the tile `findTile`
@@ -182,10 +237,16 @@ export function workspaceExit(
   wallpaper: HTMLElement,
   findTile: () => HTMLElement | undefined,
 ): { crossing: WorkspaceCrossing; restore: () => void } {
-  let icon = workspaceHeaderIcon();
+  // A realm without an icon URL has an empty header slot; the tile's icon
+  // then fades in from it, and is kept out of the landing tile's bitmap.
+  let standIn = workspaceHeaderIcon() ? undefined : headerIconStandIn();
+  let icon = workspaceHeaderIcon() ?? standIn;
   let restore = () => {};
   return {
-    restore: () => restore(),
+    restore: () => {
+      restore();
+      standIn?.remove();
+    },
     crossing: {
       from: wallpaper,
       to: () => {
@@ -207,10 +268,10 @@ export function workspaceExit(
   };
 }
 
-// A cold realm's index card can still be rendering its header when the
-// crossing captures. Give the icon a few frames to appear so it has
-// somewhere to land; the crossing plays regardless after `timeout` ms.
-export async function workspaceHeaderRendered(timeout = 300) {
+// The index card's header can still be rendering when the crossing
+// captures. Give it a few frames so the icon lands on the real header; after
+// `timeout` ms the crossing plays anyway and the icon lands on a stand-in.
+export async function workspaceHeaderRendered(timeout = 150) {
   let deadline = performance.now() + timeout;
   while (!workspaceHeaderIcon() && performance.now() < deadline) {
     await new Promise<void>((resolve) => afterMotionPaint(resolve));
