@@ -168,7 +168,7 @@ export function workspaceEntry(tile: HTMLElement): {
       from: tile,
       to: () => document.querySelector<HTMLElement>('.workspace-wallpaper'),
       duration: motionDurations.workspace,
-      chrome: 'crossfade',
+      chrome: 'summon',
       scenes: [
         { selector: dashboard, fade: 'out' },
         { selector: platter, fade: 'rise', seed: tileRealmIcon },
@@ -254,7 +254,7 @@ export function workspaceExit(
         return tile;
       },
       duration: motionDurations.workspace,
-      chrome: 'crossfade',
+      chrome: 'summon',
       scenes: [
         { selector: platter, fade: 'fall', seed: tileRealmIcon },
         { selector: dashboard, fade: 'in' },

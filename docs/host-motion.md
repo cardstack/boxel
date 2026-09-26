@@ -69,7 +69,7 @@ await this.hostMotion.cross({
   parent,                                  // optional stack parent trading depth
   scenes,                                  // optional surrounding layers
   companions,                              // optional small matched objects
-  chrome: 'stationary' | 'crossfade',      // optional, default stationary
+  chrome: 'stationary' | 'summon',         // optional, default stationary
   reflowStacks,                            // optional, see rule 3
 });
 ```
@@ -100,6 +100,19 @@ origins: `lib/workspace-open-origin.ts` `workspaceEntry(tile)` and
 (without its `update`) and a `restore` for the tile's adopted corners.
 
 ### Anatomy of a crossing
+
+Every layer class has a fixed plane (`styles/app.css`), back to front:
+
+| Plane | Layers                                                   |
+| ----- | -------------------------------------------------------- |
+| −1    | scenes: the dashboard, reflowing neighbour stacks        |
+| 0–3   | a parent card: tray, body, header, title and realm icon  |
+| 4–5   | the card: its shadows, then its bitmap                   |
+| 6     | platter: a workspace's cards over its realm background   |
+| 7     | companion: the realm icon flying between tile and header |
+| 8     | stationary chrome: the top bar and AI panel              |
+| 9     | edge chrome: neighbour-stack buttons                     |
+| 10    | persistent chrome: Boxel, account, search, AI            |
 
 Layers, back to front:
 
@@ -146,12 +159,14 @@ Layers, back to front:
   the landing paint.
 - **stationary chrome** — the top bar and assistant, then edge controls
   (neighbour-stack buttons), captured so the flying card never covers them.
+  `chrome: 'summon'` trades the top bar's controls between the dashboard
+  (View All) and a workspace (Interact, New): the leaving set rises out of
+  the top edge, fading by 40%, and the arriving set drops in from above
+  from 45%.
 - **persistent chrome** — the app's own controls (the Boxel button,
   account, search and AI) on the topmost plane, each its own layer, at
   natural size. On screen before and after, their faces cross additively
-  (`plus-lighter`), so they never fade with the surface beneath, even
-  between the dashboard and a workspace. `chrome: 'crossfade'` trades the top bar instead,
-  for crossings between the dashboard and a workspace, whose bars differ.
+  (`plus-lighter`), so they never move or fade with the surface beneath.
 
 A deferred card body (`StackItem.deferContent`) mounts one paint after
 landing; until then the index's prerendered isolated HTML stands in

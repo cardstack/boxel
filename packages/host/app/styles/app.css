@@ -55,7 +55,22 @@
 .ember-application .monaco-editor .monaco-editor-overlaymessage .anchor.below {
   display: none;
 }
-/* Named snapshot planes sit above the ordinary DOM stacking contexts. */
+/* Named snapshot planes sit above the ordinary DOM stacking contexts. Back
+   to front:
+   -1 scenes: surfaces around a crossing (the dashboard, reflowing stacks)
+    0 stack underlay: the parent card's tray
+    1 stack body       2 stack header       3 stack title and realm icon
+    4 card shadow      5 card bitmap
+    6 platter: the workspace's cards over the realm background (the card)
+    7 companion: the realm icon flying to or from the header
+    8 stationary chrome: the top bar and AI panel
+    9 edge chrome: neighbour-stack buttons
+   10 persistent chrome: Boxel, account, search, AI */
+::view-transition-group(.boxel-scene),
+::view-transition-group(.boxel-reflow) {
+  z-index: -1;
+}
+
 ::view-transition-group(.boxel-stack-underlay) {
   z-index: 0;
   overflow: visible;

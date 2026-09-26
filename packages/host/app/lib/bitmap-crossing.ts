@@ -201,6 +201,26 @@ export interface CrossingCompanion {
   to: (landing: HTMLElement | undefined) => HTMLElement | null | undefined;
 }
 
+// 'summon': the top bar's controls leave upward, out of the top edge, fading
+// by 40%, and the arriving set drops in from above from 45% on the motion
+// curve. The travel is one face height, so each set is fully out of view.
+const summoned = () => ({
+  departing: sampled((t) => {
+    let u = clamp01(t / 0.4);
+    return {
+      opacity: 1 - u,
+      transform: `translateY(${(-100 * motionEaseAt(u)).toFixed(2)}%)`,
+    };
+  }),
+  arriving: sampled((t) => {
+    let u = clamp01((t - 0.45) / 0.55);
+    return {
+      opacity: clamp01(u / 0.6),
+      transform: `translateY(${(-100 * (1 - motionEaseAt(u))).toFixed(2)}%)`,
+    };
+  }),
+});
+
 // 'replace': another card takes the departing one's place in the same slot.
 // The departing face recedes toward the slot's top centre, where buried
 // parents peek out, and is gone by 40%; the landing surfaces there from just
@@ -250,10 +270,12 @@ export interface BitmapCrossing {
   parent?: HTMLElement;
   scenes?: CrossingScene[];
   companions?: CrossingCompanion[];
-  // 'stationary' holds the top bar and edge controls still above the move.
-  // 'crossfade' trades them, for a crossing between surfaces with different
-  // chrome (the dashboard and a workspace).
-  chrome?: 'stationary' | 'crossfade';
+  // 'stationary' holds the top bar still above the move. 'summon' trades
+  // its controls between surfaces with different ones (the dashboard's View
+  // All, a workspace's Interact and New): the leaving set rises out of the
+  // top edge, the arriving set drops in from above. The app's own controls
+  // (Boxel, account, search, AI) never move either way.
+  chrome?: 'stationary' | 'summon';
   // Receives a finish() that jumps playback to its end; the host calls it
   // when a newer scene takes over.
   onReady?: (finish: () => void) => void;
@@ -608,19 +630,21 @@ export async function crossfadeCardBitmap({
     // View Transition layers are above DOM z-index. Capture persistent chrome
     // as its own stationary face so the crossing cannot cover the toolbar.
     builder
-      .add('.submode-layout-top-bar, .ai-assistant-resizable-panel')
+      .add('.ai-assistant-resizable-panel')
       .class('boxel-stationary-chrome')
       .group(false)
       .crop(false);
-    if (chrome === 'crossfade') {
-      builder.old(
-        { opacity: [1, 0, 0] },
-        { times: [0, 0.4, 1], ease: 'linear' },
-      );
-      builder.new(
-        { opacity: [0, 0, 1] },
-        { times: [0, 0.5, 1], ease: 'linear' },
-      );
+    builder.old({ opacity: 0 }, { duration: 0 });
+    builder.new({ opacity: 1 }, { duration: 0 });
+    builder
+      .add('.submode-layout-top-bar')
+      .class('boxel-stationary-chrome')
+      .group(false)
+      .crop(false);
+    if (chrome === 'summon') {
+      let { departing, arriving } = summoned();
+      builder.old(departing.keyframes, departing.options);
+      builder.new(arriving.keyframes, arriving.options);
     } else {
       builder.old({ opacity: 0 }, { duration: 0 });
       builder.new({ opacity: 1 }, { duration: 0 });
