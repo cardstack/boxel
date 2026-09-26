@@ -85,7 +85,7 @@ export default modifier((anchor: HTMLElement, [context]: [ChoreoContext]) => {
   let pose = () =>
     Array.from(
       root.querySelectorAll<HTMLElement>(
-        '.workspace-scene, .workspace-wallpaper, .stacks, .item, .search-sheet, .header-motion-parts, .header-motion-surface, .header-motion-parts .card-type-display-name',
+        '.workspace-scene, .workspace-wallpaper, .stacks, .item, .search-sheet, [data-header-motion-parts], .header-motion-surface, [data-header-motion-parts] .card-type-display-name',
       ),
     ).map((element) => {
       if (!identities.has(element)) identities.set(element, ++nextIdentity);

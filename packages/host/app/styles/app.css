@@ -213,7 +213,7 @@
 }
 
 /* Header content is resolved once. Its empty surface owns shape and shadow. */
-.header-motion-parts {
+[data-header-motion-parts] {
   position: relative;
   isolation: isolate;
   background: transparent !important;
@@ -237,10 +237,10 @@
     var(--header-surface-background)
   );
 }
-.header-motion-parts.is-editing:not(.expanded-card-header-pill)
+[data-header-motion-parts].is-editing:not(.expanded-card-header-pill)
   > .header-motion-surface {
   background: var(--boxel-highlight);
 }
-[data-choreo-raised] .header-motion-parts {
+[data-choreo-raised] [data-header-motion-parts] {
   overflow: visible;
 }

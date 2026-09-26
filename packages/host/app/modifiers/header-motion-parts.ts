@@ -28,7 +28,9 @@ export default modifier((element: HTMLElement, [id]: [string]) => {
   shadow.style.boxShadow = style.boxShadow;
   element.prepend(shadow);
   element.prepend(surface);
-  element.classList.add('header-motion-parts');
+  // An attribute, not a class: the header's class attribute is bound in its
+  // template, and a re-render would drop an added class.
+  element.dataset.headerMotionParts = '';
   let nodes: MotionNode[] = [];
   for (let [part, target] of [
     ['surface', surface],
