@@ -33,11 +33,21 @@ import {
 
 import type { Submode } from '@cardstack/host/components/submode-switcher';
 import { Submodes } from '@cardstack/host/components/submode-switcher';
+import { motionDurations } from '@cardstack/host/lib/motion-timing';
 import {
   StackItem,
   takesFileDeleteRoute,
   type StackItemType,
 } from '@cardstack/host/lib/stack-item';
+import {
+  workspaceEntry,
+  workspaceExit,
+  workspaceHeaderRendered,
+  workspaceOriginFromElement,
+  workspaceReturnTile,
+  type WorkspaceOpenOrigin,
+  type WorkspacePortal,
+} from '@cardstack/host/lib/workspace-open-origin';
 
 import {
   file,
@@ -45,6 +55,7 @@ import {
   type FileResource,
 } from '@cardstack/host/resources/file';
 import { maybe } from '@cardstack/host/resources/maybe';
+import type HostMotionService from '@cardstack/host/services/host-motion';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type MessageService from '@cardstack/host/services/message-service';
 import type MonacoService from '@cardstack/host/services/monaco-service';
@@ -195,6 +206,7 @@ export default class OperatorModeStateService extends Service {
     return this.expandedStackItems.get(itemKey) ?? false;
   }
   setStackItemExpanded(itemKey: string, value: boolean) {
+    this.hostMotion.begin('header', itemKey);
     if (value) {
       // Only one card can be expanded at a time — clear all others so
       // the same card open in two stacks can't leave both expanded.
@@ -232,6 +244,7 @@ export default class OperatorModeStateService extends Service {
   @tracked expandedCardHeaderElement: HTMLElement | null = null;
 
   @service declare private cardService: CardService;
+  @service declare private hostMotion: HostMotionService;
   @service declare private codeSemanticsService: CodeSemanticsService;
   @service declare private errorDisplay: ErrorDisplayService;
   @service declare private loaderService: LoaderService;
@@ -375,6 +388,7 @@ export default class OperatorModeStateService extends Service {
     // returns to top, it auto-re-expands. The visual collapse is
     // already handled by isExpanded = isTopCard && isExpandedIntent
     // — a buried card never renders as expanded.
+    this.hostMotion.begin('stack', item.instanceId);
     this._state.stacks[stackIndex].push(item);
     if (item.id) {
       this.recentCardsService.add(item.id);
@@ -480,6 +494,13 @@ export default class OperatorModeStateService extends Service {
     if (itemIndex === -1) {
       return;
     }
+    // Closing the last card removes its whole stack; the remaining stacks
+    // move into the freed width. A card crossing already owns the scene, in
+    // which case this is a no-op.
+    this.hostMotion.begin(
+      'stack',
+      itemIndex > 0 ? stack[itemIndex - 1].instanceId : undefined,
+    );
     stack.splice(itemIndex); // Remove anything above the item
 
     // If the resulting stack is now empty, remove it
@@ -526,6 +547,7 @@ export default class OperatorModeStateService extends Service {
     if (!stack) {
       throw new Error(`No stack at index ${stackIndex}`);
     }
+    this.hostMotion.begin('stack', stack.at(-2)?.instanceId);
     let item = stack.pop();
     if (!item) {
       throw new Error(`No items in stack at index ${stackIndex}`);
@@ -891,15 +913,19 @@ export default class OperatorModeStateService extends Service {
     await this.updateCodePath(fileUrl);
   };
 
+  private codePathUpdateSequence = 0;
+
   async updateCodePath(
     codePath: RealmResourceIdentifier | URL | null,
     moduleInspectorView?: ModuleInspectorView,
   ) {
+    let sequence = ++this.codePathUpdateSequence;
     let codePathURL =
       typeof codePath === 'string'
         ? this.network.virtualNetwork.toURL(codePath)
         : codePath;
     let canonicalCodePath = await this.determineCanonicalCodePath(codePathURL);
+    if (sequence !== this.codePathUpdateSequence) return;
     this._state.codePath = canonicalCodePath;
     this.updateOpenDirsForNestedPath();
     this.schedulePersist();
@@ -950,6 +976,7 @@ export default class OperatorModeStateService extends Service {
   }
 
   replaceCodePath(codePath: URL | null) {
+    ++this.codePathUpdateSequence;
     // replace history explicitly
     // typically used when, serving a redirect in the code path
     // solve UX issues with back button referring back to request url of redirect
@@ -1442,51 +1469,244 @@ export default class OperatorModeStateService extends Service {
   }
 
   openWorkspaceChooser() {
-    this._state.workspaceChooserOpened = true;
-    this.schedulePersist();
+    this.workspaceChooserOpened = true;
   }
 
   closeWorkspaceChooser() {
-    this._state.workspaceChooserOpened = false;
-    this.schedulePersist();
+    this.workspaceChooserOpened = false;
   }
 
-  openWorkspace = async (realmUrl: string) => {
+  @tracked workspacePortal?: WorkspacePortal;
+  private workspacePortalToken = 0;
+
+  private startWorkspacePortal(
+    origin: WorkspaceOpenOrigin,
+    direction: WorkspacePortal['direction'],
+  ) {
+    this.hostMotion.beginWorkspace();
+    let fade = false;
+    if (direction === 'closing') {
+      let tile = Array.from(
+        document.querySelectorAll<HTMLElement>('[data-workspace-realm]'),
+      ).find(
+        (element) =>
+          element.dataset.workspaceRealm === origin.realmURL &&
+          !!element.closest('.workspace-card.is-enlarged') ===
+            !!origin.favorite,
+      );
+      let current = workspaceOriginFromElement(
+        tile ?? null,
+        origin.realmURL,
+        origin.backgroundURL,
+      );
+      fade = !current;
+      if (current) origin = current;
+    }
+    this.workspacePortal = {
+      token: ++this.workspacePortalToken,
+      origin,
+      direction,
+      fade,
+    };
+  }
+
+  finishWorkspacePortal(token: number) {
+    if (this.workspacePortal?.token === token) {
+      this.workspacePortal = undefined;
+      this.hostMotion.endWorkspace();
+    }
+  }
+
+  updateWorkspacePortalTarget(origin: WorkspaceOpenOrigin, token: number) {
+    let portal = this.workspacePortal;
+    if (
+      portal?.token !== token ||
+      portal.direction !== 'closing' ||
+      portal.origin.realmURL !== origin.realmURL ||
+      portal.origin.favorite !== origin.favorite
+    )
+      return;
+    // A modifier reads this tracked portal while reporting its tile. Do not
+    // invalidate that modifier again when layout has not actually changed.
+    if (
+      origin.x === portal.origin.x &&
+      origin.y === portal.origin.y &&
+      origin.width === portal.origin.width &&
+      origin.height === portal.origin.height &&
+      origin.radius === portal.origin.radius
+    )
+      return;
+    this.workspacePortal = { ...portal, origin };
+  }
+
+  openWorkspace = async (
+    realmUrl: string,
+    workspaceOrigin?: WorkspaceOpenOrigin,
+  ) => {
     // Ensure realmUrl has a trailing slash
     if (!realmUrl.endsWith('/')) {
       realmUrl = realmUrl + '/';
     }
-    let id = rri(`${realmUrl}index`);
-    let stackItem = new StackItem({
-      id,
-      format: 'isolated',
-      stackIndex: 0,
-      type: 'card',
-    });
-    this.clearStacks();
-    this.addItemToStack(stackItem);
+    // The tile element is consumed by the crossing, never kept on the stack.
+    let { source, ...rest } = workspaceOrigin ?? {};
+    let origin = workspaceOrigin ? (rest as WorkspaceOpenOrigin) : undefined;
+    if (source && this.hostMotion.canCross(source, motionDurations.workspace)) {
+      let { crossing, restore } = workspaceEntry(source);
+      try {
+        await this.hostMotion.cross({
+          ...crossing,
+          update: async () => {
+            this.enterWorkspace(realmUrl, origin, false);
+            await workspaceHeaderRendered();
+          },
+        });
+      } finally {
+        restore();
+      }
+    } else {
+      this.enterWorkspace(realmUrl, origin, true);
+    }
 
     let lastOpenedFile = this.recentFilesService.recentFiles.find(
       (file: RecentFile) => file.realmURL.href === realmUrl,
     );
+    let id = rri(`${realmUrl}index`);
     await this.updateCodePath(
       lastOpenedFile
         ? new URL(`${lastOpenedFile.realmURL}${lastOpenedFile.filePath}`)
         : id,
     );
-    this.updateSubmode(Submodes.Interact);
+  };
 
+  private enterWorkspace(
+    realmUrl: string,
+    workspaceOrigin: WorkspaceOpenOrigin | undefined,
+    portal: boolean,
+  ) {
+    let id = rri(`${realmUrl}index`);
+    let stackItem = new StackItem({
+      id,
+      workspaceOrigin,
+      format: 'isolated',
+      stackIndex: 0,
+      type: 'card',
+    });
+    // Change the scene and its ownership in one render. Awaiting code-path
+    // metadata between these changes lets the old card start a separate exit.
+    if (workspaceOrigin && portal)
+      this.startWorkspacePortal(workspaceOrigin, 'opening');
+    else this.workspacePortal = undefined;
+    let existing = this._state.stacks[0]?.[0];
+    if (
+      this._state.stacks.length === 1 &&
+      this._state.stacks[0]?.length === 1 &&
+      existing?.id === id &&
+      existing.format === 'isolated'
+    ) {
+      // Returning to the retained index should preserve its DOM, scroll, and
+      // resources. Only the wallpaper origin changes when another tile copy
+      // (favorite versus catalog) was selected.
+      existing.workspaceOrigin = workspaceOrigin;
+    } else {
+      this.clearStacks();
+      this.addItemToStack(stackItem);
+    }
+    this.updateSubmode(Submodes.Interact);
     this._state.workspaceChooserOpened = false;
     this.cachedRealmURL = new URL(realmUrl);
-  };
+  }
 
   get workspaceChooserOpened() {
     return this.state.workspaceChooserOpened ?? false;
   }
 
   set workspaceChooserOpened(workspaceChooserOpened: boolean) {
+    if (
+      workspaceChooserOpened !== this.workspaceChooserOpened &&
+      this.state.submode === Submodes.Interact
+    ) {
+      if (
+        workspaceChooserOpened &&
+        this.crossToDashboard(() => {
+          this._state.workspaceChooserOpened = true;
+          this.schedulePersist();
+        })
+      ) {
+        return;
+      }
+      let origin = this.workspaceTileOrigin;
+      if (origin)
+        this.startWorkspacePortal(
+          origin,
+          workspaceChooserOpened ? 'closing' : 'opening',
+        );
+    }
     this._state.workspaceChooserOpened = workspaceChooserOpened;
     this.schedulePersist();
+  }
+
+  // Closing the only card on screen, the realm's index card, leaves the
+  // workspace for the dashboard.
+  closesWorkspace(item: StackItem) {
+    let [stack, ...others] = this._state.stacks;
+    if (others.length || stack?.length !== 1 || stack[0] !== item) return false;
+    return isRealmIndexCardId(
+      item.id,
+      this.getRealmURLFromItemId(item.id),
+      this.network.virtualNetwork,
+    );
+  }
+
+  // Closing the only card on screen when it is not the realm's index card
+  // puts the index card in its place (see trimItemsFromStack).
+  closesToIndex(item: StackItem) {
+    let [stack, ...others] = this._state.stacks;
+    if (others.length || stack?.length !== 1 || stack[0] !== item) return false;
+    return !this.closesWorkspace(item);
+  }
+
+  // Leaves the workspace by closing its last card, with the same crossing
+  // back to the dashboard as the dashboard button.
+  async closeWorkspace(remove: () => void) {
+    await (this.crossToDashboard(remove) ?? remove());
+  }
+
+  // The tile a single-stack workspace was opened from, if it remembers one.
+  private get workspaceTileOrigin() {
+    return this._state.stacks.length === 1
+      ? this._state.stacks[0]?.[0]?.workspaceOrigin
+      : undefined;
+  }
+
+  // The realm behind the stacks: its background is the workspace wallpaper.
+  private get workspaceRealmURL(): string | undefined {
+    let id = this._state.stacks[0]?.[0]?.id;
+    return (id && this.realm.url(id)) || undefined;
+  }
+
+  // Runs `leave` inside the crossing from the realm background back into
+  // that realm's dashboard tile. It needs only the realm whose background is
+  // showing, not how the workspace was entered, so it also plays after a
+  // reload, a pasted URL, or with several stacks open. Returns undefined,
+  // without running `leave`, when no crossing can play.
+  private crossToDashboard(leave: () => void): Promise<void> | undefined {
+    let wallpaper = document.querySelector<HTMLElement>('.workspace-wallpaper');
+    let origin = this.workspaceTileOrigin;
+    let realmURL = origin?.realmURL ?? this.workspaceRealmURL;
+    if (
+      !wallpaper ||
+      !realmURL ||
+      this.state.submode !== Submodes.Interact ||
+      !this.hostMotion.canCross(wallpaper, motionDurations.workspace)
+    )
+      return undefined;
+    this.workspacePortal = undefined;
+    let { crossing, restore } = workspaceExit(wallpaper, () =>
+      workspaceReturnTile(realmURL, origin?.favorite),
+    );
+    return this.hostMotion
+      .cross({ ...crossing, update: leave })
+      .finally(restore);
   }
 
   // Operator mode state is persisted in a query param, which lives in the index controller

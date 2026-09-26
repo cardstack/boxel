@@ -1,14 +1,9 @@
-import { fn } from '@ember/helper';
+import { concat, fn } from '@ember/helper';
 import { hash } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
-import { scheduleOnce } from '@ember/runloop';
 import { service } from '@ember/service';
-import type { SafeString } from '@ember/template';
-import { htmlSafe } from '@ember/template';
-
-import { isTesting } from '@embroider/macros';
 
 import Component from '@glimmer/component';
 
@@ -21,6 +16,7 @@ import { restartableTask, timeout, dropTask } from 'ember-concurrency';
 import Modifier from 'ember-modifier';
 import { provide, consume } from 'ember-provide-consume-context';
 
+import { motion } from 'glimmer-motion';
 import pluralize from 'pluralize';
 import { TrackedSet } from 'tracked-built-ins';
 
@@ -65,10 +61,18 @@ import {
 } from '@cardstack/runtime-common';
 
 import {
+  cardActionOrigin,
+  type CardOpenOrigin,
+} from '@cardstack/host/lib/card-open-origin';
+import { motionDurations } from '@cardstack/host/lib/motion-timing';
+import {
   stackItemTypeToStoreReadType,
   type StackItem,
 } from '@cardstack/host/lib/stack-item';
 import { urlForRealmLookup } from '@cardstack/host/lib/utils';
+import cardActivation from '@cardstack/host/modifiers/card-activation';
+import cssVariables from '@cardstack/host/modifiers/css-variables';
+import headerMotionParts from '@cardstack/host/modifiers/header-motion-parts';
 
 import consumeContext from '../../helpers/consume-context';
 import ElementTracker, {
@@ -80,10 +84,12 @@ import CardRenderer from '../card-renderer';
 import ArchivedRealmState from './archived-realm-state';
 import CardError from './card-error';
 import DeleteModal from './delete-modal';
+import DockCardMotion from './dock-card-motion';
 
 import OperatorModeOverlays from './operator-mode-overlays';
 
 import type CardService from '../../services/card-service';
+import type HostMotionService from '../../services/host-motion';
 import type NetworkService from '../../services/network';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type RealmService from '../../services/realm';
@@ -95,10 +101,11 @@ import type {
 } from '@cardstack/base/card-api';
 
 export interface StackItemComponentAPI {
+  element: () => HTMLElement | undefined;
   clearSelections: () => void;
   deselectCard: (cardId: string) => void;
   scrollIntoView: (selector: string) => Promise<void>;
-  startAnimation: (type: 'closing' | 'movingForward') => Promise<void>;
+  cardBoundary: (cardId: string) => CardOpenOrigin | undefined;
 }
 
 interface Signature {
@@ -137,6 +144,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   declare private cardCrudFunctions: CardCrudFunctions;
 
   @service declare private cardService: CardService;
+  @service declare private hostMotion: HostMotionService;
   @service declare private network: NetworkService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private realm: RealmService;
@@ -155,15 +163,9 @@ export default class OperatorModeStackItem extends Component<Signature> {
   @tracked private numberOfCardsToDelete = 0;
   @tracked private isDeletingCards = false;
   @tracked private deleteError: string | undefined;
-  @tracked private animationType:
-    | 'opening'
-    | 'closing'
-    | 'movingForward'
-    | undefined = 'opening';
   @tracked private cardResource: ReturnType<getCard> | undefined;
   private contentEl: HTMLElement | undefined;
   private containerEl: HTMLElement | undefined;
-  private itemEl: HTMLElement | undefined;
 
   @provide(PermissionsContextName)
   get permissions(): Permissions | undefined {
@@ -185,10 +187,11 @@ export default class OperatorModeStackItem extends Component<Signature> {
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
     this.args.setupStackItem(this.args.item, {
+      element: () => this.containerEl,
       clearSelections: this.clearSelections,
       deselectCard: this.deselectCard,
       scrollIntoView: this.scrollIntoViewTask.perform,
-      startAnimation: this.startAnimation.perform,
+      cardBoundary: (cardId) => cardActionOrigin(this.containerEl, cardId),
     });
   }
 
@@ -225,7 +228,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
     return !this.isBuried && this.isWideFormat;
   }
 
-  private get styleForStackedCard(): SafeString {
+  private get styleForStackedCard() {
     const stackItemMaxWidth = 50; // unit: rem, 800px for 16px base
     const RATIO = 1.2;
     //  top card: 800px / (1.2 ^ 0) = 800px;
@@ -242,7 +245,13 @@ export default class OperatorModeStackItem extends Component<Signature> {
     // without fighting inline !important overrides. Mirrors host-mode
     // pattern: parent constrains height, children inherit.
     if (this.isExpanded) {
-      return htmlSafe(`z-index: calc(${this.args.index} + 1);`);
+      return {
+        zIndex: this.args.index + 1,
+        height: '100%',
+        width: '100%',
+        maxWidth: '100%',
+        marginTop: 0,
+      };
     }
 
     let marginTopPx = 0;
@@ -264,18 +273,15 @@ export default class OperatorModeStackItem extends Component<Signature> {
       ? '100%'
       : `${stackItemMaxWidth / Math.pow(RATIO, invertedIndex)}rem`;
 
-    let styles = `
-      height: calc(100% - ${marginTopPx}px);
-      width: ${width};
-      max-width: ${maxWidthPercent}%;
-      z-index: calc(${this.args.index} + 1);
-      margin-top: ${marginTopPx}px;
-    `; // using margin-top instead of padding-top to hide scrolled content from view
-    // Transition (280ms ease-out, all geometric props) is on the .item
-    // CSS rule below — no inline override here, so expand/collapse
-    // morph + stacked-layout shifts all use the same curve.
-
-    return htmlSafe(styles);
+    // Choreo owns transforms; keep layout styles on its modifier so a
+    // rerender cannot overwrite a tween's in-flight inline styles.
+    return {
+      height: `calc(100% - ${marginTopPx}px)`,
+      width,
+      maxWidth: `${maxWidthPercent}%`,
+      zIndex: this.args.index + 1,
+      marginTop: marginTopPx,
+    };
   }
 
   private get isBuried() {
@@ -292,6 +298,30 @@ export default class OperatorModeStackItem extends Component<Signature> {
       this.realmURL,
       this.network.virtualNetwork,
     );
+  }
+
+  private get headerMotionId() {
+    return `${this.args.item.instanceId}:header`;
+  }
+
+  private get headerStyle() {
+    return {
+      '--boxel-card-header-icon-container-min-width': this.isBuried
+        ? '50px'
+        : '95px',
+      '--boxel-card-header-actions-min-width': this.isBuried ? '50px' : '95px',
+      '--boxel-card-header-background-color': this.headerColor,
+      '--boxel-card-header-text-color': getContrastColor(this.headerColor),
+      '--realm-icon-background-color': getContrastColor(
+        this.headerColor,
+        'transparent',
+      ),
+      '--realm-icon-border-color': getContrastColor(
+        this.headerColor,
+        'transparent',
+        'rgba(0 0 0 / 15%)',
+      ),
+    };
   }
 
   // Element ref captured by submode-layout's expanded-card-header-slot.
@@ -333,111 +363,38 @@ export default class OperatorModeStackItem extends Component<Signature> {
   private get isExpanded(): boolean {
     return this.isTopCard && this.isExpandedIntent;
   }
-  private toggleExpanded = () => {
+  private get isCoveredByExpandedCard(): boolean {
+    let top = this.args.stackItems.at(-1);
+    return Boolean(
+      this.isBuried &&
+      top &&
+      this.operatorModeStateService.isStackItemExpanded(top.instanceId),
+    );
+  }
+  private toggleExpanded = async () => {
     if (!this.isTopCard) return;
-    const cardEl = this.itemEl;
-    const cardFrom = cardEl?.getBoundingClientRect();
-
-    this.operatorModeStateService.setStackItemExpanded(
-      this.itemExpandKey,
-      !this.isExpandedIntent,
-    );
-
-    // FLIP via Web Animations on the card body: measure rect before
-    // state change, animate inverse transform back to identity after
-    // re-render. Works around CSS transitions not firing when changing
-    // properties cross from inline-style to CSS-rule sources mid-frame.
-    if (!cardEl || !cardFrom) return;
-    this.pendingFlipEl = cardEl;
-    this.pendingFlipFrom = cardFrom;
-    scheduleOnce('afterRender', this, this.runExpandAnimation);
-  };
-
-  private pendingFlipEl: HTMLElement | null = null;
-  private pendingFlipFrom: DOMRect | null = null;
-
-  private runExpandAnimation() {
-    const cardEl = this.pendingFlipEl;
-    const cardFrom = this.pendingFlipFrom;
-    this.pendingFlipEl = null;
-    this.pendingFlipFrom = null;
-    if (!cardEl || !cardFrom) return;
-    this.playFlip(cardEl, cardFrom, {
-      duration: 280,
-      easing: 'cubic-bezier(0.34, 1.56, 0.64, 1)',
+    let expand = !this.isExpandedIntent;
+    let card = this.containerEl;
+    let apply = () =>
+      this.operatorModeStateService.setStackItemExpanded(
+        this.itemExpandKey,
+        expand,
+      );
+    if (!card) {
+      apply();
+      return;
+    }
+    // The card keeps its element and only its frame changes. Cross its own
+    // two faces so the content tweens with the frame instead of snapping;
+    // expanding keeps the narrow face until near the landing.
+    await this.hostMotion.cross({
+      from: card,
+      to: () => card,
+      update: apply,
+      duration: motionDurations.boundary,
+      handoff: expand ? 'late' : 'crossfade',
     });
-    // Header gets a lightweight fade + small Y slide — suggests
-    // direction without the full FLIP's visual noise. Expand: pill
-    // slides UP into the bar (starts 10px below). Restore: header
-    // slides DOWN onto the card (starts 10px above). A second afterRender
-    // pass lets {{#in-element}} settle before measuring.
-    scheduleOnce('afterRender', this, this.animateHeaderTransition);
-  }
-
-  private animateHeaderTransition() {
-    const headerTo = this.findHeaderEl();
-    if (!headerTo) return;
-    const fromOffsetY = this.isExpandedIntent ? 28 : -28;
-    headerTo.animate(
-      [
-        { opacity: 0, transform: `translateY(${fromOffsetY}px)` },
-        { opacity: 1, transform: 'translateY(0)' },
-      ],
-      {
-        duration: 280,
-        easing: 'cubic-bezier(0.34, 1.56, 0.64, 1)',
-        fill: 'none',
-      },
-    );
-  }
-
-  private findHeaderEl(): HTMLElement | null {
-    // After expand: the portaled .expanded-card-header-pill in the bar.
-    // Before expand (or after restore): the inline .stack-item-header
-    // inside this stack-item's DOM.
-    const slot = this.operatorModeStateService.expandedCardHeaderElement;
-    const portaled = slot?.querySelector(
-      '.expanded-card-header-pill',
-    ) as HTMLElement | null;
-    if (portaled) return portaled;
-    return (
-      (this.itemEl?.querySelector(
-        '.stack-item-header',
-      ) as HTMLElement | null) ?? null
-    );
-  }
-
-  private playFlip(
-    el: HTMLElement,
-    fromRect: DOMRect,
-    opts: { duration: number; easing: string },
-  ) {
-    const toRect = el.getBoundingClientRect();
-    const dx = fromRect.left - toRect.left;
-    const dy = fromRect.top - toRect.top;
-    // Guard against zero target dimensions (e.g., during unmount or
-    // before layout settles) — Web Animations would NaN out otherwise.
-    if (toRect.width === 0 || toRect.height === 0) return;
-    const sx = fromRect.width / toRect.width;
-    const sy = fromRect.height / toRect.height;
-    el.animate(
-      [
-        {
-          transform: `translate(${dx}px, ${dy}px) scale(${sx}, ${sy})`,
-          transformOrigin: 'top left',
-        },
-        {
-          transform: 'translate(0, 0) scale(1, 1)',
-          transformOrigin: 'top left',
-        },
-      ],
-      {
-        duration: opts.duration,
-        easing: opts.easing,
-        fill: 'none',
-      },
-    );
-  }
+  };
 
   private _closeItem = dropTask(async () => {
     // Clear any persisted expand intent for this item — the item is
@@ -812,75 +769,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
     this.containerEl.scrollTop = 0;
   });
 
-  private startAnimation = dropTask(
-    async (animationType: 'closing' | 'movingForward') => {
-      this.animationType = animationType;
-      await new Promise<void>((resolve) => {
-        scheduleOnce(
-          'afterRender',
-          this,
-          this.handleAnimationCompletion,
-          animationType,
-          resolve,
-        );
-      });
-    },
-  );
-
-  private handleAnimationCompletion(
-    animationName: 'opening' | 'closing' | 'movingForward',
-    resolve?: () => void,
-  ) {
-    if (!this.itemEl) {
-      this.clearAnimationType(animationName);
-      resolve?.();
-      return;
-    }
-    const animations = this.itemEl.getAnimations?.() ?? [];
-    if (animations.length === 0) {
-      this.clearAnimationType(animationName);
-      resolve?.();
-      return;
-    }
-    Promise.all(animations.map((animation) => animation.finished))
-      .then(() => {
-        this.clearAnimationType(animationName);
-        resolve?.();
-      })
-      .catch((e) => {
-        // AbortError is expected in two scenarios:
-        // 1. Multiple stack items are animating in parallel (eg. closing and moving forward)
-        //    and some elements get removed before their animations complete
-        // 2. Tests running with animation-duration: 0s can cause
-        //    animations to abort before they're properly tracked
-        if (e.name === 'AbortError') {
-          this.clearAnimationType(animationName);
-          resolve?.();
-        } else {
-          console.error(e);
-        }
-      });
-  }
-
-  private clearAnimationType(
-    animationName: 'opening' | 'closing' | 'movingForward',
-  ) {
-    if (this.animationType === animationName) {
-      this.animationType = undefined;
-    }
-  }
-
-  private trackOpeningAnimation = () => {
-    if (this.animationType !== 'opening') {
-      return;
-    }
-    scheduleOnce('afterRender', this, this.finishOpeningAnimation);
-  };
-
-  private finishOpeningAnimation = () => {
-    this.handleAnimationCompletion('opening');
-  };
-
   private setupContentEl = (el: HTMLElement) => {
     this.contentEl = el;
   };
@@ -943,30 +831,13 @@ export default class OperatorModeStackItem extends Component<Signature> {
     return Boolean(this.cardError);
   }
 
-  private setupItemEl = (el: HTMLElement) => {
-    this.itemEl = el;
-    this.trackOpeningAnimation();
-  };
-
   private get doOpeningAnimation() {
     return (
+      !this.args.item.workspaceOrigin &&
       this.isTopCard &&
-      this.animationType === 'opening' &&
       !this.isEditing &&
       !(this.args.item.format === 'isolated' && this.args.item.request) // Skip animation if we have a request and we're in isolated format, it means we're completing an edit operation
     );
-  }
-
-  private get doClosingAnimation() {
-    return this.animationType === 'closing';
-  }
-
-  private get doMovingForwardAnimation() {
-    return this.animationType === 'movingForward';
-  }
-
-  private get isTesting() {
-    return isTesting();
   }
 
   private setWindowTitle = () => {
@@ -988,30 +859,48 @@ export default class OperatorModeStackItem extends Component<Signature> {
 
   <template>
     {{consumeContext this.makeCardResource}}
+    {{#if @item.openingOrigin}}
+      {{#unless @item.openingOrigin.bitmapKey}}
+        <DockCardMotion
+          @id={{@item.instanceId}}
+          @origin={{@item.openingOrigin}}
+        />
+      {{/unless}}
+    {{/if}}
     <div
-      class={{cn
-        'item'
-        buried=this.isBuried
-        expanded=this.isExpanded
-        opening-animation=this.doOpeningAnimation
-        closing-animation=this.doClosingAnimation
-        move-forward-animation=this.doMovingForwardAnimation
-        testing=this.isTesting
-      }}
+      class={{cn 'item' buried=this.isBuried expanded=this.isExpanded}}
       data-test-stack-card-index={{@index}}
       data-test-stack-card={{this.cardIdentifier}}
       {{! In order to support scrolling cards into view
       we use a selector that is not pruned out in production builds }}
       data-stack-card={{this.cardIdentifier}}
-      style={{this.styleForStackedCard}}
-      {{ContentElement onSetup=this.setupItemEl}}
+      data-stack-covered={{this.isCoveredByExpandedCard}}
+      data-dock-card={{if @item.openingOrigin 'true'}}
+      data-bitmap-entry={{@item.openingOrigin.bitmapKey}}
+      {{motion
+        id=@item.instanceId
+        role=(if
+          this.operatorModeStateService.workspacePortal
+          'portal-card'
+          (if
+            @item.openingOrigin
+            'dock-card'
+            (if this.doOpeningAnimation 'opening-card' 'stack-card')
+          )
+        )
+        style=this.styleForStackedCard
+      }}
     >
       <CardContainer
         class='stack-item-card'
         style={{cssVar
           card-error-header-height='var(--stack-item-header-height)'
+          dock-card-source-radius=(if
+            @item.openingOrigin (concat @item.openingOrigin.radius 'px')
+          )
         }}
         {{ContentElement onSetup=this.setupContainerEl}}
+        {{cardActivation}}
       >
         {{#if (not this.cardResource.isLoaded)}}
           <div class='loading' data-test-stack-item-loading-card>
@@ -1105,6 +994,8 @@ export default class OperatorModeStackItem extends Component<Signature> {
                   @isExpanded={{this.isExpanded}}
                   @onFinishEditing={{if this.isEditing this.doneEditing}}
                   @onClose={{unless this.isBuried this.closeItem}}
+                  {{motion id=this.headerMotionId role='stack-header'}}
+                  {{headerMotionParts this.headerMotionId}}
                   class='expanded-card-header-pill'
                   data-test-stack-card-header
                 />
@@ -1132,24 +1023,9 @@ export default class OperatorModeStackItem extends Component<Signature> {
                 @finishEditingShortcutHint={{this.keyboardShortcutLabels.finishEditing}}
                 @closeShortcutHint={{this.keyboardShortcutLabels.close}}
                 class='stack-item-header'
-                style={{cssVar
-                  boxel-card-header-icon-container-min-width=(if
-                    this.isBuried '50px' '95px'
-                  )
-                  boxel-card-header-actions-min-width=(if
-                    this.isBuried '50px' '95px'
-                  )
-                  boxel-card-header-background-color=this.headerColor
-                  boxel-card-header-text-color=(getContrastColor
-                    this.headerColor
-                  )
-                  realm-icon-background-color=(getContrastColor
-                    this.headerColor 'transparent'
-                  )
-                  realm-icon-border-color=(getContrastColor
-                    this.headerColor 'transparent' 'rgba(0 0 0 / 15%)'
-                  )
-                }}
+                {{motion id=this.headerMotionId role='stack-header'}}
+                {{cssVariables this.headerStyle}}
+                {{headerMotionParts this.headerMotionId}}
                 role={{if this.isBuried 'button' 'banner'}}
                 {{on
                   'click'
@@ -1163,22 +1039,35 @@ export default class OperatorModeStackItem extends Component<Signature> {
           {{/let}}
           <div
             class='stack-item-content'
+            inert={{this.isBuried}}
             {{ContentElement onSetup=this.setupContentEl}}
             data-test-stack-item-content
           >
-            <CardRenderer
-              class='stack-item-preview'
-              @card={{this.card}}
-              @format={{this.cardFormat}}
-              @codeRef={{this.defaultCodeRef}}
-            />
-            <OperatorModeOverlays
-              @renderedCardsForOverlayActions={{this.renderedCardsForOverlayActions}}
-              @requestDeleteCard={{@requestDeleteCard}}
-              @toggleSelect={{this.toggleSelect}}
-              @selectedCards={{this.selectedCards}}
-              @viewCard={{this.cardCrudFunctions.viewCard}}
-            />
+            {{#if @item.deferContent}}
+              {{#if @item.placeholder}}
+                {{#let @item.placeholder as |Placeholder|}}
+                  <div
+                    class='stack-item-preview stack-item-placeholder'
+                    inert
+                    aria-hidden='true'
+                  ><Placeholder /></div>
+                {{/let}}
+              {{/if}}
+            {{else}}
+              <CardRenderer
+                class='stack-item-preview'
+                @card={{this.card}}
+                @format={{this.cardFormat}}
+                @codeRef={{this.defaultCodeRef}}
+              />
+              <OperatorModeOverlays
+                @renderedCardsForOverlayActions={{this.renderedCardsForOverlayActions}}
+                @requestDeleteCard={{@requestDeleteCard}}
+                @toggleSelect={{this.toggleSelect}}
+                @selectedCards={{this.selectedCards}}
+                @viewCard={{this.cardCrudFunctions.viewCard}}
+              />
+            {{/if}}
           </div>
         {{/if}}
       </CardContainer>
@@ -1186,38 +1075,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
     <style scoped>
       :global(:root) {
         --stack-card-footer-height: 6rem;
-      }
-
-      @keyframes scaleIn {
-        from {
-          transform: scale(0.1);
-          opacity: 0;
-        }
-        to {
-          transform: scale(1);
-          opacity: 1;
-        }
-      }
-      @keyframes fadeOut {
-        from {
-          opacity: 1;
-          transform: translateY(0);
-        }
-        to {
-          opacity: 0;
-          transform: translateY(100%);
-        }
-      }
-
-      @keyframes moveForward {
-        from {
-          transform: translateY(0);
-          opacity: 0.8;
-        }
-        to {
-          transform: translateY(25px);
-          opacity: 1;
-        }
       }
 
       .item {
@@ -1228,29 +1085,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
         height: inherit;
         z-index: 0;
         pointer-events: none;
-        transition:
-          margin-top var(--boxel-transition),
-          width var(--boxel-transition);
       }
-      .item.opening-animation {
-        animation: scaleIn 0.2s forwards;
-      }
-      .item.closing-animation {
-        animation: fadeOut 0.2s forwards;
-      }
-      .item.move-forward-animation {
-        animation: moveForward 0.2s none;
-      }
-      .item.opening-animation.testing {
-        animation-duration: 0s;
-      }
-      .item.closing-animation.testing {
-        animation-duration: 0s;
-      }
-      .item.move-forward-animation.testing {
-        animation-duration: 0s;
-      }
-
       .item.buried {
         --stack-item-header-height: 2.5rem;
         --realm-icon-border-radius: 4px;
@@ -1297,7 +1132,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
          DOM (top card = last in DOM order). */
       .item:not(.expanded):has(~ .item.expanded) {
         opacity: 0;
-        transition: opacity 380ms ease;
       }
 
       .stack-item-card {
@@ -1306,19 +1140,38 @@ export default class OperatorModeStackItem extends Component<Signature> {
         display: grid;
         grid-template-rows: var(--stack-item-header-height) auto;
         border-radius: var(--boxel-border-radius-xl);
-        box-shadow: var(--boxel-deep-box-shadow);
+        box-shadow: var(--boxel-motion-raised-shadow);
         pointer-events: auto;
         overflow: hidden;
       }
       .stack-item-header {
+        --stack-header-expanded: 0;
         --boxel-card-header-padding: var(--boxel-sp-4xs) var(--boxel-sp-xs);
-        border-radius: 0;
         z-index: 1;
         max-width: max-content;
         height: var(--stack-item-header-height);
         min-width: 100%;
       }
 
+      .item[data-dock-card] .stack-item-card {
+        border-radius: calc(
+          var(--dock-card-source-radius, 0px) +
+            (
+              var(--boxel-border-radius-xl) -
+                var(--dock-card-source-radius, 0px)
+            ) *
+            var(--dock-open-progress, 1)
+        );
+      }
+      .item[data-dock-card].buried .stack-item-card {
+        border-radius: var(--boxel-border-radius-lg);
+      }
+      .item[data-dock-card].expanded .stack-item-card {
+        border-radius: 0;
+      }
+      .item[data-dock-card] .stack-item-content {
+        opacity: var(--dock-content-opacity, 1);
+      }
       .stack-item-content {
         overflow: auto;
       }
@@ -1344,6 +1197,16 @@ export default class OperatorModeStackItem extends Component<Signature> {
 
       .buried .stack-item-content {
         display: none;
+      }
+      .buried .stack-item-content[data-retained-body-size] {
+        display: block;
+        position: absolute;
+        top: var(--stack-item-header-height);
+        width: var(--retained-body-width);
+        height: var(--retained-body-height);
+        visibility: hidden;
+        opacity: 0;
+        pointer-events: none;
       }
 
       .loading {
@@ -1371,14 +1234,31 @@ export default class OperatorModeStackItem extends Component<Signature> {
          left-justified type/title. Reuses CardHeader's existing
          actions structure; just re-skinned via this class. */
       .expanded-card-header-pill {
+        --stack-header-expanded: 1;
         --boxel-card-header-padding: var(--boxel-sp-4xs)
           var(--operator-mode-spacing);
         --boxel-card-header-gap: var(--operator-mode-spacing);
         height: var(--container-button-size);
         background: var(--boxel-light);
-        border-radius: var(--boxel-border-radius-2xl);
         box-shadow: var(--submode-bar-item-box-shadow);
         outline: var(--submode-bar-item-outline);
+      }
+      .stack-item-header,
+      .expanded-card-header-pill {
+        --stack-header-roundness: var(--stack-header-expanded);
+        /* The inline header owns its visible top corners even while lifted
+           out of the card's clip. Bottom corners round only toward the pill. */
+        --stack-header-top-radius: calc(
+          var(--boxel-border-radius-xl) +
+            (var(--boxel-border-radius-2xl) - var(--boxel-border-radius-xl)) *
+            var(--stack-header-roundness)
+        );
+        --stack-header-bottom-radius: calc(
+          var(--boxel-border-radius-2xl) * var(--stack-header-roundness)
+        );
+        border-radius: var(--stack-header-top-radius)
+          var(--stack-header-top-radius) var(--stack-header-bottom-radius)
+          var(--stack-header-bottom-radius);
       }
       /* Title in the expanded pill stays left-justified inside the
          center column (overrides CardHeader's default text-align: center). */

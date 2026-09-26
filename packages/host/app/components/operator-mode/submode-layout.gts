@@ -3,7 +3,6 @@ import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 
 import { service } from '@ember/service';
-
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
@@ -34,6 +33,8 @@ import ProfileSettingsModal from '@cardstack/host/components/operator-mode/profi
 import ProfileInfoPopover from '@cardstack/host/components/operator-mode/profile-info-popover';
 
 import type IndexController from '@cardstack/host/controllers';
+import type { CardOpenOrigin } from '@cardstack/host/lib/card-open-origin';
+import { motionDurations } from '@cardstack/host/lib/motion-timing';
 
 import { assertNever } from '@cardstack/host/utils/assert-never';
 import { AiAssistantPanelWidth } from '@cardstack/host/utils/local-storage-keys';
@@ -46,9 +47,11 @@ import SubmodeSwitcher, { Submodes } from '../submode-switcher';
 import ChooseSubscriptionPlanModal from './choose-subscription-plan-modal';
 
 import NewFileButton, { type NewFileOptions } from './new-file-button';
+import StackMotion from './stack-motion';
 import WorkspaceChooser from './workspace-chooser';
 
 import type AiAssistantPanelService from '../../services/ai-assistant-panel-service';
+import type HostMotionService from '../../services/host-motion';
 import type MatrixService from '../../services/matrix-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type RecentCardsService from '../../services/recent-cards-service';
@@ -56,15 +59,21 @@ import type SearchSheetStateService from '../../services/search-sheet-state';
 import type StoreService from '../../services/store';
 import type { SearchSheetMode } from '../search-sheet';
 import type { Submode } from '../submode-switcher';
+import type { PerformCommand } from 'glimmer-motion';
 
 interface Signature {
   Element: HTMLDivElement;
   Args: {
     onSearchSheetOpened?: () => void;
     onSearchSheetClosed?: () => void;
-    onCardSelectFromSearch?: (cardId: string, kind?: SearchResultKind) => void;
+    onCardSelectFromSearch?: (
+      cardId: string,
+      kind?: SearchResultKind,
+      origin?: CardOpenOrigin,
+    ) => void | Promise<void>;
     selectedCardRef?: ResolvedCodeRef | undefined;
     newFileOptions?: NewFileOptions;
+    bitmapCrossingActive?: number;
   };
   Blocks: {
     default: [
@@ -108,6 +117,7 @@ const COLLAPSED_TOP_BAR_BUTTONS_WIDTH_REM = 46;
 const COLLAPSED_TOP_BAR_BUTTONS_NOT_EXPANDED_WIDTH_REM = 23;
 
 export default class SubmodeLayout extends Component<Signature> {
+  @service declare private hostMotion: HostMotionService;
   @tracked private searchSheetMode: SearchSheetMode = SearchSheetModes.Closed;
   @tracked private profileSummaryOpened = false;
   @tracked private topBarCenterElement: Element | null = null;
@@ -334,22 +344,30 @@ export default class SubmodeLayout extends Component<Signature> {
     if (this.suppressSearchClose) {
       return;
     }
+    // Blur closes an already-closed sheet after most clicks. Starting a sheet
+    // scene then would finish whatever the click just started (a stack reflow).
+    if (this.searchSheetMode !== SearchSheetModes.Closed)
+      this.hostMotion.begin('sheet');
     this.searchSheetMode = SearchSheetModes.Closed;
     this.args.onSearchSheetClosed?.();
   }
 
   @action private expandSearchToShowResults(_term: string) {
+    if (this.searchSheetMode !== SearchSheetModes.SearchResults)
+      this.hostMotion.begin('sheet');
     this.searchSheetMode = SearchSheetModes.SearchResults;
   }
 
   @action private expandSearchOnFilterChange() {
     if (this.searchSheetMode === SearchSheetModes.SearchPrompt) {
+      this.hostMotion.begin('sheet');
       this.searchSheetMode = SearchSheetModes.SearchResults;
     }
   }
 
   @action private openSearchSheetToPrompt() {
     if (this.searchSheetMode === SearchSheetModes.Closed) {
+      this.hostMotion.begin('sheet');
       // Reopen straight to the results view when a search is persisted, so the
       // restored results are shown immediately rather than the compact prompt.
       // Gate on the service's own `hasActiveSearch` (term OR type OR realm) —
@@ -361,21 +379,95 @@ export default class SubmodeLayout extends Component<Signature> {
         : SearchSheetModes.SearchPrompt;
     }
 
-    this.searchElement?.focus();
+    this.searchElement?.focus({ preventScroll: true });
     this.args.onSearchSheetOpened?.();
+  }
+
+  @tracked private bitmapCrossingToken?: number;
+  private bitmapEntrySequence = 0;
+
+  private get bitmapCrossingActive() {
+    return (
+      this.bitmapCrossingToken !== undefined ||
+      this.args.bitmapCrossingActive !== undefined
+    );
+  }
+
+  // A crossing into a new stack leaves the existing stacks live beneath it,
+  // reflowing to make room; every other crossing owns the whole scene.
+  private get stacksInstant() {
+    return this.bitmapCrossingActive && !this.hostMotion.stacksReflowing;
   }
 
   @action private async handleCardSelectFromSearch(
     cardId: string,
     kind?: SearchResultKind,
+    origin?: CardOpenOrigin,
   ) {
-    this.args.onCardSelectFromSearch?.(cardId, kind);
-    this.closeSearchSheet();
+    let source = origin?.source;
+    let duration = motionDurations.crossing;
+    if (!source || !this.hostMotion.canCross(source, duration)) {
+      // Without a bitmap the new card docks from the tile with Choreo.
+      this.args.onCardSelectFromSearch?.(cardId, kind, origin);
+      this.closeSearchSheet();
+      return;
+    }
+    let token = ++this.bitmapEntrySequence;
+    this.bitmapCrossingToken = token;
+    let bitmapKey = `search-bitmap-${token}`;
+    let { source: _source, ...geometry } = origin!;
+    try {
+      await this.hostMotion.cross({
+        from: source,
+        to: () =>
+          document.querySelector<HTMLElement>(
+            `[data-bitmap-entry="${bitmapKey}"] > .stack-item-card`,
+          ),
+        update: async () => {
+          if (token !== this.bitmapEntrySequence) return;
+          await this.args.onCardSelectFromSearch?.(cardId, kind, {
+            ...geometry,
+            bitmapKey,
+          });
+          if (token === this.bitmapEntrySequence) this.closeSearchSheet();
+        },
+        duration,
+      });
+    } finally {
+      if (this.bitmapCrossingToken === token)
+        this.bitmapCrossingToken = undefined;
+    }
   }
 
   private get workspaceChooserOpened() {
     return this.operatorModeStateService.workspaceChooserOpened;
   }
+
+  private get workspaceChooserVisible() {
+    return (
+      this.workspaceChooserOpened ||
+      !!this.operatorModeStateService.workspacePortal
+    );
+  }
+
+  private get workspaceChooserMounted() {
+    // Retain tiles and scroll state so return does not rebuild the dashboard.
+    return (
+      this.workspaceChooserVisible ||
+      this.operatorModeStateService.state.stacks.some(
+        (stack) => !!stack[0]?.workspaceOrigin,
+      )
+    );
+  }
+
+  private onMotionPerform = (command: PerformCommand) => {
+    if (
+      command.action === 'workspace-portal-complete' &&
+      typeof command.payload === 'number'
+    ) {
+      this.operatorModeStateService.finishWorkspacePortal(command.payload);
+    }
+  };
 
   private set workspaceChooserOpened(workspaceChooserOpened: boolean) {
     this.operatorModeStateService.workspaceChooserOpened =
@@ -407,7 +499,9 @@ export default class SubmodeLayout extends Component<Signature> {
   @action
   private storeSearchElement(element: HTMLElement) {
     this.searchElement = element;
-    this.searchElement.focus();
+    // The sheet never scrolls into view; a plain focus() would force layout
+    // of the half-mounted panel to compute a scroll position.
+    this.searchElement.focus({ preventScroll: true });
   }
   @action
   private openSearchAndShowResults(term: string, typeRef?: ResolvedCodeRef) {
@@ -426,8 +520,10 @@ export default class SubmodeLayout extends Component<Signature> {
       this.suppressSearchClose = true;
 
       let wasClosed = this.searchSheetMode === SearchSheetModes.Closed;
+      if (this.searchSheetMode !== SearchSheetModes.SearchResults)
+        this.hostMotion.begin('sheet');
       this.searchSheetMode = SearchSheetModes.SearchResults;
-      this.searchElement?.focus();
+      this.searchElement?.focus({ preventScroll: true });
       if (wasClosed) {
         this.args.onSearchSheetOpened?.();
       }
@@ -444,7 +540,10 @@ export default class SubmodeLayout extends Component<Signature> {
   @tracked private isChooseSubscriptionPlanModalOpen = false;
 
   <template>
-    <div
+    <StackMotion
+      @onPerform={{this.onMotionPerform}}
+      @instant={{this.stacksInstant}}
+      @portalActive={{bool this.operatorModeStateService.workspacePortal}}
       {{handleWindowResizeModifier this.onWindowResize}}
       class={{cn 'submode-layout' this.aiAssistantVisibilityClass}}
       data-test-submode-layout
@@ -522,9 +621,20 @@ export default class SubmodeLayout extends Component<Signature> {
               />
             </button>
           </div>
-          {{#if this.workspaceChooserOpened}}
+          {{#if this.workspaceChooserMounted}}
             <WorkspaceChooser
-              @topBarCenterElement={{this.topBarCenterElement}}
+              @active={{this.workspaceChooserOpened}}
+              @topBarCenterElement={{if
+                this.workspaceChooserOpened
+                this.topBarCenterElement
+                null
+              }}
+              class={{cn
+                portal-backdrop=this.operatorModeStateService.workspacePortal
+                chooser-concealed=(not this.workspaceChooserVisible)
+              }}
+              inert={{not this.workspaceChooserOpened}}
+              aria-hidden={{unless this.workspaceChooserOpened 'true'}}
             />
           {{/if}}
 
@@ -538,6 +648,7 @@ export default class SubmodeLayout extends Component<Signature> {
           {{#if @onCardSelectFromSearch}}
             <SearchSheet
               @mode={{this.searchSheetMode}}
+              @instant={{this.bitmapCrossingActive}}
               @onSetup={{this.setupSearch}}
               @onBlur={{this.closeSearchSheet}}
               @onCancel={{this.closeSearchSheet}}
@@ -597,7 +708,7 @@ export default class SubmodeLayout extends Component<Signature> {
           </ResizablePanel>
         {{/if}}
       </ResizablePanelGroup>
-    </div>
+    </StackMotion>
 
     {{#if this.operatorModeStateService.profileSettingsOpen}}
       <ProfileSettingsModal
@@ -611,6 +722,13 @@ export default class SubmodeLayout extends Component<Signature> {
     />
 
     <style scoped>
+      :deep(.workspace-chooser.portal-backdrop) {
+        z-index: 0;
+      }
+      :deep(.workspace-chooser.chooser-concealed) {
+        visibility: hidden;
+        pointer-events: none;
+      }
       .submode-layout {
         --submode-bar-item-border-radius: var(--boxel-border-radius);
         --boxel-icon-button-width: var(--container-button-size);

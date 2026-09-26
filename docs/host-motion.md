@@ -1,0 +1,263 @@
+# Host motion
+
+How operator mode animates navigation: which mechanism moves what, who
+decides when motion runs, and how to measure it. Code references are to
+`packages/host/app` unless noted.
+
+## Two mechanisms
+
+**Live geometry (Choreo).** `glimmer-motion`'s `<Choreo>` regions measure
+live DOM before and after a render and tween the difference. They own motion
+that happens inside one scene, where the same elements stay on screen:
+
+- stack reflow (cards and whole stacks taking new widths),
+- the header handoff between a card and the top bar,
+- the search sheet resizing between closed, prompt and results,
+- the Choreo dock (a search pick when no bitmap crossing can run).
+
+Regions: `components/operator-mode/stack-motion.gts` (stacks and headers),
+`components/search-sheet/motion.gts`, and
+`components/operator-mode/workspace-scene.gts` (the clip-path dashboard
+portal, used when a tile crossing cannot run).
+
+**Bitmap crossings (view transitions).** A crossing captures the departing
+face and the landing face as browser bitmaps and morphs one frame between
+them, crossfading the faces, while the live DOM is already at its final
+layout. It owns motion _between_ scenes, where one object becomes another:
+
+| Crossing                         | from → to                              | Caller                                                        |
+| -------------------------------- | -------------------------------------- | ------------------------------------------------------------- |
+| Open a card                      | preview in the parent → new stack item | `interact-submode.gts` `viewCard`                             |
+| Close a card                     | stack item → its preview in the parent | `interact-submode.gts` `close`                                |
+| Open into a new stack, and close | preview → right stack item, and back   | same, with `reflowStacks` / `morph` neighbours                |
+| Expand / restore                 | the card → itself at its new width     | `stack-item.gts` `toggleExpanded`                             |
+| Search pick                      | search result tile → new stack item    | `submode-layout.gts` `handleCardSelectFromSearch`             |
+| Dashboard tile ↔ workspace       | tile wallpaper ↔ realm background      | `workspace-open-origin.ts` `workspaceEntry` / `workspaceExit` |
+
+Nothing is ever scaled live: text keeps its real layout; only raster faces
+scale, cropped with `object-fit: cover` so they never stretch.
+
+## One policy owner: `HostMotionService`
+
+`services/host-motion.ts` decides what may move. Rules, in priority order:
+
+1. **Direct manipulation wins.** A pointer drag past 4 px (or native
+   drag/drop) finishes whatever is playing and disables motion until release.
+2. **One scene at a time.** `begin('stack' | 'header' | 'sheet', primaryId?)`
+   arms one Choreo scene; starting a different scene finishes the current one.
+   With a `primaryId`, only that card reflows; without one (a whole stack
+   closing) every kept card does.
+3. **A crossing owns the scene.** While a crossing plays, Choreo scenes are
+   refused and the stack region is held instant, except when the crossing was
+   started with `reflowStacks` (a card flying into a new stack), which leaves
+   the existing stacks live so they reflow beneath it.
+4. **Nothing is armed at rest.** Regions receive `@armed`; an unarmed region
+   with nothing in flight skips its before/after measurement entirely.
+
+### `cross()` and `canCross()`
+
+Every crossing goes through one entry:
+
+```ts
+await this.hostMotion.cross({
+  from: tileElement,                       // departing face
+  to: () => document.querySelector(...),   // landing face, looked up after update
+  update: () => this.openTheCard(),        // the navigation itself
+  duration: motionDurations.boundary,      // seconds
+  ease: boundaryEase,
+  handoff: 'crossfade' | 'late',           // optional, default crossfade
+  parent,                                  // optional stack parent trading depth
+  scenes,                                  // optional surrounding layers
+  companions,                              // optional small matched objects
+  chrome: 'stationary' | 'summon',         // optional, default stationary
+  reflowStacks,                            // optional, see rule 3
+});
+```
+
+One lookup convention holds throughout: anything in the updated document is
+a function called after the update, and it receives the landing face when
+it needs a point of reference (`to()`, a companion's `to(landing)`, a
+`fall` scene's `seed(landing)`). A `rise` scene's `seed(from)` is called
+before the update, from the departing face.
+
+`cross()` gates (tests, reduced motion, unsupported browser, drag, zero
+duration: run `update` directly), takes and releases the bitmap budget, holds
+the `host-motion:crossing` test waiter, and waits for `afterRender` before
+the new capture. If `to()` returns nothing (the tile scrolled away), the
+departing face just fades.
+
+`canCross(from, duration)` exposes the gate for callers that need a different
+fallback: a search pick checks it first and docks with Choreo when no bitmap
+can play.
+
+Below `cross()`, `lib/bitmap-crossing.ts` `crossfadeCardBitmap(crossing)` is
+the pure mechanism (options documented on `BitmapCrossing`). Call it directly
+only in tests.
+
+A crossing used from more than one place is defined once, next to its
+origins: `lib/workspace-open-origin.ts` `workspaceEntry(tile)` and
+`workspaceExit(wallpaper, findTile)` return the dashboard ↔ workspace crossing
+(without its `update`) and a `restore` for the tile's adopted corners.
+
+### Anatomy of a crossing
+
+Every layer class has a fixed plane (`styles/app.css`), back to front:
+
+| Plane | Layers                                                   |
+| ----- | -------------------------------------------------------- |
+| −1    | scenes: the dashboard, reflowing neighbour stacks        |
+| 0–3   | a parent card: tray, body, header, title and realm icon  |
+| 4–5   | the card: its shadows, then its bitmap                   |
+| 6     | platter: a workspace's cards over its realm background   |
+| 7     | companion: the realm icon flying between tile and header |
+| 8     | stationary chrome: the top bar and AI panel              |
+| 9     | edge chrome: neighbour-stack buttons                     |
+| 10    | persistent chrome: Boxel, account, search, AI            |
+
+Layers, back to front:
+
+- **scenes** — whole surrounding surfaces: `out` fades over the first 45%,
+  `in` from 25% to 80% (the dashboard arriving). `morph` crosses a persistent
+  element's faces at their natural size while its clipping frame moves
+  (neighbouring stacks taking freed width), so a widening stack is revealed,
+  never scaled. `rise` scales and fades an arriving scene up out of the
+  crossing card, centred on the card's moving frame the whole way, starting
+  at its `seed`'s size; `fall` is the reverse. The workspace's platter of
+  cards comes up from the middle of its dashboard tile at the size of the
+  tile's realm icon. Platters paint above the card (`.boxel-platter`), since
+  the card there is the realm background.
+- **companions** — small objects matched as layers of their own, above the
+  platter: the realm icon flies between the tile and the first card's
+  header. Naming the icon keeps it out of the tile bitmap, which would
+  otherwise blow it up across the background. When the header has no icon
+  there is still a slot: while a cold realm's index card loads, a copy of the
+  tile's icon stands where the header's will sit; a realm without an icon
+  URL (its header renders an empty slot) gets an empty stand-in, so the icon
+  dissolves into the slot or fades in from it. The entry waits up to 150 ms
+  for the real header first (`workspaceHeaderRendered`). A companion that
+  still has nowhere to land fades in place and marks
+  `companion-unlanded:<index>`.
+- **the dashboard holds still** — the chooser focuses its default tile
+  without scrolling (`focusWhenSelected` scrolls only for arrow-key
+  navigation); tiles re-created as realm info arrives would otherwise
+  scroll the dashboard under a landing crossing.
+- **parent** — when a card opens over (or returns to) its stack parent, the
+  parent's tray, body and header move as matched layers of their own. The
+  header is one object travelling between its place on the card and the
+  buried strip in both directions, with its title and realm icon matched
+  separately so the title scales between its full and buried sizes.
+- **card bitmap** — the departing and landing faces in one morphing frame.
+  `handoff: 'replace'` is a different card taking the departing one's
+  place (the realm's index card when its last card closes): the faces never
+  share a frame; the departing card recedes toward the top of its slot and
+  the replacement surfaces there from just behind.
+  `handoff: 'late'` keeps the departing face until 82% of the move (expand,
+  so a face growing into a wider layout is never squeezed).
+- **shadows** — `lib/bitmap-shadow.ts` paints contact and pool shadows as
+  their own layers; the card's own `box-shadow` is suppressed during the
+  flight and restored at its resting value with transitions held off through
+  the landing paint.
+- **stationary chrome** — the top bar and assistant, then edge controls
+  (neighbour-stack buttons), captured so the flying card never covers them.
+  `chrome: 'summon'` trades the top bar's controls between the dashboard
+  (View All) and a workspace (Interact, New): the leaving set rises out of
+  the top edge, fading by 40%, and the arriving set drops in from above
+  from 45%.
+- **persistent chrome** — the app's own controls (the Boxel button,
+  account, search and AI) on the topmost plane, each its own layer, at
+  natural size. On screen before and after, their faces cross additively
+  (`plus-lighter`), so they never move or fade with the surface beneath.
+
+A deferred card body (`StackItem.deferContent`) mounts one paint after
+landing; until then the index's prerendered isolated HTML stands in
+(`lib/prerendered-placeholder.ts`, skipped above 100 KB).
+
+### Origins and return addresses
+
+`lib/card-open-origin.ts` resolves where a crossing starts and where it
+returns:
+
+- The preview that holds the click is the origin. A click beside a tile (an
+  open-in-new-stack strip) resolves to the nearest preview. Otherwise a
+  unique visible preview of the card is used.
+- The chosen preview is remembered per parent as the return address, because
+  a buried parent hides every preview and a card shown twice (a fitted tile
+  and an embedded row) would be ambiguous on the way back. The address is
+  released when the card closes.
+- A card opened into its own stack keeps `StackItem.returnTo` (in memory,
+  never persisted). Closing it, when that card is still on top and the tile is
+  visible, crosses back into the tile while the other stacks `morph` into the
+  freed width.
+- Closing the workspace's last card, its index card, takes the same crossing
+  back to the dashboard as the dashboard button.
+- Opening the dashboard crosses the realm background back into that realm's
+  tile on screen, found after the update (`workspaceReturnTile`), preferring
+  the favourite or catalogue copy it was opened from. It needs no stored
+  origin, so it also works after a reload or with several stacks open.
+- A dashboard tile's rounding belongs to its card container; the tile image
+  adopts those corners for the crossing so they tween to and from the square
+  realm background (`lib/workspace-open-origin.ts` `adoptTileCorners`).
+
+## Timing
+
+Every geometric motion uses one curve, `motionEase` (cubic-bezier 0.2, 0.8,
+0.2, 1): it leaves at once, since the click has already waited for capture,
+and lands softly without overshoot. Choreo regions and crossings take it as
+native easing; sampled keyframes (the platter) use `motionEaseAt(t)`. Only
+opacity windows are linear.
+
+`motionDurations` (seconds): card 0.32, exit 0.18, sheet 0.24, search
+crossing 0.32, open and expand 0.32, return 0.26, workspace 0.4. Motions that
+play together share a duration: a card opening into a new stack and the
+stacks reflowing beside it both take 0.32.
+
+All motion takes no time in tests (`isTesting()`), and crossings and deferred
+bodies hold test waiters, so `settled()` covers them. Reduced motion applies
+destinations immediately.
+
+## Performance rules
+
+These are measured, not stylistic:
+
+- **Never mutate a stylesheet during motion.** With hundreds of `<style>`
+  elements on the page, any stylesheet insert, rewrite or removal restyles
+  the whole document (30–60 ms). View-transition CSS is one static rule set
+  installed at load; a crossing toggles classes and inline names only.
+  Removing a direct child of `<body>` has the same cost, so shadow layers
+  live in one persistent `display: contents` host.
+- **Read before write.** A crossing reads every participant's styles before
+  assigning any name, class or group.
+- **Idle regions don't measure.** An unarmed Choreo region skips its
+  before/after rect reads, which otherwise force layout on every render.
+- **Release focus before removing it.** A leaving card that holds focus is
+  blurred before capture; removing a focused element forces a synchronous
+  style recalc mid-update.
+- **Replace, don't retime, browser view-transition animations.** Chrome
+  samples a retimed CSSAnimation inconsistently (some frames use the effect
+  easing, others the CSS timing), which made layers lurch. The motion-dom
+  patch copies their keyframes into WAAPI animations with our timing.
+
+What remains is structural: the first motion frame lands 50–80 ms after a
+click (old capture, update render, new capture), and a new-stack crossing
+spends about 10 ms more measuring the stacks it reflows.
+
+## Measuring
+
+- `?motionSpeed=0.15` slows every host motion for review (0.1–2).
+- `?motionTrace` records User Timing marks (`boxel-motion:*`): capture,
+  update, playback-ready, finished, content-mount, begun/refused scenes, and
+  `return-skipped:<reason>` when a close cannot cross.
+- `?motionInspect=1` records each click's crossing into
+  `<script id="host-motion-inspection">`: frame gaps, long animation frames,
+  phase marks, every frame of every view-transition layer (geometry, face
+  opacity, animation clock), and a `jank` summary flagging reversals,
+  spikes, face-opacity jumps and long frames per layer.
+
+Measure in a visible, foreground tab: hidden tabs throttle
+`requestAnimationFrame` and skip view transitions.
+
+## Dependencies
+
+`glimmer-motion` (Choreo) is vendored as `vendor/glimmer-motion-0.0.0.tgz`;
+it and `motion-dom` carry pnpm patches described in
+`vendor/glimmer-motion.md`. Both should move upstream.

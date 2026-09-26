@@ -39,7 +39,7 @@ interface Signature {
     saveCard: SaveCardFn;
     deleteCard: DeleteCardFn;
     toolContext: ToolContext;
-    close: (stackItem: StackItem) => void;
+    close: (stackItem: StackItem, animate?: boolean) => void | Promise<void>;
     onSelectedCards: (
       selectedCards: CardDefOrId[],
       stackItem: StackItem,
@@ -53,11 +53,6 @@ interface Signature {
 }
 
 export default class OperatorModeStack extends Component<Signature> {
-  private stackItemComponentAPI = new WeakMap<
-    StackItem,
-    StackItemComponentAPI
-  >();
-
   @provide(CardCrudFunctionsContextName)
   // @ts-ignore "cardCrudFunctions" is declared but not used
   private get cardCrudFunctions(): CardCrudFunctions {
@@ -76,25 +71,15 @@ export default class OperatorModeStack extends Component<Signature> {
       itemsToDismiss.push(this.args.stackItems[i]);
     }
 
-    // Animate closing items
-    const animations = itemsToDismiss
-      .map((item) => {
-        const componentAPI = this.stackItemComponentAPI.get(item);
-        return componentAPI?.startAnimation('closing') ?? undefined;
-      })
-      .filter(Boolean);
-
-    // Animate next top item moving forward
-    const nextTopItem = this.args.stackItems[itemIndex];
-    const nextTopItemAPI = this.stackItemComponentAPI.get(nextTopItem);
-
-    if (nextTopItemAPI) {
-      animations.push(nextTopItemAPI.startAnimation('movingForward'));
-    }
-
-    await Promise.all(animations);
-
-    await Promise.all(itemsToDismiss.map((i) => this.args.close(i)));
+    // Choreo retains departing DOM until its exit tween finishes. Update
+    // state together so departures and the remaining cards share one run.
+    // A single close can reverse its shared boundary. A multi-card trim is
+    // one state update, not several competing bitmap captures.
+    await Promise.all(
+      itemsToDismiss.map((i) =>
+        this.args.close(i, itemsToDismiss.length === 1),
+      ),
+    );
   });
 
   private setupStackItem = (
@@ -102,7 +87,6 @@ export default class OperatorModeStack extends Component<Signature> {
     componentAPI: StackItemComponentAPI,
   ) => {
     this.args.setupStackItem(item, componentAPI);
-    this.stackItemComponentAPI.set(item, componentAPI);
   };
 
   <template>
@@ -154,9 +138,6 @@ export default class OperatorModeStack extends Component<Signature> {
         padding-inline: var(--stack-padding-inline);
         padding-bottom: var(--stack-padding-bottom);
         z-index: 0;
-        transition:
-          padding-top var(--boxel-transition),
-          padding-inline var(--boxel-transition);
       }
       .stack-medium-padding-top:not(:has(.item.expanded)) {
         --stack-padding-top: var(--stack-md-padding-top);

@@ -1,6 +1,7 @@
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import { schedule } from '@ember/runloop';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
@@ -13,6 +14,7 @@ import RefreshIcon from '@cardstack/boxel-icons/refresh-cw';
 import { format as formatDate } from 'date-fns';
 import { didCancel, dropTask, task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
+import { modifier } from 'ember-modifier';
 import pluralize from 'pluralize';
 
 import {
@@ -50,6 +52,10 @@ import {
   publishedRealmURLsFromInfo,
   skillsRealmURL,
 } from '@cardstack/host/lib/utils';
+import {
+  workspaceOpenOrigin,
+  workspaceOriginFromElement,
+} from '@cardstack/host/lib/workspace-open-origin';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type NetworkService from '@cardstack/host/services/network';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -119,7 +125,11 @@ export default class Workspace extends Component<Signature> {
         <ItemContainer
           data-test-workspace-button={{this.name}}
           data-nav-index={{@navIndex}}
+          data-workspace-realm={{@realmIdentifier}}
           {{on 'click' this.openWorkspace}}
+          {{this.reportPortalTarget
+            this.operatorModeStateService.workspacePortal.token
+          }}
           {{focusWhenSelected @isSelected}}
         >
           <div
@@ -1955,11 +1965,41 @@ export default class Workspace extends Component<Signature> {
     return this.publishedRealmURLs.length > 0;
   }
 
-  @action async openWorkspace() {
+  @action async openWorkspace(event: Event) {
     await this.operatorModeStateService.openWorkspace(
       this.args.realmIdentifier,
+      workspaceOpenOrigin(event, this.args.realmIdentifier, this.backgroundURL),
     );
   }
+
+  private reportPortalTarget = modifier(
+    (element: HTMLElement, [token]: [number | undefined]) => {
+      let portal = this.operatorModeStateService.workspacePortal;
+      if (
+        !token ||
+        portal?.direction !== 'closing' ||
+        portal.origin.realmURL !== this.args.realmIdentifier ||
+        portal.origin.favorite !== !!this.args.isFavoritesSection
+      )
+        return;
+      // Wait until the chooser has finished layout before measuring its actual
+      // return tile. Update only geometry; the in-flight progress never resets.
+
+      schedule('afterRender', () => {
+        if (!element.isConnected) return;
+        let origin = workspaceOriginFromElement(
+          element,
+          this.args.realmIdentifier,
+          this.backgroundURL,
+        );
+        if (origin)
+          this.operatorModeStateService.updateWorkspacePortalTarget(
+            origin,
+            token,
+          );
+      });
+    },
+  );
 
   @action openDeleteModal() {
     if (!this.canDeleteWorkspace) {

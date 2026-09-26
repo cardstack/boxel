@@ -12,6 +12,7 @@ import { dropTask, restartableTask, timeout } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import onKeyMod from 'ember-keyboard/modifiers/on-key';
 import { consume } from 'ember-provide-consume-context';
+import { motion } from 'glimmer-motion';
 
 import { get } from 'lodash-es';
 import { TrackedWeakMap, TrackedSet } from 'tracked-built-ins';
@@ -56,6 +57,19 @@ import {
   type Filter,
 } from '@cardstack/runtime-common';
 
+import { afterMotionPaint } from '@cardstack/host/lib/after-motion-paint';
+import { supportsBitmapCrossing } from '@cardstack/host/lib/bitmap-crossing';
+import {
+  embeddedCardElement,
+  embeddedCardOrigin,
+  forgetCardActionOrigin,
+  type CardOpenOrigin,
+} from '@cardstack/host/lib/card-open-origin';
+import { htmlComponent } from '@cardstack/host/lib/html-component';
+import { motionDurations } from '@cardstack/host/lib/motion-timing';
+import { traceMotionPhase } from '@cardstack/host/lib/motion-trace';
+import { fetchIsolatedPlaceholder } from '@cardstack/host/lib/prerendered-placeholder';
+
 import {
   detectStackItemTypeForTarget,
   takesFileDeleteRoute,
@@ -84,6 +98,8 @@ import NeighborStackTriggerButton, {
 import OperatorModeStack from './stack';
 
 import SubmodeLayout from './submode-layout';
+import WorkspaceScene from './workspace-scene';
+import WorkspaceWallpaper from './workspace-wallpaper';
 
 import type { NewFileOptions } from './new-file-button';
 import type { CardDefOrId } from './stack-item';
@@ -92,6 +108,7 @@ import type { StackItemComponentAPI } from './stack-item';
 
 import type CardService from '../../services/card-service';
 import type FileUploadService from '../../services/file-upload';
+import type HostMotionService from '../../services/host-motion';
 import type LoaderService from '../../services/loader-service';
 import type NetworkService from '../../services/network';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
@@ -156,6 +173,7 @@ export default class InteractSubmode extends Component {
   @consume(CardContextName) declare private cardContext: CardContext;
 
   @service declare private cardService: CardService;
+  @service declare private hostMotion: HostMotionService;
   @service('file-upload') declare private fileUpload: FileUploadService;
   @service declare private toolService: ToolService;
   @service declare private operatorModeStateService: OperatorModeStateService;
@@ -167,6 +185,8 @@ export default class InteractSubmode extends Component {
   @service declare private network: NetworkService;
 
   @tracked private searchSheetTrigger: SearchSheetTrigger | null = null;
+  @tracked private boundaryCrossingToken?: number;
+  private boundarySequence = 0;
   @tracked private cardToDelete: CardToDelete | undefined = undefined;
   @tracked private recentCardCollection:
     | ReturnType<getCardCollection>
@@ -290,19 +310,20 @@ export default class InteractSubmode extends Component {
     return localId;
   };
 
-  private viewCard = (
+  private viewCard = async (
     stackIndex: number,
     cardOrURL: CardDef | URL | string,
     format: Format | Event = 'isolated',
     opts?: {
       type?: StackItemType;
+      openingOrigin?: CardOpenOrigin;
       openCardInRightMostStack?: boolean;
       stackIndex?: number;
       fieldType?: 'linksTo' | 'linksToMany' | 'contains' | 'containsMany';
       fieldName?: string;
       useBaseTemplate?: boolean;
     },
-  ): void => {
+  ): Promise<void> => {
     if (format instanceof Event) {
       // common when invoked from template {{on}} modifier
       format = 'isolated';
@@ -348,6 +369,19 @@ export default class InteractSubmode extends Component {
         return;
       }
     }
+    let sourceItem = this.stacks[stackIndex]?.at(-1);
+    // Like all host motion, crossings take no time in tests: without a crossing
+    // there is no deferred body, and the card opens as an ordinary push.
+    let boundaryDuration = isTesting() ? 0 : motionDurations.boundary;
+    let origin =
+      boundaryDuration > 0 &&
+      format === 'isolated' &&
+      !this.hostMotion.dragging &&
+      !opts?.openingOrigin &&
+      sourceItem &&
+      supportsBitmapCrossing()
+        ? stackItemComponentAPI.get(sourceItem)?.cardBoundary(cardId)
+        : undefined;
     if (opts?.openCardInRightMostStack) {
       stackIndex = this.stacks.length;
     } else if (typeof opts?.stackIndex === 'number') {
@@ -366,11 +400,18 @@ export default class InteractSubmode extends Component {
       stackIndex = opts.stackIndex;
     }
     let stackItemType = opts?.type ?? this.getStackItemType(cardOrURL, cardId);
+    let token = ++this.boundarySequence;
+    let bitmapKey = `stack-boundary-${token}`;
+    let { source, ...geometry } = origin ?? {};
     let newItem = new StackItem({
       id: cardId,
       format,
       stackIndex,
       type: stackItemType,
+      deferContent: !!source,
+      openingOrigin: source
+        ? { ...(geometry as CardOpenOrigin), bitmapKey }
+        : opts?.openingOrigin,
       useBaseTemplate: opts?.useBaseTemplate,
       relationshipContext: opts?.fieldName
         ? {
@@ -382,8 +423,72 @@ export default class InteractSubmode extends Component {
           }
         : undefined,
     });
-    this.addToStack(newItem);
-    this.operatorModeStateService.closeWorkspaceChooser();
+    let open = () => {
+      this.addToStack(newItem);
+      this.operatorModeStateService.closeWorkspaceChooser();
+    };
+    if (!source) {
+      open();
+      return;
+    }
+    // The live body mounts after the crossing lands. Meanwhile the index's
+    // prerendered isolated HTML stands in, inert, as soon as it arrives; the
+    // incoming view is live during the transition, so it fills in mid-flight.
+    void fetchIsolatedPlaceholder(
+      {
+        network: this.network,
+        realm: this.realm,
+        realmServer: this.realmServer,
+      },
+      cardId,
+    ).then((html) => {
+      if (html && newItem.deferContent && !this.isDestroying) {
+        newItem.placeholder = htmlComponent(html);
+      }
+    });
+    this.boundaryCrossingToken = token;
+    // A card opened into a new stack leaves its source card on top of its own
+    // stack: it is no buried underlay, and every stack reflows to make room.
+    let newStack = stackIndex >= this.stacks.length;
+    if (newStack) newItem.returnTo = sourceItem;
+    // Tests settle only once the crossing and its deferred body are done.
+    let waiterToken = waiter.beginAsync();
+    try {
+      await this.hostMotion.cross({
+        from: source,
+        to: () =>
+          document.querySelector<HTMLElement>(
+            `[data-bitmap-entry="${bitmapKey}"] > .stack-item-card`,
+          ),
+        update: () => {
+          if (this.isDestroying || token !== this.boundarySequence) return;
+          open();
+        },
+        duration: boundaryDuration,
+        parent: newStack
+          ? undefined
+          : (source.closest<HTMLElement>('.stack-item-card') ?? undefined),
+        reflowStacks: newStack,
+      });
+    } finally {
+      // The match exists for this crossing only. Ordinary card updates must
+      // never replay it or retain a reference to the source DOM.
+      newItem.openingOrigin = undefined;
+      if (this.boundaryCrossingToken === token)
+        this.boundaryCrossingToken = undefined;
+      // A large authored body can block hundreds of milliseconds. Give the
+      // primary crossing its complete paint interval before mounting it.
+      // The same bounded handoff runs after interruption or a skipped capture.
+      await new Promise<void>((resolve) => {
+        afterMotionPaint(() => {
+          traceMotionPhase('content-mount');
+          newItem.deferContent = false;
+          newItem.placeholder = undefined;
+          resolve();
+        });
+      });
+      waiter.endAsync(waiterToken);
+    }
   };
 
   private editCard = (
@@ -414,28 +519,162 @@ export default class InteractSubmode extends Component {
 
   stackBackgroundsState = stackBackgroundsResource(this);
 
-  private get backgroundImageStyle() {
+  private get workspaceEntry() {
+    let item = this.stacks.length === 1 ? this.stacks[0]?.[0] : undefined;
+    if (!item?.workspaceOrigin) return undefined;
+    return { id: item.instanceId, origin: item.workspaceOrigin };
+  }
+
+  private get backgroundImageURL() {
     // only return a background image when both stacks originate from the same realm
     // otherwise we delegate to each stack to handle this
     let { hasDifferingBackgroundURLs } = this.stackBackgroundsState;
-    if (this.stackBackgroundsState.backgroundImageURLs.length === 0) {
-      return htmlSafe('');
+    if (this.workspaceEntry) {
+      // The selected realm metadata is already loaded by its dashboard tile.
+      // Do not wait for the index card or show the preceding realm's image.
+      let { origin } = this.workspaceEntry;
+      let info = this.realm.info(origin.realmURL);
+      return info ? (info.backgroundURL ?? undefined) : origin.backgroundURL;
     }
     if (!hasDifferingBackgroundURLs) {
-      return htmlSafe(
-        `background-image: url(${this.stackBackgroundsState.backgroundImageURLs[0]});`,
-      );
+      return this.stackBackgroundsState.backgroundImageURLs[0];
     }
-    return htmlSafe('');
+    return undefined;
   }
 
-  private close = (item: StackItem) => {
-    // close the item first so user doesn't have to wait for the save to complete
-    this.operatorModeStateService.trimItemsFromStack(item);
-    let { request, id } = item;
+  private get workspaceConcealed() {
+    return (
+      this.operatorModeStateService.workspaceChooserOpened &&
+      !this.operatorModeStateService.workspacePortal
+    );
+  }
 
-    if (id && item.format === 'edit') {
-      request?.fulfill(id);
+  private close = async (item: StackItem, animate = true) => {
+    let remove = () => {
+      // Close without waiting for the save to complete.
+      this.operatorModeStateService.trimItemsFromStack(item);
+      if (item.id && item.format === 'edit') item.request?.fulfill(item.id);
+    };
+    if (animate && this.operatorModeStateService.closesWorkspace(item)) {
+      await this.operatorModeStateService.closeWorkspace(remove);
+      return;
+    }
+    // The realm's index card takes the last card's place: it surfaces in the
+    // same slot as the closing card recedes.
+    let closing = stackItemComponentAPI.get(item)?.element();
+    if (
+      animate &&
+      closing &&
+      this.operatorModeStateService.closesToIndex(item)
+    ) {
+      await this.hostMotion.cross({
+        from: closing,
+        to: () =>
+          Array.from(
+            document.querySelectorAll<HTMLElement>(
+              '.stacks .operator-mode-stack .stack-item-card',
+            ),
+          ).find((card) => !closing.contains(card)),
+        update: remove,
+        duration: isTesting() ? 0 : motionDurations.boundary,
+        handoff: 'replace',
+      });
+      return;
+    }
+    let stack = this.stacks[item.stackIndex];
+    let parent = stack?.at(-2);
+    // A card that opened into its own stack settles back into the tile it
+    // came from in another stack, while the remaining stacks take its width.
+    let home =
+      !parent &&
+      stack?.length === 1 &&
+      item.returnTo &&
+      this.stacks[item.returnTo.stackIndex]?.at(-1) === item.returnTo
+        ? item.returnTo
+        : undefined;
+    let source = stackItemComponentAPI.get(item)?.element();
+    let underlay =
+      (parent ?? home) &&
+      stackItemComponentAPI.get((parent ?? home)!)?.element();
+    let returnDuration = isTesting() ? 0 : motionDurations.boundaryReturn;
+    let skip = !animate
+      ? 'unanimated'
+      : returnDuration === 0
+        ? 'no-duration'
+        : item.format !== 'isolated'
+          ? 'format'
+          : stack?.at(-1) !== item
+            ? 'not-top'
+            : this.hostMotion.dragging
+              ? 'dragging'
+              : !supportsBitmapCrossing()
+                ? 'unsupported'
+                : !source
+                  ? 'no-source'
+                  : !underlay
+                    ? 'no-underlay'
+                    : !embeddedCardElement(underlay, item.id)
+                      ? 'no-return-tile'
+                      : undefined;
+    if (skip || !source || !underlay) {
+      traceMotionPhase(`return-skipped:${skip}`);
+      remove();
+      return;
+    }
+
+    // The crossing releases focus inside the leaving card before capture. An
+    // expanded card's header is portaled into the top bar, outside it.
+    let focused = document.activeElement;
+    if (
+      focused instanceof HTMLElement &&
+      focused.closest('.expanded-card-header-pill')
+    ) {
+      focused.blur();
+    }
+
+    let token = ++this.boundarySequence;
+    // Every other stack changes width when this stack goes. Its cards move
+    // as one layer, so a top card and the parents buried under it stay
+    // together.
+    let reflowKey = `stack-return-${token}`;
+    let neighbours = home
+      ? this.stacks
+          .filter((other) => other !== stack)
+          .map((other) =>
+            stackItemComponentAPI
+              .get(other.at(-1)!)
+              ?.element()
+              ?.closest<HTMLElement>('.operator-mode-stack > .inner'),
+          )
+          .filter((element): element is HTMLElement => !!element)
+      : [];
+    for (let element of neighbours) element.dataset.bitmapReflow = reflowKey;
+    this.boundaryCrossingToken = token;
+    let waiterToken = waiter.beginAsync();
+    try {
+      await this.hostMotion.cross({
+        from: source,
+        // The tile's real layout once its card is back on top. If it
+        // disappeared or scrolled away, the outgoing bitmap just fades.
+        to: () => embeddedCardOrigin(underlay, item.id)?.source,
+        update: () => {
+          if (this.isDestroying || token !== this.boundarySequence) return;
+          remove();
+        },
+        duration: returnDuration,
+        parent: home ? undefined : underlay,
+        scenes: home
+          ? [{ selector: `[data-bitmap-reflow="${reflowKey}"]`, fade: 'morph' }]
+          : [],
+      });
+    } finally {
+      for (let element of neighbours)
+        if (element.dataset.bitmapReflow === reflowKey)
+          delete element.dataset.bitmapReflow;
+      forgetCardActionOrigin(underlay, item.id);
+      if (this.boundaryCrossingToken === token)
+        this.boundaryCrossingToken = undefined;
+      waiter.endAsync(waiterToken);
     }
   };
 
@@ -675,7 +914,11 @@ export default class InteractSubmode extends Component {
   }
 
   private openSelectedSearchResultInStack = restartableTask(
-    async (cardId: string, kind?: SearchResultKind) => {
+    async (
+      cardId: string,
+      kind?: SearchResultKind,
+      openingOrigin?: CardOpenOrigin,
+    ) => {
       let waiterToken = waiter.beginAsync();
       try {
         let searchSheetTrigger = this.searchSheetTrigger; // Will be set by showSearchWithTrigger
@@ -692,6 +935,7 @@ export default class InteractSubmode extends Component {
         ) {
           let newItem = new StackItem({
             id: cardId,
+            openingOrigin,
             format: 'isolated',
             stackIndex: 0,
             type: kind ?? this.getStackItemType(cardId, cardId),
@@ -717,6 +961,7 @@ export default class InteractSubmode extends Component {
         ) {
           await this.viewCard(this.stacks.length, cardId, 'isolated', {
             type: kind,
+            openingOrigin,
           });
         } else {
           // In case, that the search was accessed directly without clicking right and left buttons,
@@ -729,7 +974,10 @@ export default class InteractSubmode extends Component {
             numberOfStacks === 0 ||
             this.operatorModeStateService.stackIsEmpty(stackIndex)
           ) {
-            await this.viewCard(0, cardId, 'isolated', { type: kind });
+            await this.viewCard(0, cardId, 'isolated', {
+              type: kind,
+              openingOrigin,
+            });
           } else {
             stack = this.operatorModeStateService.rightMostStack();
             if (stack) {
@@ -737,6 +985,7 @@ export default class InteractSubmode extends Component {
               if (bottomMostItem) {
                 let stackItem = new StackItem({
                   id: cardId,
+                  openingOrigin,
                   format: 'isolated',
                   stackIndex,
                   type: kind ?? this.getStackItemType(cardId, cardId),
@@ -957,21 +1206,24 @@ export default class InteractSubmode extends Component {
       @onSearchSheetClosed={{this.clearSearchSheetTrigger}}
       @onCardSelectFromSearch={{perform this.openSelectedSearchResultInStack}}
       @newFileOptions={{this.newFileOptions}}
+      @bitmapCrossingActive={{this.boundaryCrossingToken}}
       data-test-interact-submode
       as |search|
     >
-      <div
+      <WorkspaceScene
+        @portal={{this.operatorModeStateService.workspacePortal}}
+        @concealed={{this.workspaceConcealed}}
         class={{cn
           'interact-submode'
           has-expanded-card=this.operatorModeStateService.hasAnyStackItemExpanded
         }}
-        style={{this.backgroundImageStyle}}
         {{onKeyMod 'Escape' this.handleEscape}}
         {{! Ctrl+E (not Cmd+E — taken by browsers' "Use Selection for Find").
            Lowercase 'e' matches event.key, so Dvorak/AZERTY users get the
            shortcut on whatever key produces 'e' on their layout. }}
         {{onKeyMod 'ctrl+e' this.handleToggleEdit}}
       >
+        <WorkspaceWallpaper @backgroundURL={{this.backgroundImageURL}} />
         {{#if this.canCreateNeighborStack}}
           <NeighborStackTriggerButton
             class='neighbor-stack-trigger stack-trigger-left'
@@ -983,7 +1235,10 @@ export default class InteractSubmode extends Component {
             }}
           />
         {{/if}}
-        <div class={{cn 'stacks' is-multi-stack=(gt this.stacks.length 1)}}>
+        <div
+          class={{cn 'stacks' is-multi-stack=(gt this.stacks.length 1)}}
+          {{motion role='workspace-cards'}}
+        >
           {{#each this.stacks as |stack stackIndex|}}
             {{#let
               (get
@@ -1055,7 +1310,7 @@ export default class InteractSubmode extends Component {
             </:content>
           </DeleteModal>
         {{/if}}
-      </div>
+      </WorkspaceScene>
     </SubmodeLayout>
 
     <style scoped>
@@ -1073,11 +1328,11 @@ export default class InteractSubmode extends Component {
         justify-content: center;
         align-items: center;
         position: relative;
-        background-position: center;
-        background-size: cover;
         height: 100%;
       }
       .stacks {
+        position: relative;
+        z-index: 1;
         flex: 1;
         height: 100%;
         display: flex;
