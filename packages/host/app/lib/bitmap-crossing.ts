@@ -117,43 +117,47 @@ export function supportsBitmapCrossing() {
 // A layer around the card crossing. 'out' fades a departing scene over the
 // first part of the move, 'in' fades an arriving scene in from a quarter of
 // the way, and 'morph' crosses a persistent element's two faces while its
-// frame moves (a neighbouring stack taking freed width). 'rise' grows an
-// arriving scene out of its seed and 'fall' shrinks a departing one into it:
-// the platter of cards over a realm background, growing out of the realm
-// icon on its dashboard tile.
+// frame moves (a neighbouring stack taking freed width). 'rise' scales and
+// fades an arriving scene up out of the crossing card, centred on the card's
+// moving frame the whole way, and 'fall' the reverse: the workspace's
+// platter of cards arriving from the middle of its dashboard tile.
 export interface CrossingScene {
   selector: string;
   fade: 'in' | 'out' | 'morph' | 'rise' | 'fall';
-  // 'rise' and 'fall': the element the scene grows out of or shrinks into,
-  // looked up in the document it belongs to (before the update for 'rise',
-  // after it for 'fall'). Without one the scene only fades.
-  seed?: () => HTMLElement | null | undefined;
+  // 'rise' and 'fall': an element whose size the scene starts from (or ends
+  // at), found from the card face in its own document: the departing face
+  // for 'rise', the landing face for 'fall'. The tile's realm icon, so the
+  // platter starts no bigger than the icon it appears behind. Without one it
+  // scales from 60%.
+  seed?: (face: HTMLElement) => HTMLElement | null | undefined;
 }
 
-// A scene grown from a seed starts a little larger than it, so the platter
-// visibly surrounds the icon rather than hiding behind it.
-const seedMargin = 1.5;
+const unseededScale = 0.6;
 
-// The scene scales about its seed on the boundary spring across the whole
-// crossing, in step with the card: a point on the platter (its header's realm
-// icon) tracks the companion flying to it. Rising, it is opaque by 35%, while
-// still small; falling, it holds until halfway and is gone by 85%, as it
-// reaches the seed. Sampled so opacity and scale keep separate windows in one
-// keyframe list.
-export function sceneZoomKeyframes(
-  layer: DOMRect,
-  seed: DOMRect | undefined,
+// The frame's centre travels with the crossing card on the boundary spring
+// while the scene scales from its seed's size. Rising, it is opaque by 40%;
+// falling, gone by 70%. Sampled so opacity and geometry keep separate
+// windows in one keyframe list.
+function platterKeyframes(
   arriving: boolean,
+  layer?: DOMRect,
+  frame?: DOMRect,
+  seed?: DOMRect,
 ) {
   let clamp = (value: number) => Math.min(1, Math.max(0, value));
-  let seedScale = seed
-    ? clamp(
-        (seedMargin * Math.max(seed.width, seed.height)) /
-          Math.max(layer.width, layer.height),
-      )
-    : 1;
-  let dx = seed ? seed.x + seed.width / 2 - layer.x - layer.width / 2 : 0;
-  let dy = seed ? seed.y + seed.height / 2 - layer.y - layer.height / 2 : 0;
+  let start =
+    layer && seed
+      ? clamp(
+          (1.2 * Math.max(seed.width, seed.height)) /
+            Math.max(layer.width, layer.height),
+        )
+      : unseededScale;
+  let dx =
+    layer && frame ? frame.x + frame.width / 2 - layer.x - layer.width / 2 : 0;
+  let dy =
+    layer && frame
+      ? frame.y + frame.height / 2 - layer.y - layer.height / 2
+      : 0;
   let times: number[] = [];
   let opacity: number[] = [];
   let transform: string[] = [];
@@ -161,14 +165,11 @@ export function sceneZoomKeyframes(
   for (let step = 0; step <= steps; step++) {
     let t = step / steps;
     let grown = arriving ? boundaryEase(t) : 1 - boundaryEase(t);
-    let scale = seedScale + (1 - seedScale) * grown;
-    opacity.push(
-      arriving ? clamp((t - 0.05) / 0.3) : 1 - clamp((t - 0.5) / 0.35),
-    );
-    let pull = 1 - scale;
+    let away = 1 - grown;
     times.push(t);
+    opacity.push(arriving ? clamp((t - 0.05) / 0.35) : 1 - clamp(t / 0.7));
     transform.push(
-      `translate(${(pull * dx).toFixed(2)}px, ${(pull * dy).toFixed(2)}px) scale(${scale.toFixed(4)})`,
+      `translate(${(away * dx).toFixed(2)}px, ${(away * dy).toFixed(2)}px) scale(${(start + (1 - start) * grown).toFixed(4)})`,
     );
   }
   return {
@@ -181,16 +182,17 @@ export function sceneZoomKeyframes(
 // (a realm icon travelling between a dashboard tile and a card header).
 export interface CrossingCompanion {
   from: HTMLElement;
-  // Looked up after the update; nothing means the companion fades out.
-  to: () => HTMLElement | null | undefined;
+  // Found after the update, from the landing face when there is one.
+  // Nothing means the companion fades out.
+  to: (landing: HTMLElement | undefined) => HTMLElement | null | undefined;
 }
 
 export interface BitmapCrossing {
   // The departing face: its snapshot is where the move starts.
   from: HTMLElement;
-  // Selector for the landing face in the updated document. Nothing matching
-  // means the departing face simply fades.
-  to: string;
+  // The landing face, looked up once the update has run. Nothing (the tile
+  // scrolled away or was removed) means the departing face simply fades.
+  to: () => HTMLElement | null | undefined;
   // Applies the navigation between the old and new captures.
   update: () => void | Promise<void>;
   // Seconds, before inspection slow-motion is applied.
@@ -219,7 +221,7 @@ export interface BitmapCrossing {
 // No live card tree is resized or independently stretched on either axis.
 export async function crossfadeCardBitmap({
   from: source,
-  to: destination,
+  to,
   update,
   duration = motionDurations.crossing,
   ease = motionEase,
@@ -240,7 +242,9 @@ export async function crossfadeCardBitmap({
     return;
   }
   let updated = false;
-  let companionKey = `companion-${++underlaySequence}`;
+  let crossingKey = `crossing-${++underlaySequence}`;
+  let landingSelector = `[data-bitmap-landing="${crossingKey}"]`;
+  let landing: HTMLElement | undefined;
   let underlayKey: string | undefined;
   let bodyFrame: HTMLElement | undefined;
   let shadow: ReturnType<typeof prepareBitmapShadow> | undefined;
@@ -269,12 +273,17 @@ export async function crossfadeCardBitmap({
       body && opening
         ? { width: body.offsetWidth, height: body.offsetHeight }
         : undefined;
-    let seedRects = new Map(
+    // A rising platter centres on the departing face and starts at its
+    // seed's size; a falling one needs its own box before the update.
+    let departing = scenes.some((scene) => scene.fade === 'rise')
+      ? source.getBoundingClientRect()
+      : undefined;
+    let risingSeeds = new Map(
       scenes
         .filter((scene) => scene.fade === 'rise')
-        .map((scene) => [scene, scene.seed?.()?.getBoundingClientRect()]),
+        .map((scene) => [scene, scene.seed?.(source)?.getBoundingClientRect()]),
     );
-    let fallRects = new Map(
+    let fallingLayers = new Map(
       scenes
         .filter((scene) => scene.fade === 'fall')
         .map((scene) => [
@@ -291,6 +300,8 @@ export async function crossfadeCardBitmap({
         updated = true;
         traceMotionPhase('update-start');
         await update();
+        landing = to() ?? undefined;
+        landing?.setAttribute('data-bitmap-landing', crossingKey);
         traceMotionPhase('update-rendered');
         for (let part of parts) {
           let target = underlay?.querySelector<HTMLElement>(part.selector);
@@ -308,35 +319,38 @@ export async function crossfadeCardBitmap({
             ?.setAttribute('data-bitmap-header-entry', underlayKey);
         traceMotionPhase('header-measured');
         for (let scene of scenes) {
-          if (scene.fade !== 'rise' && scene.fade !== 'fall') continue;
           let target = builder.targets.get(scene.selector);
           if (!target) continue;
           if (scene.fade === 'rise') {
             let layer = document.querySelector(scene.selector);
-            if (layer)
-              target.new = sceneZoomKeyframes(
-                layer.getBoundingClientRect(),
-                seedRects.get(scene),
+            if (layer) {
+              let { keyframes, options } = platterKeyframes(
                 true,
+                layer.getBoundingClientRect(),
+                departing,
+                risingSeeds.get(scene),
               );
-          } else {
-            let layer = fallRects.get(scene);
-            if (layer)
-              target.old = sceneZoomKeyframes(
-                layer,
-                scene.seed?.()?.getBoundingClientRect(),
-                false,
-              );
+              target.new = { keyframes, options };
+            }
+          } else if (scene.fade === 'fall' && landing) {
+            let { keyframes, options } = platterKeyframes(
+              false,
+              fallingLayers.get(scene),
+              landing.getBoundingClientRect(),
+              scene.seed?.(landing)?.getBoundingClientRect(),
+            );
+            target.old = { keyframes, options };
           }
         }
-        companions.forEach((companion, index) =>
-          companion
-            .to()
-            ?.setAttribute('data-bitmap-companion', `${companionKey}-${index}`),
-        );
-        let destinationPainted = shadow?.update(
-          document.querySelector<HTMLElement>(destination),
-        );
+        companions.forEach((companion, index) => {
+          let arrival = companion.to(landing);
+          if (!arrival) traceMotionPhase(`companion-unlanded:${index}`);
+          arrival?.setAttribute(
+            'data-bitmap-companion',
+            `${crossingKey}-${index}`,
+          );
+        });
+        let destinationPainted = shadow?.update(landing ?? null);
         let capture = shadow;
         if (capture && destinationPainted) {
           capture.layers.forEach((layer, index) => {
@@ -376,7 +390,7 @@ export async function crossfadeCardBitmap({
       },
       { duration: duration / inspectionSpeed(), ease },
     )
-      .add(source, destination)
+      .add(source, landingSelector)
       .class('boxel-card-bitmap')
       .group(false)
       .crop(true);
@@ -495,11 +509,12 @@ export async function crossfadeCardBitmap({
     for (let scene of scenes) {
       if (scene.fade === 'morph') {
         // A persistent element whose box changes around the crossing (a
-        // neighbouring stack taking the freed width): its two faces cross
-        // while its frame moves, like a card expanding.
+        // neighbouring stack taking the freed width): its two faces cross at
+        // their natural size while the clipping frame moves. A covering crop
+        // would scale the whole stack up as it widens.
         builder
           .add(scene.selector)
-          .class('boxel-scene')
+          .class('boxel-reflow')
           .group(false)
           .crop(true);
         builder.old({ opacity: [1, 0] });
@@ -515,7 +530,16 @@ export async function crossfadeCardBitmap({
         )
         .group(false)
         .crop(false);
-      if (scene.fade === 'out' || scene.fade === 'fall') {
+      if (scene.fade === 'rise' || scene.fade === 'fall') {
+        let { keyframes, options } = platterKeyframes(scene.fade === 'rise');
+        if (scene.fade === 'rise') {
+          builder.old({ opacity: 0 }, { duration: 0 });
+          builder.new(keyframes, options);
+        } else {
+          builder.old(keyframes, options);
+          builder.new({ opacity: 0 }, { duration: 0 });
+        }
+      } else if (scene.fade === 'out') {
         builder.old(
           { opacity: [1, 0, 0] },
           { times: [0, 0.45, 1], ease: 'linear' },
@@ -531,7 +555,7 @@ export async function crossfadeCardBitmap({
     }
     companions.forEach(({ from }, index) => {
       builder
-        .add(from, `[data-bitmap-companion="${companionKey}-${index}"]`)
+        .add(from, `[data-bitmap-companion="${crossingKey}-${index}"]`)
         .class('boxel-companion')
         .group(false)
         .crop(false);
@@ -593,9 +617,11 @@ export async function crossfadeCardBitmap({
       document
         .querySelector(`[data-bitmap-header-entry="${underlayKey}"]`)
         ?.removeAttribute('data-bitmap-header-entry');
-    for (let landing of document.querySelectorAll(
-      `[data-bitmap-companion^="${companionKey}-"]`,
+    if (landing?.getAttribute('data-bitmap-landing') === crossingKey)
+      landing.removeAttribute('data-bitmap-landing');
+    for (let companion of document.querySelectorAll(
+      `[data-bitmap-companion^="${crossingKey}-"]`,
     ))
-      landing.removeAttribute('data-bitmap-companion');
+      companion.removeAttribute('data-bitmap-companion');
   }
 }

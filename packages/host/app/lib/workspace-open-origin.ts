@@ -1,4 +1,8 @@
+import { afterMotionPaint } from './after-motion-paint';
+import { boundaryEase, motionDurations } from './motion-timing';
+
 import type { CardOpenOrigin } from './card-open-origin';
+import type { HostCrossing } from '../services/host-motion';
 
 export interface WorkspaceOpenOrigin extends CardOpenOrigin {
   realmURL: string;
@@ -123,7 +127,7 @@ export function workspaceReturnTile(
   return card?.querySelector<HTMLElement>('.tile-icon') ?? undefined;
 }
 
-// The realm icon on a dashboard tile: the seed a workspace grows out of.
+// The realm icon on a dashboard tile, which flies to the workspace header.
 export function tileRealmIcon(tile: HTMLElement) {
   return tile.querySelector<HTMLElement>('.realm-icon-wrapper') ?? undefined;
 }
@@ -136,4 +140,79 @@ export function workspaceHeaderIcon() {
       '.stacks .operator-mode-stack .stack-item-header .realm-icon',
     ) ?? undefined
   );
+}
+
+const dashboard = '.workspace-chooser';
+const platter = '.stacks';
+
+type WorkspaceCrossing = Omit<HostCrossing, 'update'>;
+
+// Dashboard to workspace, like a fitted card opening to isolated: the tile
+// crosses into the realm background while the dashboard fades out, the
+// realm icon flies to the first card's header, and the platter of cards
+// scales and fades up behind it from the middle of the tile, starting at the
+// icon's size. restore() once it lands.
+export function workspaceEntry(tile: HTMLElement): {
+  crossing: WorkspaceCrossing;
+  restore: () => void;
+} {
+  let icon = tileRealmIcon(tile);
+  return {
+    restore: adoptTileCorners(tile),
+    crossing: {
+      from: tile,
+      to: () => document.querySelector<HTMLElement>('.workspace-wallpaper'),
+      duration: motionDurations.workspace,
+      ease: boundaryEase,
+      chrome: 'crossfade',
+      scenes: [
+        { selector: dashboard, fade: 'out' },
+        { selector: platter, fade: 'rise', seed: tileRealmIcon },
+      ],
+      companions: icon ? [{ from: icon, to: workspaceHeaderIcon }] : [],
+    },
+  };
+}
+
+// The mirror: the realm background crosses back into the tile `findTile`
+// finds once the dashboard renders, the header's realm icon flies back to
+// it as the platter scales and fades down, and the dashboard fades in. With no tile
+// on screen the background simply fades. restore() once it lands.
+export function workspaceExit(
+  wallpaper: HTMLElement,
+  findTile: () => HTMLElement | undefined,
+): { crossing: WorkspaceCrossing; restore: () => void } {
+  let icon = workspaceHeaderIcon();
+  let restore = () => {};
+  return {
+    restore: () => restore(),
+    crossing: {
+      from: wallpaper,
+      to: () => {
+        let tile = findTile();
+        if (tile) restore = adoptTileCorners(tile);
+        return tile;
+      },
+      duration: motionDurations.workspace,
+      ease: boundaryEase,
+      chrome: 'crossfade',
+      scenes: [
+        { selector: platter, fade: 'fall', seed: tileRealmIcon },
+        { selector: dashboard, fade: 'in' },
+      ],
+      companions: icon
+        ? [{ from: icon, to: (tile) => tile && tileRealmIcon(tile) }]
+        : [],
+    },
+  };
+}
+
+// A cold realm's index card can still be rendering its header when the
+// crossing captures. Give the icon a few frames to appear so it has
+// somewhere to land; the crossing plays regardless after `timeout` ms.
+export async function workspaceHeaderRendered(timeout = 300) {
+  let deadline = performance.now() + timeout;
+  while (!workspaceHeaderIcon() && performance.now() < deadline) {
+    await new Promise<void>((resolve) => afterMotionPaint(resolve));
+  }
 }

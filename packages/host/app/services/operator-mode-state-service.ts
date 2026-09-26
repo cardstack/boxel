@@ -33,19 +33,16 @@ import {
 
 import type { Submode } from '@cardstack/host/components/submode-switcher';
 import { Submodes } from '@cardstack/host/components/submode-switcher';
-import {
-  boundaryEase,
-  motionDurations,
-} from '@cardstack/host/lib/motion-timing';
+import { motionDurations } from '@cardstack/host/lib/motion-timing';
 import {
   StackItem,
   takesFileDeleteRoute,
   type StackItemType,
 } from '@cardstack/host/lib/stack-item';
 import {
-  adoptTileCorners,
-  tileRealmIcon,
-  workspaceHeaderIcon,
+  workspaceEntry,
+  workspaceExit,
+  workspaceHeaderRendered,
   workspaceOriginFromElement,
   workspaceReturnTile,
   type WorkspaceOpenOrigin,
@@ -1554,31 +1551,17 @@ export default class OperatorModeStateService extends Service {
     let { source, ...rest } = workspaceOrigin ?? {};
     let origin = workspaceOrigin ? (rest as WorkspaceOpenOrigin) : undefined;
     if (source && this.hostMotion.canCross(source, motionDurations.workspace)) {
-      // Like a fitted card opening to isolated: the tile's wallpaper crosses
-      // into the realm background while the dashboard fades out beneath it
-      // and the index card fades in over the landing.
-      let restoreCorners = adoptTileCorners(source);
-      let tileIcon = tileRealmIcon(source);
+      let { crossing, restore } = workspaceEntry(source);
       try {
         await this.hostMotion.cross({
-          from: source,
-          to: () => document.querySelector<HTMLElement>('.workspace-wallpaper'),
-          update: () => this.enterWorkspace(realmUrl, origin, false),
-          duration: motionDurations.workspace,
-          ease: boundaryEase,
-          // The platter of cards grows out of the tile's realm icon while
-          // the icon flies to its place in the card header.
-          scenes: [
-            { selector: '.workspace-chooser', fade: 'out' },
-            { selector: '.stacks', fade: 'rise', seed: () => tileIcon },
-          ],
-          companions: tileIcon
-            ? [{ from: tileIcon, to: workspaceHeaderIcon }]
-            : [],
-          chrome: 'crossfade',
+          ...crossing,
+          update: async () => {
+            this.enterWorkspace(realmUrl, origin, false);
+            await workspaceHeaderRendered();
+          },
         });
       } finally {
-        restoreCorners();
+        restore();
       }
     } else {
       this.enterWorkspace(realmUrl, origin, true);
@@ -1642,25 +1625,16 @@ export default class OperatorModeStateService extends Service {
       workspaceChooserOpened !== this.workspaceChooserOpened &&
       this.state.submode === Submodes.Interact
     ) {
-      let origin =
-        this._state.stacks.length === 1
-          ? this._state.stacks[0]?.[0]?.workspaceOrigin
-          : undefined;
-      // The return needs only the realm whose background is showing, not how
-      // the workspace was entered: after a reload, a pasted URL, or with
-      // several stacks open there is no stored tile origin.
-      let wallpaper = workspaceChooserOpened
-        ? document.querySelector<HTMLElement>('.workspace-wallpaper')
-        : null;
-      let realmURL = origin?.realmURL ?? this.workspaceRealmURL;
       if (
-        wallpaper &&
-        realmURL &&
-        this.hostMotion.canCross(wallpaper, motionDurations.workspace)
+        workspaceChooserOpened &&
+        this.crossToDashboard(() => {
+          this._state.workspaceChooserOpened = true;
+          this.schedulePersist();
+        })
       ) {
-        void this.returnToWorkspaceTile(wallpaper, realmURL, origin?.favorite);
         return;
       }
+      let origin = this.workspaceTileOrigin;
       if (origin)
         this.startWorkspacePortal(
           origin,
@@ -1683,27 +1657,17 @@ export default class OperatorModeStateService extends Service {
     );
   }
 
-  // Leaves the workspace by closing its last card, crossing the realm
-  // background back into its dashboard tile like the dashboard button does.
+  // Leaves the workspace by closing its last card, with the same crossing
+  // back to the dashboard as the dashboard button.
   async closeWorkspace(remove: () => void) {
-    let wallpaper = document.querySelector<HTMLElement>('.workspace-wallpaper');
-    let realmURL = this.workspaceRealmURL;
-    if (
-      !wallpaper ||
-      !realmURL ||
-      this.state.submode !== Submodes.Interact ||
-      !this.hostMotion.canCross(wallpaper, motionDurations.workspace)
-    ) {
-      remove();
-      return;
-    }
-    let origin = this._state.stacks[0]?.[0]?.workspaceOrigin;
-    await this.returnToWorkspaceTile(
-      wallpaper,
-      realmURL,
-      origin?.favorite,
-      remove,
-    );
+    await (this.crossToDashboard(remove) ?? remove());
+  }
+
+  // The tile a single-stack workspace was opened from, if it remembers one.
+  private get workspaceTileOrigin() {
+    return this._state.stacks.length === 1
+      ? this._state.stacks[0]?.[0]?.workspaceOrigin
+      : undefined;
   }
 
   // The realm behind the stacks: its background is the workspace wallpaper.
@@ -1712,52 +1676,29 @@ export default class OperatorModeStateService extends Service {
     return (id && this.realm.url(id)) || undefined;
   }
 
-  // The reverse of opening from a tile: the realm background crosses back
-  // into its dashboard tile while the cards fade out and the dashboard in.
-  // With no tile on screen the background simply fades.
-  private async returnToWorkspaceTile(
-    wallpaper: HTMLElement,
-    realmURL: string,
-    favorite?: boolean,
-    // The navigation; by default, opening the dashboard over the stacks.
-    leave: () => void = () => {
-      this._state.workspaceChooserOpened = true;
-      this.schedulePersist();
-    },
-  ) {
+  // Runs `leave` inside the crossing from the realm background back into
+  // that realm's dashboard tile. It needs only the realm whose background is
+  // showing, not how the workspace was entered, so it also plays after a
+  // reload, a pasted URL, or with several stacks open. Returns undefined,
+  // without running `leave`, when no crossing can play.
+  private crossToDashboard(leave: () => void): Promise<void> | undefined {
+    let wallpaper = document.querySelector<HTMLElement>('.workspace-wallpaper');
+    let origin = this.workspaceTileOrigin;
+    let realmURL = origin?.realmURL ?? this.workspaceRealmURL;
+    if (
+      !wallpaper ||
+      !realmURL ||
+      this.state.submode !== Submodes.Interact ||
+      !this.hostMotion.canCross(wallpaper, motionDurations.workspace)
+    )
+      return undefined;
     this.workspacePortal = undefined;
-    let restoreCorners = () => {};
-    let tile: HTMLElement | undefined;
-    let headerIcon = workspaceHeaderIcon();
-    try {
-      await this.hostMotion.cross({
-        from: wallpaper,
-        to: () => {
-          tile = workspaceReturnTile(realmURL, favorite);
-          if (tile) restoreCorners = adoptTileCorners(tile);
-          return tile;
-        },
-        // The platter shrinks into the tile's realm icon as the header's
-        // icon flies back to it.
-        companions: headerIcon
-          ? [{ from: headerIcon, to: () => tile && tileRealmIcon(tile) }]
-          : [],
-        chrome: 'crossfade',
-        update: leave,
-        duration: motionDurations.workspace,
-        ease: boundaryEase,
-        scenes: [
-          {
-            selector: '.stacks',
-            fade: 'fall',
-            seed: () => tile && tileRealmIcon(tile),
-          },
-          { selector: '.workspace-chooser', fade: 'in' },
-        ],
-      });
-    } finally {
-      restoreCorners();
-    }
+    let { crossing, restore } = workspaceExit(wallpaper, () =>
+      workspaceReturnTile(realmURL, origin?.favorite),
+    );
+    return this.hostMotion
+      .cross({ ...crossing, update: leave })
+      .finally(restore);
   }
 
   // Operator mode state is persisted in a query param, which lives in the index controller

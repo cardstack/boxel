@@ -20,12 +20,8 @@ const crossingWaiter = buildWaiter('host-motion:crossing');
 
 export interface HostCrossing extends Omit<
   BitmapCrossing,
-  'to' | 'onReady' | 'duration'
+  'onReady' | 'duration'
 > {
-  // The landing face, looked up once the update has rendered. Returning
-  // nothing (the tile scrolled away or was removed) lets the departing face
-  // fade instead.
-  to: () => HTMLElement | null | undefined;
   // Seconds. Crossings take no time in tests.
   duration: number;
   // Leave the existing stacks live under the crossing so they reflow with
@@ -127,8 +123,6 @@ export default class HostMotionService extends Service {
     this.workspaceActive = false;
   }
 
-  private crossingSequence = 0;
-
   // Whether a crossing would play. Callers with a different fallback (a
   // Choreo dock instead of a bitmap) check this before building one.
   canCross(from: HTMLElement | undefined, duration: number) {
@@ -144,7 +138,6 @@ export default class HostMotionService extends Service {
   // The one entry for a card-level bitmap crossing (open, return, expand,
   // search pick, workspace tile). Runs `update` directly when motion is off.
   async cross({
-    to,
     update,
     duration,
     reflowStacks,
@@ -154,30 +147,24 @@ export default class HostMotionService extends Service {
       await update();
       return;
     }
-    let key = String(++this.crossingSequence);
-    let landing: HTMLElement | null | undefined;
     let budget = this.beginBitmap({ reflowStacks });
     let waiterToken = crossingWaiter.beginAsync();
     try {
       await crossfadeCardBitmap({
         ...crossing,
-        to: `[data-bitmap-landing="${key}"]`,
         duration,
         update: async () => {
           await update();
-          // Capture the landing's settled layout, not a mid-render pose.
+          // Look up and capture the landing's settled layout, not a
+          // mid-render pose.
           await new Promise<void>((resolve) =>
             schedule('afterRender', resolve),
           );
-          landing = to();
-          landing?.setAttribute('data-bitmap-landing', key);
         },
         onReady: (finish) => this.onBitmapReady(budget, finish),
       });
     } finally {
       this.endBitmap(budget);
-      if (landing?.getAttribute('data-bitmap-landing') === key)
-        landing.removeAttribute('data-bitmap-landing');
       crossingWaiter.endAsync(waiterToken);
     }
   }

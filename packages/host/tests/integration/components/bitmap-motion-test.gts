@@ -45,11 +45,14 @@ class EmbeddedFixture extends Component {
     bitmapReady = new Promise<void>((resolve) => (ready = resolve));
     completion = crossfadeCardBitmap({
       from: source,
-      to: this.custom
-        ? '[data-test-open-gallery]'
-        : this.flattened
-          ? '.preview-surface'
-          : '[data-boxel-card-format="fitted"]',
+      to: () =>
+        document.querySelector<HTMLElement>(
+          this.custom
+            ? '[data-test-open-gallery]'
+            : this.flattened
+              ? '.preview-surface'
+              : '[data-boxel-card-format="fitted"]',
+        ),
       update: () => {
         focusAtUpdate = document.activeElement;
         this.opened = false;
@@ -73,7 +76,8 @@ class EmbeddedFixture extends Component {
     bitmapReady = new Promise<void>((resolve) => (ready = resolve));
     completion = crossfadeCardBitmap({
       from: source,
-      to: '[data-test-opened-gallery]',
+      to: () =>
+        document.querySelector<HTMLElement>('[data-test-opened-gallery]'),
       update: () => {
         this.bodyReady = !this.deferred;
         this.opened = true;
@@ -237,7 +241,8 @@ class BitmapFixture extends Component {
   close = (event: Event) => {
     completion = crossfadeCardBitmap({
       from: event.currentTarget as HTMLElement,
-      to: '[data-test-bitmap-source]',
+      to: () =>
+        document.querySelector<HTMLElement>('[data-test-bitmap-source]'),
       update: () => {
         this.opened = false;
       },
@@ -247,7 +252,8 @@ class BitmapFixture extends Component {
   open = (event: Event) => {
     completion = crossfadeCardBitmap({
       from: event.currentTarget as HTMLElement,
-      to: '[data-test-bitmap-target]',
+      to: () =>
+        document.querySelector<HTMLElement>('[data-test-bitmap-target]'),
       update: () => {
         this.opened = true;
       },
@@ -1218,7 +1224,7 @@ module('Integration | bitmap motion', function (hooks) {
     let calls = 0;
     await crossfadeCardBitmap({
       from: find('[data-test-bitmap-source]') as HTMLElement,
-      to: '.unused-target',
+      to: () => document.querySelector<HTMLElement>('.unused-target'),
       update: () => {
         calls++;
       },

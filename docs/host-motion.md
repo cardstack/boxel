@@ -25,14 +25,14 @@ face and the landing face as browser bitmaps and morphs one frame between
 them, crossfading the faces, while the live DOM is already at its final
 layout. It owns motion _between_ scenes, where one object becomes another:
 
-| Crossing                         | from → to                              | Caller                                                                     |
-| -------------------------------- | -------------------------------------- | -------------------------------------------------------------------------- |
-| Open a card                      | preview in the parent → new stack item | `interact-submode.gts` `viewCard`                                          |
-| Close a card                     | stack item → its preview in the parent | `interact-submode.gts` `close`                                             |
-| Open into a new stack, and close | preview → right stack item, and back   | same, with `reflowStacks` / `morph` neighbours                             |
-| Expand / restore                 | the card → itself at its new width     | `stack-item.gts` `toggleExpanded`                                          |
-| Search pick                      | search result tile → new stack item    | `submode-layout.gts` `handleCardSelectFromSearch`                          |
-| Dashboard tile ↔ workspace       | tile wallpaper ↔ realm background      | `operator-mode-state-service.ts` `openWorkspace` / `returnToWorkspaceTile` |
+| Crossing                         | from → to                              | Caller                                                        |
+| -------------------------------- | -------------------------------------- | ------------------------------------------------------------- |
+| Open a card                      | preview in the parent → new stack item | `interact-submode.gts` `viewCard`                             |
+| Close a card                     | stack item → its preview in the parent | `interact-submode.gts` `close`                                |
+| Open into a new stack, and close | preview → right stack item, and back   | same, with `reflowStacks` / `morph` neighbours                |
+| Expand / restore                 | the card → itself at its new width     | `stack-item.gts` `toggleExpanded`                             |
+| Search pick                      | search result tile → new stack item    | `submode-layout.gts` `handleCardSelectFromSearch`             |
+| Dashboard tile ↔ workspace       | tile wallpaper ↔ realm background      | `workspace-open-origin.ts` `workspaceEntry` / `workspaceExit` |
 
 Nothing is ever scaled live: text keeps its real layout; only raster faces
 scale, cropped with `object-fit: cover` so they never stretch.
@@ -68,15 +68,23 @@ await this.hostMotion.cross({
   handoff: 'crossfade' | 'late',           // optional, default crossfade
   parent,                                  // optional stack parent trading depth
   scenes,                                  // optional surrounding layers
+  companions,                              // optional small matched objects
+  chrome: 'stationary' | 'crossfade',      // optional, default stationary
   reflowStacks,                            // optional, see rule 3
 });
 ```
 
+One lookup convention holds throughout: anything in the updated document is
+a function called after the update, and it receives the landing face when
+it needs a point of reference (`to()`, a companion's `to(landing)`, a
+`fall` scene's `seed(landing)`). A `rise` scene's `seed(from)` is called
+before the update, from the departing face.
+
 `cross()` gates (tests, reduced motion, unsupported browser, drag, zero
 duration: run `update` directly), takes and releases the bitmap budget, holds
-the `host-motion:crossing` test waiter, waits for `afterRender` before the new
-capture, and tags whatever `to()` returns as the landing face. If `to()`
-returns nothing (the tile scrolled away), the departing face just fades.
+the `host-motion:crossing` test waiter, and waits for `afterRender` before
+the new capture. If `to()` returns nothing (the tile scrolled away), the
+departing face just fades.
 
 `canCross(from, duration)` exposes the gate for callers that need a different
 fallback: a search pick checks it first and docks with Choreo when no bitmap
@@ -86,23 +94,32 @@ Below `cross()`, `lib/bitmap-crossing.ts` `crossfadeCardBitmap(crossing)` is
 the pure mechanism (options documented on `BitmapCrossing`). Call it directly
 only in tests.
 
+A crossing used from more than one place is defined once, next to its
+origins: `lib/workspace-open-origin.ts` `workspaceEntry(tile)` and
+`workspaceExit(wallpaper, findTile)` return the dashboard ↔ workspace crossing
+(without its `update`) and a `restore` for the tile's adopted corners.
+
 ### Anatomy of a crossing
 
 Layers, back to front:
 
 - **scenes** — whole surrounding surfaces: `out` fades over the first 45%,
-  `in` from 25% to 80% (the dashboard arriving), `morph` crosses a persistent
-  element's faces while its frame moves (neighbouring stacks taking freed
-  width). `rise` grows an arriving scene out of a `seed` element and `fall`
-  shrinks a departing one into it, both on the boundary spring across the
-  whole crossing: the workspace's platter of cards grows out of the realm
-  icon on its dashboard tile and shrinks back into it. They paint above the
-  card (`.boxel-platter`), since the card there is the realm background.
+  `in` from 25% to 80% (the dashboard arriving). `morph` crosses a persistent
+  element's faces at their natural size while its clipping frame moves
+  (neighbouring stacks taking freed width), so a widening stack is revealed,
+  never scaled. `rise` scales and fades an arriving scene up out of the
+  crossing card, centred on the card's moving frame the whole way, starting
+  at its `seed`'s size; `fall` is the reverse. The workspace's platter of
+  cards comes up from the middle of its dashboard tile at the size of the
+  tile's realm icon. Platters paint above the card (`.boxel-platter`), since
+  the card there is the realm background.
 - **companions** — small objects matched as layers of their own, above the
-  platter: the realm icon flies between the tile and the first card's header.
-  Scaling the platter about the icon keeps its header's icon slot close to
-  the flying icon throughout, and naming the icon keeps it out of the tile
-  bitmap, which would otherwise blow it up across the background.
+  platter: the realm icon flies between the tile and the first card's
+  header. Naming the icon keeps it out of the tile bitmap, which would
+  otherwise blow it up across the background. A companion with nowhere to
+  land fades in place and marks `companion-unlanded:<index>`; entering a
+  cold realm, the update waits up to 300 ms for the header's icon
+  (`workspaceHeaderRendered`).
 - **parent** — when a card opens over (or returns to) its stack parent, the
   parent's tray, body and header move as matched layers of their own. On
   **open** the parent's header enters its buried strip as a new layer,

@@ -108,6 +108,17 @@
   mix-blend-mode: plus-lighter !important;
 }
 
+/* A reflowing neighbour keeps its faces at natural size, centred at the top
+   of its widening frame, which reveals the wider face instead of scaling. */
+::view-transition-old(.boxel-reflow),
+::view-transition-new(.boxel-reflow) {
+  width: auto !important;
+  height: auto !important;
+  object-fit: none !important;
+  left: 50%;
+  translate: -50% 0;
+}
+
 /* A platter of cards grown out of a crossing card's seed sits above the card
    (a realm background), and the companion flying to its header above both. */
 ::view-transition-group(.boxel-platter) {
