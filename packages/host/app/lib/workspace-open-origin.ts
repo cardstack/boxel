@@ -1,5 +1,5 @@
 import { afterMotionPaint } from './after-motion-paint';
-import { boundaryEase, motionDurations } from './motion-timing';
+import { motionDurations } from './motion-timing';
 
 import type { CardOpenOrigin } from './card-open-origin';
 import type { HostCrossing } from '../services/host-motion';
@@ -168,7 +168,6 @@ export function workspaceEntry(tile: HTMLElement): {
       from: tile,
       to: () => document.querySelector<HTMLElement>('.workspace-wallpaper'),
       duration: motionDurations.workspace,
-      ease: boundaryEase,
       chrome: 'crossfade',
       scenes: [
         { selector: dashboard, fade: 'out' },
@@ -255,7 +254,6 @@ export function workspaceExit(
         return tile;
       },
       duration: motionDurations.workspace,
-      ease: boundaryEase,
       chrome: 'crossfade',
       scenes: [
         { selector: platter, fade: 'fall', seed: tileRealmIcon },

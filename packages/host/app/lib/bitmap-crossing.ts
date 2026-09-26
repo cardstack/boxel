@@ -2,10 +2,10 @@ import { animateView, type ViewTransitionOptions } from 'glimmer-motion';
 
 import { prepareBitmapShadow } from './bitmap-shadow';
 import {
-  boundaryEase,
   inspectionSpeed,
   motionDurations,
   motionEase,
+  motionEaseAt,
 } from './motion-timing';
 import { traceMotionPhase } from './motion-trace';
 
@@ -134,7 +134,7 @@ export interface CrossingScene {
 
 const unseededScale = 0.6;
 
-// The frame's centre travels with the crossing card on the boundary spring
+// The frame's centre travels with the crossing card on the motion curve
 // while the scene scales from its seed's size. Rising, it is opaque by 40%;
 // falling, gone by 70%. Sampled so opacity and geometry keep separate
 // windows in one keyframe list.
@@ -164,7 +164,7 @@ function platterKeyframes(
   let steps = 24;
   for (let step = 0; step <= steps; step++) {
     let t = step / steps;
-    let grown = arriving ? boundaryEase(t) : 1 - boundaryEase(t);
+    let grown = arriving ? motionEaseAt(t) : 1 - motionEaseAt(t);
     let away = 1 - grown;
     times.push(t);
     opacity.push(arriving ? clamp((t - 0.05) / 0.35) : 1 - clamp(t / 0.7));

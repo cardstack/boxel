@@ -66,11 +66,7 @@ import {
   type CardOpenOrigin,
 } from '@cardstack/host/lib/card-open-origin';
 import { htmlComponent } from '@cardstack/host/lib/html-component';
-import {
-  boundaryEase,
-  boundaryReturnEase,
-  motionDurations,
-} from '@cardstack/host/lib/motion-timing';
+import { motionDurations } from '@cardstack/host/lib/motion-timing';
 import { traceMotionPhase } from '@cardstack/host/lib/motion-trace';
 import { fetchIsolatedPlaceholder } from '@cardstack/host/lib/prerendered-placeholder';
 
@@ -469,7 +465,6 @@ export default class InteractSubmode extends Component {
           open();
         },
         duration: boundaryDuration,
-        ease: boundaryEase,
         parent: newStack
           ? undefined
           : (source.closest<HTMLElement>('.stack-item-card') ?? undefined),
@@ -645,7 +640,6 @@ export default class InteractSubmode extends Component {
           remove();
         },
         duration: returnDuration,
-        ease: boundaryReturnEase,
         parent: home ? undefined : underlay,
         scenes: home
           ? [{ selector: `[data-bitmap-reflow="${reflowKey}"]`, fade: 'morph' }]

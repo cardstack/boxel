@@ -14,9 +14,9 @@ import {
   forgetCardActionOrigin,
 } from '@cardstack/host/lib/card-open-origin';
 import {
-  boundaryEase,
-  boundaryReturnEase,
   motionDurations,
+  motionEase,
+  motionEaseAt,
 } from '@cardstack/host/lib/motion-timing';
 import cardActivation from '@cardstack/host/modifiers/card-activation';
 
@@ -58,7 +58,6 @@ class EmbeddedFixture extends Component {
         this.opened = false;
       },
       duration: motionDurations.boundaryReturn,
-      ease: boundaryReturnEase,
       onReady: ready,
       parent: underlay,
     });
@@ -83,7 +82,6 @@ class EmbeddedFixture extends Component {
         this.opened = true;
       },
       duration: motionDurations.boundary,
-      ease: boundaryEase,
       onReady: () => ready(),
       parent: boundary,
     }).finally(async () => {
@@ -577,12 +575,13 @@ module('Integration | bitmap motion', function (hooks) {
     for (let animation of groups) {
       assert.strictEqual(
         animation.effect!.getComputedTiming().duration,
-        360,
-        'opening uses a bounded 360ms browser animation',
+        motionDurations.boundary * 1000,
+        'opening uses a bounded browser animation of the boundary duration',
       );
-      assert.true(
-        animation.effect!.getTiming().easing!.startsWith('linear('),
-        'spring response is baked into native easing',
+      assert.strictEqual(
+        animation.effect!.getTiming().easing,
+        `cubic-bezier(${motionEase.join(', ')})`,
+        'the shared motion curve plays as native easing',
       );
     }
     for (let animation of animations) {
@@ -725,7 +724,8 @@ module('Integration | bitmap motion', function (hooks) {
         );
       }
     }
-    for (let animation of animations) animation.currentTime = 90;
+    let quarter = (motionDurations.boundary * 1000) / 4;
+    for (let animation of animations) animation.currentTime = quarter;
     for (let shadow of shadows) {
       assert.ok(
         Math.abs(painted(partPose(shadow)).width - painted(pose()).width) < 1,
@@ -752,8 +752,8 @@ module('Integration | bitmap motion', function (hooks) {
       'workspace and Gallery use the same clock and easing',
     );
     assert.ok(
-      progress < 0.4,
-      'a quarter of the timeline still reads as departure, not completion',
+      Math.abs(progress - motionEaseAt(0.25)) < 0.05,
+      'a quarter of the way in, the shared ease-out has covered most of the move',
     );
     assert.dom(target).hasStyle({ transform: 'none' });
     assert.dom(target.querySelector('h1')).hasStyle({ transform: 'none' });
@@ -988,7 +988,10 @@ module('Integration | bitmap motion', function (hooks) {
     let parentProgress =
       (width(parent) - parentFrom.width) /
       (parent.getBoundingClientRect().width - parentFrom.width);
-    let followsReversedCurve = progress > 0.7 && progress < 0.85;
+    // Halfway through the return the shared ease-out is most of the way
+    // there: it responds at once and eases into its landing.
+    let expected = motionEaseAt(0.5);
+    let followsReversedCurve = Math.abs(progress - expected) < 0.05;
     assert.ok(
       followsReversedCurve,
       'return responds promptly and eases into its landing',

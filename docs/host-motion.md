@@ -178,10 +178,16 @@ returns:
 
 ## Timing
 
-`lib/motion-timing.ts` `motionDurations` (seconds): card 0.28, exit 0.18,
-sheet 0.24, search crossing 0.32, open 0.36, return 0.26, workspace 0.4.
-Opening uses a critically damped spring baked into native easing
-(`boundaryEase`); returns use the same response.
+Every geometric motion uses one curve, `motionEase` (cubic-bezier 0.2, 0.8,
+0.2, 1): it leaves at once, since the click has already waited for capture,
+and lands softly without overshoot. Choreo regions and crossings take it as
+native easing; sampled keyframes (the platter) use `motionEaseAt(t)`. Only
+opacity windows are linear.
+
+`motionDurations` (seconds): card 0.32, exit 0.18, sheet 0.24, search
+crossing 0.32, open and expand 0.32, return 0.26, workspace 0.4. Motions that
+play together share a duration: a card opening into a new stack and the
+stacks reflowing beside it both take 0.32.
 
 All motion takes no time in tests (`isTesting()`), and crossings and deferred
 bodies hold test waiters, so `settled()` covers them. Reduced motion applies

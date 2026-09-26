@@ -2,32 +2,23 @@ import { registerDestructor } from '@ember/destroyable';
 import { isTesting } from '@embroider/macros';
 import { tracked } from '@glimmer/tracking';
 
-import { spring } from 'motion-dom';
+import { cubicBezier } from 'motion-utils';
 
+// One curve for every host motion: an ease-out that leaves at once (the
+// click has already waited for capture) and lands softly, never
+// overshooting. Live Choreo geometry, bitmap crossings and sampled
+// keyframes all use it, so motions that play together arrive together.
 export const motionEase: [number, number, number, number] = [0.2, 0.8, 0.2, 1];
-// Bake a critically damped response into the native easing at capture time.
-// Normalize its visual interval so geometry reaches exactly 1 at our deadline,
-// rather than keeping a long physical spring tail (and its layers) alive.
-const boundaryResponse = spring({
-  keyframes: [0, 1],
-  visualDuration: 1,
-  bounce: 0,
-});
-const boundaryTarget = boundaryResponse.next(1000).value;
-export const boundaryEase = (progress: number) => {
-  if (progress <= 0) return 0;
-  if (progress >= 1) return 1;
-  return boundaryResponse.next(progress * 1000).value / boundaryTarget;
-};
-// Reverse the geometry, but retain a responsive departure and gentle landing.
-export const boundaryReturnEase = boundaryEase;
+export const motionEaseAt = cubicBezier(...motionEase);
 
+// Seconds. Motions that play together share a duration: a card opening
+// into a new stack (boundary) runs alongside the stacks reflowing (card).
 export const motionDurations = {
-  card: 0.28,
+  card: 0.32,
   exit: 0.18,
   sheet: 0.24,
   crossing: 0.32,
-  boundary: 0.36,
+  boundary: 0.32,
   boundaryReturn: 0.26,
   workspace: 0.4,
 };

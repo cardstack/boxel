@@ -64,10 +64,7 @@ import {
   cardActionOrigin,
   type CardOpenOrigin,
 } from '@cardstack/host/lib/card-open-origin';
-import {
-  boundaryEase,
-  motionDurations,
-} from '@cardstack/host/lib/motion-timing';
+import { motionDurations } from '@cardstack/host/lib/motion-timing';
 import {
   stackItemTypeToStoreReadType,
   type StackItem,
@@ -394,7 +391,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
       to: () => card,
       update: apply,
       duration: motionDurations.boundary,
-      ease: boundaryEase,
       handoff: expand ? 'late' : 'crossfade',
     });
   };
