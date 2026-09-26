@@ -100,10 +100,27 @@ else
   WORKER_MANAGER_ARG="$1"
 fi
 
-# The compiled-module cache survives restarts and is cleared only by the
-# running realm's file watcher, so subset files the sync rewrote above could
-# be served from a compile of their old content. Once the catalog realm
-# answers, touch them so the watcher clears those entries.
+# The compiled-module cache survives restarts, and a read never checks a
+# cached compile against its file, so subset files the sync rewrote above
+# could be served from a compile of their old content. The catalog is a
+# --path realm, so by default it runs a boot index, and a boot index drops the
+# realm's whole cache (before it starts when the realm already has an index,
+# and again when it completes). Only a catalog realm that mounts without a
+# boot index keeps stale entries: with REALM_SERVER_SKIP_BOOT_INDEX=true, or
+# with REALM_SERVER_FULL_INDEX_ON_STARTUP=false over an existing index. Once
+# that realm answers, touch the subset files so its file watcher clears them.
+#
+# The touch is skipped when the boot index runs because it is not free: each
+# touched file queues an incremental index of the catalog behind whatever the
+# stack's workers already hold (on a single-worker stack, the catalog's own
+# boot prerender pass), and the catalog's `_readiness-check` answers not-ready
+# until that index completes.
+if [ -n "$CATALOG_TOUCH" ] &&
+  [ "${REALM_SERVER_SKIP_BOOT_INDEX:-}" != "true" ] &&
+  [ "${REALM_SERVER_FULL_INDEX_ON_STARTUP:-}" != "false" ]; then
+  echo "catalog test subset: not touching the subset files; the catalog realm's boot index drops their compiled modules"
+  CATALOG_TOUCH=''
+fi
 if [ -n "$CATALOG_TOUCH" ]; then
   (
     for _ in $(seq 1 300); do
