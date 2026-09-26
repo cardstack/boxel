@@ -560,6 +560,10 @@ export default class InteractSubmode extends Component {
       this.operatorModeStateService.trimItemsFromStack(item);
       if (item.id && item.format === 'edit') item.request?.fulfill(item.id);
     };
+    if (animate && this.operatorModeStateService.closesWorkspace(item)) {
+      await this.operatorModeStateService.closeWorkspace(remove);
+      return;
+    }
     let stack = this.stacks[item.stackIndex];
     let parent = stack?.at(-2);
     // A card that opened into its own stack settles back into the tile it
@@ -595,7 +599,7 @@ export default class InteractSubmode extends Component {
                     : !embeddedCardElement(underlay, item.id)
                       ? 'no-return-tile'
                       : undefined;
-    if (skip) {
+    if (skip || !source || !underlay) {
       traceMotionPhase(`return-skipped:${skip}`);
       remove();
       return;
@@ -612,12 +616,19 @@ export default class InteractSubmode extends Component {
     }
 
     let token = ++this.boundarySequence;
-    // Every other stack's top card changes width when this stack goes.
+    // Every other stack changes width when this stack goes. Its cards move
+    // as one layer, so a top card and the parents buried under it stay
+    // together.
     let reflowKey = `stack-return-${token}`;
     let neighbours = home
       ? this.stacks
           .filter((other) => other !== stack)
-          .map((other) => stackItemComponentAPI.get(other.at(-1)!)?.element())
+          .map((other) =>
+            stackItemComponentAPI
+              .get(other.at(-1)!)
+              ?.element()
+              ?.closest<HTMLElement>('.operator-mode-stack > .inner'),
+          )
           .filter((element): element is HTMLElement => !!element)
       : [];
     for (let element of neighbours) element.dataset.bitmapReflow = reflowKey;

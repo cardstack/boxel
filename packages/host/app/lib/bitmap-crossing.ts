@@ -1,7 +1,12 @@
 import { animateView, type ViewTransitionOptions } from 'glimmer-motion';
 
 import { prepareBitmapShadow } from './bitmap-shadow';
-import { inspectionSpeed, motionDurations, motionEase } from './motion-timing';
+import {
+  boundaryEase,
+  inspectionSpeed,
+  motionDurations,
+  motionEase,
+} from './motion-timing';
 import { traceMotionPhase } from './motion-trace';
 
 let underlaySequence = 0;
@@ -112,10 +117,59 @@ export function supportsBitmapCrossing() {
 // A layer around the card crossing. 'out' fades a departing scene over the
 // first part of the move, 'in' fades an arriving scene over the last part, and
 // 'morph' crosses a persistent element's two faces while its frame moves (a
-// neighbouring stack taking freed width).
+// neighbouring stack taking freed width). 'rise' is an arriving scene that
+// follows the card out of its departing face, and 'fall' a departing scene
+// that settles into the landing face ahead of it (cards over a realm
+// background that crosses to and from its dashboard tile).
 export interface CrossingScene {
   selector: string;
-  fade: 'in' | 'out' | 'morph';
+  fade: 'in' | 'out' | 'morph' | 'rise' | 'fall';
+}
+
+const riseScale = 0.94;
+const fallScale = 0.96;
+
+// Content arriving inside a crossing container trails it: it starts at 30%,
+// is opaque by 70%, and settles on the boundary spring by the end. Leaving,
+// it goes first: gone by 35%, shrunk by 45%. The zoom is about the card's
+// face, so the scene appears to come out of the tile and return into it.
+// Sampled so opacity and scale keep separate windows in one keyframe list.
+export function sceneZoomKeyframes(
+  layer: DOMRect,
+  toward: DOMRect | undefined,
+  arriving: boolean,
+) {
+  let dx = toward ? toward.x + toward.width / 2 - layer.x - layer.width / 2 : 0;
+  let dy = toward
+    ? toward.y + toward.height / 2 - layer.y - layer.height / 2
+    : 0;
+  let clamp = (value: number) => Math.min(1, Math.max(0, value));
+  let times: number[] = [];
+  let opacity: number[] = [];
+  let transform: string[] = [];
+  let steps = 20;
+  for (let step = 0; step <= steps; step++) {
+    let t = step / steps;
+    let scale: number;
+    if (arriving) {
+      scale =
+        riseScale + (1 - riseScale) * boundaryEase(clamp((t - 0.3) / 0.7));
+      opacity.push(clamp((t - 0.3) / 0.4));
+    } else {
+      let progress = 1 - boundaryEase(1 - clamp(t / 0.45));
+      scale = 1 - (1 - fallScale) * progress;
+      opacity.push(1 - clamp(t / 0.35));
+    }
+    let pull = 1 - scale;
+    times.push(t);
+    transform.push(
+      `translate(${(pull * dx).toFixed(2)}px, ${(pull * dy).toFixed(2)}px) scale(${scale.toFixed(4)})`,
+    );
+  }
+  return {
+    keyframes: { opacity, transform },
+    options: { times, ease: 'linear' as const },
+  };
 }
 
 export interface BitmapCrossing {
@@ -194,6 +248,17 @@ export async function crossfadeCardBitmap({
       body && opening
         ? { width: body.offsetWidth, height: body.offsetHeight }
         : undefined;
+    let sourceRect = scenes.some((scene) => scene.fade === 'rise')
+      ? source.getBoundingClientRect()
+      : undefined;
+    let fallRects = new Map(
+      scenes
+        .filter((scene) => scene.fade === 'fall')
+        .map((scene) => [
+          scene,
+          document.querySelector(scene.selector)?.getBoundingClientRect(),
+        ]),
+    );
     let parts = headerParts(underlay);
     shadow = prepareBitmapShadow(source);
     // Keep document-scoped capture: Chromium 153 can abort element-scoped
@@ -219,6 +284,28 @@ export async function crossfadeCardBitmap({
             ?.querySelector<HTMLElement>('.stack-item-header')
             ?.setAttribute('data-bitmap-header-entry', underlayKey);
         traceMotionPhase('header-measured');
+        for (let scene of scenes) {
+          if (scene.fade !== 'rise' && scene.fade !== 'fall') continue;
+          let target = builder.targets.get(scene.selector);
+          if (!target) continue;
+          if (scene.fade === 'rise') {
+            let layer = document.querySelector(scene.selector);
+            if (layer)
+              target.new = sceneZoomKeyframes(
+                layer.getBoundingClientRect(),
+                sourceRect,
+                true,
+              );
+          } else {
+            let layer = fallRects.get(scene);
+            if (layer)
+              target.old = sceneZoomKeyframes(
+                layer,
+                document.querySelector(destination)?.getBoundingClientRect(),
+                false,
+              );
+          }
+        }
         let destinationPainted = shadow?.update(
           document.querySelector<HTMLElement>(destination),
         );
@@ -392,7 +479,7 @@ export async function crossfadeCardBitmap({
         continue;
       }
       builder.add(scene.selector).class('boxel-scene').group(false).crop(false);
-      if (scene.fade === 'out') {
+      if (scene.fade === 'out' || scene.fade === 'fall') {
         builder.old(
           { opacity: [1, 0, 0] },
           { times: [0, 0.45, 1], ease: 'linear' },

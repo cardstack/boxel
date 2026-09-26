@@ -1565,7 +1565,7 @@ export default class OperatorModeStateService extends Service {
           ease: boundaryEase,
           scenes: [
             { selector: '.workspace-chooser', fade: 'out' },
-            { selector: '.stacks', fade: 'in' },
+            { selector: '.stacks', fade: 'rise' },
           ],
         });
       } finally {
@@ -1662,6 +1662,41 @@ export default class OperatorModeStateService extends Service {
     this.schedulePersist();
   }
 
+  // Closing the only card on screen, the realm's index card, leaves the
+  // workspace for the dashboard.
+  closesWorkspace(item: StackItem) {
+    let [stack, ...others] = this._state.stacks;
+    if (others.length || stack?.length !== 1 || stack[0] !== item) return false;
+    return isRealmIndexCardId(
+      item.id,
+      this.getRealmURLFromItemId(item.id),
+      this.network.virtualNetwork,
+    );
+  }
+
+  // Leaves the workspace by closing its last card, crossing the realm
+  // background back into its dashboard tile like the dashboard button does.
+  async closeWorkspace(remove: () => void) {
+    let wallpaper = document.querySelector<HTMLElement>('.workspace-wallpaper');
+    let realmURL = this.workspaceRealmURL;
+    if (
+      !wallpaper ||
+      !realmURL ||
+      this.state.submode !== Submodes.Interact ||
+      !this.hostMotion.canCross(wallpaper, motionDurations.workspace)
+    ) {
+      remove();
+      return;
+    }
+    let origin = this._state.stacks[0]?.[0]?.workspaceOrigin;
+    await this.returnToWorkspaceTile(
+      wallpaper,
+      realmURL,
+      origin?.favorite,
+      remove,
+    );
+  }
+
   // The realm behind the stacks: its background is the workspace wallpaper.
   private get workspaceRealmURL(): string | undefined {
     let id = this._state.stacks[0]?.[0]?.id;
@@ -1675,6 +1710,11 @@ export default class OperatorModeStateService extends Service {
     wallpaper: HTMLElement,
     realmURL: string,
     favorite?: boolean,
+    // The navigation; by default, opening the dashboard over the stacks.
+    leave: () => void = () => {
+      this._state.workspaceChooserOpened = true;
+      this.schedulePersist();
+    },
   ) {
     this.workspacePortal = undefined;
     let restoreCorners = () => {};
@@ -1686,14 +1726,11 @@ export default class OperatorModeStateService extends Service {
           if (tile) restoreCorners = adoptTileCorners(tile);
           return tile;
         },
-        update: () => {
-          this._state.workspaceChooserOpened = true;
-          this.schedulePersist();
-        },
+        update: leave,
         duration: motionDurations.workspace,
         ease: boundaryEase,
         scenes: [
-          { selector: '.stacks', fade: 'out' },
+          { selector: '.stacks', fade: 'fall' },
           { selector: '.workspace-chooser', fade: 'in' },
         ],
       });
