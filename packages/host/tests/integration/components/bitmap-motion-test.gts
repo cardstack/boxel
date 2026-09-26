@@ -522,6 +522,9 @@ module('Integration | bitmap motion', function (hooks) {
     let from = source.getBoundingClientRect();
     let index = find('[data-test-index]') as HTMLElement;
     let indexFrom = index.getBoundingClientRect();
+    let headerFrom = index
+      .querySelector<HTMLElement>('.stack-item-header')!
+      .getBoundingClientRect();
     await click('[data-test-open-gallery]');
     await bitmapReady;
     await waitUntil(
@@ -542,19 +545,15 @@ module('Integration | bitmap motion', function (hooks) {
         `::view-transition-${type}(${part.style.viewTransitionName})`,
       );
     assert.strictEqual(
-      new Set([name, indexName, header.style.viewTransitionName]).size,
-      3,
-      'card, parent, and its entering header have distinct matches',
-    );
-    assert.strictEqual(
-      title.style.viewTransitionName,
-      '',
-      'title rides in the entering header snapshot',
-    );
-    assert.strictEqual(
-      icon.style.viewTransitionName,
-      '',
-      'realm icon rides in the entering header snapshot',
+      new Set([
+        name,
+        indexName,
+        header.style.viewTransitionName,
+        title.style.viewTransitionName,
+        icon.style.viewTransitionName,
+      ]).size,
+      5,
+      'card, parent, and the header with its title and icon each travel as their own match',
     );
     assert.notStrictEqual(indexName, name, 'two independent boundary matches');
     await waitUntil(() =>
@@ -613,6 +612,7 @@ module('Integration | bitmap motion', function (hooks) {
         width: parseFloat(style.width) * Math.hypot(matrix.a, matrix.b),
         height: parseFloat(style.height) * Math.hypot(matrix.c, matrix.d),
         x: matrix.e + originX * (1 - matrix.a) - originY * matrix.c,
+        y: matrix.f + originY * (1 - matrix.d) - originX * matrix.b,
       };
     };
     assert.strictEqual(
@@ -674,11 +674,9 @@ module('Integration | bitmap motion', function (hooks) {
       '5',
       'selected Gallery stays above the complete parent',
     );
-    let headerOffset = () =>
-      new DOMMatrixReadOnly(partPose(header, 'new').transform).f;
     assert.ok(
-      Math.abs(headerOffset() + parseFloat(partPose(header, 'new').height)) < 1,
-      'the buried header starts one header-height above its strip',
+      Math.abs(painted(partPose(header)).y - headerFrom.y) < 1,
+      'the header starts at its place on the card',
     );
     assert.strictEqual(
       indexPose().overflow,
@@ -770,10 +768,6 @@ module('Integration | bitmap motion', function (hooks) {
       '0',
       'empty buried frame never paints a duplicate body',
     );
-    assert.ok(
-      headerOffset() < 0,
-      'the header is still sliding down while the card travels',
-    );
     assert.dom(title).hasStyle({ fontSize: '14px', transform: 'none' });
     for (let time of [90, 300, 359]) {
       for (let animation of animations) animation.currentTime = time;
@@ -796,7 +790,11 @@ module('Integration | bitmap motion', function (hooks) {
       }
     }
     for (let animation of animations) animation.currentTime = 360;
-    assert.ok(Math.abs(headerOffset()) < 0.5, 'the header lands in its strip');
+    assert.ok(
+      Math.abs(painted(partPose(header)).y - header.getBoundingClientRect().y) <
+        1,
+      'the header lands in its strip',
+    );
     for (let shadow of shadows)
       assert.ok(
         Math.abs(

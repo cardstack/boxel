@@ -129,11 +129,10 @@ Layers, back to front:
   navigation); tiles re-created as realm info arrives would otherwise
   scroll the dashboard under a landing crossing.
 - **parent** — when a card opens over (or returns to) its stack parent, the
-  parent's tray, body and header move as matched layers of their own. On
-  **open** the parent's header enters its buried strip as a new layer,
-  sliding down one header-height from under the top bar. On **return** the
-  header, title and realm icon are matched separately and the title scales
-  back from its buried size.
+  parent's tray, body and header move as matched layers of their own. The
+  header is one object travelling between its place on the card and the
+  buried strip in both directions, with its title and realm icon matched
+  separately so the title scales between its full and buried sizes.
 - **card bitmap** — the departing and landing faces in one morphing frame.
   `handoff: 'late'` keeps the departing face until 82% of the move (expand,
   so a face growing into a wider layout is never squeezed).
