@@ -102,30 +102,43 @@ fi
 
 # The compiled-module cache survives restarts, and a read never checks a
 # cached compile against its file, so subset files the sync rewrote above
-# could be served from a compile of their old content. The catalog is a
-# --path realm, so by default it runs a boot index, and a boot index drops the
-# realm's whole cache (before it starts when the realm already has an index,
-# and again when it completes). Only a catalog realm that mounts without a
-# boot index keeps stale entries: with REALM_SERVER_SKIP_BOOT_INDEX=true, or
-# with REALM_SERVER_FULL_INDEX_ON_STARTUP=false over an existing index. Once
-# that realm answers, touch the subset files so its file watcher clears them.
+# could be served from a compile of their old content. A catalog realm that
+# runs a boot index drops its whole cache (before the index starts when the
+# realm already has an index, and again when it completes), so only one that
+# mounts without a boot index keeps stale entries. In that case, once the
+# catalog realm answers, touch the subset files so its file watcher clears
+# them.
 #
-# The touch is skipped when the boot index runs because it is not free: each
-# touched file queues an incremental index of the catalog behind whatever the
-# stack's workers already hold (on a single-worker stack, the catalog's own
-# boot prerender pass), and the catalog's `_readiness-check` answers not-ready
-# until that index completes.
-if [ -n "$CATALOG_TOUCH" ] &&
-  [ "${REALM_SERVER_SKIP_BOOT_INDEX:-}" != "true" ] &&
-  [ "${REALM_SERVER_FULL_INDEX_ON_STARTUP:-}" != "false" ]; then
-  echo "catalog test subset: not touching the subset files; the catalog realm's boot index drops their compiled modules"
-  CATALOG_TOUCH=''
-fi
+# The touch is skipped after a boot index because it is not free: each touched
+# file queues an incremental index of the catalog behind whatever the stack's
+# workers already hold (on a single-worker stack, the catalog's own boot
+# prerender pass), and the catalog's `_readiness-check` answers not-ready until
+# that index completes.
+#
+# Whether the boot index ran is read from the queue rather than inferred from
+# REALM_SERVER_SKIP_BOOT_INDEX and REALM_SERVER_FULL_INDEX_ON_STARTUP: the
+# realm server decides it from those together with whether the catalog already
+# has an index. A boot index is a from-scratch-index job for the catalog
+# enqueued after the baseline taken here. When the queue can't be read, the
+# touch runs.
 if [ -n "$CATALOG_TOUCH" ]; then
+  . ../../scripts/pg-container.sh
+  # The highest job id before this boot: 0 on a database the realm server has
+  # yet to migrate, empty when the queue can't be read.
+  if [ "$(boxel_pg_psql -d "$PGDATABASE" -tAc "SELECT to_regclass('jobs') IS NULL" 2>/dev/null)" = "t" ]; then
+    CATALOG_JOBS_BASELINE=0
+  else
+    CATALOG_JOBS_BASELINE=$(boxel_pg_psql -d "$PGDATABASE" -tAc 'SELECT COALESCE(max(id), 0) FROM jobs' 2>/dev/null)
+  fi
   (
     for _ in $(seq 1 300); do
       if curl -skf "${CATALOG_REALM_URL}_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson" >/dev/null 2>&1; then
-        node ../catalog/scripts/sync-test-subset.ts --touch="$CATALOG_TOUCH"
+        if [ -n "$CATALOG_JOBS_BASELINE" ] &&
+          [ "$(boxel_pg_psql -d "$PGDATABASE" -tAc "SELECT EXISTS (SELECT 1 FROM jobs WHERE id > ${CATALOG_JOBS_BASELINE} AND job_type = 'from-scratch-index' AND concurrency_group = 'indexing:${CATALOG_REALM_URL}')" 2>/dev/null)" = "t" ]; then
+          echo "catalog test subset: not touching the subset files; the catalog realm's boot index dropped their compiled modules"
+        else
+          node ../catalog/scripts/sync-test-subset.ts --touch="$CATALOG_TOUCH"
+        fi
         exit 0
       fi
       sleep 2
