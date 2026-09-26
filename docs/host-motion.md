@@ -131,6 +131,10 @@ returns:
   never persisted). Closing it, when that card is still on top and the tile is
   visible, crosses back into the tile while the other stacks `morph` into the
   freed width.
+- Opening the dashboard crosses the realm background back into that realm's
+  tile on screen, found after the update (`workspaceReturnTile`), preferring
+  the favourite or catalogue copy it was opened from. It needs no stored
+  origin, so it also works after a reload or with several stacks open.
 - A dashboard tile's rounding belongs to its card container; the tile image
   adopts those corners for the crossing so they tween to and from the square
   realm background (`lib/workspace-open-origin.ts` `adoptTileCorners`).
