@@ -43,22 +43,22 @@ class EmbeddedFixture extends Component {
       source.parentElement!.querySelector<HTMLElement>('[data-test-index]')!;
     let ready!: () => void;
     bitmapReady = new Promise<void>((resolve) => (ready = resolve));
-    completion = crossfadeCardBitmap(
-      source,
-      this.custom
+    completion = crossfadeCardBitmap({
+      from: source,
+      to: this.custom
         ? '[data-test-open-gallery]'
         : this.flattened
           ? '.preview-surface'
           : '[data-boxel-card-format="fitted"]',
-      () => {
+      update: () => {
         focusAtUpdate = document.activeElement;
         this.opened = false;
       },
-      motionDurations.boundaryReturn,
-      boundaryReturnEase,
-      ready,
-      underlay,
-    );
+      duration: motionDurations.boundaryReturn,
+      ease: boundaryReturnEase,
+      onReady: ready,
+      parent: underlay,
+    });
   };
   open = (event: Event) => {
     let boundary = (event.currentTarget as HTMLElement).closest<HTMLElement>(
@@ -71,20 +71,18 @@ class EmbeddedFixture extends Component {
     if (!source) return;
     let ready!: () => void;
     bitmapReady = new Promise<void>((resolve) => (ready = resolve));
-    completion = crossfadeCardBitmap(
-      source,
-      '[data-test-opened-gallery]',
-      () => {
+    completion = crossfadeCardBitmap({
+      from: source,
+      to: '[data-test-opened-gallery]',
+      update: () => {
         this.bodyReady = !this.deferred;
         this.opened = true;
       },
-      motionDurations.boundary,
-      boundaryEase,
-      () => {
-        ready();
-      },
-      boundary,
-    ).finally(async () => {
+      duration: motionDurations.boundary,
+      ease: boundaryEase,
+      onReady: () => ready(),
+      parent: boundary,
+    }).finally(async () => {
       if (this.deferred)
         await new Promise<void>((resolve) => {
           afterMotionPaint(() => {
@@ -237,24 +235,24 @@ class BitmapFixture extends Component {
   @tracked modal = false;
   openModal = () => (this.modal = true);
   close = (event: Event) => {
-    completion = crossfadeCardBitmap(
-      event.currentTarget as HTMLElement,
-      '[data-test-bitmap-source]',
-      () => {
+    completion = crossfadeCardBitmap({
+      from: event.currentTarget as HTMLElement,
+      to: '[data-test-bitmap-source]',
+      update: () => {
         this.opened = false;
       },
-      0.8,
-    );
+      duration: 0.8,
+    });
   };
   open = (event: Event) => {
-    completion = crossfadeCardBitmap(
-      event.currentTarget as HTMLElement,
-      '[data-test-bitmap-target]',
-      () => {
+    completion = crossfadeCardBitmap({
+      from: event.currentTarget as HTMLElement,
+      to: '[data-test-bitmap-target]',
+      update: () => {
         this.opened = true;
       },
-      0.8,
-    );
+      duration: 0.8,
+    });
   };
   <template>
     <div class='submode-layout-top-bar' data-test-bitmap-chrome>Stationary
@@ -1218,14 +1216,14 @@ module('Integration | bitmap motion', function (hooks) {
   test('zero-duration bitmap navigation applies its destination exactly once', async function (assert) {
     await renderComponent(BitmapFixture);
     let calls = 0;
-    await crossfadeCardBitmap(
-      find('[data-test-bitmap-source]') as HTMLElement,
-      '.unused-target',
-      () => {
+    await crossfadeCardBitmap({
+      from: find('[data-test-bitmap-source]') as HTMLElement,
+      to: '.unused-target',
+      update: () => {
         calls++;
       },
-      0,
-    );
+      duration: 0,
+    });
     assert.strictEqual(calls, 1);
     assert.strictEqual(
       (find('[data-test-bitmap-source]') as HTMLElement).style

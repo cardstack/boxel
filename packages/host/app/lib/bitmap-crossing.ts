@@ -109,24 +109,53 @@ export function supportsBitmapCrossing() {
   );
 }
 
+// A layer around the card crossing. 'out' fades a departing scene over the
+// first part of the move, 'in' fades an arriving scene over the last part, and
+// 'morph' crosses a persistent element's two faces while its frame moves (a
+// neighbouring stack taking freed width).
+export interface CrossingScene {
+  selector: string;
+  fade: 'in' | 'out' | 'morph';
+}
+
+export interface BitmapCrossing {
+  // The departing face: its snapshot is where the move starts.
+  from: HTMLElement;
+  // Selector for the landing face in the updated document. Nothing matching
+  // means the departing face simply fades.
+  to: string;
+  // Applies the navigation between the old and new captures.
+  update: () => void | Promise<void>;
+  // Seconds, before inspection slow-motion is applied.
+  duration?: number;
+  ease?: ViewTransitionOptions['ease'];
+  // 'crossfade' blends the faces across the move; 'late' keeps the departing
+  // face until near the landing so a face growing into a wider layout is
+  // never squeezed.
+  handoff?: 'crossfade' | 'late';
+  // A card trading depth with `from` (its stack parent): its tray, body,
+  // header and title move as matched layers of their own.
+  parent?: HTMLElement;
+  scenes?: CrossingScene[];
+  // Receives a finish() that jumps playback to its end; the host calls it
+  // when a newer scene takes over.
+  onReady?: (finish: () => void) => void;
+}
+
 // The browser captures both faces as raster layers. Their shared frame morphs,
 // while object-fit: cover keeps each bitmap proportional and crops the excess.
 // No live card tree is resized or independently stretched on either axis.
-export async function crossfadeCardBitmap(
-  source: HTMLElement,
-  destination: string,
-  update: () => void | Promise<void>,
+export async function crossfadeCardBitmap({
+  from: source,
+  to: destination,
+  update,
   duration = motionDurations.crossing,
-  ease: ViewTransitionOptions['ease'] = motionEase,
-  onReady?: (finish: () => void) => void,
-  underlay?: HTMLElement,
-  // Whole scenes around the crossing: a departing one fades out in the first
-  // part of the move, an arriving one fades in over the last part.
-  scenes: { selector: string; fade: 'in' | 'out' | 'morph' }[] = [],
-  // 'late' keeps the source face for most of the move and hands over near
-  // the landing, so a face growing into a wider layout is never squeezed.
-  handoff: 'crossfade' | 'late' = 'crossfade',
-) {
+  ease = motionEase,
+  handoff = 'crossfade',
+  parent: underlay,
+  scenes = [],
+  onReady,
+}: BitmapCrossing) {
   if (
     !supportsBitmapCrossing() ||
     !source.isConnected ||

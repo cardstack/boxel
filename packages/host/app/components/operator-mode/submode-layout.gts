@@ -3,8 +3,6 @@ import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 
 import { service } from '@ember/service';
-import { buildWaiter } from '@ember/test-waiters';
-import { isTesting } from '@embroider/macros';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
@@ -35,10 +33,6 @@ import ProfileSettingsModal from '@cardstack/host/components/operator-mode/profi
 import ProfileInfoPopover from '@cardstack/host/components/operator-mode/profile-info-popover';
 
 import type IndexController from '@cardstack/host/controllers';
-import {
-  crossfadeCardBitmap,
-  supportsBitmapCrossing,
-} from '@cardstack/host/lib/bitmap-crossing';
 import type { CardOpenOrigin } from '@cardstack/host/lib/card-open-origin';
 import { motionDurations } from '@cardstack/host/lib/motion-timing';
 
@@ -66,8 +60,6 @@ import type StoreService from '../../services/store';
 import type { SearchSheetMode } from '../search-sheet';
 import type { Submode } from '../submode-switcher';
 import type { PerformCommand } from 'glimmer-motion';
-
-const crossingWaiter = buildWaiter('operator-mode:search-crossing');
 
 interface Signature {
   Element: HTMLDivElement;
@@ -413,29 +405,25 @@ export default class SubmodeLayout extends Component<Signature> {
     origin?: CardOpenOrigin,
   ) {
     let source = origin?.source;
-    // Like all host motion, the crossing takes no time in tests.
-    let duration = isTesting() ? 0 : motionDurations.crossing;
-    if (
-      !source ||
-      duration === 0 ||
-      !supportsBitmapCrossing() ||
-      this.hostMotion.dragging
-    ) {
+    let duration = motionDurations.crossing;
+    if (!source || !this.hostMotion.canCross(source, duration)) {
+      // Without a bitmap the new card docks from the tile with Choreo.
       this.args.onCardSelectFromSearch?.(cardId, kind, origin);
       this.closeSearchSheet();
       return;
     }
     let token = ++this.bitmapEntrySequence;
     this.bitmapCrossingToken = token;
-    let budgetToken = this.hostMotion.beginBitmap();
     let bitmapKey = `search-bitmap-${token}`;
     let { source: _source, ...geometry } = origin!;
-    let waiterToken = crossingWaiter.beginAsync();
     try {
-      await crossfadeCardBitmap(
-        source,
-        `[data-bitmap-entry="${bitmapKey}"] > .stack-item-card`,
-        async () => {
+      await this.hostMotion.cross({
+        from: source,
+        to: () =>
+          document.querySelector<HTMLElement>(
+            `[data-bitmap-entry="${bitmapKey}"] > .stack-item-card`,
+          ),
+        update: async () => {
           if (token !== this.bitmapEntrySequence) return;
           await this.args.onCardSelectFromSearch?.(cardId, kind, {
             ...geometry,
@@ -444,14 +432,10 @@ export default class SubmodeLayout extends Component<Signature> {
           if (token === this.bitmapEntrySequence) this.closeSearchSheet();
         },
         duration,
-        undefined,
-        (finish) => this.hostMotion.onBitmapReady(budgetToken, finish),
-      );
+      });
     } finally {
-      this.hostMotion.endBitmap(budgetToken);
       if (this.bitmapCrossingToken === token)
         this.bitmapCrossingToken = undefined;
-      crossingWaiter.endAsync(waiterToken);
     }
   }
 

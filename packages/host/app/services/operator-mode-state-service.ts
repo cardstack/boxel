@@ -1,9 +1,8 @@
 import { getOwner } from '@ember/application';
 import type Owner from '@ember/owner';
 import type RouterService from '@ember/routing/router-service';
-import { schedule, scheduleOnce } from '@ember/runloop';
+import { scheduleOnce } from '@ember/runloop';
 import Service, { service } from '@ember/service';
-import { isTesting } from '@embroider/macros';
 
 import { tracked, cached } from '@glimmer/tracking';
 
@@ -35,10 +34,6 @@ import {
 import type { Submode } from '@cardstack/host/components/submode-switcher';
 import { Submodes } from '@cardstack/host/components/submode-switcher';
 import {
-  crossfadeCardBitmap,
-  supportsBitmapCrossing,
-} from '@cardstack/host/lib/bitmap-crossing';
-import {
   boundaryEase,
   motionDurations,
 } from '@cardstack/host/lib/motion-timing';
@@ -48,6 +43,7 @@ import {
   type StackItemType,
 } from '@cardstack/host/lib/stack-item';
 import {
+  adoptTileCorners,
   workspaceOriginFromElement,
   type WorkspaceOpenOrigin,
   type WorkspacePortal,
@@ -1554,32 +1550,25 @@ export default class OperatorModeStateService extends Service {
     // The tile element is consumed by the crossing, never kept on the stack.
     let { source, ...rest } = workspaceOrigin ?? {};
     let origin = workspaceOrigin ? (rest as WorkspaceOpenOrigin) : undefined;
-    if (source && this.workspaceCrossingDuration > 0) {
+    if (source && this.hostMotion.canCross(source, motionDurations.workspace)) {
       // Like a fitted card opening to isolated: the tile's wallpaper crosses
       // into the realm background while the dashboard fades out beneath it
       // and the index card fades in over the landing.
-      let budgetToken = this.hostMotion.beginBitmap();
+      let restoreCorners = adoptTileCorners(source);
       try {
-        await crossfadeCardBitmap(
-          source,
-          '.workspace-wallpaper',
-          async () => {
-            this.enterWorkspace(realmUrl, origin, false);
-            await new Promise<void>((resolve) =>
-              schedule('afterRender', resolve),
-            );
-          },
-          this.workspaceCrossingDuration,
-          boundaryEase,
-          (finish) => this.hostMotion.onBitmapReady(budgetToken, finish),
-          undefined,
-          [
+        await this.hostMotion.cross({
+          from: source,
+          to: () => document.querySelector<HTMLElement>('.workspace-wallpaper'),
+          update: () => this.enterWorkspace(realmUrl, origin, false),
+          duration: motionDurations.workspace,
+          ease: boundaryEase,
+          scenes: [
             { selector: '.workspace-chooser', fade: 'out' },
             { selector: '.stacks', fade: 'in' },
           ],
-        );
+        });
       } finally {
-        this.hostMotion.endBitmap(budgetToken);
+        restoreCorners();
       }
     } else {
       this.enterWorkspace(realmUrl, origin, true);
@@ -1595,12 +1584,6 @@ export default class OperatorModeStateService extends Service {
         : id,
     );
   };
-
-  private get workspaceCrossingDuration() {
-    return isTesting() || !supportsBitmapCrossing() || this.hostMotion.dragging
-      ? 0
-      : motionDurations.workspace;
-  }
 
   private enterWorkspace(
     realmUrl: string,
@@ -1657,7 +1640,7 @@ export default class OperatorModeStateService extends Service {
         if (
           workspaceChooserOpened &&
           wallpaper &&
-          this.workspaceCrossingDuration > 0
+          this.hostMotion.canCross(wallpaper, motionDurations.workspace)
         ) {
           void this.returnToWorkspaceTile(wallpaper, origin);
           return;
@@ -1672,7 +1655,6 @@ export default class OperatorModeStateService extends Service {
     this.schedulePersist();
   }
 
-  private workspaceReturnSequence = 0;
   // The reverse of opening from a tile: the realm background crosses back
   // into its dashboard tile while the cards fade out and the dashboard in.
   private async returnToWorkspaceTile(
@@ -1680,44 +1662,37 @@ export default class OperatorModeStateService extends Service {
     origin: WorkspaceOpenOrigin,
   ) {
     this.workspacePortal = undefined;
-    let key = `workspace-return-${++this.workspaceReturnSequence}`;
-    let tile: HTMLElement | undefined;
-    let budgetToken = this.hostMotion.beginBitmap();
+    let restoreCorners = () => {};
     try {
-      await crossfadeCardBitmap(
-        wallpaper,
-        `[data-bitmap-return="${key}"]`,
-        async () => {
+      await this.hostMotion.cross({
+        from: wallpaper,
+        to: () => {
+          let tile = Array.from(
+            document.querySelectorAll<HTMLElement>('[data-workspace-realm]'),
+          )
+            .find(
+              (element) =>
+                element.dataset.workspaceRealm === origin.realmURL &&
+                !!element.closest('.workspace-card.is-enlarged') ===
+                  !!origin.favorite,
+            )
+            ?.querySelector<HTMLElement>('.tile-icon');
+          if (tile) restoreCorners = adoptTileCorners(tile);
+          return tile;
+        },
+        update: () => {
           this._state.workspaceChooserOpened = true;
           this.schedulePersist();
-          await new Promise<void>((resolve) =>
-            schedule('afterRender', resolve),
-          );
-          tile =
-            Array.from(
-              document.querySelectorAll<HTMLElement>('[data-workspace-realm]'),
-            )
-              .find(
-                (element) =>
-                  element.dataset.workspaceRealm === origin.realmURL &&
-                  !!element.closest('.workspace-card.is-enlarged') ===
-                    !!origin.favorite,
-              )
-              ?.querySelector<HTMLElement>('.tile-icon') ?? undefined;
-          if (tile) tile.dataset.bitmapReturn = key;
         },
-        this.workspaceCrossingDuration,
-        boundaryEase,
-        (finish) => this.hostMotion.onBitmapReady(budgetToken, finish),
-        undefined,
-        [
+        duration: motionDurations.workspace,
+        ease: boundaryEase,
+        scenes: [
           { selector: '.stacks', fade: 'out' },
           { selector: '.workspace-chooser', fade: 'in' },
         ],
-      );
+      });
     } finally {
-      this.hostMotion.endBitmap(budgetToken);
-      if (tile?.dataset.bitmapReturn === key) delete tile.dataset.bitmapReturn;
+      restoreCorners();
     }
   }
 

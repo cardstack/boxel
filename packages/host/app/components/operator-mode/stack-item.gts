@@ -3,9 +3,7 @@ import { hash } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
-import { schedule } from '@ember/runloop';
 import { service } from '@ember/service';
-import { isTesting } from '@embroider/macros';
 
 import Component from '@glimmer/component';
 
@@ -62,10 +60,6 @@ import {
   baseCardRef,
 } from '@cardstack/runtime-common';
 
-import {
-  crossfadeCardBitmap,
-  supportsBitmapCrossing,
-} from '@cardstack/host/lib/bitmap-crossing';
 import {
   cardActionOrigin,
   type CardOpenOrigin,
@@ -379,52 +373,30 @@ export default class OperatorModeStackItem extends Component<Signature> {
       this.operatorModeStateService.isStackItemExpanded(top.instanceId),
     );
   }
-  private expandSequence = 0;
   private toggleExpanded = async () => {
     if (!this.isTopCard) return;
     let expand = !this.isExpandedIntent;
+    let card = this.containerEl;
     let apply = () =>
       this.operatorModeStateService.setStackItemExpanded(
         this.itemExpandKey,
         expand,
       );
-    // The card keeps its element and only its frame changes. Cross its own
-    // two faces so the content tweens with the frame instead of snapping.
-    let card = this.containerEl;
-    let duration = isTesting() ? 0 : motionDurations.boundary;
-    if (
-      !card ||
-      duration === 0 ||
-      !supportsBitmapCrossing() ||
-      this.hostMotion.dragging
-    ) {
+    if (!card) {
       apply();
       return;
     }
-    let key = `stack-expand-${++this.expandSequence}`;
-    card.dataset.bitmapExpand = key;
-    let budgetToken = this.hostMotion.beginBitmap();
-    try {
-      await crossfadeCardBitmap(
-        card,
-        `[data-bitmap-expand="${key}"]`,
-        async () => {
-          apply();
-          await new Promise<void>((resolve) =>
-            schedule('afterRender', resolve),
-          );
-        },
-        duration,
-        boundaryEase,
-        (finish) => this.hostMotion.onBitmapReady(budgetToken, finish),
-        undefined,
-        [],
-        expand ? 'late' : 'crossfade',
-      );
-    } finally {
-      this.hostMotion.endBitmap(budgetToken);
-      if (card.dataset.bitmapExpand === key) delete card.dataset.bitmapExpand;
-    }
+    // The card keeps its element and only its frame changes. Cross its own
+    // two faces so the content tweens with the frame instead of snapping;
+    // expanding keeps the narrow face until near the landing.
+    await this.hostMotion.cross({
+      from: card,
+      to: () => card,
+      update: apply,
+      duration: motionDurations.boundary,
+      ease: boundaryEase,
+      handoff: expand ? 'late' : 'crossfade',
+    });
   };
 
   private _closeItem = dropTask(async () => {

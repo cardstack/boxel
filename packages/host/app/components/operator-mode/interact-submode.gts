@@ -1,7 +1,6 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { concat, fn } from '@ember/helper';
 import { action } from '@ember/object';
-import { schedule } from '@ember/runloop';
 import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
 import { buildWaiter } from '@ember/test-waiters';
@@ -59,10 +58,7 @@ import {
 } from '@cardstack/runtime-common';
 
 import { afterMotionPaint } from '@cardstack/host/lib/after-motion-paint';
-import {
-  crossfadeCardBitmap,
-  supportsBitmapCrossing,
-} from '@cardstack/host/lib/bitmap-crossing';
+import { supportsBitmapCrossing } from '@cardstack/host/lib/bitmap-crossing';
 import {
   embeddedCardElement,
   embeddedCardOrigin,
@@ -459,32 +455,27 @@ export default class InteractSubmode extends Component {
     // stack: it is no buried underlay, and every stack reflows to make room.
     let newStack = stackIndex >= this.stacks.length;
     if (newStack) newItem.returnTo = sourceItem;
-    let budgetToken = this.hostMotion.beginBitmap({ reflowStacks: newStack });
     // Tests settle only once the crossing and its deferred body are done.
     let waiterToken = waiter.beginAsync();
     try {
-      await crossfadeCardBitmap(
-        source,
-        `[data-bitmap-entry="${bitmapKey}"] > .stack-item-card`,
-        async () => {
+      await this.hostMotion.cross({
+        from: source,
+        to: () =>
+          document.querySelector<HTMLElement>(
+            `[data-bitmap-entry="${bitmapKey}"] > .stack-item-card`,
+          ),
+        update: () => {
           if (this.isDestroying || token !== this.boundarySequence) return;
           open();
-          // Capture the fully laid-out destination, not its loading/entry pose.
-          await new Promise<void>((resolve) =>
-            schedule('afterRender', resolve),
-          );
         },
-        boundaryDuration,
-        boundaryEase,
-        (finish) => {
-          this.hostMotion.onBitmapReady(budgetToken, finish);
-        },
-        newStack
+        duration: boundaryDuration,
+        ease: boundaryEase,
+        parent: newStack
           ? undefined
           : (source.closest<HTMLElement>('.stack-item-card') ?? undefined),
-      );
+        reflowStacks: newStack,
+      });
     } finally {
-      this.hostMotion.endBitmap(budgetToken);
       // The match exists for this crossing only. Ordinary card updates must
       // never replay it or retain a reference to the source DOM.
       newItem.openingOrigin = undefined;
@@ -621,50 +612,39 @@ export default class InteractSubmode extends Component {
     }
 
     let token = ++this.boundarySequence;
-    let key = `stack-return-${token}`;
-    let destination: HTMLElement | undefined;
     // Every other stack's top card changes width when this stack goes.
+    let reflowKey = `stack-return-${token}`;
     let neighbours = home
       ? this.stacks
           .filter((other) => other !== stack)
           .map((other) => stackItemComponentAPI.get(other.at(-1)!)?.element())
           .filter((element): element is HTMLElement => !!element)
       : [];
-    for (let element of neighbours) element.dataset.bitmapReflow = key;
+    for (let element of neighbours) element.dataset.bitmapReflow = reflowKey;
     this.boundaryCrossingToken = token;
-    let budgetToken = this.hostMotion.beginBitmap();
     let waiterToken = waiter.beginAsync();
     try {
-      await crossfadeCardBitmap(
-        source,
-        `[data-bitmap-return="${key}"]`,
-        async () => {
+      await this.hostMotion.cross({
+        from: source,
+        // The tile's real layout once its card is back on top. If it
+        // disappeared or scrolled away, the outgoing bitmap just fades.
+        to: () => embeddedCardOrigin(underlay, item.id)?.source,
+        update: () => {
           if (this.isDestroying || token !== this.boundarySequence) return;
           remove();
-          await new Promise<void>((resolve) =>
-            schedule('afterRender', resolve),
-          );
-          // Its hidden body now has the real destination layout. If the tile
-          // disappeared or scrolled away, let the outgoing bitmap just fade.
-          destination = embeddedCardOrigin(underlay, item.id)?.source;
-          if (destination) destination.dataset.bitmapReturn = key;
         },
-        returnDuration,
-        boundaryReturnEase,
-        (finish) => this.hostMotion.onBitmapReady(budgetToken, finish),
-        home ? undefined : underlay,
-        home
-          ? [{ selector: `[data-bitmap-reflow="${key}"]`, fade: 'morph' }]
+        duration: returnDuration,
+        ease: boundaryReturnEase,
+        parent: home ? undefined : underlay,
+        scenes: home
+          ? [{ selector: `[data-bitmap-reflow="${reflowKey}"]`, fade: 'morph' }]
           : [],
-      );
+      });
     } finally {
-      this.hostMotion.endBitmap(budgetToken);
       for (let element of neighbours)
-        if (element.dataset.bitmapReflow === key)
+        if (element.dataset.bitmapReflow === reflowKey)
           delete element.dataset.bitmapReflow;
       forgetCardActionOrigin(underlay, item.id);
-      if (destination?.dataset.bitmapReturn === key)
-        delete destination.dataset.bitmapReturn;
       if (this.boundaryCrossingToken === token)
         this.boundaryCrossingToken = undefined;
       waiter.endAsync(waiterToken);
