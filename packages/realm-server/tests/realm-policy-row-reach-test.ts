@@ -92,8 +92,14 @@ const ROSTER_MODULE = `
     @field teacherIds = containsMany(StringField);
     @field students = linksToMany(() => Student);
     @field roll = contains(StringField, {
+      // A linked card can still be an empty slot on a render's first pass,
+      // before the links it names are loaded; the value the index records is
+      // the one the render settles on.
       computeVia: function (this: Roster) {
-        return (this.students ?? []).map((student) => student.name).join(', ');
+        return (this.students ?? [])
+          .map((student) => student?.name)
+          .filter(Boolean)
+          .join(', ');
       },
     });
   }
@@ -366,7 +372,13 @@ module(basename(import.meta.filename), function (hooks) {
     });
 
     test('an undeclared read is served under the unnarrowed validator', async function (assert) {
-      let etag = (await getCard(FULL, AUTH.admin())).headers.etag;
+      let response = await getCard(FULL, AUTH.admin());
+      assert.strictEqual(
+        response.status,
+        200,
+        `the admin reads the roster: ${response.text}`,
+      );
+      let etag = response.headers.etag;
       assert.ok(etag, 'the read carries a validator');
       assert.false(
         /links-only|no-links/.test(etag),
@@ -456,6 +468,11 @@ module(basename(import.meta.filename), function (hooks) {
         [NONE, 'none'],
       ] as const) {
         let first = await getCard(url, AUTH.admin());
+        assert.strictEqual(
+          first.status,
+          200,
+          `${label}: the admin reads it: ${first.text}`,
+        );
         let etag = first.headers.etag;
         assert.ok(etag, `${label}: the read carries a validator`);
         assert.strictEqual(
