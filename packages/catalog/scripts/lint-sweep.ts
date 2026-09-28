@@ -8,10 +8,10 @@
 // Run from packages/catalog:
 //
 //   node scripts/lint-sweep.ts --record=<file>
-//     Runs the package's own lint:types, lint:js and lint:hbs scripts and
-//     writes every error they report to <file>. Exits 0 whether or not there
-//     are lint errors; exits 1 only when a linter could not run, since a
-//     linter that crashed reports no errors and must not read as a pass.
+//     Runs the package's own lint scripts, the same set its `pnpm lint` runs,
+//     and writes every error they report to <file>. Exits 0 whether or not
+//     there are lint errors; exits 1 only when a linter could not run, since
+//     a linter that crashed reports no errors and must not read as a pass.
 //
 //   node scripts/lint-sweep.ts --report=<file> [--baseline=<file>]
 //     Prints the errors recorded in <file> and exits 1 if there are any. With
@@ -20,8 +20,10 @@
 //     that is already broken against boxel main does not fail every change.
 //     Writes a markdown summary to $GITHUB_STEP_SUMMARY when it is set.
 //
-// Errors are matched by linter, file, rule and message, but not position, so
-// an error in a boxel file that the change only moved still matches.
+// Errors are matched by linter, file, rule, message and position first, then
+// the rest without position, so an error in a boxel file that the change only
+// moved still matches, and a repeated error the change adds is the one
+// reported.
 
 import { spawnSync } from 'node:child_process';
 import {
@@ -221,6 +223,12 @@ function lintHbs(outDir: string): LinterRun {
   return { diagnostics, status, output };
 }
 
+const parsers: Record<Linter, (outDir: string) => LinterRun> = {
+  'lint:types': () => lintTypes(),
+  'lint:js': lintJs,
+  'lint:hbs': lintHbs,
+};
+
 function git(dir: string, args: string[]) {
   let result = spawnSync('git', ['-C', dir, ...args], { encoding: 'utf8' });
   return result.status === 0 ? result.stdout.trim() : undefined;
@@ -241,17 +249,26 @@ function record(path: string) {
     fail(`there is no catalog clone at ${contentsDir}`);
   }
 
+  // `pnpm lint` runs concurrently's `pnpm:lint:*(!fix)`: every lint: script
+  // whose name does not contain "fix". A script this sweep cannot read would
+  // fail the catalog's lint while this passes, so it is an error here.
+  let linters = Object.keys(pkg.scripts ?? {}).filter(
+    (name) => name.startsWith('lint:') && !/fix/.test(name),
+  );
+  let unreadable = linters.filter((name) => !Object.hasOwn(parsers, name));
+  if (unreadable.length > 0) {
+    fail(
+      `package.json has lint scripts this sweep cannot read: ${unreadable.join(', ')}. ` +
+        `Add a parser for their output to scripts/lint-sweep.ts.`,
+    );
+  }
+
   let outDir = mkdtempSync(join(tmpdir(), 'catalog-lint-sweep-'));
   let diagnostics: Diagnostic[] = [];
   try {
-    let runs: [Linter, () => LinterRun][] = [
-      ['lint:types', lintTypes],
-      ['lint:js', () => lintJs(outDir)],
-      ['lint:hbs', () => lintHbs(outDir)],
-    ];
-    for (let [linter, run] of runs) {
+    for (let linter of linters as Linter[]) {
       log(`running ${linter}`);
-      let result = run();
+      let result = parsers[linter](outDir);
       // Every linter here exits non-zero when it reports an error, so a
       // non-zero exit with nothing parsed means it never got as far as
       // linting. ESLint also says so outright, with exit status 2.
@@ -286,25 +303,53 @@ function key(d: Diagnostic) {
   return JSON.stringify([d.linter, d.file, d.rule, d.message]);
 }
 
-// The errors in `head` that `baseline` does not account for. Matching counts
-// occurrences, so a second copy of an error the baseline has once is new.
-function newErrors(head: Diagnostic[], baseline: Diagnostic[]) {
-  let remaining = new Map<string, number>();
-  for (let d of baseline) {
-    remaining.set(key(d), (remaining.get(key(d)) ?? 0) + 1);
+function positionedKey(d: Diagnostic) {
+  return JSON.stringify([key(d), d.line, d.column]);
+}
+
+// Takes the diagnostics in `from` that `pool` holds one of, spending one of
+// the pool's occurrences per match, so a second copy of an error the pool has
+// once is left over.
+function takeMatches(
+  from: Diagnostic[],
+  pool: Diagnostic[],
+  keyOf: (d: Diagnostic) => string,
+) {
+  let remaining = new Map<string, Diagnostic[]>();
+  for (let d of pool) {
+    let k = keyOf(d);
+    let list = remaining.get(k) ?? [];
+    list.push(d);
+    remaining.set(k, list);
   }
-  let added: Diagnostic[] = [];
-  let existing: Diagnostic[] = [];
-  for (let d of head) {
-    let count = remaining.get(key(d)) ?? 0;
-    if (count > 0) {
-      remaining.set(key(d), count - 1);
-      existing.push(d);
+  let matched: Diagnostic[] = [];
+  let unmatched: Diagnostic[] = [];
+  let used = new Set<Diagnostic>();
+  for (let d of from) {
+    let candidates = remaining.get(keyOf(d));
+    let match = candidates?.shift();
+    if (match) {
+      matched.push(d);
+      used.add(match);
     } else {
-      added.push(d);
+      unmatched.push(d);
     }
   }
-  return { added, existing };
+  return { matched, unmatched, poolLeft: pool.filter((d) => !used.has(d)) };
+}
+
+// The errors in `head` that `baseline` does not account for. Catalog files are
+// the same in both runs, so errors that also match on position pair up first;
+// only what is left matches without it, which covers boxel files the change
+// edited above an error.
+function newErrors(head: Diagnostic[], baseline: Diagnostic[]) {
+  let exact = takeMatches(head, baseline, positionedKey);
+  let moved = takeMatches(exact.unmatched, exact.poolLeft, key);
+  let existing = new Set([...exact.matched, ...moved.matched]);
+  return {
+    added: head.filter((d) => !existing.has(d)),
+    existing: head.filter((d) => existing.has(d)),
+  };
 }
 
 function location(d: Diagnostic) {
@@ -325,7 +370,14 @@ function markdownItem(d: Diagnostic, catalog: Recording['catalog']) {
     let anchor = d.line ? `#L${d.line}` : '';
     where = `[${where}](https://github.com/${catalog.repository}/blob/${catalog.revision}/${path}${anchor})`;
   }
-  let message = d.message.split('\n')[0].replace(/\|/g, '\\|');
+  // GitHub's markdown drops anything shaped like an HTML tag, and type
+  // names like `Partial<FieldsOf<X>>` are.
+  let message = d.message
+    .split('\n')[0]
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/\|/g, '\\|');
   return `- ${where} ${d.linter} \`${d.rule}\`: ${message}`;
 }
 

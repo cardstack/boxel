@@ -170,8 +170,9 @@ jobs:
           BRANCH: ${{ github.head_ref }}
         run: |
           ref=main
+          # A bare name would also match any ref ending in /<name>.
           if [ -n "$BRANCH" ] &&
-            git ls-remote --exit-code --heads https://github.com/cardstack/boxel-catalog.git "$BRANCH" >/dev/null; then
+            git ls-remote --exit-code https://github.com/cardstack/boxel-catalog.git "refs/heads/$BRANCH" >/dev/null; then
             ref="$BRANCH"
             echo "::notice title=catalog lint::Linting boxel-catalog branch $ref, which matches this branch's name, in place of main. Merge its catalog pull request before or alongside this one."
           fi
@@ -186,9 +187,13 @@ jobs:
 
       - uses: ./.github/actions/init
 
+      # Restore only: the base-branch step below can rebuild boxel-icons from
+      # the base tree, which must not be saved under this change's key.
       - name: Restore boxel-icons build cache
         id: icons-cache
         uses: ./.github/actions/restore-icons-cache
+        with:
+          save: "false"
       - name: Build Boxel Icons
         if: steps.icons-cache.outputs.cache-hit != 'true'
         run: pnpm run build
