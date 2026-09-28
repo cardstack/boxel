@@ -1562,9 +1562,6 @@ module(basename(import.meta.filename), function () {
             });
           }
 
-          let messages = await getMessagesSince(realmEventTimestampStart);
-          let messagesReadAt = Date.now();
-
           let expected = [
             {
               type: APP_BOXEL_REALM_EVENT_TYPE,
@@ -1625,14 +1622,37 @@ module(basename(import.meta.filename), function () {
             },
           ];
 
+          // The realm hands each event to the room without waiting for it to
+          // be delivered, so the room can still be behind the last response
+          // this test received. Read until every expected event has arrived,
+          // or until the wait runs out and the assertions below say which
+          // one did not.
+          let messages: MatrixEvent[] = [];
+          let messagesReadAt: number;
+          let deliveryDeadline = Date.now() + 5000;
+          for (;;) {
+            messages = await getMessagesSince(realmEventTimestampStart);
+            messagesReadAt = Date.now();
+            if (
+              expected.every((expectedEvent) =>
+                matchRealmEvent(messages, expectedEvent),
+              ) ||
+              messagesReadAt >= deliveryDeadline
+            ) {
+              break;
+            }
+            await new Promise((resolve) => setTimeout(resolve, 250));
+          }
+
           for (let expectedEvent of expected) {
             // FIXME is there a better way?
             let actualEvent = matchRealmEvent(messages, expectedEvent);
             if (!actualEvent) {
               // A miss is an event that never reached the room, one that
-              // reached it after the read, or one that arrived carrying members
-              // the comparison does not expect. Every realm event the read
-              // returned, whole and with its timestamp, tells those apart.
+              // reached it only after the wait ran out, or one that arrived
+              // carrying members the comparison does not expect. Every realm
+              // event the last read returned, whole and with its timestamp,
+              // tells those apart.
               console.error(
                 `[card-source-endpoints-test] no realm event matched ${JSON.stringify(
                   expectedEvent.content,
