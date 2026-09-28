@@ -1262,6 +1262,47 @@ module(basename(import.meta.filename), function () {
           );
         });
 
+        test('a write of the bytes already stored queues no index job and leaves the file alone', async function (assert) {
+          let source = `//TEST UNCHANGED\n${cardSrc}`;
+          let first = await request
+            .post('/unchanged-source.gts')
+            .set('Accept', 'application/vnd.card+source')
+            .send(source);
+          assert.strictEqual(first.status, 204, 'first write returns 204');
+          await testRealm.incrementalIndexing();
+          let filePath = join(
+            dir.name,
+            'realm_server_1',
+            'test',
+            'unchanged-source.gts',
+          );
+          let mtimeBefore = statSync(filePath).mtimeMs;
+          let baseline = await maxIncrementalIndexJobId();
+
+          let second = await request
+            .post('/unchanged-source.gts')
+            .set('Accept', 'application/vnd.card+source')
+            .send(source);
+          await testRealm.incrementalIndexing();
+
+          assert.strictEqual(second.status, 204, 'second write returns 204');
+          assert.deepEqual(
+            await incrementalIndexJobsSince(baseline),
+            [],
+            'nothing is queued for a write that changes no bytes',
+          );
+          assert.strictEqual(
+            statSync(filePath).mtimeMs,
+            mtimeBefore,
+            'the file is not rewritten',
+          );
+          assert.strictEqual(
+            second.headers['last-modified'],
+            first.headers['last-modified'],
+            'the response reports the modification time the file already has',
+          );
+        });
+
         test('returns once the bytes are durable, with indexing still queued', async function (assert) {
           let since = Date.now();
           let baseline = await maxIncrementalIndexJobId();
@@ -2118,6 +2159,125 @@ module(basename(import.meta.filename), function () {
             `one incremental index job for one upload (ids: ${jobs
               .map((job) => job.id)
               .join(', ')})`,
+          );
+        });
+
+        // Large enough that the stored file is read back in several chunks,
+        // so the comparison has to carry its position across chunk
+        // boundaries rather than finishing inside the first one.
+        function multiChunkBytes(): Uint8Array {
+          let bytes = new Uint8Array(200 * 1024);
+          for (let i = 0; i < bytes.length; i++) {
+            bytes[i] = i % 251;
+          }
+          return bytes;
+        }
+
+        test('a binary upload of the bytes already stored queues no index job and leaves the file alone', async function (assert) {
+          let bytes = multiChunkBytes();
+          let first = await request
+            .post('/unchanged-upload.bin')
+            .set('Content-Type', 'application/octet-stream')
+            .send(Buffer.from(bytes));
+          assert.strictEqual(first.status, 204, 'first upload returns 204');
+          await testRealm.incrementalIndexing();
+          let filePath = join(
+            dir.name,
+            'realm_server_1',
+            'test',
+            'unchanged-upload.bin',
+          );
+          let mtimeBefore = statSync(filePath).mtimeMs;
+          let baseline = await maxIncrementalIndexJobId();
+
+          let second = await request
+            .post('/unchanged-upload.bin')
+            .set('Content-Type', 'application/octet-stream')
+            .send(Buffer.from(bytes));
+          await testRealm.incrementalIndexing();
+
+          assert.strictEqual(second.status, 204, 'second upload returns 204');
+          assert.deepEqual(
+            await incrementalIndexJobsSince(baseline),
+            [],
+            'nothing is queued for an upload that changes no bytes',
+          );
+          assert.strictEqual(
+            statSync(filePath).mtimeMs,
+            mtimeBefore,
+            'the file is not rewritten',
+          );
+          assert.strictEqual(
+            second.headers['last-modified'],
+            first.headers['last-modified'],
+            'the response reports the modification time the file already has',
+          );
+        });
+
+        test('a binary upload of the bytes already stored is still indexed when the index holds no row built from them', async function (assert) {
+          let bytes = multiChunkBytes();
+          let fileURL = `${testRealmHref}unindexed-upload.bin`;
+          await request
+            .post('/unindexed-upload.bin')
+            .set('Content-Type', 'application/octet-stream')
+            .send(Buffer.from(bytes));
+          await testRealm.incrementalIndexing();
+          // Stands in for an upload whose bytes landed and whose queue insert
+          // then failed: the file is on disk and the index never caught up.
+          await query(dbAdapter, [
+            'DELETE FROM boxel_index WHERE url =',
+            param(fileURL),
+          ]);
+          let baseline = await maxIncrementalIndexJobId();
+
+          let response = await request
+            .post('/unindexed-upload.bin')
+            .set('Content-Type', 'application/octet-stream')
+            .send(Buffer.from(bytes));
+          await testRealm.incrementalIndexing();
+
+          assert.strictEqual(response.status, 204, 'HTTP 204 status');
+          assert.strictEqual(
+            (await incrementalIndexJobsSince(baseline)).length,
+            1,
+            'the repeated upload queues the index pass its bytes never got',
+          );
+          let rows = await query(dbAdapter, [
+            `SELECT url FROM boxel_index WHERE type = 'file' AND url =`,
+            param(fileURL),
+          ]);
+          assert.strictEqual(rows.length, 1, 'the file is back in the index');
+        });
+
+        test('a binary upload the same length as the stored file but differing in its last byte is written and indexed', async function (assert) {
+          let bytes = multiChunkBytes();
+          await request
+            .post('/last-byte-differs.bin')
+            .set('Content-Type', 'application/octet-stream')
+            .send(Buffer.from(bytes));
+          await testRealm.incrementalIndexing();
+          let baseline = await maxIncrementalIndexJobId();
+
+          let changed = bytes.slice();
+          changed[changed.length - 1] = changed[changed.length - 1]! ^ 0xff;
+          let response = await request
+            .post('/last-byte-differs.bin')
+            .set('Content-Type', 'application/octet-stream')
+            .send(Buffer.from(changed));
+          await testRealm.incrementalIndexing();
+
+          assert.strictEqual(response.status, 204, 'HTTP 204 status');
+          assert.strictEqual(
+            (await incrementalIndexJobsSince(baseline)).length,
+            1,
+            'the changed upload is indexed',
+          );
+          let fileBytes = readFileSync(
+            join(dir.name, 'realm_server_1', 'test', 'last-byte-differs.bin'),
+          );
+          assert.true(
+            Buffer.from(changed).equals(fileBytes),
+            'the file holds the changed bytes',
           );
         });
 
