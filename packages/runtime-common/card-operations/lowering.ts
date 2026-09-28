@@ -254,13 +254,34 @@ export async function lowerOperationDeclarations(
       issues.push(...operation.issues!);
       continue;
     }
-    let operation = await lowerOperation(raw[name], sink, context);
+    let operation: OperationDefinition;
+    try {
+      operation = await lowerOperation(raw[name], sink, context);
+    } catch (e: unknown) {
+      // Lowering records rather than throws, so this is a defect in it. It
+      // costs this operation its validity and nothing else, and the entry
+      // stays stored, flags and all, rather than leaving its name to fall
+      // back to the built-in behavior of the same name.
+      sink.add(
+        'lowering-failed',
+        '',
+        `lowering this operation failed: ${e instanceof Error ? e.message : String(e)}`,
+      );
+      operation = { base: raw[name].base, deterministic: true };
+    }
     if (sink.issues.length > 0) {
       operation.invalid = true;
       operation.issues = sink.issues;
       issues.push(...sink.issues);
     }
     operations[name] = operation;
+  }
+  // Carried onto every entry the declaration produced, an invalid one
+  // included, so no finding against a declaration makes it grantable.
+  for (let name of Object.keys(operations)) {
+    if (raw[name]?.nonGrantable === true) {
+      operations[name].nonGrantable = true;
+    }
   }
   return { operations, issues };
 }
@@ -270,7 +291,7 @@ export async function lowerOperationDeclarations(
 // and nothing else.
 class IssueSink {
   readonly issues: OperationLoweringIssue[] = [];
-  private operation: string;
+  readonly operation: string;
 
   constructor(operation: string) {
     this.operation = operation;
@@ -416,7 +437,10 @@ async function lowerOperation(
       operation.query = query;
     }
   }
-  if (base === 'appendContainsMany') {
+  if (
+    base === 'appendContainsMany' &&
+    !isBuiltInAppend(sink.operation, declaration as AppendContainsManyClauses)
+  ) {
     let items = await lowerAppendContainsMany(
       declaration as AppendContainsManyClauses,
       paramNames,
@@ -1526,6 +1550,22 @@ interface AppendContainsManyClauses {
   field?: unknown;
   item?: unknown;
   fields?: Record<string, unknown>;
+}
+
+// An append declared under its own name that names nothing to append is the
+// built-in append, which takes its field and items from each invocation. It
+// lowers to no items, which is what the executor reads as the built-in. Under
+// any other name an append that names nothing is incomplete.
+function isBuiltInAppend(
+  name: string,
+  declaration: AppendContainsManyClauses,
+): boolean {
+  return (
+    name === 'appendContainsMany' &&
+    declaration.field === undefined &&
+    declaration.item === undefined &&
+    declaration.fields === undefined
+  );
 }
 
 // `field: 'events', item: {…}` → `items: { events: {…} }`, and `fields: {…}`
