@@ -379,6 +379,7 @@ export const BUNDLED_BASE_MODULES: Record<
   'html-file-def': () => import('@cardstack/base/html-file-def'),
   'html-meta-extractor': () => import('@cardstack/base/html-meta-extractor'),
   'id3v2-parser': () => import('@cardstack/base/id3v2-parser'),
+  'image-animation': () => import('@cardstack/base/image-animation'),
   'image-color-profile': () => import('@cardstack/base/image-color-profile'),
   'iso-bmff': () => import('@cardstack/base/iso-bmff'),
   'jpg-meta-extractor': () => import('@cardstack/base/jpg-meta-extractor'),
