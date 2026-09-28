@@ -412,6 +412,11 @@ export function shimHostTools(virtualNetwork: VirtualNetwork) {
     GenerateThumbnailToolModule,
   );
   shimHostToolModule(virtualNetwork, 'capture-card', CaptureCardToolModule);
+  // The capture tool's legacy module name. Released `boxel-cli` plugin skills
+  // teach this import and `boxel run-command` path, and those releases stay
+  // installed independently of the host, so card code they generate keeps
+  // resolving.
+  shimHostToolModule(virtualNetwork, 'screenshot-card', CaptureCardToolModule);
   shimHostToolModule(virtualNetwork, 'get-card', GetCardToolModule);
   shimHostToolModule(
     virtualNetwork,

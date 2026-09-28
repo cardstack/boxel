@@ -317,11 +317,11 @@ export function isMarkdownFile(id: string): boolean {
 // anything already stored under it.
 export const CAPTURE_SERVING_PREFIX = '_capture/';
 
-// The prefix captures served under before they were named captures. Still
-// answered, because a durable capture URL is meant to be stored: a card may
-// hold one minted under the old name, and a browser keeps serving the
-// previously installed auth service worker — which matches capture requests on
-// the prefix to attach credentials — until it next updates. Reserved against
+// The legacy spelling of `CAPTURE_SERVING_PREFIX`. Still answered, because a
+// durable capture URL is meant to be stored: a card may hold one minted under
+// this spelling, and a browser keeps serving an auth service worker that
+// matches capture requests on this prefix to attach credentials until it next
+// updates. Reserved against
 // writes for as long as it is served, so nothing can be stored where a GET
 // would never read it back.
 export const LEGACY_CAPTURE_SERVING_PREFIX = '_screenshot/';

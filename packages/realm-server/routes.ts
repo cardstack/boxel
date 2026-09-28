@@ -318,10 +318,10 @@ export function createRoutes(args: CreateRoutesArgs) {
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleCaptureCard(args),
   );
-  // The name this endpoint answered to before captures were called captures.
-  // `boxel-cli` is installed and pinned independently of this server, so a
-  // released version still posts here; it is answered by the same handler for
-  // as long as those versions are in use.
+  // The legacy spelling of `/_capture-card`. `boxel-cli` is installed and
+  // pinned independently of this server, and released versions post here, so
+  // it is answered by the same handler for as long as those versions are in
+  // use.
   router.post(
     '/_screenshot-card',
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),

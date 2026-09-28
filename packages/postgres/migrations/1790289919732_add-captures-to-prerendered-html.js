@@ -1,9 +1,12 @@
 // The declared-capture manifest ({name → {specHash, objectKey, …}}) the
-// prerender-html visit writes for each row, renamed from `screenshots` now
-// that a declared entry can also be a paged PDF rather than only a raster
-// tile. Additive half of the rename: the column is added alongside the old
-// one and backfilled, so the previous code revision keeps reading
-// `screenshots` until the removal migration drops it post-deploy.
+// prerender-html visit writes for each row, under the name that covers a
+// paged PDF as well as a raster tile. Additive half of the `screenshots` →
+// `captures` rename: the column is added alongside the old one and
+// backfilled, and the previous code revision keeps reading and writing
+// `screenshots` until the removal migration drops it post-deploy. Its commits
+// also write NULL over `captures` meanwhile (a commit copies every column
+// the schema holds out of the pending row); the removal migration re-copies
+// those rows before it drops the old column.
 //
 // Added to the production table and both twins — `prerendered_html_pending`
 // (a pass stages rows there and the commit copies every production column
