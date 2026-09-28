@@ -20,6 +20,7 @@ import StackMotion from '@cardstack/host/components/operator-mode/stack-motion';
 import SearchSheetMotion from '@cardstack/host/components/search-sheet/motion';
 import headerMotionParts from '@cardstack/host/modifiers/header-motion-parts';
 
+import { motionDeadline } from '../../helpers/motion';
 import { renderComponent } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
@@ -251,7 +252,11 @@ module('Integration | chrome motion', function (hooks) {
       let layoutSizes = new Set<string>();
       let fixedShadowPaint = true;
       let shadowsAligned = true;
-      while (!isMotionIdle()) {
+      for (
+        let expire = motionDeadline('motion to settle');
+        !isMotionIdle();
+        expire()
+      ) {
         let header = find('[data-choreo-raised] [data-test-header]');
         if (header) {
           layoutSizes.add(
@@ -398,7 +403,11 @@ module('Integration | chrome motion', function (hooks) {
     let frames = 0;
     let maxError = 0;
     let raised = false;
-    while (!isMotionIdle()) {
+    for (
+      let expire = motionDeadline('motion to settle');
+      !isMotionIdle();
+      expire()
+    ) {
       let card = element('[data-test-card]').getBoundingClientRect();
       let header = element('[data-test-header]').getBoundingClientRect();
       maxError = Math.max(
@@ -548,7 +557,11 @@ module('Integration | chrome motion', function (hooks) {
     let bottomError = 0;
     let layoutChanged = false;
     let nativeSurface = false;
-    while (!isMotionIdle()) {
+    for (
+      let expire = motionDeadline('motion to settle');
+      !isMotionIdle();
+      expire()
+    ) {
       bottomError = Math.max(
         bottomError,
         Math.abs(surface.getBoundingClientRect().bottom - bottom),

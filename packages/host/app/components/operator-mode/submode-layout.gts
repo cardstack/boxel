@@ -407,8 +407,14 @@ export default class SubmodeLayout extends Component<Signature> {
     let source = origin?.source;
     let duration = motionDurations.crossing;
     if (!source || !this.hostMotion.canCross(source, duration)) {
-      // Without a bitmap the new card docks from the tile with Choreo.
-      this.args.onCardSelectFromSearch?.(cardId, kind, origin);
+      // Without a bitmap the new card docks from the tile with Choreo. The
+      // dock needs only the tile's geometry, never the result element.
+      let { source: _tile, ...geometry } = origin ?? {};
+      this.args.onCardSelectFromSearch?.(
+        cardId,
+        kind,
+        origin ? (geometry as CardOpenOrigin) : undefined,
+      );
       this.closeSearchSheet();
       return;
     }
@@ -466,6 +472,11 @@ export default class SubmodeLayout extends Component<Signature> {
       typeof command.payload === 'number'
     ) {
       this.operatorModeStateService.finishWorkspacePortal(command.payload);
+    } else if (
+      command.action === 'dock-complete' &&
+      typeof command.payload === 'string'
+    ) {
+      this.operatorModeStateService.finishDock(command.payload);
     }
   };
 
@@ -556,7 +567,7 @@ export default class SubmodeLayout extends Component<Signature> {
         as |ResizablePanel ResizeHandle|
       >
         <ResizablePanel class='main-panel'>
-          <div class='submode-layout-top-bar'>
+          <div class='submode-layout-top-bar' data-motion-chrome='top-bar'>
             <IconButton
               @icon={{BoxelIconWithText}}
               @width='160px'
@@ -569,6 +580,7 @@ export default class SubmodeLayout extends Component<Signature> {
               }}
               {{on 'click' this.toggleWorkspaceChooser}}
               data-workspace-chooser-toggle
+              data-motion-chrome='boxel'
               data-test-workspace-chooser-toggle
             />
             {{#if this.workspaceChooserOpened}}
@@ -611,6 +623,7 @@ export default class SubmodeLayout extends Component<Signature> {
 
             <button
               class='profile-icon-button'
+              data-motion-chrome='account'
               {{on 'click' this.toggleProfileSummary}}
               data-test-profile-icon-button
             >
@@ -666,6 +679,7 @@ export default class SubmodeLayout extends Component<Signature> {
           {{#unless this.aiAssistantPanelService.isAiAssistantHidden}}
             <AiAssistantButton
               class='chat-btn'
+              data-motion-chrome='assistant-button'
               @isActive={{this.aiAssistantPanelService.isOpen}}
               {{on
                 'click'
@@ -691,6 +705,7 @@ export default class SubmodeLayout extends Component<Signature> {
         {{#if this.aiAssistantPanelService.isOpen}}
           <ResizablePanel
             class='ai-assistant-resizable-panel'
+            data-motion-chrome='assistant-panel'
             @defaultSize={{this.aiPanelWidths.defaultWidth}}
             @minSize={{this.aiPanelWidths.minWidth}}
             @collapsible={{false}}
@@ -725,8 +740,11 @@ export default class SubmodeLayout extends Component<Signature> {
       :deep(.workspace-chooser.portal-backdrop) {
         z-index: 0;
       }
+      /* Mounted but skipped: content-visibility keeps the dashboard's state
+         while style and layout passes leave it out entirely. */
       :deep(.workspace-chooser.chooser-concealed) {
         visibility: hidden;
+        content-visibility: hidden;
         pointer-events: none;
       }
       .submode-layout {

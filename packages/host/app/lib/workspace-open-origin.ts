@@ -132,13 +132,16 @@ export function tileRealmIcon(tile: HTMLElement) {
   return tile.querySelector<HTMLElement>('.realm-icon-wrapper') ?? undefined;
 }
 
-// The realm icon in the header of the workspace's first card, where a tile's
-// icon lands.
-export function workspaceHeaderIcon() {
+// Finds the workspace's first card (its stack item element), the card a
+// tile's icon lands on or leaves from. The caller resolves it from state, so
+// a second open stack is never mistaken for it.
+export type WorkspaceCard = () => HTMLElement | undefined;
+
+// The realm icon in the header of the workspace's first card.
+function headerIcon(card: WorkspaceCard) {
   return (
-    document.querySelector<HTMLElement>(
-      '.stacks .operator-mode-stack .stack-item-header .realm-icon',
-    ) ?? undefined
+    card()?.querySelector<HTMLElement>('.stack-item-header .realm-icon') ??
+    undefined
   );
 }
 
@@ -152,7 +155,10 @@ type WorkspaceCrossing = Omit<HostCrossing, 'update'>;
 // realm icon flies to the first card's header, and the platter of cards
 // scales and fades up behind it from the middle of the tile, starting at the
 // icon's size. restore() once it lands.
-export function workspaceEntry(tile: HTMLElement): {
+export function workspaceEntry(
+  tile: HTMLElement,
+  card: WorkspaceCard,
+): {
   crossing: WorkspaceCrossing;
   restore: () => void;
 } {
@@ -178,7 +184,7 @@ export function workspaceEntry(tile: HTMLElement): {
             {
               from: icon,
               to: () =>
-                workspaceHeaderIcon() ?? (standIn = headerIconStandIn(icon)),
+                headerIcon(card) ?? (standIn = headerIconStandIn(card, icon)),
             },
           ]
         : [],
@@ -193,10 +199,11 @@ export function workspaceEntry(tile: HTMLElement): {
 // header whose realm has no icon URL renders an empty icon slot: an empty
 // stand-in there lets the icon dissolve into the slot, since no icon comes.
 // Removed when the crossing ends.
-function headerIconStandIn(tileIcon?: HTMLElement): HTMLElement | undefined {
-  let card = document.querySelector<HTMLElement>(
-    '.stacks .operator-mode-stack .stack-item-card',
-  );
+function headerIconStandIn(
+  workspaceCard: WorkspaceCard,
+  tileIcon?: HTMLElement,
+): HTMLElement | undefined {
+  let card = workspaceCard()?.querySelector<HTMLElement>('.stack-item-card');
   let image = tileIcon?.querySelector<HTMLElement>('.realm-icon');
   if (!card) return undefined;
   let slot = card.querySelector<HTMLElement>(
@@ -235,11 +242,12 @@ function headerIconStandIn(tileIcon?: HTMLElement): HTMLElement | undefined {
 export function workspaceExit(
   wallpaper: HTMLElement,
   findTile: () => HTMLElement | undefined,
+  card: WorkspaceCard,
 ): { crossing: WorkspaceCrossing; restore: () => void } {
   // A realm without an icon URL has an empty header slot; the tile's icon
   // then fades in from it, and is kept out of the landing tile's bitmap.
-  let standIn = workspaceHeaderIcon() ? undefined : headerIconStandIn();
-  let icon = workspaceHeaderIcon() ?? standIn;
+  let standIn = headerIcon(card) ? undefined : headerIconStandIn(card);
+  let icon = headerIcon(card) ?? standIn;
   let restore = () => {};
   return {
     restore: () => {
@@ -269,9 +277,12 @@ export function workspaceExit(
 // The index card's header can still be rendering when the crossing
 // captures. Give it a few frames so the icon lands on the real header; after
 // `timeout` ms the crossing plays anyway and the icon lands on a stand-in.
-export async function workspaceHeaderRendered(timeout = 150) {
+export async function workspaceHeaderRendered(
+  card: WorkspaceCard,
+  timeout = 150,
+) {
   let deadline = performance.now() + timeout;
-  while (!workspaceHeaderIcon() && performance.now() < deadline) {
+  while (!headerIcon(card) && performance.now() < deadline) {
     await new Promise<void>((resolve) => afterMotionPaint(resolve));
   }
 }

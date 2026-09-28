@@ -34,8 +34,10 @@ layout. It owns motion _between_ scenes, where one object becomes another:
 | Search pick                      | search result tile → new stack item    | `submode-layout.gts` `handleCardSelectFromSearch`             |
 | Dashboard tile ↔ workspace       | tile wallpaper ↔ realm background      | `workspace-open-origin.ts` `workspaceEntry` / `workspaceExit` |
 
-Nothing is ever scaled live: text keeps its real layout; only raster faces
-scale, cropped with `object-fit: cover` so they never stretch.
+No card is scaled live: text keeps its real layout, and in a crossing only
+raster faces scale, cropped with `object-fit: cover` so they never stretch.
+Choreo does scale two empty surfaces, the search sheet's and a header's
+(`lib/motion-transform.ts`), which carry no text.
 
 ## One policy owner: `HostMotionService`
 
@@ -51,8 +53,16 @@ scale, cropped with `object-fit: cover` so they never stretch.
    refused and the stack region is held instant, except when the crossing was
    started with `reflowStacks` (a card flying into a new stack), which leaves
    the existing stacks live so they reflow beneath it.
-4. **Nothing is armed at rest.** Regions receive `@armed`; an unarmed region
+4. **A workspace portal owns the scene.** While the dashboard portal plays
+   (the fallback when no tile crossing can run), stack, header and sheet
+   scenes are refused. The portal is set and cleared only through
+   `OperatorModeStateService.workspacePortal`, which ends it in this service
+   on every path, including the scene being torn down mid-flight.
+5. **Nothing is armed at rest.** Regions receive `@armed`; an unarmed region
    with nothing in flight skips its before/after measurement entirely.
+6. **Navigation never depends on motion.** A crossing's `update` always runs
+   its navigation, even when a newer crossing has taken over its visuals, and
+   a motion failure after the navigation is logged, not thrown.
 
 ### `cross()` and `canCross()`
 
@@ -65,7 +75,7 @@ await this.hostMotion.cross({
   update: () => this.openTheCard(),        // the navigation itself
   duration: motionDurations.boundary,      // seconds
   ease: boundaryEase,
-  handoff: 'crossfade' | 'late',           // optional, default crossfade
+  handoff: 'crossfade' | 'late' | 'replace', // optional, default crossfade
   parent,                                  // optional stack parent trading depth
   scenes,                                  // optional surrounding layers
   companions,                              // optional small matched objects
@@ -207,17 +217,23 @@ native easing; sampled keyframes (the platter) use `motionEaseAt(t)`. Only
 opacity windows are linear.
 
 `motionDurations` (seconds): card 0.32, exit 0.18, sheet 0.24, search
-crossing 0.32, open and expand 0.32, return 0.26, workspace 0.4. Motions that
-play together share a duration: a card opening into a new stack and the
-stacks reflowing beside it both take 0.32.
+crossing 0.32, open and expand 0.32, a return into a tile 0.26, the index
+card replacing a closed last card 0.32, workspace 0.4. Motions that play
+together share a duration: a card opening into a new stack and the stacks
+reflowing beside it both take 0.32.
 
-All motion takes no time in tests (`isTesting()`), and crossings and deferred
-bodies hold test waiters, so `settled()` covers them. Reduced motion applies
-destinations immediately.
+Callers pass these nominal durations; `HostMotionService.duration()` is the
+one place they resolve, and it returns 0 in tests unless a test sets
+`crossingsInTests` to play crossings for real. Choreo regions resolve theirs
+through `MotionTiming`. Crossings and deferred bodies hold test waiters, so
+`settled()` covers them, and motion tests wait with named deadlines
+(`tests/helpers/motion.ts`) rather than unbounded loops. Reduced motion
+applies destinations immediately.
 
 ## Performance rules
 
-These are measured, not stylistic:
+These are measured, not stylistic. The code follows them; nothing checks
+them automatically:
 
 - **Never mutate a stylesheet during motion.** With hundreds of `<style>`
   elements on the page, any stylesheet insert, rewrite or removal restyles

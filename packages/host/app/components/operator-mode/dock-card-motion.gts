@@ -13,22 +13,30 @@ class DockSteps extends StepComponent<{ id: string; duration: number }> {
   node(): TimelineNode {
     let { id, duration } = this.args;
     return {
-      kind: 'parallel',
+      kind: 'sequence',
       children: [
         {
-          kind: 'tween',
-          of: { id, type: 'inserted' },
-          props: { transform: liftIn, opacity: [0, 1] },
-          ms: duration * 1000,
-          ease: motionEase,
+          kind: 'parallel',
+          children: [
+            {
+              kind: 'tween',
+              of: { id, type: 'inserted' },
+              props: { transform: liftIn, opacity: [0, 1] },
+              ms: duration * 1000,
+              ease: motionEase,
+            },
+            {
+              kind: 'tween',
+              of: { id, type: 'kept' },
+              props: { opacity: 1 },
+              ms: duration * 1000,
+              ease: motionEase,
+            },
+          ],
         },
-        {
-          kind: 'tween',
-          of: { id, type: 'kept' },
-          props: { opacity: 1 },
-          ms: duration * 1000,
-          ease: motionEase,
-        },
+        // The origin is spent once the card has docked; releasing it lets
+        // the stack region stop measuring on every render.
+        { kind: 'perform', action: 'dock-complete', payload: id },
       ],
     };
   }

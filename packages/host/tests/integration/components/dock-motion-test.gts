@@ -20,6 +20,7 @@ import {
   type CardOpenOrigin,
 } from '@cardstack/host/lib/card-open-origin';
 
+import { motionDeadline } from '../../helpers/motion';
 import { renderComponent } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
@@ -193,7 +194,11 @@ module('Integration | dock motion', function (hooks) {
     let samples: DOMRect[] = [];
     let unscaled = true;
     let layer = true;
-    while (!isMotionIdle()) {
+    for (
+      let expire = motionDeadline('motion to settle');
+      !isMotionIdle();
+      expire()
+    ) {
       let el = card();
       samples.push(el.getBoundingClientRect());
       let transform = new DOMMatrixReadOnly(getComputedStyle(el).transform);

@@ -1,3 +1,5 @@
+import { registerDestructor } from '@ember/destroyable';
+import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
@@ -15,6 +17,7 @@ import MotionTiming, {
 } from '@cardstack/host/lib/motion-timing';
 import type { WorkspacePortal } from '@cardstack/host/lib/workspace-open-origin';
 import type HostMotionService from '@cardstack/host/services/host-motion';
+import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 type PropTarget = string | number | (string | number)[];
 
@@ -118,6 +121,18 @@ interface Signature {
 
 export default class WorkspaceScene extends Component<Signature> {
   @service declare private hostMotion: HostMotionService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
+
+  constructor(owner: Owner, args: Signature['Args']) {
+    super(owner, args);
+    // Leaving interact mode mid-portal tears the scene down before its
+    // timeline completes; the portal must end with it.
+    registerDestructor(this, () => {
+      let token = this.args.portal?.token;
+      if (token !== undefined)
+        this.operatorModeStateService.finishWorkspacePortal(token);
+    });
+  }
   private previousPortal?: number;
   private timing = new MotionTiming(this);
   private get duration() {

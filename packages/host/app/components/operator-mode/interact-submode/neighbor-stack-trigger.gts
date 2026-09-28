@@ -38,6 +38,7 @@ export default class NeighborStackTriggerButton extends Component<Signature> {
             add-card-to-neighbor-stack--active=(eq @activeTrigger @triggerSide)
           }}
           {{on 'click' (fn @onTrigger @triggerSide)}}
+          data-motion-chrome='edge'
           aria-label='Add card to {{@triggerSide}} stack'
           data-test-add-card-right-stack={{eq
             @triggerSide

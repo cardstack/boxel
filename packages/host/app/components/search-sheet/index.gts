@@ -320,6 +320,7 @@ export default class SearchSheet extends Component<Signature> {
       {{on 'click' this.captureSelection capture=true}}
       {{on 'keydown' this.captureSelection capture=true}}
       data-test-search-sheet={{@mode}}
+      data-motion-chrome={{if (eq @mode 'closed') 'search'}}
       {{onClickOutside
         this.onBlur
         exceptSelector='.add-card-to-neighbor-stack,.boxel-dropdown__content,.boxel-picker__dropdown,.boxel-select__dropdown,.picker-before-options-with-search,.picker-option-row,.search-sheet-header,.search-sheet-section-header'

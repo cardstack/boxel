@@ -874,6 +874,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
       {{! In order to support scrolling cards into view
       we use a selector that is not pruned out in production builds }}
       data-stack-card={{this.cardIdentifier}}
+      data-stack-item={{@item.instanceId}}
       data-stack-covered={{this.isCoveredByExpandedCard}}
       data-dock-card={{if @item.openingOrigin 'true'}}
       data-bitmap-entry={{@item.openingOrigin.bitmapKey}}

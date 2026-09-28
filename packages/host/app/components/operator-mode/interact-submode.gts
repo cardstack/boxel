@@ -58,11 +58,11 @@ import {
 } from '@cardstack/runtime-common';
 
 import { afterMotionPaint } from '@cardstack/host/lib/after-motion-paint';
-import { supportsBitmapCrossing } from '@cardstack/host/lib/bitmap-crossing';
 import {
   embeddedCardElement,
   embeddedCardOrigin,
   forgetCardActionOrigin,
+  returnFocus,
   type CardOpenOrigin,
 } from '@cardstack/host/lib/card-open-origin';
 import { htmlComponent } from '@cardstack/host/lib/html-component';
@@ -372,16 +372,16 @@ export default class InteractSubmode extends Component {
     let sourceItem = this.stacks[stackIndex]?.at(-1);
     // Like all host motion, crossings take no time in tests: without a crossing
     // there is no deferred body, and the card opens as an ordinary push.
-    let boundaryDuration = isTesting() ? 0 : motionDurations.boundary;
-    let origin =
-      boundaryDuration > 0 &&
-      format === 'isolated' &&
-      !this.hostMotion.dragging &&
-      !opts?.openingOrigin &&
-      sourceItem &&
-      supportsBitmapCrossing()
+    let boundaryDuration = motionDurations.boundary;
+    let boundary =
+      format === 'isolated' && !opts?.openingOrigin && sourceItem
         ? stackItemComponentAPI.get(sourceItem)?.cardBoundary(cardId)
         : undefined;
+    // Deferring the body and fetching its placeholder only make sense for a
+    // crossing that will play: ask the same gate cross() will.
+    let origin = this.hostMotion.canCross(boundary?.source, boundaryDuration)
+      ? boundary
+      : undefined;
     if (opts?.openCardInRightMostStack) {
       stackIndex = this.stacks.length;
     } else if (typeof opts?.stackIndex === 'number') {
@@ -460,9 +460,10 @@ export default class InteractSubmode extends Component {
           document.querySelector<HTMLElement>(
             `[data-bitmap-entry="${bitmapKey}"] > .stack-item-card`,
           ),
+        // The navigation always runs; only its visuals belong to this
+        // crossing, so a newer open or close never drops this one.
         update: () => {
-          if (this.isDestroying || token !== this.boundarySequence) return;
-          open();
+          if (!this.isDestroying) open();
         },
         duration: boundaryDuration,
         parent: newStack
@@ -569,14 +570,14 @@ export default class InteractSubmode extends Component {
     ) {
       await this.hostMotion.cross({
         from: closing,
-        to: () =>
-          Array.from(
-            document.querySelectorAll<HTMLElement>(
-              '.stacks .operator-mode-stack .stack-item-card',
-            ),
-          ).find((card) => !closing.contains(card)),
+        to: () => {
+          let index = this.stacks[0]?.[0];
+          return index && index !== item
+            ? stackItemComponentAPI.get(index)?.element()
+            : undefined;
+        },
         update: remove,
-        duration: isTesting() ? 0 : motionDurations.boundary,
+        duration: motionDurations.boundary,
         handoff: 'replace',
       });
       return;
@@ -596,29 +597,26 @@ export default class InteractSubmode extends Component {
     let underlay =
       (parent ?? home) &&
       stackItemComponentAPI.get((parent ?? home)!)?.element();
-    let returnDuration = isTesting() ? 0 : motionDurations.boundaryReturn;
+    let returnDuration = motionDurations.boundaryReturn;
     let skip = !animate
       ? 'unanimated'
-      : returnDuration === 0
-        ? 'no-duration'
-        : item.format !== 'isolated'
-          ? 'format'
-          : stack?.at(-1) !== item
-            ? 'not-top'
-            : this.hostMotion.dragging
-              ? 'dragging'
-              : !supportsBitmapCrossing()
-                ? 'unsupported'
-                : !source
-                  ? 'no-source'
-                  : !underlay
-                    ? 'no-underlay'
-                    : !embeddedCardElement(underlay, item.id)
-                      ? 'no-return-tile'
-                      : undefined;
+      : item.format !== 'isolated'
+        ? 'format'
+        : stack?.at(-1) !== item
+          ? 'not-top'
+          : !source
+            ? 'no-source'
+            : !this.hostMotion.canCross(source, returnDuration)
+              ? 'cannot-cross'
+              : !underlay
+                ? 'no-underlay'
+                : !embeddedCardElement(underlay, item.id)
+                  ? 'no-return-tile'
+                  : undefined;
     if (skip || !source || !underlay) {
       traceMotionPhase(`return-skipped:${skip}`);
       remove();
+      returnFocus(underlay || undefined, item.id);
       return;
     }
 
@@ -658,8 +656,7 @@ export default class InteractSubmode extends Component {
         // disappeared or scrolled away, the outgoing bitmap just fades.
         to: () => embeddedCardOrigin(underlay, item.id)?.source,
         update: () => {
-          if (this.isDestroying || token !== this.boundarySequence) return;
-          remove();
+          if (!this.isDestroying) remove();
         },
         duration: returnDuration,
         parent: home ? undefined : underlay,
@@ -671,6 +668,7 @@ export default class InteractSubmode extends Component {
       for (let element of neighbours)
         if (element.dataset.bitmapReflow === reflowKey)
           delete element.dataset.bitmapReflow;
+      returnFocus(underlay, item.id);
       forgetCardActionOrigin(underlay, item.id);
       if (this.boundaryCrossingToken === token)
         this.boundaryCrossingToken = undefined;

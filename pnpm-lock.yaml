@@ -567,6 +567,12 @@ catalogs:
     monaco-editor:
       specifier: ^0.52.2
       version: 0.52.2
+    motion-dom:
+      specifier: 13.3.0
+      version: 13.3.0
+    motion-utils:
+      specifier: 13.3.0
+      version: 13.3.0
     ms:
       specifier: ^2.1.3
       version: 2.1.3
@@ -2667,10 +2673,10 @@ importers:
         specifier: 'catalog:'
         version: 0.52.2(patch_hash=bdefe071221b87c7c15e1add6739d24d486f543dbad0d714ae586085204626cd)
       motion-dom:
-        specifier: ^13.3.0
+        specifier: 'catalog:'
         version: 13.3.0(patch_hash=f3868b651ecd1dd61694bc2a447b57e71cc37b1b48e8d6ca41301647df7ce67e)
       motion-utils:
-        specifier: ^13.3.0
+        specifier: 'catalog:'
         version: 13.3.0
       ms:
         specifier: 'catalog:'

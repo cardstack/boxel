@@ -1476,14 +1476,25 @@ export default class OperatorModeStateService extends Service {
     this.workspaceChooserOpened = false;
   }
 
-  @tracked workspacePortal?: WorkspacePortal;
+  @tracked private _workspacePortal?: WorkspacePortal;
   private workspacePortalToken = 0;
+
+  // A running portal owns the scene: stack, header and sheet motion stand
+  // down until it ends. Every path that sets or clears the portal goes
+  // through here, so motion can never stay off after one is dropped.
+  get workspacePortal(): WorkspacePortal | undefined {
+    return this._workspacePortal;
+  }
+  set workspacePortal(portal: WorkspacePortal | undefined) {
+    if (portal && !this._workspacePortal) this.hostMotion.beginWorkspace();
+    if (!portal && this._workspacePortal) this.hostMotion.endWorkspace();
+    this._workspacePortal = portal;
+  }
 
   private startWorkspacePortal(
     origin: WorkspaceOpenOrigin,
     direction: WorkspacePortal['direction'],
   ) {
-    this.hostMotion.beginWorkspace();
     let fade = false;
     if (direction === 'closing') {
       let tile = Array.from(
@@ -1510,11 +1521,20 @@ export default class OperatorModeStateService extends Service {
     };
   }
 
+  // A card docked from a search result no longer needs its origin.
+  finishDock(instanceId: string) {
+    for (let stack of this._state.stacks)
+      for (let item of stack)
+        if (
+          item.instanceId === instanceId &&
+          item.openingOrigin &&
+          !item.openingOrigin.bitmapKey
+        )
+          item.openingOrigin = undefined;
+  }
+
   finishWorkspacePortal(token: number) {
-    if (this.workspacePortal?.token === token) {
-      this.workspacePortal = undefined;
-      this.hostMotion.endWorkspace();
-    }
+    if (this.workspacePortal?.token === token) this.workspacePortal = undefined;
   }
 
   updateWorkspacePortalTarget(origin: WorkspaceOpenOrigin, token: number) {
@@ -1551,13 +1571,13 @@ export default class OperatorModeStateService extends Service {
     let { source, ...rest } = workspaceOrigin ?? {};
     let origin = workspaceOrigin ? (rest as WorkspaceOpenOrigin) : undefined;
     if (source && this.hostMotion.canCross(source, motionDurations.workspace)) {
-      let { crossing, restore } = workspaceEntry(source);
+      let { crossing, restore } = workspaceEntry(source, this.workspaceCard);
       try {
         await this.hostMotion.cross({
           ...crossing,
           update: async () => {
             this.enterWorkspace(realmUrl, origin, false);
-            await workspaceHeaderRendered();
+            await workspaceHeaderRendered(this.workspaceCard);
           },
         });
       } finally {
@@ -1678,6 +1698,18 @@ export default class OperatorModeStateService extends Service {
       : undefined;
   }
 
+  // The workspace's first card element, found by its stack item's instance.
+  private workspaceCard = () => {
+    let item = this._state.stacks[0]?.[0];
+    return (
+      (item &&
+        document.querySelector<HTMLElement>(
+          `[data-stack-item="${CSS.escape(item.instanceId)}"]`,
+        )) ||
+      undefined
+    );
+  };
+
   // The realm behind the stacks: its background is the workspace wallpaper.
   private get workspaceRealmURL(): string | undefined {
     let id = this._state.stacks[0]?.[0]?.id;
@@ -1701,8 +1733,10 @@ export default class OperatorModeStateService extends Service {
     )
       return undefined;
     this.workspacePortal = undefined;
-    let { crossing, restore } = workspaceExit(wallpaper, () =>
-      workspaceReturnTile(realmURL, origin?.favorite),
+    let { crossing, restore } = workspaceExit(
+      wallpaper,
+      () => workspaceReturnTile(realmURL, origin?.favorite),
+      this.workspaceCard,
     );
     return this.hostMotion
       .cross({ ...crossing, update: leave })

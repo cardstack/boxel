@@ -9,6 +9,7 @@ import { createArming, type ChoreoContext } from 'glimmer-motion';
 
 import {
   crossfadeCardBitmap,
+  modalOpen,
   supportsBitmapCrossing,
   type BitmapCrossing,
 } from '@cardstack/host/lib/bitmap-crossing';
@@ -22,7 +23,7 @@ export interface HostCrossing extends Omit<
   BitmapCrossing,
   'onReady' | 'duration'
 > {
-  // Seconds. Crossings take no time in tests.
+  // Nominal seconds; see duration().
   duration: number;
   // Leave the existing stacks live under the crossing so they reflow with
   // Choreo (a card flying into a new stack). Otherwise the crossing owns the
@@ -125,12 +126,24 @@ export default class HostMotionService extends Service {
 
   // Whether a crossing would play. Callers with a different fallback (a
   // Choreo dock instead of a bitmap) check this before building one.
+  // Crossings take no time in tests unless a test plays them for real.
+  crossingsInTests = false;
+
+  // A crossing's effective duration in seconds. Callers pass the nominal
+  // one; this is the only place tests turn it off.
+  duration(seconds: number) {
+    return isTesting() && !this.crossingsInTests ? 0 : seconds;
+  }
+
+  // The same gate decides everything a crossing implies (a deferred body, a
+  // placeholder fetch), so a caller never prepares for one that won't play.
+  // `duration` is nominal, as passed to cross().
   canCross(from: HTMLElement | undefined, duration: number) {
     return (
-      !isTesting() &&
-      duration > 0 &&
+      this.duration(duration) > 0 &&
       !this.dragging &&
       supportsBitmapCrossing() &&
+      !modalOpen() &&
       !!from?.isConnected
     );
   }
@@ -152,7 +165,7 @@ export default class HostMotionService extends Service {
     try {
       await crossfadeCardBitmap({
         ...crossing,
-        duration,
+        duration: this.duration(duration),
         update: async () => {
           await update();
           // Look up and capture the landing's settled layout, not a

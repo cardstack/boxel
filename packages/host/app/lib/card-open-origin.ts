@@ -120,6 +120,22 @@ export function embeddedCardElement(boundary: HTMLElement, cardId: string) {
   return candidates.length === 1 ? candidates[0] : undefined;
 }
 
+const focusable = 'a[href], button, [tabindex]:not([tabindex="-1"])';
+
+// Closing a card removes its focused Close button, which drops focus on the
+// body. When nothing else holds focus, give it back to the preview the card
+// returns to (or its nearest focusable part), without scrolling.
+export function returnFocus(boundary: HTMLElement | undefined, cardId: string) {
+  if (!boundary) return;
+  let active = document.activeElement;
+  if (active && active !== document.body && active.isConnected) return;
+  let tile = embeddedCardElement(boundary, cardId);
+  let target =
+    tile?.closest<HTMLElement>(focusable) ??
+    tile?.querySelector<HTMLElement>(focusable);
+  target?.focus({ preventScroll: true });
+}
+
 function embeddedCardElements(boundary: HTMLElement, cardId: string) {
   return Array.from(
     boundary.querySelectorAll<HTMLElement>(

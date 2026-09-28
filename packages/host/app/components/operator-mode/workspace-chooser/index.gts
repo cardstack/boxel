@@ -1,5 +1,6 @@
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import { schedule } from '@ember/runloop';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
@@ -25,6 +26,7 @@ import type { Icon } from '@cardstack/boxel-ui/icons';
 import { logger, ri } from '@cardstack/runtime-common';
 
 import config from '@cardstack/host/config/environment';
+import type HostMotionService from '@cardstack/host/services/host-motion';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
@@ -58,6 +60,30 @@ export default class WorkspaceChooser extends Component<Signature> {
   @service declare matrixService: MatrixService;
   @service declare realmServer: RealmServerService;
   @service declare realm: RealmService;
+  @service declare private hostMotion: HostMotionService;
+
+  // The chooser stays mounted while hidden, so reopening it is not a new
+  // render of its tiles. Start each opening like the first: no selection
+  // ring, focus on the default tile, and that tile in view unless a
+  // crossing is landing on the dashboard (its tile is measured in place).
+  private wasActive = this.args.active !== false;
+  private onReopen = modifier(
+    (element: HTMLElement, [active]: [boolean | undefined]) => {
+      let opening = active !== false && !this.wasActive;
+      this.wasActive = active !== false;
+      if (!opening) return;
+      schedule('afterRender', () => {
+        if (this.isDestroying) return;
+        this.selectedIndex = null;
+        let tile = element.querySelector<HTMLElement>(
+          `[data-nav-index="${this.currentIndex}"]`,
+        );
+        tile?.focus({ preventScroll: true });
+        if (!this.hostMotion.bitmapActive)
+          tile?.scrollIntoView({ block: 'nearest' });
+      });
+    },
+  );
 
   // Archived realms are tucked away below the fold and collapsed by default —
   // they're rarely needed, so the section stays out of the way and the list
@@ -586,6 +612,7 @@ export default class WorkspaceChooser extends Component<Signature> {
       data-test-workspace-chooser
       {{on 'keydown' this.onKeydown}}
       {{on 'focusin' this.onFocusIn}}
+      {{this.onReopen @active}}
     >
       {{#if @topBarCenterElement}}
         {{#in-element @topBarCenterElement}}

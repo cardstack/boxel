@@ -15,6 +15,7 @@ import { module, test } from 'qunit';
 
 import StackMotion from '@cardstack/host/components/operator-mode/stack-motion';
 
+import { motionDeadline } from '../../helpers/motion';
 import { renderComponent } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
@@ -280,7 +281,11 @@ module('Integration | stack motion', function (hooks) {
       scaleX: number;
       scaleY: number;
     }[] = [];
-    while (!isMotionIdle()) {
+    for (
+      let expire = motionDeadline('motion to settle');
+      !isMotionIdle();
+      expire()
+    ) {
       let a = parent.getBoundingClientRect();
       let b = incoming.getBoundingClientRect();
       let transform = new DOMMatrixReadOnly(

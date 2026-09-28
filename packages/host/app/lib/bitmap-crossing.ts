@@ -1,5 +1,7 @@
 import { animateView, type ViewTransitionOptions } from 'glimmer-motion';
 
+import { logger } from '@cardstack/runtime-common';
+
 import { prepareBitmapShadow } from './bitmap-shadow';
 import {
   inspectionSpeed,
@@ -8,6 +10,8 @@ import {
   motionEaseAt,
 } from './motion-timing';
 import { traceMotionPhase } from './motion-trace';
+
+const log = logger('host:motion');
 
 let underlaySequence = 0;
 
@@ -107,11 +111,19 @@ function playbackSettled(
   });
 }
 
+// View-transition classes arrived after startViewTransition itself; without
+// them (Chrome 111-124, Safari 18.0-18.1) layers cannot be styled or cropped.
 export function supportsBitmapCrossing() {
   return (
     typeof document.startViewTransition === 'function' &&
+    CSS.supports('view-transition-class', 'a') &&
     !window.matchMedia('(prefers-reduced-motion: reduce)').matches
   );
+}
+
+// A modal above the workspace keeps navigation out of the topmost layer.
+export function modalOpen() {
+  return !!document.querySelector('dialog[open], [aria-modal="true"]');
 }
 
 // A layer around the card crossing. 'out' fades a departing scene over the
@@ -242,11 +254,14 @@ const surface = () =>
     '50% 0',
   );
 
+// Chrome is found by the data-motion-chrome hook each control declares, so
+// a component's own class names can change without dropping a layer.
+const chromeHook = (part: string) => `[data-motion-chrome="${part}"]`;
 const persistentChrome = [
-  '[data-workspace-chooser-toggle]',
-  '.profile-icon-button',
-  '.search-sheet.closed',
-  '.chat-btn',
+  chromeHook('boxel'),
+  chromeHook('account'),
+  chromeHook('search'),
+  chromeHook('assistant-button'),
 ];
 
 export interface BitmapCrossing {
@@ -301,7 +316,7 @@ export async function crossfadeCardBitmap({
     !supportsBitmapCrossing() ||
     !source.isConnected ||
     duration === 0 ||
-    document.querySelector('dialog[open], [aria-modal="true"]')
+    modalOpen()
   ) {
     await update();
     return;
@@ -630,14 +645,14 @@ export async function crossfadeCardBitmap({
     // View Transition layers are above DOM z-index. Capture persistent chrome
     // as its own stationary face so the crossing cannot cover the toolbar.
     builder
-      .add('.ai-assistant-resizable-panel')
+      .add(chromeHook('assistant-panel'))
       .class('boxel-stationary-chrome')
       .group(false)
       .crop(false);
     builder.old({ opacity: 0 }, { duration: 0 });
     builder.new({ opacity: 1 }, { duration: 0 });
     builder
-      .add('.submode-layout-top-bar')
+      .add(chromeHook('top-bar'))
       .class('boxel-stationary-chrome')
       .group(false)
       .crop(false);
@@ -653,7 +668,7 @@ export async function crossfadeCardBitmap({
     // Corner/edge affordances are a separate foreground plane. In particular,
     // the closed search dock must not disappear behind an enlarging card.
     builder
-      .add('.add-card-to-neighbor-stack')
+      .add(chromeHook('edge'))
       .class('boxel-edge-chrome')
       .group(false)
       .crop(false);
@@ -688,9 +703,11 @@ export async function crossfadeCardBitmap({
     traceMotionPhase('playback-ready');
     await playbackSettled(run, duration / inspectionSpeed());
   } catch (error) {
-    // An unavailable capture must never prevent the requested navigation.
+    // An unavailable capture must never prevent the requested navigation,
+    // and a failure after it has run must not fail the caller: the
+    // navigation succeeded, only its motion did not.
     if (!updated) await update();
-    else throw error;
+    else log.warn('crossing failed after its navigation ran', error);
   } finally {
     traceMotionPhase('finished');
     releaseFinishedViewAnimations();

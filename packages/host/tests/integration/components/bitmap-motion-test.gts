@@ -20,6 +20,7 @@ import {
 } from '@cardstack/host/lib/motion-timing';
 import cardActivation from '@cardstack/host/modifiers/card-activation';
 
+import { within } from '../../helpers/motion';
 import { renderComponent } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
@@ -259,14 +260,10 @@ class BitmapFixture extends Component {
     });
   };
   <template>
-    <div class='submode-layout-top-bar' data-test-bitmap-chrome>Stationary
-      toolbar</div>
-    <div class='search-sheet closed' data-test-search-dock>Search</div>
-    <button
-      type='button'
-      class='add-card-to-neighbor-stack'
-      data-test-edge-control
-    >Add stack</button>
+    <div data-motion-chrome='top-bar' data-test-bitmap-chrome>Stationary toolbar</div>
+    <div data-motion-chrome='search' data-test-search-dock>Search</div>
+    <button type='button' data-motion-chrome='edge' data-test-edge-control>Add
+      stack</button>
     <button
       type='button'
       {{on 'click' this.openModal}}
@@ -363,7 +360,7 @@ module('Integration | bitmap motion', function (hooks) {
       'an earlier unrelated click is not an origin',
     );
     await click(button);
-    await bitmapReady;
+    await within(bitmapReady, 'the crossing to start playing');
     assert.ok(
       (find('[data-test-opened-gallery]') as HTMLElement).style
         .viewTransitionName,
@@ -381,7 +378,7 @@ module('Integration | bitmap motion', function (hooks) {
       'address cannot match another card',
     );
     await click('[data-test-close-gallery]');
-    await bitmapReady;
+    await within(bitmapReady, 'the crossing to start playing');
     assert.ok(
       button.style.viewTransitionName,
       'close transmutates back to the custom button',
@@ -398,7 +395,7 @@ module('Integration | bitmap motion', function (hooks) {
     await renderComponent(EmbeddedFixture);
     await click('[data-test-defer]');
     await click('[data-test-open-gallery]');
-    await bitmapReady;
+    await within(bitmapReady, 'the crossing to start playing');
     assert
       .dom('[data-test-opened-gallery] h1')
       .doesNotExist('capture completes without the destination body');
@@ -442,7 +439,7 @@ module('Integration | bitmap motion', function (hooks) {
       'boxless overflow ancestor does not erase visible bounds',
     );
     await click('[data-test-open-gallery]');
-    await bitmapReady;
+    await within(bitmapReady, 'the crossing to start playing');
     assert.ok(
       (find('[data-test-opened-gallery]') as HTMLElement).style
         .viewTransitionName,
@@ -460,7 +457,7 @@ module('Integration | bitmap motion', function (hooks) {
       'hidden content is not an opening origin',
     );
     await click('[data-test-close-gallery]');
-    await bitmapReady;
+    await within(bitmapReady, 'the crossing to start playing');
     assert.ok(
       surface.style.viewTransitionName,
       'return matches the surface, not its zero-size wrapper',
@@ -499,7 +496,7 @@ module('Integration | bitmap motion', function (hooks) {
       'two visible previews are ambiguous by identity alone',
     );
     await click('[data-test-duplicate-face]');
-    await bitmapReady;
+    await within(bitmapReady, 'the crossing to start playing');
     assert.ok(
       (find('[data-test-opened-gallery]') as HTMLElement).style
         .viewTransitionName,
@@ -537,7 +534,7 @@ module('Integration | bitmap motion', function (hooks) {
     };
     try {
       await click('[data-test-open-gallery]');
-      await bitmapReady;
+      await within(bitmapReady, 'the crossing to start playing');
     } finally {
       window.getComputedStyle = original;
     }
@@ -561,7 +558,7 @@ module('Integration | bitmap motion', function (hooks) {
       .querySelector<HTMLElement>('.stack-item-header')!
       .getBoundingClientRect();
     await click('[data-test-open-gallery]');
-    await bitmapReady;
+    await within(bitmapReady, 'the crossing to start playing');
     await waitUntil(
       () =>
         !!(find('[data-test-opened-gallery]') as HTMLElement | null)?.style
@@ -926,7 +923,7 @@ module('Integration | bitmap motion', function (hooks) {
       'hidden identity is available without a retained DOM reference',
     );
     await click('[data-test-close-gallery]');
-    await bitmapReady;
+    await within(bitmapReady, 'the crossing to start playing');
     let target = find('.preview') as HTMLElement;
     let header = parent.querySelector<HTMLElement>('.stack-item-header')!;
     let title = parent.querySelector<HTMLElement>('.card-type-display-name')!;
@@ -1378,7 +1375,7 @@ module('Integration | bitmap motion', function (hooks) {
     let settledPromptly: boolean;
     try {
       await click('[data-test-open-gallery]');
-      await bitmapReady;
+      await within(bitmapReady, 'the crossing to start playing');
       // A viewport resize makes the browser skip the transition and cancel
       // its pseudo-element animations, which never settles motion's finished.
       transition!.skipTransition();
