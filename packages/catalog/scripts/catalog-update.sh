@@ -33,8 +33,18 @@ cd contents
 export LANG=C
 export LC_ALL=C
 
+# The files the pull changes are recorded for the test-subset sync, which
+# touches the subset files among them once the realm is up: the realm is
+# stopped during the pull, so its watcher never sees those rewrites.
+PULLED_LIST="$(git rev-parse --git-path boxel-catalog-pulled)"
+PULL_BASE="$(git rev-parse HEAD)"
+record_pulled() {
+  git diff --name-only "$PULL_BASE" HEAD >"$PULLED_LIST"
+}
+
 if PULL_OUT=$(git pull 2>&1); then
   echo "$PULL_OUT"
+  record_pulled
   exit 0
 fi
 
@@ -43,6 +53,7 @@ if echo "$PULL_OUT" | grep -qE 'untracked working tree files would be overwritte
   echo "catalog: pull blocked by local changes, stashing as '${STASH_LABEL}' and retrying..."
   git stash push --include-untracked -m "${STASH_LABEL}"
   git pull
+  record_pulled
   echo "catalog: updated. Stashed changes saved — review with:"
   echo "  (cd packages/catalog/contents && git stash list)"
   echo "Reapply with:"

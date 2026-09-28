@@ -47,6 +47,8 @@ const externalsPath = join(repoRoot, 'packages/host/app/lib/externals.ts');
 // definition to the indexer.
 const MARKER_FILE = 'catalog-test-subset.txt';
 const ADDED_LIST = 'boxel-test-subset-added';
+// Written by catalog-update.sh: the clone files its last pull changed.
+const PULLED_LIST = 'boxel-catalog-pulled';
 // The files this sync wrote, which are the only ones --touch has to touch.
 const WRITTEN_LIST = join(catalogDir, '.test-subset-written');
 
@@ -362,7 +364,19 @@ function mergeIntoClone(
       divergent.push(path);
     }
   }
-  writeFileSync(WRITTEN_LIST, added.map((p) => `${p}\n`).join(''));
+  // A subset file the pull rewrote is as stale in the compiled-module cache
+  // as one the sync wrote. The list is consumed here so a later start that
+  // skips the update does not touch the same files again.
+  let pulledPath = gitPath(PULLED_LIST);
+  let pulled = existsSync(pulledPath)
+    ? readFileSync(pulledPath, 'utf8').split('\n').filter(Boolean)
+    : [];
+  rmSync(pulledPath, { force: true });
+  let rewritten = new Set([
+    ...added,
+    ...pulled.filter((p) => contents.has(p) && existsSync(join(cloneDir, p))),
+  ]);
+  writeFileSync(WRITTEN_LIST, [...rewritten].map((p) => `${p}\n`).join(''));
   writeFileSync(
     gitPath(ADDED_LIST),
     added.map((p) => `${p}\t${sha256(contents.get(p)!)}\n`).join(''),
