@@ -34,6 +34,10 @@ import {
 
 export type MultiRealmAuthorizationState = {
   realmList: string[];
+  // The user the request's token was verified for. Absent on a request that
+  // carried no token, which reached here only because every realm it names
+  // is publicly readable.
+  user?: string;
 };
 
 const MULTI_REALM_AUTH_STATE = 'multiRealmAuthorization';
@@ -118,6 +122,7 @@ export function multiRealmAuthorization({
     let publishedRealmURLs = await getPublishedRealmURLs(dbAdapter, realmList);
 
     let readableRealms = new Set<string>();
+    let user: string | undefined;
     let authorization = ctxt.req.headers['authorization'];
     if (!authorization) {
       let publicPermissions = await fetchUserPermissions(dbAdapter, {
@@ -156,6 +161,7 @@ export function multiRealmAuthorization({
         throw e;
       }
 
+      user = token.user;
       let permissionsForAllRealms = await fetchUserPermissions(dbAdapter, {
         userId: token.user,
         onlyOwnRealms: false,
@@ -181,6 +187,7 @@ export function multiRealmAuthorization({
 
     (ctxt.state as Record<string, unknown>)[MULTI_REALM_AUTH_STATE] = {
       realmList,
+      ...(user === undefined ? {} : { user }),
     } satisfies MultiRealmAuthorizationState;
 
     await next();

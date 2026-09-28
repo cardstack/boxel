@@ -1531,8 +1531,45 @@ module(basename(import.meta.filename), function () {
             { by: 'item.createdAt', 'item.on': REPORT, direction: 'desc' },
           ],
           realms: [REALM],
+          operation: 'openReports',
+          on: REPORT,
         },
-        'the class became the type it names, the actor marker became the caller, and the card-rooted query became the entry-addressed one',
+        'the class became the type it names, the actor marker became the caller, the card-rooted query became the entry-addressed one, and the request names the operation so the realm can resolve it for itself',
+      );
+    });
+
+    test('names the operation, its type and the payload for the realm to resolve', function (assert) {
+      let { env } = harness();
+      let payload = { status: 'escalated' };
+      let query = (buildOperations(statusType(), env).byStatus as any).query(
+        payload,
+      );
+
+      assert.strictEqual(query.operation, 'byStatus', 'the operation invoked');
+      assert.deepEqual(query.on, REPORT, 'the type it was invoked on');
+      assert.deepEqual(
+        query.params,
+        { status: 'escalated' },
+        'and the payload it was invoked with',
+      );
+      assert.notStrictEqual(
+        query.params,
+        payload,
+        'held as a copy, so a later edit to the payload reads as a change to the query',
+      );
+    });
+
+    test('a type no module exports cannot be named, so a search on it is refused at the call', function (assert) {
+      let { env } = harness();
+      let unnamed = reportType({ codeRef: undefined });
+
+      assert.throws(
+        () =>
+          (buildOperations(unnamed, env).openReports as any).query(undefined, {
+            realms: [REALM],
+          }),
+        /no module exports that class/,
+        'the realm resolves a saved search from the type it names, and there is none to name',
       );
     });
 
