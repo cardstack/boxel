@@ -168,12 +168,12 @@ export {
   isDocumentResult,
   isHeadResult,
   isIdentityResult,
+  effectiveLinkStrategy,
   isLinkStrategy,
   isOperationFailure,
   isSourceResult,
   isWrite,
   linkStrategyOf,
-  narrowerLinkStrategy,
 } from './types.ts';
 export type {
   BaseOperation,

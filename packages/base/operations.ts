@@ -521,6 +521,11 @@ export interface DeleteOperationDeclaration extends OperationCommon {
 //     assembled. A consumer fetches each target on its own request.
 //   * `none` — no relationship data is assembled or named.
 //
+// It governs reads of this card — the document a read rooted here serves. When
+// the card turns up inside another card's closure, that read's own strategy
+// decides what it carries, and a `full` one carries this card whole, with its
+// relationships and what they link to.
+//
 // The narrowing is uniform: the same request answers a realm writer and a
 // caller reached by a policy grant with the same document, because the shape
 // is a property of the operation rather than of how the caller was
@@ -532,7 +537,15 @@ export interface DeleteOperationDeclaration extends OperationCommon {
 // realm's own authority, and lives in the card's own attributes.
 export type LinkStrategy = 'full' | 'ids' | 'none';
 
-const LINK_STRATEGIES: readonly LinkStrategy[] = ['full', 'ids', 'none'];
+// A total map over the union, so a strategy added to `LinkStrategy` without an
+// entry here is a type error rather than a value the decorator refuses while
+// lowering and the serving path accept it.
+const LINK_STRATEGY_SET: Record<LinkStrategy, true> = {
+  full: true,
+  ids: true,
+  none: true,
+};
+const LINK_STRATEGIES = Object.keys(LINK_STRATEGY_SET) as LinkStrategy[];
 
 export interface ReadOperationDeclaration extends OperationCommon {
   readonly base: 'read';

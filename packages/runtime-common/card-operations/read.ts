@@ -8,8 +8,7 @@ import {
   pathsFor,
 } from './dispatch.ts';
 import {
-  linkStrategyOf,
-  narrowerLinkStrategy,
+  effectiveLinkStrategy,
   OperationFailure,
   type OperationDefinition,
   type OperationDocumentResult,
@@ -88,36 +87,11 @@ export async function readOperation(
   let url = instanceTargetURL({ ...request, target });
   refuseUnservedStages(request, definition);
   let localPath = localPathFor(core, url);
-  let links = effectiveLinkStrategy(definition, opts);
+  let links = effectiveLinkStrategy(definition.links, opts.resolveLinksOnly);
   if (opts.headersOnly) {
     return await readHeaders(core, url, localPath, links, scope);
   }
   return await readDocument(core, url, localPath, links, opts);
-}
-
-// How much of the card's link graph this read carries, from the two places
-// that may narrow it.
-//
-// The operation declares one, and it is the author's statement about what this
-// card's representation is allowed to reach — uniform across callers, because
-// the serving path never asks how a caller was authorized.
-//
-// The request carries the other. `resolveLinksOnly` is how the realm sheds
-// load, or how a consumer says it will resolve the links it displays itself;
-// either way it asks for less than the whole closure.
-//
-// Both only ever narrow, so the answer is whichever of them narrows further.
-// Composing them any other way would let one widen the other: a request that
-// asked for the full closure would defeat a declaration written to withhold
-// it, and the declaration is the half a policy author reasons about.
-function effectiveLinkStrategy(
-  definition: OperationDefinition,
-  opts: Pick<RunOperationOptions, 'resolveLinksOnly'>,
-): LinkStrategy {
-  return narrowerLinkStrategy(
-    linkStrategyOf(definition.links),
-    opts.resolveLinksOnly ? 'ids' : 'full',
-  );
 }
 
 // A declaration may specialize `read` by running a `program` over the target,

@@ -130,14 +130,36 @@ export function linkStrategyOf(value: unknown): LinkStrategy {
   return isLinkStrategy(value) ? value : 'none';
 }
 
-// Whichever of the two withholds more. Both the operation's declaration and
-// the request's own `resolveLinksOnly` only ever narrow, so composing them any
-// other way would let one widen the other.
-export function narrowerLinkStrategy(
-  a: LinkStrategy,
-  b: LinkStrategy,
-): LinkStrategy {
+// Whichever of the two withholds more.
+function narrowerLinkStrategy(a: LinkStrategy, b: LinkStrategy): LinkStrategy {
   return LINK_STRATEGY_REACH[a] >= LINK_STRATEGY_REACH[b] ? a : b;
+}
+
+// How much of the card's link graph a read carries, from the two places that
+// may narrow it. The one function both the read executor and the card+json
+// validator built ahead of it call, so the body and the validator that
+// describes it cannot disagree about the shape.
+//
+// The operation declares one, and it is the author's statement about what this
+// card's representation is allowed to reach — uniform across callers, because
+// the serving path never asks how a caller was authorized.
+//
+// The request carries the other. `resolveLinksOnly` is how the realm sheds
+// load, or how a consumer says it will resolve the links it displays itself;
+// either way it asks for less than the whole closure.
+//
+// Both only ever narrow, so the answer is whichever of them narrows further.
+// Composing them any other way would let one widen the other: a request that
+// asked for the full closure would defeat a declaration written to withhold
+// it, and the declaration is the half a policy author reasons about.
+export function effectiveLinkStrategy(
+  declared: unknown,
+  resolveLinksOnly: boolean | undefined,
+): LinkStrategy {
+  return narrowerLinkStrategy(
+    linkStrategyOf(declared),
+    resolveLinksOnly ? 'ids' : 'full',
+  );
 }
 
 export interface OperationDefinition {
@@ -271,9 +293,14 @@ export type OperationLoweringIssueCode =
   // user id and no card represents a user, so the link would name a card that
   // does not exist.
   | 'actor-not-a-card'
-  // A `links` strategy on a base that assembles no link closure. Only a read
-  // answers with a card's link graph, so the declaration would narrow nothing.
+  // A `links` strategy on a base other than `read`. The strategy narrows the
+  // document a read of the target serves, and no other base serves one: a write
+  // answers without assembling the card's closure, a `readSource` serves stored
+  // bytes, and a `query` answers through search, whose results carry their own
+  // closures that this declaration does not govern.
   | 'links-without-assembly'
+  // A `links` value that is not one of the strategies a read can apply.
+  | 'invalid-link-strategy'
   // A raw BXL program that does not parse.
   | 'invalid-program'
   // A declared query the realm's own query grammar refuses.

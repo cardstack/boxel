@@ -64,6 +64,7 @@ const REALM_POLICY = {
 // admits all three and the only thing that varies between them is what their
 // `read` declares.
 const ROSTER = { module: `${EDUCATION}roster`, name: 'Roster' };
+const SECTION = { module: `${EDUCATION}roster`, name: 'Section' };
 
 // Is the caller one of this roster's teachers. `any(. == actor())` rather than
 // `contains`, which matches substrings.
@@ -82,7 +83,7 @@ const STUDENT_MODULE = `
 // computed when the card is indexed, under the realm's own authority, and lands
 // in the card's own attributes rather than in the link closure.
 const ROSTER_MODULE = `
-  import { contains, containsMany, field, linksToMany, CardDef } from "@cardstack/base/card-api";
+  import { contains, containsMany, field, linksTo, linksToMany, CardDef } from "@cardstack/base/card-api";
   import StringField from "@cardstack/base/string";
   import { operation } from "@cardstack/base/operations";
   import { Student } from "./student";
@@ -119,6 +120,13 @@ const ROSTER_MODULE = `
       links: 'none',
     };
   }
+
+  // Declares nothing, and links to a roster that declares \`none\`. What a read
+  // of it carries is decided by its own read alone.
+  export class Section extends CardDef {
+    @field teacherIds = containsMany(StringField);
+    @field roster = linksTo(() => Roster);
+  }
 `;
 
 type Grant = { operation: string; where?: unknown };
@@ -129,6 +137,7 @@ type Rule = { targetType: { module: string; name: string }; grants: Grant[] };
 // of a roster's representation rather than on its own merits.
 const RULES: Rule[] = [
   { targetType: ROSTER, grants: [{ operation: 'read', where: TEACHES }] },
+  { targetType: SECTION, grants: [{ operation: 'read', where: TEACHES }] },
 ];
 
 function policyCard(rules: Rule[]) {
@@ -167,6 +176,17 @@ function roster(name: string, title: string, students: string[]) {
   });
 }
 
+function section(roster: string) {
+  return JSON.stringify({
+    data: {
+      type: 'card',
+      attributes: { teacherIds: [TEACHER] },
+      relationships: { roster: { links: { self: `../rosters/${roster}` } } },
+      meta: { adoptsFrom: { module: '../roster', name: 'Section' } },
+    },
+  });
+}
+
 function envelope(...operations: unknown[]) {
   return JSON.stringify({ 'boxel:operations': operations });
 }
@@ -174,6 +194,7 @@ function envelope(...operations: unknown[]) {
 const FULL = `${EDUCATION}rosters/full`;
 const IDS = `${EDUCATION}rosters/ids`;
 const NONE = `${EDUCATION}rosters/none`;
+const SECTION_1 = `${EDUCATION}sections/s1`;
 const ADA = `${EDUCATION}students/ada`;
 const BEN = `${EDUCATION}students/ben`;
 
@@ -185,7 +206,11 @@ interface CardBody {
     attributes?: Record<string, unknown>;
     relationships?: Record<string, { links?: { self?: string } }>;
   };
-  included?: { id?: string; type?: string }[];
+  included?: {
+    id?: string;
+    type?: string;
+    relationships?: Record<string, { links?: { self?: string } }>;
+  }[];
 }
 
 module(basename(import.meta.filename), function (hooks) {
@@ -223,6 +248,7 @@ module(basename(import.meta.filename), function (hooks) {
             'rosters/full.json': roster('FullRoster', 'Full', ['ada', 'ben']),
             'rosters/ids.json': roster('IdsRoster', 'Ids', ['ada', 'ben']),
             'rosters/none.json': roster('NoneRoster', 'None', ['ada', 'ben']),
+            'sections/s1.json': section('none'),
           },
           permissions: {
             [ADMIN]: ['read', 'write', 'realm-owner'],
@@ -326,14 +352,21 @@ module(basename(import.meta.filename), function (hooks) {
       .sort();
   }
 
-  // What a document's relationships name. A link the response names without
+  // What a resource's relationships name. A link the response names without
   // carrying is exactly the `ids` shape.
-  function linkedIds(body: CardBody, base: string): string[] {
-    return Object.values(body.data.relationships ?? {})
+  function namedTargets(
+    relationships: Record<string, { links?: { self?: string } }> | undefined,
+    base: string,
+  ): string[] {
+    return Object.values(relationships ?? {})
       .map((relationship) => relationship.links?.self)
       .filter((self): self is string => typeof self === 'string')
       .map((self) => new URL(self, base).href)
       .sort();
+  }
+
+  function linkedIds(body: CardBody, base: string): string[] {
+    return namedTargets(body.data.relationships, base);
   }
 
   function assertNotPermitted(
@@ -427,6 +460,31 @@ module(basename(import.meta.filename), function (hooks) {
     });
   });
 
+  module('scope', function () {
+    test('a declaration narrows reads of its own card, not the card inside another read', async function (assert) {
+      // Stated rather than implied. The roster declares `none`, and a `full`
+      // read of a card that links to it still carries it whole: a linked
+      // type's declaration is not consulted while a closure is assembled, so
+      // a narrowing only holds on the type that is read.
+      let body = await read(SECTION_1, AUTH.teacher());
+      let roster = (body.included ?? []).find(
+        (resource) =>
+          resource.id && new URL(resource.id, SECTION_1).href === NONE,
+      );
+      assert.ok(roster, 'the none-declared roster is in the closure');
+      assert.deepEqual(
+        namedTargets(roster?.relationships, SECTION_1),
+        [ADA, BEN].sort(),
+        'carrying the relationships its own read withholds',
+      );
+      assert.deepEqual(
+        includedIds(body, SECTION_1),
+        [ADA, BEN, NONE].sort(),
+        'and the students behind them',
+      );
+    });
+  });
+
   module('uniform for every caller', function () {
     test('the document is the same whether the caller was admitted coarsely or by grant', async function (assert) {
       for (let [url, label] of [
@@ -503,6 +561,40 @@ module(basename(import.meta.filename), function (hooks) {
         3,
         `each strategy names its own shape: ${variants.join(' / ')}`,
       );
+    });
+  });
+
+  module('the validator a narrowed request is answered from', function () {
+    test('a request asking for links only is answered from its own validator', async function (assert) {
+      // The validator built ahead of the assembly composes the declaration
+      // with the request, so a conditional request carrying the header is the
+      // case that reads that composition rather than the assembly's.
+      for (let [url, label] of [
+        [FULL, 'full'],
+        [IDS, 'ids'],
+        [NONE, 'none'],
+      ] as const) {
+        let first = await getCard(url, AUTH.admin()).set(
+          X_BOXEL_LINK_SHAPE_HEADER,
+          'links-only',
+        );
+        assert.strictEqual(
+          first.status,
+          200,
+          `${label}: the admin reads it: ${first.text}`,
+        );
+        let etag = first.headers.etag;
+        assert.ok(etag, `${label}: the read carries a validator`);
+        assert.strictEqual(
+          (
+            await getCard(url, AUTH.admin())
+              .set(X_BOXEL_LINK_SHAPE_HEADER, 'links-only')
+              .set('If-None-Match', etag)
+          ).status,
+          304,
+          `${label}: a conditional read with the same header matches it`,
+        );
+      }
     });
   });
 

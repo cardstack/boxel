@@ -1609,6 +1609,50 @@ module('Unit | operation lowering', function (hooks) {
       undefined,
       'and nothing is stored that a serving path would read as a narrowing',
     );
+
+    // A query answers through search, whose results carry their own closures,
+    // so a strategy on one would read as a narrowing of those that never
+    // happens.
+    let query = await lowerOperationDeclarations(
+      {
+        roll: {
+          base: 'query',
+          query: { filter: { on: Roster, eq: { title: 'x' } } },
+          links: 'ids',
+        },
+      } as unknown as Record<string, OperationsModule.OperationDeclaration>,
+      {
+        definition: buildDefinition(Roster as unknown as typeof BaseDef),
+        lookupDefinition,
+        identifyCard: (target) => identifyCard(target),
+      },
+    );
+    assert.deepEqual(
+      codes(query),
+      ['links-without-assembly'],
+      'a query answers with results this declaration does not govern',
+    );
+
+    let unknown = await lowerOperationDeclarations(
+      {
+        summary: { base: 'read', links: 'some' },
+      } as unknown as Record<string, OperationsModule.OperationDeclaration>,
+      {
+        definition: buildDefinition(Roster as unknown as typeof BaseDef),
+        lookupDefinition,
+        identifyCard: (target) => identifyCard(target),
+      },
+    );
+    assert.deepEqual(
+      codes(unknown),
+      ['invalid-link-strategy'],
+      'a value that names no strategy is its own finding',
+    );
+    assert.strictEqual(
+      unknown.operations.summary.links,
+      undefined,
+      'and is not stored for the serving path to read as the narrowest one',
+    );
   });
 
   test('an append that says nothing to append is recorded rather than stored as work', async function (assert) {

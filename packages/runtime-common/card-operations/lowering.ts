@@ -333,18 +333,20 @@ async function lowerOperation(
     operation.optimistic = declaration.optimistic;
   }
 
-  // A link strategy narrows what a read carries back. Only a read assembles a
-  // card's link graph, so on any other base the declaration would narrow
-  // nothing — and a stored entry carrying one would read as a narrowing that
-  // was never applied. The authoring decorator refuses it where it is written;
-  // this keeps it out of a type's entry, which outlives the code that built it.
+  // A link strategy narrows the document a read of the target serves, and no
+  // other base serves one — so on any other base the declaration would narrow
+  // nothing, and a stored entry carrying one would read as a narrowing that was
+  // never applied. A `query` in particular answers through search, whose results
+  // carry their own closures that this declaration does not govern. The
+  // authoring decorator refuses both of these where they are written; this
+  // keeps them out of a type's entry, which outlives the code that built it.
   let links = (declaration as { links?: unknown }).links;
   if (links !== undefined) {
     if (base !== 'read') {
       sink.add(
         'links-without-assembly',
         'links',
-        `a "${base}" operation assembles no link closure, so a \`links\` strategy would narrow nothing`,
+        `a \`links\` strategy narrows the document a "read" serves, and a "${base}" operation serves no such document, so it would narrow nothing`,
       );
     } else if (!isLinkStrategy(links)) {
       // Not stored. The serving path reads an unrecognized strategy as the
@@ -352,7 +354,7 @@ async function lowerOperation(
       // author did not ask for; recording it instead refuses the read and says
       // why.
       sink.add(
-        'links-without-assembly',
+        'invalid-link-strategy',
         'links',
         `"${String(links)}" does not name how much of the link graph a read carries — one of "full", "ids", "none"`,
       );

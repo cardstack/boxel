@@ -268,7 +268,7 @@ import {
 } from './card-operations/named-query.ts';
 import { settledWithin, STAGING_WIDTH } from './card-operations/coordinator.ts';
 import {
-  narrowerLinkStrategy,
+  effectiveLinkStrategy,
   OperationFailure,
   isDocumentResult,
   isHeadResult,
@@ -11227,7 +11227,8 @@ export class Realm {
           // type's own `read` declaration is half of what decides that — so
           // the plan is resolved before the validator is built rather than
           // where its other answer is consumed. The read that follows composes
-          // the two the same way, so the two agree by construction.
+          // the declaration with the request through the same function, so the
+          // two agree by construction.
           //
           // Asking here rather than only where a fast path would take the
           // answer costs a memo hit on a conditional request whose validator
@@ -11245,10 +11246,7 @@ export class Realm {
             realmInfoHash,
             screenshotsEtagFingerprint(instanceEntry.screenshots),
             cardJsonShapeFor(
-              narrowerLinkStrategy(
-                plan.links,
-                resolveLinksOnly ? 'ids' : 'full',
-              ),
+              effectiveLinkStrategy(plan.links, resolveLinksOnly),
             ),
             skipLinkAssemblyBudget,
           );
