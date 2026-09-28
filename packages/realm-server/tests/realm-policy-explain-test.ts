@@ -11,6 +11,7 @@ import {
   rri,
   SupportedMimeType,
 } from '@cardstack/runtime-common';
+import { archiveRealm } from '@cardstack/runtime-common/db-queries/realm-metadata-queries';
 import { insertPermissions } from '@cardstack/runtime-common/db-queries/realm-permission-queries';
 import type {
   PolicyExplanation,
@@ -760,6 +761,15 @@ module(basename(import.meta.filename), function (hooks) {
       }
       assert.strictEqual(missing.status, 404);
       assert.strictEqual(errorOf(missing)?.code, 'target-not-found');
+
+      // An archived realm refuses everything, so it has nothing to explain.
+      await archiveRealm(db, new URL(EDUCATION));
+      let archived = await ask(ASKER.itAdmin(), { ...asked, target: ROOM_204 });
+      assert.strictEqual(
+        archived.text,
+        missing.text,
+        'an archived realm’s card is told of as a missing one, byte for byte',
+      );
     });
 
     test('a session the target realm would not accept asks as nobody, on a policy realm anyone may read', async function (assert) {
