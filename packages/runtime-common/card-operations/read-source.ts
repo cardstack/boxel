@@ -65,14 +65,13 @@ import type { OperationCore, RunOperationOptions } from './dispatch.ts';
 //     resolved path and reads it. A read has no redirect to give.
 //   * The response around the bytes. `Last-Modified`, `x-created`, the
 //     validator, the 304 and the source cache are all the facade's, computed
-//     from what comes back here. Which validator is the facade's choice too,
-//     and the byte routes do not make one choice: the source route builds an
-//     `ETag` from a content hash for a `.json` or an executable extension, and
-//     from `lastModified` for everything else, computing no hash at all on
-//     that second path. Both members are here for either choice — a content
-//     identity for every path, whether or not the route serving it asks for
-//     one, since reading it is bounded and withholding it would only narrow
-//     what a facade can validate on. A `Range` needs more than this result
+//     from what comes back here. Which validator is the facade's choice too:
+//     the byte routes build their `ETag`s from a fingerprint of their own,
+//     hashed from the bytes they cache or read off the handle they resolved,
+//     rather than from this result's `version`. Both members are here for
+//     whatever a facade chooses — a content identity for every path, whether
+//     or not the route serving it asks for one, since reading it is bounded
+//     and withholding it would only narrow what a facade can validate on. A `Range` needs more than this result
 //     carries — the adapter's bounded-read capability does not travel through
 //     it — so a facade serving 206s holds the handle itself.
 //
