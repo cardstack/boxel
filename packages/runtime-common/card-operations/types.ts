@@ -639,7 +639,9 @@ export interface PolicyExplanation {
 }
 
 export type PolicyExplanationDecision =
-  // The invocation would run.
+  // The invocation would be admitted. It can still refuse for reasons of its
+  // own, which are no part of authorization: a param it was not sent, an
+  // assertion the card does not satisfy.
   | 'allowed'
   // The invocation would be refused.
   | 'denied'
@@ -669,9 +671,10 @@ export type PolicyExplanationReason =
   // A write to the realm's policy card or to its config card, which no grant
   // reaches whatever the card's type declares.
   | 'authorization-infrastructure'
-  // The target has no index row the gate can trust, so its type is not
-  // known, and no rule can be matched against it.
-  | 'unindexed-target'
+  // The target is nothing a rule can be matched against: a card whose index
+  // row records an error, so its type is unknown, or a target that is not a
+  // card at all.
+  | 'unmatchable-target'
   // The operation is not one the target carries: resolving it refused before
   // the policy could be consulted. `refusal` says how.
   | 'not-resolved'

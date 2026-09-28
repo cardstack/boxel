@@ -681,6 +681,9 @@ export async function resolveGatedOperation(
   try {
     resolved = await resolveUngated(core, target, name, scope);
   } catch (e: unknown) {
+    if (isOperationFailure(e)) {
+      scope.trace?.resolutionRefused(e);
+    }
     throw refusal(e);
   }
   let { definition, typeDefinition, typeChain } = resolved;

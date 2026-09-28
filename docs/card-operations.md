@@ -87,8 +87,11 @@ subclass really will reshape the operation.
 ### `base` — the behavior a declaration builds on
 
 The base operations are `read`, `readSource`, `create`, `update`, `delete`,
-`query`, `transform`, `appendContainsMany` and `appendLine`. Which of them a
-def carries follows from what kind of def it is:
+`query`, `transform`, `appendContainsMany`, `appendLine` and `explain`. Which
+of them a def carries follows from what kind of def it is. `explain` is the
+exception: no def carries it until a card declares an operation on it, and it
+belongs on a policy card (see
+[Asking a policy what it decides](#asking-a-policy-what-it-decides)).
 
 | Def                                | Carries                                                                                                                                                                     |
 | ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -567,6 +570,58 @@ Three worth recognizing:
   depends on the card's stored values, so the 500 also says something about
   what the card holds; write predicates that cannot throw on any value the
   card can store.
+
+## Asking a policy what it decides
+
+A realm's policy widens what the realm's own permissions allow. A policy
+narrower than its author meant shows up as refusals someone reports. A policy
+wider than its author meant shows up as nothing at all. An explain is how the
+realm's owner asks directly.
+
+`RealmPolicy` declares one, named `explain`. Invoked on the policy card with
+an actor, a card and an operation, it runs the policy gate of the realm that
+holds the card, exactly as that invocation would. It stops at the decision,
+invokes nothing, and answers with how the gate got there:
+
+```ts
+let explanation = await operations<typeof RealmPolicy>(policy).explain({
+  actor: '@teacher:example.org',
+  target: 'https://example.org/education/classrooms/room-204',
+  operation: 'read',
+});
+// explanation.decision   'allowed' | 'denied' | 'failed'
+// explanation.reason     why, as one code: 'acl', 'granted', 'no-grant',
+//                        'predicate-false', 'predicate-threw', …
+// explanation.acl        what the realm's own permissions allow the actor
+// explanation.rules      every rule governing the card's type, with each of
+//                        its grants for the operation: the predicate, the
+//                        tier it reads, and what it said
+// explanation.admittedBy the grant that admitted it, where one did
+// explanation.refusal    the status and code the actor would be refused with
+```
+
+Some things worth knowing before you read one:
+
+- **It is for realm owners.** The caller asking must be able to read both the
+  policy card's realm and the card's realm. A caller missing either one is told
+  what a card that does not exist is told, the same response byte for byte. No
+  policy grant ever reaches an explain, the policy's own grant included.
+- **There is no asking about yourself.** A caller refused an operation is told
+  as little as the realm's permissions entitle them to, so that they cannot
+  learn which cards exist. An explain would tell them exactly that, so it is
+  not a self-service check, and a view never decides what to show from one.
+- **It explains only the policy the card's realm names.** An explain on any
+  other policy card refuses with `policy-not-in-force`.
+- **`allowed` means the gate admits the invocation.** The operation can still
+  refuse for reasons of its own, such as a param it was not sent or an
+  assertion the card does not satisfy.
+- **A write's predicate is judged against the card as it is stored now.** An
+  invocation decides it under the write lock, so another write landing first
+  can change the answer.
+- **The tier says what a predicate reads.** `stored` is the card's own stored
+  source, which is as fresh as the last write. `snapshot` is a predicate
+  annotated as reading computed values or linked cards. Those lag the index,
+  the gate never evaluates them, and such a grant admits nothing.
 
 ## Where to look next
 

@@ -6043,24 +6043,23 @@ export class Realm {
     } catch {
       return undefined;
     }
-    let realm: Realm | undefined;
     if (this.paths.inRealm(url)) {
-      realm = this;
-    } else {
-      try {
-        realm = await this.#realmFor?.(url);
-      } catch {
-        realm = undefined;
-      }
+      return this.#asTargetRealm(url);
     }
-    if (!realm?.paths.inRealm(url)) {
+    let peer: Realm | undefined;
+    try {
+      peer = await this.#realmFor?.(url);
+    } catch {
       return undefined;
     }
-    let target = realm;
+    return peer?.paths.inRealm(url) ? peer.#asTargetRealm(url) : undefined;
+  }
+
+  #asTargetRealm(url: URL): TargetRealm {
     return {
       url,
-      core: target.operationCore,
-      coarseDeclinedFor: (caller) => target.#coarseDeclinedFor(caller),
+      core: this.operationCore,
+      coarseDeclinedFor: (caller) => this.#coarseDeclinedFor(caller),
     };
   }
 

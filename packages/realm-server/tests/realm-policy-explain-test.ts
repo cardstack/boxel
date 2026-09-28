@@ -171,7 +171,10 @@ function policyCard(rules: Rule[]) {
       type: 'card',
       attributes: { rules },
       meta: {
-        adoptsFrom: { module: '../explainable-policy', name: 'ExplainablePolicy' },
+        adoptsFrom: {
+          module: '../explainable-policy',
+          name: 'ExplainablePolicy',
+        },
       },
     },
   });
@@ -426,7 +429,9 @@ module(basename(import.meta.filename), function (hooks) {
           },
           {
             targetType: CLASSROOM,
-            grants: [{ where: LEADS, tier: 'stored', outcome: 'not-evaluated' }],
+            grants: [
+              { where: LEADS, tier: 'stored', outcome: 'not-evaluated' },
+            ],
           },
         ],
         admittedBy: { rule: 0, grant: 0 },
@@ -622,8 +627,9 @@ module(basename(import.meta.filename), function (hooks) {
                 invoke(operation, { href: target, ...(data ? { data } : {}) }),
               );
         if (explanation.decision === 'allowed') {
-          assert.true(
-            response.status >= 200 && response.status < 300,
+          assert.strictEqual(
+            Math.floor(response.status / 100),
+            2,
             `${label}: explained as allowed, and the invocation ran (${response.status})`,
           );
           continue;
@@ -668,7 +674,10 @@ module(basename(import.meta.filename), function (hooks) {
       );
       for (let [label, response] of [
         ['an Org reader asking about a card they cannot read', unreadable],
-        ['an Org reader asking about a card that is not there', missingUnreadable],
+        [
+          'an Org reader asking about a card that is not there',
+          missingUnreadable,
+        ],
         ['a realm this server does not serve', elsewhere],
       ] as const) {
         assert.strictEqual(response.status, missing.status, `${label}: status`);
@@ -697,15 +706,12 @@ module(basename(import.meta.filename), function (hooks) {
         target: ROOM_204,
         operation: 'read',
       });
-      assert.true(
-        explained.status === 403 || explained.status === 404,
-        `the same policy's grant of explain admits nothing (${explained.status})`,
-      );
-      assert.notStrictEqual(
+      assert.strictEqual(
         explained.status,
-        200,
-        'the teacher learns nothing about their own access',
+        404,
+        "the same policy's grant of explain admits nothing, and the teacher, who may not read the Org realm, is told the card is not there",
       );
+      assert.strictEqual(errorOf(explained)?.code, 'target-not-found');
     });
 
     test('a policy card the target’s realm does not name explains nothing there', async function (assert) {

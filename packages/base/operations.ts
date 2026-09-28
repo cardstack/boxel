@@ -149,18 +149,17 @@ const CARRIED_BY: Record<BaseOperationName, readonly DefFamily[]> = {
 // `explain` reports what a realm's policy decides for a caller, a target and
 // an operation, which only means something on a policy card. Implied on every
 // card, it would be a member on every card whose every invocation is refused.
-const DECLARATION_ONLY: Partial<Record<BaseOperationName, readonly DefFamily[]>> =
-  {
-    explain: ['card'],
-  };
+const DECLARATION_ONLY: Partial<
+  Record<BaseOperationName, readonly DefFamily[]>
+> = {
+  explain: ['card'],
+};
 
 function operationsCarriedBy(family: DefFamily): readonly BaseOperationName[] {
   return BASE_OPERATIONS.filter((base) => CARRIED_BY[base].includes(family));
 }
 
-function declarationOnlyBases(
-  family: DefFamily,
-): readonly BaseOperationName[] {
+function declarationOnlyBases(family: DefFamily): readonly BaseOperationName[] {
   return BASE_OPERATIONS.filter((base) =>
     DECLARATION_ONLY[base]?.includes(family),
   );
@@ -834,7 +833,7 @@ function impliedOperations(
 
 // Which base operations a def type may declare an operation on: the ones it
 // implies, and the ones it reaches only through a declaration.
-function carriedOperations(
+function declarableOperations(
   owner: typeof BaseDef,
 ): readonly BaseOperationName[] {
   let family = defFamily(owner);
@@ -1056,11 +1055,11 @@ function assertValidDeclaration(
   // carries. Read from the same list `getOperations` synthesizes: only a card
   // has a mutation surface, and a file's metadata is content-derived and
   // read-only. A behavior nothing implies is carried once it is declared.
-  let carried = carriedOperations(owner);
-  if (!carried.includes(base)) {
+  let declarable = declarableOperations(owner);
+  if (!declarable.includes(base)) {
     throw new Error(
       `${label}: this def type carries only ${quoteList(
-        carried,
+        declarable,
       )}, so it cannot declare a "${base}" operation`,
     );
   }

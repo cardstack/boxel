@@ -1,5 +1,5 @@
 import type { CompiledOperationGrant, CompiledPolicyRule } from './policy.ts';
-import type { OperationFailure } from './types.ts';
+import type { BaseOperation, OperationFailure } from './types.ts';
 
 // ============================================================================
 // What the policy gate did on the way to one decision.
@@ -21,9 +21,10 @@ export type GateTraceRefusal =
   | 'non-grantable'
   // A write to the realm's policy card or to its config card.
   | 'authorization-infrastructure'
-  // The target has no row the gate can match a rule against: no index row,
-  // an error row, or a target that is not a card.
-  | 'unindexed-target'
+  // The target is nothing a rule can be matched against: a card whose index
+  // row records an error, so its type is unknown, or a target that is not a
+  // card at all.
+  | 'unmatchable-target'
   // No rule governing the target's type has a grant for the operation.
   | 'no-grant';
 
@@ -31,6 +32,9 @@ export type GateTraceRefusal =
 export type GateTraceOutcome = 'held' | 'did-not-hold' | 'threw';
 
 export class GateTrace {
+  // The behavior the operation resolved to, once it has: whether it writes
+  // decides whether the ACL declined it at all.
+  base: BaseOperation | undefined;
   // Every rule whose type is in the target's adoption chain, in policy order,
   // each with the grants in it that name the operation.
   readonly rules: {
@@ -44,6 +48,10 @@ export class GateTrace {
   // did not lower. A caller the ACL declined outright is told the gate's
   // refusal instead, so this is the only place the reason survives.
   resolutionFailure: OperationFailure | undefined;
+
+  reached(base: BaseOperation) {
+    this.base ??= base;
+  }
 
   resolutionRefused(failure: OperationFailure) {
     this.resolutionFailure ??= failure;

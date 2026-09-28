@@ -24,7 +24,6 @@ import {
   isOperationFailure,
   isWrite,
   refusalForNonReader,
-  type BaseOperation,
   type ExplainedGrantOutcome,
   type ExplainedRule,
   type OperationError,
@@ -166,40 +165,55 @@ async function explain(
     coarseDeclined,
     trace,
   });
-  let decision: GateDecision;
-  let operationBase: BaseOperation;
+  let decision: GateDecision | undefined;
+  let failure: OperationFailure | undefined;
   try {
-    let gated = await resolveGatedOperation(
+    ({ decision } = await resolveGatedOperation(
       realm.core,
       target,
       question.operation,
       scope,
-    );
-    decision = gated.decision;
-    operationBase = gated.definition.base;
+    ));
   } catch (e: unknown) {
     if (!isOperationFailure(e)) {
       throw e;
     }
-    return withRules(
-      refused(
-        base,
-        refusalReason(trace, e),
-        seenBy(coarseDeclined, e.error),
-        e.error.status >= 500 ? 'failed' : 'denied',
-      ),
-      trace,
-    );
+    failure = e;
   }
+  // The same 401, for a caller the ACL lets read and not write, on a write:
+  // the request that carries a write is one the ACL declines them.
   if (
     actor.kind !== 'user' &&
     coarseDeclined === 'writes' &&
-    isWrite(operationBase)
+    trace.base &&
+    isWrite(trace.base)
   ) {
     return refused(base, 'actor-required', {
       status: 401,
       code: 'actor-required',
     });
+  }
+  if (failure || !decision) {
+    let error = failure?.error ?? {
+      status: 500,
+      code: 'internal-error' as const,
+      title: '',
+      detail: '',
+    };
+    // The gate found no row for the target. It had one when this began, so
+    // it went while this ran, and is told of as any missing target is.
+    if (!trace.resolutionFailure && error.code === 'target-not-found') {
+      throw noSuchTarget();
+    }
+    return withRules(
+      refused(
+        base,
+        refusalReason(trace, error.status),
+        seenBy(coarseDeclined, error),
+        error.status >= 500 ? 'failed' : 'denied',
+      ),
+      trace,
+    );
   }
   if (decision.kind === 'coarse') {
     return { ...base, decision: 'allowed', reason: 'acl' };
@@ -222,16 +236,18 @@ async function explain(
   }
   let explained = withRules(base, trace);
   if (!admitting) {
-    let failure = new OperationFailure({
-      status: 403,
-      code: 'operation-not-permitted',
-      title: 'Operation not permitted',
-      detail: '',
-    });
+    // A pending write refused under the lock is refused as the gate refuses:
+    // a 500 where a predicate threw and none held, and otherwise the gate's
+    // own refusal.
+    let threw = [...trace.outcomes.values()].includes('threw');
+    let refusal: OperationError = threw
+      ? { status: 500, code: 'internal-error', title: '', detail: '' }
+      : { status: 403, code: 'operation-not-permitted', title: '', detail: '' };
     return refused(
       explained,
-      refusalReason(trace, failure),
-      seenBy(coarseDeclined, failure.error),
+      refusalReason(trace, refusal.status),
+      seenBy(coarseDeclined, refusal),
+      threw ? 'failed' : 'denied',
     );
   }
   return {
@@ -264,12 +280,12 @@ function seenBy(
 // Why the gate refused, in the terms an explanation reports.
 function refusalReason(
   trace: GateTrace,
-  failure: OperationFailure,
+  status: number,
 ): PolicyExplanationReason {
   if (trace.resolutionFailure) {
     return 'not-resolved';
   }
-  if (failure.error.status >= 500) {
+  if (status >= 500) {
     return [...trace.outcomes.values()].includes('threw')
       ? 'predicate-threw'
       : 'policy-unloadable';
@@ -279,8 +295,8 @@ function refusalReason(
       return 'non-grantable';
     case 'authorization-infrastructure':
       return 'authorization-infrastructure';
-    case 'unindexed-target':
-      return 'unindexed-target';
+    case 'unmatchable-target':
+      return 'unmatchable-target';
     case 'no-grant':
       return 'no-grant';
     default:
@@ -379,7 +395,7 @@ function questionIn(request: OperationRequest): Question {
   let { actor, target, operation } = params as Record<string, unknown>;
   if (actor !== undefined && actor !== null && typeof actor !== 'string') {
     throw invalid(
-      `operation "${request.name}" explains a decision for \`actor\`, a user id; leave it out, or send an empty string, to ask about a caller who presents no credentials`,
+      `operation "${request.name}" explains a decision for \`actor\`, a user id, or an empty string for a caller who presents no credentials`,
     );
   }
   if (typeof target !== 'string' || target.length === 0) {
