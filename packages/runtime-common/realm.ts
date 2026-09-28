@@ -303,6 +303,7 @@ import { inferContentType } from './infer-content-type.ts';
 import {
   fileContentToText,
   fileContentToBytes,
+  fileContentEquals,
   readFileAsText,
   getFileWithFallbacks,
   type TextFileRef,
@@ -4309,58 +4310,73 @@ export class Realm {
           ? 'card'
           : 'file';
       this.assertWriteSize(content, sizeType, path);
-      let isNewFile: boolean;
-      if (typeof content === 'string') {
-        // The stored file is opened before it is read, so its length can rule
-        // the comparison out without any of it being held. Only a file of
-        // exactly the staged content's length can be the staged content, and
-        // a replacement almost never is — so this is what keeps replacing a
-        // file that is large from costing its size. `openFile` reports the
-        // length from a stat it already performs, and reading the body stays
-        // a separate step because the body is a lazy, single-use stream on
-        // every streaming adapter.
-        let stored = await this.#adapter.openFile(path);
-        let couldMatch =
-          stored !== undefined &&
-          (stored.size === undefined ||
-            stored.size === computeContentSize(content));
-        let existingFile = couldMatch
-          ? await readFileAsText(path, (p) => this.#adapter.openFile(p))
-          : undefined;
+      // The stored file is opened before it is read, so its length can rule
+      // the comparison out without any of it being held. Only a file of
+      // exactly the staged content's length can be the staged content, and
+      // a replacement almost never is — so this is what keeps replacing a
+      // file that is large from costing its size. `openFile` reports the
+      // length from a stat it already performs, and reading the body stays
+      // a separate step because the body is a lazy, single-use stream on
+      // every streaming adapter.
+      let stored = await this.#adapter.openFile(path);
+      let couldMatch =
+        stored !== undefined &&
+        (stored.size === undefined ||
+          stored.size === computeContentSize(content));
+      let unchanged: { lastModified: number } | undefined;
+      if (couldMatch && typeof content === 'string') {
+        let existingFile = await readFileAsText(path, (p) =>
+          this.#adapter.openFile(p),
+        );
         if (existingFile?.content === content) {
-          // Identical bytes: the file is left alone, so its modification time
-          // stands and nothing is queued for indexing. The content hash is
-          // still the file's own — the bytes in hand are the bytes on disk —
-          // so a caller reading a version off this result gets the one the
-          // file already holds rather than nothing.
-          //
-          // Recorded on the row as well as returned. A file written before
-          // the realm began recording hashes carries none, and the row is
-          // what the file's metadata resource reports as its content hash —
-          // so a file the realm has never rewritten would answer without one
-          // until something changed its bytes. Writing the hash it already
-          // has is a no-op for every file that has one. This is not what
-          // makes `baseVersion` work: that is computed from the bytes read
-          // inside the write lock and never consults the row.
-          let unchangedHash = computeContentHash(content);
-          results.push({
-            path,
-            lastModified: existingFile.lastModified,
-            contentHash: unchangedHash,
-          });
-          fileMetaRows.push({
-            path,
-            contentHash: unchangedHash,
-            contentSize: computeContentSize(content),
-          });
-          continue;
+          unchanged = existingFile;
         }
-        // From the open above rather than from the read, which a file whose
-        // length already settled the comparison never had.
-        isNewFile = stored === undefined;
-      } else {
-        isNewFile = !(await this.#adapter.exists(path));
+      } else if (
+        couldMatch &&
+        stored &&
+        content instanceof Uint8Array &&
+        (await fileContentEquals(stored, content))
+      ) {
+        // Bytes are compared as bytes and never decoded, so a match is a
+        // byte-for-byte one. The stored file is read a chunk at a time against
+        // a body already held whole, which keeps a large upload from being
+        // held twice. Not the hash recorded at the last write: only the
+        // file's length vouches for that record, so a file rewritten out of
+        // band at the same length would read as unchanged, and the bytes a
+        // caller sent to replace it would be dropped.
+        unchanged = stored;
       }
+      if (unchanged) {
+        // Identical bytes: the file is left alone, so its modification time
+        // stands and nothing is queued for indexing. The content hash is
+        // still the file's own — the bytes in hand are the bytes on disk —
+        // so a caller reading a version off this result gets the one the
+        // file already holds rather than nothing.
+        //
+        // Recorded on the row as well as returned. A file written before
+        // the realm began recording hashes carries none, and the row is
+        // what the file's metadata resource reports as its content hash —
+        // so a file the realm has never rewritten would answer without one
+        // until something changed its bytes. Writing the hash it already
+        // has is a no-op for every file that has one. This is not what
+        // makes `baseVersion` work: that is computed from the bytes read
+        // inside the write lock and never consults the row.
+        let unchangedHash = computeContentHash(content);
+        results.push({
+          path,
+          lastModified: unchanged.lastModified,
+          contentHash: unchangedHash,
+        });
+        fileMetaRows.push({
+          path,
+          contentHash: unchangedHash,
+          contentSize: computeContentSize(content),
+        });
+        continue;
+      }
+      // From the open above rather than from a read, which a file whose
+      // length already settled the comparison never had.
+      let isNewFile = stored === undefined;
       let contentHash = computeContentHash(content);
       let contentSize = computeContentSize(content);
       this.sendIndexInitiationEvent(url.href);
