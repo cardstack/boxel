@@ -1,10 +1,12 @@
 import { service } from '@ember/service';
 
-import { isCardInstance, logger } from '@cardstack/runtime-common';
+import { logger } from '@cardstack/runtime-common';
+import { absolutizeSkillLinks } from '@cardstack/runtime-common/ai';
 // Conventional module-scoped logger (pattern used elsewhere like store & realm events)
 const oneShotLogger = logger('llm:oneshot');
 
 import HostBaseTool from '../lib/host-base-tool';
+import { loadSkillSource, type SkillSource } from '../lib/skill-tools';
 
 import { prettifyMessages } from '../utils/prettify-messages';
 import { prettifyPrompts } from '../utils/prettify-prompts';
@@ -18,7 +20,6 @@ import type RealmServerService from '../services/realm-server';
 import type StoreService from '../services/store';
 import type ToolService from '../services/tool-service';
 import type * as BaseToolModule from '@cardstack/base/command';
-import type { Skill } from '@cardstack/base/skill';
 
 export default class OneShotLlmRequestTool extends HostBaseTool<
   typeof BaseToolModule.OneShotLLMRequestInput,
@@ -100,15 +101,15 @@ export default class OneShotLlmRequestTool extends HostBaseTool<
         attachedFilesContent = attachedFileResults.join('');
       }
 
-      // Load skill cards from IDs if provided
-      let loadedSkillCards: Skill[] = [];
+      // Load skills from IDs if provided — `Skill` cards or `SKILL.md` files
+      let loadedSkillCards: SkillSource[] = [];
       if (input.skillCardIds && input.skillCardIds.length > 0) {
         const skillCardPromises = input.skillCardIds.map(
           async (skillCardId) => {
             try {
-              return await this.store.get<Skill>(skillCardId);
+              return (await loadSkillSource(this.store, skillCardId)) ?? null;
             } catch (e) {
-              console.warn(`Failed to load skill card ${skillCardId}:`, e);
+              console.warn(`Failed to load skill ${skillCardId}:`, e);
               return null;
             }
           },
@@ -116,7 +117,7 @@ export default class OneShotLlmRequestTool extends HostBaseTool<
 
         const skillCardResults = await Promise.all(skillCardPromises);
         loadedSkillCards = skillCardResults.filter(
-          (card): card is Skill => card !== null && isCardInstance(card),
+          (card): card is SkillSource => card !== null,
         );
       }
 
@@ -195,14 +196,20 @@ export default class OneShotLlmRequestTool extends HostBaseTool<
   }
 }
 
-const skillsToMessage = (cards: Skill[]) => {
-  return cards
-    .map((card) => {
+const skillsToMessage = (sources: SkillSource[]) => {
+  return sources
+    .map((source) => {
+      // A `Skill` card carries its guidance in `instructions`; a markdown
+      // skill's `content` is the file body with the frontmatter stripped.
+      let text =
+        'instructions' in source ? source.instructions : source.content;
+      // Relative links in a skill body point at its reference files; resolve
+      // them against the skill's URL so the model gets usable addresses.
       let instructions =
-        typeof (card as any).instructions === 'string'
-          ? (card as any).instructions.trim()
+        typeof text === 'string'
+          ? absolutizeSkillLinks(text.trim(), source.id)
           : '';
-      return `Skill (id: ${card.id}):\n${instructions || '[no instructions]'}`;
+      return `Skill (id: ${source.id}):\n${instructions || '[no instructions]'}`;
     })
     .join('\n\n');
 };

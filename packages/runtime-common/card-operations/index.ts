@@ -13,6 +13,13 @@ export type {
   RealmPolicyCacheEnvironment,
 } from './policy.ts';
 export type { LoweringContext } from './lowering.ts';
+export { notPermitted, policyGateStats } from './gate.ts';
+export type {
+  GateDecision,
+  MatchedGrant,
+  OperationPolicyAccess,
+  PolicyGateStats,
+} from './gate.ts';
 export {
   assertParamsSupplied,
   canonicalizeTarget,
@@ -22,11 +29,14 @@ export {
   scopeCallerFor,
   pathsFor,
   readShape,
+  resolveGatedOperation,
   resolveOperation,
   runOperation,
 } from './dispatch.ts';
 export type {
   CanonicalizeOptions,
+  CoarseDeclined,
+  GatedOperation,
   OperationCore,
   OperationDefinitionLookup,
   OperationIndexQueryEngine,
@@ -142,6 +152,8 @@ export type {
   TransformProgramError,
 } from './transforms.ts';
 export { lowerQueryOperation, lowerQueryTemplate } from './query.ts';
+export { isNamedQueryPayload, resolveNamedQuery } from './named-query.ts';
+export type { NamedQueryContext } from './named-query.ts';
 export type {
   QueryDefinition,
   QueryInvocation,

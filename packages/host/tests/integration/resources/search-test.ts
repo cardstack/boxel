@@ -1646,10 +1646,12 @@ module(`Integration | search resource`, function (hooks) {
       let g = globalThis as unknown as {
         __boxelRenderContext?: boolean;
         __boxelJobId?: string;
+        __boxelRenderScope?: string;
         __boxelConsumingRealm?: string;
       };
       g.__boxelRenderContext = undefined;
       g.__boxelJobId = undefined;
+      g.__boxelRenderScope = undefined;
       g.__boxelConsumingRealm = undefined;
       storeService.clearInFlightSearch();
       storeService.clearSearchCache();
@@ -1770,6 +1772,28 @@ module(`Integration | search resource`, function (hooks) {
         fetchCalls,
         2,
         'cache entry from prior job is not served under new jobId',
+      );
+    });
+
+    test(`a render-scope change drops the cache while the job stays the same`, async function (assert) {
+      // A validation round re-reads under a scope of its own, inside the same
+      // job: another writer's pass committed to the realm since the answers
+      // cached under the previous scope were read.
+      enterPrerender('job-1', testRealmURL);
+      let g = globalThis as unknown as { __boxelRenderScope?: string };
+      g.__boxelRenderScope = `${testRealmURL}@1`;
+      releaseFetch.fulfill();
+
+      await storeService.search(bookQuery, [testRealmURL]);
+      await storeService.search(bookQuery, [testRealmURL]);
+      assert.strictEqual(fetchCalls, 1, 'one scope serves repeats from cache');
+
+      g.__boxelRenderScope = `${testRealmURL}@1~1`;
+      await storeService.search(bookQuery, [testRealmURL]);
+      assert.strictEqual(
+        fetchCalls,
+        2,
+        'an answer cached under the previous scope is not served under the new one',
       );
     });
 

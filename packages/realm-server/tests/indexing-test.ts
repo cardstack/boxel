@@ -581,7 +581,7 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(
         prerenderJob.concurrency_group,
         `prerender-html:${testRealm}`,
-        'HTML work runs in its own per-realm concurrency group',
+        "a from-scratch pass's HTML runs in the exclusive lane of the realm's prerender-html family",
       );
       assert.strictEqual(
         prerenderJob.status,
@@ -1313,8 +1313,12 @@ module(basename(import.meta.filename), function () {
         fittedHtml.includes('data-test-file-fitted'),
         'the file entry has FileDef fitted HTML',
       );
+      // The date may sit inside a wrapping element (the shell hides it from
+      // Percy with a `data-test-percy-hide` span), so skip opening tags between
+      // the `·` and the text. Closing tags are not skipped, so an empty wrapper
+      // cannot let the match run on into later markup.
       assert.ok(
-        /class="sub-mod"[^>]*>·\s*[^\s<]/.test(fittedHtml),
+        /class="sub-mod"[^>]*>·\s*(?:<[^/>][^>]*>\s*)*[^\s<]/.test(fittedHtml),
         `the fitted HTML renders a modified time, got: ${fittedHtml.slice(0, 2000)}`,
       );
     });
@@ -2532,7 +2536,7 @@ module(basename(import.meta.filename), function () {
                 `SELECT id, priority, args
              FROM jobs
              WHERE job_type = 'incremental-index'
-               AND concurrency_group = $1
+               AND (concurrency_group = $1 OR lane_family = $1)
                AND status = 'unfulfilled'`,
                 { bind: [`indexing:${realm.url}`] },
               )) as {
@@ -2621,7 +2625,7 @@ module(basename(import.meta.filename), function () {
                 `SELECT args
              FROM jobs
              WHERE job_type = 'incremental-index'
-               AND concurrency_group = $1
+               AND (concurrency_group = $1 OR lane_family = $1)
                AND status = 'unfulfilled'`,
                 { bind: [`indexing:${realm.url}`] },
               )) as {
@@ -2685,7 +2689,7 @@ module(basename(import.meta.filename), function () {
               let rows = (await testDbAdapter.execute(
                 `SELECT job_type
              FROM jobs
-             WHERE concurrency_group = $1
+             WHERE (concurrency_group = $1 OR lane_family = $1)
                AND status = 'unfulfilled'
                AND job_type IN ('incremental-index', 'from-scratch-index')`,
                 { bind: [`indexing:${realm.url}`] },
@@ -2823,7 +2827,7 @@ module(basename(import.meta.filename), function () {
               let rows = (await testDbAdapter.execute(
                 `SELECT job_type
                FROM jobs
-               WHERE concurrency_group = $1
+               WHERE (concurrency_group = $1 OR lane_family = $1)
                  AND status = 'unfulfilled'
                  AND job_type IN ('incremental-index', 'from-scratch-index')`,
                 { bind: [`indexing:${realm.url}`] },

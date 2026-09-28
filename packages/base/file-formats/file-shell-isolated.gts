@@ -435,22 +435,27 @@ export class FileIsolatedShell extends GlimmerComponent<FileIsolatedShellSignatu
             {{#if this.created}}
               <div class='insp-row'>
                 <dt>Created</dt>
-                {{! Unlike Modified, which reads an mtime CI normalises to a
-                function of file content, this reads realm_file_meta.created_at
-                — written as `Date.now()` the first time a path is indexed, and
-                pinned by nothing. Two runs on different days therefore disagree
-                and Percy reports a diff. Hidden from Percy rather than
-                normalised: it is a database column rather than a file
-                attribute, and a capture is the wrong place to verify a
-                timestamp. The label stays visible, so the row and the layout
-                around it are still compared. }}
+                {{! Reads realm_file_meta.created_at — written as `Date.now()`
+                the first time a path is indexed, and pinned by nothing, so two
+                runs on different days disagree and Percy reports a diff.
+                Hidden rather than normalised: it is a database column rather
+                than a file attribute, and a capture is the wrong place to
+                verify a timestamp. The label stays visible, so the row and the
+                layout around it are still compared.
+
+                Modified is hidden too, for a different reason. CI does
+                normalise its mtime to a function of file content, which makes
+                it agree between two runs of the same content — but that is not
+                the same as being worth comparing. The number is a hash rather
+                than a date, and a content edit moves it anywhere in the
+                window, so the rendered date changes whenever the bytes do. }}
                 <dd data-test-percy-hide>{{this.created}}</dd>
               </div>
             {{/if}}
             {{#if this.modified}}
               <div class='insp-row'>
                 <dt>Modified</dt>
-                <dd>{{this.modified}}</dd>
+                <dd data-test-percy-hide>{{this.modified}}</dd>
               </div>
             {{/if}}
           </dl>

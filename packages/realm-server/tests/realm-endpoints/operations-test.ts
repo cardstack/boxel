@@ -540,7 +540,7 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
     async function indexJobIds(): Promise<number[]> {
       let rows = (await testDbAdapter.execute(
         `select id from jobs where job_type = 'incremental-index'
-         and concurrency_group = $1 order by id`,
+         and (concurrency_group = $1 or lane_family = $1) order by id`,
         { bind: [`indexing:${realm.url}`] },
       )) as { id: number | string }[];
       return rows.map((row) => Number(row.id));

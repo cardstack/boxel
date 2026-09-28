@@ -69,6 +69,18 @@ export interface OperationQueryTemplate extends Omit<
   filter?: OperationQueryFilterTemplate;
 }
 
+// The members that make a search request a named one: the declared query
+// operation to run, the type it is invoked on, and the params to fill it
+// with. The realm resolves the query from its own definition of that type, so
+// a request carrying these is answered with the declaration's query whatever
+// else the request carries — see `resolveNamedQuery`.
+export interface NamedQueryInvocation {
+  operation: string;
+  // A declaration the type inherits resolves the same as its own.
+  on: CodeRef;
+  params?: Record<string, unknown>;
+}
+
 export type OperationQueryFilterTemplate = Omit<
   SearchEntryWireFilter,
   'any' | 'every' | 'not' | 'matches'
@@ -261,7 +273,10 @@ export type PolicyIssueCode =
   // nor the annotated `{ bxl, snapshot }` form.
   | 'invalid-grant'
   // A `where` that does not parse, or that the `policy` profile refuses.
-  | 'invalid-predicate';
+  | 'invalid-predicate'
+  // A grant on a query whose `where` does not compile to a search filter. The
+  // grant is kept, and admits no search.
+  | 'policy-not-filterable';
 
 // A problem found while compiling a realm's policy. Recorded, never thrown,
 // for the reason lowering records rather than throws: the edit that caused it
@@ -364,6 +379,11 @@ export interface OperationRequest {
   // unconditional write; present makes the write conditional, and the result's
   // `baseMatched` reports whether the target was still at that version.
   baseVersion?: string;
+  // Set when the realm ACL declined this request's caller. That is the one
+  // case the realm's policy decides whether the operation runs. Absent means
+  // the ACL allowed the caller, or never judged the request, as with a
+  // realm-internal dispatch.
+  coarseDeclined?: true;
 }
 
 // A read's answer: the assembled JSON:API document, exactly as the card+json
@@ -632,6 +652,11 @@ export type OperationErrorCode =
   // nobody. Distinct from `invalid-params` because nothing the caller sent is
   // wrong: the remedy is credentials, which is what its 401 says.
   | 'actor-required'
+  // The realm ACL declined the caller, and no grant in the realm's policy
+  // admits this operation on this target. The detail is the same whether the
+  // target exists or not, and whatever the policy holds, so the refusal says
+  // nothing about the realm beyond the fact of the refusal.
+  | 'operation-not-permitted'
   // The bytes an operation would store are over the realm's ceiling for a
   // card or a file of that kind. Separate from `invalid-params` because the
   // payload is well formed and the remedy is to send less of it, and because

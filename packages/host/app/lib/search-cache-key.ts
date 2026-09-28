@@ -5,9 +5,9 @@ import {
 } from '@cardstack/runtime-common';
 
 // Stable digest key for the store-side resolved-doc search cache.
-// Pairs with `searchInFlightKey` (CS-11121) but adds the `jobId` and
+// Pairs with `searchInFlightKey` but adds the render-scope and
 // `consumingRealm` dimensions so cache entries are scoped to a single
-// indexing batch's view of a single realm.
+// view of a single realm (see `currentRenderScope`).
 //
 // The cache itself only consults this key when the caller has already
 // passed the same-realm gate (realms array equals `[consumingRealm]`),
@@ -18,7 +18,7 @@ import {
 // caller falls back to uncached fetch so the cache is best-effort, never
 // a correctness boundary. Same trade-off as the server-side cache key.
 export function searchCacheKey(
-  jobId: string,
+  renderScope: string,
   consumingRealm: string,
   query: Query,
   // The *resolved* wire scope (see `StoreService.resolveWireScope`), not the
@@ -29,7 +29,7 @@ export function searchCacheKey(
 ): string | undefined {
   try {
     return JSON.stringify([
-      jobId,
+      renderScope,
       consumingRealm,
       normalizeQueryForSignature(query),
       scope ?? null,

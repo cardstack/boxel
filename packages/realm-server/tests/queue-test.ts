@@ -17,6 +17,7 @@ import type {
 import {
   Deferred,
   registerQueueJobDefinition,
+  systemInitiatedPriority,
   userInitiatedPriority,
 } from '@cardstack/runtime-common';
 import { JobClaimHold } from '@cardstack/runtime-common/jobs/claim-hold';
@@ -2717,26 +2718,46 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('a writer job at a higher priority starts ahead of a pending exclusive job', async function (assert) {
+    // Writers run at the user-initiated tier and a from-scratch pass at the
+    // system tier. A barrier the higher tier could pass would let two writers
+    // that keep overlapping hold the exclusive job off indefinitely.
+    test('a writer job at a higher priority still does not start ahead of an older pending exclusive job', async function (assert) {
       await publishLaneJob('writer-a', {
         concurrencyGroup: lane('a'),
         laneFamily: family,
+        priority: userInitiatedPriority,
       });
       await started('writer-a');
       await publishLaneJob('exclusive', {
         concurrencyGroup: family,
         laneFamily: family,
+        priority: systemInitiatedPriority,
       });
       await publishLaneJob('writer-b', {
         concurrencyGroup: lane('b'),
         laneFamily: family,
         priority: userInitiatedPriority,
       });
+      await afterAControlStarts('control');
+      assert.false(
+        hasStarted('writer-b'),
+        "b's lane could run beside a's and outranks the exclusive job, but the exclusive job was queued first",
+      );
+
+      await finish('writer-a');
+      await started('exclusive');
+      await finish('exclusive');
       await started('writer-b');
       assert.deepEqual(
-        events,
-        ['writer-a start', 'writer-b start'],
-        "the higher-priority lane started beside a's while the exclusive job waited",
+        events.filter((event) => !event.startsWith('control')),
+        [
+          'writer-a start',
+          'writer-a finish',
+          'exclusive start',
+          'exclusive finish',
+          'writer-b start',
+        ],
+        'the exclusive job ran in its turn',
       );
     });
 

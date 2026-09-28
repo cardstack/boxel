@@ -2553,10 +2553,11 @@ module(basename(import.meta.filename), function () {
 
     // The scope a render is keyed to decides which resident instances a
     // prerender tab may reuse. An index pass and the prerender_html job it
-    // spawns render the same generation of the same realm from two queue
-    // jobs, so keying on the job id alone would put them in different scopes
-    // and make each drop what the other just built — while a *different*
-    // pass, whose whole purpose is to observe a write, must not share one.
+    // spawns render one view of the same realm from two queue jobs, so keying
+    // on the job id alone would put them in different scopes and make each
+    // drop what the other just built — while a *different* pass, whose whole
+    // purpose is to observe a write, must not share one, and neither may a job
+    // whose spawning pass another commit overlapped.
     module('render scope', function () {
       function scopeRecordingPrerenderer(scopes: (string | undefined)[]) {
         return {
@@ -2600,17 +2601,49 @@ module(basename(import.meta.filename), function () {
       async function scopesForPass(opts: {
         spawningJobId: number | null;
         info: ReturnType<typeof jobInfo>;
+        // The spawning pass's ledger row: the generation it read and the one
+        // it committed. Absent, the job has no recorded spawning pass.
+        spawner?: { baseGeneration: number; generation: number };
+        // The realm's generation when the job adopts its stamps; defaults to
+        // the spawning pass's commit.
+        realmGeneration?: number;
       }): Promise<(string | undefined)[]> {
         let url = `${testRealm}scope-${opts.info.jobId}.json`;
         await writeInstance(1, url, '<h1>old</h1>');
         let scopes: (string | undefined)[] = [];
-        await runPassAt({
+        let spawner = opts.spawner;
+        let generation = opts.realmGeneration ?? spawner?.generation ?? 2;
+        if (spawner && opts.spawningJobId !== null) {
+          await adapter.execute(
+            `INSERT INTO realm_index_commits
+               (realm_url, generation, base_generation, pass_id, job_id, urls, full_realm, committed_at)
+             VALUES ($1, $2, $3, $4, $5, '[]'::jsonb, false, $6)`,
+            {
+              bind: [
+                testRealm,
+                spawner.generation,
+                spawner.baseGeneration,
+                `pass-${opts.spawningJobId}`,
+                opts.spawningJobId,
+                Date.now(),
+              ],
+            },
+          );
+        }
+        await setRealmGeneration(generation);
+        await runPrerenderHtmlPass({
           realmURL: new URL(testRealm),
           changes: [{ url, operation: 'update' }],
-          generation: 2,
+          spawningIndexPasses:
+            spawner && opts.spawningJobId !== null
+              ? passes(opts.spawningJobId)
+              : [],
+          generation,
           loaderEpoch: 'epoch-a',
           spawningJobId: opts.spawningJobId,
           ...noPreWarmDeps,
+          // The ledger it checks its spawning pass against.
+          dbAdapter: adapter,
           indexWriter,
           virtualNetwork,
           reader: stubReader(
@@ -2638,12 +2671,13 @@ module(basename(import.meta.filename), function () {
         return scopes;
       }
 
-      test("the pass renders under its spawning index job's scope, not its own job id", async function (assert) {
+      test("the pass renders under its spawning index job's scope, not its own job id, when nothing else committed around it", async function (assert) {
         let spawning = jobInfo();
         let htmlJob = jobInfo();
         let scopes = await scopesForPass({
           spawningJobId: spawning.jobId,
           info: htmlJob,
+          spawner: { baseGeneration: 1, generation: 2 },
         });
 
         assert.deepEqual(
@@ -2654,6 +2688,62 @@ module(basename(import.meta.filename), function () {
         assert.notOk(
           scopes.includes(renderScopeFor(testRealm, htmlJob.jobId)),
           'and not the scope of the queue job running it — a tab shared with the index visit would otherwise reload everything it just built',
+        );
+      });
+
+      test('a pass whose spawning pass another commit overlapped renders under its own scope', async function (assert) {
+        // Another writer's pass committed generation 2 while the spawning
+        // pass ran, so the spawning pass committed 3 over state newer than
+        // what its visits read and left resident.
+        let spawning = jobInfo();
+        let htmlJob = jobInfo();
+        let scopes = await scopesForPass({
+          spawningJobId: spawning.jobId,
+          info: htmlJob,
+          spawner: { baseGeneration: 1, generation: 3 },
+        });
+
+        assert.deepEqual(
+          scopes,
+          [renderScopeFor(testRealm, htmlJob.jobId)],
+          "the visit reads afresh under the job's own scope",
+        );
+      });
+
+      test('a pass that adopts a generation past its spawning pass renders under its own scope', async function (assert) {
+        // The spawning pass committed 2 cleanly, but another writer's pass
+        // committed 3 before this job adopted its stamps.
+        let spawning = jobInfo();
+        let htmlJob = jobInfo();
+        let scopes = await scopesForPass({
+          spawningJobId: spawning.jobId,
+          info: htmlJob,
+          spawner: { baseGeneration: 1, generation: 2 },
+          realmGeneration: 3,
+        });
+
+        assert.deepEqual(
+          scopes,
+          [renderScopeFor(testRealm, htmlJob.jobId)],
+          "the visit reads afresh under the job's own scope",
+        );
+      });
+
+      test('a pass with a spawning job but no recorded spawning pass renders under its own scope', async function (assert) {
+        // A job enqueued by a worker predating spawning passes carries its
+        // spawning job but nothing the ledger can answer for, so there is no
+        // telling whether its view moved.
+        let spawning = jobInfo();
+        let htmlJob = jobInfo();
+        let scopes = await scopesForPass({
+          spawningJobId: spawning.jobId,
+          info: htmlJob,
+        });
+
+        assert.deepEqual(
+          scopes,
+          [renderScopeFor(testRealm, htmlJob.jobId)],
+          "falls back to the job's own scope",
         );
       });
 
@@ -2702,10 +2792,12 @@ module(basename(import.meta.filename), function () {
         let firstScopes = await scopesForPass({
           spawningJobId: first.jobId,
           info: first,
+          spawner: { baseGeneration: 1, generation: 2 },
         });
         let secondScopes = await scopesForPass({
           spawningJobId: second.jobId,
           info: second,
+          spawner: { baseGeneration: 2, generation: 3 },
         });
 
         assert.notDeepEqual(

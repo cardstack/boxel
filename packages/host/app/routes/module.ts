@@ -175,7 +175,7 @@ export default class ModuleRoute extends Route<Model> {
     this.#authGuard.register();
     if (!isTesting()) {
       await this.store.ensureSetupComplete();
-      this.realm.restoreSessionsFromStorage();
+      this.realm.restoreSessionsFromStorage({ startingVisit: true });
       this.#restoreRenderTimers = enableRenderTimerStub();
       this.#releaseTimerBlock = beginTimerBlock();
     }

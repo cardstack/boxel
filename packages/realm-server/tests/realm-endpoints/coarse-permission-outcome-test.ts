@@ -76,18 +76,18 @@ const readProbes: Probe[] = [
   },
   {
     label: 'GET card+source',
-    consumes: true,
+    consumes: false,
     send: (r) =>
       r.get('/person.gts').set('Accept', SupportedMimeType.CardSource),
   },
   {
     label: 'GET raw file',
-    consumes: true,
+    consumes: false,
     send: (r) => r.get('/sample.md'),
   },
   {
     label: 'GET transpiled module',
-    consumes: true,
+    consumes: false,
     send: (r) => r.get('/person'),
   },
   {
@@ -132,13 +132,13 @@ const writeProbes: Probe[] = [
   // Routes that consume it.
   {
     label: 'POST card+json',
-    consumes: true,
+    consumes: false,
     send: (r) =>
       r.post('/').set('Accept', SupportedMimeType.CardJson).send('not json'),
   },
   {
     label: 'PATCH card+json',
-    consumes: true,
+    consumes: false,
     send: (r) =>
       r
         .patch('/person-1')
@@ -147,13 +147,13 @@ const writeProbes: Probe[] = [
   },
   {
     label: 'DELETE card+json',
-    consumes: true,
+    consumes: false,
     send: (r) =>
       r.delete('/person-1').set('Accept', SupportedMimeType.CardJson),
   },
   {
     label: 'POST card+source',
-    consumes: true,
+    consumes: false,
     send: (r) =>
       r
         .post('/new-file.gts')
@@ -162,7 +162,7 @@ const writeProbes: Probe[] = [
   },
   {
     label: 'POST octet-stream',
-    consumes: true,
+    consumes: false,
     send: (r) =>
       r
         .post('/new-file.bin')
@@ -171,7 +171,7 @@ const writeProbes: Probe[] = [
   },
   {
     label: 'DELETE card+source',
-    consumes: true,
+    consumes: false,
     send: (r) =>
       r.delete('/person.gts').set('Accept', SupportedMimeType.CardSource),
   },
@@ -185,6 +185,53 @@ const writeProbes: Probe[] = [
         .set('Content-Type', SupportedMimeType.BoxelOperations)
         .send('not json'),
   },
+];
+
+// A well-formed request for each route that consumes the ACL's outcome, so a
+// caller it admits reaches the operation the route resolves. The card+json
+// `HEAD` is not among them: the ACL lets every `HEAD` through, and the route
+// asks the read question itself.
+interface GatedProbe {
+  route: string;
+  send: (request: SuperTest<Test>, realmURL: string) => Test;
+}
+
+function operationsBatch(realmURL: string, name: string) {
+  return JSON.stringify({
+    'boxel:operations': [
+      { op: 'invoke', 'boxel:name': name, href: `${realmURL}person-1` },
+    ],
+  });
+}
+
+const gatedProbes: GatedProbe[] = [
+  {
+    route: `GET ${SupportedMimeType.CardJson}`,
+    send: (r) => r.get('/person-1').set('Accept', SupportedMimeType.CardJson),
+  },
+  ...[SupportedMimeType.BoxelOperations, SupportedMimeType.JSONAPI].flatMap(
+    (accept) => [
+      {
+        route: `QUERY ${accept}`,
+        send: (r: SuperTest<Test>, realmURL: string) =>
+          r
+            .post('/_operations')
+            .set('X-HTTP-Method-Override', 'QUERY')
+            .set('Accept', accept)
+            .set('Content-Type', SupportedMimeType.BoxelOperations)
+            .send(operationsBatch(realmURL, 'read')),
+      },
+      {
+        route: `POST ${accept}`,
+        send: (r: SuperTest<Test>, realmURL: string) =>
+          r
+            .post('/_operations')
+            .set('Accept', accept)
+            .set('Content-Type', SupportedMimeType.BoxelOperations)
+            .send(operationsBatch(realmURL, 'delete')),
+      },
+    ],
+  ),
 ];
 
 function assertRefusal(
@@ -316,7 +363,7 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       await unarchiveRealm(dbAdapter, new URL(testRealm.url));
     });
 
-    test('exactly the operation routes consume the recorded outcome', async function (assert) {
+    test('exactly the routes that hand the outcome to the policy gate consume it', async function (assert) {
       let consumers = testRealm
         .routeDescriptions()
         .filter((route) => route.consumesCoarseOutcome)
@@ -325,24 +372,14 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       assert.deepEqual(
         consumers,
         [
-          `DELETE ${SupportedMimeType.CardJson} /|/.+(?<!.json)`,
-          `DELETE ${SupportedMimeType.CardSource} /.+`,
           `GET ${SupportedMimeType.CardJson} /.*`,
-          `GET ${SupportedMimeType.CardSource} /.*`,
           `HEAD ${SupportedMimeType.CardJson} /.*`,
-          `HEAD ${SupportedMimeType.CardSource} /.*`,
-          `PATCH ${SupportedMimeType.CardJson} /.+(?<!.json)`,
           `POST ${SupportedMimeType.BoxelOperations} /_operations`,
-          `POST ${SupportedMimeType.CardJson} (/|/.+/)`,
-          `POST ${SupportedMimeType.CardSource} /.*`,
           `POST ${SupportedMimeType.JSONAPI} /_operations`,
-          `POST ${SupportedMimeType.OctetStream} /.*`,
           `QUERY ${SupportedMimeType.BoxelOperations} /_operations`,
           `QUERY ${SupportedMimeType.JSONAPI} /_operations`,
-          'GET * *',
-          'HEAD * *',
         ].sort(),
-        'the consumer set is the card+json verbs, the card+source routes, the operations envelope, and the fallback file and module serve for reads',
+        'the consumer set is the card+json read and the operations envelope',
       );
       let nonConsumers = testRealm
         .routeDescriptions()
@@ -364,9 +401,44 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           .filter((route) => route.path === '*')
           .map((route) => route.method)
           .sort(),
-        ['DELETE', 'PATCH', 'POST', 'QUERY'],
-        'the fallback does not consume it for any method but a read',
+        ['DELETE', 'GET', 'HEAD', 'PATCH', 'POST', 'QUERY'],
+        'the fallback file and module serve does not consume it for any method',
       );
+    });
+
+    test('every consuming route hands an admitted caller to the policy gate', async function (assert) {
+      let consumers = testRealm
+        .routeDescriptions()
+        .filter((route) => route.consumesCoarseOutcome)
+        .map((route) => `${route.method} ${route.mimeType}`)
+        .filter((route) => route !== `HEAD ${SupportedMimeType.CardJson}`)
+        .sort();
+      assert.deepEqual(
+        gatedProbes.map((probe) => probe.route).sort(),
+        consumers,
+        'there is a probe for every consuming route',
+      );
+      testRealm.__testOnlySetCoarseAdmission(() => true);
+      try {
+        for (let probe of gatedProbes) {
+          let response = await probe.send(request, testRealm.url);
+          assert.strictEqual(response.status, 403, `${probe.route}: status`);
+          assert.true(
+            response.text.includes('is not permitted on'),
+            `${probe.route}: the refusal is the gate’s, for a realm with no policy`,
+          );
+        }
+      } finally {
+        testRealm.__testOnlySetCoarseAdmission(undefined);
+      }
+      let person = await request
+        .get('/person-1')
+        .set('Accept', SupportedMimeType.CardJson)
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'owner', ['read', 'write', 'realm-owner'])}`,
+        );
+      assert.strictEqual(person.status, 200, 'and nothing was deleted');
     });
 
     test('an admission reaches only consuming routes, and never a refusal of realm-owner authority', async function (assert) {
@@ -420,14 +492,12 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           .set('Accept', SupportedMimeType.CardJson);
         assert.strictEqual(
           card.status,
-          200,
-          'admitting: an anonymous card+json read reaches its handler',
+          403,
+          'admitting: an anonymous card+json read reaches its handler, and the policy gate refuses it for a realm with no policy',
         );
-        let raw = await request.get('/sample.md');
-        assert.strictEqual(
-          raw.status,
-          200,
-          'admitting: an anonymous raw file read reaches the fallback',
+        assert.true(
+          card.text.includes('is not permitted on'),
+          'admitting: the refusal is the gate’s',
         );
 
         await archiveRealm(dbAdapter, new URL(testRealm.url));

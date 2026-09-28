@@ -8,11 +8,17 @@ import type { Definition } from '../definitions.ts';
 import type { IndexedInstanceSource } from '../index-query-engine.ts';
 import { logger } from '../log.ts';
 import { rri } from '../realm-identifiers.ts';
-import type { PolicyIssue, PolicyIssueCode } from './types.ts';
+import { compilePolicyFilter } from './policy-filter.ts';
+import type {
+  OperationQueryFilterTemplate,
+  PolicyIssue,
+  PolicyIssueCode,
+} from './types.ts';
 
 // A realm's policy compiled for the gate: the RealmPolicy card that the realm's
 // `realm.json` names, with every `where` parsed and canonicalized under BXL's
-// `policy` profile.
+// `policy` profile, and every grant on a query carrying the search filter its
+// predicate compiles to.
 //
 // Only what compiled is here. A rule or grant that did not compile is left out
 // and recorded in `issues`. So a grant whose predicate failed can never be
@@ -42,6 +48,18 @@ export interface CompiledOperationGrant {
   operation: string;
   // Absent for a grant with no condition.
   where?: CompiledPolicyPredicate;
+  // For a grant on a query, the search filter the grant admits: the cards of
+  // the rule's type that its predicate holds for, as a wire filter template
+  // whose `{ $ref: 'actor' }` markers a search fills in with the caller. A
+  // search the policy scopes composes it into the caller's filter rather than
+  // judging each card it finds.
+  //
+  // Absent on every other grant. A `read` grant never has one: reading a card
+  // whose id you were given and enumerating every card of a type are
+  // different powers. Absent too on a query grant whose predicate has no
+  // filter, which is recorded as a `policy-not-filterable` issue. That grant
+  // admits no search, and its predicate is kept as it is.
+  filter?: OperationQueryFilterTemplate;
 }
 
 export interface CompiledPolicyPredicate {
@@ -369,6 +387,13 @@ async function definitionFingerprint(
   codeRef: ResolvedCodeRef,
   env: PolicyCompileEnvironment,
 ): Promise<string | undefined> {
+  return (await fingerprintedDefinition(codeRef, env))?.fingerprint;
+}
+
+async function fingerprintedDefinition(
+  codeRef: ResolvedCodeRef,
+  env: PolicyCompileEnvironment,
+): Promise<{ definition: Definition; fingerprint: string } | undefined> {
   let definition: Definition;
   try {
     definition = await env.lookupDefinition(codeRef);
@@ -378,7 +403,10 @@ async function definitionFingerprint(
     }
     throw e;
   }
-  return computeContentHash(stableStringify(definition) ?? '');
+  return {
+    definition,
+    fingerprint: computeContentHash(stableStringify(definition) ?? ''),
+  };
 }
 
 async function compilePolicy(
@@ -404,6 +432,53 @@ async function compilePolicy(
     definitions,
     inputs,
   });
+
+  // A type's definition, recorded as an input of this compilation: a change to
+  // the definition, or to the realm whose module defines the type, is a change
+  // to what the policy compiles to. The types a rule names are read here, and
+  // so is every type a search filter's field path crosses into.
+  let readDefinition = async (
+    codeRef: ResolvedCodeRef,
+  ): Promise<Definition | undefined> => {
+    let moduleURL = safeURL(codeRef.module, env);
+    if (moduleURL && !inputs.includes(moduleURL)) {
+      inputs.push(moduleURL);
+      onInput(moduleURL);
+    }
+    let found = await fingerprintedDefinition(codeRef, env);
+    definitions.set(`${codeRef.module}#${codeRef.name}`, {
+      codeRef,
+      fingerprint: found?.fingerprint,
+    });
+    return found?.definition;
+  };
+  // A grant on a query carries the search filter its predicate compiles to,
+  // or has none and records why. No other grant carries one.
+  let withFilter = async (
+    grant: CompiledOperationGrant,
+    predicate: { body: unknown; snapshot: boolean } | undefined,
+    targetType: ResolvedCodeRef,
+    definition: Definition,
+    grantPath: string,
+  ): Promise<CompiledOperationGrant> => {
+    if (!isQueryGrant(grant.operation, definition)) {
+      return grant;
+    }
+    let parser = await loadBxl();
+    let outcome = await compilePolicyFilter(targetType, definition, predicate, {
+      lookupDefinition: readDefinition,
+      validateBxlAst: (node, options) => parser.validateBxlAst(node, options),
+    });
+    if ('problem' in outcome) {
+      issue(
+        'policy-not-filterable',
+        `${grantPath}.where`,
+        `the grant is on a query, and its \`where\` does not compile to a search filter: ${outcome.problem}`,
+      );
+      return grant;
+    }
+    return { ...grant, filter: outcome.filter };
+  };
 
   if (!row) {
     issue(
@@ -456,15 +531,8 @@ async function compilePolicy(
       );
       continue;
     }
-    let moduleURL = safeURL(resolved.module, env);
-    if (moduleURL) {
-      inputs.push(moduleURL);
-      onInput(moduleURL);
-    }
-    let key = `${resolved.module}#${resolved.name}`;
-    let fingerprint = await definitionFingerprint(resolved, env);
-    definitions.set(key, { codeRef: resolved, fingerprint });
-    if (fingerprint === undefined) {
+    let definition = await readDefinition(resolved);
+    if (!definition) {
       issue(
         'unresolved-type',
         `${rulePath}.targetType`,
@@ -500,7 +568,15 @@ async function compilePolicy(
         continue;
       }
       if (!where) {
-        grants.push({ operation });
+        grants.push(
+          await withFilter(
+            { operation },
+            undefined,
+            resolved,
+            definition,
+            grantPath,
+          ),
+        );
         continue;
       }
       let outcome = await compilePredicate(where.source);
@@ -508,18 +584,38 @@ async function compilePolicy(
         issue('invalid-predicate', `${grantPath}.where`, outcome.problem);
         continue;
       }
-      grants.push({
-        operation,
-        where: {
-          source: where.source,
-          canonical: outcome.canonical,
-          snapshot: where.snapshot,
-        },
-      });
+      grants.push(
+        await withFilter(
+          {
+            operation,
+            where: {
+              source: where.source,
+              canonical: outcome.canonical,
+              snapshot: where.snapshot,
+            },
+          },
+          { body: outcome.body, snapshot: where.snapshot },
+          resolved,
+          definition,
+          grantPath,
+        ),
+      );
     }
     rules.push({ targetType: resolved, grants });
   }
   return compiled();
+}
+
+// Whether a grant is on a query: the base `query`, which a search with a
+// filter of the caller's own is authorized under, or a named operation the
+// rule's type declares on it.
+function isQueryGrant(operation: string, definition: Definition): boolean {
+  let declared =
+    definition.operations &&
+    Object.prototype.hasOwnProperty.call(definition.operations, operation)
+      ? definition.operations[operation]
+      : undefined;
+  return (declared?.base ?? operation) === 'query';
 }
 
 function asCodeRef(
@@ -593,7 +689,7 @@ const ADMITTED_CALL_DENIAL =
 
 async function compilePredicate(
   source: string,
-): Promise<{ canonical: string } | { problem: string }> {
+): Promise<{ canonical: string; body: unknown } | { problem: string }> {
   let bxl = await loadBxl();
   let program;
   try {
@@ -628,7 +724,7 @@ async function compilePredicate(
         .join('; ')}`,
     };
   }
-  return { canonical: program.canonicalSource };
+  return { canonical: program.canonicalSource, body: program.body };
 }
 
 // BXL, and the shape of what this module asks of it.
@@ -652,6 +748,14 @@ export interface BxlPolicyParser {
       message: string;
     }[];
   };
+  validateBxlAst(
+    node: unknown,
+    options: { profile: 'predicate' },
+  ): {
+    code: string;
+    severity: 'error' | 'warning';
+    message: string;
+  }[];
 }
 
 let bxl: Promise<BxlPolicyParser> | undefined;

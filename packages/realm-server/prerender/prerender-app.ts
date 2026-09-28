@@ -1157,6 +1157,7 @@ export function buildPrerenderApp(options: {
           auth: args.auth,
           format: args.format,
           ...(args.captureSpec ? { captureSpec: args.captureSpec } : {}),
+          renderOptions: args.renderOptions,
           priority: args.priority,
           signal,
         }),

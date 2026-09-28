@@ -234,14 +234,14 @@ export default class RenderRoute extends Route<Model> {
     // cost of an explicit clear is also small.
     this.store.clearInFlightSearch();
     // The resolved-doc search cache is INTENTIONALLY NOT cleared
-    // here. A single indexing job renders many cards in the same
+    // here. A single render scope covers many cards in the same
     // prerender tab — each card navigation activates and deactivates
-    // this route, but all those visits share one `__boxelJobId` and
-    // a stable view of the consuming realm's `boxel_index`. Cached
-    // entries from earlier renders in the job are the entire point;
-    // dropping them per-render would defeat the cache. Cross-job
-    // invalidation is handled by `fetchSearchDoc`'s entry-time
-    // jobId-change clear (and by `resetState` on harder resets).
+    // this route, but all those visits share one scope, which names a
+    // view of the consuming realm no commit has moved. Cached entries
+    // from earlier renders in the scope are the entire point; dropping
+    // them per-render would defeat the cache. Cross-scope invalidation
+    // is handled by `fetchSearchDoc`'s entry-time scope-change clear
+    // (and by `resetState` on harder resets).
     (globalThis as any).__renderModel = undefined;
     (globalThis as any).__boxelRenderCapturedDeps = undefined;
     (globalThis as any).__docsInFlight = undefined;
@@ -293,7 +293,7 @@ export default class RenderRoute extends Route<Model> {
     if (!isTesting()) {
       // tests have their own way of dealing with window level errors in card-prerender.gts
       this.#attachWindowErrorListeners();
-      this.realm.restoreSessionsFromStorage();
+      this.realm.restoreSessionsFromStorage({ startingVisit: true });
     }
 
     // activate() doesn't run early enough for this to be set before the model()
@@ -822,7 +822,7 @@ export default class RenderRoute extends Route<Model> {
             this.loaderService.loader,
           );
 
-          await this.realm.ensureRealmMeta(realmURL);
+          await this.#ensureVisitRealmMeta(realmURL);
           let capturesMeta = await this.declarationCapturesMeta(
             doc,
             canonicalId,
@@ -926,6 +926,39 @@ export default class RenderRoute extends Route<Model> {
     }
     this.store.resetCache();
     this.lastStoreResetKey = resetKey;
+  }
+
+  // The realm info is fetched from whichever known realm `realmURL` resolves
+  // to, which is not always `realmURL`'s own: a known realm whose URL prefixes
+  // it answers first. Its fetch then fails naming a realm this render never
+  // asked about, so the failure is extended to say which realm the render asked
+  // for, which one answered, and which realm the answering one's session was
+  // issued for. A session issued for `realmURL` is this realm's own, handed to
+  // the ancestor by a registration that went through `knownRealm`; one issued
+  // for the answering realm is that realm's own, carried by this visit or left
+  // by an earlier one; no session means the tab identified the answering realm
+  // without one. The error doc then reads as a resolution fault on its own.
+  async #ensureVisitRealmMeta(realmURL: string): Promise<void> {
+    try {
+      await this.realm.ensureRealmMeta(realmURL);
+    } catch (err) {
+      let resolved = this.realm.url(realmURL);
+      let vn = this.network.virtualNetwork;
+      if (
+        err instanceof Error &&
+        resolved &&
+        vn.unresolveURL(resolved) !== vn.unresolveURL(realmURL)
+      ) {
+        let sessionRealm = this.realm.realms.get(resolved)?.claims?.realm;
+        err.message =
+          `${err.message} (this render's realm ${realmURL} resolved to the ` +
+          `known realm ${resolved}, which ` +
+          (sessionRealm
+            ? `holds a session issued for ${sessionRealm})`
+            : 'holds no session)');
+      }
+      throw err;
+    }
   }
 
   // What the card branch would otherwise read off its own `card+source` GET,
@@ -2008,6 +2041,34 @@ export default class RenderRoute extends Route<Model> {
     this.#windowListenersAttached = false;
   }
 
+  // The markers `#ensurePrerenderElements` mints when no render template put
+  // them on the page. A container it creates hangs off `document.body`,
+  // outside the application's root element, so tearing the app down leaves it
+  // behind; they're removed when this route is destroyed instead. Outside
+  // tests the route lives as long as the page, so this changes nothing there.
+  // In a host test run one page hosts every test's app, and a leftover
+  // `[data-prerender-error]` would answer the next test's query for one.
+  #createdPrerenderElements: HTMLElement[] = [];
+  #createdPrerenderElementsDestructorRegistered = false;
+
+  #trackCreatedPrerenderElement(element: HTMLElement) {
+    this.#createdPrerenderElements.push(element);
+    if (
+      this.#createdPrerenderElementsDestructorRegistered ||
+      this.isDestroying ||
+      this.isDestroyed
+    ) {
+      return;
+    }
+    this.#createdPrerenderElementsDestructorRegistered = true;
+    registerDestructor(this, () => {
+      for (let element of this.#createdPrerenderElements) {
+        element.remove();
+      }
+      this.#createdPrerenderElements = [];
+    });
+  }
+
   #ensurePrerenderElements(): {
     container: HTMLElement | null;
     errorElement: HTMLElement | null;
@@ -2022,6 +2083,7 @@ export default class RenderRoute extends Route<Model> {
       container = document.createElement('div');
       container.setAttribute('data-prerender', '');
       document.body.appendChild(container);
+      this.#trackCreatedPrerenderElement(container);
     }
     let errorElement = document.querySelector(
       '[data-prerender-error]',
@@ -2030,6 +2092,7 @@ export default class RenderRoute extends Route<Model> {
       errorElement = document.createElement('pre');
       errorElement.setAttribute('data-prerender-error', '');
       container.appendChild(errorElement);
+      this.#trackCreatedPrerenderElement(errorElement);
     }
     return { container, errorElement };
   }

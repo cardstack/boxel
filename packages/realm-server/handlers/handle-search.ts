@@ -35,7 +35,9 @@ import {
   fetchRequestFromContext,
   releaseSearchAdmission,
   sendResponseForBadRequest,
+  sendResponseForNotFound,
   setContextResponse,
+  withSearchConnectionTenant,
 } from '../middleware/index.ts';
 import {
   getMultiRealmAuthorization,
@@ -55,6 +57,12 @@ import type {
   Realm,
   VirtualNetwork,
 } from '@cardstack/runtime-common';
+import {
+  errorsDocument,
+  isNamedQueryPayload,
+  isOperationFailure,
+  resolveNamedQuery,
+} from '@cardstack/runtime-common/card-operations';
 import {
   PRERENDER_JOB_ID_HEADER,
   PRERENDER_JOB_PRIORITY_HEADER,
@@ -105,6 +113,87 @@ export default function handleSearch(opts: {
   let linkShapePolicy = opts.linkShapePolicy ?? LinkShapePolicy.pinned('full');
   let liveSearchCache = opts.liveSearchCache ?? new LiveSearchCache();
   return async function (ctxt: Koa.Context) {
+    let { realmList, user } = getMultiRealmAuthorization(ctxt);
+    let payload = getSearchRequestPayload(ctxt);
+    if (isNamedQueryPayload(payload)) {
+      // Resolving reads the declaration's definition, so it draws on the
+      // database as a search of the realms the request names, the same as the
+      // search it resolves to.
+      let named = payload;
+      let resolved = await withSearchConnectionTenant(ctxt, realmList, () =>
+        resolveNamedSearch(ctxt, named, realmList, user),
+      );
+      if (!resolved) {
+        return;
+      }
+      payload = resolved;
+      realmList = resolved.realms!;
+    }
+    // The realms this search names are known from here: each one's link-shape
+    // level follows the requests that name it, and the database connections
+    // the search draws on are shared out by them.
+    attributeSearchRequest(ctxt, realmList);
+    await withSearchConnectionTenant(ctxt, realmList, () =>
+      respond(ctxt, realmList, payload),
+    );
+  };
+
+  // The ad-hoc query a named one resolves to, or nothing once the refusal has
+  // been answered. The declaration is read through a realm the request names:
+  // one this process already holds where there is one, so resolving mounts a
+  // realm only when none of them is mounted. For a type whose module this
+  // server serves, the definition entry belongs to the module's own realm
+  // whichever realm reads it; for one served elsewhere, it is read with the
+  // reading realm owner's credentials. The realms the query may search are the
+  // ones the middleware authorized, so resolving it never widens what the
+  // caller can reach.
+  async function resolveNamedSearch(
+    ctxt: Koa.Context,
+    payload: Record<string, unknown>,
+    realmList: string[],
+    user: string | undefined,
+  ) {
+    let resolvingRealm =
+      realmList.map((url) => reconciler.mounted.get(url)).find(Boolean) ??
+      (
+        await resolveRealmsForFederatedRequest(
+          reconciler,
+          realmList.slice(0, 1),
+        )
+      )[0];
+    if (!resolvingRealm) {
+      await sendResponseForNotFound(
+        ctxt,
+        `Realm not available to resolve a named query: ${realmList[0]}`,
+      );
+      return undefined;
+    }
+    try {
+      return await resolveNamedQuery(resolvingRealm.operationCore, payload, {
+        actor: user,
+        realms: realmList,
+        duringRender: ctxt.get(DURING_PRERENDER_HEADER).length > 0,
+      });
+    } catch (e) {
+      if (!isOperationFailure(e)) {
+        throw e;
+      }
+      await setContextResponse(
+        ctxt,
+        new Response(JSON.stringify(errorsDocument(e.error)), {
+          status: e.error.status,
+          headers: { 'content-type': SupportedMimeType.CardJson },
+        }),
+      );
+      return undefined;
+    }
+  }
+
+  async function respond(
+    ctxt: Koa.Context,
+    realmList: string[],
+    payload: unknown,
+  ) {
     let handlerStart = Date.now();
     // Slots the query-shape line is assembled from. `shape` is filled in as
     // soon as the query parses — a request that never gets that far has no
@@ -120,21 +209,15 @@ export default function handleSearch(opts: {
     let timings =
       loggingCorrelationId !== null ? new RequestTimings() : undefined;
 
-    let { realmList } = getMultiRealmAuthorization(ctxt);
-    // The realms this search names are known from here, and each one's
-    // link-shape level follows the requests that name it.
-    attributeSearchRequest(ctxt, realmList);
-
     let parsed;
     let request = await fetchRequestFromContext(ctxt);
     try {
-      let parseRequest = async () => {
-        let payload = getSearchRequestPayload(ctxt);
-        if (payload === undefined) {
-          payload = await parseSearchRequestPayload(request);
-        }
-        return parseSearchEntryQueryFromPayload(payload);
-      };
+      let parseRequest = async () =>
+        parseSearchEntryQueryFromPayload(
+          payload === undefined
+            ? await parseSearchRequestPayload(request)
+            : payload,
+        );
       parsed = timings
         ? await timings.time('parse', parseRequest)
         : await parseRequest();
@@ -413,7 +496,7 @@ export default function handleSearch(opts: {
       emitTelemetry({ status: 500 });
       throw e;
     }
-  };
+  }
 }
 
 // The job-scoped cache + ETag/304 protocol for the federated search
@@ -475,9 +558,14 @@ async function respondWithJobScopedSearchCache(
     // Fold each realm's generation fingerprint (index + prerendered-HTML) into
     // the cache key so the ETag advances when either channel does — a cached
     // `304` can't pin an HTML-less or older-rendering result after newer HTML
-    // lands. Purely a key change: it only fragments the cache, and the body a
-    // miss produces reflects the current DB state.
-    let generations = await searchCache!.realmGenerations(realms);
+    // lands. The consuming realm's rides along even when the query does not
+    // search it: another writer's pass can commit to that realm while this
+    // job runs, and the linked resources a result carries can live there.
+    // Purely a key change: it only fragments the cache, and the body a miss
+    // produces reflects the current DB state.
+    let generations = await searchCache!.realmGenerations([
+      ...new Set([...realms, consumingRealm!]),
+    ]);
     let keyOpts = { ...(args.opts as Record<string, unknown>), generations };
     let expectedEtag = searchCache!.computeETag({
       jobId: jobId!,
