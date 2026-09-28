@@ -405,11 +405,13 @@ export interface CardContext<T extends CardDef = CardDef> {
   getCard: getCard<T>;
   getCards: getCards;
   getCardCollection: getCardCollection;
-  // May this session invoke `operation` on `card`? Answers synchronously from
-  // what the session already knows, and `undefined` while the realm is being
-  // asked — so a template reads it like any other value and re-renders when
-  // the answer lands. The calls one render pass makes are coalesced into one
-  // request per realm.
+  // May this session invoke `operation` on `target`? A target is a saved card
+  // or its URL, or a card class to ask whether a card of that type may be
+  // created (in `opts.realm`, or where a create names no realm, the realm it
+  // lands in). Answers synchronously from what the session already knows, and
+  // `undefined` while the realm is being asked — so a template reads it like
+  // any other value and re-renders when the answer lands. The calls one render
+  // pass makes are coalesced into one request per realm.
   //
   // It sits beside `realm.canWrite`, which a card editor is already gated on,
   // and extends it: the ACL's `canWrite` is a complete answer for a caller it
@@ -423,7 +425,8 @@ export interface CardContext<T extends CardDef = CardDef> {
   // guard on it.
   canInvoke?: (
     operation: string,
-    card: CardDef | string,
+    target: CardDef | string | typeof CardDef,
+    opts?: { realm?: string },
   ) => boolean | undefined;
   store: Store;
   // Host bridge for the markdown editor's embed chooser. Provided by

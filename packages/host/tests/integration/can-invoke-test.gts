@@ -1,6 +1,7 @@
 import Service from '@ember/service';
 import { render, settled, waitUntil } from '@ember/test-helpers';
 
+import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import {
@@ -10,9 +11,11 @@ import {
 
 import type CapabilitiesService from '@cardstack/host/services/capabilities';
 
+import { setupBaseRealm, CardDef } from '../helpers/base-realm';
 import { setupRenderingTest } from '../helpers/setup';
 
-import type { CardDef } from '@cardstack/base/card-api';
+import type { CardDef as CardInstance } from '@cardstack/base/card-api';
+import type { RealmEventContent } from '@cardstack/base/matrix-event';
 
 // `@context.canInvoke` reads synchronously and answers from what the session
 // already knows, so what a test has to pin is the shape of the traffic behind
@@ -36,6 +39,8 @@ const realmUnderTest = {
   holding: undefined as Promise<void> | undefined,
   release: undefined as (() => void) | undefined,
   failing: false,
+  // What the fake message service was asked to deliver, per realm.
+  listeners: new Map<string, ((event: RealmEventContent) => void)[]>(),
   hold() {
     this.holding = new Promise<void>((resolve) => {
       this.release = () => {
@@ -76,8 +81,34 @@ class FakeRealm extends Service {
     [REALM, OTHER].find((realm) => id.startsWith(realm));
 }
 
-function cardAt(id: string): CardDef {
-  return { id } as CardDef;
+class FakeMessageService extends Service {
+  subscribe(realmURL: string, cb: (event: RealmEventContent) => void) {
+    let listeners = realmUnderTest.listeners.get(realmURL) ?? [];
+    listeners.push(cb);
+    realmUnderTest.listeners.set(realmURL, listeners);
+    return () => {
+      realmUnderTest.listeners.set(
+        realmURL,
+        (realmUnderTest.listeners.get(realmURL) ?? []).filter((l) => l !== cb),
+      );
+    };
+  }
+}
+
+// An incremental index pass of `realmURL` that changed `invalidations`.
+function indexed(realmURL: string, invalidations: string[]) {
+  for (let listener of realmUnderTest.listeners.get(realmURL) ?? []) {
+    listener({
+      eventName: 'index',
+      indexType: 'incremental',
+      invalidations,
+      realmURL,
+    } as unknown as RealmEventContent);
+  }
+}
+
+function cardAt(id: string): CardInstance {
+  return { id } as unknown as CardInstance;
 }
 
 // The two services the capability check reaches the realm through are faked,
@@ -93,8 +124,10 @@ module('Integration | canInvoke', function (hooks) {
     realmUnderTest.holding = undefined;
     realmUnderTest.release = undefined;
     realmUnderTest.failing = false;
+    realmUnderTest.listeners = new Map();
     this.owner.register('service:network', FakeNetwork);
     this.owner.register('service:realm', FakeRealm);
+    this.owner.register('service:message-service', FakeMessageService);
     service = this.owner.lookup(
       'service:capabilities',
     ) as unknown as CapabilitiesService;
@@ -202,7 +235,7 @@ module('Integration | canInvoke', function (hooks) {
 
   test('a card with no id, and a realm this session does not know, ask nothing', async function (assert) {
     assert.strictEqual(
-      service.canInvoke('read', {} as CardDef),
+      service.canInvoke('read', {} as CardInstance),
       undefined,
       'an unsaved card has no stored state for a predicate to read',
     );
@@ -269,6 +302,126 @@ module('Integration | canInvoke', function (hooks) {
     assert.strictEqual(realmUnderTest.sent.length, 2, 'and it was asked again');
   });
 
+  test('a pair read while another request is in flight goes out as soon as that request is under way', async function (assert) {
+    realmUnderTest.allow.add(`read ${REALM}a`);
+    realmUnderTest.allow.add(`read ${REALM}b`);
+    realmUnderTest.hold();
+    service.canInvoke('read', cardAt(`${REALM}a`));
+    await waitUntil(() => realmUnderTest.sent.length === 1);
+    service.canInvoke('read', cardAt(`${REALM}b`));
+    await waitUntil(() => realmUnderTest.sent.length === 2);
+    assert.deepEqual(
+      realmUnderTest.sent.map((request) =>
+        request.checks.map((check) => check.target),
+      ),
+      [[`${REALM}a`], [`${REALM}b`]],
+      'the second pair did not wait on a request that was never going to carry it',
+    );
+    realmUnderTest.release!();
+    await settled();
+    assert.true(service.canInvoke('read', cardAt(`${REALM}a`)));
+    assert.true(service.canInvoke('read', cardAt(`${REALM}b`)));
+  });
+
+  test('a reply to a session that has ended is dropped', async function (assert) {
+    realmUnderTest.allow.add(`read ${REALM}a`);
+    realmUnderTest.hold();
+    service.canInvoke('read', cardAt(`${REALM}a`));
+    await waitUntil(() => realmUnderTest.sent.length === 1);
+    service.resetState();
+    // Whoever signs in next is not granted what the last session was.
+    realmUnderTest.allow.delete(`read ${REALM}a`);
+    realmUnderTest.release!();
+    await settled();
+    assert.strictEqual(
+      service.canInvoke('read', cardAt(`${REALM}a`)),
+      undefined,
+      'the earlier session’s answer did not land in this one',
+    );
+    await settled();
+    assert.strictEqual(realmUnderTest.sent.length, 2, 'this session asked');
+    assert.false(
+      service.canInvoke('read', cardAt(`${REALM}a`)),
+      'and holds its own answer',
+    );
+  });
+
+  test('an index event naming a card asks again about it, and about nothing else', async function (assert) {
+    realmUnderTest.allow.add(`read ${REALM}a`);
+    realmUnderTest.allow.add(`read ${REALM}b`);
+    service.canInvoke('read', cardAt(`${REALM}a`));
+    service.canInvoke('read', cardAt(`${REALM}b`));
+    await settled();
+    assert.true(service.canInvoke('read', cardAt(`${REALM}a`)));
+    realmUnderTest.allow.delete(`read ${REALM}a`);
+    realmUnderTest.hold();
+    indexed(REALM, [`${REALM}a`]);
+    await waitUntil(() => realmUnderTest.sent.length === 2);
+    assert.deepEqual(
+      realmUnderTest.sent[1].checks.map((check) => check.target),
+      [`${REALM}a`],
+      'only the card the pass changed is asked about again',
+    );
+    assert.true(
+      service.canInvoke('read', cardAt(`${REALM}a`)),
+      'the held answer is served until the new one lands, so nothing flickers',
+    );
+    realmUnderTest.release!();
+    await settled();
+    assert.false(
+      service.canInvoke('read', cardAt(`${REALM}a`)),
+      'and the new one replaces it',
+    );
+    assert.true(service.canInvoke('read', cardAt(`${REALM}b`)));
+  });
+
+  test('an index event that moves the realm’s config asks again about every pair in the realm', async function (assert) {
+    service.canInvoke('read', cardAt(`${REALM}a`));
+    service.canInvoke('delete', cardAt(`${REALM}b`));
+    service.canInvoke('read', cardAt(`${OTHER}c`));
+    await settled();
+    indexed(REALM, [`${REALM}realm`]);
+    await settled();
+    assert.deepEqual(
+      realmUnderTest.sent
+        .slice(2)
+        .map((request) => request.checks.map((check) => check.target)),
+      [[`${REALM}a`, `${REALM}b`]],
+      'the config can change the policy every answer in the realm rests on, and another realm’s answers are untouched',
+    );
+  });
+
+  test('an answer past its age is asked again by the next read of it', async function (assert) {
+    let realNow = Date.now;
+    let now = realNow();
+    Date.now = () => now;
+    try {
+      realmUnderTest.allow.add(`read ${REALM}a`);
+      service.canInvoke('read', cardAt(`${REALM}a`));
+      await settled();
+      assert.true(service.canInvoke('read', cardAt(`${REALM}a`)));
+      await settled();
+      assert.strictEqual(
+        realmUnderTest.sent.length,
+        1,
+        'a fresh answer is served without asking',
+      );
+      // Nothing this session can observe changed: a policy card in a realm it
+      // cannot read, or its own permissions.
+      realmUnderTest.allow.delete(`read ${REALM}a`);
+      now += 5_000;
+      assert.true(
+        service.canInvoke('read', cardAt(`${REALM}a`)),
+        'a stale answer is still served while it is asked again',
+      );
+      await settled();
+      assert.strictEqual(realmUnderTest.sent.length, 2, 'and it was asked');
+      assert.false(service.canInvoke('read', cardAt(`${REALM}a`)));
+    } finally {
+      Date.now = realNow;
+    }
+  });
+
   test('a template reads "not known", then re-renders with the answer', async function (assert) {
     realmUnderTest.allow.add(`read ${REALM}granted`);
     realmUnderTest.hold();
@@ -302,5 +455,63 @@ module('Integration | canInvoke', function (hooks) {
       1,
       'both reads in the render went out together',
     );
+  });
+});
+
+// A type target needs a class the loader produced, since that is what a card
+// author holds and what `identifyCard` can name. So this module loads the base
+// realm, and fakes only the capability request on the network it loads over.
+module('Integration | canInvoke | a type target', function (hooks) {
+  setupRenderingTest(hooks);
+  setupBaseRealm(hooks);
+
+  test('a class asks whether a card of that type may be created', async function (assert) {
+    let network = getService('network');
+    let sent: Sent[] = [];
+    let real = network.authedFetch;
+    Object.defineProperty(network, 'authedFetch', {
+      configurable: true,
+      value: async (url: string, init?: RequestInit) => {
+        if (!url.endsWith('_capabilities')) {
+          return await real(url, init);
+        }
+        let { checks } = JSON.parse(String(init!.body)) as {
+          checks: CapabilityCheck[];
+        };
+        sent.push({ url, checks });
+        return new Response(
+          JSON.stringify({
+            checks: checks.map((check) => ({ ...check, allowed: true })),
+          }),
+          { headers: { 'content-type': 'application/json' } },
+        );
+      },
+    });
+    try {
+      let service = getService(
+        'capabilities',
+      ) as unknown as CapabilitiesService;
+      assert.strictEqual(
+        service.canInvoke('create', CardDef, { realm: REALM }),
+        undefined,
+      );
+      await settled();
+      assert.strictEqual(sent.length, 1, 'one request');
+      assert.strictEqual(
+        sent[0].url,
+        `${REALM}_capabilities`,
+        'to the realm the card would be created in',
+      );
+      let [check] = sent[0].checks;
+      assert.strictEqual(check.operation, 'create');
+      assert.strictEqual(
+        typeof check.target === 'object' ? check.target.name : undefined,
+        'CardDef',
+        'naming the type by its code ref rather than any card',
+      );
+      assert.true(service.canInvoke('create', CardDef, { realm: REALM }));
+    } finally {
+      delete (network as unknown as { authedFetch?: unknown }).authedFetch;
+    }
   });
 });
