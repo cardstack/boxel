@@ -2,6 +2,7 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import { Loader, getField, identifyCard } from '@cardstack/runtime-common';
+import type { RealmResourceIdentifier } from '@cardstack/runtime-common';
 
 import { renderCard } from '../helpers/render-component';
 import { setupRenderingTest } from '../helpers/setup';
@@ -13,8 +14,9 @@ import type * as CardAPIModule from '@cardstack/base/card-api';
 // class by JS reference rather than by asking the loader for it, which is what
 // bundling leaves behind — the bundler resolves a bundled module's import
 // inside the chunk, so the loader is never asked for the declarer.
-const DECLARER = 'http://bundled-identity.test/declarer';
-const HOLDER = 'http://bundled-identity.test/holder';
+const DECLARER =
+  'http://bundled-identity.test/declarer' as RealmResourceIdentifier;
+const HOLDER = 'http://bundled-identity.test/holder' as RealmResourceIdentifier;
 
 // The same shape with a link in place of the contained field, built fresh per
 // call so each case gets classes no earlier one has named.
@@ -22,8 +24,10 @@ let linkPairs = 0;
 function defineLinkedPair(api: typeof CardAPIModule) {
   let { CardDef, field, linksTo } = api;
   let n = linkPairs++;
-  let declarer = `http://bundled-identity.test/link-declarer-${n}`;
-  let holder = `http://bundled-identity.test/link-holder-${n}`;
+  let declarer =
+    `http://bundled-identity.test/link-declarer-${n}` as RealmResourceIdentifier;
+  let holder =
+    `http://bundled-identity.test/link-holder-${n}` as RealmResourceIdentifier;
 
   class Target extends CardDef {
     static displayName = 'Target';
@@ -161,7 +165,7 @@ module('Integration | bundled base identity', function (hooks) {
     assert.dom('[data-test-holder] [data-test-detail-note]').hasText('a note');
 
     assert.deepEqual(
-      api.serializeCard(card as any).data.meta,
+      api.serializeCard(card as any, {}).data.meta,
       { adoptsFrom: { module: HOLDER, name: 'Holder' } },
       'the round trip records the holder and nothing about the field',
     );
