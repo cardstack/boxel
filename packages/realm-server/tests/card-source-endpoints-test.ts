@@ -1562,64 +1562,37 @@ module(basename(import.meta.filename), function () {
             });
           }
 
+          let initiation = (updatedFile: string) => ({
+            type: APP_BOXEL_REALM_EVENT_TYPE,
+            content: {
+              eventName: 'index',
+              indexType: 'incremental-index-initiation',
+              updatedFile,
+              realmURL: testRealmURL.href,
+            },
+          });
+          let incremental = (invalidations: string[]) => ({
+            type: APP_BOXEL_REALM_EVENT_TYPE,
+            content: {
+              eventName: 'index',
+              indexType: 'incremental',
+              invalidations,
+              clientRequestId: null,
+              realmURL: testRealmURL.href,
+            },
+          });
+          // One initiation and one incremental event for each of the four
+          // writes, in the order the test makes them: the module, the
+          // instance, the module again, the instance again.
           let expected = [
-            {
-              type: APP_BOXEL_REALM_EVENT_TYPE,
-              content: {
-                eventName: 'index',
-                indexType: 'incremental-index-initiation',
-                updatedFile: `${testRealmURL}test-card.gts`,
-                realmURL: testRealmURL.href,
-              },
-            },
-            {
-              type: APP_BOXEL_REALM_EVENT_TYPE,
-              content: {
-                eventName: 'index',
-                indexType: 'incremental',
-                invalidations: [`${testRealmURL}test-card.gts`],
-                clientRequestId: null,
-                realmURL: testRealmURL.href,
-              },
-            },
-            {
-              type: APP_BOXEL_REALM_EVENT_TYPE,
-              content: {
-                eventName: 'index',
-                indexType: 'incremental-index-initiation',
-                updatedFile: `${testRealmURL}test-card.gts`,
-                realmURL: testRealmURL.href,
-              },
-            },
-            {
-              type: APP_BOXEL_REALM_EVENT_TYPE,
-              content: {
-                eventName: 'index',
-                indexType: 'incremental',
-                invalidations: [`${testRealmURL}test-card.gts`, id],
-                clientRequestId: null,
-                realmURL: testRealmURL.href,
-              },
-            },
-            {
-              type: APP_BOXEL_REALM_EVENT_TYPE,
-              content: {
-                eventName: 'index',
-                indexType: 'incremental-index-initiation',
-                updatedFile: `${id}.json`,
-                realmURL: testRealmURL.href,
-              },
-            },
-            {
-              type: APP_BOXEL_REALM_EVENT_TYPE,
-              content: {
-                eventName: 'index',
-                indexType: 'incremental',
-                invalidations: [id],
-                clientRequestId: null,
-                realmURL: testRealmURL.href,
-              },
-            },
+            initiation(`${testRealmURL}test-card.gts`),
+            incremental([`${testRealmURL}test-card.gts`]),
+            initiation(`${id}.json`),
+            incremental([id]),
+            initiation(`${testRealmURL}test-card.gts`),
+            incremental([`${testRealmURL}test-card.gts`, id]),
+            initiation(`${id}.json`),
+            incremental([id]),
           ];
 
           // The realm hands each event to the room without waiting for it to
@@ -1628,38 +1601,53 @@ module(basename(import.meta.filename), function () {
           // or until the wait runs out and the assertions below say which
           // one did not.
           let messages: MatrixEvent[] = [];
+          let claims: (MatrixEvent | undefined)[] = [];
           let messagesReadAt: number;
           let deliveryDeadline = Date.now() + 5000;
           for (;;) {
             messages = await getMessagesSince(realmEventTimestampStart);
             messagesReadAt = Date.now();
-            if (
-              expected.every((expectedEvent) =>
-                matchRealmEvent(messages, expectedEvent),
-              ) ||
-              messagesReadAt >= deliveryDeadline
-            ) {
+            claims = claimRealmEvents(messages, expected);
+            if (claims.every(Boolean) || messagesReadAt >= deliveryDeadline) {
               break;
             }
             await new Promise((resolve) => setTimeout(resolve, 250));
           }
 
-          for (let expectedEvent of expected) {
-            // FIXME is there a better way?
-            let actualEvent = matchRealmEvent(messages, expectedEvent);
-            if (!actualEvent) {
-              // A miss is an event that never reached the room, one that
-              // reached it only after the wait ran out, or one that arrived
-              // carrying members the comparison does not expect. Every realm
-              // event the last read returned, whole and with its timestamp,
-              // tells those apart.
+          // A miss is an event that never reached the room, one that reached
+          // it only after the wait ran out, or one that arrived carrying
+          // members the comparison does not expect. One more read a little
+          // later separates the first two, and every realm event that read
+          // returns, whole and with its timestamp, shows the third.
+          let lateRead:
+            | {
+                at: number;
+                messages: MatrixEvent[];
+                claims: (MatrixEvent | undefined)[];
+              }
+            | undefined;
+          if (!claims.every(Boolean)) {
+            await new Promise((resolve) => setTimeout(resolve, 2000));
+            let lateMessages = await getMessagesSince(realmEventTimestampStart);
+            lateRead = {
+              at: Date.now(),
+              messages: lateMessages,
+              claims: claimRealmEvents(lateMessages, expected),
+            };
+          }
+
+          for (let [index, expectedEvent] of expected.entries()) {
+            let actualEvent = claims[index];
+            if (!actualEvent && lateRead) {
               console.error(
-                `[card-source-endpoints-test] no realm event matched ${JSON.stringify(
+                `[card-source-endpoints-test] expected realm event ${index} ${JSON.stringify(
                   expectedEvent.content,
-                )}; read at ${messagesReadAt} returned ${
-                  messages.length
-                } message(s) since ${realmEventTimestampStart}: ${JSON.stringify(
-                  messages
+                )} was not in the read at ${messagesReadAt}; a later read at ${
+                  lateRead.at
+                } ${
+                  lateRead.claims[index] ? 'found it' : 'did not find it either'
+                }. Realm events since ${realmEventTimestampStart} in the later read: ${JSON.stringify(
+                  lateRead.messages
                     .filter((m) => m.type === APP_BOXEL_REALM_EVENT_TYPE)
                     .map((m) => ({
                       ts: m.origin_server_ts,
@@ -2320,12 +2308,28 @@ module(basename(import.meta.filename), function () {
   });
 });
 
-function matchRealmEvent(events: MatrixEvent[], event: any) {
-  return events.find(
-    (m) =>
-      m.type === event.type &&
-      isEqual(event.content, withoutFixtureVaryingMembers(m.content)),
-  );
+// The event that satisfies each expectation, or undefined where none does. An
+// event satisfies at most one expectation, so two writes that broadcast the
+// same content need an event each rather than sharing one. Content is compared
+// exactly, so an event can only satisfy expectations identical to each other,
+// and taking the first unclaimed match never starves a later expectation.
+function claimRealmEvents(
+  events: MatrixEvent[],
+  expected: { type: string; content: unknown }[],
+): (MatrixEvent | undefined)[] {
+  let claimed = new Set<MatrixEvent>();
+  return expected.map((event) => {
+    let match = events.find(
+      (m) =>
+        !claimed.has(m) &&
+        m.type === event.type &&
+        isEqual(event.content, withoutFixtureVaryingMembers(m.content)),
+    );
+    if (match) {
+      claimed.add(match);
+    }
+    return match;
+  });
 }
 
 // Incremental index events carry two members whose values follow the
