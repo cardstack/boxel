@@ -1,7 +1,6 @@
 import Service from '@ember/service';
-import { settled } from '@ember/test-helpers';
+import { render, settled, waitUntil } from '@ember/test-helpers';
 
-import { setupTest } from 'ember-qunit';
 import { module, test } from 'qunit';
 
 import {
@@ -10,6 +9,8 @@ import {
 } from '@cardstack/runtime-common';
 
 import type CapabilitiesService from '@cardstack/host/services/capabilities';
+
+import { setupRenderingTest } from '../helpers/setup';
 
 import type { CardDef } from '@cardstack/base/card-api';
 
@@ -75,16 +76,14 @@ class FakeRealm extends Service {
     [REALM, OTHER].find((realm) => id.startsWith(realm));
 }
 
-class FakeSession extends Service {
-  register() {}
-}
-
 function cardAt(id: string): CardDef {
   return { id } as CardDef;
 }
 
-module('Unit | services | capabilities', function (hooks) {
-  setupTest(hooks);
+// The two services the capability check reaches the realm through are faked,
+// so what a test observes is exactly the requests the check would send.
+module('Integration | canInvoke', function (hooks) {
+  setupRenderingTest(hooks);
 
   let service: CapabilitiesService;
 
@@ -96,7 +95,6 @@ module('Unit | services | capabilities', function (hooks) {
     realmUnderTest.failing = false;
     this.owner.register('service:network', FakeNetwork);
     this.owner.register('service:realm', FakeRealm);
-    this.owner.register('service:session', FakeSession);
     service = this.owner.lookup(
       'service:capabilities',
     ) as unknown as CapabilitiesService;
@@ -237,10 +235,22 @@ module('Unit | services | capabilities', function (hooks) {
     service.canInvoke('read', cardAt(`${REALM}a`));
     await settled();
     assert.strictEqual(realmUnderTest.sent.length, 1, 'the realm was asked');
+    realmUnderTest.failing = false;
+    realmUnderTest.allow.add(`read ${REALM}a`);
     assert.strictEqual(
       service.canInvoke('read', cardAt(`${REALM}a`)),
       undefined,
       'a realm that could not answer has said nothing about whether the caller may',
+    );
+    await settled();
+    assert.strictEqual(
+      realmUnderTest.sent.length,
+      2,
+      'so the next read of the pair asks again',
+    );
+    assert.true(
+      service.canInvoke('read', cardAt(`${REALM}a`)),
+      'and takes the answer the realm gives this time',
     );
   });
 
@@ -257,5 +267,40 @@ module('Unit | services | capabilities', function (hooks) {
     );
     await settled();
     assert.strictEqual(realmUnderTest.sent.length, 2, 'and it was asked again');
+  });
+
+  test('a template reads "not known", then re-renders with the answer', async function (assert) {
+    realmUnderTest.allow.add(`read ${REALM}granted`);
+    realmUnderTest.hold();
+    let { canInvoke } = service;
+    let granted = `${REALM}granted`;
+    let denied = `${REALM}denied`;
+    // Not awaited: `render` settles, and settling waits for the answers this
+    // test is holding back so it can read what the template shows before them.
+    let rendering = render(
+      <template>
+        <span data-test-granted>
+          {{#if (canInvoke 'read' granted)}}yes{{else}}no{{/if}}
+        </span>
+        <span data-test-denied>
+          {{#if (canInvoke 'read' denied)}}yes{{else}}no{{/if}}
+        </span>
+      </template>,
+    );
+    await waitUntil(() => realmUnderTest.sent.length === 1);
+    assert
+      .dom('[data-test-granted]')
+      .hasText('no', 'nothing is shown before the realm has answered');
+    realmUnderTest.release!();
+    await rendering;
+    assert
+      .dom('[data-test-granted]')
+      .hasText('yes', 'the answer lands and the template re-reads it');
+    assert.dom('[data-test-denied]').hasText('no');
+    assert.strictEqual(
+      realmUnderTest.sent.length,
+      1,
+      'both reads in the render went out together',
+    );
   });
 });

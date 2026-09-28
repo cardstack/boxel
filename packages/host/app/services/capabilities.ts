@@ -53,10 +53,10 @@ import type { CardDef } from '@cardstack/base/card-api';
 
 const waiter = buildWaiter('capabilities:check');
 
-// An answer this session holds. `undefined` is "asked, not yet answered" — the
-// value a template reads while the realm is being asked, and the value a pair
-// keeps forever where there is nothing to ask (an unsaved card, a realm this
-// session does not know, a render).
+// An answer as a template reads it. `undefined` is "not known": the value a
+// pair has while the realm is being asked, after a request that could not be
+// answered, and forever where there is nothing to ask (an unsaved card, a
+// realm this session does not know, a render).
 type Held = boolean | undefined;
 
 export default class CapabilitiesService
@@ -67,10 +67,15 @@ export default class CapabilitiesService
   @service declare private realm: RealmService;
   @service declare private session: SessionService;
 
-  // Keyed by realm, operation and target together, because the answer depends
-  // on all three. Tracked per key, so a pair that is answered invalidates the
-  // templates that read that pair and no others.
-  #held: TrackedMap<string, Held> = new TrackedMap();
+  // The answers, keyed by realm, operation and target together, because the
+  // answer depends on all three. Tracked per key, so a pair that is answered
+  // invalidates the templates that read that pair and no others. Written only
+  // when an answer lands, never while a template is reading it: a read that
+  // wrote here would dirty a value the same render had just consumed.
+  #held: TrackedMap<string, boolean> = new TrackedMap();
+  // The pairs that have been asked about and not answered yet. Untracked for
+  // the same reason, since a read is what adds to it.
+  #asking: Set<string> = new Set();
   // Enrolled and not yet sent, per realm — the realm is what a request is
   // addressed to, so a view spanning two realms sends two.
   #enrolled: Map<string, Map<string, CapabilityCheck>> = new Map();
@@ -105,11 +110,16 @@ export default class CapabilitiesService
       return undefined;
     }
     let key = `${realmURL}|${operation}|${id}`;
-    if (this.#held.has(key)) {
-      return this.#held.get(key);
+    // Read first, so a template that reads a pair before it is answered is
+    // subscribed to the answer when it lands.
+    let held = this.#held.get(key);
+    if (held !== undefined) {
+      return held;
     }
-    this.#held.set(key, undefined);
-    this.#enrol(realmURL, key, { target: id, operation });
+    if (!this.#asking.has(key)) {
+      this.#asking.add(key);
+      this.#enrol(realmURL, key, { target: id, operation });
+    }
     return undefined;
   };
 
@@ -118,6 +128,7 @@ export default class CapabilitiesService
   // and the next read of any pair asks again as whoever signed in next.
   resetState(): void {
     this.#held.clear();
+    this.#asking.clear();
     this.#enrolled.clear();
   }
 
@@ -162,9 +173,13 @@ export default class CapabilitiesService
         chunk.map(([, check]) => check),
       );
       chunk.forEach(([key], index) => {
-        // A request that failed leaves the pair unanswered rather than denied.
-        // A denial hides a control the caller may well be able to use, and a
-        // realm that could not answer has said nothing about whether they can.
+        this.#asking.delete(key);
+        // A request that failed leaves the pair unanswered rather than denied,
+        // and free to be asked again by the next read of it. A denial would
+        // hide a control the caller may well be able to use, when a realm that
+        // could not answer has said nothing about whether they can. Nothing is
+        // written for it, so the failure itself causes no re-render and no
+        // retry loop: the next ask waits for something else to render.
         let answer = answers?.[index];
         if (answer) {
           this.#held.set(key, answer.allowed);
