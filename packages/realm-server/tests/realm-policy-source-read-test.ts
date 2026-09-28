@@ -32,9 +32,9 @@ import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
 // type handed to it the way every other behavior does. It types the target
 // itself: a data file by the `FileDef` its extension names, and a card's raw
 // `.json` by the card's own type. These tests drive the operation directly
-// rather than over HTTP, because the byte routes do not consume the realm
-// ACL's outcome yet — routing them to the gate is CS-13101's, and the type
-// resolution those routes will rest on is what is pinned here.
+// rather than over HTTP: the byte routes refuse a caller the realm ACL
+// declined before any operation is dispatched, so the type resolution is
+// pinned where it happens, in the gate.
 const EDUCATION = 'http://127.0.0.1:4444/education/';
 const ORG = 'http://127.0.0.1:4444/org/';
 const ADMIN = '@education-admin:localhost';
