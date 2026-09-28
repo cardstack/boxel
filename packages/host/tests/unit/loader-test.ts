@@ -17,6 +17,33 @@ import {
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupRenderingTest } from '../helpers/setup';
 
+// Bounds a promise a regression could leave pending forever. QUnit's own
+// timeout would fail the test too, but as a timeout on the whole test rather
+// than as a statement about this promise — and a module load that stalls
+// without saying so is the failure these tests exist to catch.
+const SETTLE_DEADLINE_MS = 5000;
+async function settleWithin<T>(promise: Promise<T>, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(
+          () =>
+            reject(
+              new Error(
+                `${label} did not settle within ${SETTLE_DEADLINE_MS}ms`,
+              ),
+            ),
+          SETTLE_DEADLINE_MS,
+        );
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer!);
+  }
+}
+
 module('Unit | loader', function (hooks) {
   setupRenderingTest(hooks);
   setupLocalIndexing(hooks);
@@ -126,6 +153,24 @@ module('Unit | loader', function (hooks) {
           'reexporter.js': `
           export { g } from './g';
         `,
+          // Card code reaching a host-provided package through a runtime
+          // `import()`. The realm's transpile rewrites each of these to
+          // `import.meta.loader.import(...)`, so what they exercise is the
+          // loader's own resolution of a bare specifier, not the browser's.
+          'dynamic-shim-consumer.js': `
+          export async function viaSyncShim() {
+            return (await import('test-sync-shim-pkg')).value;
+          }
+          export async function viaAsyncShim() {
+            return (await import('test-async-shim-pkg')).value;
+          }
+          export async function viaPrefixShim() {
+            return (await import('@test-shim-prefix/thing')).value;
+          }
+          export async function viaUnshimmedSpecifier() {
+            return (await import('test-specifier-nobody-shimmed')).value;
+          }
+        `,
         },
       }),
     );
@@ -230,6 +275,101 @@ module('Unit | loader', function (hooks) {
     }>(`${testRealmURL}foo`);
     assert.strictEqual(checkImportMeta(), `${testRealmURL}foo.js`);
     assert.strictEqual(myLoader(), loader, 'the loader instance is correct');
+  });
+
+  // A runtime `import()` of a shim-registered bare specifier resolves
+  // through the shim registry, the same as the static form, for every shape
+  // a shim can be registered in. An import that instead neither resolves nor
+  // rejects burns a capture render's whole readiness budget and surfaces as
+  // an unrelated-looking timeout, so each case settles against a deadline and
+  // a regression fails as itself rather than as QUnit's global timeout.
+  const DYNAMIC_SHIM_SHAPES: {
+    name: string;
+    exportName: string;
+    value: string;
+    register: (virtualNetwork: VirtualNetwork) => void;
+  }[] = [
+    {
+      name: 'shimModule',
+      exportName: 'viaSyncShim',
+      value: 'sync',
+      register: (virtualNetwork) =>
+        virtualNetwork.shimModule('test-sync-shim-pkg', { value: 'sync' }),
+    },
+    {
+      name: 'shimAsyncModule by id',
+      exportName: 'viaAsyncShim',
+      value: 'async',
+      register: (virtualNetwork) =>
+        virtualNetwork.shimAsyncModule({
+          id: 'test-async-shim-pkg',
+          resolve: async () => ({ value: 'async' }),
+        }),
+    },
+    {
+      name: 'shimAsyncModule by prefix',
+      exportName: 'viaPrefixShim',
+      value: 'prefix',
+      register: (virtualNetwork) =>
+        virtualNetwork.shimAsyncModule({
+          prefix: '@test-shim-prefix/',
+          resolve: async () => ({ value: 'prefix' }),
+        }),
+    },
+  ];
+
+  for (let shape of DYNAMIC_SHIM_SHAPES) {
+    test(`a runtime import() of a bare specifier registered with ${shape.name} resolves through the shim registry`, async function (assert) {
+      shape.register(getService('network').virtualNetwork);
+      let module = await loader.import<Record<string, () => Promise<string>>>(
+        `${testRealmURL}dynamic-shim-consumer`,
+      );
+      assert.strictEqual(
+        await settleWithin(
+          module[shape.exportName](),
+          `import() of the ${shape.name} specifier`,
+        ),
+        shape.value,
+      );
+    });
+  }
+
+  test('a runtime import() of a shim whose resolver never settles rejects rather than hanging', async function (assert) {
+    // The last unbounded await in the shim path: a resolver is caller-
+    // supplied — typically a lazy chunk load — and the loader has no clock of
+    // its own to hold it to. The handler's deadline is what keeps a stalled
+    // one from reaching card code as a promise that never settles.
+    getService('network').virtualNetwork.shimAsyncModule(
+      {
+        id: 'test-async-shim-pkg',
+        resolve: () => new Promise<never>(() => {}),
+      },
+      { delay: async () => {}, retryDelaysMs: [], resolveDeadlineMs: 50 },
+    );
+    let { viaAsyncShim } = await loader.import<{
+      viaAsyncShim: () => Promise<string>;
+    }>(`${testRealmURL}dynamic-shim-consumer`);
+    await assert.rejects(
+      settleWithin(viaAsyncShim(), 'import() of a stalled shim'),
+      /test-async-shim-pkg/,
+      'the rejection names the specifier whose resolver stalled',
+    );
+  });
+
+  test('a runtime import() of a bare specifier nobody shimmed rejects rather than hanging', async function (assert) {
+    // A specifier the network cannot serve has to surface as an error the
+    // card author can act on, on the same deadline as a successful load.
+    let { viaUnshimmedSpecifier } = await loader.import<{
+      viaUnshimmedSpecifier: () => Promise<string>;
+    }>(`${testRealmURL}dynamic-shim-consumer`);
+    await assert.rejects(
+      settleWithin(
+        viaUnshimmedSpecifier(),
+        'import() of an unshimmed specifier',
+      ),
+      /test-specifier-nobody-shimmed/,
+      'the rejection names the specifier that could not be resolved',
+    );
   });
 
   // Module identifiers can be in registered prefix form (e.g.
