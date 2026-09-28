@@ -811,8 +811,9 @@ const ARCHIVED_SEAL_EXEMPT_PATHS = new Set(['_readiness-check', '_session']);
 // (see `#refusalUnderPolicy`).
 const CONSUMES_COARSE_OUTCOME = { consumesCoarseOutcome: true } as const;
 // Marks the routes that serve code and the file tree, which no policy grant
-// reaches: the card+source read and the directory listing. The fallback file
-// and module serve is one too, for a `GET`. See `RouteOptions.coarseReadOnly`.
+// reaches: the card+source read and its `HEAD`, and the directory listing. The
+// fallback file and module serve is one too, for a `GET` and a `HEAD`. See
+// `RouteOptions.coarseReadOnly`.
 const COARSE_READ_ONLY = { coarseReadOnly: true } as const;
 const ROUTER_METHODS: Method[] = [
   'GET',
@@ -2594,6 +2595,7 @@ export class Realm {
         '/.*',
         SupportedMimeType.CardSource,
         this.getSourceOrRedirect.bind(this),
+        COARSE_READ_ONLY,
       )
       .get(
         '/.*',
@@ -6318,6 +6320,12 @@ export class Realm {
         }
         await this.#assertNotArchived(localPath);
       }
+      if (!isLocal && request.method === 'HEAD' && dispatch.coarseReadOnly) {
+        let answer = await this.#headUnderPolicy(request, requestContext);
+        if (answer) {
+          return answer;
+        }
+      }
       if (!this.#realmIndexQueryEngine) {
         return systemError({
           requestContext,
@@ -6467,11 +6475,11 @@ export class Realm {
     // the stored bytes through the `readSource` operation, and any other
     // method no route claimed. None of it consumes the ACL's outcome: the
     // gate grants no stored-bytes read, so a caller the ACL refused is
-    // refused as it refused them. For a `GET` that refusal is the one a
-    // coarse-read-only route gives.
+    // refused as it refused them. For a `GET` and a `HEAD` that refusal is
+    // the one a coarse-read-only route gives.
     return {
       consumesCoarseOutcome: false,
-      coarseReadOnly: request.method === 'GET',
+      coarseReadOnly: request.method === 'GET' || request.method === 'HEAD',
       handle: () => this.fallbackHandle(request, requestContext),
     };
   }
@@ -6609,6 +6617,25 @@ export class Realm {
     });
   }
 
+  // A `HEAD` passes the realm's permission check whoever sends it, so on a
+  // coarse-read-only route it would hand a caller the ACL would not let read
+  // the realm a file's own validators, and a 404 where nothing is there. In a
+  // realm with a policy such a caller is given the discovery answer instead,
+  // as a `HEAD` of a card they may not read is, so the route says nothing
+  // about the path. A realm with no policy answers as it always has.
+  async #headUnderPolicy(
+    request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response | undefined> {
+    if ((await this.getRealmPolicy()) === undefined) {
+      return undefined;
+    }
+    let probe = await this.#readProbe(request, requestContext);
+    return probe.allowed
+      ? undefined
+      : this.realmIdentityResponse(requestContext);
+  }
+
   // Stands in for the admission decision so a test can show which requests
   // an admission would reach and which the terminal assertion refuses
   // regardless. Pass `undefined` to restore the real decision.
@@ -6640,7 +6667,7 @@ export class Realm {
         mimeType: '*' as const,
         path: '*' as const,
         consumesCoarseOutcome: false,
-        coarseReadOnly: method === 'GET',
+        coarseReadOnly: method === 'GET' || method === 'HEAD',
       })),
     ];
   }

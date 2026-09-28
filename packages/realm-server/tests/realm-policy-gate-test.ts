@@ -1526,6 +1526,50 @@ module(basename(import.meta.filename), function (hooks) {
       );
     });
 
+    test('a HEAD of stored bytes says nothing to a caller who may not read the realm', async function (assert) {
+      let head = (url: string, accept: string, auth: string) =>
+        request
+          .head(path(url))
+          .set('Accept', accept)
+          .set('Authorization', auth);
+      let headersOf = (response: Response) =>
+        Object.entries(response.headers as Record<string, string>)
+          .filter(([name]) => name !== 'date')
+          .sort(([a], [b]) => a.localeCompare(b));
+      const EXISTING = `${EDUCATION}classrooms/room-205.json`;
+      const MISSING = `${EDUCATION}classrooms/room-999.json`;
+      for (let accept of [SupportedMimeType.CardSource, '*/*']) {
+        let existing = await head(EXISTING, accept, AUTH.teacher());
+        let missing = await head(MISSING, accept, AUTH.teacher());
+        assert.strictEqual(
+          existing.status,
+          missing.status,
+          `${accept}: a file that exists and one that does not share a status`,
+        );
+        assert.notOk(existing.get('etag'), `${accept}: and carry no validator`);
+        assert.deepEqual(
+          headersOf(existing),
+          headersOf(missing),
+          `${accept}: or any header that tells them apart`,
+        );
+      }
+      let reader = await head(
+        EXISTING,
+        SupportedMimeType.CardSource,
+        AUTH.reader(),
+      );
+      let refused = await head(
+        EXISTING,
+        SupportedMimeType.CardSource,
+        AUTH.teacher(),
+      );
+      assert.notDeepEqual(
+        headersOf(reader),
+        headersOf(refused),
+        'where a reader gets the file’s own headers',
+      );
+    });
+
     test('a target outside the realm is refused before the policy is loaded', async function (assert) {
       await assert.rejects(
         resolveGatedOperation(

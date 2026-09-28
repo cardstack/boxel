@@ -415,8 +415,10 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           .sort(),
         [
           `GET ${SupportedMimeType.CardSource} /.*`,
+          `HEAD ${SupportedMimeType.CardSource} /.*`,
           `GET ${SupportedMimeType.DirectoryListing} .*/`,
           'GET * *',
+          'HEAD * *',
         ].sort(),
         'the card+source read, the directory listing and the fallback file and module serve',
       );
