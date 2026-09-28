@@ -1332,6 +1332,7 @@ export async function createRealm({
   videoSizeLimitBytes,
   transpileCoordinator,
   fullIndexOnStartup,
+  skipBootIndex,
   mediaCacheAdapter,
   screenshotSyncWaitMs,
   readIndexDrainBudgetMs,
@@ -1367,6 +1368,10 @@ export async function createRealm({
   // Production sets this via `resolveFullIndexOnStartup`; tests opt in
   // explicitly because `createRealm` has no realm-registry row to read.
   fullIndexOnStartup?: true;
+  // Forwarded to the Realm constructor's `skipBootIndex` option: the realm
+  // mounts and serves without indexing, as the realm-server test stack's
+  // realms do (`REALM_SERVER_SKIP_BOOT_INDEX=true`).
+  skipBootIndex?: true;
   // if you are creating a realm  to test it directly without a server, you can
   // also specify `withWorker: true` to also include a worker with your realm
   withWorker?: true;
@@ -1471,6 +1476,7 @@ export async function createRealm({
     },
     {
       ...(fullIndexOnStartup ? { fullIndexOnStartup: true as const } : {}),
+      ...(skipBootIndex ? { skipBootIndex: true as const } : {}),
       ...(screenshotSyncWaitMs !== undefined ? { screenshotSyncWaitMs } : {}),
       ...(linkShapePolicy ? { linkShapePolicy } : {}),
       ...(readIndexDrainBudgetMs !== undefined
