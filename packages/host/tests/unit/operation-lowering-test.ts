@@ -557,6 +557,57 @@ module('Unit | operation lowering', function (hooks) {
     );
   });
 
+  test('a non-grantable declaration is carried through, and nothing else is marked', async function (assert) {
+    let { field, contains, containsMany, CardDef } = api;
+    let { operation } = operations;
+    class Ledger extends CardDef {
+      static displayName = 'Ledger';
+      @field status = contains(StringField);
+      @field entries = containsMany(StringField);
+      @operation static seal = {
+        base: 'transform',
+        nonGrantable: true,
+        set: { status: 'sealed' },
+      } satisfies OperationsModule.OperationDeclaration;
+      @operation static reopen = {
+        base: 'transform',
+        set: { status: 'open' },
+      } satisfies OperationsModule.OperationDeclaration;
+      @operation static appendContainsMany = {
+        base: 'appendContainsMany',
+        nonGrantable: true,
+      } satisfies OperationsModule.OperationDeclaration;
+      @operation static broken = {
+        base: 'transform',
+        nonGrantable: true,
+        set: { missing: 'x' },
+      } satisfies OperationsModule.OperationDeclaration;
+    }
+    shim({ Ledger });
+
+    let { operations: lowered, issues } = await lower(Ledger);
+    assert.deepEqual(
+      issues.map((issue) => `${issue.operation}: ${issue.code}`),
+      ['broken: unknown-field'],
+      'only the declaration naming a missing field has findings',
+    );
+    assert.true(lowered.seal.nonGrantable, 'the flag reaches the realm');
+    assert.false(
+      'nonGrantable' in lowered.reopen,
+      'a declaration that does not ask carries no flag',
+    );
+    assert.deepEqual(
+      lowered.appendContainsMany,
+      { base: 'appendContainsMany', deterministic: true, nonGrantable: true },
+      'the built-in append, marked, lowers to no items, which the executor reads as the built-in',
+    );
+    assert.true(lowered.broken.invalid, 'the broken declaration is invalid');
+    assert.true(
+      lowered.broken.nonGrantable,
+      'and a finding against it does not make it grantable',
+    );
+  });
+
   // -------------------------------------------------------------------------
   // The source-level writes
   // -------------------------------------------------------------------------

@@ -602,6 +602,64 @@ module('Integration | operations', function (hooks) {
     }
   });
 
+  test('an appendContainsMany under its own name may name nothing, and is then the built-in', function (assert) {
+    class Journal extends CardDef {
+      @operation static appendContainsMany = {
+        base: 'appendContainsMany',
+        nonGrantable: true,
+      } satisfies OperationsModule.OperationDeclaration;
+    }
+    assert.deepEqual(
+      JSON.parse(
+        JSON.stringify(getDeclaredOperations(Journal).appendContainsMany),
+      ),
+      { base: 'appendContainsMany', nonGrantable: true },
+      'a def can mark the built-in append without changing what it appends',
+    );
+    assert.throws(
+      () => {
+        class Named extends CardDef {
+          @operation static log = {
+            base: 'appendContainsMany',
+            nonGrantable: true,
+          };
+        }
+        return Named;
+      },
+      /needs `field` and `item`, or `fields`/,
+      'under any other name an append that names nothing is refused',
+    );
+  });
+
+  test('nonGrantable is a boolean any declaration may carry', function (assert) {
+    class Ledger extends CardDef {
+      @operation static seal = {
+        base: 'transform',
+        set: { status: 'sealed' },
+        nonGrantable: true,
+      } satisfies OperationsModule.OperationDeclaration;
+      @operation static update = {
+        base: 'update',
+        nonGrantable: true,
+      } satisfies OperationsModule.OperationDeclaration;
+    }
+    assert.deepEqual(
+      Object.keys(getDeclaredOperations(Ledger)).sort(),
+      ['seal', 'update'],
+      'a named operation and a built-in both carry it',
+    );
+    assert.throws(() => {
+      class Loose extends CardDef {
+        @operation static seal = {
+          base: 'transform',
+          set: { status: 'sealed' },
+          nonGrantable: 'yes' as unknown as boolean,
+        };
+      }
+      return Loose;
+    }, /`nonGrantable` must be a boolean/);
+  });
+
   test('a declaration that runs no program carries no raw one', function (assert) {
     // A program stored where nothing runs it is worse than a refusal: it reads
     // as work the operation does.
