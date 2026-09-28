@@ -16,6 +16,35 @@ import type * as CardAPIModule from '@cardstack/base/card-api';
 const DECLARER = 'http://bundled-identity.test/declarer';
 const HOLDER = 'http://bundled-identity.test/holder';
 
+// The same shape with a link in place of the contained field, built fresh per
+// call so each case gets classes no earlier one has named.
+let linkPairs = 0;
+function defineLinkedPair(api: typeof CardAPIModule) {
+  let { CardDef, field, linksTo } = api;
+  let n = linkPairs++;
+  let declarer = `http://bundled-identity.test/link-declarer-${n}`;
+  let holder = `http://bundled-identity.test/link-holder-${n}`;
+
+  class Target extends CardDef {
+    static displayName = 'Target';
+  }
+  class LinkHolder extends CardDef {
+    static displayName = 'LinkHolder';
+    @field target = linksTo(Target);
+  }
+
+  let virtualNetwork = getService('network').virtualNetwork;
+  virtualNetwork.shimAsyncModule({
+    id: declarer,
+    resolve: async () => ({ Target }),
+  });
+  virtualNetwork.shimAsyncModule({
+    id: holder,
+    resolve: async () => ({ LinkHolder }),
+  });
+  return { Target, LinkHolder, declarer, holder };
+}
+
 function defineBundledPair(api: typeof CardAPIModule) {
   let { CardDef, Component, FieldDef, contains, field } = api;
 
@@ -135,6 +164,41 @@ module('Integration | bundled base identity', function (hooks) {
       api.serializeCard(card as any).data.meta,
       { adoptsFrom: { module: HOLDER, name: 'Holder' } },
       'the round trip records the holder and nothing about the field',
+    );
+  });
+
+  // Why the attribution rule asks about links and not contained fields. A link
+  // carries its type as data — the chooser searches by it — so the two orders
+  // have to name the same module, and they do not: served, the ref names the
+  // module that declares the class; unserved, it names the field it is held as.
+  test('a link to such a class names the field rather than the module', async function (assert) {
+    let loader = getService('loader-service').loader;
+    let api = await cardAPI();
+
+    let unserved = defineLinkedPair(api);
+    await loader.import(unserved.holder);
+    assert.strictEqual(
+      Loader.identify(unserved.Target),
+      undefined,
+      'the module declaring the link target is never asked for',
+    );
+    assert.deepEqual(
+      identifyCard(getField(unserved.LinkHolder, 'target')!.card),
+      {
+        type: 'fieldOf',
+        field: 'target',
+        card: { module: unserved.holder, name: 'LinkHolder' },
+      },
+      'so the type a chooser would filter by names the field',
+    );
+
+    let served = defineLinkedPair(api);
+    await loader.import(served.declarer);
+    await loader.import(served.holder);
+    assert.deepEqual(
+      identifyCard(getField(served.LinkHolder, 'target')!.card),
+      { module: served.declarer, name: 'Target' },
+      'and names the declaring module once the loader is asked for it',
     );
   });
 
