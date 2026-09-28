@@ -18,7 +18,8 @@
       "realm-policy-compile-test",
       "realm-policy-create-lane-test",
       "realm-policy-gate-test",
-      "realm-policy-query-filter-test"
+      "realm-policy-query-filter-test",
+      "realm-policy-write-lock-test"
     ]
   }
 }
