@@ -273,7 +273,9 @@ import {
   isOperationFailure,
   isSourceResult,
   isWrite,
+  refusalForNonReader,
   type EntryPosition,
+  type OperationError,
   type OperationRequest,
   type OperationResult,
   type OperationSourceResult,
@@ -815,8 +817,14 @@ const ARCHIVED_SEAL_EXEMPT_PATHS = new Set(['_readiness-check', '_session']);
 // consumes the outcome only if every operation it resolves is resolved with
 // the ACL's refusal on it, so no other route does. The card+json writes, the
 // card+source routes and the realm's fallback file and module serve keep the
-// ACL's own refusal.
+// ACL's refusal, which a realm with a policy words differently on some of them
+// (see `#refusalUnderPolicy`).
 const CONSUMES_COARSE_OUTCOME = { consumesCoarseOutcome: true } as const;
+// Marks the routes that serve code and the file tree, which no policy grant
+// reaches: the card+source read and its `HEAD`, and the directory listing. The
+// fallback file and module serve is one too, for a `GET` and a `HEAD`. See
+// `RouteOptions.coarseReadOnly`.
+const COARSE_READ_ONLY = { coarseReadOnly: true } as const;
 const ROUTER_METHODS: Method[] = [
   'GET',
   'QUERY',
@@ -2010,6 +2018,7 @@ export type RequestContext = {
 // and whether it consumes the realm ACL's recorded outcome.
 interface RequestDispatch {
   consumesCoarseOutcome: boolean;
+  coarseReadOnly?: boolean;
   handle: () => Promise<ResponseWithNodeStream>;
 }
 
@@ -2023,6 +2032,7 @@ export type DispatchDescription =
       mimeType: '*';
       path: '*';
       consumesCoarseOutcome: boolean;
+      coarseReadOnly: boolean;
     };
 
 type CoarseAdmission = (
@@ -2604,11 +2614,13 @@ export class Realm {
         '/.*',
         SupportedMimeType.CardSource,
         this.getSourceOrRedirect.bind(this),
+        COARSE_READ_ONLY,
       )
       .get(
         '/.*',
         SupportedMimeType.CardSource,
         this.getSourceOrRedirect.bind(this),
+        COARSE_READ_ONLY,
       )
       .delete(
         '/.+',
@@ -2619,6 +2631,7 @@ export class Realm {
         '.*/',
         SupportedMimeType.DirectoryListing,
         this.getDirectoryListing.bind(this),
+        COARSE_READ_ONLY,
       );
 
     // Realm discovery: a `HEAD` on any path, in any `Accept` bucket without a
@@ -5263,9 +5276,10 @@ export class Realm {
       // write's result, which does not exist until the write has committed, so
       // a program failing there answers 400 over a batch that landed. The
       // status is the same and what it says about the realm is not.
+      let error = this.#refusalSeenBy(err.error, requestContext);
       return this.#operationsResponse(
-        errorsDocument(err.error),
-        err.error.status,
+        errorsDocument(error),
+        error.status,
         requestContext,
       );
     }
@@ -5607,6 +5621,14 @@ export class Realm {
         canonical.name,
         scope,
       );
+      // A write whose admission still rests on a predicate has not been
+      // admitted. For a caller who may not read the realm it is refused here,
+      // where a target that is not there is refused, so nothing the batch goes
+      // on to decide about it, and no position in the batch, tells them the
+      // card exists.
+      if (decision.kind === 'pending' && scope.coarseDeclined === 'all') {
+        throw notPermitted(target, canonical.name);
+      }
       assertTravelsInEnvelope(canonical, definition);
       assertVersionableEntry(canonical, definition);
       return { entry: canonical, target, definition, decision, scope };
@@ -5933,6 +5955,19 @@ export class Realm {
     return this.#coarseDeclined(requestContext) === 'all'
       ? { coarseDeclined: true }
       : {};
+  }
+
+  // An operation's refusal as this request's caller is told it, so a caller
+  // the ACL would not let read the realm is never told which cards exist,
+  // whichever place raised the refusal. The envelope's refusals pass through
+  // here; the card+json read applies the same rule from the caller it carries.
+  #refusalSeenBy(
+    error: OperationError,
+    requestContext: RequestContext,
+  ): OperationError {
+    return this.#coarseDeclined(requestContext) === 'all'
+      ? refusalForNonReader(error)
+      : error;
   }
 
   // Who an operation dispatched from an HTTP request is running for. The actor
@@ -6322,6 +6357,15 @@ export class Realm {
           requiredPermission === 'realm-owner' ||
           !(await this.#admitsDespiteCoarseRefusal(request, requestContext))
         ) {
+          let answer = await this.#refusalUnderPolicy(
+            request,
+            dispatch,
+            requiredPermission,
+            requestContext,
+          );
+          if (answer) {
+            return answer;
+          }
           throw (
             requestContext.coarseRefusal ??
             new AuthorizationError(
@@ -6330,6 +6374,12 @@ export class Realm {
           );
         }
         await this.#assertNotArchived(localPath);
+      }
+      if (!isLocal && request.method === 'HEAD' && dispatch.coarseReadOnly) {
+        let answer = await this.#headUnderPolicy(request, requestContext);
+        if (answer) {
+          return answer;
+        }
       }
       if (!this.#realmIndexQueryEngine) {
         return systemError({
@@ -6472,6 +6522,7 @@ export class Realm {
       let matched: Route = route;
       return {
         consumesCoarseOutcome: matched.consumesCoarseOutcome,
+        coarseReadOnly: matched.coarseReadOnly,
         handle: () => this.#router.handle(request, requestContext, matched),
       };
     }
@@ -6479,9 +6530,11 @@ export class Realm {
     // the stored bytes through the `readSource` operation, and any other
     // method no route claimed. None of it consumes the ACL's outcome: the
     // gate grants no stored-bytes read, so a caller the ACL refused is
-    // refused as it refused them.
+    // refused as it refused them. For a `GET` and a `HEAD` that refusal is
+    // the one a coarse-read-only route gives.
     return {
       consumesCoarseOutcome: false,
+      coarseReadOnly: request.method === 'GET' || request.method === 'HEAD',
       handle: () => this.fallbackHandle(request, requestContext),
     };
   }
@@ -6559,6 +6612,85 @@ export class Realm {
     return (await this.getRealmPolicy()) !== undefined;
   }
 
+  // How a realm with a policy answers a request its ACL refused and nothing
+  // admitted, where that answer differs from the ACL's own. Both cases are
+  // answered before the route runs, so neither resolves anything about the
+  // path. Every other refusal, and every refusal in a realm with no policy, is
+  // the ACL's.
+  //
+  // - A request that authenticated nobody, on a route that consumes the ACL's
+  //   outcome, is told to authenticate in the form the route's own refusals
+  //   take: an `actor-required` error. It gets the same answer for a path
+  //   that names a card and one that names nothing.
+  // - A caller the ACL does not let read the realm, on a coarse-read-only
+  //   route, is told nothing is there. That is what such a caller is told of
+  //   a card no grant admits, and of a card that does not exist, so the
+  //   routes no grant reaches say no more than the ones a grant might.
+  async #refusalUnderPolicy(
+    request: Request,
+    dispatch: RequestDispatch,
+    requiredPermission: RealmAction,
+    requestContext: RequestContext,
+  ): Promise<Response | undefined> {
+    let refusal = requestContext.coarseRefusal;
+    let unauthenticated =
+      refusal instanceof CoarseAuthenticationRequired &&
+      dispatch.consumesCoarseOutcome;
+    let unreadable =
+      refusal instanceof CoarsePermissionInsufficient &&
+      dispatch.coarseReadOnly === true &&
+      requiredPermission === 'read';
+    if (
+      requiredPermission === 'realm-owner' ||
+      !(unauthenticated || unreadable) ||
+      (await this.getRealmPolicy()) === undefined
+    ) {
+      return undefined;
+    }
+    if (!unauthenticated) {
+      return notFound(request, requestContext);
+    }
+    return createResponse({
+      body: JSON.stringify(
+        errorsDocument({
+          status: 401,
+          code: 'actor-required',
+          title: 'Authentication required',
+          detail: AuthenticationErrorMessages.MissingAuthHeader,
+        }),
+        null,
+        2,
+      ),
+      init: {
+        status: 401,
+        headers: {
+          'content-type': SupportedMimeType.JSONAPI,
+          'X-Boxel-Realm-Url': requestContext.realm.url,
+        },
+      },
+      requestContext,
+    });
+  }
+
+  // A `HEAD` passes the realm's permission check whoever sends it, so on a
+  // coarse-read-only route it would hand a caller the ACL would not let read
+  // the realm a file's own validators, and a 404 where nothing is there. In a
+  // realm with a policy such a caller is given the discovery answer instead,
+  // as a `HEAD` of a card they may not read is, so the route says nothing
+  // about the path. A realm with no policy answers as it always has.
+  async #headUnderPolicy(
+    request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response | undefined> {
+    if ((await this.getRealmPolicy()) === undefined) {
+      return undefined;
+    }
+    let probe = await this.#readProbe(request, requestContext);
+    return probe.allowed
+      ? undefined
+      : this.realmIdentityResponse(requestContext);
+  }
+
   // Stands in for the admission decision so a test can show which requests
   // an admission would reach and which the terminal assertion refuses
   // regardless. Pass `undefined` to restore the real decision.
@@ -6590,6 +6722,7 @@ export class Realm {
         mimeType: '*' as const,
         path: '*' as const,
         consumesCoarseOutcome: false,
+        coarseReadOnly: method === 'GET' || method === 'HEAD',
       })),
     ];
   }
@@ -10948,9 +11081,12 @@ export class Realm {
         if (!isOperationFailure(e)) {
           throw e;
         }
+        // Wherever a caller the ACL declined would be told nothing is there,
+        // which is both a card the gate refused and one that does not exist,
+        // they get the discovery answer the ACL's own refusal gives.
         if (
           coarseDeclined.coarseDeclined &&
-          e.error.code === 'operation-not-permitted'
+          refusalForNonReader(e.error).code === 'target-not-found'
         ) {
           return this.realmIdentityResponse(requestContext);
         }
@@ -11373,7 +11509,15 @@ export class Realm {
       if (!isOperationFailure(e)) {
         throw e;
       }
-      return cardJsonAssemblyFromFailure(e);
+      // The read's refusal as this caller is told it (see `#refusalSeenBy`).
+      // A caller the ACL declined is never answered from a shared assembly,
+      // so this one is theirs alone.
+      let error = caller.coarseDeclined
+        ? refusalForNonReader(e.error)
+        : e.error;
+      return cardJsonAssemblyFromFailure(
+        error === e.error ? e : new OperationFailure(error),
+      );
     }
     if (!isDocumentResult(result)) {
       throw new Error(
