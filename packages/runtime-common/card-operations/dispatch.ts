@@ -22,6 +22,8 @@ import {
   type LoadedPolicy,
   type OperationPolicyAccess,
 } from './gate.ts';
+import type { GateTrace } from './gate-trace.ts';
+import { explainOperation, type TargetRealm } from './explain.ts';
 import {
   DEFINITION_FREE_BASE_OPERATIONS,
   OperationFailure,
@@ -155,6 +157,13 @@ export interface OperationCore {
   // What the policy gate reads for a caller the realm ACL declined. A core
   // without it admits no such caller.
   policy?: OperationPolicyAccess;
+  // The realm that serves `href`, and the URL `href` resolves to there, for
+  // the explain operation, which runs that realm's policy gate. A target
+  // commonly lives in a realm other than the policy card's, so this reaches
+  // any realm the server serves, on the server's own authority: the explain
+  // judges for itself what its caller may be told. Undefined where no realm
+  // this server serves holds `href`. A core without it explains nothing.
+  targetRealm?(href: string): Promise<TargetRealm | undefined>;
 }
 
 // The realm's own `FileRef`, narrowed to what a stored-bytes read uses. Stated
@@ -302,10 +311,15 @@ export interface OperationScope {
   // Absent for every other invocation, and for a create until those two
   // stages have run.
   readonly proposed: Record<string, unknown> | undefined;
+  // Where the policy gate records how it reached its decision, for an explain
+  // to report. Absent on every invocation that is not being explained, which
+  // is every invocation a caller makes.
+  readonly trace: GateTrace | undefined;
   // A scope for another invocation in the same request, sharing this one's row
   // memo so the invocations of one request still cost one read of each row
   // between them. The caller and the ACL's verdict carry over unless named; a
-  // proposed document belongs to one invocation and never does.
+  // proposed document belongs to one invocation and never does, and neither
+  // does a trace.
   derive(invocation: ScopeInvocation): OperationScope;
 }
 
@@ -330,6 +344,7 @@ export interface ScopeInvocation {
   caller?: ScopeCaller;
   coarseDeclined?: CoarseDeclined;
   proposed?: Record<string, unknown>;
+  trace?: GateTrace;
 }
 
 // What the realm ACL declined for a request, judged per invocation rather than
@@ -368,22 +383,26 @@ export function newOperationScope(
     caller: ScopeCaller,
     coarseDeclined: CoarseDeclined,
     proposed: Record<string, unknown> | undefined,
+    trace: GateTrace | undefined,
   ): OperationScope => ({
     peekInstance,
     caller,
     coarseDeclined,
     proposed,
+    trace,
     derive: (next) =>
       scopeFor(
         next.caller ?? caller,
         next.coarseDeclined ?? coarseDeclined,
         next.proposed,
+        next.trace,
       ),
   });
   return scopeFor(
     invocation.caller ?? { kind: 'unattributed' },
     invocation.coarseDeclined ?? 'none',
     invocation.proposed,
+    invocation.trace,
   );
 }
 
@@ -425,6 +444,7 @@ const ALL_BASE_OPERATIONS: Readonly<Record<BaseOperation, true>> = {
   transform: true,
   appendContainsMany: true,
   appendLine: true,
+  explain: true,
 };
 
 // Keyed by kind for the lookup dispatch actually does, but built from a table
@@ -441,6 +461,22 @@ const CARRIED_BY: Readonly<Record<BaseOperation, readonly DefKind[]>> = {
   transform: ['card-def'],
   appendContainsMany: ['card-def'],
   appendLine: ['file-def'],
+  // Carried by nothing on its own. See `DECLARATION_ONLY`.
+  explain: [],
+};
+
+// The behaviors a target carries only under a name its type declares on
+// them. Nothing implies one, so a target whose type declares none has no
+// operation by that name, and asking for it is asking for an operation that
+// does not exist. An explain is the one: it answers only on a policy card, and
+// a policy card's type is what declares it.
+const DECLARATION_ONLY: Readonly<Partial<Record<BaseOperation, true>>> =
+  Object.assign(Object.create(null) as Partial<Record<BaseOperation, true>>, {
+    explain: true,
+  });
+
+const DECLARABLE_ON: Readonly<Partial<Record<BaseOperation, DefKind[]>>> = {
+  explain: ['card-def'],
 };
 
 function carriedBy(kind: DefKind): Partial<Record<BaseOperation, true>> {
@@ -499,6 +535,9 @@ function carries(
   base: BaseOperation,
 ): boolean {
   if (own(ALLOWED_BASE_OPERATIONS[kind], base)) {
+    return true;
+  }
+  if (own(DECLARABLE_ON, base)?.includes(kind)) {
     return true;
   }
   return (
@@ -762,7 +801,7 @@ async function resolveUngated(
     }
     return { definition: declared, typeDefinition: definition, typeChain };
   }
-  if (!isBaseOperation(name)) {
+  if (!isBaseOperation(name) || own(DECLARATION_ONLY, name)) {
     throw new OperationFailure({
       id: targetId(target),
       status: 404,
@@ -1048,6 +1087,8 @@ async function runBaseOperation(
       // and an executor that peeked a row would put back the index read
       // resolving it definition-free just took out.
       return await readSourceOperation(core, canonical, opts);
+    case 'explain':
+      return await explainOperation(core, canonical, scope);
     case 'query':
       // A declared query is a saved search, invoked by naming it in a request
       // to `_search` or `_federated-search`. The realm resolves it there, from

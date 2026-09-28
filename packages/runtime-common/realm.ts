@@ -240,7 +240,9 @@ import type {
   OperationScope,
   OperationStoredFile,
   OperationStoredFileMeta,
+  ScopeCaller,
 } from './card-operations/dispatch.ts';
+import type { TargetRealm } from './card-operations/explain.ts';
 import {
   assertTravelsInEnvelope,
   assertVersionableEntry,
@@ -2174,6 +2176,7 @@ export class Realm {
   #dbAdapter: DBAdapter;
   #queue: QueuePublisher;
   #virtualNetwork: VirtualNetwork;
+  #realmFor: ((url: URL) => Promise<Realm | undefined>) | undefined;
   #mediaCacheAdapter: MediaCacheAdapter | undefined;
   // Shared with every realm the process serves — the cache keys on absolute
   // card URLs, and one byte cap for the process is the bound that matters.
@@ -2337,6 +2340,7 @@ export class Realm {
       transpileCoordinator,
       mediaCacheAdapter,
       cardDocumentCache,
+      realmFor,
     }: {
       url: string;
       adapter: RealmAdapter;
@@ -2366,6 +2370,11 @@ export class Realm {
       // across every realm in the process. Optional — without one, each card
       // GET assembles its own body.
       cardDocumentCache?: CardDocumentCache;
+      // The realm this server serves at a URL, mounted if it is not yet. An
+      // explain on this realm's policy card asks about a target in whichever
+      // realm that card governs, which is commonly another one. Without it,
+      // an explain reaches only this realm's own targets.
+      realmFor?: (url: URL) => Promise<Realm | undefined>;
     },
     opts?: Options,
   ) {
@@ -2375,6 +2384,7 @@ export class Realm {
     this.#adapter = adapter;
     this.#queue = queue;
     this.#virtualNetwork = virtualNetwork;
+    this.#realmFor = realmFor;
     this.#fullIndexOnStartup = opts?.fullIndexOnStartup ?? false;
     this.#skipBootIndex = opts?.skipBootIndex ?? false;
     this.#fromScratchIndexPriority =
@@ -6016,9 +6026,65 @@ export class Realm {
             ),
           policyCard: async () => (await this.getRealmPolicy())?.card,
         },
+        targetRealm: (href) => this.#targetRealm(href),
       };
     }
     return this.#operationCore;
+  }
+
+  // The realm an explain's target belongs to, reached on the realm server's
+  // own authority: the explain decides for itself what its caller may be
+  // told. A target in this realm is this realm's, and any other is the realm
+  // the server serves it from, mounted if it has to be.
+  async #targetRealm(href: string): Promise<TargetRealm | undefined> {
+    let url: URL;
+    try {
+      url = new URL(this.#resolveAtomicHref(href), this.paths.url);
+    } catch {
+      return undefined;
+    }
+    let realm: Realm | undefined;
+    if (this.paths.inRealm(url)) {
+      realm = this;
+    } else {
+      try {
+        realm = await this.#realmFor?.(url);
+      } catch {
+        realm = undefined;
+      }
+    }
+    if (!realm?.paths.inRealm(url)) {
+      return undefined;
+    }
+    let target = realm;
+    return {
+      url,
+      core: target.operationCore,
+      coarseDeclinedFor: (caller) => target.#coarseDeclinedFor(caller),
+    };
+  }
+
+  // What this realm's ACL declines for a caller, in the form a request's
+  // scope carries it, read from the same permissions a request from them is
+  // checked against. The realm's own user is permitted everything, as it is
+  // on a request.
+  async #coarseDeclinedFor(caller: ScopeCaller): Promise<CoarseDeclined> {
+    let permissions = await fetchRealmPermissions(
+      this.#dbAdapter,
+      new URL(this.url),
+    );
+    let may: (action: RealmAction) => Promise<boolean>;
+    if (caller.kind === 'user') {
+      if (caller.actor === this.#matrixClientUserId) {
+        return 'none';
+      }
+      let checker = new RealmPermissionChecker(permissions, this.#matrixClient);
+      may = (action) => checker.can(caller.actor, action);
+    } else {
+      may = async (action) => Boolean(permissions['*']?.includes(action));
+    }
+    let [read, write] = await Promise.all([may('read'), may('write')]);
+    return read && write ? 'none' : read ? 'writes' : 'all';
   }
 
   // What the realm ACL declined for this request, in the form an operation

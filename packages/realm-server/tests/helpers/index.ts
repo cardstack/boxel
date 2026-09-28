@@ -1340,6 +1340,7 @@ export async function createRealm({
   readIndexDrainBudgetMs,
   linkShapePolicy,
   cardDocumentCache = new CardDocumentCache(),
+  realmFor,
 }: {
   dir: string;
   definitionLookup: DefinitionLookup;
@@ -1392,6 +1393,9 @@ export async function createRealm({
   // instance to read its stats, or `ttlMs: 0` to keep coalescing while
   // disabling retention.
   cardDocumentCache?: CardDocumentCache;
+  // The other realms the realm can reach, for an explain on its policy card
+  // that asks about a target in one of them.
+  realmFor?: (url: URL) => Promise<Realm | undefined>;
 }): Promise<{ realm: Realm; adapter: RealmAdapter }> {
   await insertPermissions(dbAdapter, new URL(realmURL), permissions);
 
@@ -1471,6 +1475,7 @@ export async function createRealm({
       transpileCoordinator,
       mediaCacheAdapter,
       cardDocumentCache,
+      ...(realmFor ? { realmFor } : {}),
     },
     {
       ...(fullIndexOnStartup ? { fullIndexOnStartup: true as const } : {}),
@@ -1765,6 +1770,10 @@ export async function runTestRealmServerWithRealms({
       dbAdapter,
       enableFileWatcher,
       definitionLookup,
+      // Every realm this server holds, as the production server reaches the
+      // realms it serves.
+      realmFor: async (url) =>
+        createdRealms.find((candidate) => candidate.paths.inRealm(url)),
     });
     await realm.logInToMatrix();
     virtualNetwork.mount(realm.handle);

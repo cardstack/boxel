@@ -161,6 +161,9 @@ const DECLARABLE_BY: Record<BaseOperationName, readonly Definition['type'][]> =
     transform: ['card-def'],
     appendContainsMany: ['card-def'],
     appendLine: ['file-def'],
+    // Reached only through a declaration: nothing implies it, and it answers
+    // only on a policy card.
+    explain: ['card-def'],
   };
 
 function declarableBases(
@@ -189,6 +192,7 @@ function runsNoProgram(base: BaseOperationName, kind: Definition['type']) {
   return (
     base === 'appendLine' ||
     base === 'appendContainsMany' ||
+    base === 'explain' ||
     (base === 'update' && kind === 'file-def')
   );
 }
@@ -277,9 +281,15 @@ export async function lowerOperationDeclarations(
     operations[name] = operation;
   }
   // Carried onto every entry the declaration produced, an invalid one
-  // included, so no finding against a declaration makes it grantable.
+  // included, so no finding against a declaration makes it grantable. An
+  // explain is never grantable whatever its declaration says: the decorator
+  // refuses one that leaves the flag off, and an entry reaching here without
+  // it is marked all the same.
   for (let name of Object.keys(operations)) {
-    if (raw[name]?.nonGrantable === true) {
+    if (
+      raw[name]?.nonGrantable === true ||
+      operations[name].base === 'explain'
+    ) {
       operations[name].nonGrantable = true;
     }
   }
@@ -368,7 +378,9 @@ async function lowerOperation(
       'transformations',
       base === 'update'
         ? `an "update" on a file replaces its content wholesale rather than transforming a document, so this program would never be reached`
-        : `an "${base}" operation appends to the stored file rather than running a program over a document, so this program would never be reached`,
+        : base === 'explain'
+          ? `an "explain" operation reports what the realm's policy decides rather than running a program over a document, so this program would never be reached`
+          : `an "${base}" operation appends to the stored file rather than running a program over a document, so this program would never be reached`,
     );
   } else if (rawProgram) {
     // An author's program is written in the readable spelling; canonicalizing
@@ -413,9 +425,22 @@ async function lowerOperation(
       operation.input = input;
     }
   }
-  let output = await lowerOutput(declaration.output, paramNames, sink, context);
-  if (output) {
-    operation.output = output;
+  if (base === 'explain' && declaration.output !== undefined) {
+    sink.add(
+      'unrunnable-program',
+      'output',
+      `an "explain" operation answers with the policy's explanation as the gate reports it, so this projection would never be reached`,
+    );
+  } else {
+    let output = await lowerOutput(
+      declaration.output,
+      paramNames,
+      sink,
+      context,
+    );
+    if (output) {
+      operation.output = output;
+    }
   }
 
   if (base === 'create') {
