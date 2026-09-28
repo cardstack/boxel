@@ -1430,8 +1430,9 @@ module(basename(import.meta.filename), function () {
 
   // A module_transpile_cache row outlives the process that wrote it, so a
   // realm that comes back up finds every row its last run left. Mounted
-  // without a boot index, as the realm-server test stack mounts its realms,
-  // it clears none of them on the way up, and nothing was watching the files
+  // without a boot index, as the realm-server test stack mounts the dev realm
+  // server's realms (base, catalog and the rest), it clears none of them on
+  // the way up, and nothing was watching the files
   // while it was down. Whether a row compiled from a file's earlier content is
   // served then rests on the read alone, which checks the row against the file
   // as it stands. The same read decides a row another checkout wrote for the
@@ -1583,30 +1584,11 @@ module(basename(import.meta.filename), function () {
           "coming back up leaves the earlier run's compile in the shared cache",
         );
 
-        let second = await getModule(laterRun);
-        assert.strictEqual(
-          second.status,
-          200,
-          'the later run served the module',
-        );
-        assert.true(
-          second.body.includes('AfterRestart'),
-          'compiled from the file as it now stands',
-        );
-        assert.false(
-          second.body.includes('BeforeRestart'),
-          'rather than the compile the earlier run left',
-        );
-        assert.strictEqual(
-          laterRun.__testOnlyGetTranspileCallCount(),
-          1,
-          'by compiling the file',
-        );
-        assert.true(
-          (await sharedCacheBody())?.includes('AfterRestart'),
-          'and the shared cache now holds that compile',
-        );
-
+        // The later run's first request is the one a client holding the
+        // earlier compile makes, such as a prerender tab revalidating what it
+        // imported: a conditional GET carrying the earlier run's validator. It
+        // reaches the validator built from the file and then the shared cache,
+        // with nothing in memory in front of either.
         if (!first.etag) {
           throw new Error('the earlier run served the module without an etag');
         }
@@ -1616,11 +1598,29 @@ module(basename(import.meta.filename), function () {
         assert.strictEqual(
           revalidated.status,
           200,
-          "a client revalidating the earlier run's compile is sent the new one",
+          "a client revalidating the earlier run's compile is sent a module",
         );
         assert.true(
           revalidated.body.includes('AfterRestart'),
           'compiled from the file as it now stands',
+        );
+        assert.false(
+          revalidated.body.includes('BeforeRestart'),
+          'rather than the compile the earlier run left',
+        );
+        assert.notStrictEqual(
+          revalidated.etag,
+          first.etag,
+          'under the validator of the version it compiled',
+        );
+        assert.strictEqual(
+          laterRun.__testOnlyGetTranspileCallCount(),
+          1,
+          'by compiling the file',
+        );
+        assert.true(
+          (await sharedCacheBody())?.includes('AfterRestart'),
+          'and the shared cache now holds that compile',
         );
       });
 
