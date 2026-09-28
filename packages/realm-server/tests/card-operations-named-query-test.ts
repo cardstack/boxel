@@ -98,6 +98,14 @@ function stubCore() {
       async lookupDefinition() {
         return definition;
       },
+      // A named query targets the type, and a type target reads its
+      // definition together with the adoption chain recorded beside it.
+      async lookupDefinitionEntry() {
+        return {
+          definition,
+          types: [`${REPORT.module}/${REPORT.name}`],
+        };
+      },
     },
     resolveCodeRef: (codeRef: CodeRef) =>
       isResolvedCodeRef(codeRef) ? codeRef : undefined,
