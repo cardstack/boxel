@@ -33,9 +33,8 @@ import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
 // broadest grant there is, and a reader of the realm holds no write
 // permission, so each of their writes reaches the gate.
 //
-// The school realm also plays the worked example's Org realm: it stores the
-// policy card the Education realm's `policy` key names, which the school
-// realm's own key does not name.
+// The school realm also stores the policy card the Education realm's `policy`
+// key names, a card the school realm's own key does not name.
 const SCHOOL = 'http://127.0.0.1:4444/school/';
 const EDUCATION = 'http://127.0.0.1:4444/education/';
 const POLICY_CARD = `${SCHOOL}policies/school`;
@@ -137,14 +136,17 @@ const SCHOOL_POLICY_MODULE = `
   }
 `;
 
-// A type with a named create that mints a policy card of `RealmPolicy` itself.
+// A type with two named creates: one mints a policy card of `RealmPolicy`
+// itself, and one mints an ordinary card.
 const DRAFTER_MODULE = `
   import { CardDef } from "@cardstack/base/card-api";
   import { operation } from "@cardstack/base/operations";
   import { RealmPolicy } from "@cardstack/catalog/realm-policy/realm-policy";
+  import { Ledger } from "./ledger";
 
   export class Drafter extends CardDef {
     @operation static draftPolicy = { base: 'create', of: RealmPolicy };
+    @operation static draftLedger = { base: 'create', of: Ledger };
   }
 `;
 
@@ -178,8 +180,11 @@ const RULES: Rule[] = [
     targetType: LEDGER,
     grants: [{ operation: 'update' }, { operation: 'seal' }],
   },
-  // A named create granted on the type that declares it.
-  { targetType: DRAFTER, grants: [{ operation: 'draftPolicy' }] },
+  // The named creates granted on the type that declares them.
+  {
+    targetType: DRAFTER,
+    grants: [{ operation: 'draftPolicy' }, { operation: 'draftLedger' }],
+  },
 ];
 
 // What the Education realm's policy grants, which is only read.
@@ -529,6 +534,10 @@ module(basename(import.meta.filename), function (hooks) {
     });
   });
 
+  // The card here is a policy card, which the type rule refuses as well, so
+  // these are outcomes. That the gate knows the card by its identity, under
+  // either spelling of the key, is pinned in the dispatch suite, where the
+  // card's type can be kept out of the policy's family.
   module('the card the realm’s policy key names', function () {
     test('no grant admits a write to it, whatever its type allows', async function (assert) {
       assertNotPermitted(
@@ -554,7 +563,7 @@ module(basename(import.meta.filename), function (hooks) {
       );
     });
 
-    test('a pointer that names the card by its stored source names the same card', async function (assert) {
+    test('a pointer that names the card by its stored source still loads the policy', async function (assert) {
       await school.write(
         'realm.json',
         realmConfigCardJSON({ name: 'School', policy: `${POLICY_CARD}.json` }),
@@ -571,7 +580,7 @@ module(basename(import.meta.filename), function (hooks) {
           AUTH.reader(),
           invoke('setMotto', { href: POLICY_CARD, data: { motto: 'Obey' } }),
         ),
-        'and the card it names is still out of its reach',
+        'and a write to the card it names is still refused',
       );
     });
 
@@ -728,6 +737,17 @@ module(basename(import.meta.filename), function (hooks) {
         ledger.status,
         200,
         'while the same grant admits a create of an ordinary card',
+      );
+      let draftedLedger = await operations(
+        AUTH.reader(),
+        invoke('draftLedger', {
+          data: { meta: { adoptsFrom: adoptsFrom(DRAFTER) } },
+        }),
+      );
+      assert.strictEqual(
+        draftedLedger.status,
+        200,
+        'and the rule that grants the named create admits one that mints an ordinary card',
       );
     });
 

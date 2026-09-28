@@ -2038,6 +2038,7 @@ export class Realm {
   #realmIndexUpdater: RealmIndexUpdater;
   #realmIndexQueryEngine: RealmIndexQueryEngine;
   #policyCache: RealmPolicyCache;
+  #policyTypeKey: string | undefined;
   #operationCore: OperationCore | undefined;
   #batchCore: BatchCore | undefined;
   #adapter: RealmAdapter;
@@ -5911,6 +5912,7 @@ export class Realm {
               this.#virtualNetwork,
             ),
           policyCard: async () => (await this.getRealmPolicy())?.card,
+          isPolicyCard: (types) => this.#isPolicyCard(types),
         },
       };
     }
@@ -13360,7 +13362,6 @@ export class Realm {
   // it grants. The type definitions its rules name come from this realm's
   // definition lookup, as an operation's do.
   #makePolicyCache(): RealmPolicyCache {
-    let policyTypeKey: string | undefined;
     return new RealmPolicyCache({
       policyCard: async () => (await this.getRealmPolicy())?.card,
       readCard: (url) => this.#realmIndexQueryEngine.instanceSource(url),
@@ -13376,18 +13377,22 @@ export class Realm {
       lookupDefinition: (codeRef) =>
         this.#definitionLookup.lookupDefinition(codeRef),
       toURL: (identifier) => this.#virtualNetwork.toURL(identifier),
-      isPolicyCard: (types) => {
-        // The index records an adoption chain in the same spelling, so the
-        // key is computed the same way. A subtype of RealmPolicy carries it
-        // too.
-        policyTypeKey ??= internalKeyFor(
-          realmPolicyRef,
-          undefined,
-          this.#virtualNetwork,
-        );
-        return types.includes(policyTypeKey);
-      },
+      isPolicyCard: (types) => this.#isPolicyCard(types),
     });
+  }
+
+  // Whether an adoption chain, as the index records one, is a policy card's.
+  // The compiler asks it of the card a key names, and the gate asks it of
+  // every card a grant would write, so the two agree on what a policy card is.
+  #isPolicyCard(types: string[]): boolean {
+    // The index records an adoption chain in the same spelling, so the key is
+    // computed the same way. A subtype of RealmPolicy carries it too.
+    this.#policyTypeKey ??= internalKeyFor(
+      realmPolicyRef,
+      undefined,
+      this.#virtualNetwork,
+    );
+    return types.includes(this.#policyTypeKey);
   }
 
   // Every part of one parse, which is why they are read together rather than

@@ -7,12 +7,11 @@ import type { CardResource } from '../resource-types.ts';
 import { localPathFor, pathsFor } from './dispatch.ts';
 import type { OperationCore, OperationScope } from './dispatch.ts';
 import type { BxlMutationModule } from './executors.ts';
-import {
-  realmPolicyRef,
-  type CompiledOperationGrant,
-  type CompiledPolicyPredicate,
-  type CompiledPolicyRule,
-  type CompiledRealmPolicy,
+import type {
+  CompiledOperationGrant,
+  CompiledPolicyPredicate,
+  CompiledPolicyRule,
+  CompiledRealmPolicy,
 } from './policy.ts';
 import { loadBxlTransform } from './transforms.ts';
 import {
@@ -105,6 +104,10 @@ export interface OperationPolicyAccess {
   // The URL of the card the realm's `policy` key names, or undefined for a
   // realm with no policy. Only the pointer: reading it loads nothing.
   policyCard(): Promise<string | undefined>;
+  // Whether an adoption chain, as the index records one, is a policy card's:
+  // a `RealmPolicy`'s or a subtype's. It is the answer the policy compiler
+  // gets when it asks whether the card a key names is one.
+  isPolicyCard(types: string[]): boolean;
 }
 
 // The target as the gate judges it. It holds what the realm resolved, and
@@ -235,9 +238,10 @@ export async function gateOperation(
   }
   // The realm's config card and the card its policy key names together
   // decide every grant, so no grant writes either, whatever their types
-  // declare. The key may name a card of any type, and a write could turn a
-  // card that is not a policy card into one. So this rule follows the cards'
-  // identities rather than their types.
+  // declare. This rule follows the cards' identities rather than their types
+  // because the gate judges a card's type by its index row, which can lag the
+  // stored bytes. A card a realm writer has just rewritten as a policy card
+  // reads as its old type until its index pass lands.
   if (
     subject.kind === 'card' &&
     isWrite(base) &&
@@ -402,16 +406,7 @@ async function writesPolicyCard(
     definition.base === 'create' && definition.of
       ? await mintedChain(core, definition.of)
       : types;
-  if (!written) {
-    return true;
-  }
-  let policyKeys: string[];
-  try {
-    policyKeys = await access.typeKeys(realmPolicyRef);
-  } catch {
-    return true;
-  }
-  return written.some((key) => policyKeys.includes(key));
+  return !written || access.isPolicyCard(written);
 }
 
 // The adoption chain of the type a named create mints, as the definition
