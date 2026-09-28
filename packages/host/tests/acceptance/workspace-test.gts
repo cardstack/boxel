@@ -1,4 +1,11 @@
-import { click, visit, waitFor } from '@ember/test-helpers';
+import {
+  click,
+  fillIn,
+  find,
+  triggerKeyEvent,
+  visit,
+  waitFor,
+} from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
@@ -12,11 +19,14 @@ import {
   setupAuthEndpoints,
   setupUserSubscription,
   SYSTEM_CARD_FIXTURE_CONTENTS,
+  realmConfigCardJSON,
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
 
 const STACK = '[data-test-operator-mode-stack="0"]';
+const WORKSPACE_NAME = 'Test Workspace';
+const WORKSPACE_BUTTON = `[data-test-workspace-button="${WORKSPACE_NAME}"]`;
 
 module('Acceptance | workspace card', function (hooks) {
   setupApplicationTest(hooks);
@@ -58,6 +68,7 @@ module('Acceptance | workspace card', function (hooks) {
       mockMatrixUtils,
       contents: {
         ...SYSTEM_CARD_FIXTURE_CONTENTS,
+        'realm.json': realmConfigCardJSON({ name: WORKSPACE_NAME }),
         'note.gts': { Note },
         'index.json': new Workspace(),
         'Note/1.json': new Note({ cardTitle: 'First Note' }),
@@ -88,7 +99,7 @@ module('Acceptance | workspace card', function (hooks) {
   test('a realm indexed by Workspace renders its shell and switches segments', async function (assert) {
     await visit('/');
     assert.dom('[data-test-workspace-chooser]').exists();
-    await click('[data-test-workspace-button="Unnamed Workspace"]');
+    await click(WORKSPACE_BUTTON);
 
     await waitFor(`${STACK} nav.tabs`);
     assert
@@ -122,7 +133,7 @@ module('Acceptance | workspace card', function (hooks) {
 
   test('the "New card" chooser searches across all available realms, not just this workspace', async function (assert) {
     await visit('/');
-    await click('[data-test-workspace-button="Unnamed Workspace"]');
+    await click(WORKSPACE_BUTTON);
     await waitFor(`${STACK} nav.tabs`);
 
     // The empty-space welcome hero offers a "New card" affordance that opens
@@ -151,7 +162,7 @@ module('Acceptance | workspace card', function (hooks) {
   // isolated-render integration tests.
   test('Home Browse lists a pill per card type with its instance count', async function (assert) {
     await visit('/');
-    await click('[data-test-workspace-button="Unnamed Workspace"]');
+    await click(WORKSPACE_BUTTON);
     await waitFor(`${STACK} nav.tabs`);
 
     await waitFor(`${STACK} [data-test-browse]`);
@@ -169,7 +180,7 @@ module('Acceptance | workspace card', function (hooks) {
 
   test('clicking a Home Browse pill opens the Library filtered to that type', async function (assert) {
     await visit('/');
-    await click('[data-test-workspace-button="Unnamed Workspace"]');
+    await click(WORKSPACE_BUTTON);
     await waitFor(`${STACK} [data-test-browse]`);
 
     let noteChip = findTypeChip(assert, 'Note');
@@ -193,7 +204,7 @@ module('Acceptance | workspace card', function (hooks) {
   // — not just the base Everything / Cards / Files filters.
   test('the Library rail lists a row per card type with its count', async function (assert) {
     await visit('/');
-    await click('[data-test-workspace-button="Unnamed Workspace"]');
+    await click(WORKSPACE_BUTTON);
     await waitFor(`${STACK} nav.tabs`);
 
     await click(`${STACK} [data-test-workspace-tab="library"]`);
@@ -206,9 +217,36 @@ module('Acceptance | workspace card', function (hooks) {
       .hasText('1', 'the Note rail row shows its single-instance count');
   });
 
+  // Operator mode reads Escape on anything that is not a text field as "close
+  // this card". A result is a button, so the Escape that dismisses the search
+  // from a focused result has to stop before it reaches the document, or the
+  // whole workspace closes with the list.
+  test('Escape on a focused search result dismisses the results and keeps the workspace open', async function (assert) {
+    await visit('/');
+    await click(WORKSPACE_BUTTON);
+    await waitFor(`${STACK} nav.tabs`);
+
+    await fillIn(`${STACK} [data-test-workspace-search]`, 'First');
+    await waitFor(`${STACK} [data-test-search-result]`);
+
+    let result = find(`${STACK} [data-test-search-result]`) as HTMLElement;
+    result.focus();
+    await triggerKeyEvent(result, 'keydown', 'Escape');
+
+    assert
+      .dom(`${STACK} [data-test-workspace-index]`)
+      .exists('the workspace card is still open');
+    assert
+      .dom(`${STACK} [data-test-search-result]`)
+      .doesNotExist('the results are dismissed');
+    assert
+      .dom(`${STACK} [data-test-workspace-search]`)
+      .hasValue('', 'the term is cleared');
+  });
+
   test('a remix surfaces in the Activity feed as a first-class event', async function (assert) {
     await visit('/');
-    await click('[data-test-workspace-button="Unnamed Workspace"]');
+    await click(WORKSPACE_BUTTON);
     await waitFor(`${STACK} nav.tabs`);
 
     await click(`${STACK} [data-test-workspace-tab="activity"]`); // Activity
@@ -228,7 +266,7 @@ module('Acceptance | workspace card', function (hooks) {
 
   test('an uploaded file surfaces in the Activity feed alongside cards', async function (assert) {
     await visit('/');
-    await click('[data-test-workspace-button="Unnamed Workspace"]');
+    await click(WORKSPACE_BUTTON);
     await waitFor(`${STACK} nav.tabs`);
 
     await click(`${STACK} [data-test-workspace-tab="activity"]`); // Activity
@@ -268,7 +306,7 @@ module('Acceptance | workspace card', function (hooks) {
 
   test('opening a file feed row opens the file, not a card', async function (assert) {
     await visit('/');
-    await click('[data-test-workspace-button="Unnamed Workspace"]');
+    await click(WORKSPACE_BUTTON);
     await waitFor(`${STACK} nav.tabs`);
 
     await click(`${STACK} [data-test-workspace-tab="activity"]`); // Activity
