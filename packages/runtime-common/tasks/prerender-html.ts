@@ -24,6 +24,7 @@ import {
   type IncrementalChange,
 } from './indexer.ts';
 import type { Stats } from '../worker.ts';
+import { queueClaimOf, type QueueClaim } from '../jobs/queue-claim.ts';
 
 export { prerenderHtml };
 
@@ -94,6 +95,9 @@ export interface PrerenderHtmlResult extends JSONTypes.Object {
   // members because the result is a `JSONTypes.Object`, whose index signature
   // rejects `undefined`.
   phaseTimings: Record<string, number> | null;
+  // How the queue claimed this job, as on an index job's result (see
+  // `IncrementalResult.queueClaim`); null when no queue claimed it.
+  queueClaim: QueueClaim | null;
 }
 
 // The measured phases only, or null when none was measured.
@@ -170,8 +174,8 @@ function spawnedByIndexPasses(args: PrerenderHtmlArgs): boolean {
 //   repair read, and a merged job rendering under the older one would keep a
 //   stale module cache in every tab it reuses.
 //
-// Kept apart, the two run in order, since the realm's prerender-html jobs
-// share one concurrency group.
+// Kept apart, the two run in order, since a publish only ever meets
+// candidates of its own lane, and a lane runs one job at a time.
 function canMergePending(existing: CoalesceArgs, incoming: CoalesceArgs) {
   if (existing.legacy || incoming.legacy) {
     return false;
@@ -226,7 +230,7 @@ function unionPasses(
 // spawned from an equal-or-newer committed generation: a job with spawning
 // passes may already have read the index generations it stamps, so it cannot
 // promise to cover rows that moved since. Anything else inserts a fresh row,
-// which the per-realm concurrency group serializes behind the running job.
+// which its lane runs after the running job.
 function choosePrerenderHtmlCoalesceDecision(
   context: QueueCoalesceContext,
 ): QueueCoalesceDecision {
@@ -419,6 +423,8 @@ const prerenderHtml: Task<PrerenderHtmlArgs, PrerenderHtmlResult> = ({
         reservationId: -1,
         priority: 0,
         queueWaitMs: null,
+        concurrencyGroup: null,
+        laneFamily: null,
       },
       jobPriority: jobInfo?.priority,
       onProgress: reportProgress,
@@ -460,5 +466,6 @@ const prerenderHtml: Task<PrerenderHtmlArgs, PrerenderHtmlResult> = ({
         janitorRowsCleared: pass.janitorRowsCleared,
         janitorStagingsCleared: pass.janitorStagingsCleared,
       }),
+      queueClaim: queueClaimOf(jobInfo) ?? null,
     };
   };

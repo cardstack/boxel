@@ -78,6 +78,10 @@ function stub(operations?: Definition['operations']): OperationCore {
           ...(operations ? { operations } : {}),
         };
       },
+      async lookupDefinitionEntry(codeRef: CodeRef) {
+        let definition = await this.lookupDefinition(codeRef);
+        return definition ? { definition, types: [] } : undefined;
+      },
     },
     indexQueryEngine: {
       async cardDocument(url: URL) {
@@ -612,6 +616,7 @@ module(basename(import.meta.filename), function () {
           entry: createEntry(sent),
           target: { kind: 'type', codeRef: PERSON, realm: REALM },
           definition: TITLED_CREATE,
+          decision: { kind: 'coarse' },
           scope: newOperationScope(core, { caller: scopeCallerFor(ACTOR) }),
         },
         {
@@ -650,6 +655,7 @@ module(basename(import.meta.filename), function () {
           entry: createEntry(resource),
           target: { kind: 'type', codeRef: PERSON, realm: REALM },
           definition: { base: 'create', deterministic: true },
+          decision: { kind: 'coarse' },
           scope: newOperationScope(stub(), { caller: scopeCallerFor(ACTOR) }),
         },
         { name: 'create', params: {}, actor: ACTOR, realmConfig },
@@ -669,6 +675,7 @@ module(basename(import.meta.filename), function () {
             entry: createEntry({}),
             target: { kind: 'type', codeRef: PERSON, realm: REALM },
             definition: withoutInput as OperationDefinition,
+            decision: { kind: 'coarse' },
             scope: newOperationScope(stub()),
           },
           { name: 'draft', params: {}, realmConfig },
@@ -689,6 +696,7 @@ module(basename(import.meta.filename), function () {
           },
           target: { kind: 'instance', url: CARD },
           definition: { base: 'transform', deterministic: true },
+          decision: { kind: 'coarse' },
           scope: newOperationScope(stub(), { caller: scopeCallerFor(ACTOR) }),
         },
         {

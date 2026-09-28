@@ -19,7 +19,8 @@ interface Signature {
     // `--boxel-color-scheme` signal — no inline styles, no JS. The scope
     // attribute is only stamped when theme CSS is present: it also triggers the
     // theme.css boundary reset that stops ambient/outer-theme token values from
-    // inheriting in, which unthemed cards rely on to follow the chrome scheme.
+    // inheriting in, which unthemed cards (those on the default theme) rely
+    // on to follow the chrome scheme.
     themeCss?: string | null;
     themeScope?: string;
   };

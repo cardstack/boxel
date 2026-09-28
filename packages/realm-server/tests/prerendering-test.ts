@@ -9995,6 +9995,63 @@ module(basename(import.meta.filename), function () {
           'releasing the owning batch drops the memo',
         );
       });
+
+      test('concurrent jobs keep their own memos, and a release drops only its own batch', async function (assert) {
+        // Index passes of one realm run one per writer lane, so two jobs'
+        // visits interleave on one affinity. Neither may replace the
+        // other's memo, and one finishing must not strip the other's memo
+        // or its hold on the affinity.
+        let jobA = 'icon-memo-concurrent-a.1';
+        let jobB = 'icon-memo-concurrent-b.1';
+        await indexVisit('maple.json', { jobId: jobA, batchId: 'batch-a' });
+        await indexVisit('willow.json', { jobId: jobB, batchId: 'batch-b' });
+        await indexVisit('willow.json', { jobId: jobA, batchId: 'batch-a' });
+
+        let memoA = prerenderer.getIconMemo(affinityKey, jobA);
+        assert.strictEqual(
+          memoA?.misses,
+          2,
+          "job A rendered its icons once, although job B's visit came between",
+        );
+        assert.strictEqual(
+          memoA?.hits,
+          2,
+          'job A reused them on its next visit of the same type',
+        );
+        let memoB = prerenderer.getIconMemo(affinityKey, jobB);
+        assert.strictEqual(memoB?.misses, 2, 'job B rendered its own icons');
+        assert.deepEqual(
+          prerenderer
+            .getBatchOwnership(affinityKey)
+            .map(({ batchId }) => batchId)
+            .sort(),
+          ['batch-a', 'batch-b'],
+          'both batches hold the affinity',
+        );
+
+        await prerenderer.releaseBatch({
+          batchId: 'batch-b',
+          affinityType: 'realm',
+          affinityValue: realmURL,
+        });
+        assert.strictEqual(
+          prerenderer.getIconMemo(affinityKey, jobB),
+          undefined,
+          "the releasing batch's memo is dropped",
+        );
+        assert.strictEqual(
+          prerenderer.getIconMemo(affinityKey, jobA)?.hits,
+          2,
+          "the other job's memo survives its peer's release",
+        );
+        assert.deepEqual(
+          prerenderer
+            .getBatchOwnership(affinityKey)
+            .map(({ batchId }) => batchId),
+          ['batch-a'],
+          'the other batch still holds the affinity',
+        );
+      });
     });
   });
 });

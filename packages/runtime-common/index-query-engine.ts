@@ -283,6 +283,17 @@ export interface IndexedInstance {
   sourceContentHash: string | null;
 }
 
+// An instance's row as its index visit left it, and nothing from its render.
+// `error` is set when the visit itself failed, and `instance` otherwise.
+export interface IndexedInstanceSource {
+  realmURL: string;
+  generation: number;
+  sourceContentHash: string | null;
+  types: string[] | null;
+  instance: CardResource | null;
+  error: SerializedError | null;
+}
+
 interface InstanceError extends Partial<
   Omit<
     IndexedInstance,
@@ -624,6 +635,51 @@ export class IndexQueryEngine {
       'LIMIT 1',
     ] as Expression)) as unknown as { generation: number }[];
     return rows.length > 0 ? Number(rows[0].generation) : undefined;
+  }
+
+  // An instance's row from `boxel_index` alone, with no `prerendered_html`
+  // join: what its index visit read and recorded, and whether that visit
+  // failed. A render error is not reflected, so a card whose rendering failed
+  // still reads as the instance its source says it is. For a reader that
+  // needs the card's data and adoption chain, and none of its rendering.
+  async getInstanceSource(
+    url: URL,
+    opts?: GetEntryOptions,
+  ): Promise<IndexedInstanceSource | undefined> {
+    let rows = (await this.#query([
+      'SELECT i.realm_url, i.generation, i.source_content_hash, i.types, i.pristine_doc, i.has_error, i.error_doc',
+      `FROM ${tableFromOpts(opts)} AS i`,
+      'WHERE',
+      ...every([
+        any([
+          [`i.url =`, param(url.href)],
+          [`i.file_alias =`, param(url.href)],
+        ]),
+        ['i.type =', param('instance')],
+        any([['i.is_deleted = FALSE'], ['i.is_deleted IS NULL']]),
+      ]),
+      'LIMIT 1',
+    ] as Expression)) as unknown as {
+      realm_url: string;
+      generation: number;
+      source_content_hash: string | null;
+      types: string[] | null;
+      pristine_doc: CardResource | null;
+      has_error: boolean | null;
+      error_doc: SerializedError | null;
+    }[];
+    let row = rows[0];
+    if (!row) {
+      return undefined;
+    }
+    return {
+      realmURL: row.realm_url,
+      generation: Number(row.generation),
+      sourceContentHash: row.source_content_hash ?? null,
+      types: row.types,
+      instance: row.has_error ? null : row.pristine_doc,
+      error: row.has_error ? row.error_doc : null,
+    };
   }
 
   // The declared-screenshot manifest of a live instance — the `?name=`

@@ -122,7 +122,25 @@ export interface QueuePublisher {
 export interface QueuePublishRequest {
   jobType: string;
   priority?: number;
+  // The lane the job runs in. The queue runs at most one job per group at a
+  // time, and coalesces a publish only into jobs of its own group.
   concurrencyGroup: string | null;
+  // The family the lane belongs to, when it belongs to one. A family is a set
+  // of lanes that share the same work, such as one realm's index, and it
+  // separates two kinds of member:
+  //
+  // - Exclusive work runs with nothing else in the family. A job is exclusive
+  //   when its group names the family itself, or when it names no family at
+  //   all, which is every job published without one.
+  // - A writer lane is a group inside the family with a name of its own. Its
+  //   jobs run alongside other writer lanes' jobs, but never alongside
+  //   exclusive work, and a pending exclusive job is a barrier that later
+  //   writer jobs of no higher priority wait behind.
+  //
+  // Readers that ask about the family as a whole (is the realm's index behind,
+  // cancel the realm's work) match on `laneFamilyPredicate`, so they see every
+  // lane the family holds. See `pg-queue.ts` for the claim rules.
+  laneFamily?: string | null;
   timeout: number;
   args: PgPrimitive;
   // The users whose work this job carries, recorded on the row so a gate in
@@ -209,6 +227,7 @@ export function normalizeQueueJobSpec(args: QueuePublishRequest): QueueJobSpec {
     // A publish that doesn't state a priority is background work, so it
     // takes the system-initiated tier.
     priority: args.priority ?? systemInitiatedPriority,
+    laneFamily: args.laneFamily ?? null,
   };
 }
 

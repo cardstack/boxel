@@ -1,13 +1,14 @@
 import type { DBAdapter, Expression, Querier } from '@cardstack/runtime-common';
 import {
   addExplicitParens,
-  cancelRunningJobsInConcurrencyGroup,
+  cancelRunningJobsInLaneFamily,
   dbAdapterQuerier,
   param,
   separatedByCommas,
 } from '@cardstack/runtime-common';
 import { indexingConcurrencyGroup } from '@cardstack/runtime-common/jobs/indexing';
 import { prerenderHtmlConcurrencyGroup } from '@cardstack/runtime-common/jobs/prerender-html';
+import { laneFamilyPredicate } from '@cardstack/runtime-common/jobs/lane-family';
 import fsExtra from 'fs-extra';
 const { pathExistsSync, readdirSync, removeSync } = fsExtra;
 import { join, relative } from 'path';
@@ -75,20 +76,20 @@ export async function removeRealmDatabaseArtifacts(args: {
 }) {
   let { dbAdapter, realmURL, querier } = args;
   let q = querier ?? dbAdapterQuerier(dbAdapter);
-  // Both of the realm's job lanes must be drained: a surviving
-  // prerender_html job would run against whatever realm later occupies this
-  // URL and stamp this realm's (higher) generation into its
-  // prerendered_html rows, silently pinning them against the monotonic swap
-  // guard until the new realm's generation catches up.
-  for (let concurrencyGroup of [
+  // Both of the realm's job lane families must be drained, every lane of
+  // each: a surviving prerender_html job would run against whatever realm
+  // later occupies this URL and stamp this realm's (higher) generation into
+  // its prerendered_html rows, silently pinning them against the monotonic
+  // swap guard until the new realm's generation catches up.
+  for (let laneFamily of [
     indexingConcurrencyGroup(realmURL),
     prerenderHtmlConcurrencyGroup(realmURL),
   ]) {
-    await cancelRunningJobsInConcurrencyGroup(dbAdapter, concurrencyGroup, q);
+    await cancelRunningJobsInLaneFamily(dbAdapter, laneFamily, q);
 
     let pendingJobs = (await q([
-      `SELECT id FROM jobs WHERE concurrency_group =`,
-      param(concurrencyGroup),
+      `SELECT id FROM jobs WHERE`,
+      ...laneFamilyPredicate(laneFamily),
       ` AND status = 'unfulfilled'`,
     ])) as { id: number }[];
 
@@ -104,8 +105,8 @@ export async function removeRealmDatabaseArtifacts(args: {
     }
 
     await q([
-      `DELETE FROM jobs WHERE concurrency_group =`,
-      param(concurrencyGroup),
+      `DELETE FROM jobs WHERE`,
+      ...laneFamilyPredicate(laneFamily),
       ` AND status = 'unfulfilled'`,
     ]);
   }

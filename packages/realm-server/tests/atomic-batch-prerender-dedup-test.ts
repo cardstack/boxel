@@ -129,7 +129,7 @@ module(basename(import.meta.filename), function (hooks) {
               ) as urls
          from jobs
         where job_type = 'prerender_html'
-          and concurrency_group = $1
+          and (concurrency_group = $1 or lane_family = $1)
           and id > $2
         order by id`,
       { bind: [`prerender-html:${realm.url}`, baseline] },

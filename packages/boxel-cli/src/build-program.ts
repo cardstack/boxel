@@ -73,6 +73,10 @@ export function buildBoxelProgram(version: string): Command {
       '--local',
       'Target a local dev server instead of production (for add command)',
     )
+    .option(
+      '--json',
+      'Output the complete profile set as JSON (for list command)',
+    )
     .addHelpText(
       'after',
       `
@@ -117,6 +121,7 @@ Environment variables (for 'add'):
           production?: boolean;
           staging?: boolean;
           local?: boolean;
+          json?: boolean;
         },
       ) => {
         if (options?.password) {

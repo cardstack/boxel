@@ -17,6 +17,7 @@ import {
   type LooseCardResource,
   type DBAdapter,
   type QueryOptions,
+  type IndexedInstanceSource,
   type InstanceOrError,
   type LinkTargetInstance,
   type LinkTargetFile,
@@ -937,6 +938,13 @@ export class RealmIndexQueryEngine {
     opts?: QueryOptions,
   ): Promise<InstanceOrError | undefined> {
     return await this.#indexQueryEngine.getInstance(url, opts);
+  }
+
+  async instanceSource(
+    url: URL,
+    opts?: QueryOptions,
+  ): Promise<IndexedInstanceSource | undefined> {
+    return await this.#indexQueryEngine.getInstanceSource(url, opts);
   }
 
   // Liveness probe matching `instance()`'s row predicate (including the

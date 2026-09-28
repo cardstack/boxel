@@ -13,7 +13,7 @@ import {
   type getCard as GetCardType,
   type Realm,
   type SearchEntries,
-  type SearchEntryWireQuery,
+  type NamedSearchWireQuery,
 } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
@@ -102,6 +102,16 @@ const REPORT_MODULE = `
   }
 `;
 
+// A type no report is, for a filter that could never match one.
+const MEMO_MODULE = `
+  import { contains, field, CardDef } from "@cardstack/base/card-api";
+  import StringField from "@cardstack/base/string";
+
+  export class Memo extends CardDef {
+    @field body = contains(StringField);
+  }
+`;
+
 function reportRef() {
   return { module: testRRI('report'), name: 'Report' };
 }
@@ -174,6 +184,7 @@ module('Integration | operations query', function (hooks) {
       realmURL: testRealmURL,
       contents: {
         'report.gts': REPORT_MODULE,
+        'memo.gts': MEMO_MODULE,
         'reports/open-1.json': reportFile({
           headline: 'Air quality',
           status: 'open',
@@ -277,7 +288,7 @@ module('Integration | operations query', function (hooks) {
   });
 
   test('the wire query a call resolves to is the one the search component takes', async function (assert) {
-    let query = saved('openReports').query() as SearchEntryWireQuery;
+    let query = saved('openReports').query() as NamedSearchWireQuery;
 
     assert.deepEqual(
       query,
@@ -291,8 +302,10 @@ module('Integration | operations query', function (hooks) {
           },
         ],
         realms: [testRealmURL],
+        operation: 'openReports',
+        on: reportRef(),
       },
-      'the classes became the type they name, and the card-rooted query became the entry-addressed one',
+      'the classes became the type they name, the card-rooted query became the entry-addressed one, and the request names the operation the realm resolves it from',
     );
 
     await render(
@@ -358,6 +371,57 @@ module('Integration | operations query', function (hooks) {
         (entry) => entry.id === `${testRealmURL}reports/open-3`,
       ),
       'the report written after the search started joined it when the realm indexed it — a query is as fresh as the index',
+    );
+  });
+
+  test('a search the realm resolves by name re-runs on writes its own filter cannot see', async function (assert) {
+    // What a host holding a stale definition sends: the named operation, and
+    // beside it a lowering of that operation which no longer matches what the
+    // realm resolves it to. The realm answers with its own resolution, so the
+    // carried filter cannot be what decides which writes the search skips.
+    let stale = {
+      ...(saved('openReports').query() as NamedSearchWireQuery),
+      filter: { 'item.on': { module: testRRI('memo'), name: 'Memo' } },
+    };
+    let reports = getService('operations').search.entries(() => stale);
+    assert.strictEqual(
+      (await settledEntries(reports)).length,
+      3,
+      'the realm answered with the open reports its declaration matches',
+    );
+
+    // The gate resolves its anchors off the first typed event, which takes the
+    // re-run it would have taken anyway, and judges the ones after it. A
+    // closed report moves nothing here, so it only primes the gate.
+    await realm.write(
+      'reports/closed-2.json',
+      JSON.stringify(
+        reportFile({ headline: 'Closed again', status: 'closed' }),
+      ),
+    );
+    await settled();
+    assert.strictEqual(
+      (await settledEntries(reports)).length,
+      3,
+      'a closed report is not one the realm’s declaration matches',
+    );
+
+    await realm.write(
+      'reports/open-4.json',
+      JSON.stringify(
+        reportFile({
+          headline: 'Filed under a stale definition',
+          status: 'open',
+        }),
+      ),
+    );
+    await waitUntil(() => reports.entries.length === 4, { timeout: 10_000 });
+
+    assert.ok(
+      reports.entries.find(
+        (entry) => entry.id === `${testRealmURL}reports/open-4`,
+      ),
+      'the report joined the search though the filter it carries could never match one',
     );
   });
 
