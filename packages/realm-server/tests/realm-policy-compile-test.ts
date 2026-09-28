@@ -517,6 +517,11 @@ module(basename(import.meta.filename), function (hooks) {
       policy?.issues.map(({ code }) => code),
       ['policy-card-unloadable'],
     );
+    assert.strictEqual(
+      policy?.version,
+      undefined,
+      'and names no version, since nothing was compiled from its bytes',
+    );
 
     await pointAt(`${ORG}note`);
     policy = await compiled();
@@ -593,6 +598,15 @@ module(basename(import.meta.filename), function (hooks) {
           targetType: { module: '../no-such-module', name: 'Nothing' },
           grants: grants('read'),
         },
+        // An operation a subtype declares, named on a type it descends from,
+        // beside a built-in the type carries.
+        {
+          targetType: {
+            module: rri('@cardstack/base/card-api'),
+            name: 'CardDef',
+          },
+          grants: grants('approve', 'update'),
+        },
       ]),
     );
     let policy = await compiled();
@@ -616,6 +630,7 @@ module(basename(import.meta.filename), function (hooks) {
         { code: 'grants-module-source', path: 'rules[3].targetType' },
         { code: 'grants-module-source', path: 'rules[4].targetType' },
         { code: 'unresolved-type', path: 'rules[6].targetType' },
+        { code: 'unknown-operation', path: 'rules[7].grants[0].operation' },
       ],
       'every refused rule and grant is recorded where it is, and nothing else is',
     );
@@ -645,6 +660,7 @@ module(basename(import.meta.filename), function (hooks) {
           grants: ['rules[2].grants[0] read', 'rules[2].grants[2] readSource'],
         },
         { rule: 'rules[5]', grants: ['rules[5].grants[0] readSource'] },
+        { rule: 'rules[7]', grants: ['rules[7].grants[1] update'] },
       ],
       'what is left compiles, at the positions the author wrote it',
     );

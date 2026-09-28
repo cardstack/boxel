@@ -458,9 +458,13 @@ async function compilePolicy(
   let cardURL = new URL(card);
   let issue = (code: PolicyIssueCode, path: string, message: string) =>
     issues.push({ code, path, message });
-  let version = row?.failureWithheld
-    ? undefined
-    : (row?.sourceContentHash ?? undefined);
+  // An error row carries the last good visit's fingerprint forward, as a row
+  // whose failure was withheld carries everything forward, so only a row that
+  // holds the card's current document says which bytes it describes.
+  let version =
+    row?.instance && !row.failureWithheld
+      ? (row.sourceContentHash ?? undefined)
+      : undefined;
   let compiled = (): Compilation => ({
     compiled: { card, version, rules, issues },
     row: rowIdentity(row),
@@ -574,6 +578,11 @@ async function compilePolicy(
       `the realm's policy card ${card} is not in the index`,
     );
   }
+  // Refused until a visit of the card succeeds. The row holds what an earlier
+  // visit read, and nothing on it says whether the card has changed since, so
+  // compiling it could serve a grant an administrator has just removed. The
+  // policy stays refused until something re-visits the card: an edit to it,
+  // a change to a module it depends on, or a reindex of its realm.
   if (row.failureWithheld) {
     return uncompilable(
       'policy-card-unloadable',
@@ -678,9 +687,10 @@ async function compilePolicy(
         );
         continue;
       }
-      // Authorization infrastructure is outside the grant model, and the gate
-      // refuses it whatever a compiled policy holds. So such a grant is
-      // recorded rather than kept as though it admitted something.
+      // Authorization infrastructure is outside the grant model. An operation
+      // flagged non-grantable is one the gate refuses whatever a compiled
+      // policy holds, so a grant of it is recorded rather than kept as though
+      // it admitted something.
       let keptOutBy = granted.nonGrantable
         ? resolved.name
         : isDefinitionFreeBaseOperation(operation)
@@ -694,11 +704,15 @@ async function compilePolicy(
         );
         continue;
       }
+      // A write on a policy type is refused here, where it is written. The gate
+      // refuses a write to the one policy card the realm's pointer names, but
+      // not to any other card of a policy type, so without this a rule naming
+      // one would let its grantees edit the realm's other policies.
       if (isPolicyType && isWrite(granted.base)) {
         issue(
           'grants-authorization-infrastructure',
           `${grantPath}.operation`,
-          `\`${operation}\` writes a ${resolved.name}, which is a RealmPolicy, and a policy card is written only by a caller the realm's own permissions allow`,
+          `\`${operation}\` writes a ${resolved.name}, which is a RealmPolicy, and a rule naming a policy type grants no write to it: whoever can edit a policy card decides what the policy grants`,
         );
         continue;
       }
