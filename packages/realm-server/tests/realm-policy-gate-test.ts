@@ -1538,7 +1538,9 @@ module(basename(import.meta.filename), function (hooks) {
           .sort(([a], [b]) => a.localeCompare(b));
       const EXISTING = `${EDUCATION}classrooms/room-205.json`;
       const MISSING = `${EDUCATION}classrooms/room-999.json`;
-      for (let accept of [SupportedMimeType.CardSource, '*/*']) {
+      // `image/png` is an Accept no route claims, so its `HEAD` reaches the
+      // fallback file serve rather than a discovery route.
+      for (let accept of [SupportedMimeType.CardSource, 'image/png']) {
         let existing = await head(EXISTING, accept, AUTH.teacher());
         let missing = await head(MISSING, accept, AUTH.teacher());
         assert.strictEqual(
