@@ -579,7 +579,9 @@ module(basename(import.meta.filename), function (hooks) {
         'as the anonymous delete itself is refused',
       );
 
-      let stranger = `Bearer ${createJWT(library, COLLEAGUE, [])}`;
+      // A session's token carries the caller's effective permissions, which on
+      // a realm anyone may read include that read.
+      let stranger = `Bearer ${createJWT(library, COLLEAGUE, ['read'])}`;
       let signedIn = await checkLibrary(stranger, [pair]);
       assert.deepEqual(
         (signedIn.body as { checks: CapabilityAnswer[] }).checks,
