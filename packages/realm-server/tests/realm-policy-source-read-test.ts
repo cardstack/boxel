@@ -366,6 +366,18 @@ module(basename(import.meta.filename), function (hooks) {
       // trust about its type. Falling through to the file its extension claims
       // would make "any data file" mean "every broken card's raw source".
       await policy('anyFile');
+      // The precondition the refusal rests on. Without an error row the path
+      // would be typed as a file, and a refusal would say nothing about how
+      // an error row is judged.
+      let row = await education.operationCore.indexQueryEngine.instance(
+        new URL(BROKEN_SOURCE.slice(0, -'.json'.length)),
+        { includeErrors: true },
+      );
+      assert.strictEqual(
+        row?.type,
+        'instance-error',
+        'the realm holds an error row',
+      );
       await refused(
         assert,
         BROKEN_SOURCE,
