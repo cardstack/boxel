@@ -13,13 +13,14 @@ import {
   baseRealm,
   Deferred,
   realmURL as realmURLSymbol,
-  SEARCH_CONCURRENCY_CAP,
+  QUERY_FIELD_SEARCH_CONCURRENCY_CAP,
 } from '@cardstack/runtime-common';
 
 import type LoaderService from '@cardstack/host/services/loader-service';
 import RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 import type StoreService from '@cardstack/host/services/store';
+import type { SearchThrottleLane } from '@cardstack/host/services/store';
 
 import {
   setupIntegrationTestRealm,
@@ -40,10 +41,10 @@ class StubRealmService extends RealmService {
 // A query-backed relationship asks the server who its members are, once per
 // field per deserialized card — a fan-out nobody requested card by card, and
 // the largest source of concurrent `_federated-search` requests a tab produces.
-// It shares the store's concurrency ceiling with the card `@context` surface,
-// so the fan-out leaves as a queue rather than as a burst. What it must NOT
-// share are the other card caps: clamping the page or the realm list would
-// change which cards the field reports as members.
+// It takes a slot in the store's query-field concurrency lane, so the fan-out
+// leaves as a queue rather than as a burst. What it must NOT share are the card
+// caps: clamping the page or the realm list would change which cards the field
+// reports as members.
 module(`Integration | query field search throttle`, function (hooks) {
   let loader: Loader;
   let loaderService: LoaderService;
@@ -123,19 +124,22 @@ module(`Integration | query field search throttle`, function (hooks) {
     restoreFetch = undefined;
   });
 
-  test(`a query field's search waits for a slot in the store's concurrency ceiling`, async function (this: RenderingTestContext, assert) {
+  test(`a query field's search waits for a slot in the store's query-field lane`, async function (this: RenderingTestContext, assert) {
     // Fill every slot with work that cannot finish until this test says so.
     let gates: Deferred<void>[] = [];
     let occupied = 0;
-    let occupying = Array.from({ length: SEARCH_CONCURRENCY_CAP }, () => {
-      let gate = new Deferred<void>();
-      gates.push(gate);
-      return storeService.performThrottledSearch(async () => {
-        occupied++;
-        await gate.promise;
-      });
-    });
-    await waitUntil(() => occupied >= SEARCH_CONCURRENCY_CAP, {
+    let occupying = Array.from(
+      { length: QUERY_FIELD_SEARCH_CONCURRENCY_CAP },
+      () => {
+        let gate = new Deferred<void>();
+        gates.push(gate);
+        return storeService.performThrottledSearch(async () => {
+          occupied++;
+          await gate.promise;
+        }, 'query-field');
+      },
+    );
+    await waitUntil(() => occupied >= QUERY_FIELD_SEARCH_CONCURRENCY_CAP, {
       timeout: 5_000,
     });
     let releaseGates = () => {
@@ -156,12 +160,13 @@ module(`Integration | query field search throttle`, function (hooks) {
       storeService.performThrottledSearch.bind(storeService);
     (storeService as any).performThrottledSearch = (
       run: () => Promise<unknown>,
+      lane: SearchThrottleLane,
     ) => {
       enqueued++;
       return performThrottledSearch(async () => {
         started++;
         return await run();
-      });
+      }, lane);
     };
     fetchCalls = 0;
 

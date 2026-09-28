@@ -56,11 +56,11 @@ import {
 } from './shared.ts';
 import {
   buildCombinedTemplateDatabase,
+  clearPendingIndexRows,
   clearRealmPermissions,
   cloneDatabaseFromTemplate,
   databaseExists,
   dropDatabase,
-  rebuildWorkingIndexFromIndex,
   resetQueueState,
   rewriteClonedRealmServerUrls,
   seedRealmPermissions,
@@ -407,7 +407,7 @@ export async function startFactoryRealmServer(
         );
       }
       await resetQueueState(databaseName);
-      await rebuildWorkingIndexFromIndex(databaseName);
+      await clearPendingIndexRows(databaseName);
       await seedRealmPermissions(
         databaseName,
         baseRealmURL,

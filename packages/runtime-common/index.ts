@@ -9,6 +9,7 @@ import type { CodeRef, ResolvedCodeRef } from './code-ref.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
 import type { RenderRouteOptions } from './render-route-options.ts';
 import type { Definition } from './definitions.ts';
+import type { QueueClaim } from './jobs/queue-claim.ts';
 import type { OperationsTransport } from './card-operations/client.ts';
 import type { OperationLoweringIssue } from './card-operations/types.ts';
 import type {
@@ -760,6 +761,11 @@ export interface RenderTimeoutDiagnostics extends BuildModelDiagnostics {
       // persisted before priority threading landed will lack the
       // field. Consumers should treat absent as `0`.
       priority?: number;
+      // The indexing batch the call belongs to; absent for a call that
+      // belongs to none (a module prerender, an on-demand render). An
+      // affinity can carry several batches at once, so this is what tells
+      // a stalled render's own batch apart from a concurrent one.
+      batchId?: string;
     }>;
   };
   // Host-emitted computed-field counters lifted out of
@@ -967,7 +973,7 @@ export interface IndexVisitClientTimings {
 // (`Batch.copyFrom` / `copyPrerenderedHtmlFrom` clone the source realm's
 // rows rather than rendering them): those keep whatever the source row
 // carried, so they name the source realm's pass, or nothing at all if that
-// row predates these stamps. The three stamps are:
+// row predates these stamps. The stamps are:
 //
 //   - `invalidationId` — one UUID per invalidation fan-out: minted when the
 //     `Batch` is created, so a from-scratch pass (which never calls
@@ -979,14 +985,23 @@ export interface IndexVisitClientTimings {
 //     fan-out. The `prerender_html` job an index pass spawns is its own
 //     batch with its own id: each groups its own channel's fan-out, so join
 //     the two channels on `url` (plus `generation`), never on this.
+//   - `passId` — the id of the batch that wrote the row, which an index
+//     pass's `realm_index_commits` row also carries, so a promoted row joins
+//     to the commit that published it. A `prerender_html` job's batch
+//     records no commit, so on `prerendered_html` the id only groups what
+//     that attempt of the job wrote. A retried job's attempts are separate
+//     passes, and a retry promotes the rows it resumed as the earlier attempt
+//     staged them, so such a row names that attempt — one that never
+//     committed. `boxel_index` has no `job_id` column; the ledger row of the
+//     pass that did commit carries the job id both attempts share.
 //   - `indexedAt` — wall-clock the write happened.
 //   - `writeSeq` — the row's position within that fan-out's write order.
 //
 // A tombstone takes no position in the write order, so `writeSeq` is absent
-// on one. The index channel's tombstones do carry the other two: they are
+// on one. The index channel's tombstones do carry the other three: they are
 // written by `invalidate()` under the id it just minted, and a visited URL's
 // row then overwrites its tombstone. The render channel's tombstones clear
-// `diagnostics` outright and so carry none of the three.
+// `diagnostics` outright and so carry none of them.
 //
 // Every other field is optional because writers populate incrementally:
 // render-side fields come from the Prerenderer's response meta. Any stage
@@ -999,6 +1014,7 @@ export interface IndexVisitClientTimings {
 export interface Diagnostics
   extends RenderTimeoutDiagnostics, PrerenderMetaDiagnostics {
   invalidationId?: string;
+  passId?: string;
   indexedAt?: number;
   // 0-based position of this row among the batch's row writes, stamped when
   // the row enters the write path. `indexedAt` only resolves to the
@@ -1035,6 +1051,26 @@ export interface Diagnostics
   //
   // Absent on a tombstoned row and on rows written before the stamp existed.
   writeSeq?: number;
+  // On a row a commit's validation round wrote: the round, 1 for the first.
+  // The pass's commit found that a peer pass of the realm had committed
+  // something this row was read against, rolled back, and re-visited the row
+  // (or reached it by extending to the peer's rows that depend on the pass).
+  // Tombstones a round writes carry it too. Absent on every row a pass wrote
+  // outside a round, which is every row of a pass no peer overlapped.
+  validationRound?: number;
+  // How the queue claimed the job that wrote this row: how long it waited
+  // between enqueue and claim, and the lane and lane family it was claimed in.
+  // The same object as the job's `jobs.result.queueClaim`, so a row's share of
+  // a save's wait splits into queue wait and the pass's own run without a join
+  // to `jobs`. Absent on a row no queue-claimed job wrote.
+  queueClaim?: QueueClaim;
+  // On a `prerendered_html` row written by the `prerender_html` job: the
+  // generation of the live `boxel_index` row (same URL and type) that the
+  // row's own generation was read from once the job's spawning index passes
+  // had committed. Equal to the row's generation. Absent when there was no
+  // such index row, in which case the row took the realm's committed
+  // generation.
+  stampedFromIndexGeneration?: number;
   // Host-shell token the prerender server had been told was current when this
   // render started, and again when its response was assembled. Two different
   // values mean the render straddled a host redeploy: the page resolved
@@ -1295,13 +1331,13 @@ export type PrerenderVisitArgs = {
   // carry-forward on its own row's prior manifest inside. Only honored by
   // 'prerender-html' visits.
   screenshots?: DeclaredScreenshotVisitArgs;
-  // The realm view this visit renders against — one realm at one generation.
-  // An index pass and the `prerender_html` job it spawns are separate queue
-  // jobs that read the same files, so they carry the same scope, while the
-  // next pass over the realm carries a different one. A prerender tab keys
-  // what it may reuse across visits on this rather than on `jobId`: the two
-  // jobs interleave on a shared tab, and scoping on the job would tear that
-  // tab's state down on every alternation while still holding one view.
+  // The realm view this visit renders against: one realm, with no commit to it
+  // in between. A prerender tab keys what it may reuse across visits on this
+  // rather than on `jobId` — cached link documents, resident instances,
+  // in-render search results — so a scope must change whenever the view
+  // could have. An index pass and the `prerender_html` job it spawns share
+  // one while nothing else committed around the pass; otherwise each takes
+  // its own (see `renderScopeFor`).
   renderScope?: string;
   // The card instance's stored bytes, for a visit whose caller already read
   // them. The card branch of the render route builds its model from these
@@ -1433,6 +1469,16 @@ export interface DeclaredScreenshotVisitResult {
 // job of the index pass — its own for the index visit, the spawning pass's for
 // the prerender-html job that pass enqueued.
 //
+// A scope names a view of the realm that no commit moved, because a prerender
+// tab reuses what it read under one scope without checking it again. Index
+// passes of one realm run side by side, one per writer lane, so another
+// writer's commit can move the view mid-pass. So `round` separates the reads
+// a pass makes after that: a commit-time validation round re-visits under a
+// scope of its own, which every tab it lands on treats as a new view. And a
+// prerender-html job shares its spawning pass's scope only when nothing else
+// committed around that pass (see `runPrerenderHtmlPass`); otherwise it keys
+// on its own job.
+//
 // The pass's *generation* would read more naturally and is not sound: it is
 // `current_generation + 1` computed at batch start and only committed by
 // `done()`, so a pass that dies before finalizing leaves the row untouched and
@@ -1444,8 +1490,14 @@ export interface DeclaredScreenshotVisitResult {
 // the earlier attempt's copies. That write enqueues its own pass, whose
 // invalidation set covers the same rows under a scope of its own, so the window
 // closes on the next pass rather than persisting.
-export function renderScopeFor(realmURL: string, passJobId: number): string {
-  return `${realmURL}@${passJobId}`;
+export function renderScopeFor(
+  realmURL: string,
+  passJobId: number,
+  round = 0,
+): string {
+  return round === 0
+    ? `${realmURL}@${passJobId}`
+    : `${realmURL}@${passJobId}~${round}`;
 }
 
 // Arguments for releasing an indexing batch's ownership of an affinity,
@@ -1582,6 +1634,11 @@ export type ScreenshotPrerenderArgs = {
   format: ScreenshotFormat;
   // Optional per-capture overrides (viewport, scale, fullPage, clip).
   captureSpec?: ScreenshotCaptureSpec;
+  // Render-route options for the capture. The capture path always renders a
+  // card (`cardRender`), so only `loaderEpoch` is meaningful here today: it
+  // synchronizes the pooled tab's module graph to the realm's current
+  // timeline, exactly as an indexing visit's `renderOptions` do.
+  renderOptions?: RenderRouteOptions;
   // Worker-job priority threaded through from the producer side. See
   // ModulePrerenderArgs for the contract.
   priority?: number;
@@ -1684,6 +1741,7 @@ export {
   CONTENT_HASH_HEAD_BYTES,
   CONTENT_HASH_TAIL_BYTES,
 } from './content-hash.ts';
+export { uint8ArrayToBase64 } from './base64.ts';
 export type { FileSizeLimits } from './write-size-validation.ts';
 export {
   isSplicedSource,
@@ -1767,6 +1825,20 @@ export * from './card-operations/client.ts';
 // `@cardstack/runtime-common/card-operations` directly and takes that cost on
 // purpose.
 export type * from './card-operations/types.ts';
+// The compiled-policy cache reaches bxl only through a specifier TypeScript
+// cannot follow, so exporting it from the barrel costs no consumer that
+// typecheck program. The realm server announces other realms' index moves to
+// it through `noteRealmIndexMoved`.
+export {
+  noteRealmIndexMoved,
+  realmPolicyRef,
+} from './card-operations/policy.ts';
+export type {
+  CompiledOperationGrant,
+  CompiledPolicyPredicate,
+  CompiledPolicyRule,
+  CompiledRealmPolicy,
+} from './card-operations/policy.ts';
 export * from './query-canonicalization.ts';
 export * from './searchable-routes.ts';
 export * from './catalog.ts';
@@ -1777,7 +1849,6 @@ export * from './bfm-card-references.ts';
 export * from './bfm-math-render.ts';
 export * from './bfm-mermaid-render.ts';
 export * from './constants.ts';
-import { executableExtensions } from './constants.ts';
 export * from './search-replace-markers.ts';
 export * from './helpers/const.ts';
 export * from './document.ts';
@@ -1860,8 +1931,9 @@ export * from './render-route-options.ts';
 export * from './publishability.ts';
 export * from './pr-manifest.ts';
 export * from './file-def-code-ref.ts';
-export * from './file-def-bindings.ts';
+export * from './policy-file-def.ts';
 
+import { executableExtensions } from './constants.ts';
 // Extensions covered by the realm-wide pre-warm sweep that primes the
 // modules cache before the visit loop. This is an optimization, not a
 // correctness gate: a `.ts` / `.js` file CAN host a `CardDef`

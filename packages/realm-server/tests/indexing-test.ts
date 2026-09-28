@@ -581,7 +581,7 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(
         prerenderJob.concurrency_group,
         `prerender-html:${testRealm}`,
-        'HTML work runs in its own per-realm concurrency group',
+        "a from-scratch pass's HTML runs in the exclusive lane of the realm's prerender-html family",
       );
       assert.strictEqual(
         prerenderJob.status,
@@ -589,14 +589,29 @@ module(basename(import.meta.filename), function () {
         'the prerender_html job completed successfully',
       );
       let prerenderArgs = prerenderJob.args as {
+        spawningIndexPasses: { jobId: number; passId: string }[];
         generation: number;
         spawningJobId: number | null;
         changes: { url: string; operation: string }[];
       };
+      assert.deepEqual(
+        prerenderArgs.spawningIndexPasses.map((pass) => pass.jobId),
+        [indexJob.id],
+        'the job waits on the pass of the index job that spawned it',
+      );
+      let ledger = (await testDbAdapter.execute(
+        `SELECT job_id FROM realm_index_commits WHERE pass_id = $1`,
+        { bind: [prerenderArgs.spawningIndexPasses[0].passId] },
+      )) as { job_id: number }[];
+      assert.deepEqual(
+        ledger.map((row) => Number(row.job_id)),
+        [indexJob.id],
+        'identified by the pass id that pass committed under',
+      );
       assert.strictEqual(
         prerenderArgs.generation,
         1,
-        'the job carries the generation the index pass anticipated',
+        'and carries the generation that pass anticipated, for older workers',
       );
       assert.strictEqual(
         prerenderArgs.spawningJobId,
@@ -621,7 +636,8 @@ module(basename(import.meta.filename), function () {
       // The module pre-warm sweep's wall-clock is attributed to the job that
       // pays it: the prerender job records `preWarmMs`, the index job does not.
       let prerenderResult = prerenderJob.result as {
-        phaseTimings?: { preWarmMs?: unknown } | null;
+        spawningIndexJobIds?: unknown;
+        phaseTimings?: { preWarmMs?: unknown; spawnGateMs?: unknown } | null;
       } | null;
       assert.strictEqual(
         typeof prerenderResult?.phaseTimings?.preWarmMs,
@@ -629,6 +645,19 @@ module(basename(import.meta.filename), function () {
         `the prerender job result records the pre-warm wall-clock, got: ${JSON.stringify(
           prerenderResult,
         )}`,
+      );
+      // And the wait for its spawning pass's commit, together with which
+      // passes it waited on, so a slow render can be split into waiting and
+      // rendering from the job row alone.
+      assert.strictEqual(
+        typeof prerenderResult?.phaseTimings?.spawnGateMs,
+        'number',
+        'the prerender job result records the spawning-pass wait',
+      );
+      assert.deepEqual(
+        prerenderResult?.spawningIndexJobIds,
+        [indexJob.id],
+        'the prerender job result names the index passes it waited on',
       );
     });
 
@@ -1792,7 +1821,7 @@ module(basename(import.meta.filename), function () {
       });
 
       test('a retry reports the adoption chain the attempt it resumes wrote', async function (assert) {
-        // A job that dies before its swap leaves real rows in the working
+        // A job that dies before its swap leaves real rows in the pending
         // table, and the retry resumes them rather than re-visiting — so the
         // write path never sees them a second time. For a card that dead
         // attempt created there is no production row to read a chain from
@@ -1803,6 +1832,8 @@ module(basename(import.meta.filename), function () {
           reservationId: 1,
           priority: 0,
           queueWaitMs: null,
+          concurrencyGroup: null,
+          laneFamily: null,
         };
         let url = new URL(`${testRealm}resumed-only.json`);
         let resumedType = `${testRealm}resumed-only/ResumedOnly`;
@@ -2168,29 +2199,63 @@ module(basename(import.meta.filename), function () {
         );
       });
 
-      test('batch invalidation resolves alias-like seeds from staged working rows', async function (assert) {
+      test("batch invalidation resolves alias-like seeds from the pass's own staged rows, not a peer's", async function (assert) {
         let stagedOnlyURL = new URL(`${testRealm}staged-only.json`);
         let stagedAliasURL = new URL(`${testRealm}staged-only`);
+        let stagedFile = {
+          type: 'file' as const,
+          deps: new Set<string>(),
+          lastModified: Date.now(),
+          resourceCreatedAt: Date.now(),
+        };
+        // A committed row that depends on the staged file by its concrete
+        // `.json` URL. The fan-out matches a dependency string exactly, so it
+        // reaches this row only when the alias seed resolved to that URL.
+        let dependentURL = `${testRealm}staged-only-dependent.json`;
+        await testDbAdapter.execute(
+          `INSERT INTO boxel_index (url, file_alias, type, generation, realm_url, deps, is_deleted, has_error)
+           VALUES ($1, $2, 'instance', 1, $3, $4::jsonb, false, false)`,
+          {
+            bind: [
+              dependentURL,
+              dependentURL.replace(/\.json$/, ''),
+              realm.url,
+              JSON.stringify([stagedOnlyURL.href]),
+            ],
+          },
+        );
 
+        let otherBatch = await new IndexWriter(testDbAdapter).createBatch(
+          new URL(realm.url),
+          virtualNetwork,
+        );
         let stagingBatch = await new IndexWriter(testDbAdapter).createBatch(
           new URL(realm.url),
           virtualNetwork,
         );
-        await stagingBatch.updateEntry(stagedOnlyURL, {
-          type: 'file',
-          deps: new Set<string>(),
-          lastModified: Date.now(),
-          resourceCreatedAt: Date.now(),
-        });
+        // A batch's first `invalidate()` fixes the URLs it treats as already
+        // handled, and a URL it wrote before then is one of them. So the file
+        // each batch reaches through a staged row is one staged after that.
+        for (let batch of [otherBatch, stagingBatch]) {
+          await batch.invalidate([new URL(`${testRealm}unrelated-seed.json`)]);
+        }
 
-        let invalidationBatch = await new IndexWriter(
-          testDbAdapter,
-        ).createBatch(new URL(realm.url), virtualNetwork);
-        await invalidationBatch.invalidate([stagedAliasURL]);
+        let peerBatch = await new IndexWriter(testDbAdapter).createBatch(
+          new URL(realm.url),
+          virtualNetwork,
+        );
+        await peerBatch.updateEntry(stagedOnlyURL, stagedFile);
+        await otherBatch.invalidate([stagedAliasURL]);
+        assert.false(
+          otherBatch.invalidations.includes(dependentURL),
+          "a peer pass's staged row does not resolve the seed, so its dependents are not reached",
+        );
 
-        assert.ok(
-          invalidationBatch.invalidations.includes(stagedOnlyURL.href),
-          'instance-id style seed resolves via boxel_index_working row before production commit',
+        await stagingBatch.updateEntry(stagedOnlyURL, stagedFile);
+        await stagingBatch.invalidate([stagedAliasURL]);
+        assert.true(
+          stagingBatch.invalidations.includes(dependentURL),
+          "the pass's own staged row resolves the seed, and the fan-out reaches its dependents",
         );
       });
 
@@ -2299,10 +2364,9 @@ module(basename(import.meta.filename), function () {
       });
 
       test('batch invalidation clears has_error and error_doc when tombstoning a previously-errored row', async function (assert) {
-        // The primary key is `(url, realm_url, type)` — no `generation` —
-        // so a tombstone upsert always collides with the prior row for the
-        // same URL. Any column NOT in the tombstone upsert's SET list keeps
-        // its previous value. Before this guard, `has_error` and `error_doc`
+        // A tombstone is staged over a copy of the URL's production row, so
+        // any column NOT in the tombstone upsert's SET list keeps its
+        // production value. Before this guard, `has_error` and `error_doc`
         // were not in that list, so an errored row stayed errored across
         // every subsequent reindex even after the file was deleted —
         // producing a "has_error = true, error_doc = jsonb null" shape
@@ -2468,7 +2532,7 @@ module(basename(import.meta.filename), function () {
                 `SELECT id, priority, args
              FROM jobs
              WHERE job_type = 'incremental-index'
-               AND concurrency_group = $1
+               AND (concurrency_group = $1 OR lane_family = $1)
                AND status = 'unfulfilled'`,
                 { bind: [`indexing:${realm.url}`] },
               )) as {
@@ -2557,7 +2621,7 @@ module(basename(import.meta.filename), function () {
                 `SELECT args
              FROM jobs
              WHERE job_type = 'incremental-index'
-               AND concurrency_group = $1
+               AND (concurrency_group = $1 OR lane_family = $1)
                AND status = 'unfulfilled'`,
                 { bind: [`indexing:${realm.url}`] },
               )) as {
@@ -2621,7 +2685,7 @@ module(basename(import.meta.filename), function () {
               let rows = (await testDbAdapter.execute(
                 `SELECT job_type
              FROM jobs
-             WHERE concurrency_group = $1
+             WHERE (concurrency_group = $1 OR lane_family = $1)
                AND status = 'unfulfilled'
                AND job_type IN ('incremental-index', 'from-scratch-index')`,
                 { bind: [`indexing:${realm.url}`] },
@@ -2759,7 +2823,7 @@ module(basename(import.meta.filename), function () {
               let rows = (await testDbAdapter.execute(
                 `SELECT job_type
                FROM jobs
-               WHERE concurrency_group = $1
+               WHERE (concurrency_group = $1 OR lane_family = $1)
                  AND status = 'unfulfilled'
                  AND job_type IN ('incremental-index', 'from-scratch-index')`,
                 { bind: [`indexing:${realm.url}`] },

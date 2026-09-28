@@ -33,12 +33,19 @@ const log = logger('search-bounds');
 //     so a caller can paginate — and can see that it got a short page.
 //   - Realms fan-out (MAX_REALMS_PER_SEARCH_REQUEST) — client-side only, on the
 //     card `@context` surface: the host federates widely.
-//   - Concurrency (SEARCH_CONCURRENCY_CAP) — client-side only, and a ceiling on
-//     a store service rather than on a caller: the card `@context` surface and
-//     query-field resolution share one, so a page's whole search fan-out is
-//     bounded however it is spread across cards. Each store service holds its
-//     own, so this is not a single number across a tab. The host runs its own
-//     searches freely.
+//   - Concurrency (SEARCH_CONCURRENCY_CAP, QUERY_FIELD_SEARCH_CONCURRENCY_CAP)
+//     — client-side only, and two lanes per store service rather than one
+//     ceiling. The card `@context` surface takes SEARCH_CONCURRENCY_CAP slots
+//     and query-field resolution takes QUERY_FIELD_SEARCH_CONCURRENCY_CAP of
+//     its own, so a store service has at most the sum in flight. The lanes are
+//     separate so the eager query-field fan-out, which grows with every card a
+//     page deserializes, never holds the slots a search the card asked for is
+//     waiting on. Within each lane a page's fan-out is bounded
+//     however it is spread across cards. Each store service holds its own
+//     pair, so neither is a single number across a tab. The host runs its own
+//     searches freely. Unlike the server-side bounds, neither cap can be tuned
+//     by env: the host bundle has no `process.env`, so both hold their defaults
+//     wherever they are enforced.
 //   - Time budget (SEARCH_TIME_BUDGET_MS) — server-side only: a wall-clock
 //     cutoff of the server's own work can't live anywhere else.
 //   - In-flight ceiling (SERVER_MAX_IN_FLIGHT_SEARCHES, with
@@ -61,7 +68,8 @@ const log = logger('search-bounds');
 //     rather than in hops because distance does not track expense: a card
 //     carrying dozens of relationships is dozens of resources one hop out.
 //
-// All bounds are exported consts, overridable via env for ops tuning.
+// All bounds are exported consts, overridable via env for ops tuning where the
+// enforcing process has an env to read (see the concurrency caps above).
 // ---------------------------------------------------------------------------
 
 const DEFAULT_MAX_SEARCH_PAGE_SIZE = 100;
@@ -70,6 +78,7 @@ const DEFAULT_SERVER_ABSOLUTE_MAX_PAGE_SIZE = 2_000;
 const DEFAULT_MAX_REALMS_PER_SEARCH_REQUEST = 2;
 const DEFAULT_SEARCH_TIME_BUDGET_MS = 30_000;
 const DEFAULT_SEARCH_CONCURRENCY_CAP = 2;
+const DEFAULT_QUERY_FIELD_SEARCH_CONCURRENCY_CAP = 2;
 const DEFAULT_SERVER_MAX_IN_FLIGHT_SEARCHES = 30;
 const DEFAULT_SEARCH_ADMISSION_WAIT_MS = 1_000;
 const DEFAULT_SERVER_MAX_ASSEMBLED_LINK_RESOURCES = 1_000;
@@ -161,14 +170,23 @@ export const SEARCH_TIME_BUDGET_MS = parsePositiveInt(
   MIN_TIME_BUDGET_MS,
 );
 
-// Max item-leg searches one store service may have in flight at once, across
-// the card `@context` surface and query-field resolution together. Enforced client-side
-// (see host StoreService); exported here so the client and the shared contract
-// agree on one number. Excess searches queue rather than fail, so this bounds
-// the concurrency and never the count.
+// Max card `@context` item-leg searches one store service may have in flight at
+// once. Enforced client-side (see host StoreService); exported here so the
+// client and the shared contract agree on one number. Excess searches queue
+// rather than fail, so this bounds the concurrency and never the count.
 export const SEARCH_CONCURRENCY_CAP = parsePositiveInt(
   env.SEARCH_CONCURRENCY_CAP,
   DEFAULT_SEARCH_CONCURRENCY_CAP,
+  MIN_CONCURRENCY,
+);
+
+// Max query-field resolution searches one store service may have in flight at
+// once — a lane of its own beside SEARCH_CONCURRENCY_CAP's, so the two add up
+// rather than share. Like that cap it queues the excess and bounds the
+// concurrency, never the count.
+export const QUERY_FIELD_SEARCH_CONCURRENCY_CAP = parsePositiveInt(
+  env.QUERY_FIELD_SEARCH_CONCURRENCY_CAP,
+  DEFAULT_QUERY_FIELD_SEARCH_CONCURRENCY_CAP,
   MIN_CONCURRENCY,
 );
 

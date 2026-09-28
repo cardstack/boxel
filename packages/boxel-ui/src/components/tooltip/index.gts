@@ -39,6 +39,7 @@ interface Signature {
 }
 export default class Tooltip extends Component<Signature> {
   @tracked isHoverOnTrigger = false;
+  @tracked isFocusOnTrigger = false;
   private overlayContainer?: HTMLElement | null = null;
   private triggerElement?: HTMLElement | null = null;
   private themeObserver?: MutationObserver | null = null;
@@ -53,7 +54,9 @@ export default class Tooltip extends Component<Signature> {
   }
 
   get showContent(): boolean {
-    return this.isHoverOnTrigger && !this.args.disabled;
+    return (
+      (this.isHoverOnTrigger || this.isFocusOnTrigger) && !this.args.disabled
+    );
   }
 
   get appRootEl(): HTMLElement {
@@ -157,16 +160,48 @@ export default class Tooltip extends Component<Signature> {
     this.overlayContainer = null;
   }
 
+  // Hover and focus are tracked apart so a pointer leaving a trigger that
+  // still has keyboard focus does not take the tooltip away, and vice versa.
   @action
   onMouseEnter(event: Event) {
-    this.triggerElement = event.currentTarget as HTMLElement;
     this.isHoverOnTrigger = true;
-    this.startObservingTheme();
+    this.activate(event);
   }
 
   @action
   onMouseLeave() {
     this.isHoverOnTrigger = false;
+    this.deactivate();
+  }
+
+  // Only keyboard focus shows the tooltip. A mouse click also focuses a
+  // button, and without this guard the tooltip would stay pinned after the
+  // pointer moved away, until focus landed somewhere else.
+  @action
+  onFocusIn(event: Event) {
+    let trigger = event.currentTarget as HTMLElement;
+    if (!trigger.matches(':focus-visible, :has(:focus-visible)')) {
+      return;
+    }
+    this.isFocusOnTrigger = true;
+    this.activate(event);
+  }
+
+  @action
+  onFocusOut() {
+    this.isFocusOnTrigger = false;
+    this.deactivate();
+  }
+
+  private activate(event: Event) {
+    this.triggerElement = event.currentTarget as HTMLElement;
+    this.startObservingTheme();
+  }
+
+  private deactivate() {
+    if (this.isHoverOnTrigger || this.isFocusOnTrigger) {
+      return;
+    }
     this.stopObservingTheme();
     this.triggerElement = null;
   }
@@ -183,6 +218,8 @@ export default class Tooltip extends Component<Signature> {
         {{velcro.hook}}
         {{on 'mouseenter' this.onMouseEnter}}
         {{on 'mouseleave' this.onMouseLeave}}
+        {{on 'focusin' this.onFocusIn}}
+        {{on 'focusout' this.onFocusOut}}
         data-tooltip-trigger='true'
         ...attributes
       >

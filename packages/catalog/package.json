@@ -45,6 +45,7 @@
     "catalog:setup": "[ -d contents ] || git clone git@github.com:cardstack/boxel-catalog.git contents || git clone https://github.com/cardstack/boxel-catalog.git contents || { echo 'both ssh and https clone failed; check GitHub auth and network'; exit 1; }",
     "catalog:update": "sh scripts/catalog-update.sh",
     "catalog:reset": "rm -rf contents && pnpm catalog:setup",
+    "catalog:test-subset": "node scripts/sync-test-subset.ts",
     "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
     "lint:fix": "concurrently \"pnpm:lint:*:fix\" --names \"fix:\"",
     "lint:hbs": "ember-template-lint contents --no-error-on-unmatched-pattern",

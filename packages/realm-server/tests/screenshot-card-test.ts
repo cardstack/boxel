@@ -64,6 +64,11 @@ module(basename(import.meta.filename), function () {
         async withUserCostLock(_userId, fn) {
           return await fn();
         },
+        async withTransaction(fn) {
+          return await fn((expression, coerceTypes) =>
+            query(this, expression, coerceTypes),
+          );
+        },
       };
     }
 

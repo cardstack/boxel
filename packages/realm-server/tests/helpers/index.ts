@@ -68,6 +68,8 @@ import {
 import { upsertPublishedRealmInRegistry } from '../../lib/realm-registry-writes.ts';
 
 import {
+  currentConnectionTenant,
+  isSharedWork,
   PgAdapter,
   PgQueuePublisher,
   PgQueueRunner,
@@ -261,10 +263,63 @@ export async function waitUntil<T>(
   );
 }
 
+// Run `fn` and report each database statement issued while it ran, with the
+// connection tenant (see `withConnectionTenant` in `@cardstack/postgres`) it
+// was charged to — `undefined` for untagged work — and whether it ran as
+// shared work (`withSharedWork`). The statements are still run by the real
+// adapter; this only reads the async context each one is issued in, which is
+// the context the adapter's connection scheduler reads too.
+export async function connectionTenantsDuring<T>(
+  dbAdapter: PgAdapter,
+  fn: () => Promise<T>,
+): Promise<{
+  result: T;
+  statements: { sql: string; tenant: string | undefined; shared: boolean }[];
+}> {
+  let statements: {
+    sql: string;
+    tenant: string | undefined;
+    shared: boolean;
+  }[] = [];
+  let execute = dbAdapter.execute;
+  dbAdapter.execute = function (this: PgAdapter, ...args) {
+    statements.push({
+      sql: args[0],
+      tenant: currentConnectionTenant(),
+      shared: isSharedWork(),
+    });
+    return execute.apply(this, args);
+  };
+  try {
+    return { result: await fn(), statements };
+  } finally {
+    dbAdapter.execute = execute;
+  }
+}
+
+// Statements that read the realm index — the rows a search is answering from,
+// as opposed to the bookkeeping around it.
+export function indexReads<S extends { sql: string }>(statements: S[]): S[] {
+  return statements.filter(({ sql }) => /\bFROM\s+boxel_index\b/i.test(sql));
+}
+
+// Statements that read the module definition cache.
+export function definitionCacheReads<S extends { sql: string }>(
+  statements: S[],
+): S[] {
+  return statements.filter(({ sql }) => /\bFROM\s+modules\b/i.test(sql));
+}
+
 export const testRealm = 'http://test-realm/';
 export const localBaseRealm = isEnvironmentMode()
   ? `${serviceURL('realm-server')}/base`
   : 'http://localhost:4201/base';
+// The catalog realm the test stack serves: the pinned catalog test subset
+// (packages/catalog/test-subset.json), at the URL the prerender host bundle
+// resolves `@cardstack/catalog/` to.
+export const localCatalogRealm = isEnvironmentMode()
+  ? `${serviceURL('realm-server')}/catalog/`
+  : 'http://localhost:4201/catalog/';
 export const matrixURL = new URL(
   isEnvironmentMode() ? serviceURL('matrix') : 'http://localhost:8008',
 );
@@ -411,6 +466,9 @@ export function createVirtualNetwork() {
   // @cardstack/base/ realm-prefix mapping so unresolveURL on either
   // form canonicalises to the same RRI.
   virtualNetwork.addRealmMapping('@cardstack/base/', localBaseRealm);
+  // The prerender host registers the catalog prefix too, so this side has to
+  // agree with it for module keys to match across the two processes.
+  virtualNetwork.addRealmMapping('@cardstack/catalog/', localCatalogRealm);
   return virtualNetwork;
 }
 
@@ -3200,8 +3258,9 @@ export function realmConfigCardJSON(
     // The realm's own settings, which a card operation reads with
     // `realmConfig("key")`.
     config?: Record<string, unknown>;
-    // Which FileDef subclass each file extension in this realm binds to.
-    fileTypes?: Record<string, { module: string; name: string }>;
+    // The pointer to the realm's policy card. Typed loosely so a test can
+    // write a malformed one.
+    policy?: unknown;
   } = {},
 ): string {
   let attrs: Record<string, unknown> = {};
@@ -3224,8 +3283,8 @@ export function realmConfigCardJSON(
   if (config.config !== undefined) {
     attrs.config = config.config;
   }
-  if (config.fileTypes !== undefined) {
-    attrs.fileTypes = config.fileTypes;
+  if (config.policy !== undefined) {
+    attrs.policy = config.policy;
   }
   return JSON.stringify({
     data: {

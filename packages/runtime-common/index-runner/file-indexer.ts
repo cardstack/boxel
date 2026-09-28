@@ -27,7 +27,6 @@ import {
 import { baseRef } from '../constants.ts';
 import { CARD_INSTANCE_FILE_KEY } from '../search-doc-keys.ts';
 import type { VirtualNetwork } from '../virtual-network.ts';
-import type { FileDefBindings } from '../file-def-bindings.ts';
 
 export interface FileIndexerOptions {
   path: LocalPath;
@@ -52,12 +51,6 @@ export interface FileIndexerOptions {
   diagnostics?: Diagnostics;
   dependencyResolver: IndexRunnerDependencyManager;
   virtualNetwork: VirtualNetwork;
-  // The realm's own binding of file extension to FileDef subclass. The row
-  // this writes carries the class it resolves, and the realm resolves the same
-  // one from the same document when it serves the file or dispatches an
-  // operation against it — so the type a file is indexed as and the type its
-  // operations are looked up on cannot disagree.
-  fileDefBindings?: FileDefBindings;
   updateEntry(
     entryURL: URL,
     entry: FileEntry | FileErrorIndexEntry,
@@ -80,7 +73,6 @@ export async function performFileIndexing({
   diagnostics,
   dependencyResolver,
   virtualNetwork,
-  fileDefBindings,
   updateEntry,
   logWarn,
 }: FileIndexerOptions): Promise<'indexed' | 'error'> {
@@ -103,11 +95,7 @@ export async function performFileIndexing({
   let name = path.split('/').pop() ?? path;
   let contentType = inferContentType(name);
 
-  let fileDefCodeRef = resolveFileDefCodeRef(
-    new URL(fileURL),
-    virtualNetwork,
-    fileDefBindings,
-  );
+  let fileDefCodeRef = resolveFileDefCodeRef(new URL(fileURL), virtualNetwork);
   let fileTypeRefs = [fileDefCodeRef];
   if (
     fileDefCodeRef.module !== BASE_FILE_DEF_CODE_REF.module ||
@@ -205,27 +193,6 @@ export async function performFileIndexing({
   );
   let fileTypes = extractResult.types ?? fallbackTypes;
   let deps = new Set(extractResult.deps ?? []);
-  // Deliberately NOT an edge to the realm's config document.
-  //
-  // A file's class depends on the realm's `fileTypes` bindings, so an edge
-  // from every file row to `realm.json` would make a binding edit re-index
-  // the files it re-types. It would also make every *other* edit to that
-  // document do the same, and those are the common ones — a rename, an icon
-  // or background change, a routing rule. Under such an edge a rename does
-  // not show its new name until every file in the realm has been re-indexed,
-  // which is a steep price on the frequent edit to buy something for the rare
-  // one.
-  //
-  // What that edge would have bought is bounded, because `adoptsFrom` on a
-  // served file-meta document is resolved from the realm's live bindings
-  // ahead of the row (see `fileMetaDocumentFromIndex`): the class a client
-  // hydrates and the class an operation dispatches against agree from the
-  // moment a binding is written, with no pass in between. What lags a binding
-  // change until the next re-index is the row's `types` — so a search by the
-  // bound type does not find the file, and `enumerateFileRenderings`, which
-  // keys fitted and embedded HTML on `types[0]`, has no candidates under the
-  // new class. Editing bindings on a realm that already holds files therefore
-  // wants a realm re-index, which the `fileTypes` field says.
 
   // Shared by the success entry and the dependency-error entry below, so the
   // two rows carry the same search keys. Two of them are synthetic (stamped

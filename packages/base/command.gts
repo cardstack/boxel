@@ -208,7 +208,9 @@ export class WriteBinaryFileInput extends CardDef {
   @field path = contains(StringField);
   @field realm = contains(StringField);
   @field base64Content = contains(StringField);
-  @field contentType = contains(StringField);
+  // No content-type field: the binary-write path always posts
+  // application/octet-stream (the realm router matches binary uploads on it)
+  // and the realm infers the file type from the destination path's extension.
   @field useNonConflictingFilename = contains(BooleanField);
 }
 

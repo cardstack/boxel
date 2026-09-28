@@ -83,9 +83,9 @@ export async function serializeCard(card: CardDef): Promise<CardResource> {
 
 // we can relax the resource here since we will be asserting an ID when we
 // setup the index. A fixture row carries both channels' data in one flat
-// object: the index half lands on `boxel_index(_working)` and the HTML half
+// object: the index half lands on `boxel_index(_pending)` and the HTML half
 // (the prerendered_html columns picked in below) lands on
-// `prerendered_html(_working)` — setupIndex splits them by each table's
+// `prerendered_html(_pending)` — setupIndex splits them by each table's
 // column list.
 type RelaxedBoxelIndexTable = Omit<BoxelIndexTable, 'pristine_doc'> & {
   pristine_doc: LooseCardResource | null;
@@ -119,9 +119,9 @@ export type TestIndexRow =
     };
 
 export interface SetupIndexOptions {
-  // When `false`, `setupIndex` seeds only `boxel_index(_working)` and leaves
-  // `prerendered_html(_working)` empty — the "indexed but not yet rendered"
-  // state. The default seeds a `prerendered_html(_working)` row per fixture
+  // When `false`, `setupIndex` seeds only `boxel_index(_pending)` and leaves
+  // `prerendered_html(_pending)` empty — the "indexed but not yet rendered"
+  // state. The default seeds a `prerendered_html(_pending)` row per fixture
   // row carrying the fixture's HTML/markdown half, so tests read HTML through
   // the real `prerendered_html` path. Only a test that manages
   // `prerendered_html` rows itself needs to opt out.
@@ -136,7 +136,14 @@ export interface SetupIndexOptions {
 //    wish to set from the `data` object.
 //
 // the realm generations table will default to generation 1 of the testRealmURL
-// if no value is supplied
+// if no value is supplied.
+//
+// Rows given as a plain array are committed rows. The `{ working, production }`
+// form also stages its `working` rows the way an index pass stages them: in the
+// pending tables, under the `staging_id` each row names (see `jobStagingId`). A
+// pass reads only its own staging, plus the resumable rows of its job's earlier
+// attempts, so a working row that names no staging is refused rather than
+// staged where no batch would read it.
 export async function setupIndex(client: DBAdapter): Promise<void>;
 export async function setupIndex(
   client: DBAdapter,
@@ -193,12 +200,10 @@ export async function setupIndex(
   let productionRows: TestIndexRow[] = [];
   if (!maybeWorkingProductionRows) {
     versionRows = [{ realm_url: testRealmURL, current_generation: 1 }];
-    workingRows = maybeVersionRows as TestIndexRow[];
     productionRows = maybeVersionRows as TestIndexRow[];
   } else {
     versionRows = maybeVersionRows as TestRealmGenerationsRow[];
     if (Array.isArray(maybeWorkingProductionRows)) {
-      workingRows = maybeWorkingProductionRows as TestIndexRow[];
       productionRows = maybeWorkingProductionRows as TestIndexRow[];
     } else {
       workingRows = maybeWorkingProductionRows.working;
@@ -207,10 +212,17 @@ export async function setupIndex(
   }
   let now = Date.now();
   let normalizedWorkingRows = await normalizeIndexRows(workingRows, now);
+  for (let row of normalizedWorkingRows) {
+    if (typeof row.staging_id !== 'string') {
+      throw new Error(
+        `working row ${String(row.url)} names no staging_id, so no batch would read it`,
+      );
+    }
+  }
   let normalizedProductionRows = await normalizeIndexRows(productionRows, now);
   let workingIndexedCardsExpressions = await tableExpressions(
     client,
-    'boxel_index_working',
+    'boxel_index_pending',
     normalizedWorkingRows,
   );
   let productionIndexedCardsExpressions = await tableExpressions(
@@ -227,7 +239,7 @@ export async function setupIndex(
 
   await insertRows(
     client,
-    'boxel_index_working',
+    'boxel_index_pending',
     workingIndexedCardsExpressions,
   );
   await insertRows(client, 'boxel_index', productionIndexedCardsExpressions);
@@ -251,7 +263,7 @@ export async function setupIndex(
     );
   }
 
-  // Each fixture row's HTML/markdown half lands on `prerendered_html(_working)`
+  // Each fixture row's HTML/markdown half lands on `prerendered_html(_pending)`
   // — the sole home of rendered output — with `rendered_at` seeded from the
   // row's `indexed_at` (or the shared insert time). A row that carries no
   // rendering fields gets no `prerendered_html` row: it is indexed but not
@@ -277,10 +289,10 @@ export async function setupIndex(
         }));
     await insertRows(
       client,
-      'prerendered_html_working',
+      'prerendered_html_pending',
       await tableExpressions(
         client,
-        'prerendered_html_working',
+        'prerendered_html_pending',
         renderedRows(normalizedWorkingRows),
       ),
     );
@@ -304,26 +316,38 @@ async function insertRows(
   if (rows.length === 0) {
     return;
   }
-  await query(
-    client,
-    [
-      `INSERT INTO ${table}`,
-      ...addExplicitParens(separatedByCommas(rows[0].nameExpressions)),
-      'VALUES',
-      ...separatedByCommas(
-        rows.map((row) =>
-          addExplicitParens(separatedByCommas(row.valueExpressions)),
+  // One multi-row INSERT binds `rows * columns` parameters and every driver
+  // caps a statement's parameter count (sqlite-wasm at 32,766, Postgres at
+  // 65,535). A fixture big enough to exercise the writer's own chunking would
+  // otherwise blow that ceiling here, during setup, before the code under test
+  // ever runs — and a seed row carries more columns than a tombstone does, so
+  // setup would always fail first. Chunk against the same conservative budget
+  // the writer uses for sqlite.
+  let columnCount = rows[0].nameExpressions.length;
+  let rowsPerInsert = Math.max(1, Math.floor(900 / columnCount));
+  for (let i = 0; i < rows.length; i += rowsPerInsert) {
+    let slice = rows.slice(i, i + rowsPerInsert);
+    await query(
+      client,
+      [
+        `INSERT INTO ${table}`,
+        ...addExplicitParens(separatedByCommas(rows[0].nameExpressions)),
+        'VALUES',
+        ...separatedByCommas(
+          slice.map((row) =>
+            addExplicitParens(separatedByCommas(row.valueExpressions)),
+          ),
         ),
-      ),
-    ] as Expression,
-    coerceTypes,
-  );
+      ] as Expression,
+      coerceTypes,
+    );
+  }
 }
 
 // Normalize the fixture shapes (raw row / card / {card, data}) into flat row
 // objects carrying both channels' data. `tableExpressions` projects a table's
 // own columns out of a normalized row, so one row seeds its
-// `boxel_index(_working)` half and its `prerendered_html(_working)` half.
+// `boxel_index(_pending)` half and its `prerendered_html(_pending)` half.
 async function normalizeIndexRows(
   indexRows: TestIndexRow[],
   now: number,
@@ -375,9 +399,9 @@ async function tableExpressions(
   client: DBAdapter,
   table:
     | 'boxel_index'
-    | 'boxel_index_working'
+    | 'boxel_index_pending'
     | 'prerendered_html'
-    | 'prerendered_html_working',
+    | 'prerendered_html_pending',
   rows: Record<string, unknown>[],
 ) {
   let columnNames = await client.getColumnNames(table);
