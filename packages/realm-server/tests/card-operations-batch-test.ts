@@ -4492,6 +4492,42 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('a card an earlier entry appends to leaves nothing to judge, whatever the batch read of it before', async function (assert) {
+      // The delete makes the batch read the card whole before anything
+      // stages, and the append that runs first stages a description of the
+      // card rather than its bytes. What the delete is judged by is the card
+      // the append leaves, which the batch never holds.
+      let original = eventLog([{ label: 'first' }]);
+      let { core } = stub({
+        stored: { 'log-1.json': original },
+        definitions: {
+          EventLog: eventLogDefinition(),
+          LogEvent: logEventDefinition(),
+        },
+      });
+      let handed: unknown = 'unset';
+      await commitBatch(core, [
+        {
+          op: 'appendContainsMany',
+          href: `${REALM}log-1`,
+          field: 'events',
+          items: [{ label: 'second' }],
+        },
+        {
+          op: 'delete',
+          href: `${REALM}log-1`,
+          admit: async (judged) => {
+            handed = judged;
+          },
+        },
+      ]).catch(() => undefined);
+      assert.strictEqual(
+        handed,
+        undefined,
+        'not the bytes from before the append',
+      );
+    });
+
     test('a refusal commits nothing, whichever group holds it', async function (assert) {
       let { core, commits } = stub({
         stored: {
