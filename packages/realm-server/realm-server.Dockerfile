@@ -9,11 +9,13 @@ WORKDIR /realm-server
 RUN apt-get update && apt-get install -y ca-certificates curl unzip postgresql jq rsync git
 RUN npm install -g pnpm@12.7.0
 
-# Cache-friendly dependency fetch: this layer only re-runs when the lockfile
-# (or patches it references) changes, not on every source edit. `pnpm fetch`
-# populates the global pnpm store in $HOME from the lockfile alone, so the
-# subsequent `pnpm install --offline` doesn't need the registry.
-COPY pnpm-lock.yaml pnpm-workspace.yaml ./
+# Cache-friendly dependency fetch: this layer only re-runs when the lockfile,
+# the patches it references, or the pnpmfile changes, not on every source edit.
+# `pnpm fetch` populates the global pnpm store in $HOME, so the subsequent
+# `pnpm install --offline` doesn't need the registry. The pnpmfile belongs here
+# because the lockfile records its checksum: a frozen fetch that cannot
+# recompute it fails with ERR_PNPM_LOCKFILE_CONFIG_MISMATCH.
+COPY pnpm-lock.yaml pnpm-workspace.yaml .pnpmfile.cjs ./
 COPY patches/ ./patches
 RUN CI=1 pnpm fetch
 
