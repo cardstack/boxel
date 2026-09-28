@@ -447,22 +447,35 @@ function mergeIntoClone(
 // repo, whether a file named like a subset file or a class named like one a
 // subset file exports, drifts from the definition deployments serve while
 // tests keep passing against it.
+//
+// File names come from the manifest alone. Class names come from the subset
+// files' contents, which are absent when they could not be fetched; then only
+// the file names are checked, since a network error is nothing to fix here.
 function checkNoCopies(
   manifest: Manifest,
-  contents: Map<string, string>,
+  contents: Map<string, string> | undefined,
   dir: string,
 ) {
   let classNames = new Set<string>();
-  for (let source of contents.values()) {
+  for (let source of contents?.values() ?? []) {
     for (let [, name] of source.matchAll(
       /^export\s+(?:default\s+)?class\s+(\w+)/gm,
     )) {
       classNames.add(name);
     }
   }
-  let fileNames = new Set([...contents.keys()].map((path) => basename(path)));
+  let fileNames = new Set(manifest.files.map(({ path }) => basename(path)));
+  // A declaration starts its line, as a class statement or as a class
+  // expression bound to a name, so a comment or a string that mentions the
+  // class is not one. Subclasses and type aliases of the same name aren't
+  // matched either.
+  let names = [...classNames].join('|');
   let declaration = classNames.size
-    ? new RegExp(`\\bclass\\s+(${[...classNames].join('|')})\\b`)
+    ? new RegExp(
+        `^\\s*(?:export\\s+)?(?:default\\s+)?(?:declare\\s+)?(?:abstract\\s+)?class\\s+(${names})\\b` +
+          `|^\\s*(?:export\\s+)?(?:const|let|var)\\s+(${names})\\s*(?::[^=]*)?=\\s*class\\b`,
+        'm',
+      )
     : undefined;
   let copies: string[] = [];
   let visit = (current: string) => {
@@ -482,7 +495,9 @@ function checkNoCopies(
         let match =
           declaration && readFileSync(path, 'utf8').match(declaration);
         if (match) {
-          copies.push(`${relative(repoRoot, path)} declares ${match[1]}`);
+          copies.push(
+            `${relative(repoRoot, path)} declares ${match[1] ?? match[2]}`,
+          );
         }
       }
     }
@@ -496,7 +511,9 @@ function checkNoCopies(
     );
   }
   log(
-    `${relative(repoRoot, dir)} holds no copy of a subset definition (${[...classNames].join(', ')})`,
+    classNames.size
+      ? `${relative(repoRoot, dir)} holds no copy of a subset definition (${[...classNames].join(', ')})`
+      : `${relative(repoRoot, dir)} holds no file named like a subset file`,
   );
 }
 
@@ -620,6 +637,17 @@ async function main() {
     loaded = await loadContents(manifest);
   } catch (e) {
     let message = `could not fetch ${manifest.repository}@${manifest.revision}: ${(e as Error).message}`;
+    if (noCopiesArg) {
+      console.warn(
+        `catalog test subset: ${message}; checking file names only, since the class names come from the files`,
+      );
+      checkNoCopies(
+        manifest,
+        undefined,
+        resolve(noCopiesArg.slice('--check-no-copies='.length)),
+      );
+      return;
+    }
     if (args.has('--best-effort')) {
       console.warn(`catalog test subset: ${message}; continuing without it`);
       return;
