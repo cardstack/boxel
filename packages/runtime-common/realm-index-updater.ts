@@ -9,11 +9,8 @@ import {
   type Stats,
   type DBAdapter,
   type QueuePublisher,
-  type CopyArgs,
-  type CopyResult,
 } from './index.ts';
 import {
-  indexingConcurrencyGroup,
   indexingWriterLane,
   INCREMENTAL_INDEX_JOB_TIMEOUT_SEC,
   makeIncrementalArgsWithCallerMetadata,
@@ -115,17 +112,17 @@ export interface IncrementalIndexOptions {
 // on it, and for a pass handed a change set, how many files that set holds and
 // the first of them.
 interface PendingPass {
-  jobType: 'incremental-index' | 'copy-index' | 'from-scratch-index';
+  jobType: 'incremental-index' | 'from-scratch-index';
   registeredAt: number;
   jobId?: number;
   fileCount?: number;
   firstFile?: string;
 }
 
-// An incremental or copy pass, tagged with what the narrower gates filter on
-// (see #incrementalIndexingDeferreds).
+// An incremental pass, tagged with what the narrower gates filter on (see
+// #incrementalIndexingDeferreds).
 type IncrementalPass = PendingPass & {
-  jobType: 'incremental-index' | 'copy-index';
+  jobType: 'incremental-index';
   initiatedBy?: string;
   affectsStaging?: boolean;
 };
@@ -175,7 +172,7 @@ export class RealmIndexUpdater {
   // known. Read endpoints use it to scope their read-your-writes drain to the
   // requesting user's own writes (`incrementalIndexingInitiatedBy`) instead of
   // parking every reader behind whatever indexing happens to be in flight.
-  // System-originated jobs (file watcher, realm copy) carry no tag.
+  // System-originated jobs (the file watcher) carry no tag.
   //
   // `affectsStaging` is whether the pass touched one of the two things a
   // staging write resolves out of shared state: an executable module, or the
@@ -336,7 +333,7 @@ export class RealmIndexUpdater {
     return Promise.all(pending).then(() => undefined);
   }
 
-  // Awaits only the incremental/copy passes that can move what a staging
+  // Awaits only the incremental passes that can move what a staging
   // write resolves — the slice of `incrementalIndexing()` a write about to
   // stage is actually exposed to. Returns undefined when nothing qualifying
   // is in flight, even while instance-only passes are still draining: those
@@ -356,7 +353,7 @@ export class RealmIndexUpdater {
   // ignore rules are not stored bytes and not under the lock, but no pass this
   // gate could wait for moves them: they are written only by a from-scratch
   // pass's discovery step, and an incremental echoes back the set it was
-  // handed. A gate over incremental and copy passes is therefore the wrong
+  // handed. A gate over incremental passes is therefore the wrong
   // place to guard them, not a place that forgot to.
   //
   // From-scratch passes are outside this gate for the same reason they are
@@ -652,47 +649,6 @@ export class RealmIndexUpdater {
   ): Promise<void> {
     let { settled } = await this.enqueueChanges(changes, opts);
     await settled;
-  }
-
-  async copy(
-    sourceRealmURL: URL,
-    onInvalidation?: (invalidatedURLs: URL[]) => Promise<void>,
-  ): Promise<{ generation?: number }> {
-    let indexingDeferred = new Deferred<void>();
-    // A copy indexes the whole source realm, so its change set is everything
-    // the realm holds — modules included. It is named here rather than
-    // computed because a copy never enumerates its changes up front.
-    let pendingPass: IncrementalPass = {
-      jobType: 'copy-index',
-      registeredAt: Date.now(),
-      affectsStaging: true,
-    };
-    this.#incrementalIndexingDeferreds.set(indexingDeferred, pendingPass);
-    try {
-      let args: CopyArgs = {
-        realmURL: this.#realm.url,
-        realmUsername: await this.#realm.getRealmOwnerUsername(),
-        sourceRealmURL: sourceRealmURL.href,
-      };
-      let job = await this.#queue.publish<CopyResult>({
-        jobType: 'copy-index',
-        concurrencyGroup: indexingConcurrencyGroup(this.#realm.url),
-        timeout: 4 * 60,
-        priority: userInitiatedPriority,
-        args,
-      });
-      pendingPass.jobId = job.id;
-      let { invalidations, generation } = await job.done;
-      if (onInvalidation) {
-        await onInvalidation(
-          invalidations.map((href) => new URL(href.replace(/\.json$/, ''))),
-        );
-      }
-      return { generation };
-    } finally {
-      indexingDeferred.fulfill();
-      this.#incrementalIndexingDeferreds.delete(indexingDeferred);
-    }
   }
 
   public isIgnored(url: URL): boolean {

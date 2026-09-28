@@ -468,7 +468,6 @@ export type RealmEventContent =
 export type IndexRealmEventContent =
   | IncrementalIndexEventContent
   | FullIndexEventContent
-  | CopiedIndexEventContent
   | IncrementalIndexInitiationContent;
 
 // One publish an index pass indexed alongside others. See
@@ -573,14 +572,6 @@ export interface IncrementalIndexEventContent {
 interface FullIndexEventContent {
   eventName: 'index';
   indexType: 'full';
-  generation?: number;
-  realmURL: string;
-}
-
-interface CopiedIndexEventContent {
-  eventName: 'index';
-  indexType: 'copy';
-  sourceRealmURL: string;
   generation?: number;
   realmURL: string;
 }
