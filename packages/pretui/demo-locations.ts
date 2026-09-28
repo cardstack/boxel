@@ -69,6 +69,14 @@ async function importSibling(path: string): Promise<Record<string, unknown>> {
   >;
 }
 
+/** A 404 for the page itself, not for a module the page imports. */
+function isMissingPage(e: unknown, href: string): boolean {
+  let { status, deps } = (e ?? {}) as { status?: number; deps?: string[] };
+  return (
+    status === 404 && (!deps?.length || deps.some((d) => d.startsWith(href)))
+  );
+}
+
 /** Load `subject`'s usage page; undefined when it has none or its module fails to load. */
 export async function loadDemo(
   subject: DemoSubject,
@@ -77,7 +85,7 @@ export async function loadDemo(
   try {
     return demoIn(await importSibling(path), subject.name);
   } catch (e) {
-    if (pageExpected(subject)) {
+    if (pageExpected(subject) || !isMissingPage(e, siblingHref(path))) {
       console.warn(`Pretui: no usage page for ${subject.name} at ${path}`, e);
     }
     return undefined;
