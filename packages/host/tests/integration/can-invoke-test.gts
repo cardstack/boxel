@@ -1,17 +1,30 @@
 import Service from '@ember/service';
-import { render, settled, waitUntil } from '@ember/test-helpers';
+import { render, settled, waitFor, waitUntil } from '@ember/test-helpers';
+import GlimmerComponent from '@glimmer/component';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import {
+  baseRealm,
   CAPABILITY_CHECK_CAP,
   type CapabilityCheck,
 } from '@cardstack/runtime-common';
+import type { Loader } from '@cardstack/runtime-common/loader';
 
+import OperatorMode from '@cardstack/host/components/operator-mode/container';
 import type CapabilitiesService from '@cardstack/host/services/capabilities';
 
+import {
+  SYSTEM_CARD_FIXTURE_CONTENTS,
+  realmConfigCardJSON,
+  setupIntegrationTestRealm,
+  setupLocalIndexing,
+  setupOperatorModeStateCleanup,
+} from '../helpers';
 import { setupBaseRealm, CardDef } from '../helpers/base-realm';
+import { setupMockMatrix } from '../helpers/mock-matrix';
+import { renderComponent } from '../helpers/render-component';
 import { setupRenderingTest } from '../helpers/setup';
 
 import type { CardDef as CardInstance } from '@cardstack/base/card-api';
@@ -515,3 +528,106 @@ module('Integration | canInvoke | a type target', function (hooks) {
     }
   });
 });
+
+// The whole way a card reaches an answer: the operator-mode context providers,
+// the service, the realm's own `_capabilities` route. The in-browser realm a
+// host test runs dispatches the host's requests as its own, so no ACL judges
+// them and permission is not what this pins: the realm-server suite does. What
+// it pins is that the template reads the realm's answer. So the card asks one
+// question the realm admits and one it refuses whoever asks — an operation its
+// type does not carry — and shows each as one of three states, so a `false`
+// cannot be mistaken for an answer that never arrived.
+module(
+  'Integration | canInvoke | a card in the operator-mode stack',
+  function (hooks) {
+    const REALM_URL = 'http://test-realm/test-gates/';
+    let loader: Loader;
+
+    setupRenderingTest(hooks);
+    setupOperatorModeStateCleanup(hooks);
+    hooks.beforeEach(function () {
+      loader = getService('loader-service').loader;
+    });
+    setupLocalIndexing(hooks);
+
+    let mockMatrixUtils = setupMockMatrix(hooks, {
+      loggedInAs: '@testuser:localhost',
+      activeRealms: [baseRealm.url, REALM_URL],
+      autostart: true,
+    });
+
+    hooks.beforeEach(async function () {
+      let cardApi: typeof import('@cardstack/base/card-api') =
+        await loader.import('@cardstack/base/card-api');
+      let { CardDef: Base, Component } = cardApi;
+
+      class Gate extends Base {
+        static displayName = 'Gate';
+        static isolated = class Isolated extends Component<typeof this> {
+          answer(operation: string) {
+            let answer = this.args.context?.canInvoke?.(
+              operation,
+              this.args.model as InstanceType<typeof Base>,
+            );
+            return answer === undefined ? 'unknown' : answer ? 'yes' : 'no';
+          }
+          get read() {
+            return this.answer('read');
+          }
+          get undeclared() {
+            return this.answer('noSuchOperation');
+          }
+          <template>
+            <span data-test-gate-read={{this.read}}>{{this.read}}</span>
+            <span data-test-gate-undeclared={{this.undeclared}}>
+              {{this.undeclared}}
+            </span>
+          </template>
+        };
+      }
+
+      await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        realmURL: REALM_URL,
+        contents: {
+          ...SYSTEM_CARD_FIXTURE_CONTENTS,
+          'gate.gts': { Gate },
+          'Gate/one.json': {
+            data: {
+              type: 'card',
+              meta: { adoptsFrom: { module: '../gate', name: 'Gate' } },
+            },
+          },
+          'realm.json': realmConfigCardJSON({ name: 'Gates' }),
+        },
+        startMatrix: false,
+      });
+      await mockMatrixUtils.start();
+    });
+
+    test('a card’s template reads the realm’s answer off its context', async function (assert) {
+      getService('operator-mode-state-service').restore({
+        stacks: [
+          [{ type: 'card', id: `${REALM_URL}Gate/one`, format: 'isolated' }],
+        ],
+      });
+      let noop = () => {};
+      await renderComponent(
+        class TestDriver extends GlimmerComponent {
+          <template><OperatorMode @onClose={{noop}} /></template>
+        },
+      );
+      await waitFor('[data-test-gate-read="yes"]');
+      assert
+        .dom('[data-test-gate-read]')
+        .hasText('yes', 'the realm admits a read of the card');
+      await waitFor('[data-test-gate-undeclared="no"]');
+      assert
+        .dom('[data-test-gate-undeclared]')
+        .hasText(
+          'no',
+          'and refuses an operation its type does not carry, so the answer is the realm’s',
+        );
+    });
+  },
+);
