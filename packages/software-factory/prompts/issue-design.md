@@ -126,6 +126,13 @@ cannot reopen.
 - **Base-realm imports are not reuse.** `StringField`, `EmailField`,
   `ImageDef` and their siblings are the standard library. Never record one
   as a reuse decision — §3 owns them instead.
+- **A base type you inherit through an adoption is still not a reuse row.**
+  When you `EXTEND` or adopt a catalog block, the fields it brings with it are
+  already covered by that block's row — the adoption is the decision, and
+  listing an inherited `EmailField` separately double-counts it and puts a
+  base-realm module in a table that is supposed to mean "a catalog block was
+  considered". Name the inherited fields in the adopting row's `Wiring`
+  instead, and record the type itself in `Base types` marked `inherited`.
 - **If a gate blocks an adoption you want**, record it as `REUSE-BLOCKED`
   with the gate and its exact error and `post_update` the same — never
   quietly hand-build the thing instead.
@@ -151,10 +158,15 @@ schema is a contract, not a variable.
   resolves it to a type. Choose the more specific type over what the issue
   text names, unless that entry is marked `type-fixed:` — which means the
   concrete type is load-bearing and must survive.
+- **A type you inherit from an adopted block still gets a line here**, marked
+  `inherited` and naming the block it comes from. You did not choose it, but
+  the build turn needs to know the field exists and must not re-declare it.
 - Record these in a **Base types** block in the notes (§5), *not* in the
   Reuse decisions table. Keeping them apart is what lets the reuse table mean
   "a catalog block was considered" — a base-realm row in that table is a
-  defect in both artifacts.
+  defect in both artifacts, **including one that arrived through an
+  adoption**. If you catch yourself writing a `REFERENCE` row whose module is
+  `https://cardstack.com/base/…`, it belongs in this block instead.
 
 ## 4. DESIGN — mock, screenshot, critique, revise
 
@@ -234,13 +246,16 @@ schema is a contract, not a variable.
 
   ```
   Base types
-  - email → EmailField (issue said StringField; validated + mail editor)
-  - phone → PhoneNumberField (issue said StringField)
-  - website → UrlField
+  - email → EmailField  [inherited from PersonBase — do not re-declare]
+  - phone → PhoneNumberField (PersonBase declares StringField; narrowed here)
+  - website → UrlField (issue said StringField; validated + link editor)
   - joinedOn → DateField  [type-fixed: per issue]
   ```
 
-  No base-realm type appears in the Reuse decisions table.
+  Before you write the closing line, **check it against the table you actually
+  wrote**: no row's module may start with `https://cardstack.com/base/`. A
+  notes file that asserts compliance while carrying such a row is worse than
+  one that carries it openly, because the assertion is what a reviewer reads.
 - The theme-variable mapping names the **project Theme's** variables (the
   Theme card the design-foundation turn resolved). `design/tokens.css` is the
   mockup-time mirror of that Theme, not a second vocabulary — if the mockup

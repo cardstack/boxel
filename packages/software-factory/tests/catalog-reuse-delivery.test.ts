@@ -334,6 +334,45 @@ module('catalog reuse > artifact contract', function () {
     }
   });
 
+  // Observed on a real run: the card adopted a catalog block, and the base type
+  // that block supplied (`EmailField`, via `PersonBase`) was recorded as a
+  // REFERENCE row in the Reuse decisions table — a base-realm module in a table
+  // that is supposed to mean "a catalog block was considered". The rule excluding
+  // base types was stated, but not for the case where the type arrives *through*
+  // an adoption, which is exactly when it looks catalog-derived.
+  test('a base type inherited through an adoption is not a reuse row', async function (assert) {
+    for (let name of AUTHORING_PROMPTS) {
+      let prompt = await readPrompt(name);
+      assert.true(
+        /inherit(ed)? through an adoption|inherited through an adoption|arrived through an adoption|inherit from an adopted block/i.test(
+          prompt,
+        ),
+        `${name} covers the inherited-through-adoption case`,
+      );
+      assert.true(
+        prompt.includes('inherited'),
+        `${name} gives the Base types block a marker for it`,
+      );
+    }
+  });
+
+  // The same run asserted "No base-realm type appears in the Reuse decisions
+  // table" directly beneath a table that contained one. An unchecked claim is
+  // worse than a visible defect, because the claim is what a reviewer reads.
+  test('the notes must check the base-realm rule rather than assert it', async function (assert) {
+    for (let name of AUTHORING_PROMPTS) {
+      let prompt = await readPrompt(name);
+      assert.true(
+        prompt.includes('https://cardstack.com/base/'),
+        `${name} names the module prefix that makes the rule checkable`,
+      );
+      assert.true(
+        /check (it |the table )?against/i.test(prompt),
+        `${name} tells the turn to check the table, not just claim compliance`,
+      );
+    }
+  });
+
   // The Base types block is only binding if the turn that writes the schema is
   // told it outranks the issue body.
   test('the build turn treats the Base types block as binding', async function (assert) {

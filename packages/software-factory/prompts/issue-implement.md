@@ -112,6 +112,13 @@ the mockup already fixed is one you can no longer adopt.
 - **Base-realm imports are not reuse.** `StringField`, `EmailField`,
   `ImageDef` and their siblings are the standard library. Never record one
   as a reuse decision — §3 owns them instead.
+- **A base type you inherit through an adoption is still not a reuse row.**
+  When you `EXTEND` or adopt a catalog block, the fields it brings with it are
+  already covered by that block's row — the adoption is the decision, and
+  listing an inherited `EmailField` separately double-counts it and puts a
+  base-realm module in a table that is supposed to mean "a catalog block was
+  considered". Name the inherited fields in the adopting row's `Wiring`
+  instead, and record the type itself in `Base types` marked `inherited`.
 - Record the outcome as a **Reuse decisions** table in
   `design/<card-slug>-NOTES.md`, under a `searched:` line giving the paths
   queried and their per-kind spec counts (plus a `CAVEAT:` line if any count
@@ -152,14 +159,20 @@ it is a separate question you must answer before the mockup fixes a schema.
   resolves it to a type. Choose the more specific type over what the issue
   text names, unless that entry is marked `type-fixed:` — which means the
   concrete type is load-bearing and must survive.
+- **A type you inherit from an adopted block still gets a line here**, marked
+  `inherited` and naming the block it comes from — you did not choose it, but
+  the build turn must know not to re-declare it.
 - Record these as a **Base types** block in the notes, *not* in the Reuse
   decisions table — keeping them apart is what lets that table mean "a
-  catalog block was considered":
+  catalog block was considered". A row whose module starts with
+  `https://cardstack.com/base/` is a defect **even when the type arrived
+  through an adoption**; check the table against that rule before asserting
+  compliance in the notes:
 
   ```
   Base types
-  - email → EmailField (issue said StringField; validated + mail editor)
-  - phone → PhoneNumberField (issue said StringField)
+  - email → EmailField  [inherited from PersonBase — do not re-declare]
+  - phone → PhoneNumberField (PersonBase declares StringField; narrowed here)
   - joinedOn → DateField  [type-fixed: per issue]
   ```
 
