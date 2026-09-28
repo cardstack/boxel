@@ -697,6 +697,64 @@ export function parseSearchEntryQueryFromPayload(
 }
 
 // ---------------------------------------------------------------------------
+// Composing a realm's policy into a search.
+//
+// A `query` grant's predicate compiled to a filter when the policy compiled,
+// so a search the policy scopes runs that filter alongside the caller's own
+// rather than judging each row it finds. Both must hold: the caller asked for
+// a shape, and the grant admits a set of cards, and what comes back is the
+// rows in both.
+//
+//   effectiveFilter = { every: [ callerFilter, { any: [ ...grantFilters ] } ] }
+//
+// Composing before the query is planned is the whole point. The engine pages
+// over the rows the composed filter matches, so a page comes back full rather
+// than sparse — a page filtered after the fact would be short by however many
+// of its rows the policy removed, which reads as data loss rather than as a
+// policy.
+//
+// A realm contributing no filter is left alone. Not wrapped in an `every` of
+// one, not anchored, not touched: the query it runs is the one it ran before
+// any of this existed, which is what every caller a realm reads coarsely gets.
+// ---------------------------------------------------------------------------
+
+// The filter a search runs for one realm, given what the caller asked for and
+// what that realm's policy contributes.
+//
+// The grants are composed under `any` whether there is one of them or several.
+// Grants union, so the shape says what it means, and it says the same thing
+// however many rules happened to match — adding a second grant to a policy
+// widens what comes back without reshaping the query that was already running.
+export function composePolicyScopedFilter(
+  callerFilter: Filter | undefined,
+  grantFilters: Filter[],
+): Filter | undefined {
+  if (grantFilters.length === 0) {
+    return callerFilter;
+  }
+  let granted: Filter = { any: grantFilters };
+  return callerFilter === undefined
+    ? granted
+    : { every: [callerFilter, granted] };
+}
+
+// A policy's compiled filter in the grammar the engine runs. The fragment is
+// stored as a wire filter, the same grammar a request carries, so it is read
+// the way a request's filter is read — including the validation, which is what
+// keeps a filter the compiler should never have produced from reaching the
+// engine.
+//
+// A fragment binds no `htmlQuery`: it is compiled from a predicate over a
+// card's fields, and the rendering a search asks for is the caller's to
+// choose. So there is nothing here for the parser's htmlQuery lift to carry
+// away, and the whole fragment survives as membership.
+export function policyFilterFromWire(
+  filter: SearchEntryWireFilter,
+): Filter | undefined {
+  return parseSearchEntryQueryFromPayload({ filter }).itemQuery.filter;
+}
+
+// ---------------------------------------------------------------------------
 // The single-instance GET's query-string surface. The card+html /
 // file-meta+html GET sources one entry by URL, so it needs no membership
 // query — only the rendering selection (`?format=` / `?renderType=`) and the
@@ -1141,6 +1199,12 @@ export async function searchEntryRealms(
   realms: Array<SearchEntrySearchableRealm | null | undefined>,
   searchEntryQuery: SearchEntryQuery,
   opts?: SearchOpts,
+  // The query one realm runs, where it differs from the one every other realm
+  // runs. A realm whose policy scopes this caller searches the caller's query
+  // with that realm's grants composed into it, and a policy governs the realm
+  // it belongs to alone — so the fan-out is over one question asked several
+  // ways, rather than one query run several times.
+  queryForRealm?: (realm: SearchEntrySearchableRealm) => SearchEntryQuery,
 ): Promise<EntryCollectionDocument> {
   // Same instrumentation contract as `searchRealms`: a caller that threads
   // its own collector (the realm-server handler) emits the complete
@@ -1156,7 +1220,10 @@ export async function searchEntryRealms(
     realms,
     searchEntryQuery.itemQuery,
     async (realm) => {
-      let doc = await realm.searchEntries(searchEntryQuery, perRealmOpts);
+      let doc = await realm.searchEntries(
+        queryForRealm ? queryForRealm(realm) : searchEntryQuery,
+        perRealmOpts,
+      );
       if (!realm.url) {
         return doc;
       }

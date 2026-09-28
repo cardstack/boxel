@@ -355,14 +355,28 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
     });
 
     // A federated search payload that names an archived realm must not
-    // return hits. The mechanism is the enumeration filter in
-    // fetchUserPermissions: once a realm is archived, the requester has
-    // no permission for it per the filtered enumeration, so the
-    // multi-realm-authorization middleware short-circuits the request
-    // with 403 before handle-search runs. The handler itself does no
-    // extra work; this test pins the contract end-to-end so a refactor
-    // of the enumeration layer can't silently weaken it.
-    test('archived realms in a federated search payload are refused at the auth boundary', async function (assert) {
+    // return hits from it. Archiving a realm takes every caller's permission
+    // on it away, so the realm is one the requester cannot read, and a realm
+    // a verified caller cannot read contributes no rows to a federated search
+    // rather than refusing the realms named beside it. It is sealed from the
+    // search outright, not merely unread: no policy it names is consulted.
+    // This pins the contract end-to-end so a refactor of the enumeration
+    // layer can't silently weaken it.
+    test('an archived realm in a federated search payload contributes no rows', async function (assert) {
+      let before = await postSearch({
+        filter: personFilter(),
+        realms: [testRealm.url, secondaryRealm.url],
+      });
+      assert.strictEqual(before.status, 200);
+      let secondaryHits = (response: typeof before) =>
+        response.body.data.filter((entry: { id: string }) =>
+          entry.id.startsWith(secondaryRealm.url),
+        );
+      assert.true(
+        secondaryHits(before).length > 0,
+        'before archiving, the secondary realm answers the search',
+      );
+
       await archiveRealm(dbAdapter, new URL(secondaryRealm.url));
 
       let response = await postSearch({
@@ -371,27 +385,16 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
       });
       assert.strictEqual(
         response.status,
-        403,
-        'a request including an archived realm is forbidden',
-      );
-      assert.ok(
-        String(response.body?.errors?.[0] ?? response.text).includes(
-          secondaryRealm.url,
-        ),
-        'the forbidden response names the archived realm',
-      );
-
-      let activeOnly = await postSearch({
-        filter: personFilter(),
-        realms: [testRealm.url],
-      });
-      assert.strictEqual(
-        activeOnly.status,
         200,
-        'the same request restricted to the active realm succeeds',
+        'the request is answered for the realms that can answer it',
+      );
+      assert.deepEqual(
+        secondaryHits(response),
+        [],
+        'the archived realm returns no hits',
       );
       assert.strictEqual(
-        activeOnly.body.meta.page.total,
+        response.body.meta.page.total,
         2,
         'active realms continue to search normally',
       );

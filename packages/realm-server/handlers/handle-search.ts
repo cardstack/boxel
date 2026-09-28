@@ -2,11 +2,16 @@ import type Koa from 'koa';
 import {
   applyServerSearchPageBound,
   buildSearchErrorResponse,
+  combineSearchEntryResults,
+  composePolicyScopedFilter,
   DURING_PRERENDER_HEADER,
   ifNoneMatchMatches,
   isItemLegSearch,
+  logger,
+  parseRealmsFromPayload,
   parseSearchRequestPayload,
   parseSearchEntryQueryFromPayload,
+  policyFilterFromWire,
   runWithSearchTimeBudget,
   sanitizeConsumingRealmHeader,
   SearchBoundError,
@@ -24,8 +29,11 @@ import {
   requestedLinkShape,
   rowClassForPageSize,
   X_BOXEL_LINK_SHAPE_HEADER,
+  type Filter,
   type LinkShapeDecision,
   type Query,
+  type SearchEntryQuery,
+  type SearchEntryWireFilter,
   type SearchShapeCacheOutcome,
   type SearchShapeDescriptor,
   type SearchShapeLinkMode,
@@ -61,6 +69,8 @@ import {
   errorsDocument,
   isNamedQueryPayload,
   isOperationFailure,
+  namedQueryInvocation,
+  policyQueryScope,
   resolveNamedQuery,
 } from '@cardstack/runtime-common/card-operations';
 import {
@@ -77,6 +87,8 @@ import {
 // (server.ts) so a cross-origin browser caller can read it, not just
 // server-side supertest/curl.
 export const LIVE_SEARCH_CACHE_HEADER = 'x-boxel-live-search-cache';
+
+const log = logger('realm-server:search');
 
 // The federated search: the entry wire model over every requested
 // realm. Parses the entry-rooted query (the `item.` membership query,
@@ -113,30 +125,121 @@ export default function handleSearch(opts: {
   let linkShapePolicy = opts.linkShapePolicy ?? LinkShapePolicy.pinned('full');
   let liveSearchCache = opts.liveSearchCache ?? new LiveSearchCache();
   return async function (ctxt: Koa.Context) {
-    let { realmList, user } = getMultiRealmAuthorization(ctxt);
+    let { realmList, grantCandidates, user } = getMultiRealmAuthorization(ctxt);
     let payload = getSearchRequestPayload(ctxt);
+    // Every realm the request named, whether the caller reads it or reaches it
+    // only through its policy, in the order the request named them — which is
+    // the order their rows are merged in. A named query's declaration is
+    // scoped against this, since a declaration may well name the realm the
+    // grant is for.
+    let reachable = new Set([...realmList, ...grantCandidates]);
+    let named = parseRealmsFromPayload(payload).filter((realm) =>
+      reachable.has(realm),
+    );
+    // What a policy fragment is looked up by: a query runs under the name it
+    // was invoked with, on the type that declares it. An ad-hoc search names
+    // neither, so no grant is found for one and a realm the caller cannot read
+    // contributes nothing to it.
+    let invocation = namedQueryInvocation(payload);
     if (isNamedQueryPayload(payload)) {
       // Resolving reads the declaration's definition, so it draws on the
       // database as a search of the realms the request names, the same as the
       // search it resolves to.
-      let named = payload;
-      let resolved = await withSearchConnectionTenant(ctxt, realmList, () =>
-        resolveNamedSearch(ctxt, named, realmList, user),
+      let request = payload;
+      let resolved = await withSearchConnectionTenant(ctxt, named, () =>
+        resolveNamedSearch(ctxt, request, named, user, realmList.length === 0),
       );
       if (!resolved) {
         return;
       }
       payload = resolved;
-      realmList = resolved.realms!;
+      // The declaration's own scope narrows what the request named, so the
+      // split is taken again against what it resolved to.
+      let scoped = new Set(resolved.realms!);
+      realmList = realmList.filter((realm) => scoped.has(realm));
+      grantCandidates = grantCandidates.filter((realm) => scoped.has(realm));
+      named = named.filter((realm) => scoped.has(realm));
     }
+    // What each realm the caller cannot read contributes. A realm whose policy
+    // admits this query is searched with the grants composed into it; every
+    // other one is left out of the search entirely, which is the same answer a
+    // realm holding no matching row gives. Only these realms are asked: a
+    // realm the caller reads outright never loads a policy.
+    //
+    // A request a render is waiting on has no actor, whoever it authenticated
+    // as: what a render produces is served to every viewer, so no one
+    // viewer's grants may shape it. It is scoped by no policy.
+    let duringRender = ctxt.get(DURING_PRERENDER_HEADER).length > 0;
+    let scopes = await withSearchConnectionTenant(ctxt, named, () =>
+      policyScopes(
+        grantCandidates,
+        invocation,
+        duringRender ? undefined : user,
+      ),
+    );
+    // The realms this search runs against, in the order the request named
+    // them.
+    let searched = named.filter(
+      (realm) => realmList.includes(realm) || scopes.has(realm),
+    );
     // The realms this search names are known from here: each one's link-shape
     // level follows the requests that name it, and the database connections
     // the search draws on are shared out by them.
-    attributeSearchRequest(ctxt, realmList);
-    await withSearchConnectionTenant(ctxt, realmList, () =>
-      respond(ctxt, realmList, payload),
+    attributeSearchRequest(ctxt, searched);
+    await withSearchConnectionTenant(ctxt, searched, () =>
+      respond(ctxt, searched, payload, scopes),
     );
   };
+
+  // The filters each grant-reached realm's policy contributes, keyed by realm.
+  // A realm that contributes none is absent, and is not searched.
+  //
+  // Mounting a realm to ask is work a coarsely-authorized search never does —
+  // it is reached only for a realm this caller may not read, which is a realm
+  // they could not have searched at all before.
+  async function policyScopes(
+    grantCandidates: string[],
+    invocation: { operation: string; on: CodeRef } | undefined,
+    user: string | undefined,
+  ): Promise<Map<string, SearchEntryWireFilter[]>> {
+    let scopes = new Map<string, SearchEntryWireFilter[]>();
+    if (grantCandidates.length === 0 || !invocation || !user) {
+      return scopes;
+    }
+    let realms = await resolveRealmsForFederatedRequest(
+      reconciler,
+      grantCandidates,
+    );
+    await Promise.all(
+      realms.map(async (realm, index) => {
+        if (!realm) {
+          return;
+        }
+        // A realm whose policy cannot be judged contributes nothing, and only
+        // to itself: the fan-out isolates a realm whose search fails, and a
+        // realm whose policy fails is isolated the same way. Failing closed is
+        // the direction that matters — its rows are withheld, never served
+        // unscoped.
+        let scope;
+        try {
+          scope = await policyQueryScope(realm.operationCore, {
+            ...invocation,
+            actor: user,
+          });
+        } catch (e) {
+          log.warn(
+            `policy scope for a search of ${grantCandidates[index]} could not be decided, so the realm contributes no rows`,
+            e,
+          );
+          return;
+        }
+        if (scope.kind === 'scoped') {
+          scopes.set(grantCandidates[index], scope.filters);
+        }
+      }),
+    );
+    return scopes;
+  }
 
   // The ad-hoc query a named one resolves to, or nothing once the refusal has
   // been answered. The declaration is read through a realm the request names:
@@ -152,6 +255,12 @@ export default function handleSearch(opts: {
     payload: Record<string, unknown>,
     realmList: string[],
     user: string | undefined,
+    // Whether the caller reads none of the realms the request names. Such a
+    // caller is answered for a declaration that does not resolve as for one
+    // that grants them nothing, since the reasons it can fail describe what
+    // the type declares — the same thing the gate's refusal withholds from a
+    // caller the ACL declined outright.
+    readsNone: boolean,
   ) {
     let resolvingRealm =
       realmList.map((url) => reconciler.mounted.get(url)).find(Boolean) ??
@@ -180,10 +289,14 @@ export default function handleSearch(opts: {
       }
       await setContextResponse(
         ctxt,
-        new Response(JSON.stringify(errorsDocument(e.error)), {
-          status: e.error.status,
-          headers: { 'content-type': SupportedMimeType.CardJson },
-        }),
+        readsNone
+          ? new Response(JSON.stringify(combineSearchEntryResults([], 0)), {
+              headers: { 'content-type': SupportedMimeType.CardJson },
+            })
+          : new Response(JSON.stringify(errorsDocument(e.error)), {
+              status: e.error.status,
+              headers: { 'content-type': SupportedMimeType.CardJson },
+            }),
       );
       return undefined;
     }
@@ -193,6 +306,7 @@ export default function handleSearch(opts: {
     ctxt: Koa.Context,
     realmList: string[],
     payload: unknown,
+    scopes: Map<string, SearchEntryWireFilter[]>,
   ) {
     let handlerStart = Date.now();
     // Slots the query-shape line is assembled from. `shape` is filled in as
@@ -273,6 +387,27 @@ export default function handleSearch(opts: {
       parsed.itemQuery = applyServerSearchPageBound(parsed.itemQuery);
     }
 
+    // The query each policy-scoped realm runs. Composed here, off the bounded
+    // query, so the page the engine fills is a page of rows the policy admits:
+    // it pages over the composed filter rather than over the caller's and then
+    // discarding, which is what keeps a policy-filtered page full rather than
+    // sparse. Every other realm runs `parsed` untouched.
+    let scopedQueries = new Map<string, SearchEntryQuery>();
+    for (let [realm, filters] of scopes) {
+      scopedQueries.set(realm, {
+        ...parsed,
+        itemQuery: {
+          ...parsed.itemQuery,
+          filter: composePolicyScopedFilter(
+            parsed.itemQuery.filter,
+            filters
+              .map((filter) => policyFilterFromWire(filter))
+              .filter((filter): filter is Filter => filter !== undefined),
+          ),
+        },
+      });
+    }
+
     // How much of each result's link graph this response carries. Decided
     // after the page clamp above, since the clamped page is the only bound on
     // this search's result count and the cost of a closure scales with it —
@@ -332,6 +467,17 @@ export default function handleSearch(opts: {
     if (parsed.scope && parsed.scope !== 'all') {
       cacheKeyOpts.scope = parsed.scope;
     }
+    // What a policy composed into this search, keyed by the realm that
+    // contributed it. Two callers asking the same question of the same realms
+    // are answered from one entry only where the policy said the same thing
+    // about both, which for a grant reading `actor()` it never does. Folded
+    // only when something was composed, so a search no policy scoped keys
+    // exactly as it did before there were policies.
+    if (scopes.size > 0) {
+      cacheKeyOpts.policyScope = Object.fromEntries(
+        [...scopes].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)),
+      );
+    }
 
     // `loggingCorrelationId` / `timings` deliberately stay OUT of the
     // cache-key opts (per-request values would make every key unique) and
@@ -388,10 +534,22 @@ export default function handleSearch(opts: {
         let realmInstances = timings
           ? await timings.time('resolveRealms', resolveRealms)
           : await resolveRealms();
-        let doc = await searchEntryRealms(realmInstances, parsed, {
-          ...runSearchOpts,
-          ...(signal ? { signal } : {}),
-        });
+        let doc = await searchEntryRealms(
+          realmInstances,
+          parsed,
+          {
+            ...runSearchOpts,
+            ...(signal ? { signal } : {}),
+          },
+          scopedQueries.size === 0
+            ? undefined
+            : queryForRealmInstance(
+                realmInstances,
+                realmList,
+                scopedQueries,
+                parsed,
+              ),
+        );
         // If the budget already fired, skip stringifying a document we're about
         // to discard (the time-budget race has already resolved with the 408).
         signal?.throwIfAborted();
@@ -497,6 +655,31 @@ export default function handleSearch(opts: {
       throw e;
     }
   }
+}
+
+// The query each resolved realm instance runs. The instances are positional
+// with the realms the search names, so each one is matched to its query by
+// where it stands rather than by the URL it reports: a realm reached through
+// its policy is always handed its scoped query, and never falls through to the
+// unscoped one because its URL is spelled differently from the request's.
+function queryForRealmInstance(
+  instances: Array<object | null | undefined>,
+  realmURLs: string[],
+  scopedQueries: Map<string, SearchEntryQuery>,
+  unscoped: SearchEntryQuery,
+): (realm: object) => SearchEntryQuery {
+  let byInstance = new Map<object, SearchEntryQuery | undefined>();
+  instances.forEach((instance, index) => {
+    if (instance) {
+      byInstance.set(instance, scopedQueries.get(realmURLs[index]));
+    }
+  });
+  return (realm) => {
+    if (!byInstance.has(realm)) {
+      throw new Error('a search reached a realm it did not name');
+    }
+    return byInstance.get(realm) ?? unscoped;
+  };
 }
 
 // The job-scoped cache + ETag/304 protocol for the federated search
