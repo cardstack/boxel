@@ -13,13 +13,20 @@ export type {
   RealmPolicyCacheEnvironment,
 } from './policy.ts';
 export type { LoweringContext } from './lowering.ts';
-export { notPermitted, policyGateStats } from './gate.ts';
+export {
+  dischargePendingDecision,
+  notPermitted,
+  pendingWriteHolds,
+  policyGateStats,
+} from './gate.ts';
 export { policyQueryScope } from './policy-query.ts';
 export type { PolicyQueryScope } from './policy-query.ts';
 export type {
   GateDecision,
   MatchedGrant,
   OperationPolicyAccess,
+  PendingDecision,
+  PendingWrite,
   PolicyGateStats,
 } from './gate.ts';
 export {
@@ -69,6 +76,7 @@ export {
   stageUpdate,
 } from './executors.ts';
 export type {
+  AdmissionSubject,
   AppendContainsManyEntry,
   AppendLineEntry,
   BatchDocument,
@@ -124,6 +132,7 @@ export {
   needsActor,
   paramsFor,
   parseOperationsEnvelope,
+  pendingWriteOf,
   projectedResult,
   readResult,
   resultsTree,
