@@ -2214,6 +2214,41 @@ module(basename(import.meta.filename), function () {
           );
         });
 
+        test('a binary upload of the bytes already stored is still indexed when the index holds no row built from them', async function (assert) {
+          let bytes = multiChunkBytes();
+          let fileURL = `${testRealmHref}unindexed-upload.bin`;
+          await request
+            .post('/unindexed-upload.bin')
+            .set('Content-Type', 'application/octet-stream')
+            .send(Buffer.from(bytes));
+          await testRealm.incrementalIndexing();
+          // Stands in for an upload whose bytes landed and whose queue insert
+          // then failed: the file is on disk and the index never caught up.
+          await query(dbAdapter, [
+            'DELETE FROM boxel_index WHERE url =',
+            param(fileURL),
+          ]);
+          let baseline = await maxIncrementalIndexJobId();
+
+          let response = await request
+            .post('/unindexed-upload.bin')
+            .set('Content-Type', 'application/octet-stream')
+            .send(Buffer.from(bytes));
+          await testRealm.incrementalIndexing();
+
+          assert.strictEqual(response.status, 204, 'HTTP 204 status');
+          assert.strictEqual(
+            (await incrementalIndexJobsSince(baseline)).length,
+            1,
+            'the repeated upload queues the index pass its bytes never got',
+          );
+          let rows = await query(dbAdapter, [
+            `SELECT url FROM boxel_index WHERE type = 'file' AND url =`,
+            param(fileURL),
+          ]);
+          assert.strictEqual(rows.length, 1, 'the file is back in the index');
+        });
+
         test('a binary upload the same length as the stored file but differing in its last byte is written and indexed', async function (assert) {
           let bytes = multiChunkBytes();
           await request

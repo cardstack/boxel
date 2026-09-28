@@ -4335,8 +4335,18 @@ export class Realm {
         couldMatch &&
         stored &&
         content instanceof Uint8Array &&
+        (await this.#indexDescribesFile(url, computeContentHash(content))) &&
         (await fileContentEquals(stored, content))
       ) {
+        // Matching bytes are not enough on their own here. Re-sending an
+        // upload is how a caller recovers from one whose bytes landed but
+        // whose metadata row or queue insert then failed, and how a file
+        // whose last index pass errored gets another one — and both look
+        // exactly like a repeat of an upload that fully landed. So the file
+        // is left alone only when the index already holds a live row built
+        // from these bytes; otherwise the upload proceeds as a write, which
+        // queues the pass the earlier attempt never got.
+        //
         // Bytes are compared as bytes and never decoded, so a match is a
         // byte-for-byte one. The stored file is read a chunk at a time against
         // a body already held whole, which keeps a large upload from being
@@ -4822,6 +4832,15 @@ export class Realm {
         `failed to enqueue deferred prerender_html job for ${this.url}: ${e?.message}`,
       );
     }
+  }
+
+  // Whether the index holds a live row for this file whose content
+  // fingerprint is `contentHash` — that is, whether the file's last index pass
+  // completed over exactly these bytes. A file with no row, or whose last pass
+  // errored, has no live file row, so it answers no.
+  async #indexDescribesFile(url: URL, contentHash: string): Promise<boolean> {
+    let entry = await this.#realmIndexQueryEngine.file(url);
+    return entry?.searchDoc?.contentHash === contentHash;
   }
 
   // persist created_at into realm_file_meta table using db adapter
