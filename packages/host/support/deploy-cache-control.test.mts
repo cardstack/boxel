@@ -260,6 +260,9 @@ test('references the rewrite has no business versioning are left as written', ()
       distOf({
         'assets/main-DMcx_nWD.js': 'bundle',
         '@embroider/virtual/app.css': ':root {}',
+        // Where a `//host/…` reference would be read from if it were taken
+        // for a root-relative one.
+        '/cdn.example.com/lib.js': 'lib',
       }),
     ),
     shell,

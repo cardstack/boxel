@@ -23,6 +23,9 @@ import path from 'node:path';
 // every spelling of the URL is answered with the object currently at the path.
 // Which `Cache-Control` each file is uploaded with is decided separately, in
 // config/deploy.js.
+//
+// The realm-server replaces the shell's icon links with its own unversioned
+// ones, so the icons' versions reach only a shell served straight from the CDN.
 
 // A root-relative `src` / `href`. A protocol-relative `//host/…` reference is
 // not the dist's, and one that already carries a query or fragment is left as
