@@ -48,9 +48,9 @@ Gaps worth knowing:
 
 ## Theming
 
-Tone tokens: `--primary`/`--primary-foreground`, `--destructive`/`--destructive-foreground`, `--success`, `--warning`, `--pretui-info`, `--pretui-attention`, `--foreground`, plus the `--pretui-on-*` counterparts. Recipe tokens: `--card`, `--card-foreground`, `--border`, `--muted-foreground`, `--shadow-2xs`. Each appearance only sets `--pretui-btn-surface`, `--pretui-btn-text` and `--pretui-btn-edge` (plus `-hover` twins); one border carries the edge, so fill and edge move together on hover. Metrics: `--boxel-border-radius-sm` (the default radius; override per instance with `--pretui-button-radius`), `--track-ui`, `--text-ui-xs|sm|md|lg|xl` under the `--pretui-size-xs|s|m|l|xl` override knobs, `--pretui-dur-snap`, `--pretui-ease-snap`.
+Tone tokens, all from the Boxel theme contract: `--primary`, `--destructive`, `--info`, `--success`, `--warning` and `--attention`, each with its `-foreground` pair, plus `--foreground`/`--background` for the neutral tone. Recipe tokens: `--background`, `--foreground`, `--border`, `--muted-foreground`, `--shadow-2xs`. Each appearance only sets `--pretui-btn-surface`, `--pretui-btn-text` and `--pretui-btn-edge` (plus `-hover` twins); one border carries the edge, so fill and edge move together on hover. Metrics: `--boxel-border-radius-sm` (the default radius; override per instance with `--pretui-button-radius`), `--track-ui`, `--text-ui-xs|sm|md|lg|xl` under the `--pretui-size-xs|s|m|l|xl` override knobs, `--pretui-dur-snap`, `--pretui-ease-snap`.
 
-A season **should** define an on-color for every tone it uses (`--pretui-on-info`, `-success`, `-warning`, `-attention`). The `accent` recipe paints `--pretui-tone` as the background and `--pretui-tone-on` as the text. When a theme leaves one out, the fallback is computed from the fill: near-white below oklch lightness 0.71, near-black above it (the APCA crossover). That keeps the text readable but can't fix a fill of middling lightness, where neither text color reaches Lc 60; the fix there is the fill itself.
+The `accent` recipe paints the tone as the background and its `-foreground` as the text, so a theme that changes `--warning` should change `--warning-foreground` with it. `theme.css` defaults every pair, so a theme that sets neither still renders a readable button.
 
 ## React ecosystem
 
