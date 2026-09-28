@@ -4,6 +4,7 @@ import {
   find,
   triggerKeyEvent,
   visit,
+  waitUntil,
   waitFor,
 } from '@ember/test-helpers';
 
@@ -319,5 +320,124 @@ module('Acceptance | workspace card', function (hooks) {
     assert
       .dom(`[data-test-stack-card="${testRealmURL}welcome-song.mp3"]`)
       .exists('the file opens as a file stack item');
+  });
+});
+
+module('Acceptance | workspace card | Library pages', function (hooks) {
+  setupApplicationTest(hooks);
+  setupLocalIndexing(hooks);
+
+  let mockMatrixUtils = setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:localhost',
+    activeRealms: [testRealmURL],
+  });
+
+  let { createAndJoinRoom } = mockMatrixUtils;
+
+  // One more page than the Library's 100-row page holds.
+  const NOTE_COUNT = 105;
+  const GRID_ITEM = `${STACK} [data-test-cards-grid-cards] [data-test-cards-grid-item]`;
+  const PAGINATION = `${STACK} [data-test-card-list-pagination]`;
+
+  hooks.beforeEach(async function () {
+    createAndJoinRoom({ sender: '@testuser:localhost', name: 'room-test' });
+    setupUserSubscription();
+    setupAuthEndpoints();
+
+    let loader = getService('loader-service').loader;
+    let { field, contains, CardDef } = await loader.import<
+      typeof import('@cardstack/base/card-api')
+    >('@cardstack/base/card-api');
+    let { default: StringField } = await loader.import<
+      typeof import('@cardstack/base/string')
+    >('@cardstack/base/string');
+    let { Workspace } = await loader.import<
+      typeof import('@cardstack/base/workspace')
+    >('@cardstack/base/workspace');
+
+    class Note extends CardDef {
+      static displayName = 'Note';
+      @field cardTitle = contains(StringField);
+    }
+    class Memo extends CardDef {
+      static displayName = 'Memo';
+      @field cardTitle = contains(StringField);
+    }
+
+    let notes: Record<string, InstanceType<typeof Note>> = {};
+    for (let i = 1; i <= NOTE_COUNT; i++) {
+      let n = String(i).padStart(3, '0');
+      notes[`Note/${n}.json`] = new Note({ cardTitle: `Note ${n}` });
+    }
+
+    await setupAcceptanceTestRealm({
+      mockMatrixUtils,
+      contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
+        'realm.json': realmConfigCardJSON({ name: WORKSPACE_NAME }),
+        'note.gts': { Note, Memo },
+        'index.json': new Workspace(),
+        'Memo/1.json': new Memo({ cardTitle: 'Only Memo' }),
+        ...notes,
+      },
+    });
+  });
+
+  async function openLibraryFilter(name: string) {
+    await visit('/');
+    await click(WORKSPACE_BUTTON);
+    await waitFor(`${STACK} nav.tabs`);
+    await click(`${STACK} [data-test-workspace-tab="library"]`);
+    await waitFor(`${STACK} [data-test-boxel-filter-list-button="${name}"]`);
+    await click(`${STACK} [data-test-boxel-filter-list-button="${name}"]`);
+  }
+
+  function gridItemCount() {
+    return document.querySelectorAll(GRID_ITEM).length;
+  }
+
+  async function waitForGridItems(count: number) {
+    await waitUntil(() => gridItemCount() === count, {
+      timeoutMessage: `expected ${count} grid items, saw ${gridItemCount()}`,
+    });
+  }
+
+  test('a filter with more rows than a page steps through them page by page', async function (assert) {
+    await openLibraryFilter('Note');
+    await waitForGridItems(100);
+
+    assert.dom(PAGINATION).exists('the Library offers page controls');
+    assert.dom(`${PAGINATION} [aria-current="page"]`).hasText('1');
+    assert
+      .dom(`${GRID_ITEM}[data-test-cards-grid-item="${testRealmURL}Note/105"]`)
+      .doesNotExist('the last note is past the first page');
+
+    await click(`${PAGINATION} [aria-label="Next"]`);
+    await waitForGridItems(NOTE_COUNT - 100);
+
+    assert.dom(`${PAGINATION} [aria-current="page"]`).hasText('2');
+    assert
+      .dom(`${GRID_ITEM}[data-test-cards-grid-item="${testRealmURL}Note/105"]`)
+      .exists('the second page holds the rest');
+    assert
+      .dom(`${GRID_ITEM}[data-test-cards-grid-item="${testRealmURL}Note/001"]`)
+      .doesNotExist('and not the first page again');
+  });
+
+  test('changing the filter starts again at page 1', async function (assert) {
+    await openLibraryFilter('Note');
+    await waitForGridItems(100);
+    await click(`${PAGINATION} [aria-label="Next"]`);
+    await waitForGridItems(NOTE_COUNT - 100);
+
+    await click(`${STACK} [data-test-boxel-filter-list-button="Memo"]`);
+    await waitForGridItems(1);
+    assert
+      .dom(PAGINATION)
+      .doesNotExist('a filter that fits on one page shows no page controls');
+
+    await click(`${STACK} [data-test-boxel-filter-list-button="Note"]`);
+    await waitForGridItems(100);
+    assert.dom(`${PAGINATION} [aria-current="page"]`).hasText('1');
   });
 });
