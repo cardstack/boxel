@@ -74,10 +74,10 @@ import {
 // they are told of a target that is not (see `refusalForNonReader`). Two things
 // still set those apart, and neither is closed here. Time: a refusal that
 // evaluated a predicate takes longer than one that found no card, so a caller
-// who measures carefully can tell the two apart. And the 500: a predicate only
-// runs against a card whose type a rule names, either one that is stored or,
-// for a create against a type, the one the create would mint, and whether it
-// throws depends on that card's values. So a predicate that throws tells any
+// who measures carefully can tell the two apart. And the 500: a predicate that
+// throws is one only against a card whose type a rule names, either one that
+// is stored or, for a create against a type, the one the create would mint,
+// and whether it throws depends on that card's values. So a predicate that throws tells any
 // caller who reaches it that such a card or type is there, and something about
 // what a stored card holds: `(.title | tonumber) > 0` answers 500 for a card
 // whose title is not a number and 404 for one whose title is a number no
@@ -923,6 +923,7 @@ async function ruleTypeKeys(
 // values and relationship links. A computed value and a linked card's fields
 // are not there, since those come from the index and lag the stored source.
 interface PredicateSubject {
+  // Undefined for a data file, which has no document to read.
   input: unknown;
   // What `instance()` answers. Absent where there is no card for it to name.
   instance?: Record<string, unknown>;
@@ -1056,6 +1057,10 @@ async function projectedSource(
 
 // Whether one predicate holds for this caller. Only `true` holds. Anything
 // else it answers fails, and any way its evaluation throws is reported as that.
+// The one exception is a data file. It has no document, so a predicate that
+// throws reaching for one has found nothing, as `readSubject` says, and so it
+// does not hold. That is the subject's shape rather than a fault in the policy,
+// and it stays a refusal: the same answer as a path with nothing stored at it.
 //
 // It runs through the transform runner, the one BXL entry that carries the
 // request context a predicate reads. `params()` is not supplied, so a
@@ -1088,7 +1093,7 @@ async function evaluate(
     );
     return answer === true ? 'holds' : 'fails';
   } catch {
-    return 'threw';
+    return subject.input === undefined ? 'fails' : 'threw';
   }
 }
 
