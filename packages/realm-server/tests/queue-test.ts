@@ -2575,13 +2575,13 @@ module(basename(import.meta.filename), function () {
       return events.includes(`${name} start`);
     }
 
-    // Lets a job finish, and wakes every runner once its completion has
-    // committed. A runner woken before that still sees the job holding its
-    // lane, and would otherwise sleep until its next poll.
+    // Lets a job finish, and waits for its completion to commit. It sends no
+    // wake of its own, so whatever starts next is claimed on the queue's own
+    // wakes, as in production: the runner that ran the job claiming again, a
+    // publish, or a completion that leaves an exclusive job pending.
     async function finish(name: string) {
       gates.get(name)!.fulfill();
       await dones.get(name);
-      await kick();
     }
 
     // Publishes a control job in a lane nothing else uses and waits for it to
@@ -3073,6 +3073,11 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    // The high-priority runner that ran the writer can't claim the exclusive
+    // job, and the all-priority runner has already found nothing to do and
+    // gone back to sleep. So only a wake from the writer's completion can
+    // start the exclusive job before the all-priority runner's next poll,
+    // which is 10 s away.
     test('an older lower-tier exclusive job starts once its family is idle with no writer job pending', async function (assert) {
       await occupyTheAllPriorityRunner();
       await publishLaneJob('exclusive', {
@@ -3087,8 +3092,11 @@ module(basename(import.meta.filename), function () {
       });
       await started('writer');
       await finish('other realm');
+      // Gives the all-priority runner time to scan, find the exclusive job's
+      // family busy, and sleep.
+      await new Promise((r) => setTimeout(r, 500));
       await finish('writer');
-      await started('exclusive');
+      await started('exclusive', 5_000);
       assert.deepEqual(
         {
           events: familyEvents(),

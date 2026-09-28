@@ -519,6 +519,44 @@ function isUserInitiatedTier(alias: 'j' | 'p'): string {
   return `(${alias}.priority >= ${userInitiatedPrerenderHtmlPriority})`;
 }
 
+// Wakes every runner when a writer job's completion leaves a pending exclusive
+// job in its family. A completion notifies only `jobs_finished`, which runners
+// don't listen on, and the worker that ran the writer job goes straight back
+// to claiming, which it may do without being able to claim the exclusive job
+// (see the lane rules in the claim query). Without this, an idle worker that
+// could claim the exclusive job would not scan until its next poll, by which
+// time the family is usually busy again. Best-effort: a missed wake only
+// leaves the job to that poll.
+async function wakeRunnersForPendingExclusive(
+  queryFn: (expression: Expression) => Promise<unknown>,
+  workerId: string,
+  job: JobsTable,
+) {
+  let family = job.lane_family;
+  if (!family || family === job.concurrency_group) {
+    return;
+  }
+  try {
+    await queryFn([
+      `SELECT pg_notify('jobs', '') WHERE EXISTS (
+         SELECT 1 FROM jobs p
+          WHERE p.status = 'unfulfilled'
+            AND p.concurrency_group =`,
+      param(family),
+      `AND ${isExclusiveLane('p')}
+       )`,
+    ]);
+  } catch (e: any) {
+    log.error(
+      `%s: could not wake runners for family %s after job %s: %s`,
+      workerId,
+      family,
+      job.id,
+      e?.message ?? e,
+    );
+  }
+}
+
 // The claim query's search for a pending exclusive job `p` of writer job `j`'s
 // family that was queued before `j`, for the body of an EXISTS.
 function olderPendingExclusive(): string {
@@ -641,13 +679,13 @@ export class PgQueueRunner implements QueueRunner {
             //   `#maxWriterLanesPerFamily` at once, and one at a time while an
             //   older exclusive job of the family is pending. An exclusive job
             //   waits for the family to empty, and two writer lanes whose
-            //   passes keep overlapping would keep it occupied indefinitely.
-            //   With one lane at a time the family empties after each writer's
-            //   pass unless another save is already queued, and a worker that
-            //   can claim the exclusive job then takes it as the older of the
-            //   two. That is a chance, not a guarantee: a family whose next save
-            //   is always queued before the current pass ends keeps the
-            //   exclusive job waiting.
+            //   passes keep overlapping would never let it. With one lane at a
+            //   time the family empties between passes, and a worker that can
+            //   claim the exclusive job and scans in that gap takes it as the
+            //   older of the two. The worker that ran a pass scans the moment
+            //   its completion commits, so when that worker can claim the
+            //   exclusive job, the job starts once the passes running when it
+            //   was queued finish.
             // - A writer job does not start ahead of an older pending exclusive
             //   job of its family at the writer's priority tier or above (the
             //   tiers are user-initiated and system; see `isUserInitiatedTier`).
@@ -662,9 +700,15 @@ export class PgQueueRunner implements QueueRunner {
             //   system-tier from-scratch pass waits for an all-priority worker
             //   to reach it behind every realm's system work, which after a
             //   deploy that reindexes every realm takes hours. A barrier would
-            //   hold each save in the realm for all of that. The one-lane rule
-            //   is what gives such a pass its chance: an all-priority worker
-            //   that reaches it while the family is empty claims it.
+            //   hold each save in the realm for all of that. The cost is that
+            //   nothing bounds how long such a pass waits while its realm keeps
+            //   saving. The worker that ran the last pass cannot claim it, and
+            //   takes the next queued save the moment its completion commits.
+            //   The completion wakes the other workers
+            //   (`wakeRunnersForPendingExclusive`), so an idle all-priority
+            //   worker races it for the family, but a busy one scans only when
+            //   it frees up. Only a pause in the realm's saves that lasts until
+            //   an all-priority worker scans is sure to let the pass start.
             //
             // Jobs published without a family are all exclusive, each in a
             // family of its own group, so for them these reduce to the first
@@ -1059,6 +1103,7 @@ export class PgQueueRunner implements QueueRunner {
             `%s: committed job completion, notified jobs_finished`,
             this.#workerId,
           );
+          await wakeRunnersForPendingExclusive(query, this.#workerId, jobToRun);
         }
       } catch (e: any) {
         // Reachable for the claim transaction only — `finalizeJob` handles
