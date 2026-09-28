@@ -242,8 +242,13 @@ module('Integration | FileDef resource primitives', function (hooks) {
   // When that fetch can't succeed — as here, where the host is unreachable —
   // playback has to degrade to the canonical source rather than disappear.
   test('FileAudio falls back to the canonical source when the blob fetch fails', async function (assert) {
+    // Port 1 is on the WHATWG bad-port list, so the browser refuses the
+    // request before it reaches the network stack: the blob load fails
+    // immediately, for the same reason on every machine. An unreachable host
+    // instead leaves the failure to DNS and a connection timeout, which is
+    // neither immediate nor the same twice.
     let file = new FileDef({
-      url: 'http://example.com/a/take.mp3',
+      url: 'http://127.0.0.1:1/a/take.mp3',
       name: 'take.mp3',
     });
     await render(
@@ -261,13 +266,13 @@ module('Integration | FileDef resource primitives', function (hooks) {
     await waitUntil(
       () =>
         document.querySelector('audio')?.getAttribute('src') ===
-        'http://example.com/a/take.mp3',
+        'http://127.0.0.1:1/a/take.mp3',
     );
     assert
       .dom('audio')
       .hasAttribute(
         'src',
-        'http://example.com/a/take.mp3',
+        'http://127.0.0.1:1/a/take.mp3',
         'the element is playable from the canonical URL',
       );
     assert.notOk(

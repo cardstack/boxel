@@ -339,11 +339,25 @@ export const BUNDLED_BASE_MODULES: Record<
   website: () => import('@cardstack/base/website'),
   'cards-grid': () => import('@cardstack/base/cards-grid'),
   'datetime-stamp': () => import('@cardstack/base/datetime-stamp'),
+  // `file-formats/metadata-fields` and the file defs that hold its fields —
+  // docx, pptx, xlsx, html and midi — are deliberately NOT bundled.
+  //
+  // It declares fourteen FieldDefs that those defs hold as compound fields,
+  // and a field's class has to have an identity: deserializing one calls
+  // `makeMetaForField`, which throws when `identifyCard` cannot name the
+  // class. A class is named only when the loader is asked for the module that
+  // declares it, and a bundled module asking for another bundled module is
+  // resolved inside the chunk, where the loader never sees it. So bundling
+  // both a def and the fields it holds leaves those fields unnameable for any
+  // realm whose cards reach them, while the other defs that hold them — image,
+  // audio, video, pdf, font, 3D — are fetched and would have named them only
+  // by coincidence of being loaded first.
+  //
+  // Fetching all six keeps the identity where the declaring module is served.
   'audio-metadata': () => import('@cardstack/base/audio-metadata'),
   'audio-waveform': () => import('@cardstack/base/audio-waveform'),
   'avif-meta-extractor': () => import('@cardstack/base/avif-meta-extractor'),
   'csv-file-def': () => import('@cardstack/base/csv-file-def'),
-  'docx-file-def': () => import('@cardstack/base/docx-file-def'),
   'docx-meta-extractor': () => import('@cardstack/base/docx-meta-extractor'),
   'exif-meta-extractor': () => import('@cardstack/base/exif-meta-extractor'),
   'file-formats/audio-preview': () =>
@@ -356,8 +370,6 @@ export const BUNDLED_BASE_MODULES: Record<
     import('@cardstack/base/file-formats/html-preview'),
   'file-formats/markdown-preview': () =>
     import('@cardstack/base/file-formats/markdown-preview'),
-  'file-formats/metadata-fields': () =>
-    import('@cardstack/base/file-formats/metadata-fields'),
   'file-formats/midi-preview': () =>
     import('@cardstack/base/file-formats/midi-preview'),
   'file-formats/model3d-captures': () =>
@@ -376,7 +388,6 @@ export const BUNDLED_BASE_MODULES: Record<
   'font-meta-extractor': () => import('@cardstack/base/font-meta-extractor'),
   'gif-meta-extractor': () => import('@cardstack/base/gif-meta-extractor'),
   'gltf-meta-extractor': () => import('@cardstack/base/gltf-meta-extractor'),
-  'html-file-def': () => import('@cardstack/base/html-file-def'),
   'html-meta-extractor': () => import('@cardstack/base/html-meta-extractor'),
   'id3v2-parser': () => import('@cardstack/base/id3v2-parser'),
   'image-color-profile': () => import('@cardstack/base/image-color-profile'),
@@ -384,7 +395,6 @@ export const BUNDLED_BASE_MODULES: Record<
   'jpg-meta-extractor': () => import('@cardstack/base/jpg-meta-extractor'),
   'json-file-def': () => import('@cardstack/base/json-file-def'),
   'm4a-meta-extractor': () => import('@cardstack/base/m4a-meta-extractor'),
-  'midi-audio-def': () => import('@cardstack/base/midi-audio-def'),
   'midi-meta-extractor': () => import('@cardstack/base/midi-meta-extractor'),
   'mp3-meta-extractor': () => import('@cardstack/base/mp3-meta-extractor'),
   'mp4-meta-extractor': () => import('@cardstack/base/mp4-meta-extractor'),
@@ -393,7 +403,6 @@ export const BUNDLED_BASE_MODULES: Record<
   ooxml: () => import('@cardstack/base/ooxml'),
   'pdf-meta-extractor': () => import('@cardstack/base/pdf-meta-extractor'),
   'png-meta-extractor': () => import('@cardstack/base/png-meta-extractor'),
-  'pptx-file-def': () => import('@cardstack/base/pptx-file-def'),
   'pptx-meta-extractor': () => import('@cardstack/base/pptx-meta-extractor'),
   'stl-meta-extractor': () => import('@cardstack/base/stl-meta-extractor'),
   'svg-meta-extractor': () => import('@cardstack/base/svg-meta-extractor'),
@@ -405,7 +414,6 @@ export const BUNDLED_BASE_MODULES: Record<
   'wav-meta-extractor': () => import('@cardstack/base/wav-meta-extractor'),
   'webm-meta-extractor': () => import('@cardstack/base/webm-meta-extractor'),
   'webp-meta-extractor': () => import('@cardstack/base/webp-meta-extractor'),
-  'xlsx-file-def': () => import('@cardstack/base/xlsx-file-def'),
   'xlsx-meta-extractor': () => import('@cardstack/base/xlsx-meta-extractor'),
   'zip-file-def': () => import('@cardstack/base/zip-file-def'),
 };
