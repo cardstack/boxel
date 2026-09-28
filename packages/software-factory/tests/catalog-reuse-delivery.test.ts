@@ -403,6 +403,29 @@ module('catalog reuse > artifact contract', function () {
     );
   });
 
+  // Observed across two runs of the same prompt: one adopted the Theme as
+  // {module: "@cardstack/base/structured-theme", name: "default"} and wrote it;
+  // the other wrote a named import of the class and the realm refused the card
+  // with FilterRefersToNonexistentTypeError, failing the atomic write. The
+  // prompt asked for a Theme card without saying which module or export, so the
+  // turn guessed — and a wrong guess surfaces as a 500 on a healthy realm.
+  // `bootstrap-implement.md` already carries this rule for the cards it writes.
+  test('the design foundation is told the Theme module and export', async function (assert) {
+    let prompt = await readPrompt('issue-design-foundation.md');
+    assert.true(
+      prompt.includes('@cardstack/base/structured-theme'),
+      'the module is named rather than left to a guess',
+    );
+    assert.true(
+      /"name":\s*"default"|name: "default"/.test(prompt),
+      'the export is pinned to the default export',
+    );
+    assert.true(
+      prompt.includes('get_card_schema'),
+      'the schema is fetched before the card is written',
+    );
+  });
+
   test('the build turn links the Theme and keeps literals out of templates', async function (assert) {
     let prompt = await readPrompt('issue-build.md');
     assert.true(prompt.includes('cardInfo.theme'), 'the link is required');

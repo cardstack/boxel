@@ -111,6 +111,26 @@ Write these artifacts:
   - Otherwise author one: a `Theme` card instance in the target realm,
     carrying the palette, type, spacing, radius and shadow decisions above
     as its structured theme variables. Name it for the project.
+
+    **Fetch the schema before you write it** —
+    `get_card_schema({ module: "@cardstack/base/structured-theme", name: "default" })`
+    — and adopt exactly that module and name:
+
+    ```json
+    "meta": {
+      "adoptsFrom": {
+        "module": "@cardstack/base/structured-theme",
+        "name": "default"
+      }
+    }
+    ```
+
+    `StructuredTheme` is that module's **default** export, so `name` is the
+    literal string `"default"`, not `"StructuredTheme"`. Naming the class
+    instead produces a card the realm cannot serialize, and the write fails
+    with `FilterRefersToNonexistentTypeError` on an otherwise healthy realm —
+    which reads like a broken stack rather than a wrong reference. The schema
+    call also gives you the variable names, which you would otherwise guess.
   - Record the Theme's card id in the brand guide. Every card's build turn
     links it via `cardInfo.theme`, and every template reads its variables.
 - **`design/tokens.css`** — a **mirror of the Theme**, generated from it, for
