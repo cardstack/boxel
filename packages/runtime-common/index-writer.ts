@@ -10,11 +10,7 @@ import {
   unixTime,
   logger,
 } from './index.ts';
-import {
-  rri,
-  type RealmResourceIdentifier,
-  type RealmIdentifier,
-} from './realm-identifiers.ts';
+import { rri } from './realm-identifiers.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
 import {
   getCreatedTime,
@@ -42,10 +38,7 @@ import {
   type SerializedError,
 } from './error.ts';
 import type { DBAdapter } from './db.ts';
-import {
-  captureLedgerSourceURL,
-  type CaptureManifest,
-} from './capture-spec.ts';
+import type { CaptureManifest } from './capture-spec.ts';
 import type { RealmMetaTable } from './index-structure.ts';
 import type { FileMetaResource } from './resource-types.ts';
 import type { DeclaredCaptureError, Diagnostics } from './index.ts';
@@ -489,8 +482,8 @@ export interface BatchDoneResult extends PendingCleanupResult {
 // What a commit does about peer passes of its realm that committed while it
 // ran. Handed to `Batch.done` only by a pass that can re-visit a URL: the
 // index runner's from-scratch and incremental passes. A batch that cannot —
-// the setup-error recording, the worker's failed-entry marking, a copy —
-// commits without it, and so without checking its peers.
+// the setup-error recording, the worker's failed-entry marking — commits
+// without it, and so without checking its peers.
 export interface CommitValidation {
   // Re-visits `round.urls` into this batch the way the pass's visit loop did,
   // against the files and the index as they stand now. Called between commit
@@ -684,19 +677,13 @@ export class Batch {
   #dbAdapter: DBAdapter;
   #perfLog = logger('index-perf');
   #log = logger('index-writer');
-  // The source realm of a copy batch, set by `copyFrom`. `applyBatchUpdates`
-  // uses it to fill the destination's prerendered_html channel from the
-  // source realm's `prerendered_html` rows.
-  #copyFromSourceRealm: URL | undefined;
   // When true (the server/Postgres path), HTML prerendering runs as a separate
   // `prerender_html` job, so this index batch writes only `boxel_index` and
   // leaves the `prerendered_html` channel to that job. When false (the fused
   // path — the SQLite in-browser/test realm, which has no separate worker), the
   // batch writes each entry's HTML half into `prerendered_html_pending` inline
   // (in `updateEntry`, with tombstones mirrored in `tombstoneEntries`).
-  // Defaults to `dbAdapter.kind === 'pg'`; a copy batch fills the channel
-  // either way via `copyPrerenderedHtmlFrom` (guarded by
-  // `#copyFromSourceRealm` in `applyBatchUpdates`).
+  // Defaults to `dbAdapter.kind === 'pg'`.
   #splitPrerenderHtml: boolean;
   // When true, this batch is the `prerender_html` job's batch: it writes only
   // the `prerendered_html` channel (not `boxel_index`), stamps each row with
@@ -769,8 +756,8 @@ export class Batch {
   // (`loadResumedRows`). A batch outside a job stages under
   // `adhoc:<pass id>`, which nothing else shares.
   #stagingId: string;
-  // Whether this pass rebuilt the whole realm (a from-scratch index or a
-  // copy), as opposed to an incremental fan-out; recorded on the ledger row.
+  // Whether this pass rebuilt the whole realm (a from-scratch index), as
+  // opposed to an incremental fan-out; recorded on the ledger row.
   #fullRealm = false;
   private realmURL: URL; // this assumes that we only index cards in our own realm...
   private virtualNetwork: VirtualNetwork;
@@ -1302,269 +1289,6 @@ export class Batch {
     return result;
   }
 
-  async copyFrom(sourceRealmURL: URL): Promise<void> {
-    let columns: string[][] | undefined;
-    let sources = (await this.#query([
-      `SELECT * FROM boxel_index WHERE`,
-      // intentionally copying over error docs--perhaps these can be resolved in
-      // the new realm?
-      ...every([
-        any([['is_deleted = false'], ['is_deleted IS NULL']]),
-        [`realm_url =`, param(sourceRealmURL.href)],
-      ]),
-    ] as Expression)) as unknown as BoxelIndexTable[];
-    let now = String(Date.now());
-    let copyURL = (value: string) =>
-      this.isRegisteredPrefix(value)
-        ? value
-        : this.copiedRealmURL(sourceRealmURL, new URL(value)).href;
-    let values = sources.map((entry) => {
-      let destURL = copyURL(entry.url);
-      this.#invalidations.add(destURL);
-      entry.url = destURL;
-      entry.realm_url = this.realmURL.href;
-      entry.generation = this.#provisionalGeneration;
-      entry.job_id = this.jobInfo?.jobId ?? null;
-      entry.staging_id = this.#stagingId;
-      entry.file_alias = copyURL(entry.file_alias);
-      entry.types = entry.types ? entry.types.map(copyURL) : entry.types;
-      entry.deps = entry.deps ? entry.deps.map(copyURL) : entry.deps;
-      entry.last_known_good_deps = entry.last_known_good_deps
-        ? entry.last_known_good_deps.map(copyURL)
-        : entry.last_known_good_deps;
-      entry.pristine_doc = entry.pristine_doc
-        ? {
-            ...entry.pristine_doc,
-            id: copyURL(entry.pristine_doc.id!) as RealmResourceIdentifier, // these will always have an ID
-          }
-        : entry.pristine_doc;
-      if (entry.type === 'instance' && entry.pristine_doc) {
-        entry.pristine_doc.meta = {
-          ...entry.pristine_doc.meta,
-          realmURL: this.realmURL.href as RealmIdentifier,
-        };
-      }
-      this.updateIds(entry.search_doc, sourceRealmURL);
-      if (entry.error_doc) {
-        entry.error_doc = this.normalizeErrorDoc(
-          entry.error_doc,
-          new URL(entry.url),
-          (dep) => this.copiedRealmURL(sourceRealmURL, dep),
-        );
-      }
-      entry.indexed_at = now;
-
-      let { valueExpressions, nameExpressions } = asExpressions(entry);
-      columns = nameExpressions;
-      return valueExpressions;
-    });
-    if (!columns) {
-      throw new Error(
-        `nothing to copy from ${sourceRealmURL.href} - this realm is not present on the realm server`,
-      );
-    }
-
-    await this.#query([
-      ...upsertMultipleRows(
-        'boxel_index_pending',
-        'boxel_index_pending_pkey',
-        columns,
-        values,
-      ),
-    ]);
-
-    // `applyBatchUpdates` fills the destination's prerendered_html channel
-    // from the source realm's `prerendered_html` rows.
-    this.#copyFromSourceRealm = sourceRealmURL;
-    this.#fullRealm = true;
-  }
-
-  // Copy the source realm's `prerendered_html` rows onto the destination's
-  // `prerendered_html_pending`, so a copied realm keeps its prerendered HTML
-  // without re-rendering. Runs from `applyBatchUpdates` just before the
-  // channel swap. A destination URL whose source has no `prerendered_html`
-  // row gets none — it reads as unrendered and the catch-up sweep enqueues
-  // its render. Mirrors the `boxel_index` copy's transforms — URL rewrite
-  // (`url`, `realm_url`, `file_alias`), render-type-key rewrite of
-  // `fitted_html` / `embedded_html`, deps rewrite (scoped-CSS URLs ride in
-  // `deps`), and `error_doc` normalization — and stamps the destination
-  // generation so the copied instances read as fresh
-  // (`prerendered_html.generation == boxel_index.generation`). Tombstoned
-  // source rows are skipped, matching the `boxel_index` copy.
-  private async copyPrerenderedHtmlFrom(sourceRealmURL: URL): Promise<void> {
-    let now = String(Date.now());
-    let sources = (await this.#query([
-      `SELECT * FROM prerendered_html WHERE`,
-      ...every([
-        any([['is_deleted = false'], ['is_deleted IS NULL']]),
-        [`realm_url =`, param(sourceRealmURL.href)],
-      ]),
-    ] as Expression)) as unknown as PrerenderedHtmlTable[];
-    let copyURL = (value: string) =>
-      this.isRegisteredPrefix(value)
-        ? value
-        : this.copiedRealmURL(sourceRealmURL, new URL(value)).href;
-    let columns: string[][] | undefined;
-    let manifestCopies: {
-      sourceLedgerURL: string;
-      destLedgerURL: string;
-      manifest: CaptureManifest;
-    }[] = [];
-    let values = sources.map((entry) => {
-      let destURL = copyURL(entry.url);
-      // The source's `prerendered_html` rows are a subset of its `boxel_index`
-      // rows, so `copyFrom` already seeded these into `#invalidations`; add
-      // defensively so the swap below promotes every overlaid HTML row.
-      this.#invalidations.add(destURL);
-      if (entry.captures && Object.keys(entry.captures).length > 0) {
-        let kind: 'instance' | 'file' =
-          entry.type === 'instance' ? 'instance' : 'file';
-        manifestCopies.push({
-          sourceLedgerURL: captureLedgerSourceURL(entry.url, kind),
-          destLedgerURL: captureLedgerSourceURL(destURL, kind),
-          manifest: entry.captures as CaptureManifest,
-        });
-      }
-      entry.url = destURL;
-      entry.realm_url = this.realmURL.href;
-      entry.file_alias = copyURL(entry.file_alias);
-      entry.generation = this.commitGeneration;
-      entry.rendered_at = now;
-      entry.job_id = this.jobInfo?.jobId ?? null;
-      entry.staging_id = this.#stagingId;
-      entry.deps = entry.deps ? entry.deps.map(copyURL) : entry.deps;
-      entry.last_known_good_deps = entry.last_known_good_deps
-        ? entry.last_known_good_deps.map(copyURL)
-        : entry.last_known_good_deps;
-      entry.fitted_html = entry.fitted_html
-        ? this.objectWithCopiedRealmKeys(sourceRealmURL, entry.fitted_html)
-        : entry.fitted_html;
-      entry.embedded_html = entry.embedded_html
-        ? this.objectWithCopiedRealmKeys(sourceRealmURL, entry.embedded_html)
-        : entry.embedded_html;
-      if (entry.error_doc) {
-        entry.error_doc = this.normalizeErrorDoc(
-          entry.error_doc,
-          new URL(entry.url),
-          (dep) => this.copiedRealmURL(sourceRealmURL, dep),
-        );
-      }
-      let { valueExpressions, nameExpressions } = asExpressions(entry);
-      columns = nameExpressions;
-      return valueExpressions;
-    });
-    if (!columns) {
-      // Source realm has no prerendered HTML to copy (e.g. never rendered);
-      // the destination reads as unrendered and the catch-up sweep enqueues
-      // its renders.
-      return;
-    }
-
-    await this.#query([
-      ...upsertMultipleRows(
-        'prerendered_html_pending',
-        'prerendered_html_pending_pkey',
-        columns,
-        values,
-      ),
-    ]);
-    await this.copyDeclaredCaptureLedgerRows(sourceRealmURL, manifestCopies);
-  }
-
-  // A copied manifest is only as durable as the ledger rows that refcount
-  // its objects, and those exist solely under the source realm — once the
-  // source card re-renders (superseding) or is deleted (tombstoning), GC
-  // reclaims the objects and every copied manifest dangles. Duplicate the
-  // source's `declared`-lane rows under the destination realm and rewritten
-  // source URL so the copies hold their own references. Metadata-only: the
-  // object store is content-addressed, so no bytes move. A manifest entry
-  // whose source row is already gone stays as dangling in the copy as it was
-  // in the source. Runs only when a manifest was copied, so it never touches
-  // `media_cache_ledger` on adapters that don't carry it (captures only ever
-  // happen on the Postgres side).
-  private async copyDeclaredCaptureLedgerRows(
-    sourceRealmURL: URL,
-    copies: {
-      sourceLedgerURL: string;
-      destLedgerURL: string;
-      manifest: CaptureManifest;
-    }[],
-  ): Promise<void> {
-    if (copies.length === 0) {
-      return;
-    }
-    let sourceURLs = [...new Set(copies.map((c) => c.sourceLedgerURL))];
-    let sourceRows = (await this.#query([
-      `SELECT * FROM media_cache_ledger WHERE`,
-      ...every([
-        ['realm_url =', param(sourceRealmURL.href)],
-        [`lane = 'declared'`],
-        [
-          'source_url IN',
-          ...addExplicitParens(
-            separatedByCommas(sourceURLs.map((u) => [param(u)])),
-          ),
-        ],
-      ]),
-    ] as Expression)) as unknown as {
-      source_url: string;
-      capture_spec_hash: string;
-      object_key: string;
-      source_content_hash: string | null;
-      content_type: string;
-      size_bytes: string | number;
-      width: number | null;
-      height: number | null;
-    }[];
-    let byIdentity = new Map(
-      sourceRows.map((row) => [
-        `${row.source_url}\n${row.capture_spec_hash}\n${row.object_key}`,
-        row,
-      ]),
-    );
-    let now = Date.now();
-    let columns: string[][] | undefined;
-    let values: any[][] = [];
-    for (let { sourceLedgerURL, destLedgerURL, manifest } of copies) {
-      for (let entry of Object.values(manifest)) {
-        let source = byIdentity.get(
-          `${sourceLedgerURL}\n${entry.specHash}\n${entry.objectKey}`,
-        );
-        if (!source) {
-          continue;
-        }
-        let { nameExpressions, valueExpressions } = asExpressions({
-          realm_url: this.realmURL.href,
-          source_url: destLedgerURL,
-          capture_spec_hash: source.capture_spec_hash,
-          source_generation: this.commitGeneration,
-          object_key: source.object_key,
-          source_content_hash: source.source_content_hash,
-          lane: 'declared',
-          content_type: source.content_type,
-          size_bytes: source.size_bytes,
-          width: source.width,
-          height: source.height,
-          created_at: now,
-          last_accessed_at: now,
-        });
-        columns = nameExpressions;
-        values.push(valueExpressions);
-      }
-    }
-    if (!columns) {
-      return;
-    }
-    await this.#query([
-      ...upsertMultipleRows(
-        'media_cache_ledger',
-        'media_cache_ledger_pkey',
-        columns,
-        values,
-      ),
-    ]);
-  }
-
   // Enqueue a row write behind the write buffer instead of upserting it
   // inline. The index visit loop routes its writes here so the prerender tab
   // can start the next file's render while these rows drain. The URL joins
@@ -1661,7 +1385,7 @@ export class Batch {
   }
 
   // Immediate single-row write, for callers outside the buffered index loop
-  // (realm copy fix-ups, tests). Runs the same guards + invalidation
+  // (tests). Runs the same guards + invalidation
   // bookkeeping the buffered path does, then writes without waiting for a
   // flush.
   async updateEntry(url: URL, entry: SearchIndexEntry): Promise<void> {
@@ -3293,11 +3017,8 @@ export class Batch {
   // and runs it again (see `DBAdapter.withTransaction`). Re-running is safe
   // because everything the body changes is either undone by the rollback or
   // comes out the same on the next attempt:
-  //  - its database writes, including the ones a copy batch makes to
-  //    `prerendered_html_pending` and the media-cache ledger, roll back with
-  //    the transaction;
-  //  - its in-memory changes are idempotent: the copy adds the same URLs to
-  //    the invalidation set, the loader-epoch getter returns the token it
+  //  - its database writes roll back with the transaction;
+  //  - its in-memory changes are idempotent: the loader-epoch getter returns the token it
   //    already minted, and `#publishedPrerenderedHtml` is set to the same
   //    value.
   //
@@ -3867,17 +3588,8 @@ export class Batch {
       // `prerender_html` job, this pass wrote nothing to the channel, and the
       // job's own swap publishes it. The fused path (SQLite) lands each
       // visit's HTML half in `prerendered_html_pending` via `updateEntry`
-      // (tombstones via `tombstoneEntries`); a copy fills the channel from
-      // the source realm's rows below.
-      if (!this.#splitPrerenderHtml || this.#copyFromSourceRealm) {
-        // For a copy, overlay the source realm's `prerendered_html` rows onto
-        // this batch's pending rows. A destination URL whose source has
-        // no `prerendered_html` row gets none either — it reads as unrendered
-        // and the catch-up sweep enqueues its render.
-        if (this.#copyFromSourceRealm) {
-          await this.copyPrerenderedHtmlFrom(this.#copyFromSourceRealm);
-        }
-
+      // (tombstones via `tombstoneEntries`).
+      if (!this.#splitPrerenderHtml) {
         // Swap the pending HTML rows into production in the same
         // transaction, keyed by the same staging id, invalidation set and
         // generation.
@@ -4124,7 +3836,7 @@ export class Batch {
   // expired-reservation zombie job overwriting a newer pass's rows — while
   // keeping an equal-generation retry idempotent. It publishes the rows at the
   // generation they were staged under, which is the one its job carried.
-  // Index/copy batches swap unguarded, restamping each row with the
+  // Index batches swap unguarded, restamping each row with the
   // generation their commit allocated: that generation is the realm's newest,
   // so the guard would always pass anyway.
   private async promotePrerenderedHtmlPending(
@@ -5149,38 +4861,14 @@ export class Batch {
     return url;
   }
 
-  private copiedRealmURL(fromRealm: URL, file: URL): URL {
-    let source = new RealmPaths(fromRealm, this.virtualNetwork);
-    let dest = new RealmPaths(this.realmURL, this.virtualNetwork);
-    if (!source.inRealm(file)) {
-      return file;
-    }
-    let local = source.local(file);
-    return dest.fileURL(local);
-  }
-
-  private objectWithCopiedRealmKeys(
-    fromRealm: URL,
-    obj: Record<string, any>,
-  ): Record<string, any> {
-    let result: Record<string, any> = {};
-    for (let [key, value] of Object.entries(obj)) {
-      result[this.copiedRealmURL(fromRealm, new URL(key)).href] = value;
-    }
-    return result;
-  }
-
   private normalizeErrorDoc(
     error: SerializedError,
     entryURL: URL,
-    depMapper?: (dep: URL) => URL,
   ): SerializedError {
     let deps = error.deps
       ? [
           ...new Set(
-            error.deps.map((dep) =>
-              this.normalizeDependency(dep, entryURL, depMapper),
-            ),
+            error.deps.map((dep) => this.normalizeDependency(dep, entryURL)),
           ),
         ]
       : undefined;
@@ -5194,16 +4882,11 @@ export class Batch {
     });
   }
 
-  private normalizeDependency(
-    dep: string,
-    entryURL: URL,
-    depMapper?: (dep: URL) => URL,
-  ): string {
+  private normalizeDependency(dep: string, entryURL: URL): string {
     try {
       let resolved = new URL(dep, entryURL);
       resolved.search = '';
       resolved.hash = '';
-      resolved = depMapper ? depMapper(resolved) : resolved;
       return trimExecutableExtension(rri(resolved.href));
     } catch (_err) {
       return dep;
@@ -5272,27 +4955,6 @@ export class Batch {
       ]);
     }
     return rewritten;
-  }
-
-  private updateIds(obj: any, fromRealm: URL) {
-    if (Array.isArray(obj)) {
-      obj.forEach((i) => this.updateIds(i, fromRealm));
-    } else if (obj && typeof obj === 'object') {
-      for (let key in obj) {
-        if (
-          key === 'id' &&
-          'id' in obj &&
-          obj.id &&
-          typeof obj.id === 'string'
-        ) {
-          obj.id = this.isRegisteredPrefix(obj.id)
-            ? obj.id
-            : this.copiedRealmURL(fromRealm, new URL(obj.id));
-        } else {
-          this.updateIds(obj[key], fromRealm);
-        }
-      }
-    }
   }
 }
 

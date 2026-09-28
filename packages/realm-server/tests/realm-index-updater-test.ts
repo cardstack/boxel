@@ -533,75 +533,6 @@ module(basename(import.meta.filename), function (hooks) {
     await updater.incrementalIndexing();
   });
 
-  test('a copy holds the write-path gate', async function (assert) {
-    let { queue, waiters } = makeStubQueue();
-    let updater = new RealmIndexUpdater({
-      realm: makeStubRealm(),
-      dbAdapter: {} as DBAdapter,
-      queue,
-    });
-
-    let copyPromise = updater.copy(new URL('http://127.0.0.1:4444/source/'));
-    copyPromise.catch(() => {});
-    while (waiters.length === 0) {
-      await new Promise((resolve) => setImmediate(resolve));
-    }
-
-    assert.notStrictEqual(
-      updater.incrementalIndexingAffectingStaging(),
-      undefined,
-      'a copy indexes the whole source realm, modules included',
-    );
-
-    waiters[0].rejectFromResult(serializedWorkerError);
-    await updater.incrementalIndexing();
-    await settleMicrotasksAndUnhandledRejections();
-  });
-
-  test('a failing copy job throws from copy() and resolves the gate', async function (assert) {
-    let { queue, waiters } = makeStubQueue();
-    let updater = new RealmIndexUpdater({
-      realm: makeStubRealm(),
-      dbAdapter: {} as DBAdapter,
-      queue,
-    });
-
-    let copyPromise = updater.copy(new URL('http://127.0.0.1:4444/source/'));
-    copyPromise.catch(() => {});
-    while (waiters.length === 0) {
-      await new Promise((resolve) => setImmediate(resolve));
-    }
-    let gate = updater.incrementalIndexing();
-    assert.notStrictEqual(gate, undefined, 'gate reflects the in-flight copy');
-
-    waiters[0].rejectFromResult(serializedWorkerError);
-
-    let copyError: unknown;
-    try {
-      await copyPromise;
-    } catch (e) {
-      copyError = e;
-    }
-    assert.deepEqual(
-      copyError,
-      serializedWorkerError,
-      'copy() rejects with the job failure',
-    );
-    await gate;
-    await settleMicrotasksAndUnhandledRejections();
-
-    assert.deepEqual(
-      unhandledRejections,
-      [],
-      'no unhandled rejection escapes the copy failure path',
-    );
-    assert.strictEqual(
-      updater.incrementalIndexing(),
-      undefined,
-      'gate is drained once the failed copy settles',
-    );
-  });
-
   // The pending time is wall-clock, so it is normalized out of the assertion.
   function describePasses(updater: RealmIndexUpdater) {
     return updater
@@ -659,26 +590,25 @@ module(basename(import.meta.filename), function (hooks) {
       queue,
     });
 
-    let copyPromise = updater.copy(new URL('http://127.0.0.1:4444/source/'));
-    copyPromise.catch(() => {});
+    let enqueued = updater.enqueueUpdate([new URL(`${realmURL}person.gts`)]);
     assert.deepEqual(
       describePasses(updater),
-      ['job not yet enqueued (copy-index, pending Ns)'],
+      [
+        `job not yet enqueued (incremental-index, 1 file: ${realmURL}person.gts, pending Ns)`,
+      ],
       'the pass is named before the queue has given it a job',
     );
 
-    while (waiters.length === 0) {
-      await new Promise((resolve) => setImmediate(resolve));
-    }
+    let { settled } = await enqueued;
+    settled.catch(() => {});
     assert.deepEqual(
       describePasses(updater),
-      ['job 1 (copy-index, pending Ns)'],
+      [`job 1 (incremental-index, 1 file: ${realmURL}person.gts, pending Ns)`],
       'the pass is named by its job once enqueued',
     );
 
     waiters[0].rejectFromResult(serializedWorkerError);
-    await copyPromise.catch(() => {});
-    await settleMicrotasksAndUnhandledRejections();
+    await settled.catch(() => {});
     assert.deepEqual(describePasses(updater), [], 'nothing is pending');
   });
 

@@ -134,8 +134,9 @@ export interface QueuePublishRequest {
   //   all, which is every job published without one.
   // - A writer lane is a group inside the family with a name of its own. Its
   //   jobs run alongside other writer lanes' jobs, but never alongside
-  //   exclusive work, and a pending exclusive job is a barrier that later
-  //   writer jobs of no higher priority wait behind.
+  //   exclusive work. A pending exclusive job is a barrier that later writer
+  //   jobs at its priority tier or below wait behind; later writer jobs at a
+  //   higher tier start past it, one writer lane at a time.
   //
   // Readers that ask about the family as a whole (is the realm's index behind,
   // cancel the realm's work) match on `laneFamilyPredicate`, so they see every

@@ -16,7 +16,6 @@ export type * from './lint.ts';
 export * from '#lint-task';
 export * from './full-reindex.ts';
 export * from './daily-credit-grant.ts';
-export * from './copy.ts';
 export * from './indexer.ts';
 export * from './media-cache-gc.ts';
 export * from './scoped-css-gc.ts';
