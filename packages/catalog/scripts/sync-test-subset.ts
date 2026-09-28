@@ -47,6 +47,8 @@ const externalsPath = join(repoRoot, 'packages/host/app/lib/externals.ts');
 // definition to the indexer.
 const MARKER_FILE = 'catalog-test-subset.txt';
 const ADDED_LIST = 'boxel-test-subset-added';
+// The files this sync wrote, which are the only ones --touch has to touch.
+const WRITTEN_LIST = join(catalogDir, '.test-subset-written');
 
 const CATALOG_PREFIX = '@cardstack/catalog/';
 const ALLOWED_PREFIXES = [
@@ -360,6 +362,7 @@ function mergeIntoClone(
       divergent.push(path);
     }
   }
+  writeFileSync(WRITTEN_LIST, added.map((p) => `${p}\n`).join(''));
   writeFileSync(
     gitPath(ADDED_LIST),
     added.map((p) => `${p}\t${sha256(contents.get(p)!)}\n`).join(''),
@@ -450,17 +453,29 @@ async function checkPin(manifest: Manifest) {
 // A realm's compiled-module cache is keyed by path and cleared by the running
 // realm's file watcher, so files the sync rewrote before the realm booted can
 // still be served from a compile of their old content. Touching them once the
-// realm is up makes the watcher clear those entries.
+// realm is up makes the watcher clear those entries. Only the files the sync
+// wrote are touched: each touch queues an incremental index, and the realm
+// reports not-ready until it runs, which on a busy queue can take as long as
+// whatever job is ahead of it.
 function touch(where: string) {
   let dir = where === 'clone' ? cloneDir : subsetDir;
+  let written = existsSync(WRITTEN_LIST)
+    ? readFileSync(WRITTEN_LIST, 'utf8').split('\n').filter(Boolean)
+    : [];
   let now = new Date();
-  for (let { path } of readManifest().files) {
+  let touched = 0;
+  for (let path of written) {
     let file = join(dir, path);
     if (existsSync(file)) {
       utimesSync(file, now, now);
+      touched++;
     }
   }
-  log(`touched the subset files in ${relative(repoRoot, dir)}`);
+  log(
+    touched
+      ? `touched ${touched} rewritten subset file(s) in ${relative(repoRoot, dir)}`
+      : `no subset files were rewritten in ${relative(repoRoot, dir)}; nothing to touch`,
+  );
 }
 
 async function main() {
@@ -478,6 +493,7 @@ async function main() {
     removeFromClone();
     return;
   }
+  rmSync(WRITTEN_LIST, { force: true });
   let manifest = readManifest();
   if (args.has('--bump')) {
     manifest = bump(manifest);
@@ -501,6 +517,10 @@ async function main() {
     log(`${relative(repoRoot, subsetDir)} is current at ${manifest.revision}`);
   } else {
     writeSubsetDir(manifest, contents, source);
+    writeFileSync(
+      WRITTEN_LIST,
+      [...contents.keys()].map((p) => `${p}\n`).join(''),
+    );
     log(
       source === 'local'
         ? `copied ${contents.size} file(s) from ${process.env.CATALOG_TEST_SUBSET_SOURCE}`
