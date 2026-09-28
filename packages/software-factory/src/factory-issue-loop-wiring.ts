@@ -114,10 +114,21 @@ export interface IssueLoopWiringConfig {
    */
   retryBlocked?: boolean;
   /**
-   * Sanctions reading the catalog realm — loads the `catalog-reuse` and
-   * `boxel-ui-component-discovery` skills and opens the system prompt's
-   * cross-realm firewall to catalog searches. Reuse is the normal path, so
-   * this defaults on: only an explicit `false` turns it off.
+   * Sanctions reading the catalog realm. Three things move together, and
+   * all three have to, or the run gets contradictory instruction:
+   *
+   * 1. the `catalog-reuse` and `boxel-ui-component-discovery` skills are
+   *    loaded into the core (`DefaultSkillResolver`);
+   * 2. the system prompt's cross-realm firewall opens to catalog searches;
+   * 3. the turn prompts render their reuse steps — the REUSE section, the
+   *    Reuse decisions table and its `searched:` line, and the build turn's
+   *    wiring step and self-audit.
+   *
+   * Base-realm type selection is deliberately NOT gated: picking `EmailField`
+   * over `StringField` is not catalog reuse and survives the flag being off.
+   *
+   * Reuse is the normal path, so this defaults on: only an explicit `false`
+   * turns it off.
    */
   enableCatalogReuse?: boolean;
   /** Brief title — names the live-blog RunLog card. */
@@ -279,12 +290,16 @@ export async function runFactoryIssueLoop(
     undefined,
     () => deriveHostToolImports(defaultHostToolsRegistry(PACKAGE_ROOT)),
   );
+  // One source of truth for the run's reuse posture: it gates the skills the
+  // resolver hands out, the system prompt's cross-realm firewall, and the
+  // reuse steps in the turn prompts. Default on, matching the entrypoint:
+  // only an explicit `false` opts out.
+  let enableCatalogReuse = config.enableCatalogReuse !== false;
   let contextBuilder = new ContextBuilder({
-    skillResolver: new DefaultSkillResolver(),
+    skillResolver: new DefaultSkillResolver({ enableCatalogReuse }),
     skillLoader: new SkillLoader(),
     issueLoader,
-    // Default on, matching the entrypoint: only an explicit `false` opts out.
-    enableCatalogReuse: config.enableCatalogReuse !== false,
+    enableCatalogReuse,
     hostToolImports,
   });
 

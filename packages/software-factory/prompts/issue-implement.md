@@ -74,6 +74,7 @@ minutes.
   (design, fitted formats, theming, file fields, queries — whatever applies).
   Read precedent: if a similar card exists in the workspace, read its `.gts`.
 
+{{#if enableCatalogReuse}}
 ## 2. REUSE — decide what you are not building
 
 The catalog is a library of work already done. Consult it **before** you
@@ -109,6 +110,17 @@ the mockup already fixed is one you can no longer adopt.
   do not match the family are a theming delta, and theming closes it — adopt
   and theme. Refuse on presentation only when the *structure* is wrong: it
   renders a fundamentally different affordance than this card needs.
+- **The factory composes; it does not install.** `catalog-reuse` rule 5 says
+  never hand-copy a Listing — reuse it whole through `install` or `remix`.
+  That rule is written for a person furnishing a workspace, and it is **out of
+  scope here**: this factory builds new cards from a brief, so a Listing is
+  read as *precedent and parts* — the definitions inside it are reusable
+  through the wiring forms below, the bundle itself is not installed. Do not
+  record `install` or `remix` as a wiring form, and do not treat a matching
+  Listing as a reason to stop building. If a Listing answers the brief so
+  completely that building is obviously wasted, say so via `post_update` and
+  let a human decide — that is a question about the brief, not a reuse
+  decision you can take.
 - **Base-realm imports are not reuse.** `StringField`, `EmailField`,
   `ImageDef` and their siblings are the standard library. Never record one
   as a reuse decision — §3 owns them instead.
@@ -142,6 +154,8 @@ the mockup already fixed is one you can no longer adopt.
 - **If a gate blocks an adoption you want**, record `REUSE-BLOCKED` with the
   gate and its exact error and `post_update` the same — never quietly
   hand-build the thing instead.
+
+{{/if}}
 
 ## 3. BASE TYPES — resolve each need to its most specific type
 

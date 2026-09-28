@@ -83,6 +83,7 @@ decision that resolved it. First person, 1–3 sentences.
 - Call `list_skills`, then `read_skill` the skills this issue touches.
   Read precedent: if a similar card exists in the workspace, read its `.gts`.
 
+{{#if enableCatalogReuse}}
 ## 2. REUSE — decide what you are not building
 
 The catalog is a library of work already done. Consult it **before** you
@@ -123,6 +124,17 @@ cannot reopen.
   how that delta is closed (§4) — adopt it and theme it. Refuse on
   presentation only when the *structure* is wrong: it renders a fundamentally
   different affordance than the one this card needs.
+- **The factory composes; it does not install.** `catalog-reuse` rule 5 says
+  never hand-copy a Listing — reuse it whole through `install` or `remix`.
+  That rule is written for a person furnishing a workspace, and it is **out of
+  scope here**: this factory builds new cards from a brief, so a Listing is
+  read as *precedent and parts* — the definitions inside it are reusable
+  through the wiring forms below, the bundle itself is not installed. Do not
+  record `install` or `remix` as a wiring form, and do not treat a matching
+  Listing as a reason to stop building. If a Listing answers the brief so
+  completely that building is obviously wasted, say so via `post_update` and
+  let a human decide — that is a question about the brief, not a reuse
+  decision you can take.
 - **Base-realm imports are not reuse.** `StringField`, `EmailField`,
   `ImageDef` and their siblings are the standard library. Never record one
   as a reuse decision — §3 owns them instead.
@@ -140,6 +152,8 @@ cannot reopen.
 **This step is not card code.** Naming a catalog module and its wiring form
 in your notes is required of this turn and does not violate the no-`.gts`
 rule below.
+
+{{/if}}
 
 ## 3. BASE TYPES — resolve each need to its most specific type
 
@@ -190,6 +204,7 @@ schema is a contract, not a variable.
   which are FieldDefs), the CQ breakpoints used, theme-variable mapping for
   every hard-coded color/size in the mockup, and any traps the builder must
   not miss. This file is the build turn's contract; write it like a spec.
+{{#if enableCatalogReuse}}
 - The notes MUST open the reuse section with a **searched** line — the realms
   and paths you queried and how many specs each returned, per block kind:
 
@@ -228,6 +243,12 @@ schema is a contract, not a variable.
   `REUSE-BLOCKED` and `GAP` both end in building it yourself; what separates
   them is whether a candidate existed. Never record both for one need.
 
+  **One kind per row.** The `Kind` cell carries a single value — a block that
+  could be read as two (a field whose renderer is the interesting part) is
+  filed under what you would search for it as, with the other reading in the
+  `Wiring` cell. `component/field` defeats a per-kind scan of the table, which
+  is the whole reason the column exists.
+
   **Every block kind gets an accounting.** `card`, `field`, `component` and
   `command` must each appear — as a decision row, or as one explicit `GAP`
   row saying nothing in that kind fitted. A kind with no row at all is
@@ -240,6 +261,7 @@ schema is a contract, not a variable.
   you hand-build must carry a row — a `GAP` or a `REUSE-BLOCKED`, either is a
   correct outcome with a real reason. A hand-built definition with no row at
   all is the omission.
+{{/if}}
 - The notes MUST carry a **Base types** block from §3 — one line per need
   that resolves to a base-realm type, naming the type and, where you
   overrode the issue text, what it said and why the more specific type wins:

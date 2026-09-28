@@ -150,10 +150,11 @@ module('catalog reuse > skill delivery', function () {
     );
   });
 
-  // The design turn writes the binding hand-off. A reuse decision it does not
-  // make is one the build turn cannot make either, because by then the schema
-  // is a contract rather than a variable.
-  test('a design issue gets the reuse skills too', function (assert) {
+  // `issueType === 'design'` is the design-FOUNDATION turn, not the per-card
+  // design turn (that one is `phase === 'design'` on a `feature` issue, which
+  // takes the lean core). It gets the reuse skills so it can sweep the catalog
+  // before writing a guide that binds every later turn.
+  test('the design-foundation issue gets the reuse skills too', function (assert) {
     let skills = resolve('design');
     assert.true(skills.includes('catalog-reuse'), 'catalog-reuse is selected');
     assert.true(
@@ -485,5 +486,116 @@ module('catalog reuse > artifact contract', function () {
       prompt.includes('type-fixed:'),
       'a genuinely load-bearing type can still be pinned',
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The opt-out actually opts out
+// ---------------------------------------------------------------------------
+
+// `--no-catalog-reuse` used to close one paragraph in `system.md` and nothing
+// else. The resolver still handed out both reuse skills, which render into the
+// context through an unguarded `{{#each skills}}`, and every turn prompt still
+// carried its reuse step as unconditional template text. So the off state read
+// "not catalog" in the firewall and "MANDATORY before writing any `.gts`" a few
+// hundred lines later, and which instruction a run dropped was not something
+// the run controlled — the flag could not measure the non-reuse path it exists
+// to measure.
+module('catalog reuse > the opt-out', function () {
+  const REUSE_PROMPTS = [
+    'issue-design.md',
+    'issue-implement.md',
+    'issue-build.md',
+    'issue-fix.md',
+    'issue-design-foundation.md',
+  ];
+
+  async function readPrompt(name: string): Promise<string> {
+    return readFile(join(import.meta.dirname, '..', 'prompts', name), 'utf8');
+  }
+
+  function resolveWith(
+    issueType: string,
+    enableCatalogReuse: boolean,
+  ): string[] {
+    return new DefaultSkillResolver({ enableCatalogReuse }).resolve(
+      { id: 'Issues/i', issueType } as unknown as IssueData,
+      { id: 'Projects/p' } as unknown as ProjectData,
+    );
+  }
+
+  test('the resolver drops both reuse skills when the flag is off', function (assert) {
+    for (let issueType of ['feature', 'design']) {
+      let skills = resolveWith(issueType, false);
+      for (let name of ['catalog-reuse', 'boxel-ui-component-discovery']) {
+        assert.false(
+          skills.includes(name),
+          `${issueType}: ${name} is not loaded with the flag off`,
+        );
+      }
+      assert.true(skills.length > 0, `${issueType}: the core still resolves`);
+    }
+  });
+
+  test('the resolver keeps them when the flag is on, and by default', function (assert) {
+    for (let skills of [
+      resolveWith('feature', true),
+      resolveWith('design', true),
+      new DefaultSkillResolver().resolve(
+        { id: 'Issues/i', issueType: 'feature' } as unknown as IssueData,
+        { id: 'Projects/p' } as unknown as ProjectData,
+      ),
+    ]) {
+      assert.true(skills.includes('catalog-reuse'), 'catalog-reuse is loaded');
+      assert.true(
+        skills.includes('boxel-ui-component-discovery'),
+        'boxel-ui-component-discovery is loaded',
+      );
+    }
+  });
+
+  // Every prompt that carries a reuse step has to read the flag, or the step
+  // survives into a run whose system prompt forbids the realm it names.
+  test('every reuse-carrying prompt gates on the flag', async function (assert) {
+    for (let name of REUSE_PROMPTS) {
+      let prompt = await readPrompt(name);
+      assert.true(
+        prompt.includes('{{#if enableCatalogReuse}}'),
+        `${name} gates its reuse section`,
+      );
+    }
+  });
+
+  // Base-realm type selection is not catalog reuse and must outlive the flag:
+  // an opted-out run should still pick EmailField over StringField.
+  test('base-type selection survives the flag being off', async function (assert) {
+    for (let name of ['issue-design.md', 'issue-implement.md']) {
+      let prompt = await readPrompt(name);
+      let baseTypesIdx = prompt.indexOf('BASE TYPES');
+      assert.true(baseTypesIdx > -1, `${name} has the base-types step`);
+
+      // The step must not sit inside a gated region. Count by pairing each
+      // enableCatalogReuse open with the next {{/if}} after it — the file also
+      // carries unrelated {{#if}} blocks in its header, so a bare tally of
+      // closers says nothing.
+      let gated = false;
+      let cursor = 0;
+      for (;;) {
+        let open = prompt.indexOf('{{#if enableCatalogReuse}}', cursor);
+        if (open === -1) {
+          break;
+        }
+        let close = prompt.indexOf('{{/if}}', open);
+        if (close !== -1 && baseTypesIdx > open && baseTypesIdx < close) {
+          gated = true;
+          break;
+        }
+        cursor = close === -1 ? prompt.length : close + 1;
+      }
+      assert.false(
+        gated,
+        `${name}: BASE TYPES is outside every enableCatalogReuse block`,
+      );
+    }
   });
 });

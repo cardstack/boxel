@@ -101,11 +101,18 @@ export interface FactoryEntrypointOptions {
   debug?: boolean;
   retryBlocked?: boolean;
   /**
-   * Sanctions reading the catalog realm — both the `catalog-reuse` and
-   * `boxel-ui-component-discovery` skills are loaded and the system prompt's
-   * cross-realm firewall opens to catalog searches, so the agent must consult
-   * the catalog before authoring. When false, neither the permission nor the
-   * skills are visible.
+   * Sanctions reading the catalog realm. Three things move together, and
+   * all three have to, or the run gets contradictory instruction:
+   *
+   * 1. the `catalog-reuse` and `boxel-ui-component-discovery` skills are
+   *    loaded into the core (`DefaultSkillResolver`);
+   * 2. the system prompt's cross-realm firewall opens to catalog searches;
+   * 3. the turn prompts render their reuse steps — the REUSE section, the
+   *    Reuse decisions table and its `searched:` line, and the build turn's
+   *    wiring step and self-audit.
+   *
+   * Base-realm type selection is deliberately NOT gated: picking `EmailField`
+   * over `StringField` is not catalog reuse and survives the flag being off.
    *
    * Defaults to true. `--no-catalog-reuse` turns it off.
    */
@@ -350,7 +357,7 @@ export function getFactoryEntrypointUsage(): string {
     '                              "quiet" (stalls + failures only), "normal" (default — adds',
     '                              per-turn telemetry and scheduler notes), "verbose" (adds turn',
     '                              starts, heals, and sync successes).',
-    '  --no-catalog-reuse          Stop the agent consulting the catalog before it authors.',
+    "  --no-catalog-reuse          Stop the agent consulting the catalog before it authors\n                              (drops the reuse skills, closes the cross-realm\n                              firewall, and removes the turn prompts' reuse steps).",
     '                              Catalog reuse is on by default: the agent gets the',
     '                              catalog-reuse and boxel-ui-component-discovery skills and',
     '                              the system prompt opens the cross-realm firewall to catalog',

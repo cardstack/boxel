@@ -542,6 +542,7 @@ export class OpencodeFactoryAgent implements LoopAgent {
         issue: context.issue,
         project: context.project,
         knowledge: context.knowledge,
+        enableCatalogReuse: context.enableCatalogReuse !== false,
       });
     }
     if (issueType === 'analysis') {

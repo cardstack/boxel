@@ -102,6 +102,17 @@ pnpm factory:go \
 > `boxel-ui-component-discovery` skills. Pass `--no-catalog-reuse` to
 > run without it — useful for measuring what the reuse path is worth,
 > but not a normal run.
+>
+> The flag moves three things together, so the off state is genuinely a
+> non-reuse run rather than a run given contradictory instruction: the
+> two skills are not loaded, the system prompt's cross-realm firewall
+> stays closed, and the turn prompts drop their reuse steps (the REUSE
+> section, the Reuse decisions table and its `searched:` line, and the
+> build turn's wiring step and self-audit).
+>
+> Base-realm type selection is deliberately **not** gated — choosing
+> `EmailField` over `StringField` is not catalog reuse, so an opted-out
+> run still picks the most specific base type.
 
 **Concrete example (local):**
 

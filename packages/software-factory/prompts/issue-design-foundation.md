@@ -31,6 +31,7 @@ future design and build turn will treat your artifacts as binding.
 
 Work strictly top-down:
 
+{{#if enableCatalogReuse}}
 ## 1. Survey the catalog BEFORE you decide anything
 
 You are about to write a guide that binds every later turn. Write it over
@@ -46,6 +47,8 @@ by refusing components it could have reused.
   are answering one question: *what rendering vocabulary already exists here?*
 - `post_update` what you found — the component families worth designing
   toward, in a sentence or two.
+
+{{/if}}
 
 ## 2. Look & feel
 

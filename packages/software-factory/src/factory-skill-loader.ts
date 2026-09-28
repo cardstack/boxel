@@ -176,20 +176,46 @@ export interface SkillResolver {
   resolve(issue: IssueData, project: ProjectData): string[];
 }
 
-export class DefaultSkillResolver implements SkillResolver {
+export interface SkillResolverConfig {
   /**
-   * The reuse skills, always in the core rather than discoverable on demand.
+   * Whether this run does catalog reuse. Defaults to on, matching
+   * `factory-issue-loop-wiring.ts` and `factory-entrypoint.ts`: only an
+   * explicit `false` opts out.
+   */
+  enableCatalogReuse?: boolean;
+}
+
+export class DefaultSkillResolver implements SkillResolver {
+  #enableCatalogReuse: boolean;
+
+  constructor({ enableCatalogReuse = true }: SkillResolverConfig = {}) {
+    this.#enableCatalogReuse = enableCatalogReuse;
+  }
+
+  /**
+   * The reuse skills, in the core rather than discoverable on demand — and
+   * empty when the run has opted out.
    *
    * Catalog reuse only happens if it happens before authoring, and a skill the
    * agent has to decide to read is one it reads after it has already started.
    * Being in the core is also what lets the prompts defer method to the skill
    * instead of restating it.
    *
+   * The flag has to reach here, not just the system prompt. A skill is
+   * rendered into the context through an unguarded `{{#each skills}}`, so a
+   * `--no-catalog-reuse` run that still loads `catalog-reuse` is handed
+   * "MANDATORY before writing any `.gts`" underneath a firewall line naming
+   * the catalog as off limits — two instructions, one of which the run drops
+   * for reasons it does not control.
+   *
    * Listing a name a skill directory does not supply is silent — the loader
    * warns and continues — so `tests/factory-skill-loader.test.ts` holds these
    * names to what actually resolves.
    */
   private reuseSkills(): string[] {
+    if (!this.#enableCatalogReuse) {
+      return [];
+    }
     return ['catalog-reuse', 'boxel-ui-component-discovery'];
   }
 
@@ -217,13 +243,21 @@ export class DefaultSkillResolver implements SkillResolver {
       return ['boxel-file-structure'];
     }
 
-    // Design-foundation turns author a brand guide + tokens + family
-    // coherence sheet — taste work, not card code. File-structure covers
-    // the KA JSON; boxel-design carries the visual-language method (it
-    // resolves from the materialized catalog's fallback dirs).
-    // The design turn writes the binding hand-off the build turn implements,
-    // so a reuse decision it does not make is a decision the build turn cannot
-    // make either — by then the schema is a contract, not a variable.
+    // `issueType === 'design'` is the design-FOUNDATION turn
+    // (`Issues/design-foundation-seed` → `issue-design-foundation.md`), not
+    // the per-card design turn: that one is `context.phase === 'design'` on an
+    // ordinary implementation issue, whose issueType stays `feature`, so it
+    // takes the lean core below and gets the reuse skills from there.
+    //
+    // The foundation turn authors a brand guide, a Theme, tokens and a
+    // coherence sheet — taste work, not card code. File-structure covers the
+    // KA JSON; boxel-design carries the visual-language method.
+    //
+    // It gets the reuse skills for a read-only sweep of the domain before it
+    // writes the guide. The guide binds every later turn, so a rendering form
+    // it fixes in ignorance of the catalog is one no later turn can adopt —
+    // which is why `issue-design-foundation.md` sends it to look first and
+    // stops its authority at the token layer.
     if (issueType === 'design') {
       return ['boxel-file-structure', 'boxel-design', ...this.reuseSkills()];
     }
