@@ -24,7 +24,6 @@ on:
       - packages/boxel-cli/src/commands/realm/push.ts
       - packages/realm-server/handlers/handle-publish-realm.ts
       - packages/realm-server/handlers/handle-unpublish-realm.ts
-      - packages/runtime-common/tasks/copy.ts
   pull_request:
     paths:
       - .github/workflows/sync-workspace.yml
@@ -35,7 +34,6 @@ on:
       - packages/boxel-cli/src/commands/realm/push.ts
       - packages/realm-server/handlers/handle-publish-realm.ts
       - packages/realm-server/handlers/handle-unpublish-realm.ts
-      - packages/runtime-common/tasks/copy.ts
 
 concurrency:
   group: preview-realm-integration-${{ github.head_ref || github.run_id }}
