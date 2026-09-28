@@ -7,7 +7,7 @@ ENV realm_server_script=$realm_server_script
 WORKDIR /realm-server
 
 RUN apt-get update && apt-get install -y ca-certificates curl unzip postgresql jq rsync git
-RUN npm install -g pnpm@12.6.0
+RUN npm install -g pnpm@12.7.0
 
 # Cache-friendly dependency fetch: this layer only re-runs when the lockfile
 # (or patches it references) changes, not on every source edit. `pnpm fetch`
