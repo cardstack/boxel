@@ -561,7 +561,7 @@ module(basename(import.meta.filename), function (hooks) {
         {
           targetType: CLASSROOM,
           grants: [
-            { operation: 'read', where: '.teacherIds | contains(actor())' },
+            { operation: 'read', where: '.teacherIds | any(. == actor())' },
             // No such operation on the type, and a built-in behavior only a
             // file carries.
             ...grants('enroll', 'appendLine'),

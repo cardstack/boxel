@@ -45,7 +45,8 @@ export interface CompiledRealmPolicy {
   // The policy card, as the realm's pointer names it.
   card: string;
   // The card's `meta.version`: the fingerprint of the stored source this was
-  // compiled from. Absent when the card could not be read.
+  // compiled from. Absent when the card could not be read, or when what the
+  // index holds of it is an earlier visit's.
   version: string | undefined;
   rules: CompiledPolicyRule[];
   issues: PolicyIssue[];
@@ -457,19 +458,17 @@ async function compilePolicy(
   let cardURL = new URL(card);
   let issue = (code: PolicyIssueCode, path: string, message: string) =>
     issues.push({ code, path, message });
+  let version = row?.failureWithheld
+    ? undefined
+    : (row?.sourceContentHash ?? undefined);
   let compiled = (): Compilation => ({
-    compiled: {
-      card,
-      version: row?.sourceContentHash ?? undefined,
-      rules,
-      issues,
-    },
+    compiled: { card, version, rules, issues },
     row: rowIdentity(row),
     definitions,
     inputs,
   });
   // The policy as a whole did not compile, for the reason recorded. It has no
-  // rules, and it states no version, since nothing was compiled from one.
+  // rules.
   let uncompilable = (
     code: PolicyIssueCode,
     path: string,
@@ -477,13 +476,7 @@ async function compilePolicy(
   ): Compilation => {
     issue(code, path, message);
     return {
-      compiled: {
-        card,
-        version: undefined,
-        rules: [],
-        issues,
-        uncompilable: true,
-      },
+      compiled: { card, version, rules: [], issues, uncompilable: true },
       row: rowIdentity(row),
       definitions,
       inputs,
@@ -494,21 +487,29 @@ async function compilePolicy(
   // change to the entry, or to the realm whose module defines the type, is a
   // change to what the policy compiles to. The types a rule names are read
   // here, and the types they descend from, and every type a search filter's
-  // field path crosses into.
-  let readType = async (
+  // field path crosses into. Each is read once however many grants ask.
+  let entries = new Map<
+    string,
+    Promise<{ definition: Definition; types: string[] } | undefined>
+  >();
+  let readType = (
     codeRef: ResolvedCodeRef,
   ): Promise<{ definition: Definition; types: string[] } | undefined> => {
-    let moduleURL = safeURL(codeRef.module, env);
-    if (moduleURL && !inputs.includes(moduleURL)) {
-      inputs.push(moduleURL);
-      onInput(moduleURL);
+    let key = `${codeRef.module}#${codeRef.name}`;
+    let read = entries.get(key);
+    if (!read) {
+      let moduleURL = safeURL(codeRef.module, env);
+      if (moduleURL && !inputs.includes(moduleURL)) {
+        inputs.push(moduleURL);
+        onInput(moduleURL);
+      }
+      read = fingerprintedEntry(codeRef, env).then((found) => {
+        definitions.set(key, { codeRef, fingerprint: found?.fingerprint });
+        return found;
+      });
+      entries.set(key, read);
     }
-    let found = await fingerprintedEntry(codeRef, env);
-    definitions.set(`${codeRef.module}#${codeRef.name}`, {
-      codeRef,
-      fingerprint: found?.fingerprint,
-    });
-    return found;
+    return read;
   };
   let readDefinition = async (
     codeRef: ResolvedCodeRef,
