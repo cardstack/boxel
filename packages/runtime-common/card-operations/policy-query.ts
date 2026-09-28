@@ -1,8 +1,9 @@
 import type { CodeRef } from '../code-ref.ts';
+import type { Definition } from '../definitions.ts';
 import type { Filter } from '../query.ts';
 import { policyFilterFromWire } from '../search-entry.ts';
 import type { OperationCore } from './dispatch.ts';
-import { matchingGrants } from './gate.ts';
+import { matchingGrants, nonGrantableInChain } from './gate.ts';
 import type { CompiledRealmPolicy } from './policy.ts';
 import { lowerQueryOperation } from './query.ts';
 
@@ -36,6 +37,13 @@ import { lowerQueryOperation } from './query.ts';
 //
 // A caller with nothing to contribute is scoped to nothing rather than to
 // everything: an absent grant is a refusal here, as it is at the gate.
+//
+// Authorization infrastructure is outside the grant model here as it is at
+// the gate. A query declared `nonGrantable` contributes nothing, however the
+// compiled policy came to grant it, and so does one a type anywhere up the
+// queried type's chain declares `nonGrantable` under the same name: a subclass
+// cannot make grantable what the type it extends kept out of a policy's
+// reach.
 // ============================================================================
 
 // What a policy says about one caller's query. A realm the caller reads
@@ -67,41 +75,67 @@ export async function policyQueryScope(
   if (!policy) {
     return DENIED;
   }
-  let types = await targetTypeChain(core, invocation.on);
-  if (!types) {
+  let entry = await targetTypeEntry(core, invocation.on);
+  if (!entry?.types) {
+    return DENIED;
+  }
+  let { operation } = invocation;
+  // Refused before any rule is matched, as the gate refuses it.
+  if (ownDeclaration(entry.definition, operation)?.nonGrantable) {
     return DENIED;
   }
   let filters = await grantFilters(
     policy,
-    types,
-    invocation.operation,
+    entry.types,
+    operation,
     invocation.actor,
     core,
   );
-  return filters.length > 0 ? { kind: 'scoped', filters } : DENIED;
+  if (filters.length === 0) {
+    return DENIED;
+  }
+  // Only once a grant would contribute, as at the gate, so a query nothing
+  // grants pays no definition reads for a refusal it was getting anyway. The
+  // chain starts at the queried type, whose own declaration was read above.
+  if (await nonGrantableInChain(core, entry.types.slice(1), operation)) {
+    return DENIED;
+  }
+  return { kind: 'scoped', filters };
 }
 
-// The adoption chain of the type a query names, as the realm's own definition
-// cache recorded it: the type and every type it descends from. A rule on an
-// ancestor governs the query the way it governs that type's cards, and the
-// chain is what the gate matches a rule against too, so the two answer from
-// one reading of what the type is.
+// The definition-cache entry of the type a query names: its definition, and
+// the adoption chain recorded beside it — the type and every type it descends
+// from. A rule on an ancestor governs the query the way it governs that type's
+// cards, and the chain is what the gate matches a rule against too, so the two
+// answer from one reading of what the type is.
 //
 // A type the realm cannot resolve has no chain and nothing to match a rule
 // against, so it matches none rather than all.
-async function targetTypeChain(
+async function targetTypeEntry(
   core: OperationCore,
   on: CodeRef,
-): Promise<string[] | undefined> {
+): Promise<{ definition?: Definition; types?: string[] } | undefined> {
   let resolved = core.resolveCodeRef(on, new URL(core.realmURL));
   if (!resolved) {
     return undefined;
   }
   try {
-    return (await core.definitionLookup.lookupDefinitionEntry(resolved))?.types;
+    return await core.definitionLookup.lookupDefinitionEntry(resolved);
   } catch {
     return undefined;
   }
+}
+
+// The operation a type declares under `name` itself, as opposed to a built-in
+// behavior of that name nothing declared.
+function ownDeclaration(
+  definition: Definition | undefined,
+  name: string,
+): { nonGrantable?: true } | undefined {
+  let operations = definition?.operations;
+  return operations && Object.prototype.hasOwnProperty.call(operations, name)
+    ? operations[name]
+    : undefined;
 }
 
 // Every matching grant's filter, with the caller filled in, in the grammar the
