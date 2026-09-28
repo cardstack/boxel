@@ -1085,6 +1085,12 @@ export function combineSearchEntryResults(
   for (let doc of docs) {
     combined.data.push(...doc.data);
     combined.meta.page.total += doc.meta?.page?.total ?? 0;
+    if (doc.meta?.realmTotals) {
+      combined.meta.realmTotals = {
+        ...combined.meta.realmTotals,
+        ...doc.meta.realmTotals,
+      };
+    }
     if (combined.meta.htmlQuery == null && doc.meta?.htmlQuery != null) {
       combined.meta.htmlQuery = doc.meta.htmlQuery;
     }
@@ -1149,7 +1155,19 @@ export async function searchEntryRealms(
   let docs = await fanOutRealmSearch(
     realms,
     searchEntryQuery.itemQuery,
-    (realm) => realm.searchEntries(searchEntryQuery, perRealmOpts),
+    async (realm) => {
+      let doc = await realm.searchEntries(searchEntryQuery, perRealmOpts);
+      if (!realm.url) {
+        return doc;
+      }
+      return {
+        ...doc,
+        meta: {
+          ...doc.meta,
+          realmTotals: { [realm.url]: doc.meta?.page?.total ?? 0 },
+        },
+      };
+    },
     (label, queryLabel) =>
       `searchEntryRealms realm search failed: ${label} query=${queryLabel}`,
   );

@@ -69,6 +69,18 @@ export interface OperationQueryTemplate extends Omit<
   filter?: OperationQueryFilterTemplate;
 }
 
+// The members that make a search request a named one: the declared query
+// operation to run, the type it is invoked on, and the params to fill it
+// with. The realm resolves the query from its own definition of that type, so
+// a request carrying these is answered with the declaration's query whatever
+// else the request carries — see `resolveNamedQuery`.
+export interface NamedQueryInvocation {
+  operation: string;
+  // A declaration the type inherits resolves the same as its own.
+  on: CodeRef;
+  params?: Record<string, unknown>;
+}
+
 export type OperationQueryFilterTemplate = Omit<
   SearchEntryWireFilter,
   'any' | 'every' | 'not' | 'matches'

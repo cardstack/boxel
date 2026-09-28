@@ -1,6 +1,5 @@
 import type { ResolvedCodeRef } from '../code-ref.ts';
 import type { Definition } from '../definitions.ts';
-import { urlNamesFile } from '../file-def-code-ref.ts';
 import type { LocalPath } from '../paths.ts';
 import { isCardResource } from '../card-document-shape.ts';
 import type { CardResource } from '../resource-types.ts';
@@ -18,6 +17,7 @@ import {
   OperationFailure,
   isWrite,
   type BaseOperation,
+  type OperationDefinition,
   type OperationTarget,
   type PolicyIssueCode,
 } from './types.ts';
@@ -65,6 +65,13 @@ import {
 // it holds: `(.title | tonumber) > 0` answers 500 for a card whose title is not
 // a number and 404 for one whose title is a number no greater than zero.
 //
+// The gate never sees the target as the caller named it. It is handed the
+// target as the realm resolved it, so a type is judged by the definition the
+// realm's own index resolved and never by the ref in the request. That matters
+// for a create, the one operation whose type comes from the caller: a caller
+// who could have one type's grants consulted while creating another would have
+// every grant the realm makes on any type.
+//
 // What a grant admits is the invocation, and the operation then runs as it
 // runs for anyone. A granted `read` assembles the card's whole representation:
 // its link closure, whatever the linked cards' types, and the results of its
@@ -91,6 +98,52 @@ export interface OperationPolicyAccess {
   // it reads each link the way a mutation program does.
   resolvedLink(selfLink: string, relativeTo: URL): string;
 }
+
+// The target as the gate judges it. It holds what the realm resolved, and
+// nothing the caller named.
+export type GateSubject =
+  // A stored card, matched on the adoption chain its index row records.
+  | { kind: 'card'; url: URL }
+  // A type a create mints from, matched on the adoption chain the definition
+  // cache records beside the definition the type resolved to: the type and
+  // every type it descends from up to the root of its family, `CardDef` for a
+  // card. A card's row goes one step further, to `BaseDef`, so a rule on
+  // `BaseDef` matches every stored card and grants no create. A type the realm
+  // cannot resolve never gets here. Resolution refuses it first, as not found.
+  | { kind: 'type'; types: string[] }
+  // A target no rule is matched against: a file, which is not a card, or a
+  // URL that does not parse.
+  | { kind: 'unmatched' };
+
+// What the gate reads of an invocation's scope: who the caller is, what the
+// realm ACL declined, and the index rows a card's chain comes from. A create's
+// proposed document is not among them, because it names the type the caller
+// claims.
+export type GateScope = Pick<
+  OperationScope,
+  'caller' | 'coarseDeclined' | 'peekInstance'
+>;
+
+// The gate's refusal. It carries nothing, since what a refusal says is the
+// caller's to build from the target it asked about, and the gate has no
+// target to build one from.
+export const GATE_REFUSED = Object.freeze({ kind: 'refused' as const });
+
+// The index holds no row for the card the gate was asked about. A caller who
+// may read the realm is told so, as the operation would have told them; one
+// who may not is told the same thing they are told of a card the gate
+// refuses.
+export const GATE_MISSING = Object.freeze({ kind: 'missing' as const });
+
+// No grant admitted the invocation, and a predicate threw while the gate was
+// deciding. That is a fault in the policy rather than an answer from it.
+export const GATE_FAULTED = Object.freeze({ kind: 'faulted' as const });
+
+// The ways the gate declines an invocation.
+export type GateRefusal =
+  | typeof GATE_REFUSED
+  | typeof GATE_MISSING
+  | typeof GATE_FAULTED;
 
 // One grant the gate matched, with the rule it came from.
 export interface MatchedGrant {
@@ -154,6 +207,41 @@ export function notPermitted(
   });
 }
 
+// The failure for a gate refusal of `target`, built from the target the
+// caller asked about.
+export function gateRefusal(
+  core: OperationCore,
+  refusal: GateRefusal,
+  target: OperationTarget,
+  name: string,
+): OperationFailure {
+  let named =
+    target.kind === 'instance' ? target.url : JSON.stringify(target.codeRef);
+  let id = target.kind === 'instance' ? { id: target.url } : {};
+  switch (refusal.kind) {
+    case 'missing':
+      return new OperationFailure({
+        ...id,
+        status: 404,
+        code: 'target-not-found',
+        title: 'Not found',
+        detail: `${named} does not exist in realm ${core.realmURL}`,
+      });
+    case 'faulted':
+      return new OperationFailure({
+        ...id,
+        status: 500,
+        code: 'internal-error',
+        title: 'Policy predicate failed',
+        detail:
+          `a predicate in the realm's policy failed while deciding whether ` +
+          `operation "${name}" is permitted on ${named}`,
+      });
+    default:
+      return notPermitted(target, name);
+  }
+}
+
 // The realm's compiled policy, as the gate reads it. Undefined for a realm with
 // no policy, or a core that cannot read one.
 export interface LoadedPolicy {
@@ -196,62 +284,52 @@ export async function loadPolicy(core: OperationCore): Promise<LoadedPolicy> {
 }
 
 // Decide whether a caller the realm ACL declined may invoke `name`, which
-// resolved to `base`, on `target`. `typeDefinition` is the target type's
-// definition-cache entry, which describes the stored source a predicate
+// resolved to `definition`, on `subject`. `typeDefinition` is the target
+// type's definition-cache entry, which describes the stored source a predicate
 // reads. `loaded` is the policy, where the caller already loaded it.
 export async function gateOperation(
   core: OperationCore,
-  target: OperationTarget,
+  subject: GateSubject,
   name: string,
-  base: BaseOperation,
+  definition: OperationDefinition,
   typeDefinition: Definition | undefined,
-  scope: OperationScope,
+  scope: GateScope,
   loaded?: LoadedPolicy,
-): Promise<GateDecision> {
+): Promise<GateDecision | GateRefusal> {
+  let { base } = definition;
   if (!declines(scope, base)) {
     return { kind: 'coarse' };
   }
-  let refuse = () => notPermitted(target, name);
   // A stored-bytes read resolves before any definition, and a query is planned
   // and run on the search engine. Neither is granted here.
   if (base === 'readSource' || base === 'query') {
-    throw refuse();
+    return GATE_REFUSED;
   }
-  // A rule matches the adoption chain the index recorded on the target's card
-  // row. A type target has no row, and a file is not a card, so neither is
-  // matched by a rule here.
-  if (target.kind !== 'instance') {
-    throw refuse();
+  if (subject.kind === 'unmatched' || !core.policy) {
+    return GATE_REFUSED;
   }
-  let url = parseURL(target.url);
-  if (!url || urlNamesFile(url) || !core.policy) {
-    throw refuse();
+  // A type is only what a create mints from. Every other behavior runs
+  // against a stored card, and is judged by that card's row or not at all.
+  if (subject.kind === 'type' && base !== 'create') {
+    return GATE_REFUSED;
   }
-  let row = await scope.peekInstance(url);
-  // Nothing is there. A caller who may read the realm is told so, as the
-  // operation would have told them; one who may not is told the same thing
-  // they are told of a card the gate refuses.
-  if (!row) {
-    throw new OperationFailure({
-      id: url.href,
-      status: 404,
-      code: 'target-not-found',
-      title: 'Not found',
-      detail: `${url.href} does not exist in realm ${core.realmURL}`,
-    });
+  let types =
+    subject.kind === 'card'
+      ? await cardAdoptionChain(scope, subject.url)
+      : subject.types;
+  if (!types) {
+    return GATE_REFUSED;
   }
-  // An error row describes why the card could not be indexed, and says
-  // nothing the gate can trust about what the card is.
-  if (row.type !== 'instance' || !row.types) {
-    throw refuse();
+  if (!Array.isArray(types)) {
+    return GATE_MISSING;
   }
   let { policy } = loaded ?? (await loadPolicy(core));
   if (!policy) {
-    throw refuse();
+    return GATE_REFUSED;
   }
-  let matched = await matchingGrants(policy, row.types, name, core.policy);
+  let matched = await matchingGrants(policy, types, name, core.policy);
   if (matched.length === 0) {
-    throw refuse();
+    return GATE_REFUSED;
   }
   let unconditional = matched.find(({ grant }) => !grant.where);
   if (unconditional) {
@@ -261,10 +339,14 @@ export async function gateOperation(
     return { kind: 'pending', grants: matched };
   }
   // A read has one state to judge, and nothing to wait for, so its predicate
-  // is evaluated here, against the target as it is stored now.
-  let subject = await predicateSubject(core, url, typeDefinition);
-  if (!subject) {
-    throw refuse();
+  // is evaluated here, against the target as it is stored now. Only a stored
+  // card has a state.
+  if (subject.kind !== 'card') {
+    return GATE_REFUSED;
+  }
+  let stored = await predicateSubject(core, subject.url, typeDefinition);
+  if (!stored) {
+    return GATE_REFUSED;
   }
   let actor = scope.caller.kind === 'user' ? scope.caller.actor : undefined;
   let stats = policyGateStats(core);
@@ -281,33 +363,39 @@ export async function gateOperation(
       continue;
     }
     stats.predicateEvaluations++;
-    let outcome = await evaluate(core, where, subject, actor);
+    let outcome = await evaluate(core, where, stored, actor);
     if (outcome === 'holds') {
       return { kind: 'granted', grant: candidate };
     }
     threw ||= outcome === 'threw';
   }
-  if (threw) {
-    throw new OperationFailure({
-      id: url.href,
-      status: 500,
-      code: 'internal-error',
-      title: 'Policy predicate failed',
-      detail:
-        `a predicate in the realm's policy failed while deciding whether ` +
-        `operation "${name}" is permitted on ${url.href}`,
-    });
-  }
-  throw refuse();
+  return threw ? GATE_FAULTED : GATE_REFUSED;
 }
 
 // Whether the realm ACL declined this invocation. A caller declined only
 // writes keeps the ACL's answer for every read.
-function declines(scope: OperationScope, base: BaseOperation): boolean {
+function declines(scope: GateScope, base: BaseOperation): boolean {
   return (
     scope.coarseDeclined === 'all' ||
     (scope.coarseDeclined === 'writes' && isWrite(base))
   );
+}
+
+// The adoption chain the index recorded on a card's row. An error row
+// describes why the card could not be indexed, and says nothing the gate can
+// trust about what the card is. No row at all is its own answer.
+async function cardAdoptionChain(
+  scope: GateScope,
+  url: URL,
+): Promise<string[] | typeof GATE_MISSING | undefined> {
+  let row = await scope.peekInstance(url);
+  if (!row) {
+    return GATE_MISSING;
+  }
+  if (row.type !== 'instance' || !row.types) {
+    return undefined;
+  }
+  return row.types;
 }
 
 // Every grant for `name` in a rule whose type is in the target's adoption
@@ -453,14 +541,6 @@ function cardResourceIn(content: string): CardResource | undefined {
     return undefined;
   }
   return isCardResource(resource) ? resource : undefined;
-}
-
-function parseURL(url: string): URL | undefined {
-  try {
-    return new URL(url);
-  } catch {
-    return undefined;
-  }
 }
 
 // BXL's mutation entry, for the projection a predicate reads. Loaded the way

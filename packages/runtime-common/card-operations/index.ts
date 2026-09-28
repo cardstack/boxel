@@ -152,6 +152,8 @@ export type {
   TransformProgramError,
 } from './transforms.ts';
 export { lowerQueryOperation, lowerQueryTemplate } from './query.ts';
+export { isNamedQueryPayload, resolveNamedQuery } from './named-query.ts';
+export type { NamedQueryContext } from './named-query.ts';
 export type {
   QueryDefinition,
   QueryInvocation,

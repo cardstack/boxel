@@ -1,6 +1,7 @@
 import { action } from '@ember/object';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
+import { cached } from '@glimmer/tracking';
 
 import pluralize from 'pluralize';
 
@@ -10,6 +11,7 @@ import type {
   CodeRef,
   Filter,
   RenderableSearchEntryLike,
+  SearchEntryWireQuery,
   SearchResultsYield,
 } from '@cardstack/runtime-common';
 
@@ -23,6 +25,7 @@ import {
   buildQuerySections,
   buildRecentsSection,
   buildUrlSection,
+  type RealmSection,
   type RecentsSection,
   type SearchSheetSection,
   type UrlSection,
@@ -33,6 +36,7 @@ import type {
 } from '@cardstack/host/utils/search/types';
 
 import { SORT_OPTIONS, VIEW_OPTIONS, type SortOption } from './constants';
+import { RealmSectionPager } from './realm-section-pager';
 import ResultSection from './result-section';
 import SearchResultHeader from './search-result-header';
 
@@ -72,6 +76,9 @@ interface Signature {
     realmsLocked?: boolean;
     baseFilter?: Filter;
     offerToCreate?: { ref: CodeRef; relativeTo: URL | undefined };
+    // The main search's query, which a realm section re-issues scoped to its
+    // own realm to load rows past the first page.
+    pageQuery?: SearchEntryWireQuery;
     // The recent card ids stripped of any `.json`, for most-recent-first
     // ordering of the compact recents row against the bare `entry.id`.
     recentCardBareIds: string[];
@@ -167,6 +174,32 @@ export default class SheetResults extends Component<Signature> {
     return section;
   }
 
+  // One pager per realm section, created on first use and kept for this
+  // component's life so each owns a single search resource.
+  #pagers = new Map<string, RealmSectionPager>();
+
+  pagerFor = (sid: string): RealmSectionPager => {
+    let pager = this.#pagers.get(sid);
+    if (!pager) {
+      pager = new RealmSectionPager(this, () => {
+        let section = this.sections.find(
+          (s): s is RealmSection => s.type === 'realm' && s.sid === sid,
+        );
+        if (!section) {
+          return undefined;
+        }
+        return {
+          section,
+          pageQuery: this.args.pageQuery,
+          limit: this.getDisplayedCount(sid, section.totalCount),
+        };
+      });
+      this.#pagers.set(sid, pager);
+    }
+    return pager;
+  };
+
+  @cached
   private get sections(): SearchSheetSection[] {
     return assembleSections(
       this.recentsSection,
@@ -178,6 +211,7 @@ export default class SheetResults extends Component<Signature> {
         realmURLs: this.args.realms,
         offerToCreate: this.args.offerToCreate,
         realm: this.realm,
+        realmTotals: this.args.mainResults.meta.realmTotals,
       }),
       this.args.pagination.focusedSection,
     );
@@ -220,6 +254,15 @@ export default class SheetResults extends Component<Signature> {
     for (const entry of this.args.mainResults.entries) {
       if (entry.id) {
         urls.push(entry.id.replace(/\.json$/, ''));
+      }
+    }
+    for (const section of this.sections) {
+      if (section.type === 'realm') {
+        for (const entry of this.pagerFor(section.sid).cards) {
+          if (entry.id) {
+            urls.push(entry.id.replace(/\.json$/, ''));
+          }
+        }
       }
     }
     if (this.args.liveRecentCards.length > 0) {
@@ -350,6 +393,7 @@ export default class SheetResults extends Component<Signature> {
           @onFocusSection={{this.onFocusSection}}
           @getDisplayedCount={{this.getDisplayedCount}}
           @onShowMore={{this.onShowMore}}
+          @pager={{if (eq section.type 'realm') (this.pagerFor section.sid)}}
           @selectedCards={{@selectedCards}}
           @multiSelect={{@multiSelect}}
           @offerToCreate={{@offerToCreate}}
