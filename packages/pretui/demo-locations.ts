@@ -19,19 +19,21 @@ function kebabName(name: string): string {
 }
 
 /**
- * The module holding `subject`'s usage page, relative to the realm root, or
- * undefined when it has none to look for. Planned, host and Runtime entries
- * have no page.
+ * The module holding `subject`'s usage page, relative to the realm root. Every
+ * entry is looked up by its name, whatever its stage or tier: a planned,
+ * host or Runtime entry that has a page shows it.
  */
-export function demoModuleFor(subject: DemoSubject): string | undefined {
-  if (
+export function demoModuleFor(subject: DemoSubject): string {
+  return `./components/${kebabName(subject.name)}.usage`;
+}
+
+/** Planned, host and Runtime entries often have no page; that is not worth a warning. */
+function pageExpected(subject: DemoSubject): boolean {
+  return !(
     subject.stage === 'planned' ||
     subject.stage === 'host' ||
     subject.tier === 'Runtime'
-  ) {
-    return undefined;
-  }
-  return `./components/${kebabName(subject.name)}.usage`;
+  );
 }
 
 /** The page `name` is registered under among a module's `DEMOS_*` exports. */
@@ -72,13 +74,12 @@ export async function loadDemo(
   subject: DemoSubject,
 ): Promise<unknown | undefined> {
   let path = demoModuleFor(subject);
-  if (!path) {
-    return undefined;
-  }
   try {
     return demoIn(await importSibling(path), subject.name);
   } catch (e) {
-    console.warn(`Pretui: no usage page for ${subject.name} at ${path}`, e);
+    if (pageExpected(subject)) {
+      console.warn(`Pretui: no usage page for ${subject.name} at ${path}`, e);
+    }
     return undefined;
   }
 }
