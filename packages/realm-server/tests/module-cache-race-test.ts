@@ -1607,8 +1607,11 @@ module(basename(import.meta.filename), function () {
           'and the shared cache now holds that compile',
         );
 
+        if (!first.etag) {
+          throw new Error('the earlier run served the module without an etag');
+        }
         let revalidated = await getModule(laterRun, {
-          'If-None-Match': first.etag!,
+          'If-None-Match': first.etag,
         });
         assert.strictEqual(
           revalidated.status,
