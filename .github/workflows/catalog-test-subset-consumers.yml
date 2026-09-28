@@ -24,18 +24,21 @@ name: Catalog Test Subset Consumers
 #         catalog_ref: ${{ github.sha }}
 #
 # The caller names this file at a fixed ref (a `uses:` ref can't be an
-# expression), so the steps below always come from that ref, while
-# `boxel_ref` decides the boxel commit they run against: its tests, its
-# manifest, its mise tasks and composite actions, and the host dist built from
-# it. A boxel branch paired with a catalog change is tested by passing its name
-# as `boxel_ref`.
+# expression), so the steps below, and those of the test-web-assets.yaml they
+# call, always come from that ref. `boxel_ref` decides the boxel commit those
+# steps run against: its tests, its manifest, its mise tasks and composite
+# actions, and the source the host dist is built from. A boxel branch paired
+# with a catalog change is tested by passing its name as `boxel_ref`. A paired
+# branch that is behind the called ref can lack a task or argument these steps
+# use; merging main into it fixes that.
 #
 # A boxel PR that changes this workflow, the test web assets build, the subset
-# manifest or its sync, or the CI boot path the stack comes up through (mise,
-# the composite actions, the observability scripts and Traefik, as ci-host.yaml
-# lists them) runs it too, against the pinned catalog revision. A change that
-# would break the catalog's run is then red on the boxel PR that made it rather
-# than on the next catalog PR.
+# manifest, its sync or the test helpers that read the sync's marker, or the CI
+# boot path the stack comes up through (mise, the composite actions, the
+# observability scripts and Traefik, as ci-host.yaml lists them) runs it too,
+# against the pinned catalog revision, and so does the push that merges it. A
+# change that would break the catalog's run is then red in boxel rather than on
+# the next catalog PR.
 
 on:
   workflow_call:
@@ -48,13 +51,31 @@ on:
         description: boxel-catalog branch, tag or sha to serve as the catalog test subset
         required: true
         type: string
+  # The two lists below are the same; keep them in step.
   pull_request:
     paths:
       - ".github/workflows/catalog-test-subset-consumers.yml"
       - ".github/workflows/test-web-assets.yaml"
       - "packages/catalog/test-subset.json"
       - "packages/catalog/scripts/sync-test-subset.ts"
-      - "packages/catalog/scripts/catalog-update.sh"
+      # The only runs that take these helpers' local-checkout branch.
+      - "packages/host/tests/helpers/catalog-test-subset.ts"
+      - "packages/realm-server/tests/helpers/catalog-test-subset.ts"
+      - ".mise.toml"
+      - ".github/actions/**"
+      - "mise-tasks/**"
+      - "packages/observability/scripts/**"
+      - "traefik/**"
+  # Two PRs that each pass alone can still break the run together.
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/catalog-test-subset-consumers.yml"
+      - ".github/workflows/test-web-assets.yaml"
+      - "packages/catalog/test-subset.json"
+      - "packages/catalog/scripts/sync-test-subset.ts"
+      - "packages/host/tests/helpers/catalog-test-subset.ts"
+      - "packages/realm-server/tests/helpers/catalog-test-subset.ts"
       - ".mise.toml"
       - ".github/actions/**"
       - "mise-tasks/**"
@@ -70,8 +91,9 @@ concurrency:
 
 permissions:
   contents: read
-  # Lets the warm-test-images step pull the private GHCR mirror packages. A
-  # caller whose token can't read them falls back to Docker Hub.
+  # Lets the warm-test-images step pull the private GHCR mirror packages in
+  # boxel's own runs. A caller has to grant it too, since a called workflow
+  # can't hold a permission its caller withholds.
   packages: read
 
 jobs:
@@ -107,8 +129,9 @@ jobs:
           manifest=packages/catalog/test-subset.json
           boxel_sha=$(git rev-parse HEAD)
           catalog_repository=$(jq -r .repository "$manifest")
-          # Run from this repository's own PRs, there is no caller to name a
-          # catalog commit: test the pin, which is what boxel's CI serves.
+          # Run from this repository's own PRs and pushes, there is no caller
+          # to name a catalog commit: test the pin, which is what boxel's CI
+          # serves.
           catalog_ref="${CATALOG_REF:-$(jq -r .revision "$manifest")}"
           catalog_sha=$(gh api "repos/$catalog_repository/commits/$catalog_ref" --jq .sha)
           host_filters=$(jq -c '.tests.host // []' "$manifest")
@@ -156,11 +179,8 @@ jobs:
     env:
       BOXEL_ENVIRONMENT: ci
       CATALOG_SOURCE: test-subset
-      # Serve the subset from the catalog checkout below instead of the pin,
-      # and keep catalog-update.sh from pulling that checkout off the commit
-      # under test.
+      # Serve the subset from the catalog checkout below instead of the pin.
       CATALOG_TEST_SUBSET_SOURCE: packages/catalog/contents
-      SKIP_CATALOG_UPDATE: "1"
       # See the same setting on ci-host.yaml's host-test: the cert exists only
       # once `actions/init` has run, so the conditional in env-vars.sh never
       # sets these.
@@ -206,7 +226,11 @@ jobs:
             git clone --depth=1 https://github.com/cardstack/boxel-skills.git contents
           fi
 
+      # The mirror packages give Actions access only to boxel's own
+      # workflows. A caller's token is denied on every pull, and the step's
+      # retries cost minutes before the stack pulls from Docker Hub anyway.
       - name: Warm test Docker images from the GHCR mirror
+        if: github.repository == 'cardstack/boxel'
         continue-on-error: true
         uses: ./.github/actions/warm-test-images
 
@@ -231,6 +255,10 @@ jobs:
             stack-pid-file=/tmp/test-services.pid \
             stack-started-file=/tmp/test-services.started
 
+      # No retry on transient fetch failures, unlike ci-host.yaml's shards:
+      # the manifest's filters select a few modules rather than a shard of the
+      # suite, so such a failure is rare here, and re-running the job recovers
+      # from it.
       - name: Host tests the subset feeds
         working-directory: packages/host
         env:
@@ -259,9 +287,8 @@ jobs:
     timeout-minutes: 40
     env:
       # test-services:realm-server serves the subset as the catalog realm;
-      # these make it the catalog checkout's copy, as on the host job.
+      # this makes it the catalog checkout's copy, as on the host job.
       CATALOG_TEST_SUBSET_SOURCE: packages/catalog/contents
-      SKIP_CATALOG_UPDATE: "1"
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -285,7 +312,11 @@ jobs:
           shopt -s dotglob
           cp -a .test-web-assets-artifact/. ./
 
+      # The mirror packages give Actions access only to boxel's own
+      # workflows. A caller's token is denied on every pull, and the step's
+      # retries cost minutes before the stack pulls from Docker Hub anyway.
       - name: Warm test Docker images from the GHCR mirror
+        if: github.repository == 'cardstack/boxel'
         continue-on-error: true
         uses: ./.github/actions/warm-test-images
 
