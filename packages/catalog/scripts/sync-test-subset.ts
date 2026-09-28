@@ -11,7 +11,6 @@
 //   node scripts/sync-test-subset.ts --check-no-copies=<dir>
 //                                                    fail when <dir> holds a copy of a
 //                                                    subset definition
-//   node scripts/sync-test-subset.ts --touch=<test-subset|clone>
 //
 // `test-subset/` is served as the catalog realm by stacks that start with
 // CATALOG_SOURCE=test-subset. A stack that serves the full clone instead runs
@@ -32,7 +31,6 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
   existsSync,
-  utimesSync,
   mkdirSync,
   readdirSync,
   readFileSync,
@@ -595,30 +593,9 @@ async function checkPin(manifest: Manifest) {
   );
 }
 
-// A realm's compiled-module cache is keyed by path and cleared by the running
-// realm's file watcher, so files the sync rewrote before the realm booted can
-// still be served from a compile of their old content. Touching them once the
-// realm is up makes the watcher clear those entries.
-function touch(where: string) {
-  let dir = where === 'clone' ? cloneDir : subsetDir;
-  let now = new Date();
-  for (let { path } of readManifest().files) {
-    let file = join(dir, path);
-    if (existsSync(file)) {
-      utimesSync(file, now, now);
-    }
-  }
-  log(`touched the subset files in ${relative(repoRoot, dir)}`);
-}
-
 async function main() {
   let args = new Set(process.argv.slice(2));
-  let touchArg = [...args].find((a) => a.startsWith('--touch='));
   let noCopiesArg = [...args].find((a) => a.startsWith('--check-no-copies='));
-  if (touchArg) {
-    touch(touchArg.slice('--touch='.length));
-    return;
-  }
   if (args.has('--check-pin')) {
     await checkPin(readManifest());
     return;
