@@ -323,7 +323,7 @@ SELECT
   j.concurrency_group
 FROM jobs j
 WHERE j.args->>'realmURL' = '<realm-url>'
-  AND j.job_type IN ('from-scratch-index', 'incremental-index', 'copy-index')
+  AND j.job_type IN ('from-scratch-index', 'incremental-index')
 ORDER BY j.created_at DESC
 LIMIT 20;
 
@@ -1869,7 +1869,7 @@ LIMIT 20;
 
 A job runs in a lane, its `concurrency_group`. Lanes group into **lane families** (`jobs.lane_family`), and a realm's index lanes are one family named `indexing:<realm-url>`; its prerender-html lanes are another, `prerender-html:<realm-url>`.
 
-- **Exclusive work** runs in the group named for the family. So does every job published without a family (`lane_family IS NULL`), which is how from-scratch, copy-index and scoped-css-gc are published.
+- **Exclusive work** runs in the group named for the family. So does every job published without a family (`lane_family IS NULL`), which is how from-scratch and scoped-css-gc are published.
 - **Writer lanes** are groups of their own inside the family, and record the family in `lane_family`. Every incremental pass runs in one: `indexing:<realm-url>#user:<matrix-id>` for a write someone made, `indexing:<realm-url>#owner` for work nobody initiated (a file-watcher echo, system work). One writer's passes share a lane, so they coalesce and run in order; different writers' passes run side by side and are never coalesced.
 - **A `prerender_html` job follows the lane of the index pass that spawned it** into the `prerender-html:<realm-url>` family: an incremental pass's render runs in the same writer's `#user:` / `#owner` lane there, and a from-scratch pass's render, like a reconcile repair, is that family's exclusive work. The bulk-write render hold names the writing user's render lane and ends when that writer's own indexing settles, so it delays that writer's renders only.
 - **Two render jobs of one realm can render the same card at once.** The swap keeps the higher stamp (the live index generation the job adopted once its spawning passes committed), and a job reuses its spawning pass's render scope only when the ledger shows nothing else committed around that pass. Otherwise it renders under its own scope and reads everything afresh; the `index-perf` debug line `renders under its own scope: the realm moved around spawning job <id> (read <base>, committed <gen>, adopted <gen>)` says which.
