@@ -98,6 +98,9 @@ function stubCore() {
       async lookupDefinition() {
         return definition;
       },
+      async lookupDefinitionEntry() {
+        return { definition, types: [] };
+      },
     },
     resolveCodeRef: (codeRef: CodeRef) =>
       isResolvedCodeRef(codeRef) ? codeRef : undefined,
