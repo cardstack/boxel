@@ -1933,7 +1933,6 @@ interface Options {
   // the shape it asks for, which is already narrower than both.
   linkShapePolicy?: LinkShapePolicy;
   disableModuleCaching?: true;
-  copiedFromRealm?: URL;
   fullIndexOnStartup?: true;
   fromScratchIndexPriority?: number;
   // When set, the realm mounts and serves source but does not run a
@@ -2063,7 +2062,6 @@ export class Realm {
   #skipBootIndex = false;
   #fromScratchIndexPriority = systemInitiatedPriority;
   #definitionLookup: DefinitionLookup;
-  #copiedFromRealm: URL | undefined;
   #sourceCache = new AliasCache<SourceCacheEntry>();
   #directoryViewRefresher = new DirectoryViewRefresher(async (directory) => {
     for await (let _entry of this.#adapter.readdir(directory)) {
@@ -2384,7 +2382,6 @@ export class Realm {
     this.#disableModuleCaching = Boolean(opts?.disableModuleCaching);
     this.#linkShapePolicy =
       opts?.linkShapePolicy ?? LinkShapePolicy.pinned('full');
-    this.#copiedFromRealm = opts?.copiedFromRealm;
     this.#mediaCacheAdapter = mediaCacheAdapter;
     this.#cardDocumentCache = cardDocumentCache;
     this.#screenshotSyncWaitMs =
@@ -2747,9 +2744,17 @@ export class Realm {
     let startupSettledAt = Date.now();
     let inflight = this.indexing();
     if (inflight && !(await settledBy(inflight, requestDeadline))) {
+      // Name the passes. One this process queued can sit behind unrelated
+      // work on the queue — on a single-worker stack, the realm's own boot
+      // prerender pass — and hold this gate for far longer than any one
+      // request's budget; the job ids are what find that work.
+      let passes = this.#realmIndexUpdater.describeIndexing();
       this.#log.warn(
         `readiness check for ${this.url} is still waiting on in-flight indexing after ${Date.now() - startupSettledAt}ms ` +
-          `(realm startup used ${startupSettledAt - waitStartedAt}ms of the ${READINESS_REQUEST_BUDGET_MS}ms budget)`,
+          `(realm startup used ${startupSettledAt - waitStartedAt}ms of the ${READINESS_REQUEST_BUDGET_MS}ms budget): ` +
+          (passes.length
+            ? passes.join(', ')
+            : 'the passes settled after the gate expired'),
       );
       return notReady('index');
     }
@@ -6062,61 +6067,48 @@ export class Realm {
   async #startup(opts?: { fromScratchIndexPriority?: number }) {
     await Promise.resolve();
     let startTime = Date.now();
-    if (this.#copiedFromRealm) {
-      let { generation } = await this.#realmIndexUpdater.copy(
-        this.#copiedFromRealm,
-      );
+    let isNewIndex = await this.#realmIndexUpdater.isNewIndex();
+    if (this.#skipBootIndex) {
+      // Mount-and-serve only: no from-scratch index, even on a new index.
+      // Definitions resolve lazily via the prerenderer on first lookup.
+    } else if (isNewIndex || this.#fullIndexOnStartup) {
+      if (this.#fullIndexOnStartup) {
+        // CS-11245: bootstrap realms (kind='bootstrap': base,
+        // catalog, skills, …) full-index on every realm-server
+        // boot. On a rolling deploy the worker that picks up the
+        // resulting from-scratch-index job fans HTTP source reads
+        // through the LB, which can route to a still-warm
+        // pre-deploy peer whose `#sourceCache` was populated from
+        // pre-rsync bytes. `getSourceOrRedirect` would return those
+        // stale bytes and the reindex would persist them into
+        // `boxel_index.pristine_doc` plus sticky `error_doc` rows
+        // that survive past fleet stabilization (see CS-11245 for
+        // the originating incident). Broadcast a per-realm
+        // NOTIFY so every peer drops its entries for this URL and
+        // the next read falls through to `/persistent/` (EFS,
+        // already brought up to date by this container's
+        // `setup:<realm>-in-deployment` rsync at PID 1). The local
+        // clear is a no-op on a freshly booted container; the
+        // broadcast is what does the work. Skipped on the
+        // `isNewIndex` branch — that branch fires for first-ever
+        // mounts (e.g., brand-new publish), where peer caches for
+        // a never-before-seen URL are empty by construction.
+        await this.clearLocalSourceCachesAndBroadcast();
+      }
+      let priority =
+        opts?.fromScratchIndexPriority ?? this.#fromScratchIndexPriority;
+      let promise = this.#realmIndexUpdater.fullIndex(priority);
+      if (isNewIndex) {
+        // we only await the full indexing at boot if this is a brand new index
+        await promise;
+      }
+      // not sure how useful this event is--nothing is currently listening for
+      // it, and it may happen during or after the full index...
       this.broadcastRealmEvent({
         eventName: 'index',
-        indexType: 'copy',
-        sourceRealmURL: this.#copiedFromRealm.href,
-        ...(generation !== undefined ? { generation } : {}),
+        indexType: 'full',
         realmURL: this.url,
       });
-    } else {
-      let isNewIndex = await this.#realmIndexUpdater.isNewIndex();
-      if (this.#skipBootIndex) {
-        // Mount-and-serve only: no from-scratch index, even on a new index.
-        // Definitions resolve lazily via the prerenderer on first lookup.
-      } else if (isNewIndex || this.#fullIndexOnStartup) {
-        if (this.#fullIndexOnStartup) {
-          // CS-11245: bootstrap realms (kind='bootstrap': base,
-          // catalog, skills, …) full-index on every realm-server
-          // boot. On a rolling deploy the worker that picks up the
-          // resulting from-scratch-index job fans HTTP source reads
-          // through the LB, which can route to a still-warm
-          // pre-deploy peer whose `#sourceCache` was populated from
-          // pre-rsync bytes. `getSourceOrRedirect` would return those
-          // stale bytes and the reindex would persist them into
-          // `boxel_index.pristine_doc` plus sticky `error_doc` rows
-          // that survive past fleet stabilization (see CS-11245 for
-          // the originating incident). Broadcast a per-realm
-          // NOTIFY so every peer drops its entries for this URL and
-          // the next read falls through to `/persistent/` (EFS,
-          // already brought up to date by this container's
-          // `setup:<realm>-in-deployment` rsync at PID 1). The local
-          // clear is a no-op on a freshly booted container; the
-          // broadcast is what does the work. Skipped on the
-          // `isNewIndex` branch — that branch fires for first-ever
-          // mounts (e.g., brand-new publish), where peer caches for
-          // a never-before-seen URL are empty by construction.
-          await this.clearLocalSourceCachesAndBroadcast();
-        }
-        let priority =
-          opts?.fromScratchIndexPriority ?? this.#fromScratchIndexPriority;
-        let promise = this.#realmIndexUpdater.fullIndex(priority);
-        if (isNewIndex) {
-          // we only await the full indexing at boot if this is a brand new index
-          await promise;
-        }
-        // not sure how useful this event is--nothing is currently listening for
-        // it, and it may happen during or after the full index...
-        this.broadcastRealmEvent({
-          eventName: 'index',
-          indexType: 'full',
-          realmURL: this.url,
-        });
-      }
     }
 
     this.#perfLog.debug(
@@ -10793,7 +10785,7 @@ export class Realm {
   //     credential-less caller has no read-your-writes claim at all —
   //     anonymous writes are unsupported — so an anonymous read skips the
   //     gate outright and never parks behind an identified user's reindex.
-  //     System-originated jobs (file watcher, realm copy)
+  //     System-originated jobs (the file watcher)
   //     are untagged and hold no scoped reader — no one has a
   //     read-your-writes claim on them. Only when the requester is genuinely
   //     unknown — a token that failed verification, an assume-user

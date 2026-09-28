@@ -9,11 +9,8 @@ import {
   type Stats,
   type DBAdapter,
   type QueuePublisher,
-  type CopyArgs,
-  type CopyResult,
 } from './index.ts';
 import {
-  indexingConcurrencyGroup,
   indexingWriterLane,
   INCREMENTAL_INDEX_JOB_TIMEOUT_SEC,
   makeIncrementalArgsWithCallerMetadata,
@@ -110,6 +107,26 @@ export interface IncrementalIndexOptions {
   readsOwnWrite?: boolean;
 }
 
+// What names a pass this process is waiting on in a diagnostic: its job type,
+// the queue job once the enqueue has landed, when this process started waiting
+// on it, and for a pass handed a change set, how many files that set holds and
+// the first of them.
+interface PendingPass {
+  jobType: 'incremental-index' | 'from-scratch-index';
+  registeredAt: number;
+  jobId?: number;
+  fileCount?: number;
+  firstFile?: string;
+}
+
+// An incremental pass, tagged with what the narrower gates filter on (see
+// #incrementalIndexingDeferreds).
+type IncrementalPass = PendingPass & {
+  jobType: 'incremental-index';
+  initiatedBy?: string;
+  affectsStaging?: boolean;
+};
+
 export class RealmIndexUpdater {
   #realm: Realm;
   #realmURL: URL | undefined;
@@ -155,7 +172,7 @@ export class RealmIndexUpdater {
   // known. Read endpoints use it to scope their read-your-writes drain to the
   // requesting user's own writes (`incrementalIndexingInitiatedBy`) instead of
   // parking every reader behind whatever indexing happens to be in flight.
-  // System-originated jobs (file watcher, realm copy) carry no tag.
+  // System-originated jobs (the file watcher) carry no tag.
   //
   // `affectsStaging` is whether the pass touched one of the two things a
   // staging write resolves out of shared state: an executable module, or the
@@ -163,11 +180,11 @@ export class RealmIndexUpdater {
   // (`incrementalIndexingAffectingStaging`) to wait for those passes alone —
   // an instance-only fan-out, however wide, moves neither and so gates no
   // writer.
-  #incrementalIndexingDeferreds = new Map<
-    Deferred<void>,
-    { initiatedBy?: string; affectsStaging?: boolean }
-  >();
-  #fullIndexingDeferreds = new Set<Deferred<void>>();
+  //
+  // Every deferred, from-scratch included, also carries a `PendingPass` so
+  // `describeIndexing()` can name what a stalled wait is stuck behind.
+  #incrementalIndexingDeferreds = new Map<Deferred<void>, IncrementalPass>();
+  #fullIndexingDeferreds = new Map<Deferred<void>, PendingPass>();
 
   constructor({
     realm,
@@ -218,7 +235,7 @@ export class RealmIndexUpdater {
   indexing() {
     let pending = [
       ...this.#incrementalIndexingDeferreds.keys(),
-      ...this.#fullIndexingDeferreds,
+      ...this.#fullIndexingDeferreds.keys(),
     ];
     if (pending.length === 0) {
       return undefined;
@@ -226,6 +243,33 @@ export class RealmIndexUpdater {
     return Promise.all(pending.map((deferred) => deferred.promise)).then(
       () => undefined,
     );
+  }
+
+  // Names each pass `indexing()` is waiting on: its queue job, job type, the
+  // files it indexes when it was handed a change set, and how long this
+  // process has been waiting on it. A wait on indexing can outlast its caller
+  // because the pass is queued behind unrelated work — another realm's
+  // backlog, or this realm's own prerender pass — and the job id is what
+  // finds that work in the queue. Read from this process's own bookkeeping,
+  // so it costs nothing and cannot fail.
+  describeIndexing(): string[] {
+    let now = Date.now();
+    return [
+      ...this.#incrementalIndexingDeferreds.values(),
+      ...this.#fullIndexingDeferreds.values(),
+    ].map(({ jobType, jobId, registeredAt, fileCount, firstFile }) => {
+      let details: string[] = [jobType];
+      if (fileCount !== undefined && firstFile !== undefined) {
+        details.push(
+          fileCount === 1
+            ? `1 file: ${firstFile}`
+            : `${fileCount} files, first ${firstFile}`,
+        );
+      }
+      details.push(`pending ${Math.round((now - registeredAt) / 1000)}s`);
+      let job = jobId === undefined ? 'job not yet enqueued' : `job ${jobId}`;
+      return `${job} (${details.join(', ')})`;
+    });
   }
 
   // Awaits every in-flight incremental and copy job, whatever it touched.
@@ -289,7 +333,7 @@ export class RealmIndexUpdater {
     return Promise.all(pending).then(() => undefined);
   }
 
-  // Awaits only the incremental/copy passes that can move what a staging
+  // Awaits only the incremental passes that can move what a staging
   // write resolves — the slice of `incrementalIndexing()` a write about to
   // stage is actually exposed to. Returns undefined when nothing qualifying
   // is in flight, even while instance-only passes are still draining: those
@@ -309,7 +353,7 @@ export class RealmIndexUpdater {
   // ignore rules are not stored bytes and not under the lock, but no pass this
   // gate could wait for moves them: they are written only by a from-scratch
   // pass's discovery step, and an incremental echoes back the set it was
-  // handed. A gate over incremental and copy passes is therefore the wrong
+  // handed. A gate over incremental passes is therefore the wrong
   // place to guard them, not a place that forgot to.
   //
   // From-scratch passes are outside this gate for the same reason they are
@@ -350,7 +394,11 @@ export class RealmIndexUpdater {
     completed: Promise<FromScratchResult>;
   } {
     let indexingDeferred = new Deferred<void>();
-    this.#fullIndexingDeferreds.add(indexingDeferred);
+    let pendingPass: PendingPass = {
+      jobType: 'from-scratch-index',
+      registeredAt: Date.now(),
+    };
+    this.#fullIndexingDeferreds.set(indexingDeferred, pendingPass);
     let startedAt = performance.now();
 
     this.#log.info(`Realm ${this.realmURL.href} is starting indexing`);
@@ -366,6 +414,7 @@ export class RealmIndexUpdater {
           awaitedByPublish: opts?.awaitedByPublish,
         },
       );
+      pendingPass.jobId = job.id;
       return job;
     })();
 
@@ -443,7 +492,11 @@ export class RealmIndexUpdater {
     opts?: IncrementalIndexOptions,
   ): Promise<{ settled: Promise<void> }> {
     let indexingDeferred = new Deferred<void>();
-    this.#incrementalIndexingDeferreds.set(indexingDeferred, {
+    let pendingPass: IncrementalPass = {
+      jobType: 'incremental-index',
+      registeredAt: Date.now(),
+      fileCount: changes.length,
+      firstFile: changes[0]?.url.href,
       initiatedBy: opts?.initiatedBy ?? undefined,
       // A removal counts the same as a write: a module that is gone changes
       // what resolves just as surely as one whose bytes moved.
@@ -451,7 +504,8 @@ export class RealmIndexUpdater {
         ({ url }) =>
           hasExecutableExtension(url.href) || this.#isRealmConfigDocument(url),
       ),
-    });
+    };
+    this.#incrementalIndexingDeferreds.set(indexingDeferred, pendingPass);
     let snapshotVersion = this.#ignoreDataVersion;
     let job: Job<IncrementalDoneResult>;
     try {
@@ -495,6 +549,7 @@ export class RealmIndexUpdater {
           jobArgs.coalescedCallers[0]?.waiterId,
         ),
       });
+      pendingPass.jobId = job.id;
     } catch (e: any) {
       indexingDeferred.fulfill();
       this.#incrementalIndexingDeferreds.delete(indexingDeferred);
@@ -594,43 +649,6 @@ export class RealmIndexUpdater {
   ): Promise<void> {
     let { settled } = await this.enqueueChanges(changes, opts);
     await settled;
-  }
-
-  async copy(
-    sourceRealmURL: URL,
-    onInvalidation?: (invalidatedURLs: URL[]) => Promise<void>,
-  ): Promise<{ generation?: number }> {
-    let indexingDeferred = new Deferred<void>();
-    // A copy indexes the whole source realm, so its change set is everything
-    // the realm holds — modules included. It is named here rather than
-    // computed because a copy never enumerates its changes up front.
-    this.#incrementalIndexingDeferreds.set(indexingDeferred, {
-      affectsStaging: true,
-    });
-    try {
-      let args: CopyArgs = {
-        realmURL: this.#realm.url,
-        realmUsername: await this.#realm.getRealmOwnerUsername(),
-        sourceRealmURL: sourceRealmURL.href,
-      };
-      let job = await this.#queue.publish<CopyResult>({
-        jobType: 'copy-index',
-        concurrencyGroup: indexingConcurrencyGroup(this.#realm.url),
-        timeout: 4 * 60,
-        priority: userInitiatedPriority,
-        args,
-      });
-      let { invalidations, generation } = await job.done;
-      if (onInvalidation) {
-        await onInvalidation(
-          invalidations.map((href) => new URL(href.replace(/\.json$/, ''))),
-        );
-      }
-      return { generation };
-    } finally {
-      indexingDeferred.fulfill();
-      this.#incrementalIndexingDeferreds.delete(indexingDeferred);
-    }
   }
 
   public isIgnored(url: URL): boolean {
