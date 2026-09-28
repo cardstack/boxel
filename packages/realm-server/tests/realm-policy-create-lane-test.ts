@@ -467,7 +467,7 @@ module(basename(import.meta.filename), function (hooks) {
       );
       assert.deepEqual(
         gateStats(),
-        { policyLoads: 0, predicateEvaluations: 0 },
+        { policyLoads: 0, predicateEvaluations: 0, pendingDischarges: 0 },
         'without reaching the policy',
       );
       assertNotThere(
@@ -477,7 +477,7 @@ module(basename(import.meta.filename), function (hooks) {
       );
       assert.deepEqual(
         gateStats(),
-        { policyLoads: 1, predicateEvaluations: 0 },
+        { policyLoads: 1, predicateEvaluations: 0, pendingDischarges: 0 },
         'whose policy is loaded before the type resolves, and matched against nothing',
       );
     });
@@ -502,7 +502,7 @@ module(basename(import.meta.filename), function (hooks) {
       );
       assert.deepEqual(
         gateStats(),
-        { policyLoads: 0, predicateEvaluations: 0 },
+        { policyLoads: 0, predicateEvaluations: 0, pendingDischarges: 0 },
         'neither reached the policy',
       );
       assert.strictEqual(
@@ -548,7 +548,7 @@ module(basename(import.meta.filename), function (hooks) {
       );
       assert.deepEqual(
         gateStats(),
-        { policyLoads: 0, predicateEvaluations: 0 },
+        { policyLoads: 0, predicateEvaluations: 0, pendingDischarges: 0 },
         'and no policy was loaded for either',
       );
     });
