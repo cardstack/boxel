@@ -1313,8 +1313,12 @@ module(basename(import.meta.filename), function () {
         fittedHtml.includes('data-test-file-fitted'),
         'the file entry has FileDef fitted HTML',
       );
+      // The date may sit inside a wrapping element (the shell hides it from
+      // Percy with a `data-test-percy-hide` span), so skip opening tags between
+      // the `·` and the text. Closing tags are not skipped, so an empty wrapper
+      // cannot let the match run on into later markup.
       assert.ok(
-        /class="sub-mod"[^>]*>·\s*[^\s<]/.test(fittedHtml),
+        /class="sub-mod"[^>]*>·\s*(?:<[^/>][^>]*>\s*)*[^\s<]/.test(fittedHtml),
         `the fitted HTML renders a modified time, got: ${fittedHtml.slice(0, 2000)}`,
       );
     });
