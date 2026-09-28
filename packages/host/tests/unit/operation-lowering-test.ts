@@ -1561,6 +1561,56 @@ module('Unit | operation lowering', function (hooks) {
     }
   });
 
+  test('a link strategy is carried onto a read and recorded on anything else', async function (assert) {
+    let { field, contains, CardDef } = api;
+    class Roster extends CardDef {
+      static displayName = 'Roster';
+      @field title = contains(StringField);
+    }
+    shim({ Roster });
+
+    let read = await lowerOperationDeclarations(
+      {
+        summary: { base: 'read', links: 'ids' },
+      } as unknown as Record<string, OperationsModule.OperationDeclaration>,
+      {
+        definition: buildDefinition(Roster as unknown as typeof BaseDef),
+        lookupDefinition,
+        identifyCard: (target) => identifyCard(target),
+      },
+    );
+    assert.deepEqual(codes(read), [], 'a read may declare one');
+    assert.strictEqual(
+      read.operations.summary.links,
+      'ids',
+      'and the realm executes it from the stored entry',
+    );
+
+    // The decorator refuses this where it is written, so one only ever reaches
+    // a stored entry — which outlives the code that built it, and where a
+    // narrowing that is never applied reads as one that is.
+    let write = await lowerOperationDeclarations(
+      {
+        rename: { base: 'transform', set: { title: 'Renamed' }, links: 'none' },
+      } as unknown as Record<string, OperationsModule.OperationDeclaration>,
+      {
+        definition: buildDefinition(Roster as unknown as typeof BaseDef),
+        lookupDefinition,
+        identifyCard: (target) => identifyCard(target),
+      },
+    );
+    assert.deepEqual(
+      codes(write),
+      ['links-without-assembly'],
+      'a base that assembles no link closure has nothing to narrow',
+    );
+    assert.strictEqual(
+      write.operations.rename.links,
+      undefined,
+      'and nothing is stored that a serving path would read as a narrowing',
+    );
+  });
+
   test('an append that says nothing to append is recorded rather than stored as work', async function (assert) {
     // The decorator refuses each of these, so one only ever arrives on a
     // stored entry — where appending nothing, or a literal `null`, or picking

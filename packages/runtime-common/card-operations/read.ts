@@ -8,6 +8,8 @@ import {
   pathsFor,
 } from './dispatch.ts';
 import {
+  linkStrategyOf,
+  narrowerLinkStrategy,
   OperationFailure,
   type OperationDefinition,
   type OperationDocumentResult,
@@ -20,6 +22,7 @@ import type {
   OperationScope,
   RunOperationOptions,
 } from './dispatch.ts';
+import type { LinkStrategy } from '@cardstack/base/operations';
 import type { LocalPath } from '../paths.ts';
 import type { SingleFileMetaDocument } from '../document-types.ts';
 import type { SearchResultError } from '../realm-index-query-engine.ts';
@@ -85,10 +88,36 @@ export async function readOperation(
   let url = instanceTargetURL({ ...request, target });
   refuseUnservedStages(request, definition);
   let localPath = localPathFor(core, url);
+  let links = effectiveLinkStrategy(definition, opts);
   if (opts.headersOnly) {
-    return await readHeaders(core, url, localPath, scope);
+    return await readHeaders(core, url, localPath, links, scope);
   }
-  return await readDocument(core, url, localPath, opts);
+  return await readDocument(core, url, localPath, links, opts);
+}
+
+// How much of the card's link graph this read carries, from the two places
+// that may narrow it.
+//
+// The operation declares one, and it is the author's statement about what this
+// card's representation is allowed to reach — uniform across callers, because
+// the serving path never asks how a caller was authorized.
+//
+// The request carries the other. `resolveLinksOnly` is how the realm sheds
+// load, or how a consumer says it will resolve the links it displays itself;
+// either way it asks for less than the whole closure.
+//
+// Both only ever narrow, so the answer is whichever of them narrows further.
+// Composing them any other way would let one widen the other: a request that
+// asked for the full closure would defeat a declaration written to withhold
+// it, and the declaration is the half a policy author reasons about.
+function effectiveLinkStrategy(
+  definition: OperationDefinition,
+  opts: Pick<RunOperationOptions, 'resolveLinksOnly'>,
+): LinkStrategy {
+  return narrowerLinkStrategy(
+    linkStrategyOf(definition.links),
+    opts.resolveLinksOnly ? 'ids' : 'full',
+  );
 }
 
 // A declaration may specialize `read` by running a `program` over the target,
@@ -125,6 +154,7 @@ async function readDocument(
   core: OperationCore,
   url: URL,
   localPath: LocalPath,
+  links: LinkStrategy,
   opts: RunOperationOptions,
 ): Promise<OperationDocumentResult> {
   // The index decides first, and the bytes on disk are the fallback — not the
@@ -133,9 +163,12 @@ async function readDocument(
   // registered one: the card has an index row, and reading its extension
   // instead answers about a file that is not there.
   let result = await core.indexQueryEngine.cardDocument(url, {
-    loadLinks: true,
+    // `none` takes the pass out entirely: nothing is assembled, and the
+    // relationships the row already carries are dropped below. `ids` runs it
+    // as far as answering what each relationship names and stops there.
+    loadLinks: links !== 'none',
     skipQueryBackedExpansion: opts.skipQueryBackedExpansion ?? false,
-    resolveLinksOnly: opts.resolveLinksOnly ?? false,
+    resolveLinksOnly: links === 'ids',
     skipLinkAssemblyBudget: opts.skipLinkAssemblyBudget ?? false,
   });
   if (result === undefined) {
@@ -144,7 +177,7 @@ async function readDocument(
     // the caller receives JSON it can discriminate on `data.type`.
     let fileMeta = await core.fileMetaDocument(localPath);
     if (fileMeta) {
-      return fileMetaResult(fileMeta);
+      return fileMetaResult(fileMeta, links);
     }
     throw await missingTarget(core, url, localPath);
   }
@@ -153,6 +186,15 @@ async function readDocument(
   }
   let { doc } = result;
   doc.data.links = { self: url.href };
+  // `none` answers with the card and nothing about what it points at. Skipping
+  // the assembly pass above leaves `included` empty but leaves the stored links
+  // standing on the resource, and a relationship naming a target is exactly
+  // what this strategy withholds — so the key comes off here. `doc.data` is
+  // this read's own shallow copy of the row's resource, so deleting the key
+  // takes it off the answer and not off the row.
+  if (links === 'none') {
+    delete doc.data.relationships;
+  }
   core.unresolveInstanceIds(doc);
   // The index-data generation, the source version and the declared-screenshot
   // manifest are joined at serve time onto a fresh `meta` — never a mutation of
@@ -192,6 +234,7 @@ async function readDocument(
     // one place decides what a caller is served whichever executor produced
     // it.
     projected: false,
+    links,
     // Read off the assembly rather than off a peek taken before it: the two
     // can disagree when a write lands in between, and the validator a caller
     // builds from this has to describe the document it is returned with.
@@ -207,13 +250,18 @@ async function readDocument(
   };
 }
 
-// A file's metadata document, and what it can say about its own headers.
+// A file's metadata document, and what it can say about its own headers. The
+// strategy travels with it although a file has no links to narrow: what is
+// reported is the strategy this read applied, and a path that turns out to
+// hold bytes was not known to be one when it was decided.
 function fileMetaResult(
   document: SingleFileMetaDocument,
+  links: LinkStrategy,
 ): OperationDocumentResult {
   return {
     document,
     projected: false,
+    links,
     headers: headersFromDisk(document),
     // Derived from the bytes on disk, so there is no query behind it.
     queryBacked: false,
@@ -226,6 +274,7 @@ async function readHeaders(
   core: OperationCore,
   url: URL,
   localPath: LocalPath,
+  links: LinkStrategy,
   scope: OperationScope,
 ): Promise<OperationHeadResult> {
   let row = await scope.peekInstance(url);
@@ -239,6 +288,7 @@ async function readHeaders(
     if (file) {
       return {
         projected: false,
+        links,
         type: 'file-meta',
         indexedAt: file.indexedAt,
         lastModified: file.lastModified,
@@ -249,7 +299,7 @@ async function readHeaders(
     }
     let fileMeta = await core.fileMetaDocument(localPath);
     if (fileMeta) {
-      return { projected: false, ...headersFromDisk(fileMeta) };
+      return { projected: false, links, ...headersFromDisk(fileMeta) };
     }
     throw await missingTarget(core, url, localPath);
   }
@@ -272,6 +322,7 @@ async function readHeaders(
   }
   return {
     projected: false,
+    links,
     type: 'card',
     indexedAt: row.indexedAt,
     lastModified: row.lastModified,

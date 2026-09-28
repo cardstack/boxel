@@ -513,8 +513,31 @@ export interface DeleteOperationDeclaration extends OperationCommon {
   readonly base: 'delete';
 }
 
+// How much of the target's link graph a read carries.
+//
+//   * `full` — the transitive closure of the card's links is assembled into
+//     `included[]`. The default, and what every read answers with today.
+//   * `ids`  — the card's relationships name their targets and nothing is
+//     assembled. A consumer fetches each target on its own request.
+//   * `none` — no relationship data is assembled or named.
+//
+// The narrowing is uniform: the same request answers a realm writer and a
+// caller reached by a policy grant with the same document, because the shape
+// is a property of the operation rather than of how the caller was
+// authorized.
+//
+// It governs **assembly, not derivation**. A computed value deriving from a
+// card the caller could not fetch on its own still carries its value under
+// every strategy — the value is computed when the card is indexed, under the
+// realm's own authority, and lives in the card's own attributes.
+export type LinkStrategy = 'full' | 'ids' | 'none';
+
+export const LINK_STRATEGIES: readonly LinkStrategy[] = ['full', 'ids', 'none'];
+
 export interface ReadOperationDeclaration extends OperationCommon {
   readonly base: 'read';
+  // How much of the card's link graph this read carries. Absent is `full`.
+  readonly links?: LinkStrategy;
 }
 
 export interface QueryOperationDeclaration extends OperationCommon {
@@ -645,6 +668,16 @@ const CLAUSE_KEYS: Record<BaseOperationName, readonly string[]> = {
   // Appending a line takes no clause: the line is the payload, and the base
   // operation reads it under `line`.
   appendLine: [],
+};
+
+// Keys that shape how a base operation answers rather than describing work for
+// it to do. They are legal only on the base named here — a `links` on a
+// `create` would be read by nothing, and a key that is quietly ignored is
+// worse than one that is refused — and they are not clauses, so a declaration
+// carrying one may still express its work with a raw `transformations`
+// program.
+const MODIFIER_KEYS: Partial<Record<BaseOperationName, readonly string[]>> = {
+  read: ['links'],
 };
 
 // Clauses without which an authored declaration names no work at all: a
@@ -989,7 +1022,11 @@ function assertValidDeclaration(
     );
   }
   let clauseKeys = CLAUSE_KEYS[base];
-  let legalKeys = new Set<string>([...COMMON_DECLARATION_KEYS, ...clauseKeys]);
+  let legalKeys = new Set<string>([
+    ...COMMON_DECLARATION_KEYS,
+    ...clauseKeys,
+    ...(MODIFIER_KEYS[base] ?? []),
+  ]);
   for (let declaredKey of Object.keys(declaration)) {
     if (!legalKeys.has(declaredKey)) {
       throw new Error(
@@ -1005,6 +1042,16 @@ function assertValidDeclaration(
     typeof declaration.optimistic !== 'boolean'
   ) {
     throw new Error(`${label}: \`optimistic\` must be a boolean`);
+  }
+  if (
+    declaration.links !== undefined &&
+    !LINK_STRATEGIES.includes(declaration.links as LinkStrategy)
+  ) {
+    throw new Error(
+      `${label}: \`links\` must name how much of the card's link graph this read carries — one of ${quoteList(
+        LINK_STRATEGIES,
+      )}`,
+    );
   }
   if (declaration.input !== undefined) {
     assertBxlProgram(label, 'input', declaration.input);

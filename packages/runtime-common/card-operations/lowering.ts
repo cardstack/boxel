@@ -12,7 +12,7 @@ import {
   usesVolatileCall,
 } from './bxl-emit.ts';
 import { isBxl, isMarker, lowerQueryTemplate } from './query.ts';
-import { isDefinitionFreeBaseOperation } from './types.ts';
+import { isDefinitionFreeBaseOperation, isLinkStrategy } from './types.ts';
 import type {
   LowerOperationDeclarationsResult,
   OperationDefinition,
@@ -331,6 +331,34 @@ async function lowerOperation(
 
   if (declaration.optimistic !== undefined) {
     operation.optimistic = declaration.optimistic;
+  }
+
+  // A link strategy narrows what a read carries back. Only a read assembles a
+  // card's link graph, so on any other base the declaration would narrow
+  // nothing — and a stored entry carrying one would read as a narrowing that
+  // was never applied. The authoring decorator refuses it where it is written;
+  // this keeps it out of a type's entry, which outlives the code that built it.
+  let links = (declaration as { links?: unknown }).links;
+  if (links !== undefined) {
+    if (base !== 'read') {
+      sink.add(
+        'links-without-assembly',
+        'links',
+        `a "${base}" operation assembles no link closure, so a \`links\` strategy would narrow nothing`,
+      );
+    } else if (!isLinkStrategy(links)) {
+      // Not stored. The serving path reads an unrecognized strategy as the
+      // narrowest one, so storing this would answer with a withholding the
+      // author did not ask for; recording it instead refuses the read and says
+      // why.
+      sink.add(
+        'links-without-assembly',
+        'links',
+        `"${String(links)}" does not name how much of the link graph a read carries — one of "full", "ids", "none"`,
+      );
+    } else {
+      operation.links = links;
+    }
   }
 
   let { statements, snapshot } = await lowerClauses(

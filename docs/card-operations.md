@@ -354,6 +354,49 @@ and is never answered with a `304`.
 
 `output` is **not** an access boundary. See the posture section.
 
+### `links` — how much of the link graph a read carries
+
+A read serves a JSON:API document, and by default it assembles the transitive
+closure of the card's links into `included[]`: the cards it links to, the cards
+those link to, and so on to the end of the graph. A `read` declaration may say
+how much of that to carry.
+
+```ts
+@operation static read = {
+  base: 'read',
+  links: 'ids',
+} satisfies OperationDeclaration;
+```
+
+| `links` | What the response carries                                                       |
+| ------- | ------------------------------------------------------------------------------- |
+| `full`  | The whole assembled closure in `included[]`. The default, and today's behavior. |
+| `ids`   | The relationships name their targets; nothing is assembled.                     |
+| `none`  | No relationship data at all — nothing assembled and nothing named.              |
+
+Under `ids` a consumer fetches each target on its own request, which is one
+round trip per link it actually displays rather than one response carrying
+every link it might. Under `none` the card answers for itself alone.
+
+**It applies to every caller alike.** The declaration belongs to the operation,
+not to the caller, so the same request answers a realm writer and a caller
+reached by some other route with the same document. Narrowing a read therefore
+costs the round trips to everyone, which is the trade to weigh — and the reason
+the strategy is not a way to show one caller less than another.
+
+**It governs assembly, not derivation.** A computed value that derives from a
+linked card still carries its value under all three strategies. The value is
+computed when the card is indexed and lives in the card's own attributes, so
+withholding the link withholds the linked card's document and nothing about
+what the card itself computed from it. This is the part that most often
+surprises: `links: 'none'` on a card whose `summary` is computed from its
+linked records still answers with that summary.
+
+`links` is a `read` key. The other bases assemble no link graph — a write
+answers with an identity rather than a document, and a `readSource` serves
+stored bytes — so a `links` on one of them is refused where it is written, and
+a stored definition carrying one records a `links-without-assembly` issue.
+
 ### `optimistic`
 
 The client applies an eligible write to its local copy before the realm

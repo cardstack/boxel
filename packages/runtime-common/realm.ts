@@ -216,12 +216,13 @@ import {
 import {
   canonicalizeTarget,
   newOperationScope,
-  readShape,
+  readPlan,
   resolveGatedOperation,
   runOperation,
   scopeCallerFor,
 } from './card-operations/dispatch.ts';
-import type { ReadShape } from './card-operations/dispatch.ts';
+import type { ReadPlan } from './card-operations/dispatch.ts';
+import type { LinkStrategy } from '@cardstack/base/operations';
 import {
   notPermitted,
   policyGateStats,
@@ -267,6 +268,7 @@ import {
 } from './card-operations/named-query.ts';
 import { settledWithin, STAGING_WIDTH } from './card-operations/coordinator.ts';
 import {
+  narrowerLinkStrategy,
   OperationFailure,
   isDocumentResult,
   isHeadResult,
@@ -1347,8 +1349,29 @@ function buildEtag(
 // covering the shapes is not on its own covering the validators: the `full`
 // split above is a second dimension, so a reader enumerates the arguments
 // `buildCardJsonEtag` takes rather than this list alone.
-const CARD_JSON_SHAPES = ['full', 'links-only', 'write-echo'] as const;
+const CARD_JSON_SHAPES = [
+  'full',
+  'links-only',
+  'no-links',
+  'write-echo',
+] as const;
 type CardJsonShape = (typeof CARD_JSON_SHAPES)[number];
+
+// The shape a read's link strategy serves. Two vocabularies rather than one
+// because they answer different questions: an operation's strategy says how
+// much of the link graph a read carries, and a card+json shape names a
+// representation a validator has to tell apart — a set that also holds the
+// write echo, which no read produces.
+function cardJsonShapeFor(links: LinkStrategy): CardJsonShape {
+  switch (links) {
+    case 'full':
+      return 'full';
+    case 'ids':
+      return 'links-only';
+    case 'none':
+      return 'no-links';
+  }
+}
 
 function buildCardJsonEtag(
   indexedAt: number | null | undefined,
@@ -2237,10 +2260,11 @@ export class Realm {
   // computed"; an empty array is a valid cached result (no routing rules).
   #cachedHostRoutingMap: HostRoutingRule[] | null = null;
 
-  // Whether a card's `read` carries a transform stage, by card URL. Asked by
-  // the card+json `GET` before it takes either path that answers without
-  // running the read, and the lookup behind it is a database read — so on a
-  // realm serving conditional requests it would be a round trip added to
+  // What a card's `read` would answer with — whether it carries a transform
+  // stage, and how much of the link graph its declaration carries — by card
+  // URL. Asked by the card+json `GET` before it takes either path that answers
+  // without running the read, and the lookup behind it is a database read — so
+  // on a realm serving conditional requests it would be a round trip added to
   // exactly the requests that exist to avoid one.
   //
   // Cleared by `clearRealmIndexCaches()` alongside the entries above, which is
@@ -2251,7 +2275,7 @@ export class Realm {
   // swapping, and does not reach this: a card with foreign-realm dependencies
   // is served no validator at all, so neither fast path is taken and this is
   // never asked.
-  #readShapeByURL = new Map<string, ReadShape>();
+  #readPlanByURL = new Map<string, ReadPlan>();
 
   // This loader is not meant to be used operationally, rather it serves as a
   // template that we clone for each indexing operation
@@ -3597,7 +3621,7 @@ export class Realm {
   clearRealmIndexCaches(): void {
     this.invalidateCachedRealmInfo();
     this.#cachedHostRoutingMap = null;
-    this.#readShapeByURL.clear();
+    this.#readPlanByURL.clear();
     // Any realm's compiled policy may read from this one: a policy card here,
     // or a type its rules name. So the move is announced to all of them, and
     // not only to this realm's own.
@@ -11001,7 +11025,10 @@ export class Realm {
             result.indexedAt,
             this.getCachedRealmInfoHash(),
             screenshotsEtagFingerprint(result.screenshots),
-            resolveLinksOnly ? 'links-only' : 'full',
+            // The strategy the read reports, not the one this request asked
+            // for: the type's declaration may narrow it further, and a `HEAD`
+            // states the validator the `GET` would send.
+            cardJsonShapeFor(result.links),
             skipLinkAssemblyBudget,
           );
       // The headers a `GET` of this card would send, which for a projected
@@ -11212,31 +11239,40 @@ export class Realm {
           instanceEntry.type === 'instance' &&
           instanceEntry.indexedAt != null
         ) {
+          // The validator has to name the shape the body will take, and the
+          // type's own `read` declaration is half of what decides that — so
+          // the plan is resolved before the validator is built rather than
+          // where its other answer is consumed. The read that follows composes
+          // the two the same way, so the two agree by construction.
+          //
+          // Asking here rather than only where a fast path would take the
+          // answer costs a memo hit on a conditional request whose validator
+          // turns out not to match — and that request assembles, which
+          // resolves the same definition anyway.
+          let plan = await readPlan(
+            this.operationCore,
+            url,
+            scope,
+            this.#readPlanByURL,
+          );
+          assembles = plan.shape !== 'plain';
           peekEtag = buildCardJsonEtag(
             instanceEntry.indexedAt,
             realmInfoHash,
             screenshotsEtagFingerprint(instanceEntry.screenshots),
-            resolveLinksOnly ? 'links-only' : 'full',
+            cardJsonShapeFor(
+              narrowerLinkStrategy(
+                plan.links,
+                resolveLinksOnly ? 'ids' : 'full',
+              ),
+            ),
             skipLinkAssemblyBudget,
           );
         }
-        // Asked only where an answer would be taken from it: on a conditional
-        // hit, and on a request a configured cache would serve or retain.
-        // Every other request assembles, and the assembly resolves the same
-        // definition anyway.
         let matchedEtag =
           ifNoneMatch && peekEtag && ifNoneMatchMatches(ifNoneMatch, peekEtag)
             ? peekEtag
             : undefined;
-        if (matchedEtag || (documentCache && peekEtag)) {
-          assembles =
-            (await readShape(
-              this.operationCore,
-              url,
-              scope,
-              this.#readShapeByURL,
-            )) !== 'plain';
-        }
         if (matchedEtag && !assembles) {
           return createResponse({
             requestContext,
@@ -11395,7 +11431,7 @@ export class Realm {
         `the read of ${url.href} answered with something other than a document`,
       );
     }
-    let { document, headers, queryBacked, projected } = result;
+    let { document, headers, queryBacked, projected, links } = result;
     if (headers.type === 'file-meta') {
       // A file's metadata is derived from its bytes, so there is no index row
       // to validate it against and nothing here to cache.
@@ -11432,7 +11468,11 @@ export class Realm {
           headers.indexedAt,
           this.getCachedRealmInfoHash(),
           screenshotsEtagFingerprint(headers.screenshots),
-          resolveLinksOnly ? 'links-only' : 'full',
+          // Read off the assembly for the same reason `deps` and `indexedAt`
+          // are: the strategy this body was assembled under is the read's
+          // answer, and the request's own `resolveLinksOnly` is only half of
+          // what decided it.
+          cardJsonShapeFor(links),
           skipLinkAssemblyBudget,
         );
     return {

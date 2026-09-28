@@ -884,6 +884,30 @@ module('Integration | operations', function (hooks) {
     assert.throws(
       () => {
         class Report extends CardDef {
+          @operation static createComment = {
+            base: 'create',
+            of: () => Report,
+            links: 'none',
+          };
+        }
+        return Report;
+      },
+      /"links" is not a valid key for a "create" operation/,
+      'only a read carries a link graph to narrow',
+    );
+    assert.throws(
+      () => {
+        class Report extends CardDef {
+          @operation static summary = { base: 'read', links: 'some' };
+        }
+        return Report;
+      },
+      /`links` must name how much of the card's link graph/,
+      'and it names one of the three strategies',
+    );
+    assert.throws(
+      () => {
+        class Report extends CardDef {
           @operation static escalate = {
             base: 'transform',
             set: { status: 'escalated' },
