@@ -78,11 +78,19 @@ export class FileFittedShell extends GlimmerComponent<FileFittedShellSignature> 
 
   // Hidden from visual comparison in the template, not here: the value is
   // correct for a user's own realm, where `lastModified` is a real
-  // modification time. CI normalizes the base and skills realms' mtimes to a
-  // hash of each file's contents (`scripts/normalize-realm-mtimes.mjs`), so in
-  // a snapshot this renders an age derived from a number that is not a date,
-  // and an ordinary content edit moves it between `relativeDate`'s buckets.
-  // Comparing it there reports a rendering change when only the bytes differ.
+  // modification time. CI normalizes the mtimes of every realm its test stack
+  // serves from disk — base, skills, openrouter, the test realm and the
+  // realistic fixtures — to a hash of each file's contents
+  // (`scripts/normalize-realm-mtimes.mjs`), so in a snapshot this renders an
+  // age derived from a number that is not a date, and an ordinary content edit
+  // moves it between `relativeDate`'s buckets. Comparing it there reports a
+  // rendering change when only the bytes differ.
+  //
+  // The embedded and isolated shells hide the same value for the same reason.
+  // They format it with `shortDate` rather than `relativeDate`, which is more
+  // exposed, not less: a new hash is almost always a new calendar date, so
+  // every content edit changes what they render rather than only an edit that
+  // crosses a bucket boundary.
   get modified() {
     return relativeDate(this.args.model?.lastModified);
   }
