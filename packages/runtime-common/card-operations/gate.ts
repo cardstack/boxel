@@ -1,4 +1,4 @@
-import type { ResolvedCodeRef } from '../code-ref.ts';
+import type { CodeRef, ResolvedCodeRef } from '../code-ref.ts';
 import type { Definition } from '../definitions.ts';
 import { codeRefFromInternalKey } from '../index.ts';
 import type { LocalPath } from '../paths.ts';
@@ -7,11 +7,12 @@ import type { CardResource } from '../resource-types.ts';
 import { localPathFor, pathsFor } from './dispatch.ts';
 import type { OperationCore, OperationScope } from './dispatch.ts';
 import type { BxlMutationModule } from './executors.ts';
-import type {
-  CompiledOperationGrant,
-  CompiledPolicyPredicate,
-  CompiledPolicyRule,
-  CompiledRealmPolicy,
+import {
+  realmPolicyRef,
+  type CompiledOperationGrant,
+  type CompiledPolicyPredicate,
+  type CompiledPolicyRule,
+  type CompiledRealmPolicy,
 } from './policy.ts';
 import { loadBxlTransform } from './transforms.ts';
 import {
@@ -57,6 +58,12 @@ import {
 // - Any write to the card the realm's policy key names.
 // - Any write to the realm's config card, which holds that key and the
 //   settings a predicate reads through `realmConfig()`.
+// - Any write to a policy card, a card of `RealmPolicy` or a subtype of it,
+//   under whatever name it is invoked, and any create that mints one, refused
+//   before a matching grant admits anything. It does not matter whether a
+//   realm's policy key names the card. A key can come to name a card no key
+//   names today, and a card another realm's key names is that realm's
+//   authorization wherever it is stored.
 //
 // Every way the gate can fail denies. A policy that is gone, a compiled policy
 // with no rule for the type, a predicate that throws or answers anything but
@@ -228,8 +235,8 @@ export async function gateOperation(
   }
   // The realm's config card and the card its policy key names together
   // decide every grant, so no grant writes either, whatever their types
-  // declare. A type marks only the operations it declares, and the policy
-  // card's own type may leave one unmarked, so the rule follows the cards'
+  // declare. The key may name a card of any type, and a write could turn a
+  // card that is not a policy card into one. So this rule follows the cards'
   // identities rather than their types.
   if (
     subject.kind === 'card' &&
@@ -265,6 +272,12 @@ export async function gateOperation(
   // asked again with the rest.
   if (
     await nonGrantableInChain(core, types.slice(typeDefinition ? 1 : 0), name)
+  ) {
+    return GATE_REFUSED;
+  }
+  if (
+    isWrite(base) &&
+    (await writesPolicyCard(core, core.policy, types, definition))
   ) {
     return GATE_REFUSED;
   }
@@ -366,6 +379,57 @@ export async function nonGrantableInChain(
     }),
   );
   return answers.includes(true);
+}
+
+// Whether a write would change a policy card or mint one. `types` is the
+// target's adoption chain: a stored card's, or for a plain create the chain of
+// the type it mints. A named create mints the type its declaration names,
+// whatever type it is invoked on, so that type's chain is the one judged.
+//
+// A policy card's writes are marked non-grantable where its type declares
+// them. This covers what those marks cannot reach: a subtype's own named
+// writes, and a create, which a type cannot mark without naming what it
+// mints.
+//
+// A chain that cannot be read might be a policy card's, so it answers yes.
+async function writesPolicyCard(
+  core: OperationCore,
+  access: OperationPolicyAccess,
+  types: string[],
+  definition: OperationDefinition,
+): Promise<boolean> {
+  let written =
+    definition.base === 'create' && definition.of
+      ? await mintedChain(core, definition.of)
+      : types;
+  if (!written) {
+    return true;
+  }
+  let policyKeys: string[];
+  try {
+    policyKeys = await access.typeKeys(realmPolicyRef);
+  } catch {
+    return true;
+  }
+  return written.some((key) => policyKeys.includes(key));
+}
+
+// The adoption chain of the type a named create mints, as the definition
+// cache records it beside that type's definition. Undefined when it cannot be
+// read.
+async function mintedChain(
+  core: OperationCore,
+  of: CodeRef,
+): Promise<string[] | undefined> {
+  let resolved = core.resolveCodeRef(of, new URL(core.realmURL));
+  if (!resolved) {
+    return undefined;
+  }
+  try {
+    return (await core.definitionLookup.lookupDefinitionEntry(resolved))?.types;
+  } catch {
+    return undefined;
+  }
 }
 
 // Whether the realm ACL declined this invocation. A caller declined only
