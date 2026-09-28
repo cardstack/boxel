@@ -246,3 +246,182 @@ module('catalog reuse > operations routing table', function () {
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// The reuse artifact contract
+// ---------------------------------------------------------------------------
+
+// Two prompts author cards: `issue-design.md` (the design half of a
+// phase-split issue) and `issue-implement.md` (the single-turn path). A run
+// takes one or the other, never both, so a rule added to one and forgotten in
+// the other is delivered on half the runs and absent on the rest — and which
+// half a given run got is not visible in its output. That asymmetry is what
+// this module holds shut: every clause below is asserted against both files.
+//
+// These are the artifact requirements, which the prompt owns. Method — query
+// shapes, how to judge a hit, what each specType entitles you to — belongs to
+// the `catalog-reuse` skill and is deliberately not asserted here.
+module('catalog reuse > artifact contract', function () {
+  const AUTHORING_PROMPTS = ['issue-design.md', 'issue-implement.md'];
+
+  async function readPrompt(name: string): Promise<string> {
+    return readFile(join(import.meta.dirname, '..', 'prompts', name), 'utf8');
+  }
+
+  // A near miss with the right shape was refused as REUSE-BLOCKED because the
+  // table offered no row type for specializing it, even though the skill
+  // sanctions `extends` and the catalog's own cards are built that way.
+  test('both authoring prompts offer EXTEND as a disposition', async function (assert) {
+    for (let name of AUTHORING_PROMPTS) {
+      let prompt = await readPrompt(name);
+      assert.true(prompt.includes('`EXTEND`'), `${name} names EXTEND`);
+      assert.true(
+        /EXTEND[\s\S]{0,400}(subclass|adopt it as a base|specialize)/.test(
+          prompt,
+        ),
+        `${name} says what EXTEND does`,
+      );
+    }
+  });
+
+  // A kind with no row reads exactly like a kind nobody searched. The first
+  // run's table carried rows for the card and its fields only, against 62
+  // components and 11 commands indexed.
+  test('both authoring prompts require all four block kinds to be accounted for', async function (assert) {
+    for (let name of AUTHORING_PROMPTS) {
+      let prompt = await readPrompt(name);
+      for (let kind of ['`card`', '`field`', '`component`', '`command`']) {
+        assert.true(prompt.includes(kind), `${name} names the kind ${kind}`);
+      }
+      assert.true(
+        prompt.includes('GAP'),
+        `${name} offers GAP as the "nothing fitted" row`,
+      );
+      assert.true(
+        /all four kinds|four block kinds/i.test(prompt),
+        `${name} requires every kind to carry a row or an explicit GAP`,
+      );
+    }
+  });
+
+  // A conclusion drawn over a partial index is indistinguishable from one
+  // drawn over a complete one unless the notes say what was searched.
+  test('both authoring prompts require the searched scope in the notes', async function (assert) {
+    for (let name of AUTHORING_PROMPTS) {
+      let prompt = await readPrompt(name);
+      assert.true(prompt.includes('searched:'), `${name} names the line`);
+      assert.true(prompt.includes('CAVEAT:'), `${name} names the caveat form`);
+    }
+  });
+
+  // Base-realm type selection belongs to no step unless a step claims it: the
+  // reuse table correctly excludes base types, and the design turn did not own
+  // them, so the concrete type was whatever the bootstrap issue text named.
+  test('both authoring prompts own base-realm type selection', async function (assert) {
+    for (let name of AUTHORING_PROMPTS) {
+      let prompt = await readPrompt(name);
+      assert.true(prompt.includes('Base types'), `${name} names the block`);
+      assert.true(
+        prompt.includes('type-fixed:'),
+        `${name} carries the escape hatch that marks a real constraint`,
+      );
+      for (let type of ['EmailField', 'PhoneNumberField']) {
+        assert.true(
+          prompt.includes(type),
+          `${name} names ${type}, which a bare string would otherwise absorb`,
+        );
+      }
+    }
+  });
+
+  // The Base types block is only binding if the turn that writes the schema is
+  // told it outranks the issue body.
+  test('the build turn treats the Base types block as binding', async function (assert) {
+    let prompt = await readPrompt('issue-build.md');
+    assert.true(prompt.includes('Base types'), 'the block reaches the builder');
+    assert.true(
+      /overrides any\s+field type named in the issue body/.test(prompt),
+      'the builder is told it outranks the issue text',
+    );
+    assert.true(
+      prompt.includes('type-fixed:'),
+      'the builder honours the one exception',
+    );
+  });
+
+  // A build-local token vocabulary is one no external component can match, so
+  // every presentational mismatch is structural rather than incidental.
+  test('the design foundation resolves a platform Theme, not a private vocabulary', async function (assert) {
+    let prompt = await readPrompt('issue-design-foundation.md');
+    assert.true(prompt.includes('`Theme`'), 'the Theme card is named');
+    assert.true(
+      prompt.includes('never the source of truth'),
+      'tokens.css is demoted to a mirror of the Theme',
+    );
+    assert.true(
+      prompt.includes('cardInfo.theme'),
+      'the wiring the build turn performs is named',
+    );
+  });
+
+  test('the build turn links the Theme and keeps literals out of templates', async function (assert) {
+    let prompt = await readPrompt('issue-build.md');
+    assert.true(prompt.includes('cardInfo.theme'), 'the link is required');
+    assert.true(
+      /no color, font-family\s+or spacing literal/i.test(prompt),
+      'literals are named as the defect',
+    );
+  });
+
+  // The existing mitigation constrained negative bans only. Both presentational
+  // refusals in the first run arrived through positive signatures, which
+  // exclude a component just as hard.
+  test('the brand guide may not fix the rendering form of a component-supplied concept', async function (assert) {
+    let prompt = await readPrompt('issue-design-foundation.md');
+    assert.true(
+      prompt.includes('A positive signature excludes just as hard as a ban.'),
+      'the mitigation covers signatures, not only bans',
+    );
+    assert.true(
+      /Declare each\s+of those \*\*open\*\*/.test(prompt),
+      'such concepts are declared open rather than settled',
+    );
+    for (let concept of ['avatar', 'status', 'badge']) {
+      assert.true(
+        prompt.includes(concept),
+        `${concept} is named among the open concepts`,
+      );
+    }
+  });
+
+  // The design-foundation turn binds every later turn, so it is the one place
+  // a catalog sweep changes what the whole build can reuse.
+  test('the design foundation surveys the catalog before deciding', async function (assert) {
+    let prompt = await readPrompt('issue-design-foundation.md');
+    let surveyIdx = prompt.indexOf('## 1. Survey the catalog');
+    let brandIdx = prompt.indexOf('## 3. Brand guide');
+    assert.true(surveyIdx > -1, 'the sweep exists');
+    assert.true(
+      surveyIdx < brandIdx,
+      'the sweep runs before the guide that binds every later turn',
+    );
+    assert.true(
+      prompt.includes('read-only reconnaissance'),
+      'the sweep does not duplicate the per-card reuse decision',
+    );
+  });
+
+  // The issue text is read as binding downstream, so a type named there
+  // forecloses a better one before reuse or type selection is ever consulted.
+  test('bootstrap authors field lists as needs rather than types', async function (assert) {
+    let prompt = await readPrompt('bootstrap-implement.md');
+    assert.true(
+      prompt.includes('**Name each field as a need, not as a type.**'),
+      'the rule is stated',
+    );
+    assert.true(
+      prompt.includes('type-fixed:'),
+      'a genuinely load-bearing type can still be pinned',
+    );
+  });
+});

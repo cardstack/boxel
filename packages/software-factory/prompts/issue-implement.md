@@ -82,34 +82,88 @@ the mockup already fixed is one you can no longer adopt.
 
 - **Enumerate the needs this issue implies, the card itself first.** The
   card you are building is need #1 — the catalog may already publish it, or
-  one close enough to adopt. Then its fields, then any component or command.
-  A list that starts at the fields has already decided the card is new.
+  one close enough to adopt or extend. Then its fields, then the components
+  it renders through, then any command it invokes. A list that starts at the
+  fields has already decided the card is new.
 - **Consult the catalog per need.** `catalog-reuse` has the query shapes and
   how to judge a hit — follow it rather than inventing a query.
-- **Disposition every hit you get back.** Adopted, or refused naming the
-  mismatched fields or the design rule it breaks. A hit you drop without
-  saying why is indistinguishable from one you never saw.
+- **Search all four block kinds.** `field` and `card` are the ones that come
+  to mind; `component` and `command` are reuse units too, and the catalog
+  publishes them in quantity. A kind you never searched is a kind you cannot
+  report on.
+- **Keep what you searched, not only what you found** — the realms and paths
+  queried, and the result count for each. A count of zero for a tree that
+  ought to be populated (`cards/`, `fields/`) means your *view* of the
+  catalog is partial, not that the catalog is empty: `post_update` it and
+  record it as a `CAVEAT:` in the notes. A confident "nearest match" drawn
+  from an incomplete index is worse than no conclusion, because nothing
+  downstream can tell the two apart.
+- **Disposition every hit you get back.** Adopted, extended, or refused
+  naming the mismatched fields or the design rule it breaks. A hit you drop
+  without saying why is indistinguishable from one you never saw.
+- **A near miss is something to extend, not something to refuse.** When a
+  catalog block has the right shape and is missing a few fields, `EXTEND` it
+  and add them. Reserve `REUSE-BLOCKED` for a candidate you genuinely cannot
+  build on.
+- **Presentation is a weak reason to refuse.** Colors, spacing and type that
+  do not match the family are a theming delta, and theming closes it — adopt
+  and theme. Refuse on presentation only when the *structure* is wrong: it
+  renders a fundamentally different affordance than this card needs.
 - **Base-realm imports are not reuse.** `StringField`, `EmailField`,
   `ImageDef` and their siblings are the standard library. Never record one
-  as a reuse decision.
+  as a reuse decision — §3 owns them instead.
 - Record the outcome as a **Reuse decisions** table in
-  `design/<card-slug>-NOTES.md` — one row per need, including the card
-  itself: need → decision (`REFERENCE` / `REUSE-BLOCKED` / `GAP`) → module
-  and name → wiring form (`adoptsFrom`, import + `contains`, `linksTo`).
-  One row per need, the decisions told apart by cause: `REFERENCE` (the
-  catalog has it — wire it in), `REUSE-BLOCKED` (a candidate exists but
-  cannot be used — name it and the blocking mechanism, then build it
-  yourself), `GAP` (the catalog has nothing — build it yourself). The last
-  two both end in building it yourself; never record both for one need. Wire
-  every `REFERENCE` row in §4 rather than writing your own equivalent.
-  Every definition you hand-build carries a row — `GAP` or `REUSE-BLOCKED`,
-  either is a correct outcome with a real reason. A hand-built definition
-  with no row at all is the omission.
+  `design/<card-slug>-NOTES.md`, under a `searched:` line giving the paths
+  queried and their per-kind spec counts (plus a `CAVEAT:` line if any count
+  looked partial). One row per need, including the card itself:
+  need → kind (`card` / `field` / `component` / `command`) → decision
+  (`REFERENCE` / `EXTEND` / `REUSE-BLOCKED` / `GAP`) → module and name →
+  wiring form (`adoptsFrom` or `extends`, import + `contains`, `linksTo`).
+  The decisions are told apart by cause: `REFERENCE` (the catalog has it —
+  wire it in as-is), `EXTEND` (a near miss with the right shape — subclass
+  it and name the fields you add), `REUSE-BLOCKED` (a candidate exists but
+  cannot be used or extended — name it and the blocking mechanism, then
+  build it yourself), `GAP` (the catalog has nothing — build it yourself).
+  The last two both end in building it yourself; never record both for one
+  need. Wire every `REFERENCE` and `EXTEND` row in §5 rather than writing
+  your own equivalent. **All four kinds must appear** — as a decision row,
+  or as one explicit `GAP` row saying nothing in that kind fitted; a kind
+  with no row is indistinguishable from one never searched. Every definition
+  you hand-build carries a row — `GAP` or `REUSE-BLOCKED`, either is a
+  correct outcome with a real reason. A hand-built definition with no row at
+  all is the omission.
 - **If a gate blocks an adoption you want**, record `REUSE-BLOCKED` with the
   gate and its exact error and `post_update` the same — never quietly
   hand-build the thing instead.
 
-## 3. DESIGN — HTML mockup before any schema
+## 3. BASE TYPES — resolve each need to its most specific type
+
+Reuse asks *whose definition*. This asks *which standard-library type*, and
+it is a separate question you must answer before the mockup fixes a schema.
+
+- Pick the **most specific base-realm type that fits** each need —
+  `EmailField` over `StringField` for an email address, `PhoneNumberField`
+  for a phone number, `UrlField` for a link, and likewise `DateField`,
+  `BooleanField`, `EnumField`, `AddressField`, `AmountWithCurrency`,
+  `ColorField`, `CountryField`. A specific type carries validation and a real
+  editor; a string merely holds the same characters.
+- **The issue body's field list states intent, not prescription.** An issue
+  that says `email` (StringField) is naming the *need*; you are the step that
+  resolves it to a type. Choose the more specific type over what the issue
+  text names, unless that entry is marked `type-fixed:` — which means the
+  concrete type is load-bearing and must survive.
+- Record these as a **Base types** block in the notes, *not* in the Reuse
+  decisions table — keeping them apart is what lets that table mean "a
+  catalog block was considered":
+
+  ```
+  Base types
+  - email → EmailField (issue said StringField; validated + mail editor)
+  - phone → PhoneNumberField (issue said StringField)
+  - joinedOn → DateField  [type-fixed: per issue]
+  ```
+
+## 4. DESIGN — HTML mockup before any schema
 
 - Write `design/<card-slug>.html`: **ONE page** — a plain HTML+CSS mockup of
   the card with **hard-coded, realistic sample copy** (real names, real
@@ -124,12 +178,17 @@ the mockup already fixed is one you can no longer adopt.
   Knowledge section. Revise the HTML and re-screenshot. Do at least one
   full crit-and-revise pass; stop when you would show it to a designer.
 
-## 4. BUILD — translate the accepted mockup
+## 5. BUILD — translate the accepted mockup
 
 - Write the card definition (`.gts`) with `isolated`, `embedded`, AND
   `fitted` templates that reproduce the accepted mockup. Design decisions
-  were made in step 3 — this is a translation task. Use theme CSS variables
-  (`var(--*)`) rather than hard-coded colors where a theme exists.
+  were made in step 4 — this is a translation task.
+- **Style through the project Theme.** Set `cardInfo.theme` on your sample
+  instances to the Theme the design-foundation turn resolved (its id is in
+  the brand guide), and write every template value as `var(--*)` per the
+  notes' theme-variable mapping. No color, font-family or spacing literal
+  belongs in a template — a literal is a value the Theme cannot reach, so
+  swapping the Theme silently leaves it behind.
 - Fields are an API other cards compose with: name them for consumers,
   and prefer FieldDefs for shapes that will recur.
 - Write at least one sample card instance (`.json`) using the SAME sample
@@ -139,7 +198,7 @@ the mockup already fixed is one you can no longer adopt.
   `linkedExamples`, with its catalog-facing `title` and one-sentence
   `description` attributes populated (never left empty).
 
-## 5. VERIFY
+## 6. VERIFY
 
 - `run_lint({ path })` each file you wrote; then `run_parse()`,
   `run_evaluate()`, and `run_instantiate()` for the whole realm.
@@ -147,7 +206,7 @@ the mockup already fixed is one you can no longer adopt.
   belong to a separate hardening phase that runs later; this loop ships
   zero tests by design.
 
-## 6. Done
+## 7. Done
 
 - Call `signal_done` (factory MCP tool). The orchestrator validates
   parse/lint/eval/instantiate automatically. Do NOT set the issue status
