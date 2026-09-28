@@ -34,7 +34,7 @@ function makeStubRealm(url: string = realmURL): Realm {
 // Mirrors the pg-queue publish path closely enough to exercise the waiter
 // plumbing: the job's deferred is settled through makeQueueWaiter with the
 // caller-provided mapResult, exactly as a real queue does when a worker
-// resolves or rejects the job.
+// resolves or rejects the job. Jobs are numbered in publish order from 1.
 function makeStubQueue() {
   let waiters: ReturnType<typeof makeQueueWaiter>[] = [];
   let queue: QueuePublisher = {
@@ -49,7 +49,7 @@ function makeStubQueue() {
             (identityResultMapper as (result: PgPrimitive) => TResult),
         ),
       );
-      return new Job(1, deferred);
+      return new Job(waiters.length, deferred);
     },
     destroy: async () => {},
   };
@@ -600,5 +600,107 @@ module(basename(import.meta.filename), function (hooks) {
       undefined,
       'gate is drained once the failed copy settles',
     );
+  });
+
+  // The pending time is wall-clock, so it is normalized out of the assertion.
+  function describePasses(updater: RealmIndexUpdater) {
+    return updater
+      .describeIndexing()
+      .map((pass) => pass.replace(/pending \d+s/, 'pending Ns'));
+  }
+
+  test('describeIndexing names each pending pass by its job, type and files until it settles', async function (assert) {
+    let { queue, waiters } = makeStubQueue();
+    let updater = new RealmIndexUpdater({
+      realm: makeStubRealm(),
+      dbAdapter: {} as DBAdapter,
+      queue,
+    });
+
+    assert.deepEqual(describePasses(updater), [], 'nothing is pending');
+
+    let first = await updater.enqueueUpdate([new URL(`${realmURL}person.gts`)]);
+    first.settled.catch(() => {});
+    let second = await updater.enqueueUpdate([
+      new URL(`${realmURL}Person/1.json`),
+      new URL(`${realmURL}Person/2.json`),
+    ]);
+    second.settled.catch(() => {});
+
+    assert.deepEqual(
+      describePasses(updater),
+      [
+        `job 1 (incremental-index, 1 file: ${realmURL}person.gts, pending Ns)`,
+        `job 2 (incremental-index, 2 files, first ${realmURL}Person/1.json, pending Ns)`,
+      ],
+      'each pass is named by its queue job and the files it indexes',
+    );
+
+    waiters[0].rejectFromResult(serializedWorkerError);
+    await first.settled.catch(() => {});
+    assert.deepEqual(
+      describePasses(updater),
+      [
+        `job 2 (incremental-index, 2 files, first ${realmURL}Person/1.json, pending Ns)`,
+      ],
+      'a settled pass is no longer named',
+    );
+
+    waiters[1].rejectFromResult(serializedWorkerError);
+    await second.settled.catch(() => {});
+    assert.deepEqual(describePasses(updater), [], 'nothing is pending');
+  });
+
+  test('describeIndexing names a pass whose enqueue has not landed yet, then its job', async function (assert) {
+    let { queue, waiters } = makeStubQueue();
+    let updater = new RealmIndexUpdater({
+      realm: makeStubRealm(),
+      dbAdapter: {} as DBAdapter,
+      queue,
+    });
+
+    let copyPromise = updater.copy(new URL('http://127.0.0.1:4444/source/'));
+    copyPromise.catch(() => {});
+    assert.deepEqual(
+      describePasses(updater),
+      ['job not yet enqueued (copy-index, pending Ns)'],
+      'the pass is named before the queue has given it a job',
+    );
+
+    while (waiters.length === 0) {
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+    assert.deepEqual(
+      describePasses(updater),
+      ['job 1 (copy-index, pending Ns)'],
+      'the pass is named by its job once enqueued',
+    );
+
+    waiters[0].rejectFromResult(serializedWorkerError);
+    await copyPromise.catch(() => {});
+    await settleMicrotasksAndUnhandledRejections();
+    assert.deepEqual(describePasses(updater), [], 'nothing is pending');
+  });
+
+  test('describeIndexing names a pending from-scratch pass', async function (assert) {
+    let { queue, waiters } = makeStubQueue();
+    let updater = new RealmIndexUpdater({
+      realm: makeStubRealm(),
+      dbAdapter: {} as DBAdapter,
+      queue,
+    });
+
+    let { published, completed } = updater.publishFullIndex();
+    completed.catch(() => {});
+    await published;
+    assert.deepEqual(
+      describePasses(updater),
+      ['job 1 (from-scratch-index, pending Ns)'],
+      'the from-scratch pass is named alongside the incremental ones',
+    );
+
+    waiters[0].rejectFromResult(serializedWorkerError);
+    await completed.catch(() => {});
+    assert.deepEqual(describePasses(updater), [], 'nothing is pending');
   });
 });

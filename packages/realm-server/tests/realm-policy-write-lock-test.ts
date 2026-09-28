@@ -11,21 +11,6 @@ import type {
   Realm,
   RealmAdapter,
 } from '@cardstack/runtime-common';
-import {
-  batchEntryFor,
-  commitBatch,
-  dischargePendingDecision,
-  newOperationScope,
-  paramsFor,
-  resolveOperation,
-  scopeCallerFor,
-  stageWriteEntry,
-  type EnvelopeEntry,
-  type MatchedGrant,
-  type OperationDefinition,
-  type OperationTarget,
-  type PendingDecision,
-} from '@cardstack/runtime-common/card-operations';
 import type { LocalPath } from '@cardstack/runtime-common/paths';
 import type { PgAdapter } from '@cardstack/postgres';
 import { resetCatalogRealms } from '../handlers/handle-fetch-catalog-realms.ts';
@@ -528,108 +513,67 @@ module(basename(import.meta.filename), function (hooks) {
     });
 
     test('a create against a type is judged by the card it would mint, not the payload it was sent', async function (assert) {
-      // Staged through the coordinator as a batch stages it, with the
-      // decision the gate records for a pending write: the grants it matched
-      // and the type's definition.
-      let core = education.operationCore;
-      let target: OperationTarget = {
-        kind: 'type',
-        codeRef: adoptsFrom(BULLETIN),
-        realm: EDUCATION,
-      };
-      let policy = await education.getCompiledPolicy();
-      let typeDefinition = await core.definitionLookup.lookupDefinition(
-        adoptsFrom(BULLETIN),
-      );
-      let decisionFor = (operation: string): PendingDecision => ({
-        kind: 'pending',
-        grants: (policy?.rules ?? [])
-          .filter((rule) => rule.targetType.name === 'Bulletin')
-          .flatMap((rule) =>
-            rule.grants
-              .filter((grant) => grant.operation === operation)
-              .map((grant): MatchedGrant => ({ rule, grant })),
-          ),
-        typeDefinition,
-      });
-      let scope = newOperationScope(core, {
-        caller: scopeCallerFor(TEACHER),
-        coarseDeclined: 'all',
-      });
-      let mint = async (
-        name: string,
-        definition: OperationDefinition,
-        data: Record<string, unknown>,
-      ) => {
-        let decision = decisionFor(name);
-        let entry: EnvelopeEntry = { op: 'invoke', position: 0, name, data };
-        let staged = await stageWriteEntry(
-          { entry, target, definition, decision, scope },
-          {
-            name,
-            params: paramsFor(entry),
-            actor: TEACHER,
-            realmConfig: async () => ({}),
-          },
-        );
-        let [result] = await commitBatch(
-          education.batchCore,
-          [
-            {
-              ...batchEntryFor(staged.entry, definition),
-              admit: (judged) =>
-                dischargePendingDecision(
-                  core,
-                  { target, name, decision, scope },
-                  judged,
-                ),
+      let createAgainstType = (name: string, data: Record<string, unknown>) =>
+        operations(
+          AUTH.teacher(),
+          invoke(name, {
+            data: {
+              ...data,
+              meta: { adoptsFrom: adoptsFrom(BULLETIN) },
             },
-          ],
-          { actor: TEACHER },
+          }),
         );
-        return result?.id;
+      let audienceOf = async (response: Response) => {
+        let id = (
+          response.body as { 'atomic:results': { data: { id: string } }[] }
+        )['atomic:results'][0].data.id;
+        return (
+          (await getCard(id, AUTH.admin())).body as {
+            data: { attributes: { audience?: string } };
+          }
+        ).data.attributes.audience;
       };
-      let audienceOf = async (id: string | undefined) =>
-        id
-          ? (
-              (await getCard(id, AUTH.admin())).body as {
-                data: { attributes: { audience?: string } };
-              }
-            ).data.attributes.audience
-          : undefined;
 
-      let post = await resolveOperation(core, target, 'post');
+      let posted = await createAgainstType('post', { body: 'Picture day' });
       assert.strictEqual(
-        await audienceOf(await mint('post', post, { body: 'Picture day' })),
-        'staff',
+        posted.status,
+        200,
         'a post naming no group is admitted on the audience its input and template give it',
       );
-      await assert.rejects(
-        mint('post', post, {
+      assert.strictEqual(await audienceOf(posted), 'staff');
+      assertNotPermitted(
+        assert,
+        await createAgainstType('post', {
           body: 'Picture day',
           group: 'students',
           audience: 'staff',
         }),
-        /operation-not-permitted/,
-        'and one whose template writes another audience is refused, whatever else its payload names',
+        'a post whose template writes another audience, whatever else its payload names',
       );
 
-      let create = await resolveOperation(core, target, 'create');
-      let resource = (audience: string) => ({
+      let created = await createAgainstType('create', {
         type: 'card',
-        attributes: { body: 'Picture day', audience },
-        meta: { adoptsFrom: adoptsFrom(BULLETIN) },
+        attributes: { body: 'Picture day', audience: 'staff' },
       });
       assert.strictEqual(
-        await audienceOf(await mint('create', create, resource('staff'))),
-        'staff',
+        created.status,
+        200,
         'a plain create is judged by the card it mints',
       );
-      await assert.rejects(
-        mint('create', create, resource('students')),
-        /operation-not-permitted/,
+      assert.strictEqual(await audienceOf(created), 'staff');
+      assertNotPermitted(
+        assert,
+        await createAgainstType('create', {
+          type: 'card',
+          attributes: { body: 'Picture day', audience: 'students' },
+        }),
+        'a plain create of a card its grant does not admit',
       );
-      assert.strictEqual(gateStats().pendingDischarges, 4);
+      assert.strictEqual(
+        gateStats().pendingDischarges,
+        4,
+        'each decided under the write lock',
+      );
     });
   });
 
