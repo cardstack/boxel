@@ -1,5 +1,6 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
+import { writeFileSync } from 'fs';
 import { basename, join } from 'path';
 import { dirSync } from 'tmp';
 import { rri } from '@cardstack/runtime-common';
@@ -31,10 +32,8 @@ import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
 // A stored-bytes read is resolved before any definition, so the policy has no
 // type handed to it the way every other behavior does. It types the target
 // itself: a data file by the `FileDef` its extension names, and a card's raw
-// `.json` by the card's own type. These tests drive the operation directly
-// rather than over HTTP: the byte routes refuse a caller the realm ACL
-// declined before any operation is dispatched, so the type resolution is
-// pinned where it happens, in the gate.
+// `.json` by the card's own type. These tests drive the operation directly,
+// since that typing happens in the gate whichever route a read arrives by.
 const EDUCATION = 'http://127.0.0.1:4444/education/';
 const ORG = 'http://127.0.0.1:4444/org/';
 const ADMIN = '@education-admin:localhost';
@@ -143,6 +142,10 @@ const POLICIES: Record<string, Rule[]> = {
 };
 
 const ROOM_204_SOURCE = `${EDUCATION}classrooms/room-204.json`;
+const FRESH_SOURCE = `${EDUCATION}classrooms/fresh.json`;
+const SCHEDULE = `${EDUCATION}public/schedule.json`;
+const GHOST_PDF = `${EDUCATION}public/ghost.pdf`;
+const GHOST_SOURCE = `${EDUCATION}classrooms/ghost.json`;
 const ROOM_204 = `${EDUCATION}classrooms/room-204`;
 const BULLETIN_SOURCE = `${EDUCATION}bulletins/b1.json`;
 const BROKEN_SOURCE = `${EDUCATION}classrooms/broken.json`;
@@ -158,6 +161,7 @@ module(basename(import.meta.filename), function (hooks) {
   let education: Realm;
   let org: Realm;
   let server: Server;
+  let realmsRootPath: string;
 
   setupCatalogTestSubset(hooks);
 
@@ -170,9 +174,10 @@ module(basename(import.meta.filename), function (hooks) {
     publisher: QueuePublisher;
     runner: QueueRunner;
   }) {
+    realmsRootPath = join(dirSync().name, 'realm_server_1');
     let result = await runTestRealmServerWithRealms({
       virtualNetwork: createVirtualNetwork(),
-      realmsRootPath: join(dirSync().name, 'realm_server_1'),
+      realmsRootPath,
       realms: [
         {
           realmURL: new URL(EDUCATION),
@@ -200,6 +205,8 @@ module(basename(import.meta.filename), function (hooks) {
             'public/handbook.pdf': '%PDF-1.4 the student handbook',
             'public/logo.png': 'PNG the school crest',
             'public/styles.css': '.crest { color: navy; }',
+            // A `.json` that holds no card: a data file.
+            'public/schedule.json': JSON.stringify({ periods: [1, 2, 3] }),
             'public/notes.txt': 'term notes',
             'private/handbook.pdf': '%PDF-1.4 the staff handbook',
           },
@@ -259,9 +266,8 @@ module(basename(import.meta.filename), function (hooks) {
     await education.indexing();
   }
 
-  // A stored-bytes read as a caller the realm ACL declined. That is the one
-  // case the policy decides, and the byte routes will reach it the same way
-  // once they consume the ACL's outcome.
+  // A stored-bytes read as a caller the realm ACL declined, which is the one
+  // case the policy decides.
   function readSource(url: string, actor: string = TEACHER) {
     return runOperation(education.operationCore, {
       target: { kind: 'instance' as const, url },
@@ -314,6 +320,19 @@ module(basename(import.meta.filename), function (hooks) {
     return education.__testOnlyPolicyGateStats();
   }
 
+  // Put bytes on the Education realm's disk the way a write does before its
+  // index job lands: the file watcher is off, so nothing indexes them.
+  function storeUnindexed(localPath: string, content: string) {
+    writeFileSync(join(realmsRootPath, 'realm_0', localPath), content);
+  }
+
+  function classroomSource(title: string) {
+    return card(
+      { module: '../classroom', name: 'Classroom' },
+      { title, teacherIds: [TEACHER], announcements: [] },
+    );
+  }
+
   module('a data file is matched by the type its extension names', function () {
     test('a PdfDef grant does not cover an image', async function (assert) {
       await served(assert, HANDBOOK, 'a .pdf under a PdfDef grant');
@@ -361,29 +380,20 @@ module(basename(import.meta.filename), function (hooks) {
       await served(assert, BULLETIN_SOURCE, "a Bulletin's .json");
     });
 
-    test('a card the realm could not index is not read as a data file', async function (assert) {
-      // An error row says the path holds a card, and says nothing the gate can
-      // trust about its type. Falling through to the file its extension claims
-      // would make "any data file" mean "every broken card's raw source".
+    test('a card whose type does not resolve is not read as a data file', async function (assert) {
+      // Its document is a card, so it is not a data file, and the type it
+      // names is not there, so nothing matches it. Reading it as the file its
+      // extension claims would make "any data file" mean "every broken card's
+      // raw source".
       await policy('anyFile');
-      // The precondition the refusal rests on. Without an error row the path
-      // would be typed as a file, and a refusal would say nothing about how
-      // an error row is judged.
-      let row = await education.operationCore.indexQueryEngine.instance(
-        new URL(BROKEN_SOURCE.slice(0, -'.json'.length)),
-        { includeErrors: true },
-      );
-      assert.strictEqual(
-        row?.type,
-        'instance-error',
-        'the realm holds an error row',
-      );
       await refused(
         assert,
         BROKEN_SOURCE,
         "a broken card's .json under a FileDef grant",
       );
-      await served(assert, HANDBOOK, 'a real data file, for contrast');
+      // The contrast that makes the refusal mean something: a `.json` that
+      // holds no card is a data file, and the same grant serves it.
+      await served(assert, SCHEDULE, 'a .json that holds no card');
     });
 
     test('a card’s .json is never matched as a JsonFileDef', async function (assert) {
@@ -392,6 +402,104 @@ module(basename(import.meta.filename), function (hooks) {
       await policy('anyFile');
       await refused(assert, ROOM_204_SOURCE, "a Classroom's .json");
       await served(assert, HANDBOOK, 'a real data file, for contrast');
+    });
+  });
+
+  module('the bytes served decide, not the index', function () {
+    test('a card written but not yet indexed is not read as a data file', async function (assert) {
+      storeUnindexed('classrooms/fresh.json', classroomSource('Fresh'));
+      await policy('anyFile');
+      await refused(assert, FRESH_SOURCE, 'a fresh card under a FileDef grant');
+      await policy('classroomSource');
+      await served(
+        assert,
+        FRESH_SOURCE,
+        'the same fresh card under a Classroom grant',
+      );
+    });
+
+    test('a replaced document is judged by the type it now names', async function (assert) {
+      await policy('classroomSource');
+      await refused(assert, BULLETIN_SOURCE, 'the Bulletin, as indexed');
+      // The index row still says Bulletin; the bytes a read would serve are a
+      // Classroom's.
+      storeUnindexed('bulletins/b1.json', classroomSource('Rehomed'));
+      await served(
+        assert,
+        BULLETIN_SOURCE,
+        'the same path, now holding a Classroom',
+      );
+    });
+
+    test('a path with nothing stored at it is refused like a card is', async function (assert) {
+      // A grant on `FileDef` admits every data file, so an empty path it
+      // admitted would answer "not found" while a card's answered "not
+      // permitted" — which would say which cards exist.
+      await policy('anyFile');
+      await refused(assert, GHOST_PDF, 'a .pdf that is not there');
+      await refused(assert, GHOST_SOURCE, 'a .json that is not there');
+      await refused(assert, ROOM_204_SOURCE, "a card's .json, for comparison");
+    });
+
+    test('the path is judged as the executor will read it', async function (assert) {
+      // An encoded dot is decoded to a local path, so this spelling reads
+      // room-204's document. It is judged as that document, not as a file
+      // with no extension.
+      let encoded = `${EDUCATION}classrooms/room-204%2Ejson`;
+      let core = education.operationCore;
+      let scope = () =>
+        newOperationScope(core, {
+          caller: scopeCallerFor(TEACHER),
+          coarseDeclined: 'all' as const,
+        });
+      await policy('anyFile');
+      await assert.rejects(
+        resolveGatedOperation(
+          core,
+          { kind: 'instance', url: encoded },
+          'readSource',
+          scope(),
+        ),
+        /operation-not-permitted/,
+        'a FileDef grant does not reach the card through an encoded spelling',
+      );
+      await policy('classroomSource');
+      let granted = await resolveGatedOperation(
+        core,
+        { kind: 'instance', url: encoded },
+        'readSource',
+        scope(),
+      );
+      assert.strictEqual(
+        granted.decision.kind,
+        'granted',
+        'the Classroom grant does',
+      );
+      // A query string names nothing on disk, so it does not change what the
+      // bytes are.
+      await policy('anyFile');
+      await assert.rejects(
+        resolveGatedOperation(
+          core,
+          { kind: 'instance', url: `${ROOM_204_SOURCE}?x=1` },
+          'readSource',
+          scope(),
+        ),
+        /operation-not-permitted/,
+        "a query string does not make a card's .json a data file",
+      );
+      // Nor what a path predicate sees of the path.
+      await policy('pathPredicate');
+      await assert.rejects(
+        resolveGatedOperation(
+          core,
+          { kind: 'instance', url: `${PRIVATE_HANDBOOK}?p=/public/` },
+          'readSource',
+          scope(),
+        ),
+        /operation-not-permitted/,
+        'a query string does not satisfy a predicate on the path',
+      );
     });
   });
 
@@ -484,28 +592,52 @@ module(basename(import.meta.filename), function (hooks) {
       );
     });
 
-    test('a grant-reached card-source read costs one definition lookup', async function (assert) {
-      await policy('documentPredicate');
-      await served(assert, ROOM_204_SOURCE, "a Classroom's .json");
-      assert.strictEqual(
-        gateStats().definitionLookups,
-        1,
-        'the one lookup the stored-bytes read had skipped, to project the predicate',
-      );
-      assert.strictEqual(
-        gateStats().predicateEvaluations,
-        1,
-        'and one predicate evaluated',
-      );
-    });
-
-    test('an unconditional card-source grant reads no definition at all', async function (assert) {
+    test('a card’s raw source costs one definition lookup', async function (assert) {
       await policy('classroomSource');
       await served(assert, ROOM_204_SOURCE, "a Classroom's .json");
       assert.strictEqual(
         gateStats().definitionLookups,
+        1,
+        'the type its document names, the lookup the read had skipped',
+      );
+    });
+
+    test('a predicate on card source is projected through that same lookup', async function (assert) {
+      await policy('documentPredicate');
+      await served(assert, ROOM_204_SOURCE, "a Classroom's .json");
+      assert.strictEqual(
+        gateStats().predicateEvaluations,
+        1,
+        'one predicate evaluated',
+      );
+      assert.strictEqual(
+        gateStats().definitionLookups,
+        1,
+        'and no second lookup to project it',
+      );
+    });
+
+    test('a data file costs one definition lookup', async function (assert) {
+      await served(assert, HANDBOOK, 'a .pdf under a PdfDef grant');
+      assert.strictEqual(
+        gateStats().definitionLookups,
+        1,
+        'the chain of the FileDef its extension names',
+      );
+    });
+
+    test('a realm with no policy reads no definition for a declined read', async function (assert) {
+      await education.write(
+        'realm.json',
+        realmConfigCardJSON({ name: 'Education' }),
+      );
+      await education.indexing();
+      await refused(assert, HANDBOOK, 'a .pdf in a realm with no policy');
+      await refused(assert, ROOM_204_SOURCE, "a card's .json, likewise");
+      assert.strictEqual(
+        gateStats().definitionLookups,
         0,
-        'the card’s type came off its index row, and no predicate needed projecting',
+        'nothing was typed, since there was no policy to match it against',
       );
     });
   });
