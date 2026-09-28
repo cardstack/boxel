@@ -195,7 +195,6 @@ export interface IndexingProgressEvent {
 export const INDEX_JOB_TYPES = [
   'from-scratch-index',
   'incremental-index',
-  'copy-index',
 ] as const;
 
 export class Worker {
@@ -333,8 +332,6 @@ export class Worker {
         this.#queue.register(`media-cache-gc`, Tasks['mediaCacheGc'](taskArgs)),
       'scoped-css-gc': () =>
         this.#queue.register(`scoped-css-gc`, Tasks['scopedCssGc'](taskArgs)),
-      'copy-index': () =>
-        this.#queue.register(`copy-index`, Tasks['copy'](taskArgs)),
       'lint-source': () =>
         this.#queue.register(`lint-source`, Tasks['lintSource'](taskArgs)),
       'full-reindex': () =>
