@@ -472,7 +472,7 @@ module(basename(import.meta.filename), function (hooks) {
       );
       assert.deepEqual(
         gateStats(),
-        { policyLoads: 0, predicateEvaluations: 0 },
+        { policyLoads: 0, predicateEvaluations: 0, pendingDischarges: 0 },
         'neither reached the policy',
       );
     });
@@ -497,7 +497,7 @@ module(basename(import.meta.filename), function (hooks) {
       );
       assert.deepEqual(
         gateStats(),
-        { policyLoads: 0, predicateEvaluations: 0 },
+        { policyLoads: 0, predicateEvaluations: 0, pendingDischarges: 0 },
         'neither reached the policy',
       );
       assert.strictEqual(
@@ -543,7 +543,7 @@ module(basename(import.meta.filename), function (hooks) {
       );
       assert.deepEqual(
         gateStats(),
-        { policyLoads: 0, predicateEvaluations: 0 },
+        { policyLoads: 0, predicateEvaluations: 0, pendingDischarges: 0 },
         'and no policy was loaded for either',
       );
     });
