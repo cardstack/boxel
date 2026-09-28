@@ -223,9 +223,18 @@ export async function gateOperation(
   }
   // Once a grant would admit the invocation, and not before, so an
   // invocation that nothing grants pays no definition reads for a refusal it
-  // was getting anyway. The target's own type is left out: the name resolved
-  // against its entry, whose flag was read above.
-  if (await nonGrantableInChain(core, url, row.types.slice(1), name)) {
+  // was getting anyway. The target's own type is left out only when its entry
+  // was read: the name then resolved against that entry, whose flag was read
+  // above. An entry that could not be read left the name to the built-in, which
+  // carries no flag, so that type is asked again with the rest.
+  if (
+    await nonGrantableInChain(
+      core,
+      url,
+      row.types.slice(typeDefinition ? 1 : 0),
+      name,
+    )
+  ) {
     throw refuse();
   }
   let unconditional = matched.find(({ grant }) => !grant.where);

@@ -8,6 +8,7 @@ import {
   isOperationFailure,
   isSourceResult,
   newOperationScope,
+  resolveGatedOperation,
   resolveOperation,
   runOperation,
   scopeCallerFor,
@@ -1556,6 +1557,116 @@ module(basename(import.meta.filename), function () {
         2,
         'and a fresh scope reads it again, so no row outlives its request',
       );
+    });
+  });
+
+  // A reader declined only writes, with a policy that grants `update` on
+  // `CardDef` to everyone. `Person` declares `update` non-grantable.
+  module('the policy gate on a non-grantable operation', function () {
+    const CARD_DEF = {
+      module: '@cardstack/base/card-api',
+      name: 'CardDef',
+    } as CodeRef;
+    const key = (ref: CodeRef) =>
+      `${(ref as { module: string }).module}/${(ref as { name: string }).name}`;
+    const FLAGGED = {
+      update: {
+        base: 'update' as const,
+        deterministic: true,
+        nonGrantable: true as const,
+      },
+    };
+
+    function gatedCore(personEntry: 'flagged' | 'unflagged' | 'unreadable') {
+      let { core } = stub();
+      let lookups: string[] = [];
+      core.definitionLookup = {
+        async lookupDefinition(codeRef) {
+          lookups.push(key(codeRef as CodeRef));
+          let isPerson = key(codeRef as CodeRef) === key(PERSON);
+          if (isPerson && personEntry === 'unreadable') {
+            throw new Error('the definition could not be built');
+          }
+          return {
+            type: 'card-def',
+            codeRef,
+            displayName: isPerson ? 'Person' : 'Card',
+            fields: {},
+            fieldDefs: {},
+            ...(isPerson && personEntry === 'flagged'
+              ? { operations: FLAGGED }
+              : {}),
+          };
+        },
+      } as OperationCore['definitionLookup'];
+      let instance = core.indexQueryEngine.instance.bind(core.indexQueryEngine);
+      core.indexQueryEngine.instance = async (url, opts) => {
+        let row = await instance(url, opts);
+        return row
+          ? ({ ...row, types: [key(PERSON), key(CARD_DEF)] } as any)
+          : row;
+      };
+      core.policy = {
+        async compiledPolicy() {
+          return {
+            card: `${REALM}policy`,
+            version: '1',
+            rules: [
+              {
+                targetType: CARD_DEF as any,
+                grants: [{ operation: 'update' }],
+              },
+            ],
+            issues: [],
+          };
+        },
+        async typeKeys(ref) {
+          return [key(ref as CodeRef)];
+        },
+        resolvedLink: (selfLink) => selfLink,
+        async policyCard() {
+          return undefined;
+        },
+      };
+      return { core, lookups };
+    }
+
+    function declinedWrites(core: OperationCore) {
+      return newOperationScope(core, {
+        caller: scopeCallerFor('@reader:localhost'),
+        coarseDeclined: 'writes',
+      });
+    }
+
+    test('the flag on the target type refuses a grant that matches', async function (assert) {
+      let { core } = gatedCore('flagged');
+      await assert.rejects(
+        resolveGatedOperation(core, CARD, 'update', declinedWrites(core)),
+        /operation-not-permitted/,
+      );
+    });
+
+    test('a target type whose entry cannot be read refuses rather than dropping its flag', async function (assert) {
+      let { core, lookups } = gatedCore('unreadable');
+      await assert.rejects(
+        resolveGatedOperation(core, CARD, 'update', declinedWrites(core)),
+        /operation-not-permitted/,
+      );
+      assert.true(
+        lookups.filter((looked) => looked === key(PERSON)).length > 1,
+        'the target type was asked for again by the chain check',
+      );
+    });
+
+    test('a target type that declares nothing is granted as before', async function (assert) {
+      let { core } = gatedCore('unflagged');
+      let { decision } = await resolveGatedOperation(
+        core,
+        CARD,
+        'update',
+        declinedWrites(core),
+      );
+      assert.strictEqual(decision.kind, 'granted');
     });
   });
 });
