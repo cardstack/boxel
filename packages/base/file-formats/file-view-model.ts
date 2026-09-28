@@ -119,6 +119,9 @@ export interface FileViewModel {
   width?: number;
   height?: number;
   aspectRatio?: number;
+  // Whether a raster's container holds more than one frame; undefined when
+  // its reader couldn't tell or the family doesn't record it.
+  animation?: 'animated' | 'still';
   aspectLabel: string;
   heroFact: string;
   facts: string[];
@@ -565,6 +568,10 @@ export function fileViewModel(
     height,
     aspectRatio:
       width && height ? Math.round((width / height) * 1000) / 1000 : undefined,
+    animation:
+      file.animation === 'animated' || file.animation === 'still'
+        ? file.animation
+        : undefined,
     aspectLabel: aspectLabel(width, height),
     heroFact: heroFactFor(file, previewKind, width, height),
     facts,

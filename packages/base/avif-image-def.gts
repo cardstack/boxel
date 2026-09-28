@@ -6,6 +6,7 @@ import {
 } from './image-file-def';
 import type { ByteStream, SerializedFile } from './file-api';
 import {
+  extractAvifAnimated,
   extractAvifColorProfile,
   extractAvifDimensions,
 } from './avif-meta-extractor';
@@ -35,7 +36,11 @@ export class AvifDef extends RasterImageDef {
       height,
       // AVIF stores EXIF as a separate metadata item elsewhere in the box tree;
       // the item-location walk that reaches it isn't part of this pass.
-      ...rasterImageAttributes(undefined, extractAvifColorProfile(bytes)),
+      ...rasterImageAttributes(
+        undefined,
+        extractAvifColorProfile(bytes),
+        extractAvifAnimated(bytes),
+      ),
     };
   }
 }

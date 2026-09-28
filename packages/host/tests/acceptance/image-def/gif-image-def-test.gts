@@ -68,6 +68,18 @@ function makeRenderableGif(): Uint8Array {
   return bytes;
 }
 
+// The renderable GIF's frame (its Graphic Control Extension plus image
+// descriptor and data) repeated, so the file holds two images before its
+// trailer.
+function makeTwoFrameGif(): Uint8Array {
+  let bytes = makeRenderableGif();
+  let frameStart = bytes.findIndex(
+    (b, i) => b === 0x21 && bytes[i + 1] === 0xf9,
+  );
+  let frame = bytes.slice(frameStart, bytes.length - 1); // drop the trailer
+  return new Uint8Array([...bytes.slice(0, bytes.length - 1), ...frame, 0x3b]);
+}
+
 module('Acceptance | gif image def', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
@@ -148,6 +160,7 @@ module('Acceptance | gif image def', function (hooks) {
   hooks.beforeEach(async function () {
     let gifBytes = makeMinimalGif(6, 7);
     let renderableGifBytes = makeRenderableGif();
+    let animatedGifBytes = makeTwoFrameGif();
     ({ realm } = await withCachedRealmSetup(async () =>
       setupAcceptanceTestRealm({
         mockMatrixUtils,
@@ -155,6 +168,7 @@ module('Acceptance | gif image def', function (hooks) {
           ...SYSTEM_CARD_FIXTURE_CONTENTS,
           'sample.gif': gifBytes,
           'renderable.gif': renderableGifBytes,
+          'animated.gif': animatedGifBytes,
           'not-a-gif.gif': 'This is plain text, not a GIF file.',
         },
       }),
@@ -183,6 +197,35 @@ module('Acceptance | gif image def', function (hooks) {
     assert.ok(
       String(result.searchDoc?.contentType).includes('gif'),
       'sets gif content type',
+    );
+  });
+
+  test('records whether the GIF animates during extract', async function (assert) {
+    await visit(
+      fileExtractPath(makeFileURL('renderable.gif'), {
+        fileExtract: true,
+        fileDefCodeRef: gifDefCodeRef(),
+      }),
+    );
+    let still = await captureFileExtractResult('ready');
+    assert.strictEqual(
+      still.searchDoc?.animation,
+      'still',
+      'one frame followed by the trailer is a still',
+    );
+
+    await visit(
+      fileExtractPath(
+        makeFileURL('animated.gif'),
+        { fileExtract: true, fileDefCodeRef: gifDefCodeRef() },
+        1,
+      ),
+    );
+    let animated = await captureFileExtractResult('ready');
+    assert.strictEqual(
+      animated.searchDoc?.animation,
+      'animated',
+      'a second frame makes it animated',
     );
   });
 
