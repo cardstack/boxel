@@ -506,6 +506,15 @@ function carries(
   );
 }
 
+// Whether a type of this kind answers `name` with a built-in behavior when it
+// declares nothing under that name: the behavior an instance of the type runs
+// when a caller invokes the name on it.
+export function carriesBuiltIn(kind: DefKind, name: string): boolean {
+  return (
+    isBaseOperation(name) && own(ALLOWED_BASE_OPERATIONS[kind], name) != null
+  );
+}
+
 // The base operations that resolve without consulting a definition.
 //
 // A definition is consulted for two reasons — to find a declaration of the

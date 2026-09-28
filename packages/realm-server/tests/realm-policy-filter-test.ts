@@ -174,7 +174,8 @@ function setup(grants: Grant[]) {
     [CLASSROOM.name, classroomDefinition()],
     [ADDRESS.name, addressDefinition()],
   ]);
-  let policyKey = `${realmPolicyRef.module}/${realmPolicyRef.name}`;
+  let typeKey = (ref: ResolvedCodeRef) => `${ref.module}/${ref.name}`;
+  let policyKey = typeKey(realmPolicyRef);
   let cache = new RealmPolicyCache({
     policyCard: async () => POLICY_CARD,
     readCard: async (): Promise<IndexedInstanceSource> => ({
@@ -183,6 +184,7 @@ function setup(grants: Grant[]) {
       sourceContentHash: 'v1',
       types: [policyKey],
       error: null,
+      failureWithheld: false,
       instance: {
         id: rri(POLICY_CARD),
         type: 'card',
@@ -199,17 +201,17 @@ function setup(grants: Grant[]) {
     }),
     resolveCodeRef: (codeRef) =>
       codeRef.module === CLASSROOM.module ? CLASSROOM : undefined,
-    lookupDefinition: async (codeRef): Promise<Definition> => {
+    lookupDefinitionEntry: async (codeRef) => {
       let found = definitions.get(codeRef.name);
       if (!found) {
         throw new FilterRefersToNonexistentTypeError(
           codeRef as ResolvedCodeRef,
         );
       }
-      return found;
+      return { definition: found, types: [typeKey(codeRef)] };
     },
     toURL: (identifier) => new URL(identifier),
-    isPolicyCard: (types) => types.includes(policyKey),
+    typeKey,
   });
   return { cache, definitions };
 }
@@ -433,7 +435,11 @@ module(basename(import.meta.filename), function () {
     let policy = await compile([{ operation: 'query' }]);
     assert.deepEqual(policy.issues, []);
     assert.deepEqual(grantsOf(policy), [
-      { operation: 'query', filter: { 'item.on': CLASSROOM } },
+      {
+        operation: 'query',
+        path: 'rules[0].grants[0]',
+        filter: { 'item.on': CLASSROOM },
+      },
     ]);
   });
 
@@ -555,6 +561,7 @@ module(basename(import.meta.filename), function () {
     ]);
     assert.deepEqual(grant, {
       operation: 'query',
+      path: 'rules[0].grants[0]',
       where: {
         source: '.roomNumber + 1 > 200',
         canonical: '.roomNumber + 1 > 200',

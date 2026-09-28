@@ -20,7 +20,6 @@ import {
   type BaseOperation,
   type OperationDefinition,
   type OperationTarget,
-  type PolicyIssueCode,
 } from './types.ts';
 
 // ============================================================================
@@ -264,16 +263,12 @@ export interface LoadedPolicy {
   policy: CompiledRealmPolicy | undefined;
 }
 
-// What a policy that recorded one of these can grant is unknown rather than
-// nothing: the realm names a policy and could not read it as one.
-const UNAVAILABLE_POLICY: ReadonlySet<PolicyIssueCode> = new Set([
-  'policy-card-missing',
-  'policy-card-unloadable',
-  'not-a-policy',
-]);
-
 // Load the realm's compiled policy for a caller the realm ACL declined, and
-// refuse with a 500 when the realm names a policy it cannot load.
+// refuse with a 500 when the realm names a policy that did not compile as a
+// whole. What such a policy grants is unknown rather than nothing: the realm
+// names a policy and could not read it as one. A card missing from the index,
+// a card that will not load, and a card whose rules cannot be read are the
+// same refusal.
 //
 // For a caller who may not read the realm, this runs before the target
 // resolves. That keeps the 500 independent of the target: answered only once a
@@ -284,11 +279,7 @@ export async function loadPolicy(core: OperationCore): Promise<LoadedPolicy> {
   }
   policyGateStats(core).policyLoads++;
   let policy = await core.policy.compiledPolicy();
-  if (
-    policy?.issues.some(
-      (issue) => issue.path === '' && UNAVAILABLE_POLICY.has(issue.code),
-    )
-  ) {
+  if (policy?.uncompilable) {
     throw new OperationFailure({
       status: 500,
       code: 'internal-error',

@@ -285,7 +285,6 @@ import { commitBatch } from './card-operations/coordinator.ts';
 import {
   noteRealmIndexMoved,
   RealmPolicyCache,
-  realmPolicyRef,
   type CompiledRealmPolicy,
 } from './card-operations/policy.ts';
 import type {
@@ -13504,7 +13503,6 @@ export class Realm {
   // it grants. The type definitions its rules name come from this realm's
   // definition lookup, as an operation's do.
   #makePolicyCache(): RealmPolicyCache {
-    let policyTypeKey: string | undefined;
     return new RealmPolicyCache({
       policyCard: async () => (await this.getRealmPolicy())?.card,
       readCard: (url) => this.#realmIndexQueryEngine.instanceSource(url),
@@ -13517,20 +13515,13 @@ export class Realm {
         );
         return isResolvedCodeRef(absolute) ? absolute : undefined;
       },
-      lookupDefinition: (codeRef) =>
-        this.#definitionLookup.lookupDefinition(codeRef),
+      lookupDefinitionEntry: (codeRef) =>
+        this.#definitionLookup.lookupDefinitionEntry(codeRef),
       toURL: (identifier) => this.#virtualNetwork.toURL(identifier),
-      isPolicyCard: (types) => {
-        // The index records an adoption chain in the same spelling, so the
-        // key is computed the same way. A subtype of RealmPolicy carries it
-        // too.
-        policyTypeKey ??= internalKeyFor(
-          realmPolicyRef,
-          undefined,
-          this.#virtualNetwork,
-        );
-        return types.includes(policyTypeKey);
-      },
+      // The index and the definition cache record an adoption chain in this
+      // spelling, so a key computed the same way is found in either.
+      typeKey: (codeRef) =>
+        internalKeyFor(codeRef, undefined, this.#virtualNetwork),
     });
   }
 
