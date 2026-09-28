@@ -643,6 +643,12 @@ export async function resolveGatedOperation(
 // holds for its URL. A type is judged by the chain recorded on the entry its
 // definition came from, read in the same lookup, so the gate holds the realm's
 // answer about the type and never the caller's claim about it.
+//
+// A path whose extension names a file is handed over as one. What that file
+// is, the gate settles: a stored-bytes read is the only behavior that
+// addresses a file, and the path a card's own document sits at is spelled
+// with an extension like any other — so the answer is the index's rather
+// than the name's, and it is reached where the row is already being peeked.
 function gateSubject(
   target: OperationTarget,
   typeChain: string[] | undefined,
@@ -653,9 +659,10 @@ function gateSubject(
       : { kind: 'unmatched' };
   }
   let url = parseTargetURL(target.url);
-  return url && !urlNamesFile(url)
-    ? { kind: 'card', url }
-    : { kind: 'unmatched' };
+  if (!url) {
+    return { kind: 'unmatched' };
+  }
+  return urlNamesFile(url) ? { kind: 'file', url } : { kind: 'card', url };
 }
 
 async function resolveUngated(

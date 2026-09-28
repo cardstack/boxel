@@ -463,7 +463,12 @@ module(basename(import.meta.filename), function (hooks) {
       assert.strictEqual(batch.status, 200, 'the admin batch commits');
       assert.deepEqual(
         gateStats(),
-        { policyLoads: 0, predicateEvaluations: 0, pendingDischarges: 0 },
+        {
+          policyLoads: 0,
+          predicateEvaluations: 0,
+          pendingDischarges: 0,
+          definitionLookups: 0,
+        },
         'the gate did nothing for any of them',
       );
       assert.strictEqual(
@@ -481,7 +486,12 @@ module(basename(import.meta.filename), function (hooks) {
       );
       assert.deepEqual(
         gateStats(),
-        { policyLoads: 1, predicateEvaluations: 1, pendingDischarges: 0 },
+        {
+          policyLoads: 1,
+          predicateEvaluations: 1,
+          pendingDischarges: 0,
+          definitionLookups: 0,
+        },
         'through one policy load and one predicate',
       );
     });
@@ -1034,6 +1044,7 @@ module(basename(import.meta.filename), function (hooks) {
         policyLoads: 0,
         predicateEvaluations: 0,
         pendingDischarges: 0,
+        definitionLookups: 0,
       });
     });
 

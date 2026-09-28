@@ -3,6 +3,7 @@ import type { Definition } from '../definitions.ts';
 import type { LocalPath } from '../paths.ts';
 import { isCardResource } from '../card-document-shape.ts';
 import type { CardResource } from '../resource-types.ts';
+import { policyFileDefCodeRef } from '../policy-file-def.ts';
 import { localPathFor, pathsFor } from './dispatch.ts';
 import type { OperationCore, OperationScope } from './dispatch.ts';
 import type { AdmissionSubject, BxlMutationModule } from './executors.ts';
@@ -96,8 +97,13 @@ export type GateSubject =
   // `BaseDef` matches every stored card and grants no create. A type the realm
   // cannot resolve never gets here. Resolution refuses it first, as not found.
   | { kind: 'type'; types: string[] }
-  // A target no rule is matched against: a file, which is not a card, or a
-  // URL that does not parse.
+  // A stored path that names no card. Only a stored-bytes read is matched
+  // against one, and it resolves what the path actually holds for itself:
+  // the extension table names a file's type, but it does not name every
+  // stored file, and a card's own document is addressed through one of those
+  // extensions too. Every other behavior treats this as unmatched.
+  | { kind: 'file'; url: URL }
+  // A target no rule is matched against: a URL that does not parse.
   | { kind: 'unmatched' };
 
 // What the gate reads of an invocation's scope: who the caller is, what the
@@ -148,15 +154,24 @@ export interface PendingDecision {
   matchedType?: string;
 }
 
-// How often the gate loads a policy and evaluates a predicate, per core, and
-// how many pending writes were decided under a write lock. A test asserts on
-// these rather than on outcomes alone, since an outcome cannot show that a
-// caller the ACL allowed never reached the policy, or that a read never
-// reached a lock.
+// How often the gate loads a policy, evaluates a predicate and reads a
+// definition, per core, and how many pending writes were decided under a
+// write lock. A test asserts on these rather than on outcomes alone, since an
+// outcome cannot show that a caller the ACL allowed never reached the policy,
+// or that a read never reached a lock.
+//
+// `definitionLookups` counts the lookups the gate makes to *type its target*,
+// which a stored-bytes read is the only behavior to need: that read resolves
+// before any definition, so the gate buys one back to learn what the bytes
+// are. Every other behavior arrives with the entry its own resolution already
+// read and adds nothing here. It does not count the field lookups a predicate
+// projection makes through the definition callback, which every predicate
+// path shares whatever resolved its target.
 export interface PolicyGateStats {
   policyLoads: number;
   predicateEvaluations: number;
   pendingDischarges: number;
+  definitionLookups: number;
 }
 
 const statsByCore = new WeakMap<OperationCore, PolicyGateStats>();
@@ -164,7 +179,12 @@ const statsByCore = new WeakMap<OperationCore, PolicyGateStats>();
 export function policyGateStats(core: OperationCore): PolicyGateStats {
   let stats = statsByCore.get(core);
   if (!stats) {
-    stats = { policyLoads: 0, predicateEvaluations: 0, pendingDischarges: 0 };
+    stats = {
+      policyLoads: 0,
+      predicateEvaluations: 0,
+      pendingDischarges: 0,
+      definitionLookups: 0,
+    };
     statsByCore.set(core, stats);
   }
   return stats;
@@ -206,9 +226,9 @@ export async function gateOperation(
   if (!declines(scope, base)) {
     return { kind: 'coarse' };
   }
-  // A stored-bytes read resolves before any definition, and a query is planned
-  // and run on the search engine. Neither is granted here.
-  if (base === 'readSource' || base === 'query') {
+  // A query is planned and run on the search engine rather than against one
+  // target, so nothing here can grant one.
+  if (base === 'query') {
     return GATE_REFUSED;
   }
   if (subject.kind === 'unmatched' || !core.policy) {
@@ -219,11 +239,14 @@ export async function gateOperation(
   if (subject.kind === 'type' && base !== 'create') {
     return GATE_REFUSED;
   }
-  let types =
-    subject.kind === 'card'
-      ? await cardAdoptionChain(scope, subject.url)
-      : subject.types;
-  if (!types) {
+  // A file subject is a path that names no card, and a stored-bytes read is
+  // the only behavior that addresses one. A file's metadata document is a
+  // `read`, which is granted on cards alone.
+  if (subject.kind === 'file' && base !== 'readSource') {
+    return GATE_REFUSED;
+  }
+  let identified = await identifySubject(scope, subject, base);
+  if (!identified) {
     return GATE_REFUSED;
   }
   let stats = policyGateStats(core);
@@ -232,6 +255,14 @@ export async function gateOperation(
   if (!policy) {
     return GATE_REFUSED;
   }
+  // Only now, with a policy in hand, is a file's type worth reading: it costs
+  // the definition lookup a stored-bytes read exists to skip, and a realm
+  // with no policy has nothing to spend it on.
+  let matchOn = await typedSubject(core, identified);
+  if (!matchOn) {
+    return GATE_REFUSED;
+  }
+  let { types } = matchOn;
   let matched = await matchingGrants(policy, types, name, core.policy);
   if (matched.length === 0) {
     return GATE_REFUSED;
@@ -240,31 +271,219 @@ export async function gateOperation(
   if (unconditional) {
     return { kind: 'granted', grant: unconditional };
   }
-  if (base !== 'read') {
+  if (isWrite(base)) {
     return {
       kind: 'pending',
       grants: matched,
       typeDefinition,
-      ...(subject.kind === 'card' && types[0] ? { matchedType: types[0] } : {}),
+      ...(matchOn.kind === 'card' && types[0] ? { matchedType: types[0] } : {}),
     };
   }
   // A read has one state to judge, and nothing to wait for, so its predicate
-  // is evaluated here, against the target as it is stored now. Only a stored
-  // card has a state.
-  if (subject.kind !== 'card') {
-    return GATE_REFUSED;
-  }
-  let content = await core.readFileAsText(
-    `${localPathFor(core, subject.url)}.json` as LocalPath,
-  );
-  let resource = content === undefined ? undefined : cardResourceIn(content);
-  let stored = resource
-    ? await storedSubject(core, subject.url, typeDefinition, resource)
-    : undefined;
+  // is evaluated here, against the target as it is stored now.
+  let stored = await readSubject(core, scope, matchOn, typeDefinition);
   let granted = stored
     ? await firstHolding(core, matched, stored, scope)
     : undefined;
   return granted ? { kind: 'granted', grant: granted } : GATE_REFUSED;
+}
+
+// The target as the index identifies it, before any policy is loaded. This is
+// the half of matching that costs an index peek and a table lookup, and it
+// runs first so that a realm with no policy spends nothing more than it
+// spends today.
+type IdentifiedSubject =
+  | { kind: 'card'; url: URL; types: string[] }
+  // A stored file that holds no card, named by the `FileDef` its extension
+  // resolves to. The chain that ref stands for is read later.
+  | { kind: 'file'; url: URL; codeRef: ResolvedCodeRef }
+  | { kind: 'type'; types: string[] };
+
+// What the gate matches rules against, and what a predicate reads if one has
+// to be evaluated.
+type MatchedSubject =
+  | { kind: 'card'; url: URL; types: string[] }
+  // A stored file's chain is its `FileDef` subclass and every type that class
+  // descends from, so a rule naming `FileDef` covers any data file while a
+  // rule naming `PdfDef` covers only a `.pdf`.
+  | { kind: 'file'; url: URL; types: string[] }
+  | { kind: 'type'; types: string[] };
+
+// Which target the rules will be matched against.
+//
+// A stored-bytes read is the one behavior that identifies its own target
+// here, because it is the one resolved before any definition — every other
+// behavior arrives with the type its own resolution already read. It also has
+// the one target that is genuinely two things: the path a card's document is
+// stored at is addressed through a file extension like any other file.
+async function identifySubject(
+  scope: GateScope,
+  // Never the unmatched target: nothing is matched against one, and the gate
+  // has refused it before reaching here.
+  subject: Exclude<GateSubject, { kind: 'unmatched' }>,
+  base: BaseOperation,
+): Promise<IdentifiedSubject | undefined> {
+  if (subject.kind === 'type') {
+    return subject;
+  }
+  if (base !== 'readSource') {
+    // Every other behavior runs against a stored card, matched on its row.
+    if (subject.kind !== 'card') {
+      return undefined;
+    }
+    let types = await cardAdoptionChain(scope, subject.url);
+    return types ? { kind: 'card', url: subject.url, types } : undefined;
+  }
+  return await identifyStoredBytes(scope, subject.url);
+}
+
+// What the bytes at a path are, for the read that serves them.
+//
+// Which of the two a path is, is the index's answer rather than the name's. A
+// card's document is stored at its id plus `.json` and nothing else is, so a
+// `.json` path the index holds a row for is that card's source and is matched
+// on the card's own type — a `Classroom`, never a `JsonFileDef`. Every path
+// the index has no card at is a file, including the extensions the file-def
+// table does not name: a `.css` or a `.yml` has no def written for it and
+// resolves to `FileDef` itself, which is what lets one rule cover any data
+// file.
+//
+// The presence of a row decides it, not whether that row indexed cleanly. An
+// error row says the path holds a card the realm could not index, and a card
+// whose type the gate cannot vouch for is matched by nothing at all. Reading
+// it as the file its extension claims is the one answer that must not be
+// given: it would let a grant on `FileDef` — "any data file" — serve the raw
+// source of every card in the realm that happens to be broken.
+//
+// Module source is the remaining path with no answer. It resolves to no type,
+// so no rule can name it and no grant can reach it.
+async function identifyStoredBytes(
+  scope: GateScope,
+  url: URL,
+): Promise<IdentifiedSubject | undefined> {
+  let id = cardSourceId(url) ?? url;
+  let row = await scope.peekInstance(id);
+  if (row) {
+    return row.type === 'instance' && row.types
+      ? { kind: 'card', url: id, types: row.types }
+      : undefined;
+  }
+  let codeRef = policyFileDefCodeRef(url.pathname);
+  return codeRef ? { kind: 'file', url, codeRef } : undefined;
+}
+
+// The identified target with the adoption chain rules are matched on. Only a
+// file has one still to read; a card's came off its row and a type's off the
+// entry its definition was read from.
+async function typedSubject(
+  core: OperationCore,
+  subject: IdentifiedSubject,
+): Promise<MatchedSubject | undefined> {
+  if (subject.kind !== 'file') {
+    return subject;
+  }
+  let types = await fileAdoptionChain(core, subject.codeRef, subject.url);
+  return types ? { kind: 'file', url: subject.url, types } : undefined;
+}
+
+// The card whose stored document a path holds, if the path is spelled as one.
+// Only the `.json` spelling addresses a card's bytes; a card's id never
+// carries an extension.
+function cardSourceId(url: URL): URL | undefined {
+  if (!url.pathname.endsWith('.json')) {
+    return undefined;
+  }
+  let id = new URL(url.href);
+  id.pathname = id.pathname.slice(0, -'.json'.length);
+  return id;
+}
+
+// The adoption chain of the `FileDef` a stored file's extension names, read
+// from the definition cache the way a create's type chain is.
+//
+// This is the lookup a stored-bytes read exists to skip, and skipping it is
+// why nothing reaches here until the realm ACL has already declined: a caller
+// the ACL allowed is answered before the gate runs at all, so only the
+// already-slower branch pays it, and it pays a definition-cache hit rather
+// than an index read.
+async function fileAdoptionChain(
+  core: OperationCore,
+  codeRef: ResolvedCodeRef,
+  relativeTo: URL,
+): Promise<string[] | undefined> {
+  let resolved = core.resolveCodeRef(codeRef, relativeTo);
+  if (!resolved) {
+    return undefined;
+  }
+  policyGateStats(core).definitionLookups++;
+  try {
+    return (await core.definitionLookup.lookupDefinitionEntry(resolved))?.types;
+  } catch {
+    return undefined;
+  }
+}
+
+// What a read's predicate is evaluated against.
+//
+// A card is read as its stored source, the same projection a mutation program
+// sees. A data file has no document to interrogate at all: a predicate on one
+// reads the path it names through `instance()` and the caller through
+// `actor()`, and anything else it reaches for finds nothing and so does not
+// hold.
+async function readSubject(
+  core: OperationCore,
+  scope: GateScope,
+  matched: MatchedSubject,
+  typeDefinition: Definition | undefined,
+): Promise<PredicateSubject | undefined> {
+  if (matched.kind === 'file') {
+    return { input: undefined, instance: { id: matched.url.href } };
+  }
+  if (matched.kind !== 'card') {
+    return undefined;
+  }
+  let content = await core.readFileAsText(
+    `${localPathFor(core, matched.url)}.json` as LocalPath,
+  );
+  let resource = content === undefined ? undefined : cardResourceIn(content);
+  if (!resource) {
+    return undefined;
+  }
+  let definition =
+    typeDefinition ?? (await cardTypeDefinition(core, scope, matched.url));
+  return await storedSubject(core, matched.url, definition, resource);
+}
+
+// The definition of the type a stored card names, for a read that resolved
+// without one.
+//
+// A stored-bytes read is the only read that arrives here with no definition in
+// hand, so this is the definition lookup its card-source grants cost — and
+// only where a grant carries a predicate, since an unconditional one is
+// admitted before anything is read. The type comes off the card's index row,
+// which is the same row the grants were matched on, so the predicate is
+// projected through the type those grants were judged against.
+async function cardTypeDefinition(
+  core: OperationCore,
+  scope: GateScope,
+  url: URL,
+): Promise<Definition | undefined> {
+  let row = await scope.peekInstance(url);
+  let adoptsFrom =
+    row?.type === 'instance' ? row.instance.meta?.adoptsFrom : undefined;
+  if (!adoptsFrom) {
+    return undefined;
+  }
+  let resolved = core.resolveCodeRef(adoptsFrom, url);
+  if (!resolved) {
+    return undefined;
+  }
+  policyGateStats(core).definitionLookups++;
+  try {
+    return await core.definitionLookup.lookupDefinition(resolved);
+  } catch {
+    return undefined;
+  }
 }
 
 // A write the gate left pending, and what deciding it reads.
