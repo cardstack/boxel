@@ -1818,6 +1818,15 @@ export type { JsonValue } from './json-validation.ts';
 // import; it reaches neither bxl nor a realm, so nothing here costs a consumer
 // the typecheck program the note below is about.
 export * from './card-operations/client.ts';
+// The capability check's wire shapes and its cap, for the same reason and on
+// the same terms: a card asking `@context.canInvoke` holds these and nothing
+// else, and this module reaches neither bxl nor a realm. The check itself does
+// both, and stays behind the `card-operations` entry.
+export { CAPABILITY_CHECK_CAP } from './card-operations/capability-wire.ts';
+export type {
+  CapabilityAnswer,
+  CapabilityCheck,
+} from './card-operations/capability-wire.ts';
 // Only the lowered *shapes*, not the pass that produces them: lowering reaches
 // `@cardstack/bxl` for the program canonicalizer, and a barrel re-export would
 // pull bxl's sources into the typecheck program of every package that imports

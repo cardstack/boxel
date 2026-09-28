@@ -101,6 +101,19 @@ const readProbes: Probe[] = [
         .set('Content-Type', SupportedMimeType.BoxelOperations)
         .send('not json'),
   },
+  // A read probe although it is a `POST`: the capability check writes nothing,
+  // so the realm asks the read question of it rather than the one the method
+  // would otherwise choose.
+  {
+    label: 'POST /_capabilities',
+    consumes: true,
+    send: (r) =>
+      r
+        .post('/_capabilities')
+        .set('Accept', SupportedMimeType.JSON)
+        .set('Content-Type', SupportedMimeType.JSON)
+        .send('not json'),
+  },
 ];
 
 const writeProbes: Probe[] = [
@@ -376,10 +389,11 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           `HEAD ${SupportedMimeType.CardJson} /.*`,
           `POST ${SupportedMimeType.BoxelOperations} /_operations`,
           `POST ${SupportedMimeType.JSONAPI} /_operations`,
+          `POST ${SupportedMimeType.JSON} /_capabilities`,
           `QUERY ${SupportedMimeType.BoxelOperations} /_operations`,
           `QUERY ${SupportedMimeType.JSONAPI} /_operations`,
         ].sort(),
-        'the consumer set is the card+json read and the operations envelope',
+        'the consumer set is the card+json read, the operations envelope and the capability check',
       );
       let nonConsumers = testRealm
         .routeDescriptions()
@@ -411,7 +425,14 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
         .routeDescriptions()
         .filter((route) => route.consumesCoarseOutcome)
         .map((route) => `${route.method} ${route.mimeType}`)
-        .filter((route) => route !== `HEAD ${SupportedMimeType.CardJson}`)
+        .filter(
+          (route) =>
+            route !== `HEAD ${SupportedMimeType.CardJson}` &&
+            // The capability check answers a decision per pair rather than
+            // refusing the request, so an admitted caller reaches a 200 with
+            // denials in it. What it decides is pinned by its own module.
+            route !== `POST ${SupportedMimeType.JSON}`,
+        )
         .sort();
       assert.deepEqual(
         gatedProbes.map((probe) => probe.route).sort(),

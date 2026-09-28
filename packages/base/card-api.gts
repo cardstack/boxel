@@ -405,6 +405,26 @@ export interface CardContext<T extends CardDef = CardDef> {
   getCard: getCard<T>;
   getCards: getCards;
   getCardCollection: getCardCollection;
+  // May this session invoke `operation` on `card`? Answers synchronously from
+  // what the session already knows, and `undefined` while the realm is being
+  // asked — so a template reads it like any other value and re-renders when
+  // the answer lands. The calls one render pass makes are coalesced into one
+  // request per realm.
+  //
+  // It sits beside `realm.canWrite`, which a card editor is already gated on,
+  // and extends it: the ACL's `canWrite` is a complete answer for a caller it
+  // allows, and this is what the realm's policy adds for one it declines.
+  //
+  // Advisory, and never authorization. The realm decides again when the
+  // operation is invoked, against the state as it is then. Hide a control on
+  // `false`; never skip the call on `true`.
+  //
+  // Absent where nothing can answer — a prerender, a freestyle — so consumers
+  // guard on it.
+  canInvoke?: (
+    operation: string,
+    card: CardDef | string,
+  ) => boolean | undefined;
   store: Store;
   // Host bridge for the markdown editor's embed chooser. Provided by
   // operator-mode; absent in contexts with no chooser modal (prerender,

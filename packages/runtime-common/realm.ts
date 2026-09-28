@@ -228,6 +228,14 @@ import {
   type PolicyGateStats,
 } from './card-operations/gate.ts';
 import {
+  checkCapabilities,
+  parseCapabilityChecks,
+} from './card-operations/capabilities.ts';
+import {
+  emitCapabilityCheck,
+  type CapabilityCheckEvent,
+} from './card-operations/telemetry.ts';
+import {
   runOutputTransform,
   type TransformContext,
 } from './card-operations/transforms.ts';
@@ -817,6 +825,10 @@ const ARCHIVED_SEAL_EXEMPT_PATHS = new Set(['_readiness-check', '_session']);
 // card+source routes and the realm's fallback file and module serve keep the
 // ACL's own refusal.
 const CONSUMES_COARSE_OUTCOME = { consumesCoarseOutcome: true } as const;
+// The capability check's path, named here because two places read it: the
+// route below, and the permission the realm derives from the request's method,
+// which this path is the one `POST` exception to.
+const CAPABILITIES_PATH = '_capabilities';
 const ROUTER_METHODS: Method[] = [
   'GET',
   'QUERY',
@@ -2548,6 +2560,17 @@ export class Realm {
         '/_operations',
         SupportedMimeType.JSONAPI,
         this.handleOperations.bind(this),
+        CONSUMES_COARSE_OUTCOME,
+      )
+      // What the policy gate would decide, asked ahead of the call, so a view
+      // can hide a control its caller may not use rather than render every
+      // one and let the refusal arrive after the click. It consumes the ACL's
+      // outcome for the same reason the envelope does: the question is
+      // interesting exactly for the caller the ACL declined.
+      .post(
+        '/_capabilities',
+        SupportedMimeType.JSON,
+        this.handleCapabilities.bind(this),
         CONSUMES_COARSE_OUTCOME,
       )
       .post(
@@ -5641,6 +5664,122 @@ export class Realm {
     });
   }
 
+  // What the policy gate would decide about a bounded list of
+  // `{ target, operation }` pairs, so a view can hide the controls its caller
+  // may not use.
+  //
+  // A decision and nothing else. Each pair is resolved the way an invocation
+  // resolves it and stops where the gate answers, so a check cannot stage, take
+  // a lock, enqueue an index job or broadcast an event — not because it is
+  // asked not to, but because it never reaches the part of the core that does
+  // any of those. The answer is advisory: the gate decides again at invocation,
+  // against the state as it is then, so nothing may treat one of these as
+  // authorization.
+  //
+  // A malformed body and an over-cap list refuse the whole request, since
+  // neither is one pair's problem and a truncated answer would read to the view
+  // driving off it as a list of denials.
+  private async handleCapabilities(
+    request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    let started = Date.now();
+    try {
+      let body: unknown;
+      try {
+        body = JSON.parse(await request.text());
+      } catch {
+        throw new OperationFailure({
+          status: 400,
+          code: 'invalid-params',
+          title: 'Invalid capability check',
+          detail: `the request body is not valid JSON`,
+        });
+      }
+      let checks = parseCapabilityChecks(body);
+      let { actor } = this.#callerOf(request, requestContext);
+      let coarseDeclined = await this.#capabilityLanes(request, requestContext);
+      let answers = await checkCapabilities(this.operationCore, checks, {
+        caller: scopeCallerFor(actor),
+        coarseDeclined,
+      });
+      emitCapabilityCheck({
+        kind: 'capability-check',
+        realmURL: this.url,
+        actor: actor || null,
+        coarseDeclined,
+        pairs: answers.length,
+        allowed: answers.filter((a) => a.allowed && !a.conditional).length,
+        conditional: answers.filter((a) => a.conditional).length,
+        denied: answers.filter((a) => !a.allowed).length,
+        totalMs: Date.now() - started,
+      } satisfies CapabilityCheckEvent);
+      return this.#capabilitiesResponse(
+        { checks: answers },
+        200,
+        requestContext,
+      );
+    } catch (err: unknown) {
+      if (!isOperationFailure(err)) {
+        throw err;
+      }
+      return this.#capabilitiesResponse(
+        errorsDocument(err.error),
+        err.error.status,
+        requestContext,
+      );
+    }
+  }
+
+  // What the realm ACL declined a capability check's caller.
+  //
+  // One request asks about reads and writes together, and the ACL judged it
+  // once — as a read, which is all the check itself does. So the write lane is
+  // settled here, by asking the same permission check what it would say about a
+  // write of this realm. Without it a caller who may read but not write would
+  // be told the ACL allows them everything, and every write control in the view
+  // would render.
+  async #capabilityLanes(
+    request: Request,
+    requestContext: RequestContext,
+  ): Promise<CoarseDeclined> {
+    if (requestContext.coarseAllowed === false) {
+      return 'all';
+    }
+    if (requestContext.coarseAllowed === undefined) {
+      // The realm never judged this request, which is the realm's own internal
+      // dispatch. Nothing was declined, exactly as `#coarseDeclined` reads it.
+      return 'none';
+    }
+    return (await this.#permissionProbe(request, requestContext, 'write'))
+      .allowed
+      ? 'none'
+      : 'writes';
+  }
+
+  // A capability check answers plain JSON, never a card document: what it
+  // carries is a list of decisions rather than any resource of the realm. It is
+  // never HTTP-cached — the answer follows the policy, the target's stored
+  // values and the caller's permissions, and there is no validator over that
+  // combination for a conditional request to be answered against.
+  #capabilitiesResponse(
+    body: unknown,
+    status: number,
+    requestContext: RequestContext,
+  ): Response {
+    return createResponse({
+      body: JSON.stringify(body, null, 2),
+      init: {
+        status,
+        headers: {
+          'content-type': SupportedMimeType.JSON,
+          'cache-control': 'no-store',
+        },
+      },
+      requestContext,
+    });
+  }
+
   // we track our own writes so that we can eliminate echoes in the file watcher
 
   // Write a file whose content is described as an edit of its own bytes.
@@ -6272,11 +6411,22 @@ export class Realm {
     let requiredPermission: RealmAction = 'read';
     if (localPath === '_permissions') {
       requiredPermission = 'realm-owner';
+    } else if (localPath === CAPABILITIES_PATH) {
+      // A `POST` because it carries a body, and the body is a list of
+      // questions. It writes nothing, so deriving its permission from the
+      // method the way every other `POST` does would refuse a caller who may
+      // read the realm the answer to "may I read this card?" — and would make
+      // the check unaskable in a realm with no policy, where every answer is
+      // the ACL's own and there is nothing to hide. Both lanes are settled
+      // inside the handler, which probes write for itself.
+      requiredPermission = 'read';
     } else if (['PUT', 'PATCH', 'POST', 'DELETE'].includes(request.method)) {
       requiredPermission = 'write';
     }
 
-    let requestContext = await this.createRequestContext(requiredPermission);
+    let requestContext = await this.createRequestContext(requiredPermission, {
+      asksBothLanes: localPath === CAPABILITIES_PATH,
+    });
 
     try {
       if (!isLocal) {
@@ -11076,8 +11226,19 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
   ): Promise<{ allowed: true } | { allowed: false; refusal: unknown }> {
+    return await this.#permissionProbe(request, requestContext, 'read');
+  }
+
+  // Whether the realm ACL would admit this caller to `action`, asked rather
+  // than enforced: a refusal is an answer the caller has a use for and never
+  // the request's outcome.
+  async #permissionProbe(
+    request: Request,
+    requestContext: RequestContext,
+    action: 'read' | 'write',
+  ): Promise<{ allowed: true } | { allowed: false; refusal: unknown }> {
     try {
-      await this.checkPermission(request, requestContext, 'read', {
+      await this.checkPermission(request, requestContext, action, {
         probe: true,
       });
       return { allowed: true };
@@ -13932,6 +14093,13 @@ export class Realm {
   // second fetch.
   private async createRequestContext(
     requiredPermission: RealmAction,
+    // Whether this request will go on to ask the ACL about a permission other
+    // than the one it is judged by. The world-readable shortcut below answers a
+    // read from `*` alone and leaves the realm's own map out, which is
+    // everything a read needs and not enough for a route that also asks whether
+    // the caller may write: read from `*` alone, a realm writer on a public
+    // realm reads as someone who may not write.
+    { asksBothLanes = false }: { asksBothLanes?: boolean } = {},
   ): Promise<RequestContext> {
     let fetched = await fetchRealmPermissions(
       this.#dbAdapter,
@@ -13939,7 +14107,7 @@ export class Realm {
     );
     let isWorldReadable = fetched['*']?.includes('read') ?? false;
     let permissions: RealmPermissions =
-      requiredPermission === 'read' && isWorldReadable
+      requiredPermission === 'read' && isWorldReadable && !asksBothLanes
         ? {
             [this.#matrixClientUserId]: ['assume-user'],
             '*': ['read'],

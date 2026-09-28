@@ -14,6 +14,10 @@ export type {
 } from './policy.ts';
 export type { LoweringContext } from './lowering.ts';
 export { notPermitted, policyGateStats } from './gate.ts';
+export { checkCapabilities, parseCapabilityChecks } from './capabilities.ts';
+export type { CapabilityCaller } from './capabilities.ts';
+export { CAPABILITY_CHECK_CAP } from './capability-wire.ts';
+export type { CapabilityAnswer, CapabilityCheck } from './capability-wire.ts';
 export type {
   GateDecision,
   MatchedGrant,
@@ -89,10 +93,13 @@ export type {
 } from './executors.ts';
 export {
   OPERATIONS_CHANNEL,
+  emitCapabilityCheck,
   emitOperationPerf,
+  setCapabilityCheckSink,
   setOperationPerfSink,
 } from './telemetry.ts';
 export type {
+  CapabilityCheckEvent,
   OperationDiagnostics,
   OperationMissingRead,
   OperationMissingReason,
