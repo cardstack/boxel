@@ -680,8 +680,8 @@ module(basename(import.meta.filename), function (hooks) {
         { target: CLASSROOM, operation: 'create' },
       ]);
       assert.deepEqual(
-        teacher,
-        { operation: 'create', target: CLASSROOM, allowed: false },
+        { ...teacher, target: '<type>' },
+        { operation: 'create', target: '<type>', allowed: false },
         'a caller who may not read the realm is refused it, as the envelope refuses their undischarged create',
       );
     });
