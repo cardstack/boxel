@@ -3621,16 +3621,14 @@ class Isolated extends Component<typeof Workspace> {
   });
 
   private refreshOnIndex = (ev: RealmEventContent) => {
-    // React to a completed index pass — incremental, full, or copy — not the
+    // React to a completed index pass — incremental or full — not the
     // 'incremental-index-initiation' pre-index signal, whose new state is not
     // queryable yet. Widening past 'incremental' keeps the rail, counts, jobs
-    // dock, and feed fresh after a full reindex or a realm copy/remix, not just
-    // after incremental edits.
+    // dock, and feed fresh after a full reindex, not just after incremental
+    // edits.
     if (
       ev.eventName === 'index' &&
-      (ev.indexType === 'incremental' ||
-        ev.indexType === 'full' ||
-        ev.indexType === 'copy')
+      (ev.indexType === 'incremental' || ev.indexType === 'full')
     ) {
       this.refreshAfterIndex.perform();
     }

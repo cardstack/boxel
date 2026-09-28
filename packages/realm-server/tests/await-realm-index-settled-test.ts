@@ -434,7 +434,7 @@ module(basename(import.meta.filename), function (hooks) {
           dbAdapter,
           realmURL,
           'unfulfilled',
-          { jobType: 'copy-index', initiatedBy: [writer] },
+          { jobType: 'incremental-index', initiatedBy: [writer] },
         );
         assert.false(
           await awaitRealmIndexSettled(dbAdapter, realmURL, {
