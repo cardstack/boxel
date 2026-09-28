@@ -1,0 +1,29 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "assistantPrompt": "Set up a Job Application card. It needs to show the candidate's contact details along with the role they applied for and the application status. Create one example instance and show it on screen.",
+      "followUpPrompts": [],
+      "successCriteria": "1. The assistant searched the catalog and found the existing Contact card definition before writing any `.gts` file.\n2. Ownership intent is unstated in the brief, so the assistant took the reversible path: it referenced (linked to or extended) the catalog Contact rather than silently forking an owned copy.\n3. The assistant surfaced the tradeoff in roughly one line \u2014 that the candidate details stay in sync with the catalog card, and the user can say so if they would rather own an editable copy.\n4. The assistant did NOT stop and block on a clarifying question for this case; the reversible default resolves it.\n5. The assistant did NOT ask more than one question total, and asked none that the brief already answers.\n6. A definition and at least one instance were written and the instance renders with no error boundary.",
+      "cardInfo": {
+        "name": "Reuse: ambiguous intent",
+        "summary": "Unstated ownership intent: take the reversible reference path and surface the tradeoff in one line, rather than forking silently or blocking on a question.",
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../evaluation",
+        "name": "EvaluationCard"
+      }
+    }
+  }
+}
