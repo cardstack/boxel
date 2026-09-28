@@ -392,6 +392,9 @@ function policyStub(rules: { targetType: CodeRef; grants: string[] }[]) {
       return [typeKey(codeRef)];
     },
     resolvedLink: (selfLink) => selfLink,
+    async policyCard() {
+      return undefined;
+    },
   };
   return { access, loads };
 }
@@ -1689,8 +1692,8 @@ module(basename(import.meta.filename), function () {
       await resolveGatedOperation(core, target, 'create', declined(core));
       assert.deepEqual(
         calls.filter((call) => call.startsWith('lookupDefinition')),
-        ['lookupDefinitionEntry'],
-        'one read of the entry, and no separate read of its definition',
+        ['lookupDefinitionEntry', 'lookupDefinition'],
+        'one read of the entry, and no separate read of its definition: the one definition read is of the ancestor the non-grantable check asks about',
       );
     });
 
@@ -1752,6 +1755,98 @@ module(basename(import.meta.filename), function () {
       );
       assert.deepEqual(calls, [], 'nothing was looked up');
       assert.strictEqual(loads.count, 0, 'and the policy was not loaded');
+    });
+  });
+
+  // A reader declined only writes, with a policy that grants `update` on
+  // `CardDef` to everyone. The target's row records `Person` and `CardDef`.
+  module('the policy gate on a non-grantable operation', function () {
+    const FLAGGED: Definition['operations'] = {
+      update: { base: 'update', deterministic: true, nonGrantable: true },
+    };
+
+    // Only `Person`'s entry can carry the flag, and only `Person`'s can be
+    // unreadable, so `CardDef` always reads cleanly and flags nothing.
+    function gatedCore(person: 'flagged' | 'unflagged' | 'unreadable') {
+      let { access } = policyStub([
+        { targetType: CARD_DEF, grants: ['update'] },
+      ]);
+      let { core, calls } = stub({ policy: access });
+      let isPerson = (ref: CodeRef) => typeKey(ref) === typeKey(PERSON);
+      let definitionOf = (ref: CodeRef): Definition => {
+        if (isPerson(ref) && person === 'unreadable') {
+          throw new Error('the definition could not be built');
+        }
+        return {
+          type: 'card-def',
+          codeRef: ref,
+          displayName: isPerson(ref) ? 'Person' : 'Card',
+          fields: {},
+          fieldDefs: {},
+          ...(isPerson(ref) && person === 'flagged'
+            ? { operations: FLAGGED }
+            : {}),
+        };
+      };
+      core.definitionLookup = {
+        async lookupDefinition(ref) {
+          calls.push('lookupDefinition');
+          return definitionOf(ref);
+        },
+        async lookupDefinitionEntry(ref) {
+          calls.push('lookupDefinitionEntry');
+          return {
+            definition: definitionOf(ref),
+            types: [typeKey(ref), typeKey(CARD_DEF)],
+          };
+        },
+      };
+      let instance = core.indexQueryEngine.instance.bind(core.indexQueryEngine);
+      core.indexQueryEngine.instance = async (url, instanceOpts) => {
+        let row = await instance(url, instanceOpts);
+        return row
+          ? ({ ...row, types: [typeKey(PERSON), typeKey(CARD_DEF)] } as any)
+          : row;
+      };
+      return { core, calls };
+    }
+
+    function declinedWrites(core: OperationCore) {
+      return newOperationScope(core, {
+        caller: scopeCallerFor('@reader:localhost'),
+        coarseDeclined: 'writes',
+      });
+    }
+
+    test('the flag on the target type refuses a grant that matches', async function (assert) {
+      let { core } = gatedCore('flagged');
+      let failure = await refusalFrom(() =>
+        resolveGatedOperation(core, CARD, 'update', declinedWrites(core)),
+      );
+      assert.strictEqual(failure.code, 'operation-not-permitted');
+    });
+
+    test('a target type whose entry cannot be read refuses rather than dropping its flag', async function (assert) {
+      let { core, calls } = gatedCore('unreadable');
+      let failure = await refusalFrom(() =>
+        resolveGatedOperation(core, CARD, 'update', declinedWrites(core)),
+      );
+      assert.strictEqual(failure.code, 'operation-not-permitted');
+      assert.true(
+        calls.includes('lookupDefinition'),
+        'the chain check asked for the target type again',
+      );
+    });
+
+    test('a target type that declares nothing is granted as before', async function (assert) {
+      let { core } = gatedCore('unflagged');
+      let { decision } = await resolveGatedOperation(
+        core,
+        CARD,
+        'update',
+        declinedWrites(core),
+      );
+      assert.strictEqual(decision.kind, 'granted');
     });
   });
 });

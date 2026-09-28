@@ -478,6 +478,12 @@ interface OperationCommon {
   // The author's override of the automatically-detected eligibility for the
   // client's optimistic path.
   readonly optimistic?: boolean;
+  // Keeps the operation out of every realm policy's reach: only a caller the
+  // realm's own ACL allows may invoke it, whatever a policy grants. For the
+  // operations that edit or disclose authorization itself, where one grant
+  // could be made into every grant. It holds on every subclass, including one
+  // that redeclares the operation without it.
+  readonly nonGrantable?: boolean;
   // The raw escape hatch: author-supplied BXL in place of the declarative
   // clauses, for anything they don't express.
   //
@@ -657,6 +663,7 @@ const COMMON_DECLARATION_KEYS = [
   'base',
   'params',
   'optimistic',
+  'nonGrantable',
   'input',
   'transformations',
   'output',
@@ -1057,6 +1064,12 @@ function assertValidDeclaration(
     throw new Error(`${label}: \`optimistic\` must be a boolean`);
   }
   if (
+    declaration.nonGrantable !== undefined &&
+    typeof declaration.nonGrantable !== 'boolean'
+  ) {
+    throw new Error(`${label}: \`nonGrantable\` must be a boolean`);
+  }
+  if (
     declaration.links !== undefined &&
     !LINK_STRATEGIES.includes(declaration.links as LinkStrategy)
   ) {
@@ -1106,7 +1119,7 @@ function assertValidDeclaration(
       );
     }
   }
-  assertValidClauses(label, base, declaration);
+  assertValidClauses(label, base, declaration, key);
   if (declaration.output !== undefined && !isPlainObject(declaration.output)) {
     throw new Error(
       `${label}: \`output\` must be a projection object or a bxl program`,
@@ -1192,6 +1205,7 @@ function assertValidClauses(
   label: string,
   base: BaseOperationName,
   declaration: Record<string, unknown>,
+  name: string,
 ) {
   if (declaration.append !== undefined) {
     let append = declaration.append;
@@ -1277,7 +1291,7 @@ function assertValidClauses(
   if (base === 'appendLine') {
     assertAppendsALine(label, declaration);
   }
-  if (base === 'appendContainsMany') {
+  if (base === 'appendContainsMany' && !isBuiltInAppend(name, declaration)) {
     assertNamesItemsToAppend(label, declaration);
   }
   if (base === 'query' && declaration.query !== undefined) {
@@ -1374,6 +1388,23 @@ function assertAppendsALine(
       `${label}: \`params.line\` is the text a line holds, so it is a field class rather than a linkTo(…)`,
     );
   }
+}
+
+// An `appendContainsMany` declared under its own name that names nothing to
+// append is the built-in append, which takes its field and items from each
+// invocation. It is how a def marks the built-in, `nonGrantable` say, without
+// changing what it does. Under any other name an append that names nothing
+// describes no work, so it is refused below.
+function isBuiltInAppend(
+  name: string,
+  declaration: Record<string, unknown>,
+): boolean {
+  return (
+    name === 'appendContainsMany' &&
+    declaration.field === undefined &&
+    declaration.item === undefined &&
+    declaration.fields === undefined
+  );
 }
 
 // An `appendContainsMany` names what it appends and where, in one of two
