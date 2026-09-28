@@ -263,6 +263,9 @@ module('Unit | query', function (hooks) {
             });
         }
       },
+      async lookupDefinitionEntry(): Promise<never> {
+        throw new Error('lookupDefinitionEntry is not used by these tests');
+      },
       async lookupCachedDefinition(): Promise<undefined> {
         return undefined;
       },
