@@ -454,28 +454,28 @@ module(basename(import.meta.filename), function (hooks) {
     });
 
     test('a reader is answered from the ACL for a read and from the policy for a write', async function (assert) {
+      // The reader may read the realm and not write it. `rename` is granted on
+      // Classroom outright, `update` is granted on it by no rule, so the ACL
+      // alone would refuse both and only the policy can tell them apart.
       let given = await answers(AUTH.reader(), [
         { target: ROOM_205, operation: 'read' },
         { target: ROOM_205, operation: 'rename' },
+        { target: ROOM_205, operation: 'update' },
       ]);
       assert.deepEqual(
         given.map((answer) => answer.allowed),
-        [true, false],
-        'the reader may read the classroom and may not rename it',
+        [true, true, false],
+        'the reader may read the classroom, rename it by grant, and not update it',
       );
       assert.strictEqual(
-        given[1].reason,
+        given[2].reason,
         'operation-not-permitted',
-        'the rename was refused by the gate',
+        'the update was refused by the gate',
       );
-      assert.strictEqual(
-        gateStats().predicateEvaluations,
-        0,
-        'the read never reached a predicate, and the rename’s grant carries none',
-      );
-      assert.true(
-        gateStats().policyLoads > 0,
-        'the rename reached the policy, which the read did not',
+      assert.deepEqual(
+        gateStats(),
+        { policyLoads: 2, predicateEvaluations: 0 },
+        'each write reached the policy once and the read never did',
       );
     });
   });
@@ -582,19 +582,31 @@ module(basename(import.meta.filename), function (hooks) {
     });
 
     test('a write whose grant still rests on a predicate answers conditional', async function (assert) {
-      let [own, another] = await answers(AUTH.teacher(), [
-        { target: ROOM_204, operation: 'delete' },
+      // Asked by the reader, since a caller who may not read the realm is told
+      // a bare boolean (pinned below). A write's grant is matched without its
+      // predicate, which judges the state the write lock holds, so a delete of
+      // any classroom is conditional here, whichever teacher it names.
+      let [classroomDelete, noteDelete] = await answers(AUTH.reader(), [
         { target: ROOM_205, operation: 'delete' },
+        { target: NOTE, operation: 'delete' },
       ]);
       assert.deepEqual(
-        { allowed: own.allowed, conditional: own.conditional },
+        {
+          allowed: classroomDelete.allowed,
+          conditional: classroomDelete.conditional,
+        },
         { allowed: true, conditional: true },
-        'a delete of their own classroom matched a grant whose predicate is still to run',
+        'the Classroom delete matched a grant whose predicate is still to run',
       );
       assert.deepEqual(
-        { allowed: another.allowed, conditional: another.conditional },
+        { allowed: noteDelete.allowed, conditional: noteDelete.conditional },
         { allowed: false, conditional: undefined },
-        'a delete of a classroom they do not teach matched no grant at all',
+        'a delete of a card no rule names matched no grant at all',
+      );
+      assert.strictEqual(
+        gateStats().predicateEvaluations,
+        0,
+        'and no predicate was evaluated to answer either',
       );
     });
   });
@@ -656,13 +668,21 @@ module(basename(import.meta.filename), function (hooks) {
     });
 
     test('a grant whose predicate reads the proposed document answers conditional', async function (assert) {
-      let [given] = await answers(AUTH.teacher(), [
+      let [reader] = await answers(AUTH.reader(), [
         { target: CLASSROOM, operation: 'create' },
       ]);
       assert.deepEqual(
-        { allowed: given.allowed, conditional: given.conditional },
+        { allowed: reader.allowed, conditional: reader.conditional },
         { allowed: true, conditional: true },
         'the grant matched, and its predicate runs against whatever is submitted',
+      );
+      let [teacher] = await answers(AUTH.teacher(), [
+        { target: CLASSROOM, operation: 'create' },
+      ]);
+      assert.deepEqual(
+        teacher,
+        { operation: 'create', target: CLASSROOM, allowed: false },
+        'a caller who may not read the realm is refused it, as the envelope refuses their undischarged create',
       );
     });
 
