@@ -342,7 +342,7 @@ export const BUNDLED_BASE_MODULES: Record<
   // `file-formats/metadata-fields` and the file defs that hold its fields —
   // docx, pptx, xlsx, html and midi — are deliberately NOT bundled.
   //
-  // It declares fourteen FieldDefs that those defs hold as compound fields,
+  // It declares fifteen FieldDefs that those defs hold as compound fields,
   // and a field's class has to have an identity: deserializing one calls
   // `makeMetaForField`, which throws when `identifyCard` cannot name the
   // class. A class is named only when the loader is asked for the module that

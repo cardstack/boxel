@@ -7,8 +7,7 @@
 // class, which disagree only where something compares them. An attribution
 // break leaves a class with no identity, and the caller that writes a code ref
 // skips the write rather than failing — a field keeps rendering while its
-// definition names nothing. Both have reached review on this work; this is what
-// asks the question before a reviewer has to.
+// definition names nothing.
 import { readdirSync, readFileSync, existsSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
