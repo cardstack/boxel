@@ -15,7 +15,7 @@
 // the warmup module's mock-matrix / acceptance-test-realm setup conflicts
 // with the real running realm server, so it must not register there.
 
-import { visit, waitFor } from '@ember/test-helpers';
+import { click, visit, waitFor } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
@@ -105,11 +105,11 @@ export function registerShardWarmup() {
       let cardId = `${testRealmURL}WarmupCard/1`;
       await visitOperatorMode({
         stacks: [[{ id: cardId, format: 'isolated' }]],
-        aiAssistantOpen: true,
       });
       await waitFor(`[data-test-stack-card="${cardId}"]`, {
         timeout: FIRST_LOAD_TIMEOUT_MS,
       });
+      await click('[data-test-open-ai-assistant]');
       await waitFor('[data-test-room-settled]', {
         timeout: FIRST_LOAD_TIMEOUT_MS,
       });
