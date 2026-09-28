@@ -3402,5 +3402,52 @@ module(`Integration | search resource`, function (hooks) {
         'the facade enforces the realms cap on an explicit list',
       );
     });
+
+    // The caps hang off `search`, so a sibling that runs the same search
+    // without them is a way around the facade rather than a gap in it. The
+    // facade is an allowlist for that reason, and this pins it: a method the
+    // card-facing `Store` interface doesn't declare is absent at runtime, not
+    // merely absent from the types card code is checked against.
+    test('the card-facing store withholds the search methods that skip the caps', async function (assert) {
+      let cardStore = storeService.cardFacingStore(
+        () => 'http://current/',
+      ) as unknown as Record<string, unknown>;
+
+      for (let name of ['searchWithMeta', 'searchEntries', 'getWithoutCache']) {
+        assert.strictEqual(
+          typeof storeService[name as keyof typeof storeService],
+          'function',
+          `${name} is a real method on the store service`,
+        );
+        assert.strictEqual(
+          cardStore[name],
+          undefined,
+          `${name} is not reachable through the card-facing store`,
+        );
+      }
+
+      // Everything the interface does declare still arrives callable, so the
+      // allowlist withholds the siblings rather than the surface.
+      for (let name of [
+        'save',
+        'create',
+        'add',
+        'addWithoutPersisting',
+        'addWithoutWaiting',
+        'peek',
+        'peekError',
+        'get',
+        'delete',
+        'patch',
+        'search',
+        'getSaveState',
+      ]) {
+        assert.strictEqual(
+          typeof cardStore[name],
+          'function',
+          `${name} is reachable through the card-facing store`,
+        );
+      }
+    });
   });
 });

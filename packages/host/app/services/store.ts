@@ -271,6 +271,31 @@ type TrackedAddOptions = AddOptions &
 const MAX_SHED_SEARCH_RETRIES = 3;
 const MAX_SHED_RETRY_AFTER_SECONDS = 5;
 
+// What `cardFacingStore` lets card code reach: exactly the method names the
+// card-facing `Store` interface declares. Keep the two in step — a method
+// added to that interface and not to this set is typed as available to a card
+// and absent at runtime.
+//
+// This is an allowlist rather than a list of methods to intercept because
+// card code is untrusted. Under a denylist every method this service gains
+// becomes card-reachable by default, and the ones worth guarding are exactly
+// the ones easiest to forget: `searchWithMeta` and `searchEntries` both run a
+// search with none of the card caps applied.
+const CARD_FACING_STORE_METHODS: ReadonlySet<string> = new Set([
+  'save',
+  'create',
+  'add',
+  'addWithoutPersisting',
+  'addWithoutWaiting',
+  'peek',
+  'peekError',
+  'get',
+  'delete',
+  'patch',
+  'search',
+  'getSaveState',
+]);
+
 // The wait a shed response asks for, in ms, with jitter so the clients a burst
 // shed together don't all come back together. A missing or unparseable header
 // (the HTTP-date form, say) counts as one second.
@@ -1511,15 +1536,22 @@ export default class StoreService extends Service implements StoreInterface {
   }
 
   // The store handed to cards as `@context.store`, bound to the realm the
-  // `@context` was provided with (`getCurrentRealm`). It behaves exactly like
-  // the store service except `search` runs card-initiated — under the page,
-  // realms, and concurrency caps — and a search that names no realm targets the
-  // current realm instead of every realm the user can see. So a card can't
-  // dodge the caps (or fan out to all realms) by reaching for
-  // `@context.store.search` directly instead of `getCards`. Every other method
-  // delegates straight through. The host app injects the store service itself,
-  // never this view, so host search is unconstrained. `searchEntries` isn't on
-  // the card-facing `Store` interface, so the html leg needs no handling here.
+  // `@context` was provided with (`getCurrentRealm`). It exposes the
+  // `Store` interface's methods and nothing else, and `search` among them
+  // runs card-initiated — under the page, realms, and concurrency caps —
+  // with a realm-less search targeting the current realm instead of every
+  // realm the user can see. So a card can't dodge the caps (or fan out to
+  // all realms) by reaching for `@context.store.search` directly instead of
+  // `getCards`, nor by reaching past it for a sibling that runs the same
+  // search uncapped (`searchWithMeta`, `searchEntries`).
+  //
+  // The `Store` interface not declaring a method is what puts it off the
+  // allowlist, but it is not what keeps a card out of it: card code is
+  // untrusted and reaches this object at runtime, where a TypeScript
+  // interface is not present. The gate is the allowlist.
+  //
+  // The host app injects the store service itself, never this view, so host
+  // search is unconstrained.
   cardFacingStore(getCurrentRealm: () => string | undefined): StoreInterface {
     let store = this;
     return new Proxy(store, {
@@ -1537,6 +1569,29 @@ export default class StoreService extends Service implements StoreInterface {
               scope: opts?.scope,
             });
           };
+        }
+        // Two kinds of key pass through without being on the allowlist,
+        // because withholding them breaks the object without guarding
+        // anything:
+        //
+        //   - Symbols, which carry JS plumbing (`Symbol.toPrimitive`,
+        //     `Symbol.toStringTag`) that the engine and debuggers reach for.
+        //     No card names a method through one — this service's methods are
+        //     all string-keyed.
+        //   - `Object.prototype` members. `toString` and `valueOf` are how a
+        //     value converts to a primitive, so withholding them turns any
+        //     `String(store)` — a log line, an error message, a template
+        //     interpolation — into a "Cannot convert object to primitive
+        //     value" throw.
+        //
+        // Absent keys answer `undefined` rather than throwing, so a card that
+        // reaches for a withheld method fails where it calls it.
+        if (
+          typeof prop === 'string' &&
+          !CARD_FACING_STORE_METHODS.has(prop) &&
+          !(prop in Object.prototype)
+        ) {
+          return undefined;
         }
         let value = Reflect.get(target, prop, target);
         return typeof value === 'function' ? value.bind(target) : value;
