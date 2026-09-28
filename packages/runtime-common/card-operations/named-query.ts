@@ -164,6 +164,22 @@ export async function resolveNamedQuery(
   };
 }
 
+// A named search as the ad-hoc request that asks for its rendering and nothing
+// else: the fieldset and the `htmlQuery` binding, which are what an answer
+// with no rows carries of the request. For a request whose declaration there
+// is no realm to resolve through — every realm it names is one nothing is
+// served from — so that it is answered with the document a search of those
+// realms matching nothing would give.
+export function namedQueryRendering(
+  payload: Record<string, unknown>,
+): Record<string, unknown> {
+  let htmlQuery = htmlQueryBinding(payload.filter);
+  return {
+    ...(payload.fields !== undefined ? { fields: payload.fields } : {}),
+    ...(htmlQuery !== undefined ? { filter: { eq: { htmlQuery } } } : {}),
+  };
+}
+
 // The rendering a caller's filter asks for, read where the grammar binds it.
 // Checked by the search parser along with the rest of the query it lands in.
 function htmlQueryBinding(filter: unknown): unknown {

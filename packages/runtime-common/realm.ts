@@ -72,12 +72,11 @@ import {
   type CardJsonAssembly,
 } from './card-document-cache.ts';
 import {
-  composePolicyScopedFilter,
+  emptySearchEntryDocument,
   fieldsetFromParam,
   htmlQueryFromParams,
   parseSearchEntryQueryFromPayload,
-  policyFilterFromWire,
-  combineSearchEntryResults,
+  policyScopedQuery,
   type SearchEntryFieldset,
   type SearchEntryQuery,
 } from './search-entry.ts';
@@ -335,7 +334,7 @@ import {
   isCoarseRefusal,
   lookupRouteTable,
 } from './router.ts';
-import { parseQuery, type Filter } from './query.ts';
+import { parseQuery } from './query.ts';
 import type { Readable } from 'stream';
 import { createResponse } from './create-response.ts';
 import { decodeLintFilename, LINT_FILENAME_HEADER } from './lint-headers.ts';
@@ -12001,21 +12000,6 @@ export class Realm {
         if (!isOperationFailure(err)) {
           throw err;
         }
-        // For a caller the ACL declined outright, a declaration that does not
-        // resolve is answered as one that grants them nothing. The reasons it
-        // can fail describe the type's declarations — no such operation, a
-        // param it does not take — and a caller who cannot read the realm
-        // learns what its types declare from none of them, as the gate's
-        // refusal is written to say nothing of the same.
-        if (this.#coarseDeclined(requestContext) === 'all') {
-          return createResponse({
-            body: JSON.stringify(combineSearchEntryResults([], 0)),
-            init: {
-              headers: { 'content-type': SupportedMimeType.CardJson },
-            },
-            requestContext,
-          });
-        }
         return createResponse({
           body: JSON.stringify(errorsDocument(err.error), null, 2),
           init: {
@@ -12033,7 +12017,7 @@ export class Realm {
       // What this realm's policy contributes, for a caller its ACL declined.
       // A caller it allows is never asked: a policy widens what the ACL
       // refused and has nothing to add to what it allowed, so their query runs
-      // exactly as it always has.
+      // untouched.
       //
       // A caller reaching this realm only through its policy is answered with
       // the rows their grants admit, and with none where no grant admits the
@@ -12048,7 +12032,11 @@ export class Realm {
           : undefined;
       if (policyScope?.kind === 'denied') {
         return createResponse({
-          body: JSON.stringify(combineSearchEntryResults([], 0)),
+          body: JSON.stringify(
+            emptySearchEntryDocument(searchEntryQuery),
+            null,
+            2,
+          ),
           init: {
             headers: { 'content-type': SupportedMimeType.CardJson },
           },
@@ -12059,15 +12047,10 @@ export class Realm {
         // Composed before the page is applied below, so the page the engine
         // fills is a page of rows the policy admits rather than a page of the
         // caller's rows with some removed.
-        searchEntryQuery.itemQuery = {
-          ...searchEntryQuery.itemQuery,
-          filter: composePolicyScopedFilter(
-            searchEntryQuery.itemQuery.filter,
-            policyScope.filters
-              .map((filter) => policyFilterFromWire(filter))
-              .filter((filter): filter is Filter => filter !== undefined),
-          ),
-        };
+        searchEntryQuery = policyScopedQuery(
+          searchEntryQuery,
+          policyScope.filters,
+        );
       }
       // Two bounds hold server-side on the live item leg (never during
       // prerender, never on the prerendered-HTML leg): a hard page-size ceiling

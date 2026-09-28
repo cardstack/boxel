@@ -1,5 +1,6 @@
 import type { CodeRef } from '../code-ref.ts';
-import type { SearchEntryWireFilter } from '../search-entry.ts';
+import type { Filter } from '../query.ts';
+import { policyFilterFromWire } from '../search-entry.ts';
 import type { OperationCore } from './dispatch.ts';
 import { matchingGrants } from './gate.ts';
 import type { CompiledRealmPolicy } from './policy.ts';
@@ -17,9 +18,9 @@ import { lowerQueryOperation } from './query.ts';
 // filter alongside the caller's own.
 //
 // This is the lookup half: which filters a policy contributes to one
-// invocation. Composing them into the query the search runs is
-// `composePolicyScopedFilter`, which lives with the rest of the search
-// grammar.
+// invocation, in the grammar the engine runs. Composing them into the query
+// the search runs is `policyScopedQuery`, which lives with the rest of the
+// search grammar.
 //
 // Two rules decide what contributes:
 //
@@ -44,7 +45,7 @@ export type PolicyQueryScope =
   // The grants that admit this query, as the filter each one admits. Never
   // empty: a scope with no filter is a denial, since composing zero filters
   // would leave the caller's query running unscoped.
-  | { kind: 'scoped'; filters: SearchEntryWireFilter[] }
+  | { kind: 'scoped'; filters: Filter[] }
   // No grant admits this query here. The realm contributes no rows.
   | { kind: 'denied' };
 
@@ -103,21 +104,25 @@ async function targetTypeChain(
   }
 }
 
-// Every matching grant's filter, with the caller filled in.
+// Every matching grant's filter, with the caller filled in, in the grammar the
+// engine runs.
 //
 // A compiled filter stands the caller as the `{ $ref: 'actor' }` marker a
 // declared query uses, so filling one in is the substitution a named query
 // already runs. It goes through that same lowering, which also checks what
-// comes out against the search grammar before it can reach the engine.
+// comes out against the search grammar before it can reach the engine, and is
+// then read the way a request's filter is read. A filter that does not survive
+// either step throws here, where the realm it belongs to is still known,
+// rather than composing nothing into the search it scopes.
 async function grantFilters(
   policy: CompiledRealmPolicy,
   types: string[],
   operation: string,
   actor: string,
   core: OperationCore,
-): Promise<SearchEntryWireFilter[]> {
+): Promise<Filter[]> {
   let matched = await matchingGrants(policy, types, operation, core.policy!);
-  let filters: SearchEntryWireFilter[] = [];
+  let filters: Filter[] = [];
   for (let { grant } of matched) {
     if (!grant.filter) {
       continue;
@@ -126,9 +131,12 @@ async function grantFilters(
       { base: 'query', query: { filter: grant.filter } },
       { actor },
     );
-    if (bound.filter) {
-      filters.push(bound.filter);
+    if (!bound.filter) {
+      throw new Error(
+        `a compiled query grant on "${operation}" lowered to no filter`,
+      );
     }
+    filters.push(policyFilterFromWire(bound.filter));
   }
   return filters;
 }

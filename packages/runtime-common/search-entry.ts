@@ -714,8 +714,8 @@ export function parseSearchEntryQueryFromPayload(
 // policy.
 //
 // A realm contributing no filter is left alone. Not wrapped in an `every` of
-// one, not anchored, not touched: the query it runs is the one it ran before
-// any of this existed, which is what every caller a realm reads coarsely gets.
+// one, not anchored, not touched: it runs the caller's query as the caller
+// sent it, which is what every caller a realm reads coarsely gets.
 // ---------------------------------------------------------------------------
 
 // The filter a search runs for one realm, given what the caller asked for and
@@ -746,12 +746,61 @@ export function composePolicyScopedFilter(
 //
 // A fragment binds no `htmlQuery`: it is compiled from a predicate over a
 // card's fields, and the rendering a search asks for is the caller's to
-// choose. So there is nothing here for the parser's htmlQuery lift to carry
-// away, and the whole fragment survives as membership.
-export function policyFilterFromWire(
-  filter: SearchEntryWireFilter,
-): Filter | undefined {
-  return parseSearchEntryQueryFromPayload({ filter }).itemQuery.filter;
+// choose. So the whole fragment is membership, and it always reads as some
+// filter. One that reads as none is refused rather than returned, since a
+// grant that composed nothing into a search would leave the search running
+// unscoped.
+export function policyFilterFromWire(filter: SearchEntryWireFilter): Filter {
+  let translated = parseSearchEntryQueryFromPayload({ filter }).itemQuery
+    .filter;
+  if (!translated) {
+    throw new Error(
+      `a policy filter translated to no filter at all: ${JSON.stringify(filter)}`,
+    );
+  }
+  return translated;
+}
+
+// The query a realm runs for a caller its policy scopes: the caller's query,
+// with the grants that admit them composed into its filter. Composed on the
+// parsed query rather than on the wire filter, because the wire grammar binds
+// the caller's rendering choice in the filter's top-level `eq`, and nesting
+// that filter inside an `every` would carry the binding away from where it is
+// read. Everything but the filter — page, sort, fieldset, rendering — is the
+// caller's query as it stands.
+export function policyScopedQuery(
+  query: SearchEntryQuery,
+  grantFilters: Filter[],
+): SearchEntryQuery {
+  if (grantFilters.length === 0) {
+    throw new Error(
+      'a policy-scoped search needs at least one grant filter; with none, the search would run unscoped',
+    );
+  }
+  return {
+    ...query,
+    itemQuery: {
+      ...query.itemQuery,
+      filter: composePolicyScopedFilter(query.itemQuery.filter, grantFilters),
+    },
+  };
+}
+
+// The document a realm answers with when it contributes no rows because the
+// caller may not see any: the one a search matching nothing produces, so a
+// realm that grants the caller nothing reads exactly as a realm holding
+// nothing for them. The rendering choice is echoed whenever the html branch
+// is in play, as the engine echoes it.
+export function emptySearchEntryDocument(
+  query: SearchEntryQuery,
+): EntryCollectionDocument {
+  return {
+    data: [],
+    meta: {
+      page: { total: 0 },
+      ...(query.fieldset.html ? { htmlQuery: query.htmlQuery } : {}),
+    },
+  };
 }
 
 // ---------------------------------------------------------------------------

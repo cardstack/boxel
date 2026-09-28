@@ -23,6 +23,7 @@ import type {
 import { resolveNamedQuery } from '@cardstack/runtime-common/card-operations';
 import type { PgAdapter } from '@cardstack/postgres';
 import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms.ts';
+import { LIVE_SEARCH_CACHE_HEADER } from '../../handlers/handle-search.ts';
 import type { RealmHttpServer as Server } from '../../server.ts';
 import {
   closeServer,
@@ -69,6 +70,8 @@ const PRIVATE = 'http://127.0.0.1:4444/private/';
 const OWNER = '@owner:localhost';
 const PROVIDER_A = '@provider-a:localhost';
 const PROVIDER_B = '@provider-b:localhost';
+// Holds a grant in the Grants realm, and no schedule it admits.
+const PROVIDER_C = '@provider-c:localhost';
 
 const REALM_POLICY = {
   module: rri('@cardstack/catalog/realm-policy/realm-policy'),
@@ -437,10 +440,21 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         // inside the live search cache's retention window, so an answer keyed
         // on the request alone would hand B the body computed for A.
         let a = await federatedSearch(listOpen([GRANTS]), PROVIDER_A);
+        let again = await federatedSearch(listOpen([GRANTS]), PROVIDER_A);
         let b = await federatedSearch(listOpen([GRANTS]), PROVIDER_B);
 
+        assert.strictEqual(
+          again.headers[LIVE_SEARCH_CACHE_HEADER],
+          'hit',
+          "A's own repeat is served from the cache, so the cache is holding A's body while B asks",
+        );
         assert.deepEqual(ids(a), A_OPEN_IN_GRANTS, "A's rows");
         assert.deepEqual(ids(b), B_OPEN_IN_GRANTS, "B's rows, not A's");
+        assert.strictEqual(
+          b.headers[LIVE_SEARCH_CACHE_HEADER],
+          'miss',
+          "B's answer is computed for B",
+        );
       });
 
       test('a policy-filtered page is full, not sparse, across several pages', async function (assert) {
@@ -530,36 +544,6 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         );
       });
 
-      test('a declaration that does not resolve tells a caller who cannot read the realm nothing about the type', async function (assert) {
-        let body = { operation: 'listEverything', on: SCHEDULE };
-
-        let federated = await federatedSearch(
-          { ...body, realms: [GRANTS] },
-          PROVIDER_A,
-        );
-        assert.strictEqual(federated.status, 200, 'federated: HTTP 200');
-        assert.deepEqual(
-          ids(federated),
-          [],
-          'federated: answered as a query that grants them nothing',
-        );
-
-        let own = await realmSearch(GRANTS, body, PROVIDER_A);
-        assert.strictEqual(own.status, 200, "the realm's own search: HTTP 200");
-        assert.deepEqual(ids(own), [], "the realm's own search: no rows");
-
-        let reader = await federatedSearch(
-          { ...body, realms: [COARSE] },
-          PROVIDER_A,
-        );
-        assert.strictEqual(
-          reader.status,
-          404,
-          'a caller who reads the realm is told why, as before',
-        );
-        assert.strictEqual(reader.body.errors[0].code, 'unknown-operation');
-      });
-
       test('an ad-hoc search reaches no grant', async function (assert) {
         let response = await federatedSearch(
           {
@@ -623,7 +607,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         assert.strictEqual(
           inRealm(COARSE, response).length,
           2,
-          'and the realm the caller reads answers as always',
+          'and the realm the caller reads answers with its matching rows',
         );
       });
 
@@ -636,6 +620,92 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         assert.strictEqual(response.status, 200, 'HTTP 200 status');
         assert.deepEqual(ids(response), []);
         assert.strictEqual(response.body.meta.page.total, 0);
+      });
+
+      test('a realm that grants the caller nothing answers exactly as one whose grant matches nothing', async function (assert) {
+        // Provider C holds a grant in the Grants realm that matches none of its
+        // schedules. Provider A holds no query grant in the Denies realm.
+        let matchesNothing = await federatedSearch(
+          listOpen([GRANTS]),
+          PROVIDER_C,
+        );
+        let grantsNothing = await federatedSearch(
+          listOpen([DENIES]),
+          PROVIDER_A,
+        );
+        assert.strictEqual(matchesNothing.status, 200);
+        assert.strictEqual(grantsNothing.status, 200);
+        let withRealmsElided = (body: {
+          meta: { realmTotals?: Record<string, number> };
+        }) => ({
+          ...body,
+          meta: {
+            ...body.meta,
+            realmTotals: Object.values(body.meta.realmTotals ?? {}),
+          },
+        });
+        assert.deepEqual(
+          withRealmsElided(grantsNothing.body),
+          withRealmsElided(matchesNothing.body),
+          'the federated answers differ only in which realm they name',
+        );
+        assert.deepEqual(
+          grantsNothing.body.meta.realmTotals,
+          { [DENIES]: 0 },
+          'the realm is counted among those that answered, with nothing',
+        );
+
+        let ownMatchesNothing = await realmSearch(
+          GRANTS,
+          { operation: 'listOpen', on: SCHEDULE },
+          PROVIDER_C,
+        );
+        let ownGrantsNothing = await realmSearch(
+          DENIES,
+          { operation: 'listOpen', on: SCHEDULE },
+          PROVIDER_A,
+        );
+        assert.strictEqual(ownMatchesNothing.status, 200);
+        assert.strictEqual(
+          ownGrantsNothing.text,
+          ownMatchesNothing.text,
+          "a realm's own search answers the two byte for byte alike",
+        );
+      });
+
+      test('a named query searches each realm once, whatever the request repeats', async function (assert) {
+        let response = await federatedSearch(
+          listOpen([COARSE, COARSE]),
+          PROVIDER_A,
+        );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        assert.deepEqual(
+          ids(response).sort(),
+          [`${COARSE}schedules/a-open`, `${COARSE}schedules/b-open`],
+          'each row once',
+        );
+        assert.strictEqual(response.body.meta.page.total, 2);
+      });
+
+      test('a named query naming only archived realms is answered with no rows', async function (assert) {
+        await archiveRealm(db, new URL(GRANTS));
+        try {
+          let response = await federatedSearch(listOpen([GRANTS]), PROVIDER_A);
+          assert.strictEqual(
+            response.status,
+            200,
+            'there is nothing to search, which is not an error',
+          );
+          assert.deepEqual(ids(response), []);
+          assert.deepEqual(
+            response.body.meta.realmTotals,
+            { [GRANTS]: 0 },
+            'answered as a realm that holds nothing for the caller',
+          );
+        } finally {
+          await unarchiveRealm(db, new URL(GRANTS));
+        }
       });
 
       test('a request that authenticates nobody is still told to', async function (assert) {
@@ -682,7 +752,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         return indexReads(statements);
       }
 
-      test('a realm contributing no fragment runs the query it ran before', async function (assert) {
+      test('a realm contributing no fragment runs the query a direct search of it runs', async function (assert) {
         // A caller the realm reads outright, asking a question no other test
         // asks, so the answer is computed here rather than served from an
         // earlier test's cache entry.
@@ -697,9 +767,9 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         );
         assert.true(served.length > 0, 'the search read the index');
 
-        // The same search run straight through the realm, the way a search
-        // ran before any policy could scope one: the declaration resolved, and
-        // the server's page bound applied, and nothing else.
+        // The same search run straight through the realm, with no policy in
+        // the path: the declaration resolved, the server's page bound applied,
+        // and nothing else.
         let resolved = await resolveNamedQuery(
           realms[COARSE].operationCore,
           body,

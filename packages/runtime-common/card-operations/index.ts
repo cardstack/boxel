@@ -157,6 +157,7 @@ export { lowerQueryOperation, lowerQueryTemplate } from './query.ts';
 export {
   isNamedQueryPayload,
   namedQueryInvocation,
+  namedQueryRendering,
   resolveNamedQuery,
 } from './named-query.ts';
 export type { NamedQueryContext } from './named-query.ts';
