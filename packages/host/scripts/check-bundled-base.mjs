@@ -5,9 +5,9 @@
 //
 // Neither rule fails loudly when broken. A closure break leaves two copies of a
 // class, which disagree only where something compares them. An attribution
-// break leaves a class with no identity, and the caller that writes a code ref
-// skips the write rather than failing — a field keeps rendering while its
-// definition names nothing.
+// break leaves a class the loader does not name, and a code ref for it then
+// names the field it is held as instead of the module that declares it — which
+// still resolves, so only a caller that reads the ref as data is wrong.
 import { readdirSync, readFileSync, existsSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -18,39 +18,13 @@ const tablePath = join(hostDir, 'app', 'lib', 'bundled-base.ts');
 const SKIP_DIRS = new Set(['node_modules', 'scripts', 'types', 'tests']);
 
 // Base modules a card author imports by identifier. The loader is asked for
-// these, so the classes they declare are attributed however they are reached.
+// these, so the classes they declare are named however they are reached.
 //
-// This is a claim about the public field-type surface, not something the repo
-// can prove: a card in any realm may import any base module, and nothing here
-// sees those realms. Widen it deliberately — an entry added to quiet this check
-// asserts that card code names the module, and is wrong if it does not.
-const NAMED_BY_CARD_CODE = new Set([
-  'base64-image',
-  'big-integer',
-  'boolean',
-  'card-api',
-  'code-ref',
-  'color',
-  'date',
-  'datetime',
-  'email',
-  'enum',
-  'ethereum-address',
-  'file-api',
-  'json-field',
-  'markdown',
-  'number',
-  'percentage',
-  'phone-number',
-  'realm',
-  'skill',
-  'spec',
-  'string',
-  'text-area',
-  'time',
-  'tool-field',
-  'url',
-]);
+// This is a claim about the public surface, not something the repo can prove: a
+// card in any realm may import any base module, and nothing here sees those
+// realms. Widen it deliberately — an entry added to quiet this check asserts
+// that card code names the module, and is wrong if it does not.
+const NAMED_BY_CARD_CODE = new Set(['card-api', 'skill']);
 
 // Read source with comments blanked, so prose that looks like a specifier is
 // not taken for one. A comment is not a regular language — `/*` appears inside
@@ -179,10 +153,16 @@ const IMPORT_STATEMENT =
   /(?:^|\n)\s*import\s+(?!type\s)([^;'"]*?)\s*from\s*['"]([^'"]+)['"]/g;
 const RUNTIME_IMPORT =
   /(?:^|\n)\s*(?:import|export)\s+(?!type\s)(?:[^;'"]*?\sfrom\s*)?['"]([^'"]+)['"]/g;
-// A class held as a field. `contains(() => Foo)` defers the reference; both
+// A class held as a link. `linksTo(() => Foo)` defers the reference; both
 // spellings name the same class.
+//
+// Only links. A contained value is built from the field that holds it, so the
+// field itself names the class, and the value deserializes, renders and round
+// trips whatever the loader knows. A link's type is read as data instead: it is
+// the filter a chooser searches by, so a ref that names the holding field
+// rather than the declaring module asks for the wrong type.
 const FIELD_USE =
-  /\b(?:contains|containsMany|linksTo|linksToMany)\s*\(\s*(?:\(\)\s*=>\s*)?([A-Za-z_$][\w$]*)/g;
+  /\b(?:linksTo|linksToMany)\s*\(\s*(?:\(\)\s*=>\s*)?([A-Za-z_$][\w$]*)/g;
 
 function main() {
   let { table, exceptions } = readTable();
@@ -246,7 +226,7 @@ function main() {
       ) {
         continue;
       }
-      identityHazards.push(`${name} holds ${match[1]} from ${declaredIn}`);
+      identityHazards.push(`${name} links to ${match[1]} from ${declaredIn}`);
     }
   }
 
@@ -256,7 +236,7 @@ function main() {
   if (closure.length === 0 && identity.length === 0) {
     console.log(
       `ok: ${table.size} bundled base modules are closed under imports, ` +
-        `and hold no field whose class the loader is never asked for`,
+        `and link to no class the loader is never asked for`,
     );
     return;
   }
@@ -277,12 +257,13 @@ function main() {
 
   if (identity.length > 0) {
     console.error(
-      `\n${identity.length} bundled module(s) hold a field whose class is ` +
-        `declared by another bundled module.\n` +
+      `\n${identity.length} bundled module(s) link to a class another bundled ` +
+        `module declares.\n` +
         `A class is named only when the loader is asked for the module ` +
         `declaring it, and one bundled module asking for another is resolved ` +
-        `inside the chunk — so the field's class has no identity, and ` +
-        `deserializing it throws from makeMetaForField.\n` +
+        `inside the chunk — so a code ref for the link's type names the field ` +
+        `it is held as, and a chooser that filters on it asks for the wrong ` +
+        `type.\n` +
         `Leave the holder and the declarer both out of the table, or — if card ` +
         `code names the declarer by identifier — add it to NAMED_BY_CARD_CODE ` +
         `in this script.\n`,
