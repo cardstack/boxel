@@ -14,6 +14,7 @@ import {
   PackageShimHandler,
   PACKAGES_FAKE_ORIGIN,
   type ModuleLike,
+  type ShimRetryDeps,
 } from './package-shim-handler.ts';
 import type { Readable } from 'stream';
 import { fetcher, type FetcherMiddlewareHandler } from './fetcher.ts';
@@ -192,8 +193,11 @@ export class VirtualNetwork {
     this.packageShimHandler.shimModule(moduleIdentifier, module);
   }
 
-  shimAsyncModule(descriptor: ModuleDescriptor) {
-    this.packageShimHandler.shimAsyncModule(descriptor);
+  // `retryDeps` reaches the handler's retry and deadline knobs, which is how
+  // a test registers a shim through the network it is exercising instead of
+  // reaching past it to build a handler of its own.
+  shimAsyncModule(descriptor: ModuleDescriptor, retryDeps?: ShimRetryDeps) {
+    this.packageShimHandler.shimAsyncModule(descriptor, retryDeps);
   }
 
   // Lets a Loader serve a module shimmed on this network from its module-fetch

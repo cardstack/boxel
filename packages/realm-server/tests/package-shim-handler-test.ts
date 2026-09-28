@@ -109,4 +109,19 @@ module(basename(import.meta.filename), function () {
       await runSharedTest(packageShimHandlerTests, assert, {});
     });
   });
+
+  module('shimAsyncModule resolve deadline', function () {
+    test('withResolveDeadline rejects when the resolver never settles', async function (assert) {
+      await runSharedTest(packageShimHandlerTests, assert, {});
+    });
+    test('withResolveDeadline cancels its timer when the resolver settles first', async function (assert) {
+      await runSharedTest(packageShimHandlerTests, assert, {});
+    });
+    test('a prefix shim deadline names the module that was asked for', async function (assert) {
+      await runSharedTest(packageShimHandlerTests, assert, {});
+    });
+    test('a shimAsyncModule resolver that never settles fails the lookup rather than hanging it', async function (assert) {
+      await runSharedTest(packageShimHandlerTests, assert, {});
+    });
+  });
 });
