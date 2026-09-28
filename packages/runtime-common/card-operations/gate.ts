@@ -75,11 +75,13 @@ import {
 // still set those apart, and neither is closed here. Time: a refusal that
 // evaluated a predicate takes longer than one that found no card, so a caller
 // who measures carefully can tell the two apart. And the 500: a predicate only
-// runs against a card that exists and whose type a rule names, and whether it
-// throws depends on the card's stored values. So a predicate that throws tells
-// any caller who reaches it that such a card is there, and something about what
-// it holds: `(.title | tonumber) > 0` answers 500 for a card whose title is not
-// a number and 404 for one whose title is a number no greater than zero.
+// runs against a card whose type a rule names, either one that is stored or,
+// for a create against a type, the one the create would mint, and whether it
+// throws depends on that card's values. So a predicate that throws tells any
+// caller who reaches it that such a card or type is there, and something about
+// what a stored card holds: `(.title | tonumber) > 0` answers 500 for a card
+// whose title is not a number and 404 for one whose title is a number no
+// greater than zero.
 //
 // The gate never sees the target as the caller named it. It is handed the
 // target as the realm resolved it, so a type is judged by the definition the
@@ -164,6 +166,10 @@ export type GateRefusal =
   | typeof GATE_REFUSED
   | typeof GATE_MISSING
   | typeof GATE_FAULTED;
+
+// What judging a card by a set of grants' predicates answers: the grant that
+// admits it, or why none does.
+type Admission = MatchedGrant | typeof GATE_REFUSED | typeof GATE_FAULTED;
 
 // One grant the gate matched, with the rule it came from.
 export interface MatchedGrant {
@@ -436,13 +442,12 @@ export async function gateOperation(
   let stored = resource
     ? await storedSubject(core, subject.url, typeDefinition, resource)
     : undefined;
-  let granted = stored
+  let admission = stored
     ? await firstHolding(core, matched, stored, scope)
-    : undefined;
-  if (granted === 'threw') {
-    return GATE_FAULTED;
-  }
-  return granted ? { kind: 'granted', grant: granted } : GATE_REFUSED;
+    : GATE_REFUSED;
+  return 'grant' in admission
+    ? { kind: 'granted', grant: admission }
+    : admission;
 }
 
 // A write the gate left pending, and what deciding it reads.
@@ -477,7 +482,8 @@ export interface PendingWrite {
 // template writes the fields it fills, not the members the caller named.
 //
 // Refuses by throwing the gate's refusal, so a write refused here is refused
-// in the same words as one refused at the gate.
+// in the same words as one refused at the gate, and a predicate that throws
+// here is the same fault it is there.
 export async function dischargePendingDecision(
   core: OperationCore,
   pending: PendingWrite,
@@ -487,12 +493,9 @@ export async function dischargePendingDecision(
   judged: AdmissionSubject | undefined,
 ): Promise<void> {
   policyGateStats(core).pendingDischarges++;
-  let admitted = await admits(core, pending, judged);
-  if (admitted === 'threw') {
-    throw gateRefusal(core, GATE_FAULTED, pending.target, pending.name);
-  }
-  if (!admitted) {
-    throw notPermitted(pending.target, pending.name);
+  let admission = await admits(core, pending, judged);
+  if (!('grant' in admission)) {
+    throw gateRefusal(core, admission, pending.target, pending.name);
   }
 }
 
@@ -513,44 +516,42 @@ export async function pendingWriteHolds(
   let source = await core.readFileAsText(
     `${localPathFor(core, url)}.json` as LocalPath,
   );
-  return (
-    (await admits(
-      core,
-      pending,
-      source === undefined ? undefined : { id: url.href, source },
-    )) === true
+  let admission = await admits(
+    core,
+    pending,
+    source === undefined ? undefined : { id: url.href, source },
   );
+  return 'grant' in admission;
 }
 
+// The grant that admits a pending write against `judged`, or the refusal.
 async function admits(
   core: OperationCore,
   { target, decision, scope }: PendingWrite,
   judged: AdmissionSubject | undefined,
-): Promise<boolean | 'threw'> {
+): Promise<Admission> {
   let subject =
     target.kind === 'instance'
       ? await lockedSubject(core, target.url, decision, judged?.source)
       : await mintedSubject(core, judged);
-  if (subject === undefined) {
-    return false;
-  }
-  let holding = await firstHolding(core, decision.grants, subject, scope);
-  return holding === 'threw' ? 'threw' : holding !== undefined;
+  return subject
+    ? await firstHolding(core, decision.grants, subject, scope)
+    : GATE_REFUSED;
 }
 
-// The first grant whose predicate holds for this caller against `subject`,
-// or `threw` where none held and a predicate threw while the gate looked. A
-// predicate that throws is a fault in the policy, but another grant can still
-// hold. Grants union, so the fault is reported only when none does, and the
-// answer is the same whatever order the grants are in.
+// The first grant whose predicate holds for this caller against `subject`, or
+// the refusal where none does.
 async function firstHolding(
   core: OperationCore,
   grants: MatchedGrant[],
   subject: PredicateSubject,
   scope: GateScope,
-): Promise<MatchedGrant | 'threw' | undefined> {
+): Promise<Admission> {
   let stats = policyGateStats(core);
   let actor = scope.caller.kind === 'user' ? scope.caller.actor : undefined;
+  // A predicate that throws is a fault in the policy, but another grant can
+  // still hold. Grants union, so the fault is reported only when none does,
+  // and the answer is the same whatever order the grants are in.
   let threw = false;
   for (let candidate of grants) {
     let where = candidate.grant.where;
@@ -578,7 +579,7 @@ async function firstHolding(
     }
     threw ||= outcome === 'threw';
   }
-  return threw ? 'threw' : undefined;
+  return threw ? GATE_FAULTED : GATE_REFUSED;
 }
 
 // Whether `url` is the card the realm's policy key names. The pointer names

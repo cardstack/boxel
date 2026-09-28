@@ -291,15 +291,16 @@ module(basename(import.meta.filename), function (hooks) {
       .send(envelope(...entries));
   }
 
-  function assertNotPermitted(
-    assert: Assert,
-    response: Response,
-    label: string,
-  ) {
-    assert.strictEqual(response.status, 403, `${label}: status`);
-    assert.strictEqual(
-      (response.body as { errors?: { code?: string }[] }).errors?.[0]?.code,
-      'operation-not-permitted',
+  // The teacher may not read the realm, so the gate's refusal reaches them as
+  // the answer for a card that is not there.
+  function assertNotThere(assert: Assert, response: Response, label: string) {
+    assert.strictEqual(response.status, 404, `${label}: status`);
+    let { code, detail } = (
+      response.body as { errors: { code?: string; detail?: string }[] }
+    ).errors[0];
+    assert.deepEqual(
+      { code, detail },
+      { code: 'target-not-found', detail: 'no such target' },
       `${label}: the gate's refusal`,
     );
   }
@@ -367,7 +368,7 @@ module(basename(import.meta.filename), function (hooks) {
           classroom('Room 204', [COLLEAGUE]),
         ),
       );
-      assertNotPermitted(
+      assertNotThere(
         assert,
         await operations(
           AUTH.teacher(),
@@ -420,7 +421,7 @@ module(basename(import.meta.filename), function (hooks) {
           }),
         ),
       );
-      assertNotPermitted(
+      assertNotThere(
         assert,
         await operations(
           AUTH.teacher(),
@@ -459,7 +460,7 @@ module(basename(import.meta.filename), function (hooks) {
         [COLLEAGUE],
         'and the write handed the classroom to someone else',
       );
-      assertNotPermitted(
+      assertNotThere(
         assert,
         await operations(
           AUTH.teacher(),
@@ -498,7 +499,7 @@ module(basename(import.meta.filename), function (hooks) {
         { title: 'Room 204', teacherIds: [TEACHER] },
         'the classroom its grant rests on is untouched',
       );
-      assertNotPermitted(
+      assertNotThere(
         assert,
         await operations(
           AUTH.teacher(),
@@ -541,7 +542,7 @@ module(basename(import.meta.filename), function (hooks) {
         'a post naming no group is admitted on the audience its input and template give it',
       );
       assert.strictEqual(await audienceOf(posted), 'staff');
-      assertNotPermitted(
+      assertNotThere(
         assert,
         await createAgainstType('post', {
           body: 'Picture day',
@@ -561,7 +562,7 @@ module(basename(import.meta.filename), function (hooks) {
         'a plain create is judged by the card it mints',
       );
       assert.strictEqual(await audienceOf(created), 'staff');
-      assertNotPermitted(
+      assertNotThere(
         assert,
         await createAgainstType('create', {
           type: 'card',
@@ -578,7 +579,7 @@ module(basename(import.meta.filename), function (hooks) {
   });
 
   module('a refusal under the lock', function () {
-    test('a predicate that throws denies, leaving no write, no index job and no event', async function (assert) {
+    test('a predicate that throws is a fault in the policy, leaving no write, no index job and no event', async function (assert) {
       let jobsBefore = await indexJobCount();
       let events = countRealmEvents();
       let response = await operations(
@@ -586,10 +587,23 @@ module(basename(import.meta.filename), function (hooks) {
         invoke('rename', { href: ROOM_207, data: { title: 'Renamed' } }),
         invoke('archive', { href: ROOM_204 }),
       );
-      assertNotPermitted(assert, response, 'an archive whose predicate throws');
       assert.strictEqual(
-        (response.body as { errors: { meta: { entry: number } }[] }).errors[0]
-          .meta.entry,
+        response.status,
+        500,
+        'an archive whose predicate throws',
+      );
+      let [error] = (
+        response.body as {
+          errors: { code: string; title: string; meta: { entry: number } }[];
+        }
+      ).errors;
+      assert.deepEqual(
+        { code: error.code, title: error.title },
+        { code: 'internal-error', title: 'Policy predicate failed' },
+        'is the fault the gate reports for a predicate that throws',
+      );
+      assert.strictEqual(
+        error.meta.entry,
         1,
         'naming the entry whose predicate threw',
       );
@@ -624,11 +638,7 @@ module(basename(import.meta.filename), function (hooks) {
           invoke('rename', { href: ROOM_205, data: { title: 'Renamed' } }),
         ),
       );
-      assertNotPermitted(
-        assert,
-        response,
-        'a rename of a classroom not taught',
-      );
+      assertNotThere(assert, response, 'a rename of a classroom not taught');
       assert.strictEqual(
         (response.body as { errors: { meta: { entry: string } }[] }).errors[0]
           .meta.entry,
@@ -660,7 +670,7 @@ module(basename(import.meta.filename), function (hooks) {
         }),
         invoke('rename', { href: ROOM_204, data: { title: 'Renamed' } }),
       );
-      assertNotPermitted(
+      assertNotThere(
         assert,
         response,
         'a rename after the same batch hands the classroom to someone else',
@@ -683,11 +693,7 @@ module(basename(import.meta.filename), function (hooks) {
         invoke('rename', { href: ROOM_204, data: { title: 'Renamed' } }),
         invoke('delete', { href: ROOM_205 }),
       );
-      assertNotPermitted(
-        assert,
-        response,
-        'a delete of a classroom not taught',
-      );
+      assertNotThere(assert, response, 'a delete of a classroom not taught');
       assert.strictEqual(
         (await stored(ROOM_204))?.attributes.title,
         'Room 204',
@@ -710,7 +716,7 @@ module(basename(import.meta.filename), function (hooks) {
       [aURL, bURL]: [string, string],
       label: string,
     ) {
-      assertNotPermitted(assert, a, label);
+      assertNotThere(assert, a, label);
       assert.strictEqual(
         a.text.replaceAll(aURL, bURL),
         b.text,
