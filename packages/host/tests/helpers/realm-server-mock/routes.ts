@@ -1,6 +1,7 @@
 import {
   buildSearchErrorResponse,
   baseRealm,
+  DURING_PRERENDER_HEADER,
   ensureTrailingSlash,
   parseRealmsFromPayload,
   parseSearchEntryQueryFromPayload,
@@ -15,9 +16,16 @@ import {
   type SearchEntryQuery,
 } from '@cardstack/runtime-common';
 
+import {
+  errorsDocument,
+  isNamedQueryPayload,
+  isOperationFailure,
+  resolveNamedQuery,
+} from '@cardstack/runtime-common/card-operations';
 import { makeCardTypeSummaryDoc } from '@cardstack/runtime-common/document-types';
 
 import ENV from '@cardstack/host/config/environment';
+import { claimsFromRawToken } from '@cardstack/host/services/realm';
 
 import { getRoomIdForRealmAndUser } from '../mock-matrix/_utils';
 import { createJWT, testRealmSecretSeed } from '../test-auth';
@@ -164,6 +172,43 @@ function registerSearchRoutes() {
           return buildSearchErrorResponse(e.message);
         }
         throw e;
+      }
+
+      // Mirror the realm-server's `handle-search`: a request naming a
+      // declared query is answered with the realm's own resolution of it,
+      // read through the first realm the request names.
+      if (isNamedQueryPayload(payload)) {
+        let resolvingRealm = getTestRealmRegistry().get(
+          ensureTrailingSlash(realmList[0]),
+        )?.realm;
+        if (!resolvingRealm) {
+          return buildSearchErrorResponse(
+            `Realm not available to resolve a named query: ${realmList[0]}`,
+            404,
+          );
+        }
+        try {
+          let resolved = await resolveNamedQuery(
+            resolvingRealm.operationCore,
+            payload,
+            {
+              actor: authenticatedUser(req),
+              realms: realmList,
+              duringRender:
+                (req.headers.get(DURING_PRERENDER_HEADER) ?? '').length > 0,
+            },
+          );
+          payload = resolved;
+          realmList = resolved.realms!;
+        } catch (e) {
+          if (isOperationFailure(e)) {
+            return new Response(JSON.stringify(errorsDocument(e.error)), {
+              status: e.error.status,
+              headers: { 'content-type': SupportedMimeType.CardJson },
+            });
+          }
+          throw e;
+        }
       }
 
       let parsed;
@@ -588,6 +633,16 @@ async function handleArchiveToggle(
     }),
     { status: 200, headers: { 'content-type': SupportedMimeType.JSONAPI } },
   );
+}
+
+// The user a request's realm-server token names. The mock issues its tokens
+// unsigned, so there is nothing to verify, only a claim to read.
+function authenticatedUser(req: Request): string | undefined {
+  let authorization = req.headers.get('Authorization');
+  if (!authorization) {
+    return undefined;
+  }
+  return claimsFromRawToken(authorization.replace(/^Bearer /, '')).user;
 }
 
 // The entry searchable-realm resolver. In-process registry
