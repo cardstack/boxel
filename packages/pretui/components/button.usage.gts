@@ -27,11 +27,13 @@ export class ButtonUsage extends GlimmerComponent {
   @tracked appearance = 'accent';
   @tracked size = 'm';
   @tracked busy = false;
+  @tracked busyLabel = '';
   @tracked disabled = false;
   setTone = (v: string) => (this.tone = v);
   setAppearance = (v: string) => (this.appearance = v);
   setSize = (v: string) => (this.size = v);
   setBusy = (v: boolean) => (this.busy = v);
+  setBusyLabel = (v: string) => (this.busyLabel = v);
   setDisabled = (v: boolean) => (this.disabled = v);
   get toneVal() {
     return this.tone as PretuiTone;
@@ -46,6 +48,7 @@ export class ButtonUsage extends GlimmerComponent {
     let bits = [`@tone='${this.tone}'`, `@appearance='${this.appearance}'`];
     if (this.size !== 'm') bits.push(`@size='${this.size}'`);
     if (this.busy) bits.push('@busy={{true}}');
+    if (this.busyLabel) bits.push(`@busyLabel='${this.busyLabel}'`);
     if (this.disabled) bits.push('@disabled={{true}}');
     return `<Button ${bits.join(' ')}>Keep selling</Button>`;
   }
@@ -61,6 +64,7 @@ export class ButtonUsage extends GlimmerComponent {
           @appearance={{this.appearanceVal}}
           @size={{this.sizeVal}}
           @busy={{this.busy}}
+          @busyLabel={{this.busyLabel}}
           @disabled={{this.disabled}}
         >Keep selling</Button>
       </:example>
@@ -93,8 +97,14 @@ export class ButtonUsage extends GlimmerComponent {
           @name='busy'
           @value={{this.busy}}
           @defaultValue={{false}}
-          @description='Shows the spinner, dims the label, and blocks pointer events while a triggered action runs.'
+          @description='Shows the spinner and dims the label while an action runs. Presses are ignored, but the button keeps focus (aria-disabled, not disabled).'
           @onInput={{this.setBusy}}
+        />
+        <Args.String
+          @name='busyLabel'
+          @value={{this.busyLabel}}
+          @description='Visually hidden text added to the accessible name while busy. Set it when the visible label does not already say the button is busy.'
+          @onInput={{this.setBusyLabel}}
         />
         <Args.Bool
           @name='disabled'

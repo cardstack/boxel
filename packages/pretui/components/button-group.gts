@@ -17,7 +17,7 @@ import type {
 // `initial` so recipe fallbacks re-engage), while @appearance restates the
 // five recipe declarations at group specificity — appearance recipes are
 // attribute-selected in Button, so they cannot travel as inherited props;
-// the formulas are copied verbatim from controls.gts and read the same
+// the formulas are copied verbatim from button.gts and read the same
 // tone vars. Dropped (wave-0): WA's slotted radio-button support and its
 // focus/hover class relay (CSS handles both here).
 
@@ -70,15 +70,15 @@ export class ButtonGroup extends Component<ButtonGroupSignature> {
       .pretui-btngroup :deep(.pretui-btn) {
         position: relative;
       }
-      /* hover / focus / active ring draws on top of the shared hairline */
+      /* the hovered / focused button draws on top of the shared edge */
       .pretui-btngroup :deep(.pretui-btn:hover) {
         z-index: 1;
       }
       .pretui-btngroup :deep(.pretui-btn:focus-visible) {
         z-index: 2;
       }
-      /* attach: square the inner corners, overlap the hairlines by 1px so
-         adjacent rings collapse into one shared line */
+      /* attach: square the inner corners, overlap the borders by 1px so
+         adjacent edges collapse into one shared line */
       .pretui-btngroup[data-orientation='horizontal'] :deep(.pretui-btn:not(:first-child)) {
         margin-left: -1px;
         border-top-left-radius: 0;
@@ -101,8 +101,8 @@ export class ButtonGroup extends Component<ButtonGroupSignature> {
          The neutral-only vars reset to `initial` (guaranteed-invalid) so
          var() fallbacks re-engage for hue tones. ── */
       .pretui-btngroup[data-tone] :deep(.pretui-btn[data-tone]) {
+        --pretui-btn-accent-hover: initial;
         --pretui-btn-hairline: initial;
-        --pretui-btn-shadow: initial;
         --pretui-btn-ink: initial;
         --pretui-btn-ink-quiet: initial;
       }
@@ -110,9 +110,9 @@ export class ButtonGroup extends Component<ButtonGroupSignature> {
         --pretui-tone: var(--foreground);
         --pretui-tone-on: var(--pretui-on-neutral, var(--background));
         --pretui-btn-hairline: var(--border);
-        --pretui-btn-shadow: var(--pretui-shadow-control, 0 0 0 1px var(--border));
         --pretui-btn-ink: var(--foreground);
-        --pretui-btn-ink-quiet: var(--muted-foreground);
+        --pretui-btn-ink-quiet: color-mix(in oklch, var(--muted-foreground) 55%, var(--foreground));
+        --pretui-btn-accent-hover: color-mix(in oklch, var(--pretui-tone-on) 30%, var(--pretui-button-bg, var(--pretui-tone)));
       }
       .pretui-btngroup[data-tone='primary'] :deep(.pretui-btn[data-tone]) {
         --pretui-tone: var(--primary);
@@ -120,15 +120,15 @@ export class ButtonGroup extends Component<ButtonGroupSignature> {
       }
       .pretui-btngroup[data-tone='info'] :deep(.pretui-btn[data-tone]) {
         --pretui-tone: var(--pretui-info, var(--boxel-blue));
-        --pretui-tone-on: var(--pretui-on-info, var(--background));
+        --pretui-tone-on: var(--pretui-on-info, var(--pretui-btn-auto-on));
       }
       .pretui-btngroup[data-tone='success'] :deep(.pretui-btn[data-tone]) {
         --pretui-tone: var(--success, var(--boxel-success));
-        --pretui-tone-on: var(--pretui-on-success, var(--background));
+        --pretui-tone-on: var(--pretui-on-success, var(--pretui-btn-auto-on));
       }
       .pretui-btngroup[data-tone='warning'] :deep(.pretui-btn[data-tone]) {
         --pretui-tone: var(--warning, var(--boxel-warning));
-        --pretui-tone-on: var(--pretui-on-warning, var(--background));
+        --pretui-tone-on: var(--pretui-on-warning, var(--pretui-btn-auto-on));
       }
       .pretui-btngroup[data-tone='danger'] :deep(.pretui-btn[data-tone]) {
         --pretui-tone: var(--destructive);
@@ -136,52 +136,47 @@ export class ButtonGroup extends Component<ButtonGroupSignature> {
       }
       .pretui-btngroup[data-tone='attention'] :deep(.pretui-btn[data-tone]) {
         --pretui-tone: var(--pretui-attention, var(--boxel-fuschia));
-        --pretui-tone-on: var(--pretui-on-attention, var(--background));
+        --pretui-tone-on: var(--pretui-on-attention, var(--pretui-btn-auto-on));
       }
-      /* ── appearance inheritance: recipes restated at group specificity,
-         formulas verbatim from controls.gts (they read the tone vars) ── */
+      /* ── appearance inheritance: Button's recipes restated at group
+         specificity. They only set Button's paint vars, so the formulas
+         must stay identical to button.gts. ── */
+      .pretui-btngroup[data-appearance] :deep(.pretui-btn[data-appearance]) {
+        --pretui-btn-surface: initial;
+        --pretui-btn-surface-hover: initial;
+        --pretui-btn-text-hover: initial;
+        --pretui-btn-edge: initial;
+        --pretui-btn-elevation: initial;
+      }
       .pretui-btngroup[data-appearance='accent'] :deep(.pretui-btn[data-appearance]) {
-        background: var(--pretui-button-bg, var(--pretui-tone));
-        color: var(--pretui-button-fg, var(--pretui-tone-on));
-        box-shadow: 0 0 0 1px color-mix(in oklch, var(--pretui-button-bg, var(--pretui-tone)) 70%, var(--border)),
-          var(--pretui-edge-highlight, inset 0 1px 0 rgb(255 255 255 / 0.14)),
-          0 1px 2px var(--shadow-ink-mid, rgb(0 0 0 / 0.08));
-      }
-      .pretui-btngroup[data-appearance='accent'] :deep(.pretui-btn[data-appearance]:hover:not(:disabled)) {
-        background: color-mix(in oklch, var(--foreground) 10%, var(--pretui-button-bg, var(--pretui-tone)));
+        --pretui-btn-surface: var(--pretui-button-bg, var(--pretui-tone));
+        --pretui-btn-surface-hover: var(--pretui-btn-accent-hover, color-mix(in oklch, var(--foreground) 10%, var(--pretui-button-bg, var(--pretui-tone))));
+        --pretui-btn-text: var(--pretui-button-fg, var(--pretui-tone-on));
+        --pretui-btn-elevation: var(--shadow-2xs);
       }
       .pretui-btngroup[data-appearance='filled'] :deep(.pretui-btn[data-appearance]) {
-        background: color-mix(in oklch, var(--pretui-tone) 15%, var(--card));
-        color: var(--pretui-btn-ink, color-mix(in oklch, var(--pretui-tone) 60%, var(--foreground)));
-        box-shadow: none;
-      }
-      .pretui-btngroup[data-appearance='filled'] :deep(.pretui-btn[data-appearance]:hover:not(:disabled)) {
-        background: color-mix(in oklch, var(--pretui-tone) 22%, var(--card));
+        --pretui-btn-surface: color-mix(in oklch, var(--pretui-tone) 15%, var(--card));
+        --pretui-btn-surface-hover: color-mix(in oklch, var(--pretui-btn-tint) 22%, var(--card));
+        --pretui-btn-text: var(--pretui-btn-ink, color-mix(in oklch, var(--pretui-tone) 60%, var(--card-foreground)));
+        --pretui-btn-text-hover: var(--pretui-btn-ink, color-mix(in oklch, var(--pretui-tone) 40%, var(--card-foreground)));
       }
       .pretui-btngroup[data-appearance='outlined'] :deep(.pretui-btn[data-appearance]) {
-        background: var(--pretui-button-secondary-bg, var(--card));
-        color: var(--pretui-btn-ink, color-mix(in oklch, var(--pretui-tone) 55%, var(--foreground)));
-        box-shadow: var(--pretui-btn-shadow, 0 0 0 1px color-mix(in oklch, var(--pretui-tone) 45%, var(--border)));
-      }
-      .pretui-btngroup[data-appearance='outlined'] :deep(.pretui-btn[data-appearance]:hover:not(:disabled)) {
-        background: var(--hover, var(--boxel-100));
+        --pretui-btn-surface: var(--pretui-button-secondary-bg, transparent);
+        --pretui-btn-surface-hover: color-mix(in oklch, var(--pretui-btn-tint) 18%, var(--pretui-button-secondary-bg, transparent));
+        --pretui-btn-edge: var(--pretui-btn-hairline, color-mix(in oklch, var(--pretui-tone) 45%, var(--border)));
+        --pretui-btn-text: var(--pretui-btn-ink, color-mix(in oklch, var(--pretui-tone) 55%, var(--foreground)));
       }
       .pretui-btngroup[data-appearance='filled-outlined'] :deep(.pretui-btn[data-appearance]) {
-        background: color-mix(in oklch, var(--pretui-tone) 12%, var(--card));
-        color: var(--pretui-btn-ink, color-mix(in oklch, var(--pretui-tone) 60%, var(--foreground)));
-        box-shadow: 0 0 0 1px var(--pretui-btn-hairline, color-mix(in oklch, var(--pretui-tone) 40%, var(--border)));
-      }
-      .pretui-btngroup[data-appearance='filled-outlined'] :deep(.pretui-btn[data-appearance]:hover:not(:disabled)) {
-        background: color-mix(in oklch, var(--pretui-tone) 20%, var(--card));
+        --pretui-btn-surface: color-mix(in oklch, var(--pretui-tone) 12%, var(--card));
+        --pretui-btn-surface-hover: color-mix(in oklch, var(--pretui-btn-tint) 20%, var(--card));
+        --pretui-btn-edge: var(--pretui-btn-hairline, color-mix(in oklch, var(--pretui-tone) 40%, var(--border)));
+        --pretui-btn-text: var(--pretui-btn-ink, color-mix(in oklch, var(--pretui-tone) 60%, var(--card-foreground)));
+        --pretui-btn-text-hover: var(--pretui-btn-ink, color-mix(in oklch, var(--pretui-tone) 40%, var(--card-foreground)));
       }
       .pretui-btngroup[data-appearance='plain'] :deep(.pretui-btn[data-appearance]) {
-        background: transparent;
-        color: var(--pretui-btn-ink-quiet, color-mix(in oklch, var(--pretui-tone) 40%, var(--muted-foreground)));
-        box-shadow: none;
-      }
-      .pretui-btngroup[data-appearance='plain'] :deep(.pretui-btn[data-appearance]:hover:not(:disabled)) {
-        background: var(--hover, var(--boxel-100));
-        color: var(--pretui-btn-ink, color-mix(in oklch, var(--pretui-tone) 30%, var(--foreground)));
+        --pretui-btn-text: var(--pretui-btn-ink-quiet, color-mix(in oklch, var(--pretui-tone) 40%, var(--foreground)));
+        --pretui-btn-surface-hover: color-mix(in oklch, var(--pretui-btn-tint) 18%, transparent);
+        --pretui-btn-text-hover: var(--pretui-btn-ink, color-mix(in oklch, var(--pretui-tone) 30%, var(--foreground)));
       }
       /* ── size inheritance: font-size only, Button's own em scale rides ── */
       .pretui-btngroup[data-size='xs'] :deep(.pretui-btn[data-size]) {

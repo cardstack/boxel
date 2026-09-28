@@ -1,7 +1,9 @@
 // Button unit tests. No assertion touches a computed style: the host test
 // harness stamps the scoped-css attribute and delivers no stylesheet.
 import { module, test } from 'qunit';
-import { render } from '@ember/test-helpers';
+import { click, focus, render, settled } from '@ember/test-helpers';
+import { on } from '@ember/modifier';
+import { tracked } from '@glimmer/tracking';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
 import { Button } from './button';
 
@@ -28,7 +30,7 @@ module('Pretui | components/button', function (hooks) {
     assert.strictEqual(el.dataset['state'], undefined, 'no busy state at rest');
   });
 
-  test('busy implies disabled, announces itself, and shows the spinner', async function (assert) {
+  test('busy stays focusable, announces itself, and shows a decorative spinner', async function (assert) {
     await render(
       <template>
         <Button @busy={{true}}>Saving</Button>
@@ -37,8 +39,100 @@ module('Pretui | components/button', function (hooks) {
     let el = btn();
     assert.strictEqual(el.dataset['state'], 'busy');
     assert.strictEqual(el.getAttribute('aria-busy'), 'true');
-    assert.true(el.disabled, 'a busy button is not actionable');
-    assert.ok(el.querySelector('.pretui-spinner'), 'the spinner is rendered');
+    assert.false(el.disabled, 'native disabled would drop focus to <body>');
+    assert.strictEqual(el.getAttribute('aria-disabled'), 'true');
+    assert
+      .dom('[data-test-pretui-button-spinner]')
+      .hasAttribute('aria-hidden', 'true');
+    assert
+      .dom('[data-test-pretui-button-busy-label]')
+      .hasNoText('the visible label already says it is busy');
+  });
+
+  test('@busyLabel adds the busy state to the accessible name', async function (assert) {
+    await render(
+      <template>
+        <Button @busy={{true}} @busyLabel='Saving draft'>Save</Button>
+      </template>,
+    );
+    assert.dom('[data-test-pretui-button-busy-label]').hasText('Saving draft');
+  });
+
+  test('the busy text is empty at rest', async function (assert) {
+    await render(
+      <template>
+        <Button>Save</Button>
+      </template>,
+    );
+    assert.dom('[data-test-pretui-button-busy-label]').hasNoText();
+    assert.dom('[data-test-pretui-button-spinner]').doesNotExist();
+    assert.false(btn().hasAttribute('aria-disabled'));
+  });
+
+  test('focus stays on the button when it turns busy', async function (assert) {
+    class State {
+      @tracked busy = false;
+    }
+    let state = new State();
+    await render(
+      <template>
+        <Button @busy={{state.busy}}>Save</Button>
+      </template>,
+    );
+    await focus(btn());
+    state.busy = true;
+    await settled();
+    assert.strictEqual(document.activeElement, btn());
+  });
+
+  test('a busy button blocks its own click handlers and form submission', async function (assert) {
+    let clicks = 0;
+    let submits = 0;
+    let onClick = () => clicks++;
+    let onSubmit = (event: Event) => {
+      event.preventDefault();
+      submits++;
+    };
+    await render(
+      <template>
+        <form {{on 'submit' onSubmit}}>
+          <Button
+            type='submit'
+            @busy={{true}}
+            {{on 'click' onClick}}
+          >Pay</Button>
+        </form>
+      </template>,
+    );
+    await click(btn());
+    assert.strictEqual(clicks, 0, 'the caller handler does not run');
+    assert.strictEqual(submits, 0, 'the form does not submit');
+  });
+
+  test('a button at rest still runs its click handler', async function (assert) {
+    let clicks = 0;
+    let onClick = () => clicks++;
+    await render(
+      <template>
+        <Button {{on 'click' onClick}}>Pay</Button>
+      </template>,
+    );
+    await click(btn());
+    assert.strictEqual(clicks, 1);
+  });
+
+  test('disabled and busy together use native disabled only', async function (assert) {
+    await render(
+      <template>
+        <Button @busy={{true}} @disabled={{true}}>Saving</Button>
+      </template>,
+    );
+    let el = btn();
+    assert.true(el.disabled);
+    assert.false(
+      el.hasAttribute('aria-disabled'),
+      'never both disabled and aria-disabled',
+    );
   });
 
   test('splattributes win over the template defaults', async function (assert) {
@@ -77,7 +171,11 @@ module('Pretui | components/button', function (hooks) {
       'true',
       'busy is announced, not only painted',
     );
-    assert.true(el.disabled, 'a busy button is not actionable');
+    assert.strictEqual(
+      el.getAttribute('aria-disabled'),
+      'true',
+      'a busy button is not actionable',
+    );
   });
 
   test('Button variant accepts the alias spellings and never crashes on an unknown one', async function (assert) {
