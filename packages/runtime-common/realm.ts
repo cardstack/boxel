@@ -233,6 +233,7 @@ import type { AdmissionSubject } from './card-operations/executors.ts';
 import {
   checkCapabilities,
   parseCapabilityChecks,
+  type CapabilityCaller,
 } from './card-operations/capabilities.ts';
 import {
   emitCapabilityCheck,
@@ -5785,10 +5786,11 @@ export class Realm {
       }
       let checks = parseCapabilityChecks(body);
       let { actor } = this.#callerOf(request, requestContext);
-      let coarseDeclined = await this.#capabilityLanes(request, requestContext);
+      let lanes = await this.#capabilityLanes(request, requestContext);
+      let { coarseDeclined } = lanes;
       let answers = await checkCapabilities(this.operationCore, checks, {
         caller: scopeCallerFor(actor),
-        coarseDeclined,
+        ...lanes,
       });
       emitCapabilityCheck({
         kind: 'capability-check',
@@ -5818,7 +5820,7 @@ export class Realm {
     }
   }
 
-  // What the realm ACL declined a capability check's caller.
+  // What the realm ACL declined a capability check's caller, lane by lane.
   //
   // One request asks about reads and writes together, and the ACL judged it
   // once — as a read, which is all the check itself does. So the write lane is
@@ -5826,22 +5828,35 @@ export class Realm {
   // write of this realm. Without it a caller who may read but not write would
   // be told the ACL allows them everything, and every write control in the view
   // would render.
+  //
+  // A write the ACL refuses reaches the policy gate only where the realm would
+  // hand it there: the same `#policyJudges` question the real write is asked.
+  // Anywhere else it is refused before it is routed, so its pair is refused
+  // outright rather than put to a policy that would never see the call.
   async #capabilityLanes(
     request: Request,
     requestContext: RequestContext,
-  ): Promise<CoarseDeclined> {
-    if (requestContext.coarseAllowed === false) {
-      return 'all';
-    }
+  ): Promise<Omit<CapabilityCaller, 'caller'>> {
     if (requestContext.coarseAllowed === undefined) {
       // The realm never judged this request, which is the realm's own internal
       // dispatch. Nothing was declined, exactly as `#coarseDeclined` reads it.
-      return 'none';
+      return { coarseDeclined: 'none' };
     }
-    return (await this.#permissionProbe(request, requestContext, 'write'))
-      .allowed
-      ? 'none'
-      : 'writes';
+    let readAllowed = requestContext.coarseAllowed === true;
+    let write = await this.#permissionProbe(request, requestContext, 'write');
+    if (write.allowed) {
+      return { coarseDeclined: readAllowed ? 'none' : 'all' };
+    }
+    let coarseDeclined: CoarseDeclined = readAllowed ? 'writes' : 'all';
+    if (await this.#policyJudges(write.refusal, requestContext)) {
+      return { coarseDeclined };
+    }
+    return {
+      coarseDeclined,
+      writesRefused: requestContext.authenticatedUser
+        ? 'operation-not-permitted'
+        : 'actor-required',
+    };
   }
 
   // A capability check answers plain JSON, never a card document: what it

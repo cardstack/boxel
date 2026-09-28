@@ -46,8 +46,9 @@ import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
 
 const EDUCATION = 'http://127.0.0.1:4444/education/';
 const ORG = 'http://127.0.0.1:4444/org/';
-// Anyone may read it and only its librarian may write it, and it names no
-// policy — so every answer it gives is the ACL's own.
+// Anyone may read it and only its librarian may write it, and its policy lets
+// anyone signed in delete from it. So one realm shows both ways a write the ACL
+// refuses can go: to the policy, or refused before it is routed.
 const LIBRARY = 'http://127.0.0.1:4444/library/';
 const LIBRARIAN = '@librarian:localhost';
 const POLICY_CARD = `${ORG}policies/education`;
@@ -151,6 +152,14 @@ const RULES: Rule[] = [
   },
 ];
 
+// Anyone signed in may delete a card from the Library, whatever its type.
+const LIBRARY_RULES: Rule[] = [
+  {
+    targetType: { module: rri('@cardstack/base/card-api'), name: 'CardDef' },
+    grants: [{ operation: 'delete' }],
+  },
+];
+
 function policyCard(rules: Rule[]) {
   return JSON.stringify({
     data: {
@@ -189,6 +198,8 @@ function note(name: string) {
 
 const ROOM_204 = `${EDUCATION}classrooms/room-204`;
 const ROOM_205 = `${EDUCATION}classrooms/room-205`;
+const ROOM_207 = `${EDUCATION}classrooms/room-207`;
+const LIBRARY_NOTE = `${LIBRARY}note`;
 const HOMEROOM = `${EDUCATION}classrooms/homeroom-1`;
 const BULLETIN_1 = `${EDUCATION}bulletins/b1`;
 const BULLETIN_2 = `${EDUCATION}bulletins/b2`;
@@ -236,6 +247,7 @@ module(basename(import.meta.filename), function (hooks) {
             'student.gts': STUDENT_MODULE,
             'classrooms/room-204.json': classroom('Room 204', [TEACHER]),
             'classrooms/room-205.json': classroom('Room 205', [COLLEAGUE]),
+            'classrooms/room-207.json': classroom('Room 207', [READER]),
             'classrooms/homeroom-1.json': classroom(
               'Homeroom 1',
               [TEACHER],
@@ -261,6 +273,7 @@ module(basename(import.meta.filename), function (hooks) {
           fileSystem: {
             'realm.json': realmConfigCardJSON({ name: 'Org' }),
             'policies/education.json': policyCard(RULES),
+            'policies/library.json': policyCard(LIBRARY_RULES),
           },
           permissions: {
             [ORG_ADMIN]: ['read', 'write', 'realm-owner'],
@@ -269,7 +282,10 @@ module(basename(import.meta.filename), function (hooks) {
         {
           realmURL: new URL(LIBRARY),
           fileSystem: {
-            'realm.json': realmConfigCardJSON({ name: 'Library' }),
+            'realm.json': realmConfigCardJSON({
+              name: 'Library',
+              policy: `${ORG}policies/library`,
+            }),
             'note.json': note('A library note'),
           },
           permissions: {
@@ -363,64 +379,73 @@ module(basename(import.meta.filename), function (hooks) {
   // The same question, asked by carrying the operation out. A read is the
   // card+json `GET` a view would make; everything else travels in the
   // envelope, which is where a write and a create are invoked from.
-  async function invoke(auth: string, pair: Pair): Promise<boolean> {
+  async function invoke(
+    auth: string | undefined,
+    pair: Pair,
+  ): Promise<boolean> {
+    let withAuth = (req: Test) => (auth ? req.set('Authorization', auth) : req);
+    let realm =
+      typeof pair.target === 'string' && pair.target.startsWith(LIBRARY)
+        ? LIBRARY
+        : EDUCATION;
     if (typeof pair.target !== 'string') {
-      let response = await request
-        .post(`${path(EDUCATION)}_operations`)
-        .set('Accept', SupportedMimeType.BoxelOperations)
-        .set('Content-Type', SupportedMimeType.BoxelOperations)
-        .set('Authorization', auth)
-        .send(
-          JSON.stringify({
-            'boxel:operations': [
-              {
-                op: 'invoke',
-                'boxel:name': pair.operation,
-                data: {
-                  type: 'card',
-                  attributes: { title: 'A new one', body: 'A new one' },
-                  meta: {
-                    adoptsFrom: {
-                      module: rri(pair.target.module),
-                      name: pair.target.name,
-                    },
-                  },
-                },
-              },
-            ],
-          }),
-        );
-      return response.status === 200;
-    }
-    if (pair.operation === 'read') {
-      let response = await request
-        .get(path(pair.target))
-        .set('Accept', SupportedMimeType.CardJson)
-        .set('Authorization', auth);
-      return response.status === 200;
-    }
-    let response = await request
-      .post(`${path(EDUCATION)}_operations`)
-      .set('Accept', SupportedMimeType.BoxelOperations)
-      .set('Content-Type', SupportedMimeType.BoxelOperations)
-      .set('Authorization', auth)
-      .send(
+      let response = await withAuth(
+        request
+          .post(`${path(realm)}_operations`)
+          .set('Accept', SupportedMimeType.BoxelOperations)
+          .set('Content-Type', SupportedMimeType.BoxelOperations),
+      ).send(
         JSON.stringify({
           'boxel:operations': [
             {
               op: 'invoke',
               'boxel:name': pair.operation,
-              href: pair.target,
-              ...(pair.operation === 'rename'
-                ? { data: { title: 'Renamed' } }
-                : {}),
-              ...(pair.operation === 'appendActivity'
-                ? { data: { note: 'A note' } }
-                : {}),
+              data: {
+                type: 'card',
+                attributes: { title: 'A new one', body: 'A new one' },
+                meta: {
+                  adoptsFrom: {
+                    module: rri(pair.target.module),
+                    name: pair.target.name,
+                  },
+                },
+              },
             },
           ],
         }),
       );
+      return response.status === 200;
+    }
+    if (pair.operation === 'read') {
+      let response = await withAuth(
+        request
+          .get(path(pair.target))
+          .set('Accept', SupportedMimeType.CardJson),
+      );
+      return response.status === 200;
+    }
+    let response = await withAuth(
+      request
+        .post(`${path(realm)}_operations`)
+        .set('Accept', SupportedMimeType.BoxelOperations)
+        .set('Content-Type', SupportedMimeType.BoxelOperations),
+    ).send(
+      JSON.stringify({
+        'boxel:operations': [
+          {
+            op: 'invoke',
+            'boxel:name': pair.operation,
+            href: pair.target,
+            ...(pair.operation === 'rename'
+              ? { data: { title: 'Renamed' } }
+              : {}),
+            ...(pair.operation === 'appendActivity'
+              ? { data: { note: 'A note' } }
+              : {}),
+          },
+        ],
+      }),
+    );
     return response.status === 200;
   }
 
@@ -443,7 +468,7 @@ module(basename(import.meta.filename), function (hooks) {
       );
       assert.deepEqual(
         gateStats(),
-        { policyLoads: 0, predicateEvaluations: 0 },
+        { policyLoads: 0, predicateEvaluations: 0, pendingDischarges: 0 },
         'the gate did nothing for any of them',
       );
       assert.strictEqual(
@@ -474,7 +499,7 @@ module(basename(import.meta.filename), function (hooks) {
       );
       assert.deepEqual(
         gateStats(),
-        { policyLoads: 2, predicateEvaluations: 0 },
+        { policyLoads: 2, predicateEvaluations: 0, pendingDischarges: 0 },
         'each write reached the policy once and the read never did',
       );
     });
@@ -528,85 +553,151 @@ module(basename(import.meta.filename), function (hooks) {
     });
   });
 
-  module('pair for pair', function () {
-    // Every pair whose answer the gate settles outright, checked in one request
-    // and then carried out one at a time. The writes among them name targets no
-    // other pair reads, so carrying one out cannot change what a later pair is
-    // answered.
-    const DEFINITE: Pair[] = [
-      { target: ROOM_204, operation: 'read' },
-      { target: ROOM_205, operation: 'read' },
-      { target: NOTE, operation: 'read' },
-      { target: ABSENT, operation: 'read' },
-      { target: BULLETIN_1, operation: 'read' },
-      { target: ROOM_204, operation: 'update' },
-      { target: HOMEROOM, operation: 'rename' },
-      { target: ROOM_204, operation: 'appendActivity' },
-      { target: BULLETIN_1, operation: 'delete' },
-      { target: BULLETIN, operation: 'create' },
-    ];
+  module('a realm anyone may read, with a policy', function () {
+    function checkLibrary(auth: string | undefined, checks: Pair[]) {
+      let req = request
+        .post(`${path(LIBRARY)}_capabilities`)
+        .set('Accept', SupportedMimeType.JSON)
+        .set('Content-Type', SupportedMimeType.JSON);
+      return (auth ? req.set('Authorization', auth) : req).send({ checks });
+    }
 
-    test('every answer the gate settles matches what the invocation then does', async function (assert) {
-      let given = await answers(AUTH.teacher(), DEFINITE);
+    test('a write is answered as its invocation is, signed in or not', async function (assert) {
+      // The Library's policy lets anyone signed in delete its cards. A caller
+      // who authenticated nobody may read the realm, and their write is
+      // refused before it is routed, so no policy ever judges it.
+      let pair = { target: LIBRARY_NOTE, operation: 'delete' };
+
+      let anonymous = await checkLibrary(undefined, [pair]);
+      assert.deepEqual(
+        (anonymous.body as { checks: CapabilityAnswer[] }).checks,
+        [{ ...pair, allowed: false, reason: 'actor-required' }],
+        'the anonymous caller is refused the delete',
+      );
+      assert.false(
+        await invoke(undefined, pair),
+        'as the anonymous delete itself is refused',
+      );
+
+      let stranger = `Bearer ${createJWT(library, COLLEAGUE, [])}`;
+      let signedIn = await checkLibrary(stranger, [pair]);
+      assert.deepEqual(
+        (signedIn.body as { checks: CapabilityAnswer[] }).checks,
+        [{ ...pair, allowed: true }],
+        'a signed-in caller the ACL declines is admitted by the policy',
+      );
+      assert.true(
+        await invoke(stranger, pair),
+        'as their delete itself is admitted',
+      );
+    });
+  });
+
+  module('pair for pair', function () {
+    // Checked in one request, then carried out one at a time, and compared.
+    // The writes name targets no other pair reads, and the one that removes a
+    // card comes last, so carrying out a pair cannot change what a later one
+    // is answered. Each list holds pairs the gate admits and pairs it refuses,
+    // since a list where every answer is the same would agree with a check
+    // that always answered that.
+    async function assertPairForPair(
+      assert: Assert,
+      auth: string,
+      pairs: Pair[],
+    ) {
+      let given = await answers(auth, pairs);
       assert.notOk(
         given.some((answer) => answer.conditional),
-        'none of these pairs is left to a predicate',
+        'every pair names a stored card or a type granted outright, so none is left to a predicate',
       );
       // Both lists are built before either is compared, so a disagreement
       // reports which pair disagreed rather than stopping at the first.
       let carried: boolean[] = [];
-      for (let pair of DEFINITE) {
-        carried.push(await invoke(AUTH.teacher(), pair));
+      for (let pair of pairs) {
+        carried.push(await invoke(auth, pair));
       }
       assert.deepEqual(
         given.map((answer, index) => ({
-          pair: label(DEFINITE[index]),
+          pair: label(pairs[index]),
           allowed: answer.allowed,
         })),
-        DEFINITE.map((pair, index) => ({
+        pairs.map((pair, index) => ({
           pair: label(pair),
           allowed: carried[index],
         })),
         'the check and the invocation agree, pair for pair',
       );
-      // Not every pair the same way: a table where everything is refused would
-      // agree with a check that always answered false.
       assert.true(
         given.some((answer) => answer.allowed),
-        'and the table covers a pair the gate admits',
+        'and the list covers a pair the gate admits',
       );
       assert.true(
         given.some((answer) => !answer.allowed),
         'and one it refuses',
       );
+    }
+
+    test('for a caller who may not read the realm', async function (assert) {
+      await assertPairForPair(assert, AUTH.teacher(), [
+        { target: ROOM_204, operation: 'read' },
+        { target: ROOM_205, operation: 'read' },
+        { target: NOTE, operation: 'read' },
+        { target: ABSENT, operation: 'read' },
+        { target: BULLETIN_1, operation: 'read' },
+        { target: ROOM_204, operation: 'update' },
+        { target: HOMEROOM, operation: 'rename' },
+        { target: ROOM_204, operation: 'appendActivity' },
+        { target: BULLETIN_1, operation: 'delete' },
+        { target: BULLETIN, operation: 'create' },
+        // Writes whose grant rests on a predicate over the card, which the
+        // check judges against the card as stored and the invocation under
+        // the write lock.
+        { target: ROOM_205, operation: 'delete' },
+        { target: ROOM_204, operation: 'delete' },
+      ]);
     });
 
-    test('a write whose grant still rests on a predicate answers conditional', async function (assert) {
-      // Asked by the reader, since a caller who may not read the realm is told
-      // a bare boolean (pinned below). A write's grant is matched without its
-      // predicate, which judges the state the write lock holds, so a delete of
-      // any classroom is conditional here, whichever teacher it names.
-      let [classroomDelete, noteDelete] = await answers(AUTH.reader(), [
+    test('for a caller who may read the realm and not write it', async function (assert) {
+      // No absent card here: a reader may read the realm, so a read of a card
+      // that is not there is one the ACL admits, and it fails for want of the
+      // card rather than of permission.
+      await assertPairForPair(assert, AUTH.reader(), [
+        { target: ROOM_205, operation: 'read' },
+        { target: NOTE, operation: 'read' },
+        { target: ROOM_204, operation: 'update' },
+        { target: HOMEROOM, operation: 'rename' },
+        { target: ROOM_204, operation: 'appendActivity' },
+        { target: BULLETIN_1, operation: 'delete' },
+        { target: BULLETIN, operation: 'create' },
         { target: ROOM_205, operation: 'delete' },
-        { target: NOTE, operation: 'delete' },
+        { target: ROOM_207, operation: 'delete' },
+      ]);
+    });
+
+    test('a write whose grant rests on a predicate is judged against the card as stored', async function (assert) {
+      let [taught, untaught] = await answers(AUTH.reader(), [
+        { target: ROOM_207, operation: 'delete' },
+        { target: ROOM_205, operation: 'delete' },
       ]);
       assert.deepEqual(
-        {
-          allowed: classroomDelete.allowed,
-          conditional: classroomDelete.conditional,
-        },
-        { allowed: true, conditional: true },
-        'the Classroom delete matched a grant whose predicate is still to run',
+        { ...taught, target: '<target>' },
+        { operation: 'delete', target: '<target>', allowed: true },
+        'the reader teaches room 207, so its delete is admitted outright',
       );
       assert.deepEqual(
-        { allowed: noteDelete.allowed, conditional: noteDelete.conditional },
-        { allowed: false, conditional: undefined },
-        'a delete of a card no rule names matched no grant at all',
+        { ...untaught, target: '<target>' },
+        {
+          operation: 'delete',
+          target: '<target>',
+          allowed: false,
+          reason: 'operation-not-permitted',
+        },
+        'and does not teach room 205, so its delete is refused as the gate refuses it',
       );
-      assert.strictEqual(
-        gateStats().predicateEvaluations,
-        0,
-        'and no predicate was evaluated to answer either',
+      assert.deepEqual(
+        gateStats(),
+        { policyLoads: 2, predicateEvaluations: 2, pendingDischarges: 0 },
+        'each predicate was evaluated once, and neither by the path that holds the write lock',
       );
     });
   });
@@ -629,18 +720,22 @@ module(basename(import.meta.filename), function (hooks) {
       );
     });
 
-    test('a grant whose predicate is still to run is refused rather than marked conditional', async function (assert) {
-      let [own, absent] = await answers(AUTH.teacher(), [
-        { target: ROOM_204, operation: 'delete' },
+    test('a write its predicate refuses answers the same as a card that is not there', async function (assert) {
+      let [untaught, absent, taught] = await answers(AUTH.teacher(), [
+        { target: ROOM_205, operation: 'delete' },
         { target: ABSENT, operation: 'delete' },
+        { target: ROOM_204, operation: 'delete' },
       ]);
       assert.deepEqual(
-        { ...own, target: '<target>' },
+        { ...untaught, target: '<target>' },
         { ...absent, target: '<target>' },
-        'a card a grant names and a card that is not there answer the same, ' +
-          'so conditional would have said the card exists',
+        'a classroom they do not teach and a card that does not exist differ only in the target they named',
       );
-      assert.false(own.allowed, 'refused rather than left conditional');
+      assert.deepEqual(
+        { ...taught, target: '<target>' },
+        { operation: 'delete', target: '<target>', allowed: true },
+        'and a classroom they teach is admitted with a bare boolean, never marked conditional',
+      );
     });
 
     test('a caller who may read the realm is told why', async function (assert) {
@@ -681,8 +776,8 @@ module(basename(import.meta.filename), function (hooks) {
       ]);
       assert.deepEqual(
         { ...teacher, target: '<type>' },
-        { operation: 'create', target: '<type>', allowed: false },
-        'a caller who may not read the realm is refused it, as the envelope refuses their undischarged create',
+        { operation: 'create', target: '<type>', allowed: true },
+        'a caller who may not read the realm is told it bare: the control is worth showing, and it names no card',
       );
     });
 
@@ -805,6 +900,11 @@ module(basename(import.meta.filename), function (hooks) {
         'no index job was enqueued',
       );
       assert.deepEqual(broadcasts, [], 'and no realm event was broadcast');
+      assert.strictEqual(
+        gateStats().pendingDischarges,
+        0,
+        'and the delete it judged against its predicate never reached the write lock',
+      );
 
       // The positive control. The same operations, carried out, move all three
       // — so the zeros above are an observation rather than an instrument that
@@ -829,6 +929,18 @@ module(basename(import.meta.filename), function (hooks) {
       assert.true(
         broadcasts.length > 0,
         'and broadcast a realm event the check did not',
+      );
+      assert.true(
+        await invoke(AUTH.teacher(), {
+          target: ROOM_204,
+          operation: 'delete',
+        }),
+        'the delete the check judged is admitted when it is invoked',
+      );
+      assert.strictEqual(
+        gateStats().pendingDischarges,
+        1,
+        'by the write lock deciding its predicate, which the check never did',
       );
     });
   });
@@ -868,9 +980,9 @@ module(basename(import.meta.filename), function (hooks) {
           actor: TEACHER,
           coarseDeclined: 'all',
           pairs: 3,
-          allowed: 1,
+          allowed: 2,
           conditional: 0,
-          denied: 2,
+          denied: 1,
         },
         'the counts describe the request, and nothing names which cards it asked about',
       );

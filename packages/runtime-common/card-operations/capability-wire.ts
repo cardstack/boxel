@@ -41,10 +41,12 @@ export interface CapabilityAnswer {
   // Whether the gate would admit the invocation. For a caller who may not read
   // the realm this is the whole answer.
   allowed: boolean;
-  // Set where a grant matched but its predicate has still to run against
-  // something this check does not hold: the document a create would stage, or
-  // the state a write's predicate is judged against under the write lock. The
-  // control is worth rendering and the call may still be refused.
+  // Set where a grant matched but its predicate has still to run against a
+  // document this check does not hold: the card a create against a type would
+  // mint. The control is worth rendering and the call may still be refused.
+  // Never set for a stored card, whose predicate is judged against the card as
+  // it is stored now. Never set for a caller who may not read the realm, who
+  // is told `allowed` alone.
   conditional?: true;
   // Why the gate refused, as the code the invocation itself would carry.
   // Withheld from a caller who may not read the realm, for whom every refusal

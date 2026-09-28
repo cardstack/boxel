@@ -12,11 +12,15 @@ import {
   resolveGatedOperation,
   type CoarseDeclined,
   type OperationCore,
+  type OperationScope,
   type ScopeCaller,
 } from './dispatch.ts';
+import { pendingWriteHolds } from './gate.ts';
 import {
   OperationFailure,
   isOperationFailure,
+  isWrite,
+  type OperationErrorCode,
   type OperationTarget,
 } from './types.ts';
 
@@ -62,6 +66,13 @@ import {
 export interface CapabilityCaller {
   caller: ScopeCaller;
   coarseDeclined: CoarseDeclined;
+  // Set where the realm ACL refuses this caller's writes in a way no policy
+  // may judge: nobody signed in, a session that may only read, a realm that
+  // names no policy. Such a write is refused before it is routed, so it never
+  // reaches the gate, and neither does its pair here. The code is the one its
+  // refusal comes closest to: `actor-required` for the 401 a caller who
+  // authenticated nobody is given, `operation-not-permitted` for the 403.
+  writesRefused?: 'actor-required' | 'operation-not-permitted';
 }
 
 // Answer every pair, in order.
@@ -82,7 +93,14 @@ export async function checkCapabilities(
 ): Promise<CapabilityAnswer[]> {
   let scope = newOperationScope(core, {
     caller: who.caller,
-    coarseDeclined: who.coarseDeclined,
+    // A caller who may read the realm and whose writes are refused outright
+    // has nothing for the policy to decide: their reads are the ACL's, and
+    // their writes are refused below whatever a grant says. So the gate is not
+    // asked about either, and no policy is loaded for them.
+    coarseDeclined:
+      who.writesRefused && who.coarseDeclined === 'writes'
+        ? 'none'
+        : who.coarseDeclined,
   });
   let distinct = new Map<string, CapabilityCheck>();
   let keys = checks.map((check) => {
@@ -94,7 +112,7 @@ export async function checkCapabilities(
   });
   let asked = [...distinct];
   let outcomes = await settledWithin(STAGING_WIDTH, asked, ([, check]) =>
-    decide(core, check, who.coarseDeclined, scope),
+    decide(core, check, who, scope),
   );
   let answers = new Map<string, CapabilityDecision>();
   asked.forEach(([key], index) => {
@@ -125,38 +143,57 @@ type CapabilityDecision = Omit<CapabilityAnswer, 'operation' | 'target'>;
 async function decide(
   core: OperationCore,
   check: CapabilityCheck,
-  coarseDeclined: CoarseDeclined,
-  scope: ReturnType<typeof newOperationScope>,
+  who: CapabilityCaller,
+  scope: OperationScope,
 ): Promise<CapabilityDecision> {
   // A non-reader is told one thing however the answer was reached, so the
   // reason is dropped rather than computed and discarded — and `conditional`
-  // with it, since on a stored card it would say the card is there and a grant
-  // names its type, which is the oracle the bare boolean closes. It is also
-  // what the envelope does with such a caller's undischarged write: refuse it
-  // where a target that is not there is refused.
-  let bare = coarseDeclined === 'all';
+  // with it, since that would say a grant names the target's type.
+  let bare = who.coarseDeclined === 'all';
+  let refused = (reason: OperationErrorCode): CapabilityDecision =>
+    bare ? { allowed: false } : { allowed: false, reason };
   try {
-    let { decision } = await resolveGatedOperation(
+    let target = targetFor(core, check.target);
+    let { definition, decision } = await resolveGatedOperation(
       core,
-      targetFor(core, check.target),
+      target,
       check.operation,
       scope,
     );
-    if (decision.kind === 'pending') {
-      return bare ? { allowed: false } : { allowed: true, conditional: true };
+    if (who.writesRefused && isWrite(definition.base)) {
+      return refused(who.writesRefused);
     }
-    return { allowed: true };
+    if (decision.kind !== 'pending') {
+      return { allowed: true };
+    }
+    // A write the gate matched a grant for and left to its predicate. The
+    // write lock decides it against the card as the lock holds it, and a
+    // check holds no lock, so it asks the same question of the card as it is
+    // stored now: the answer the lock would give if nothing changes before the
+    // call takes it.
+    if (target.kind === 'instance') {
+      return (await pendingWriteHolds(core, {
+        target,
+        name: check.operation,
+        decision,
+        scope,
+      }))
+        ? { allowed: true }
+        : refused('operation-not-permitted');
+    }
+    // A create against a type is judged by the card it would mint, which does
+    // not exist while the control that would mint it is being rendered. So
+    // the most the check can say is that a grant matched and its predicate is
+    // still to run. A non-reader is told that as `true`: the control is worth
+    // showing, and what it reveals — that the realm's policy grants creates
+    // of this type — is what the create itself would reveal, and is no answer
+    // about which cards exist.
+    return bare ? { allowed: true } : { allowed: true, conditional: true };
   } catch (e: unknown) {
-    if (bare) {
-      return { allowed: false };
-    }
     // Anything that is not a refusal is a fault rather than an answer, and the
     // check fails closed on it — one pair the realm could not decide, reported
     // as itself, rather than a request the caller cannot read at all.
-    return {
-      allowed: false,
-      reason: isOperationFailure(e) ? e.error.code : 'internal-error',
-    };
+    return refused(isOperationFailure(e) ? e.error.code : 'internal-error');
   }
 }
 
