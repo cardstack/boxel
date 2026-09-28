@@ -204,6 +204,60 @@ export async function fileContentToBytes({
   return new Uint8Array(B.concat(chunks));
 }
 
+// Whether a file's content is exactly `bytes`, compared as bytes. A streamed
+// file is compared one chunk at a time, so the comparison holds a chunk of the
+// file rather than all of it, and it stops reading at the first chunk that
+// differs.
+export async function fileContentEquals(
+  { content }: Pick<FileRef, 'content'>,
+  bytes: Uint8Array,
+): Promise<boolean> {
+  let offset = 0;
+  let matchesNext = (chunk: Uint8Array | string): boolean => {
+    let piece =
+      typeof chunk === 'string' ? new TextEncoder().encode(chunk) : chunk;
+    if (offset + piece.length > bytes.length) {
+      return false;
+    }
+    for (let i = 0; i < piece.length; i++) {
+      if (piece[i] !== bytes[offset + i]) {
+        return false;
+      }
+    }
+    offset += piece.length;
+    return true;
+  };
+  if (typeof content === 'string' || content instanceof Uint8Array) {
+    return matchesNext(content) && offset === bytes.length;
+  }
+  if (content instanceof ReadableStream) {
+    let reader = content.getReader();
+    try {
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        let { done, value } = await reader.read();
+        if (done) {
+          return offset === bytes.length;
+        }
+        if (value && !matchesNext(value)) {
+          return false;
+        }
+      }
+    } finally {
+      reader.releaseLock();
+      content.cancel().catch(() => {});
+    }
+  }
+  // A node stream. Returning from inside the loop destroys it, so a mismatch
+  // does not leave the rest of the file open.
+  for await (const chunk of content as AsyncIterable<Uint8Array | string>) {
+    if (!matchesNext(chunk)) {
+      return false;
+    }
+  }
+  return offset === bytes.length;
+}
+
 export interface TextFileRef {
   content: string;
   lastModified: number;
