@@ -36,6 +36,7 @@ import {
   releaseSearchAdmission,
   sendResponseForBadRequest,
   setContextResponse,
+  withSearchConnectionTenant,
 } from '../middleware/index.ts';
 import {
   getMultiRealmAuthorization,
@@ -105,6 +106,17 @@ export default function handleSearch(opts: {
   let linkShapePolicy = opts.linkShapePolicy ?? LinkShapePolicy.pinned('full');
   let liveSearchCache = opts.liveSearchCache ?? new LiveSearchCache();
   return async function (ctxt: Koa.Context) {
+    let { realmList } = getMultiRealmAuthorization(ctxt);
+    // The realms this search names are known from here: each one's link-shape
+    // level follows the requests that name it, and the database connections
+    // the search draws on are shared out by them.
+    attributeSearchRequest(ctxt, realmList);
+    await withSearchConnectionTenant(ctxt, realmList, () =>
+      respond(ctxt, realmList),
+    );
+  };
+
+  async function respond(ctxt: Koa.Context, realmList: string[]) {
     let handlerStart = Date.now();
     // Slots the query-shape line is assembled from. `shape` is filled in as
     // soon as the query parses — a request that never gets that far has no
@@ -119,11 +131,6 @@ export default function handleSearch(opts: {
     );
     let timings =
       loggingCorrelationId !== null ? new RequestTimings() : undefined;
-
-    let { realmList } = getMultiRealmAuthorization(ctxt);
-    // The realms this search names are known from here, and each one's
-    // link-shape level follows the requests that name it.
-    attributeSearchRequest(ctxt, realmList);
 
     let parsed;
     let request = await fetchRequestFromContext(ctxt);
@@ -413,7 +420,7 @@ export default function handleSearch(opts: {
       emitTelemetry({ status: 500 });
       throw e;
     }
-  };
+  }
 }
 
 // The job-scoped cache + ETag/304 protocol for the federated search

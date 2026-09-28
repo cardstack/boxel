@@ -107,8 +107,18 @@ interface Signature {
     onChangeSort: (sort: SortOption) => void;
     onChangeView: (viewId: ViewOption['id']) => void;
     displaySidebar?: boolean;
+    // Takes everything but the contentHeaderStart block out of interaction,
+    // for when something else covers the pane, such as a sliding sidebar.
+    isContentInert?: boolean;
   };
-  Blocks: { content: []; contentHeader: []; sidebar: [] };
+  Blocks: {
+    content: [];
+    contentHeader: [];
+    // Rendered ahead of the title, for a control that belongs to the whole
+    // pane rather than to the list, such as a sidebar toggle.
+    contentHeaderStart: [];
+    sidebar: [];
+  };
   Element: HTMLElement;
 }
 
@@ -131,41 +141,56 @@ export default class CardsGridLayout extends Component<Signature> {
       {{/unless}}
       <section
         class='content scroll-container'
-        tabindex='0'
+        tabindex={{if @isContentInert '-1' '0'}}
         aria-label={{@activeFilter.displayName}}
+        data-test-cards-grid-content
       >
         <header class='content-header' data-test-cards-grid-header>
-          {{#if @activeFilter.icon}}
-            <div class='content-icon' data-test-cards-grid-header-icon>
-              {{#if (this.isIconString @activeFilter.icon)}}
-                {{htmlSafe @activeFilter.icon}}
-              {{else}}
-                <@activeFilter.icon
-                  class='filter-list__icon'
-                  role='presentation'
-                />
+          <div class='content-header-group content-header-lead'>
+            {{yield to='contentHeaderStart'}}
+            <div class='title-group'>
+              {{#if @activeFilter.icon}}
+                <div class='content-icon' data-test-cards-grid-header-icon>
+                  {{#if (this.isIconString @activeFilter.icon)}}
+                    {{htmlSafe @activeFilter.icon}}
+                  {{else}}
+                    <@activeFilter.icon
+                      class='filter-list__icon'
+                      role='presentation'
+                    />
+                  {{/if}}
+                </div>
               {{/if}}
+              <h2 class='content-title'>
+                {{@activeFilter.displayName}}
+              </h2>
             </div>
-          {{/if}}
-          <h2 class='content-title'>
-            {{@activeFilter.displayName}}
-          </h2>
-          {{#if this.displayActions}}
-            <ViewSelector
-              @items={{@viewOptions}}
-              @onChange={{@onChangeView}}
-              @selectedId={{@activeViewId}}
-            />
-            <SortDropdown
-              @options={{@sortOptions}}
-              @onSelect={{@onChangeSort}}
-              @selectedOption={{@activeSort}}
-            />
-            {{yield to='contentHeader'}}
-          {{/if}}
+          </div>
+          <div
+            class='content-header-group content-header-actions'
+            inert={{if @isContentInert true false}}
+          >
+            {{#if this.displayActions}}
+              <ViewSelector
+                @items={{@viewOptions}}
+                @onChange={{@onChangeView}}
+                @selectedId={{@activeViewId}}
+              />
+              <SortDropdown
+                @options={{@sortOptions}}
+                @onSelect={{@onChangeSort}}
+                @selectedOption={{@activeSort}}
+              />
+              {{yield to='contentHeader'}}
+            {{/if}}
+          </div>
         </header>
         {{#if (eq @activeFilter.displayName 'Highlights')}}
-          <div class='highlights-layout' data-test-highlights-layout>
+          <div
+            class='highlights-layout'
+            inert={{if @isContentInert true false}}
+            data-test-highlights-layout
+          >
             {{#if this.aiAppGeneratorCard}}
               <div
                 class='highlights-section'
@@ -228,6 +253,7 @@ export default class CardsGridLayout extends Component<Signature> {
             @format={{@format}}
             @cards={{@activeFilter.cards}}
             @viewOption={{@activeViewId}}
+            inert={{if @isContentInert true false}}
             data-test-cards-grid-cards
           />
         {{/if}}
@@ -242,7 +268,7 @@ export default class CardsGridLayout extends Component<Signature> {
         --padding: var(--boxel-cards-grid-layout-padding, var(--boxel-sp-lg));
         --boxel-card-list-padding: var(
           --boxel-cards-grid-padding,
-          0 var(--padding)
+          0 var(--padding) var(--padding)
         );
         --sidebar-min-width: var(--boxel-cards-grid-sidebar-min-width, 11rem);
         --sidebar-max-width: var(--boxel-cards-grid-sidebar-max-width, 22rem);
@@ -318,6 +344,7 @@ export default class CardsGridLayout extends Component<Signature> {
       .content-header {
         display: flex;
         align-items: center;
+        justify-content: space-between;
         flex-wrap: wrap;
         column-gap: var(--boxel-sp);
         row-gap: var(--boxel-sp-xs);
@@ -325,12 +352,29 @@ export default class CardsGridLayout extends Component<Signature> {
         margin: 0 var(--padding);
         border-bottom: 1px solid var(--border);
       }
+      .content-header-group {
+        display: flex;
+        gap: var(--boxel-sp-xs) var(--boxel-sp);
+        align-items: center;
+        min-width: 0;
+      }
+      /* the toggle and the title stay on one line; a long title wraps its own
+         text instead of dropping under the toggle */
+      .content-header-actions {
+        flex-wrap: wrap;
+      }
+      .title-group {
+        display: flex;
+        gap: var(--boxel-sp-xs);
+        align-items: center;
+        min-width: 0;
+      }
       .content-icon {
         display: flex;
         align-items: center;
         justify-content: center;
-        width: 1.5rem;
-        height: 1.5rem;
+        width: 1.25rem;
+        height: 1.25rem;
         flex-shrink: 0;
       }
 
