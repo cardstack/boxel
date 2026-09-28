@@ -671,4 +671,90 @@ module(basename(import.meta.filename), function () {
       assert.deepEqual(issues, [], 'nothing is recorded');
     });
   });
+
+  module('non-grantable declarations', function () {
+    test('the flag reaches the stored entry, and nothing else carries it', async function (assert) {
+      let { operations, issues } = await lower({
+        seal: {
+          base: 'transform',
+          set: { status: 'sealed' },
+          nonGrantable: true,
+        },
+        reopen: { base: 'transform', set: { status: 'open' } },
+        appendContainsMany: {
+          base: 'appendContainsMany',
+          nonGrantable: true,
+        },
+      });
+      assert.deepEqual(issues, [], 'every declaration lowers cleanly');
+      assert.true(operations.seal.nonGrantable, 'the flag is stored');
+      assert.false(
+        'nonGrantable' in operations.reopen,
+        'a declaration that does not ask carries no flag',
+      );
+      assert.deepEqual(
+        operations.appendContainsMany,
+        { base: 'appendContainsMany', deterministic: true, nonGrantable: true },
+        'the built-in append, marked, lowers to no items, which the executor reads as the built-in',
+      );
+    });
+
+    test('an append under any other name that names nothing is still incomplete', async function (assert) {
+      let { operations, issues } = await lower({
+        log: { base: 'appendContainsMany', nonGrantable: true },
+      });
+      assert.deepEqual(
+        issues.map((issue) => issue.code),
+        ['incomplete-append'],
+      );
+      assert.true(operations.log.nonGrantable, 'and it keeps its flag');
+    });
+
+    test('no finding against a declaration makes it grantable', async function (assert) {
+      let { operations } = await lower({
+        broken: {
+          base: 'transform',
+          set: { missing: 'x' },
+          nonGrantable: true,
+        },
+      });
+      assert.true(operations.broken.invalid, 'the declaration is invalid');
+      assert.true(operations.broken.nonGrantable, 'and non-grantable');
+    });
+
+    test('a lowering that throws keeps the declaration stored, flag and all', async function (assert) {
+      let { operations, issues } = await lowerOperationDeclarations(
+        {
+          seal: {
+            base: 'transform',
+            params: { note: StringFieldClass },
+            set: { status: 'sealed' },
+            nonGrantable: true,
+          },
+          reopen: { base: 'transform', set: { status: 'open' } },
+        } as never,
+        {
+          definition: Report,
+          lookupDefinition,
+          identifyCard: () => {
+            throw new Error('identify failed');
+          },
+        },
+      );
+      assert.deepEqual(
+        issues.map((issue) => `${issue.operation}: ${issue.code}`),
+        ['seal: lowering-failed'],
+        'the failure is recorded against the operation it hit',
+      );
+      assert.true(operations.seal.invalid, 'which is stored as invalid');
+      assert.true(
+        operations.seal.nonGrantable,
+        'and non-grantable, so its name cannot fall back to a grantable built-in',
+      );
+      assert.notOk(
+        operations.reopen.invalid,
+        'an operation the failure did not reach lowers as before',
+      );
+    });
+  });
 });

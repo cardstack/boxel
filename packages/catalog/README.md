@@ -34,11 +34,11 @@ If you have started from scratch these should have been automatically run for yo
 
 The catalog realm package includes helper scripts for managing the catalog repository:
 
-| Script                | Description                                                               |
-| --------------------- | ------------------------------------------------------------------------- |
-| `pnpm catalog:setup`  | Clones the boxel-catalog repository into `contents/` if it doesn't exist  |
-| `pnpm catalog:update` | Pulls latest changes from the boxel-catalog repository                    |
-| `pnpm catalog:reset`  | Removes the `contents/` directory and re-clones the repository            |
+| Script                | Description                                                              |
+| --------------------- | ------------------------------------------------------------------------ |
+| `pnpm catalog:setup`  | Clones the boxel-catalog repository into `contents/` if it doesn't exist |
+| `pnpm catalog:update` | Pulls latest changes from the boxel-catalog repository                   |
+| `pnpm catalog:reset`  | Removes the `contents/` directory and re-clones the repository           |
 
 ## Development Workflows
 
@@ -93,6 +93,16 @@ pnpm lint:types   # TypeScript type check
 ```
 
 These commands run locally in this monorepo's `packages/catalog` package. If you submit a pull request to the [boxel-catalog](https://github.com/cardstack/boxel-catalog) repository, any linting run in CI is controlled by that repository's own workflow configuration.
+
+### Catalog lint in boxel CI
+
+The catalog type-checks and lints its cards against this monorepo, so a platform change here (removing a field from a command input, tightening a type, adding a lint rule) can break the catalog's lint without failing anything in boxel. The **Lint Catalog** job in boxel's CI Lint workflow guards against that: it checks out boxel-catalog into `contents/` and runs this package's lint against the change, using `scripts/lint-sweep.ts`.
+
+- It lints boxel-catalog `main`, unless boxel-catalog has a branch with the same name as the boxel pull request's branch, in which case it lints that branch. That is how a boxel change and the catalog change it needs are validated together: push the catalog fix to a same-named boxel-catalog branch, and merge its catalog pull request before or alongside the boxel one.
+- It fails only on errors the change introduces. When linting the catalog against the change finds errors, the job lints the same catalog revision against the pull request's base branch too, and errors that appear in both runs are listed as already present rather than failing the check. On pushes to `main` there is no base to compare with, so any error fails.
+- The job summary lists each error, linking catalog files to their line in boxel-catalog.
+
+To reproduce it locally, run `pnpm lint` here with the boxel-catalog revision the job names checked out in `contents/`.
 
 ## Deployment Pipeline
 
