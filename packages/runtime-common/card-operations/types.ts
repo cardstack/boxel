@@ -114,8 +114,8 @@ export function isLinkStrategy(value: unknown): value is LinkStrategy {
   );
 }
 
-// What a stored definition's `links` means. Absent is `full`, which is what
-// every read answered with before the declaration existed.
+// What a stored definition's `links` means. Absent is `full`, the whole
+// closure, which is the default for every read.
 //
 // Anything else is JSON the realm reads back, so it is only as good as what
 // wrote it. Lowering records an unrecognized value rather than storing one,
@@ -182,8 +182,7 @@ export interface OperationDefinition {
   query?: OperationQueryTemplate;
   // How much of the target's link graph this read carries: the whole assembled
   // closure, the relationships naming their targets with nothing assembled, or
-  // no relationship data at all. Absent is `full`, which is what every read
-  // answered with before the declaration existed.
+  // no relationship data at all. Absent is `full`.
   //
   // It applies to every caller alike. The serving path never asks how a caller
   // was authorized, so a realm writer and a caller reached by a policy grant

@@ -368,11 +368,11 @@ how much of that to carry.
 } satisfies OperationDeclaration;
 ```
 
-| `links` | What the response carries                                                       |
-| ------- | ------------------------------------------------------------------------------- |
-| `full`  | The whole assembled closure in `included[]`. The default, and today's behavior. |
-| `ids`   | The relationships name their targets; nothing is assembled.                     |
-| `none`  | No relationship data at all — nothing assembled and nothing named.              |
+| `links` | What the response carries                                          |
+| ------- | ------------------------------------------------------------------ |
+| `full`  | The whole assembled closure in `included[]`. The default.          |
+| `ids`   | The relationships name their targets; nothing is assembled.        |
+| `none`  | No relationship data at all — nothing assembled and nothing named. |
 
 Under `ids` a consumer fetches each target on its own request, which is one
 round trip per link it actually displays rather than one response carrying

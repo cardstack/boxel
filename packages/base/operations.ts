@@ -516,7 +516,7 @@ export interface DeleteOperationDeclaration extends OperationCommon {
 // How much of the target's link graph a read carries.
 //
 //   * `full` — the transitive closure of the card's links is assembled into
-//     `included[]`. The default, and what every read answers with today.
+//     `included[]`. The default.
 //   * `ids`  — the card's relationships name their targets and nothing is
 //     assembled. A consumer fetches each target on its own request.
 //   * `none` — no relationship data is assembled or named.
