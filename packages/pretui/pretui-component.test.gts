@@ -42,6 +42,13 @@ module('Pretui | PretUISpec', function (hooks) {
       .containsText('No usage page yet');
   });
 
+  test('a planned entry that has a page shows it', async function (assert) {
+    let model = specModel('Button', 'planned');
+    await render(<template><Isolated @model={{model}} /></template>);
+    await waitFor('[data-demo-policy="included"] .FreestyleUsage');
+    assert.dom('[data-demo-policy="included"] .FreestyleUsage').exists();
+  });
+
   test('a Runtime entry without a page is excluded', async function (assert) {
     let model = specModel('UsageString', 'live', 'Runtime');
     await render(<template><Isolated @model={{model}} /></template>);
