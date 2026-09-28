@@ -574,7 +574,7 @@ export default class InteractSubmode extends Component {
     if (takesFileDeleteRoute(card, id, this.store)) {
       let fileDef = isFileDefInstance<FileDef>(card)
         ? card
-        : await this.store.get<FileDef>(id, { type: 'file-meta' });
+        : await this.store.get(id, { type: 'file-meta' });
       // A file whose metadata fails to load is still deletable; fall back to
       // its URL's filename for the dialog.
       let title = isFileDefInstance<FileDef>(fileDef)
