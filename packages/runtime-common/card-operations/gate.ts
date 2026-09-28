@@ -334,7 +334,6 @@ export async function gateOperation(
 ): Promise<GateDecision | GateRefusal> {
   let { base } = definition;
   let { trace } = scope;
-  trace?.reached(base);
   if (!declines(scope, base)) {
     return { kind: 'coarse' };
   }

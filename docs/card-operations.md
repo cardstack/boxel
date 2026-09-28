@@ -578,13 +578,26 @@ narrower than its author meant shows up as refusals someone reports. A policy
 wider than its author meant shows up as nothing at all. An explain is how the
 realm's owner asks directly.
 
-`RealmPolicy` declares one, named `explain`. Invoked on the policy card with
-an actor, a card and an operation, it runs the policy gate of the realm that
-holds the card, exactly as that invocation would. It stops at the decision,
-invokes nothing, and answers with how the gate got there:
+A policy card's type declares one, named `explain`, on the `explain` base.
+Invoked on the policy card with an actor, a card and an operation, it runs the
+policy gate of the realm that holds the card, exactly as that invocation
+would. It stops at the decision, invokes nothing, and answers with how the gate
+got there:
 
 ```ts
-let explanation = await operations<typeof RealmPolicy>(policy).explain({
+class SchoolPolicy extends RealmPolicy {
+  @operation static explain = {
+    base: 'explain',
+    params: {
+      actor: StringField,
+      target: StringField,
+      operation: StringField,
+    },
+    nonGrantable: true,
+  } satisfies OperationDeclaration;
+}
+
+let explanation = await operations<typeof SchoolPolicy>(policy).explain({
   actor: '@teacher:example.org',
   target: 'https://example.org/education/classrooms/room-204',
   operation: 'read',
@@ -602,10 +615,15 @@ let explanation = await operations<typeof RealmPolicy>(policy).explain({
 
 Some things worth knowing before you read one:
 
-- **It is for realm owners.** The caller asking must be able to read both the
-  policy card's realm and the card's realm. A caller missing either one is told
-  what a card that does not exist is told, the same response byte for byte. No
-  policy grant ever reaches an explain, the policy's own grant included.
+- **It is for the people who run the realms.** The caller asking must be able
+  to read both the policy card's realm and the card's realm, as a session of
+  their own: a revoked session, or one delegated to a single realm, asks as
+  nobody. A caller missing either read is told what a card that does not exist
+  is told, the same response byte for byte. No policy grant ever reaches an
+  explain, the policy's own grant included.
+- **Read is the whole gate.** A reader of both realms learns, for any actor
+  they name, what the card's realm's permissions allow that actor, which the
+  realm's permissions listing shows only to its owners.
 - **There is no asking about yourself.** A caller refused an operation is told
   as little as the realm's permissions entitle them to, so that they cannot
   learn which cards exist. An explain would tell them exactly that, so it is

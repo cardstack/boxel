@@ -4,7 +4,14 @@ import supertest from 'supertest';
 import type { Test, SuperTest, Response } from 'supertest';
 import { basename, join } from 'path';
 import { dirSync } from 'tmp';
-import { rri, SupportedMimeType } from '@cardstack/runtime-common';
+import jwt from 'jsonwebtoken';
+import {
+  param,
+  query,
+  rri,
+  SupportedMimeType,
+} from '@cardstack/runtime-common';
+import { insertPermissions } from '@cardstack/runtime-common/db-queries/realm-permission-queries';
 import type {
   PolicyExplanation,
   QueuePublisher,
@@ -20,6 +27,7 @@ import {
   createVirtualNetwork,
   matrixURL,
   realmConfigCardJSON,
+  realmSecretSeed,
   runTestRealmServerWithRealms,
   setupDB,
 } from './helpers/index.ts';
@@ -39,6 +47,9 @@ const IT_ADMIN = '@it-admin:localhost';
 const ORG_ADMIN = '@org-admin:localhost';
 const ORG_READER = '@org-reader:localhost';
 const READER = '@reader:localhost';
+// May write the Education realm and not read it, a shape the permissions API
+// accepts. A write reaches that realm on a request its ACL judges as a write.
+const WRITER = '@writer:localhost';
 const TEACHER = '@teacher:localhost';
 const COLLEAGUE = '@colleague:localhost';
 
@@ -223,6 +234,7 @@ const EDUCATION_CONFIG = `${EDUCATION}realm`;
 module(basename(import.meta.filename), function (hooks) {
   let education: Realm;
   let org: Realm;
+  let db: PgAdapter;
   let request: SuperTest<Test>;
   let server: Server;
 
@@ -275,6 +287,7 @@ module(basename(import.meta.filename), function (hooks) {
             [EDUCATION_ADMIN]: ['read', 'write', 'realm-owner'],
             [IT_ADMIN]: ['read', 'write'],
             [READER]: ['read'],
+            [WRITER]: ['write'],
           },
         },
         {
@@ -308,6 +321,7 @@ module(basename(import.meta.filename), function (hooks) {
 
   setupDB(hooks, {
     beforeEach: async (dbAdapter, publisher, runner) => {
+      db = dbAdapter;
       await start({ dbAdapter, publisher, runner });
     },
     afterEach: async () => {
@@ -344,6 +358,7 @@ module(basename(import.meta.filename), function (hooks) {
   const EDUCATION_SESSION: Record<string, () => string> = {
     [TEACHER]: () => onEducation(TEACHER, []),
     [READER]: () => onEducation(READER, ['read']),
+    [WRITER]: () => onEducation(WRITER, ['write']),
   };
 
   function path(url: string) {
@@ -550,6 +565,24 @@ module(basename(import.meta.filename), function (hooks) {
       );
     });
 
+    test('a caller the ACL lets write and not read is judged on the lane the operation travels in', async function (assert) {
+      let write = await explain(WRITER, ROOM_205, 'archive');
+      assert.deepEqual(write.acl, { read: false, write: true });
+      assert.strictEqual(
+        write.decision,
+        'allowed',
+        'a write travels on a request the ACL judges as a write',
+      );
+      assert.strictEqual(write.reason, 'acl');
+      let read = await explain(WRITER, ROOM_205, 'read');
+      assert.strictEqual(
+        read.reason,
+        'predicate-false',
+        'a read travels on a request the ACL judges as a read, so the policy decides it',
+      );
+      assert.deepEqual(read.refusal, { status: 404, code: 'target-not-found' });
+    });
+
     test('an operation the card does not carry, a write to authorization infrastructure, and a caller with no credentials', async function (assert) {
       let bogusForTeacher = await explain(TEACHER, ROOM_204, 'bogus');
       assert.strictEqual(bogusForTeacher.reason, 'not-resolved');
@@ -609,6 +642,8 @@ module(basename(import.meta.filename), function (hooks) {
           data: { note: 'Field trip' },
         },
         { actor: TEACHER, target: ROOM_204, operation: 'delete' },
+        { actor: WRITER, target: ROOM_205, operation: 'read' },
+        { actor: WRITER, target: ROOM_205, operation: 'archive' },
       ];
       for (let { actor, target, operation, data } of triples) {
         let label = `${actor} ${operation} ${target}`;
@@ -666,6 +701,37 @@ module(basename(import.meta.filename), function (hooks) {
         ...asked,
         target: 'http://127.0.0.1:4444/elsewhere/room-204',
       });
+      // The Education policy grants every caller a read of a bulletin, so the
+      // Org reader reaches this card. Reaching it is not reading the realm.
+      let granted = await request
+        .get(path(BULLETIN_1))
+        .set('Accept', SupportedMimeType.CardJson)
+        .set('Authorization', onEducation(ORG_READER, []));
+      assert.strictEqual(
+        granted.status,
+        200,
+        'a grant admits the Org reader to the bulletin',
+      );
+      let reachable = await ask(ASKER.orgReader(), {
+        ...asked,
+        target: BULLETIN_1,
+      });
+      // A session delegated to the Org realm, for a user who reads both
+      // realms. It is bound to the realm it was minted for.
+      let delegated = await ask(
+        `Bearer ${jwt.sign(
+          {
+            user: IT_ADMIN,
+            realm: ORG,
+            permissions: ['read'],
+            realmServerURL: org.realmServerURL,
+            delegated: true,
+          },
+          realmSecretSeed,
+          { expiresIn: '30m' },
+        )}`,
+        { ...asked, target: ROOM_204 },
+      );
       let answered = await ask(ASKER.itAdmin(), { ...asked, target: ROOM_204 });
       assert.strictEqual(
         answered.status,
@@ -678,6 +744,11 @@ module(basename(import.meta.filename), function (hooks) {
           'an Org reader asking about a card that is not there',
           missingUnreadable,
         ],
+        [
+          'an Org reader asking about a card a grant lets them reach',
+          reachable,
+        ],
+        ['a session delegated to the Org realm alone', delegated],
         ['a realm this server does not serve', elsewhere],
       ] as const) {
         assert.strictEqual(response.status, missing.status, `${label}: status`);
@@ -689,6 +760,36 @@ module(basename(import.meta.filename), function (hooks) {
       }
       assert.strictEqual(missing.status, 404);
       assert.strictEqual(errorOf(missing)?.code, 'target-not-found');
+    });
+
+    test('a session the target realm would not accept asks as nobody, on a policy realm anyone may read', async function (assert) {
+      // With the Org realm readable by everyone, a request to it takes the
+      // path that verifies a token without checking its session further.
+      await insertPermissions(db, new URL(ORG), { '*': ['read'] });
+      let session = ASKER.itAdmin();
+      let question = { actor: TEACHER, target: ROOM_204, operation: 'read' };
+      let missing = await ask(session, { ...question, target: ROOM_999 });
+      assert.strictEqual(
+        (await ask(session, question)).status,
+        200,
+        'the IT admin’s own session is answered',
+      );
+      // Every session the IT admin holds is revoked from a moment after this
+      // one was issued.
+      await query(db, [
+        'INSERT INTO users (matrix_user_id, sessions_revoked_at) VALUES (',
+        param(IT_ADMIN),
+        ',',
+        param(Math.floor(Date.now() / 1000) + 60),
+        ') ON CONFLICT (matrix_user_id) DO UPDATE SET sessions_revoked_at = EXCLUDED.sessions_revoked_at',
+      ]);
+      let revoked = await ask(session, question);
+      assert.strictEqual(revoked.status, missing.status);
+      assert.strictEqual(
+        revoked.text,
+        missing.text,
+        'a revoked session is told what a missing target is told, byte for byte',
+      );
     });
 
     test('a caller reaching the policy’s realm only through a grant is refused', async function (assert) {

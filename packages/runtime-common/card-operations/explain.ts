@@ -5,10 +5,10 @@ import {
   localPathFor,
   newOperationScope,
   resolveGatedOperation,
+  resolveOperation,
   scopeCallerFor,
   type CoarseDeclined,
   type OperationCore,
-  type OperationScope,
   type ScopeCaller,
 } from './dispatch.ts';
 import { GateTrace } from './gate-trace.ts';
@@ -61,7 +61,14 @@ import {
 // either is told what a target that does not exist is told, the same bytes
 // either way. That also means there is no asking about yourself: a caller
 // refused an operation cannot ask why, since the answer would say what the
-// refusal did not.
+// refusal did not. The caller is judged in the target's realm by a session
+// that realm would accept as theirs, so a revoked session, or one delegated to
+// the policy card's realm alone, asks as nobody.
+//
+// Read on both realms is the whole gate, not realm ownership. So a reader of
+// both learns, for any actor they name, what the target realm's ACL allows
+// that actor, which the realm's permissions listing tells only its owners.
+// That is the first half of the question an explain answers.
 //
 // Nothing here decides. The decision is `resolveGatedOperation`'s, reached
 // through the same code the invocation runs, with a trace attached to the
@@ -76,11 +83,15 @@ export interface TargetRealm {
   url: URL;
   // The realm's operation core, whose policy gate the explain runs.
   core: OperationCore;
-  // What the realm's ACL declines for this caller: nothing, only writes, or
-  // everything. The same answer the realm reaches for a request that caller
-  // sends, since an explain has to know whether that request would reach the
-  // policy at all.
-  coarseDeclinedFor(caller: ScopeCaller): Promise<CoarseDeclined>;
+  // What the realm's ACL allows this caller, read from the permissions a
+  // request from them is checked against. Read and write are kept apart
+  // because a request is judged on one of them: the one its method needs.
+  aclFor(caller: ScopeCaller): Promise<Acl>;
+}
+
+interface Acl {
+  read: boolean;
+  write: boolean;
 }
 
 // The question, as the payload carries it.
@@ -94,19 +105,27 @@ interface Question {
 export async function explainOperation(
   core: OperationCore,
   request: OperationRequest,
-  scope: OperationScope,
 ): Promise<OperationExplainResult> {
   let policyCard = instanceTargetURL(request);
   let question = questionIn(request);
+  // The caller is judged in the target's realm as that realm would judge
+  // them: by a session vouched for as their own, never by an identity
+  // another realm merely recorded. A request with no such session is judged
+  // as nobody.
+  let asker = scopeCallerFor(request.principal ?? '');
   let realm = await core.targetRealm?.(question.target);
-  // Whether the target's realm is served here and whether the caller may
-  // read it are both answered as a missing target is, before anything about
-  // the target is read.
-  if (
-    !realm ||
-    (await realm.coarseDeclinedFor(scope.caller)) === 'all' ||
-    !(await exists(realm))
-  ) {
+  // Whether the target's realm is served here, whether the caller may read
+  // it, and whether the target is there are all answered as a missing target
+  // is, before anything else about the target is read.
+  if (!realm || !(await realm.aclFor(asker)).read) {
+    throw noSuchTarget();
+  }
+  let target: OperationTarget = canonicalizeTarget(
+    realm.core,
+    { kind: 'instance', url: realm.url.href },
+    { rootNamesIndexCard: !isDefinitionFreeBaseOperation(question.operation) },
+  );
+  if (target.kind !== 'instance' || !(await exists(realm.core, target))) {
     throw noSuchTarget();
   }
   if (
@@ -119,48 +138,51 @@ export async function explainOperation(
       code: 'policy-not-in-force',
       title: 'Policy not in force',
       detail:
-        `${realm.url.href} is in a realm whose policy is not ` +
+        `${target.url} is in a realm whose policy is not ` +
         `${policyCard.href}, so that card decides nothing about it`,
     });
   }
   let actor = scopeCallerFor(question.actor);
-  let coarseDeclined = await realm.coarseDeclinedFor(actor);
-  let explanation = await explain(realm, question, actor, coarseDeclined);
+  let acl = await realm.aclFor(actor);
+  let explanation = await explain(realm.core, target, question, actor, acl);
   return { explanation };
 }
 
 // The gate's decision for the question, and how it got there.
 async function explain(
-  realm: TargetRealm,
+  core: OperationCore,
+  target: OperationTarget & { kind: 'instance' },
   question: Question,
   actor: ScopeCaller,
-  coarseDeclined: CoarseDeclined,
+  acl: Acl,
 ): Promise<PolicyExplanation> {
   let base: PolicyExplanation = {
     actor: actor.kind === 'user' ? actor.actor : null,
-    target: realm.url.href,
+    target: target.url,
     operation: question.operation,
-    acl: { read: coarseDeclined !== 'all', write: coarseDeclined === 'none' },
+    acl,
     decision: 'denied',
     reason: 'acl',
     rules: [],
   };
+  let coarseDeclined = await coarseDeclinedFor(
+    core,
+    target,
+    question,
+    actor,
+    acl,
+  );
   // A realm that names a policy answers a caller who presented no credentials
   // with a 401 before the request is routed, for every request its ACL
   // declines them, so nothing about the target is read.
-  if (actor.kind !== 'user' && coarseDeclined === 'all') {
+  if (actor.kind !== 'user' && coarseDeclined !== 'none') {
     return refused(base, 'actor-required', {
       status: 401,
       code: 'actor-required',
     });
   }
-  let target: OperationTarget = canonicalizeTarget(
-    realm.core,
-    { kind: 'instance', url: realm.url.href },
-    { rootNamesIndexCard: !isDefinitionFreeBaseOperation(question.operation) },
-  );
   let trace = new GateTrace();
-  let scope = newOperationScope(realm.core, {
+  let scope = newOperationScope(core, {
     caller: actor,
     coarseDeclined,
     trace,
@@ -169,7 +191,7 @@ async function explain(
   let failure: OperationFailure | undefined;
   try {
     ({ decision } = await resolveGatedOperation(
-      realm.core,
+      core,
       target,
       question.operation,
       scope,
@@ -179,19 +201,6 @@ async function explain(
       throw e;
     }
     failure = e;
-  }
-  // The same 401, for a caller the ACL lets read and not write, on a write:
-  // the request that carries a write is one the ACL declines them.
-  if (
-    actor.kind !== 'user' &&
-    coarseDeclined === 'writes' &&
-    trace.base &&
-    isWrite(trace.base)
-  ) {
-    return refused(base, 'actor-required', {
-      status: 401,
-      code: 'actor-required',
-    });
   }
   if (failure || !decision) {
     let error = failure?.error ?? {
@@ -222,7 +231,7 @@ async function explain(
   if (decision.kind === 'granted') {
     admitting = decision.grant;
   } else {
-    let holds = await pendingWriteHolds(realm.core, {
+    let holds = await pendingWriteHolds(core, {
       target,
       name: question.operation,
       decision,
@@ -256,6 +265,38 @@ async function explain(
     reason: 'granted',
     ...admittedBy(explained, trace, admitting),
   };
+}
+
+// What the realm's ACL declines for the request that would carry this
+// invocation. A write travels on a `POST`, which the ACL judges as a write, and
+// everything else on a request it judges as a read. So a caller the ACL lets
+// write and not read is allowed a write and declined a read, and which one
+// this is follows from the behavior the operation resolves to. That is
+// resolved first, as a caller the ACL allows would resolve it. An operation
+// that does not resolve travels as a read would.
+async function coarseDeclinedFor(
+  core: OperationCore,
+  target: OperationTarget,
+  question: Question,
+  actor: ScopeCaller,
+  acl: Acl,
+): Promise<CoarseDeclined> {
+  let writes = false;
+  try {
+    let { base } = await resolveOperation(
+      core,
+      target,
+      question.operation,
+      newOperationScope(core, { caller: actor, coarseDeclined: 'none' }),
+    );
+    writes = isWrite(base);
+  } catch {
+    writes = false;
+  }
+  if (writes ? acl.write : acl.read) {
+    return 'none';
+  }
+  return acl.read ? 'writes' : 'all';
 }
 
 function refused(
@@ -355,8 +396,11 @@ function admittedBy(
 // holds a row for it, a row recording that it failed to index included: that
 // card exists, and the gate refuses it for the row it has. A file is there when
 // its bytes are.
-async function exists(realm: TargetRealm): Promise<boolean> {
-  let { url, core } = realm;
+async function exists(
+  core: OperationCore,
+  target: OperationTarget & { kind: 'instance' },
+): Promise<boolean> {
+  let url = new URL(target.url);
   if (urlNamesFile(url)) {
     try {
       return (await core.openStoredFile(localPathFor(core, url))) !== undefined;

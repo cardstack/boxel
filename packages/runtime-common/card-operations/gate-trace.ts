@@ -1,5 +1,5 @@
 import type { CompiledOperationGrant, CompiledPolicyRule } from './policy.ts';
-import type { BaseOperation, OperationFailure } from './types.ts';
+import type { OperationFailure } from './types.ts';
 
 // ============================================================================
 // What the policy gate did on the way to one decision.
@@ -32,9 +32,6 @@ export type GateTraceRefusal =
 export type GateTraceOutcome = 'held' | 'did-not-hold' | 'threw';
 
 export class GateTrace {
-  // The behavior the operation resolved to, once it has: whether it writes
-  // decides whether the ACL declined it at all.
-  base: BaseOperation | undefined;
   // Every rule whose type is in the target's adoption chain, in policy order,
   // each with the grants in it that name the operation.
   readonly rules: {
@@ -48,10 +45,6 @@ export class GateTrace {
   // did not lower. A caller the ACL declined outright is told the gate's
   // refusal instead, so this is the only place the reason survives.
   resolutionFailure: OperationFailure | undefined;
-
-  reached(base: BaseOperation) {
-    this.base ??= base;
-  }
 
   resolutionRefused(failure: OperationFailure) {
     this.resolutionFailure ??= failure;

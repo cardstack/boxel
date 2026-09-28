@@ -2005,6 +2005,18 @@ export type RequestContext = {
   // all of which take the conservative bounded hold. Identity, not
   // authority, like `authenticatedUser`.
   anonymous?: true;
+  // The user this request's session vouches for as themselves, not just as
+  // an identity: a token `checkPermission` verified end to end, whose session
+  // is not revoked, which is not delegated to one realm, and which stands for
+  // its own bearer rather than an assumed user. Unset for every other request.
+  // It is authority only for the explain operation, which asks about a realm
+  // other than the one the request was sent to, and has to know the caller
+  // there as someone that realm would itself accept.
+  principal?: string;
+  // A token the public path verified without the checks above, which that
+  // path skips because nothing it serves reads them. `#sessionPrincipal`
+  // runs them, for a request that turns out to need a principal.
+  unvouchedSession?: { user: string; iat: number; delegated: boolean };
   // The realm ACL's verdict on an external request, recorded by
   // `Realm.handle` rather than enforced where it is made, since that runs
   // before routing and cannot tell which route the request is for. `false`
@@ -5483,18 +5495,26 @@ export class Realm {
       // Keyed by position rather than by index, because a position is a path
       // through the tree for an entry inside a group and there is no array for
       // one to be an index into.
+      // Resolved once, and only for a batch that explains: it can cost a
+      // revocation read no other operation needs.
+      let principal: Promise<string | undefined> | undefined;
       for (let { entry, target, definition } of resolved) {
         if (isWrite(definition.base)) {
           continue;
         }
         let result: OperationResult;
         try {
+          let asker =
+            definition.base === 'explain'
+              ? await (principal ??= this.#sessionPrincipal(requestContext))
+              : undefined;
           result = await runOperation(this.operationCore, {
             target,
             name: entry.name,
             ...(entry.data ? { params: paramsFor(entry) } : {}),
             ...caller,
             ...this.#readDeclined(requestContext),
+            ...(asker ? { principal: asker } : {}),
           });
         } catch (err: unknown) {
           throw atEntry(err, entry.position);
@@ -6052,22 +6072,32 @@ export class Realm {
     } catch {
       return undefined;
     }
-    return peer?.paths.inRealm(url) ? peer.#asTargetRealm(url) : undefined;
+    if (!peer?.paths.inRealm(url)) {
+      return undefined;
+    }
+    // An archived realm answers every request with a refusal, so there is
+    // nothing about its cards to explain. It is reached here without passing
+    // its own seal, which only the realm a request is sent to applies.
+    if (await isRealmArchived(this.#dbAdapter, new URL(peer.url))) {
+      return undefined;
+    }
+    return peer.#asTargetRealm(url);
   }
 
   #asTargetRealm(url: URL): TargetRealm {
     return {
       url,
       core: this.operationCore,
-      coarseDeclinedFor: (caller) => this.#coarseDeclinedFor(caller),
+      aclFor: (caller) => this.#aclFor(caller),
     };
   }
 
-  // What this realm's ACL declines for a caller, in the form a request's
-  // scope carries it, read from the same permissions a request from them is
-  // checked against. The realm's own user is permitted everything, as it is
-  // on a request.
-  async #coarseDeclinedFor(caller: ScopeCaller): Promise<CoarseDeclined> {
+  // What this realm's ACL allows a caller, read from the same permissions a
+  // request from them is checked against. The realm's own user is permitted
+  // everything, as it is on a request.
+  async #aclFor(
+    caller: ScopeCaller,
+  ): Promise<{ read: boolean; write: boolean }> {
     let permissions = await fetchRealmPermissions(
       this.#dbAdapter,
       new URL(this.url),
@@ -6075,7 +6105,7 @@ export class Realm {
     let may: (action: RealmAction) => Promise<boolean>;
     if (caller.kind === 'user') {
       if (caller.actor === this.#matrixClientUserId) {
-        return 'none';
+        return { read: true, write: true };
       }
       let checker = new RealmPermissionChecker(permissions, this.#matrixClient);
       may = (action) => checker.can(caller.actor, action);
@@ -6083,7 +6113,26 @@ export class Realm {
       may = async (action) => Boolean(permissions['*']?.includes(action));
     }
     let [read, write] = await Promise.all([may('read'), may('write')]);
-    return read && write ? 'none' : read ? 'writes' : 'all';
+    return { read, write };
+  }
+
+  // The request's principal: the session `checkPermission` vouched for, or a
+  // token the public path verified once the checks that path skips have
+  // passed for it. Neither a revoked session nor a delegated one is a
+  // principal: a delegated session is bound to the realm it was minted for.
+  async #sessionPrincipal(
+    requestContext: RequestContext,
+  ): Promise<string | undefined> {
+    if (requestContext.principal) {
+      return requestContext.principal;
+    }
+    let session = requestContext.unvouchedSession;
+    if (!session || session.delegated) {
+      return undefined;
+    }
+    return (await isSessionRevoked(this.#dbAdapter, session.user, session.iat))
+      ? undefined
+      : session.user;
   }
 
   // What the realm ACL declined for this request, in the form an operation
@@ -8933,6 +8982,11 @@ export class Realm {
             this.#realmSecretSeed,
           );
           requestContext.authenticatedUser = publicToken.user;
+          requestContext.unvouchedSession = {
+            user: publicToken.user,
+            iat: publicToken.iat,
+            delegated: Boolean(publicToken.delegated),
+          };
         } catch (e) {
           // fall through with no identity
         }
@@ -9060,6 +9114,9 @@ export class Realm {
         );
       }
       requestContext.authenticatedUser = user;
+      if (!didAssumeUser) {
+        requestContext.principal = user;
+      }
     } catch (e: any) {
       if (e?.constructor?.name === 'TokenExpiredError') {
         warnRefusal(

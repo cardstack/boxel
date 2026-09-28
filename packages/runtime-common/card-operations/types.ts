@@ -385,6 +385,12 @@ export interface OperationRequest {
   params?: Record<string, unknown>;
   // The invoking user, as the identity `actor()` resolves to.
   actor: string;
+  // The invoking user as a session the realm vouched for end to end: not
+  // revoked, not delegated to one realm, not an assumed identity. Absent for
+  // anything less. `actor` is an identity to record and compare. This is the
+  // one to judge a caller by in another realm, which is what an explain does,
+  // and nothing else reads it.
+  principal?: string;
   // The caller's own id for this request. Echoed on the realm's index event so
   // a client can tell its own write's event from anyone else's, which is what
   // lets it retire the matching optimistic entry rather than reloading.

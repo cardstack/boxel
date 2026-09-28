@@ -1091,7 +1091,7 @@ async function runBaseOperation(
       // resolving it definition-free just took out.
       return await readSourceOperation(core, canonical, opts);
     case 'explain':
-      return await explainOperation(core, canonical, scope);
+      return await explainOperation(core, canonical);
     case 'query':
       // A declared query is a saved search, invoked by naming it in a request
       // to `_search` or `_federated-search`. The realm resolves it there, from
