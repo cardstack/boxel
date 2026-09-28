@@ -2172,15 +2172,11 @@ export function setupMatrixRoom(
 
   return {
     matrixClient,
+    // Every event the room received at or after `since`, however many that
+    // is. The comparison is inclusive so an event sent in the same millisecond
+    // the caller recorded its start time still counts.
     getMessagesSince: async function (since: number) {
-      let allMessages = await matrixClient.roomMessages(testAuthRoomId!);
-      // Allow same-ms clock values between the test process and matrix so we don't
-      // miss events that are emitted immediately after we record the start time.
-      let messagesAfterSentinel = allMessages.filter(
-        (m) => m.origin_server_ts >= since,
-      );
-
-      return messagesAfterSentinel;
+      return await matrixClient.roomMessagesSince(testAuthRoomId!, since);
     },
   };
 }

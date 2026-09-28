@@ -311,6 +311,50 @@ export class MatrixClient {
     return json.chunk;
   }
 
+  // Every event in the room whose `origin_server_ts` is at or after `since`,
+  // newest first. `/messages` answers one page at a time — ten events when no
+  // limit is asked for — so a window holding more than a page is read by
+  // following the `end` token back until a page reaches past `since` or the
+  // room's history runs out. Each page asks for the server's ceiling (Synapse
+  // caps a page at 1000), so a window that fits one page costs one request.
+  async roomMessagesSince(
+    roomId: string,
+    since: number,
+  ): Promise<MatrixEvent[]> {
+    let events: MatrixEvent[] = [];
+    let from: string | undefined;
+    for (;;) {
+      let params = new URLSearchParams({ dir: 'b', limit: '1000' });
+      if (from) {
+        params.set('from', from);
+      }
+      let response = await this.request(
+        `_matrix/client/v3/rooms/${roomId}/messages?${params}`,
+      );
+      if (!response.ok) {
+        throw new Error(
+          `Unable to read messages of room ${roomId}: status ${
+            response.status
+          } - ${await response.text()}`,
+        );
+      }
+      let json = (await response.json()) as {
+        chunk: MatrixEvent[];
+        end?: string;
+      };
+      for (let event of json.chunk) {
+        if (event.origin_server_ts >= since) {
+          events.push(event);
+        }
+      }
+      let oldest = json.chunk[json.chunk.length - 1];
+      if (!json.end || !oldest || oldest.origin_server_ts < since) {
+        return events;
+      }
+      from = json.end;
+    }
+  }
+
   async getOpenIdToken(): Promise<
     | {
         access_token: string;

@@ -1563,6 +1563,7 @@ module(basename(import.meta.filename), function () {
           }
 
           let messages = await getMessagesSince(realmEventTimestampStart);
+          let messagesReadAt = Date.now();
 
           let expected = [
             {
@@ -1627,6 +1628,26 @@ module(basename(import.meta.filename), function () {
           for (let expectedEvent of expected) {
             // FIXME is there a better way?
             let actualEvent = matchRealmEvent(messages, expectedEvent);
+            if (!actualEvent) {
+              // A miss is an event that never reached the room, one that
+              // reached it after the read, or one that arrived carrying members
+              // the comparison does not expect. Every realm event the read
+              // returned, whole and with its timestamp, tells those apart.
+              console.error(
+                `[card-source-endpoints-test] no realm event matched ${JSON.stringify(
+                  expectedEvent.content,
+                )}; read at ${messagesReadAt} returned ${
+                  messages.length
+                } message(s) since ${realmEventTimestampStart}: ${JSON.stringify(
+                  messages
+                    .filter((m) => m.type === APP_BOXEL_REALM_EVENT_TYPE)
+                    .map((m) => ({
+                      ts: m.origin_server_ts,
+                      content: m.content,
+                    })),
+                )}`,
+              );
+            }
 
             let generation = (actualEvent?.content as any)?.generation;
             if (generation !== undefined) {
