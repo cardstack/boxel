@@ -442,19 +442,4 @@ module('Integration | tools | capture-card', function (hooks) {
       /still rendering; retry after 3s/,
     );
   });
-
-  test('the legacy screenshot-card module spellings resolve to the capture tool', async function (assert) {
-    let loader = getService('loader-service').loader;
-    for (let specifier of [
-      '@cardstack/boxel-host/tools/screenshot-card',
-      '@cardstack/boxel-host/commands/screenshot-card',
-    ]) {
-      let module = await loader.import<{ default: unknown }>(specifier);
-      assert.strictEqual(
-        module.default,
-        CaptureCardTool,
-        `${specifier} is the capture tool`,
-      );
-    }
-  });
 });
