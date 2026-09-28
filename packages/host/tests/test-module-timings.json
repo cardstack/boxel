@@ -112,7 +112,6 @@
   "./integration/components/card-basics-test.gts": 31.7,
   "./integration/components/card-chooser-test.gts": 49.7,
   "./integration/components/card-context-search-results-test.gts": 5.1,
-  "./integration/components/card-copy-test.gts": 32.1,
   "./integration/components/card-def-field-def-relationships-test.gts": 9.5,
   "./integration/components/card-delete-test.gts": 24.1,
   "./integration/components/card-error-awaiting-index-test.gts": 0.1,
