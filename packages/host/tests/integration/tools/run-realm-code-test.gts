@@ -98,12 +98,13 @@ module('Integration | tools | run-realm-code', function (hooks) {
     assert.deepEqual(JSON.parse(result.scriptResult!), {
       path: 'task.json',
       matches: 1,
+      saved: true,
     });
     let source = await cardService.getSource(new URL(fileUrl));
     assert.true(source.content.includes('"count": 2'));
   });
 
-  test('refuses paths outside the realm and saves nothing', async function (assert) {
+  test('refuses paths outside the realm, and names the files it already saved', async function (assert) {
     let toolService = getService('tool-service');
     let cardService = getService('card-service');
     let command = new RunRealmCodeTool(toolService.toolContext);
@@ -116,10 +117,11 @@ module('Integration | tools | run-realm-code', function (hooks) {
         code: `await realm.fs.replace('task.json', '"count": 1', '"count": 2');
 await realm.fs.writeText('../elsewhere.json', '{}');`,
       }),
-      /Path must be relative to the realm root/,
+      /Path must be relative to the realm root.*Files already saved by this run: .*task\.json/,
     );
+    // Writes save as they happen, so the replace before the bad path stays.
     let source = await cardService.getSource(new URL(fileUrl));
-    assert.true(source.content.includes('"count": 1'));
+    assert.true(source.content.includes('"count": 2'));
   });
 
   test('reads a file inside the script and edits it from what it read', async function (assert) {
@@ -146,25 +148,47 @@ return { exists: await realm.fs.exists('task.json'), missing: await realm.fs.exi
     assert.true(source.content.includes('"count": 2'));
   });
 
-  test('a failed realm call fails the run even when the script catches it', async function (assert) {
+  test('each write is saved before the script goes on', async function (assert) {
     let toolService = getService('tool-service');
     let cardService = getService('card-service');
     let command = new RunRealmCodeTool(toolService.toolContext);
 
+    // The script fails after its first write; that write is already in the
+    // realm, not held back until the script ends.
     await assert.rejects(
       command.execute({
         realm: testRealmURL,
         roomId: '!room:example.com',
-        code: `await realm.fs.replace('task.json', '"count": 1', '"count": 2');
+        code: `await realm.fs.writeText('first.json', '{}');
+throw new Error('stop here');`,
+      }),
+      /stop here.*Files already saved by this run: .*first\.json/,
+    );
+    let source = await cardService.getSource(
+      new URL(`${testRealmURL}first.json`),
+    );
+    assert.strictEqual(source.status, 200);
+  });
+
+  test('a caught failed write does not fail the run', async function (assert) {
+    let toolService = getService('tool-service');
+    let cardService = getService('card-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+
+    let result = await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `await realm.fs.replace('task.json', '"count": 1', '"count": 2');
 try { await realm.fs.replace('task.json', 'not there', 'x'); } catch (e) {}
 return 'done';`,
-      }),
-      /nothing was saved: Search string was not found/,
-    );
+    });
+
+    assert.strictEqual(result.files.length, 1);
+    assert.strictEqual(result.files[0]?.status, 'saved');
     let source = await cardService.getSource(
       new URL(`${testRealmURL}task.json`),
     );
-    assert.true(source.content.includes('"count": 1'));
+    assert.true(source.content.includes('"count": 2'));
   });
 
   test('a caught failed read does not fail the run', async function (assert) {
