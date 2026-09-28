@@ -378,6 +378,15 @@ Under `ids` a consumer fetches each target on its own request, which is one
 round trip per link it actually displays rather than one response carrying
 every link it might. Under `none` the card answers for itself alone.
 
+A declaration on `read` itself governs the card's plain `GET`, which is what
+the host loads a card with — in every mode, for every user. Under `ids` the
+host resolves the named links itself as it displays them. Under `none` it is
+never told what the card links to, so the card's link fields render empty
+wherever the host shows it, including to the realm's own writers. Reach for
+`none` only where a card's representation genuinely should not say what it
+points at; where its links are viewed or edited in the host, `ids` narrows the
+closure without hiding them.
+
 **It applies to every caller alike.** The declaration belongs to the operation,
 not to the caller, so the same request answers a realm writer and a caller
 reached by some other route with the same document. Narrowing a read therefore
