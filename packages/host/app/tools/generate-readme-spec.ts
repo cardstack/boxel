@@ -3,7 +3,7 @@ import { service } from '@ember/service';
 import type { RealmResourceIdentifier } from '@cardstack/runtime-common';
 
 import HostBaseTool from '../lib/host-base-tool';
-import { devSkillId } from '../lib/utils';
+import { skillFileURL, skillsRealmURL } from '../lib/utils';
 
 import OneShotLlmRequestTool from './one-shot-llm-request';
 import PatchCardInstanceTool from './patch-card-instance';
@@ -30,7 +30,7 @@ export default class GenerateReadmeSpecTool extends HostBaseTool<
   }
   private static SYSTEM_PROMPT = `YOU ARE a bot responsible to Github README documentation for specs/code.
 
-Reference the Spec Documentation inside boxel-development skill for understanding spec types, but focus ONLY on crafting usage documentation. Based upon specType, create documentation with these 4 sections:
+Reference the attached spec usage guide for understanding spec types, but focus ONLY on crafting usage documentation. Based upon specType, create documentation with these 4 sections:
 
 • **Summary**: Brief summary of what the spec does
 • **Import**: Show the ES6 import statement of the spec. Omit .gts extension.
@@ -78,7 +78,12 @@ Requirements:
       userPrompt,
       systemPrompt,
       llmModel: 'anthropic/claude-3-haiku',
-      skillCardIds: [devSkillId],
+      skillCardIds: [skillFileURL('boxel')],
+      // The request can't follow links, so attach the spec-type guidance the
+      // boxel skill only links to.
+      attachedFileIdentifiers: [
+        `${skillsRealmURL}skills/boxel/references/spec-usage.md`,
+      ],
     });
 
     // Patch the spec's readMe field

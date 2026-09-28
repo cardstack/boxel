@@ -4,6 +4,7 @@ import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-con
 import { trimJsonExtension } from '@cardstack/runtime-common';
 import type { DBAdapter, Expression } from '@cardstack/runtime-common';
 import { every, param, query } from '@cardstack/runtime-common';
+import { laneFamilyPredicate } from '@cardstack/runtime-common/jobs/lane-family';
 import type {
   IncrementalIndexEventContent,
   IncrementalIndexInitiationContent,
@@ -28,6 +29,18 @@ interface IncrementalIndexEventTestContext {
   // handler that never reads it. Required, so each caller states which of the
   // three the write it makes produces.
   clientRequestId: string | null | typeof ABSENT_OR_NULL_CLIENT_REQUEST_ID;
+  // What the event must carry as `versions`. `'written'` is a write that
+  // stored bytes, so the event names a version for exactly the URL it wrote —
+  // the hash itself varies with the fixture, so the check is that the key set
+  // matches and the value is a non-empty string. `'absent'` is a request that
+  // stored none, which is every delete. A record pins the hashes exactly, for
+  // a caller that computed them from the bytes on disk.
+  //
+  // Required for the same reason `clientRequestId` is: absent, present-but-
+  // empty and populated are three different statements about the write, and a
+  // helper that defaulted would let a regression that stopped reporting
+  // versions altogether pass every caller here.
+  versions: 'written' | 'absent' | Record<string, string>;
   type?: string;
   timeout?: number;
 }
@@ -81,8 +94,15 @@ export async function expectIncrementalIndexEvent(
   since: number,
   opts: IncrementalIndexEventTestContext,
 ) {
-  let { assert, getMessagesSince, realm, clientRequestId, type, timeout } =
-    opts;
+  let {
+    assert,
+    getMessagesSince,
+    realm,
+    clientRequestId,
+    versions,
+    type,
+    timeout,
+  } = opts;
 
   type = type ?? 'CardDef';
 
@@ -203,6 +223,39 @@ export async function expectIncrementalIndexEvent(
   );
   delete actualContent.invalidatedTypes;
 
+  // The post-write version of each card the request wrote directly. Compared
+  // here rather than left to the structural comparison below, because the hash
+  // is a function of the fixture's bytes and only a caller that computed it can
+  // state it — so the shared check is over the key set, which the caller's own
+  // `url` already determines.
+  if (versions === 'absent') {
+    assert.strictEqual(
+      actualContent.versions,
+      undefined,
+      'the request stored no bytes, so the event names no versions',
+    );
+  } else if (versions === 'written') {
+    assert.deepEqual(
+      Object.keys(actualContent.versions ?? {}),
+      [invalidation],
+      'the event names a version for exactly the url this write stored',
+    );
+    let reported = actualContent.versions?.[invalidation];
+    assert.true(
+      typeof reported === 'string' && reported.length > 0,
+      `the version for ${invalidation} is a non-empty string: ${JSON.stringify(
+        reported,
+      )}`,
+    );
+  } else {
+    assert.deepEqual(
+      actualContent.versions,
+      versions,
+      'the event names the versions the caller computed from the stored bytes',
+    );
+  }
+  delete actualContent.versions;
+
   assert.deepEqual(actualContent, expectedIncrementalContent);
   return incrementalEventContent;
 }
@@ -242,7 +295,8 @@ export async function prerenderedHtmlRowFor(
   return rows[0];
 }
 
-// The highest prerender_html job id currently on the realm's HTML channel
+// The highest prerender_html job id currently on the realm's HTML channel, in
+// any of its lanes
 // (0 when the channel is empty). Capture this BEFORE a write, then pass it to
 // settlePrerenderHtmlJobs as `afterJobId`. The index pass enqueues the
 // prerender_html job fire-and-forget, so a settle that runs before that row is
@@ -258,7 +312,7 @@ export async function maxPrerenderHtmlJobId(
   let concurrencyGroup = `prerender-html:${typeof realmURL === 'string' ? realmURL : realmURL.href}`;
   let rows = (await query(dbAdapter, [
     `SELECT COALESCE(MAX(id), 0)::int AS max_id FROM jobs WHERE`,
-    ...every([['concurrency_group =', param(concurrencyGroup)]]),
+    ...laneFamilyPredicate(concurrencyGroup),
   ] as Expression)) as { max_id: number }[];
   return rows[0]?.max_id ?? 0;
 }
@@ -278,7 +332,7 @@ export async function rejectedPrerenderHtmlJobIds(
   let concurrencyGroup = `prerender-html:${typeof realmURL === 'string' ? realmURL : realmURL.href}`;
   let rows = (await query(dbAdapter, [
     `SELECT j.id FROM jobs j WHERE j.status = 'rejected' AND`,
-    ...every([['j.concurrency_group =', param(concurrencyGroup)]]),
+    ...laneFamilyPredicate(concurrencyGroup, 'j'),
   ] as Expression)) as { id: number }[];
   return rows.map((row) => row.id);
 }
@@ -286,8 +340,9 @@ export async function rejectedPrerenderHtmlJobIds(
 // HTML lands on its own channel: the index pass fires a `prerender_html`
 // job (fire-and-forget) and completes without waiting for it, so a test
 // that writes and then asserts prerendered HTML must settle that channel
-// first. Waits until the realm's `prerender-html:<realm>` concurrency
-// group has no unfulfilled jobs and no active reservations, and fails
+// first. Waits until the realm's `prerender-html:<realm>` lane family — its
+// exclusive lane and every writer's lane — has no unfulfilled jobs and no
+// active reservations, and fails
 // loudly if any of its jobs rejected — a broken render should fail the
 // test, not silently satisfy the wait.
 //
@@ -328,7 +383,7 @@ export async function settlePrerenderHtmlJobs(
               FROM job_reservations r
              WHERE r.job_id = j.id AND r.completed_at IS NULL) AS reservation_age_sec
          FROM jobs j WHERE`,
-        ...every([['j.concurrency_group =', param(concurrencyGroup)]]),
+        ...laneFamilyPredicate(concurrencyGroup, 'j'),
       ] as Expression)) as {
         id: number;
         status: string;

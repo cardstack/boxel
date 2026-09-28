@@ -69,6 +69,7 @@ function environmentDefaults() {
       catalogRealmURL: 'https://localhost:4201/catalog/',
       skillsRealmURL: 'https://localhost:4201/skills/',
       openRouterRealmURL: 'https://localhost:4201/openrouter/',
+      pretuiRealmURL: 'https://localhost:4201/pretui/',
       testRealmURL: 'https://localhost:4202/test/',
     };
   }
@@ -90,6 +91,7 @@ function environmentDefaults() {
     catalogRealmURL: `https://${realmHost}/catalog/`,
     skillsRealmURL: `https://${realmHost}/skills/`,
     openRouterRealmURL: `https://${realmHost}/openrouter/`,
+    pretuiRealmURL: `https://${realmHost}/pretui/`,
     // mise-tasks/services/test-realms registers the live test realm at
     // `https://realm-test.${slug}.localhost/test/` in env mode (the
     // counterpart to standard mode's `https://localhost:4202/test/`).
@@ -184,6 +186,8 @@ module.exports = function (environment) {
       process.env.RESOLVED_SKILLS_REALM_URL || defaults.skillsRealmURL,
     resolvedOpenRouterRealmURL:
       process.env.RESOLVED_OPENROUTER_REALM_URL || defaults.openRouterRealmURL,
+    resolvedPretuiRealmURL:
+      process.env.RESOLVED_PRETUI_REALM_URL || defaults.pretuiRealmURL,
     // The live test realm-server's /test/ realm — used by host tests
     // that load source modules from it via
     // `tests/helpers#testModuleRealm`. Derived from BOXEL_ENVIRONMENT via
@@ -225,6 +229,7 @@ module.exports = function (environment) {
       ['@cardstack/catalog/', ENV.resolvedCatalogRealmURL],
       ['@cardstack/skills/', ENV.resolvedSkillsRealmURL],
       ['@cardstack/openrouter/', ENV.resolvedOpenRouterRealmURL],
+      ['@cardstack/pretui/', ENV.resolvedPretuiRealmURL],
     ].filter(([, url]) => typeof url === 'string' && url !== ''),
   );
 

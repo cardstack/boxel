@@ -4,8 +4,8 @@ import MarkdownField from '@cardstack/base/markdown';
 
 // 🧩 PATTERN: Theme-first workflow.
 //
-// Step 0 (before writing this file): pick or create a Theme card.
-// Step 1 (in the JSON instance): link cardInfo.theme to that Theme.
+// Step 0 (before writing this file): decide whether Boxel defaults are enough.
+// Step 1 (only if a specific Theme is wanted): link cardInfo.theme to it.
 // Step 2 (in this template): use theme tokens exclusively.
 // Step 3: preview to verify.
 
@@ -38,17 +38,13 @@ export class BlogPost extends CardDef {
 
       <style scoped>
         /*
-          🎯 All chrome reads from theme tokens injected by the
-          Theme card linked at cardInfo.theme. No hard-coded colors,
-          no hard-coded fonts.
+          🎯 All chrome reads from theme tokens. theme.css supplies
+          their defaults; a Theme linked at cardInfo.theme can override them.
+          No hard-coded colors or fonts.
         */
         .post {
-          background: var(--card);
-          color: var(--card-foreground);
-          border: 1px solid var(--border);
-          border-radius: var(--radius);
+          /* isolated: the CardContainer already paints --background / --foreground */
           padding: 2rem;
-          font-family: var(--font-sans);
         }
 
         .post h1 {
@@ -61,9 +57,8 @@ export class BlogPost extends CardDef {
           line-height: 1.7;
         }
 
-        /* Links inherit the theme's accent */
-        .body :global(a) {
-          color: var(--accent);
+        .body :deep(a) {
+          color: var(--accent-ink);
         }
       </style>
     </template>
@@ -95,5 +90,6 @@ export class BlogPost extends CardDef {
 //   }
 // }
 //
-// 🎯 The "cardInfo.theme" relationship key includes the dot.
-//    Use "self": null for unlinked theme — never [] (that's linksToMany).
+// 🎯 The optional "cardInfo.theme" relationship key includes the dot.
+//    Omit the relationship when no specific Theme is wanted. If an explicit
+//    empty link is needed, use "self": null — never [] (that's linksToMany).

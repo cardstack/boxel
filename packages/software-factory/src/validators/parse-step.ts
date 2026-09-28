@@ -219,6 +219,7 @@ export class ParseValidationStep implements ValidationStepRunner {
     let {
       fileResults: allFileResults,
       errorViolations: allErrors,
+      warnings,
       durationMs,
     } = await parseRealmFiles(
       {
@@ -232,6 +233,10 @@ export class ParseValidationStep implements ValidationStepRunner {
       gtsFiles,
       jsonExampleUrls,
     );
+
+    for (let warning of warnings) {
+      log.warn(`parse degraded: ${warning}`);
+    }
 
     let passed = allErrors.length === 0;
 

@@ -665,13 +665,18 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     //     runs the prerender and persist directly. This is the path
     //     used by every test that doesn't construct a coordinator and
     //     by sqlite/in-memory deployments.
-    let core: Promise<DefinitionCacheEntry | undefined> = this
-      .#populateCoordinator
-      ? this.loadDefinitionCacheEntryCoordinated(
-          args,
-          this.#populateCoordinator,
-        )
-      : this.loadDefinitionCacheEntryUncached(args);
+    // Callers searching different realms share this entry — the key names a
+    // module and a cache scope, not a requester — so its database work runs as
+    // shared work (see `DBAdapter.withSharedWork`).
+    let load = () =>
+      this.#populateCoordinator
+        ? this.loadDefinitionCacheEntryCoordinated(
+            args,
+            this.#populateCoordinator,
+          )
+        : this.loadDefinitionCacheEntryUncached(args);
+    let core: Promise<DefinitionCacheEntry | undefined> =
+      this.#dbAdapter.withSharedWork?.(load) ?? load();
     pending = core.finally(() => {
       // Identity-check before deletion: an invalidation path may have
       // dropped our entry mid-flight, after which a newer caller can

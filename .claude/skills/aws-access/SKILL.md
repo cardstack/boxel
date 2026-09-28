@@ -373,7 +373,7 @@ When constructing a query, the cheapest sanity check is: does the SQL begin with
 
 ### What's actually in the database
 
-The `indexing-diagnostics` skill is the right entry point for `boxel_index` / `boxel_index_working` / `error_doc` exploration — it documents the schema, the `diagnostics` JSONB shape, and the canonical query patterns. This skill only covers _getting connected_; the queries themselves live there.
+The `indexing-diagnostics` skill is the right entry point for `boxel_index` / `boxel_index_pending` / `error_doc` exploration — it documents the schema, the `diagnostics` JSONB shape, and the canonical query patterns. This skill only covers _getting connected_; the queries themselves live there.
 
 ## Browsing the EFS filesystem (read-only)
 

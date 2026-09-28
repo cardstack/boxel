@@ -81,6 +81,7 @@ Manage saved profiles for different users/environments
 - `--production` — Target production — the default (for add command)
 - `--staging` — Target staging instead of production (for add command)
 - `--local` — Target a local dev server instead of production (for add command)
+- `--json` — Output the complete profile set as JSON (for list command)
 
 <!-- generated:commands:end -->
 

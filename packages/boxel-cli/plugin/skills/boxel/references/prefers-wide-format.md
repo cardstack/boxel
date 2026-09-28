@@ -68,7 +68,7 @@ The fix is symmetric: drop the line, save, refresh.
 ## Where it interacts
 
 - **`link-host-mode-paths`** — every routed `path: "/about"` card MUST set `prefersWideFormat = true`. Published-realm URLs are intended to be full-page; without the static property the host shows operator-mode chrome on a *public* URL.
-- **`app-card-home-with-search`** — the home CardDef sets it. The result-list sections (`@context.searchResultsComponent`; older builds used `PrerenderedCardSearch`) need width to render their child grids.
+- **`app-card-home-with-search`** — the home CardDef sets it. The result-list sections (`@context.searchResultsComponent`) need width to render their child grids.
 - **`layout-sectioned-record-with-nav`** — pattern won't work without it. The 220px sticky nav + main content needs ≥800px.
 - **`layout-3d-card-carousel`** — perspective + per-card translateZ requires viewport width to feel spatial.
 - **Card-creation done-criteria** — confirm whether the card you just created should be wide-format. Don't skip this; the default is wrong for app cards.

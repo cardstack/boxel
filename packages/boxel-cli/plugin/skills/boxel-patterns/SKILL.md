@@ -29,7 +29,7 @@ Patterns are indexed by **user intent**, not by class hierarchy. Find the patter
 
 Ready patterns below can be read and adapted. Each has `patterns/<slug>/README.md`; most also have a separate `patterns/<slug>/example.gts`. A few are README-with-inline-recipe — the worked code lives in fenced blocks inside the README itself, marked `(README-only)` in the list below.
 
-> **Start here for any new card:** `theme-first-workflow` + `cardinfo-override-title` together form the recommended "step 0" for every new CardDef. Skipping them is the most common cause of cards that "look wrong" or have blank titles.
+> **Start here for any new card:** `theme-first-workflow` + `cardinfo-override-title` together form the recommended "step 0" for every new CardDef. The theme workflow decides whether Boxel defaults are sufficient or a specific Theme is wanted; it does not require a Theme link. Skipping these decisions is the most common cause of cards that "look wrong" or have blank titles.
 
 ### Show
 
@@ -52,7 +52,7 @@ Ready patterns below can be read and adapted. Each has `patterns/<slug>/README.m
 ### Build / Template
 
 - **`build-planning-cards-trio`** *(README-only)* — Stage-0 planning artifacts for any card family: three CardDefs (`ArchitecturePlan`, `DataModelPlan`, `MicroMockups`) whose `static isolated` templates ARE the plan documents. Without stage 0, fitted views come out pedestrian. See `boxel/references/design-playbook.md` "Planning before code — Stage 0".
-- **`theme-first-workflow`** — Choose or create a Theme card BEFORE writing the card. Link via `cardInfo.theme`; templates reference theme tokens (`var(--background)`, `var(--primary)`, etc.) from line one. The starting step for any new card or app.
+- **`theme-first-workflow`** — Decide whether Boxel defaults are sufficient or a specific Theme is wanted BEFORE writing the card. Link via `cardInfo.theme` only for the latter; templates reference theme tokens (`var(--background)`, `var(--primary)`, etc.) from line one. The starting step for any new card or app.
 - **`cardinfo-override-title`** — Override `cardTitle` to respect `cardInfo.name` first, then fall back to a primary field (`headline`, `firstName + lastName`, etc.), then to the default. Every CardDef with a natural identifier needs this.
 - `build-site-config-with-theme` — Multi-page site registry: `SiteConfig` links to a `ThemeCard` brand guide and `linksToMany(PageConfig)` nav entries; page shells compute `cardTheme` from the site unless overridden by `cardInfo.theme`.
 - `containsmany-sorted-render` — Render a `containsMany`/`linksToMany` in a non-insertion order without losing the host's field rendering chrome. Sort indexes in the Component, drive `{{#each}}` with `<@fields.notes.[i] />`.
@@ -63,6 +63,7 @@ Ready patterns below can be read and adapted. Each has `patterns/<slug>/README.m
 
 - `automate-linked-to-me-lookup` — Schema-level query-backed `linksToMany` (preferred) OR component-level `getCards()` to materialize inbound references. Two signatures documented.
 - `resource-for-state` *(README-only)* — Wrap third-party library state, legacy kanban column ordering, or any "stateful object that re-runs when args change" in an `ember-modify-based-class-resource` Resource. Used by older `kanban-resource.gts` (DndColumn ordering) and `chess-game.gts` (chess.js wrapper). New kanban boards should use `layout-kanban-drag-drop`.
+- **`automate-declared-screenshots`** — Self-refreshing screenshot slots declared as `static screenshots` on a CardDef/FileDef: captured server-side on every index, consumed via the reserved `@model.screenshotURLs.<name>` getter, and (with `useAsThumbnail: true`) feeding `cardThumbnailURL` so grid tiles show the card's **real rendering with zero template edits**. Use for automatic thumbnails, social/og images, and media poster frames. Prefer this over the imperative siblings whenever the card should *always* have a current picture of itself.
 - `automate-image-steering` — Steerable image generator: immutable seed prompt + latest steering command + image lineage attached to OpenRouter multimodal calls, so iterative refinement doesn't lose subject identity. Includes `imageHistory`/`firstImage` pinning and `restartableTask` cancellation.
 
 ### Layout
@@ -90,7 +91,7 @@ Ready patterns below can be read and adapted. Each has `patterns/<slug>/README.m
 - `integrate-openrouter-image-generation` — Preferred image generator. OpenRouter chat completions with `modalities: ['image', 'text']`; default to Gemini image, use ChatGPT/OpenAI image models when requested; persist bytes with `WriteBinaryFileCommand` + `ImageDef`.
 - `integrate-one-shot-llm` — Single LLM call via `OneShotLlmRequestCommand` (OpenRouter). System + user prompt + model id → output.
 - `integrate-filedef-generated-image` — Write generated image bytes with `WriteBinaryFileCommand`, then link `ImageDef` / `PngDef`.
-- `integrate-screenshot-card-format` — `ScreenshotCardCommand` captures a **settled PNG of any saved card at `isolated` or `embedded` format** (Puppeteer-driven through the prerender pool) and saves it under `Screenshots/` in the target card's own realm. Use for documentation snapshots, Open Graph images, audit/before-after trails — any time you want the *actual rendered card*.
+- `integrate-screenshot-card-format` — `ScreenshotCardTool` captures a **settled PNG of any saved card at `isolated` or `embedded` format** (Puppeteer-driven through the prerender pool) and returns a durable served media-cache URL; nothing is written into a realm and only read access is needed. Use for **point-in-time** snapshots you keep a URL to: documentation, audit/before-after trails. The same pipeline exports a **paged PDF** — compose a durable `_screenshot/…?type=pdf` URL (add `media=print` for the card's `@page`/print CSS) for a printable, always-current document (invoice/report/statement), and render it through the host's `SignedCaptureLink`/`SignedCapture` components so private-realm downloads and `<object>` embeds authorize; the tool's input itself is PNG-only. For a card that should *always* carry a current picture of itself (thumbnails, og images), use `automate-declared-screenshots` instead.
 - `integrate-thumbnail-card-ai` — `GenerateThumbnailCommand` generates an **AI thumbnail** via OpenRouter, writes it to a realm, and optionally auto-patches `cardInfo.cardThumbnail` in one call. Use when you want a *designed representation* of a card rather than its actual rendering; composes with `link-command-menu-item` for one-click menu actions.
 - `integrate-send-request-via-proxy` — Generic third-party HTTP through the host proxy (host handles credentials per URL host).
 - `integrate-three-js-via-cdn` — Three.js inside a card via ESM CDN. Lifecycle-managed via Glimmer modifier with explicit cleanup. Same modifier shape covers Babylon.js and raw WebGL shaders.
@@ -107,7 +108,7 @@ Ready patterns below can be read and adapted. Each has `patterns/<slug>/README.m
 - `command-typed-with-progress` — `Command<Input, Output>` with a typed `progressStep` state machine the invoking component reflects in UI.
 - `command-optimistic-pipeline` — One durable run card per invocation, mutated in place while `SaveCardCommand` writes are queued fire-and-forget. Use for LLM/image/import pipelines that need fast UI and queryable progress logs.
 - `command-atomic-install` — Transactional realm install with `PlanBuilder` + `planModuleInstall` + `planInstanceInstall` + `ExecuteAtomicOperationsCommand`. The canonical catalog-install pattern.
-- `link-command-menu-item` — Expose a Command as a card menu item via `[getCardMenuItems]`. The card-native way to surface card-scoped actions.
+- `link-command-menu-item` — Expose a Command as a card menu item via `[getMenuItems]`. The card-native way to surface card-scoped actions.
 - `automate-run-command-cli` — Invoke a Command from the shell via `npx boxel run-command <spec> --input '{}'`, pairing with a typed run card for queryable history. Batch jobs, cron, CI gates.
 
 For the wider taxonomy (direct call, reactive resource, menu, typed progress, optimistic pipeline, AI processor, multi-turn assistant, CLI script, atomic install) and a single Command class exposed via every mode, see [`boxel/references/command-invocation-modes.md`](../boxel/references/command-invocation-modes.md).

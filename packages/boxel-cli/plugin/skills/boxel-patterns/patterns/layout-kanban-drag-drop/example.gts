@@ -50,7 +50,7 @@ export class BoardColumn extends FieldDef {
       </span>
       <style scoped>
         .column-chip { display: inline-flex; align-items: center; gap: 0.375rem; }
-        .dot { width: 0.5rem; height: 0.5rem; border-radius: 999px; }
+        .dot { width: 0.5rem; height: 0.5rem; border-radius: var(--boxel-border-radius-pill); }
       </style>
     </template>
   };
@@ -115,10 +115,8 @@ export class WorkItem extends CardDef {
           align-content: start;
           gap: 0.375rem;
           padding: 0.75rem;
-          background: var(--card);
+          background-color: var(--card);
           color: var(--card-foreground);
-          border: 1px solid var(--border);
-          border-radius: var(--radius);
           overflow: hidden;
         }
         strong { font-size: 0.875rem; line-height: 1.25; }
@@ -257,8 +255,6 @@ export class WorkBoard extends CardDef {
           min-height: 0;
           display: grid;
           grid-template-rows: auto auto minmax(0, 1fr);
-          background: var(--background);
-          color: var(--foreground);
         }
         .board-header {
           display: flex;
@@ -267,7 +263,8 @@ export class WorkBoard extends CardDef {
           gap: 1rem;
           padding: 0.75rem 1rem;
           border-bottom: 1px solid var(--border);
-          background: var(--card);
+          background-color: var(--card);
+          color: var(--card-foreground);
         }
         h1 {
           display: flex;

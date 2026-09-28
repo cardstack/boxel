@@ -39,6 +39,9 @@ NODE_NO_WARNINGS=1 \
   --fromUrl='@cardstack/skills/' \
   --toUrl='https://app.boxel.ai/skills/' \
   \
+  --fromUrl='@cardstack/pretui/' \
+  --toUrl='https://app.boxel.ai/pretui/' \
+  \
   --fromUrl='@cardstack/openrouter/' \
   --toUrl='https://app.boxel.ai/openrouter/' \
   \

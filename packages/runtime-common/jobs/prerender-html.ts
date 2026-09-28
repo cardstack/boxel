@@ -8,8 +8,15 @@ import {
 import { param, query, type PgPrimitive } from '../expression.ts';
 import type { DBAdapter } from '../db.ts';
 import { Deferred } from '../deferred.ts';
+import type * as JSONTypes from 'json-typescript';
 import type { IncrementalChange } from '../tasks/indexer.ts';
 import type { PrerenderHtmlArgs } from '../tasks/prerender-html.ts';
+import {
+  exclusiveLane,
+  sameWriterLaneIn,
+  writerLane,
+  type Lane,
+} from './lane-family.ts';
 
 // When two publishes carry the same URL, the merged job keeps 'update':
 // the render consults disk truth, so an update-tagged URL whose file is
@@ -33,6 +40,35 @@ export function mergePrerenderHtmlChanges(
     }
   }
   return [...byUrl.values()];
+}
+
+// One index pass a prerender-html job waits on: the queue job that ran it, and
+// the pass id its batch minted, which its `realm_index_commits` row carries. A
+// job id alone cannot name the pass — a job whose reservation expires, or whose
+// worker dies between its commit and its resolve, runs again under the same id
+// and commits a second time — so the wait is on the pass id, and the job id
+// answers only whether the pass can still commit.
+export interface SpawningIndexPass extends JSONTypes.Object {
+  jobId: number;
+  passId: string;
+}
+
+// A prerender-html job's `spawningIndexPasses`, or undefined when its args
+// carry no such field — a job enqueued by a worker predating it, which names
+// its spawning pass only by the generation that pass anticipated.
+export function parseSpawningIndexPasses(
+  value: unknown,
+): SpawningIndexPass[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+  return value.filter(
+    (pass): pass is SpawningIndexPass =>
+      !!pass &&
+      typeof pass === 'object' &&
+      typeof (pass as SpawningIndexPass).jobId === 'number' &&
+      typeof (pass as SpawningIndexPass).passId === 'string',
+  );
 }
 
 // A prerender-html job normally floors one tier below the index pass that
@@ -66,6 +102,8 @@ export interface PrerenderHtmlEnqueueArgs {
   realmURL: string;
   realmUsername: string;
   changes: IncrementalChange[];
+  // See PrerenderHtmlArgs for both.
+  spawningIndexPasses: SpawningIndexPass[];
   generation: number;
   loaderEpoch: string;
   spawningJobId: number | null;
@@ -80,14 +118,54 @@ export interface PrerenderHtmlEnqueueArgs {
   // module pre-warm sweep — O(realm module count) — runs at the start of the
   // job only when set; incremental spawns leave it false.
   preWarm: boolean;
+  // The lane the job runs in: the spawning writer's lane of the realm's
+  // prerender-html family (`prerenderHtmlLaneFollowing` /
+  // `prerenderHtmlWriterLane`). Absent, the job is the family's exclusive work,
+  // as a from-scratch spawn and a reconcile repair are.
+  lane?: Lane;
 }
 
-// Every realm's prerender-html jobs share one concurrency group so they
-// serialize — which is what makes pending-join coalescing and tombstone
-// ordering safe. Anything that reasons about a realm's HTML jobs as a set
-// (enqueue, teardown) must use this same name.
+// The name of a realm's prerender-html lane family, and of the family's
+// exclusive lane (see `QueuePublishRequest.laneFamily`). A job follows the lane
+// of the index pass that spawned it (see `enqueuePrerenderHtmlJob`), so one
+// writer's HTML jobs share a lane, where they coalesce and run in order, and
+// different writers' HTML jobs run side by side.
+//
+// Two HTML jobs of one realm running at once can render the same row, and the
+// swap keeps the fresher render whichever commits last: each job stamps a row
+// with the generation its live index row held when the job adopted it, after
+// its spawning passes committed, and the swap's monotonic guard refuses a
+// lower stamp (see `Batch.adoptIndexGenerations`). A job that adopted a higher
+// generation started rendering after every commit up to it, so it has read
+// every write those commits indexed. Two jobs at the same stamp both started
+// after the same commits.
+//
+// Anything that reasons about a realm's HTML jobs as a set (teardown,
+// readiness) matches the family through `laneFamilyPredicate`, not this group.
 export function prerenderHtmlConcurrencyGroup(realmURL: string): string {
   return `prerender-html:${realmURL}`;
+}
+
+// The lane `initiatedBy`'s HTML work runs in: that writer's lane of the
+// realm's prerender-html family, or the owner's lane for work nobody
+// initiated. Mirrors `indexingWriterLane`.
+export function prerenderHtmlWriterLane(
+  realmURL: string,
+  initiatedBy: string | null | undefined,
+): Lane {
+  return writerLane(prerenderHtmlConcurrencyGroup(realmURL), initiatedBy);
+}
+
+// The prerender-html lane for a job spawned by a job claimed in `spawnerLane`:
+// the same writer's lane, or the exclusive lane when the spawner was exclusive
+// work (a from-scratch pass) or had no lane.
+export function prerenderHtmlLaneFollowing(
+  realmURL: string,
+  spawnerLane:
+    | { concurrencyGroup: string | null; laneFamily?: string | null }
+    | undefined,
+): Lane {
+  return sameWriterLaneIn(prerenderHtmlConcurrencyGroup(realmURL), spawnerLane);
 }
 
 // Await the prerender-html channel having caught up to a realm's index. The
@@ -107,8 +185,8 @@ export function prerenderHtmlConcurrencyGroup(realmURL: string): string {
 // A realm-wide watermark (`realm_generations.current_generation`) is the wrong
 // signal here and must not be reintroduced: an index batch advances it
 // unconditionally, a prerender batch never does, and the prerender job writes
-// rows only for the URLs it was handed, at the generation its spawning pass
-// anticipated. A pass that advances the watermark without a matching render
+// rows only for the URLs it was handed, each at its own index row's
+// generation. A pass that advances the watermark without a matching render
 // therefore leaves it unreachable on a realm that is in fact fully rendered.
 //
 // Resolves true when caught up, false on timeout.
@@ -233,7 +311,8 @@ export async function publishedHtmlHasCaughtUp(
 
 // Publish a `prerender_html` job through the normal queue-publish path. The
 // registered coalesce handler (tasks/prerender-html.ts) merges same-realm
-// publishes: per-URL update-wins merge, max generation/priority/timeout.
+// publishes: per-URL update-wins merge, the union of spawning index jobs, max
+// priority/timeout.
 // Callers fire-and-forget — an index pass must never block on, or fail
 // with, its prerender enqueue; a missed enqueue self-heals on the next pass.
 // Whether `realmURL` is configured to render no HTML.
@@ -263,6 +342,7 @@ export async function enqueuePrerenderHtmlJob(
     realmURL,
     realmUsername,
     changes,
+    spawningIndexPasses,
     generation,
     loaderEpoch,
     spawningJobId,
@@ -270,12 +350,14 @@ export async function enqueuePrerenderHtmlJob(
     timeoutSec,
     preWarm,
     awaitedByPublish,
+    lane,
   }: PrerenderHtmlEnqueueArgs,
 ): Promise<Job<PgPrimitive>> {
   let args: PrerenderHtmlArgs = {
     realmURL,
     realmUsername,
     changes,
+    spawningIndexPasses,
     generation,
     loaderEpoch,
     spawningJobId,
@@ -284,9 +366,9 @@ export async function enqueuePrerenderHtmlJob(
   };
   return await queuePublisher.publish({
     jobType: 'prerender_html',
-    // Separate from `indexing:${realmURL}` so HTML work never blocks
+    // A family separate from `indexing:${realmURL}` so HTML work never blocks
     // indexing.
-    concurrencyGroup: prerenderHtmlConcurrencyGroup(realmURL),
+    ...(lane ?? exclusiveLane(prerenderHtmlConcurrencyGroup(realmURL))),
     priority: prerenderHtmlPriority(spawningPriority, { awaitedByPublish }),
     timeout: timeoutSec,
     args,

@@ -15,6 +15,12 @@ import { tmpdir } from 'node:os';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
+import {
+  REALM_CACHE_DIR,
+  createStagedDiagnosticSink,
+  isSilentSetupFailure,
+  stageRealmSources,
+} from '@cardstack/runtime-common/realm-source-staging';
 import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
 
 import {
@@ -121,6 +127,20 @@ const BXL_PATH = BUNDLED_TYPES_DIR
 const SHIMS_PATH = BUNDLED_TYPES_DIR
   ? join(BUNDLED_TYPES_DIR, 'shims')
   : undefined;
+// In a published install the shims above type `@cardstack/boxel-icons/*`
+// as `any` — a deliberate trade against shipping 50MB of declarations.
+// Monorepo dev has no shim: the import resolves through the package's
+// exports map into the gitignored `declarations/` build output, and when
+// that isn't built it falls through to the untyped rollup JS — every icon
+// types as `object`, and each unannotated `static icon = X` in fetched
+// catalog sources breaks its class's `typeof BaseDef` constraint. Alias
+// the committed sources instead, the same mapping the factory twin uses.
+const BOXEL_ICONS_PATHS = BUNDLED_TYPES_DIR
+  ? undefined
+  : [
+      `${join(PACKAGES_PATH, 'boxel-icons', 'src', 'icons')}/*`,
+      `${join(PACKAGES_PATH, 'boxel-icons', 'src')}/*`,
+    ];
 
 // The temp parse workspace needs the CLI's runtime deps resolvable so
 // glint can type-check card code: `@glint/ember-tsc` (and its
@@ -183,7 +203,25 @@ const CLI_DEPENDENCY_PACKAGES = (() => {
   }
 })();
 
-let cachedTsconfigContent: string | undefined;
+/**
+ * The realm prefixes a card may import and this command can fetch.
+ *
+ * Spelled out here rather than imported from
+ * `@cardstack/runtime-common/realm-prefixes`: that module's type-only imports
+ * reach `@cardstack/base/*`, which this package's deliberately dependency-light
+ * `lint:types` cannot resolve. The cost of the copy is that a realm added to
+ * the declaration has to be added here too; the check that catches it is this
+ * package's own type-check staying green.
+ *
+ * The base realm is deliberately absent: it is already aliased to real sources
+ * below and needs no network call.
+ */
+const RESOLVABLE_PREFIXES = [
+  '@cardstack/catalog/',
+  '@cardstack/skills/',
+  '@cardstack/openrouter/',
+  '@cardstack/pretui/',
+];
 
 export interface ParseError {
   file: string;
@@ -200,6 +238,13 @@ export interface ParseRealmResult {
   durationMs: number;
   parseableFiles: string[];
   errors: ParseError[];
+  /**
+   * Degradations that did not fail the run but changed what it validated:
+   * realm modules the staging walk could not fetch, prefixes that fell back
+   * to the `any` shim, and diagnostics anchored in staged realm sources. A
+   * green result with warnings is a pass over an incomplete module graph.
+   */
+  warnings: string[];
   errorMessage?: string;
 }
 
@@ -250,6 +295,21 @@ async function retryWithPoll<T>(
     result = await attempt();
   }
   return result;
+}
+
+/**
+ * The origin realm prefixes resolve against.
+ *
+ * When `--realm` was passed, that realm's own origin serves the prefix realms
+ * alongside it. A workspace parse has no realm, so fall back to the active
+ * profile's realm server — the same host `boxel search` would query. Neither
+ * available means the imports get the shim.
+ */
+function realmOriginForPrefixes(
+  realmUrl: string | undefined,
+  pm: ProfileManager,
+): string | undefined {
+  return realmUrl || pm.getActiveProfile()?.profile.realmServerUrl;
 }
 
 // ---------------------------------------------------------------------------
@@ -344,6 +404,7 @@ export async function parseRealm(
       durationMs: Date.now() - startedAt,
       parseableFiles: [],
       errors: [],
+      warnings: [],
     };
   }
 
@@ -353,6 +414,7 @@ export async function parseRealm(
       : fetchSource(normalizedRealmUrl, path, pm);
 
   let errors: ParseError[] = [];
+  let warnings: string[] = [];
   let filesWithErrors = new Set<string>();
 
   if (gtsFiles.length > 0) {
@@ -374,8 +436,16 @@ export async function parseRealm(
 
     if (gtsContents.length > 0) {
       try {
-        let glintErrors = await runGlintCheck(gtsContents);
-        for (let e of glintErrors) {
+        let glintResult = await runGlintCheck(gtsContents, {
+          realmOrigin: realmOriginForPrefixes(normalizedRealmUrl, pm),
+          // The staging walk authenticates the same way fetchSource above
+          // does, so a non-public prefix realm resolves to real sources
+          // instead of degrading to the shim.
+          fetchFn: (input, init) => pm.authedRealmFetch(input, init),
+          cacheScope: pm.getActiveProfile()?.id,
+        });
+        warnings.push(...glintResult.warnings);
+        for (let e of glintResult.errors) {
           errors.push(e);
           filesWithErrors.add(e.file);
         }
@@ -419,6 +489,7 @@ export async function parseRealm(
     durationMs: Date.now() - startedAt,
     parseableFiles,
     errors,
+    warnings,
   };
 }
 
@@ -617,9 +688,25 @@ function linkResolvedDeps(nodeModulesDir: string): void {
  * workspace and writes a tsconfig with the same monorepo path mappings
  * the realm uses at runtime, then parses TS diagnostics from stdout.
  */
-async function runGlintCheck(
+interface RunGlintCheckOptions {
+  /**
+   * Origin the realm prefixes are served from — the realm being parsed, or the
+   * active profile's realm server when parsing a local workspace. Without it,
+   * realm-prefixed imports fall back to the ambient shim.
+   */
+  realmOrigin?: string;
+  fetchFn?: typeof globalThis.fetch;
+  /** Identity behind `fetchFn`, partitioning the realm-source memo. */
+  cacheScope?: string;
+}
+
+// Exported for tests: the realm-prefixed staging behavior can only be pinned
+// with an injected fetch, and the CLI surface (a subprocess) has nowhere to
+// inject one.
+export async function runGlintCheck(
   files: { path: string; content: string }[],
-): Promise<ParseError[]> {
+  glintOptions: RunGlintCheckOptions = {},
+): Promise<{ errors: ParseError[]; warnings: string[] }> {
   let tempDir = mkdtempSync(join(tmpdir(), 'boxel-parse-'));
 
   try {
@@ -639,80 +726,93 @@ async function runGlintCheck(
       writeFileSync(resolved, file.content, 'utf8');
     }
 
-    if (!cachedTsconfigContent) {
-      let tsconfig = {
-        compilerOptions: {
-          target: 'es2022',
-          allowJs: true,
-          moduleResolution: 'bundler',
-          allowSyntheticDefaultImports: true,
-          noEmit: true,
-          baseUrl: '.',
-          module: 'es2022',
-          strict: true,
-          experimentalDecorators: true,
-          skipLibCheck: true,
-          noUnusedLocals: false,
-          noUnusedParameters: false,
-          // Bundled `@cardstack/bxl` source imports its siblings by
-          // explicit `.ts` specifier. Without this each of those is a
-          // TS5097 — none reaches the caller (they're outside the temp
-          // dir, so the loop below drops them), but they still count
-          // toward `totalDiagnosticLines`, which is what tells a real
-          // "glint resolved nothing" breakage from a clean run. Safe
-          // under `noEmit`, and it keeps that signal meaningful.
-          allowImportingTsExtensions: true,
-          // `qunit-dom` augments QUnit's `Assert` with `.dom(...)`.
-          // Workspaces routinely include `.test.gts` files that call
-          // `assert.dom(...)` without importing qunit-dom directly (they
-          // rely on the ambient augmentation), and parse type-checks every
-          // discovered `.gts` — so the type lib has to be loaded here or
-          // those tests fail with "Property 'dom' does not exist on type
-          // 'Assert'". It resolves because qunit-dom is a runtime
-          // dependency of boxel-cli, reachable via the node_modules
-          // resolution above. `@cardstack/local-types` is workspace-only
-          // and fed via `include` below instead of here.
-          types: ['qunit-dom'],
-          paths: {
-            '@cardstack/base/*': [`${BASE_PKG_PATH}/*`],
-            'https://cardstack.com/base/*': [`${BASE_PKG_PATH}/*`],
-            '@cardstack/runtime-common': [`${RUNTIME_COMMON_PATH}/index`],
-            '@cardstack/runtime-common/*': [`${RUNTIME_COMMON_PATH}/*`],
-            '@cardstack/bxl': [`${BXL_PATH}/index`],
-            '@cardstack/bxl/*': [`${BXL_PATH}/*`],
-            '@cardstack/host/tests/*': [`${HOST_TESTS_PATH}/*`],
-            '@cardstack/host/*': [`${HOST_APP_PATH}/*`],
-            // The host registers each tool module under both its
-            // `tools/` specifier and the pre-rename `commands/` one, so
-            // card content that still carries the old spelling loads.
-            // Both aliases therefore target `tools/`, which is where the
-            // modules live.
-            '@cardstack/boxel-host/commands/*': [`${HOST_APP_PATH}/tools/*`],
-            // Card code imports host tools as
-            // `@cardstack/boxel-host/tools/<name>`.
-            '@cardstack/boxel-host/tools/*': [`${HOST_APP_PATH}/tools/*`],
-            // Host library modules card code may import (e.g.
-            // `lib/pdfjs-loader`); `lib` is among the bundled host-app
-            // subdirs.
-            '@cardstack/boxel-host/lib/*': [`${HOST_APP_PATH}/lib/*`],
-            '@cardstack/boxel-ui/*': [`${BOXEL_UI_PATH}/*`],
-            '*': [`${HOST_TYPES_PATH}/*`],
-          },
+    let { realmPaths, warnings: stagingWarnings } = await stageRealmSources({
+      tempDir,
+      files,
+      prefixes: RESOLVABLE_PREFIXES,
+      origin: glintOptions.realmOrigin,
+      fetchFn: glintOptions.fetchFn,
+      cacheScope: glintOptions.cacheScope,
+      onWarn: (message) => cliLog.warn(message),
+    });
+
+    let warnings: string[] = [...stagingWarnings];
+
+    let tsconfig = {
+      compilerOptions: {
+        target: 'es2022',
+        allowJs: true,
+        moduleResolution: 'bundler',
+        allowSyntheticDefaultImports: true,
+        noEmit: true,
+        baseUrl: '.',
+        module: 'es2022',
+        strict: true,
+        experimentalDecorators: true,
+        skipLibCheck: true,
+        noUnusedLocals: false,
+        noUnusedParameters: false,
+        // Bundled `@cardstack/bxl` source imports its siblings by
+        // explicit `.ts` specifier. Without this each of those is a
+        // TS5097 — none reaches the caller (they're outside the temp
+        // dir, so the loop below drops them), but they still count
+        // toward `inputDiagnosticLines`, which is what tells a real
+        // "glint resolved nothing" breakage from a clean run. Safe
+        // under `noEmit`, and it keeps that signal meaningful.
+        allowImportingTsExtensions: true,
+        // `qunit-dom` augments QUnit's `Assert` with `.dom(...)`.
+        // Workspaces routinely include `.test.gts` files that call
+        // `assert.dom(...)` without importing qunit-dom directly (they
+        // rely on the ambient augmentation), and parse type-checks every
+        // discovered `.gts` — so the type lib has to be loaded here or
+        // those tests fail with "Property 'dom' does not exist on type
+        // 'Assert'". It resolves because qunit-dom is a runtime
+        // dependency of boxel-cli, reachable via the node_modules
+        // resolution above. `@cardstack/local-types` is workspace-only
+        // and fed via `include` below instead of here.
+        types: ['qunit-dom'],
+        paths: {
+          ...realmPaths,
+          '@cardstack/base/*': [`${BASE_PKG_PATH}/*`],
+          'https://cardstack.com/base/*': [`${BASE_PKG_PATH}/*`],
+          '@cardstack/runtime-common': [`${RUNTIME_COMMON_PATH}/index`],
+          '@cardstack/runtime-common/*': [`${RUNTIME_COMMON_PATH}/*`],
+          '@cardstack/bxl': [`${BXL_PATH}/index`],
+          '@cardstack/bxl/*': [`${BXL_PATH}/*`],
+          '@cardstack/host/tests/*': [`${HOST_TESTS_PATH}/*`],
+          '@cardstack/host/*': [`${HOST_APP_PATH}/*`],
+          // The host registers each tool module under both its
+          // `tools/` specifier and the pre-rename `commands/` one, so
+          // card content that still carries the old spelling loads.
+          // Both aliases therefore target `tools/`, which is where the
+          // modules live.
+          '@cardstack/boxel-host/commands/*': [`${HOST_APP_PATH}/tools/*`],
+          // Card code imports host tools as
+          // `@cardstack/boxel-host/tools/<name>`.
+          '@cardstack/boxel-host/tools/*': [`${HOST_APP_PATH}/tools/*`],
+          // Host library modules card code may import (e.g.
+          // `lib/pdfjs-loader`); `lib` is among the bundled host-app
+          // subdirs.
+          '@cardstack/boxel-host/lib/*': [`${HOST_APP_PATH}/lib/*`],
+          '@cardstack/boxel-ui/*': [`${BOXEL_UI_PATH}/*`],
+          ...(BOXEL_ICONS_PATHS
+            ? { '@cardstack/boxel-icons/*': BOXEL_ICONS_PATHS }
+            : {}),
+          '*': [`${HOST_TYPES_PATH}/*`],
         },
-        include: [
-          '**/*.ts',
-          '**/*.gts',
-          '**/*.gjs',
-          `${LOCAL_TYPES_PATH}/**/*.d.ts`,
-          ...(SHIMS_PATH ? [`${SHIMS_PATH}/**/*.d.ts`] : []),
-        ],
-        exclude: ['node_modules'],
-      };
-      cachedTsconfigContent = JSON.stringify(tsconfig, null, 2);
-    }
+      },
+      include: [
+        '**/*.ts',
+        '**/*.gts',
+        '**/*.gjs',
+        `${LOCAL_TYPES_PATH}/**/*.d.ts`,
+        ...(SHIMS_PATH ? [`${SHIMS_PATH}/**/*.d.ts`] : []),
+      ],
+      exclude: ['node_modules', REALM_CACHE_DIR],
+    };
     writeFileSync(
       join(tempDir, 'tsconfig.json'),
-      cachedTsconfigContent,
+      JSON.stringify(tsconfig, null, 2),
       'utf8',
     );
 
@@ -780,17 +880,29 @@ async function runGlintCheck(
     });
 
     let errors: ParseError[] = [];
-    let totalDiagnosticLines = 0;
+    let inputDiagnosticLines = 0;
+    let stagedDiagnostics = createStagedDiagnosticSink(tempDir);
     for (let line of output.split('\n')) {
       let match = line.match(
         /^(.+?)\((\d+),(\d+)\):\s*error\s+(TS\d+):\s*(.+)/,
       );
       if (!match) continue;
 
-      totalDiagnosticLines++;
-
       let [, filePath, lineStr, colStr, tsCode, message] = match;
       let absolutePath = resolve(tempDir, filePath);
+      if (
+        stagedDiagnostics.trackIfStaged(absolutePath, {
+          line: lineStr,
+          column: colStr,
+          tsCode,
+          message,
+        })
+      ) {
+        continue;
+      }
+
+      inputDiagnosticLines++;
+
       if (!absolutePath.startsWith(tempDir)) continue;
 
       if (tsCode === 'TS2353' && message.includes("'scoped'")) continue;
@@ -807,7 +919,19 @@ async function runGlintCheck(
       });
     }
 
-    if (exitedWithError && errors.length === 0 && totalDiagnosticLines === 0) {
+    let stagedWarning = stagedDiagnostics.warning();
+    if (stagedWarning) {
+      warnings.push(stagedWarning);
+    }
+
+    if (
+      isSilentSetupFailure({
+        exitedWithError,
+        errorCount: errors.length,
+        inputDiagnosticLines,
+        stagedDiagnosticLines: stagedDiagnostics.count(),
+      })
+    ) {
       let truncatedOutput = output.slice(0, 500).trim();
       errors.push({
         file: files[0]?.path ?? 'unknown',
@@ -817,7 +941,7 @@ async function runGlintCheck(
       });
     }
 
-    return errors;
+    return { errors, warnings };
   } finally {
     try {
       rmSync(tempDir, { recursive: true, force: true });
@@ -1069,6 +1193,7 @@ function emptyErrorResult(message: string): ParseRealmResult {
     durationMs: 0,
     parseableFiles: [],
     errors: [],
+    warnings: [],
     errorMessage: message,
   };
 }
@@ -1129,9 +1254,21 @@ export function registerParseCommand(program: Command): void {
         process.exit(1);
       }
 
+      // Warnings are part of the verdict, not stderr noise: a green run with
+      // warnings passed against an incomplete realm module graph, and the
+      // author deciding whether that matters needs them next to the verdict
+      // line rather than scrolled past above it.
+      for (let warning of result.warnings) {
+        console.log(`${DIM}warning${RESET} ${warning}`);
+      }
+
       if (result.errors.length === 0) {
         console.log(
-          `${DIM}No parse errors (${result.filesChecked} file(s) checked).${RESET}`,
+          `${DIM}No parse errors (${result.filesChecked} file(s) checked${
+            result.warnings.length > 0
+              ? `; ${result.warnings.length} warning(s) above`
+              : ''
+          }).${RESET}`,
         );
         return;
       }

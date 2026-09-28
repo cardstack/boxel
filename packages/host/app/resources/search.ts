@@ -136,9 +136,9 @@ export interface Args<T extends CardDef | FileDef = CardDef> {
     // concurrency). Set only by `StoreService.getSearchResource` (the card
     // `@context` surface); host-internal `getSearch` callers leave it unset.
     cardInitiated?: boolean;
-    // Take a slot in the store's search concurrency ceiling without
-    // the other card caps. Set by query-field resolution, whose fan-out is one
-    // search per query field per deserialized card.
+    // Take a slot in the store's query-field search lane without the other
+    // card caps. Set by query-field resolution, whose fan-out is one search per
+    // query field per deserialized card.
     throttled?: boolean;
     // The realm a no-realm card search targets (the realm the `@context` was
     // provided with). Only meaningful with `cardInitiated`.
@@ -1250,10 +1250,10 @@ export class SearchResource<
           // A card-`@context` search runs card-initiated — under the page,
           // realms, and concurrency caps inside `store.search`. `realmsToSearch`
           // has already resolved a no-realm card search to the current realm
-          // (see modify). A query-field search takes only the concurrency slot,
-          // since clamping its page or its realms would change which cards the
-          // field reports as members. Host-internal searches pass neither flag
-          // and are unbounded.
+          // (see modify). A query-field search takes only a concurrency slot, in
+          // a lane of its own, since clamping its page or its realms would
+          // change which cards the field reports as members. Host-internal
+          // searches pass neither flag and are unbounded.
           let { instances, meta } = await this.runtimeStore.search<T>(
             query,
             this.realmsToSearch,

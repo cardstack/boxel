@@ -3,6 +3,7 @@ import {
   computeContentHashFromRanges,
 } from '../content-hash.ts';
 import { isCardError } from '../error.ts';
+import { isCardResource } from '../resource-types.ts';
 import {
   CAPTURE_SERVING_PREFIX,
   PARTIAL_WRITE_SUFFIX,
@@ -511,11 +512,14 @@ export async function commitBatch(
               lookupDefinition: core.lookupDefinition,
             }),
         });
+        // First, because linking a side-load to the card already stored
+        // takes its write out of the batch, and the checks after it have to
+        // see the batch that will commit.
+        await settleDestinations(core, paths, staged, positions);
         assertWritesAllowed(staged, positions);
         assertLinkedCardsSurvive(staged, paths, positions);
         assertWritesFit(core, staged, positions);
         await assertRemovalsAllowed(core, paths, staged, positions);
-        await assertDestinationsFree(core, staged, positions);
       } finally {
         timings?.add('stage', Date.now() - stageStart);
       }
@@ -1146,7 +1150,7 @@ function atEntry(err: unknown, position: EntryPosition): OperationFailure {
 // client-named card to the path it will land at. A create that named no `lid`
 // is deliberately absent: its file is named after an id minted during staging,
 // so no other writer can be aimed at that path, and there is nothing for a
-// lock to exclude. `assertDestinationsFree` still refuses it if something is
+// lock to exclude. `settleDestinations` still refuses it if something is
 // somehow there.
 function lockPaths(
   entries: BatchEntry[],
@@ -1692,6 +1696,18 @@ function assertWritesFit(
 // destination refuses the batch, which is the answer the atomic endpoint
 // gives an `add` whose href is taken.
 //
+// A side-load is the exception, and it is not written either way. It is a
+// linked card the caller sent along so the link has something to point at, and
+// a card of the same type already stored at its destination gives the link
+// that just as well: the side-load is dropped and the stored bytes are left as
+// they are, so the entry's own card links to the card that is there. That is
+// the case a client re-sending a card whose create already landed presents,
+// and refusing it would fail a save that has nothing wrong with the card it is
+// saving. It grants nothing a link by URL does not already allow. A stored
+// card of a different type is not the card the caller described, so that one
+// still refuses the batch, and the refusal names the side-load rather than the
+// entry's own card.
+//
 // Checked inside the lock, against the same critical section the commit runs
 // in, so nothing can take the path between the check and the write.
 //
@@ -1701,8 +1717,9 @@ function assertWritesFit(
 // there. Skipping it hands that pair to the conflicting-entries check, which
 // names the entry it collides with instead of telling a caller that meant to
 // remove and re-mint a card to patch the one it just removed.
-async function assertDestinationsFree(
+async function settleDestinations(
   core: BatchCore,
+  paths: RealmPaths,
   staged: StagedChange[],
   positions: readonly EntryPosition[],
 ): Promise<void> {
@@ -1716,29 +1733,248 @@ async function assertDestinationsFree(
   }
   let occupied = await Promise.all(
     staged.map(async (change, index) => {
+      let taken: LocalPath[] = [];
       for (let path of change.mints) {
         if (removedBefore[index].has(path)) {
           continue;
         }
         if (await core.fileExists(path)) {
-          return { index, path };
+          taken.push(path);
         }
       }
-      return undefined;
+      return taken;
     }),
   );
-  let taken = occupied.find((entry) => entry !== undefined);
-  if (taken) {
-    throw new OperationFailure({
-      status: 409,
-      code: 'invalid-params',
-      title: 'Resource already exists',
-      detail:
-        `a card is already stored at ${taken.path}; a create mints a card ` +
-        `rather than replacing one`,
-      meta: { entry: positions[taken.index] },
-    });
+  for (let [index, change] of staged.entries()) {
+    let adopted = new Set<LocalPath>();
+    for (let path of occupied[index]) {
+      if (
+        change.sideLoadMints?.has(path) &&
+        (await sameStoredType(core, paths, change, path))
+      ) {
+        adopted.add(path);
+      }
+    }
+    let dropped = new Set([
+      ...adopted,
+      ...reachedOnlyThrough(change, paths, adopted, () =>
+        linkedFromElsewhere(staged, index, paths),
+      ),
+    ]);
+    for (let path of occupied[index]) {
+      if (dropped.has(path)) {
+        continue;
+      }
+      let lid = change.sideLoadMints?.get(path);
+      if (lid === undefined) {
+        throw new OperationFailure({
+          status: 409,
+          code: 'invalid-params',
+          title: 'Resource already exists',
+          detail:
+            `a card is already stored at ${path}; a create mints a card ` +
+            `rather than replacing one`,
+          meta: { entry: positions[index] },
+        });
+      }
+      let sent = stagedAdoptsFrom(change, path);
+      throw new OperationFailure({
+        status: 409,
+        code: 'invalid-params',
+        title: 'Resource already exists',
+        detail:
+          `the linked card included in this save as "${lid}" would be ` +
+          `stored at ${path}, where a card of another type is already ` +
+          `stored; a create mints a card rather than replacing one`,
+        meta: {
+          entry: positions[index],
+          included: {
+            lid,
+            id: cardIdOf(paths, path),
+            ...(sent ? { adoptsFrom: sent } : {}),
+          },
+        },
+      });
+    }
+    if (dropped.size === 0) {
+      continue;
+    }
+    change.writes = change.writes.filter((write) => !dropped.has(write.path));
+    change.mints = change.mints.filter((mint) => !dropped.has(mint));
+    // The entry now links to a card it does not write, which is what the
+    // check that a batch does not remove a card it links to reads.
+    change.links = [
+      ...(change.links ?? []),
+      ...[...adopted].map((path) => cardIdOf(paths, path)),
+    ];
   }
+}
+
+function cardIdOf(paths: RealmPaths, path: LocalPath): string {
+  return paths.fileURL(path).href.replace(/\.json$/, '');
+}
+
+// Whether the card stored at a side-load's destination is a card of the type
+// the side-load was sent as. Both types are resolved against the file they
+// live in, so a relative module spelling and an absolute one compare equal.
+async function sameStoredType(
+  core: BatchCore,
+  paths: RealmPaths,
+  change: StagedChange,
+  path: LocalPath,
+): Promise<boolean> {
+  let sent = stagedAdoptsFrom(change, path);
+  let stored = await storedAdoptsFrom(core, path);
+  if (!sent || !stored) {
+    return false;
+  }
+  let fileURL = paths.fileURL(path);
+  return core.codeRefKey(sent, fileURL) === core.codeRefKey(stored, fileURL);
+}
+
+// The side-loads an entry would write that nothing reaches once the adopted
+// ones are left out: cards the caller sent only because an adopted side-load
+// linked to them. The stored card that stands in for it has its own links, so
+// writing those would leave cards nothing points at. A side-load nothing
+// reached to begin with is not this check's to drop, and neither is one
+// another entry in the batch links to.
+function reachedOnlyThrough(
+  change: StagedChange,
+  paths: RealmPaths,
+  adopted: ReadonlySet<LocalPath>,
+  elsewhere: () => LocalPath[],
+): LocalPath[] {
+  if (adopted.size === 0 || !change.primaryPath) {
+    return [];
+  }
+  let contents = new Map<LocalPath, string>();
+  for (let write of change.writes) {
+    if (typeof write.content === 'string') {
+      contents.set(write.path, write.content);
+    }
+  }
+  let reach = (skip: ReadonlySet<LocalPath>) => {
+    let seen = new Set<LocalPath>();
+    let pending = [change.primaryPath!, ...roots];
+    while (pending.length > 0) {
+      let path = pending.pop()!;
+      if (seen.has(path) || skip.has(path)) {
+        continue;
+      }
+      seen.add(path);
+      for (let linked of linkedPaths(contents.get(path), path, paths)) {
+        if (contents.has(linked)) {
+          pending.push(linked);
+        }
+      }
+    }
+    return seen;
+  };
+  let roots = elsewhere();
+  let before = reach(new Set());
+  let after = reach(adopted);
+  return [...before].filter(
+    (path) =>
+      !after.has(path) && !adopted.has(path) && change.sideLoadMints?.has(path),
+  );
+}
+
+// The card files the other entries' staged documents link to.
+function linkedFromElsewhere(
+  staged: StagedChange[],
+  index: number,
+  paths: RealmPaths,
+): LocalPath[] {
+  let linked: LocalPath[] = [];
+  for (let [other, change] of staged.entries()) {
+    if (other === index) {
+      continue;
+    }
+    for (let write of change.writes) {
+      if (typeof write.content === 'string') {
+        linked.push(...linkedPaths(write.content, write.path, paths));
+      }
+    }
+  }
+  return linked;
+}
+
+// The card files a staged card document links to, resolved against the file
+// that holds it.
+function linkedPaths(
+  content: string | undefined,
+  path: LocalPath,
+  paths: RealmPaths,
+): LocalPath[] {
+  if (content === undefined) {
+    return [];
+  }
+  let relationships: unknown;
+  try {
+    relationships = JSON.parse(content)?.data?.relationships;
+  } catch {
+    return [];
+  }
+  if (!relationships || typeof relationships !== 'object') {
+    return [];
+  }
+  let fileURL = paths.fileURL(path);
+  let linked: LocalPath[] = [];
+  for (let relationship of Object.values(relationships)) {
+    let self = (relationship as { links?: { self?: unknown } })?.links?.self;
+    if (typeof self !== 'string') {
+      continue;
+    }
+    let target: string;
+    try {
+      target = new URL(self, fileURL).href;
+    } catch {
+      continue;
+    }
+    let local = cardSourcePathOf(target, paths);
+    if (local) {
+      linked.push(local);
+    }
+  }
+  return linked;
+}
+
+// The type a staged side-load was sent as, read back off the bytes staging
+// produced so it is spelled the way the stored card's is.
+function stagedAdoptsFrom(
+  change: StagedChange,
+  path: LocalPath,
+): CodeRef | undefined {
+  let write = change.writes.find((candidate) => candidate.path === path);
+  return typeof write?.content === 'string'
+    ? adoptsFromOf(write.content)
+    : undefined;
+}
+
+async function storedAdoptsFrom(
+  core: BatchCore,
+  path: LocalPath,
+): Promise<CodeRef | undefined> {
+  let stored = await core.readSourceFile(path);
+  return stored ? adoptsFromOf(stored.content) : undefined;
+}
+
+// Undefined for anything that is not a card document naming its type, which
+// is not a card a side-load can be linked to in its place.
+function adoptsFromOf(content: string): CodeRef | undefined {
+  let data: unknown;
+  try {
+    data = JSON.parse(content)?.data;
+  } catch {
+    return undefined;
+  }
+  if (!isCardResource(data)) {
+    return undefined;
+  }
+  let adoptsFrom = data.meta?.adoptsFrom;
+  return adoptsFrom && typeof adoptsFrom === 'object'
+    ? (adoptsFrom as CodeRef)
+    : undefined;
 }
 
 async function commitStaged(

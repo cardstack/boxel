@@ -18,13 +18,13 @@ import type { JsonValue } from '../json-validation.ts';
 //
 // **Access posture.** These stages are identity-aware and not access-enforced.
 // A program may read `actor()`, and an `output` may leave a field out of what
-// it projects, but the realm verifies no claim the caller makes and refuses no
-// invocation on the strength of who is asking: the realm's own read/write
-// permission is the whole of what is checked. An `output` that hides a field
-// hides it from the shape of this operation's answer, not from the caller —
-// every operation's result must be treated as reachable by any caller
-// permitted to read or write the realm. Treat a projection as a response
-// shape, never as a boundary.
+// it projects, but nothing a stage does decides who may invoke the operation:
+// that is the realm's own read/write permission, widened only by the realm's
+// policy, and both are settled before a stage runs. An `output` that hides a
+// field hides it from the shape of this operation's answer, not from the
+// caller — every operation's result must be treated as reachable by any caller
+// permitted to invoke it. Treat a projection as a response shape, never as a
+// boundary.
 //
 // **Where a failure leaves the realm.** An `input` runs before anything is
 // staged, so a program that fails there refuses the operation with nothing
@@ -84,10 +84,12 @@ export interface BxlTransformModule {
 }
 
 // Resolved once per process. The module is pure and stateless, so holding it
-// costs one resolution rather than one per program.
+// costs one resolution rather than one per program. The policy gate runs its
+// predicates through the same runner, since it is the one entry that carries
+// the request context a predicate reads.
 let bxlTransform: Promise<BxlTransformModule> | undefined;
 
-function loadBxlTransform(): Promise<BxlTransformModule> {
+export function loadBxlTransform(): Promise<BxlTransformModule> {
   // The cast is what keeps the specifier opaque to TypeScript; see above.
   // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
   bxlTransform ??= import('@cardstack/bxl/transform' as string).then(

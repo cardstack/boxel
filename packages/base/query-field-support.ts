@@ -35,6 +35,7 @@ import { initSharedState } from './shared-state';
 import {
   bumpFieldLoadingSignal,
   getDataBucket,
+  markQueryFieldRead,
   type LinkErrorValue,
   type LinkNotFoundValue,
 } from './field-support';
@@ -129,6 +130,11 @@ export function ensureQueryFieldSearchResource(
     log.info(`field ${field.name} is not a query field, skipping`);
     return undefined;
   }
+  // Every read of a query-backed field arrives here — the `linksTo` and
+  // `linksToMany` getters and the relationship probe alike — so this is where a
+  // compute reading one is marked. Outside a `computeVia` (the eager resolution
+  // at deserialize) the stack is empty and this is a no-op.
+  markQueryFieldRead();
   let fieldDefinition = buildFieldDefinition(field);
   if (!fieldDefinition) {
     log.warn(`field ${field.name} missing fieldDefinition, skipping`);
@@ -265,7 +271,7 @@ export function ensureQueryFieldSearchResource(
       isLive,
       // One deserialized document can carry a query field per card it
       // references, and each of those fields asks for its own membership. Put
-      // them behind the store's concurrency ceiling so the fan-out
+      // them behind the store's query-field concurrency lane so the fan-out
       // leaves as a queue rather than as one burst of concurrent
       // `_federated-search` requests — the count is the same, the number in
       // flight at any moment is not. A prerender is left alone: its searches

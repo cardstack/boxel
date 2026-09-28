@@ -19,6 +19,7 @@ import {
   internalKeyFor,
   SupportedMimeType,
   type CardErrorsJSONAPI,
+  type CardSourceVisitArgs,
   type LooseSingleCardDocument,
   type RenderError,
   type ModuleRenderResponse,
@@ -223,6 +224,7 @@ export default class CardPrerender extends Component {
       fileData,
       types,
       cardTypes,
+      cardSource,
     }: PrerenderVisitArgs): Promise<RenderVisitResponse> => {
       this.#nonce++;
       // Clear any residual render error from a previous visit so the earliest
@@ -418,8 +420,16 @@ export default class CardPrerender extends Component {
           deps: null,
           types: null,
         };
+        // The card's stored source, when the caller already read it. The render
+        // route's card branch builds its model from this instead of fetching
+        // the instance's source for itself; the URL rides along so the route
+        // can confirm the stash names the card it is rendering. Mirrors the
+        // out-of-process runner, and the fileRender pass's own stash below.
+        if (cardSource) {
+          (globalThis as any).__boxelCardRenderData = { ...cardSource, url };
+        }
         try {
-          await this.#primeCardType(url, context);
+          await this.#primeCardType(url, context, cardSource);
           let subsequentRenderOptions =
             omitOneTimeOptions(initialRenderOptions);
           if (runHtmlSteps) {
@@ -542,6 +552,7 @@ export default class CardPrerender extends Component {
           if (this.#currentContext === context) {
             this.#currentContext = undefined;
           }
+          delete (globalThis as any).__boxelCardRenderData;
         }
         if (this.localIndexer.prerenderStatus === 'loading') {
           this.localIndexer.prerenderStatus = 'ready';
@@ -821,20 +832,32 @@ export default class CardPrerender extends Component {
     },
   );
 
-  async #primeCardType(url: string, context: CardRenderContext) {
+  async #primeCardType(
+    url: string,
+    context: CardRenderContext,
+    cardSource?: CardSourceVisitArgs,
+  ) {
     try {
-      let response = await this.network.authedFetch(url, {
-        method: 'GET',
-        headers: {
-          Accept: SupportedMimeType.CardSource,
-        },
-      });
-      if (!response.ok) {
-        return;
+      let doc: LooseSingleCardDocument | CardErrorsJSONAPI;
+      if (cardSource) {
+        // The same bytes the render itself will build from — reading them
+        // twice would only give this priming step a chance to disagree with
+        // the render about what the card is.
+        doc = JSON.parse(cardSource.source) as LooseSingleCardDocument;
+      } else {
+        let response = await this.network.authedFetch(url, {
+          method: 'GET',
+          headers: {
+            Accept: SupportedMimeType.CardSource,
+          },
+        });
+        if (!response.ok) {
+          return;
+        }
+        doc = (await response.json()) as
+          | LooseSingleCardDocument
+          | CardErrorsJSONAPI;
       }
-      let doc = (await response.json()) as
-        | LooseSingleCardDocument
-        | CardErrorsJSONAPI;
       if ('errors' in doc) {
         return;
       }

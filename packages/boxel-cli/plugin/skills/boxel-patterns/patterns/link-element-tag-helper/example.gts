@@ -27,7 +27,7 @@ export const TitleGroup: TemplateOnlyComponent<TitleGroupSignature> = <template>
   <style scoped>
     .title-group { display: flex; flex-direction: column; gap: 0.5rem; }
     .title-group__title   { margin: 0; font-weight: 800; }
-    .title-group__tagline { margin: 0; color: var(--muted-foreground, #666); }
+    .title-group__tagline { margin: 0; color: var(--muted-foreground); }
   </style>
 </template>;
 

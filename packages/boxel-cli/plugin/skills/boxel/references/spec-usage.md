@@ -58,7 +58,7 @@ import { Author } from './author';
 **Field specs (contains/containsMany):**
 ```gts
 import StringField from '@cardstack/base/string';
-import AddressField from '@cardstack/base/address-field';
+import AddressField from '@cardstack/base/address';
 @field name = contains(StringField);
 @field addresses = containsMany(AddressField);
 ```
@@ -71,7 +71,7 @@ import AddressField from '@cardstack/base/address-field';
 
 **Command specs (programmatic execution):**
 ```ts
-const cmd = new MyCommand(commandContext);
+const cmd = new MyCommand(toolContext);
 const result = await cmd.execute(input);
 ```
 
@@ -220,16 +220,16 @@ import { UpdatePlaygroundSelectionCommand } from './update-playground-selection'
 
 #### Template Usage
 
-When you need to execute commands in response to user interactions, you can just access the commandContext and invoke it as how you would a simple async function in javascript
+When you need to execute commands in response to user interactions, you can just access the toolContext and invoke it as how you would a simple async function in javascript
 
 ```typescript
-let commandContext = this.args.context?.commandContext;
-if (!commandContext) {
+let toolContext = this.args.context?.toolContext;
+if (!toolContext) {
    console.error('Command context not available');
    return;
 }
 
 const someCommandInput = new CommandInput({...args})
-const myCommand = new MyCommand(commandContext);
+const myCommand = new MyCommand(toolContext);
 const result = await myCommand.execute(someCommandInput);
 ```

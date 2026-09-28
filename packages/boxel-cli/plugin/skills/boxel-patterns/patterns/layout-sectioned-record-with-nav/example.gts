@@ -1,7 +1,7 @@
 // Distilled example for `layout-sectioned-record-with-nav`.
 //
 // One long-record CardDef + two section FieldDefs. The isolated layout has
-// a sticky 220px nav rail (one button per section + a click-to-scroll
+// a sticky 13.75rem nav rail (one button per section + a click-to-scroll
 // handler that sets @tracked activeSection) and a main content stack with
 // stable section ids.
 //
@@ -61,10 +61,10 @@ class IdentitySection extends FieldDef {
         </dl>
       </section>
       <style scoped>
-        .section { padding: 1.5rem 0; border-bottom: 1px solid var(--border, var(--boxel-200)); }
+        .section { padding: 1.5rem 0; }
         .section-title { margin: 0 0 0.75rem; font-size: 1.125rem; }
         .section-grid { display: grid; grid-template-columns: 8rem 1fr; gap: 0.5rem 1rem; }
-        .section-grid dt { color: var(--muted-foreground, var(--boxel-600)); font-size: 0.875rem; }
+        .section-grid dt { color: var(--muted-foreground); font-size: 0.875rem; }
         .section-grid dd { margin: 0; }
       </style>
     </template>
@@ -85,7 +85,7 @@ class NotesSection extends FieldDef {
         {{#if @model.detail}}<p>{{@model.detail}}</p>{{/if}}
       </section>
       <style scoped>
-        .section { padding: 1.5rem 0; border-bottom: 1px solid var(--border, var(--boxel-200)); }
+        .section { padding: 1.5rem 0; }
         .section-title { margin: 0 0 0.75rem; font-size: 1.125rem; }
         .lead { font-weight: 500; }
       </style>
@@ -96,7 +96,7 @@ class NotesSection extends FieldDef {
 // ─── Long record with sectioned nav layout ──────────────────────────
 export class SectionedRecord extends CardDef {
   static displayName = 'Sectioned Record';
-  static prefersWideFormat = true; // 220px rail needs the width
+  static prefersWideFormat = true; // 13.75rem rail needs the width
 
   @field identity = contains(IdentitySection);
   @field notes    = contains(NotesSection);
@@ -178,10 +178,9 @@ export class SectionedRecord extends CardDef {
       </article>
 
       <style scoped>
-        .record { background: var(--background, white); color: var(--foreground, #111); }
         .record-layout {
           display: grid;
-          grid-template-columns: 220px 1fr;
+          grid-template-columns: 13.75rem 1fr;
           min-height: 100vh;
         }
         .record-nav {
@@ -190,49 +189,50 @@ export class SectionedRecord extends CardDef {
           height: 100vh;
           overflow-y: auto;
           padding: 1.25rem;
-          background: var(--surface-0, var(--background));
-          border-right: 1px solid var(--border, var(--boxel-200));
+          background-color: var(--muted);
+          color: var(--foreground);
+          border-right: 1px solid var(--border);
           display: flex; flex-direction: column; gap: 1.25rem;
         }
         .nav-header { display: flex; gap: 0.5rem; align-items: center; }
         .nav-avatar {
-          width: 36px; height: 36px;
+          width: 2.25rem; height: 2.25rem;
           border-radius: 50%;
-          background: var(--primary, var(--boxel-purple-300));
-          color: white;
+          background-color: var(--primary);
+          color: var(--primary-foreground);
           display: flex; align-items: center; justify-content: center;
           font-weight: 600; font-size: 0.875rem;
         }
         .nav-info { display: flex; flex-direction: column; min-width: 0; }
         .nav-name { font-weight: 600; font-size: 0.875rem; }
-        .nav-id { font-size: 0.75rem; color: var(--muted-foreground, var(--boxel-600)); }
+        .nav-id { font-size: 0.75rem; color: var(--muted-foreground); }
         .nav-sections { display: flex; flex-direction: column; gap: 0.125rem; }
         .nav-btn {
           display: flex; align-items: center; gap: 0.5rem;
           width: 100%; padding: 0.5rem 0.75rem;
-          background: transparent; border: 0; border-radius: var(--radius-md, var(--boxel-border-radius));
+          background: transparent; border: 0; border-radius: var(--boxel-border-radius);
           text-align: left; cursor: pointer;
           font-size: 0.875rem; color: inherit;
         }
-        .nav-btn:hover { background: var(--surface-2, var(--boxel-100)); }
+        .nav-btn:hover { background-color: var(--hover); }
         .nav-btn.active {
-          background: var(--primary, var(--boxel-purple-100));
-          color: var(--primary-foreground, var(--boxel-purple-900));
+          background-color: var(--primary);
+          color: var(--primary-foreground);
           font-weight: 600;
         }
         .record-main { padding: 1.5rem 2rem; max-width: 56rem; }
         .record-header { display: flex; gap: 1rem; align-items: center; margin-bottom: 1rem; }
         .header-avatar {
-          width: 64px; height: 64px;
-          border-radius: var(--radius-md, var(--boxel-border-radius));
-          background: var(--primary, var(--boxel-purple-300));
-          color: white;
+          width: 4rem; height: 4rem;
+          border-radius: var(--boxel-border-radius);
+          background-color: var(--primary);
+          color: var(--primary-foreground);
           display: flex; align-items: center; justify-content: center;
           font-weight: 600; font-size: 1.25rem;
         }
         .header-name { margin: 0; font-size: 1.5rem; }
-        .header-id { font-size: 0.875rem; color: var(--muted-foreground, var(--boxel-600)); }
-        .section-anchor { scroll-margin-top: 1rem; }
+        .header-id { font-size: 0.875rem; color: var(--muted-foreground); }
+        .section-anchor { border-bottom: 1px solid var(--border); scroll-margin-top: 1rem; }
       </style>
     </template>
   };

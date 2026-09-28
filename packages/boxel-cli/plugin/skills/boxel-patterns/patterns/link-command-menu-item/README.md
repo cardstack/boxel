@@ -2,38 +2,38 @@
 validated: source-proven
 ---
 
-# link-command-menu-item — Expose a Command as a card menu item via `[getCardMenuItems]`
+# link-command-menu-item — Expose a Command as a card menu item via `[getMenuItems]`
 
 **What this gives you:** A right-click / overflow-menu entry on a card that runs a host Command with the card's data as input. The native Boxel menu chrome handles icon, label, keyboard navigation, and disabled states.
 
 **When to use:** The Command is an *action the user takes on this specific card* — "Generate Avatar", "Send to Printer", "Reindex Linked Children", "Export as PDF", "Refresh from Source". Anywhere you'd otherwise sprinkle bespoke buttons onto the isolated template, route through the menu instead — it keeps the card's visual surface clean and gives the user a consistent place to find actions.
 
-**The insight:** `getCardMenuItems` is a symbol the host calls on each card to compose its menu. Override the symbol on your CardDef (call `super[getCardMenuItems](params)` to keep the host's defaults), return an array of `{ label, icon, action }` entries. `params.commandContext` is what your action passes to `new MyCommand(params.commandContext)`; `params.realmURL` and `params.saveCard` give you the rest.
+**The insight:** `getMenuItems` is a symbol the host calls on each card to compose its menu. Override the symbol on your CardDef (call `super[getMenuItems](params)` to keep the host's defaults), return an array of `{ label, icon, action }` entries. `params.toolContext` is what your action passes to `new MyCommand(params.toolContext)`; `params.cardCrudFunctions.saveCard` persists a card the action mutated, and `params.canEdit` / `params.menuContext` gate when an item should appear.
 
 ## Recipe shape
 
 ```ts
-import { getCardMenuItems } from '@cardstack/runtime-common';
-import { type GetCardMenuItemParams } from '@cardstack/base/card-menu-items';
+import { getMenuItems } from '@cardstack/runtime-common';
+import { type GetMenuItemParams } from '@cardstack/base/card-api';
 import { type MenuItemOptions } from '@cardstack/boxel-ui/helpers';
 import MyIcon from '@cardstack/boxel-icons/sparkles';
 import MyCommand from './my-command';
 
 export class MyCardDef extends CardDef {
-  [getCardMenuItems](params: GetCardMenuItemParams): MenuItemOptions[] {
+  [getMenuItems](params: GetMenuItemParams): MenuItemOptions[] {
     return [
       {
         label: 'My Action',
         icon: MyIcon,
         action: async () => {
-          await new MyCommand(params.commandContext).execute({
+          await new MyCommand(params.toolContext).execute({
             cardId: this.id,
           });
-          await params.saveCard(this);
+          params.cardCrudFunctions.saveCard?.(this.id);
         },
       },
       // Host defaults LAST so user-actions show on top.
-      ...super[getCardMenuItems](params),
+      ...super[getMenuItems](params),
     ];
   }
 }
@@ -41,18 +41,18 @@ export class MyCardDef extends CardDef {
 
 ## Conventions
 
-- **Always `...super[getCardMenuItems](params)`** — preserves the host's default entries (Open, Copy, Delete, etc.). Forgetting this strips the menu.
+- **Always `...super[getMenuItems](params)`** — preserves the host's default entries (Open, Copy, Delete, etc.). Forgetting this strips the menu.
 - **Order: custom items first, defaults last.** Users read top-down; card-specific actions belong above the generic ones.
 - **Icon comes from `@cardstack/boxel-icons/<name>` or `@cardstack/boxel-ui/icons/<name>`.** Match the existing menu style — small, single-color, Lucide/Tabler-flavored.
 - **Label is verb-first.** "Generate avatar" not "Avatar generation". Title-cased like other menu items.
-- **`action` is async.** Always `await` the Command, then `await params.saveCard(this)` if the action mutates fields on the card itself.
+- **`action` is async.** Always `await` the Command, then call `params.cardCrudFunctions.saveCard?.(this.id)` if the action mutates fields on the card itself. `saveCard` is synchronous and returns nothing (it hands the id to the store, which saves in the background), so there is nothing to `await`; the `?.` is because `cardCrudFunctions` is a `Partial` and some menu contexts supply no save path.
 
 ## Conditional items
 
 Return entries conditionally to hide or disable based on card state:
 
 ```ts
-[getCardMenuItems](params: GetCardMenuItemParams): MenuItemOptions[] {
+[getMenuItems](params: GetMenuItemParams): MenuItemOptions[] {
   const items: MenuItemOptions[] = [];
   if (this.id) {
     // Only saved cards can be exported.
@@ -61,11 +61,13 @@ Return entries conditionally to hide or disable based on card state:
   if (!this.publishedAt) {
     items.push({ label: 'Publish', icon: PublishIcon, action: async () => { /*…*/ } });
   }
-  return [...items, ...super[getCardMenuItems](params)];
+  return [...items, ...super[getMenuItems](params)];
 }
 ```
 
 Hide entirely when the action doesn't apply. Use `disabled: true` + a tooltip only when the action *could* apply but a precondition fails (so the user sees why it's unavailable).
+
+`params.menuContext` says where the menu is being composed: `'interact'`, `'code-mode-preview'`, `'code-mode-playground'`, or `'ai-assistant'`. The `'ai-assistant'` variant also carries `params.menuContextParams` (`canEditActiveRealm`, `activeRealmURL`); the other variants do not, so narrow on `menuContext` before reading it. The host's own items gate on `params.menuContext === 'interact'` — do the same for actions that only make sense on an interactive card.
 
 ## Composing with other modes
 
@@ -75,10 +77,10 @@ Hide entirely when the action doesn't apply. Use `disabled: true` + a tooltip on
 
 ## Gotchas
 
-- **Forgetting `...super[getCardMenuItems](params)`** strips the host defaults silently — the user loses Open/Copy/Delete and won't know why.
+- **Forgetting `...super[getMenuItems](params)`** strips the host defaults silently — the user loses Open/Copy/Delete and won't know why.
 - **Heavy work inside `action`** blocks the menu close animation. Kick off the work, close the menu, surface progress via a tracked field or toast.
 - **`this` inside `action`** refers to the CardDef instance because the arrow function is captured in the closure. If you write a regular method, you lose the binding.
-- **Saving without `params.saveCard`** skips the host's permission and indexing handling. Prefer `params.saveCard(this)` over constructing `new SaveCardCommand(...)` yourself.
+- **Saving without `params.cardCrudFunctions.saveCard`** skips the host's permission and indexing handling. Prefer `params.cardCrudFunctions.saveCard?.(this.id)` over constructing `new SaveCardCommand(...)` yourself.
 
 ## Source
 

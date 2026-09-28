@@ -795,6 +795,72 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
+  test('the 3D family captures a rendered still onto the file row', async function (assert) {
+    let glbBytes = new Uint8Array(
+      readFileSync(
+        fileURLToPath(
+          new URL(
+            '../../experiments-realm/filedef-fixtures/samples/glb-simple.glb',
+            import.meta.url,
+          ),
+        ),
+      ),
+    );
+    await writeAndSettle('part.glb', glbBytes);
+
+    let fileRow = await prerenderedHtmlRowFor(
+      testDbAdapter,
+      `${testRealm}part.glb`,
+      'file',
+    );
+    assert.ok(fileRow, 'the file row exists');
+    let manifest = fileRow!.screenshots as ScreenshotManifest | null;
+    assert.ok(manifest?.poster, 'the rendered still landed on the file row');
+    assert.true(
+      manifest!.poster.useAsThumbnail,
+      'the still feeds the thumbnail chain',
+    );
+    assert.ok(
+      startsWith(objectBytes(manifest!.poster.objectKey), PNG_MAGIC),
+      'the capture is a PNG',
+    );
+    let fitted = JSON.stringify(fileRow!.fitted_html ?? {});
+    assert.ok(
+      fitted.includes(`_screenshot/part.glb?name=poster`),
+      `the fitted rendering carries the still URL (got: ${fitted.slice(0, 500)})`,
+    );
+  });
+
+  test('an unparsable 3D model captures no still', async function (assert) {
+    // A GLB magic header followed by garbage: the loader rejects, and the
+    // capture component swaps its readiness signal for
+    // `data-screenshot-failed`, so the slot fails immediately. No manifest
+    // entry may land — resolving readiness instead would persist the empty
+    // capture box as a blank white still and serve it as the thumbnail for
+    // the life of these bytes.
+    await writeAndSettle(
+      'broken.glb',
+      new Uint8Array([0x67, 0x6c, 0x54, 0x46, 0xde, 0xad, 0xbe, 0xef]),
+    );
+
+    let fileRow = await prerenderedHtmlRowFor(
+      testDbAdapter,
+      `${testRealm}broken.glb`,
+      'file',
+    );
+    assert.ok(fileRow, 'the file row still indexes');
+    let manifest = fileRow!.screenshots as ScreenshotManifest | null;
+    assert.notOk(
+      manifest?.poster,
+      'no poster entry lands for an unparsable model',
+    );
+    assert.strictEqual(
+      (await declaredLedgerRows(`${testRealm}broken.glb`)).length,
+      0,
+      'no ledger row lands for an unparsable model',
+    );
+  });
+
   test('an unchanged file carries its capture forward; a content change recaptures', async function (assert) {
     await writeAndSettle('sample.mismatch', 'carry me');
     let firstRow = await prerenderedHtmlRowFor(

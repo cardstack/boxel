@@ -1,11 +1,6 @@
-import {
-  CardDef,
-  Component,
-  field,
-  contains,
-} from '@cardstack/base/card-api';
-import StringField from '@cardstack/base/string';
+import { CardDef, Component } from '@cardstack/base/card-api';
 import { on } from '@ember/modifier';
+import { Button } from '@cardstack/boxel-ui/components';
 
 // 🧩 PATTERN: synthesized sound feedback with no library.
 //
@@ -90,8 +85,6 @@ const errorTone = () =>
 export class SoundFeedbackDemo extends CardDef {
   static displayName = 'Sound Feedback Demo';
 
-  @field cardTitle = contains(StringField);
-
   static isolated = class Isolated extends Component<
     typeof SoundFeedbackDemo
   > {
@@ -101,11 +94,23 @@ export class SoundFeedbackDemo extends CardDef {
 
     <template>
       <div class='demo'>
-        <h1>{{if @model.cardTitle @model.cardTitle 'Sound Feedback'}}</h1>
+        <h1><@fields.cardTitle /></h1>
         <div class='buttons'>
-          <button type='button' {{on 'click' this.click}}>Click</button>
-          <button type='button' {{on 'click' this.success}}>Success</button>
-          <button type='button' {{on 'click' this.error}}>Error</button>
+          <Button
+            @size='touch'
+            @rectangular={{true}}
+            {{on 'click' this.click}}
+          >Click</Button>
+          <Button
+            @size='touch'
+            @rectangular={{true}}
+            {{on 'click' this.success}}
+          >Success</Button>
+          <Button
+            @size='touch'
+            @rectangular={{true}}
+            {{on 'click' this.error}}
+          >Error</Button>
         </div>
       </div>
 
@@ -120,14 +125,6 @@ export class SoundFeedbackDemo extends CardDef {
         .buttons {
           display: flex;
           gap: 0.75rem;
-        }
-        button {
-          padding: 0.75rem 1.25rem;
-          border-radius: 8px;
-          border: 1px solid var(--border, #ccc);
-          background: var(--card, white);
-          cursor: pointer;
-          font-size: 1rem;
         }
       </style>
     </template>

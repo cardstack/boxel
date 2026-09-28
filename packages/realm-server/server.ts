@@ -885,8 +885,17 @@ export class RealmServer {
           // an author header needing preflight approval — without Range in
           // this list the preflight fails and the player errors before any
           // bytes flow.
+          //
+          // Accept is here for the same reason, and it is easy to miss because
+          // Accept is normally CORS-safelisted. The safelist only covers
+          // *values* free of `"` `:` and the rest of the forbidden set, and the
+          // operations envelope's media type is
+          // `application/vnd.api+json;ext="https://boxel.ai/ext/operations"` —
+          // which carries both. So that request preflights, and without Accept
+          // here the preflight fails and no browser client can invoke a card
+          // operation cross-origin at all.
           allowHeaders:
-            'Authorization, Content-Type, If-Match, If-None-Match, If-Range, Range, X-Requested-With, X-Boxel-Client-Request-Id, X-Boxel-Assume-User, X-HTTP-Method-Override, X-Boxel-Disable-Module-Cache, X-Filename, X-Boxel-During-Prerender, X-Boxel-Skip-Index-Wait, X-Boxel-Consuming-Realm, X-Boxel-Job-Id, X-Boxel-Job-Priority, X-Boxel-Logging-Correlation-Id, X-Boxel-Link-Shape, X-Grafana-Device-Id, X-Grafana-Action',
+            'Accept, Authorization, Content-Type, If-Match, If-None-Match, If-Range, Range, X-Requested-With, X-Boxel-Client-Request-Id, X-Boxel-Assume-User, X-HTTP-Method-Override, X-Boxel-Disable-Module-Cache, X-Filename, X-Boxel-During-Prerender, X-Boxel-Skip-Index-Wait, X-Boxel-Consuming-Realm, X-Boxel-Job-Id, X-Boxel-Job-Priority, X-Boxel-Logging-Correlation-Id, X-Boxel-Link-Shape, X-Grafana-Device-Id, X-Grafana-Action',
           // Without an explicit expose list, @koa/cors only emits the
           // CORS-safelisted response headers (cache-control, content-*,
           // expires, last-modified, pragma). ETag is not on that list,

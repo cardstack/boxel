@@ -2,25 +2,23 @@
 
 ### 1. Smart Code Refactoring
 ```json
-`set-active-llm_1887` with `attributes.roomId` set to the current room ID and `attributes.llmId` set to "anthropic/claude-sonnet-4.6"
-→ `read-file-for-ai-assistant_a831` with `attributes.fileUrl` set to e.g. "https://[domain]/user/card.gts"
+`read-file-for-ai-assistant_a831` with `attributes.fileUrl` set to e.g. "https://[domain]/user/card.gts"
 → Prompt "improve code structure"
-→ Emit a code patch `run-realm-code` tool call
+→ Emit a code patch search/replace block
 ```
-**Note:** Always verify/switch to code-approved LLM first
 
 ### 2. Data-Driven Schema Generation
 ```json
 `read-file-for-ai-assistant_a831` with `attributes.fileUrl` set to e.g. "data.csv"
 → Prompt "generate CardDef from CSV"
-→ Emit a code patch `run-realm-code` tool call
+→ Emit a code patch search/replace block
 ```
 
 ### 3. Live Preview Development
 ```json
 `show-card_566f` with `attributes.cardId` set to e.g. "https://[domain]/user/Card/instance"
 → Prompt "enhance UX for this card"
-→ Emit a code patch `run-realm-code` tool call
+→ Emit a code patch search/replace block
 → `show-card_566f` with `attributes.cardId` set to e.g. "https://[domain]/user/Card/instance"
 ```
 
@@ -28,7 +26,7 @@
 ```json
 `SearchCardsByQueryCommand_847d` with `attributes.query` set to valid query JSON that includes a filter
 → Prompt "detect relationship patterns"
-→ Emit a code patch `run-realm-code` tool call to create a transformation command
+→ Emit a code patch search/replace block to create a transformation command
 → `transform-cards_33d7` with `attributes.query` and `attributes.commandRef` set to perform a bulk update
 ```
 
@@ -36,7 +34,7 @@
 ```json
 `read-file-for-ai-assistant_a831` with `attributes.fileUrl` set to e.g. "https://[domain]/user/schema.gts"
 → `SearchCardsByQueryCommand_847d` with `attributes.query` set to valid query json with a filter specified
-→ Emit a code patch `run-realm-code` tool call creating a migration command
+→ Emit a code patch search/replace block creating a migration command
 → `transform-cards_33d7` with `attributes.query` and `attributes.commandRef` set to perform bulk migration
 ```
 
@@ -45,29 +43,16 @@
 `read-file-for-ai-assistant_a831` with `attributes.fileUrl` set to "https://[domain]/user/card.gts"
 → `read-file-for-ai-assistant_a831` with `attributes.fileUrl` set to "https://[domain]/user/Card/instance.json"
 → `SearchCardsByQueryCommand_847d` with `attributes.query` set to e.g. '{"filter": {"contains": {"imports": "card"}}}'
-→ Emit a code patch `run-realm-code` tool call
+→ Emit a code patch search/replace block
 ```
-
-### 7. Intelligent Debug Escalation
-```json
-Prompt "debug this error: ..."
-→ [if stuck] → `set-active-llm_1887` with `attributes.roomId` set to the current room and `attributes.llmId` set to "google/gemini-2.5-pro"
-→ Prompt "debug this error: ..."
 
 ### Code Generation
-```json
-`switch-submode_dd88` with `attributes.submode` set to "code" and `attributes.codePath` set to the target file's URL (a bare submode switch stays in whatever realm the UI last showed)
-→ `read-file-for-ai-assistant_a831` with `attributes.fileUrl` set to "https://[domain]/user/card.gts"
-→ Emit a code patch `run-realm-code` tool call
-→ (offer refresh)
-```
+Two replies at most. First reply: `read-file-for-ai-assistant_a831` with `attributes.fileUrl` set to the file, so the SEARCH block matches its current content (skip this when you already have the content). Second reply, right after the result: one line of prose, then the SEARCH/REPLACE block(s), then — if the user should see the result — a `show-card_566f` call for the instance, all in that same reply.
+
+Switching to code mode is optional navigation for the user's benefit — at most once per task, with `switch-submode_dd88` (`attributes.submode` "code", `attributes.codePath` the file URL), and only when the tab is not already in code mode on that file. It is never a step of writing, and it never needs a reply of its own.
 
 ### Card Creation
-```json
-`switch-submode_dd88` with `attributes.submode` set to "code", `attributes.createFile` set to true, and `attributes.codePath` set to the new file's URL in the target realm
-→ Emit a code patch `run-realm-code` tool call to create the new file
-→ `show-card_566f` with `attributes.cardId` set to the url of the new file
-```
+One reply: a SEARCH/REPLACE block per file with `(new)` after each file URL — the definition and every instance together — plus, if wanted, a `show-card_566f` call with `attributes.cardId` set to an instance's URL (the `.json` path without the extension). The blocks create the files; no mode switch and no placeholder call comes first. If you switch to code mode so the user can watch, do it once, before the reply that carries the blocks.
 
 ### Search & Modify
 ```json
@@ -78,7 +63,7 @@ Prompt "debug this error: ..."
 ### Schema Migration
 1. Update schema with breaking changes:
 ```json
-→ Emit a code patch `run-realm-code` tool call
+→ Emit a code patch search/replace block
 ```
 2. Add migration command to same file:
 ```typescript
@@ -104,7 +89,7 @@ Use for LLM, image generation, imports, diagnostics, or any workflow where user-
 
 ```json
 Card component action
-→ resolve `commandContext` and current `realmURL`
+→ resolve `toolContext` and current `realmURL`
 → create one typed Run/Job card with steps, logs, status, prompt/model/input snapshot
 → queue `SaveCardCommand` through an OptimisticSave helper
 → mutate the same run card for each stage and queue progress saves
@@ -140,7 +125,7 @@ Don't treat the transient as proof your query syntax is wrong. Recovery sequence
 
 1. Read the relevant files back with `npx boxel file read` to confirm they're really in the realm.
 2. `npx boxel realm wait-for-ready --realm <url>` until the realm reports ready.
-3. Validate through a host-rendered result-list card when possible (`@context.searchResultsComponent`; older builds used `PrerenderedCardSearch`) — that path exercises the indexer differently than the federated-search CLI route.
+3. Validate through a host-rendered result-list card when possible (`@context.searchResultsComponent`) — that path exercises the indexer differently than the federated-search CLI route.
 4. Retry `npx boxel search` after the realm has indexed.
 
 If the transient recurs while parallel agents are landing into the same realm, record it in the tracking doc (above) so other agents don't rewrite valid query syntax chasing a state issue.

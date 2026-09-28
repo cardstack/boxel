@@ -120,6 +120,7 @@ The relationship link points at a real ImageDef instance in the realm — never 
 ## Gotchas
 
 - **NEVER cross-mix.** Don't put an external URL into `relationships.heroImage.links.self`. That's the realm-bricking shape. The relationship is for in-realm card identifiers only.
+- **Cross-mixing is wrong in the other direction too.** Don't put a realm resource URL (a card instance or realm file the realm serves) into the `UrlField` side. A string-typed realm URL bypasses the index — no invalidation, no broken-link detection, no traversal — and rots silently when the target moves. In-realm targets always go through the `linksTo` side; the `UrlField` side is for external URLs only.
 - **Use `UrlField`, not `StringField`, and not `MaybeBase64Field`.** `UrlField` (from `@cardstack/base/url`) extends `StringField` with URL-shape validation in edit mode. The base `cardInfo` field uses `MaybeBase64Field` for historical reasons (it also accepts inline base64) — don't follow that lead in new code; `UrlField` is the canonical choice for an external HTTP(S) URL.
 - **Empty string vs null.** When clearing the URL, set the JSON value to `null` not `""` — empty strings can confuse downstream consumers expecting truthiness.
 

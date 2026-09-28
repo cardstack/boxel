@@ -1,0 +1,86 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "mrn": "PT-1003",
+      "patientName": "Priya Ramaswamy",
+      "status": "admitted",
+      "severity": "Critical",
+      "careUnit": "Intensive Care",
+      "medications": [
+        {
+          "name": "Amiodarone",
+          "doseMg": 150,
+          "frequency": "Infusion",
+          "status": "administered"
+        },
+        {
+          "name": "Heparin",
+          "doseMg": 5000,
+          "frequency": "Every 12 hours",
+          "status": "administered"
+        }
+      ],
+      "rhythmEvents": [
+        {
+          "eventId": "RE-4520",
+          "detectedAt": "2026-09-20T03:11:00Z",
+          "rhythm": "Ventricular tachycardia",
+          "status": "escalated",
+          "findings": "Cardioverted, cardiology at bedside"
+        }
+      ],
+      "vitals": [
+        {
+          "recordedAt": "2026-09-20T04:00:00Z",
+          "heartRate": 138,
+          "systolic": 96,
+          "diastolic": 58,
+          "recordedBy": "@theo.martin:boxel.ai"
+        }
+      ]
+    },
+    "relationships": {
+      "facility": {
+        "links": {
+          "self": "../HospitalFacility/northstar"
+        }
+      },
+      "attending": {
+        "links": {
+          "self": "../Clinician/aisha-tahir"
+        }
+      },
+      "auditLog": {
+        "links": {
+          "self": "../audit/pt-1003.log"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../audit/pt-1003.log"
+        }
+      },
+      "unitRoster.0": {
+        "links": {
+          "self": "../Clinician/theo-martin"
+        }
+      },
+      "unitRoster.1": {
+        "links": {
+          "self": "../Clinician/jordan-blake"
+        }
+      },
+      "consultTeam.0": {
+        "links": {
+          "self": "../Clinician/theo-martin"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../patient-record",
+        "name": "PatientRecord"
+      }
+    }
+  }
+}

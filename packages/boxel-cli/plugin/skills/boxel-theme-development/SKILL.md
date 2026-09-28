@@ -11,12 +11,13 @@ Use this for the theme artifact itself. Use `boxel-design` when the task is prim
 
 ## Read First
 
-1. `boxel/references/theme-design-system.md` for the Boxel theme hierarchy, Brand Guide fields, token names, and Boxel Brand Guide rule.
-2. `references/shadcn-boxel-token-mapping.md` before assigning semantic color, spacing, radius, or component-facing token values.
-3. `references/design-md-adapter.md` when the input or output is a Google `DESIGN.md` file, a brand brief, or a generic design-system document.
-4. `boxel-design/SKILL.md` when inventing visual direction, voice, typography, or brand mood.
-5. `boxel-ui-guidelines/references/use-boxel-design-tokens-for-theming.md` when checking how templates will consume the theme.
-6. `source-code-editing/SKILL.md` before editing any `.gts`; `boxel/references/lint-workflow.md` before declaring `.gts` work done.
+1. `boxel/references/theme-design-system.md` for the Boxel theme hierarchy, Brand Guide fields, the Boxel Brand Guide rule, and dark mode (§3.3: `data-theme`, `darkModeVariables`).
+2. `boxel-ui-guidelines/references/theme-token-contract.md` for the full list of tokens a theme must satisfy — the only inventory; nothing else lists them.
+3. `references/shadcn-boxel-token-mapping.md` before assigning semantic color, spacing, radius, or component-facing token values.
+4. `references/design-md-adapter.md` when the input or output is a Google `DESIGN.md` file, a brand brief, or a generic design-system document.
+5. `boxel-design/SKILL.md` when inventing visual direction, voice, typography, or brand mood.
+6. `boxel-ui-guidelines/references/use-boxel-design-tokens-for-theming.md` when checking how templates will consume the theme.
+7. `source-code-editing/SKILL.md` before editing any `.gts`; `boxel/references/lint-workflow.md` before declaring `.gts` work done.
 
 ## Workflow
 
@@ -49,10 +50,10 @@ Use this for the theme artifact itself. Use `boxel-design` when the task is prim
    - Put design rationale in `visualDNA` and the DetailedStyleReference markdown fields.
 
 5. **Build or patch the Theme card.**
-   - Preserve rich theme structure. Do not flatten `BrandGuide` or `StyleReference` into raw `cssVariables`.
+   - Preserve rich theme structure. Do not flatten `BrandGuide` or `StyleReference` into raw `cssVariables`, and never build on the bare `Theme` card: `StructuredTheme` is the minimum, `BrandGuide` when custom variables outside the contract are needed.
    - Include `attributes.cardInfo` for name, summary, thumbnail, and notes.
    - Omit `relationships["cardInfo.theme"]` on Theme cards themselves.
-   - Keep `cssImports` as font/link URLs; do not inline `@import` in templates.
+   - Do not write `cssImports` on a StructuredTheme; it is derived from the font fields. Hand-added stylesheets go in `customCssImports`. Never inline `@import` in templates.
    - Never nest `@media` blocks inside `cssVariables` — the theme parser silently skips those declarations. Dark-mode values belong in `darkModeVariables`.
    - Use absolute URLs for cross-realm theme links unless a relative path has been verified.
 

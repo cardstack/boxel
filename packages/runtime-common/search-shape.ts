@@ -164,8 +164,9 @@ export interface SearchShapeDescriptor {
   requestedLinkMode: SearchShapeLinkMode;
   linkModeDowngraded: boolean;
   // The policy's inputs on the request it decided: the sustained in-flight
-  // reading consulted, the level in force for the realm, and the row class the
-  // request was classified as. Recording the inputs rather than only the
+  // reading consulted — the realm's own, or for a fan-out the reading of the
+  // realm whose level decided it — the level in force for that realm, and the
+  // row class the request was classified as. Recording the inputs rather than only the
   // outcome is what separates a policy that did the right thing on bad inputs
   // from one that misjudged good inputs. Null during a prerender, which never
   // reaches the policy.

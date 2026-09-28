@@ -87,22 +87,22 @@ export class ArchitecturePlan extends CardDef {
       </article>
       <style scoped>
         /* Editorial typography — read like a printed spec */
-        .architecture-doc { font-family: 'Inter', system-ui, sans-serif; max-width: 72rem; margin: 0 auto; padding: clamp(2rem, 5vw, 4rem); color: #1a1a1a; }
-        .eyebrow { text-transform: uppercase; letter-spacing: 0.2em; font-size: 0.75rem; font-weight: 600; color: #6b7280; }
-        .doc-title { font-family: 'Source Serif 4', Georgia, serif; font-size: clamp(2.5rem, 4vw, 4rem); font-weight: 300; line-height: 1.05; margin: 0.5rem 0; }
-        .doc-subtitle { font-size: 1.125rem; color: #4b5563; max-width: 50rem; }
+        .architecture-doc { max-width: 72rem; margin: 0 auto; padding: clamp(2rem, 5vw, 4rem); }
+        .eyebrow { text-transform: uppercase; letter-spacing: 0.2em; font-size: 0.75rem; font-weight: 600; color: var(--muted-foreground); }
+        .doc-title { font-family: var(--font-serif); font-size: clamp(2.5rem, 4vw, 4rem); font-weight: 300; line-height: 1.05; margin: 0.5rem 0; }
+        .doc-subtitle { font-size: 1.125rem; color: var(--muted-foreground); max-width: 50rem; }
         .section { margin-top: 3rem; }
-        .section-title { font-family: 'Source Serif 4', serif; font-size: 1.75rem; font-weight: 400; margin-bottom: 1rem; }
-        .diagram-card { background: #f9f5ec; border: 1px solid #e5e0d0; padding: 1.5rem; border-radius: 4px; overflow-x: auto; }
-        .diagram { font-family: 'JetBrains Mono', Menlo, monospace; font-size: 0.75rem; line-height: 1.4; margin: 0; }
+        .section-title { font-family: var(--font-serif); font-size: 1.75rem; font-weight: 400; margin-bottom: 1rem; }
+        .diagram-card { background-color: var(--muted); color: var(--foreground); border: 1px solid var(--border); padding: 1.5rem; border-radius: 4px; overflow-x: auto; }
+        .diagram { font-family: var(--font-mono); font-size: 0.75rem; line-height: 1.4; margin: 0; }
         .realm-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr)); gap: 1rem; }
-        .realm-card { padding: 1.5rem; border-radius: 4px; border: 1px solid #e5e7eb; }
-        .realm-card.sensitive { background: #fef2f2; border-color: #fecaca; }
-        .realm-card.operational { background: #f0fdf4; border-color: #bbf7d0; }
+        .realm-card { padding: 1.5rem; border-radius: 4px; border: 1px solid var(--border); }
+        .realm-card.sensitive { border-color: var(--destructive); }
+        .realm-card.operational { border-color: var(--success); }
         .realm-badge { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.1em; margin-bottom: 0.5rem; }
         .realm-card h3 { font-size: 1rem; margin: 0 0 0.75rem; }
         .realm-card ul { font-size: 0.9rem; padding-left: 1.25rem; margin: 0; }
-        .realm-card code { font-family: 'JetBrains Mono', monospace; font-size: 0.85em; background: rgba(0,0,0,0.05); padding: 1px 5px; border-radius: 2px; }
+        .realm-card code { font-family: var(--font-mono); font-size: 0.85em; background-color: var(--inset); padding: 1px 5px; border-radius: 2px; }
       </style>
     </template>
   };

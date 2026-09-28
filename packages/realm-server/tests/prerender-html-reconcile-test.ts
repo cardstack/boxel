@@ -38,6 +38,7 @@ interface PrerenderHtmlJobRow {
     realmURL: string;
     realmUsername: string;
     generation: number;
+    spawningIndexPasses?: { jobId: number; passId: string }[];
     loaderEpoch: string;
     changes: { url: string; operation: string }[];
   };
@@ -183,6 +184,7 @@ module(basename(import.meta.filename), function (hooks) {
     status = 'unfulfilled',
     operation = 'update',
     finishedMinutesAgo,
+    spawningIndexPasses,
   }: {
     realmURL: string;
     generation: number;
@@ -190,6 +192,7 @@ module(basename(import.meta.filename), function (hooks) {
     status?: string;
     operation?: string;
     finishedMinutesAgo?: number;
+    spawningIndexPasses?: { jobId: number; passId: string }[];
   }) {
     let job = await insertJob(dbAdapter, {
       job_type: 'prerender_html',
@@ -199,6 +202,8 @@ module(basename(import.meta.filename), function (hooks) {
         realmURL,
         realmUsername: 'owner',
         generation,
+        // A job enqueued by current code: a repair names no passes.
+        spawningIndexPasses: spawningIndexPasses ?? [],
         loaderEpoch: '0',
         spawningJobId: null,
         coalescedPublishes: null,
@@ -460,6 +465,111 @@ module(basename(import.meta.filename), function (hooks) {
         (change) => change.url === `${realmURL}mango.json`,
       ),
       'the stale URL is in the coalesced job',
+    );
+  });
+
+  // What a spawning index pass's commit leaves on the ledger.
+  async function seedIndexCommit({
+    realmURL,
+    jobId,
+    generation,
+  }: {
+    realmURL: string;
+    jobId: number;
+    generation: number;
+  }) {
+    await query(dbAdapter, [
+      `INSERT INTO realm_index_commits
+         (realm_url, generation, base_generation, pass_id, job_id, urls, full_realm, committed_at)
+       VALUES (`,
+      param(realmURL),
+      ',',
+      param(generation),
+      ',',
+      param(generation - 1),
+      ',',
+      param(`pass-${jobId}`),
+      ',',
+      param(jobId),
+      `, NULL, false,`,
+      param(Date.now()),
+      ')',
+    ] as Expression);
+  }
+
+  test('a job still waiting on its spawning pass covers the row, whatever generation it lands at', async function (assert) {
+    const realmURL = 'http://example.com/d2/';
+    await seedOwner(realmURL);
+    await seedRealmGeneration(realmURL, 5);
+    await seedIndexRow({
+      url: `${realmURL}mango.json`,
+      realmURL,
+      generation: 5,
+    });
+    await seedPrerenderedHtmlRow({
+      url: `${realmURL}mango.json`,
+      realmURL,
+      generation: 4,
+    });
+    // Its spawning pass has not committed, so the job has not read its
+    // stamps yet, and will read them from a commit newer than this row.
+    await seedPrerenderHtmlJob({
+      realmURL,
+      // The anticipated generation, read only by older workers.
+      generation: 5,
+      spawningIndexPasses: [{ jobId: 777, passId: 'pass-777' }],
+      urls: [`${realmURL}mango.json`],
+    });
+
+    let result = await runReconcile();
+    assert.deepEqual(
+      result,
+      { realmsRepaired: 0, urlsEnqueued: 0, realmsInBackoff: 0 },
+      'the pending job covers the row',
+    );
+  });
+
+  test('a job whose spawning pass committed below the row does not cover it', async function (assert) {
+    const realmURL = 'http://example.com/d3/';
+    await seedOwner(realmURL);
+    await seedRealmGeneration(realmURL, 5);
+    await seedIndexRow({
+      url: `${realmURL}mango.json`,
+      realmURL,
+      generation: 5,
+    });
+    await seedPrerenderedHtmlRow({
+      url: `${realmURL}mango.json`,
+      realmURL,
+      generation: 3,
+    });
+    // The spawning pass committed 3; a later pass has since moved the row
+    // to 5.
+    await seedIndexCommit({ realmURL, jobId: 778, generation: 3 });
+    await seedPrerenderHtmlJob({
+      realmURL,
+      generation: 3,
+      spawningIndexPasses: [{ jobId: 778, passId: 'pass-778' }],
+      urls: [`${realmURL}mango.json`],
+    });
+
+    let result = await runReconcile();
+    assert.deepEqual(
+      result,
+      { realmsRepaired: 1, urlsEnqueued: 1, realmsInBackoff: 0 },
+      'the row is repaired',
+    );
+    let jobs = await prerenderHtmlJobs(realmURL);
+    assert.strictEqual(jobs.length, 1, 'the repair coalesced into one job');
+    assert.deepEqual(
+      jobs[0].args.spawningIndexPasses,
+      [{ jobId: 778, passId: 'pass-778' }],
+      'the coalesced job still waits on its spawning pass',
+    );
+    assert.strictEqual(
+      jobs[0].args.generation,
+      5,
+      'and carries the committed generation the repair was spawned from',
     );
   });
 

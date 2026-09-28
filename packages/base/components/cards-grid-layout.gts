@@ -106,55 +106,91 @@ interface Signature {
     onChangeFilter: (filter: FilterOption) => void;
     onChangeSort: (sort: SortOption) => void;
     onChangeView: (viewId: ViewOption['id']) => void;
+    displaySidebar?: boolean;
+    // Takes everything but the contentHeaderStart block out of interaction,
+    // for when something else covers the pane, such as a sliding sidebar.
+    isContentInert?: boolean;
   };
-  Blocks: { content: []; contentHeader: []; sidebar: [] };
+  Blocks: {
+    content: [];
+    contentHeader: [];
+    // Rendered ahead of the title, for a control that belongs to the whole
+    // pane rather than to the list, such as a sidebar toggle.
+    contentHeaderStart: [];
+    sidebar: [];
+  };
   Element: HTMLElement;
 }
 
 export default class CardsGridLayout extends Component<Signature> {
   <template>
     <section class='boxel-cards-grid-layout' ...attributes>
-      <aside class='sidebar scroll-container' tabindex='0'>
-        <FilterList
-          @filters={{@filterOptions}}
-          @activeFilter={{@activeFilter}}
-          @onChanged={{@onChangeFilter}}
-        />
-        {{yield to='sidebar'}}
-      </aside>
-      <section class='content scroll-container' tabindex='0'>
-        <header class='content-header' aria-label={{@activeFilter.displayName}}>
-          {{#if @activeFilter.icon}}
-            <div class='content-icon'>
-              {{#if (this.isIconString @activeFilter.icon)}}
-                {{htmlSafe @activeFilter.icon}}
-              {{else}}
-                <@activeFilter.icon
-                  class='filter-list__icon'
-                  role='presentation'
-                />
+      {{#unless (eq @displaySidebar false)}}
+        <aside
+          class='sidebar scroll-container'
+          tabindex='0'
+          aria-label='Filters'
+        >
+          <FilterList
+            @filters={{@filterOptions}}
+            @activeFilter={{@activeFilter}}
+            @onChanged={{@onChangeFilter}}
+          />
+          {{yield to='sidebar'}}
+        </aside>
+      {{/unless}}
+      <section
+        class='content scroll-container'
+        tabindex={{if @isContentInert '-1' '0'}}
+        aria-label={{@activeFilter.displayName}}
+        data-test-cards-grid-content
+      >
+        <header class='content-header' data-test-cards-grid-header>
+          <div class='content-header-group content-header-lead'>
+            {{yield to='contentHeaderStart'}}
+            <div class='title-group'>
+              {{#if @activeFilter.icon}}
+                <div class='content-icon' data-test-cards-grid-header-icon>
+                  {{#if (this.isIconString @activeFilter.icon)}}
+                    {{htmlSafe @activeFilter.icon}}
+                  {{else}}
+                    <@activeFilter.icon
+                      class='filter-list__icon'
+                      role='presentation'
+                    />
+                  {{/if}}
+                </div>
               {{/if}}
+              <h2 class='content-title'>
+                {{@activeFilter.displayName}}
+              </h2>
             </div>
-          {{/if}}
-          <h2 class='content-title'>
-            {{@activeFilter.displayName}}
-          </h2>
-          {{#if this.displayActions}}
-            <ViewSelector
-              @items={{@viewOptions}}
-              @onChange={{@onChangeView}}
-              @selectedId={{@activeViewId}}
-            />
-            <SortDropdown
-              @options={{@sortOptions}}
-              @onSelect={{@onChangeSort}}
-              @selectedOption={{@activeSort}}
-            />
-            {{yield to='contentHeader'}}
-          {{/if}}
+          </div>
+          <div
+            class='content-header-group content-header-actions'
+            inert={{if @isContentInert true false}}
+          >
+            {{#if this.displayActions}}
+              <ViewSelector
+                @items={{@viewOptions}}
+                @onChange={{@onChangeView}}
+                @selectedId={{@activeViewId}}
+              />
+              <SortDropdown
+                @options={{@sortOptions}}
+                @onSelect={{@onChangeSort}}
+                @selectedOption={{@activeSort}}
+              />
+              {{yield to='contentHeader'}}
+            {{/if}}
+          </div>
         </header>
         {{#if (eq @activeFilter.displayName 'Highlights')}}
-          <div class='highlights-layout' data-test-highlights-layout>
+          <div
+            class='highlights-layout'
+            inert={{if @isContentInert true false}}
+            data-test-highlights-layout
+          >
             {{#if this.aiAppGeneratorCard}}
               <div
                 class='highlights-section'
@@ -163,7 +199,7 @@ export default class CardsGridLayout extends Component<Signature> {
                 <h3
                   class='section-header'
                   data-test-section-header='new-feature'
-                >NEW FEATURE</h3>
+                >New feature</h3>
                 <div
                   class='highlights-card-container'
                   data-test-highlights-card-container='ai-app-generator'
@@ -182,7 +218,7 @@ export default class CardsGridLayout extends Component<Signature> {
                 <h3
                   class='section-header'
                   data-test-section-header='getting-started'
-                >GETTING STARTED</h3>
+                >Getting started</h3>
                 <div
                   class='highlights-card-container'
                   data-test-highlights-card-container='welcome-to-boxel'
@@ -202,7 +238,7 @@ export default class CardsGridLayout extends Component<Signature> {
                 <h3
                   class='section-header'
                   data-test-section-header='join-the-community'
-                >JOIN THE COMMUNITY</h3>
+                >Join the community</h3>
                 <this.communityCards @format='embedded' />
               </div>
             {{/if}}
@@ -217,6 +253,7 @@ export default class CardsGridLayout extends Component<Signature> {
             @format={{@format}}
             @cards={{@activeFilter.cards}}
             @viewOption={{@activeViewId}}
+            inert={{if @isContentInert true false}}
             data-test-cards-grid-cards
           />
         {{/if}}
@@ -231,7 +268,7 @@ export default class CardsGridLayout extends Component<Signature> {
         --padding: var(--boxel-cards-grid-layout-padding, var(--boxel-sp-lg));
         --boxel-card-list-padding: var(
           --boxel-cards-grid-padding,
-          0 var(--padding)
+          0 var(--padding) var(--padding)
         );
         --sidebar-min-width: var(--boxel-cards-grid-sidebar-min-width, 11rem);
         --sidebar-max-width: var(--boxel-cards-grid-sidebar-max-width, 22rem);
@@ -243,22 +280,31 @@ export default class CardsGridLayout extends Component<Signature> {
         height: 100%;
         max-height: 100vh;
         overflow: hidden;
-        background-color: var(--background, var(--boxel-light));
-        color: var(--foreground, var(--boxel-dark));
+        background-color: var(--background);
+        color: var(--foreground);
       }
       .scroll-container {
         /* Keep the scrollbar gutter reserved and the scrollbar a fixed width in
            every state, so revealing it on hover never steals layout width and
            reflows the card grid. Only the thumb color is toggled on hover/focus;
            toggling overflow or the scrollbar width would shift the layout. */
+        --scrollbar-thumb: color-mix(
+          in oklab,
+          var(--foreground) 15%,
+          transparent
+        );
         overflow-y: auto;
         scrollbar-gutter: stable;
         scrollbar-width: thin;
-        scrollbar-color: transparent transparent;
+        scrollbar-color: var(--scrollbar-thumb) transparent;
       }
       .scroll-container:hover,
       .scroll-container:focus {
-        scrollbar-color: rgba(0 0 0 / 25%) transparent;
+        --scrollbar-thumb: color-mix(
+          in oklab,
+          var(--foreground) 30%,
+          transparent
+        );
       }
       .scroll-container::-webkit-scrollbar {
         width: 0.5rem;
@@ -268,12 +314,8 @@ export default class CardsGridLayout extends Component<Signature> {
         background: transparent;
       }
       .scroll-container::-webkit-scrollbar-thumb {
-        background: transparent;
+        background-color: var(--scrollbar-thumb);
         border-radius: var(--boxel-border-radius-xs);
-      }
-      .scroll-container:hover::-webkit-scrollbar-thumb,
-      .scroll-container:focus::-webkit-scrollbar-thumb {
-        background: rgba(0 0 0 / 25%);
       }
       .sidebar {
         --accent: var(--sidebar-accent);
@@ -302,19 +344,37 @@ export default class CardsGridLayout extends Component<Signature> {
       .content-header {
         display: flex;
         align-items: center;
+        justify-content: space-between;
         flex-wrap: wrap;
         column-gap: var(--boxel-sp);
         row-gap: var(--boxel-sp-xs);
         padding: var(--padding) 0;
         margin: 0 var(--padding);
-        border-bottom: 1px solid #e2e2e2;
+        border-bottom: 1px solid var(--border);
+      }
+      .content-header-group {
+        display: flex;
+        gap: var(--boxel-sp-xs) var(--boxel-sp);
+        align-items: center;
+        min-width: 0;
+      }
+      /* the toggle and the title stay on one line; a long title wraps its own
+         text instead of dropping under the toggle */
+      .content-header-actions {
+        flex-wrap: wrap;
+      }
+      .title-group {
+        display: flex;
+        gap: var(--boxel-sp-xs);
+        align-items: center;
+        min-width: 0;
       }
       .content-icon {
         display: flex;
         align-items: center;
         justify-content: center;
-        width: 1.5rem;
-        height: 1.5rem;
+        width: 1.25rem;
+        height: 1.25rem;
         flex-shrink: 0;
       }
 
@@ -337,7 +397,7 @@ export default class CardsGridLayout extends Component<Signature> {
         font-size: var(--boxel-heading-font-size);
         font-weight: 500;
         line-height: var(--boxel-heading-line-height);
-        letter-spacing: var(--boxel-lsp-xxs);
+        letter-spacing: var(--boxel-heading-letter-spacing);
       }
 
       .highlights-layout {
@@ -358,10 +418,12 @@ export default class CardsGridLayout extends Component<Signature> {
 
       .section-header {
         margin: 0;
-        font: 600 var(--boxel-font);
-        color: var(--boxel-dark);
+        font-size: var(--boxel-eyebrow-font-size);
+        font-weight: var(--boxel-eyebrow-font-weight);
+        line-height: var(--boxel-eyebrow-line-height);
+        letter-spacing: var(--boxel-eyebrow-letter-spacing);
+        color: var(--foreground);
         text-transform: uppercase;
-        letter-spacing: var(--boxel-lsp-xs);
       }
 
       .highlights-card-container {

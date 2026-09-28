@@ -30,7 +30,7 @@ import { IdentitySection, MedicalSection, /* … */ } from './sections';
 
 export class LongRecord extends CardDef {
   static displayName = 'Long Record';
-  static prefersWideFormat = true; // ← required; the 220px nav rail needs the width
+  static prefersWideFormat = true; // ← required; the 13.75rem nav rail needs the width
 
   @field identity = contains(IdentitySection);
   @field medical  = contains(MedicalSection);
@@ -106,7 +106,7 @@ CSS skeleton:
 ```css
 .record-layout {
   display: grid;
-  grid-template-columns: 220px 1fr;
+  grid-template-columns: 13.75rem 1fr;
   min-height: 100vh;
 }
 .record-nav {
@@ -115,18 +115,19 @@ CSS skeleton:
   height: 100vh;
   overflow-y: auto;
   padding: 1.25rem;
-  background: var(--surface-0, var(--background));
-  border-right: 1px solid var(--border, var(--boxel-200));
+  background-color: var(--muted);
+  color: var(--foreground);
+  border-right: 1px solid var(--border);
 }
 .nav-btn {
   display: flex; align-items: center; gap: 0.5rem;
   width: 100%; padding: 0.5rem 0.75rem;
-  background: transparent; border: 0; border-radius: var(--radius-md, var(--boxel-border-radius));
+  background: transparent; border: 0; border-radius: var(--boxel-border-radius);
   text-align: left; cursor: pointer;
 }
 .nav-btn.active {
-  background: var(--primary, var(--boxel-purple-100));
-  color: var(--primary-foreground, var(--boxel-purple-900));
+  background-color: var(--primary);
+  color: var(--primary-foreground);
 }
 .record-main { padding: 1.5rem 2rem; max-width: 56rem; }
 .section-anchor { scroll-margin-top: 1rem; }
@@ -200,11 +201,11 @@ If the record is the sensitive half of an `organize-sensitive-stub-pair`, the le
 {{/if}}
 ```
 
-The fitted format keeps the preview compact in the 220px rail.
+The fitted format keeps the preview compact in the 13.75rem rail.
 
 ## Gotchas
 
-- **`prefersWideFormat = true` is required.** Without it, the host gives you a narrow column and the 220px nav rail eats half the content.
+- **`prefersWideFormat = true` is required.** Without it, the host gives you a narrow column and the 13.75rem nav rail eats half the content.
 - **Section ids vs section keys.** Use a single `sections = [{ id, label, icon }, …]` array as the source of truth; both the nav buttons and the section wrappers derive ids from it. Hand-syncing two lists is the most common bug.
 - **Icon switching with `{{#if (eq section.icon 'user')}}` is verbose but explicit.** The alternative — passing a Glimmer component as `section.iconComponent` — runs into template-typing pain. Keep the if/else if chain unless you have 10+ icons; then move to a Map.
 - **Scroll-spy via `IntersectionObserver` is a follow-up improvement.** Most cards land first with click-only highlight (set `activeSection` in the click handler). Wire IntersectionObserver later only if real users complain that the active state drifts during free scrolling.

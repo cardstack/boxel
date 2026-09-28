@@ -20,6 +20,16 @@ declare module '@cardstack/boxel-host/lib/pdfjs-loader' {
   export function loadPdfjs(): Promise<any>;
 }
 
+declare module '@cardstack/boxel-host/lib/three-loader' {
+  // Matches `loadThree` in `packages/host/app/lib/three-loader.ts`.
+  export function loadThree(): Promise<{
+    THREE: any;
+    GLTFLoader: any;
+    STLLoader: any;
+    ThreeMFLoader: any;
+  }>;
+}
+
 declare module '@cardstack/boxel-host/lib/signed-capture' {
   // Matches `packages/host/app/lib/signed-capture.gts`. `SignedCapture`
   // yields [signedUrl, errorMessage]; `SignedCaptureLink` renders an anchor

@@ -15,6 +15,7 @@ import {
   isClientDisconnectError,
   upstreamCallSignal,
 } from '../lib/proxy-forward.ts';
+import { withBillableCall } from '../lib/billable-call.ts';
 import * as Sentry from '@sentry/node';
 
 const log = logger('request-forward');
@@ -126,11 +127,10 @@ export default function handleRequestForward({
   dbAdapter: DBAdapter;
 }) {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
-    // A caller that stops waiting must take the upstream call with it. The
-    // forward runs inside a per-user advisory lock that serializes that
-    // user's billable calls across replicas, so an upstream request nobody is
-    // reading any more still blocks that user's next forward for as long as
-    // it runs — on a slow model call, over a minute.
+    // A caller that stops waiting must take the upstream call with it. Each
+    // forward occupies one of the user's limited in-flight slots until it
+    // ends, so an upstream request nobody is reading any more keeps that slot
+    // for as long as it runs — on a slow model call, over a minute.
     let clientGone = clientDisconnectSignal(ctxt);
 
     try {
@@ -284,93 +284,80 @@ export default function handleRequestForward({
         return;
       }
 
-      // 5. Serialize concurrent requests from the same matrix user across
-      // replicas: the next request can't kick off another billable upstream
-      // call before the previous request's cost row has landed in the
-      // credits ledger. The lock is held through validate-credits →
-      // upstream call → save-cost; on streaming, save-cost happens inside
-      // handleStreamingRequest after the `[DONE]` marker.
-      await dbAdapter.withUserCostLock(matrixUserId, async () => {
-        const creditValidation =
-          await destinationConfig.creditStrategy.validateCredits(
-            dbAdapter,
-            matrixUserId,
-          );
-
-        if (!creditValidation.hasEnoughCredits) {
-          await sendResponseForForbiddenRequest(
-            ctxt,
-            creditValidation.errorMessage || 'Insufficient credits',
-          );
-          return;
-        }
-
-        if (json.stream) {
-          await handleStreamingRequest(
-            ctxt,
-            finalUrl,
-            json.method,
-            headers,
-            finalBody,
-            destinationConfig,
-            dbAdapter,
-            matrixUserId,
-            clientGone,
-          );
-          return;
-        }
-
-        // Cancelling the upstream call is what ends the critical section:
-        // without it the lock is held until a response the client will never
-        // read finally arrives. The signal is released once that response
-        // exists, so reading it and recording its cost cannot be cancelled —
-        // by then the provider has already generated and billed for the
-        // tokens, and abandoning the read only loses the charge.
-        const upstreamCall = upstreamCallSignal(clientGone);
-        const fetchOptions: RequestInit = {
-          method: json.method,
-          headers,
-          signal: upstreamCall.signal,
-        };
-
-        // Only add body for non-GET requests or when requestBody is provided
-        if (json.method !== 'GET' && finalBody !== undefined) {
-          fetchOptions.body = finalBody;
-        }
-
-        // FIXME undici or something is swallowing the errors, making them useless:
-        /*
-          Error in request forward handler: TypeError: fetch failed
-            at node:internal/deps/undici/undici:13510:13
-            at processTicksAndRejections (node:internal/process/task_queues:105:5)
-        */
-        const externalResponse = await globalThis.fetch(finalUrl, fetchOptions);
-        upstreamCall.release();
-
-        const responseData = await externalResponse.json();
-
-        await destinationConfig.creditStrategy.saveUsageCost(
+      // 5. Admit the call against the user's credits, forward it, and charge
+      // for what it cost. See withBillableCall for how one user's concurrent
+      // calls are bounded.
+      await withBillableCall(
+        {
           dbAdapter,
           matrixUserId,
-          responseData,
-        );
+          creditStrategy: destinationConfig.creditStrategy,
+          signal: clientGone,
+          destination: destinationConfig.url,
+        },
+        (errorMessage) => sendResponseForForbiddenRequest(ctxt, errorMessage),
+        async () => {
+          if (json.stream) {
+            return await handleStreamingRequest(
+              ctxt,
+              finalUrl,
+              json.method,
+              headers,
+              finalBody,
+              matrixUserId,
+              clientGone,
+            );
+          }
 
-        const response = new Response(JSON.stringify(responseData), {
-          status: externalResponse.status,
-          statusText: externalResponse.statusText,
-          headers: {
-            'content-type': SupportedMimeType.JSON,
-          },
-        });
+          // Cancelling the upstream call is what frees the user's in-flight
+          // slot: without it the slot is held until a response the client
+          // will never read finally arrives. The signal is released once that
+          // response exists, so reading it and recording its cost cannot be
+          // cancelled — by then the provider has already generated and billed
+          // for the tokens, and abandoning the read only loses the charge.
+          const upstreamCall = upstreamCallSignal(clientGone);
+          const fetchOptions: RequestInit = {
+            method: json.method,
+            headers,
+            signal: upstreamCall.signal,
+          };
 
-        await setContextResponse(ctxt, response);
-      });
+          // Only add body for non-GET requests or when requestBody is provided
+          if (json.method !== 'GET' && finalBody !== undefined) {
+            fetchOptions.body = finalBody;
+          }
+
+          // FIXME undici or something is swallowing the errors, making them useless:
+          /*
+            Error in request forward handler: TypeError: fetch failed
+              at node:internal/deps/undici/undici:13510:13
+              at processTicksAndRejections (node:internal/process/task_queues:105:5)
+          */
+          const externalResponse = await globalThis.fetch(
+            finalUrl,
+            fetchOptions,
+          );
+          upstreamCall.release();
+
+          const responseData = await externalResponse.json();
+
+          const response = new Response(JSON.stringify(responseData), {
+            status: externalResponse.status,
+            statusText: externalResponse.statusText,
+            headers: {
+              'content-type': SupportedMimeType.JSON,
+            },
+          });
+
+          await setContextResponse(ctxt, response);
+          return responseData;
+        },
+      );
     } catch (error) {
       if (isClientDisconnectError(error, clientGone)) {
         // Cancelling on purpose is not a fault: there is no one left to
         // answer and nothing an on-call engineer could act on, so this stays
-        // out of the error channel. Returning here is what lets the cost lock
-        // release for this user's next forward.
+        // out of the error channel.
         log.info(
           'Client disconnected during request forward; upstream call cancelled',
         );

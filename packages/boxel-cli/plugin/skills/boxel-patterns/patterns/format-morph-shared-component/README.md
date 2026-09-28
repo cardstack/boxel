@@ -60,13 +60,14 @@ class MorphTemplate extends GlimmerComponent<{
     <style scoped>
       .card {
         /* Tokens default to "isolated" sizing */
-        --pad: 56px;
-        --title-size: 56px;
-        --body-size: 18px;
+        --pad: 3.5rem;
+        --title-size: 3.5rem;
+        --body-size: 1.125rem;
         display: grid;
-        gap: 32px;
+        gap: 2rem;
         padding: var(--pad);
-        background: var(--card);
+        background-color: var(--card);
+        color: var(--card-foreground);
         border-radius: var(--radius);
         transition:
           padding 360ms cubic-bezier(0.2, 0.7, 0, 1),
@@ -75,8 +76,8 @@ class MorphTemplate extends GlimmerComponent<{
       .card__title  { font-size: var(--title-size); transition: font-size 360ms; }
       .card__body   { font-size: var(--body-size);  transition: font-size 360ms; }
 
-      .card--edit   { --pad: 24px; --title-size: 22px; --body-size: 14px; }
-      .card--embedded { --pad: 20px; --title-size: 20px; --body-size: 13px; }
+      .card--edit   { --pad: 1.5rem; --title-size: 1.375rem; --body-size: 0.875rem; }
+      .card--embedded { --pad: 1.25rem; --title-size: 1.25rem; --body-size: 0.8125rem; }
     </style>
   </template>
 }

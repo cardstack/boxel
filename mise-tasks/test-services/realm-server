@@ -34,16 +34,21 @@ NODE_TEST_REALM_READY="${REALM_TEST_READY_SCHEME}://${REALM_TEST_URL#*://}/node-
 # suite reads indexed content from. Those dev realms only need to serve
 # source for the suite, so skipping their from-scratch index keeps
 # `_readiness-check` fast and frees the prerender pool for the tests' own renders.
+#
+# CATALOG_SOURCE=test-subset serves the pinned catalog test subset as the
+# catalog realm — the system definitions the suite loads through
+# `@cardstack/catalog/` — rather than cloning the whole catalog.
+CATALOG_REALM_READY="${REALM_READY_SCHEME}://${REALM_BASE_URL#*://}/catalog/${READY_PATH}"
 WAIT_ON_TIMEOUT=900000 \
   SKIP_EXPERIMENTS=true \
-  SKIP_CATALOG=true \
+  CATALOG_SOURCE=test-subset \
   SKIP_BOXEL_HOMEPAGE=true \
   SKIP_SUBMISSION=true \
   NODE_NO_WARNINGS=1 \
   START_SERVER_AND_TEST_INSECURE=1 \
   start-server-and-test \
     'REALM_SERVER_SKIP_BOOT_INDEX=true run-p -ln start:icons start:host-dist start:pg start:prerender-dev start:prerender-manager-dev start:matrix start:smtp start:worker-development start:development' \
-    "${BASE_REALM_READY}|${REALM_READY_SCHEME}://${REALM_BASE_URL#*://}/software-factory/${READY_PATH}|${MATRIX_URL_VAL}|http://localhost:5001|${ICONS_URL}|${HOST_URL}" \
+    "${BASE_REALM_READY}|${CATALOG_REALM_READY}|${REALM_READY_SCHEME}://${REALM_BASE_URL#*://}/software-factory/${READY_PATH}|${MATRIX_URL_VAL}|http://localhost:5001|${ICONS_URL}|${HOST_URL}" \
     'run-p -ln start:worker-test start:test-realms' \
     "${NODE_TEST_REALM_READY}" \
     'wait'

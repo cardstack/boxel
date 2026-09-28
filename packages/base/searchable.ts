@@ -16,6 +16,7 @@ import {
   isLinkNotFound,
   isNonPresentLink,
   isNotLoadedValue,
+  isQueryTaintedField,
   peekAtField,
   type LinkErrorValue,
   type LinkNotFoundValue,
@@ -287,6 +288,23 @@ async function searchableQueryableValue(
         isDeclaredLink && !getDataBucket(value).has(fieldName)
           ? null
           : peekAtField(value, fieldName);
+      // A computed that read a query-backed field derives from a live search
+      // nothing reindexes this row for, so it is left out of the doc on the
+      // same terms the query field above is. Running the field is what reveals
+      // the read, so the check follows it rather than joining the skip above.
+      if (field!.computeVia && isQueryTaintedField(value, fieldName)) {
+        // The compute already ran in `peekAtField` above — for a tainted field
+        // that is a live search plus a reduction, the priciest work on the
+        // card. Attribute it before dropping the field, or its cost surfaces as
+        // unexplained walk time (`searchDocMs` still counts it) on exactly the
+        // rows a slow pass gets investigated on.
+        if (timings?.fieldsMs) {
+          timings.fieldsMs[fieldPath] =
+            (timings.fieldsMs[fieldPath] ?? 0) +
+            (performance.now() - fieldStart);
+        }
+        return undefined;
+      }
       let entryValue: any;
       switch (field!.fieldType) {
         case 'contains': {

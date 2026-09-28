@@ -36,7 +36,7 @@ import {
 import { relative, resolve } from 'path';
 import { format, resolveConfig } from 'prettier';
 
-const BOXEL_SKILLS_VERSION = 'v0.1.1';
+const BOXEL_SKILLS_VERSION = 'v0.1.5';
 const BOXEL_SKILLS_REPO_URL = 'https://github.com/cardstack/boxel-skills.git';
 
 const PLUGIN_DIR = resolve(import.meta.dirname, '..', 'plugin');
@@ -93,11 +93,16 @@ function listEntries(dir: string): string[] {
 }
 
 /**
- * Minimal single-line YAML frontmatter reader — just enough to pull `name:`
- * and `description:` for the README tables. boxel-skills authors these as
- * single-line scalars; anything fancier falls back to the entry's file name
- * rather than mis-parsing. Deliberately not a YAML parser: the copied files
- * are the contract, the table is a convenience.
+ * Minimal YAML frontmatter reader — just enough to pull `name:` and
+ * `description:` for the README tables. Deliberately not a YAML parser: the
+ * copied files are the contract, the table is a convenience.
+ *
+ * Block scalars are read because skill authors use them: a description long
+ * enough to wrap is naturally written as `description: >-` with the text on
+ * the following indented lines, and reading only the key's own line yields the
+ * literal `>-` as the description. We do not control how upstream authors
+ * write their frontmatter, so the reader accommodates the form rather than the
+ * table advertising punctuation.
  */
 export function parseFrontmatter(content: string): {
   name?: string;
@@ -106,14 +111,35 @@ export function parseFrontmatter(content: string): {
   if (!content.startsWith('---\n')) return {};
   const end = content.indexOf('\n---', 4);
   if (end === -1) return {};
-  const block = content.slice(4, end);
+  const lines = content.slice(4, end).split('\n');
   const out: { name?: string; description?: string } = {};
-  for (const line of block.split('\n')) {
-    const m = /^(name|description):\s*(.+)$/.exec(line);
+
+  for (let i = 0; i < lines.length; i++) {
+    const m = /^(name|description):\s*(.*)$/.exec(lines[i]);
     if (!m) continue;
     const key = m[1] as 'name' | 'description';
     if (out[key] !== undefined) continue;
-    out[key] = m[2].trim().replace(/^(['"])(.*)\1$/, '$2');
+    const value = m[2].trim();
+
+    // `>`/`|`, optionally followed by a chomping (`-`/`+`) and/or indentation
+    // (`1`-`9`) indicator, means the value is the indented block that follows.
+    if (/^[>|][0-9+-]*$/.test(value)) {
+      const folded = value.startsWith('>');
+      const body: string[] = [];
+      for (let j = i + 1; j < lines.length; j++) {
+        if (lines[j].trim() === '') {
+          body.push('');
+          continue;
+        }
+        if (!/^\s/.test(lines[j])) break;
+        body.push(lines[j].trim());
+      }
+      out[key] = folded ? body.join(' ').trim() : body.join('\n').trim();
+      continue;
+    }
+
+    if (value === '') continue;
+    out[key] = value.replace(/^(['"])(.*)\1$/, '$2');
   }
   return out;
 }

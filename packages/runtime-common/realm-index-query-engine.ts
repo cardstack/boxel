@@ -17,6 +17,7 @@ import {
   type LooseCardResource,
   type DBAdapter,
   type QueryOptions,
+  type IndexedInstanceSource,
   type InstanceOrError,
   type LinkTargetInstance,
   type LinkTargetFile,
@@ -239,6 +240,19 @@ export interface SearchResultDoc {
   // assembled `doc` here — direct `cardDocument()` callers (indexing, POST /
   // PATCH echoes) don't surface it — and applied only on the GET response.
   generation: number;
+  // The content hash of the stored source this document was assembled from
+  // (`boxel_index.source_content_hash`), stamped onto the GET response's
+  // per-instance `meta` as `version` alongside `generation` and carried the same
+  // way. A client sends it back as the base its next write is computed against,
+  // and the realm answers `baseMatched` by comparing it to the bytes it
+  // executed from.
+  //
+  // It comes off this row rather than being read from the file at serve time
+  // precisely so it describes the document it travels with: the two are written
+  // by the same pass. Null when the row carries no fingerprint, and the
+  // response then reports no version — which is the honest answer, and the one
+  // a client reads as "I cannot confirm this" rather than as a confirmation.
+  version: string | null;
   // indexed_at on the primary card's index row. Bumps on every reindex
   // (direct file write OR dependency-triggered re-write), so it's a
   // complete fingerprint for the assembled card+json document and is
@@ -911,6 +925,7 @@ export class RealmIndexQueryEngine {
       type: 'doc',
       doc,
       generation: instance.generation,
+      version: instance.sourceContentHash,
       indexedAt: instance.indexedAt,
       deps: instance.deps,
       screenshots: instance.screenshots,
@@ -923,6 +938,13 @@ export class RealmIndexQueryEngine {
     opts?: QueryOptions,
   ): Promise<InstanceOrError | undefined> {
     return await this.#indexQueryEngine.getInstance(url, opts);
+  }
+
+  async instanceSource(
+    url: URL,
+    opts?: QueryOptions,
+  ): Promise<IndexedInstanceSource | undefined> {
+    return await this.#indexQueryEngine.getInstanceSource(url, opts);
   }
 
   // Liveness probe matching `instance()`'s row predicate (including the

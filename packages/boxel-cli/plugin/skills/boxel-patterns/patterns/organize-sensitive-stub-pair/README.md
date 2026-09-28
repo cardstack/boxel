@@ -26,6 +26,7 @@ Two pieces make this work:
 import { CardDef, Component, field, contains, linksTo } from '@cardstack/base/card-api';
 import { Command } from '@cardstack/runtime-common';
 import SaveCardCommand from '@cardstack/boxel-host/tools/save-card';
+import { Button } from '@cardstack/boxel-ui/components';
 
 import { IdentitySection, MedicalSection, /* … */ } from './sections';
 import { OperationalStub } from './operational-stub';
@@ -66,7 +67,7 @@ export class FullRecord extends CardDef {
       const profile = this.args.model;
       if (!profile?.operationalStub) return;
       try {
-        await new SyncOperationalStubCommand(this.args.context.commandContext)
+        await new SyncOperationalStubCommand(this.args.context.toolContext)
           .execute(profile);
       } catch (error) {
         console.error('Failed to sync stub:', error);
@@ -76,9 +77,9 @@ export class FullRecord extends CardDef {
     <template>
       {{!-- Sensitive banner up top, then sections, then a sync button when needsSync --}}
       {{#if this.needsSync}}
-        <button type='button' {{on 'click' this.syncStub}}>
+        <Button type='button' {{on 'click' this.syncStub}}>
           Sync stub ({{this.syncIssues.length}} field(s) drifted)
-        </button>
+        </Button>
       {{/if}}
       {{!-- … rest of the isolated layout, with sensitive banner + sections … --}}
     </template>
@@ -108,7 +109,7 @@ export class SyncOperationalStubCommand extends Command<typeof FullRecord, undef
       + new URL(stub.id).pathname.split('/').slice(0, -2).join('/')
       + '/',
     );
-    await new SaveCardCommand(this.commandContext).execute({
+    await new SaveCardCommand(this.toolContext).execute({
       card: stub,
       realm: stubRealm,
     });

@@ -255,15 +255,15 @@ const PRIORITY_ICONS: Record<string, ComponentLike> = {
 
 ### Color-code via theme tokens, not hard-coded colors
 
-When status pills need distinct colors per value, define custom tokens on the Theme card (e.g. `--status-todo-bg`, `--status-doing-bg`, `--status-done-bg`) rather than inlining colors in `<style scoped>`:
+When status pills need distinct colors per value, map each value onto one of the contract's status fills (`--success`, `--warning`, `--info`, `--attention`, `--destructive`) or a neutral surface, each paired with its own `-foreground`, rather than inlining colors or inventing tokens in `<style scoped>`:
 
 ```css
-.status-pill.todo  { background: var(--status-todo-bg);  color: var(--status-todo-fg); }
-.status-pill.doing { background: var(--status-doing-bg); color: var(--status-doing-fg); }
-.status-pill.done  { background: var(--status-done-bg);  color: var(--status-done-fg); }
+.status-pill.todo  { background-color: var(--muted);   color: var(--foreground); }
+.status-pill.doing { background-color: var(--info);    color: var(--info-foreground); }
+.status-pill.done  { background-color: var(--success); color: var(--success-foreground); }
 ```
 
-This keeps the per-status palette swappable with the Theme.
+A status *word* on a neutral surface (no pill) takes the hue's ink token instead: `color: var(--success-ink)`. Both forms follow the Theme, so the per-status palette stays swappable. Tokens outside the contract (`--status-todo-bg`) have no default and no boundary reset, so they paint nothing under any theme that does not define them.
 
 ### Common mistake — ladder of `{{#if (eq …)}}`
 

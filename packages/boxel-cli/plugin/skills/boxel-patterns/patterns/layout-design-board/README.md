@@ -10,19 +10,19 @@ validated: source-proven
 
 **The insight:** CardDef is a composition primitive. You don't have to put all sections in one big card with `containsMany` — instead, give the parent `linksTo Section1`, `linksTo Section2`, etc., and render each in its own preferred format. Children are individually editable, can be reused across boards, and the parent stays focused on layout.
 
-**The chrome-strip trick:** Sections styled as standalone cards bring their own card chrome (borders, padding, background). When delegated into a board, you usually want them flush. One CSS line solves it: `.board-sections > * { background: transparent !important; border: none !important; }`. Reusable across all design-board uses.
+**Making sections flush:** Sections styled as standalone cards bring their own card chrome (halo, background, rounded corners). When delegated into a board, you usually want them flush. Two supported moves, both on the field invocation: `@displayContainer={{false}}` drops the halo, and a `class` (forwarded onto the section's `CardContainer`) with `background-color: transparent` drops the wrapper surface. No `:deep()`, no `!important`. The wrapper's corner stays at the theme's radius; with a transparent surface and no halo it is not visible.
 
 **Recipe shape:**
 
 1. Parent has `@field hero = linksTo(HeroSection)`, `@field metrics = linksTo(MetricsPanel)`, etc.
 2. Parent's `isolated` template renders each via `<@fields.hero @format='isolated' />`, `<@fields.metrics @format='embedded' />`, etc.
-3. CSS strip-chrome on `.board-sections > *`.
+3. `@displayContainer={{false}} class='board-section'` on each field, and `.board-section { background-color: transparent; }` in the parent's scoped style.
 
 **Gotchas:**
 - Empty `linksTo` field renders nothing — guard with `{{#if @model.hero}}` for empty states.
 - Per-field format override is `@format='…'` on the field invocation, not on `@fields.foo` itself.
 - Don't recurse — a board card linking to a board card linking to a board card will work but reads badly.
 
-**Source:** tessar-general `micro-mockups.gts:28-99` (the linksTo fields rendered at chosen formats), `:200-215` (the chrome-strip CSS).
+**Source:** tessar-general `micro-mockups.gts:28-99` (the linksTo fields rendered at chosen formats).
 
 **See also:** `boxel/references/fitted-formats.md`, `boxel/references/delegated-rendering.md`, `layout-card-gallery` (planned).

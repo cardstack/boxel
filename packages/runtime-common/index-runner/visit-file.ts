@@ -1,6 +1,7 @@
 import type { Ignore } from 'ignore';
 
 import {
+  cardSourceForVisit,
   flattenPrerenderMeta,
   hasExecutableExtension,
   isCardResource,
@@ -46,6 +47,10 @@ interface RenderFileForIndexingOptions {
   // for this batch's visits and strips it from concurrent non-batch
   // traffic that happens to land on the same warm tab.
   batchId: string;
+  // Which of the pass's views this visit reads: 0 for the pass's own visit
+  // loop, and the round's number for a commit-time validation round, which
+  // re-reads after peer commits moved the realm (see `renderScopeFor`).
+  renderScopeRound: number;
   prerenderer: Prerenderer;
   virtualNetwork: VirtualNetwork;
   consumeClearCacheForRender(): boolean;
@@ -138,6 +143,7 @@ export async function renderFileForIndexing({
   jobPriority,
   auth,
   batchId,
+  renderScopeRound,
   prerenderer,
   virtualNetwork,
   consumeClearCacheForRender,
@@ -237,6 +243,17 @@ export async function renderFileForIndexing({
     }
   }
 
+  // The bytes read above, carried into the visit so the render's card branch
+  // builds its model from them instead of fetching the instance's source for
+  // itself. Both visits below get it: each one enters the render route on its
+  // own transition and would otherwise read the file again.
+  let cardSource = cardSourceForVisit({
+    source: content,
+    realmURL: realmURL.href,
+    lastModified,
+    isCardInstance: Boolean(parsedCardResource),
+  });
+
   let visitArgs = {
     affinityType: 'realm' as const,
     affinityValue: realmURL.href,
@@ -244,8 +261,15 @@ export async function renderFileForIndexing({
     url: fileURL,
     auth,
     batchId,
+    ...(cardSource ? { cardSource } : {}),
     ...(jobInfo
-      ? { renderScope: renderScopeFor(realmURL.href, jobInfo.jobId) }
+      ? {
+          renderScope: renderScopeFor(
+            realmURL.href,
+            jobInfo.jobId,
+            renderScopeRound,
+          ),
+        }
       : {}),
     ...(jobPriority !== undefined ? { priority: jobPriority } : {}),
     ...(jobInfo ? { jobId: `${jobInfo.jobId}.${jobInfo.reservationId}` } : {}),
@@ -523,6 +547,11 @@ function mergeCardVisitResults(
     searchDoc: index?.searchDoc ?? null,
     displayNames: index?.displayNames ?? null,
     types: index?.types ?? null,
+    // From the index visit, the visit that produced `serialized` — the two have
+    // to describe one read of the source or the pairing means nothing. The
+    // prerender-html visit builds its own model from its own source read, and
+    // that read is behind no document this row stores.
+    sourceContentHash: index?.sourceContentHash ?? null,
     deps: mergeDeps(index?.deps ?? null, html?.deps ?? null),
     ...(index?.diagnostics ? { diagnostics: index.diagnostics } : {}),
     iconHTML: index?.iconHTML ?? null,

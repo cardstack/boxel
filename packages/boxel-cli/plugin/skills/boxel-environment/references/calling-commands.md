@@ -120,7 +120,7 @@ Before generating ANY command call, verify:
   }
 }
 ```
-**Note:** `codePath` pins code mode to the target realm — a bare `submode` switch stays in whatever realm the UI last showed
+**Note:** `codePath` pins code mode to the target realm — a bare `submode` switch stays in whatever realm the UI last showed. It is a plain file URL: the `(new)` marker belongs after the URL in a SEARCH/REPLACE block, never inside a tool argument.
 
 ### Example 3: Empty attributes (when no params needed)
 ```json

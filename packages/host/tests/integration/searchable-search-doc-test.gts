@@ -30,6 +30,7 @@ import {
   CardDef,
   FieldDef,
   Component,
+  NumberField,
   StringField,
   createFromSerialized,
   getDataBucket,
@@ -291,12 +292,31 @@ module('Integration | searchable search doc', function (hooks) {
     }
 
     // ---- query-backed field (must never appear in the doc) -----------------
+    // Neither does a computed that reads one: its value derives from a live
+    // search nothing reindexes this row for. `relatedCount` reads the query
+    // field directly and `relatedSummary` reaches it through `relatedCount`,
+    // while `shoutedTitle` reads only the card's own data and stays.
     class ArticleQuery extends CardDef {
       static displayName = 'ArticleQuery';
       @field title = contains(StringField);
       @field related = linksToMany(() => Agent, {
         searchable: true,
         query: { filter: { eq: { name: 'Agent Smith' } } },
+      });
+      @field relatedCount = contains(NumberField, {
+        computeVia: function (this: ArticleQuery) {
+          return this.related.length;
+        },
+      });
+      @field relatedSummary = contains(StringField, {
+        computeVia: function (this: ArticleQuery) {
+          return `${this.relatedCount} related`;
+        },
+      });
+      @field shoutedTitle = contains(StringField, {
+        computeVia: function (this: ArticleQuery) {
+          return this.title.toUpperCase();
+        },
       });
     }
 
@@ -1199,6 +1219,23 @@ module('Integration | searchable search doc', function (hooks) {
     let doc = await loadAndGenerate(`${testRealmURL}ArticleQuery/q1`);
     assert.strictEqual(doc.title, 'Query', 'plain fields are present');
     assert.notOk('related' in doc, 'the query-backed field is skipped');
+  });
+
+  test('a computed that reads a query-backed field never appears in the doc', async function (assert) {
+    let doc = await loadAndGenerate(`${testRealmURL}ArticleQuery/q1`);
+    assert.notOk(
+      'relatedCount' in doc,
+      'a computed reading the query field is skipped',
+    );
+    assert.notOk(
+      'relatedSummary' in doc,
+      'a computed reading the query field through another computed is skipped',
+    );
+    assert.strictEqual(
+      doc.shoutedTitle,
+      'QUERY',
+      'a computed that reads no query field is still indexed',
+    );
   });
 
   test('a throwing branch does not stop sibling link loads in the same walk', async function (assert) {

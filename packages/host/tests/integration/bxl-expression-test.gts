@@ -103,9 +103,13 @@ module('Integration | bxl expressions on real cards', function (hooks) {
       1032.8,
       'fx compiles Excel-like readable syntax (PascalCase labels)',
     );
+    // `customerName` (`jq`.customer.name``) demonstrates jq mode on a field
+    // that reaches its value through a `linksTo` rather than the query-backed
+    // `claims` inverse — the aggregations that read that inverse are omitted
+    // from the index (see the omission tests below).
     assert.strictEqual(
-      searchDoc.paidClaimsTotal,
-      3980.75,
+      searchDoc.customerName,
+      'Acme Freight',
       'jq is handed straight to the jq engine',
     );
   });
@@ -126,15 +130,21 @@ module('Integration | bxl expressions on real cards', function (hooks) {
     assert.strictEqual(searchDoc.customerName, 'Acme Freight');
   });
 
-  test('aggregations run over the query-backed claims inverse', async function (assert) {
+  test('aggregations over the query-backed claims inverse are omitted from the index', async function (assert) {
+    // A computed that reads the query-backed `claims` inverse derives from a
+    // live search the index cannot invalidate: a write to a matching claim
+    // never reindexes the policy, so a stored aggregate would go stale. Such a
+    // computed is left out of the indexed document rather than baked in.
     let searchDoc = await indexedSearchDoc(`${testRealmURL}Policy/pol-100`);
-    assert.strictEqual(searchDoc.paidClaimsTotal, 3980.75);
-    assert.strictEqual(searchDoc.reservedClaimsTotal, 1500);
-    assert.strictEqual(searchDoc.openClaimCount, 1);
+    assert.strictEqual(searchDoc.paidClaimsTotal, undefined);
+    assert.strictEqual(searchDoc.reservedClaimsTotal, undefined);
+    assert.strictEqual(searchDoc.openClaimCount, undefined);
+    // The taint is transitive: `lossRatio` reads the aggregates through fx
+    // rather than the inverse directly, and is omitted on the same terms.
     assert.strictEqual(
       searchDoc.lossRatio,
-      0.4567,
-      'chained computeds read other BXL computeds',
+      undefined,
+      'a computed chained off the query-derived aggregates is omitted too',
     );
   });
 
@@ -148,12 +158,10 @@ module('Integration | bxl expressions on real cards', function (hooks) {
     let underwriterName = searchDoc.underwriterName ?? null;
     assert.strictEqual(customerName, null);
     assert.strictEqual(underwriterName, null);
-    assert.strictEqual(
-      searchDoc.paidClaimsTotal,
-      0,
-      'aggregation over an empty claims inverse falls back to 0',
-    );
-    assert.strictEqual(searchDoc.lossRatio, 0);
+    // The query-backed aggregation is omitted whether or not the inverse is
+    // empty — omission is a property of what it reads, not of what it derives.
+    assert.strictEqual(searchDoc.paidClaimsTotal, undefined);
+    assert.strictEqual(searchDoc.lossRatio, undefined);
   });
 
   test('blank numeric fields read as 0 under Excel blank semantics', async function (assert) {
@@ -185,19 +193,15 @@ module('Integration | bxl expressions on real cards', function (hooks) {
   // { as: FieldDef } materialization
   // ===========================================================================
 
-  test('{ as: FieldDef } output lands in the search doc as structured field values', async function (assert) {
+  test('{ as: FieldDef } computeds that read the query inverse are omitted from the index', async function (assert) {
+    // `riskBand` and `claimBands` materialize into real field instances, but
+    // both derive from the query-backed `claims` inverse — `riskBand` through
+    // `lossRatio`, `claimBands` directly — so both are omitted from the index
+    // rather than persisted as stale structured values. (`{ as: FieldDef }`
+    // materialization itself is covered below on a self-derived computed.)
     let searchDoc = await indexedSearchDoc(`${testRealmURL}Policy/pol-100`);
-    assert.strictEqual(searchDoc.riskBand?.label, 'Low');
-    assert.strictEqual(searchDoc.riskBand?.score, 46);
-    // Query sort orders the claims by claimId, so the bands are stable.
-    assert.deepEqual(
-      (searchDoc.claimBands ?? []).map((band: any) => band?.label),
-      ['Standard', 'Minor'],
-    );
-    assert.deepEqual(
-      (searchDoc.claimBands ?? []).map((band: any) => band?.score),
-      [3200.5, 780.25],
-    );
+    assert.strictEqual(searchDoc.riskBand, undefined);
+    assert.strictEqual(searchDoc.claimBands, undefined);
   });
 
   test('{ as: FieldDef } materializes real instances through getFields', async function (assert) {

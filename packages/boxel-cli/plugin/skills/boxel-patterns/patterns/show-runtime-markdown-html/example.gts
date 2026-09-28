@@ -39,10 +39,10 @@ export class BlogPost extends CardDef {
       </article>
 
       <style scoped>
-        .post { max-width: 720px; margin: 0 auto; padding: 2rem; }
-        .post header { margin-bottom: 1.5rem; padding-bottom: 1rem; border-bottom: 1px solid var(--border, #e6e6e6); }
+        .post { max-width: 45rem; margin: 0 auto; padding: 2rem; }
+        .post header { margin-bottom: 1.5rem; padding-bottom: 1rem; border-bottom: 1px solid var(--border); }
         .post h1 { margin: 0 0 0.5rem; }
-        .post time { color: var(--muted-foreground, #666); font-size: 0.85rem; }
+        .post time { color: var(--muted-foreground); font-size: 0.85rem; }
         .post-body { line-height: 1.6; }
       </style>
     </template>
@@ -63,7 +63,7 @@ export class BlogPost extends CardDef {
       </article>
 
       <style scoped>
-        .post-preview { padding: 1rem; border: 1px solid var(--border, #e6e6e6); border-radius: var(--radius, 8px); }
+        .post-preview { padding: 1rem; }
         .post-preview h2 { margin: 0 0 0.5rem; }
         .excerpt {
           max-height: 8em;

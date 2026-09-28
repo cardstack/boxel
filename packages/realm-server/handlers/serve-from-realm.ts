@@ -6,8 +6,10 @@ import type {
 } from '@cardstack/runtime-common';
 import { logger } from '@cardstack/runtime-common';
 import {
+  attributeSearchRequest,
   fetchRequestFromContext,
   setContextResponse,
+  withSearchConnectionTenant,
 } from '../middleware/index.ts';
 import { setupCloseHandler } from '../node-realm.ts';
 import { findOrMountRealm } from '../lib/realm-routing.ts';
@@ -45,8 +47,15 @@ export function createServeFromRealm(
     let requestURL = new URL(
       `${ctxt.protocol}://${ctxt.host}${ctxt.originalUrl}`,
     );
+    let realm: Realm | undefined;
     try {
-      await findOrMountRealm(requestURL, deps);
+      realm = await findOrMountRealm(requestURL, deps);
+      // A realm's own `_search` names that realm. Attributed here because this
+      // is where the request is first resolved to one; the admission gate
+      // counted it before anything knew which.
+      if (realm) {
+        attributeSearchRequest(ctxt, [realm.url]);
+      }
     } catch (err: any) {
       log.warn(
         `failed to mount realm for request ${requestURL.href}: ${err?.message ?? err}`,
@@ -55,13 +64,15 @@ export function createServeFromRealm(
       ctxt.body = `Realm mount failed: ${err?.message ?? err}`;
       return;
     }
-    let realmResponse = await virtualNetwork.handle(
-      request,
-      (mappedRequest) => {
-        // Setup this handler only after the request has been mapped because
-        // the *mapped request* is the one that gets closed, not the original one
-        setupCloseHandler(ctxt.res, mappedRequest);
-      },
+    let realmResponse = await withSearchConnectionTenant(
+      ctxt,
+      realm ? [realm.url] : [],
+      () =>
+        virtualNetwork.handle(request, (mappedRequest) => {
+          // Setup this handler only after the request has been mapped because
+          // the *mapped request* is the one that gets closed, not the original one
+          setupCloseHandler(ctxt.res, mappedRequest);
+        }),
     );
 
     await setContextResponse(ctxt, realmResponse);

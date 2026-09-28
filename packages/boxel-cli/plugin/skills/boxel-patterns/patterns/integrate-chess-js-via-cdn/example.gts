@@ -87,14 +87,14 @@ export class ChessCard extends CardDef {
         .chess-card { padding: 1rem; }
         .board-host {
           width: 100%;
-          max-width: 480px;
+          max-width: 30rem;
           aspect-ratio: 1;        /* Square */
           margin: 1rem auto;
         }
         .fen {
           font-size: 0.75rem;
           word-break: break-all;
-          color: var(--muted-foreground, #666);
+          color: var(--muted-foreground);
         }
       </style>
     </template>

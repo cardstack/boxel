@@ -10,9 +10,16 @@ import {
   type TransformContext,
 } from './transforms.ts';
 import {
+  gateOperation,
+  notPermitted,
+  type GateDecision,
+  type OperationPolicyAccess,
+} from './gate.ts';
+import {
   DEFINITION_FREE_BASE_OPERATIONS,
   OperationFailure,
   isDocumentResult,
+  isOperationFailure,
   isHeadResult,
   type BaseOperation,
   type OperationDefinition,
@@ -138,6 +145,9 @@ export interface OperationCore {
     data: LooseCardResource | FileMetaResource;
     included?: (LooseCardResource | FileMetaResource)[];
   }): void;
+  // What the policy gate reads for a caller the realm ACL declined. A core
+  // without it admits no such caller.
+  policy?: OperationPolicyAccess;
 }
 
 // The realm's own `FileRef`, narrowed to what a stored-bytes read uses. Stated
@@ -260,25 +270,109 @@ export interface RunOperationOptions {
 // read of a row rather than one per reader, and so every reader sees the same
 // snapshot of it. The memo lives for the invocation and no longer: a core is
 // long-lived and must never hold a card's row across requests.
+//
+// A scope also says who the invocation is for, whether the realm ACL declined
+// them, and, for a create, what it would write. Those are the facts the policy
+// gate reads that the target does not carry. They travel here rather than as
+// parameters of `resolveOperation` because the scope already reaches every
+// place an operation is resolved.
 export interface OperationScope {
   peekInstance(url: URL): Promise<InstanceOrError | undefined>;
+  readonly caller: ScopeCaller;
+  // What the realm ACL declined for the request this invocation belongs to.
+  // Where it declined an invocation, the policy gate decides whether it runs;
+  // everywhere else the gate does nothing at all.
+  readonly coarseDeclined: CoarseDeclined;
+  // The payload a `create` entry is staged from, as its `input` stage and its
+  // `params` check left it — what the operation would actually write, not the
+  // bytes the caller sent. For a plain create that is the resource the card is
+  // minted from; for a named one, the params its template is filled with.
+  // Absent for every other invocation, and for a create until those two
+  // stages have run.
+  readonly proposed: Record<string, unknown> | undefined;
+  // A scope for another invocation in the same request, sharing this one's row
+  // memo so the invocations of one request still cost one read of each row
+  // between them. The caller and the ACL's verdict carry over unless named; a
+  // proposed document belongs to one invocation and never does.
+  derive(invocation: ScopeInvocation): OperationScope;
 }
 
-export function newOperationScope(core: OperationCore): OperationScope {
+// Who an operation is being resolved for.
+//
+// `anonymous` is a request that authenticated nobody, and is kept apart from
+// a user whose id happens to be empty: absence is what makes a predicate that
+// reads the actor refuse rather than match, so it cannot be spelled as a value
+// a predicate could compare against.
+//
+// `unattributed` is a resolution made with no request's caller in hand at all
+// — the read-shape question, which asks what kind of read a target has so a
+// handler can decide whether to answer from its validator, and says nothing
+// about who may run it. It is also what a scope built without saying is, so
+// that a caller has to name the caller to have one.
+export type ScopeCaller =
+  | { kind: 'user'; actor: string }
+  | { kind: 'anonymous' }
+  | { kind: 'unattributed' };
+
+export interface ScopeInvocation {
+  caller?: ScopeCaller;
+  coarseDeclined?: CoarseDeclined;
+  proposed?: Record<string, unknown>;
+}
+
+// What the realm ACL declined for a request, judged per invocation rather than
+// once for the request, since one request can carry reads and writes.
+//
+// - `none`: a caller the ACL allowed, or a request it never judged.
+// - `writes`: a caller who may read the realm and not write it, on a request
+//   that writes. Their reads are the ACL's to answer, and only their writes
+//   are the policy's.
+// - `all`: a caller who may do neither.
+export type CoarseDeclined = 'none' | 'writes' | 'all';
+
+// The scope caller for a request's actor, which transports carry as a string
+// that is empty when nobody signed in.
+export function scopeCallerFor(actor: string): ScopeCaller {
+  return actor ? { kind: 'user', actor } : { kind: 'anonymous' };
+}
+
+export function newOperationScope(
+  core: OperationCore,
+  invocation: ScopeInvocation = {},
+): OperationScope {
   let rows = new Map<string, Promise<InstanceOrError | undefined>>();
-  return {
-    peekInstance(url: URL) {
-      let cached = rows.get(url.href);
-      if (!cached) {
-        // Always with errors: an errored row is still a row, and the readers
-        // that care about the difference check `type` themselves. Asking one
-        // way keeps the memo to a single entry per URL.
-        cached = core.indexQueryEngine.instance(url, { includeErrors: true });
-        rows.set(url.href, cached);
-      }
-      return cached;
-    },
+  let peekInstance = (url: URL) => {
+    let cached = rows.get(url.href);
+    if (!cached) {
+      // Always with errors: an errored row is still a row, and the readers
+      // that care about the difference check `type` themselves. Asking one
+      // way keeps the memo to a single entry per URL.
+      cached = core.indexQueryEngine.instance(url, { includeErrors: true });
+      rows.set(url.href, cached);
+    }
+    return cached;
   };
+  let scopeFor = (
+    caller: ScopeCaller,
+    coarseDeclined: CoarseDeclined,
+    proposed: Record<string, unknown> | undefined,
+  ): OperationScope => ({
+    peekInstance,
+    caller,
+    coarseDeclined,
+    proposed,
+    derive: (next) =>
+      scopeFor(
+        next.caller ?? caller,
+        next.coarseDeclined ?? coarseDeclined,
+        next.proposed,
+      ),
+  });
+  return scopeFor(
+    invocation.caller ?? { kind: 'unattributed' },
+    invocation.coarseDeclined ?? 'none',
+    invocation.proposed,
+  );
 }
 
 // The def types, as the operation core distinguishes them.
@@ -457,7 +551,7 @@ function own<T>(
 }
 
 // Which built-in behavior `name` means for `target`, as the definition the
-// executor works from.
+// executor works from, once the policy gate has admitted the invocation.
 //
 // A declaration wins over the built-in of the same name — that is how an
 // author specializes `read` or rebinds `delete` onto `transform` — so the
@@ -465,12 +559,85 @@ function own<T>(
 // be read is not fatal for a base name against an instance target: the card
 // is in the index, the built-in behavior does not consult its definition, and
 // refusing here would make a broken module's cards unreadable.
+//
+// A write the gate could only admit on a predicate is refused here. Its
+// predicate has to be evaluated under the write lock, and a caller resolving
+// through here holds no lock and carries no pending decision to one. A caller
+// that does takes the decision from `resolveGatedOperation` instead.
 export async function resolveOperation(
   core: OperationCore,
   target: OperationTarget,
   name: string,
   scope: OperationScope = newOperationScope(core),
 ): Promise<OperationDefinition> {
+  let { definition, decision } = await resolveGatedOperation(
+    core,
+    target,
+    name,
+    scope,
+  );
+  if (decision.kind === 'pending') {
+    throw notPermitted(target, name);
+  }
+  return definition;
+}
+
+// An operation resolved for a target, with what the policy gate decided about
+// invoking it.
+export interface GatedOperation {
+  definition: OperationDefinition;
+  decision: GateDecision;
+}
+
+// `resolveOperation`, answering the gate's decision rather than acting on it.
+//
+// The gate is the last stage, after the operation is known to exist and to be
+// carried by the target. It matches rules against the adoption chain the index
+// recorded for the target, never against a type the caller named.
+//
+// For a caller the ACL declined outright, every refusal the resolution itself
+// makes is answered as the gate's. The resolution refuses for reasons that
+// describe the target: no such operation on its type, a declaration that did
+// not lower, a type that does not resolve. Answered as themselves, they would
+// tell such a caller which cards exist and what their types declare, which is
+// what the gate's refusal is written not to say.
+export async function resolveGatedOperation(
+  core: OperationCore,
+  target: OperationTarget,
+  name: string,
+  scope: OperationScope = newOperationScope(core),
+): Promise<GatedOperation> {
+  let resolved: Awaited<ReturnType<typeof resolveUngated>>;
+  try {
+    resolved = await resolveUngated(core, target, name, scope);
+  } catch (e: unknown) {
+    if (scope.coarseDeclined === 'all' && isOperationFailure(e)) {
+      throw notPermitted(target, name);
+    }
+    throw e;
+  }
+  let { definition, typeDefinition } = resolved;
+  let decision = await gateOperation(
+    core,
+    target,
+    name,
+    definition.base,
+    typeDefinition,
+    scope,
+  );
+  return { definition, decision };
+}
+
+async function resolveUngated(
+  core: OperationCore,
+  target: OperationTarget,
+  name: string,
+  scope: OperationScope,
+): Promise<{
+  definition: OperationDefinition;
+  // The target type's own entry, where one resolved.
+  typeDefinition?: Definition;
+}> {
   assertInRealm(core, target);
   if (isDefinitionFreeOperation(name)) {
     // Before the lookup, not merely without it — see
@@ -482,7 +649,7 @@ export async function resolveOperation(
     if (!kind || !own(ALLOWED_BASE_OPERATIONS[kind], name)) {
       throw notAllowed(target, name, kind, name);
     }
-    return { base: name, deterministic: true };
+    return { definition: { base: name, deterministic: true } };
   }
   let definition = await definitionFor(core, target, scope);
   if (target.kind === 'type' && !definition) {
@@ -534,7 +701,7 @@ export async function resolveOperation(
     if (!carries(target, kind, declared.base)) {
       throw notAllowed(target, name, kind, declared.base);
     }
-    return declared;
+    return { definition: declared, typeDefinition: definition };
   }
   if (!isBaseOperation(name)) {
     throw new OperationFailure({
@@ -551,7 +718,10 @@ export async function resolveOperation(
   // The built-in behavior, undeclared. It has no program and no params, and
   // its result is fixed by the behavior itself, so it is deterministic by
   // construction.
-  return { base: name, deterministic: true };
+  return {
+    definition: { base: name, deterministic: true },
+    ...(definition ? { typeDefinition: definition } : {}),
+  };
 }
 
 // Whether a `read` of this target may be answered without running it, asked
@@ -624,7 +794,20 @@ async function resolveReadShape(
       core,
       { kind: 'instance', url: url.href },
       'read',
-      scope,
+      // Unattributed whatever the caller's scope says: this asks what kind of
+      // read the target has, not whether anyone may run it. A request that
+      // goes on to assemble is resolved again with its caller, but the two
+      // fast paths this answer opens — the conditional 304 and the shared
+      // response cache — are served without that second resolution, so
+      // nothing that judges the caller runs on them. The cross-request memo in
+      // `readShape` is keyed by URL alone, which is sound only while this
+      // question stays caller-less. For the same reason the policy gate never
+      // runs here, and a caller the realm ACL declined is kept off both fast
+      // paths by the handler.
+      scope.derive({
+        caller: { kind: 'unattributed' },
+        coarseDeclined: 'none',
+      }),
     );
   } catch {
     return 'unresolved';
@@ -648,7 +831,10 @@ export async function runOperation(
   });
   let canonical: OperationRequest =
     target === request.target ? request : { ...request, target };
-  let scope = newOperationScope(core);
+  let scope = newOperationScope(core, {
+    caller: scopeCallerFor(canonical.actor),
+    ...(canonical.coarseDeclined ? { coarseDeclined: 'all' as const } : {}),
+  });
   let definition = await resolveOperation(core, target, canonical.name, scope);
   // The four stages of an invocation, in the one order they run: the `input`
   // transform over the payload, the `params` check against what it produced,

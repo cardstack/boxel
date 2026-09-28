@@ -74,8 +74,8 @@ export class GeoLocationCard extends CardDef {
         .geo-card { padding: 1rem; }
         .map-host {
           width: 100%;
-          height: 400px;       /* Leaflet needs explicit dimensions */
-          border-radius: var(--radius, 8px);
+          height: 25rem;       /* Leaflet needs explicit dimensions */
+          border-radius: var(--boxel-border-radius-sm);
           margin-top: 0.5rem;
         }
       </style>

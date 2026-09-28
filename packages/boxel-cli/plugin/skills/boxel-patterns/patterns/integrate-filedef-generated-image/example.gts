@@ -33,13 +33,13 @@ function parseImageDataUrl(dataUrl: string) {
 }
 
 export async function writeGeneratedImageFile(
-  commandContext: any,
+  toolContext: any,
   realm: string,
   dataUrl: string,
   pathStem = 'GeneratedImages/result',
 ): Promise<ImageDef> {
   let image = parseImageDataUrl(dataUrl);
-  let written = await new WriteBinaryFileCommand(commandContext).execute({
+  let written = await new WriteBinaryFileCommand(toolContext).execute({
     path: `${pathStem}.${image.extension}`,
     realm,
     base64Content: image.base64Content,

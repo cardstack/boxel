@@ -13,6 +13,7 @@ import {
   internalKeyFor,
   identifyCard,
   getFieldDefinitions,
+  jobStagingId,
   rri,
   type RealmResourceIdentifier,
   type ResolvedCodeRef,
@@ -1962,8 +1963,9 @@ module('Unit | query', function (hooks) {
     assert.deepEqual(getIds(results), [mango.id], 'results are correct');
   });
 
-  test('can perform query against WIP version of the index', async function (assert) {
+  test("can perform query against a pass's staged rows", async function (assert) {
     let { mango, vangogh, ringo } = testCards;
+    let stagingId = jobStagingId(1, 1);
     await setupIndex(
       dbAdapter,
       [{ realm_url: testRealmURL, current_generation: 1 }],
@@ -1971,15 +1973,27 @@ module('Unit | query', function (hooks) {
         working: [
           {
             card: mango,
-            data: { generation: 1, search_doc: { name: 'Mango' } },
+            data: {
+              generation: 1,
+              staging_id: stagingId,
+              search_doc: { name: 'Mango' },
+            },
           },
           {
             card: vangogh,
-            data: { generation: 2, search_doc: { name: 'Mango' } },
+            data: {
+              generation: 2,
+              staging_id: stagingId,
+              search_doc: { name: 'Mango' },
+            },
           },
           {
             card: ringo,
-            data: { generation: 2, search_doc: { name: 'Ringo' } },
+            data: {
+              generation: 2,
+              staging_id: stagingId,
+              search_doc: { name: 'Ringo' },
+            },
           },
         ],
         production: [
@@ -2008,7 +2022,7 @@ module('Unit | query', function (hooks) {
           eq: { name: 'Mango' },
         },
       },
-      { useWorkInProgressIndex: true },
+      { pendingStagingId: stagingId },
     );
 
     assert.strictEqual(meta.page.total, 2, 'the total results meta is correct');
@@ -2021,6 +2035,7 @@ module('Unit | query', function (hooks) {
 
   test('can perform query against "production" version of the index', async function (assert) {
     let { mango, vangogh, ringo } = testCards;
+    let stagingId = jobStagingId(1, 1);
     await setupIndex(
       dbAdapter,
       [{ realm_url: testRealmURL, current_generation: 1 }],
@@ -2028,15 +2043,27 @@ module('Unit | query', function (hooks) {
         working: [
           {
             card: mango,
-            data: { generation: 1, search_doc: { name: 'Mango' } },
+            data: {
+              generation: 1,
+              staging_id: stagingId,
+              search_doc: { name: 'Mango' },
+            },
           },
           {
             card: vangogh,
-            data: { generation: 2, search_doc: { name: 'Mango' } },
+            data: {
+              generation: 2,
+              staging_id: stagingId,
+              search_doc: { name: 'Mango' },
+            },
           },
           {
             card: ringo,
-            data: { generation: 1, search_doc: { name: 'Ringo' } },
+            data: {
+              generation: 1,
+              staging_id: stagingId,
+              search_doc: { name: 'Ringo' },
+            },
           },
         ],
         production: [

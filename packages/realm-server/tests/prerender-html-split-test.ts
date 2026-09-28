@@ -11,6 +11,7 @@ import {
   systemInitiatedPriority,
   userInitiatedPrerenderHtmlPriority,
   userInitiatedPriority,
+  type CardSourceVisitArgs,
   type DefinitionLookup,
   type Diagnostics,
   type IndexingProgressEvent,
@@ -30,6 +31,7 @@ import { runPrerenderHtmlPass } from '@cardstack/runtime-common/index-runner/pre
 // Registers the `prerender_html` coalesce handler at load time.
 import '@cardstack/runtime-common/tasks/prerender-html';
 import type { PrerenderHtmlArgs } from '@cardstack/runtime-common/tasks/prerender-html';
+import type { SpawningIndexPass } from '@cardstack/runtime-common/jobs/prerender-html';
 import type { PgAdapter } from '@cardstack/postgres';
 import {
   createTestPgAdapter,
@@ -52,6 +54,12 @@ const noPreWarmDeps = {
   realmOwnerUserId: 'test_realm',
 };
 
+// The spawning index passes of the given jobs, one pass per job, each with a
+// pass id derived from its job id.
+function passes(...jobIds: number[]): SpawningIndexPass[] {
+  return jobIds.map((jobId) => ({ jobId, passId: `pass-${jobId}` }));
+}
+
 function prerenderHtmlArgs(
   overrides: Partial<PrerenderHtmlArgs> = {},
 ): PrerenderHtmlArgs {
@@ -59,6 +67,7 @@ function prerenderHtmlArgs(
     realmURL: testRealm,
     realmUsername: 'test_realm',
     changes: [{ url: `${testRealm}1.json`, operation: 'update' }],
+    spawningIndexPasses: passes(100),
     generation: 1,
     loaderEpoch: 'epoch-a',
     spawningJobId: 100,
@@ -114,13 +123,13 @@ module(basename(import.meta.filename), function () {
       assert.deepEqual(decision, { type: 'insert' });
     });
 
-    test('joins a pending job, merging changes update-wins and taking the max generation', function (assert) {
+    test('joins a pending job, merging changes update-wins and waiting on every spawning index job', function (assert) {
       let existing = prerenderHtmlArgs({
         changes: [
           { url: `${testRealm}1.json`, operation: 'delete' },
           { url: `${testRealm}2.json`, operation: 'update' },
         ],
-        generation: 3,
+        spawningIndexPasses: passes(100),
         loaderEpoch: 'epoch-old',
         spawningJobId: 100,
       });
@@ -129,7 +138,7 @@ module(basename(import.meta.filename), function () {
           { url: `${testRealm}1.json`, operation: 'update' },
           { url: `${testRealm}3.json`, operation: 'update' },
         ],
-        generation: 4,
+        spawningIndexPasses: passes(200),
         loaderEpoch: 'epoch-new',
         spawningJobId: 200,
       });
@@ -155,20 +164,25 @@ module(basename(import.meta.filename), function () {
         'timeout is the max across publishes',
       );
       let mergedArgs = decision.update?.args as PrerenderHtmlArgs;
+      assert.deepEqual(
+        mergedArgs.spawningIndexPasses,
+        passes(100, 200),
+        'the merged job waits on the index passes behind both publishes',
+      );
       assert.strictEqual(
         mergedArgs.generation,
-        4,
-        'generation is the max across publishes',
+        1,
+        'the older-worker fallback generation is the max across publishes',
       );
       assert.strictEqual(
         mergedArgs.loaderEpoch,
         'epoch-new',
-        'the loader epoch rides with the max generation',
+        'the loader epoch is the newer enqueue’s',
       );
       assert.strictEqual(
         mergedArgs.spawningJobId,
         200,
-        'the spawning job id follows the newest publish',
+        'the spawning job id follows the newer enqueue',
       );
       let byUrl = new Map(
         mergedArgs.changes.map((change) => [change.url, change.operation]),
@@ -190,12 +204,12 @@ module(basename(import.meta.filename), function () {
 
     test('a pending join accumulates the coalesced-publish count across merges', function (assert) {
       let existing = prerenderHtmlArgs({
-        generation: 3,
+        spawningIndexPasses: passes(100),
         spawningJobId: 100,
         coalescedPublishes: 2,
       });
       let incoming = prerenderHtmlArgs({
-        generation: 4,
+        spawningIndexPasses: passes(200),
         spawningJobId: 200,
       });
       let decision = coalesce(
@@ -222,13 +236,13 @@ module(basename(import.meta.filename), function () {
       // keeping 'update' is safe in both merge directions.
       let existing = prerenderHtmlArgs({
         changes: [{ url: `${testRealm}1.json`, operation: 'update' }],
-        generation: 3,
+        spawningIndexPasses: passes(100),
         loaderEpoch: 'epoch-1',
         spawningJobId: 100,
       });
       let incoming = prerenderHtmlArgs({
         changes: [{ url: `${testRealm}1.json`, operation: 'delete' }],
-        generation: 4,
+        spawningIndexPasses: passes(200),
         loaderEpoch: 'epoch-1',
         spawningJobId: 200,
       });
@@ -248,10 +262,10 @@ module(basename(import.meta.filename), function () {
         [{ url: `${testRealm}1.json`, operation: 'update' }],
         'the merged job visits the URL and lets the missing file tombstone it',
       );
-      assert.strictEqual(
-        mergedArgs.generation,
-        4,
-        'generation is still the max across publishes',
+      assert.deepEqual(
+        mergedArgs.spawningIndexPasses,
+        passes(100, 200),
+        'the merged job still waits on both spawning passes',
       );
     });
 
@@ -323,17 +337,17 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('joins an in-flight job whose changes cover the incoming set at an equal-or-newer generation', function (assert) {
+    test('joins an in-flight job that already waits on the incoming spawning pass and covers its changes', function (assert) {
       let inFlight = prerenderHtmlArgs({
         changes: [
           { url: `${testRealm}1.json`, operation: 'update' },
           { url: `${testRealm}2.json`, operation: 'update' },
         ],
-        generation: 5,
+        spawningIndexPasses: passes(100, 200),
       });
       let incoming = prerenderHtmlArgs({
         changes: [{ url: `${testRealm}1.json`, operation: 'update' }],
-        generation: 5,
+        spawningIndexPasses: passes(200),
       });
       let decision = coalesce(
         context({
@@ -344,9 +358,13 @@ module(basename(import.meta.filename), function () {
       assert.deepEqual(decision, { type: 'join', jobId: 9 });
     });
 
-    test('inserts rather than joining an in-flight job at an older generation', function (assert) {
-      let inFlight = prerenderHtmlArgs({ generation: 4 });
-      let incoming = prerenderHtmlArgs({ generation: 5 });
+    test('inserts rather than joining an in-flight job that does not wait on the incoming spawning pass', function (assert) {
+      // The running job may already be past its wait, so it cannot be relied
+      // on to render after a pass it never waited for.
+      let inFlight = prerenderHtmlArgs({ spawningIndexPasses: passes(100) });
+      let incoming = prerenderHtmlArgs({
+        spawningIndexPasses: passes(100, 200),
+      });
       let decision = coalesce(
         context({
           incoming: spec(incoming),
@@ -356,13 +374,170 @@ module(basename(import.meta.filename), function () {
       assert.deepEqual(decision, { type: 'insert' });
     });
 
-    test('a pending join keeps the existing epoch when the existing publish is newer', function (assert) {
+    test('a repair from committed state joins an in-flight repair at an equal-or-newer generation only', function (assert) {
+      let repair = (generation: number) =>
+        prerenderHtmlArgs({ spawningIndexPasses: [], generation });
+      assert.deepEqual(
+        coalesce(
+          context({
+            incoming: spec(repair(5)),
+            inFlightCandidates: [candidate(9, repair(5))],
+          }),
+        ),
+        { type: 'join', jobId: 9 },
+        'an in-flight repair at the same committed generation covers it',
+      );
+      assert.deepEqual(
+        coalesce(
+          context({
+            incoming: spec(repair(5)),
+            inFlightCandidates: [candidate(9, repair(4))],
+          }),
+        ),
+        { type: 'insert' },
+        'an in-flight repair from older committed state does not',
+      );
+      assert.deepEqual(
+        coalesce(
+          context({
+            incoming: spec(repair(5)),
+            inFlightCandidates: [
+              candidate(
+                9,
+                prerenderHtmlArgs({ spawningIndexPasses: passes(100) }),
+              ),
+            ],
+          }),
+        ),
+        { type: 'insert' },
+        'nor does an in-flight spawned job, which may already have read the generations it stamps',
+      );
+    });
+
+    test('a repair and a spawned job under different loader epochs stay separate jobs', function (assert) {
+      // Which epoch is the newer depends on whether the spawning pass
+      // committed before the state the repair read, which the coalescer cannot
+      // see. A merged job rendering under the older one keeps a stale module
+      // cache in every tab it reuses, so the two run one after the other.
+      let spawned = prerenderHtmlArgs({
+        spawningIndexPasses: passes(300),
+        generation: 3,
+        loaderEpoch: 'epoch-3',
+      });
+      let repair = prerenderHtmlArgs({
+        spawningIndexPasses: [],
+        generation: 5,
+        loaderEpoch: 'epoch-5',
+      });
+      for (let [existing, incoming] of [
+        [spawned, repair],
+        [repair, spawned],
+      ]) {
+        assert.deepEqual(
+          coalesce(
+            context({
+              incoming: spec(incoming),
+              candidates: [candidate(11, existing)],
+            }),
+          ),
+          { type: 'insert' },
+        );
+      }
+    });
+
+    test('a repair and a spawned job under the same loader epoch merge, and the merged job still waits on the spawning pass', function (assert) {
       let existing = prerenderHtmlArgs({
+        spawningIndexPasses: passes(300),
+        generation: 3,
+        loaderEpoch: 'epoch-a',
+        spawningJobId: 300,
+      });
+      let incoming = prerenderHtmlArgs({
+        spawningIndexPasses: [],
+        generation: 5,
+        loaderEpoch: 'epoch-a',
+        spawningJobId: 400,
+      });
+      let decision = coalesce(
+        context({
+          incoming: spec(incoming),
+          candidates: [candidate(11, existing)],
+        }),
+      );
+      assert.strictEqual(decision.type, 'join');
+      if (decision.type !== 'join') {
+        throw new Error('expected a join decision');
+      }
+      let mergedArgs = decision.update?.args as PrerenderHtmlArgs;
+      assert.deepEqual(mergedArgs.spawningIndexPasses, passes(300));
+      assert.strictEqual(mergedArgs.loaderEpoch, 'epoch-a');
+    });
+
+    test('a pending job from a worker predating spawning passes is never merged into', function (assert) {
+      // It names its spawning pass only by generation. Merged into a job that
+      // waits on passes, its URLs could render before that pass commits.
+      let legacy = {
+        realmURL: testRealm,
+        realmUsername: 'test_realm',
+        changes: [{ url: `${testRealm}1.json`, operation: 'update' }],
+        generation: 4,
+        loaderEpoch: 'epoch-a',
+        spawningJobId: 90,
+        coalescedPublishes: null,
+        preWarm: false,
+      };
+      assert.deepEqual(
+        coalesce(
+          context({
+            incoming: spec(prerenderHtmlArgs()),
+            candidates: [candidate(11, legacy)],
+          }),
+        ),
+        { type: 'insert' },
+        'a new publish does not fold into it',
+      );
+      assert.deepEqual(
+        coalesce(
+          context({
+            incoming: spec(legacy),
+            candidates: [candidate(11, prerenderHtmlArgs())],
+          }),
+        ),
+        { type: 'insert' },
+        'nor does it fold into a new pending job',
+      );
+    });
+
+    test('an in-flight join is keyed on the pass, not the job: a rerun of the same job does not join', function (assert) {
+      // A job whose reservation expired runs again under the same id with a
+      // new pass. The running job may already have seen the first pass commit
+      // and released its visits, so it cannot cover the rerun's.
+      let inFlight = prerenderHtmlArgs({
+        spawningIndexPasses: [{ jobId: 100, passId: 'first-attempt' }],
+      });
+      let incoming = prerenderHtmlArgs({
+        spawningIndexPasses: [{ jobId: 100, passId: 'second-attempt' }],
+      });
+      assert.deepEqual(
+        coalesce(
+          context({
+            incoming: spec(incoming),
+            inFlightCandidates: [candidate(9, inFlight)],
+          }),
+        ),
+        { type: 'insert' },
+      );
+    });
+
+    test('two pending repairs from committed state keep the newer generation’s epoch', function (assert) {
+      let existing = prerenderHtmlArgs({
+        spawningIndexPasses: [],
         generation: 6,
         loaderEpoch: 'epoch-new',
         spawningJobId: 300,
       });
       let incoming = prerenderHtmlArgs({
+        spawningIndexPasses: [],
         generation: 5,
         loaderEpoch: 'epoch-old',
         spawningJobId: 400,
@@ -497,6 +672,7 @@ module(basename(import.meta.filename), function () {
         realmURL: testRealm,
         realmUsername: 'test_realm',
         changes: [{ url: `${testRealm}1.json`, operation: 'update' }],
+        spawningIndexPasses: passes(100),
         generation: 1,
         loaderEpoch: 'epoch-a',
         spawningJobId: 100,
@@ -536,6 +712,216 @@ module(basename(import.meta.filename), function () {
     });
   });
 
+  module('index pass fan-out', function (hooks) {
+    let adapter: PgAdapter;
+    let indexWriter: IndexWriter;
+
+    hooks.beforeEach(async function () {
+      prepareTestDB();
+      adapter = await createTestPgAdapter();
+      indexWriter = new IndexWriter(adapter);
+    });
+
+    hooks.afterEach(async function () {
+      await adapter.close();
+    });
+
+    const url = (name: string) => `${testRealm}${name}.json`;
+    const urls = (...names: string[]) => names.map(url).sort();
+
+    async function indexRow(name: string, deps: string[]) {
+      await adapter.execute(
+        `INSERT INTO boxel_index (url, file_alias, realm_url, type, generation, deps)
+         VALUES ($1, $1, $2, 'instance', 1, $3)`,
+        { bind: [url(name), testRealm, JSON.stringify(deps.map(url))] },
+      );
+    }
+
+    async function htmlRow(name: string, deps: string[]) {
+      await adapter.execute(
+        `INSERT INTO prerendered_html (url, file_alias, realm_url, type, generation, deps)
+         VALUES ($1, $1, $2, 'instance', 1, $3)`,
+        { bind: [url(name), testRealm, JSON.stringify(deps.map(url))] },
+      );
+    }
+
+    // `hub` is the edited card. Index edges (`boxel_index.deps`) record what
+    // a card's search document read; render edges (`prerendered_html.deps`)
+    // record what only its formatted HTML read.
+    async function seedGraph() {
+      await adapter.execute(
+        `INSERT INTO realm_generations (realm_url, current_generation, loader_epoch)
+         VALUES ($1, 1, 'epoch-a')`,
+        { bind: [testRealm] },
+      );
+      await indexRow('hub', []);
+      await htmlRow('hub', []);
+      // Links the hub in its data.
+      await indexRow('linker', ['hub']);
+      await htmlRow('linker', ['hub']);
+      // Links the linker in its data.
+      await indexRow('linker-of-linker', ['linker']);
+      await htmlRow('linker-of-linker', ['linker']);
+      // Shows the hub in its HTML only.
+      await indexRow('renderer', []);
+      await htmlRow('renderer', ['hub']);
+      // Shows the renderer in its HTML only.
+      await indexRow('renderer-of-renderer', []);
+      await htmlRow('renderer-of-renderer', ['renderer']);
+      // Links the renderer in its data, but the renderer's own data never
+      // read the hub, so nothing this card's search document holds moved.
+      await indexRow('linker-of-renderer', ['renderer']);
+      await htmlRow('linker-of-renderer', ['renderer']);
+      await indexRow('unrelated', []);
+      await htmlRow('unrelated', []);
+    }
+
+    async function pendingURLs() {
+      let rows = (await adapter.execute(
+        `SELECT url FROM boxel_index_pending WHERE realm_url = $1`,
+        { bind: [testRealm] },
+      )) as { url: string }[];
+      return rows.map((row) => row.url).sort();
+    }
+
+    test('a split pass visits index-edge dependents and leaves render-only dependents to the HTML job', async function (assert) {
+      await seedGraph();
+      let batch = await indexWriter.createBatch(
+        new URL(testRealm),
+        new VirtualNetwork(),
+        undefined,
+        { splitPrerenderHtml: true },
+      );
+      await batch.invalidate([new URL(url('hub'))]);
+
+      assert.deepEqual(
+        batch.invalidations.sort(),
+        urls('hub', 'linker', 'linker-of-linker'),
+        'the index pass visits the edited card and what reaches it through index edges',
+      );
+      assert.deepEqual(
+        batch.renderOnlyInvalidations.sort(),
+        urls('linker-of-renderer', 'renderer', 'renderer-of-renderer'),
+        'what reaches the edited card only through a render edge is left to the HTML job',
+      );
+      assert.deepEqual(
+        await pendingURLs(),
+        urls('hub', 'linker', 'linker-of-linker'),
+        'the pass tombstones only the rows it will visit',
+      );
+
+      await batch.done();
+      let [commit] = (await adapter.execute(
+        `SELECT urls, render_only_urls FROM realm_index_commits
+          WHERE realm_url = $1 AND generation = $2`,
+        { bind: [testRealm, batch.committedGeneration] },
+      )) as { urls: string[] | null; render_only_urls: string[] | null }[];
+      assert.deepEqual(
+        commit,
+        {
+          urls: urls('hub', 'linker', 'linker-of-linker'),
+          render_only_urls: urls(
+            'linker-of-renderer',
+            'renderer',
+            'renderer-of-renderer',
+          ),
+        },
+        "the commit's ledger row lists both the rows it promoted and the render-only rows it restamped",
+      );
+      let rows = (await adapter.execute(
+        `SELECT url, generation, indexed_at, is_deleted FROM boxel_index
+          WHERE realm_url = $1 AND url = ANY($2)`,
+        {
+          bind: [
+            testRealm,
+            urls('renderer', 'renderer-of-renderer', 'unrelated'),
+          ],
+        },
+      )) as {
+        url: string;
+        generation: number;
+        indexed_at: string | number | null;
+        is_deleted: boolean | null;
+      }[];
+      let byURL = new Map(rows.map((row) => [row.url, row]));
+      for (let name of ['renderer', 'renderer-of-renderer']) {
+        let row = byURL.get(url(name));
+        assert.strictEqual(
+          row?.generation,
+          batch.committedGeneration,
+          `${name}'s index row carries the pass's generation, so the HTML reconcile sweep can still repair it`,
+        );
+        assert.notEqual(
+          row?.indexed_at,
+          null,
+          `${name}'s index row carries a fresh indexed_at, so card+json validators move`,
+        );
+        assert.notOk(row?.is_deleted, `${name}'s index row stays live`);
+      }
+      assert.strictEqual(
+        byURL.get(url('unrelated'))?.generation,
+        1,
+        'a card outside the fan-out is untouched',
+      );
+      assert.strictEqual(
+        byURL.get(url('unrelated'))?.indexed_at,
+        null,
+        'a card outside the fan-out keeps its indexed_at',
+      );
+    });
+
+    test('a dependent with both an index edge and a render edge is visited', async function (assert) {
+      await seedGraph();
+      await indexRow('both', ['hub']);
+      await htmlRow('both', ['hub', 'renderer']);
+      let batch = await indexWriter.createBatch(
+        new URL(testRealm),
+        new VirtualNetwork(),
+        undefined,
+        { splitPrerenderHtml: true },
+      );
+      await batch.invalidate([new URL(url('hub'))]);
+
+      assert.true(
+        batch.invalidations.includes(url('both')),
+        'the index edge puts the card in the visit set',
+      );
+      assert.false(
+        batch.renderOnlyInvalidations.includes(url('both')),
+        'a visited card is not also handed over as render-only',
+      );
+    });
+
+    test('a fused pass visits every dependent, since its visits render the HTML inline', async function (assert) {
+      await seedGraph();
+      let batch = await indexWriter.createBatch(
+        new URL(testRealm),
+        new VirtualNetwork(),
+        undefined,
+        { splitPrerenderHtml: false },
+      );
+      await batch.invalidate([new URL(url('hub'))]);
+
+      assert.deepEqual(
+        batch.invalidations.sort(),
+        urls(
+          'hub',
+          'linker',
+          'linker-of-linker',
+          'linker-of-renderer',
+          'renderer',
+          'renderer-of-renderer',
+        ),
+        'every card reachable through either edge kind is visited',
+      );
+      assert.deepEqual(
+        batch.renderOnlyInvalidations,
+        [],
+        'nothing is left to a separate HTML job',
+      );
+    });
+  });
+
   module('prerenderHtmlOnly batch', function (hooks) {
     let adapter: PgAdapter;
     let indexWriter: IndexWriter;
@@ -559,16 +945,51 @@ module(basename(import.meta.filename), function () {
         reservationId: 1,
         priority: 0,
         queueWaitMs: null,
+        concurrencyGroup: null,
+        laneFamily: null,
       };
     }
 
+    // Commits `generation` as the realm's generation, standing in for the
+    // index pass that spawned the prerender-html job. With no index row for
+    // the URLs these tests write, every row the job stamps takes it.
+    async function setRealmGeneration(generation: number) {
+      await adapter.execute(
+        `INSERT INTO realm_generations (realm_url, current_generation, loader_epoch)
+         VALUES ($1, $2, '0')
+         ON CONFLICT (realm_url) DO UPDATE SET current_generation = EXCLUDED.current_generation`,
+        { bind: [testRealm, generation] },
+      );
+    }
+
+    // A prerender-html batch whose rows are stamped at `generation`, the way
+    // the job's batch is once its spawning passes have committed.
     async function makeBatch(generation: number, info = jobInfo()) {
-      return await indexWriter.createBatch(
+      await setRealmGeneration(generation);
+      let batch = await indexWriter.createBatch(
         new URL(testRealm),
         virtualNetwork,
         info,
-        { prerenderHtmlOnly: true, generation },
+        { prerenderHtmlOnly: true },
       );
+      await batch.adoptIndexGenerations([]);
+      return batch;
+    }
+
+    type PassAtArgs = Omit<
+      Parameters<typeof runPrerenderHtmlPass>[0],
+      'spawningIndexPasses' | 'generation'
+    > & { generation: number };
+
+    // Runs the pass the way the job runs it once the index pass that spawned
+    // it has committed `generation`.
+    async function runPassAt({ generation, ...args }: PassAtArgs) {
+      await setRealmGeneration(generation);
+      return await runPrerenderHtmlPass({
+        ...args,
+        spawningIndexPasses: [],
+        generation,
+      });
     }
 
     async function writeInstance(
@@ -615,8 +1036,8 @@ module(basename(import.meta.filename), function () {
       return rows[0];
     }
 
-    // Every live row on either channel carries the three write-side stamps
-    // in its `diagnostics` column (see `Diagnostics`). Assert they are there,
+    // Every live row on either channel carries the write-side stamps in its
+    // `diagnostics` column (see `Diagnostics`). Assert they are there,
     // then return the rest of the blob so a render-side assertion can compare
     // exactly what the render produced. Not for `error_doc.diagnostics`: that
     // mirror carries the render's own diagnostics only.
@@ -627,7 +1048,7 @@ module(basename(import.meta.filename), function () {
     ): Record<string, unknown> {
       assert.ok(diagnostics, `${label} carries a diagnostics blob`);
       let rest: Record<string, unknown> = { ...(diagnostics ?? {}) };
-      for (let key of ['invalidationId', 'indexedAt', 'writeSeq']) {
+      for (let key of ['invalidationId', 'passId', 'indexedAt', 'writeSeq']) {
         assert.notStrictEqual(
           rest[key],
           undefined,
@@ -931,12 +1352,12 @@ module(basename(import.meta.filename), function () {
       await batch.seedPrerenderedHtmlInvalidations([
         { url, operation: 'update' },
       ]);
-      let workingRows = (await adapter.execute(
-        `SELECT type, is_deleted, generation FROM prerendered_html_working WHERE url = $1 ORDER BY type`,
+      let pendingRows = (await adapter.execute(
+        `SELECT type, is_deleted, generation FROM prerendered_html_pending WHERE url = $1 ORDER BY type`,
         { bind: [url] },
       )) as { type: string; is_deleted: boolean; generation: number }[];
       assert.deepEqual(
-        workingRows.map((r) => ({
+        pendingRows.map((r) => ({
           type: r.type,
           is_deleted: Boolean(r.is_deleted),
           generation: r.generation,
@@ -945,7 +1366,7 @@ module(basename(import.meta.filename), function () {
           { type: 'file', is_deleted: true, generation: 2 },
           { type: 'instance', is_deleted: true, generation: 2 },
         ],
-        'the whole set is tombstoned up front in the working table',
+        'the whole set is tombstoned up front in the pending table',
       );
 
       await batch.updatePrerenderedHtmlEntry(new URL(url), {
@@ -1163,7 +1584,7 @@ module(basename(import.meta.filename), function () {
           throw new Error('not used by the prerender-html pass');
         },
       };
-      await runPrerenderHtmlPass({
+      await runPassAt({
         realmURL: new URL(testRealm),
         changes: [{ url: cardURL, operation: 'update' }],
         generation: 1,
@@ -1358,16 +1779,16 @@ module(basename(import.meta.filename), function () {
       await attempt2.seedPrerenderedHtmlInvalidations([
         { url, operation: 'update' },
       ]);
-      let workingRows = (await adapter.execute(
-        `SELECT is_deleted, isolated_html FROM prerendered_html_working WHERE url = $1`,
+      let pendingRows = (await adapter.execute(
+        `SELECT is_deleted, isolated_html FROM prerendered_html_pending WHERE url = $1`,
         { bind: [url] },
       )) as { is_deleted: boolean | null; isolated_html: string | null }[];
       assert.strictEqual(
-        workingRows[0].isolated_html,
+        pendingRows[0].isolated_html,
         '<h1>attempt 1</h1>',
         'seeding does not tombstone over the resumed row',
       );
-      assert.false(Boolean(workingRows[0].is_deleted));
+      assert.false(Boolean(pendingRows[0].is_deleted));
       await attempt2.done();
 
       let row = await productionRow(url);
@@ -1517,12 +1938,326 @@ module(basename(import.meta.filename), function () {
         /only valid on a prerenderHtmlOnly batch/,
       );
 
-      await assert.rejects(
-        indexWriter.createBatch(new URL(testRealm), virtualNetwork, jobInfo(), {
-          prerenderHtmlOnly: true,
-        }),
-        /requires an explicit generation/,
+      let unadopted = await indexWriter.createBatch(
+        new URL(testRealm),
+        virtualNetwork,
+        jobInfo(),
+        { prerenderHtmlOnly: true },
       );
+      await assert.rejects(
+        unadopted.updatePrerenderedHtmlEntry(new URL(`${testRealm}1.json`), {
+          type: 'instance',
+          deps: [],
+        }),
+        /before adopting the index generations it stamps/,
+        'a prerender-html batch cannot stamp a row before it has read the index generations',
+      );
+      await assert.rejects(
+        indexBatch.adoptIndexGenerations([`${testRealm}1.json`]),
+        /only valid on a prerenderHtmlOnly batch/,
+      );
+    });
+
+    // The job is enqueued mid-pass, before its spawning index pass commits,
+    // and that pass takes its generation only when it commits. So the job
+    // waits on the pass by job id, answered by the commit ledger, and stamps
+    // each row from the index row it renders once the wait is over.
+    module('spawning-pass gate', function () {
+      const cardURL = `${testRealm}gated.json`;
+      const cardSource = JSON.stringify({
+        data: {
+          type: 'card',
+          meta: { adoptsFrom: { module: `${testRealm}pine`, name: 'Pine' } },
+        },
+      });
+
+      function visitRecordingPrerenderer(visited: string[]): Prerenderer {
+        return {
+          async prerenderVisit(args: { url: string }) {
+            visited.push(args.url);
+            let rendering = {
+              isolatedHTML: '<h1>rendered</h1>',
+              headHTML: null,
+              atomHTML: null,
+              embeddedHTML: null,
+              fittedHTML: null,
+              iconHTML: null,
+              markdown: null,
+            };
+            return {
+              card: {
+                serialized: null,
+                searchDoc: null,
+                displayNames: null,
+                deps: [],
+                types: null,
+                ...rendering,
+              },
+              fileRender: rendering,
+            };
+          },
+          async prerenderModule() {
+            throw new Error('not used by the prerender-html pass');
+          },
+          async runCommand() {
+            throw new Error('not used by the prerender-html pass');
+          },
+        } as unknown as Prerenderer;
+      }
+
+      async function insertIndexJob(): Promise<number> {
+        let [row] = (await adapter.execute(
+          `INSERT INTO jobs (job_type, concurrency_group, args, status, timeout)
+           VALUES ('incremental-index', $1, '{}'::jsonb, 'unfulfilled', 600)
+           RETURNING id`,
+          { bind: [`indexing:${testRealm}`] },
+        )) as { id: number | string }[];
+        return Number(row.id);
+      }
+
+      async function indexRowAt(url: string, generation: number) {
+        await adapter.execute(
+          `INSERT INTO boxel_index (url, file_alias, realm_url, type, generation)
+           VALUES ($1, $1, $2, 'instance', $3)
+           ON CONFLICT ON CONSTRAINT boxel_index_pkey DO UPDATE SET generation = EXCLUDED.generation`,
+          { bind: [url, testRealm, generation] },
+        );
+      }
+
+      // What an index pass's commit publishes, as far as the job can see it:
+      // its rows, the realm's generation, and its ledger row.
+      async function commitIndexPass(opts: {
+        jobId: number;
+        passId?: string;
+        generation: number;
+        urls: string[];
+      }) {
+        for (let url of opts.urls) {
+          await indexRowAt(url, opts.generation);
+        }
+        await setRealmGeneration(opts.generation);
+        await adapter.execute(
+          `INSERT INTO realm_index_commits
+             (realm_url, generation, base_generation, pass_id, job_id, urls, full_realm, committed_at)
+           VALUES ($1, $2, $3, $4, $5, $6::jsonb, false, $7)`,
+          {
+            bind: [
+              testRealm,
+              opts.generation,
+              opts.generation - 1,
+              opts.passId ?? `pass-${opts.jobId}`,
+              opts.jobId,
+              JSON.stringify(opts.urls),
+              Date.now(),
+            ],
+          },
+        );
+      }
+
+      function passArgs(opts: {
+        spawningIndexPasses: SpawningIndexPass[];
+        visited: string[];
+      }): Parameters<typeof runPrerenderHtmlPass>[0] {
+        return {
+          realmURL: new URL(testRealm),
+          changes: [{ url: cardURL, operation: 'update' }],
+          spawningIndexPasses: opts.spawningIndexPasses,
+          generation: 0,
+          loaderEpoch: 'epoch-a',
+          spawningJobId: opts.spawningIndexPasses[0]?.jobId ?? null,
+          ...noPreWarmDeps,
+          indexWriter,
+          virtualNetwork,
+          reader: stubReader(new Map([[cardURL, cardSource]])),
+          prerenderer: visitRecordingPrerenderer(opts.visited),
+          auth: 'test-auth',
+          jobInfo: jobInfo(),
+          dbAdapter: adapter,
+        };
+      }
+
+      test("a peer's commit does not release the visits; the spawning pass's commit does", async function (assert) {
+        await commitIndexPass({
+          jobId: await insertIndexJob(),
+          generation: 1,
+          urls: [cardURL],
+        });
+        let spawner = await insertIndexJob();
+        let peer = await insertIndexJob();
+
+        let visited: string[] = [];
+        let pass = runPrerenderHtmlPass(
+          passArgs({ spawningIndexPasses: passes(spawner), visited }),
+        );
+
+        // The peer overtakes the spawner and commits first, taking the
+        // generation the spawner anticipated when it set up. The realm's
+        // generation now reads past anything the spawner could have been
+        // told at enqueue time.
+        await commitIndexPass({
+          jobId: peer,
+          generation: 2,
+          urls: [`${testRealm}elsewhere.json`],
+        });
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        assert.deepEqual(
+          visited,
+          [],
+          'the visits are still held after a peer pass committed',
+        );
+
+        await commitIndexPass({
+          jobId: spawner,
+          generation: 3,
+          urls: [cardURL],
+        });
+        let result = await pass;
+
+        assert.deepEqual(
+          visited,
+          [cardURL],
+          'the spawning pass’s commit released the visits',
+        );
+        assert.ok(
+          (result.spawnGateMs ?? 0) >= 1000,
+          `the wait is reported on the result (${result.spawnGateMs} ms)`,
+        );
+        assert.strictEqual(
+          result.generation,
+          3,
+          'the pass reports the committed generation it rendered against',
+        );
+        let row = await productionRow(cardURL);
+        assert.strictEqual(
+          row.generation,
+          3,
+          'the row is stamped with the generation the spawning pass committed',
+        );
+        assert.strictEqual(row.diagnostics?.stampedFromIndexGeneration, 3);
+      });
+
+      test("an earlier attempt of the same job committing does not release a wait on the rerun's pass", async function (assert) {
+        // A job whose reservation expired runs again under the same id. The
+        // first attempt's commit is on the ledger under that id, but the
+        // rerun's pass — the one this job's changes came from — is not.
+        await commitIndexPass({
+          jobId: await insertIndexJob(),
+          generation: 1,
+          urls: [cardURL],
+        });
+        let spawner = await insertIndexJob();
+        await commitIndexPass({
+          jobId: spawner,
+          passId: 'first-attempt',
+          generation: 2,
+          urls: [cardURL],
+        });
+
+        let visited: string[] = [];
+        let pass = runPrerenderHtmlPass(
+          passArgs({
+            spawningIndexPasses: [{ jobId: spawner, passId: 'second-attempt' }],
+            visited,
+          }),
+        );
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        assert.deepEqual(
+          visited,
+          [],
+          'the visits are still held while the rerun has not committed',
+        );
+
+        await commitIndexPass({
+          jobId: spawner,
+          passId: 'second-attempt',
+          generation: 3,
+          urls: [cardURL],
+        });
+        await pass;
+        assert.deepEqual(
+          visited,
+          [cardURL],
+          'the rerun’s commit released them',
+        );
+        let row = await productionRow(cardURL);
+        assert.strictEqual(
+          row.generation,
+          3,
+          'the row is stamped with the rerun’s generation',
+        );
+      });
+
+      test('a spawning pass that stops running without committing releases the visits', async function (assert) {
+        await commitIndexPass({
+          jobId: await insertIndexJob(),
+          generation: 4,
+          urls: [cardURL],
+        });
+        let spawner = await insertIndexJob();
+
+        let visited: string[] = [];
+        let pass = runPrerenderHtmlPass(
+          passArgs({ spawningIndexPasses: passes(spawner), visited }),
+        );
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        assert.deepEqual(visited, [], 'the visits wait while it runs');
+
+        await adapter.execute(
+          `UPDATE jobs SET status = 'rejected' WHERE id = $1`,
+          { bind: [spawner] },
+        );
+        let result = await pass;
+
+        assert.deepEqual(
+          visited,
+          [cardURL],
+          'the visits render against the committed index once it has stopped',
+        );
+        let row = await productionRow(cardURL);
+        assert.strictEqual(
+          row.generation,
+          4,
+          'the row takes the generation of the index row production still holds',
+        );
+        assert.strictEqual(result.generation, 4);
+      });
+
+      test("each row takes its own index row's generation, and the realm's only where it has none", async function (assert) {
+        // The card's instance row was last committed at 2; peer passes have
+        // since carried the realm to 5 without touching it. The file row has
+        // no index row at all here.
+        await indexRowAt(cardURL, 2);
+        await setRealmGeneration(5);
+
+        let visited: string[] = [];
+        let result = await runPrerenderHtmlPass(
+          passArgs({ spawningIndexPasses: [], visited }),
+        );
+
+        let instanceRow = await productionRow(cardURL, 'instance');
+        assert.strictEqual(
+          instanceRow.generation,
+          2,
+          'the instance row matches the index row it renders, so it reads as current rather than ahead of it',
+        );
+        assert.strictEqual(
+          instanceRow.diagnostics?.stampedFromIndexGeneration,
+          2,
+          'and records the index generation it was read from',
+        );
+        let fileRow = await productionRow(cardURL, 'file');
+        assert.strictEqual(
+          fileRow.generation,
+          5,
+          'a row with no index row takes the realm’s committed generation',
+        );
+        assert.strictEqual(
+          fileRow.diagnostics?.stampedFromIndexGeneration,
+          undefined,
+          'and records no index generation',
+        );
+        assert.strictEqual(result.generation, 5);
+      });
     });
 
     module('per-URL failure isolation', function () {
@@ -1592,7 +2327,7 @@ module(basename(import.meta.filename), function () {
           deps: [`${testRealm}dep.gts`],
         });
 
-        let { stats } = await runPrerenderHtmlPass({
+        let { stats } = await runPassAt({
           realmURL: new URL(testRealm),
           changes: [
             { url: failedURL, operation: 'update' },
@@ -1657,7 +2392,7 @@ module(basename(import.meta.filename), function () {
         let newCardURL = `${testRealm}brand-new.json`;
         let plainFileURL = `${testRealm}notes.txt`;
 
-        let { stats } = await runPrerenderHtmlPass({
+        let { stats } = await runPassAt({
           realmURL: new URL(testRealm),
           changes: [
             { url: newCardURL, operation: 'update' },
@@ -1712,7 +2447,7 @@ module(basename(import.meta.filename), function () {
         // so the re-parse fallback cannot classify the URL — the instance
         // error can only come from the batch's record of the live production
         // row types its tombstone seeding overwrote.
-        let { stats } = await runPrerenderHtmlPass({
+        let { stats } = await runPassAt({
           realmURL: new URL(testRealm),
           changes: [{ url, operation: 'update' }],
           generation: 2,
@@ -1747,7 +2482,7 @@ module(basename(import.meta.filename), function () {
         let passArgs = (
           generation: number,
           prerenderer: Prerenderer,
-        ): Parameters<typeof runPrerenderHtmlPass>[0] => ({
+        ): PassAtArgs => ({
           realmURL: new URL(testRealm),
           changes: [{ url, operation: 'update' }],
           generation,
@@ -1762,7 +2497,7 @@ module(basename(import.meta.filename), function () {
           jobInfo: jobInfo(),
         });
 
-        await runPrerenderHtmlPass(passArgs(1, abortingPrerenderer('mango')));
+        await runPassAt(passArgs(1, abortingPrerenderer('mango')));
         let row = await productionRow(url);
         assert.true(Boolean(row.error_doc?.visitRequestFailure));
         assert.strictEqual(
@@ -1771,7 +2506,7 @@ module(basename(import.meta.filename), function () {
           'the first failure starts a run of one',
         );
 
-        await runPrerenderHtmlPass(passArgs(2, abortingPrerenderer('mango')));
+        await runPassAt(passArgs(2, abortingPrerenderer('mango')));
         row = await productionRow(url);
         assert.strictEqual(
           row.error_doc?.consecutiveVisitFailures,
@@ -1785,7 +2520,7 @@ module(basename(import.meta.filename), function () {
             return renderedVisitResponse('recovered');
           },
         };
-        await runPrerenderHtmlPass(passArgs(3, succeeding));
+        await runPassAt(passArgs(3, succeeding));
         row = await productionRow(url);
         assert.strictEqual(
           row.error_doc,
@@ -1818,10 +2553,11 @@ module(basename(import.meta.filename), function () {
 
     // The scope a render is keyed to decides which resident instances a
     // prerender tab may reuse. An index pass and the prerender_html job it
-    // spawns render the same generation of the same realm from two queue
-    // jobs, so keying on the job id alone would put them in different scopes
-    // and make each drop what the other just built — while a *different*
-    // pass, whose whole purpose is to observe a write, must not share one.
+    // spawns render one view of the same realm from two queue jobs, so keying
+    // on the job id alone would put them in different scopes and make each
+    // drop what the other just built — while a *different* pass, whose whole
+    // purpose is to observe a write, must not share one, and neither may a job
+    // whose spawning pass another commit overlapped.
     module('render scope', function () {
       function scopeRecordingPrerenderer(scopes: (string | undefined)[]) {
         return {
@@ -1865,17 +2601,49 @@ module(basename(import.meta.filename), function () {
       async function scopesForPass(opts: {
         spawningJobId: number | null;
         info: ReturnType<typeof jobInfo>;
+        // The spawning pass's ledger row: the generation it read and the one
+        // it committed. Absent, the job has no recorded spawning pass.
+        spawner?: { baseGeneration: number; generation: number };
+        // The realm's generation when the job adopts its stamps; defaults to
+        // the spawning pass's commit.
+        realmGeneration?: number;
       }): Promise<(string | undefined)[]> {
         let url = `${testRealm}scope-${opts.info.jobId}.json`;
         await writeInstance(1, url, '<h1>old</h1>');
         let scopes: (string | undefined)[] = [];
+        let spawner = opts.spawner;
+        let generation = opts.realmGeneration ?? spawner?.generation ?? 2;
+        if (spawner && opts.spawningJobId !== null) {
+          await adapter.execute(
+            `INSERT INTO realm_index_commits
+               (realm_url, generation, base_generation, pass_id, job_id, urls, full_realm, committed_at)
+             VALUES ($1, $2, $3, $4, $5, '[]'::jsonb, false, $6)`,
+            {
+              bind: [
+                testRealm,
+                spawner.generation,
+                spawner.baseGeneration,
+                `pass-${opts.spawningJobId}`,
+                opts.spawningJobId,
+                Date.now(),
+              ],
+            },
+          );
+        }
+        await setRealmGeneration(generation);
         await runPrerenderHtmlPass({
           realmURL: new URL(testRealm),
           changes: [{ url, operation: 'update' }],
-          generation: 2,
+          spawningIndexPasses:
+            spawner && opts.spawningJobId !== null
+              ? passes(opts.spawningJobId)
+              : [],
+          generation,
           loaderEpoch: 'epoch-a',
           spawningJobId: opts.spawningJobId,
           ...noPreWarmDeps,
+          // The ledger it checks its spawning pass against.
+          dbAdapter: adapter,
           indexWriter,
           virtualNetwork,
           reader: stubReader(
@@ -1903,12 +2671,13 @@ module(basename(import.meta.filename), function () {
         return scopes;
       }
 
-      test("the pass renders under its spawning index job's scope, not its own job id", async function (assert) {
+      test("the pass renders under its spawning index job's scope, not its own job id, when nothing else committed around it", async function (assert) {
         let spawning = jobInfo();
         let htmlJob = jobInfo();
         let scopes = await scopesForPass({
           spawningJobId: spawning.jobId,
           info: htmlJob,
+          spawner: { baseGeneration: 1, generation: 2 },
         });
 
         assert.deepEqual(
@@ -1919,6 +2688,62 @@ module(basename(import.meta.filename), function () {
         assert.notOk(
           scopes.includes(renderScopeFor(testRealm, htmlJob.jobId)),
           'and not the scope of the queue job running it — a tab shared with the index visit would otherwise reload everything it just built',
+        );
+      });
+
+      test('a pass whose spawning pass another commit overlapped renders under its own scope', async function (assert) {
+        // Another writer's pass committed generation 2 while the spawning
+        // pass ran, so the spawning pass committed 3 over state newer than
+        // what its visits read and left resident.
+        let spawning = jobInfo();
+        let htmlJob = jobInfo();
+        let scopes = await scopesForPass({
+          spawningJobId: spawning.jobId,
+          info: htmlJob,
+          spawner: { baseGeneration: 1, generation: 3 },
+        });
+
+        assert.deepEqual(
+          scopes,
+          [renderScopeFor(testRealm, htmlJob.jobId)],
+          "the visit reads afresh under the job's own scope",
+        );
+      });
+
+      test('a pass that adopts a generation past its spawning pass renders under its own scope', async function (assert) {
+        // The spawning pass committed 2 cleanly, but another writer's pass
+        // committed 3 before this job adopted its stamps.
+        let spawning = jobInfo();
+        let htmlJob = jobInfo();
+        let scopes = await scopesForPass({
+          spawningJobId: spawning.jobId,
+          info: htmlJob,
+          spawner: { baseGeneration: 1, generation: 2 },
+          realmGeneration: 3,
+        });
+
+        assert.deepEqual(
+          scopes,
+          [renderScopeFor(testRealm, htmlJob.jobId)],
+          "the visit reads afresh under the job's own scope",
+        );
+      });
+
+      test('a pass with a spawning job but no recorded spawning pass renders under its own scope', async function (assert) {
+        // A job enqueued by a worker predating spawning passes carries its
+        // spawning job but nothing the ledger can answer for, so there is no
+        // telling whether its view moved.
+        let spawning = jobInfo();
+        let htmlJob = jobInfo();
+        let scopes = await scopesForPass({
+          spawningJobId: spawning.jobId,
+          info: htmlJob,
+        });
+
+        assert.deepEqual(
+          scopes,
+          [renderScopeFor(testRealm, htmlJob.jobId)],
+          "falls back to the job's own scope",
         );
       });
 
@@ -1953,6 +2778,8 @@ module(basename(import.meta.filename), function () {
             reservationId: -1,
             priority: 0,
             queueWaitMs: null,
+            concurrencyGroup: null,
+            laneFamily: null,
           },
         });
 
@@ -1965,16 +2792,124 @@ module(basename(import.meta.filename), function () {
         let firstScopes = await scopesForPass({
           spawningJobId: first.jobId,
           info: first,
+          spawner: { baseGeneration: 1, generation: 2 },
         });
         let secondScopes = await scopesForPass({
           spawningJobId: second.jobId,
           info: second,
+          spawner: { baseGeneration: 2, generation: 3 },
         });
 
         assert.notDeepEqual(
           firstScopes,
           secondScopes,
           'a later pass renders under its own scope, so the write it exists to observe cannot be answered from what the earlier pass left resident',
+        );
+      });
+    });
+
+    // This pass reads each file's source to decide whether it is a card, and
+    // hands that same source to the visit so the render builds its model from
+    // it instead of fetching the instance's source again. The hand-off is
+    // destructured by name at every hop, so dropping it anywhere leaves the
+    // render fetching — which still produces correct HTML and fails nothing.
+    // This job never runs `render.meta`, so `cardSourceFrom` never reaches a
+    // row for it either: the visit args are the only place the hop is
+    // observable at all.
+    module('card source', function () {
+      function cardSourceRecordingPrerenderer(
+        recorded: (CardSourceVisitArgs | undefined)[],
+      ) {
+        return {
+          async prerenderVisit(args: { cardSource?: CardSourceVisitArgs }) {
+            recorded.push(args.cardSource);
+            return {
+              fileRender: {
+                isolatedHTML: '<pre>rendered</pre>',
+                headHTML: null,
+                atomHTML: null,
+                embeddedHTML: null,
+                fittedHTML: null,
+                iconHTML: null,
+                markdown: null,
+              },
+            };
+          },
+          async prerenderModule() {
+            throw new Error('not used by the prerender-html pass');
+          },
+          async runCommand() {
+            throw new Error('not used by the prerender-html pass');
+          },
+        } as unknown as Prerenderer;
+      }
+
+      async function cardSourceForPass(
+        url: string,
+        source: string,
+      ): Promise<(CardSourceVisitArgs | undefined)[]> {
+        let recorded: (CardSourceVisitArgs | undefined)[] = [];
+        await runPassAt({
+          realmURL: new URL(testRealm),
+          changes: [{ url, operation: 'update' }],
+          generation: 2,
+          loaderEpoch: 'epoch-a',
+          spawningJobId: null,
+          ...noPreWarmDeps,
+          indexWriter,
+          virtualNetwork,
+          reader: stubReader(new Map([[url, source]])),
+          prerenderer: cardSourceRecordingPrerenderer(recorded),
+          auth: 'test-auth',
+          jobInfo: jobInfo(),
+        });
+        return recorded;
+      }
+
+      test("a card instance's visit carries the source this pass read", async function (assert) {
+        let url = `${testRealm}carries-source.json`;
+        let source = JSON.stringify({
+          data: {
+            type: 'card',
+            meta: { adoptsFrom: { module: `${testRealm}pine`, name: 'Pine' } },
+          },
+        });
+
+        let recorded = await cardSourceForPass(url, source);
+
+        assert.strictEqual(recorded.length, 1, 'one visit');
+        assert.strictEqual(
+          recorded[0]?.source,
+          source,
+          'the bytes this pass read are the bytes the visit carries',
+        );
+        assert.strictEqual(
+          recorded[0]?.realmURL,
+          testRealm,
+          "the visit's realm travels with them, since a render has no response header to learn it from",
+        );
+        assert.strictEqual(
+          typeof recorded[0]?.lastModified,
+          'number',
+          'and the modified time the card branch would otherwise read off its own response',
+        );
+      });
+
+      test('a .json file that is not a card instance carries no source', async function (assert) {
+        // Nothing renders it through the card branch, so there is nothing for a
+        // stash to feed — and sending one would put bytes on the wire that no
+        // consumer reads.
+        let url = `${testRealm}not-a-card.json`;
+        let recorded = await cardSourceForPass(
+          url,
+          JSON.stringify({ hello: 'world' }),
+        );
+
+        assert.strictEqual(recorded.length, 1, 'one visit');
+        assert.strictEqual(
+          recorded[0],
+          undefined,
+          'the visit carries no card source',
         );
       });
     });
@@ -2011,7 +2946,7 @@ module(basename(import.meta.filename), function () {
         let events: IndexingProgressEvent[] = [];
         let visited: string[] = [];
         let info = jobInfo();
-        await runPrerenderHtmlPass({
+        await runPassAt({
           realmURL: new URL(testRealm),
           changes: [
             { url: `${testRealm}a.txt`, operation: 'update' },
@@ -2089,7 +3024,7 @@ module(basename(import.meta.filename), function () {
             throw new Error('renderer died');
           },
         };
-        let { stats } = await runPrerenderHtmlPass({
+        let { stats } = await runPassAt({
           realmURL: new URL(testRealm),
           changes: [{ url: `${testRealm}a.txt`, operation: 'update' }],
           generation: 1,

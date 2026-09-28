@@ -1,0 +1,29 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "assistantPrompt": "create a hello world card and show it",
+      "followUpPrompts": [],
+      "successCriteria": "1. A new card definition (a `.gts` file) and one instance of it exist in the test workspace.\n2. The instance is open on screen (stack or code-mode preview) and renders the words \"Hello World\" (any casing) with no error boundary.\n3. The definition and the instance were written in the same reply, with box-style SEARCH/REPLACE markers, and every patch applied.\n4. The assistant did not ask a question or wait for confirmation before writing.\n5. At most 8 turns and at most one mode switch.",
+      "cardInfo": {
+        "name": "Hello World",
+        "summary": "The smallest build: one definition, one instance, shown on screen.",
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../evaluation",
+        "name": "EvaluationCard"
+      }
+    }
+  }
+}

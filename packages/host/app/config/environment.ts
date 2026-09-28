@@ -39,6 +39,7 @@ export default config as {
   resolvedCatalogRealmURL: string | undefined;
   resolvedSkillsRealmURL: string;
   resolvedOpenRouterRealmURL: string | undefined;
+  resolvedPretuiRealmURL: string;
   resolvedTestRealmURL: string;
   hostsOwnAssets: boolean;
   realmsServed?: string[];

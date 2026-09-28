@@ -26,6 +26,7 @@ const REALM_USERS = [
   'submission_realm',
   'node-test_realm',
   'skills_realm',
+  'pretui_realm',
   'software_factory_realm',
   'test_realm',
   'openrouter_realm',

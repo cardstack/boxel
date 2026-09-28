@@ -27,7 +27,7 @@ export default class WeatherFetchCommand extends Command<
   protected async run(input: WeatherFetchInput): Promise<WeatherResult> {
     if (!input.city) throw new Error('city is required');
 
-    const proxy = new SendRequestViaProxyCommand(this.commandContext);
+    const proxy = new SendRequestViaProxyCommand(this.toolContext);
 
     // 1) Build the URL. The realm matches the host (api.weatherapi.com)
     //    and injects the configured API key automatically — we don't
@@ -61,8 +61,8 @@ export default class WeatherFetchCommand extends Command<
 //
 //   class CityWeatherWidget extends Component<typeof CityCard> {
 //     fetchTask = restartableTask(async () => {
-//       const { commandContext } = this.args.context!;
-//       const cmd = new WeatherFetchCommand(commandContext);
+//       const { toolContext } = this.args.context!;
+//       const cmd = new WeatherFetchCommand(toolContext);
 //       const result = await cmd.execute({ city: this.args.model.name });
 //       this.summary = result.summary;
 //     });

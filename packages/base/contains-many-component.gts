@@ -20,7 +20,7 @@ import {
   PermissionsConsumer,
 } from './field-component';
 import { Button, IconButton } from '@cardstack/boxel-ui/components';
-import type { Loader } from '@cardstack/runtime-common';
+import { loaderForModule, type Loader } from '@cardstack/runtime-common';
 import {
   getPlural,
   fields,
@@ -457,12 +457,8 @@ export function getContainsManyComponent({
 }
 
 function myLoader(): Loader {
-  // we know this code is always loaded by an instance of our Loader, which sets
-  // import.meta.loader.
-
-  // When type-checking realm-server, tsc sees this file and thinks
-  // it will be transpiled to CommonJS and so it complains about this line. But
-  // this file is always loaded through our loader and always has access to import.meta.
+  // tsc checks this file as CommonJS output when it checks realm-server, and
+  // so rejects the `import.meta` read; the read is all that is suppressed.
   // @ts-ignore
-  return (import.meta as any).loader;
+  return loaderForModule(import.meta);
 }

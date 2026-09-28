@@ -269,6 +269,29 @@ export interface IndexedInstance {
   generation: number;
   realmURL: string;
   indexedAt: number | null;
+  // The content hash of the stored source `instance` was serialized from, as
+  // the pass that indexed those bytes recorded it. The card+json GET serves it
+  // as `meta.version`; a client sends it back as the base its next write is
+  // computed against.
+  //
+  // Null when the row predates the stamp or its pass produced no fingerprint,
+  // in which case the GET reports no version at all. Never substitute
+  // `realm_file_meta.content_hash` for a null here: that column describes
+  // whatever the file holds now rather than the bytes behind this row's
+  // document, and it is empty for every file that reached disk outside the
+  // realm's own write API.
+  sourceContentHash: string | null;
+}
+
+// An instance's row as its index visit left it, and nothing from its render.
+// `error` is set when the visit itself failed, and `instance` otherwise.
+export interface IndexedInstanceSource {
+  realmURL: string;
+  generation: number;
+  sourceContentHash: string | null;
+  types: string[] | null;
+  instance: CardResource | null;
+  error: SerializedError | null;
 }
 
 interface InstanceError extends Partial<
@@ -310,7 +333,11 @@ export type QueryOptions = WIPOptions & {
 export type SearchProjection = { kind: 'dataOnly' } | { kind: 'renderSet' };
 
 export interface WIPOptions {
-  useWorkInProgressIndex?: boolean;
+  // Read one index pass's staged rows — its `boxel_index_pending` rows, with
+  // its own `prerendered_html_pending` rows joined — instead of the committed
+  // index. Takes the pass's `Batch.stagingId`, so a read sees that pass's
+  // uncommitted work and no other pass's.
+  pendingStagingId?: string;
 }
 
 export interface QueryResultsMeta {
@@ -610,6 +637,51 @@ export class IndexQueryEngine {
     return rows.length > 0 ? Number(rows[0].generation) : undefined;
   }
 
+  // An instance's row from `boxel_index` alone, with no `prerendered_html`
+  // join: what its index visit read and recorded, and whether that visit
+  // failed. A render error is not reflected, so a card whose rendering failed
+  // still reads as the instance its source says it is. For a reader that
+  // needs the card's data and adoption chain, and none of its rendering.
+  async getInstanceSource(
+    url: URL,
+    opts?: GetEntryOptions,
+  ): Promise<IndexedInstanceSource | undefined> {
+    let rows = (await this.#query([
+      'SELECT i.realm_url, i.generation, i.source_content_hash, i.types, i.pristine_doc, i.has_error, i.error_doc',
+      `FROM ${tableFromOpts(opts)} AS i`,
+      'WHERE',
+      ...every([
+        any([
+          [`i.url =`, param(url.href)],
+          [`i.file_alias =`, param(url.href)],
+        ]),
+        ['i.type =', param('instance')],
+        any([['i.is_deleted = FALSE'], ['i.is_deleted IS NULL']]),
+      ]),
+      'LIMIT 1',
+    ] as Expression)) as unknown as {
+      realm_url: string;
+      generation: number;
+      source_content_hash: string | null;
+      types: string[] | null;
+      pristine_doc: CardResource | null;
+      has_error: boolean | null;
+      error_doc: SerializedError | null;
+    }[];
+    let row = rows[0];
+    if (!row) {
+      return undefined;
+    }
+    return {
+      realmURL: row.realm_url,
+      generation: Number(row.generation),
+      sourceContentHash: row.source_content_hash ?? null,
+      types: row.types,
+      instance: row.has_error ? null : row.pristine_doc,
+      error: row.has_error ? row.error_doc : null,
+    };
+  }
+
   // The declared-screenshot manifest of a live instance — the `?name=`
   // serving route's addressing read: the shared live-instance predicate (so
   // a name resolves exactly when a DSL capture of the same instance would).
@@ -687,11 +759,13 @@ export class IndexQueryEngine {
       resource_created_at: resourceCreatedAt,
       types,
       deps,
+      source_content_hash: sourceContentHash,
     } = maybeResult;
     let baseResult = {
       canonicalURL,
       realmURL,
       instance,
+      sourceContentHash: sourceContentHash ?? null,
       isolatedHtml,
       headHtml,
       embeddedHtml,
@@ -2462,16 +2536,33 @@ function assertIndexEntry<T>(obj: T): Omit<
 }
 
 function tableFromOpts(opts: WIPOptions | undefined) {
-  return opts?.useWorkInProgressIndex ? 'boxel_index_working' : 'boxel_index';
+  return opts?.pendingStagingId === undefined
+    ? 'boxel_index'
+    : stagedRows('boxel_index_pending', opts.pendingStagingId);
 }
 
-// The prerendered_html table paired with the boxel_index table `tableFromOpts`
-// selects: the working table mirrors boxel_index_working during an in-progress
-// pass, the production table mirrors boxel_index.
+// The prerendered_html rows paired with the boxel_index rows `tableFromOpts`
+// selects: the same pass's staged HTML rows for a staged read, the production
+// table otherwise.
 function prerenderedTableFromOpts(opts: WIPOptions | undefined) {
-  return opts?.useWorkInProgressIndex
-    ? 'prerendered_html_working'
-    : 'prerendered_html';
+  return opts?.pendingStagingId === undefined
+    ? 'prerendered_html'
+    : stagedRows('prerendered_html_pending', opts.pendingStagingId);
+}
+
+// A pass's rows of a pending table, as a derived table the callers alias like
+// the table it stands in for. The staging id is spliced into the statement
+// text because the table expression is interpolated into it rather than built
+// from parameters, so only the two shapes a batch mints are accepted.
+const STAGING_ID_PATTERN = /^(job:\d+\.-?\d+|adhoc:[0-9a-f-]+)$/;
+function stagedRows(
+  table: 'boxel_index_pending' | 'prerendered_html_pending',
+  stagingId: string,
+) {
+  if (!STAGING_ID_PATTERN.test(stagingId)) {
+    throw new Error(`not a staging id: ${JSON.stringify(stagingId)}`);
+  }
+  return `(SELECT * FROM ${table} WHERE staging_id = '${stagingId}')`;
 }
 
 // HTML-channel LEFT JOIN: attaches the prerendered_html row (aliased `ph`) for

@@ -111,6 +111,7 @@
         "sidebarPrimary": "var(--boxel-dark, #000000)",
         "trackingNormal": "0.01em",
         "mutedForeground": "var(--boxel-550, #525252)",
+        "subtleForeground": "var(--boxel-450, #919191)",
         "accentForeground": "var(--boxel-dark, #000000)",
         "popoverForeground": "var(--boxel-dark, #000000)",
         "primaryForeground": "var(--boxel-dark, #000000)",
@@ -118,6 +119,8 @@
         "secondaryForeground": "var(--boxel-dark, #000000)",
         "destructiveForeground": "var(--boxel-light, #FFFFFF)",
         "success": "var(--boxel-success, #00AC3D)",
+        "attention": "var(--boxel-amber, #D97706)",
+        "attentionForeground": "var(--boxel-dark, #000000)",
         "sidebarAccentForeground": "var(--boxel-dark, #000000)",
         "sidebarPrimaryForeground": "var(--boxel-light, #FFFFFF)"
       },
@@ -220,6 +223,8 @@
         "secondaryForeground": "var(--boxel-dark, #000000)",
         "destructiveForeground": "var(--boxel-light, #FFFFFF)",
         "success": "var(--boxel-success, #00AC3D)",
+        "attention": "var(--boxel-amber, #D97706)",
+        "attentionForeground": "var(--boxel-dark, #000000)",
         "sidebarAccentForeground": "var(--boxel-dark, #000000)",
         "sidebarPrimaryForeground": "var(--boxel-dark, #000000)"
       },

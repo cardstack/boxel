@@ -320,6 +320,52 @@ class _FileResource extends Resource<Args> {
     this.setSubscription(realmURL, this.onRealmInvalidation);
   });
 
+  // Whether a write under this request id leaves this resource needing to
+  // re-read its file.
+  private reloadsForRequest(
+    clientRequestId: string | null | undefined,
+    normalizedURL: string,
+  ): boolean {
+    let reloadFile = false;
+    if (!clientRequestId || clientRequestId.startsWith('instance:')) {
+      reloadFile = true;
+      realmEventsLogger.debug(
+        `reloading file resource ${normalizedURL} because realm event has ${!clientRequestId ? 'no clientRequestId' : 'clientRequestId from instance editor'}`,
+      );
+    } else if (
+      clientRequestId.startsWith('editor:') ||
+      clientRequestId.startsWith('editor-with-instance:')
+    ) {
+      if (this.cardService.clientRequestIds.has(clientRequestId)) {
+        realmEventsLogger.debug(
+          `ignoring because request id is contained in known clientRequestIds`,
+          clientRequestId,
+        );
+      } else {
+        reloadFile = true;
+        realmEventsLogger.debug(
+          `reloading file resource ${normalizedURL} because request id is ${clientRequestId}, not contained within known clientRequestIds`,
+          Object.keys(this.cardService.clientRequestIds),
+        );
+      }
+    } else if (
+      clientRequestId.startsWith('bot-patch:') ||
+      // create-file writes originate from this host (cardService.saveSource
+      // with saveType 'create-file' — the path WriteTextFileTool uses)
+      // but the FileResource may not yet have any content because its first
+      // fetch raced indexing and 404'd. The clientRequestId being in
+      // cardService.clientRequestIds does NOT imply we already have the
+      // content (unlike the editor: case), so we still need to reload.
+      clientRequestId.startsWith('create-file:')
+    ) {
+      reloadFile = true;
+      realmEventsLogger.debug(
+        `reloading file resource ${normalizedURL} because request id is ${clientRequestId}`,
+      );
+    }
+    return reloadFile;
+  }
+
   private onRealmInvalidation = (event: RealmEventContent): void => {
     if (
       event.eventName !== 'index' ||
@@ -357,45 +403,22 @@ class _FileResource extends Resource<Args> {
         event,
       );
 
-      let clientRequestId = event.clientRequestId;
-      let reloadFile = false;
-
-      if (!clientRequestId || clientRequestId.startsWith('instance:')) {
-        reloadFile = true;
-        realmEventsLogger.debug(
-          `reloading file resource ${normalizedURL} because realm event has ${!clientRequestId ? 'no clientRequestId' : 'clientRequestId from instance editor'}`,
-        );
-      } else if (
-        clientRequestId.startsWith('editor:') ||
-        clientRequestId.startsWith('editor-with-instance:')
-      ) {
-        if (this.cardService.clientRequestIds.has(clientRequestId)) {
-          realmEventsLogger.debug(
-            `ignoring because request id is contained in known clientRequestIds`,
-            event.clientRequestId,
-          );
-        } else {
-          reloadFile = true;
-          realmEventsLogger.debug(
-            `reloading file resource ${normalizedURL} because request id is ${clientRequestId}, not contained within known clientRequestIds`,
-            Object.keys(this.cardService.clientRequestIds),
-          );
-        }
-      } else if (
-        clientRequestId.startsWith('bot-patch:') ||
-        // create-file writes originate from this host (cardService.saveSource
-        // with saveType 'create-file' — the path WriteTextFileTool uses)
-        // but the FileResource may not yet have any content because its first
-        // fetch raced indexing and 404'd. The clientRequestId being in
-        // cardService.clientRequestIds does NOT imply we already have the
-        // content (unlike the editor: case), so we still need to reload.
-        clientRequestId.startsWith('create-file:')
-      ) {
-        reloadFile = true;
-        realmEventsLogger.debug(
-          `reloading file resource ${normalizedURL} because request id is ${clientRequestId}`,
-        );
+      // A pass shared with other writers is announced once, under one
+      // writer's id, so the writers that changed this file are found in its
+      // coalesced writes instead. Any one of them that calls for a re-read
+      // gets one. A file none of them changed falls back to the id the event
+      // was announced under, as a single writer's event does.
+      let requestIds = (event.coalescedWrites ?? [])
+        .filter(
+          ({ changed }) => changed === null || changed.includes(normalizedURL),
+        )
+        .map(({ clientRequestId }) => clientRequestId);
+      if (requestIds.length === 0) {
+        requestIds = [event.clientRequestId ?? null];
       }
+      let reloadFile = requestIds.some((clientRequestId) =>
+        this.reloadsForRequest(clientRequestId, normalizedURL),
+      );
 
       if (reloadFile) {
         // Mirrors the store's invalidation path: only reset the loader when

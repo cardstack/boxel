@@ -17,22 +17,16 @@ import {
 
 const testRealm = new URL('http://127.0.0.1:4445/test/');
 
-// One card definition with a `friend` link that its templates RENDER, and
-// that is deliberately NOT `searchable`. Rendering is what records the link
-// target as a dependency of the card that links to it, and those recorded
-// dependencies are what the invalidation walk reads to find a written URL's
-// dependents. A link the templates never read is not captured, however the
-// field is declared, and a card with no recorded dependency on the target
-// never reaches the pass's fan-out at all.
-//
-// Leaving `searchable` off is what makes these scenarios exercise the
-// ordering under test. A `searchable` link is followed by the search-doc
-// walk, whose collected targets the meta route unions into the index
-// channel's own `deps` — an edge the dependency ordering reads, which would
-// put the target first on its own. Recorded only by the render, the edge
-// lands on the render channel, which the invalidation walk reads and the
-// ordering does not: the fan-out still finds the dependents, and nothing but
-// the write's own URL can put the target ahead of them.
+// One card definition with a `friend` link whose target's name it reads into
+// a computed field, and that its templates render. Reading the target during
+// the index visit records it in the dependent's own `boxel_index.deps`, which
+// is what puts the dependent in a pass's fan-out: a dependent that only
+// renders the target reaches the prerender-html job, not the index pass, so
+// it would never be ordered at all. The same edge is one the dependency
+// ordering reads, so these scenarios pin the end-to-end outcome — the
+// written URL's row lands before its dependents' — rather than which step
+// produced it; `index-visit-order-test.ts` covers the written-URLs-first
+// fallback on its own.
 //
 // `friend` renders as `atom`, which reads only `firstName`, so the render
 // follows the link exactly one hop rather than recursing through the graph.
@@ -45,6 +39,11 @@ function makeFileSystem() {
       export class Person extends CardDef {
         @field firstName = contains(StringField);
         @field friend = linksTo(() => Person);
+        @field friendName = contains(StringField, {
+          computeVia: function (this: Person) {
+            return this.friend?.firstName;
+          },
+        });
         static atom = class Atom extends Component<typeof this> {
           <template>
             <span><@fields.firstName /></span>
@@ -262,12 +261,8 @@ module(basename(import.meta.filename), function (hooks) {
   test("a write's own row is written before the dependents its fan-out found", async function (assert) {
     assert.timeout(300_000);
 
-    // `aaa` and `bbb` both link to `zzz` and render the link, so writing
-    // `zzz` fans out to all three, and `zzz` sorts last of the three. The
-    // target links to neither of them, so no dependency of its own pins it
-    // ahead: what the pass falls back on is the order the URLs arrived in,
-    // where the target came last. Leading with the write's own URL is the
-    // only thing that puts it first.
+    // `aaa` and `bbb` both link to `zzz` and read its name, so writing `zzz`
+    // fans out to all three, and `zzz` sorts last of the three.
     await push(assert, 'the target is created', [
       person('add', 'zzz.json', 'Zeta'),
     ]);
@@ -302,8 +297,8 @@ module(basename(import.meta.filename), function (hooks) {
   test('a batch writes every target before any dependent', async function (assert) {
     assert.timeout(300_000);
 
-    // Two targets, each with one dependent linking to it, and each sorting
-    // after both dependents lexically.
+    // Two targets, each with one dependent linking to it and reading its
+    // name, and each sorting after both dependents lexically.
     await push(assert, 'the targets are created', [
       person('add', 'yyy.json', 'Ypsilon'),
       person('add', 'zzz.json', 'Zeta'),

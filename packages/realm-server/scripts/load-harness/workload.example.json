@@ -24,7 +24,18 @@
     "question every time and the realm answers it from its live-search cache",
     "after the first, so the run reports what a cache hit costs rather than",
     "what answering costs. Pick values that match rows: a fragment selecting",
-    "nothing is a cheap search that measures none of the shape's work."
+    "nothing is a cheap search that measures none of the shape's work.",
+    "",
+    "`writes` names one block per kind of write, and writer slots take them in",
+    "order. Two blocks pinned to two usernames put two identities on one realm,",
+    "which is the only shape in which the per-realm indexing lane is visible",
+    "from outside — a single block cannot produce it however many writers run",
+    "it. The PATCH block below is the expensive half: patching a card that many",
+    "instances link to invalidates all of them, while a POST creates a card",
+    "nothing links to yet and its pass visits one file. Differing `everyMs`",
+    "cadences are what give the run both halves of the reading, cheap writes",
+    "that land inside an expensive pass and cheap writes that do not. Grant the",
+    "second account write access first: setup-realm.ts --write-grants 1."
   ],
 
   "fieldset": "item",
@@ -99,16 +110,34 @@
     }
   ],
 
-  "write": {
-    "path": "WidgetReport",
-    "adoptsFrom": {
-      "module": "${realm}schema/widget-report",
-      "name": "WidgetReport"
+  "writes": [
+    {
+      "label": "hub",
+      "method": "PATCH",
+      "path": "Widget/shared-widget",
+      "everyMs": 30000,
+      "adoptsFrom": {
+        "module": "${realm}schema/widget",
+        "name": "Widget"
+      },
+      "attributes": {
+        "title": "Shared widget (rev ${n})"
+      }
     },
-    "attributes": {
-      "title": "Load harness report ${n}",
-      "reportedOn": "${date}",
-      "body": "Written by the load harness."
+    {
+      "label": "leaf",
+      "username": "loadtest02",
+      "everyMs": 5000,
+      "path": "WidgetReport",
+      "adoptsFrom": {
+        "module": "${realm}schema/widget-report",
+        "name": "WidgetReport"
+      },
+      "attributes": {
+        "title": "Load harness report ${n}",
+        "reportedOn": "${date}",
+        "body": "Written by the load harness."
+      }
     }
-  }
+  ]
 }

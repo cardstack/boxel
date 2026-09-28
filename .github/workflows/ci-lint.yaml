@@ -126,6 +126,10 @@ jobs:
         if: ${{ !cancelled() }}
         run: pnpm run lint
         working-directory: packages/ai-bot
+      - name: Lint AI Assistant Evals
+        if: ${{ !cancelled() }}
+        run: pnpm run lint
+        working-directory: packages/ai-assistant-evals
       - name: Lint Bot Runner
         if: ${{ !cancelled() }}
         run: pnpm run lint

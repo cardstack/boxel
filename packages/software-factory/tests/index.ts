@@ -35,6 +35,8 @@ import './eval-execution.test.ts';
 import './instantiate-discovery.test.ts';
 import './instantiate-step.test.ts';
 import './parse-step.test.ts';
+import './realm-source-cache.test.ts';
+import './parse-realm-imports.test.ts';
 import './port-allocator.test.ts';
 import './find-and-hold-available-port.test.ts';
 

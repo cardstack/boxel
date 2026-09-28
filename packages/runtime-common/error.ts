@@ -529,6 +529,9 @@ export class CardError extends Error implements SerializedError {
   deps?: string[];
   awaitingIndex?: true;
   gatewayFailure?: true;
+  // Structured detail about what the error concerns, for a caller that acts on
+  // it rather than reading the message.
+  meta?: Record<string, unknown>;
 
   constructor(
     message: string,

@@ -75,7 +75,8 @@ Registration happens in two places:
 
 - **Host** — `packages/host/app/services/network.ts` registers
   `@cardstack/base/` plus whichever of `@cardstack/catalog/`,
-  `@cardstack/skills/`, and `@cardstack/openrouter/` the build config resolves.
+  `@cardstack/skills/`, `@cardstack/openrouter/` and `@cardstack/pretui/` the
+  build config resolves.
 - **Realm server and workers** — `main.ts` and `worker.ts` translate each
   `--fromUrl` / `--toUrl` pair on the command line. A `--fromUrl` that is not
   URL-shaped becomes a realm mapping directly:

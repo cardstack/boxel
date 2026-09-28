@@ -181,6 +181,7 @@
   --boxel-red: #ff5050;
   --boxel-pink: #ff009d;
   --boxel-orange: #ff7f00;
+  --boxel-amber: #d97706; /* attention status default */
   --boxel-yellow: #ffd800;
   --boxel-lime: #c3fc33;
   --boxel-green: #37eb77;

@@ -7,9 +7,12 @@
 // sanctioned Boxel pattern for external libraries (the loader resolves https://
 // specifiers). Two gates keep WebGL off the paths where it can't or shouldn't
 // run:
-//   - PRERENDER: server-side rendering (indexing/prerender) never boots WebGL or
-//     fetches the CDN engine; `isLiveRender()` is the deterministic gate. The
-//     static cube is the prerender representation.
+//   - PRERENDER: this viewer never boots WebGL or fetches the CDN engine during
+//     server-side rendering (indexing/prerender); `isLiveRender()` is the
+//     deterministic gate, and the static cube is its prerender representation.
+//     The fitted poster is a separate capture-only render (`model3d-captures`)
+//     that draws one still with the host's vendored three.js — no CDN fetch
+//     on the indexing path.
 //   - VIEWPORT: the viewer boots only while on-screen and disposes its context
 //     when scrolled off, re-booting on re-entry — so a strip of embedded models
 //     keeps only the visible ones holding a context and never exhausts the

@@ -81,9 +81,12 @@ const copy: Task<CopyArgs, CopyResult> = ({
       `${jobIdentity(jobInfo)} starting copy indexing for job: ${JSON.stringify(args)}`,
     );
     reportStatus(jobInfo, 'start');
+    // Under the job, so the rows the copy stages belong to this attempt of it:
+    // a retry resumes them, and the janitor clears them once the job ends.
     let batch = await indexWriter.createBatch(
       new URL(realmURL),
       virtualNetwork,
+      jobInfo,
     );
     await batch.copyFrom(new URL(sourceRealmURL));
     let result = await batch.done();
@@ -100,6 +103,6 @@ const copy: Task<CopyArgs, CopyResult> = ({
     return {
       invalidations,
       totalNonErrorIndexEntries,
-      generation: batch.currentGeneration,
+      generation: batch.committedGeneration,
     };
   };

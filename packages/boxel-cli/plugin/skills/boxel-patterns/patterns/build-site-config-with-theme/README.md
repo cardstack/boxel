@@ -28,6 +28,7 @@ export class SiteConfig extends CardDef {
 ```
 
 **Gotchas:**
+- `pageUrl` as `UrlField` is correct here and is not a violation of the realm-resource-URL rule (`boxel` Cardinal Rule 16): the value is a curated public path routed via `hostRoutingRules` (`/about`, `/pricing`), not a card identifier. Decoupling the public URL from the card id is the point of the routing mechanism — do not rewrite it as `linksTo` to a page card.
 - For production realm files, keep `PageConfig`, `SiteConfig`, and each page shell in separate `.gts` files. The example co-locates them only to show the pattern in one place.
 - Preserve `cardInfo.theme` as the override in computed `cardTheme`: `this.cardInfo?.theme ?? this.site?.brandGuide ?? null`.
 - Sort nav entries in the rendering component, not in the JSON instance. Use `showInNav` + `navOrder`.

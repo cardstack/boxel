@@ -13,6 +13,7 @@ pnpm setup:base-in-deployment
 pnpm setup:experiments-in-deployment
 pnpm setup:catalog-in-deployment
 pnpm setup:skills-in-deployment
+pnpm setup:pretui-in-deployment
 pnpm setup:software-factory-in-deployment
 pnpm setup:boxel-homepage-in-deployment
 pnpm setup:openrouter-in-deployment
@@ -66,6 +67,11 @@ NODE_NO_WARNINGS=1 \
   --username='skills_realm' \
   --fromUrl='@cardstack/skills/' \
   --toUrl='https://app.boxel.ai/skills/' \
+  \
+  --path='/persistent/pretui' \
+  --username='pretui_realm' \
+  --fromUrl='@cardstack/pretui/' \
+  --toUrl='https://app.boxel.ai/pretui/' \
   \
   --path='/persistent/boxel-homepage' \
   --username='boxel_homepage_realm' \

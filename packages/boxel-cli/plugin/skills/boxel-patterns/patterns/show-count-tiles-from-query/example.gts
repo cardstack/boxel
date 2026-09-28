@@ -88,16 +88,16 @@ class CountTile extends GlimmerComponent<CountTileSignature> {
         align-content: center;
         gap: 0.25rem;
         padding: 0.9rem;
-        border: 1px solid var(--border, #d7dee8);
+        border: 1px solid var(--border);
         border-radius: 8px;
-        background: var(--card, #ffffff);
-        color: var(--foreground, #17202a);
+        background-color: var(--card);
+        color: var(--card-foreground);
         text-align: left;
         cursor: pointer;
       }
 
       .count-tile:hover {
-        border-color: var(--primary, #3563e9);
+        border-color: var(--primary);
       }
 
       .value {
@@ -111,26 +111,26 @@ class CountTile extends GlimmerComponent<CountTileSignature> {
         font-weight: 700;
         text-transform: uppercase;
         letter-spacing: 0.06em;
-        color: var(--muted-foreground, #677489);
+        color: var(--muted-foreground);
       }
 
       .hint {
         font-size: 0.78rem;
-        color: var(--muted-foreground, #677489);
+        color: var(--muted-foreground);
       }
 
       .warning {
-        border-color: #f5c451;
-        background: #fff9e8;
+        border-color: var(--warning);
+        color: var(--warning-ink);
       }
 
       .danger {
-        border-color: #ef8585;
-        background: #fff1f1;
+        border-color: var(--destructive);
+        color: var(--destructive-ink);
       }
 
       .loading {
-        background: linear-gradient(90deg, #f4f6f8 25%, #e9eef4 50%, #f4f6f8 75%);
+        background: linear-gradient(90deg, var(--muted) 25%, var(--card) 50%, var(--muted) 75%);
         background-size: 200% 100%;
         animation: shimmer 1.4s infinite ease-in-out;
       }
@@ -212,7 +212,7 @@ export class DashboardOverview extends CardDef {
       <section class='dashboard'>
         <header>
           <p>Overview</p>
-          <h1>{{if @model.heading @model.heading 'Operations'}}</h1>
+          <h1>{{@model.cardTitle}}</h1>
         </header>
 
         <div class='tiles'>
@@ -256,8 +256,6 @@ export class DashboardOverview extends CardDef {
           gap: 1rem;
           align-content: start;
           padding: 1.25rem;
-          background: var(--background, #f7f9fc);
-          color: var(--foreground, #17202a);
         }
 
         header {
@@ -272,7 +270,7 @@ export class DashboardOverview extends CardDef {
 
         header p,
         .active {
-          color: var(--muted-foreground, #677489);
+          color: var(--muted-foreground);
           font-size: 0.8rem;
         }
 
@@ -282,7 +280,7 @@ export class DashboardOverview extends CardDef {
 
         .tiles {
           display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+          grid-template-columns: repeat(auto-fit, minmax(9.375rem, 1fr));
           gap: 0.75rem;
         }
       </style>

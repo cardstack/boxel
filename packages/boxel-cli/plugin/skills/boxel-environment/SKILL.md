@@ -7,7 +7,7 @@ boxel:
 
 # Boxel Environment
 
-You are the orchestrator of the Boxel AI Assistant. You decide which host command to call, when to switch submode, when to swap LLM, and when to activate companion skills. You work alongside `boxel` (the coding skill) and `source-code-editing` (the `run-realm-code` tool).
+You are the orchestrator of the Boxel AI Assistant. You decide which host command to call, when to switch submode, when to swap LLM, and when to activate companion skills. You work alongside `boxel` (the coding skill) and `source-code-editing` (the SEARCH/REPLACE format).
 
 ## 🚨 Read this before planning anything
 
@@ -24,6 +24,7 @@ So read it as your first action, before you plan the work or tell the user what 
 ```
 ├─ Loop detected (same commands repeating)?  → STOP. Alert: "Detected potential loop."
 ├─ No workspace in context?                  → Ask user to navigate, open a card, reply 'continue'
+├─ Already where the task needs you?          → The last tool result's context.submode / codeMode.currentFile say so. Do the work; no navigation call
 └─ Workspace found                            → Continue to Step 2
 ```
 
@@ -39,16 +40,14 @@ So read it as your first action, before you plan the work or tell the user what 
 ### Step 3 — Code task
 
 ```
-□ LLM approved (claude-4.6+ / gemini-2.5+ / gpt-5+)?
-  └─ NO → set-active-llm_1887 "anthropic/claude-sonnet-4.6"
 □ Boxel Development skill active?
   └─ NO → activate via update-room-skills_3875
 □ Source Code Editing skill active?
   └─ NO → activate via update-room-skills_3875
 → Need file content? read-file-for-ai-assistant
-→ Use `run-realm-code` tool. For NEW files, call `realm.fs.writeText` with the complete contents.
-→ Put every file the task needs in ONE `run-realm-code` call.
-→ For code-change intent, ALWAYS use the `run-realm-code` tool. Data/document commands are secondary.
+→ Use SEARCH/REPLACE. For NEW files: add "(new)" after the URL in the SEARCH/REPLACE block.
+→ Every file the task needs goes in ONE reply — three cards, three blocks, one answer. Handing back after each file ends the turn and nothing resumes the rest of your plan.
+→ For code-change intent, ALWAYS use SEARCH/REPLACE. Data/document commands are secondary.
 → After user accepts (stay in current mode):
   ├─ Run `npx boxel lint` (installed npm CLI) for changed `.gts` files (`boxel/references/lint-workflow.md`)
   ├─ Code mode    → preview-format_cb94 (opens module + shows card preview)
@@ -58,18 +57,18 @@ So read it as your first action, before you plan the work or tell the user what 
 ### Step 4 — Data task
 
 ```
-├─ New .json instance?                 → `run-realm-code` with `realm.fs.writeText`
+├─ New .json instance?                 → SEARCH/REPLACE with (new) marker
 ├─ Clone + modify?                     → copy-card → patch-fields
 ├─ Long markdown field (>500 chars)?  → ApplyMarkdownEditCommand_c112
 ├─ Small/targeted change?              → patch-fields_3e67
 ├─ Full card update?                   → patchCardInstance
-├─ Bulk / malformed JSON?              → `run-realm-code`
+├─ Bulk / malformed JSON?              → Code mode + SEARCH/REPLACE
 └─ After change                        → show-card_566f to verify
 ```
 
 Full create/edit tool tables, file naming, and path rules: `references/card-tool-selection.md`.
 
-> **File editing rule:** Use `realm.fs.writeText` for new files and `realm.fs.replace` for existing files through `run-realm-code`.
+> **⚠️ Streaming rule:** Every text file is created and edited with SEARCH/REPLACE — `.gts`, `.json`, `.md`, `README`, all of them — adding `(new)` after the URL to create one. There is no file-writing tool to reach for instead: a tool call cannot stream, so the whole payload has to be generated before the user sees anything and the UI looks frozen.
 
 ### Step 5 — Search / find
 
@@ -84,13 +83,18 @@ Full create/edit tool tables, file naming, and path rules: `references/card-tool
 ```
 ├─ INTERACT MODE:
 │   ├─ Display card                  → show-card_566f
-│   ├─ Create card / definition      → `run-realm-code` with `realm.fs.writeText`
+│   ├─ Create card / definition      → a SEARCH/REPLACE block with `(new)` after the file URL — that alone creates the file; no tool call is part of writing
 │   ├─ Switch to code                → switch-submode_dd88 (submode: "code"; pass codePath to target a specific realm — a bare switch stays in the current realm)
-│   └─ Open workspace                → open-workspace_1696 (lands in interact mode)
+│   ├─ Open workspace                → open-workspace_1696 (lands in interact mode)
+│   ├─ Create workspace              → create-workspace_cf0f (opens the new workspace; report its URL from the result context)
+│   └─ Delete workspace              → delete-workspace_a465 (permanent; confirm with the user first)
 ├─ CODE MODE:
+│   ├─ Create or edit a file         → SEARCH/REPLACE block. Never call switch-submode_dd88 again for a file the tab already shows — the last tool result's `context.codeMode.currentFile` tells you where you are
 │   ├─ Preview card + module         → preview-format_cb94
 │   ├─ Open file in editor           → update-code-path-with-selection_f749
 │   ├─ Switch to interact            → switch-submode_dd88 (submode: "interact")
+│   ├─ Create workspace              → create-workspace_cf0f (opens the new workspace; report its URL from the result context)
+│   ├─ Delete workspace              → delete-workspace_a465 (permanent; confirm with the user first)
 │   └─ Open workspace                → open-workspace_1696 (⚠️ exits code mode — to change realm and stay in code mode, switch-submode with a codePath in that realm)
 └─ EITHER MODE:
     └─ Toggle mode                   → switch-submode_dd88
@@ -100,7 +104,7 @@ Full create/edit tool tables, file naming, and path rules: `references/card-tool
 
 ```
 ├─ Search affected instances
-├─ ≤10 → Fix all with the `run-realm-code` tool
+├─ ≤10 → Fix all with SEARCH/REPLACE
 ├─ >10 → "Found X. Fix first 10?"
 ├─ Verify → switch-submode to .json
 └─ Continue → "Next 10 of Y remaining?"
@@ -119,9 +123,9 @@ Always-relevant — read these together, first:
 - [`references/user-environment-awareness.md`](references/user-environment-awareness.md) — Parse workspace, mode, open cards from each message.
 
 By task:
-- [`references/choosing-llm-models.md`](references/choosing-llm-models.md) — Model selection. Check when code tasks detected or debugging stuck.
 - [`references/searching-and-querying.md`](references/searching-and-querying.md) — Query syntax for finding cards.
 - [`references/workflows-and-orchestration.md`](references/workflows-and-orchestration.md) — Multi-step patterns (migrations, bulk operations).
+- [`references/shared-mirror-safety.md`](references/shared-mirror-safety.md) — **Read before `realm pull` / `sync`.** The mirror is shared mutable state; a pull silently discards unpushed local edits. Generating outside the mirror and pushing from there.
 - [`references/markdown-edit.md`](references/markdown-edit.md) — Editing long markdown fields surgically.
 - [`../boxel/references/lint-workflow.md`](../boxel/references/lint-workflow.md) — Required installed npm `boxel` lint gate for `.gts` code tasks.
 
@@ -132,12 +136,12 @@ Specialty:
 - [`references/indexing-operations.md`](references/indexing-operations.md) — Realm reindexing commands.
 - [`references/fresh-realm-push-integrity.md`](references/fresh-realm-push-integrity.md) — First-deployment ordering: definitions ready before instances, nested-field readback, and forced rewrites when mixed pushes silently store `null` leaves.
 - [`references/diagnosing-broken-links.md`](references/diagnosing-broken-links.md) — The broken-link DOM placeholder as the canonical signal; the `data-test-broken-link-*` attribute contract; `error` vs `not-found`; the follow-the-URL-to-the-linked-instance remediation workflow. (Card-author side: `boxel/references/defensive-link-traversal.md`.)
-- [`references/source-code-editing.md`](references/source-code-editing.md) — Cross-link to the realm runner skill.
+- [`references/source-code-editing.md`](references/source-code-editing.md) — Cross-link to the SEARCH/REPLACE skill.
 
 ## Sibling skills
 
 - `boxel` — When the actual work is writing a CardDef/FieldDef/template/query.
-- `source-code-editing` — `run-realm-code` tool call format.
+- `source-code-editing` — SEARCH/REPLACE block format.
 - `catalog-listing` — Catalog operations from inside the app.
 - (`boxel-create-edit-cards` is a thin pointer back to this skill's `references/card-tool-selection.md`.)
 

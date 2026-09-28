@@ -286,6 +286,16 @@ export const SCREENSHOT_MAX_PHYSICAL_EDGE_PX = 16384;
 // a batch resume instead of discard.
 export const SCREENSHOT_MAX_CAPTURES = 12;
 
+// A per-card sub-cap on *pdf* declared captures, counted within (not on top
+// of) SCREENSHOT_MAX_CAPTURES. A pdf capture is far heavier than a raster
+// tile — a full print-media re-layout plus pagination and a multi-page
+// document encode, bounded by SCREENSHOT_PDF_MAX_PAGES/BYTES — so a card that
+// declared a dozen of them could blow the visit's time budget on its own.
+// Pdf slots beyond this cap fail per-slot (the broken-links model: the
+// manifest omits the name, `screenshotErrors` records why), the same
+// deterministic name-sorted overflow the batch cap uses.
+export const SCREENSHOT_MAX_PDF_CAPTURES = 3;
+
 // A `target` is a CSS selector, not an arbitrary program: bound its length so a
 // pathological selector can't be smuggled through. It needs no XPath guard —
 // the capture path runs it through `document.querySelector`, which executes
@@ -1214,14 +1224,20 @@ export const SCREENSHOT_DEFAULT_BACKGROUND = 'white';
 // boundary: everything in the declaration except the capture-only component
 // itself, which cannot serialize — it is flagged `render: true` and
 // re-resolved in-page by slot name when the capture renders.
+//
+// `type: 'pdf'` entries are paged documents, not raster tiles: `width` /
+// `height` (and the raster-only `deviceScaleFactor` / `background`) are
+// refused at declaration (`assertValidScreenshotSpec`), so they are absent
+// here. Paper comes from the card's own print CSS (`@page`), and the entry
+// renders under `media=print`.
 export interface DeclaredScreenshotSpecPayload {
-  width: number;
-  height: number;
+  width?: number;
+  height?: number;
   deviceScaleFactor?: number;
   background?: string;
   useAsThumbnail?: boolean;
   keyBy?: 'generation' | 'file-content';
-  type?: ScreenshotImageType;
+  type?: CaptureOutputType;
   format?: DeclaredScreenshotFormat;
   render?: true;
 }
@@ -1245,16 +1261,49 @@ export function canonicalDeclaredCaptureString(
   name: string,
   payload: DeclaredScreenshotSpecPayload,
 ): string {
-  let canonical: Record<string, unknown> = {
-    background: payload.background ?? SCREENSHOT_DEFAULT_BACKGROUND,
-    declared: name,
-    deviceScaleFactor:
-      payload.deviceScaleFactor ?? SCREENSHOT_DEFAULT_DEVICE_SCALE_FACTOR,
-    height: payload.height,
-    source: payload.render ? 'render' : payload.format,
-    type: payload.type ?? SCREENSHOT_DEFAULT_IMAGE_TYPE,
-    width: payload.width,
-  };
+  // Destructure the whole payload so a field added to
+  // `DeclaredScreenshotSpecPayload` later fails to compile here — the one
+  // function that turns a payload into a ledger key — instead of being
+  // silently dropped from the identity and aliasing two distinct captures onto
+  // one hash. `useAsThumbnail` and `keyBy` steer consumption and invalidation,
+  // not pixels, so they are deliberate discards; `rest` must stay empty.
+  let {
+    width,
+    height,
+    deviceScaleFactor,
+    background,
+    type,
+    format,
+    render,
+    useAsThumbnail: _useAsThumbnail,
+    keyBy: _keyBy,
+    ...rest
+  } = payload;
+  rest satisfies Record<string, never>;
+
+  // A pdf entry has no raster geometry — no capture box, no device scale, no
+  // painted background — so its identity is the slot name, its source, and
+  // the `print` media it paginates under. `type: 'pdf'` alone already keeps it
+  // distinct from any raster spelling; `media` is folded in explicitly so the
+  // identity states the axis rather than leaving it implied by `type`.
+  let canonical: Record<string, unknown> =
+    type === 'pdf'
+      ? {
+          declared: name,
+          media: 'print',
+          source: render ? 'render' : format,
+          type: 'pdf',
+        }
+      : {
+          background: background ?? SCREENSHOT_DEFAULT_BACKGROUND,
+          declared: name,
+          deviceScaleFactor:
+            deviceScaleFactor ?? SCREENSHOT_DEFAULT_DEVICE_SCALE_FACTOR,
+          height,
+          source: render ? 'render' : format,
+          type: type ?? SCREENSHOT_DEFAULT_IMAGE_TYPE,
+          width,
+        };
   return JSON.stringify(
     Object.fromEntries(
       Object.entries(canonical).sort(([a], [b]) => a.localeCompare(b)),
@@ -1278,13 +1327,21 @@ export async function declaredCaptureSpecHash(
 // round-trip. `sourceContentHash` is recorded for `keyBy: 'file-content'`
 // slots so the next prerender pass can carry the entry forward without
 // re-rendering when the source file's bytes are unchanged.
+//
+// A pdf slot (`contentType: 'application/pdf'`) has no raster geometry:
+// `width` / `height` / `deviceScaleFactor` are absent, and `pageCount` /
+// `byteSize` describe the paged document instead. A pdf can never be a
+// thumbnail (that fallback chain wants an image), so `useAsThumbnail` never
+// rides on one.
 export interface ScreenshotManifestEntry {
   specHash: string;
   objectKey: string;
   contentType: string;
-  width: number;
-  height: number;
-  deviceScaleFactor: number;
+  width?: number;
+  height?: number;
+  deviceScaleFactor?: number;
+  pageCount?: number;
+  byteSize?: number;
   useAsThumbnail?: true;
   sourceContentHash?: string;
 }
@@ -1369,16 +1426,19 @@ export function screenshotNameURLFor({
 // whether a capture changed; it is absent on a declaration-derived entry
 // (see `screenshotsMetaFromRoster`) where no capture is being asserted.
 // `width`/`height` are CSS pixels with `deviceScaleFactor` multiplying the
-// physical pixels, matching the manifest. The internal manifest keys
+// physical pixels, matching the manifest — all three absent on a pdf entry,
+// which carries `pageCount`/`byteSize` instead. The internal manifest keys
 // (`specHash`, `objectKey`, `sourceContentHash`) deliberately do not appear:
 // they steer capture identity and carry-forward, not consumption.
 export interface ScreenshotMetaEntry {
   url: string;
   hash?: string;
   contentType: string;
-  width: number;
-  height: number;
-  deviceScaleFactor: number;
+  width?: number;
+  height?: number;
+  deviceScaleFactor?: number;
+  pageCount?: number;
+  byteSize?: number;
   useAsThumbnail?: true;
 }
 
@@ -1403,9 +1463,15 @@ export function screenshotsMetaFromManifest(
       url: screenshotNameURLFor({ realmURL, instanceLocalPath, name }),
       hash: entry.objectKey,
       contentType: entry.contentType,
-      width: entry.width,
-      height: entry.height,
-      deviceScaleFactor: entry.deviceScaleFactor,
+      // Raster geometry and paged-document facts are mutually exclusive per
+      // entry; project through only the ones this capture actually recorded.
+      ...(entry.width !== undefined ? { width: entry.width } : {}),
+      ...(entry.height !== undefined ? { height: entry.height } : {}),
+      ...(entry.deviceScaleFactor !== undefined
+        ? { deviceScaleFactor: entry.deviceScaleFactor }
+        : {}),
+      ...(entry.pageCount !== undefined ? { pageCount: entry.pageCount } : {}),
+      ...(entry.byteSize !== undefined ? { byteSize: entry.byteSize } : {}),
       ...(entry.useAsThumbnail ? { useAsThumbnail: true as const } : {}),
     };
   }
@@ -1433,6 +1499,17 @@ export function screenshotsMetaFromRoster(
 ): ScreenshotsMeta {
   let result: ScreenshotsMeta = {};
   for (let [name, payload] of Object.entries(roster)) {
+    // A pdf entry declares no capture box, and its page count / byte size
+    // exist only once Chrome has paginated — so the declaration-derived form
+    // asserts the durable URL and the pdf content type alone, with the paged
+    // facts filled in by the real manifest join on a live load.
+    if (payload.type === 'pdf') {
+      result[name] = {
+        url: screenshotNameURLFor({ realmURL, instanceLocalPath, name }),
+        contentType: captureOutputContentType('pdf'),
+      };
+      continue;
+    }
     result[name] = {
       url: screenshotNameURLFor({ realmURL, instanceLocalPath, name }),
       contentType: screenshotContentType(

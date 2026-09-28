@@ -48,45 +48,52 @@ export class AudioTrack extends CardDef {
 
     <template>
       <article class='audio-track'>
-        {{#if @model.coverArt}}
-          <div class='cover'>
-            <@fields.coverArt @format='embedded' />
+        <div class='layout'>
+          {{#if @model.coverArt}}
+            <div class='cover'>
+              <@fields.coverArt @format='embedded' />
+            </div>
+          {{/if}}
+
+          <div class='details'>
+            <h1>{{@model.cardTitle}}</h1>
+            {{#if @model.artist}}
+              <p>{{@model.artist}}</p>
+            {{/if}}
+
+            {{#if this.audioUrl}}
+              <audio class='player' controls preload='metadata'>
+                <source src={{this.audioUrl}} type={{this.mimeType}} />
+                <track kind='captions' />
+              </audio>
+            {{else}}
+              <p class='empty'>Link an audio FileDef to enable playback.</p>
+            {{/if}}
           </div>
-        {{/if}}
-
-        <div class='details'>
-          <h1>{{@model.cardTitle}}</h1>
-          {{#if @model.artist}}
-            <p>{{@model.artist}}</p>
-          {{/if}}
-
-          {{#if this.audioUrl}}
-            <audio class='player' controls preload='metadata'>
-              <source src={{this.audioUrl}} type={{this.mimeType}} />
-              <track kind='captions' />
-            </audio>
-          {{else}}
-            <p class='empty'>Link an audio FileDef to enable playback.</p>
-          {{/if}}
         </div>
       </article>
 
       <style scoped>
         .audio-track {
+          height: 100%;
+          overflow-y: auto;
+          container-type: inline-size;
+          container-name: audio-track;
+        }
+
+        .layout {
           display: grid;
-          grid-template-columns: minmax(140px, 220px) minmax(0, 1fr);
+          grid-template-columns: minmax(8.75rem, 13.75rem) minmax(0, 1fr);
           gap: 1rem;
           align-items: center;
           padding: 1rem;
-          background: var(--background, #fff);
-          color: var(--foreground, #111827);
         }
 
         .cover {
           aspect-ratio: 1;
           overflow: hidden;
-          border-radius: var(--radius, 8px);
-          background: var(--muted, #f3f4f6);
+          border-radius: var(--boxel-border-radius-sm);
+          background-color: var(--muted);
         }
 
         .details {
@@ -110,11 +117,11 @@ export class AudioTrack extends CardDef {
         }
 
         .empty {
-          color: var(--muted-foreground, #6b7280);
+          color: var(--muted-foreground);
         }
 
-        @media (max-width: 560px) {
-          .audio-track {
+        @container audio-track (width < 35rem) {
+          .layout {
             grid-template-columns: 1fr;
           }
         }
@@ -165,7 +172,7 @@ export class AudioTrack extends CardDef {
         }
 
         span {
-          color: var(--muted-foreground, #6b7280);
+          color: var(--muted-foreground);
           font-size: 0.875rem;
         }
 

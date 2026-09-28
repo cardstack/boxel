@@ -10,8 +10,8 @@ Always reach for existing boxel-ui components before writing custom HTML + CSS. 
     display: inline-flex;
     align-items: center;
     padding: 0.25rem 0.75rem;
-    border-radius: 9999px;
-    background: var(--muted);
+    border-radius: var(--boxel-border-radius-pill);
+    background-color: var(--muted);
     font-size: var(--boxel-font-size-xs);
   }
 </style>

@@ -1,9 +1,27 @@
-import { notFound, CardError, responseWithError } from './error.ts';
+import { CardError, responseWithError } from './error.ts';
 import type { RequestContext } from './index.ts';
 import { RealmPaths, logger } from './index.ts';
 
 export class AuthenticationError extends Error {}
 export class AuthorizationError extends Error {}
+// The realm's ACL declining a caller, as distinct from a credential that could
+// not be accepted at all. A request with no credentials the ACL would honor
+// and a caller whose permissions fall short are the two decisions a realm's
+// ACL makes; each is still the 401 or 403 it always was, and the realm records
+// it on the request rather than refusing at once (see `coarseAllowed` on
+// `RequestContext`). A token that is invalid, expired, revoked or out of step
+// with the realm's permissions is not an ACL decision and is refused at once.
+export class CoarseAuthenticationRequired extends AuthenticationError {}
+export class CoarsePermissionInsufficient extends AuthorizationError {}
+export type CoarseRefusal =
+  | CoarseAuthenticationRequired
+  | CoarsePermissionInsufficient;
+export function isCoarseRefusal(error: unknown): error is CoarseRefusal {
+  return (
+    error instanceof CoarseAuthenticationRequired ||
+    error instanceof CoarsePermissionInsufficient
+  );
+}
 // Thrown at the realm request boundary when a request targets an archived
 // (sealed) realm. Surfaced as a 403 carrying an "archived" marker so the
 // client can render the sealed state rather than a generic forbidden error.
@@ -237,10 +255,30 @@ function matchRoute<T>(
   return undefined;
 }
 
+export interface RouteOptions {
+  // The route takes the realm ACL's recorded outcome instead of being refused
+  // by it: a request the ACL declined still reaches the route's dispatch,
+  // which is the one place anything may admit it. Every other route is
+  // refused with the ACL's own refusal before its handler runs.
+  consumesCoarseOutcome?: true;
+}
+
+export interface Route {
+  handler: Handler;
+  consumesCoarseOutcome: boolean;
+}
+
+export interface RouteDescription {
+  method: Method;
+  mimeType: SupportedMimeType;
+  path: string;
+  consumesCoarseOutcome: boolean;
+}
+
 export class Router {
-  #routeTable: RouteTable<Handler> = new Map<
+  #routeTable: RouteTable<Route> = new Map<
     SupportedMimeType,
-    Map<Method, Map<string, Handler>>
+    Map<Method, Map<string, Route>>
   >();
   log = logger('realm:router');
   #paths: RealmPaths;
@@ -248,28 +286,58 @@ export class Router {
     this.#paths = new RealmPaths(mountURL);
   }
 
-  get(path: string, mimeType: SupportedMimeType, handler: Handler): Router {
-    this.setRoute(mimeType, 'GET', path, handler);
+  get(
+    path: string,
+    mimeType: SupportedMimeType,
+    handler: Handler,
+    opts?: RouteOptions,
+  ): Router {
+    this.setRoute(mimeType, 'GET', path, handler, opts);
     return this;
   }
-  query(path: string, mimeType: SupportedMimeType, handler: Handler): Router {
-    this.setRoute(mimeType, 'QUERY', path, handler);
+  query(
+    path: string,
+    mimeType: SupportedMimeType,
+    handler: Handler,
+    opts?: RouteOptions,
+  ): Router {
+    this.setRoute(mimeType, 'QUERY', path, handler, opts);
     return this;
   }
-  post(path: string, mimeType: SupportedMimeType, handler: Handler): Router {
-    this.setRoute(mimeType, 'POST', path, handler);
+  post(
+    path: string,
+    mimeType: SupportedMimeType,
+    handler: Handler,
+    opts?: RouteOptions,
+  ): Router {
+    this.setRoute(mimeType, 'POST', path, handler, opts);
     return this;
   }
-  patch(path: string, mimeType: SupportedMimeType, handler: Handler): Router {
-    this.setRoute(mimeType, 'PATCH', path, handler);
+  patch(
+    path: string,
+    mimeType: SupportedMimeType,
+    handler: Handler,
+    opts?: RouteOptions,
+  ): Router {
+    this.setRoute(mimeType, 'PATCH', path, handler, opts);
     return this;
   }
-  delete(path: string, mimeType: SupportedMimeType, handler: Handler): Router {
-    this.setRoute(mimeType, 'DELETE', path, handler);
+  delete(
+    path: string,
+    mimeType: SupportedMimeType,
+    handler: Handler,
+    opts?: RouteOptions,
+  ): Router {
+    this.setRoute(mimeType, 'DELETE', path, handler, opts);
     return this;
   }
-  head(path: string, mimeType: SupportedMimeType, handler: Handler): Router {
-    this.setRoute(mimeType, 'HEAD', path, handler);
+  head(
+    path: string,
+    mimeType: SupportedMimeType,
+    handler: Handler,
+    opts?: RouteOptions,
+  ): Router {
+    this.setRoute(mimeType, 'HEAD', path, handler, opts);
     return this;
   }
 
@@ -278,6 +346,7 @@ export class Router {
     method: Method,
     path: string,
     handler: Handler,
+    opts: RouteOptions = {},
   ) {
     let routeFamily = this.#routeTable.get(mimeType);
     if (!routeFamily) {
@@ -289,23 +358,43 @@ export class Router {
       routes = new Map();
       routeFamily.set(method, routes);
     }
-    routes.set(path, handler);
+    routes.set(path, {
+      handler,
+      consumesCoarseOutcome: opts.consumesCoarseOutcome === true,
+    });
   }
 
-  handles(request: Request): boolean {
-    return !!this.lookupHandler(request);
+  // Every registered route, in registration order within each family, so a
+  // caller can check what each route does with the realm ACL's outcome
+  // without having to reach it with a request.
+  routes(): RouteDescription[] {
+    let descriptions: RouteDescription[] = [];
+    for (let [mimeType, family] of this.#routeTable) {
+      for (let [method, routes] of family) {
+        for (let [path, route] of routes) {
+          descriptions.push({
+            method,
+            mimeType,
+            path,
+            consumesCoarseOutcome: route.consumesCoarseOutcome,
+          });
+        }
+      }
+    }
+    return descriptions;
+  }
+
+  lookupRoute(request: Request): Route | undefined {
+    return lookupRouteTable(this.#routeTable, this.#paths, request);
   }
 
   async handle(
     request: Request,
     requestContext: RequestContext,
+    route: Route,
   ): Promise<Response> {
-    let handler = this.lookupHandler(request);
-    if (!handler) {
-      return notFound(request, requestContext);
-    }
     try {
-      return await handler(request, requestContext);
+      return await route.handler(request, requestContext);
     } catch (err) {
       if (err instanceof CardError) {
         // Without this line a thrown CardError is indistinguishable in the
@@ -329,9 +418,5 @@ export class Router {
         },
       );
     }
-  }
-
-  private lookupHandler(request: Request): Handler | undefined {
-    return lookupRouteTable(this.#routeTable, this.#paths, request);
   }
 }

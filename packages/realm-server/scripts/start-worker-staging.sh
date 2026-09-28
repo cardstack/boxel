@@ -39,6 +39,9 @@ NODE_NO_WARNINGS=1 \
   --fromUrl='@cardstack/skills/' \
   --toUrl='https://realms-staging.stack.cards/skills/' \
   \
+  --fromUrl='@cardstack/pretui/' \
+  --toUrl='https://realms-staging.stack.cards/pretui/' \
+  \
   --fromUrl='@cardstack/openrouter/' \
   --toUrl='https://realms-staging.stack.cards/openrouter/' \
   \

@@ -1,4 +1,3 @@
-import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { htmlSafe } from '@ember/template';
@@ -12,61 +11,90 @@ import Button from '../button/index.gts';
 import IconButton from '../icon-button/index.gts';
 
 export type Filter = {
+  count?: number;
   displayName: string;
   filters?: Filter[];
   icon?: Icon | string;
+  // Stable identity for the row. Required when two filters can share a
+  // display name; the row keeps its DOM node across a rebuild of the array.
+  id?: string;
   isExpanded?: boolean;
 };
 
-interface Signature {
+interface Signature<F extends Filter = Filter> {
   Args: {
-    activeFilter?: Filter;
-    filters: Filter[] | undefined;
-    onChanged: (filter: Filter) => void;
+    activeFilter?: F;
+    filters: F[] | undefined;
+    onChanged: (filter: F) => void;
+  };
+  Blocks: {
+    // Rendered after each item's button, for a per-item control such as an
+    // add button. Receives the item.
+    action: [filter: F];
   };
   Element: HTMLElement;
 }
 
-const FilterList: TemplateOnlyComponent<Signature> = <template>
-  <ul class='filter-list' role='tree' ...attributes>
-    {{#each @filters key='displayName' as |filter|}}
-      <ListItem
-        @filter={{filter}}
-        @onChanged={{@onChanged}}
-        @activeFilter={{@activeFilter}}
-      />
-    {{/each}}
-  </ul>
-  <style scoped>
-    @layer boxelComponentL3 {
-      .filter-list {
-        display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp-4xs);
-        list-style-type: none;
-        padding-inline-start: 0;
-        margin-block: 0;
-      }
-      .filter-list :deep(.filter-list) {
-        margin-top: var(--boxel-sp-4xs);
-        padding-inline-start: var(--boxel-sp);
-      }
-    }
-  </style>
-</template>;
+export default class FilterList<F extends Filter = Filter> extends Component<
+  Signature<F>
+> {
+  // Rows are keyed by a stable string, not by object identity: a caller that
+  // rebuilds its filter objects on every refresh would otherwise replace each
+  // row's DOM node under the user, dropping keyboard focus. The id wins; the
+  // display name is the fallback for callers whose names are unique.
+  private get keyedFilters() {
+    return (this.args.filters ?? []).map((filter) => ({
+      key: filter.id ?? filter.displayName,
+      filter,
+    }));
+  }
 
-export default FilterList;
+  <template>
+    <ul class='filter-list' role='tree' ...attributes>
+      {{#each this.keyedFilters key='key' as |entry|}}
+        <ListItem
+          @filter={{entry.filter}}
+          @onChanged={{@onChanged}}
+          @activeFilter={{@activeFilter}}
+        >
+          <:action as |item|>{{yield item to='action'}}</:action>
+        </ListItem>
+      {{/each}}
+    </ul>
+    <style scoped>
+      @layer boxelComponentL3 {
+        .filter-list {
+          display: flex;
+          flex-direction: column;
+          gap: var(--boxel-sp-4xs);
+          list-style-type: none;
+          padding-inline-start: 0;
+          margin-block: 0;
+        }
+        .filter-list :deep(.filter-list) {
+          margin-top: var(--boxel-sp-4xs);
+          padding-inline-start: var(--boxel-sp);
+        }
+      }
+    </style>
+  </template>
+}
 
-interface ListItemSignature {
+interface ListItemSignature<F extends Filter = Filter> {
   Args: {
-    activeFilter?: Filter;
-    filter: Filter;
-    onChanged: (filter: Filter) => void;
+    activeFilter?: F;
+    filter: F;
+    onChanged: (filter: F) => void;
+  };
+  Blocks: {
+    action: [filter: F];
   };
   Element: HTMLElement;
 }
 
-export class ListItem extends Component<ListItemSignature> {
+export class ListItem<F extends Filter = Filter> extends Component<
+  ListItemSignature<F>
+> {
   <template>
     <li
       class='filter-list-item'
@@ -104,7 +132,13 @@ export class ListItem extends Component<ListItemSignature> {
           <span class='filter-name boxel-ellipsize'>
             {{@filter.displayName}}
           </span>
+          {{#if (isNumber @filter.count)}}
+            <span class='filter-count' data-test-filter-list-count>
+              {{@filter.count}}
+            </span>
+          {{/if}}
         </Button>
+        {{yield @filter to='action'}}
         {{#if this.hasNestedItems}}
           <IconButton
             class='dropdown-toggle'
@@ -118,18 +152,22 @@ export class ListItem extends Component<ListItemSignature> {
       </span>
       {{#if this.isExpanded}}
         <FilterList
-          @filters={{@filter.filters}}
+          @filters={{this.nestedFilters}}
           @onChanged={{@onChanged}}
           @activeFilter={{@activeFilter}}
           role='group'
           aria-label='{{@filter.displayName}} group'
-        />
+        >
+          <:action as |item|>{{yield item to='action'}}</:action>
+        </FilterList>
       {{/if}}
     </li>
     <style scoped>
       @layer boxelComponentL2 {
         .list-item-buttons {
           display: flex;
+          align-items: center;
+          gap: var(--boxel-sp-4xs);
           border-radius: var(--boxel-border-radius-sm);
           color: inherit;
           background-color: inherit;
@@ -194,6 +232,7 @@ export class ListItem extends Component<ListItemSignature> {
         .filter-list__button {
           flex-grow: 1;
           width: 100%;
+          min-width: 0;
           display: flex;
           justify-content: flex-start;
           gap: var(--boxel-sp-xs);
@@ -205,6 +244,13 @@ export class ListItem extends Component<ListItemSignature> {
           overflow: hidden;
           text-align: left;
         }
+        /* when a control follows the button (the action slot or the group
+           toggle), the button ends close to its content and the control
+           carries the edge */
+        .filter-list__button:has(+ *) {
+          --boxel-button-padding: var(--boxel-sp-4xs) var(--boxel-sp-5xs)
+            var(--boxel-sp-4xs) var(--boxel-sp-sm);
+        }
         .filter-list__button:hover,
         .filter-list__button:focus {
           color: inherit;
@@ -214,6 +260,19 @@ export class ListItem extends Component<ListItemSignature> {
         .filter-list__button {
           border: none;
           transition: none;
+        }
+        .filter-name {
+          flex: 1 1 auto;
+          min-width: 0;
+        }
+        .filter-count {
+          flex-shrink: 0;
+          font-size: var(--boxel-font-size-2xs);
+          font-variant-numeric: tabular-nums;
+          color: var(--boxel-filter-count-foreground, var(--muted-foreground));
+        }
+        .is-selected .filter-count {
+          color: inherit;
         }
         :deep(.filter-list__icon) {
           flex-shrink: 0;
@@ -233,6 +292,12 @@ export class ListItem extends Component<ListItemSignature> {
 
   private get hasNestedItems() {
     return Boolean(this.args.filter?.filters);
+  }
+
+  // Nested filters are declared on the base type, so they come back as F[]
+  // only by this cast; the list is homogeneous in practice.
+  private get nestedFilters() {
+    return this.args.filter?.filters as F[] | undefined;
   }
 
   @action private toggleExpanded() {
@@ -255,4 +320,8 @@ function addClassToSVG(svgString: string, className: string) {
 
 function isString(item: unknown): item is string {
   return typeof item === 'string';
+}
+
+function isNumber(item: unknown): item is number {
+  return typeof item === 'number';
 }

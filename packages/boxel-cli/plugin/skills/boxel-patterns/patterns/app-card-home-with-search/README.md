@@ -105,68 +105,70 @@ export class Surge extends CardDef {
     <template>
       <article class='sg'>
         <header class='sg-mast'>
-          <h1 class='sg-wordmark'>{{if @model.welcome @model.welcome 'SURGE'}}</h1>
-          {{#if @model.tagline}}<p class='sg-tagline'>{{@model.tagline}}</p>{{/if}}
+          <h1 class='sg-wordmark'><@fields.cardTitle /></h1>
+          {{#if @model.tagline}}<p class='sg-tagline'><@fields.tagline /></p>{{/if}}
         </header>
 
-        {{!-- Singular spotlight — no plural-field wrapper, simple :deep override --}}
+        {{!-- Singular spotlight — the class lands on the linked card's CardContainer via ...attributes --}}
         {{#if @model.headlineMeet}}
           <section class='sg-featured'>
-            <@fields.headlineMeet @format='embedded' />
+            <@fields.headlineMeet @format='embedded' class='sg-featured-card' />
           </section>
         {{/if}}
 
         {{!-- Dynamic section: every Meet in the realm, fitted, live --}}
         <section class='sg-section'>
           <h2 class='sg-section-title'>The calendar</h2>
-          <ul class='sg-meets'>
-            <@context.searchResultsComponent
-              @query={{this.meetsWireQuery}}
-              @mode='hover'
-              as |results|
-            >
-              {{#if results.isLoading}}
-                <li class='sg-loading'>Loading…</li>
-              {{/if}}
+          <@context.searchResultsComponent
+            @query={{this.meetsWireQuery}}
+            @mode='hover'
+            as |results|
+          >
+            {{#if results.isLoading}}
+              <p class='sg-status' role='status'>Loading…</p>
+            {{/if}}
+            <ul class='sg-meets'>
               {{#each results.entries key='id' as |entry|}}
                 <li class='sg-meets-cell'>
-                  <entry.component class='sg-card' />
+                  <entry.component />
                 </li>
               {{else}}
-                <li class='sg-empty'>No meets yet.</li>
+                <li class='sg-status'>No meets yet.</li>
               {{/each}}
-            </@context.searchResultsComponent>
-          </ul>
+            </ul>
+          </@context.searchResultsComponent>
         </section>
 
         {{!-- Add one @context.searchResultsComponent section per CardDef in the family --}}
       </article>
 
       <style scoped>
-        /* Outer chrome — leave radius / border / shadow / opaque bg to the host */
+        /* Outer chrome — leave radius / border / shadow / bg / font to the host */
         .sg {
-          background: var(--paper, #F5F8FA);
-          color: var(--ink, #0B1320);
-          font-family: var(--font-body, system-ui, sans-serif);
-          min-height: 100%;
+          --sg-cell-min-width: 17.5rem;
+          --sg-cell-height: 12.5rem;
+          height: 100%;
+          overflow-y: auto;
+        }
+        .sg-featured-card {
+          /* the container already draws its 1px --border ring and border-radius; no border here */
+          background-color: var(--card);
+          color: var(--card-foreground);
+        }
+        .sg-status {
+          margin: 0;
+          color: var(--muted-foreground);
         }
         .sg-meets {
           list-style: none;
           padding: 0;
           margin: 0;
           display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-          gap: 14px;
+          grid-template-columns: repeat(auto-fill, minmax(var(--sg-cell-min-width), 1fr));
+          gap: var(--boxel-sp);
         }
-        .sg-meets-cell { min-height: 200px; }
-        /* Chrome override on the prerendered cards */
-        .sg-section :deep(.boxel-card-container) {
-          border-radius: 0;
-          background: var(--card, #FFFFFF);
-        }
-        .sg-section :deep(.boxel-card-container--boundaries) {
-          box-shadow: 0 0 0 1px var(--ink, #0B1320);
-        }
+        /* Fixed height: FittedCard picks its layout by container query, so the cell must have a size */
+        .sg-meets-cell { height: var(--sg-cell-height); }
       </style>
     </template>
   };
@@ -227,11 +229,11 @@ The home almost always wants the first. The host pre-renders each result on the 
 
 **Critical — apply the chrome contract:**
 
-The home's outermost element (`.sg` in the example) MUST leave decoration to the host's CardContainer. No `border-radius`, no `border`, no `box-shadow`, no opaque `background` (`var(--paper)` is fine — the paper is the brand surface, not chrome), no `overflow`. Brand-specific outer treatment goes on the Theme card as `--radius`, `--background`, `--border`. See `boxel-ui-guidelines/references/delegated-render-control.md`.
+The home's outermost element (`.sg` in the example) MUST leave decoration to the host's CardContainer. No `border-radius`, no `border`, no `box-shadow`, no `background`, no `color`, no `font-family` — the container already paints `--background` / `--foreground` and applies the theme's font, and any token outside the theme contract (`--paper`, `--ink`, `--font-body`) or a hex fallback disconnects the home from the user's Theme card. What the root does own is `height: 100%; overflow-y: auto`, so long homes scroll instead of clipping. Brand-specific outer treatment goes on the Theme card as `--radius`, `--background`, `--border`. See `boxel-ui-guidelines/references/delegated-render-control.md`.
 
 **Critical — no plural-field wrapper for search-results output:**
 
-`@context.searchResultsComponent` does NOT wrap its yielded entries in `.plural-field / .containsMany-field / .linksToMany-field` — that wrapper only appears for `<@fields.plural @format='...' />` direct rendering. With the search-results surface, you own the `<ul>` / `<li>` shell yourself, so `display: grid` on the `<ul>` works without any `display: contents` tricks. The chrome `:deep()` overrides still apply because each result renders inside its own `.boxel-card-container`.
+`@context.searchResultsComponent` does NOT wrap its yielded entries in `.plural-field / .containsMany-field / .linksToMany-field` — that wrapper only appears for `<@fields.plural @format='...' />` direct rendering. With the search-results surface, you own the `<ul>` / `<li>` shell yourself, so `display: grid` on the `<ul>` works without any `display: contents` tricks. Give each `<li>` a fixed height — `FittedCard` chooses its layout by container query and has nothing to measure in an auto-height cell. Keep the loading indicator outside the `<ul>` so the list only ever holds list items. Leave the results' chrome alone: each renders inside its own themed `.boxel-card-container`, and zeroing its radius or painting an outline through `:deep()` fights the Theme card. For the single spotlight card, pass `class=` on `<@fields.headlineMeet />` instead — `...attributes` lands on that card's `CardContainer`, so no `:deep()` is needed.
 
 **The three query traps:**
 

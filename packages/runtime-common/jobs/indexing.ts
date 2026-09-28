@@ -5,6 +5,7 @@ import type {
   IncrementalChange,
   IncrementalDoneResult,
   IncrementalResult,
+  SharedIndexPass,
 } from '../tasks/indexer.ts';
 import {
   param,
@@ -16,25 +17,48 @@ import type { DBAdapter } from '../db.ts';
 import { baseRealm, baseRealmRRI } from '../constants.ts';
 import { systemInitiatedPriority, userInitiatedPriority } from '../queue.ts';
 import { Deferred } from '../deferred.ts';
+import { parseSpawningIndexPasses } from './prerender-html.ts';
+import { laneFamilyPredicate, writerLane, type Lane } from './lane-family.ts';
 import { v4 as uuidv4 } from '@lukeed/uuid';
 import { isObjectLike } from 'lodash-es';
 
 export const INCREMENTAL_INDEX_JOB_TIMEOUT_SEC = 10 * 60;
 
-// The name of a realm's index lane. Membership in it means one thing only:
-// serialize against everything else in it. Every job that writes the realm's
-// index joins — from-scratch, incremental, copy — and so does work that must
-// not overlap a running pass without writing the index itself, today
-// `scoped-css-gc` (see `runtime-common/scoped-css-gc.ts`).
+// The name of a realm's index lane family (see `QueuePublishRequest.laneFamily`),
+// and of the family's exclusive lane. A job published to this group runs with
+// nothing else of the realm's index: from-scratch and copy, which rewrite the
+// realm's index wholesale, and work that must not overlap a running pass
+// without writing the index itself, today `scoped-css-gc` (see
+// `runtime-common/scoped-css-gc.ts`). An incremental pass runs in its writer's
+// lane of the family instead (see `indexingWriterLane`).
 //
-// So the lane's membership does not answer "is this realm's index behind its
-// source". A reader asking that must narrow to `INDEX_WRITING_JOB_TYPES`;
-// reading the bare lane reports a realm as mid-index for as long as a GC sweep
-// sits queued behind an unrelated backlog. A caller that wants the lane itself
-// — cancelling a realm's outstanding work on teardown — wants every member and
-// should not narrow.
+// Readers ask about the family rather than this group, through
+// `laneFamilyPredicate`, so a job in a writer lane counts wherever an
+// exclusive one does.
+//
+// So the family's membership does not answer "is this realm's index behind
+// its source". A reader asking that must narrow to `INDEX_WRITING_JOB_TYPES`;
+// reading the bare family reports a realm as mid-index for as long as a GC
+// sweep sits queued behind an unrelated backlog. A caller that wants the
+// family itself — cancelling a realm's outstanding work on teardown — wants
+// every member and should not narrow.
 export function indexingConcurrencyGroup(realmURL: string): string {
   return `indexing:${realmURL}`;
+}
+
+// The lane an incremental pass for `initiatedBy`'s writes runs in: that
+// writer's lane of the realm's index family, or the owner's lane for work
+// nobody initiated. Two people editing one realm index side by side, so a
+// cheap save does not wait out another user's long pass. One writer's passes
+// share a lane, so they coalesce with each other and run in order, which is
+// what read-your-writes and the in-flight join rely on. Passes that overlap
+// are reconciled when they commit (see `Batch.done`'s validation), not by
+// the queue.
+export function indexingWriterLane(
+  realmURL: string,
+  initiatedBy: string | null | undefined,
+): Lane {
+  return writerLane(indexingConcurrencyGroup(realmURL), initiatedBy);
 }
 
 // The priority a system-initiated index of `realmURL` is enqueued at.
@@ -55,12 +79,14 @@ export function indexingConcurrencyGroup(realmURL: string): string {
 // sweep occupies the all-priority pool.
 //
 // Base is the only realm elevated this way, and two things bound what that
-// costs. Every job that writes a realm's index shares
-// `indexingConcurrencyGroup(realmURL)`, and the claim query skips any group
-// already holding a live reservation — so base's index occupies one worker at
-// a time. And the elevation stops at the index: follow-on prerender-html work
-// derives its tier from `prerenderSpawnedPriority` below rather than from the
-// elevated value, so a realm-wide HTML sweep for base cannot take a second
+// costs. Every job that writes a realm's index is in the lane family
+// `indexingConcurrencyGroup(realmURL)`, and the claim query runs one job per
+// lane and never runs a family's exclusive work beside anything else in it —
+// so base's exclusive index work occupies one worker at a time, and its
+// incremental passes, which run in writer lanes, at most the queue's cap on
+// concurrent writer lanes per family. And the elevation stops at the index: follow-on
+// prerender-html work derives its tier from `prerenderSpawnedPriority` below
+// rather than from the elevated value, so a realm-wide HTML sweep for base cannot take a second
 // worker out of the same pool. Each further realm elevated would add another
 // index group, and so another worker held off user-initiated work; the other
 // bootstrap realms (catalog, skills, ...) stay at the system tier and get FIFO
@@ -133,10 +159,11 @@ export function prerenderSpawnedPriority({
 // published, so with several realm-server replicas behind one load balancer
 // they answer per-replica; the `jobs` rows are the same for every replica.
 //
-// Signal: no `unfulfilled` job in the realm's index concurrency group, which
-// covers both queued and running jobs. A job's status is stamped only after its
-// handler has returned, so its index writes are already committed by the time
-// it stops counting as unfulfilled — a clear lane means every index write
+// Signal: no `unfulfilled` job in the realm's index lane family — its
+// exclusive lane and every writer lane — which covers both queued and running
+// jobs. A job's status is stamped only after its handler has returned, so its
+// index writes are already committed by the time it stops counting as
+// unfulfilled — a clear lane means every index write
 // enqueued so far is durable. Resolves true when the lane is clear, false on
 // timeout.
 //
@@ -199,8 +226,8 @@ export async function unbuiltIndexFailure(
     return undefined;
   }
   let [job] = (await query(dbAdapter, [
-    `SELECT status, result FROM jobs WHERE job_type = 'from-scratch-index' AND concurrency_group =`,
-    param(indexingConcurrencyGroup(realmURL)),
+    `SELECT status, result FROM jobs WHERE job_type = 'from-scratch-index' AND`,
+    ...laneFamilyPredicate(indexingConcurrencyGroup(realmURL)),
     'ORDER BY id DESC LIMIT 1',
   ])) as { status: string; result: unknown }[];
   if (!job || job.status !== 'rejected') {
@@ -286,9 +313,10 @@ export function jobTypeFilter(
 // ask `awaitRealmIndexSettled`, whose answer is one query rather than a read
 // that can disagree with the gate it explains.
 //
-// Capped because it lands in a log line. A realm's lane serializes, so it holds
-// a handful in practice; the cap only bounds a pathological backlog, and a lane
-// that deep is diagnosed from the queue, not from one realm's readiness log.
+// Capped because it lands in a log line. A realm's lanes each serialize, so
+// they hold a handful in practice; the cap only bounds a pathological backlog,
+// and a lane that deep is diagnosed from the queue, not from one realm's
+// readiness log.
 const OUTSTANDING_INDEX_JOBS_LOG_CAP = 10;
 
 // `claimed` separates the two states a reader of this has to tell apart: a job
@@ -319,8 +347,8 @@ export async function outstandingIndexJobs(
     `SELECT id, job_type,`,
     `EXISTS (SELECT 1 FROM job_reservations jr WHERE jr.job_id = jobs.id`,
     `AND jr.completed_at IS NULL AND jr.locked_until > NOW()) AS claimed`,
-    `FROM jobs WHERE status = 'unfulfilled' AND concurrency_group =`,
-    param(indexingConcurrencyGroup(realmURL)),
+    `FROM jobs WHERE status = 'unfulfilled' AND`,
+    ...laneFamilyPredicate(indexingConcurrencyGroup(realmURL)),
     ...jobTypeFilter(jobTypes),
     `ORDER BY id LIMIT ${OUTSTANDING_INDEX_JOBS_LOG_CAP}`,
   ])) as { id: number | string; job_type: string; claimed: boolean }[];
@@ -398,6 +426,13 @@ export async function awaitRealmIndexSettled(
     // by, where one naming nobody waits for the lane — which is what a
     // readiness probe or a publish means.
     //
+    // Across the family that is the writer's own lane plus the exclusive work
+    // that carries it. A writer lane's jobs carry that one writer, since
+    // coalescing never merges across lanes, so the recorded set is what picks
+    // out the lane; and an exclusive job counts when it carries the writer
+    // too. Another writer's lane never does, and neither does exclusive work
+    // that carries only other writers.
+    //
     // A pass no HTTP write produced records no user, and reads as the realm
     // owner rather than as nobody: a row written before the column existed, a
     // file-watcher echo, a GC sweep still gate somebody, and the owner is the
@@ -435,8 +470,8 @@ export async function awaitRealmIndexSettled(
       return true;
     }
     let expression: Expression = [
-      `SELECT 1 FROM jobs WHERE status = 'unfulfilled' AND concurrency_group =`,
-      param(indexingConcurrencyGroup(realmURL)),
+      `SELECT 1 FROM jobs WHERE status = 'unfulfilled' AND`,
+      ...laneFamilyPredicate(indexingConcurrencyGroup(realmURL)),
     ];
     if (initiatedBy) {
       // Containment over the recorded set, since a coalesced pass carries
@@ -536,6 +571,7 @@ function parseIncrementalResult(
     stats,
     generation,
     deferredPrerenderHtml,
+    coalescedCallers,
   } = result as Record<string, PgPrimitive>;
   if (
     !Array.isArray(invalidations) ||
@@ -563,6 +599,77 @@ function parseIncrementalResult(
     stats: stats as IncrementalResult['stats'],
     ...(typeof generation === 'number' ? { generation } : {}),
     ...(deferred ? { deferredPrerenderHtml: deferred } : {}),
+    ...(Array.isArray(coalescedCallers)
+      ? { coalescedCallers: parseCoalescedCallers(coalescedCallers) }
+      : {}),
+  };
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return (
+    Array.isArray(value) && value.every((item) => typeof item === 'string')
+  );
+}
+
+// The callers a pass indexed, as the claimed job's args named them. Read
+// loosely: an entry written by a realm server predating a member lacks it, and
+// one missing its identity is dropped rather than guessed at.
+function parseCoalescedCallers(value: unknown[]): CoalescedCaller[] {
+  let callers: CoalescedCaller[] = [];
+  for (let caller of value) {
+    if (!isObjectLike(caller)) {
+      continue;
+    }
+    let { waiterId, clientRequestId, urls, clientAuthored, announcesPass } =
+      caller as Record<string, unknown>;
+    if (
+      typeof waiterId !== 'string' ||
+      (clientRequestId !== null && typeof clientRequestId !== 'string')
+    ) {
+      continue;
+    }
+    callers.push({
+      waiterId,
+      clientRequestId,
+      urls: isStringArray(urls) ? urls : null,
+      clientAuthored: isStringArray(clientAuthored) ? clientAuthored : null,
+      announcesPass: announcesPass === true,
+    });
+  }
+  return callers;
+}
+
+// How one caller of a pass relates to the others it shared the pass with.
+// Undefined when the pass indexed this caller alone, or when it cannot say who
+// else it indexed (a result from an older worker), or when this caller is not
+// among those named — a publish that attached to a job already running is not
+// in the args that job was claimed with. Each of those leaves the caller
+// announcing the pass itself — a duplicate a subscriber can absorb, where a
+// caller wrongly standing down would leave the pass unannounced.
+function sharedPassFor(
+  waiterId: string | undefined,
+  callers: CoalescedCaller[] | undefined,
+): SharedIndexPass | undefined {
+  if (
+    waiterId === undefined ||
+    !callers ||
+    callers.length < 2 ||
+    !callers.some((caller) => caller.waiterId === waiterId)
+  ) {
+    return undefined;
+  }
+  // The first caller that announces its passes as they land. Chosen from the
+  // args rather than negotiated, so every caller — in whichever replica it is
+  // waiting — reaches the same answer from the same result without talking to
+  // the others. A caller for which this pass is only a step toward a later
+  // one is passed over: its announcement waits on work that has not happened
+  // yet and may never succeed. When no caller announces as it lands, nobody
+  // stands down.
+  let announcer = callers.find((caller) => caller.announcesPass);
+  return {
+    announcedByPeer: announcer !== undefined && announcer.waiterId !== waiterId,
+    waiterId,
+    callers,
   };
 }
 
@@ -578,7 +685,7 @@ function parseDeferredPrerenderHtml(
   if (!isObjectLike(value) || Array.isArray(value)) {
     return undefined;
   }
-  let { changes, generation, loaderEpoch } = value as Record<
+  let { changes, spawningIndexPass, generation, loaderEpoch } = value as Record<
     string,
     PgPrimitive
   >;
@@ -603,7 +710,15 @@ function parseDeferredPrerenderHtml(
     }
     parsedChanges.push({ url, operation });
   }
-  return { changes: parsedChanges, generation, loaderEpoch };
+  // A set from a worker predating `spawningIndexPass` carries none, and
+  // its enqueued job waits on the generation instead.
+  let [pass] = parseSpawningIndexPasses([spawningIndexPass]) ?? [];
+  return {
+    changes: parsedChanges,
+    loaderEpoch,
+    spawningIndexPass: pass ?? null,
+    generation,
+  };
 }
 
 export interface IncrementalIndexEnqueueArgs {
@@ -620,9 +735,22 @@ export interface IncrementalIndexEnqueueArgs {
 export function makeIncrementalArgsWithCallerMetadata(
   args: IncrementalIndexEnqueueArgs,
   clientRequestId: string | null,
+  caller?: {
+    // See CoalescedCaller.
+    clientAuthored?: string[] | null;
+    announcesPass?: boolean;
+  },
 ): IncrementalArgs {
   let waiterId = uuidv4();
-  let coalescedCallers: CoalescedCaller[] = [{ waiterId, clientRequestId }];
+  let coalescedCallers: CoalescedCaller[] = [
+    {
+      waiterId,
+      clientRequestId,
+      urls: args.changes.map(({ url }) => url.replace(/\.json$/, '')),
+      clientAuthored: caller?.clientAuthored ?? null,
+      announcesPass: caller?.announcesPass === true,
+    },
+  ];
   return {
     realmURL: args.realmURL,
     realmUsername: args.realmUsername,
@@ -637,6 +765,9 @@ export function makeIncrementalArgsWithCallerMetadata(
 
 export function mapIncrementalDoneResult(
   clientRequestId: string | null,
+  // The caller's own entry in the job's `coalescedCallers`, so it can find
+  // itself among the callers the pass reports.
+  waiterId?: string,
 ): (result: PgPrimitive) => IncrementalDoneResult {
   return (result: PgPrimitive) => {
     let parsedResult = parseIncrementalResult(result);
@@ -651,9 +782,11 @@ export function mapIncrementalDoneResult(
         )}`,
       );
     }
+    let sharedPass = sharedPassFor(waiterId, parsedResult.coalescedCallers);
     return {
       ...parsedResult,
       clientRequestId,
+      ...(sharedPass ? { sharedPass } : {}),
     };
   };
 }

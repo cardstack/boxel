@@ -1,6 +1,6 @@
 ## Font Loading — Theme Card Owns Imports
 
-Do NOT use `@import url(...)` inside `<style scoped>` blocks. Font imports belong in the Theme card's `cssImports` field. The runtime automatically passes them to `CardContainer`.
+Do NOT use `@import url(...)` inside `<style scoped>` blocks. Font imports belong to the Theme card: a StructuredTheme derives Google Fonts links in `cssImports` from its font stacks, and other stylesheets go in its `customCssImports`. The runtime automatically passes them to `CardContainer`.
 
 **Wrong:**
 ```css

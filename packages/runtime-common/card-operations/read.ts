@@ -154,14 +154,28 @@ async function readDocument(
   let { doc } = result;
   doc.data.links = { self: url.href };
   core.unresolveInstanceIds(doc);
-  // The index-data generation and the declared-screenshot manifest are joined
-  // at serve time onto a fresh `meta` — never a mutation of the cached
-  // pristine doc's own. The generation lets a consumer tell fresh index data
-  // from stale; the manifest is never written back into the index row or the
-  // source file.
+  // The index-data generation, the source version and the declared-screenshot
+  // manifest are joined at serve time onto a fresh `meta` — never a mutation of
+  // the cached pristine doc's own. The generation lets a consumer tell fresh
+  // index data from stale; the manifest is never written back into the index row
+  // or the source file.
+  //
+  // `version` is the content hash of the stored source this document was
+  // assembled from, recorded on the row by the pass that indexed those bytes. A
+  // client sends it back as the base its next write is computed against, so it
+  // has to describe the document it ships with and not the file's current
+  // state — which is why it is read off the row here rather than from
+  // `realm_file_meta` at serve time. Omitted entirely when the row carries none,
+  // so a caller reads "no version" rather than a value it cannot rely on.
+  //
+  // It travels with the response only. Both strips that stand between a client
+  // echoing a document back and the bytes on disk — `file-serializer.ts` and
+  // `stageUpdate` — drop it, so a version is never persisted into the very file
+  // it describes.
   doc.data.meta = {
     ...doc.data.meta,
     generation: result.generation,
+    ...(result.version != null ? { version: result.version } : {}),
     ...(result.screenshots
       ? {
           screenshots: screenshotsMetaFromManifest(result.screenshots, {

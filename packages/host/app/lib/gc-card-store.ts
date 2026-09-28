@@ -98,13 +98,17 @@ type StoreHooks = {
 // render flag alone is set by host-test renders that carry no job, and a job
 // id alone would let a stray global leak into the app's own store.
 //
-// The scope, not the job, is what state can be reused across. An index pass
-// and the prerender-html job it spawns are separate queue jobs reading one
-// immutable view of the realm, and they interleave on a shared tab — keying on
-// the job would drop everything on each alternation while the view never
-// moved. A driver that threads no scope falls back to the job id, which is the
+// The scope, not the job, is what state can be reused across. A scope names a
+// view of the realm with no commit to it in between: an index pass and the
+// prerender-html job it spawns share one while nothing else committed around
+// the pass, and they interleave on a shared tab — keying on the job would drop
+// everything on each alternation while the view never moved. When another
+// writer's pass commits mid-job, the driver moves the scope instead: a
+// validation round re-reads under a scope of its own, and a prerender-html job
+// whose spawning pass overlapped a peer keys on itself (see `renderScopeFor`).
+// A driver that threads no scope falls back to the job id, which is the
 // narrower of the two and so never unsound.
-function currentRenderScope(): string | undefined {
+export function currentRenderScope(): string | undefined {
   let g = globalThis as unknown as {
     __boxelRenderContext?: boolean;
     __boxelJobId?: string;
@@ -266,14 +270,13 @@ export default class CardStoreWithGarbageCollection implements CardStore {
   // re-load into a local deserialize instead of a network round-trip.
   //
   // Staleness contract — one consistent view of every target per scope. For
-  // the indexed realm's own files an index pass serializes with that realm's
-  // writes, and a mid-pass write is picked up by the follow-up pass its
-  // invalidation enqueues. One caveat the scope keying adds: a scope spans
-  // the index pass AND the `prerender_html` job it spawned, which are
-  // separate queue jobs, so a write landing between them is not excluded the
-  // way a write during a single pass is. That is bounded to HTML — in split
-  // mode the html job writes only `prerendered_html`, never a search doc —
-  // and the write's own pass regenerates it under a fresh scope. A
+  // the indexed realm's own files, a scope is a view no commit moved: a write
+  // made during a pass is picked up by the pass its invalidation enqueues, and
+  // when another writer's pass commits while this one runs, the driver moves
+  // the scope for every read that could see it — the commit-time validation
+  // round that re-visits for the peer, and a `prerender_html` job whose
+  // spawning pass the peer overlapped (see `renderScopeFor`). What a scope
+  // cached is therefore never read after a commit it predates. A
   // cross-realm target CAN change mid-scope,
   // and the cache pins the version first observed — deliberately, matching
   // the scope-scoped instance reuse in the link getter's lazy-load path,
@@ -496,7 +499,7 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     if (isLocalId(id)) {
       return id;
     }
-    return this.#virtualNetwork.toRealURLHref(id);
+    return this.#virtualNetwork.keyForIdentifier(id);
   }
 
   getCard(id: string): CardDef | undefined {

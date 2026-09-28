@@ -135,17 +135,15 @@ export class WikiPage extends CardDef {
           gap: 1.25rem;
           height: 100%;
           padding: 1rem;
-          background: var(--background, #fff);
-          color: var(--foreground, #17202a);
         }
 
         aside {
-          border-right: 1px solid var(--border, #d8dee7);
+          border-right: 1px solid var(--border);
           padding-right: 1rem;
         }
 
         .wiki-content :deep(.wiki-link) {
-          color: var(--primary, #285de8);
+          color: var(--primary-ink);
           font-weight: 650;
           text-decoration: underline;
           cursor: pointer;

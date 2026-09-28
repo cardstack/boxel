@@ -4,6 +4,7 @@ import {
   OperationFailure,
   isDocumentResult,
   isOperationFailure,
+  isWrite,
   type BaseOperation,
   type EntryPosition,
   type OperationDefinition,
@@ -12,7 +13,10 @@ import {
   type OperationTarget,
 } from './types.ts';
 import type { BatchEntryResult, BatchNode } from './coordinator.ts';
+import { assertParamsSupplied, type OperationScope } from './dispatch.ts';
+import { runInputTransform, type TransformContext } from './transforms.ts';
 import type { BatchEntry } from './executors.ts';
+import type { GateDecision } from './gate.ts';
 import { isCodeRef } from '../card-document-shape.ts';
 import type { CardResource } from '../resource-types.ts';
 import type { SearchEntryWireFilter } from '../search-entry.ts';
@@ -122,6 +126,12 @@ export interface EnvelopeEntry {
   // the resource-level member JSON:API already reserves for exactly this, and
   // the key later entries link to the new card by.
   lid?: string;
+  // The version the caller believes it is writing on top of, read from
+  // `data.meta.baseVersion`. The result reports whether the target was still
+  // at it, and the write happens either way — a moved base is something the
+  // caller decides what to do about, where `If-Match` is how a caller asks for
+  // the write to be refused instead.
+  baseVersion?: string;
 }
 
 // A run of entries, which is itself an entry of whatever holds it.
@@ -373,6 +383,24 @@ function parseInvocation(
       position,
     );
   }
+  let baseVersion = baseVersionIn(data, position);
+  if (baseVersion !== undefined && data) {
+    // Lifted out of the payload, not merely read from it. `data` reaches the
+    // document arms of `batchEntryFor` as the JSON:API resource itself — a
+    // patch to merge, or a card to mint — so a member left on `meta` would be
+    // merged into the card's stored source, where `meta` legitimately carries
+    // `adoptsFrom` and `fields` and so cannot be dropped wholesale. It would
+    // also make an otherwise no-op patch look like a change.
+    //
+    // `meta` survives as an object even when the base version was all it held:
+    // a patch has to carry `adoptsFrom` to be read as a card resource at all,
+    // and the arms that take params drop `meta` themselves.
+    let { baseVersion: _lifted, ...meta } = data.meta as Record<
+      string,
+      unknown
+    >;
+    data = { ...data, meta };
+  }
   if (operation.href !== undefined && operation['boxel:target'] !== undefined) {
     // Both spellings of the same slot. Refused rather than resolved by a
     // precedence rule, because the two disagree about something the caller
@@ -397,7 +425,41 @@ function parseInvocation(
       : { find: queryTargetIn(operation['boxel:target'], position) }),
     ...(data ? { data } : {}),
     ...(lid === undefined ? {} : { lid }),
+    ...(baseVersion === undefined ? {} : { baseVersion }),
   };
+}
+
+// The base version out of an entry's `data.meta`, which is where the wire
+// carries the members that describe the resource rather than the operation's
+// own params — `meta` is already subtracted from the params for that reason.
+//
+// A non-string is refused rather than ignored, because the thing a caller does
+// with a base version is read the `baseMatched` that comes back: an ignored one
+// answers with no `baseMatched` at all, which a caller reads as "the realm does
+// not report on this" and not as "you sent the wrong shape". An empty string is
+// refused for the same reason and separately, since it is a caller that
+// interpolated a version it never had — and it would otherwise be compared
+// against the file's real hash and answer a confident `false`.
+function baseVersionIn(
+  data: Record<string, unknown> | undefined,
+  position: EntryPosition,
+): string | undefined {
+  if (!data || !isPlainRecord(data.meta)) {
+    return undefined;
+  }
+  let baseVersion = data.meta.baseVersion;
+  if (baseVersion === undefined) {
+    return undefined;
+  }
+  if (typeof baseVersion !== 'string' || baseVersion.length === 0) {
+    throw refuse(
+      `entry ${position} carries a "meta.baseVersion" that is not a ` +
+        `non-empty string; a base version is the version the caller last saw ` +
+        `the target at`,
+      position,
+    );
+  }
+  return baseVersion;
 }
 
 // The members a query target carries. Read as a closed set, unlike `data`,
@@ -571,6 +633,13 @@ export interface ResolvedEnvelopeEntry {
   entry: EnvelopeEntry;
   target: OperationTarget;
   definition: OperationDefinition;
+  // What the policy gate decided about this entry. A `pending` write is one
+  // whose admission still rests on a predicate.
+  decision: GateDecision;
+  // This entry's own view of the batch's scope: the batch's caller and row
+  // memo, and — once `stageWriteEntry` has run — the document a create would
+  // write.
+  scope: OperationScope;
 }
 
 // The two behaviors that are reached somewhere other than here.
@@ -599,6 +668,41 @@ export function assertTravelsInEnvelope(
           `engine rather than in a batch`
         : `operation "${entry.name}" reads stored bytes, which the card ` +
           `source and byte routes serve rather than a JSON batch`,
+    meta: { entry: entry.position },
+  });
+}
+
+// A base version names the state a write is computed on top of, so an entry
+// that does not write has nothing to compare one against.
+//
+// Refused rather than ignored, and refused here rather than left to the
+// coordinator, because the coordinator only ever sees the entries that write:
+// a `read`, a `readSource` or a `query` — the three bases that write nothing —
+// is answered before the batch is staged. An ignored
+// base version answers with no `baseMatched` at all, which is exactly the
+// reading a caller cannot distinguish from "the realm does not report on
+// this" — so a well-formed value on a read would be silently dropped while a
+// malformed one on the same read is a refusal, which is the inconsistency the
+// shape check exists to avoid.
+//
+// Which *writing* behaviors carry a base stays the coordinator's rule, since
+// it owns the comparison; this covers only the entries that never reach it.
+export function assertVersionableEntry(
+  entry: EnvelopeEntry,
+  definition: OperationDefinition,
+): void {
+  if (entry.baseVersion === undefined || isWrite(definition.base)) {
+    return;
+  }
+  throw new OperationFailure({
+    ...(entry.href ? { id: entry.href } : {}),
+    status: 400,
+    code: 'invalid-params',
+    title: 'Invalid base version',
+    detail:
+      `entry ${entry.position} invokes "${entry.name}", which is a ` +
+      `"${definition.base}" and writes nothing, and names a base version; ` +
+      `a base version describes the state a write is computed on top of`,
     meta: { entry: entry.position },
   });
 }
@@ -637,7 +741,19 @@ export function batchEntryFor(
   // under, so a batch holding only some of an envelope's entries — and one
   // whose entries sat inside groups — still reports refusals against the
   // envelope's own numbering.
-  let common = { definition, label: position };
+  //
+  // The base version rides along on every arm rather than only on the two that
+  // can report a match. Which behaviors have a base to compare is the
+  // coordinator's rule and it already enforces it for in-process callers, so
+  // handing it through uniformly is what makes a `create` that names one answer
+  // the same refusal however it arrived, instead of one that silently drops it.
+  let common = {
+    definition,
+    label: position,
+    ...(entry.baseVersion === undefined
+      ? {}
+      : { baseVersion: entry.baseVersion }),
+  };
   switch (definition.base) {
     case 'create': {
       if (entry.found) {
@@ -732,6 +848,19 @@ export function batchEntryFor(
         href: hrefRequired(entry, 'appendLine'),
       };
     case 'appendContainsMany':
+      if (definition.items) {
+        // A declaration says what it appends, so `field`, `items` and
+        // `fields` are not read off the wire for one — which means they are
+        // ordinary param names here, and subtracting them would make a
+        // declaration naming one of them uninvokable. The endpoint checks the
+        // payload against the same unsubtracted map before staging.
+        return {
+          op: 'appendContainsMany',
+          ...common,
+          params: paramsFor(entry),
+          href: hrefRequired(entry, 'appendContainsMany'),
+        };
+      }
       return {
         op: 'appendContainsMany',
         ...common,
@@ -826,6 +955,47 @@ export function entryWithPayload(
     }
   }
   return { ...entry, data: { ...payload, ...carried } };
+}
+
+// A write entry's two steps before it is staged, in the order `runOperation`
+// runs them for a read: the `input` stage over the payload, then the `params`
+// check against what it produced. A value an `input` supplies is what the
+// check then sees, which is most of what an `input` is for.
+//
+// The check belongs here and not in the executors: a declared param with no
+// value is the caller's mistake, and the behaviors read the payload
+// differently enough that some would never notice — a `delete` reads no
+// payload at all, so a declaration requiring one would be carried out over a
+// card the caller had not said enough to remove.
+//
+// A create's scope comes back carrying the payload as these two steps left it,
+// since that — not what the caller sent — is what the card would be minted
+// from. The transformed entry keeps its `position` and the envelope's own
+// members; only the payload moves.
+export async function stageWriteEntry(
+  write: ResolvedEnvelopeEntry,
+  ctx: TransformContext,
+): Promise<ResolvedEnvelopeEntry> {
+  let { entry, definition, scope } = write;
+  if (definition.input) {
+    entry = entryWithPayload(
+      entry,
+      await runInputTransform(definition, paramsFor(entry), ctx),
+    );
+  }
+  assertParamsSupplied(definition, paramsFor(entry), {
+    name: entry.name,
+    ...(entry.href ? { id: entry.href } : {}),
+  });
+  if (definition.base === 'create') {
+    // Read the way `batchEntryFor` stages it: a named create is filled from
+    // its params, which leave out the members the envelope reads for itself,
+    // and a plain create is minted from the whole resource, local id included.
+    scope = scope.derive({
+      proposed: definition.of ? paramsFor(entry) : (entry.data ?? {}),
+    });
+  }
+  return { ...write, entry, scope };
 }
 
 function own(

@@ -34,13 +34,27 @@ const realmDir = existsSync(configuredRealmDir)
 const SETUP_COMMAND_TIMEOUT_MS = Number(
   process.env.TEST_HARNESS_SETUP_COMMAND_TIMEOUT_MS ?? 900_000,
 );
+// Backstop for serve:support as a whole. When a bring-up step inside it fails
+// or exceeds its own bound (host preview 180s, `/_standby` render 240s,
+// Postgres and icons 30s each), serve:support exits and the wait below reports
+// that immediately with the child's own error. This outer bound covers the
+// case where the child is still making progress: the bounded steps can add
+// up to roughly 510s, and the one-time work with no bound of its own (the
+// seed-tar build with its image pull and migrations, the boxel-ui build) needs
+// room on top of that. A healthy-but-slow bring-up that exceeds this is
+// reported with the timeout error and the child's buffered output.
 const SUPPORT_METADATA_TIMEOUT_MS = Number(
-  process.env.TEST_HARNESS_SUPPORT_METADATA_TIMEOUT_MS ?? 120_000,
+  process.env.TEST_HARNESS_SUPPORT_METADATA_TIMEOUT_MS ?? 600_000,
 );
+const METADATA_WAIT_HEARTBEAT_MS = 30_000;
 
 const setupLog = logger('software-factory:playwright');
 const supportLog = logger('software-factory:playwright:support');
 const cacheLog = logger('software-factory:playwright:cache');
+
+function formatSeconds(ms: number): string {
+  return `${(ms / 1000).toFixed(1)}s`;
+}
 
 function appendLog(buffer: string, chunk: string): string {
   let combined = `${buffer}${chunk}`;
@@ -156,6 +170,7 @@ async function waitForMetadataFile<T>(
   timeoutMs = SUPPORT_METADATA_TIMEOUT_MS,
 ): Promise<T> {
   let startedAt = Date.now();
+  let nextHeartbeatAt = startedAt + METADATA_WAIT_HEARTBEAT_MS;
 
   while (Date.now() - startedAt < timeoutMs) {
     if (existsSync(metadataFile)) {
@@ -172,11 +187,24 @@ async function waitForMetadataFile<T>(
       );
     }
 
+    if (Date.now() >= nextHeartbeatAt) {
+      // Periodic progress lines give a slow bring-up timestamps in the CI log,
+      // which the child's buffered output (dumped only on failure) lacks.
+      setupLog.info(
+        `still waiting for ${metadataFile} after ${formatSeconds(
+          Date.now() - startedAt,
+        )} (timeout ${formatSeconds(timeoutMs)})`,
+      );
+      nextHeartbeatAt += METADATA_WAIT_HEARTBEAT_MS;
+    }
+
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
 
   throw new Error(
-    `timed out waiting for software-factory support metadata ${metadataFile}\n${getLogs()}`,
+    `timed out after ${formatSeconds(
+      Date.now() - startedAt,
+    )} waiting for software-factory support metadata ${metadataFile}\n${getLogs()}`,
   );
 }
 

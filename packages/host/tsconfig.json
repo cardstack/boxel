@@ -50,6 +50,7 @@
   },
   "include": [
     "../base/**/*",
+    "../ai-assistant-evals/eval-realm/**/*",
     "../experiments-realm/**/*",
     "../openrouter-realm/**/*",
     "../test-realm-cards/contents/**/*",

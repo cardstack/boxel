@@ -27,6 +27,7 @@ import {
   sumUpCreditsLedger,
 } from '@cardstack/billing/billing-queries';
 import { AllowedProxyDestinations } from '../lib/allowed-proxy-destinations.ts';
+import { MAX_IN_FLIGHT_CALLS_PER_USER } from '../lib/billable-call.ts';
 
 module(basename(import.meta.filename), function () {
   module('Realm-specific Endpoints | _request-forward', function (hooks) {
@@ -67,6 +68,29 @@ module(basename(import.meta.filename), function () {
           matrixURL: new URL('http://localhost:8008'),
         }));
       request = supertest(testRealmHttpServer);
+    }
+
+    function sendChatForward(jwt: string) {
+      return request
+        .post('/_request-forward')
+        .set('Accept', 'application/json')
+        .set('Content-Type', 'application/json')
+        .set('Authorization', `Bearer ${jwt}`)
+        .send({
+          url: 'https://openrouter.ai/api/v1/chat/completions',
+          method: 'POST',
+          requestBody: JSON.stringify({
+            model: 'openai/gpt-3.5-turbo',
+            messages: [{ role: 'user', content: 'Hi' }],
+          }),
+        });
+    }
+
+    async function inFlightReservations(): Promise<number> {
+      let [{ count }] = await dbAdapter.execute(
+        `SELECT COUNT(*) AS count FROM billable_call_reservations WHERE matrix_user_id = '@testuser:localhost'`,
+      );
+      return Number(count);
     }
 
     setupDB(hooks, {
@@ -664,6 +688,11 @@ module(basename(import.meta.filename), function () {
         response.body.errors?.[0]?.includes('minimum of 10 credits'),
         'Should return insufficient credits error',
       );
+      assert.strictEqual(
+        await inFlightReservations(),
+        0,
+        'a denied call takes no in-flight slot',
+      );
     });
 
     test('should handle missing authentication token', async function (assert) {
@@ -1046,23 +1075,16 @@ module(basename(import.meta.filename), function () {
       }
     });
 
-    test('serializes concurrent same-user OpenRouter calls via the cost-barrier lock', async function (assert) {
-      // Two concurrent requests from the same matrix user must not both
-      // forward to OpenRouter against the same credit balance — the second
-      // must wait until the first's cost row has landed. Before the
-      // db-coordinated barrier the second forwarded immediately because
-      // its credit check raced the first's pending deduction.
+    test("runs one user's concurrent calls in parallel up to the in-flight limit, and the next waits for a slot", async function (assert) {
+      // A page that asks for several generations at once must get them
+      // concurrently. Past the limit a call waits rather than failing, and
+      // starts as soon as one of the user's calls finishes.
       const originalFetch = global.fetch;
       const mockFetch = sinon.stub(global, 'fetch');
 
-      // Each forward should see the prior cost already debited. We don't
-      // assert exact debit ordering against the upstream calls (the lock
-      // serializes both ends of the work), only that across both
-      // completions the ledger reflects both costs.
-      const inflightChatCalls: Array<{
-        release: () => void;
-        started: Promise<void>;
-      }> = [];
+      // Each upstream call is held open until the test releases it, so the
+      // calls genuinely overlap.
+      const upstreamCalls: Array<{ release: () => void }> = [];
 
       mockFetch.callsFake(async (input: string | URL | Request) => {
         const url = typeof input === 'string' ? input : input.toString();
@@ -1071,20 +1093,294 @@ module(basename(import.meta.filename), function () {
             status: 404,
           });
         }
-        // Suspend the upstream call until the test releases it, so two
-        // concurrent same-user requests would actually overlap upstream
-        // without the lock. With the lock the second call won't even
-        // reach this point until the first completes.
         let releaseFn!: () => void;
-        let startedFn!: () => void;
-        const startedSignal = new Promise<void>((res) => (startedFn = res));
-        const gate = new Promise<void>((res) => (releaseFn = res));
-        inflightChatCalls.push({ release: releaseFn, started: startedSignal });
-        startedFn();
-        await gate;
+        const released = new Promise<void>((res) => (releaseFn = res));
+        upstreamCalls.push({ release: releaseFn });
+        const callNumber = upstreamCalls.length;
+        await released;
         return new Response(
           JSON.stringify({
-            id: `gen-${inflightChatCalls.length}`,
+            id: `gen-${callNumber}`,
+            choices: [{ text: 'ok' }],
+            usage: { total_tokens: 10, cost: 0.002 },
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      });
+
+      const pending: Promise<unknown>[] = [];
+      try {
+        const jwt = createRealmServerJWT(
+          { user: '@testuser:localhost', sessionRoom: 'test-session-room' },
+          realmSecretSeed,
+        );
+        const send = () => sendChatForward(jwt).then((r) => r);
+
+        // supertest's Test is a thenable that only fires on `.then`, which
+        // `send` calls, so every request is on the wire from here.
+        for (let i = 0; i < MAX_IN_FLIGHT_CALLS_PER_USER + 1; i++) {
+          pending.push(send());
+        }
+
+        await waitUntil(
+          async () => upstreamCalls.length >= MAX_IN_FLIGHT_CALLS_PER_USER,
+          {
+            timeout: 15000,
+            timeoutMessage: `${MAX_IN_FLIGHT_CALLS_PER_USER} same-user calls should reach upstream together`,
+          },
+        );
+        // The call past the limit must still be waiting. Give it time it
+        // would need to get through if it were not.
+        await new Promise((r) => setTimeout(r, 1000));
+        assert.strictEqual(
+          upstreamCalls.length,
+          MAX_IN_FLIGHT_CALLS_PER_USER,
+          'the call past the in-flight limit waits instead of reaching upstream',
+        );
+
+        upstreamCalls[0].release();
+        await waitUntil(
+          async () => upstreamCalls.length === MAX_IN_FLIGHT_CALLS_PER_USER + 1,
+          {
+            timeout: 15000,
+            timeoutMessage:
+              'the waiting call should reach upstream once a slot frees',
+          },
+        );
+
+        for (const call of upstreamCalls) call.release();
+        const responses = (await Promise.all(pending)) as Array<{
+          status: number;
+        }>;
+        assert.deepEqual(
+          responses.map((r) => r.status),
+          new Array(MAX_IN_FLIGHT_CALLS_PER_USER + 1).fill(200),
+          'every call is served',
+        );
+
+        // Every call's cost lands (0.002 USD × 1000 = 2 credits each).
+        const expected = 50 - 2 * (MAX_IN_FLIGHT_CALLS_PER_USER + 1);
+        const user = await getUserByMatrixUserId(
+          dbAdapter,
+          '@testuser:localhost',
+        );
+        await waitUntil(
+          async () => {
+            const credits = await sumUpCreditsLedger(dbAdapter, {
+              creditType: ['extra_credit', 'extra_credit_used'],
+              userId: user!.id,
+            });
+            return credits === expected;
+          },
+          {
+            timeoutMessage: `every call should be debited (${expected} credits left)`,
+          },
+        );
+        assert.strictEqual(
+          await inFlightReservations(),
+          0,
+          'every finished call gives its slot back',
+        );
+      } finally {
+        // A failed assertion mid-flight would otherwise leave gated upstream
+        // calls hanging the test process.
+        for (const call of upstreamCalls) call.release();
+        await Promise.allSettled(pending);
+        mockFetch.restore();
+        global.fetch = originalFetch;
+      }
+    });
+
+    test('a client that leaves while waiting for a slot never reaches upstream', async function (assert) {
+      // A call waiting at the in-flight limit has taken no slot yet. Its
+      // client giving up must end the wait, and must not leave a slot taken
+      // or an upstream call started once a slot frees.
+      const originalFetch = global.fetch;
+      const mockFetch = sinon.stub(global, 'fetch');
+
+      const upstreamCalls: Array<{ release: () => void }> = [];
+      mockFetch.callsFake(async (input: string | URL | Request) => {
+        const url = typeof input === 'string' ? input : input.toString();
+        if (!url.includes('/chat/completions')) {
+          return new Response(JSON.stringify({ error: 'Not found' }), {
+            status: 404,
+          });
+        }
+        let releaseFn!: () => void;
+        const released = new Promise<void>((res) => (releaseFn = res));
+        upstreamCalls.push({ release: releaseFn });
+        await released;
+        return new Response(
+          JSON.stringify({
+            id: `gen-${upstreamCalls.length}`,
+            choices: [{ text: 'ok' }],
+            usage: { total_tokens: 10, cost: 0.002 },
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      });
+
+      const jwt = createRealmServerJWT(
+        { user: '@testuser:localhost', sessionRoom: 'test-session-room' },
+        realmSecretSeed,
+      );
+      const running: Promise<unknown>[] = [];
+      const waiting = sendChatForward(jwt);
+      let waitingSettled: Promise<unknown> | undefined;
+      try {
+        for (let i = 0; i < MAX_IN_FLIGHT_CALLS_PER_USER; i++) {
+          running.push(sendChatForward(jwt).then((r) => r));
+        }
+        await waitUntil(
+          async () => upstreamCalls.length >= MAX_IN_FLIGHT_CALLS_PER_USER,
+          {
+            timeout: 15000,
+            timeoutMessage: 'the first calls should fill every slot',
+          },
+        );
+
+        // supertest's Test fires on `.then`; both outcomes are swallowed
+        // because this is the request the test walks away from.
+        waitingSettled = waiting.then(
+          () => undefined,
+          () => undefined,
+        );
+        // Long enough for the request to reach admission and start waiting.
+        await new Promise((r) => setTimeout(r, 1000));
+        waiting.abort();
+        await waitingSettled;
+
+        for (const call of upstreamCalls) call.release();
+        await Promise.all(running);
+        // Give a call that wrongly kept waiting the time it would need to be
+        // admitted once the slots freed.
+        await new Promise((r) => setTimeout(r, 3000));
+
+        assert.strictEqual(
+          upstreamCalls.length,
+          MAX_IN_FLIGHT_CALLS_PER_USER,
+          'the abandoned call never reaches upstream',
+        );
+        assert.strictEqual(
+          await inFlightReservations(),
+          0,
+          'the abandoned call leaves no slot taken',
+        );
+      } finally {
+        for (const call of upstreamCalls) call.release();
+        await Promise.allSettled(running);
+        await waitingSettled;
+        mockFetch.restore();
+        global.fetch = originalFetch;
+      }
+    });
+
+    test("a call still resolving its cost does not hold up the user's next call", async function (assert) {
+      // A response with no inline cost is priced by polling the provider,
+      // which can take minutes. The user's next call must not wait on it.
+      const originalFetch = global.fetch;
+      const mockFetch = sinon.stub(global, 'fetch');
+
+      let chatCalls = 0;
+      let costLookupStarted = false;
+      let releaseCostLookup!: () => void;
+      const costLookupReleased = new Promise<void>(
+        (res) => (releaseCostLookup = res),
+      );
+
+      mockFetch.callsFake(async (input: string | URL | Request) => {
+        const url = typeof input === 'string' ? input : input.toString();
+        if (url.includes('/generation?id=')) {
+          costLookupStarted = true;
+          await costLookupReleased;
+          return new Response(
+            JSON.stringify({ data: { id: 'gen-no-cost', total_cost: 0.003 } }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          );
+        }
+        if (url.includes('/chat/completions')) {
+          chatCalls++;
+          const body =
+            chatCalls === 1
+              ? { id: 'gen-no-cost', choices: [{ text: 'ok' }] }
+              : {
+                  id: `gen-${chatCalls}`,
+                  choices: [{ text: 'ok' }],
+                  usage: { total_tokens: 10, cost: 0.002 },
+                };
+          return new Response(JSON.stringify(body), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        return new Response(JSON.stringify({ error: 'Not found' }), {
+          status: 404,
+        });
+      });
+
+      let first: Promise<unknown> | undefined;
+      try {
+        const jwt = createRealmServerJWT(
+          { user: '@testuser:localhost', sessionRoom: 'test-session-room' },
+          realmSecretSeed,
+        );
+
+        first = sendChatForward(jwt).then((r) => r);
+        await waitUntil(async () => costLookupStarted, {
+          timeout: 15000,
+          timeoutMessage: 'the first call should start looking up its cost',
+        });
+
+        const second = await sendChatForward(jwt);
+        assert.strictEqual(
+          second.status,
+          200,
+          'the next call is served while the first is still being priced',
+        );
+
+        releaseCostLookup();
+        await first;
+
+        // 0.003 USD for the first and 0.002 USD for the second: 5 credits.
+        const user = await getUserByMatrixUserId(
+          dbAdapter,
+          '@testuser:localhost',
+        );
+        await waitUntil(
+          async () => {
+            const credits = await sumUpCreditsLedger(dbAdapter, {
+              creditType: ['extra_credit', 'extra_credit_used'],
+              userId: user!.id,
+            });
+            return credits === 45;
+          },
+          { timeoutMessage: 'both calls should be debited (50 - 5 = 45)' },
+        );
+      } finally {
+        releaseCostLookup();
+        await first?.catch(() => undefined);
+        mockFetch.restore();
+        global.fetch = originalFetch;
+      }
+    });
+
+    test('an in-flight reservation left behind by a dead replica stops counting once it expires', async function (assert) {
+      // A replica that dies mid-call never gives its slot back. The row it
+      // left must not lock the user out for good.
+      for (let i = 0; i < MAX_IN_FLIGHT_CALLS_PER_USER; i++) {
+        await dbAdapter.execute(
+          `INSERT INTO billable_call_reservations (matrix_user_id, expires_at) VALUES ('@testuser:localhost', ${
+            Date.now() - 1000
+          })`,
+        );
+      }
+
+      const originalFetch = global.fetch;
+      const mockFetch = sinon.stub(global, 'fetch');
+      mockFetch.callsFake(async () => {
+        return new Response(
+          JSON.stringify({
+            id: 'gen-1',
             choices: [{ text: 'ok' }],
             usage: { total_tokens: 10, cost: 0.002 },
           }),
@@ -1097,86 +1393,14 @@ module(basename(import.meta.filename), function () {
           { user: '@testuser:localhost', sessionRoom: 'test-session-room' },
           realmSecretSeed,
         );
-
-        // supertest's Test is a thenable, not an eagerly-evaluating
-        // Promise — it fires the HTTP request when `.then` is called.
-        // Wrapping in `.then((r) => r)` forces the request to start now
-        // so the test can wait on inflight stub activity below; otherwise
-        // `const p1 = send()` would never actually hit the server until
-        // we awaited it.
-        const send = () =>
-          request
-            .post('/_request-forward')
-            .set('Accept', 'application/json')
-            .set('Content-Type', 'application/json')
-            .set('Authorization', `Bearer ${jwt}`)
-            .send({
-              url: 'https://openrouter.ai/api/v1/chat/completions',
-              method: 'POST',
-              requestBody: JSON.stringify({
-                model: 'openai/gpt-3.5-turbo',
-                messages: [{ role: 'user', content: 'Hi' }],
-              }),
-            })
-            .then((r) => r);
-
-        const p1 = send();
-        // Wait until the first forward has hit the upstream stub so we
-        // know it owns the lock. waitUntil defaults to a 1s budget, which
-        // isn't enough on a cold realm server (JWT → body parse → DB
-        // destination-config lookup → advisory-lock acquire → validate-
-        // Credits before fetch fires); give it real headroom.
-        await waitUntil(async () => inflightChatCalls.length >= 1, {
-          timeout: 15000,
-          timeoutMessage: 'first upstream call should reach the fetch stub',
-        });
-        const p2 = send();
-
-        // With the lock held, the second request must NOT reach upstream
-        // until the first releases. Give it generous wall time then assert.
-        await new Promise((r) => setTimeout(r, 500));
+        const response = await sendChatForward(jwt);
+        assert.strictEqual(response.status, 200, 'the call is served');
         assert.strictEqual(
-          inflightChatCalls.length,
-          1,
-          'second concurrent same-user request blocks on the cost-barrier lock',
-        );
-
-        // Release the first; the second should then proceed and reach
-        // upstream by itself.
-        inflightChatCalls[0].release();
-        await p1;
-
-        await waitUntil(async () => inflightChatCalls.length >= 2, {
-          timeout: 15000,
-          timeoutMessage:
-            'second upstream call should proceed once lock releases',
-        });
-        inflightChatCalls[1].release();
-        await p2;
-
-        // Both costs (0.002 USD × 1000 = 2 credits each) should have
-        // landed, leaving 50 - 4 = 46.
-        const user = await getUserByMatrixUserId(
-          dbAdapter,
-          '@testuser:localhost',
-        );
-        await waitUntil(
-          async () => {
-            const credits = await sumUpCreditsLedger(dbAdapter, {
-              creditType: ['extra_credit', 'extra_credit_used'],
-              userId: user!.id,
-            });
-            return credits === 46;
-          },
-          {
-            timeoutMessage:
-              'both serialized costs should be debited (50 - 4 = 46)',
-          },
+          await inFlightReservations(),
+          0,
+          'the expired reservations are cleared',
         );
       } finally {
-        // If a test assertion failed mid-flight, leftover gated upstream
-        // calls would hang the test process — release any survivors.
-        for (const c of inflightChatCalls) c.release();
         mockFetch.restore();
         global.fetch = originalFetch;
       }
@@ -1277,11 +1501,11 @@ module(basename(import.meta.filename), function () {
       }
     });
 
-    test('a client that disconnects mid-forward cancels the upstream call and frees the cost lock', async function (assert) {
-      // The forward holds the per-user cost lock for the whole life of the
-      // upstream call, so a caller that walks away from a slow model call
-      // would otherwise leave its own next call queued behind an answer
-      // nobody is going to read.
+    test('a client that disconnects mid-forward cancels the upstream call and gives back its in-flight slot', async function (assert) {
+      // A forward occupies one of the user's in-flight slots for the whole
+      // life of the upstream call, so a caller that walks away from a slow
+      // model call would otherwise keep that slot for an answer nobody is
+      // going to read.
       const originalFetch = global.fetch;
       const mockFetch = sinon.stub(global, 'fetch');
 
@@ -1374,13 +1598,15 @@ module(basename(import.meta.filename), function () {
           'the upstream call is cancelled when its client goes away',
         );
 
-        // The lock is the thing the disconnect has to free: with the upstream
-        // call still running, this second forward never gets to start.
+        await waitUntil(async () => (await inFlightReservations()) === 0, {
+          timeout: 15000,
+          timeoutMessage: 'the abandoned forward should give its slot back',
+        });
+
         const second = send().then((r) => r);
         await waitUntil(async () => upstreamCalls.length >= 2, {
           timeout: 15000,
-          timeoutMessage:
-            'the next same-user forward should reach upstream once the abandoned one is cancelled',
+          timeoutMessage: 'the next same-user forward should reach upstream',
         });
         upstreamCalls[1].release();
         const response = await second;
@@ -1420,12 +1646,12 @@ module(basename(import.meta.filename), function () {
       }
     });
 
-    test('a client that disconnects mid-stream cancels the upstream stream and frees the cost lock', async function (assert) {
+    test('a client that disconnects mid-stream cancels the upstream stream and gives back its in-flight slot', async function (assert) {
       const originalFetch = global.fetch;
       const mockFetch = sinon.stub(global, 'fetch');
 
       // The first upstream stream emits a delta and then keeps generating —
-      // no `[DONE]`, so the cost-save the lock is held for never happens.
+      // no `[DONE]`, so nothing ever gets charged for it.
       // Erroring the body when the signal aborts stands in for what fetch
       // does to a response body once its request is cancelled.
       const streamSignals: Array<AbortSignal | undefined> = [];
@@ -1520,6 +1746,10 @@ module(basename(import.meta.filename), function () {
           Boolean(streamSignals[0]?.aborted),
           'the upstream stream is cancelled when its client goes away',
         );
+        await waitUntil(async () => (await inFlightReservations()) === 0, {
+          timeout: 15000,
+          timeoutMessage: 'the abandoned stream should give its slot back',
+        });
 
         const response = await send();
         assert.strictEqual(

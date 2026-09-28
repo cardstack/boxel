@@ -107,7 +107,7 @@ const messages = [{
   ],
 }];
 
-const result = await new SendRequestViaProxyCommand(commandContext).execute({
+const result = await new SendRequestViaProxyCommand(toolContext).execute({
   url: 'https://openrouter.ai/api/v1/chat/completions',
   method: 'POST',
   requestBody: JSON.stringify({

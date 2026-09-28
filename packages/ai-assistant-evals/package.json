@@ -1,0 +1,37 @@
+{
+  "name": "@cardstack/ai-assistant-evals",
+  "version": "1.0.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "description": "AI assistant evals: drives the real local Boxel stack through Playwright — a bare prompt per model (`pnpm eval:models`) or an EvaluationCard run that records its results as cards (`pnpm eval`). See README.md.",
+  "scripts": {
+    "eval:models": "playwright test -c playwright.config.ts",
+    "eval:models:headed": "EVAL_WORKERS=1 playwright test -c playwright.config.ts --headed",
+    "eval:models:tabs": "EVAL_TABS=1 EVAL_WORKERS=1 playwright test -c playwright.config.ts --headed",
+    "eval:setup": "node eval-setup.ts",
+    "eval:users": "node ensure-users.ts",
+    "eval": "node run-eval.ts",
+    "eval:judge": "node judge-result.ts",
+    "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
+    "lint:fix": "concurrently \"pnpm:lint:*:fix\" --names \"fix:\"",
+    "lint:hbs": "ember-template-lint .",
+    "lint:hbs:fix": "ember-template-lint . --fix",
+    "lint:js": "eslint . --ext .ts --report-unused-disable-directives --cache",
+    "lint:js:fix": "eslint . --ext .ts --report-unused-disable-directives --fix",
+    "lint:types": "ember-tsc --noEmit"
+  },
+  "devDependencies": {
+    "@cardstack/boxel-icons": "workspace:*",
+    "@cardstack/boxel-ui": "workspace:*",
+    "@glint/ember-tsc": "catalog:",
+    "@playwright/test": "catalog:",
+    "@types/node": "catalog:",
+    "concurrently": "catalog:",
+    "ember-template-lint": "catalog:",
+    "typescript": "catalog:"
+  },
+  "volta": {
+    "extends": "../../package.json"
+  }
+}

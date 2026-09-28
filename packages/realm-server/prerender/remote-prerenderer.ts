@@ -297,6 +297,7 @@ export function createRemotePrerenderer(
       jobId,
       screenshots,
       renderScope,
+      cardSource,
     }: PrerenderVisitArgs): Promise<RenderVisitResponse> {
       return await requestWithRetry<RenderVisitResponse>(
         'prerender-visit',
@@ -317,6 +318,7 @@ export function createRemotePrerenderer(
           ...(jobId ? { jobId } : {}),
           ...(screenshots ? { screenshots } : {}),
           ...(renderScope ? { renderScope } : {}),
+          ...(cardSource ? { cardSource } : {}),
         },
       );
     },
@@ -340,6 +342,7 @@ export function createRemotePrerenderer(
       auth,
       format,
       captureSpec,
+      renderOptions,
       priority,
       jobId,
     }) {
@@ -354,6 +357,7 @@ export function createRemotePrerenderer(
           auth,
           format,
           ...(captureSpec ? { captureSpec } : {}),
+          ...(renderOptions ? { renderOptions } : {}),
           ...(priority !== undefined ? { priority } : {}),
           // Stripped into the x-boxel-job-id header by requestWithRetry, so
           // manager and prerender-server logs join back to the worker job.

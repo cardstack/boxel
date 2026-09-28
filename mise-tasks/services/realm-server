@@ -42,9 +42,24 @@ if [ -z "${SKIP_BOXEL_HOMEPAGE:-}" ]; then
   pnpm --dir=../boxel-homepage-realm boxel-homepage:setup
 fi
 
+# The catalog realm is served from one of two places. By default it is the
+# full boxel-catalog clone, merged with the pinned test subset: subset files
+# the clone lacks are added to it, so boxel's tests find the definitions they
+# pin. CATALOG_SOURCE=test-subset serves only the pinned subset, which is what
+# the test stacks use in place of cloning the whole catalog.
+CATALOG_PATH='../catalog/contents'
+CATALOG_TOUCH=''
 if [ "${SKIP_CATALOG:-}" != "true" ]; then
-  pnpm --dir=../catalog catalog:setup
-  pnpm --dir=../catalog catalog:update
+  if [ "${CATALOG_SOURCE:-}" = "test-subset" ]; then
+    CATALOG_PATH='../catalog/test-subset'
+    CATALOG_TOUCH='test-subset'
+    pnpm --dir=../catalog catalog:test-subset || exit 1
+  else
+    pnpm --dir=../catalog catalog:setup
+    pnpm --dir=../catalog catalog:update
+    pnpm --dir=../catalog catalog:test-subset --into-clone --best-effort
+    CATALOG_TOUCH='clone'
+  fi
 fi
 
 if [ -z "$MATRIX_REGISTRATION_SHARED_SECRET" ]; then
@@ -85,6 +100,22 @@ else
   WORKER_MANAGER_ARG="$1"
 fi
 
+# The compiled-module cache survives restarts and is cleared only by the
+# running realm's file watcher, so subset files the sync rewrote above could
+# be served from a compile of their old content. Once the catalog realm
+# answers, touch them so the watcher clears those entries.
+if [ -n "$CATALOG_TOUCH" ]; then
+  (
+    for _ in $(seq 1 300); do
+      if curl -skf "${CATALOG_REALM_URL}_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson" >/dev/null 2>&1; then
+        node ../catalog/scripts/sync-test-subset.ts --touch="$CATALOG_TOUCH"
+        exit 0
+      fi
+      sleep 2
+    done
+  ) &
+fi
+
 LOW_CREDIT_THRESHOLD="${LOW_CREDIT_THRESHOLD:-2000}" \
   NODE_ENV=development \
   NODE_NO_WARNINGS=1 \
@@ -111,7 +142,7 @@ LOW_CREDIT_THRESHOLD="${LOW_CREDIT_THRESHOLD:-2000}" \
   --fromUrl='https://cardstack.com/base/' \
   --toUrl="${REALM_BASE_URL}/base/" \
   \
-  ${START_CATALOG:+--path='../catalog/contents'} \
+  ${START_CATALOG:+--path="${CATALOG_PATH}"} \
   ${START_CATALOG:+--username='catalog_realm'} \
   ${START_CATALOG:+--fromUrl='@cardstack/catalog/'} \
   ${START_CATALOG:+--toUrl="${CATALOG_REALM_URL}"} \
@@ -120,6 +151,11 @@ LOW_CREDIT_THRESHOLD="${LOW_CREDIT_THRESHOLD:-2000}" \
   --username='skills_realm' \
   --fromUrl='@cardstack/skills/' \
   --toUrl="${REALM_BASE_URL}/skills/" \
+  \
+  --path='../pretui' \
+  --username='pretui_realm' \
+  --fromUrl='@cardstack/pretui/' \
+  --toUrl="${REALM_BASE_URL}/pretui/" \
   \
   ${START_SUBMISSION:+--path="${SUBMISSION_REALM_PATH}"} \
   ${START_SUBMISSION:+--username='submission_realm'} \

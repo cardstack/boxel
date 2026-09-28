@@ -18,7 +18,10 @@ import {
   waitUntil,
   type RealmRequest,
 } from './helpers/index.ts';
-import { settlePrerenderHtmlJobs } from './helpers/indexing.ts';
+import {
+  maxPrerenderHtmlJobId,
+  settlePrerenderHtmlJobs,
+} from './helpers/indexing.ts';
 
 const testRealm = new URL('http://127.0.0.1:4445/test/');
 
@@ -172,26 +175,48 @@ module(basename(import.meta.filename), function (hooks) {
                 where r.job_id = j.id and r.completed_at is null) as reservations
          from jobs j
         where j.job_type = 'prerender_html'
-          and j.concurrency_group = $1
+          and (j.concurrency_group = $1 or j.lane_family = $1)
           and j.status = 'unfulfilled'
         order by j.id`,
       { bind: [prerenderHtmlConcurrencyGroup(realm.url)] },
     )) as unknown as { id: number; urls: string[]; reservations: number }[];
   }
 
-  async function liveHoldCount(): Promise<number> {
+  // The lanes of the realm's render family that hold claims right now: the
+  // family itself, or one writer's lane of it.
+  async function liveHolds(): Promise<string[]> {
+    let family = prerenderHtmlConcurrencyGroup(realm.url);
     let rows = (await testDbAdapter.execute(
-      `select count(*)::int as n from job_claim_holds
-        where concurrency_group = $1 and expires_at > now()`,
-      { bind: [prerenderHtmlConcurrencyGroup(realm.url)] },
-    )) as { n: number }[];
-    return rows[0]?.n ?? 0;
+      `select concurrency_group from job_claim_holds
+        where (concurrency_group = $1 or concurrency_group like $2)
+          and expires_at > now()`,
+      { bind: [family, `${family}#%`] },
+    )) as { concurrency_group: string }[];
+    return rows.map((row) => row.concurrency_group);
   }
 
-  test('a batch write holds its realm render lane past the write, until its indexing settles', async function (assert) {
+  async function liveHoldCount(): Promise<number> {
+    return (await liveHolds()).length;
+  }
+
+  // The lanes the realm's prerender_html jobs newer than `afterJobId` ran in.
+  async function prerenderLanesAfter(afterJobId: number): Promise<string[]> {
+    let rows = (await testDbAdapter.execute(
+      `select distinct concurrency_group from jobs
+        where job_type = 'prerender_html'
+          and (concurrency_group = $1 or lane_family = $1)
+          and id > $2`,
+      { bind: [prerenderHtmlConcurrencyGroup(realm.url), afterJobId] },
+    )) as { concurrency_group: string }[];
+    return rows.map((row) => row.concurrency_group);
+  }
+
+  test("a batch write holds its writer's render lane past the write, until its indexing settles", async function (assert) {
     assert.timeout(300_000);
 
+    let baseline = await maxPrerenderHtmlJobId(testDbAdapter, realm.url);
     let recorder = recordHoldStatements(testDbAdapter);
+    let holdLane: string | undefined;
     try {
       // Comfortably over RENDER_HOLD_MIN_BATCH_SIZE, so this is a batch the
       // hold is meant for.
@@ -205,10 +230,18 @@ module(basename(import.meta.filename), function (hooks) {
         ['acquire'],
         'the hold outlives the write that took it',
       );
+      let holds = await liveHolds();
       assert.strictEqual(
-        await liveHoldCount(),
+        holds.length,
         1,
         'the lane is still held when the write returns',
+      );
+      holdLane = holds[0];
+      assert.true(
+        holdLane?.startsWith(
+          `${prerenderHtmlConcurrencyGroup(realm.url)}#user:`,
+        ),
+        `the hold names the writer's own render lane, not the realm's whole family: ${holdLane}`,
       );
 
       await realm.incrementalIndexing();
@@ -227,7 +260,13 @@ module(basename(import.meta.filename), function (hooks) {
 
     await settlePrerenderHtmlJobs(testDbAdapter, realm.url, {
       timeout: 240_000,
+      afterJobId: baseline,
     });
+    assert.deepEqual(
+      await prerenderLanesAfter(baseline),
+      [holdLane],
+      "the write's render ran in the lane its hold named",
+    );
   });
 
   test('a release is not undone by a refresh already in flight', async function (assert) {

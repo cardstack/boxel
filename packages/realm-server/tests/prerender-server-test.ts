@@ -3,11 +3,14 @@ const { module, test } = QUnit;
 import type { SuperTest, Test } from 'supertest';
 import supertest from 'supertest';
 import { basename } from 'path';
+import { createServer, type Server } from 'http';
+import type { AddressInfo } from 'net';
 import sinon from 'sinon';
 
 import {
   closeServer,
   setupPermissionedRealmCached,
+  waitUntil,
   testCreatePrerenderAuth,
 } from './helpers/index.ts';
 import {
@@ -15,7 +18,11 @@ import {
   createPrerenderHttpServer,
 } from '../prerender/prerender-app.ts';
 import type { Prerenderer } from '../prerender/index.ts';
-import { baseCardRef, rri } from '@cardstack/runtime-common';
+import {
+  baseCardRef,
+  MAX_STASHED_CARD_SOURCE_LENGTH,
+  rri,
+} from '@cardstack/runtime-common';
 import {
   PRERENDER_SERVER_DRAINING_STATUS_CODE,
   PRERENDER_SERVER_STATUS_DRAINING,
@@ -32,6 +39,77 @@ import { Deferred } from '@cardstack/runtime-common';
 // response to be awaited later.
 function inFlight<T>(send: () => PromiseLike<T>): Promise<T> {
   return (async () => await send())();
+}
+
+// A listener standing in for the prerender manager. It records every request
+// it receives, with the prerender server each one names: the `url` query
+// parameter of a DELETE, or the body's `url` attribute of a registration.
+interface StandInManager {
+  url: string;
+  requests: { method: string; path: string; serverURL: string | null }[];
+  close(): Promise<void>;
+}
+
+async function startStandInManager(): Promise<StandInManager> {
+  let requests: StandInManager['requests'] = [];
+  let server = createServer((req, res) => {
+    let chunks: Buffer[] = [];
+    req.on('data', (chunk: Buffer) => chunks.push(chunk));
+    req.on('end', () => {
+      let url = new URL(req.url ?? '/', 'http://manager');
+      let serverURL = url.searchParams.get('url');
+      if (!serverURL && chunks.length > 0) {
+        try {
+          serverURL =
+            JSON.parse(Buffer.concat(chunks).toString('utf8')).data?.attributes
+              ?.url ?? null;
+        } catch {
+          serverURL = null;
+        }
+      }
+      requests.push({
+        method: req.method ?? '',
+        path: url.pathname,
+        serverURL,
+      });
+      res.statusCode = 204;
+      res.end();
+    });
+  });
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => resolve());
+  });
+  return {
+    url: `http://127.0.0.1:${(server.address() as AddressInfo).port}`,
+    requests,
+    close: () => closeServer(server),
+  };
+}
+
+// Points the prerender server's manager calls at `managerURL` (plus any extra
+// env), returning a function that restores the previous values.
+function pointPrerenderAtManager(
+  managerURL: string,
+  extra: Record<string, string> = {},
+): () => void {
+  let overrides: Record<string, string> = {
+    PRERENDER_MANAGER_URL: managerURL,
+    ...extra,
+  };
+  let previous = Object.fromEntries(
+    Object.keys(overrides).map((key) => [key, process.env[key]]),
+  );
+  Object.assign(process.env, overrides);
+  return () => {
+    for (let [key, value] of Object.entries(previous)) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+  };
 }
 
 module(basename(import.meta.filename), function () {
@@ -243,6 +321,77 @@ module(basename(import.meta.filename), function () {
               captured.attrs[0]?.renderScope,
               undefined,
               `${JSON.stringify(scope)} is not forwarded as a scope`,
+            );
+          } finally {
+            prerenderer.prerenderVisit = original;
+          }
+        }
+      });
+
+      test('a cardSource on the request reaches the prerenderer', async function (assert) {
+        let captured: { attrs: any[] } = { attrs: [] };
+        let original = prerenderer.prerenderVisit;
+        prerenderer.prerenderVisit = stubVisit(captured) as any;
+        try {
+          let cardSource = {
+            source: '{"data":{"attributes":{"name":"Sequoia"}}}',
+            realmURL: realmURL.href,
+            lastModified: 1767322445000,
+          };
+          let res = await postVisit({ cardSource });
+          assert.strictEqual(res.status, 201, 'HTTP 201');
+          assert.deepEqual(
+            captured.attrs[0]?.cardSource,
+            cardSource,
+            'the source off the request body is forwarded to the visit',
+          );
+        } finally {
+          prerenderer.prerenderVisit = original;
+        }
+      });
+
+      test('an unusable cardSource is dropped rather than rejecting the visit', async function (assert) {
+        // Dropping leaves the render to fetch the card's source for itself,
+        // which is the path this whole mechanism optimizes away and so is
+        // always safe. Rejecting would fail a render over an optimization.
+        //
+        // The three fields are required together — the card branch has no other
+        // source for the realm URL or the modified time — and the payload is
+        // size-bounded here as well as at the producer, because this is where
+        // the bytes arrive and where they are handed to a CDP message.
+        let original = prerenderer.prerenderVisit;
+        let valid = {
+          source: '{"data":{"attributes":{"name":"Sequoia"}}}',
+          realmURL: realmURL.href,
+          lastModified: 1767322445000,
+        };
+        let cases: [string, unknown][] = [
+          ['not an object', 'a string'],
+          ['an array', []],
+          ['missing source', { ...valid, source: undefined }],
+          ['missing realmURL', { ...valid, realmURL: undefined }],
+          ['empty realmURL', { ...valid, realmURL: '' }],
+          ['missing lastModified', { ...valid, lastModified: undefined }],
+          ['non-numeric lastModified', { ...valid, lastModified: 'nope' }],
+          ['non-finite lastModified', { ...valid, lastModified: null }],
+          [
+            'over the size cap',
+            {
+              ...valid,
+              source: 'x'.repeat(MAX_STASHED_CARD_SOURCE_LENGTH + 1),
+            },
+          ],
+        ];
+        for (let [label, cardSource] of cases) {
+          let captured: { attrs: any[] } = { attrs: [] };
+          prerenderer.prerenderVisit = stubVisit(captured) as any;
+          try {
+            let res = await postVisit({ cardSource });
+            assert.strictEqual(res.status, 201, `HTTP 201 for ${label}`);
+            assert.strictEqual(
+              captured.attrs[0]?.cardSource,
+              undefined,
+              `${label} is not forwarded`,
             );
           } finally {
             prerenderer.prerenderVisit = original;
@@ -1731,6 +1880,7 @@ module(basename(import.meta.filename), function () {
       let server = createPrerenderHttpServer({
         maxPages: 1,
         fatalExitOnUncaught: false,
+        registerWithManager: false,
       });
       try {
         await new Promise<void>((resolve, reject) => {
@@ -1755,7 +1905,10 @@ module(basename(import.meta.filename), function () {
     test('fatalExitOnUncaught default registers process-wide fatal handlers', async function (assert) {
       let baselineUncaught = process.listenerCount('uncaughtException');
       let baselineRejection = process.listenerCount('unhandledRejection');
-      let server = createPrerenderHttpServer({ maxPages: 1 });
+      let server = createPrerenderHttpServer({
+        maxPages: 1,
+        registerWithManager: false,
+      });
       try {
         await new Promise<void>((resolve, reject) => {
           server.once('error', reject);
@@ -1786,6 +1939,95 @@ module(basename(import.meta.filename), function () {
           'unhandledRejection listener removed on close',
         );
       }
+    });
+  });
+
+  module('createPrerenderHttpServer manager registration', function (hooks) {
+    let manager: StandInManager;
+    let restoreEnv: () => void;
+
+    hooks.beforeEach(async function () {
+      manager = await startStandInManager();
+      restoreEnv = pointPrerenderAtManager(manager.url, {
+        PRERENDER_HEARTBEAT_INTERVAL_MS: '1000',
+      });
+    });
+
+    hooks.afterEach(async function () {
+      restoreEnv();
+      await manager.close();
+    });
+
+    async function listen(server: Server): Promise<string> {
+      await new Promise<void>((resolve, reject) => {
+        server.once('error', reject);
+        server.listen(0, '127.0.0.1', () => resolve());
+      });
+      return `:${(server.address() as AddressInfo).port}`;
+    }
+
+    test('registerWithManager=false never registers with or unregisters from the manager', async function (assert) {
+      let registered = createPrerenderHttpServer({
+        maxPages: 1,
+        fatalExitOnUncaught: false,
+      });
+      let unregistered = createPrerenderHttpServer({
+        maxPages: 1,
+        fatalExitOnUncaught: false,
+        registerWithManager: false,
+      });
+      let registeredPort: string | undefined;
+      let unregisteredPort: string | undefined;
+      try {
+        unregisteredPort = await listen(unregistered);
+        registeredPort = await listen(registered);
+        // Heartbeats repeat every second, so waiting for the default server's
+        // second one gives the opted-out server's loop time to have posted.
+        await waitUntil(
+          async () =>
+            manager.requests.filter(
+              (r) =>
+                r.method === 'POST' &&
+                r.path === '/prerender-servers' &&
+                r.serverURL?.endsWith(registeredPort!),
+            ).length >= 2,
+          {
+            timeout: 10000,
+            timeoutMessage: 'default server heartbeats reach the manager',
+          },
+        );
+      } finally {
+        // Its close handler unregisters as soon as the browser has stopped,
+        // so awaiting that stop puts any unregister it would send ahead of
+        // the default server's, which the wait below observes.
+        await closeServer(unregistered);
+        await (
+          unregistered as Server & { __stopPrerenderer?: () => Promise<void> }
+        ).__stopPrerenderer?.();
+        await closeServer(registered);
+      }
+      await waitUntil(
+        async () =>
+          manager.requests.some(
+            (r) =>
+              r.method === 'DELETE' &&
+              r.path === '/prerender-servers' &&
+              r.serverURL?.endsWith(registeredPort!),
+          ),
+        {
+          timeout: 60000,
+          timeoutMessage: () =>
+            `default server unregisters from the manager; saw ${JSON.stringify(manager.requests)}`,
+        },
+      );
+
+      assert.deepEqual(
+        manager.requests.filter((r) =>
+          r.serverURL?.endsWith(unregisteredPort!),
+        ),
+        [],
+        'the manager never hears from the opted-out server',
+      );
     });
   });
 });

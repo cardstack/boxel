@@ -12,7 +12,7 @@ _TODO: fill in the recommended use cases + worked snippets for each mode. The sk
 |---|---|---|
 | **Direct call** — `new MyCommand(ctx).execute(input)` | _TODO_ Inside another Command, inside a tracked task, inside an action method. The lowest-level form. | `boxel/references/command-development.md` (opening sections) |
 | **Reactive resource** — `commandData<T>(this, MyCommand)` | _TODO_ A Glimmer component needs the command's *result*, rendered reactively when it resolves. Replaces hand-rolled `restartableTask` + `@tracked`. | `command-data-resource` |
-| **Card menu item** — `[getCardMenuItems]` | _TODO_ The Command is an action the user takes *on a specific card* — generate avatar, send to printer, refresh from source. | `link-command-menu-item` |
+| **Card menu item** — `[getMenuItems]` | _TODO_ The Command is an action the user takes *on a specific card* — generate avatar, send to printer, refresh from source. | `link-command-menu-item` |
 | **Typed run card with progress** — `@tracked progressStep` on the Command class | _TODO_ The user wants to watch a long-running operation (upload, AI call, migration) progress through named phases. | `command-typed-with-progress` |
 | **Optimistic run-card pipeline** — durable run card with steps + logs | _TODO_ Multi-step workflow (LLM call → file write → save → index) that needs an auditable history record. The card *is* the history. | `command-optimistic-pipeline` |
 | **One-shot AI processor** — wraps `OneShotLlmRequestCommand` | _TODO_ Single LLM call, no conversation. Classification, summarization, JSON extraction from a card. | `integrate-one-shot-llm` |
@@ -43,7 +43,7 @@ _TODO: a single canonical `MyCommand` class shown wired up to each mode. This is
 
 **Card menu item:**
 ```ts
-// _TODO: [getCardMenuItems](params) returning { label, icon, action } that calls execute_
+// _TODO: [getMenuItems](params) returning { label, icon, action } that calls execute_
 ```
 
 **CLI script:**

@@ -1,0 +1,31 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "assistantPrompt": "Build me a place to keep my recipes. A recipe has a title, how many servings it makes, its ingredients with an amount and a unit for each, the steps in order, and how long it takes to prepare and to cook \u2014 I should never have to add those two up myself, the total should just be there. A cookbook has a title, holds any number of my recipes, and tells me how many are in it without me counting. Write me a pancake recipe and a soup recipe, put both in a cookbook called Weeknight Favourites, and show me the cookbook.",
+      "followUpPrompts": [
+        "The cookbook page is a bit plain. Lay the recipes out as a grid of cards instead of a list, with each card showing the recipe's title and how long it takes altogether, and give a recipe a light border and more room to breathe when it appears inside something else. Don't change any of my recipes. Show me the cookbook again."
+      ],
+      "successCriteria": "1. Two definitions exist: a Recipe with `title`, `servings`, a containsMany ingredient field (name, amount, unit), containsMany steps, `prepMinutes` and `cookMinutes`; and a Cookbook with `title` and a `linksToMany` field holding recipes.\n2. Both computed fields are `computeVia`, not stored numbers: the recipe's total time is prep plus cook, and the cookbook's count comes from the linked recipes.\n3. Three instances exist: two recipes and one cookbook named Weeknight Favourites that links to both. The cookbook is open on screen with no error boundary, and shows both recipe titles and a count of 2.\n4. After the follow-up: the same `.gts` files were edited in place with SEARCH/REPLACE blocks. No second Recipe or Cookbook definition was written, and no instance was recreated.\n5. The follow-up changed templates and styles only. Every field, computed field and instance from the first prompt still exists, and the cookbook still renders both recipes with their total times.\n6. Every patch applied, the assistant did not ask a question or wait for confirmation before acting, and the whole flow took at most 14 turns.",
+      "cardInfo": {
+        "name": "Cookbook \u2014 computed fields, links, instances, restyle",
+        "summary": "Exercises computed fields, a link field between two definitions, creating several instances, and a follow-up prompt that restyles what was built without touching the data.",
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../evaluation",
+        "name": "EvaluationCard"
+      }
+    }
+  }
+}

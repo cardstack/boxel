@@ -28,10 +28,16 @@ import type { PgAdapter } from '@cardstack/postgres';
 import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms.ts';
 import { LIVE_SEARCH_CACHE_HEADER } from '../../handlers/handle-search.ts';
 import { LiveSearchCache } from '../../live-search-cache.ts';
-import { getSearchInFlight } from '../../search-inflight.ts';
+import {
+  getSearchInFlight,
+  getSearchRequestsInFlight,
+} from '../../search-inflight.ts';
 import {
   closeServer,
+  connectionTenantsDuring,
   createVirtualNetwork,
+  definitionCacheReads,
+  indexReads,
   setupDB,
   matrixURL,
   realmSecretSeed,
@@ -315,6 +321,37 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
       for (let { id } of janeHtml.relationships.styles.data) {
         assert.true(cssIds.has(id), `referenced stylesheet ${id} is included`);
       }
+    });
+
+    test('the index reads a federated search does are charged to the set of realms it names', async function (assert) {
+      let { result: response, statements } = await connectionTenantsDuring(
+        dbAdapter,
+        () =>
+          postSearch({
+            filter: personFilter(),
+            realms: [secondaryRealm.url, testRealm.url, secondaryRealm.url],
+          }),
+      );
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      let expected = [testRealm.url, secondaryRealm.url].sort().join(' ');
+      let reads = indexReads(statements);
+      assert.true(reads.length > 0, 'the search read the index');
+      assert.deepEqual(
+        reads
+          .map(({ tenant, shared }) => JSON.stringify({ tenant, shared }))
+          .filter((r, i, all) => all.indexOf(r) === i),
+        [JSON.stringify({ tenant: expected, shared: false })],
+        'every index read is charged to one tenant, the realm set, however the request ordered or repeated it, and held to its share',
+      );
+      let lookups = definitionCacheReads(statements);
+      assert.true(lookups.length > 0, 'the search looked up card definitions');
+      assert.deepEqual(
+        lookups
+          .map(({ tenant, shared }) => JSON.stringify({ tenant, shared }))
+          .filter((r, i, all) => all.indexOf(r) === i),
+        [JSON.stringify({ tenant: expected, shared: true })],
+        'definition lookups, which searches of other realms share, are ordered as the realm set that started them but run as shared work',
+      );
     });
 
     // A federated search payload that names an archived realm must not
@@ -738,7 +775,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
       );
     });
 
-    test('a coalesced live search releases its admission slot while the compute is still running', async function (assert) {
+    test('a coalesced live search releases its admission slot while the compute is still running, and stays counted as a request', async function (assert) {
       // A cache whose next compute waits on the test, so a second identical
       // request is guaranteed to arrive while the first is still computing.
       class HoldableLiveSearchCache extends LiveSearchCache {
@@ -803,6 +840,11 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
         1,
         'the joiner handed its slot back while the compute is still running',
       );
+      assert.strictEqual(
+        getSearchRequestsInFlight(),
+        2,
+        'but is still a request in flight, waiting on the computation it joined, which is what the link-shape policy reads',
+      );
 
       releaseCompute();
       let [a, b] = await Promise.all([first, second]);
@@ -815,6 +857,11 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
         getSearchInFlight(),
         0,
         'the computing request released on completion, and only once',
+      );
+      assert.strictEqual(
+        getSearchRequestsInFlight(),
+        0,
+        'and both requests stopped counting when their responses ended',
       );
 
       let third = await postSearch(searchBody);

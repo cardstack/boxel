@@ -115,6 +115,7 @@ const lookupDefinition = async (codeRef: CodeRef) => graph.get(refKey(codeRef));
 const StringFieldClass = function StringField() {} as unknown as never;
 
 const params = (key: string) => ({ $ref: 'params', key }) as never;
+const instance = (key: string) => ({ $ref: 'instance', key }) as never;
 const actor = () => ({ $ref: 'actor' }) as never;
 const card = (value: unknown) => ({ $ref: 'card', value }) as never;
 
@@ -629,6 +630,45 @@ module(basename(import.meta.filename), function () {
         operations.addReviewer.snapshot,
         'the gathering the assertion depends on travels with the operation, since a program reads the stored document and a link collection is not in it',
       );
+    });
+
+    // An append edits the card's stored bytes without assembling its document,
+    // so the card's own values are not there for an item to read. The marker
+    // carries through the template untouched, so without a finding here the
+    // declaration indexes clean and refuses at every invocation instead —
+    // which tells the author at the wrong time and in the wrong place.
+    test('an instance() in an appended item is recorded where it is written', async function (assert) {
+      let { issues } = await lower({
+        note: {
+          base: 'appendContainsMany',
+          params: { body: StringFieldClass },
+          field: 'comments',
+          item: { body: params('body'), author: instance('owner') },
+        },
+      });
+      assert.deepEqual(
+        issues.map((issue) => issue.code),
+        ['instance-out-of-scope'],
+        'the item reading the card is what is refused, and nothing else is',
+      );
+      assert.true(
+        issues[0]?.message.includes('transform'),
+        `the author is pointed at the behavior that does read the card: ${issues[0]?.message}`,
+      );
+    });
+
+    test('an append whose item reads only its params lowers with no findings', async function (assert) {
+      // The positive control for the case above: the same declaration minus
+      // the one member that reaches for the card.
+      let { issues } = await lower({
+        note: {
+          base: 'appendContainsMany',
+          params: { body: StringFieldClass },
+          field: 'comments',
+          item: { body: params('body') },
+        },
+      });
+      assert.deepEqual(issues, [], 'nothing is recorded');
     });
   });
 });

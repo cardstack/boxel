@@ -370,7 +370,14 @@ test.describe('Publish realm', () => {
         ),
       );
       try {
-        await waitForPublishedMarker(page, publishedRealmURL, sentinel, budget);
+        // No readiness probe from inside the gate here: the `catch` below
+        // already probes readiness under the stronger `awaitPrerenderHtml`
+        // gate and names which sentinel is being served, and a second probe
+        // would both spend budget this test holds back for that path and
+        // report a second verdict that can disagree with it.
+        await waitForPublishedMarker(page, publishedRealmURL, sentinel, {
+          timeout: budget,
+        });
       } catch (e) {
         let body = await page.request
           .get(publishedRealmURL, {

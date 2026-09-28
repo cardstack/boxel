@@ -27,7 +27,7 @@ convention to follow when picking the field type: a `*At` suffix (`createdAt`,
 `publishedAt`) means `DateTimeField`; a `*Date`/`*On` suffix or bare `dob` means
 `DateField`.
 
-## 2. Never put an external URL in `relationships.<field>.links.self`
+## 2. Never put an external URL in `relationships.<field>.links.self` — and never a realm URL in a string field
 
 If a `linksTo`/`linksToMany` field's JSON `links.self` points at a URL the indexer
 can't parse as a card (an external website, an image CDN URL, anything not a card
@@ -37,6 +37,22 @@ index too, with no error pointing at the actual bad file. For an external image/
 use the pair pattern instead: `linksTo(ImageDef)` (or a similar file/media field) +
 `contains(UrlField)` as two separate fields, never one relationship pointing straight
 at an external URL.
+
+**The rule cuts both ways.** If a field's value is the URL of a card instance or a
+realm file — an absolute realm URL, a relative path like `../Theme/foo`, or any URL
+a realm serves — model it as `linksTo` / `linksToMany` (a `FileDef` subtype for
+files), never as a `StringField` or `UrlField` attribute. The string version writes
+fine, indexes fine, and even renders as a clickable link — then rots silently: the
+index never invalidates the referrer when the target changes, broken-link
+diagnostics can't see it, `<@fields.X />` can't render the target, and queries can't
+traverse it. When the target moves or is deleted, nothing reports the dangling
+reference. Two carve-outs where a string is correct: a `FileDef` subtype's own
+`id`/`url`/`sourceUrl` descriptor fields hold the realm file URL as strings by
+design, and a curated public path routed via `hostRoutingRules` (a nav target like
+`/about`) is a routed path, not a resource identifier. Everything else `UrlField`
+holds should be an external (non-realm) URL. Details:
+`boxel/references/base-field-catalog.md` "Realm-resource URLs — always a
+relationship, never a string".
 
 ## 3. `linksToMany` JSON uses indexed top-level keys, never an array
 
@@ -130,3 +146,29 @@ omit the key entirely. Writing `"cardInfo": { "theme": null }` (or any value for
 link) into `attributes` passes lint and writes successfully — then **every read of the
 instance throws** `linkTo field 'theme' cannot deserialize non-relationship value null`
 until the raw JSON is repaired by hand.
+
+## 11. Any function a template *calls* must be an arrow-function property, never a class method
+
+When a template calls a component function — as a helper (`{{if (this.isActive
+note) ...}}`) or via `{{fn}}` — Glimmer invokes the plain function **without
+binding `this`**. A class body is always strict mode, so inside a class *method*
+`this` is `undefined` and the first property access throws — **during render**,
+which poisons Ember's renderer beyond recovery: the whole application freezes
+and only a page reload brings it back. The code passes lint, often passes
+prerender (the crash can hide behind interaction-dependent branches), and event
+handlers wired with `{{on}}` mask the pattern because the same mistake there
+merely breaks one handler instead of the app. Write every template-invoked
+function as an arrow property:
+
+```ts
+// wrong — crashes the app at render
+isActive(note: string) { return this.activeNotes.has(note); }
+// right
+isActive = (note: string) => this.activeNotes.has(note);
+```
+
+Getters are safe: the template reads them off `this` (`{{this.safeTitle}}`,
+`{{#if this.showComments}}`), so they never lose their receiver — the trap is
+only functions the template detaches and calls. `@action` methods also bind
+correctly and are safe in call position; arrow properties are the convention
+in this repo.

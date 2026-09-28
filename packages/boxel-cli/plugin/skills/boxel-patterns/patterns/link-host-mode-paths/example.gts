@@ -104,8 +104,6 @@ export class HomePage extends CardDef {
           max-width: 64rem;
           margin: 0 auto;
           padding: var(--boxel-sp-xl) var(--boxel-sp-lg);
-          background: var(--background, white);
-          color: var(--foreground, #111);
         }
         .page-header {
           display: flex;
@@ -118,7 +116,7 @@ export class HomePage extends CardDef {
           gap: var(--boxel-sp-lg);
         }
         .nav a {
-          color: var(--primary, currentColor);
+          color: var(--primary-ink);
           text-decoration: none;
           font-weight: 600;
         }
@@ -132,7 +130,7 @@ export class HomePage extends CardDef {
         }
         .subhead {
           margin: 0;
-          color: var(--muted-foreground, #555);
+          color: var(--muted-foreground);
           font-size: 1.125rem;
         }
         .page-body :deep(*) {

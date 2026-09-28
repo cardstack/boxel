@@ -243,6 +243,7 @@ export async function performCardIndexing({
     fittedHTML,
     iconHTML,
     markdown,
+    sourceContentHash,
   } = renderResult;
 
   let deps = new Set(runtimeDeps ?? []);
@@ -292,6 +293,11 @@ export async function performCardIndexing({
     types: types!,
     displayNames: displayNames ?? [],
     deps,
+    // Written on the same entry as `resource`, because it describes the bytes
+    // `resource` was serialized from. The render fingerprinted the source it
+    // read; pairing the two on one row is what lets the card+json GET report a
+    // `meta.version` that names the document it ships with.
+    sourceContentHash: sourceContentHash ?? undefined,
     diagnostics: withBookkeeping(diagnostics),
   });
 }

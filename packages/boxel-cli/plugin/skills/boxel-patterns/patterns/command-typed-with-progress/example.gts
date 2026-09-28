@@ -69,7 +69,7 @@ export class UploadImageCommand extends Command<typeof UploadImageInput, typeof 
 // import { restartableTask } from 'ember-concurrency';
 //
 // class MyCard extends Component<typeof MyCardDef> {
-//   uploadCommand = new UploadImageCommand(this.args.context!.commandContext);
+//   uploadCommand = new UploadImageCommand(this.args.context!.toolContext);
 //
 //   runUpload = restartableTask(async () => {
 //     await this.uploadCommand.execute({ dataUri: '…', targetRealmUrl: '…' });

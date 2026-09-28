@@ -6174,6 +6174,69 @@ module('Integration | serialization', function (hooks) {
     );
   });
 
+  test('a computed that reads a query field is omitted when serializing for persistence', async function (assert) {
+    class Person extends CardDef {
+      @field name = contains(StringField);
+    }
+    class QueryCard extends CardDef {
+      @field cardTitle = contains(StringField);
+      @field matches = linksToMany(() => Person, {
+        query: {
+          filter: {
+            eq: { name: '$this.cardTitle' },
+          },
+        },
+      });
+      @field matchCount = contains(NumberField, {
+        computeVia: function (this: QueryCard) {
+          return this.matches.length;
+        },
+      });
+      // Reaches the query field through `matchCount` rather than directly, so
+      // it is tainted only if the taint is transitive.
+      @field matchSummary = contains(StringField, {
+        computeVia: function (this: QueryCard) {
+          return `${this.matchCount} matches`;
+        },
+      });
+      @field shoutedTitle = contains(StringField, {
+        computeVia: function (this: QueryCard) {
+          return this.cardTitle.toUpperCase();
+        },
+      });
+    }
+
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'query-computed-card.gts': { Person, QueryCard },
+      },
+    });
+
+    let card = new QueryCard({ cardTitle: 'Target' });
+    let serialized = serializeCard(card, {
+      includeComputeds: true,
+      includeUnrenderedFields: true,
+      omitQueryFields: true,
+    });
+
+    assert.strictEqual(
+      serialized.data.attributes?.matchCount,
+      undefined,
+      'a computed reading a query field is not persisted',
+    );
+    assert.strictEqual(
+      serialized.data.attributes?.matchSummary,
+      undefined,
+      'a computed reading a query field through another computed is not persisted',
+    );
+    assert.strictEqual(
+      serialized.data.attributes?.shoutedTitle,
+      'TARGET',
+      'a computed that reads no query field is persisted as before',
+    );
+  });
+
   module('linksToMany', function () {
     test('can serialize a linksToMany relationship', async function (assert) {
       class Pet extends CardDef {

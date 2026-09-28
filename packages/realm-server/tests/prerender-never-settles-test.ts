@@ -158,6 +158,9 @@ module(basename(import.meta.filename), function (hooks) {
       maxPages: 2,
       port: prerenderPort,
       fatalExitOnUncaught: false, // tests share the qunit process
+      // Reached directly by its URL; registering would let a machine-wide
+      // prerender manager route other stacks' renders into the wedged pool.
+      registerWithManager: false,
     });
     trackServer(server);
     await new Promise<void>((resolve, reject) => {

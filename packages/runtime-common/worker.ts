@@ -54,7 +54,7 @@ export interface IndexPhaseTimings {
   // Whole-job wall, kickoff to return.
   totalMs?: number;
   // Batch setup before any phase below: `IndexWriter.createBatch` (generation
-  // bump + resumable working-row scan). Non-trivial on a retry job or under DB
+  // read + resumable pending-row scan). Non-trivial on a retry job or under DB
   // slowness, so it's bucketed rather than left as residue in `totalMs`.
   setupMs?: number;
   // Reading the index's per-file modified times up front (from-scratch only).
@@ -74,9 +74,45 @@ export interface IndexPhaseTimings {
   // cannot time its own write. This is the I/O the visit's tab does not need,
   // so it is the primary candidate to overlap with the next visit.
   writeMs?: number;
-  // The final atomic swap: `batch.done()` (realm-meta update, working → main
-  // promotion, obsolete-row prune) in one transaction.
+  // The final atomic swap: `batch.done()` (realm-meta update, pending → main
+  // promotion, obsolete-row prune) in one transaction, then the cleanup of
+  // the pending rows it promoted. Excludes `validationMs`.
   swapMs?: number;
+  // How many times the swap's transaction ran. More than 1 means a deadlock
+  // or serialization failure against a concurrent commit to the same rows
+  // rolled it back and it ran again.
+  swapAttempts?: number;
+  // The part of `swapMs` spent on attempts that rolled back.
+  swapRetryMs?: number;
+  // The part of `swapMs` the committing attempt spent waiting for the realm's
+  // commit lock — for another pass of the same realm to finish committing.
+  commitLockWaitMs?: number;
+  // The part of `swapMs` after the commit spent deleting the pending rows it
+  // promoted and running the janitor. Absent when the swap never committed.
+  pendingCleanupMs?: number;
+  // What the janitor removed: this realm's pending rows no pass can commit any
+  // more — those of jobs that have finished, and ad-hoc stagings idle past
+  // the abandonment window — and how many stagings they belonged to. Nonzero
+  // means some pass left rows behind: it died before its commit, or its own
+  // cleanup failed. Absent when the cleanup failed before the janitor ran.
+  janitorRowsCleared?: number;
+  janitorStagingsCleared?: number;
+  // Present only when a peer pass of the realm committed while this one ran,
+  // so its commit checked what the peer's commit made stale. `validationMs`
+  // is the wall of those checks plus every round that rolled the commit back
+  // to re-visit. `validationRounds` counts the rounds: 0 means the peers
+  // touched nothing this pass read. `revisitCount` is the URLs the rounds
+  // re-visited, and `extendCount` the peer-committed URLs the pass extended
+  // to because they depend on it, both summed across rounds. Each re-visited
+  // row carries its round as `boxel_index.diagnostics.validationRound`.
+  validationMs?: number;
+  validationRounds?: number;
+  revisitCount?: number;
+  extendCount?: number;
+  // The `incremental-index` job the commit enqueued in its own transaction,
+  // when the rounds ran out and peers still left rows stale. It re-indexes
+  // what was left, in the pass's lane.
+  followUpJobId?: number;
 }
 
 export interface StreamFileRef {
@@ -112,6 +148,13 @@ export interface JobInfo extends JSONTypes.Object {
   // index-signature reason as `priority`; null means the queue couldn't
   // compute it (or the JobInfo is synthetic).
   queueWaitMs: number | null;
+  // The lane the job was claimed in, and the lane family it belongs to, as the
+  // queue row records them. Together with `queueWaitMs` they say what a job
+  // waited behind: another job of its own lane, or the family's exclusive work
+  // (see `QueuePublishRequest.laneFamily`). Null on a synthetic JobInfo, and
+  // `laneFamily` is null on any job published without a family.
+  concurrencyGroup: string | null;
+  laneFamily: string | null;
 }
 
 export interface StatusArgs {
@@ -137,6 +180,11 @@ export interface IndexingProgressEvent {
   files?: string[];
   url?: string;
   stats?: Stats;
+  // The lane the job was claimed in (its `concurrency_group`), on
+  // `indexing-started` and `indexing-finished`, so a job's progress log lines
+  // say whose pass it is: a writer's lane, the owner's, or the family's
+  // exclusive lane. Absent when no queue claimed the job.
+  lane?: string;
 }
 
 // The job types an `indexJobsOnly` worker registers. The queue's claim

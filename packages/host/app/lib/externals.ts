@@ -65,6 +65,7 @@ import {
 
 import * as pdfjsLoader from '../lib/pdfjs-loader';
 import * as signedCapture from '../lib/signed-capture';
+import * as threeLoader from '../lib/three-loader';
 import { shimHostTools } from '../tools';
 
 export function shimExternals(virtualNetwork: VirtualNetwork) {
@@ -239,6 +240,13 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/lib/signed-capture',
     signedCapture,
+  );
+  // The 3D families' capture-only still renders with the host's vendored
+  // three.js through the same sync-shim shape as the pdf.js loader: a static
+  // import of a zero-cost function whose call performs the lazy chunk load.
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/lib/three-loader',
+    threeLoader,
   );
   virtualNetwork.shimAsyncModule({
     id: 'uuid',

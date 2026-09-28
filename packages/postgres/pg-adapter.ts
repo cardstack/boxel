@@ -4,6 +4,7 @@ import {
   type ExecuteOptions,
   type Expression,
   type Querier,
+  type TransactionOptions,
   Deferred,
   expressionToSql,
   logger,
@@ -14,6 +15,11 @@ import nodePgMigrate, { type RunnerOption } from 'node-pg-migrate';
 import { join } from 'path';
 import { Pool, Client, type PoolClient, type Notification } from 'pg';
 
+import {
+  ConnectionScheduler,
+  markConnectionHeld,
+  withSharedWork,
+} from './connection-scheduler.ts';
 import { postgresConfig } from './pg-config.ts';
 import migrationNameFixes from './scripts/migration-name-fixes.cjs';
 
@@ -87,6 +93,10 @@ const MAX_FILE_WRITE_LOCKS = 256;
 
 const log = logger('pg-adapter');
 
+// deadlock_detected and serialization_failure: the attempt lost a race with
+// another transaction and is expected to succeed when run again.
+const RETRYABLE_TRANSACTION_SQLSTATES = new Set(['40P01', '40001']);
+
 // One line per file-write lock acquisition. Separate from `pg-adapter`'s own
 // channel because it is operational signal rather than adapter diagnostics,
 // and it answers the question request latency cannot: a write that took a
@@ -147,6 +157,37 @@ function configuredPoolMax(): number {
   return Number.isInteger(value) && value > 0 ? value : DEFAULT_POOL_MAX;
 }
 
+// How many of the pool's connections one tenant may hold while the pool is
+// oversubscribed and another tenant has work open (see `ConnectionScheduler`).
+// The tenants are the realm sets searches name — usually a single realm — so
+// this is the share of a replica's database concurrency one realm's searches
+// keep when they want more than the pool has and another realm is searching
+// too.
+//
+// Sized at the concurrency past which the database stops getting faster. On
+// the staging instance (2 vCPU), a single realm's saturating search load drove
+// CPU to 85% at 8.0 average active sessions and 95% at 8.7, then sat at
+// 98-99% from 11 up through the 54-session bursts the load reached — so across
+// the fleet's two replicas, about eight concurrent sessions is what saturates
+// it, and everything above that queued inside Postgres. Four per replica is
+// the smallest share that still lets one realm drive the database to that
+// point on its own, so a heavy realm keeps most of its throughput while
+// contending without multiplying every other realm's query time by its
+// session count. It scales with the database the fleet shares and with
+// the number of replicas sharing it, so an environment with more cores per
+// replica wants a proportionally larger value.
+const DEFAULT_POOL_TENANT_SHARE = 4;
+function configuredPoolTenantShare(): number {
+  let rawValue = process.env.PG_POOL_TENANT_SHARE;
+  if (!rawValue) {
+    return DEFAULT_POOL_TENANT_SHARE;
+  }
+  let value = Number(rawValue);
+  return Number.isInteger(value) && value > 0
+    ? value
+    : DEFAULT_POOL_TENANT_SHARE;
+}
+
 export type NotificationHandler = (notification: Notification) => void;
 
 export interface NotificationSubscription {
@@ -205,6 +246,10 @@ export class PgAdapter implements DBAdapter {
   readonly kind = 'pg';
   #isClosed = false;
   private pool: Pool;
+  // Decides who checks out the pool's connections, and in what order. Every
+  // checkout goes through it, and it grants at most the pool's own max at
+  // once, so the pool's internal FIFO queue never forms.
+  #scheduler: ConnectionScheduler;
   private started: Promise<void>;
   private config: Config;
   // Shared LISTEN connection used by all subscribe() callers. A dedicated
@@ -239,6 +284,10 @@ export class PgAdapter implements DBAdapter {
     this.config = config();
     let { user, host, database, password, port } = this.config;
     let max = configuredPoolMax();
+    this.#scheduler = new ConnectionScheduler({
+      limit: max,
+      tenantShare: configuredPoolTenantShare(),
+    });
     log.debug(`connecting to DB ${this.url}`);
     this.pool = new Pool({
       user,
@@ -261,6 +310,28 @@ export class PgAdapter implements DBAdapter {
 
   get isClosed() {
     return this.#isClosed;
+  }
+
+  // The connection scheduler's state when read, for the health sampler:
+  // connections checked out against the pool's max, acquisitions waiting,
+  // and how many of those wait only because their tenant is at its share.
+  get connectionStats(): {
+    inUse: number;
+    limit: number;
+    waiting: number;
+    waitingAtShare: number;
+  } {
+    return {
+      inUse: this.#scheduler.inUse,
+      limit: this.#scheduler.limit,
+      waiting: this.#scheduler.waiting,
+      waitingAtShare: this.#scheduler.waitingAtShare,
+    };
+  }
+
+  // See `DBAdapter.withSharedWork`.
+  withSharedWork<T>(fn: () => Promise<T>): Promise<T> {
+    return withSharedWork(fn);
   }
 
   get url() {
@@ -288,6 +359,7 @@ export class PgAdapter implements DBAdapter {
     const client = this.#notificationClient;
     this.#notificationClient = undefined;
     this.#channels.clear();
+    this.#scheduler.dispose();
     if (client) {
       try {
         await client.end();
@@ -433,7 +505,7 @@ export class PgAdapter implements DBAdapter {
     opts?: ExecuteOptions,
   ): Promise<Record<string, PgPrimitive>[]> {
     await this.started;
-    let client = await this.pool.connect();
+    let { client, releaseTurn } = await this.#checkout();
     // A checked-out client's death is nobody's event: the pool removes its
     // own idle listener for the duration of the checkout, so the in-flight
     // query rejects into the caller that handles it and the socket's closing
@@ -459,6 +531,20 @@ export class PgAdapter implements DBAdapter {
     } finally {
       stopRecording();
       client.release();
+      releaseTurn();
+    }
+  }
+
+  // Wait for the scheduler's go-ahead, then check a client out of the pool.
+  // The turn is handed back by the caller after the client is released, or
+  // here if the checkout itself fails.
+  async #checkout(): Promise<{ client: PoolClient; releaseTurn: () => void }> {
+    let releaseTurn = await this.#scheduler.acquire();
+    try {
+      return { client: await this.pool.connect(), releaseTurn };
+    } catch (e) {
+      releaseTurn();
+      throw e;
     }
   }
 
@@ -530,7 +616,7 @@ export class PgAdapter implements DBAdapter {
   // CS-10898 plumbed the pinned querier through the realm-destruction
   // helpers (removeRealmDatabaseArtifacts, removeRealmPermissions,
   // deleteRegistryRowByUrl, deletePublishedRowsBySourceUrl,
-  // cancelRunningJobsInConcurrencyGroup); when callers pass `txQuerier` to
+  // cancelRunningJobsInLaneFamily); when callers pass `txQuerier` to
   // those helpers, all their writes commit or roll back together with the
   // advisory lock's own transaction. Queries `fn` issues through the shared
   // dbAdapter still go via separate pool connections and are NOT part of
@@ -751,10 +837,13 @@ export class PgAdapter implements DBAdapter {
     return await work;
   }
 
-  // Per-matrix-user serialization barrier for billable upstream proxy calls.
-  // Two concurrent requests from the same matrix user — including across
-  // replicas with no stickiness — must not both kick off an upstream call
-  // before the prior request's cost row has landed in the credits ledger.
+  // Per-matrix-user serialization barrier for a user's credit bookkeeping.
+  // Callers hold it around the steps that read the user's balance and act on
+  // it — gating a billable call on the balance, and debiting a call's cost —
+  // so two such steps for the same matrix user never interleave, including
+  // across replicas with no stickiness. The debit reads each credit bucket
+  // before writing it, so two unserialized debits can both spend the same
+  // credits.
   //
   // Two coordination layers compose:
   //
@@ -765,8 +854,8 @@ export class PgAdapter implements DBAdapter {
   //    matrix user id serializes holders across replicas.
   //
   // Pool-pressure budget: this is the realm-server's main pool (also used
-  // by indexing / federated-search), and the critical section spans the
-  // upstream LLM call (potentially tens of seconds on streaming). Without
+  // by indexing / federated-search), and a burst of one user's calls
+  // arrives at the barrier together. Without
   // the in-process queue, N concurrent same-user requests landing on one
   // replica would each pin a pool client while blocked on the advisory
   // lock — that scales badly against the 40-client default and the
@@ -785,7 +874,7 @@ export class PgAdapter implements DBAdapter {
   //
   // The callback does NOT receive a `txQuerier` — the barrier only needs
   // serialization, not transactional grouping of the work inside it.
-  // Inner DB calls (validateCredits, saveUsageCost) run via the shared
+  // Inner DB calls (validateCredits, spendUsageCost) run via the shared
   // dbAdapter on separate pool connections as today.
   async withUserCostLock<T>(
     matrixUserId: string,
@@ -968,6 +1057,50 @@ export class PgAdapter implements DBAdapter {
     });
   }
 
+  // One transaction on one pinned pool connection: BEGIN, `fn`, COMMIT, with
+  // withConnection issuing the ROLLBACK when `fn` or the COMMIT throws. `fn`'s
+  // statements must go through `txQuerier`; anything it runs through
+  // `execute` checks out a different client and is outside the transaction.
+  //
+  // Postgres resolves a deadlock by aborting one participant (40P01), and a
+  // serialization failure (40001) means the same thing: this attempt lost,
+  // and running it again is expected to succeed. Both roll back and run `fn`
+  // again from the start, up to `maxAttempts`. Any other error is thrown
+  // straight away.
+  async withTransaction<T>(
+    fn: (txQuerier: Querier) => Promise<T>,
+    opts?: TransactionOptions,
+  ): Promise<T> {
+    let maxAttempts = Math.max(1, opts?.maxAttempts ?? 3);
+    for (let attempt = 1; ; attempt++) {
+      try {
+        return await this.withConnection(async (queryFn) => {
+          await queryFn(['BEGIN']);
+          let result = await fn(queryFn);
+          await queryFn(['COMMIT']);
+          return result;
+        });
+      } catch (err: unknown) {
+        let code = (err as { code?: unknown })?.code;
+        if (
+          attempt >= maxAttempts ||
+          typeof code !== 'string' ||
+          !RETRYABLE_TRANSACTION_SQLSTATES.has(code)
+        ) {
+          throw err;
+        }
+        log.warn(
+          `transaction${opts?.label ? ` for ${opts.label}` : ''} rolled back on SQLSTATE ${code} (attempt ${attempt} of ${maxAttempts}); retrying: ${(err as Error).message}`,
+        );
+        // A short randomized pause so the transaction that won the deadlock
+        // can finish before this one takes its locks again.
+        await new Promise((resolve) =>
+          setTimeout(resolve, attempt * (25 + Math.random() * 50)),
+        );
+      }
+    }
+  }
+
   async withConnection<T>(
     fn: (
       query: (e: Expression) => Promise<Record<string, PgPrimitive>[]>,
@@ -975,7 +1108,7 @@ export class PgAdapter implements DBAdapter {
   ): Promise<T> {
     await this.started;
 
-    let client = await this.pool.connect();
+    let { client, releaseTurn } = await this.#checkout();
     let stopRecording = recordConnectionErrors(client, this.url, 'warn');
     let query = async (expression: Expression) => {
       let sql = expressionToSql(this.kind, expression);
@@ -983,9 +1116,12 @@ export class PgAdapter implements DBAdapter {
       let { rows } = await client.query(sql);
       return rows;
     };
+    // `fn` runs holding this client, so any connection it checks out through
+    // the adapter is one it needs before it can give this one back.
+    let holding = markConnectionHeld();
     let released = false;
     try {
-      return await fn(query);
+      return await holding.run(() => fn(query));
     } catch (e) {
       // Clean up any in-progress transaction before returning the client to
       // the pool. Without this, a connection left in a dirty transaction
@@ -1008,10 +1144,12 @@ export class PgAdapter implements DBAdapter {
       released = true;
       throw e;
     } finally {
+      holding.end();
       stopRecording();
       if (!released) {
         client.release();
       }
+      releaseTurn();
     }
   }
 

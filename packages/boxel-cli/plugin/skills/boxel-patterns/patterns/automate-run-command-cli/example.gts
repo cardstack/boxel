@@ -18,7 +18,7 @@ import { Command } from '@cardstack/base/command';
 //     --json
 //
 // The CLI loads the module, instantiates the Command with a synthetic
-// commandContext, builds the input card from `--input`, runs it, and
+// toolContext, builds the input card from `--input`, runs it, and
 // prints the output card as JSON. Use this for batch jobs, cron,
 // CI gates, or any time you want to fire a typed action without the
 // host UI.
@@ -70,8 +70,8 @@ export class ReindexCommand extends Command<
 
 // Plug in your real work here.
 async function reindexRealm(realm: string): Promise<number> {
-  // For a CLI tool, lean on host commands from `this.commandContext`:
-  //   const search = new SearchCardsByQueryCommand(this.commandContext);
+  // For a CLI tool, lean on host commands from `this.toolContext`:
+  //   const search = new SearchCardsByQueryCommand(this.toolContext);
   //   const { cardIds } = await search.execute({ query: ..., realms: [realm] });
   //   ...
   // Use SaveCardCommand to write, SendRequestViaProxyCommand to call

@@ -13,7 +13,6 @@ import {
 } from '@cardstack/base/card-api';
 import BooleanField from '@cardstack/base/boolean';
 import NumberField from '@cardstack/base/number';
-import StringField from '@cardstack/base/string';
 import { cn, eq } from '@cardstack/boxel-ui/helpers';
 import { Star, StarHalfFill, StarFilled } from '@cardstack/boxel-ui/icons';
 
@@ -136,11 +135,11 @@ class StarRating extends GlimmerComponent<StarRatingSignature> {
       }
 
       .star-button-empty {
-        color: var(--muted-foreground, #8b95a3);
+        color: var(--muted-foreground);
       }
 
       .star-button-empty:hover {
-        color: var(--foreground, #111827);
+        color: var(--foreground);
       }
 
       .star-rating:has(.star-button-empty:hover) {
@@ -149,7 +148,7 @@ class StarRating extends GlimmerComponent<StarRatingSignature> {
 
       .star-button-empty:hover ~ .star-button {
         --icon-fill-color: none;
-        --icon-stroke-color: var(--muted-foreground, #8b95a3);
+        --icon-stroke-color: var(--muted-foreground);
       }
 
       .star-button-full:hover ~ .star-button-full {
@@ -191,7 +190,7 @@ export class RatingsSummary extends FieldDef {
         }
 
         .count {
-          color: var(--muted-foreground, #6b7280);
+          color: var(--muted-foreground);
         }
       </style>
     </template>
@@ -212,7 +211,6 @@ export class RatingsSummary extends FieldDef {
 export class ReviewCard extends CardDef {
   static displayName = 'Review';
 
-  @field cardTitle = contains(StringField);
   @field rating = contains(RatingsSummary);
 
   static isolated = class Isolated extends Component<typeof ReviewCard> {

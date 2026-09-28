@@ -38,18 +38,18 @@ import SendRequestViaProxyCommand from '@cardstack/boxel-host/tools/send-request
 import { SearchCardsByQueryCommand } from '@cardstack/boxel-host/tools/search-cards';
 
 // Save a card
-await new SaveCardCommand(this.commandContext).execute({
+await new SaveCardCommand(this.toolContext).execute({
   card: myCard,
   realm: 'https://realm-url/'
 });
 
 // Get a card
-const card = await new GetCardCommand(this.commandContext).execute({
+const card = await new GetCardCommand(this.toolContext).execute({
   cardId: 'https://realm/Card/id'
 });
 
 // External API call
-const response = await new SendRequestViaProxyCommand(this.commandContext).execute({
+const response = await new SendRequestViaProxyCommand(this.toolContext).execute({
   url: 'https://api.example.com/endpoint',
   method: 'POST',
   requestBody: JSON.stringify(data),
@@ -90,7 +90,7 @@ For generated images, audio, or other bytes, write a real realm file and then li
 ```gts
 import WriteBinaryFileCommand from '@cardstack/boxel-host/tools/write-binary-file';
 
-const result = await new WriteBinaryFileCommand(this.commandContext).execute({
+const result = await new WriteBinaryFileCommand(this.toolContext).execute({
   path: 'GeneratedImages/result.png',
   realm: input.realm,
   base64Content,
@@ -104,7 +104,7 @@ const result = await new WriteBinaryFileCommand(this.commandContext).execute({
 ```gts
 import { SearchCardsByQueryCommand } from '@cardstack/boxel-host/tools/search-cards';
 
-const results = await new SearchCardsByQueryCommand(this.commandContext).execute({
+const results = await new SearchCardsByQueryCommand(this.toolContext).execute({
   query: {
     filter: {
       on: { module: new URL('./product', import.meta.url).href, name: 'Product' },
@@ -145,10 +145,10 @@ import SaveCardCommand from '@cardstack/boxel-host/tools/save-card';
 
 class OptimisticSave {
   pending: Array<Promise<any>> = [];
-  constructor(readonly commandContext: any) {}
+  constructor(readonly toolContext: any) {}
 
   save(card: any, realm: string) {
-    let saved = new SaveCardCommand(this.commandContext).execute({ card, realm });
+    let saved = new SaveCardCommand(this.toolContext).execute({ card, realm });
     this.pending.push(saved);
     saved.catch(() => {});
     return saved;
@@ -175,20 +175,21 @@ Pattern: `boxel-patterns/patterns/command-optimistic-pipeline`.
 ### Menu Integration
 
 ```gts
-import { getCardMenuItems } from '@cardstack/runtime-common';
+import { getMenuItems } from '@cardstack/runtime-common';
+import { type GetMenuItemParams } from '@cardstack/base/card-api';
+import { type MenuItemOptions } from '@cardstack/boxel-ui/helpers';
 
-[getCardMenuItems](params: GetCardMenuItemParams): MenuItemOptions[] {
+[getMenuItems](params: GetMenuItemParams): MenuItemOptions[] {
   return [{
     label: 'My Action',
     icon: MyIcon,
+    disabled: !this.id,
     action: async () => {
-      await new MyCommand(params.commandContext).execute({
+      await new MyCommand(params.toolContext).execute({
         cardId: this.id,
-        realm: params.realmURL
       });
-      await params.saveCard(this);
     }
-  }, ...super[getCardMenuItems](params)];
+  }, ...super[getMenuItems](params)];
 }
 ```
 
