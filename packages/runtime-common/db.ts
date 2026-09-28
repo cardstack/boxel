@@ -12,6 +12,15 @@ export interface ExecuteOptions {
   coerceTypes?: TypeCoercion;
 }
 
+export interface TransactionOptions {
+  // Names the transaction in the log line a retry writes, e.g. the realm whose
+  // index swap is committing.
+  label?: string;
+  // How many times to run `fn` before giving up on a deadlock or
+  // serialization failure. Defaults to 3.
+  maxAttempts?: number;
+}
+
 export interface DBAdapter {
   kind: 'pg' | 'sqlite';
   isClosed: boolean;
@@ -21,6 +30,19 @@ export interface DBAdapter {
   ) => Promise<Record<string, PgPrimitive>[]>;
   close: () => Promise<void>;
   getColumnNames: (tableName: string) => Promise<string[]>;
+  // Run `fn` inside one transaction: every statement `fn` issues through
+  // `txQuerier` commits together, or none do if `fn` throws. Statements `fn`
+  // issues through the adapter itself are not part of the transaction.
+  //
+  // PgAdapter pins one pool connection for the whole transaction. A deadlock
+  // or serialization failure (SQLSTATE 40P01 / 40001) rolls back and runs `fn`
+  // again from the start, so `fn` must be safe to re-run and must keep no
+  // effects outside the database that a rollback would leave behind. SQLite
+  // runs the transaction on its single connection and never retries.
+  withTransaction: <T>(
+    fn: (txQuerier: Querier) => Promise<T>,
+    opts?: TransactionOptions,
+  ) => Promise<T>;
   // Best-effort cross-instance broadcast on a named channel. Backends that
   // don't support pub/sub (e.g. in-process SQLite) implement this as a no-op:
   // the caller must treat it as fire-and-forget cache-coherency, never as
@@ -65,4 +87,13 @@ export interface DBAdapter {
     matrixUserId: string,
     fn: () => Promise<T>,
   ) => Promise<T>;
+  // Run `fn` as shared work: a computation that callers on behalf of
+  // different realms may end up waiting on through a coalescing cache.
+  // PgAdapter shares its connections out by the realm a search names and
+  // holds a realm to a share of them under contention; shared work keeps its
+  // place in that ordering but is exempt from the share, so a realm that joins
+  // work another realm started never waits at the other realm's share.
+  // Adapters that do not share connections out by tenant leave it undefined,
+  // and callers run `fn` as it is.
+  withSharedWork?: <T>(fn: () => Promise<T>) => Promise<T>;
 }

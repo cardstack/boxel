@@ -808,7 +808,7 @@ module('run-log > seeded module', function () {
     // QUnit's would. Give QUnit slack above 120s so a hung compile surfaces as
     // the gate's own "ember-tsc was killed" rejection, not a bare QUnit timeout.
     assert.timeout(130_000);
-    let errors = await runGlintCheck([
+    let { errors } = await runGlintCheck([
       { path: 'run-log.gts', content: RUN_LOG_GTS },
     ]);
     assert.deepEqual(

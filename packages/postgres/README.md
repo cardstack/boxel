@@ -61,9 +61,11 @@ _authoring_ a destructive change, not when applying.
 
 ### Gotchas
 
-- **`boxel_index` and `boxel_index_working` are twin tables and must stay
-  schema-identical** — the indexer does `SELECT * FROM boxel_index` and mirrors
-  the row shape into `boxel_index_working`. Any column change must touch both.
+- **Each production index table has a pending twin** — `boxel_index` ↔
+  `boxel_index_pending`, `prerendered_html` ↔ `prerendered_html_pending`. A pass
+  stages its rows in the pending table and its commit copies every production
+  column out of it, so a column added to a production table must be added to
+  its pending twin too.
 - **Moving an already-applied migration between directories re-runs it** under
   the new tracking table; only safe if `up()` is idempotent (`IF EXISTS` /
   `ifNotExists`). Moving a not-yet-applied file is always clean.

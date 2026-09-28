@@ -34,7 +34,6 @@ import {
   isSparseItemResource,
   loadCardDef,
   resolveFileDefCodeRef,
-  type FileDefBindings,
   searchEntryWireQueryFromQuery,
   getTypeRefsFromFilter,
   X_BOXEL_JOB_PRIORITY_HEADER,
@@ -54,6 +53,7 @@ import {
   applySearchPageBound,
   assertRealmsBound,
   isJsonContentType,
+  QUERY_FIELD_SEARCH_CONCURRENCY_CAP,
   SEARCH_CONCURRENCY_CAP,
   SKIP_INDEX_WAIT_HEADER,
   SupportedMimeType,
@@ -98,7 +98,11 @@ import {
   type VirtualNetwork,
 } from '@cardstack/runtime-common';
 
-import CardStore, { getDeps, type ReferenceCount } from '../lib/gc-card-store';
+import CardStore, {
+  currentRenderScope,
+  getDeps,
+  type ReferenceCount,
+} from '../lib/gc-card-store';
 
 import {
   consumingRealmHeader,
@@ -235,6 +239,11 @@ const queryFieldSeedFromSearchSymbol = Symbol.for(
 );
 
 type PersistOptions = CreateOptions & { clientRequestId?: string };
+
+// Which of a store service's search concurrency lanes a throttled search takes:
+// the card `@context` surface's, or query-field resolution's.
+export type SearchThrottleLane = 'card' | 'query-field';
+
 // What an index event said the state of a card would be, carried alongside the
 // reload it scheduled so a second delivery of that event can recognize it as
 // already answered. Both members are optional because both are optional on the
@@ -364,15 +373,19 @@ export default class StoreService extends Service implements StoreInterface {
   // a prerender. Layered *above* `inflightSearch`: a cache hit skips
   // the network round-trip entirely; a miss falls through to the
   // in-flight Map and the cache is populated on resolve. Keyed by
-  // (jobId, consumingRealm, query) — gated to same-realm-only so a
+  // (render scope, consumingRealm, query) — gated to same-realm-only so a
   // cross-realm read can't freeze a value while a peer realm-server
   // replica swaps mid-job.
   //
-  // Lifetime: the entire indexing job. One job typically spans many
-  // card renders in the same prerender tab (each navigation activates
-  // and deactivates the render route but all those visits share one
-  // `__boxelJobId`); the cache must survive those route bounces so
-  // earlier renders' work is reusable by later ones. Only clear when
+  // Lifetime: the render scope (`currentRenderScope`, falling back to
+  // `__boxelJobId`), which names one view of the realm with no commit in
+  // between. One scope typically spans many card renders in the same
+  // prerender tab (each navigation activates and deactivates the render
+  // route but all those visits share one scope); the cache must survive
+  // those route bounces so earlier renders' work is reusable by later ones.
+  // A scope changes whenever the view could have — another writer's pass
+  // committing to the realm mid-job is the case a job id alone would miss —
+  // so a cached answer never outlives the view it was read from. Only clear when
   // the job actually changes — `fetchSearchDoc` does this at
   // fetch-entry via the jobId-change check, and `resetState` /
   // `resetCache` do it on harder service resets. The render route's
@@ -382,12 +395,11 @@ export default class StoreService extends Service implements StoreInterface {
   // storing resolved docs rather than promises (avoids tail-latency
   // stalls on slow first populate).
   private searchCache: Map<string, SearchEntryResults> = new Map();
-  // The jobId the `searchCache` entries belong to. When a request
-  // arrives carrying a different `__boxelJobId` we drop the cache
-  // before serving — belt-and-braces beside `resetState()` and the
-  // render-route deactivate clear, in case a prerender tab is reused
-  // across jobs without driving either of those paths.
-  private searchCacheJobId: string | undefined = undefined;
+  // The render scope the `searchCache` entries belong to. When a request
+  // arrives under a different scope we drop the cache before serving —
+  // belt-and-braces beside `resetState()`, in case a prerender tab moves to
+  // another scope without driving it.
+  private searchCacheScope: string | undefined = undefined;
   // Monotonic counter bumped on every clear of `searchCache` (every
   // path that empties the map: `clearSearchCache`, `resetState`,
   // `resetCache`, the jobId-change clear at fetch-entry). A
@@ -472,7 +484,7 @@ export default class StoreService extends Service implements StoreInterface {
     this.#reloadTargets = new Map();
     this.inflightSearch = new Map();
     this.searchCache = new Map();
-    this.searchCacheJobId = undefined;
+    this.searchCacheScope = undefined;
     this.searchCacheGeneration++;
     this.autoSaveQueues = new Map();
     this.autoSavePromises = new Map();
@@ -533,13 +545,13 @@ export default class StoreService extends Service implements StoreInterface {
   // Drop every resolved-doc search-cache entry. Used for hard resets
   // (`resetState`, `resetCache`) and by tests; NOT called from the
   // render route's per-visit deactivate, because the cache is meant
-  // to survive across renders within a single indexing job. Cross-job
+  // to survive across renders within a single render scope. Cross-scope
   // invalidation is handled by `fetchSearchDoc`'s entry-time
-  // jobId-change clear, which fires the first time a new
-  // `__boxelJobId` is observed.
+  // scope-change clear, which fires the first time a new scope is
+  // observed.
   clearSearchCache(): void {
     this.searchCache.clear();
-    this.searchCacheJobId = undefined;
+    this.searchCacheScope = undefined;
     this.searchCacheGeneration++;
   }
 
@@ -559,7 +571,7 @@ export default class StoreService extends Service implements StoreInterface {
     this.#reloadTargets = new Map();
     this.inflightSearch = new Map();
     this.searchCache = new Map();
-    this.searchCacheJobId = undefined;
+    this.searchCacheScope = undefined;
     this.searchCacheGeneration++;
     this.autoSaveQueues = new Map();
     this.autoSavePromises = new Map();
@@ -1164,10 +1176,20 @@ export default class StoreService extends Service implements StoreInterface {
     return api.serializeFileDef(fileDef, {}) as SingleFileMetaDocument;
   }
 
-  async delete(id: string): Promise<void> {
+  // `opts.type` is host-only: the card-facing `Store` interface declares
+  // `delete(id)` alone, so card code reaches the card route and nothing else.
+  async delete(id: string, opts?: { type?: StoreReadType }): Promise<void> {
     id = asURL(id, this.network.virtualNetwork);
     if (!id) {
       // the card isn't actually saved yet, so do nothing
+      return;
+    }
+    if (opts?.type === 'file-meta') {
+      // A file is deleted through its source route: the card+json DELETE
+      // only knows how to remove card instances.
+      this.store.delete(id);
+      await this.cardService.deleteSource(new URL(id));
+      this.notifyCardInvalidationSubscribers(id);
       return;
     }
     // Snapshot the consumers BEFORE removing the deleted instance from the
@@ -1349,10 +1371,11 @@ export default class StoreService extends Service implements StoreInterface {
       // page size, realms fan-out, and the concurrency throttle — none of which
       // constrain the host app's own direct search calls.
       cardInitiated?: boolean;
-      // Run under the concurrency throttle without the other card caps, for a
-      // caller whose result set must not be reshaped but whose volume still has
-      // to be bounded — query-field resolution, which fires a search per query
-      // field per deserialized card. Implied by `cardInitiated`.
+      // Run under the query-field concurrency lane without the other card caps,
+      // for a caller whose result set must not be reshaped but whose volume
+      // still has to be bounded — query-field resolution, which fires a search
+      // per query field per deserialized card. Ignored with `cardInitiated`,
+      // which takes the card lane instead.
       throttled?: boolean;
       // Asked once, when a queued search reaches the front of the throttle.
       // Waiting is where a consumer can go away — the resource that wanted this
@@ -1405,15 +1428,19 @@ export default class StoreService extends Service implements StoreInterface {
         opts?.dependencyTrackingContext,
         opts?.scope,
       );
-    let result =
-      opts?.cardInitiated || opts?.throttled
-        ? await this.performThrottledSearch(async () => {
-            if (opts?.isObsolete?.()) {
-              return { instances: [] as T[], meta: { page: { total: 0 } } };
-            }
-            return await run();
-          })
-        : await run();
+    let lane: SearchThrottleLane | undefined = opts?.cardInitiated
+      ? 'card'
+      : opts?.throttled
+        ? 'query-field'
+        : undefined;
+    let result = lane
+      ? await this.performThrottledSearch(async () => {
+          if (opts?.isObsolete?.()) {
+            return { instances: [] as T[], meta: { page: { total: 0 } } };
+          }
+          return await run();
+        }, lane)
+      : await run();
     return opts?.includeMeta ? result : result.instances;
   }
 
@@ -1479,16 +1506,13 @@ export default class StoreService extends Service implements StoreInterface {
       : this.realmServer.availableRealmIdentifiers;
   }
 
-  // This store service's ceiling on concurrent item-leg searches. The task is a
-  // class field, so each store service carries its own — the interactive app's
-  // and a render store's are separate ceilings, not one shared tab-wide number.
-  // Within one it bounds the store and not a single card: every search routed
-  // through it competes for the same slots. Two callers route: the card
-  // `@context` surface (`getCards` and the card-facing store, via
-  // `cardInitiated`), and query-field resolution (via `throttled`), which fires
-  // a search per query field per deserialized card and is the larger fan-out of
-  // the two. The host app's own direct `store.search` / `getSearch` calls do
-  // not, so the trusted host is never throttled.
+  // This store service's ceilings on concurrent item-leg searches, one lane per
+  // caller. The tasks are class fields, so each store service carries its own
+  // pair — the interactive app's and a render store's are separate ceilings,
+  // not one shared tab-wide number. Within one lane the ceiling bounds the
+  // store and not a single card: every search routed into it competes for the
+  // same slots. The host app's own direct `store.search` / `getSearch` calls
+  // take neither lane, so the trusted host is never throttled.
   //
   // `enqueue` + `maxConcurrency` queues excess searches rather than dropping
   // them, so nothing a card asked for goes unanswered — a burst becomes a
@@ -1497,20 +1521,43 @@ export default class StoreService extends Service implements StoreInterface {
   // realm-server's per-request heap all scale with. The server's per-request
   // bounds (page / realms / time) are the un-overridable backstop; this keeps
   // well-behaved cards from tripping them in the first place.
-  private searchThrottle = task(
+  //
+  // The card lane serves the card `@context` surface (`getCards` and the
+  // card-facing store, via `cardInitiated`).
+  private cardSearchThrottle = task(
     { maxConcurrency: SEARCH_CONCURRENCY_CAP, enqueue: true },
     async (run: () => Promise<unknown>): Promise<unknown> => {
       return await run();
     },
   );
 
-  // Run `run` under this store's search concurrency ceiling (`enqueue` +
-  // maxConcurrency), so no more than the cap hit the realm-server at once and
+  // The query-field lane serves query-field resolution (via `throttled`), which
+  // fires a search per query field per deserialized card — the larger fan-out
+  // of the two, and one that feeds itself, since each result it hydrates
+  // resolves its own query fields in turn. `enqueue` is a single FIFO with no
+  // priority, and a slot is held across the hydration as well as the fetch, so
+  // on a shared lane a search a card asks for after a page starts loading
+  // would wait out that whole drain. Its own lane keeps the fan-out from
+  // holding the slots the card lane needs.
+  private queryFieldSearchThrottle = task(
+    { maxConcurrency: QUERY_FIELD_SEARCH_CONCURRENCY_CAP, enqueue: true },
+    async (run: () => Promise<unknown>): Promise<unknown> => {
+      return await run();
+    },
+  );
+
+  // Run `run` in `lane` under that lane's concurrency ceiling (`enqueue` +
+  // maxConcurrency), so no more than its cap hit the realm-server at once and
   // the rest queue. Called from `search` when `cardInitiated` or `throttled`.
   // Typed as a plain Promise since the caller only awaits the result. Public so
   // a test can exercise the throttle with controllable work.
-  performThrottledSearch<R>(run: () => Promise<R>): Promise<R> {
-    return this.searchThrottle.perform(run) as unknown as Promise<R>;
+  performThrottledSearch<R>(
+    run: () => Promise<R>,
+    lane: SearchThrottleLane,
+  ): Promise<R> {
+    let throttle =
+      lane === 'card' ? this.cardSearchThrottle : this.queryFieldSearchThrottle;
+    return throttle.perform(run) as unknown as Promise<R>;
   }
 
   // The store handed to cards as `@context.store`, bound to the realm the
@@ -1609,19 +1656,20 @@ export default class StoreService extends Service implements StoreInterface {
     scope?: SearchEntryScope,
   ): Promise<SearchEntryResults> {
     let inPrerender = Boolean((globalThis as any).__boxelRenderContext);
-    let jobId = inPrerender
-      ? ((globalThis as any).__boxelJobId as string | undefined)
-      : undefined;
+    let renderScope = inPrerender ? currentRenderScope() : undefined;
     let consumingRealm = inPrerender
       ? ((globalThis as any).__boxelConsumingRealm as string | undefined)
       : undefined;
 
-    // Belt-and-braces jobId-change clear at fetch-entry. `resetState`
-    // and the render-route deactivate hook are the primary paths; this
-    // catches a prerender tab reused across jobs without either firing.
-    if (typeof jobId === 'string' && jobId !== this.searchCacheJobId) {
+    // Scope-change clear at fetch-entry: the first request under a new
+    // render scope drops what the previous scope cached, since the realm
+    // view it was read from may since have moved.
+    if (
+      typeof renderScope === 'string' &&
+      renderScope !== this.searchCacheScope
+    ) {
       this.searchCache.clear();
-      this.searchCacheJobId = jobId;
+      this.searchCacheScope = renderScope;
       this.searchCacheGeneration++;
     }
 
@@ -1633,17 +1681,17 @@ export default class StoreService extends Service implements StoreInterface {
     // `scope` would split them and defeat the dedup.
     let wireScope = this.resolveWireScope(query, scope);
 
-    // Resolved-doc cache eligibility: prerender + jobId + same-realm.
+    // Resolved-doc cache eligibility: prerender + render scope + same-realm.
     // Cross-realm reads bypass — see field comment.
     let cacheKey: string | undefined;
     if (
       inPrerender &&
-      typeof jobId === 'string' &&
+      typeof renderScope === 'string' &&
       typeof consumingRealm === 'string' &&
       realms.length === 1 &&
       realms[0] === consumingRealm
     ) {
-      cacheKey = searchCacheKey(jobId, consumingRealm, query, wireScope);
+      cacheKey = searchCacheKey(renderScope, consumingRealm, query, wireScope);
       if (cacheKey !== undefined) {
         let cached = this.searchCache.get(cacheKey);
         if (cached !== undefined) {
@@ -1939,10 +1987,10 @@ export default class StoreService extends Service implements StoreInterface {
       // `getDefaultRealm`. Left unset by non-`@context` callers (query-field
       // support, the render-store hook), which are not subject to the caps.
       cardInitiated?: boolean;
-      // Set by query-field resolution: take a slot in this store's search
-      // concurrency ceiling, leaving the rest of the card caps off. See
-      // `searchThrottle`. Forced off for a render store, which must not wait on
-      // a queue mid-render.
+      // Set by query-field resolution: take a slot in this store's query-field
+      // search lane, leaving the rest of the card caps off. See
+      // `queryFieldSearchThrottle`. Forced off for a render store, which must
+      // not wait on a queue mid-render.
       throttled?: boolean;
       getDefaultRealm?: () => string | undefined;
       seed?: {
@@ -3652,7 +3700,6 @@ export default class StoreService extends Service implements StoreInterface {
     let fileDefCodeRef = resolveFileDefCodeRef(
       new URL(url),
       this.network.virtualNetwork,
-      this.renderFileDefBindingsFor(url),
     );
     let extractor = new FileDefAttributesExtractor({
       loaderService: this.loaderService,
@@ -3673,25 +3720,6 @@ export default class StoreService extends Service implements StoreInterface {
       return new CardError(msg, { status: 500 });
     }
     return { data: result.resource };
-  }
-
-  // The file type bindings the render was handed, when they apply to this file.
-  //
-  // A render is given one realm's bindings — the realm whose index pass asked
-  // for it — and a card may link a file in another realm, where they mean
-  // nothing. So a file outside that realm falls back to the platform table,
-  // which is the same answer its own realm gives it unless that realm has
-  // bound the extension, and a realm's bindings are not this render's to read.
-  private renderFileDefBindingsFor(url: string): FileDefBindings | undefined {
-    let carried = (
-      globalThis as unknown as {
-        __boxelFileDefBindings?: { realm: string; types: FileDefBindings };
-      }
-    ).__boxelFileDefBindings;
-    if (!carried) {
-      return undefined;
-    }
-    return url.startsWith(carried.realm) ? carried.types : undefined;
   }
 
   // this function is used to determine if the instance will be auto-saved or

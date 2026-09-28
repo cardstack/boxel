@@ -36,6 +36,7 @@ import {
   releaseSearchAdmission,
   sendResponseForBadRequest,
   setContextResponse,
+  withSearchConnectionTenant,
 } from '../middleware/index.ts';
 import {
   getMultiRealmAuthorization,
@@ -105,6 +106,17 @@ export default function handleSearch(opts: {
   let linkShapePolicy = opts.linkShapePolicy ?? LinkShapePolicy.pinned('full');
   let liveSearchCache = opts.liveSearchCache ?? new LiveSearchCache();
   return async function (ctxt: Koa.Context) {
+    let { realmList } = getMultiRealmAuthorization(ctxt);
+    // The realms this search names are known from here: each one's link-shape
+    // level follows the requests that name it, and the database connections
+    // the search draws on are shared out by them.
+    attributeSearchRequest(ctxt, realmList);
+    await withSearchConnectionTenant(ctxt, realmList, () =>
+      respond(ctxt, realmList),
+    );
+  };
+
+  async function respond(ctxt: Koa.Context, realmList: string[]) {
     let handlerStart = Date.now();
     // Slots the query-shape line is assembled from. `shape` is filled in as
     // soon as the query parses — a request that never gets that far has no
@@ -119,11 +131,6 @@ export default function handleSearch(opts: {
     );
     let timings =
       loggingCorrelationId !== null ? new RequestTimings() : undefined;
-
-    let { realmList } = getMultiRealmAuthorization(ctxt);
-    // The realms this search names are known from here, and each one's
-    // link-shape level follows the requests that name it.
-    attributeSearchRequest(ctxt, realmList);
 
     let parsed;
     let request = await fetchRequestFromContext(ctxt);
@@ -413,7 +420,7 @@ export default function handleSearch(opts: {
       emitTelemetry({ status: 500 });
       throw e;
     }
-  };
+  }
 }
 
 // The job-scoped cache + ETag/304 protocol for the federated search
@@ -475,9 +482,14 @@ async function respondWithJobScopedSearchCache(
     // Fold each realm's generation fingerprint (index + prerendered-HTML) into
     // the cache key so the ETag advances when either channel does — a cached
     // `304` can't pin an HTML-less or older-rendering result after newer HTML
-    // lands. Purely a key change: it only fragments the cache, and the body a
-    // miss produces reflects the current DB state.
-    let generations = await searchCache!.realmGenerations(realms);
+    // lands. The consuming realm's rides along even when the query does not
+    // search it: another writer's pass can commit to that realm while this
+    // job runs, and the linked resources a result carries can live there.
+    // Purely a key change: it only fragments the cache, and the body a miss
+    // produces reflects the current DB state.
+    let generations = await searchCache!.realmGenerations([
+      ...new Set([...realms, consumingRealm!]),
+    ]);
     let keyOpts = { ...(args.opts as Record<string, unknown>), generations };
     let expectedEtag = searchCache!.computeETag({
       jobId: jobId!,

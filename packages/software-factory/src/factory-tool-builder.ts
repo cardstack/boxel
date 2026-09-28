@@ -567,6 +567,7 @@ function buildRunParseTool(config: ToolBuilderConfig): FactoryTool {
           durationMs: 0,
           parseableFiles: [],
           errors: [],
+          warnings: [],
           errorMessage: syncError,
         };
       }

@@ -29,7 +29,7 @@ function makeConfig(
     workspaceDir: createTestWorkspace().dir,
     getNextSequenceNumber: async () => 1,
     // Default glint check mock — returns no errors (clean files)
-    runGlintCheckFn: async () => [],
+    runGlintCheckFn: async () => ({ errors: [], warnings: [] }),
     ...overrides,
   };
 }
@@ -75,13 +75,17 @@ function makeSearchSpecsError(
 
 function makeGlintCheck(
   errors: ParseErrorData[],
-): (files: { path: string; content: string }[]) => Promise<ParseErrorData[]> {
-  return async () => errors;
+): (
+  files: { path: string; content: string }[],
+) => Promise<{ errors: ParseErrorData[]; warnings: string[] }> {
+  return async () => ({ errors, warnings: [] });
 }
 
 function makeGlintCheckThrows(
   message: string,
-): (files: { path: string; content: string }[]) => Promise<ParseErrorData[]> {
+): (
+  files: { path: string; content: string }[],
+) => Promise<{ errors: ParseErrorData[]; warnings: string[] }> {
   return async () => {
     throw new Error(message);
   };
@@ -144,7 +148,7 @@ module('ParseValidationStep', function () {
         searchSpecsFn: makeSearchSpecs([]),
         runGlintCheckFn: async (files) => {
           discoveredFiles = files.map((f) => f.path);
-          return [];
+          return { errors: [], warnings: [] };
         },
       }),
     );

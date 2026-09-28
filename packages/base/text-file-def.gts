@@ -18,7 +18,6 @@ import {
 import type { FilePreviewSignature } from './file-formats/file-preview-stage';
 import { fencedCodeBlock } from './markdown-helpers';
 
-const TEXT_EXTENSIONS = new Set(['.txt', '.text', '.log']);
 const EXCERPT_MAX_LENGTH = 500;
 
 function getExtension(url: string): string {
@@ -167,6 +166,11 @@ export class TextFileDef extends FileDef {
   static displayName = 'Text File';
   static icon = TextFileIcon;
   static acceptTypes = '.txt,.text,text/plain';
+  // The extensions `extractAttributes` reads as this class's text. A subclass
+  // bound to its own extension in the platform's extension table names it
+  // here, since a file whose extension is not listed is refused as a content
+  // mismatch rather than read.
+  static textExtensions: readonly string[] = ['.txt', '.text'];
 
   // A `.txt` served without (or with an uninformative) content type would route
   // to a generic profile by extension alone, so pin the document axes the four
@@ -221,7 +225,7 @@ export class TextFileDef extends FileDef {
     }>
   > {
     let extension = getExtension(url);
-    if (!TEXT_EXTENSIONS.has(extension)) {
+    if (!this.textExtensions.includes(extension)) {
       throw new FileContentMismatchError(
         `Expected text file extension, got "${extension || 'none'}"`,
       );

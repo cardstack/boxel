@@ -404,65 +404,78 @@ async function ensureHostReady(): Promise<{
         logs = `${logs}${String(chunk)}`.slice(-20_000);
       });
 
-      // Phase 1: wait for vite preview to accept connections. This only
-      // proves the server is listening and can return the HTML shell — it
-      // never requests modules, so it does not prove the app can boot.
-      await waitUntil(
-        async () => {
+      let stopHost = () => {
+        if (child.exitCode === null) {
           try {
-            let readyResponse = await fetch(hostURL);
-            if (readyResponse.ok) {
-              return true;
-            }
+            process.kill(-child.pid!, 'SIGTERM');
           } catch {
-            // host not ready yet
+            // best effort cleanup
           }
-          if (child.exitCode !== null) {
-            if (hostStartupLooksLikePortContention(logs)) {
-              return false;
-            }
-            throw new Error(
-              `host app exited early with code ${child.exitCode}\n${logs}`,
-            );
-          }
-          return false;
-        },
-        {
-          timeout: 180_000,
-          interval: 500,
-          timeoutMessage: `Timed out waiting for host app at ${hostURL}\n${logs}`,
-        },
-      );
+        }
+      };
 
-      // Phase 2: prove vite can actually render the `/_standby` page's DOM,
-      // not just serve the HTML shell. A shell fetch never requests modules,
-      // so it does not kick vite's dep optimizer; only a browser-shaped
-      // navigation forces the (~1000-package) app graph to build, which can
-      // exceed 90s cold. The in-harness realm-server and prerenderer both
-      // drive `/_standby` through Puppeteer and block on the `#standby-ready`
-      // marker (packages/realm-server/prerender/page-pool.ts); gating their
-      // bring-up on the same marker here keeps them from spinning up while
-      // vite is still cold — the window where the prerender's standby load
-      // exhausts its retry budget and renders fail with ECONNREFUSED.
-      await assertStandbyRendersDom(
-        hostURL,
-        () => logs,
-        () =>
-          child.exitCode !== null && !hostStartupLooksLikePortContention(logs)
-            ? child.exitCode
-            : null,
-      );
+      // A failed bring-up must not leave vite preview running: its open
+      // pipes keep the caller's process alive, so a supervisor waiting for
+      // that process to exit would only learn of the failure at its own
+      // timeout.
+      try {
+        // Phase 1: wait for vite preview to accept connections. This only
+        // proves the server is listening and can return the HTML shell — it
+        // never requests modules, so it does not prove the app can boot.
+        await waitUntil(
+          async () => {
+            try {
+              let readyResponse = await fetch(hostURL);
+              if (readyResponse.ok) {
+                return true;
+              }
+            } catch {
+              // host not ready yet
+            }
+            if (child.exitCode !== null) {
+              if (hostStartupLooksLikePortContention(logs)) {
+                return false;
+              }
+              throw new Error(
+                `host app exited early with code ${child.exitCode}\n${logs}`,
+              );
+            }
+            return false;
+          },
+          {
+            timeout: 180_000,
+            interval: 500,
+            timeoutMessage: `Timed out waiting for host app at ${hostURL}\n${logs}`,
+          },
+        );
+
+        // Phase 2: prove vite can actually render the `/_standby` page's DOM,
+        // not just serve the HTML shell. A shell fetch never requests modules,
+        // so it does not kick vite's dep optimizer; only a browser-shaped
+        // navigation forces the (~1000-package) app graph to build, which can
+        // exceed 90s cold. The in-harness realm-server and prerenderer both
+        // drive `/_standby` through Puppeteer and block on the `#standby-ready`
+        // marker (packages/realm-server/prerender/page-pool.ts); gating their
+        // bring-up on the same marker here keeps them from spinning up while
+        // vite is still cold — the window where the prerender's standby load
+        // exhausts its retry budget and renders fail with ECONNREFUSED.
+        await assertStandbyRendersDom(
+          hostURL,
+          () => logs,
+          () =>
+            child.exitCode !== null && !hostStartupLooksLikePortContention(logs)
+              ? child.exitCode
+              : null,
+        );
+      } catch (error) {
+        stopHost();
+        throw error;
+      }
 
       return {
         hostURL,
         async stop() {
-          if (child.exitCode === null) {
-            try {
-              process.kill(-child.pid!, 'SIGTERM');
-            } catch {
-              // best effort cleanup
-            }
-          }
+          stopHost();
         },
       };
     },

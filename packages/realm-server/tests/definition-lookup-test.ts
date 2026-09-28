@@ -3648,6 +3648,8 @@ module(basename(import.meta.filename), function () {
         reservationId: 1,
         priority: 10,
         queueWaitMs: null,
+        concurrencyGroup: null,
+        laneFamily: null,
       };
 
       let warmed = await preWarmModulesTable({

@@ -1,7 +1,11 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
-import type { DBAdapter, PgPrimitive } from '@cardstack/runtime-common';
+import {
+  query,
+  type DBAdapter,
+  type PgPrimitive,
+} from '@cardstack/runtime-common';
 import { IndexingEventSink } from '../indexing-event-sink.ts';
 
 interface RecordedExecute {
@@ -39,6 +43,11 @@ function makeRecordingAdapter(): {
       },
       async withUserCostLock(_userId, fn) {
         return await fn();
+      },
+      async withTransaction(fn) {
+        return await fn((expression, coerceTypes) =>
+          query(this, expression, coerceTypes),
+        );
       },
     },
   };
@@ -481,6 +490,11 @@ module(basename(import.meta.filename), function () {
         },
         async withUserCostLock(_userId, fn) {
           return await fn();
+        },
+        async withTransaction(fn) {
+          return await fn((expression, coerceTypes) =>
+            query(this, expression, coerceTypes),
+          );
         },
       };
       let sink = new IndexingEventSink({ flushIntervalMs: 10 });

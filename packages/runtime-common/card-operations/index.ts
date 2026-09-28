@@ -1,22 +1,48 @@
 export { lowerOperationDeclarations } from './lowering.ts';
+export {
+  noteRealmIndexMoved,
+  RealmPolicyCache,
+  realmPolicyRef,
+} from './policy.ts';
+export type {
+  CompiledOperationGrant,
+  CompiledPolicyPredicate,
+  CompiledPolicyRule,
+  CompiledRealmPolicy,
+  PolicyCompileEnvironment,
+  RealmPolicyCacheEnvironment,
+} from './policy.ts';
 export type { LoweringContext } from './lowering.ts';
+export { notPermitted, policyGateStats } from './gate.ts';
+export type {
+  GateDecision,
+  MatchedGrant,
+  OperationPolicyAccess,
+  PolicyGateStats,
+} from './gate.ts';
 export {
   assertParamsSupplied,
   canonicalizeTarget,
   localPathFor,
   instanceTargetURL,
   newOperationScope,
+  scopeCallerFor,
   pathsFor,
   readShape,
+  resolveGatedOperation,
   resolveOperation,
   runOperation,
 } from './dispatch.ts';
 export type {
   CanonicalizeOptions,
+  CoarseDeclined,
+  GatedOperation,
   OperationCore,
   OperationDefinitionLookup,
   OperationIndexQueryEngine,
   OperationScope,
+  ScopeCaller,
+  ScopeInvocation,
   OperationStoredFile,
   OperationStoredFileMeta,
   ReadShape,
@@ -100,6 +126,7 @@ export {
   readResult,
   resultsTree,
   stagedTree,
+  stageWriteEntry,
   targetFor,
   writeResult,
 } from './envelope.ts';
