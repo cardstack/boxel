@@ -340,11 +340,14 @@ const defaultDelay = (ms: number) =>
 // whole readiness budget disappears and the failure surfaces as an
 // unrelated-looking timeout naming nothing.
 //
-// Generous against any real chunk fetch — a load that legitimately takes this
-// long has already lost the render it was for — and inside the 90s
-// `cardRenderTimeout`, so the error reaches a log rather than being overtaken
-// by the render giving up first.
-export const SHIM_RESOLVE_DEADLINE_MS = 30_000;
+// Generous against any real chunk fetch and the retry schedule above — a load
+// that legitimately takes this long has already lost the render it was for.
+// It has to fire before the tightest budget an import can sit under, so the
+// error names the specifier rather than being overtaken by that budget's own
+// timeout. The tightest is the prerender's `SCREENSHOT_PENDING_WAIT_MS`
+// (15s), which a capture-only component's `await import(...)` waits under
+// while it holds `data-screenshot-pending`; `cardRenderTimeout` is longer.
+export const SHIM_RESOLVE_DEADLINE_MS = 10_000;
 
 const defaultScheduleTimeout = (callback: () => void, ms: number) => {
   let id = setTimeout(callback, ms);
