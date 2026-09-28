@@ -109,6 +109,23 @@ function makeRenderablePng(): Uint8Array {
   return bytes;
 }
 
+// The renderable PNG with an APNG `acTL` chunk after IHDR, behind a text chunk
+// large enough that finding `acTL` needs more than IHDR's 33 bytes.
+function makeAnimatedPng(): Uint8Array {
+  let bytes = makeRenderablePng();
+  let afterIhdr = 8 + 25; // signature + IHDR chunk
+  let text = buildChunk('tEXt', new Uint8Array(20_000).fill(0x61));
+  let actlData = new Uint8Array(8);
+  new DataView(actlData.buffer).setUint32(0, 1); // num_frames
+  let actl = buildChunk('acTL', actlData);
+  return new Uint8Array([
+    ...bytes.slice(0, afterIhdr),
+    ...text,
+    ...actl,
+    ...bytes.slice(afterIhdr),
+  ]);
+}
+
 function buildChunk(type: string, data: Uint8Array): Uint8Array {
   // chunk = length (4 bytes) + type (4 bytes) + data + CRC (4 bytes)
   let chunk = new Uint8Array(4 + 4 + data.length + 4);
@@ -223,6 +240,7 @@ module('Acceptance | png image def', function (hooks) {
   hooks.beforeEach(async function () {
     let pngBytes = makeMinimalPng(2, 3);
     let renderablePngBytes = makeRenderablePng();
+    let animatedPngBytes = makeAnimatedPng();
     ({ realm } = await withCachedRealmSetup(async () =>
       setupAcceptanceTestRealm({
         mockMatrixUtils,
@@ -230,6 +248,7 @@ module('Acceptance | png image def', function (hooks) {
           ...SYSTEM_CARD_FIXTURE_CONTENTS,
           'sample.png': pngBytes,
           'renderable.png': renderablePngBytes,
+          'animated.png': animatedPngBytes,
           'not-a-png.png': 'This is plain text, not a PNG file.',
         },
       }),
@@ -285,6 +304,35 @@ module('Acceptance | png image def', function (hooks) {
       result.searchDoc?.exif,
       undefined,
       'PNG carries no EXIF in IHDR, so no exif attribute is produced',
+    );
+  });
+
+  test('records whether the PNG animates during extract', async function (assert) {
+    await visit(
+      fileExtractPath(makeFileURL('sample.png'), {
+        fileExtract: true,
+        fileDefCodeRef: pngDefCodeRef(),
+      }),
+    );
+    let still = await captureFileExtractResult('ready');
+    assert.strictEqual(
+      still.searchDoc?.animation,
+      'still',
+      'image data with no acTL before it is a still',
+    );
+
+    await visit(
+      fileExtractPath(
+        makeFileURL('animated.png'),
+        { fileExtract: true, fileDefCodeRef: pngDefCodeRef() },
+        1,
+      ),
+    );
+    let animated = await captureFileExtractResult('ready');
+    assert.strictEqual(
+      animated.searchDoc?.animation,
+      'animated',
+      'an acTL chunk past a large ancillary chunk is still found',
     );
   });
 
