@@ -58,6 +58,7 @@ module(basename(import.meta.filename), function () {
     assert.deepEqual(
       registered.sort(),
       [
+        'capture-card',
         'daily-credit-grant',
         'from-scratch-index',
         'full-reindex',
@@ -68,7 +69,6 @@ module(basename(import.meta.filename), function () {
         'prerender_html',
         'run-command',
         'scoped-css-gc',
-        'capture-card',
       ],
       'all job types are registered',
     );
