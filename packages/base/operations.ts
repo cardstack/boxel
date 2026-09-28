@@ -532,7 +532,7 @@ export interface DeleteOperationDeclaration extends OperationCommon {
 // realm's own authority, and lives in the card's own attributes.
 export type LinkStrategy = 'full' | 'ids' | 'none';
 
-export const LINK_STRATEGIES: readonly LinkStrategy[] = ['full', 'ids', 'none'];
+const LINK_STRATEGIES: readonly LinkStrategy[] = ['full', 'ids', 'none'];
 
 export interface ReadOperationDeclaration extends OperationCommon {
   readonly base: 'read';
