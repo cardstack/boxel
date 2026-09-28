@@ -209,17 +209,24 @@ module('Integration | bundled base identity', function (hooks) {
   // The same shape in the module table rather than in a fixture: `DocxDef`
   // holds `OfficeMetadataField`, which `file-formats/metadata-fields` declares,
   // and both are bundled. This is the case the table's file-format family
-  // rests on, in a loader that has been asked for nothing else.
+  // rests on.
+  //
+  // What the loader knows of the field class is deliberately not asserted here.
+  // `Loader.loaders` is static and binds a class to the first loader that
+  // serves a module exposing it, for the life of the class — so whether this
+  // one is named depends on what ran before, across the whole suite. The
+  // shimmed pair above is where that is pinned, on classes made for the test.
+  // What holds either way is that the field carries an identity and the value
+  // deserializes, which is what the module table depends on.
   test('a bundled def holding a bundled field class deserializes it', async function (assert) {
     let loader = getService('loader-service').loader;
     let api = await cardAPI();
     let { DocxDef } = await loader.import<any>('@cardstack/base/docx-file-def');
     let officeField = getField(DocxDef, 'officeMetadata');
 
-    assert.strictEqual(
-      Loader.identify(officeField!.card),
-      undefined,
-      'the loader is never asked for the module declaring the field class',
+    assert.ok(
+      identifyCard(officeField!.card),
+      'the field class is named, by its module or by the field holding it',
     );
 
     let resource = {
