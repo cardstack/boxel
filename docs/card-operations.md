@@ -415,6 +415,53 @@ A write answers with an identity and a version, not a document. `version` is
 the fingerprint of the card's stored source; to see the written document, read
 it after the call, or let the store refresh from the realm's invalidation.
 
+## Asking before invoking
+
+A template can ask whether the current session may invoke an operation, so it
+can hide a control the caller cannot use instead of rendering every control and
+letting the refusal arrive after the click:
+
+```gts
+class Isolated extends Component<typeof Classroom> {
+  get canAddActivity() {
+    return this.args.context?.canInvoke?.('appendActivity', this.args.model);
+  }
+  <template>
+    {{#if this.canAddActivity}}
+      <button {{on 'click' this.addActivity}}>Add activity</button>
+    {{/if}}
+  </template>
+}
+```
+
+`canInvoke(operation, card)` answers synchronously: `true` or `false` once the
+realm has answered, `undefined` while it is being asked. The template re-renders
+when the answer lands. Every call made during one render pass goes to the realm
+as one request, so thirty cards each asking about three operations cost one
+round trip, not ninety. `@context.canInvoke` is absent where there is no session
+to ask for (a prerender, a freestyle), so guard on it.
+
+**Nothing may treat a capability answer as authorization.** The realm decides
+again when the operation is invoked, against the state as it is then, so a
+`true` means the operation was allowed a moment ago, not that the call will
+succeed. Hide a control on `false`; never skip or trust the call because of a
+`true`.
+
+Under it is `POST {realm}/_capabilities`, which takes up to 100
+`{ target, operation }` pairs and answers each one. A target is a card's URL, or
+a type's `{ module, name }` for a create. Each answer comes from the realm's own
+permission decision and goes no further, so asking changes nothing in the realm:
+
+- `allowed: true, conditional: true` means a grant matched but a predicate still
+  has to run against something the check cannot see: the document a create
+  would write, or a card's state under the write lock. Render the control; the
+  call can still be refused.
+- A caller who cannot read the realm gets only `allowed`, with no reason and no
+  `conditional`. A card they may not use and a card that does not exist get the
+  same answer.
+- A caller who can read the realm also gets a `reason` on a refusal: the error
+  code the invocation itself would return.
+
 ## Saved searches
 
 A `query` operation is a saved search declared next to the card's other
