@@ -58,7 +58,6 @@ module(basename(import.meta.filename), function () {
     assert.deepEqual(
       registered.sort(),
       [
-        'copy-index',
         'daily-credit-grant',
         'from-scratch-index',
         'full-reindex',
