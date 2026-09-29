@@ -880,20 +880,27 @@ const ADMITTED_CALL_DENIAL =
 // A name here is refused wherever it appears in a predicate, and not only
 // where it reads `actor()`: a partial match on any value that decides access
 // is one an author has to reason about for every value that value could hold.
-// Names are as BXL resolves them. jq's `index` finds a substring, while Excel's
-// `INDEX` reads a position and is not here.
+// Names are as BXL resolves them, across every library the gate can resolve,
+// the lazily loaded validators included. jq's `index` finds a substring, while
+// Excel's `INDEX` reads a position and is not here.
+//
+// `startswith` and `endswith`, and `ltrimstr`, `rtrimstr` and `trimstr`, are
+// refused unless their argument is a fixed string. Anchored at a fixed string
+// they are how a namespace is written: a path under `"…/public/"`, an id on
+// `":example.org"`. Anchored at anything else, the free end is on a value the
+// author did not write: `.teacherIds | any(startswith(actor()))` holds for
+// `@bob:server` against `@bob:server.org` just as `contains` does.
 //
 // Deliberately admitted, though each can come close:
 //
-// - `startswith` and `endswith`, and `ltrimstr`, `rtrimstr` and `trimstr`.
-//   They are anchored at one end, which is how a namespace is written: a path
-//   under `"…/public/"`, an id on `":example.org"`.
 // - Splitting and rewriting a string (`split`, `splits`, `sub`, `gsub`,
 //   `SUBSTITUTE`, `LEFT` and the rest). They answer no match themselves, and
 //   what they produce is compared exactly. A substring test can be built from
 //   one, but not by an author reaching for a membership test.
 // - Case folding and trimming (`ascii_downcase`, `LOWER`, `TRIM`), which
 //   loosen an equality without making it partial.
+// - The validators that test the shape of one value (`isEmail`, `isUUID`,
+//   `isWhitelisted` and the rest) rather than match it against another.
 const PARTIAL_MATCH_BUILTINS: ReadonlyMap<string, string> = new Map([
   ['contains', 'matches substrings'],
   ['inside', 'is `contains` reversed, and matches substrings'],
@@ -902,11 +909,14 @@ const PARTIAL_MATCH_BUILTINS: ReadonlyMap<string, string> = new Map([
   ['indices', 'finds a substring'],
   ['FIND', 'finds a substring'],
   ['SEARCH', 'finds a substring or a wildcard pattern'],
+  ['isIn', 'finds a substring when its list is a string'],
   ['test', 'matches a regex anywhere in a string'],
   ['match', 'matches a regex anywhere in a string'],
   ['capture', 'matches a regex anywhere in a string'],
   ['scan', 'matches a regex anywhere in a string'],
+  ['matches', 'matches a regex anywhere in a string'],
   ['like', 'matches a wildcard pattern'],
+  ['bsearch', 'answers a position for a value that is not there'],
   ['MATCH', 'can settle for the nearest value or a wildcard pattern'],
   ['LOOKUP', 'settles for the nearest value'],
   ['LOOKUP_BY', 'settles for the nearest value'],
@@ -916,21 +926,51 @@ const PARTIAL_MATCH_BUILTINS: ReadonlyMap<string, string> = new Map([
   ['XLOOKUP', 'can settle for the nearest value or a wildcard pattern'],
 ]);
 
-// The partial-match builtins a predicate calls, each named once, in the order
-// they first appear.
-function partialMatchCalls(bxl: BxlPolicyParser, body: unknown): string[] {
-  let calls = new Set<string>();
+// Admitted only when anchored at a fixed string; see above.
+const ANCHORED_BUILTINS = new Set([
+  'startswith',
+  'endswith',
+  'ltrimstr',
+  'rtrimstr',
+  'trimstr',
+]);
+
+function isFixedString(node: unknown): boolean {
+  let { type, valueType, interpolated } = node as {
+    type?: unknown;
+    valueType?: unknown;
+    interpolated?: unknown;
+  };
+  return type === 'literal' && valueType === 'string' && interpolated !== true;
+}
+
+// The partial-match builtins a predicate calls, each named once in the order
+// it first appears, with what makes it partial.
+function partialMatchCalls(
+  bxl: BxlPolicyParser,
+  body: unknown,
+): Map<string, string> {
+  let calls = new Map<string, string>();
   bxl.visitBxlAst(body, (node) => {
-    let { type, name } = node as { type?: unknown; name?: unknown };
-    if (
-      type === 'call' &&
-      typeof name === 'string' &&
-      PARTIAL_MATCH_BUILTINS.has(name)
+    let { type, name, args } = node as {
+      type?: unknown;
+      name?: unknown;
+      args?: unknown;
+    };
+    if (type !== 'call' || typeof name !== 'string' || calls.has(name)) {
+      return;
+    }
+    let reason = PARTIAL_MATCH_BUILTINS.get(name);
+    if (reason) {
+      calls.set(name, reason);
+    } else if (
+      ANCHORED_BUILTINS.has(name) &&
+      !(Array.isArray(args) && args.length === 1 && isFixedString(args[0]))
     ) {
-      calls.add(name);
+      calls.set(name, 'is anchored at a value that is not a fixed string');
     }
   });
-  return [...calls];
+  return calls;
 }
 
 type PredicateProblem = {
@@ -979,13 +1019,13 @@ async function compilePredicate(
     };
   }
   let partial = partialMatchCalls(bxl, program.body);
-  if (partial.length > 0) {
-    let calls = partial
-      .map((name) => `\`${name}\` ${PARTIAL_MATCH_BUILTINS.get(name)}`)
+  if (partial.size > 0) {
+    let calls = [...partial]
+      .map(([name, reason]) => `\`${name}\` ${reason}`)
       .join('; ');
     return {
       code: 'partial-match',
-      problem: `\`where\` matches a value only in part, so it can hold for a caller the grant does not name: ${calls}. Test membership with \`.list | any(. == actor())\`, and compare strings with \`==\`, \`startswith\` or \`endswith\``,
+      problem: `\`where\` matches a value only in part, so it can hold for a caller the grant does not name: ${calls}. Test membership with \`.list | any(. == actor())\`, and compare strings with \`==\`, or with \`startswith\` or \`endswith\` and a fixed prefix or suffix`,
     };
   }
   return { canonical: program.canonicalSource, body: program.body };

@@ -450,7 +450,7 @@ module(basename(import.meta.filename), function (hooks) {
 
   // Each refused predicate calls one builtin that can hold for a value it
   // matches only in part. Each admitted one beside it comes close, and
-  // compares exactly or anchors its match at one end.
+  // compares exactly or anchors its match at a fixed string.
   test('a predicate that matches a value only in part is refused, whichever builtin it uses, and one that compares exactly compiles', async function (assert) {
     let refused: [string, string][] = [
       ['.teacherIds | contains([actor()])', 'contains'],
@@ -473,9 +473,18 @@ module(basename(import.meta.filename), function (hooks) {
       ['XLOOKUP(actor(), .teacherIds, .teacherIds) == actor()', 'XLOOKUP'],
       ['LOOKUP_BY(.teacherIds, "id", actor(), "id") == actor()', 'LOOKUP_BY'],
       ['VLOOKUP_BY(.teacherIds, "id", actor(), "id") == actor()', 'VLOOKUP_BY'],
+      // The validators, which load lazily.
+      ['matches(.status, actor())', 'matches'],
+      ['isIn(actor(), .status)', 'isIn'],
+      ['.teacherIds | bsearch(actor()) >= 0', 'bsearch'],
+      // Anchored at a value the author did not write.
+      ['.teacherIds | any(startswith(actor()))', 'startswith'],
+      ['actor() | endswith(.status)', 'endswith'],
+      ['(.status | ltrimstr(actor())) != .status', 'ltrimstr'],
       // Refused wherever it appears, and not only where it reads the caller.
       ['.status == "approved" and (.teacherIds | any(test("^@")))', 'test'],
     ];
+    // Anchored at a fixed string, the way a namespace is written.
     let admitted = [
       '.teacherIds | any(. == actor())',
       '.status | startswith("appro")',
