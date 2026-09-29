@@ -125,6 +125,7 @@ export class ButtonGroup extends Component<ButtonGroupSignature> {
         }
         .pretui-btngroup[data-tone='neutral'] :deep(.pretui-btn[data-tone]) {
           --pretui-tone: var(--foreground);
+          --pretui-tone-ink: var(--foreground);
           --pretui-tone-on: var(--background);
           --pretui-btn-hairline: var(--border);
           --pretui-btn-ink: var(--foreground);
@@ -133,26 +134,32 @@ export class ButtonGroup extends Component<ButtonGroupSignature> {
         }
         .pretui-btngroup[data-tone='primary'] :deep(.pretui-btn[data-tone]) {
           --pretui-tone: var(--primary);
+          --pretui-tone-ink: var(--primary-ink);
           --pretui-tone-on: var(--primary-foreground);
         }
         .pretui-btngroup[data-tone='info'] :deep(.pretui-btn[data-tone]) {
           --pretui-tone: var(--info);
+          --pretui-tone-ink: var(--info-ink);
           --pretui-tone-on: var(--info-foreground);
         }
         .pretui-btngroup[data-tone='success'] :deep(.pretui-btn[data-tone]) {
           --pretui-tone: var(--success);
+          --pretui-tone-ink: var(--success-ink);
           --pretui-tone-on: var(--success-foreground);
         }
         .pretui-btngroup[data-tone='warning'] :deep(.pretui-btn[data-tone]) {
           --pretui-tone: var(--warning);
+          --pretui-tone-ink: var(--warning-ink);
           --pretui-tone-on: var(--warning-foreground);
         }
         .pretui-btngroup[data-tone='danger'] :deep(.pretui-btn[data-tone]) {
           --pretui-tone: var(--destructive);
+          --pretui-tone-ink: var(--destructive-ink);
           --pretui-tone-on: var(--destructive-foreground);
         }
         .pretui-btngroup[data-tone='attention'] :deep(.pretui-btn[data-tone]) {
           --pretui-tone: var(--attention);
+          --pretui-tone-ink: var(--attention-ink);
           --pretui-tone-on: var(--attention-foreground);
         }
         /* ── appearance inheritance: Button's recipes restated at group
@@ -194,6 +201,11 @@ export class ButtonGroup extends Component<ButtonGroupSignature> {
           --pretui-btn-text: var(--pretui-btn-ink-quiet, color-mix(in oklch, var(--pretui-tone) 40%, var(--foreground)));
           --pretui-btn-surface-hover: color-mix(in oklch, var(--pretui-btn-tint) 18%, transparent);
           --pretui-btn-text-hover: var(--pretui-btn-ink, color-mix(in oklch, var(--pretui-tone) 30%, var(--foreground)));
+        }
+        .pretui-btngroup[data-appearance='link'] :deep(.pretui-btn[data-appearance]) {
+          --pretui-btn-text: var(--pretui-button-fg, var(--pretui-tone-ink));
+          padding-inline: 0;
+          text-underline-offset: 0.2em;
         }
         /* ── size inheritance: font-size only, Button's own em scale rides ── */
         .pretui-btngroup[data-size='xs'] :deep(.pretui-btn[data-size]) {

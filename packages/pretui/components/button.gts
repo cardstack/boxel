@@ -109,6 +109,8 @@ export interface ButtonSignature {
      *  doesn't say so itself (e.g. 'Save' → 'Save, saving') */
     busyLabel?: string;
     disabled?: boolean;
+    /** renders an <a> that looks like this button; @busy does not apply */
+    href?: string;
     /** corner treatment; 'rounded' (default) is the theme's --radius less 2px */
     shape?: ButtonShape;
     /** alias of @disabled */
@@ -119,7 +121,7 @@ export interface ButtonSignature {
     isPending?: boolean;
   };
   Blocks: { default: [] };
-  Element: HTMLButtonElement;
+  Element: HTMLButtonElement | HTMLAnchorElement;
 }
 
 export class Button extends Component<ButtonSignature> {
@@ -163,7 +165,7 @@ export class Button extends Component<ButtonSignature> {
   get ariaDisabled() {
     return this.busy && !this.disabled ? 'true' : undefined;
   }
-  // Capture phase on the button itself runs before the caller's own click
+  // Capture phase on the element itself runs before the caller's own click
   // listeners, and preventDefault stops a type='submit' from submitting.
   blockWhileBusy = (event: Event) => {
     if (this.ariaDisabled) {
@@ -171,36 +173,60 @@ export class Button extends Component<ButtonSignature> {
       event.stopImmediatePropagation();
     }
   };
+  // An <a> has no disabled state: a disabled link loses its href (so it no
+  // longer navigates) and swallows clicks the same way.
+  blockWhileDisabled = (event: Event) => {
+    if (this.disabled) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    }
+  };
   <template>
-    <button
-      type='button'
-      class='pretui-btn'
-      data-tone={{this.tone}}
-      data-appearance={{this.appearance}}
-      data-size={{this.size}}
-      data-state={{if this.busy 'busy'}}
-      data-shape={{this.shape}}
-      disabled={{this.disabled}}
-      aria-disabled={{this.ariaDisabled}}
-      aria-busy={{if this.busy 'true'}}
-      {{on 'click' this.blockWhileBusy capture=true}}
-      data-test-pretui-button
-      ...attributes
-    >
-      <span class='pretui-btn-busy' {{fitBusyContent this.busy}}>
-        {{#if this.busy}}<span
-            class='pretui-spinner'
-            aria-hidden='true'
-            data-test-pretui-button-spinner
-          ></span>{{/if}}
-        {{! always rendered, so the busy text lands in an existing node }}
-        <span
-          class='pretui-btn-busy-text'
-          data-test-pretui-button-busy-label
-        >{{if this.busy @busyLabel}}</span>
-      </span>
-      <span class='pretui-btn-label'>{{yield}}</span>
-    </button>
+    {{#if @href}}
+      <a
+        class='pretui-btn'
+        href={{unless this.disabled @href}}
+        role={{if this.disabled 'link'}}
+        aria-disabled={{if this.disabled 'true'}}
+        data-tone={{this.tone}}
+        data-appearance={{this.appearance}}
+        data-size={{this.size}}
+        data-shape={{this.shape}}
+        {{on 'click' this.blockWhileDisabled capture=true}}
+        data-test-pretui-button
+        ...attributes
+      ><span class='pretui-btn-label'>{{yield}}</span></a>
+    {{else}}
+      <button
+        type='button'
+        class='pretui-btn'
+        data-tone={{this.tone}}
+        data-appearance={{this.appearance}}
+        data-size={{this.size}}
+        data-state={{if this.busy 'busy'}}
+        data-shape={{this.shape}}
+        disabled={{this.disabled}}
+        aria-disabled={{this.ariaDisabled}}
+        aria-busy={{if this.busy 'true'}}
+        {{on 'click' this.blockWhileBusy capture=true}}
+        data-test-pretui-button
+        ...attributes
+      >
+        <span class='pretui-btn-busy' {{fitBusyContent this.busy}}>
+          {{#if this.busy}}<span
+              class='pretui-spinner'
+              aria-hidden='true'
+              data-test-pretui-button-spinner
+            ></span>{{/if}}
+          {{! always rendered, so the busy text lands in an existing node }}
+          <span
+            class='pretui-btn-busy-text'
+            data-test-pretui-button-busy-label
+          >{{if this.busy @busyLabel}}</span>
+        </span>
+        <span class='pretui-btn-label'>{{yield}}</span>
+      </button>
+    {{/if}}
     <style scoped>
       /* layered, so a caller's plain CSS wins without fighting specificity */
       @layer Component {
@@ -277,9 +303,13 @@ export class Button extends Component<ButtonSignature> {
           outline: 2px solid var(--ring);
           outline-offset: 2px;
         }
-        .pretui-btn:disabled {
+        .pretui-btn:disabled,
+        a.pretui-btn[aria-disabled='true'] {
           opacity: 0.45;
           cursor: default;
+        }
+        a.pretui-btn {
+          text-decoration: none;
         }
         .pretui-btn[data-shape='pill'] {
           border-radius: var(
@@ -307,6 +337,7 @@ export class Button extends Component<ButtonSignature> {
         }
         /* tone map — each tone only sets custom properties */
         .pretui-btn[data-tone='neutral'] {
+          --pretui-tone-ink: var(--foreground);
           --pretui-tone: var(--foreground);
           --pretui-tone-on: var(--background);
           --pretui-btn-hairline: var(--border);
@@ -324,26 +355,32 @@ export class Button extends Component<ButtonSignature> {
           );
         }
         .pretui-btn[data-tone='primary'] {
+          --pretui-tone-ink: var(--primary-ink);
           --pretui-tone: var(--primary);
           --pretui-tone-on: var(--primary-foreground);
         }
         .pretui-btn[data-tone='info'] {
+          --pretui-tone-ink: var(--info-ink);
           --pretui-tone: var(--info);
           --pretui-tone-on: var(--info-foreground);
         }
         .pretui-btn[data-tone='success'] {
+          --pretui-tone-ink: var(--success-ink);
           --pretui-tone: var(--success);
           --pretui-tone-on: var(--success-foreground);
         }
         .pretui-btn[data-tone='warning'] {
+          --pretui-tone-ink: var(--warning-ink);
           --pretui-tone: var(--warning);
           --pretui-tone-on: var(--warning-foreground);
         }
         .pretui-btn[data-tone='danger'] {
+          --pretui-tone-ink: var(--destructive-ink);
           --pretui-tone: var(--destructive);
           --pretui-tone-on: var(--destructive-foreground);
         }
         .pretui-btn[data-tone='attention'] {
+          --pretui-tone-ink: var(--attention-ink);
           --pretui-tone: var(--attention);
           --pretui-tone-on: var(--attention-foreground);
         }
@@ -435,6 +472,25 @@ export class Button extends Component<ButtonSignature> {
             --pretui-btn-ink,
             color-mix(in oklch, var(--pretui-tone) 30%, var(--foreground))
           );
+        }
+        /* a standalone text action: the tone's ink, no fill or edge, flush
+           with surrounding text (inline padding 0) but still a full-height
+           target; the underline marks hover and keyboard focus */
+        .pretui-btn[data-appearance='link'] {
+          --pretui-btn-text: var(--pretui-button-fg, var(--pretui-tone-ink));
+          padding-inline: 0;
+          text-underline-offset: 0.2em;
+        }
+        .pretui-btn[data-appearance='link']:focus-visible {
+          text-decoration-line: underline;
+        }
+        @media (hover: hover) {
+          .pretui-btn[data-appearance='link']:hover:not(
+              :disabled,
+              [aria-disabled='true']
+            ) {
+            text-decoration-line: underline;
+          }
         }
         .pretui-btn[data-state='busy'] {
           cursor: progress;

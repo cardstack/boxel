@@ -149,6 +149,39 @@ export class PretuiButtonPreview extends CardDef {
           </div>
         </section>
 
+        <section aria-labelledby='links-heading'>
+          <h2 id='links-heading'>Links</h2>
+          <p>With @href the Button renders a real link. These open in a new tab.</p>
+          <div class='row'>
+            <Button
+              @href='https://www.boxel.ai'
+              target='_blank'
+              rel='noopener noreferrer'
+            >Visit site</Button>
+            <Button
+              @href='https://www.boxel.ai'
+              @tone='neutral'
+              @appearance='outlined'
+              target='_blank'
+              rel='noopener noreferrer'
+            >Outlined link</Button>
+            <Button @href='https://www.boxel.ai' @disabled={{true}}>Disabled
+              link</Button>
+          </div>
+          <h3>Link appearance</h3>
+          <div class='row'>
+            {{#each this.tones as |tone|}}
+              <Button @appearance='link' @tone={{tone}}>{{tone}}</Button>
+            {{/each}}
+            <Button
+              @appearance='link'
+              @href='https://www.boxel.ai'
+              target='_blank'
+              rel='noopener noreferrer'
+            >Link with @href</Button>
+          </div>
+        </section>
+
         <section aria-labelledby='shape-heading'>
           <h2 id='shape-heading'>Shape</h2>
           <div class='row'>

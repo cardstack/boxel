@@ -154,6 +154,70 @@ module('Pretui | components/button', function (hooks) {
     );
   });
 
+  test('@href renders a link with the same treatment', async function (assert) {
+    await render(
+      <template>
+        <Button @href='/pricing' @tone='neutral' @appearance='outlined'>
+          Pricing
+        </Button>
+      </template>,
+    );
+    let el = document.querySelector(
+      '[data-test-pretui-button]',
+    ) as HTMLAnchorElement;
+    assert.strictEqual(el.tagName, 'A', 'navigation is a real link');
+    assert.strictEqual(el.getAttribute('href'), '/pricing');
+    assert.false(el.hasAttribute('type'), 'no button type on a link');
+    assert.strictEqual(el.dataset['tone'], 'neutral');
+    assert.strictEqual(el.dataset['appearance'], 'outlined');
+    assert.false(el.hasAttribute('aria-disabled'));
+  });
+
+  test('a disabled link drops its href, keeps the link role, and swallows clicks', async function (assert) {
+    let clicks = 0;
+    let onClick = () => clicks++;
+    await render(
+      <template>
+        <Button
+          @href='/pricing'
+          @disabled={{true}}
+          {{on 'click' onClick}}
+        >Pricing</Button>
+      </template>,
+    );
+    let el = document.querySelector(
+      '[data-test-pretui-button]',
+    ) as HTMLAnchorElement;
+    assert.false(el.hasAttribute('href'), 'no longer navigates');
+    assert.strictEqual(el.getAttribute('role'), 'link');
+    assert.strictEqual(el.getAttribute('aria-disabled'), 'true');
+    await click(el);
+    assert.strictEqual(clicks, 0, 'the caller handler does not run');
+  });
+
+  test("@appearance='link' is a text-link look on either element", async function (assert) {
+    await render(
+      <template>
+        <Button @appearance='link' data-test-link-button>Undo</Button>
+        <Button
+          @appearance='link'
+          @href='/help'
+          data-test-link-anchor
+        >Help</Button>
+      </template>,
+    );
+    assert.strictEqual(btn('[data-test-link-button]').tagName, 'BUTTON');
+    assert.strictEqual(
+      btn('[data-test-link-button]').dataset['appearance'],
+      'link',
+    );
+    let anchor = document.querySelector(
+      '[data-test-link-anchor]',
+    ) as HTMLElement;
+    assert.strictEqual(anchor.tagName, 'A');
+    assert.strictEqual(anchor.dataset['appearance'], 'link');
+  });
+
   test('splattributes win over the template defaults', async function (assert) {
     await render(
       <template>

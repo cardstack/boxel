@@ -1,12 +1,13 @@
 ## What it is
 
-The kit's action primitive: a native `<button>` with a two-axis treatment system and a built-in busy state. Everything that performs an action is this, or wraps it — **IconButton**, **CopyButton**, **ButtonGroup**, **FormFooter** and **ApprovalFooter** all render Buttons. If the thing navigates rather than acts, use an anchor; a Button that only changes the URL lies to assistive tech. If you need a set of mutually exclusive choices styled as buttons, that is **SegmentedControl** (a selection, not an action).
+The kit's action primitive: a native `<button>` with a two-axis treatment system and a built-in busy state. Everything that performs an action is this, or wraps it — **IconButton**, **CopyButton**, **ButtonGroup**, **FormFooter** and **ApprovalFooter** all render Buttons. If the thing navigates rather than acts, pass `@href`: the Button renders a real `<a>` with the same treatment, because a `<button>` that only changes the URL lies to assistive tech. If you need a set of mutually exclusive choices styled as buttons, that is **SegmentedControl** (a selection, not an action).
 
 ## The contract
 
 ```
 @tone?      'neutral' | 'primary' | 'info' | 'success' | 'warning' | 'danger' | 'attention'
-@appearance? 'accent' | 'filled' | 'outlined' | 'filled-outlined' | 'plain'
+@appearance? 'accent' | 'filled' | 'outlined' | 'filled-outlined' | 'plain' | 'link'
+@href?      renders an <a> instead of a <button>; @busy does not apply
 @size?      'xs' | 's' | 'm' | 'l' | 'xl'   (default 'm')
 @busy?, @disabled?
 @shape?     'rounded' | 'pill' | 'square'   (default 'rounded': the theme's --radius less 2px)
@@ -31,11 +32,15 @@ Where Pretui improves:
 - **Uniform `em` sizing** (above) — Web Awesome and shadcn both restate padding/height per size.
 - Per-instance escapes (`--pretui-button-h`, `--pretui-button-min-w`, `--pretui-button-px`, `--pretui-button-radius`, `--pretui-button-bg`, `--pretui-button-fg`) are custom properties, so a call site can deviate without `:deep()`.
 
-Deliberately absent versus the field: no `href`/link rendering (use an anchor), no `caret`, no icon slots — icons are just children.
+Deliberately absent versus the field: no `caret`, no icon slots — icons are just children, and no `as`/`asChild` polymorphism (`@href` is the one alternate element). Links inside running text belong to a separate text-link component, not to `@appearance='link'`, which is for standalone actions.
 
 ## Accessibility
 
-No APG pattern is required: this is a native `<button>`, which is the whole point. `type='button'` is set _before_ `...attributes`, so a call site can still pass `type="submit"` and win.
+No APG pattern is required: this is a native `<button>`, or with `@href` a native `<a>`, which is the whole point. `type='button'` is set _before_ `...attributes`, so a call site can still pass `type="submit"` and win.
+
+**Links.** `@href` renders `<a href>`, so middle-click, open-in-new-tab and the link role all work. `target`, `rel` and `download` pass through `...attributes`; pair `target='_blank'` with `rel='noopener noreferrer'`. A disabled link drops its `href`, takes `role="link"` with `aria-disabled="true"` so the state is still announced, and swallows clicks. Inside a card, a plain `href` is a full browser navigation: the host does not intercept it. To open a card in the stack, call `@context.actions.viewCard` (or the card's `viewCard`) from a click handler instead, or `preventDefault` in one if the element must stay a link.
+
+**`@appearance='link'`** is underlined on hover and on keyboard focus only, which suits standalone actions. It is not a substitute for an underlined link inside a paragraph (WCAG 1.4.1 needs a cue besides color there).
 
 Gaps worth knowing:
 

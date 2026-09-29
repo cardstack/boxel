@@ -31,6 +31,7 @@ export class ButtonUsage extends GlimmerComponent {
   @tracked busy = false;
   @tracked busyLabel = '';
   @tracked disabled = false;
+  @tracked href = '';
   @tracked shape = 'rounded';
   setTone = (v: string) => (this.tone = v);
   setAppearance = (v: string) => (this.appearance = v);
@@ -38,12 +39,16 @@ export class ButtonUsage extends GlimmerComponent {
   setBusy = (v: boolean) => (this.busy = v);
   setBusyLabel = (v: string) => (this.busyLabel = v);
   setDisabled = (v: boolean) => (this.disabled = v);
+  setHref = (v: string) => (this.href = v);
   setShape = (v: string) => (this.shape = v);
   get toneVal() {
     return this.tone as PretuiTone;
   }
   get appearanceVal() {
     return this.appearance as PretuiAppearance;
+  }
+  get hrefVal() {
+    return this.href || undefined;
   }
   get shapeVal() {
     return this.shape as ButtonShape;
@@ -57,13 +62,14 @@ export class ButtonUsage extends GlimmerComponent {
     if (this.busy) bits.push('@busy={{true}}');
     if (this.busyLabel) bits.push(`@busyLabel='${this.busyLabel}'`);
     if (this.disabled) bits.push('@disabled={{true}}');
+    if (this.href) bits.push(`@href='${this.href}'`);
     if (this.shape !== 'rounded') bits.push(`@shape='${this.shape}'`);
     return `<Button ${bits.join(' ')}>Keep selling</Button>`;
   }
   <template>
     <FreestyleUsage
       @name='Button'
-      @description='Interactive button for actions and form submission. The boxel-ui @kind axis is re-cut as the two-axis treatment grid: @tone picks the hue, @appearance picks the recipe. Renders as a native button; the boxel-ui anchor/LinkTo polymorphism is host-router coupling and stays behind.'
+      @description='Interactive button for actions and form submission. The boxel-ui @kind axis is re-cut as the two-axis treatment grid: @tone picks the hue, @appearance picks the recipe. Renders a native button, or a native link with @href; the boxel-ui LinkTo mode is host-router coupling and stays behind.'
       @source={{this.usage}}
     >
       <:example>
@@ -74,6 +80,7 @@ export class ButtonUsage extends GlimmerComponent {
           @busy={{this.busy}}
           @busyLabel={{this.busyLabel}}
           @disabled={{this.disabled}}
+          @href={{this.hrefVal}}
           @shape={{this.shapeVal}}
         >Keep selling</Button>
       </:example>
@@ -121,6 +128,12 @@ export class ButtonUsage extends GlimmerComponent {
           @defaultValue={{false}}
           @description='Disables the button.'
           @onInput={{this.setDisabled}}
+        />
+        <Args.String
+          @name='href'
+          @value={{this.href}}
+          @description='Renders a real link (an <a>) with the same look. A disabled link drops its href; @busy does not apply.'
+          @onInput={{this.setHref}}
         />
         <Args.String
           @name='shape'
