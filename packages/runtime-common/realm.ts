@@ -2142,9 +2142,9 @@ interface CardWriteAdmission {
   // Present for a write the gate left the write lock to decide, which the
   // coordinator decides there (see `BatchEntry.admit`).
   entry: { admit?: (judged: AdmissionSubject | undefined) => Promise<void> };
-  // How the write's batch is committed for this caller. For a caller who may
-  // not read the realm, the realm mints the ids of the cards it creates (see
-  // `CommitBatchOptions.mintIds`).
+  // How the write's batch is committed for this caller (see `#mintPosture`).
+  // Every card+json write commits under it, so for a caller who may not read
+  // the realm, the realm mints the ids of any card the write creates.
   batch: { mintIds?: true };
   // Refuses, by throwing, a document whose side-loads a write the gate
   // admitted would stage.
@@ -5768,10 +5768,7 @@ export class Realm {
             // place — which is the case the event's authorship naming exists
             // for, and the only front door that produces it.
             reportAuthorship: true,
-            // A caller the realm ACL won't let read the realm doesn't choose
-            // where the cards it creates land: a `lid` names the card within
-            // the batch and in its result, and the realm mints its id.
-            ...(coarseDeclined === 'all' ? { mintIds: true } : {}),
+            ...this.#mintPosture(coarseDeclined),
           },
         );
         // The coordinator answers in the flat order of the entries it staged,
@@ -6466,6 +6463,16 @@ export class Realm {
       return 'none';
     }
     return requestContext.coarseReadAllowed ? 'writes' : 'all';
+  }
+
+  // How a batch this caller commits names the cards it creates. A caller who
+  // may not read the realm doesn't choose where a card lands, so the realm
+  // mints its id (see `CommitBatchOptions.mintIds`). A caller who may read the
+  // realm can list it, so where their card lands tells them nothing, and they
+  // name it as any writer does. Every route that commits a create for a caller
+  // the ACL declined takes its batch options from here.
+  #mintPosture(coarseDeclined: CoarseDeclined): { mintIds?: true } {
+    return coarseDeclined === 'all' ? { mintIds: true } : {};
   }
 
   // What this realm's policy contributes to one search, for a caller its ACL
@@ -10641,6 +10648,11 @@ export class Realm {
       // names that as the reconciliation point, alongside `api.setId`); the
       // response document is not part of that path, and could not be — the
       // index answers in ids, never in the `lid` a caller would match on.
+      // A card the realm minted the id of is the exception (see
+      // `#mintPosture`): its URL's last segment is the realm's id, never its
+      // `lid`, so the host pairs it with its local id only from the `POST`
+      // response's `data.id`, which the save flow hands to `api.setId`. The
+      // caller it mints for sends no side-loads, since the gate refuses them.
       // Writes that answer from the serialized echo — prerender and
       // skip-index-wait callers — return no `included` at all and always have.
       let entry = await timings.time('readback', () =>
@@ -11071,6 +11083,7 @@ export class Realm {
             },
           ],
           {
+            ...admission.batch,
             clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
             ...(requestContext.authenticatedUser
               ? { actor: requestContext.authenticatedUser }
@@ -11433,15 +11446,13 @@ export class Realm {
         });
       }
     };
-    // A caller who may read the realm can list it, so where their card lands
-    // tells them nothing, and they choose it as any writer does. One who may
-    // not has the realm choose: it mints the card's id, and the card lands
-    // beneath the realm's root. That caller is told a refusal as a card that
-    // isn't there, so the refusal here says no more than the gate's own.
-    let readsRealm = coarseDeclined !== 'all';
-    let batch = readsRealm ? {} : { mintIds: true as const };
+    // A caller the realm names new cards for has the realm choose where a card
+    // lands: the realm mints its id, and the card lands beneath the realm's
+    // root. That caller is told a refusal as a card that isn't there, so the
+    // refusal here says no more than the gate's own.
+    let batch = this.#mintPosture(coarseDeclined);
     let assertDestination = (directory: string) => {
-      if (!readsRealm && directory !== '') {
+      if (batch.mintIds && directory !== '') {
         throw new OperationFailure({
           status: 403,
           code: 'operation-not-permitted',
@@ -12740,6 +12751,7 @@ export class Realm {
         this.batchCore,
         [{ op: 'delete', href: url.href, ...admission.entry }],
         {
+          ...admission.batch,
           ...(requestContext.authenticatedUser
             ? { actor: requestContext.authenticatedUser }
             : {}),

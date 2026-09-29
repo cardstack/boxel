@@ -1,4 +1,3 @@
-import { v4 as uuidV4 } from 'uuid';
 import {
   computeContentHash,
   computeContentHashFromRanges,
@@ -17,6 +16,7 @@ import {
   createIdentity,
   includedResources,
   localIdOf,
+  mintedIdentity,
   namesForeignRealm,
   stageAppendContainsMany,
   stageAppendLine,
@@ -305,13 +305,14 @@ export interface CommitBatchOptions {
   // caller know a new card's URL before it exists. Set, every card the batch
   // mints is stored under an id the realm mints instead. The `lid` still names
   // the card inside the batch: it is the key another entry links to it by, and
-  // the one its result is reported under. It no longer names the file.
+  // the one its result is reported under. It does not name the file, though
+  // it is held to the rule a card's id is, as any caller's is.
   //
   // It is for a caller the realm ACL won't let read the realm. What a create
   // answers depends on what is stored where it lands: it mints a card where
   // nothing is stored and is refused where a card is. So a caller who picks
   // the id picks which path the answer describes, and such a caller is never
-  // told which paths hold a card.
+  // told whether a path holds a card they may not see.
   mintIds?: boolean;
   // Per-request wall-clock collector, threaded from a caller that reports
   // where its write's time went. The stages a commit owns are not observable
@@ -1413,9 +1414,9 @@ function indexLids(
         }
         claim(
           resource.lid,
-          stagedIdentity(
+          (mintIds ? mintedIdentity : stagedIdentity)(
             resource.meta?.adoptsFrom,
-            mintIds ? uuidV4() : resource.lid,
+            resource.lid,
             entry.op === 'create' ? entry.directory : undefined,
             paths,
           ),

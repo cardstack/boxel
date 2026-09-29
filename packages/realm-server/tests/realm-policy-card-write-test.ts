@@ -1066,6 +1066,49 @@ module(basename(import.meta.filename), function (hooks) {
       );
     });
 
+    test('a local id is held to the rule a card’s id is, whoever sends it, on either transport', async function (assert) {
+      for (let lid of ['', 'a/b']) {
+        let label = `a local id of ${JSON.stringify(lid)}`;
+        let [minted, named] = await Promise.all(
+          [AUTH.teacher(), AUTH.admin()].map((auth) =>
+            operations(
+              EDUCATION,
+              auth,
+              invoke('create', {
+                data: withLid(newCard(BULLETIN, { body: 'Bake sale' }), lid)
+                  .data,
+              }),
+            ),
+          ),
+        );
+        assert.strictEqual(named.status, 400, `${label}: a writer's create`);
+        assert.strictEqual(
+          minted.text,
+          named.text,
+          `${label}: a caller the realm mints ids for gets the same answer`,
+        );
+
+        let [mintedPost, namedPost] = await Promise.all(
+          [AUTH.teacher(), AUTH.admin()].map((auth) =>
+            createCard(
+              EDUCATION,
+              auth,
+              withLid(newCard(BULLETIN, { body: 'Bake sale' }), lid),
+            ),
+          ),
+        );
+        assert.strictEqual(namedPost.status, 400, `${label}: a writer's POST`);
+        let message = (response: Response) =>
+          (JSON.parse(response.text) as { errors: { message: string }[] })
+            .errors[0].message;
+        assert.deepEqual(
+          [mintedPost.status, message(mintedPost)],
+          [namedPost.status, message(namedPost)],
+          `${label}: a POST from a caller the realm mints ids for gets the same answer`,
+        );
+      }
+    });
+
     test('a local id the realm does not store a card under still links the batch’s cards to each other', async function (assert) {
       let response = await operations(
         OPEN,

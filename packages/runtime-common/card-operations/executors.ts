@@ -2092,12 +2092,24 @@ export function createIdentity(
       return staged;
     }
   }
-  return stagedIdentity(
-    resource?.meta?.adoptsFrom ?? entry.definition?.of,
-    (mintIds ? undefined : lid) ?? uuidV4(),
-    entry.directory,
-    paths,
-  );
+  let type = resource?.meta?.adoptsFrom ?? entry.definition?.of;
+  return lid !== undefined && mintIds
+    ? mintedIdentity(type, lid, entry.directory, paths)
+    : stagedIdentity(type, lid ?? uuidV4(), entry.directory, paths);
+}
+
+// The identity a card takes in a batch that mints its ids (see
+// `CommitBatchOptions.mintIds`). The local id the caller sent is still held to
+// the rule any id is, so what a batch accepts of a request doesn't depend on
+// who sent it. Only where the card lands does.
+export function mintedIdentity(
+  adoptsFrom: CodeRef | undefined,
+  lid: string,
+  directory: string | undefined,
+  paths: RealmPaths,
+): StagedIdentity {
+  stagedIdentity(adoptsFrom, lid, directory, paths);
+  return stagedIdentity(adoptsFrom, uuidV4(), directory, paths);
 }
 
 // Whether a resource declares itself to belong to another realm. One batch
