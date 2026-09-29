@@ -745,8 +745,14 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       //
       // `trace` is every statement in the order it was issued, definition
       // lookups included, each with its offset from the start. It is for a
-      // failed comparison to report: it shows the interleaving the sort hides,
-      // and whether one search looked up a definition the other did not.
+      // failed comparison to report the interleaving the sort hides, and the
+      // definitions each search looked up while resolving and compiling its
+      // query. A federated request also reads what the endpoint itself needs,
+      // the caller's session and permissions and the realm registry, which a
+      // direct search never reads. And it starts a type-key warm-up that
+      // nothing awaits, which looks up the query's type definition when its
+      // cached keys are cold and can land in either window. None of those is
+      // an index read, and none is a sign of a divergence.
       async function indexQueriesDuring(fn: () => Promise<unknown>) {
         let statements: { sql: string; bind: unknown }[] = [];
         let trace: { atMs: number; sql: string; bind: unknown }[] = [];
@@ -791,17 +797,18 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
 
         // The same search run straight through the realm, with no policy in
         // the path: the declaration resolved, the server's page bound applied,
-        // and nothing else.
-        let { query: resolved } = await resolveNamedQuery(
-          realms[COARSE].operationCore,
-          body,
-          { actor: PROVIDER_A, realms: [COARSE] },
-        );
-        let query = parseSearchEntryQueryFromPayload(resolved);
-        query.itemQuery = applyServerSearchPageBound(query.itemQuery);
-        let direct = await indexQueriesDuring(() =>
-          realms[COARSE].searchEntries(query),
-        );
+        // and nothing else. Resolving is inside the window, as it is inside the
+        // federated request, so both traces carry its definition lookups.
+        let direct = await indexQueriesDuring(async () => {
+          let { query: resolved } = await resolveNamedQuery(
+            realms[COARSE].operationCore,
+            body,
+            { actor: PROVIDER_A, realms: [COARSE] },
+          );
+          let query = parseSearchEntryQueryFromPayload(resolved);
+          query.itemQuery = applyServerSearchPageBound(query.itemQuery);
+          return realms[COARSE].searchEntries(query);
+        });
 
         if (!QUnit.equiv(served.reads, direct.reads)) {
           for (let [label, { trace }] of [
