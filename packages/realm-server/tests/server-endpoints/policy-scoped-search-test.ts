@@ -2,12 +2,14 @@ import QUnit from 'qunit';
 const { module, test } = QUnit;
 import supertest from 'supertest';
 import type { Test, SuperTest } from 'supertest';
-import { basename, join } from 'path';
+import { mkdirSync, writeFileSync } from 'fs';
+import { basename, dirname, join } from 'path';
 import { dirSync } from 'tmp';
 import {
   applyServerSearchPageBound,
   archiveRealm,
   composePolicyScopedFilter,
+  insertPermissions,
   parseSearchEntryQueryFromPayload,
   rri,
   unarchiveRealm,
@@ -24,7 +26,8 @@ import { resolveNamedQuery } from '@cardstack/runtime-common/card-operations';
 import type { PgAdapter } from '@cardstack/postgres';
 import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms.ts';
 import { LIVE_SEARCH_CACHE_HEADER } from '../../handlers/handle-search.ts';
-import type { RealmHttpServer as Server } from '../../server.ts';
+import { insertSourceRealmInRegistry } from '../../lib/realm-registry-writes.ts';
+import type { RealmServer, RealmHttpServer as Server } from '../../server.ts';
 import {
   closeServer,
   createJWT,
@@ -322,6 +325,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
   module('a search a policy scopes', function (hooks) {
     let realms: Record<string, Realm> = {};
     let request: SuperTest<Test>;
+    let realmServer: RealmServer;
     let server: Server;
     let db: PgAdapter;
 
@@ -435,6 +439,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         runner,
         matrixURL,
       });
+      realmServer = result.testRealmServer;
       server = result.testRealmHttpServer;
       request = supertest(server);
       for (let realm of result.realms) {
@@ -1203,6 +1208,136 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         } finally {
           await unarchiveRealm(db, new URL(GRANTS));
         }
+      });
+    });
+
+    module('a realm this process has not mounted', function (hooks) {
+      // Each is staged the way a realm nothing on this process has touched
+      // since it started is: its files on disk and its row in the registry,
+      // and no mount. Neither provider may read either one.
+      const UNMOUNTED_PRIVATE = 'http://127.0.0.1:4444/unmounted-private/';
+      const UNMOUNTED_ENUMERABLE =
+        'http://127.0.0.1:4444/unmounted-enumerable/';
+      const SCHEDULES = { 'item.on': SCHEDULE };
+
+      async function stage(
+        realmURL: string,
+        diskId: string,
+        files: Record<string, string>,
+      ) {
+        let dir = join(realmServer.testingOnlyRealmsRootPath, diskId);
+        for (let [path, content] of Object.entries(files)) {
+          mkdirSync(dirname(join(dir, path)), { recursive: true });
+          writeFileSync(join(dir, path), content);
+        }
+        await insertSourceRealmInRegistry(db, {
+          url: realmURL,
+          diskId,
+          ownerUsername: 'owner',
+        });
+        await insertPermissions(db, new URL(realmURL), {
+          [OWNER]: ['read', 'write', 'realm-owner'],
+        });
+      }
+
+      function isMounted(realmURL: string) {
+        let reconciler = realmServer.testingOnlyReconciler;
+        return (
+          reconciler.mounted.has(realmURL) ||
+          reconciler.pendingMounts.has(realmURL) ||
+          realmServer.testingOnlyRealms.some((realm) => realm.url === realmURL)
+        );
+      }
+
+      hooks.before(async function () {
+        await stage(UNMOUNTED_PRIVATE, 'unmounted-private', {
+          'realm.json': realmConfigCardJSON({ name: 'Unmounted private' }),
+          ...aOpen(),
+        });
+        await stage(UNMOUNTED_ENUMERABLE, 'unmounted-enumerable', {
+          'realm.json': realmConfigCardJSON({
+            name: 'Unmounted enumerable',
+            policy: `${UNMOUNTED_ENUMERABLE}policies/policy`,
+          }),
+          'policies/policy.json': policyCard([
+            { operation: 'query', where: OPEN },
+          ]),
+          ...aOpen(),
+          'schedules/a-closed.json': schedule({
+            title: 'A closed',
+            providerId: PROVIDER_A,
+            status: 'closed',
+            rank: 2,
+          }),
+        });
+        // The registry as this process reflects it, which is what the
+        // realms are looked up in, brought up to date with the rows just
+        // written rather than waiting on the notification they sent.
+        await realmServer.testingOnlyReconcile();
+      });
+
+      hooks.after(function () {
+        realmServer?.testingOnlyReconciler.mounted
+          .get(UNMOUNTED_ENUMERABLE)
+          ?.unsubscribe();
+      });
+
+      test('one whose realm.json names no policy contributes no rows, and is not mounted to say so', async function (assert) {
+        assert.false(
+          isMounted(UNMOUNTED_PRIVATE),
+          'precondition: nothing on this process has mounted it',
+        );
+
+        let response = await federatedSearch(
+          { filter: SCHEDULES, realms: [ENUMERABLE, UNMOUNTED_PRIVATE] },
+          PROVIDER_A,
+        );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        assert.deepEqual(
+          inRealm(UNMOUNTED_PRIVATE, response),
+          [],
+          'none from it',
+        );
+        assert.deepEqual(
+          inRealm(ENUMERABLE, response).sort(),
+          [`${ENUMERABLE}schedules/a-open`, `${ENUMERABLE}schedules/b-open`],
+          'and the realm beside it answers under its own policy',
+        );
+        assert.notStrictEqual(
+          response.body.meta.incomplete,
+          true,
+          'it is counted among the realms that answered, not the ones that failed to',
+        );
+        assert.false(
+          isMounted(UNMOUNTED_PRIVATE),
+          'and it is still not mounted',
+        );
+      });
+
+      test('one whose realm.json names a policy is mounted to ask it, and contributes what its grants admit', async function (assert) {
+        // Mounting the realm indexes it from scratch.
+        assert.timeout(180_000);
+        assert.false(
+          isMounted(UNMOUNTED_ENUMERABLE),
+          'precondition: nothing on this process has mounted it',
+        );
+
+        let response = await federatedSearch(
+          { filter: SCHEDULES, realms: [UNMOUNTED_ENUMERABLE] },
+          PROVIDER_A,
+        );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        assert.deepEqual(
+          ids(response),
+          [`${UNMOUNTED_ENUMERABLE}schedules/a-open`],
+          'the open schedule its `query` grant admits, and not the closed one',
+        );
+        assert.true(
+          isMounted(UNMOUNTED_ENUMERABLE),
+          'the realm was mounted to ask its policy',
+        );
       });
     });
 
