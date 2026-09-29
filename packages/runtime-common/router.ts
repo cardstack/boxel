@@ -298,6 +298,7 @@ export interface RouteDescription {
   path: string;
   consumesCoarseOutcome: boolean;
   coarseReadOnly: boolean;
+  operationalEndpoint: boolean;
 }
 
 export class Router {
@@ -405,6 +406,7 @@ export class Router {
             path,
             consumesCoarseOutcome: route.consumesCoarseOutcome,
             coarseReadOnly: route.coarseReadOnly,
+            operationalEndpoint: route.operationalEndpoint,
           });
         }
       }
