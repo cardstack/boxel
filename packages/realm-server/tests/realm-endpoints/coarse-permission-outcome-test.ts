@@ -102,6 +102,19 @@ const readProbes: Probe[] = [
         .set('Content-Type', SupportedMimeType.BoxelOperations)
         .send('not json'),
   },
+  // A read probe although it is a `POST`: the capability check writes nothing,
+  // so the realm asks the read question of it rather than the one the method
+  // would otherwise choose.
+  {
+    label: 'POST /_capabilities',
+    consumes: true,
+    send: (r) =>
+      r
+        .post('/_capabilities')
+        .set('Accept', SupportedMimeType.JSON)
+        .set('Content-Type', SupportedMimeType.JSON)
+        .send('not json'),
+  },
 ];
 
 const writeProbes: Probe[] = [
@@ -379,10 +392,11 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           `QUERY ${SupportedMimeType.CardJson} /_search`,
           `POST ${SupportedMimeType.BoxelOperations} /_operations`,
           `POST ${SupportedMimeType.JSONAPI} /_operations`,
+          `POST ${SupportedMimeType.JSON} /_capabilities`,
           `QUERY ${SupportedMimeType.BoxelOperations} /_operations`,
           `QUERY ${SupportedMimeType.JSONAPI} /_operations`,
         ].sort(),
-        'the consumer set is the card+json read, the search, and the operations envelope',
+        'the consumer set is the card+json read, the search, the operations envelope and the capability check',
       );
       let nonConsumers = testRealm
         .routeDescriptions()
@@ -420,13 +434,18 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
     });
 
     test('every consuming route hands an admitted caller to the policy gate', async function (assert) {
-      // The search is the one consumer that does not: it hands an admitted
-      // caller to the policy's query lane, which answers with rows rather than
-      // with a refusal, and is pinned on its own below.
+      // Two consumers answer an admitted caller with something other than a
+      // refusal, and each is pinned on its own. The search hands them to the
+      // policy's query lane, which answers with rows (below). The capability
+      // check answers a decision per pair, a 200 with denials in it (its own
+      // module).
       let consumers = testRealm
         .routeDescriptions()
         .filter((route) => route.consumesCoarseOutcome)
-        .filter((route) => route.path !== '/_search')
+        .filter(
+          (route) =>
+            route.path !== '/_search' && route.path !== '/_capabilities',
+        )
         .map((route) => `${route.method} ${route.mimeType}`)
         .filter((route) => route !== `HEAD ${SupportedMimeType.CardJson}`)
         .sort();

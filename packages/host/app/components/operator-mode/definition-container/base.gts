@@ -39,9 +39,7 @@ const BaseContainerHeader: TemplateOnlyComponent<BaseContainerHeaderSignature> =
     </Header>
     <style scoped>
       .base-container-header {
-        /* 25px exactly. 1.56rem is 24.96px, and a fractional height
-           leaves every engine to round it its own way — which is how
-           the same content lands a pixel apart between browsers. */
+        /* 25px exactly. */
         --boxel-header-min-height: 1.5625rem;
         --boxel-header-padding: var(--boxel-sp-5xs) var(--boxel-sp-xs);
         --boxel-header-background-color: var(--boxel-300);

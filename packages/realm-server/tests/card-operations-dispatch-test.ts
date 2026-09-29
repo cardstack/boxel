@@ -890,6 +890,7 @@ module(basename(import.meta.filename), function () {
       });
       assert.deepEqual(fromRow, {
         projected: false,
+        links: 'full',
         type: 'file-meta',
         indexedAt: 1700,
         lastModified: 1699,
@@ -911,6 +912,7 @@ module(basename(import.meta.filename), function () {
       });
       assert.deepEqual(fromDisk, {
         projected: false,
+        links: 'full',
         type: 'file-meta',
         indexedAt: null,
         lastModified: 42,
