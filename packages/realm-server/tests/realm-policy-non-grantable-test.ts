@@ -10,7 +10,12 @@ import type {
   QueueRunner,
   Realm,
 } from '@cardstack/runtime-common';
-import { resolveOperation } from '@cardstack/runtime-common/card-operations';
+import {
+  newOperationScope,
+  resolveOperation,
+  scopeCallerFor,
+  type CompiledRealmPolicy,
+} from '@cardstack/runtime-common/card-operations';
 import type { PgAdapter } from '@cardstack/postgres';
 import { resetCatalogRealms } from '../handlers/handle-fetch-catalog-realms.ts';
 import type { RealmHttpServer as Server } from '../server.ts';
@@ -29,9 +34,10 @@ import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
 // An operation whose declaration is `nonGrantable`, any write to the card the
 // realm's `policy` key names, and any write to a policy card at all, are
 // invocable only by a caller the realm's own ACL allows. The policy here
-// grants every operation the tests invoke on every card, which is the
-// broadest grant there is, and a reader of the realm holds no write
-// permission, so each of their writes reaches the gate.
+// grants every built-in write on every card, which is the broadest grant
+// there is, and each named operation the tests invoke on the type that
+// declares it. A reader of the realm holds no write permission, so each of
+// their writes reaches the gate.
 //
 // The school realm also stores the policy card the Education realm's `policy`
 // key names, a card the school realm's own key does not name.
@@ -155,17 +161,14 @@ type Rule = {
   grants: { operation: string }[];
 };
 
-// The writes the tests invoke, each granted realm-wide, except the named
-// create, which its own rule grants.
+// The built-in writes, each granted realm-wide. A named operation is granted
+// on the type that declares it, since that is the only type it names.
 const CARD_DEF_GRANTS = [
   'create',
   'update',
   'delete',
   'transform',
   'appendContainsMany',
-  'seal',
-  'annotate',
-  'setMotto',
 ];
 
 const RULES: Rule[] = [
@@ -174,17 +177,21 @@ const RULES: Rule[] = [
     grants: CARD_DEF_GRANTS.map((operation) => ({ operation })),
   },
   // The kept operations granted on the type that declares them, as a policy
-  // author might write them. The compiled policy holds these like any other
-  // grant, and the gate never consults them.
+  // author might write them, beside an ordinary one. Compiling records each
+  // kept one and leaves it out, and the gate refuses it whatever a compiled
+  // policy holds.
   {
     targetType: LEDGER,
-    grants: [{ operation: 'update' }, { operation: 'seal' }],
+    grants: ['update', 'seal', 'annotate'].map((operation) => ({ operation })),
   },
   // The named creates granted on the type that declares them.
   {
     targetType: DRAFTER,
     grants: [{ operation: 'draftPolicy' }, { operation: 'draftLedger' }],
   },
+  // A named write on a policy type, which compiling records and leaves out
+  // too.
+  { targetType: SCHOOL_POLICY, grants: [{ operation: 'setMotto' }] },
 ];
 
 // What the Education realm's policy grants, which is only read.
@@ -367,6 +374,37 @@ module(basename(import.meta.filename), function (hooks) {
     });
   }
 
+  // Resolves invocations on `url` for a reader the realm ACL declined, against
+  // a compiled policy holding `rules`, as the policy would be had compiling let
+  // them through. It shows what the gate refuses of a grant that reached a
+  // compiled policy however it came to be there.
+  function carrying(
+    rules: CompiledRealmPolicy['rules'],
+    url: string,
+  ): (name: string) => ReturnType<typeof resolveOperation> {
+    let core = school.operationCore;
+    let policy: CompiledRealmPolicy = {
+      card: POLICY_CARD,
+      version: undefined,
+      rules,
+      issues: [],
+    };
+    let carried = {
+      ...core,
+      policy: { ...core.policy!, compiledPolicy: async () => policy },
+    };
+    return (name) =>
+      resolveOperation(
+        carried,
+        { kind: 'instance', url },
+        name,
+        newOperationScope(carried, {
+          caller: scopeCallerFor(READER),
+          coarseDeclined: 'all',
+        }),
+      );
+  }
+
   function assertNotPermitted(
     assert: Assert,
     response: Response,
@@ -384,7 +422,7 @@ module(basename(import.meta.filename), function (hooks) {
       assertNotPermitted(
         assert,
         await operations(AUTH.reader(), invoke('seal', { href: LEDGER_1 })),
-        'a named operation granted on CardDef and on its own type',
+        'a named operation granted on its own type',
       );
       assertNotPermitted(
         assert,
@@ -415,22 +453,62 @@ module(basename(import.meta.filename), function (hooks) {
       );
     });
 
-    test('the refusal holds though the compiled policy carries the grant', async function (assert) {
+    test('compiling records a grant of it and leaves the grant out', async function (assert) {
       let compiled = await school.getCompiledPolicy();
-      assert.deepEqual(compiled?.issues, [], 'the policy compiles cleanly');
-      let ledgerRule = compiled?.rules.find(
-        (rule) => rule.targetType.name === 'Ledger',
+      assert.deepEqual(
+        compiled?.issues.map(({ code, path }) => ({ code, path })),
+        [
+          {
+            code: 'grants-authorization-infrastructure',
+            path: 'rules[1].grants[0].operation',
+          },
+          {
+            code: 'grants-authorization-infrastructure',
+            path: 'rules[1].grants[1].operation',
+          },
+          {
+            code: 'grants-authorization-infrastructure',
+            path: 'rules[3].grants[0].operation',
+          },
+        ],
+        'the kept operations, and the named write on the policy type',
       );
       assert.deepEqual(
-        ledgerRule?.grants.map((grant) => grant.operation),
-        ['update', 'seal'],
-        'the grants naming the kept operations reached the compiled policy',
+        compiled?.rules.map((rule) =>
+          rule.grants.map((grant) => grant.operation),
+        ),
+        [CARD_DEF_GRANTS, ['annotate'], ['draftPolicy', 'draftLedger'], []],
+        'the grants beside them compile',
       );
-      assertNotPermitted(
-        assert,
-        await operations(AUTH.reader(), invoke('seal', { href: LEDGER_1 })),
-        'and the gate refuses the operation they name',
+    });
+
+    test('the refusal holds though a compiled policy carries the grant', async function (assert) {
+      let ledgerRule = (await school.getCompiledPolicy())!.rules[1];
+      let resolve = carrying(
+        [
+          {
+            ...ledgerRule,
+            grants: [
+              { operation: 'update', path: 'rules[1].grants[0]' },
+              { operation: 'seal', path: 'rules[1].grants[1]' },
+              ...ledgerRule.grants,
+            ],
+          },
+        ],
+        LEDGER_1,
       );
+      assert.strictEqual(
+        (await resolve('annotate')).base,
+        'transform',
+        'the carried policy is the one the gate consults',
+      );
+      for (let name of ['seal', 'update']) {
+        await assert.rejects(
+          resolve(name),
+          /operation-not-permitted/,
+          `and it refuses ${name}, which it grants`,
+        );
+      }
     });
 
     test('an ordinary operation on the same type is granted as before', async function (assert) {
@@ -687,6 +765,20 @@ module(basename(import.meta.filename), function (hooks) {
     });
 
     test('no grant admits a write a subtype declares for itself', async function (assert) {
+      await assert.rejects(
+        carrying(
+          [
+            {
+              targetType: CARD_DEF,
+              path: 'rules[0]',
+              grants: [{ operation: 'setMotto', path: 'rules[0].grants[0]' }],
+            },
+          ],
+          DRAFT_POLICY,
+        )('setMotto'),
+        /operation-not-permitted/,
+        'the gate refuses the named write though a compiled policy grants it on every card',
+      );
       assertNotPermitted(
         assert,
         await operations(

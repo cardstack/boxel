@@ -114,7 +114,6 @@
   "./integration/components/card-chooser-paging-test.gts": 111.4,
   "./integration/components/card-chooser-test.gts": 46.8,
   "./integration/components/card-context-search-results-test.gts": 3.9,
-  "./integration/components/card-copy-test.gts": 31.2,
   "./integration/components/card-def-field-def-relationships-test.gts": 9.8,
   "./integration/components/card-delete-test.gts": 29.9,
   "./integration/components/card-error-awaiting-index-test.gts": 0.1,
