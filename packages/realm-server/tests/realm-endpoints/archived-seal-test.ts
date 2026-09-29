@@ -182,11 +182,12 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       let dbAdapter: PgAdapter;
 
       setupPermissionedRealmCached(hooks, {
-        fixture: 'blank',
+        fixture: 'simple',
         // A private realm: no `*` permission.
         realmURL: testRealmURLFor('private-archived/'),
         permissions: {
           owner: ['read', 'write', 'realm-owner'],
+          reader: ['read'],
         },
         onRealmSetup(args: {
           testRealm: Realm;
@@ -204,6 +205,135 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       function path(suffix: string) {
         return `${new URL(testRealm.url).pathname.replace(/\/$/, '')}${suffix}`;
       }
+
+      // A `HEAD` passes the realm ACL whoever sends it, so it is the one
+      // request a caller who cannot read the realm gets past the ACL with.
+      // These are the `HEAD`s that read something from a caller who may read
+      // the realm: a card, a module's source, and the raw file serve.
+      const contentHeads: [string, string | undefined][] = [
+        ['/person-1', 'application/vnd.card+json'],
+        ['/person.gts', 'application/vnd.card+source'],
+        ['/sample.md', '*/*'],
+        ['/sample.md', undefined],
+      ];
+      // These answer every caller with the realm's discovery answer, or are
+      // the operational endpoints the seal exempts.
+      const otherHeads: [string, string | undefined][] = [
+        ['/_info', 'application/vnd.api+json'],
+        ['/_search', 'application/vnd.card+json'],
+        ['/_readiness-check', 'application/vnd.api+json'],
+        ['/_session', undefined],
+      ];
+
+      interface HeadAnswer {
+        label: string;
+        status: number;
+        headers: Record<string, string>;
+      }
+
+      async function head(
+        heads: [string, string | undefined][],
+        callers: [string, string | undefined][],
+      ): Promise<HeadAnswer[]> {
+        let answers: HeadAnswer[] = [];
+        for (let [caller, authorization] of callers) {
+          for (let [suffix, accept] of heads) {
+            let req = request.head(path(suffix));
+            if (accept) {
+              req = req.set('Accept', accept);
+            }
+            if (authorization) {
+              req = req.set('Authorization', authorization);
+            }
+            let response = await req;
+            let headers = { ...(response.headers as Record<string, string>) };
+            delete headers.date;
+            answers.push({
+              label: `${caller} HEAD ${suffix} (accept: ${accept ?? 'none'})`,
+              status: response.status,
+              headers,
+            });
+          }
+        }
+        return answers;
+      }
+
+      test('a HEAD from a caller who may not read the realm gets the answer it gets while the realm is active', async function (assert) {
+        let callers: [string, string | undefined][] = [
+          ['anonymous', undefined],
+          ['unpermitted', `Bearer ${createJWT(testRealm, 'stranger', [])}`],
+        ];
+        let heads = [...contentHeads, ...otherHeads];
+        let active = await head(heads, callers);
+        for (let answer of active) {
+          assert.strictEqual(
+            answer.headers['x-boxel-realm-url'],
+            testRealm.url,
+            `active: ${answer.label} names the realm`,
+          );
+        }
+        for (let answer of active.slice(0, contentHeads.length)) {
+          assert.strictEqual(
+            answer.status,
+            200,
+            `active: ${answer.label} gets the discovery answer`,
+          );
+          assert.notOk(
+            answer.headers['etag'],
+            `active: ${answer.label} carries no validator`,
+          );
+        }
+
+        await archiveRealm(dbAdapter, new URL(testRealm.url));
+        let archived = await head(heads, callers);
+        assert.strictEqual(archived.length, active.length);
+        for (let [index, answer] of archived.entries()) {
+          assert.deepEqual(
+            { status: answer.status, headers: answer.headers },
+            {
+              status: active[index].status,
+              headers: active[index].headers,
+            },
+            `archived: ${answer.label} gets the answer it gets while the realm is active`,
+          );
+          assert.notOk(
+            answer.headers['x-boxel-realm-archived'],
+            `archived: ${answer.label} is not told the realm is archived`,
+          );
+        }
+      });
+
+      test('a HEAD from a caller who may read the realm meets the seal', async function (assert) {
+        let callers: [string, string | undefined][] = [
+          ['reader', `Bearer ${createJWT(testRealm, 'reader', ['read'])}`],
+          [
+            'owner',
+            `Bearer ${createJWT(testRealm, 'owner', [
+              'read',
+              'write',
+              'realm-owner',
+            ])}`,
+          ],
+        ];
+        let active = await head(contentHeads, callers);
+        for (let answer of active) {
+          assert.strictEqual(
+            answer.status,
+            200,
+            `active: ${answer.label} is answered`,
+          );
+        }
+
+        await archiveRealm(dbAdapter, new URL(testRealm.url));
+        for (let answer of await head(contentHeads, callers)) {
+          assert.strictEqual(answer.status, 403, `${answer.label}: HTTP 403`);
+          assert.strictEqual(
+            answer.headers['x-boxel-realm-archived'],
+            'true',
+            `${answer.label}: carries the X-Boxel-Realm-Archived marker`,
+          );
+        }
+      });
 
       test('a private archived realm returns the normal 401/403 to callers who cannot prove access, and the archived marker only to authorized callers', async function (assert) {
         await archiveRealm(dbAdapter, new URL(testRealm.url));

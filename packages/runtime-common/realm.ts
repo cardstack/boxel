@@ -6791,8 +6791,22 @@ export class Realm {
         // health probe that sends no `Accept` header is still exempt. The
         // archive-management endpoints live on the realm SERVER router and
         // never reach this boundary, so they stay reachable.
-        if (requestContext.coarseAllowed) {
-          await this.#assertNotArchived(localPath);
+        //
+        // A `HEAD` passes the ACL whoever sends it, so its passing shows
+        // nothing about the caller. It meets the seal only from a caller who
+        // may read the realm. Anyone else gets the discovery answer, which is
+        // what their `HEAD` gets from the realm when it is not archived, so
+        // the answer does not say whether the realm is archived. It is given
+        // here rather than by the route, since a route that would answer this
+        // caller with a read would then run that read in a sealed realm.
+        if (requestContext.coarseAllowed && (await this.#isSealed(localPath))) {
+          if (
+            request.method === 'HEAD' &&
+            !(await this.#readProbe(request, requestContext)).allowed
+          ) {
+            return this.realmIdentityResponse(requestContext);
+          }
+          throw new ArchivedRealmError(`Realm ${this.url} is archived`);
         }
       }
       let dispatch = this.#routeRequest(request, localPath, requestContext);
@@ -7154,16 +7168,22 @@ export class Realm {
     this.#testOnlyBeforeBatchLock = hook;
   }
 
+  async #assertNotArchived(localPath: LocalPath): Promise<void> {
+    if (await this.#isSealed(localPath)) {
+      throw new ArchivedRealmError(`Realm ${this.url} is archived`);
+    }
+  }
+
+  // Whether the archived seal covers `localPath`: the realm is archived and
+  // the path is not one of the operational endpoints exempt from the seal.
   // Read fresh (no memoization) for the same reason createRequestContext
   // does: a peer replica's archive/unarchive must take effect here without a
   // restart.
-  async #assertNotArchived(localPath: LocalPath): Promise<void> {
-    if (
+  async #isSealed(localPath: LocalPath): Promise<boolean> {
+    return (
       !ARCHIVED_SEAL_EXEMPT_PATHS.has(localPath) &&
       (await isRealmArchived(this.#dbAdapter, new URL(this.url)))
-    ) {
-      throw new ArchivedRealmError(`Realm ${this.url} is archived`);
-    }
+    );
   }
 
   // Every route with whether it consumes the realm ACL's recorded outcome,
