@@ -39,14 +39,22 @@ fi
 if [ ! -f "$CACHE_FILE" ] && command -v gh >/dev/null 2>&1; then
   # The newest main run that uploaded the artifact, found through the
   # artifacts list: the workflow runs list filtered by branch can answer with
-  # runs weeks old. See cache_run_ids in scripts/import-cached-index.sh.
-  RUN_ID=$(gh api "repos/$REPO/actions/artifacts?name=boxel-index-cache&per_page=30" --jq '
-    [.artifacts[]
-      | select(.expired | not)
-      | select(.workflow_run.head_branch == "main")
-      | select(.workflow_run.head_repository_id == .workflow_run.repository_id)
-      | .workflow_run.id]
-    | max // empty' 2>/dev/null) || RUN_ID=""
+  # runs weeks old. See cache_run_ids in scripts/import-cached-index.sh, whose
+  # retry this matches: a lost lookup costs a live index.
+  RUN_ID=""
+  for attempt in 1 2 3; do
+    if RUN_ID=$(gh api "repos/$REPO/actions/artifacts?name=boxel-index-cache&per_page=30" --jq '
+      [.artifacts[]
+        | select(.expired | not)
+        | select(.workflow_run.head_branch == "main")
+        | select(.workflow_run.head_repository_id == .workflow_run.repository_id)
+        | .workflow_run.id]
+      | max // empty' 2>/dev/null); then
+      break
+    fi
+    RUN_ID=""
+    sleep "$attempt"
+  done
   if [ -n "$RUN_ID" ]; then
     echo "[index-cache] Downloading cache from CI run $RUN_ID via gh…"
     mkdir -p "$(dirname "$CACHE_FILE")"
