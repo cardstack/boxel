@@ -217,11 +217,14 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
         ['/sample.md', '*/*'],
         ['/sample.md', undefined],
       ];
-      // These answer every caller with the realm's discovery answer, or are
-      // the operational endpoints the seal exempts.
+      // These read nothing even for a caller who may read the realm: the
+      // buckets whose `HEAD` is the discovery answer for everyone, a file the
+      // realm is part-way through writing, and the operational endpoints the
+      // seal exempts.
       const otherHeads: [string, string | undefined][] = [
         ['/_info', 'application/vnd.api+json'],
         ['/_search', 'application/vnd.card+json'],
+        ['/sample.md.boxel-partial', undefined],
         ['/_readiness-check', 'application/vnd.api+json'],
         ['/_session', undefined],
       ];

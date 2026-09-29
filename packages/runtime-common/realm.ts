@@ -6777,10 +6777,11 @@ export class Realm {
         // An archived realm is sealed for everyone, owner included: once a
         // caller is authorized, every external content request is
         // short-circuited with 403 (archived). The seal applies only to a
-        // caller the ACL allowed, so an unauthenticated or unauthorized caller
-        // to a private realm gets the normal 401/403 and never learns the
-        // realm exists or is archived — only callers who could otherwise reach
-        // the content see the sealed response. A public realm's readers are
+        // caller the ACL allowed, so a caller the ACL refuses gets its normal
+        // 401/403 rather than being told the realm is archived — only callers
+        // who could otherwise reach the content see the sealed response. In a
+        // realm with a policy, a caller the policy judges is admitted after
+        // routing (below) and meets the seal there. A public realm's readers are
         // allowed by the ACL, so they do see the seal (the realm's existence
         // is already public). The seal is method-agnostic, so reads and writes
         // are blocked by this one check. The realm's public operational
@@ -6795,10 +6796,11 @@ export class Realm {
         // A `HEAD` passes the ACL whoever sends it, so its passing shows
         // nothing about the caller. It meets the seal only from a caller who
         // may read the realm. Anyone else gets the discovery answer, which is
-        // what their `HEAD` gets from the realm when it is not archived, so
-        // the answer does not say whether the realm is archived. It is given
-        // here rather than by the route, since a route that would answer this
-        // caller with a read would then run that read in a sealed realm.
+        // what their `HEAD` of any path gets from the realm while it is
+        // active, unless a policy grant admits them to a card there, so the
+        // answer does not say whether the realm is archived. It is given here
+        // rather than by the route: a route that would answer this caller with
+        // a read a grant admits would then run that read in a sealed realm.
         if (requestContext.coarseAllowed && (await this.#isSealed(localPath))) {
           if (
             request.method === 'HEAD' &&
@@ -6958,10 +6960,13 @@ export class Realm {
     }
     // A file the realm is part-way through assembling, or one a write that
     // died left behind. It is never indexed, so serving it would hand back
-    // content the realm does not otherwise acknowledge exists.
+    // content the realm does not otherwise acknowledge exists. Its `HEAD` is
+    // coarse-read-only, as the fallback serve's is, so a caller who may not
+    // read the realm gets the discovery answer here as on every other path.
     if (isPartialWritePath(localPath)) {
       return {
         consumesCoarseOutcome: false,
+        coarseReadOnly: request.method === 'HEAD',
         handle: async () => notFound(request, requestContext),
       };
     }
