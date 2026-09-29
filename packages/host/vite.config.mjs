@@ -342,6 +342,14 @@ export default defineConfig(({ mode }) => ({
   resolve: {
     alias: [
       ...hostToolAliases(),
+      // Bundled base modules import host library modules as
+      // `@cardstack/boxel-host/lib/<name>`, the specifier app/lib/externals.ts
+      // shims for the loader at runtime. Map it onto the same files so the
+      // bundler resolves what the runtime serves.
+      {
+        find: /^@cardstack\/boxel-host\/lib\/(.*)$/,
+        replacement: path.join(__dirname, 'app', 'lib', '$1'),
+      },
       { find: 'path', replacement: require.resolve('path-browserify') },
       { find: 'stream', replacement: require.resolve('stream-browserify') },
       { find: /^util$/, replacement: require.resolve('util/') },

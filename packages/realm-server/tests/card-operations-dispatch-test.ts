@@ -3,11 +3,14 @@ const { module, test } = QUnit;
 import { basename } from 'path';
 
 import {
+  dischargePendingDecision,
   isDocumentResult,
   isHeadResult,
   isOperationFailure,
   isSourceResult,
   newOperationScope,
+  pendingWriteFor,
+  policyGateStats,
   resolveFacadeWrite,
   resolveGatedOperation,
   resolveOperation,
@@ -15,6 +18,7 @@ import {
   scopeCallerFor,
   type OperationCore,
   type OperationError,
+  type OperationScope,
   type OperationTarget,
 } from '@cardstack/runtime-common/card-operations';
 import { fileContentToBytes } from '@cardstack/runtime-common/stream';
@@ -2151,6 +2155,261 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(
         await decide(core, typeTarget(PERSON), 'draft'),
         'operation-not-permitted',
+      );
+    });
+  });
+
+  // The gate matches a write's grants on the card's index row, and the write
+  // lock judges the card again from the bytes the write stages against. Here
+  // the row records `Person` and `CardDef`, and a reader declined only writes
+  // holds grants on `CardDef` for every write the cases invoke. Each case
+  // changes what the lock holds: the type the stored bytes name, and the
+  // chain the definition cache records for it.
+  module('the write lock on a card a grant admitted a write to', function () {
+    const PET: CodeRef = { module: `${REALM}pet`, name: 'Pet' } as CodeRef;
+    const TARGET = { kind: 'instance' as const, url: `${REALM}person-1` };
+    const GRANTED = ['read', 'update', 'setMotto', 'draft'];
+    const OPERATIONS: Definition['operations'] = {
+      setMotto: { base: 'transform', deterministic: true },
+      // A named create anchored on the card, which mints a `Pet` and leaves
+      // the card as it is.
+      draft: { base: 'create', of: PET, deterministic: true },
+    };
+
+    // `where` makes every grant rest on that predicate. `personChain` is the
+    // chain the definition cache records for `Person` now, which the row
+    // does not know about.
+    function lockedCore({
+      where,
+      policyCard,
+      personChain = [PERSON, CARD_DEF],
+    }: {
+      where?: string;
+      policyCard?: string;
+      personChain?: CodeRef[];
+    } = {}) {
+      let { access } = policyStub([{ targetType: CARD_DEF, grants: GRANTED }], {
+        policyCard,
+      });
+      if (where) {
+        let compiled = access.compiledPolicy.bind(access);
+        access.compiledPolicy = async () => {
+          let policy = (await compiled())!;
+          return {
+            ...policy,
+            rules: policy.rules.map((rule) => ({
+              ...rule,
+              grants: rule.grants.map((grant) => ({
+                ...grant,
+                where: { source: where, canonical: where, snapshot: false },
+              })),
+            })),
+          };
+        };
+      }
+      let { core } = stub({ policy: access, operations: OPERATIONS });
+      let entry = core.definitionLookup.lookupDefinitionEntry.bind(
+        core.definitionLookup,
+      );
+      core.definitionLookup.lookupDefinitionEntry = async (ref) => {
+        let found = await entry(ref);
+        return found && typeKey(ref) === typeKey(PERSON)
+          ? { ...found, types: personChain.map(typeKey) }
+          : found;
+      };
+      let instance = core.indexQueryEngine.instance.bind(core.indexQueryEngine);
+      core.indexQueryEngine.instance = async (url, instanceOpts) => {
+        let row = await instance(url, instanceOpts);
+        return row
+          ? ({ ...row, types: [typeKey(PERSON), typeKey(CARD_DEF)] } as any)
+          : row;
+      };
+      return core;
+    }
+
+    function declinedWrites(core: OperationCore) {
+      return newOperationScope(core, {
+        caller: scopeCallerFor('@reader:localhost'),
+        coarseDeclined: 'writes',
+      });
+    }
+
+    // What the gate decides about `name` on the card, then what the lock
+    // decides with the card's stored bytes adopting from `storedAs`.
+    // `beneathAppend` hands those bytes over as the lock holds a card that an
+    // earlier entry appended to.
+    async function underLock(
+      core: OperationCore,
+      name: string,
+      storedAs: CodeRef,
+      {
+        scope = declinedWrites(core),
+        beneathAppend = false,
+      }: { scope?: OperationScope; beneathAppend?: boolean } = {},
+    ): Promise<string> {
+      let { decision } = await resolveGatedOperation(core, TARGET, name, scope);
+      let pending = pendingWriteFor(TARGET, name, decision, scope);
+      if (!pending) {
+        return `${decision.kind}, leaving nothing to the lock`;
+      }
+      let source = JSON.stringify({
+        data: {
+          type: 'card',
+          id: TARGET.url,
+          attributes: { title: 'Hi' },
+          meta: { adoptsFrom: storedAs },
+        },
+      });
+      try {
+        await dischargePendingDecision(core, pending, {
+          id: TARGET.url,
+          source,
+          ...(beneathAppend ? { beneathAppend: true as const } : {}),
+        });
+        return `${decision.kind}, then admitted`;
+      } catch (err) {
+        if (isOperationFailure(err)) {
+          return `${decision.kind}, then ${err.error.code}`;
+        }
+        throw err;
+      }
+    }
+
+    test('a write granted outright is refused when its bytes adopt from RealmPolicy', async function (assert) {
+      for (let [policyCard, whose] of [
+        [undefined, 'no key names the card'],
+        [`${REALM}policy`, 'this realm’s key names another card'],
+      ] as const) {
+        let core = lockedCore({ policyCard });
+        for (let name of ['update', 'setMotto', 'draft']) {
+          assert.strictEqual(
+            await underLock(core, name, REALM_POLICY),
+            'granted, then operation-not-permitted',
+            `${name}, where ${whose}`,
+          );
+        }
+      }
+    });
+
+    test('a write granted outright is refused when its bytes adopt from any other type', async function (assert) {
+      let core = lockedCore();
+      assert.strictEqual(
+        await underLock(core, 'update', PET),
+        'granted, then operation-not-permitted',
+        'the grant on CardDef was matched on a Person, not on a Pet',
+      );
+    });
+
+    test('a write granted outright is admitted while its bytes adopt from the type it was matched on', async function (assert) {
+      let core = lockedCore();
+      for (let name of ['update', 'setMotto', 'draft']) {
+        assert.strictEqual(
+          await underLock(core, name, PERSON),
+          'granted, then admitted',
+          name,
+        );
+      }
+    });
+
+    test('a type that now descends from RealmPolicy makes the card a policy card under the lock', async function (assert) {
+      let core = lockedCore({ personChain: [PERSON, REALM_POLICY, CARD_DEF] });
+      assert.strictEqual(
+        await underLock(core, 'update', PERSON),
+        'granted, then operation-not-permitted',
+        'a write that changes the card',
+      );
+      assert.strictEqual(
+        await underLock(core, 'setMotto', PERSON),
+        'granted, then operation-not-permitted',
+        'a named write that changes the card',
+      );
+      assert.strictEqual(
+        await underLock(core, 'draft', PERSON),
+        'granted, then admitted',
+        'a named create anchored on the card, which mints a Pet and leaves the card as it is',
+      );
+    });
+
+    test('a write resting on a predicate is judged by its bytes before the predicate runs', async function (assert) {
+      let policyNow = lockedCore({
+        where: 'true',
+        personChain: [PERSON, REALM_POLICY, CARD_DEF],
+      });
+      assert.strictEqual(
+        await underLock(policyNow, 'update', PERSON),
+        'pending, then operation-not-permitted',
+        'a card whose type now descends from RealmPolicy',
+      );
+      assert.strictEqual(
+        policyGateStats(policyNow).predicateEvaluations,
+        0,
+        'refused without evaluating the predicate',
+      );
+      let ordinary = lockedCore({ where: 'true' });
+      assert.strictEqual(
+        await underLock(ordinary, 'update', PERSON),
+        'pending, then admitted',
+        'while the same predicate admits an ordinary card',
+      );
+      assert.strictEqual(policyGateStats(ordinary).predicateEvaluations, 1);
+    });
+
+    test('bytes beneath an append judge a write granted outright by their type alone', async function (assert) {
+      let core = lockedCore();
+      assert.strictEqual(
+        await underLock(core, 'update', PERSON, { beneathAppend: true }),
+        'granted, then admitted',
+        'the type the grant was matched on',
+      );
+      assert.strictEqual(
+        await underLock(core, 'update', REALM_POLICY, { beneathAppend: true }),
+        'granted, then operation-not-permitted',
+        'a policy card',
+      );
+      assert.strictEqual(
+        await underLock(lockedCore({ where: 'true' }), 'update', PERSON, {
+          beneathAppend: true,
+        }),
+        'pending, then operation-not-permitted',
+        'while a predicate, which reads what the append changes, judges nothing from them',
+      );
+    });
+
+    test('what leaves nothing to the lock', async function (assert) {
+      let core = lockedCore();
+      assert.strictEqual(
+        await underLock(core, 'read', REALM_POLICY, {
+          scope: newOperationScope(core, {
+            caller: scopeCallerFor('@stranger:localhost'),
+            coarseDeclined: 'all',
+          }),
+        }),
+        'granted, leaving nothing to the lock',
+        'a read, which is decided at the gate',
+      );
+      assert.strictEqual(
+        await underLock(core, 'update', REALM_POLICY, {
+          scope: newOperationScope(core, {
+            caller: scopeCallerFor('@admin:localhost'),
+            coarseDeclined: 'none',
+          }),
+        }),
+        'coarse, leaving nothing to the lock',
+        'a write the realm ACL allows',
+      );
+    });
+
+    test('a caller that carries no decision to a lock is refused a write granted outright', async function (assert) {
+      let core = lockedCore();
+      let failure = await refusalFrom(() =>
+        resolveOperation(core, TARGET, 'update', declinedWrites(core)),
+      );
+      assert.strictEqual(failure.code, 'operation-not-permitted');
+      assert.strictEqual(
+        (await resolveOperation(core, TARGET, 'read', declinedWrites(core)))
+          .base,
+        'read',
+        'while a granted read resolves as before',
       );
     });
   });
