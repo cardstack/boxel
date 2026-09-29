@@ -190,6 +190,14 @@ type Options = {
   // answer to "which cards does this field name?" — the part a consumer
   // cannot cheaply recompute — and drops the cards themselves, which it can.
   resolveLinksOnly?: boolean;
+  // When true, a search entry's item answers for itself alone: the resource
+  // carries no `relationships`, and the `loadLinks` pass that would assemble
+  // them does not run — so nothing is named and nothing is side-loaded. Unlike
+  // `omitIncluded`, which skips the pass and leaves the stored links standing
+  // on each item, this withholds even which cards an item points at. It
+  // narrows the item and never the entry: the entry still names its item and
+  // carries its renderings. Read by `searchEntries` alone.
+  omitRelationships?: boolean;
   // Per-request wall-clock collector, threaded from `searchRealms` when a
   // request carries a correlation id. The post-SQL stages here — the SQL
   // query and the `loadLinks` relationship assembly — stamp their elapsed
@@ -524,6 +532,9 @@ export class RealmIndexQueryEngine {
             new URL(url),
             file,
           );
+          if (opts?.omitRelationships) {
+            item = withoutRelationships(item);
+          }
           if (fieldset.item.kind === 'sparse') {
             item = buildSparseItemResource(item, fieldset.item.fields);
           } else {
@@ -666,6 +677,9 @@ export class RealmIndexQueryEngine {
           id: cardUrl as RealmResourceIdentifier,
           links: { self: cardUrl },
         };
+        if (opts?.omitRelationships) {
+          item = withoutRelationships(item);
+        }
         if (fieldset.item.kind === 'sparse') {
           item = buildSparseItemResource(item, fieldset.item.fields);
         } else {
@@ -773,7 +787,12 @@ export class RealmIndexQueryEngine {
       ...itemResources,
     ];
 
-    if (fullItemRoots.length > 0 && opts?.loadLinks && !opts?.omitIncluded) {
+    if (
+      fullItemRoots.length > 0 &&
+      opts?.loadLinks &&
+      !opts?.omitIncluded &&
+      !opts?.omitRelationships
+    ) {
       let omit = itemResources.map((r) => r.id).filter(Boolean) as string[];
       // One assembly serves the whole page, so the budget is spent across the
       // page's rows jointly and the report belongs on the document rather than
@@ -2704,6 +2723,15 @@ function enumerateFileRenderings(file: IndexedFile): RowRendering[] {
     candidates.push({ format: 'isolated', html: file.isolatedHtml });
   }
   return candidates;
+}
+
+// An item with its relationships taken off. A shallow copy, so the row the
+// item was built from keeps its own.
+function withoutRelationships<T extends CardResource<Saved> | FileMetaResource>(
+  item: T,
+): T {
+  let { relationships: _withheld, ...rest } = item;
+  return rest as T;
 }
 
 // Takes the narrow shape rather than a full `IndexedFile`, which is a

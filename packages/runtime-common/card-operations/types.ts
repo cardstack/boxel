@@ -135,14 +135,17 @@ function narrowerLinkStrategy(a: LinkStrategy, b: LinkStrategy): LinkStrategy {
   return LINK_STRATEGY_REACH[a] >= LINK_STRATEGY_REACH[b] ? a : b;
 }
 
-// How much of the card's link graph a read carries, from the two places that
-// may narrow it. The one function both the read executor and the card+json
-// validator built ahead of it call, so the body and the validator that
-// describes it cannot disagree about the shape.
+// How much of the card's link graph a read carries, or how much of each
+// result's a named query's results carry, from the two places that may narrow
+// it. The one function the read executor, the card+json validator built ahead
+// of it, and both search endpoints call, so the body and the validator that
+// describes it cannot disagree about the shape, and neither can a query's
+// results served from a realm's own `_search` and from `_federated-search`.
 //
 // The operation declares one, and it is the author's statement about what this
-// card's representation is allowed to reach — uniform across callers, because
-// the serving path never asks how a caller was authorized.
+// card's representation — or this query's results — is allowed to reach,
+// uniform across callers, because the serving path never asks how a caller was
+// authorized.
 //
 // The request carries the other. `resolveLinksOnly` is how the realm sheds
 // load, or how a consumer says it will resolve the links it displays itself;
@@ -202,9 +205,16 @@ export interface OperationDefinition {
   // A saved search, as an entry-wire query whose value slots may still hold
   // markers.
   query?: OperationQueryTemplate;
-  // How much of the target's link graph this read carries: the whole assembled
+  // How much of the target's link graph this read carries, or how much of each
+  // result's link graph this query's results carry: the whole assembled
   // closure, the relationships naming their targets with nothing assembled, or
-  // no relationship data at all. Absent is `full`.
+  // no relationship data at all. Absent is `full`. Only a `read` or a `query`
+  // carries one.
+  //
+  // On a query it governs every result row alike, whatever type the row is and
+  // whatever that type's own `read` declares, and it narrows the row's card
+  // rather than the entry the row is delivered in: the entry still names its
+  // card and carries its renderings.
   //
   // It applies to every caller alike. The serving path never asks how a caller
   // was authorized, so a realm writer and a caller reached by a policy grant
@@ -303,13 +313,13 @@ export type OperationLoweringIssueCode =
   // user id and no card represents a user, so the link would name a card that
   // does not exist.
   | 'actor-not-a-card'
-  // A `links` strategy on a base other than `read`. The strategy narrows the
-  // document a read of the target serves, and no other base serves one: a write
-  // answers without assembling the card's closure, a `readSource` serves stored
-  // bytes, and a `query` answers through search, whose results carry their own
-  // closures that this declaration does not govern.
+  // A `links` strategy on a base other than `read` or `query`. The strategy
+  // narrows the link closure a read of the target or a query's results
+  // assemble, and no other base assembles one: a write answers without
+  // assembling the card's closure, and a `readSource` serves stored bytes.
   | 'links-without-assembly'
-  // A `links` value that is not one of the strategies a read can apply.
+  // A `links` value that is not one of the strategies a read or a query can
+  // apply.
   | 'invalid-link-strategy'
   // A raw BXL program that does not parse.
   | 'invalid-program'
