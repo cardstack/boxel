@@ -4,7 +4,7 @@ import supertest from 'supertest';
 import type { Test, SuperTest, Response } from 'supertest';
 import { basename, join } from 'path';
 import { dirSync } from 'tmp';
-import { rri, SupportedMimeType } from '@cardstack/runtime-common';
+import { logger, rri, SupportedMimeType } from '@cardstack/runtime-common';
 import type {
   QueuePublisher,
   QueueRunner,
@@ -143,6 +143,38 @@ const SYLLABUS_MODULE = `
     @field title = contains(StringField);
   }
 `;
+
+// Every warning the gate logs on `realm:policy` while `fn` runs. The gate and
+// this suite share the named logger, so a tap on its method factory sees
+// exactly what the gate writes. The level is held at `warn` or louder for the
+// duration, so a quieter LOG_LEVELS setting cannot hide the line a test is
+// looking for.
+async function policyWarningsDuring(
+  fn: () => Promise<void>,
+): Promise<string[]> {
+  let log = logger('realm:policy');
+  let warnings: string[] = [];
+  let originalFactory = log.methodFactory;
+  let originalLevel = log.getLevel();
+  log.methodFactory = (methodName, level, loggerName) => {
+    let raw = originalFactory(methodName, level, loggerName);
+    return (...args: unknown[]) => {
+      if (methodName === 'warn') {
+        warnings.push(args.map(String).join(' '));
+      }
+      raw(...args);
+    };
+  };
+  // Rebinds the logger's methods, which is what puts the tap in place.
+  log.setLevel(originalLevel > log.levels.WARN ? 'warn' : originalLevel);
+  try {
+    await fn();
+  } finally {
+    log.methodFactory = originalFactory;
+    log.setLevel(originalLevel);
+  }
+  return warnings;
+}
 
 type Grant = { operation: string; where?: unknown };
 type Rule = { targetType: { module: string; name: string }; grants: Grant[] };
@@ -940,8 +972,24 @@ module(basename(import.meta.filename), function (hooks) {
       );
       // The teacher may not read the realm, so the fault reaches them as the
       // answer for a syllabus that does not exist.
-      let thrown = await getCard(ALGEBRA, AUTH.teacher());
-      let missing = await getCard(GEOMETRY, AUTH.teacher());
+      let thrown!: Response;
+      let missing!: Response;
+      let thrownBatch!: Response;
+      let missingBatch!: Response;
+      let warnings = await policyWarningsDuring(async () => {
+        thrown = await getCard(ALGEBRA, AUTH.teacher());
+        missing = await getCard(GEOMETRY, AUTH.teacher());
+        thrownBatch = await operations(
+          EDUCATION,
+          AUTH.teacher(),
+          invoke('read', { href: ALGEBRA }),
+        );
+        missingBatch = await operations(
+          EDUCATION,
+          AUTH.teacher(),
+          invoke('read', { href: GEOMETRY }),
+        );
+      });
       assert.strictEqual(
         thrown.status,
         404,
@@ -952,21 +1000,27 @@ module(basename(import.meta.filename), function (hooks) {
         missing.text,
         'is the same body as a card that is not there, but for the URL',
       );
-      let thrownBatch = await operations(
-        EDUCATION,
-        AUTH.teacher(),
-        invoke('read', { href: ALGEBRA }),
-      );
-      let missingBatch = await operations(
-        EDUCATION,
-        AUTH.teacher(),
-        invoke('read', { href: GEOMETRY }),
-      );
       assert.strictEqual(thrownBatch.status, 404, 'as is an envelope read');
       assert.strictEqual(
         thrownBatch.text,
         missingBatch.text,
         'whose body is the same, byte for byte',
+      );
+      let faults = warnings.filter((line) =>
+        line.includes('threw while deciding'),
+      );
+      assert.strictEqual(
+        faults.length,
+        1,
+        'the throw is logged once, however many reads it refuses',
+      );
+      assert.true(
+        faults[0]?.includes(`"read" on ${ALGEBRA}`),
+        `the line names the card the predicate threw on: ${faults[0]}`,
+      );
+      assert.true(
+        faults[0]?.includes('cannot be parsed as number'),
+        'and why it threw',
       );
       assert.strictEqual(
         gateStats().predicateEvaluations,

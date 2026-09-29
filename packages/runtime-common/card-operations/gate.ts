@@ -3,6 +3,7 @@ import type { Definition } from '../definitions.ts';
 import { codeRefFromInternalKey } from '../index.ts';
 import type { LocalPath } from '../paths.ts';
 import { isCardResource } from '../card-document-shape.ts';
+import { now } from '../clock.ts';
 import { logger } from '../log.ts';
 import type { CardResource } from '../resource-types.ts';
 import { extensionOfName } from '../file-def-code-ref.ts';
@@ -1342,18 +1343,60 @@ async function evaluate(
     if (subject.input === undefined) {
       return 'fails';
     }
-    // A caller who may not read the realm is told of this fault as a card
-    // that is not there, so the log is where a policy's author finds it.
     let judged = subject.instance?.id;
-    (policyLog ??= logger('realm:policy')).warn(
-      `a predicate in the policy of realm ${core.realmURL} threw while ` +
-        `deciding whether ${actor ?? 'an anonymous caller'} may invoke ` +
-        `"${operation}" on ${typeof judged === 'string' ? judged : 'its target'}: ` +
-        `${where.source}: ${e instanceof Error ? e.message : String(e)}`,
+    logThrow(
+      core,
+      operation,
+      where,
+      typeof judged === 'string' ? judged : 'its target',
+      actor,
+      e,
     );
     return 'threw';
   }
 }
+
+// A caller who may not read the realm is told of a predicate's fault as a card
+// that is not there, so the log is where a policy's author finds it.
+//
+// It logs one line per predicate a minute at most. A capability check
+// evaluates a predicate once for each card it is asked about, and a view asks
+// again as it re-renders, so a line for every throw would put the whole view
+// into the log at the rate it renders. One line says what the author needs:
+// that the predicate throws, on what, and why, and an explain answers which
+// card it throws on. The error is cut short because BXL's quotes the value it
+// failed on, which can be a whole stored field.
+function logThrow(
+  core: OperationCore,
+  operation: string,
+  where: CompiledPolicyPredicate,
+  judged: string,
+  actor: string | undefined,
+  e: unknown,
+): void {
+  let at = now();
+  let last = lastLoggedThrow.get(where);
+  if (last !== undefined && at - last < THROW_LOG_INTERVAL_MS) {
+    return;
+  }
+  lastLoggedThrow.set(where, at);
+  let error = e instanceof Error ? e.message : String(e);
+  if (error.length > THROW_ERROR_LENGTH) {
+    error = `${error.slice(0, THROW_ERROR_LENGTH)}…`;
+  }
+  (policyLog ??= logger('realm:policy')).warn(
+    `a predicate in the policy of realm ${core.realmURL} threw while ` +
+      `deciding whether ${actor ?? 'an anonymous caller'} may invoke ` +
+      `"${operation}" on ${judged}: ${where.source}: ${error}`,
+  );
+}
+
+const THROW_LOG_INTERVAL_MS = 60_000;
+const THROW_ERROR_LENGTH = 200;
+
+// When each compiled predicate last logged a throw. Keyed on the compiled
+// predicate, so a policy compiled again starts over.
+const lastLoggedThrow = new WeakMap<CompiledPolicyPredicate, number>();
 
 // Created lazily: a module-scope `logger()` can race the circular import that
 // installs the log-definitions factory, the hazard `telemetry.ts` documents.
