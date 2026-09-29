@@ -54,45 +54,49 @@ const VARIANT_AXES: Record<string, [PretuiTone, PretuiAppearance]> =
 // label when that fits (a stretched or min-width button), else the spinner
 // alone over the hidden label. Measured with the layout attribute cleared, so
 // the chosen layout can't widen the button and feed back into the check.
-const fitBusyContent = modifier((busyEl: HTMLElement, [busy]: [boolean]) => {
-  let button = busyEl.parentElement;
-  let label = busyEl.nextElementSibling as HTMLElement | null;
-  let text = busyEl.lastElementChild as HTMLElement | null;
-  if (!button || !label || !text) return;
-  if (!busy) {
-    button.removeAttribute('data-busy-layout');
-    return;
-  }
-  let target = button;
-  let labelEl = label;
-  let textEl = text;
-  let measure = () => {
-    target.removeAttribute('data-busy-layout');
-    let style = getComputedStyle(target);
-    let room =
-      target.clientWidth -
-      parseFloat(style.paddingLeft) -
-      parseFloat(style.paddingRight) -
-      0.5;
-    // spinner 1.04em + gap 0.48em, as in the styles below
-    let spinner = parseFloat(style.fontSize) * 1.52;
-    // the busy text is visually hidden here, so scrollWidth is its full width
-    let textWidth = textEl.textContent?.trim() ? textEl.scrollWidth : 0;
-    if (textWidth && room >= textWidth + spinner) {
-      target.setAttribute('data-busy-layout', 'text');
-    } else if (room >= labelEl.offsetWidth + spinner) {
-      target.setAttribute('data-busy-layout', 'inline');
+// The busy label is an argument only so that changing it while busy re-runs
+// the measurement; the text itself is read from the DOM.
+const fitBusyContent = modifier(
+  (busyEl: HTMLElement, [busy, _busyLabel]: [boolean, string | undefined]) => {
+    let button = busyEl.parentElement;
+    let label = busyEl.nextElementSibling as HTMLElement | null;
+    let text = busyEl.lastElementChild as HTMLElement | null;
+    if (!button || !label || !text) return;
+    if (!busy) {
+      button.removeAttribute('data-busy-layout');
+      return;
     }
-  };
-  measure();
-  if (typeof ResizeObserver === 'undefined') return;
-  let observer = new ResizeObserver(measure);
-  observer.observe(target);
-  return () => {
-    observer.disconnect();
-    target.removeAttribute('data-busy-layout');
-  };
-});
+    let target = button;
+    let labelEl = label;
+    let textEl = text;
+    let measure = () => {
+      target.removeAttribute('data-busy-layout');
+      let style = getComputedStyle(target);
+      let room =
+        target.clientWidth -
+        parseFloat(style.paddingLeft) -
+        parseFloat(style.paddingRight) -
+        0.5;
+      // spinner 1.04em + gap 0.48em, as in the styles below
+      let spinner = parseFloat(style.fontSize) * 1.52;
+      // the busy text is visually hidden here, so scrollWidth is its full width
+      let textWidth = textEl.textContent?.trim() ? textEl.scrollWidth : 0;
+      if (textWidth && room >= textWidth + spinner) {
+        target.setAttribute('data-busy-layout', 'text');
+      } else if (room >= labelEl.offsetWidth + spinner) {
+        target.setAttribute('data-busy-layout', 'inline');
+      }
+    };
+    measure();
+    if (typeof ResizeObserver === 'undefined') return;
+    let observer = new ResizeObserver(measure);
+    observer.observe(target);
+    return () => {
+      observer.disconnect();
+      target.removeAttribute('data-busy-layout');
+    };
+  },
+);
 
 export const BUTTON_SHAPES = ['rounded', 'pill', 'square'] as const;
 export type ButtonShape = (typeof BUTTON_SHAPES)[number];
@@ -212,7 +216,7 @@ export class Button extends Component<ButtonSignature> {
         data-test-pretui-button
         ...attributes
       >
-        <span class='pretui-btn-busy' {{fitBusyContent this.busy}}>
+        <span class='pretui-btn-busy' {{fitBusyContent this.busy @busyLabel}}>
           {{#if this.busy}}<span
               class='pretui-spinner'
               aria-hidden='true'
