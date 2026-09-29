@@ -674,8 +674,9 @@ export type PolicyExplanationReason =
   // behavior no grant reaches here at all — a query, which is authorized on
   // the search engine's lane, and an explain.
   | 'non-grantable'
-  // A write to the realm's policy card or to its config card, which no grant
-  // reaches whatever the card's type declares.
+  // A write to the realm's policy card or to its config card, or a write that
+  // changes or mints any policy card, which no grant reaches whatever the
+  // card's type declares.
   | 'authorization-infrastructure'
   // The target is nothing a rule can be matched against for this operation:
   // a card whose index row records an error, so its type is unknown; a file,

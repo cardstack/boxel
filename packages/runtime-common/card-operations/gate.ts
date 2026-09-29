@@ -481,6 +481,7 @@ export async function gateOperation(
     isWrite(base) &&
     (await writesPolicyCard(core, core.policy, types, definition))
   ) {
+    trace?.refused('authorization-infrastructure');
     return GATE_REFUSED;
   }
   let unconditional = matched.find(({ grant }) => !grant.where);
