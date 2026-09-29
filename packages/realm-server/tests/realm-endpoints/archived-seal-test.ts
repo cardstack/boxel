@@ -144,9 +144,9 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
         '_readiness-check stays reachable while archived',
       );
 
-      // The exemption is path-based, not header-based: a bare health probe
-      // that sends no `Accept` header is never sealed — it's handled exactly
-      // as on an active realm, with no archived marker. (The router itself
+      // A bare health probe that sends no `Accept` header reaches no route,
+      // and the seal lets it through: it's handled exactly as on an active
+      // realm, with no archived marker. (The router itself
       // gates `_readiness-check` on the `Accept` header, so a header-less probe
       // doesn't reach the handler on either an active or archived realm; the
       // point here is that the seal doesn't single it out.)
@@ -232,6 +232,24 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           .set('Authorization', ownerJWT()),
         'owner card+source GET _readiness-check',
       );
+      // A `HEAD` under those two media types is the read of what is stored
+      // at the path, not the probe's discovery answer.
+      for (let accept of [
+        'application/vnd.card+source',
+        'application/vnd.card+json',
+      ]) {
+        let response = await request
+          .head('/_readiness-check')
+          .set('Accept', accept)
+          .set('Authorization', ownerJWT());
+        let label = `owner ${accept} HEAD _readiness-check`;
+        assert.strictEqual(response.status, 403, `${label}: HTTP 403`);
+        assert.strictEqual(
+          response.get('X-Boxel-Realm-Archived'),
+          'true',
+          `${label}: carries the X-Boxel-Realm-Archived marker`,
+        );
+      }
 
       for (let path of ['_session', '_readiness-check']) {
         assert.false(
@@ -242,6 +260,17 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
     });
 
     test('the operational endpoints themselves stay reachable while archived', async function (assert) {
+      // The probe's `HEAD` under the media types a health checker sends,
+      // answered while the realm is active, to compare against below.
+      let headAccepts = ['*/*', 'application/vnd.api+json'];
+      let activeHeads: number[] = [];
+      for (let accept of headAccepts) {
+        let response = await request
+          .head('/_readiness-check')
+          .set('Accept', accept);
+        activeHeads.push(response.status);
+      }
+
       await archiveRealm(dbAdapter, new URL(testRealmHref));
 
       let matrixClient = new MatrixClient({
@@ -266,6 +295,28 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
         .get('/_readiness-check')
         .set('Accept', 'application/vnd.api+json');
       assert.strictEqual(readiness.status, 200, '_readiness-check answers');
+
+      for (let [index, accept] of headAccepts.entries()) {
+        let response = await request
+          .head('/_readiness-check')
+          .set('Accept', accept);
+        let label = `HEAD _readiness-check (accept: ${accept})`;
+        assert.strictEqual(
+          response.status,
+          200,
+          `${label} gets the discovery answer`,
+        );
+        assert.strictEqual(
+          response.status,
+          activeHeads[index],
+          `${label} gets the answer it gets while the realm is active`,
+        );
+        assert.strictEqual(
+          response.get('X-Boxel-Realm-Archived'),
+          undefined,
+          `${label} is not given the archived seal`,
+        );
+      }
     });
 
     test('a readiness probe that no route answers reads nothing the realm stores at its path', async function (assert) {
@@ -389,14 +440,14 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       ];
       // These read nothing even for a caller who may read the realm: the
       // buckets whose `HEAD` is the discovery answer for everyone, a file the
-      // realm is part-way through writing, and the paths of the operational
-      // endpoints.
+      // realm is part-way through writing, and the health probe's `HEAD`s.
       const otherHeads: [string, string | undefined][] = [
         ['/_info', 'application/vnd.api+json'],
         ['/_search', 'application/vnd.card+json'],
         ['/sample.md.boxel-partial', undefined],
         ['/_readiness-check', 'application/vnd.api+json'],
-        ['/_session', undefined],
+        ['/_readiness-check', '*/*'],
+        ['/_readiness-check', undefined],
       ];
 
       interface HeadAnswer {

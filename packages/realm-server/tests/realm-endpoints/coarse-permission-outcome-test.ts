@@ -533,7 +533,19 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       );
     });
 
-    test('exactly the sign-in and the readiness check answer a caller without credentials', async function (assert) {
+    test('exactly the operational endpoints answer a caller without credentials and pass the archived seal', async function (assert) {
+      // The probe's `HEAD` is its own route in every media type whose `HEAD`
+      // is the realm's discovery answer, which is every one but card+source
+      // and card+json, whose `HEAD` reads what is stored at the path.
+      let probeHeads = [
+        ...new Set(
+          Object.values(SupportedMimeType).filter(
+            (mimeType) =>
+              mimeType !== SupportedMimeType.CardSource &&
+              mimeType !== SupportedMimeType.CardJson,
+          ),
+        ),
+      ].map((mimeType) => `HEAD ${mimeType} /_readiness-check`);
       assert.deepEqual(
         testRealm
           .routeDescriptions()
@@ -543,7 +555,9 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
         [
           `POST ${SupportedMimeType.Session} /_session`,
           `GET ${SupportedMimeType.RealmInfo} /_readiness-check`,
+          ...probeHeads,
         ].sort(),
+        'the session sign-in and the health probe, and none of the routes that read or write what the realm stores',
       );
     });
 

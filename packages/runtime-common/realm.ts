@@ -838,14 +838,15 @@ function renderHoldMaxMs(): number {
     ? override
     : DEFAULT_RENDER_HOLD_MAX_MS;
 }
-// Marks the realm's public operational endpoints, `_session` authentication
-// and the `_readiness-check` health probe, which answer a caller without
-// credentials and keep working while the realm is archived (see
-// `RouteOptions.operationalEndpoint`).
+// Marks the realm's public operational endpoints, which answer a caller
+// without credentials and keep working while the realm is archived (see
+// `RouteOptions.operationalEndpoint`): `_session` authentication, and the
+// `_readiness-check` health probe, both its `GET` and its `HEAD` in every
+// media type whose `HEAD` is the realm's discovery answer.
 const OPERATIONAL_ENDPOINT = { operationalEndpoint: true } as const;
-// The health probe's path as the router matches it, named here because two
-// places read it: the probe's route, and the probe that reaches no route
-// because it sends no `Accept` one answers (see `#isBareReadinessProbe`).
+// The health probe's path as the router matches it, named here because the
+// probe's routes read it, and so does the probe that reaches no route because
+// it sends no `Accept` they answer (see `#isBareReadinessProbe`).
 const READINESS_CHECK_PATH = '/_readiness-check';
 // Marks the routes whose handlers hand the realm ACL's recorded outcome to the
 // policy gate: the `/_operations` envelope, which resolves every entry through
@@ -2115,6 +2116,11 @@ export type RequestContext = {
 interface RequestDispatch {
   consumesCoarseOutcome: boolean;
   coarseReadOnly?: boolean;
+  // The answer is one of the realm's operational endpoints, which an archived
+  // realm's seal lets through (see `OPERATIONAL_ENDPOINT`). The seal reads it
+  // off the dispatch that will answer, so nothing else a request for an
+  // endpoint's path could be handed to passes with it.
+  operationalEndpoint?: boolean;
   handle: () => Promise<ResponseWithNodeStream>;
 }
 
@@ -2129,7 +2135,7 @@ export type DispatchDescription =
       path: '*';
       consumesCoarseOutcome: boolean;
       coarseReadOnly: boolean;
-      operationalEndpoint: false;
+      operationalEndpoint: boolean;
     };
 
 type CoarseAdmission = (
@@ -2792,15 +2798,28 @@ export class Realm {
     // of the caller, which is what lets a client work out which realm serves a
     // URL — and whether that realm is public — before it has credentials for
     // it.
+    //
+    // The health probe's `HEAD` is that same answer, which reads nothing, and
+    // is registered ahead of the catch-all as the probe's own route so that it
+    // stays reachable while the realm is archived: `*/*`, which a health
+    // checker's `HEAD` commonly sends, is one of these buckets.
     Object.values(SupportedMimeType).forEach((mimeType) => {
       if (
         mimeType !== SupportedMimeType.CardSource &&
         mimeType !== SupportedMimeType.CardJson
       ) {
-        this.#router.head('/.*', mimeType as SupportedMimeType, async () => {
+        let discovery = async () => {
           let requestContext = await this.createRequestContext('read');
           return this.realmIdentityResponse(requestContext);
-        });
+        };
+        this.#router
+          .head(
+            READINESS_CHECK_PATH,
+            mimeType as SupportedMimeType,
+            discovery,
+            OPERATIONAL_ENDPOINT,
+          )
+          .head('/.*', mimeType as SupportedMimeType, discovery);
       }
     });
     // card+json is the one bucket where a `HEAD` is a read: a caller permitted
@@ -6824,6 +6843,7 @@ export class Realm {
     });
 
     try {
+      let dispatch = this.#routeRequest(request, localPath, requestContext);
       if (!isLocal) {
         // A capture-URL token (`?token=` on a `_screenshot/` GET) authorizes
         // exactly this request without an Authorization header — the door for
@@ -6863,11 +6883,11 @@ export class Realm {
         // endpoints stay reachable while archived: the `_readiness-check`
         // health probe (so health checks don't read an archived realm as
         // down) and `_session` (so authentication still works). A request
-        // passes as the router dispatches it, not by its path, and a bare
-        // health probe that sends no `Accept` header passes too (see
-        // `#passesArchivedSeal`). The archive-management endpoints live on
-        // the realm SERVER router and never reach this boundary, so they stay
-        // reachable.
+        // passes by the dispatch that answers it, not by its path (see
+        // `RequestDispatch.operationalEndpoint`), and a bare health probe
+        // that sends no `Accept` header passes too. The archive-management
+        // endpoints live on the realm SERVER router and never reach this
+        // boundary, so they stay reachable.
         //
         // A `HEAD` passes the ACL whoever sends it, so its passing shows
         // nothing about the caller. It meets the seal only from a caller who
@@ -6877,7 +6897,7 @@ export class Realm {
         // answer does not say whether the realm is archived. It is given here
         // rather than by the route: a route that would answer this caller with
         // a read a grant admits would then run that read in a sealed realm.
-        if (requestContext.coarseAllowed && (await this.#isSealed(request))) {
+        if (requestContext.coarseAllowed && (await this.#isSealed(dispatch))) {
           if (
             request.method === 'HEAD' &&
             !(await this.#readProbe(request, requestContext)).allowed
@@ -6887,7 +6907,6 @@ export class Realm {
           throw new ArchivedRealmError(`Realm ${this.url} is archived`);
         }
       }
-      let dispatch = this.#routeRequest(request, localPath, requestContext);
       // The terminal assertion: nothing reaches a handler with the ACL's
       // refusal on it unless its route consumes that outcome, so a route that
       // says nothing is refused exactly as the ACL would have refused it. A
@@ -6915,7 +6934,7 @@ export class Realm {
             )
           );
         }
-        await this.#assertNotArchived(request);
+        await this.#assertNotArchived(dispatch);
       }
       if (!isLocal && request.method === 'HEAD' && dispatch.coarseReadOnly) {
         let answer = await this.#headForNonReader(request, requestContext);
@@ -7068,10 +7087,11 @@ export class Realm {
       return {
         consumesCoarseOutcome: matched.consumesCoarseOutcome,
         coarseReadOnly: matched.coarseReadOnly,
+        operationalEndpoint: matched.operationalEndpoint,
         handle: () => this.#router.handle(request, requestContext, matched),
       };
     }
-    // The health probe sent with no `Accept` its route answers. It is told
+    // The health probe sent with no `Accept` its routes answer. It is told
     // nothing is there, in the words the file serve uses for a path that
     // holds nothing, rather than handed to that serve: an archived realm's
     // seal lets this probe through, and the file serve would read what the
@@ -7081,6 +7101,7 @@ export class Realm {
       return {
         consumesCoarseOutcome: false,
         coarseReadOnly: true,
+        operationalEndpoint: true,
         handle: async () =>
           notFound(
             request,
@@ -7269,40 +7290,30 @@ export class Realm {
     this.#testOnlyBeforeBatchLock = hook;
   }
 
-  async #assertNotArchived(request: Request): Promise<void> {
-    if (await this.#isSealed(request)) {
+  async #assertNotArchived(dispatch: RequestDispatch): Promise<void> {
+    if (await this.#isSealed(dispatch)) {
       throw new ArchivedRealmError(`Realm ${this.url} is archived`);
     }
   }
 
-  // Whether the archived seal covers `request`: the realm is archived and the
-  // request is not one the seal lets through. Read fresh (no memoization) for
-  // the same reason createRequestContext does: a peer replica's
-  // archive/unarchive must take effect here without a restart.
-  async #isSealed(request: Request): Promise<boolean> {
+  // Whether the archived seal covers the request `dispatch` answers: the
+  // realm is archived and the dispatch is not an operational endpoint. That
+  // is read off the dispatch rather than the request's path, so a request
+  // whose path only resembles an endpoint's, such as the directory
+  // `_session/`, or `_session` asked for as card source, is sealed like any
+  // other. Read fresh (no memoization) for the same reason
+  // createRequestContext does: a peer replica's archive/unarchive must take
+  // effect here without a restart.
+  async #isSealed(dispatch: RequestDispatch): Promise<boolean> {
     return (
-      (await isRealmArchived(this.#dbAdapter, new URL(this.url))) &&
-      !this.#passesArchivedSeal(request)
+      !dispatch.operationalEndpoint &&
+      (await isRealmArchived(this.#dbAdapter, new URL(this.url)))
     );
   }
 
-  // The requests an archived realm's seal lets through: one the router
-  // dispatches to an operational endpoint (see `OPERATIONAL_ENDPOINT`), and
-  // the health probe sent with no `Accept` any route answers, which reads
-  // nothing (see `#routeRequest`). Each is matched as the router matches it,
-  // so a request whose path only resembles an endpoint's, such as the
-  // directory `_session/`, or `_session` asked for as card source, is sealed
-  // like any other.
-  #passesArchivedSeal(request: Request): boolean {
-    let route = this.#router.lookupRoute(request);
-    return route
-      ? route.operationalEndpoint
-      : this.#isBareReadinessProbe(request);
-  }
-
   // Whether `request` is a `GET` or `HEAD` of the health probe's path. Asked
-  // only of a request no route answers, which is the probe sent without the
-  // `Accept` its route is registered under, as a health checker commonly
+  // only of a request no route answers, which is the probe sent without an
+  // `Accept` its routes are registered under, as a health checker commonly
   // sends it.
   #isBareReadinessProbe(request: Request): boolean {
     return (
@@ -7324,7 +7335,7 @@ export class Realm {
         path: '*' as const,
         consumesCoarseOutcome: false,
         coarseReadOnly: method === 'GET' || method === 'HEAD',
-        operationalEndpoint: false as const,
+        operationalEndpoint: false,
       })),
     ];
   }
