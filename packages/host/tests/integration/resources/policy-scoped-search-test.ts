@@ -1,11 +1,12 @@
 import type { RenderingTestContext } from '@ember/test-helpers';
-import { settled } from '@ember/test-helpers';
+import { settled, waitUntil } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import {
   baseRealm,
+  Deferred,
   rri,
   SupportedMimeType,
   type LooseSingleCardDocument,
@@ -28,6 +29,7 @@ import { setupBaseRealm } from '../../helpers/base-realm';
 import { setupCatalogTestSubset } from '../../helpers/catalog-test-subset';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import {
+  getRealmServerRoute,
   registerDefaultRoutes,
   registerRealmServerRoute,
 } from '../../helpers/realm-server-mock/routes';
@@ -293,6 +295,70 @@ module('Integration | policy-scoped search', function (hooks) {
       ids(search).includes(`${SCOPED}schedules/local`),
       'the create is merged into the result',
     );
+  });
+
+  // Until a search answers for a realm, the result holds no mark for it, so
+  // the arm widens only into a realm the session already knows it reads.
+  test('before the first answer lands, a matching card of a realm the session does not read is not merged', async function (this: RenderingTestContext, assert) {
+    await storeService.get(COARSE_OPEN);
+    await storeService.get(THEIRS_OPEN);
+
+    let answer = getRealmServerRoute(new URL('http://mock/_federated-search'))!;
+    let held = new Deferred<void>();
+    registerRealmServerRoute({
+      path: '/_federated-search',
+      handler: async (req, url, state) => {
+        await held.promise;
+        return await answer.handler(req, url, state);
+      },
+    });
+    try {
+      let search = liveSearch(this.owner, OPEN, [SCOPED, COARSE]);
+      await waitUntil(() => ids(search).includes(COARSE_OPEN), {
+        timeout: 10_000,
+      });
+      assert.deepEqual(
+        ids(search),
+        [COARSE_OPEN],
+        'while the search is in flight, the card of the realm the session reads is merged, and the card of the scoped realm is not',
+      );
+
+      held.fulfill();
+      await search.loaded;
+      await settled();
+      assert.deepEqual(
+        search.meta.policyScopedRealms,
+        [SCOPED],
+        'the answer marks the scoped realm',
+      );
+      assert.deepEqual(ids(search), [COARSE_OPEN]);
+    } finally {
+      registerDefaultRoutes();
+    }
+  });
+
+  test('after a search fails, a matching card of a realm the session does not read is not merged', async function (this: RenderingTestContext, assert) {
+    await storeService.get(COARSE_OPEN);
+    await storeService.get(THEIRS_OPEN);
+
+    registerRealmServerRoute({
+      path: '/_federated-search',
+      handler: async () => new Response('unavailable', { status: 500 }),
+    });
+    try {
+      let search = liveSearch(this.owner, OPEN, [SCOPED, COARSE]);
+      await search.loaded;
+      await settled();
+
+      assert.strictEqual(search.errors?.length, 1, 'the search failed');
+      assert.deepEqual(
+        ids(search),
+        [COARSE_OPEN],
+        'the card of the realm the session reads is merged, and the card of the scoped realm is not',
+      );
+    } finally {
+      registerDefaultRoutes();
+    }
   });
 
   test('a row a policy-scoped result returned still drops out when a local edit stops it matching', async function (this: RenderingTestContext, assert) {

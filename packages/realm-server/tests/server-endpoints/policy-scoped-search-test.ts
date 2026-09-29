@@ -103,6 +103,14 @@ const SCHEDULE_MODULE = `
       },
     };
 
+    @operation static listOpenInGrants = {
+      base: 'query',
+      query: {
+        filter: { on: () => ServicePlanSchedule, eq: { status: 'open' } },
+        realms: ['${GRANTS}'],
+      },
+    };
+
     @operation static listAll = {
       base: 'query',
       query: {
@@ -798,7 +806,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         );
       });
 
-      test('a declared query marks every realm it searched, the ones the caller reads included', async function (assert) {
+      test('a declared query marks every realm the request named, the ones the caller reads included', async function (assert) {
         let response = await federatedSearch(
           listOpen([GRANTS, COARSE]),
           PROVIDER_A,
@@ -809,6 +817,29 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           response.body.meta.policyScopedRealms,
           [GRANTS, COARSE],
           "the server resolved the declaration, so no realm's rows are the caller's filter to decide",
+        );
+      });
+
+      test('a declared query marks the realms the request named, not the ones its declaration searched', async function (assert) {
+        let response = await federatedSearch(
+          {
+            operation: 'listOpenInGrants',
+            on: SCHEDULE,
+            realms: [COARSE, GRANTS],
+          },
+          OWNER,
+        );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        assert.deepEqual(
+          Object.keys(response.body.meta.realmTotals),
+          [GRANTS],
+          'the declaration searched only the realm it scopes itself to',
+        );
+        assert.deepEqual(
+          response.body.meta.policyScopedRealms,
+          [COARSE, GRANTS],
+          'and the mark names both realms the request named',
         );
       });
 

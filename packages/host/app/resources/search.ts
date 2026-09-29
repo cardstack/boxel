@@ -54,6 +54,7 @@ import { searchErrorEntry } from '../lib/search-error-entry';
 
 import type LoaderService from '../services/loader-service';
 import type NetworkService from '../services/network';
+import type RealmService from '../services/realm';
 import type RealmServerService from '../services/realm-server';
 import type StoreService from '../services/store';
 import type { CardDef } from '@cardstack/base/card-api';
@@ -194,6 +195,7 @@ export class SearchResource<
   @service declare private realmServer: RealmServerService;
   @service declare private store: StoreService;
   @service declare private loaderService: LoaderService;
+  @service declare private realm: RealmService;
   #storeServiceOverride: StoreService | undefined;
   @tracked private realmsToSearch: RealmIdentifier[] = [];
   // Resist the urge to expose this property publicly as that may entice
@@ -208,6 +210,12 @@ export class SearchResource<
   // otherwise it is passed through unchanged.
   private _instances = new TrackedArray<T>();
   @tracked private _meta: SearchEntryResults['meta'] = { page: { total: 0 } };
+  // The realms the result set held was answered for by a completed search, so
+  // the realms whose policy-scoped mark in `_meta` is the server's word for
+  // this caller. Empty until a search completes, and again after one fails or a
+  // seed replaces its result: a seed is resolved under its owner realm's
+  // authority rather than the viewer's, so it carries no mark to go by.
+  @tracked private answeredRealms: RealmPaths[] = [];
   @tracked private _errors: ErrorEntry[] | undefined;
   // The card-api slice the client-side matcher/comparator need. Loaded
   // asynchronously for live searches; until it resolves the search behaves as
@@ -942,19 +950,14 @@ export class SearchResource<
     // Add candidates the server didn't return but that match locally, scoped to
     // the query's target realm(s). `unresolvable` candidates are not added.
     //
-    // Nor is any candidate of a realm the result marks policy-scoped. What the
-    // result holds of such a realm was decided by more than the query this
-    // matcher knows — the caller's policy, or the server's own resolution of a
-    // declared query — so a card of it that the server did not return may be
-    // one it withheld, however well it matches here. Those realms' returned
-    // rows still narrow above; they just never widen.
-    let policyScoped = this.policyScopedRealms;
+    // Nor is any candidate of a realm the arm may not widen into (see
+    // `mayWidenInto`).
     let added = candidatePool.filter(
       (instance) =>
         instance.id != null &&
         !serverIds.has(instance.id) &&
         this.isInTargetRealm(instance.id) &&
-        !policyScoped.some((realm) => realm.inRealm(instance.id)) &&
+        this.mayWidenInto(instance.id) &&
         localMatch(instance) === 'match',
     );
 
@@ -1031,8 +1034,31 @@ export class SearchResource<
     return true;
   }
 
-  // The realms the current result set marks policy-scoped: of these, only the
-  // rows the server returned may be displayed.
+  // Whether a card the server did not return may be added to the displayed
+  // result. Never into a realm the result marks policy-scoped: what the result
+  // holds of such a realm was decided by more than the query this matcher knows
+  // (the caller's policy, or the server's own resolution of a declared query),
+  // so a matching card of it that the server did not return may be one it
+  // withheld. Those realms' returned rows still narrow; they never widen.
+  //
+  // The mark speaks only for the realms a completed search answered. For any
+  // other realm the result holds no answer about this caller: before the first
+  // search lands, after one fails, when a seed stands in for one, or for a realm
+  // the resource has just started searching. The arm then widens only into a
+  // realm this session already knows it reads outright, which the server never
+  // marks for an ad-hoc search. A realm the caller reaches only through a policy
+  // is never widened into, whichever state the result is in.
+  private mayWidenInto(id: RealmResourceIdentifier): boolean {
+    if (this.answeredRealms.some((realm) => realm.inRealm(id))) {
+      return !this.policyScopedRealms.some((realm) => realm.inRealm(id));
+    }
+    let realm = this.realmsToSearch.find((realm) =>
+      new RealmPaths(realm).inRealm(id),
+    );
+    return realm !== undefined && this.realm.canRead(realm);
+  }
+
+  // The realms the current result set marks policy-scoped.
   @cached
   private get policyScopedRealms(): RealmPaths[] {
     return (this._meta?.policyScopedRealms ?? []).map(
@@ -1221,6 +1247,7 @@ export class SearchResource<
       // rows there would turn "unknown" into "you have all of them".
       this.seedTotalUnknown = Boolean(seed.totalUnknown);
       this._meta = seed.meta ?? { page: { total: cards.length } };
+      this.answeredRealms = [];
       this._errors = seed.errors;
       await this.updateInstances(cards, dependencyTrackingContext);
     },
@@ -1273,9 +1300,10 @@ export class SearchResource<
           // a lane of its own, since clamping its page or its realms would
           // change which cards the field reports as members. Host-internal
           // searches pass neither flag and are unbounded.
+          let realms = this.realmsToSearch;
           let { instances, meta } = await this.runtimeStore.search<T>(
             query,
-            this.realmsToSearch,
+            realms,
             {
               includeMeta: true,
               dependencyTrackingContext,
@@ -1310,6 +1338,7 @@ export class SearchResource<
             this.#raiseResultGeneration(realm, generation);
           }
           this._meta = meta;
+          this.answeredRealms = realms.map((realm) => new RealmPaths(realm));
           this._errors = undefined;
           await this.updateInstances(instances, dependencyTrackingContext);
         } catch (err) {
@@ -1335,6 +1364,7 @@ export class SearchResource<
           // signal exists to prevent.
           this.seedTotalUnknown = true;
           this._meta = { page: { total: 0 }, incomplete: true };
+          this.answeredRealms = [];
           // The applied seed identity deliberately survives a failure, unlike a
           // completed search above. A failed search computed nothing, so what a
           // document last asserted about this field is still the last thing

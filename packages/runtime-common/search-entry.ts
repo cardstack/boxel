@@ -791,9 +791,12 @@ export function policyScopedQuery(
 // scoped whatever it contributed. Its policy composed a grant, admitted
 // nothing, or could not be judged, and the mark reads the same in each case,
 // so it cannot tell a caller whether they hold a grant there. A declared query
-// the server resolved from its own definition scopes every realm it searched,
-// since what it matched is the server's resolution rather than the caller's.
-// The realms are named in the order the search names them, once each.
+// the server resolved from its own definition scopes every realm the request
+// named, since what it matched is the server's resolution rather than the
+// caller's. That includes a realm its declaration leaves out, which contributes
+// no rows to it, so the mark never says which realms the declaration searched.
+// `realms` are the ones the request named, and they are marked in that order,
+// once each.
 export function policyScopedRealms({
   realms,
   readable,

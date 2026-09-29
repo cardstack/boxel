@@ -137,6 +137,10 @@ export default function handleSearch(opts: {
     // reads, one reached only through its policy, or one nothing is served
     // from — an archived realm, which contributes no rows to anyone.
     let named = parseRealmsFromPayload(payload);
+    // The realms the request named, before a declaration narrows them. The
+    // policy-scoped mark names these, so it never says which of them a
+    // declaration searched.
+    let requested = named;
     // What a policy fragment is looked up by: a query runs under the name it
     // was invoked with, on the type that declares it. An ad-hoc search names
     // neither, so no grant is found for one and a realm the caller cannot read
@@ -213,7 +217,10 @@ export default function handleSearch(opts: {
     );
     attributeSearchRequest(ctxt, working);
     await withSearchConnectionTenant(ctxt, working, () =>
-      respond(ctxt, named, payload, access, declaredLinks, resolvedByServer),
+      respond(ctxt, named, payload, access, declaredLinks, {
+        requested,
+        resolvedByServer,
+      }),
     );
   };
 
@@ -342,7 +349,10 @@ export default function handleSearch(opts: {
     payload: unknown,
     access: RealmAccess,
     declaredLinks: LinkStrategy | undefined,
-    resolvedByServer: boolean,
+    {
+      requested,
+      resolvedByServer,
+    }: { requested: string[]; resolvedByServer: boolean },
   ) {
     let handlerStart = Date.now();
     // Slots the query-shape line is assembled from. `shape` is filled in as
@@ -434,13 +444,13 @@ export default function handleSearch(opts: {
     }
     // Whether any realm this search names is one the caller does not read.
     // Where none is, the search is the one it would be with no policy
-    // anywhere: nothing composed, nothing stood in, nothing folded into its
-    // cache key.
+    // anywhere: nothing composed and nothing stood in, and nothing folded into
+    // its cache key beyond the mark a declared query carries.
     let unread = realmList.filter((realm) => !access.readable.has(realm));
     // The realms the result marks policy-scoped, so a client reconciling it
     // against cards it holds adds none of theirs the server did not return.
     let scopedRealms = policyScopedRealms({
-      realms: realmList,
+      realms: requested,
       readable: (realm) => access.readable.has(realm),
       resolvedByServer,
     });

@@ -193,6 +193,7 @@ function registerSearchRoutes() {
       let links: LinkStrategy = 'full';
       let invocation = namedQueryInvocation(payload);
       let resolvedByServer = isNamedQueryPayload(payload);
+      let requested = realmList;
       if (isNamedQueryPayload(payload)) {
         let resolvingRealm = getTestRealmRegistry().get(
           ensureTrailingSlash(realmList[0]),
@@ -301,7 +302,7 @@ function registerSearchRoutes() {
             ? undefined
             : (realm) => scopedQueries.get(realm) ?? parsed,
         ),
-        policyScopedRealms({ realms: realmList, readable, resolvedByServer }),
+        policyScopedRealms({ realms: requested, readable, resolvedByServer }),
       );
 
       return new Response(JSON.stringify(combined), {
