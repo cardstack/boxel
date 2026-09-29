@@ -770,6 +770,46 @@ Three worth recognizing:
   what the card holds; write predicates that cannot throw on any value the
   card can store.
 
+## The card routes and a realm's policy
+
+A realm's policy can admit a caller the realm's own permissions decline. The
+card+json writes reach the policy the way a batch does: a `POST` that creates a
+card is judged as `create` on the type it names, a `PATCH` as `update` on the
+card, and a `DELETE` as `delete`. A grant whose `where` reads the card is decided
+under the write lock, against the card as it stands when the write runs. A
+refusal follows the same rules on both: a caller who may read the realm gets a
+403, and one who may not gets the 404 a card that does not exist gets. The
+card+json body carries no `code`, so there the status is the whole answer.
+
+For a caller the realm admits only through a grant, four things set the card
+routes apart from a batch:
+
+- **A verb is the built-in behavior.** A `PATCH` merges the document it is sent
+  and a `DELETE` removes the card, whatever the card's type declares under those
+  names. A type that declares its own `update` or `delete` means by the name
+  what its declaration says, so a grant on the name is used through
+  `operations()`, and the card route refuses the write.
+- **No side-loads.** A document's `included` cards are written too, and a grant
+  on one card does not reach another. Create each as its own entry in a batch.
+- **A create names its type by URL or registered prefix.** A relative module in
+  `meta.adoptsFrom` is refused, because a card that is not stored yet has no
+  location for it to be relative to.
+- **A write answers with the card it wrote.** A `POST` or `PATCH` answers with
+  the card's indexed document, without its link closure, and without running
+  the type's `read`, so an `output` its `read` declares does not narrow it. A
+  grant of `create` or `update` over the card routes therefore shows the caller
+  the card's whole document, whatever `read` grant they hold, and a `PATCH`
+  that changes nothing still answers with it. Grant a card write only where the
+  caller may see the card.
+
+Some routes answer on the realm's own permissions alone, and no grant reaches
+them: the `card+source` write, its octet-stream spelling and the `card+source`
+removal; `/_atomic`; and the realm's administration routes, such as `_reindex`
+and `_permissions`. The first two write or remove stored bytes verbatim, whether
+those are module source, a data file or a card's whole document, and a verbatim
+replacement can change a card's type out from under the grant that admitted it.
+The administration routes do not act on a card at all.
+
 ## Asking a policy what it decides
 
 A realm's policy widens what the realm's own permissions allow. A policy
