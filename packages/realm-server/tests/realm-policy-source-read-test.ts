@@ -1008,10 +1008,19 @@ module(basename(import.meta.filename), function (hooks) {
         AS.teacher(),
       );
       assert.strictEqual(textOf(granted), textOf(reader), "a card's .json");
+      // All but the header that says whether the source cache answered, which
+      // it never does for a caller the gate reads for.
+      let uncached = (response: Response) =>
+        headersOf(response).filter(([name]) => name !== 'x-boxel-cache');
       assert.deepEqual(
-        headersOf(granted),
-        headersOf(reader),
+        uncached(granted),
+        uncached(reader),
         "a card's .json: headers",
+      );
+      assert.strictEqual(
+        granted.get('x-boxel-cache'),
+        'miss',
+        "a card's .json: read past the source cache",
       );
     });
 
