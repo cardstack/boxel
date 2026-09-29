@@ -579,7 +579,7 @@ module(basename(import.meta.filename), function (hooks) {
 
   module('every entry is gated on its own', function () {
     test('a batch whose every entry a grant admits commits every entry', async function (assert) {
-      let jobsBefore = await indexJobCount();
+      let before = await beforeBatch();
       let response = await operations(
         AUTH.teacher(),
         rename(ROOM_101, 'Algebra'),
@@ -619,11 +619,24 @@ module(basename(import.meta.filename), function (hooks) {
         { body: 'Picture day', audience: 'staff' },
         'and so was the bulletin',
       );
+      // What the refusals are measured with sees a batch that commits: the
+      // realm's files change, the batch indexes under one job, and it
+      // announces itself.
+      assert.true(
+        'classrooms/room-101.json' in before.files,
+        'the realm’s files are read off disk',
+      );
+      assert.notDeepEqual(
+        await realmFiles(),
+        before.files,
+        'and the batch changed them',
+      );
       assert.strictEqual(
-        (await indexJobCount()) - jobsBefore,
+        (await indexJobCount()) - before.jobs,
         1,
         'the whole batch indexed under one job',
       );
+      assert.true(before.events.sent > 0, 'and sent a realm event');
       assert.strictEqual(
         gateStats().policyLoads,
         5,
