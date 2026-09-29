@@ -1680,6 +1680,73 @@ module(basename(import.meta.filename), function (hooks) {
     });
   });
 
+  module('a target a query finds', function () {
+    // The policy above with one rule more: a `query` grant on every
+    // classroom, so a caller who may not read the realm can find classrooms
+    // by query. Each one found is then gated on the entry's own operation,
+    // which for a delete admits only a classroom the caller teaches.
+    async function enumerable() {
+      await org.write(
+        'policies/enumerable.json',
+        policyCard([
+          ...RULES,
+          { targetType: CLASSROOM, grants: [{ operation: 'query' }] },
+        ]),
+      );
+      await org.indexing();
+      await pointAt(`${ORG}policies/enumerable`);
+    }
+
+    const EVERY_CLASSROOM = { query: { 'item.on': CLASSROOM }, expect: 'many' };
+
+    test('each card a query finds is gated, and one refused refuses the batch without naming it', async function (assert) {
+      await enumerable();
+      let response = await operations(
+        EDUCATION,
+        AUTH.teacher(),
+        invoke('delete', { 'boxel:target': EVERY_CLASSROOM }),
+      );
+      assertNotThere(
+        assert,
+        response,
+        'a delete of every classroom, two of which the teacher does not teach',
+      );
+      let [error] = (
+        JSON.parse(response.text) as {
+          errors: { id?: string; meta?: { entry?: string } }[];
+        }
+      ).errors;
+      assert.strictEqual(error.id, undefined, 'the refusal carries no id');
+      assert.true(
+        /^\[0\]\.boxel:target\[[0-3]\]$/.test(error.meta?.entry ?? ''),
+        `it names the found entry by position alone: ${error.meta?.entry}`,
+      );
+      for (let room of [ROOM_204, ROOM_205, ROOM_206, HOMEROOM]) {
+        assert.strictEqual(
+          (await getCard(room, AUTH.admin())).status,
+          200,
+          `${room} was not deleted`,
+        );
+      }
+    });
+
+    test('an entry both grants admit runs against every card the query finds', async function (assert) {
+      await enumerable();
+      let response = await operations(
+        EDUCATION,
+        AUTH.teacher(),
+        invoke('rename', {
+          'boxel:target': EVERY_CLASSROOM,
+          data: { title: 'Renamed' },
+        }),
+      );
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      for (let room of [ROOM_204, ROOM_205, ROOM_206, HOMEROOM]) {
+        assert.strictEqual(await titleOf(room), 'Renamed', `${room} renamed`);
+      }
+    });
+  });
+
   module('what does not change', function () {
     test('a realm with no policy answers every refusal as the realm ACL gave it', async function (assert) {
       await pointAt(null);
