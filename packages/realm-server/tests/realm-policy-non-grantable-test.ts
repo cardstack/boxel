@@ -12,6 +12,7 @@ import type {
 } from '@cardstack/runtime-common';
 import {
   newOperationScope,
+  resolveGatedOperation,
   resolveOperation,
   scopeCallerFor,
   type CompiledRealmPolicy,
@@ -378,6 +379,11 @@ module(basename(import.meta.filename), function (hooks) {
   // a compiled policy holding `rules`, as the policy would be had compiling let
   // them through. It shows what the gate refuses of a grant that reached a
   // compiled policy however it came to be there.
+  //
+  // It resolves as a caller that takes the write lock's decision does. The
+  // plain resolution refuses every write it would leave to the lock, which is
+  // every write to a stored card, so through it a write the gate admits would
+  // be refused as well, and a refusal would say nothing about the gate.
   function carrying(
     rules: CompiledRealmPolicy['rules'],
     url: string,
@@ -393,16 +399,18 @@ module(basename(import.meta.filename), function (hooks) {
       ...core,
       policy: { ...core.policy!, compiledPolicy: async () => policy },
     };
-    return (name) =>
-      resolveOperation(
-        carried,
-        { kind: 'instance', url },
-        name,
-        newOperationScope(carried, {
-          caller: scopeCallerFor(READER),
-          coarseDeclined: 'all',
-        }),
-      );
+    return async (name) =>
+      (
+        await resolveGatedOperation(
+          carried,
+          { kind: 'instance', url },
+          name,
+          newOperationScope(carried, {
+            caller: scopeCallerFor(READER),
+            coarseDeclined: 'all',
+          }),
+        )
+      ).definition;
   }
 
   function assertNotPermitted(
