@@ -715,6 +715,23 @@ A batch commits in one realm, under one write lock, as one index job and one
 event. An entry naming a card in another realm is refused before anything is
 sent.
 
+A realm's policy judges a batch entry by entry. For a caller the realm's own
+permissions decline, each entry is gated against its own target and the
+operation that target's type declares, and one entry's grant admits nothing
+for another, even on the same card: a grant to rename a classroom does not
+let the delete beside it through. An entry that runs against the cards a
+`b.find(…)` answers is gated once per card, so an `expect: 'many'` entry that
+finds three cards is three decisions. One refusal refuses the batch, wherever
+it comes from. The gate refuses an entry no grant admits before anything is
+staged. The write lock refuses a write whose predicate does not hold against
+the card it changes, and a create whose predicate does not hold for the card
+it would mint, after the entries ahead of it have staged. Either way nothing is
+written, no index job is enqueued and no event is sent. The refusal names its
+entry in `meta.entry`, a path such as `[0].boxel:target[1]` for the second card
+an entry found. A caller who may not read the realm is told that entry and
+nothing else, in the same 404 a missing card gets, and may not describe a
+target with a query at all.
+
 ## Authoring errors
 
 Lowering runs when the module is indexed and records findings against the
