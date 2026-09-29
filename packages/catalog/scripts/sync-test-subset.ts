@@ -527,7 +527,7 @@ function bump(manifest: Manifest) {
   );
   let sha = output.split(/\s/)[0];
   if (!/^[0-9a-f]{40}$/.test(sha)) {
-    fail(`could not resolve main of ${manifest.repository}`);
+    fail(`could not resolve ${manifest.repository} main`);
   }
   let raw = readFileSync(manifestPath, 'utf8');
   writeFileSync(manifestPath, raw.replace(manifest.revision, sha));
@@ -784,11 +784,11 @@ async function checkPin(manifest: Manifest) {
       `${manifest.revision} is not on ${manifest.repository} main (compare status "${status}"). ` +
         (merged
           ? `It is from ${merged.html_url}, which was merged as ${merged.merge_commit_sha}. ` +
-            `Re-pin to a commit on main (pnpm catalog:test-subset --bump).`
+            `Re-pin to a commit on ${manifest.repository} main (pnpm catalog:test-subset --bump).`
           : (prs.length
               ? `It is in ${prs.map((pr) => pr.html_url).join(', ')}. `
               : '') +
-            `Merge the catalog change first, then re-pin to a commit on main (pnpm catalog:test-subset --bump).`),
+            `Merge the ${manifest.repository} change first, then re-pin to a commit on ${manifest.repository} main (pnpm catalog:test-subset --bump).`),
     );
   }
   log(`${manifest.revision} is on ${manifest.repository} main`);
@@ -818,18 +818,18 @@ async function checkPin(manifest: Manifest) {
   if (changed.length) {
     let prs = await pullRequestsChanging(manifest, changed, headers);
     let waiting = await pinsMatchingMain(manifest, mainBlobs, headers);
-    let steps = `to main (pnpm catalog:test-subset --bump), run the manifest's tests against it, and commit the new pin.`;
+    let steps = `to ${manifest.repository} main (pnpm catalog:test-subset --bump), run the manifest's tests against it, and commit the new pin.`;
     let [one, ...more] = waiting.pullRequests;
     fail(
       `${manifest.repository} main has changed ${changed.join(', ')} since ${manifest.revision}` +
         (prs.length ? ` (in ${prs.join(', ')})` : '') +
         `, so boxel's tests would run against definitions deployments no longer serve. ` +
         (waiting.main
-          ? `Boxel main already pins a revision that matches ${manifest.repository} main: merge main into this branch.`
+          ? `${boxelRepository} main already pins a revision that matches ${manifest.repository} main: merge ${boxelRepository} main into this branch.`
           : one
             ? more.length
-              ? `${waiting.pullRequests.join(', ')} already pin a revision that matches ${manifest.repository} main: once one merges, merge main into this branch. To move the pin without them, re-pin ${steps}`
-              : `${one} already pins a revision that matches ${manifest.repository} main: once it merges, merge main into this branch. To move the pin without it, re-pin ${steps}`
+              ? `${waiting.pullRequests.join(', ')} already pin a revision that matches ${manifest.repository} main: once one merges, merge ${boxelRepository} main into this branch. To move the pin without them, re-pin ${steps}`
+              : `${one} already pins a revision that matches ${manifest.repository} main: once it merges, merge ${boxelRepository} main into this branch. To move the pin without it, re-pin ${steps}`
             : `Re-pin ${steps}`),
     );
   }
