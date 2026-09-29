@@ -2035,6 +2035,7 @@ module(basename(import.meta.filename), function () {
   // chain the definition cache records for it.
   module('the write lock on a card a grant admitted a write to', function () {
     const PET: CodeRef = { module: `${REALM}pet`, name: 'Pet' } as CodeRef;
+    const TARGET = { kind: 'instance' as const, url: `${REALM}person-1` };
     const GRANTED = ['read', 'update', 'setMotto', 'draft'];
     const OPERATIONS: Definition['operations'] = {
       setMotto: { base: 'transform', deterministic: true },
@@ -2109,21 +2110,24 @@ module(basename(import.meta.filename), function () {
       storedAs: CodeRef,
       scope = declinedWrites(core),
     ): Promise<string> {
-      let { decision } = await resolveGatedOperation(core, CARD, name, scope);
-      let pending = pendingWriteFor(CARD, name, decision, scope);
+      let { decision } = await resolveGatedOperation(core, TARGET, name, scope);
+      let pending = pendingWriteFor(TARGET, name, decision, scope);
       if (!pending) {
         return `${decision.kind}, leaving nothing to the lock`;
       }
       let source = JSON.stringify({
         data: {
           type: 'card',
-          id: CARD.url,
+          id: TARGET.url,
           attributes: { title: 'Hi' },
           meta: { adoptsFrom: storedAs },
         },
       });
       try {
-        await dischargePendingDecision(core, pending, { id: CARD.url, source });
+        await dischargePendingDecision(core, pending, {
+          id: TARGET.url,
+          source,
+        });
         return `${decision.kind}, then admitted`;
       } catch (err) {
         if (isOperationFailure(err)) {
@@ -2245,11 +2249,11 @@ module(basename(import.meta.filename), function () {
     test('a caller that carries no decision to a lock is refused a write granted outright', async function (assert) {
       let core = lockedCore();
       let failure = await refusalFrom(() =>
-        resolveOperation(core, CARD, 'update', declinedWrites(core)),
+        resolveOperation(core, TARGET, 'update', declinedWrites(core)),
       );
       assert.strictEqual(failure.code, 'operation-not-permitted');
       assert.strictEqual(
-        (await resolveOperation(core, CARD, 'read', declinedWrites(core)))
+        (await resolveOperation(core, TARGET, 'read', declinedWrites(core)))
           .base,
         'read',
         'while a granted read resolves as before',

@@ -739,9 +739,7 @@ export function pendingWriteFor(
   decision: GateDecision,
   scope: OperationScope,
 ): PendingWrite | undefined {
-  return leavesToLock(decision)
-    ? { target, name, decision, scope }
-    : undefined;
+  return leavesToLock(decision) ? { target, name, decision, scope } : undefined;
 }
 
 // Whether a decision leaves anything for the write lock to decide.

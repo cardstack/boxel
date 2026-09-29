@@ -122,7 +122,8 @@ type Rule = { targetType: { module: string; name: string }; grants: Grant[] };
 
 // Every Classroom grant rests on a predicate, so every write on a classroom by
 // a teacher is decided under the lock. `archive` rests on a predicate that
-// throws for any title that is not a number.
+// throws for any title that is not a number. A Bulletin's `update` is granted
+// outright, and the lock still judges the type of the card it changes.
 const RULES: Rule[] = [
   {
     targetType: CLASSROOM,
@@ -140,6 +141,7 @@ const RULES: Rule[] = [
     grants: [
       { operation: 'post', where: '.audience == "staff"' },
       { operation: 'create', where: '.audience == "staff"' },
+      { operation: 'update' },
     ],
   },
 ];
@@ -182,6 +184,7 @@ function parallel(...operations: unknown[]): Record<string, unknown> {
 const ROOM_204 = `${EDUCATION}classrooms/room-204`;
 const ROOM_205 = `${EDUCATION}classrooms/room-205`;
 const ROOM_207 = `${EDUCATION}classrooms/room-207`;
+const NOTICE = `${EDUCATION}bulletins/notice`;
 
 module(basename(import.meta.filename), function (hooks) {
   let education: Realm;
@@ -218,6 +221,15 @@ module(basename(import.meta.filename), function (hooks) {
             'classrooms/room-204.json': classroom('Room 204', [TEACHER]),
             'classrooms/room-205.json': classroom('Room 205', [COLLEAGUE]),
             'classrooms/room-207.json': classroom('Room 207', [TEACHER]),
+            'bulletins/notice.json': JSON.stringify({
+              data: {
+                type: 'card',
+                attributes: { body: 'Posted', audience: 'staff' },
+                meta: {
+                  adoptsFrom: { module: '../bulletin', name: 'Bulletin' },
+                },
+              },
+            }),
           },
           permissions: {
             [ADMIN]: ['read', 'write', 'realm-owner'],
@@ -316,7 +328,12 @@ module(basename(import.meta.filename), function (hooks) {
       : (
           JSON.parse(content) as {
             data: {
-              attributes: { title?: string; teacherIds?: string[] };
+              attributes: {
+                title?: string;
+                teacherIds?: string[];
+                body?: string;
+                rules?: Rule[];
+              };
               meta: { adoptsFrom: { name: string } };
             };
           }
@@ -438,6 +455,70 @@ module(basename(import.meta.filename), function (hooks) {
         (await stored(ROOM_204))?.meta.adoptsFrom.name,
         'Bulletin',
         'and the card is left as the other writer wrote it',
+      );
+    });
+
+    test('a write granted outright is judged by the type its card’s bytes name when the lock is taken', async function (assert) {
+      let revised = await operations(
+        AUTH.teacher(),
+        invoke('update', {
+          href: NOTICE,
+          data: {
+            type: 'card',
+            attributes: { body: 'Revised' },
+            meta: { adoptsFrom: adoptsFrom(BULLETIN) },
+          },
+        }),
+      );
+      assert.strictEqual(revised.status, 200, 'the grant admits the update');
+      assert.strictEqual((await stored(NOTICE))?.attributes.body, 'Revised');
+
+      // A realm writer rewrites the bulletin as a policy card after the gate
+      // matched the teacher's write on its row, which still records a
+      // Bulletin. The teacher's document names the type the bytes now hold,
+      // so nothing but the lock's judgement of those bytes stands between
+      // the grant on Bulletin and the policy card's rules.
+      betweenGateAndLock(() =>
+        education.write('bulletins/notice.json', policyCard([])),
+      );
+      assertNotThere(
+        assert,
+        await operations(
+          AUTH.teacher(),
+          invoke('update', {
+            href: NOTICE,
+            data: {
+              type: 'card',
+              attributes: {
+                rules: [
+                  {
+                    targetType: CLASSROOM,
+                    grants: [{ operation: 'update' }],
+                  },
+                ],
+              },
+              meta: { adoptsFrom: REALM_POLICY },
+            },
+          }),
+        ),
+        'an update granted on a Bulletin, into what is now a policy card',
+      );
+      let card = await stored(NOTICE);
+      assert.strictEqual(
+        card?.meta.adoptsFrom.name,
+        'RealmPolicy',
+        'the card is left as the realm writer wrote it',
+      );
+      assert.deepEqual(card?.attributes.rules, [], 'with no rule written');
+      assert.deepEqual(
+        gateStats(),
+        {
+          policyLoads: 2,
+          predicateEvaluations: 0,
+          pendingDischarges: 0,
+          definitionLookups: 0,
+        },
+        'neither write rested on a predicate',
       );
     });
 
