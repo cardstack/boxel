@@ -593,6 +593,33 @@ module(basename(import.meta.filename), function (hooks) {
       );
       assert.strictEqual(await stored(education, ROOM_205), undefined);
     });
+
+    test('a write granted outright is judged by the stored type of the card the lock holds', async function (assert) {
+      // The grants were matched on a Bulletin, and the card is a Notice by
+      // the time the lock is taken. That the Notice's own type grants a delete
+      // outright changes nothing.
+      betweenGateAndLock(() =>
+        education.write(
+          'bulletins/b2.json',
+          card(
+            { module: '../notice', name: 'Notice' },
+            { body: 'Swapped', status: 'posted' },
+          ),
+        ),
+      );
+      assertNotThere(
+        assert,
+        await deleteCard(BULLETIN_2, AUTH.teacher()),
+        await deleteCard(BULLETIN_9, AUTH.teacher()),
+        [BULLETIN_2, BULLETIN_9],
+        'a DELETE of a bulletin rewritten as a notice after the gate matched the write',
+      );
+      assert.strictEqual(
+        (await stored(education, BULLETIN_2))?.body,
+        'Swapped',
+        'and the card is left as the other writer wrote it',
+      );
+    });
   });
 
   module('a write no grant admits', function () {
