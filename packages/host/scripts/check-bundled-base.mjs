@@ -263,12 +263,18 @@ function classIndex() {
   return index;
 }
 
-// Whether a class is a FieldDef. A superclass's name is read by one thing only
-// — an adoption-chain walk — and nothing walks a field's ancestry: a
-// definition records types for a card or a file and none for a field
-// (`routes/module.ts`), and the render walk starts from an instance's class
-// (`routes/render/meta.ts`). So an unnamed ancestor above a field is
-// unreachable, and only a card or file def has to answer for its chain.
+// Whether a class is a FieldDef. Plenty of things walk a field's ancestry —
+// code mode does, through `CardTypeService.toType` and
+// `CodeSemanticsService` — but those go through `getAncestor`, which registers
+// an `ancestorOf` local identity as it climbs, so the level above a bundled
+// field answers with a ref relative to it rather than with undefined.
+//
+// The walks that truncate are the ones that climb with a raw prototype hop and
+// stop at the first level `identifyCard` cannot name: `routes/render/meta.ts`,
+// the file-def extractor, and the definition indexing in `routes/module.ts`.
+// All three start from a card or a file def. So only a card or file def has to
+// answer for its chain, and a field's unnamed ancestor is never reached by
+// anything that would truncate on it.
 //
 // An unresolvable chain answers false, so the rule fires rather than goes
 // quiet on something it could not read.
@@ -378,8 +384,9 @@ function main() {
         `superclass all read that name as data — a chooser filters on it, and ` +
         `an adoption-chain walk stops at the first level it cannot name, ` +
         `truncating the types a file or card is indexed under.\n` +
-        `Leave the holder and the declarer both out of the table, or — if card ` +
-        `code names the declarer by identifier — add it to NAMED_BY_CARD_CODE ` +
+        `Leave the holder out of the table — a fetched holder imports the ` +
+        `declarer through the loader, which is what names it — or, if card ` +
+        `code names the declarer by identifier, add it to NAMED_BY_CARD_CODE ` +
         `in this script.\n`,
     );
     for (let line of identity) {
