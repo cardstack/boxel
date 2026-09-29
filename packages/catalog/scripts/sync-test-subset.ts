@@ -536,11 +536,9 @@ function bump(manifest: Manifest) {
 }
 
 interface PullRequest {
-  number: number;
   html_url: string;
   merged_at: string | null;
   merge_commit_sha: string | null;
-  head: { ref: string; sha: string };
 }
 
 const boxelRepository = 'cardstack/boxel';
@@ -550,9 +548,10 @@ const boxelRepository = 'cardstack/boxel';
 async function lookup<T>(
   url: string,
   headers: Record<string, string>,
+  init?: RequestInit,
 ): Promise<T | undefined> {
   try {
-    let response = await fetch(url, { headers });
+    let response = await fetch(url, { ...init, headers });
     return response.ok ? ((await response.json()) as T) : undefined;
   } catch {
     return undefined;
@@ -582,7 +581,7 @@ async function pullRequestsChanging(
   manifest: Manifest,
   paths: string[],
   headers: Record<string, string>,
-): Promise<PullRequest[]> {
+): Promise<string[]> {
   let api = `https://api.github.com/repos/${manifest.repository}`;
   let compare = await lookup<{ commits: { sha: string }[] }>(
     `${api}/compare/${manifest.revision}...main`,
@@ -604,57 +603,146 @@ async function pullRequestsChanging(
       }
     }
   }
-  let prs = new Map<string, PullRequest>();
+  let urls = new Set<string>();
   for (let sha of shas) {
     for (let pr of await pullRequestsFor(manifest.repository, sha, headers)) {
-      prs.set(pr.html_url, pr);
-    }
-  }
-  return [...prs.values()];
-}
-
-// A catalog change and the boxel change that depends on it are made on
-// branches of the same name, which is how boxel-catalog's Boxel Test Subset
-// workflow pairs them. The open boxel pull requests on a catalog pull
-// request's branch whose pin differs from this one carry that boxel side,
-// re-pin included. The branch under check is left out, since the message is
-// addressed to it.
-async function pairedBoxelPullRequests(
-  manifest: Manifest,
-  catalogPrs: PullRequest[],
-  headers: Record<string, string>,
-): Promise<string[]> {
-  let api = `https://api.github.com/repos/${boxelRepository}`;
-  let owner = boxelRepository.split('/')[0];
-  let current = process.env.GITHUB_HEAD_REF || currentBranch();
-  let manifestFile = relative(repoRoot, manifestPath);
-  let urls = new Set<string>();
-  for (let ref of new Set(catalogPrs.map((pr) => pr.head.ref))) {
-    if (ref === current) {
-      continue;
-    }
-    let prs = await lookup<PullRequest[]>(
-      `${api}/pulls?state=open&head=${owner}:${encodeURIComponent(ref)}`,
-      headers,
-    );
-    for (let pr of prs ?? []) {
-      let file = await lookup<{ content: string }>(
-        `${api}/contents/${manifestFile}?ref=${pr.head.sha}`,
-        headers,
-      );
-      let revision = file
-        ? (
-            JSON.parse(
-              Buffer.from(file.content, 'base64').toString('utf8'),
-            ) as Manifest
-          ).revision
-        : undefined;
-      if (revision && revision !== manifest.revision) {
-        urls.add(pr.html_url);
-      }
+      urls.add(pr.html_url);
     }
   }
   return [...urls];
+}
+
+const boxelPinsQuery = `
+  query ($owner: String!, $name: String!, $path: String!, $mainPath: String!, $after: String) {
+    repository(owner: $owner, name: $name) {
+      main: object(expression: $mainPath) { ... on Blob { text } }
+      pullRequests(states: OPEN, first: 100, after: $after) {
+        pageInfo { hasNextPage endCursor }
+        nodes {
+          url
+          headRefName
+          commits(last: 1) {
+            nodes { commit { file(path: $path) { object { ... on Blob { text } } } } }
+          }
+        }
+      }
+    }
+  }
+`;
+
+interface BoxelPinsAnswer {
+  data?: {
+    repository: {
+      main: { text?: string } | null;
+      pullRequests: {
+        pageInfo: { hasNextPage: boolean; endCursor: string | null };
+        nodes: {
+          url: string;
+          headRefName: string;
+          commits: {
+            nodes: {
+              commit: { file: { object: { text?: string } | null } | null };
+            }[];
+          };
+        }[];
+      };
+    };
+  };
+}
+
+// The catalog revision boxel main pins, and the one each open boxel pull
+// request pins at its head, read from their manifests with a GraphQL query
+// per hundred pull requests. A pull request whose branch has no manifest, or
+// one that doesn't parse, is left out. GraphQL takes no anonymous requests, so
+// without GITHUB_TOKEN this answers nothing.
+async function boxelPins(headers: Record<string, string>) {
+  let [owner, name] = boxelRepository.split('/');
+  let path = relative(repoRoot, manifestPath);
+  let revisionIn = (text: string | undefined) => {
+    try {
+      return text ? (JSON.parse(text) as Manifest).revision : undefined;
+    } catch {
+      return undefined;
+    }
+  };
+  let main: string | undefined;
+  let pullRequests: { url: string; branch: string; revision: string }[] = [];
+  let after: string | null = null;
+  do {
+    let answer: BoxelPinsAnswer | undefined = await lookup<BoxelPinsAnswer>(
+      'https://api.github.com/graphql',
+      headers,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          query: boxelPinsQuery,
+          variables: { owner, name, path, mainPath: `main:${path}`, after },
+        }),
+      },
+    );
+    if (!answer?.data) {
+      break;
+    }
+    let { repository } = answer.data;
+    main ??= revisionIn(repository.main?.text);
+    for (let pr of repository.pullRequests.nodes) {
+      let revision = revisionIn(pr.commits.nodes[0]?.commit.file?.object?.text);
+      if (revision) {
+        pullRequests.push({ url: pr.url, branch: pr.headRefName, revision });
+      }
+    }
+    let { hasNextPage, endCursor } = repository.pullRequests.pageInfo;
+    after = hasNextPage ? endCursor : null;
+  } while (after);
+  return { main, pullRequests };
+}
+
+// Where a pin that clears a changed-subset-file failure is already waiting:
+// boxel main, or open boxel pull requests other than the branch under check,
+// whose pin has every subset file as catalog main has it. That is the check's
+// own condition, so merging one of them is what makes this branch pass.
+async function pinsMatchingMain(
+  manifest: Manifest,
+  mainBlobs: Map<string, string | undefined>,
+  headers: Record<string, string>,
+) {
+  let pins = await boxelPins(headers);
+  let matches = new Map<string, Promise<boolean>>();
+  let matchesMain = (revision: string) => {
+    if (!matches.has(revision)) {
+      matches.set(
+        revision,
+        Promise.all(
+          [...mainBlobs].map(async ([path, sha]) => {
+            let blob = await lookup<{ sha: string }>(
+              `https://api.github.com/repos/${manifest.repository}/contents/${path}?ref=${revision}`,
+              headers,
+            );
+            return blob?.sha === sha;
+          }),
+        ).then((each) => each.every(Boolean)),
+      );
+    }
+    return matches.get(revision)!;
+  };
+  if (
+    pins.main &&
+    pins.main !== manifest.revision &&
+    (await matchesMain(pins.main))
+  ) {
+    return { main: true, pullRequests: [] };
+  }
+  let current = process.env.GITHUB_HEAD_REF || currentBranch();
+  let candidates = pins.pullRequests.filter(
+    (pr) => pr.branch !== current && pr.revision !== manifest.revision,
+  );
+  let matching = await Promise.all(
+    candidates.map((pr) => matchesMain(pr.revision)),
+  );
+  return {
+    main: false,
+    pullRequests: candidates.filter((_, i) => matching[i]).map((pr) => pr.url),
+  };
 }
 
 function currentBranch() {
@@ -718,26 +806,31 @@ async function checkPin(manifest: Manifest) {
     }
     return ((await response.json()) as { sha: string }).sha;
   };
+  let mainBlobs = new Map<string, string | undefined>();
   let changed: string[] = [];
   for (let { path } of manifest.files) {
-    if (
-      (await blobSha(path, 'main')) !== (await blobSha(path, manifest.revision))
-    ) {
+    let sha = await blobSha(path, 'main');
+    mainBlobs.set(path, sha);
+    if (sha !== (await blobSha(path, manifest.revision))) {
       changed.push(path);
     }
   }
   if (changed.length) {
     let prs = await pullRequestsChanging(manifest, changed, headers);
-    let paired = await pairedBoxelPullRequests(manifest, prs, headers);
+    let waiting = await pinsMatchingMain(manifest, mainBlobs, headers);
+    let steps = `to main (pnpm catalog:test-subset --bump), run the manifest's tests against it, and commit the new pin.`;
+    let [one, ...more] = waiting.pullRequests;
     fail(
       `${manifest.repository} main has changed ${changed.join(', ')} since ${manifest.revision}` +
-        (prs.length ? ` (in ${prs.map((pr) => pr.html_url).join(', ')})` : '') +
+        (prs.length ? ` (in ${prs.join(', ')})` : '') +
         `, so boxel's tests would run against definitions deployments no longer serve. ` +
-        (paired.length
-          ? `The boxel side of that change, which re-pins, is in ${paired.join(', ')}: once that merges, merge main into this branch. ` +
-            `To move the pin without it, re-pin`
-          : `Re-pin`) +
-        ` to main (pnpm catalog:test-subset --bump), run the manifest's tests against it, and commit the new pin.`,
+        (waiting.main
+          ? `Boxel main already pins a revision that matches ${manifest.repository} main: merge main into this branch.`
+          : one
+            ? more.length
+              ? `${waiting.pullRequests.join(', ')} already pin a revision that matches ${manifest.repository} main: once one merges, merge main into this branch. To move the pin without them, re-pin ${steps}`
+              : `${one} already pins a revision that matches ${manifest.repository} main: once it merges, merge main into this branch. To move the pin without it, re-pin ${steps}`
+            : `Re-pin ${steps}`),
     );
   }
   log(
