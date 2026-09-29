@@ -170,10 +170,7 @@ export {
   namedQueryRendering,
   resolveNamedQuery,
 } from './named-query.ts';
-export type {
-  NamedQueryContext,
-  ResolvedNamedQuery,
-} from './named-query.ts';
+export type { NamedQueryContext, ResolvedNamedQuery } from './named-query.ts';
 export type {
   QueryDefinition,
   QueryInvocation,

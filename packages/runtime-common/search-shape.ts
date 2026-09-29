@@ -79,6 +79,7 @@ import type {
   SearchEntryQuery,
   SearchEntryScope,
 } from './search-entry.ts';
+import type { LinkStrategy } from '@cardstack/base/operations';
 
 export const SEARCH_SHAPE_CHANNEL = 'boxel:search-shape';
 
@@ -107,10 +108,25 @@ export type SearchShapeCacheOutcome =
 // per-result cost there is, and one the query itself does not show. A
 // prerender skips the `loadLinks` relationship-assembly pass outright; a live
 // search configured against side-loading runs the pass and drops the closure;
-// the default assembles the whole closure. The same query in two of these
-// modes is two different response bodies, which is why the handler's cache key
+// a named query declaring `none` skips the pass and names no link at all; the
+// default assembles the whole closure. The same query in two of these modes is
+// two different response bodies, which is why the handler's cache key
 // separates them and why the shape hash does too.
-export type SearchShapeLinkMode = 'prerender' | 'links-only' | 'full';
+export type SearchShapeLinkMode = 'prerender' | 'links-only' | 'none' | 'full';
+
+// The mode a live search is served in, from the link strategy it was settled
+// on. Only a live search has one: a prerender reports `prerender` whatever
+// strategy it carried, since it skips the assembly pass either way.
+export function searchShapeLinkMode(links: LinkStrategy): SearchShapeLinkMode {
+  switch (links) {
+    case 'full':
+      return 'full';
+    case 'ids':
+      return 'links-only';
+    case 'none':
+      return 'none';
+  }
+}
 
 // The members derivable from the request alone. Everything here is a function
 // of the query, so two identical requests produce identical descriptors.

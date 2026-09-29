@@ -951,7 +951,7 @@ module('Integration | operations', function (hooks) {
         return Report;
       },
       /"links" is not a valid key for a "create" operation/,
-      'only a read carries a link graph to narrow',
+      'only a read or a query carries a link graph to narrow',
     );
     assert.throws(
       () => {
@@ -960,8 +960,34 @@ module('Integration | operations', function (hooks) {
         }
         return Report;
       },
-      /`links` must name how much of the card's link graph/,
+      /`links` must name how much of the card's link graph this read carries/,
       'and it names one of the three strategies',
+    );
+    assert.throws(
+      () => {
+        class Report extends CardDef {
+          @operation static listAll = {
+            base: 'query',
+            query: { filter: { type: () => Report } },
+            links: 'some',
+          };
+        }
+        return Report;
+      },
+      /`links` must name how much of the card's link graph each of this query's results carries/,
+      'a query names one of the same three',
+    );
+    class Roster extends CardDef {
+      @operation static listAll = {
+        base: 'query',
+        query: { filter: { type: () => Roster } },
+        links: 'ids',
+      };
+    }
+    assert.strictEqual(
+      (getDeclaredOperations(Roster).listAll as { links?: unknown }).links,
+      'ids',
+      'and a query that names one is declared with it',
     );
     assert.throws(
       () => {

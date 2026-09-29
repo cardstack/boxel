@@ -12231,7 +12231,11 @@ export class Realm {
       loadLinks: true as const,
       ...(opts?.cacheOnlyDefinitions ? { cacheOnlyDefinitions: true } : {}),
       ...(opts?.omitIncluded ? { omitIncluded: true } : {}),
-      ...(opts?.resolveLinksOnly ? { resolveLinksOnly: true } : {}),
+      // `ids` runs the assembly pass as far as naming each result's targets;
+      // `none` answers each result's card with no relationship data and runs
+      // no pass at all.
+      ...(opts?.links === 'ids' ? { resolveLinksOnly: true } : {}),
+      ...(opts?.links === 'none' ? { omitRelationships: true } : {}),
       // `!== undefined` so an explicit priority 0 (system-initiated) survives.
       ...(opts?.priority !== undefined ? { priority: opts.priority } : {}),
       ...(opts?.timings ? { timings: opts.timings } : {}),
@@ -12281,15 +12285,20 @@ export class Realm {
     // that declares it. Read before the declaration is resolved, since what it
     // resolves to is a filter and carries neither.
     let invocation = namedQueryInvocation(payload);
+    // How much of each result's link graph a named query's declaration lets
+    // its results carry. An ad-hoc search declares nothing.
+    let declaredLinks: LinkStrategy | undefined;
     if (isNamedQueryPayload(payload)) {
       // A named query searches this realm and no other, so this realm is the
       // whole of the scope it may resolve to.
       try {
-        payload = await resolveNamedQuery(this.operationCore, payload, {
+        let resolved = await resolveNamedQuery(this.operationCore, payload, {
           actor: requestContext.authenticatedUser,
           realms: [this.url],
           duringRender: isDuringPrerenderRequest(request),
         });
+        payload = resolved.query;
+        declaredLinks = resolved.links;
       } catch (err: unknown) {
         if (!isOperationFailure(err)) {
           throw err;
@@ -12369,8 +12378,14 @@ export class Realm {
       let rowClass = rowClassForPageSize(
         searchEntryQuery.itemQuery.page?.size as number | undefined,
       );
-      let resolveLinksOnly =
-        this.#decideLinkShape(request, rowClass)?.mode === 'links-only';
+      // Live traffic's side of the same question: a prerender skips the pass
+      // below, while a live search the link-shape policy has degraded keeps
+      // the pass and drops only the closure it would have assembled. A named
+      // query's declaration may narrow either further, and neither widens it.
+      let links = effectiveLinkStrategy(
+        declaredLinks,
+        this.#decideLinkShape(request, rowClass)?.mode === 'links-only',
+      );
       let runSearch = (signal?: AbortSignal) =>
         this.searchEntries(searchEntryQuery, {
           cacheOnlyDefinitions: duringPrerender,
@@ -12379,11 +12394,7 @@ export class Realm {
           // result from its raw card+source file, so the transitive
           // `included[]` expansion is throwaway work in this path.
           omitIncluded: duringPrerender,
-          // Live traffic's side of the same question: a prerender takes the
-          // line above and skips the pass, while a live search the policy has
-          // degraded keeps the pass and drops only the closure it would have
-          // assembled.
-          resolveLinksOnly,
+          links,
           ...(signal ? { signal } : {}),
         });
       // Cut an over-budget item-leg search off (408) rather than run it to

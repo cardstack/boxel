@@ -1085,7 +1085,9 @@ function assertValidDeclaration(
   ) {
     throw new Error(
       `${label}: \`links\` must name how much of the card's link graph ${
-        base === 'query' ? "each of this query's results carries" : 'this read carries'
+        base === 'query'
+          ? "each of this query's results carries"
+          : 'this read carries'
       } — one of ${quoteList(LINK_STRATEGIES)}`,
     );
   }

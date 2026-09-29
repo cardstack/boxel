@@ -1612,7 +1612,7 @@ module('Unit | operation lowering', function (hooks) {
     }
   });
 
-  test('a link strategy is carried onto a read and recorded on anything else', async function (assert) {
+  test('a link strategy is carried onto a read or a query and recorded on anything else', async function (assert) {
     let { field, contains, CardDef } = api;
     class Roster extends CardDef {
       static displayName = 'Roster';
@@ -1661,9 +1661,8 @@ module('Unit | operation lowering', function (hooks) {
       'and nothing is stored that a serving path would read as a narrowing',
     );
 
-    // A query answers through search, whose results carry their own closures,
-    // so a strategy on one would read as a narrowing of those that never
-    // happens.
+    // A query assembles a closure for each row it answers with, so it narrows
+    // those the way a read narrows its document.
     let query = await lowerOperationDeclarations(
       {
         roll: {
@@ -1678,10 +1677,11 @@ module('Unit | operation lowering', function (hooks) {
         identifyCard: (target) => identifyCard(target),
       },
     );
-    assert.deepEqual(
-      codes(query),
-      ['links-without-assembly'],
-      'a query answers with results this declaration does not govern',
+    assert.deepEqual(codes(query), [], 'a query may declare one');
+    assert.strictEqual(
+      query.operations.roll.links,
+      'ids',
+      'and the realm serves its results from the stored entry',
     );
 
     let unknown = await lowerOperationDeclarations(
