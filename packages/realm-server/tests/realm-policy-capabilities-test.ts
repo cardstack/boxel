@@ -468,7 +468,12 @@ module(basename(import.meta.filename), function (hooks) {
       );
       assert.deepEqual(
         gateStats(),
-        { policyLoads: 0, predicateEvaluations: 0, pendingDischarges: 0 },
+        {
+          policyLoads: 0,
+          predicateEvaluations: 0,
+          pendingDischarges: 0,
+          definitionLookups: 0,
+        },
         'the gate did nothing for any of them',
       );
       assert.strictEqual(
@@ -499,7 +504,12 @@ module(basename(import.meta.filename), function (hooks) {
       );
       assert.deepEqual(
         gateStats(),
-        { policyLoads: 2, predicateEvaluations: 0, pendingDischarges: 0 },
+        {
+          policyLoads: 2,
+          predicateEvaluations: 0,
+          pendingDischarges: 0,
+          definitionLookups: 0,
+        },
         'each write reached the policy once and the read never did',
       );
     });
@@ -698,7 +708,12 @@ module(basename(import.meta.filename), function (hooks) {
       );
       assert.deepEqual(
         gateStats(),
-        { policyLoads: 2, predicateEvaluations: 2, pendingDischarges: 0 },
+        {
+          policyLoads: 2,
+          predicateEvaluations: 2,
+          pendingDischarges: 0,
+          definitionLookups: 0,
+        },
         'each predicate was evaluated once, and neither by the path that holds the write lock',
       );
     });
