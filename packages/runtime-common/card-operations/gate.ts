@@ -813,10 +813,26 @@ export async function dischargePendingDecision(
   if (pending.decision.kind === 'pending') {
     policyGateStats(core).pendingDischarges++;
   }
-  let admission = await admits(core, pending, judged);
-  if (!('grant' in admission)) {
-    throw gateRefusal(core, admission, pending.target, pending.name);
+  let refusal = await pendingWriteRefusal(core, pending, judged);
+  if (refusal) {
+    throw refusal;
   }
+}
+
+// The refusal `dischargePendingDecision` would throw for a pending write
+// judged against `judged`, or undefined where it would admit the write. This
+// never admits anything and counts no discharge: it is for a caller that has
+// to know how the lock would decide a write that is not being decided under
+// it.
+export async function pendingWriteRefusal(
+  core: OperationCore,
+  pending: PendingWrite,
+  judged: AdmissionSubject | undefined,
+): Promise<OperationFailure | undefined> {
+  let admission = await admits(core, pending, judged);
+  return 'grant' in admission
+    ? undefined
+    : gateRefusal(core, admission, pending.target, pending.name);
 }
 
 // Whether a pending write would be admitted against its target card as stored

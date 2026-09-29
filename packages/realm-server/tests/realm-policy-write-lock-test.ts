@@ -896,6 +896,119 @@ module(basename(import.meta.filename), function (hooks) {
       );
     });
 
+    test('a write the batch itself leaves refused is the answer whether or not a card after it exists', async function (assert) {
+      let revision = (attributes: Record<string, unknown>) => ({
+        type: 'card',
+        attributes,
+        meta: { adoptsFrom: adoptsFrom(CLASSROOM) },
+      });
+      let bulletin = {
+        type: 'card',
+        lid: 'picture-day',
+        attributes: { body: 'Picture day', audience: 'staff' },
+        meta: { adoptsFrom: adoptsFrom(BULLETIN) },
+      };
+      // A classroom the caller does not teach is refused only once the batch
+      // reaches the lock, and one that does not exist is refused at
+      // resolution, before anything does. The writes ahead of it are judged
+      // against the classroom as the batch leaves it either way: removed by
+      // the entry before, or handed to someone else by it. That holds even
+      // when an entry after it refuses the batch before the lock decides
+      // anything, as a local id claimed twice does.
+      let batches: [string, (href: string) => Test][] = [
+        [
+          'an update of a classroom the batch deleted',
+          (href) =>
+            operations(
+              AUTH.teacher(),
+              invoke('delete', { href: ROOM_204 }),
+              invoke('update', {
+                href: ROOM_204,
+                data: revision({ title: 'Revised' }),
+              }),
+              invoke('update', { href, data: revision({ title: 'Revised' }) }),
+            ),
+        ],
+        [
+          'a rename of a classroom the batch handed to a colleague',
+          (href) =>
+            operations(
+              AUTH.teacher(),
+              invoke('update', {
+                href: ROOM_204,
+                data: revision({ teacherIds: [COLLEAGUE] }),
+              }),
+              invoke('rename', { href: ROOM_204, data: { title: 'Renamed' } }),
+              invoke('rename', { href, data: { title: 'Renamed' } }),
+            ),
+        ],
+        [
+          'an update of a classroom the batch deleted, ahead of one local id claimed twice',
+          (href) =>
+            operations(
+              AUTH.teacher(),
+              invoke('delete', { href: ROOM_204 }),
+              invoke('update', {
+                href: ROOM_204,
+                data: revision({ title: 'Revised' }),
+              }),
+              invoke('update', { href, data: revision({ title: 'Revised' }) }),
+              invoke('create', { data: bulletin }),
+              invoke('create', { data: bulletin }),
+            ),
+        ],
+      ];
+      for (let [label, batch] of batches) {
+        let untaught = await batch(ROOM_205);
+        sameRefusal(
+          assert,
+          untaught,
+          await batch(ROOM_999),
+          [ROOM_205, ROOM_999],
+          label,
+        );
+        assert.strictEqual(
+          (untaught.body as { errors: { meta: { entry: number } }[] }).errors[0]
+            .meta.entry,
+          1,
+          `${label}: is refused where it sits`,
+        );
+      }
+      assert.deepEqual(
+        (await stored(ROOM_204))?.attributes,
+        { title: 'Room 204', teacherIds: [TEACHER] },
+        'and nothing was written',
+      );
+    });
+
+    test('a create against a type is judged by the card it would mint whether or not a card after it exists', async function (assert) {
+      let behind = (href: string) =>
+        operations(
+          AUTH.teacher(),
+          invoke('post', {
+            data: {
+              body: 'Picture day',
+              meta: { adoptsFrom: adoptsFrom(BULLETIN) },
+            },
+          }),
+          invoke('rename', { href, data: { title: 'Renamed' } }),
+        );
+      let untaught = await behind(ROOM_205);
+      sameRefusal(
+        assert,
+        untaught,
+        await behind(ROOM_999),
+        [ROOM_205, ROOM_999],
+        'a post its grant admits, ahead of a rename of a classroom not taught',
+      );
+      assert.strictEqual(
+        (untaught.body as { errors: { meta: { entry: number } }[] }).errors[0]
+          .meta.entry,
+        1,
+        'is refused at the rename rather than at the post',
+      );
+    });
+
     test('another entry’s failure says no more than a refusal either', async function (assert) {
       let beside = (href: string) =>
         operations(

@@ -229,6 +229,8 @@ import {
   dischargePendingDecision,
   notPermitted,
   pendingWriteHolds,
+  pendingWriteRefusal,
+  type PendingWrite,
   policyGateStats,
   type PolicyGateStats,
 } from './card-operations/gate.ts';
@@ -275,6 +277,7 @@ import {
   targetFor,
   writeResult,
   type EnvelopeEntry,
+  type EnvelopeNode,
   type EnvelopeResult,
   type ResolvedEnvelopeEntry,
 } from './card-operations/envelope.ts';
@@ -301,7 +304,7 @@ import {
   type OperationSourceResult,
 } from './card-operations/types.ts';
 import { erroredTargetRow } from './card-operations/read.ts';
-import { commitBatch } from './card-operations/coordinator.ts';
+import { commitBatch, rehearseBatch } from './card-operations/coordinator.ts';
 import {
   noteRealmIndexMoved,
   RealmPolicyCache,
@@ -5514,9 +5517,10 @@ export class Realm {
       // may be a write the gate left to the write lock. A card that does not exist is
       // refused where it sits, so the position a refusal names says whether
       // the entries ahead of it resolved, and it is weighed against theirs.
+      // Nothing has reached the write lock, so it has decided nothing.
       throw await this.#disclosableFailure(
         (outcomes[refusedAt] as PromiseRejectedResult).reason,
-        coarseDeclined,
+        { coarseDeclined, tree, caller },
         outcomes.slice(0, refusedAt).map(fulfilled),
         new Map(),
       );
@@ -5621,48 +5625,29 @@ export class Realm {
         isWrite(definition.base),
       );
       if (writes.length > 0) {
-        // Each entry's `input` stage and `params` check, which `stageWriteEntry`
-        // runs in the order `runOperation` runs them for a read. The transformed
-        // entry keeps its `position`, which is the key both the staging schedule
-        // and the results are looked up by.
-        //
-        // A write a policy grant admitted carries what the gate left undecided
-        // to the coordinator, which decides it under the write lock where the
-        // write stages: the type a stored card's bytes name, and a predicate
-        // the grant rests on, against the card it changes or, for a create
-        // against a type, the card it would mint.
+        // Each write in request order, as the coordinator stages it, keyed by
+        // the position it was sent under (see `#stagedWrite`).
         let staged = new Map<EntryPosition, BatchEntry>();
         for (let [index, write] of writes.entries()) {
-          try {
-            writes[index] = await stageWriteEntry(
-              write,
-              this.#transformContext(write.entry, caller),
-            );
-            let { entry, definition } = writes[index];
-            let pending = pendingWriteOf(writes[index]);
-            staged.set(entry.position, {
-              ...batchEntryFor(entry, definition),
-              ...(pending
-                ? {
-                    admit: async (judged: AdmissionSubject | undefined) => {
-                      try {
-                        await dischargePendingDecision(
-                          this.operationCore,
-                          pending,
-                          judged,
-                        );
-                      } catch (refusal: unknown) {
-                        decided.set(entry.position, refusal);
-                        throw refusal;
-                      }
-                      decided.set(entry.position, undefined);
-                    },
-                  }
-                : {}),
-            });
-          } catch (err: unknown) {
-            throw atEntry(err, write.entry.position);
-          }
+          let { transformed, batchEntry } = await this.#stagedWrite(
+            write,
+            caller,
+            async (pending, judged, position) => {
+              try {
+                await dischargePendingDecision(
+                  this.operationCore,
+                  pending,
+                  judged,
+                );
+              } catch (refusal: unknown) {
+                decided.set(position, refusal);
+                throw refusal;
+              }
+              decided.set(position, undefined);
+            },
+          );
+          writes[index] = transformed;
+          staged.set(transformed.entry.position, batchEntry);
         }
         await this.#testOnlyBeforeBatchLock?.();
         // The tree the caller sent, with the entries that only read taken out of
@@ -5728,7 +5713,7 @@ export class Realm {
     } catch (err: unknown) {
       throw await this.#disclosableFailure(
         err,
-        coarseDeclined,
+        { coarseDeclined, tree, caller },
         resolved,
         decided,
       );
@@ -5804,7 +5789,7 @@ export class Realm {
 
   // What a batch that failed may tell its caller, for a caller the realm ACL
   // declined outright whose batch holds a write the policy gate left to the
-  // write lock and the lock has not decided.
+  // write lock.
   //
   // Such a write's target resolved, and the gate matched a grant on it, which
   // never happens for a card that does not exist. So a refusal the batch makes
@@ -5816,39 +5801,190 @@ export class Realm {
   // A write the lock would refuse, for its card's type or its predicate, is
   // answered with the gate's refusal instead, exactly as a card that does not
   // exist is answered. A write the lock would admit lets the caller have the
-  // answer the batch actually has. A write the lock already decided is not
-  // judged again: one it admitted may be told, and one it refused is the
-  // refusal. The first such write in request order is the answer, so a batch
-  // that the lock refused at one entry says nothing about the entries after
-  // it, as a batch refused at resolution says nothing about them either.
+  // answer the batch actually has. The first write in request order that the
+  // lock would refuse is the answer, so a batch the lock refused at one entry
+  // says nothing about the entries after it, as a batch refused at resolution
+  // says nothing about them either.
   //
-  // The write is judged against its card as stored now, outside the lock.
-  // That decides only what the refusal says, never whether anything is
-  // written, since a batch that reaches here writes nothing.
+  // How the lock would decide each write is worked out from the entries ahead
+  // of it and nothing after it, so a card named later in the batch cannot move
+  // the answer by existing. A write to a card no earlier entry changes is
+  // judged against that card as stored, which is what the lock judges it by:
+  // the lock's own decision where it made one, and the stored bytes where it
+  // did not. The lock decides the others by what staging leaves them. They are
+  // a write to a card an earlier entry removed, rewrote or appended to, and a
+  // create against a type, which is judged by the card it would mint. So those
+  // are rehearsed (see `#rehearsedDecisions`) over the entries ahead of the
+  // first write its stored card refuses, and never taken from the lock. The
+  // lock plans the whole batch before it stages any of it, and a later entry
+  // can stop it from deciding anything, or supply a local id an earlier entry
+  // links to.
+  //
+  // None of this decides whether anything is written: it runs once the batch
+  // has already failed.
   async #disclosableFailure(
     err: unknown,
-    coarseDeclined: CoarseDeclined,
+    {
+      coarseDeclined,
+      tree,
+      caller,
+    }: {
+      coarseDeclined: CoarseDeclined;
+      tree: readonly EnvelopeNode[];
+      caller: { actor: string; clientRequestId: string };
+    },
     resolved: readonly ResolvedEnvelopeEntry[],
+    // The lock's decisions, for a batch that reached it.
     decided: ReadonlyMap<EntryPosition, unknown>,
   ): Promise<unknown> {
     if (coarseDeclined !== 'all') {
       return err;
     }
+    // The cards the entries so far change, which a later write to one of
+    // them is judged by what they leave.
+    let changed = new Set<string>();
+    let ahead: ResolvedEnvelopeEntry[] = [];
+    let rehearse = false;
+    let refused: { position: EntryPosition; refusal: unknown } | undefined;
     for (let entry of resolved) {
       let { position } = entry.entry;
-      if (decided.has(position)) {
-        let refusal = decided.get(position);
-        if (refusal !== undefined) {
-          return atEntry(refusal, position);
-        }
-        continue;
-      }
       let pending = pendingWriteOf(entry);
-      if (pending && !(await pendingWriteHolds(this.operationCore, pending))) {
-        return atEntry(notPermitted(pending.target, pending.name), position);
+      if (pending) {
+        if (
+          pending.target.kind !== 'instance' ||
+          changed.has(pending.target.url)
+        ) {
+          rehearse = true;
+        } else {
+          let refusal = decided.has(position)
+            ? decided.get(position)
+            : (await pendingWriteHolds(this.operationCore, pending))
+              ? undefined
+              : notPermitted(pending.target, pending.name);
+          if (refusal !== undefined) {
+            refused = { position, refusal };
+            break;
+          }
+        }
+      }
+      ahead.push(entry);
+      if (
+        isWrite(entry.definition.base) &&
+        entry.definition.base !== 'create' &&
+        entry.target.kind === 'instance'
+      ) {
+        changed.add(entry.target.url);
       }
     }
-    return err;
+    if (rehearse) {
+      let rehearsed = await this.#rehearsedDecisions(tree, ahead, caller);
+      for (let { entry } of ahead) {
+        let refusal = rehearsed.get(entry.position);
+        if (refusal !== undefined) {
+          return atEntry(refusal, entry.position);
+        }
+      }
+    }
+    return refused ? atEntry(refused.refusal, refused.position) : err;
+  }
+
+  // How the write lock would decide the writes in `resolved` that the gate
+  // left to it, each keyed by position with the refusal it would give, or
+  // undefined where it would admit the write.
+  //
+  // The writes are staged in request order as the lock stages them, against
+  // the realm as stored now, and nothing is committed. What they are staged
+  // with is `resolved` and nothing else, local ids included. A write that
+  // cannot be staged ends the rehearsal there, since nothing can say what it
+  // would leave its card. So does anything staging refuses, as it ends the
+  // batch under the lock, and whatever that was is the batch's failure to
+  // report or not, so it is not rethrown here.
+  async #rehearsedDecisions(
+    tree: readonly EnvelopeNode[],
+    resolved: readonly ResolvedEnvelopeEntry[],
+    caller: { actor: string; clientRequestId: string },
+  ): Promise<Map<EntryPosition, OperationFailure | undefined>> {
+    let rehearsed = new Map<EntryPosition, OperationFailure | undefined>();
+    let admit = async (
+      pending: PendingWrite,
+      judged: AdmissionSubject | undefined,
+      position: EntryPosition,
+    ) => {
+      let refusal = await pendingWriteRefusal(
+        this.operationCore,
+        pending,
+        judged,
+      );
+      rehearsed.set(position, refusal);
+      if (refusal) {
+        throw refusal;
+      }
+    };
+    let staged = new Map<EntryPosition, BatchEntry>();
+    for (let write of resolved) {
+      if (!isWrite(write.definition.base)) {
+        continue;
+      }
+      try {
+        let { batchEntry } = await this.#stagedWrite(write, caller, admit);
+        staged.set(write.entry.position, batchEntry);
+      } catch {
+        break;
+      }
+    }
+    try {
+      await rehearseBatch(this.batchCore, stagedTree(tree, staged), {
+        actor: caller.actor || undefined,
+      });
+    } catch {
+      // A refusal from an admission is already in `rehearsed`, and anything
+      // else staging refused only ends the rehearsal.
+    }
+    return rehearsed;
+  }
+
+  // One write's `input` stage and `params` check, which `stageWriteEntry` runs
+  // in the order `runOperation` runs them for a read, and the entry the
+  // coordinator stages for it. The transformed write keeps its `position`,
+  // which is the key both the staging schedule and the results are looked up
+  // by.
+  //
+  // A write a policy grant admitted carries what the gate left undecided to
+  // the coordinator, which decides it where the write stages: the type a
+  // stored card's bytes name, and a predicate the grant rests on, against the
+  // card it changes or, for a create against a type, the card it would mint.
+  // `admit` is what decides it there, handed the card staging judges it by.
+  async #stagedWrite(
+    write: ResolvedEnvelopeEntry,
+    caller: { actor: string; clientRequestId: string },
+    admit: (
+      pending: PendingWrite,
+      judged: AdmissionSubject | undefined,
+      position: EntryPosition,
+    ) => Promise<void>,
+  ): Promise<{ transformed: ResolvedEnvelopeEntry; batchEntry: BatchEntry }> {
+    try {
+      let transformed = await stageWriteEntry(
+        write,
+        this.#transformContext(write.entry, caller),
+      );
+      let { entry, definition } = transformed;
+      let pending = pendingWriteOf(transformed);
+      return {
+        transformed,
+        batchEntry: {
+          ...batchEntryFor(entry, definition),
+          ...(pending
+            ? {
+                admit: (judged: AdmissionSubject | undefined) =>
+                  admit(pending, judged, entry.position),
+              }
+            : {}),
+        },
+      };
+    } catch (err: unknown) {
+      throw atEntry(err, write.entry.position);
+    }
   }
 
   // A batch's answer is never HTTP-cached. It is not a resource with a

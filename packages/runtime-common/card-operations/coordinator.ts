@@ -517,7 +517,12 @@ export async function rehearseBatch(
     return;
   }
   let settings: Promise<Record<string, JsonValue>> | undefined;
-  await stageBatch(core, planned, opts, () => (settings ??= core.realmConfig()));
+  await stageBatch(
+    core,
+    planned,
+    opts,
+    () => (settings ??= core.realmConfig()),
+  );
 }
 
 // A batch laid out for staging: the tree with each entry's flat position, its
