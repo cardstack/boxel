@@ -755,10 +755,12 @@ Some things worth knowing before you read one:
 - **Read is the whole gate.** A reader of both realms learns, for any actor
   they name, what the card's realm's permissions allow that actor, which the
   realm's permissions listing shows only to its owners.
-- **There is no asking about yourself.** A caller refused an operation is told
-  as little as the realm's permissions entitle them to, so that they cannot
-  learn which cards exist. An explain would tell them exactly that, so it is
-  not a self-service check, and a view never decides what to show from one.
+- **It is not a self-service check.** A caller who may not read the card's
+  realm is told as little as the realm's permissions entitle them to, so that
+  they cannot learn which cards exist, and an explain would tell them exactly
+  that. Such a caller cannot ask about the card at all, themselves included. A
+  caller who reads both realms can ask about any actor, themselves included,
+  but a view never decides what to show from an explain.
 - **It explains only the policy the card's realm names.** An explain on any
   other policy card refuses with `policy-not-in-force`.
 - **`allowed` means the gate admits the invocation.** The operation can still
