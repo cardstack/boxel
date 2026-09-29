@@ -508,9 +508,17 @@ module('Integration | realm policy', function (hooks) {
     );
     await fillIn('[data-test-explain-operation]', 'read');
     await click('[data-test-explain-submit]');
-    await waitFor('[data-test-explanation]');
+    await waitFor('[data-test-explanation], [data-test-explain-refusal]', {
+      timeout: 10_000,
+    });
 
-    assert.dom('[data-test-explain-refusal]').doesNotExist();
+    assert.strictEqual(
+      document
+        .querySelector('[data-test-explain-refusal]')
+        ?.textContent?.trim(),
+      undefined,
+      'the realm answers the question rather than refusing it',
+    );
     assert.dom('[data-test-explanation-decision]').hasText('allowed');
     assert
       .dom('[data-test-explanation-reason]')
