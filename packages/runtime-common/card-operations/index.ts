@@ -179,6 +179,7 @@ export {
   isOperationFailure,
   isSourceResult,
   isWrite,
+  refusalForNonReader,
 } from './types.ts';
 export type {
   BaseOperation,
