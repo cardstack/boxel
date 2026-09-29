@@ -213,8 +213,9 @@ export interface AdmissionSubject {
 
 export interface CreateEntry extends EntryCommon {
   op: 'create';
-  // The client's own id for the card being minted. It names the file the card
-  // lands in, and it is the key other entries in the batch link to it by.
+  // The client's own id for the card being minted. It is the key other entries
+  // in the batch link to it by, and it names the file the card lands in,
+  // except in a batch that mints its ids (see `CommitBatchOptions.mintIds`).
   // Absent means the realm mints an id, and nothing else in the batch can
   // refer to the card.
   lid?: string;
