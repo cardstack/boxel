@@ -369,15 +369,14 @@ module(basename(import.meta.filename), function (hooks) {
     return namedTargets(body.data.relationships, base);
   }
 
-  function assertNotPermitted(
-    assert: Assert,
-    response: Response,
-    label: string,
-  ) {
-    assert.strictEqual(response.status, 403, `${label}: status`);
-    assert.true(
-      /is not permitted on/.test(response.text),
-      `${label}: the gate's refusal`,
+  // The gate's refusal to a caller who may not read the realm, which the
+  // teacher is: they are told nothing is there, so a card the policy does not
+  // reach answers the way a card that does not exist does.
+  function assertNotThere(assert: Assert, response: Response, label: string) {
+    assert.strictEqual(response.status, 404, `${label}: status`);
+    assert.false(
+      /not permitted/.test(response.text),
+      `${label}: nothing says the gate refused`,
     );
   }
 
@@ -397,7 +396,7 @@ module(basename(import.meta.filename), function (hooks) {
         [ADA, BEN].sort(),
         'and the relationships name them',
       );
-      assertNotPermitted(
+      assertNotThere(
         assert,
         await getCard(ADA, AUTH.teacher()),
         'a student the teacher received inside the roster',
@@ -438,7 +437,7 @@ module(basename(import.meta.filename), function (hooks) {
     test('each named target is fetched on its own request and gated there', async function (assert) {
       let body = await read(IDS, AUTH.teacher());
       for (let target of linkedIds(body, IDS)) {
-        assertNotPermitted(
+        assertNotThere(
           assert,
           await getCard(target, AUTH.teacher()),
           `the per-link fetch of ${target}`,

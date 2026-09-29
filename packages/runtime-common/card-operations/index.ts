@@ -183,6 +183,7 @@ export {
   isSourceResult,
   isWrite,
   linkStrategyOf,
+  refusalForNonReader,
 } from './types.ts';
 export type {
   BaseOperation,
