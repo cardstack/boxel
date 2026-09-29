@@ -286,7 +286,9 @@ import {
   isOperationFailure,
   isSourceResult,
   isWrite,
+  refusalForNonReader,
   type EntryPosition,
+  type OperationError,
   type OperationRequest,
   type OperationResult,
   type OperationSourceResult,
@@ -316,6 +318,7 @@ import { inferContentType } from './infer-content-type.ts';
 import {
   fileContentToText,
   fileContentToBytes,
+  fileContentEquals,
   readFileAsText,
   getFileWithFallbacks,
   type TextFileRef,
@@ -828,12 +831,18 @@ const ARCHIVED_SEAL_EXEMPT_PATHS = new Set(['_readiness-check', '_session']);
 // consumes the outcome only if every operation it resolves is resolved with
 // the ACL's refusal on it, so no other route does. The card+json writes, the
 // card+source routes and the realm's fallback file and module serve keep the
-// ACL's own refusal.
+// ACL's refusal, which a realm with a policy words differently on some of them
+// (see `#refusalUnderPolicy`).
 const CONSUMES_COARSE_OUTCOME = { consumesCoarseOutcome: true } as const;
 // The capability check's path, named here because two places read it: the
 // route below, and the permission the realm derives from the request's method,
 // which this path is the one `POST` exception to.
 const CAPABILITIES_PATH = '_capabilities';
+// Marks the routes that serve code and the file tree, which no policy grant
+// reaches: the card+source read and its `HEAD`, and the directory listing. The
+// fallback file and module serve is one too, for a `GET` and a `HEAD`. See
+// `RouteOptions.coarseReadOnly`.
+const COARSE_READ_ONLY = { coarseReadOnly: true } as const;
 const ROUTER_METHODS: Method[] = [
   'GET',
   'QUERY',
@@ -2027,6 +2036,7 @@ export type RequestContext = {
 // and whether it consumes the realm ACL's recorded outcome.
 interface RequestDispatch {
   consumesCoarseOutcome: boolean;
+  coarseReadOnly?: boolean;
   handle: () => Promise<ResponseWithNodeStream>;
 }
 
@@ -2040,6 +2050,7 @@ export type DispatchDescription =
       mimeType: '*';
       path: '*';
       consumesCoarseOutcome: boolean;
+      coarseReadOnly: boolean;
     };
 
 type CoarseAdmission = (
@@ -2633,11 +2644,13 @@ export class Realm {
         '/.*',
         SupportedMimeType.CardSource,
         this.getSourceOrRedirect.bind(this),
+        COARSE_READ_ONLY,
       )
       .get(
         '/.*',
         SupportedMimeType.CardSource,
         this.getSourceOrRedirect.bind(this),
+        COARSE_READ_ONLY,
       )
       .delete(
         '/.+',
@@ -2648,6 +2661,7 @@ export class Realm {
         '.*/',
         SupportedMimeType.DirectoryListing,
         this.getDirectoryListing.bind(this),
+        COARSE_READ_ONLY,
       );
 
     // Realm discovery: a `HEAD` on any path, in any `Accept` bucket without a
@@ -4338,58 +4352,83 @@ export class Realm {
           ? 'card'
           : 'file';
       this.assertWriteSize(content, sizeType, path);
-      let isNewFile: boolean;
-      if (typeof content === 'string') {
-        // The stored file is opened before it is read, so its length can rule
-        // the comparison out without any of it being held. Only a file of
-        // exactly the staged content's length can be the staged content, and
-        // a replacement almost never is — so this is what keeps replacing a
-        // file that is large from costing its size. `openFile` reports the
-        // length from a stat it already performs, and reading the body stays
-        // a separate step because the body is a lazy, single-use stream on
-        // every streaming adapter.
-        let stored = await this.#adapter.openFile(path);
-        let couldMatch =
-          stored !== undefined &&
-          (stored.size === undefined ||
-            stored.size === computeContentSize(content));
-        let existingFile = couldMatch
-          ? await readFileAsText(path, (p) => this.#adapter.openFile(p))
-          : undefined;
+      // The stored file is opened before it is read, so its length can rule
+      // the comparison out without any of it being held. Only a file of
+      // exactly the staged content's length can be the staged content, and
+      // a replacement almost never is — so this is what keeps replacing a
+      // file that is large from costing its size. `openFile` reports the
+      // length from a stat it already performs, and reading the body stays
+      // a separate step because the body is a lazy, single-use stream on
+      // every streaming adapter.
+      let stored = await this.#adapter.openFile(path);
+      let couldMatch =
+        stored !== undefined &&
+        (stored.size === undefined ||
+          stored.size === computeContentSize(content));
+      let unchanged: { lastModified: number } | undefined;
+      if (couldMatch && typeof content === 'string') {
+        let existingFile = await readFileAsText(path, (p) =>
+          this.#adapter.openFile(p),
+        );
         if (existingFile?.content === content) {
-          // Identical bytes: the file is left alone, so its modification time
-          // stands and nothing is queued for indexing. The content hash is
-          // still the file's own — the bytes in hand are the bytes on disk —
-          // so a caller reading a version off this result gets the one the
-          // file already holds rather than nothing.
-          //
-          // Recorded on the row as well as returned. A file written before
-          // the realm began recording hashes carries none, and the row is
-          // what the file's metadata resource reports as its content hash —
-          // so a file the realm has never rewritten would answer without one
-          // until something changed its bytes. Writing the hash it already
-          // has is a no-op for every file that has one. This is not what
-          // makes `baseVersion` work: that is computed from the bytes read
-          // inside the write lock and never consults the row.
-          let unchangedHash = computeContentHash(content);
-          results.push({
-            path,
-            lastModified: existingFile.lastModified,
-            contentHash: unchangedHash,
-          });
-          fileMetaRows.push({
-            path,
-            contentHash: unchangedHash,
-            contentSize: computeContentSize(content),
-          });
-          continue;
+          unchanged = existingFile;
         }
-        // From the open above rather than from the read, which a file whose
-        // length already settled the comparison never had.
-        isNewFile = stored === undefined;
-      } else {
-        isNewFile = !(await this.#adapter.exists(path));
+      } else if (
+        couldMatch &&
+        stored &&
+        content instanceof Uint8Array &&
+        (await this.#indexDescribesFile(url, computeContentHash(content))) &&
+        (await fileContentEquals(stored, content))
+      ) {
+        // Matching bytes are not enough on their own here. Re-sending an
+        // upload is how a caller recovers from one whose bytes landed but
+        // whose metadata row or queue insert then failed, and how a file
+        // whose last index pass errored gets another one — and both look
+        // exactly like a repeat of an upload that fully landed. So the file
+        // is left alone only when the index already holds a live row built
+        // from these bytes; otherwise the upload proceeds as a write, which
+        // queues the pass the earlier attempt never got.
+        //
+        // Bytes are compared as bytes and never decoded, so a match is a
+        // byte-for-byte one. The stored file is read a chunk at a time against
+        // a body already held whole, which keeps a large upload from being
+        // held twice. Not the hash recorded at the last write: only the
+        // file's length vouches for that record, so a file rewritten out of
+        // band at the same length would read as unchanged, and the bytes a
+        // caller sent to replace it would be dropped.
+        unchanged = stored;
       }
+      if (unchanged) {
+        // Identical bytes: the file is left alone, so its modification time
+        // stands and nothing is queued for indexing. The content hash is
+        // still the file's own — the bytes in hand are the bytes on disk —
+        // so a caller reading a version off this result gets the one the
+        // file already holds rather than nothing.
+        //
+        // Recorded on the row as well as returned. A file written before
+        // the realm began recording hashes carries none, and the row is
+        // what the file's metadata resource reports as its content hash —
+        // so a file the realm has never rewritten would answer without one
+        // until something changed its bytes. Writing the hash it already
+        // has is a no-op for every file that has one. This is not what
+        // makes `baseVersion` work: that is computed from the bytes read
+        // inside the write lock and never consults the row.
+        let unchangedHash = computeContentHash(content);
+        results.push({
+          path,
+          lastModified: unchanged.lastModified,
+          contentHash: unchangedHash,
+        });
+        fileMetaRows.push({
+          path,
+          contentHash: unchangedHash,
+          contentSize: computeContentSize(content),
+        });
+        continue;
+      }
+      // From the open above rather than from a read, which a file whose
+      // length already settled the comparison never had.
+      let isNewFile = stored === undefined;
       let contentHash = computeContentHash(content);
       let contentSize = computeContentSize(content);
       this.sendIndexInitiationEvent(url.href);
@@ -4835,6 +4874,15 @@ export class Realm {
         `failed to enqueue deferred prerender_html job for ${this.url}: ${e?.message}`,
       );
     }
+  }
+
+  // Whether the index holds a live row for this file whose content
+  // fingerprint is `contentHash` — that is, whether the file's last index pass
+  // completed over exactly these bytes. A file with no row, or whose last pass
+  // errored, has no live file row, so it answers no.
+  async #indexDescribesFile(url: URL, contentHash: string): Promise<boolean> {
+    let entry = await this.#realmIndexQueryEngine.file(url);
+    return entry?.searchDoc?.contentHash === contentHash;
   }
 
   // persist created_at into realm_file_meta table using db adapter
@@ -5295,9 +5343,10 @@ export class Realm {
       // write's result, which does not exist until the write has committed, so
       // a program failing there answers 400 over a batch that landed. The
       // status is the same and what it says about the realm is not.
+      let error = this.#refusalSeenBy(err.error, requestContext);
       return this.#operationsResponse(
-        errorsDocument(err.error),
-        err.error.status,
+        errorsDocument(error),
+        error.status,
         requestContext,
       );
     }
@@ -6179,6 +6228,19 @@ export class Realm {
       : {};
   }
 
+  // An operation's refusal as this request's caller is told it, so a caller
+  // the ACL would not let read the realm is never told which cards exist,
+  // whichever place raised the refusal. The envelope's refusals pass through
+  // here; the card+json read applies the same rule from the caller it carries.
+  #refusalSeenBy(
+    error: OperationError,
+    requestContext: RequestContext,
+  ): OperationError {
+    return this.#coarseDeclined(requestContext) === 'all'
+      ? refusalForNonReader(error)
+      : error;
+  }
+
   // Who an operation dispatched from an HTTP request is running for. The actor
   // is the identity the realm authenticated, which is empty for an anonymous
   // caller — an operation that reads it has to treat "nobody" as a value
@@ -6577,6 +6639,15 @@ export class Realm {
           requiredPermission === 'realm-owner' ||
           !(await this.#admitsDespiteCoarseRefusal(request, requestContext))
         ) {
+          let answer = await this.#refusalUnderPolicy(
+            request,
+            dispatch,
+            requiredPermission,
+            requestContext,
+          );
+          if (answer) {
+            return answer;
+          }
           throw (
             requestContext.coarseRefusal ??
             new AuthorizationError(
@@ -6585,6 +6656,12 @@ export class Realm {
           );
         }
         await this.#assertNotArchived(localPath);
+      }
+      if (!isLocal && request.method === 'HEAD' && dispatch.coarseReadOnly) {
+        let answer = await this.#headUnderPolicy(request, requestContext);
+        if (answer) {
+          return answer;
+        }
       }
       if (!this.#realmIndexQueryEngine) {
         return systemError({
@@ -6727,6 +6804,7 @@ export class Realm {
       let matched: Route = route;
       return {
         consumesCoarseOutcome: matched.consumesCoarseOutcome,
+        coarseReadOnly: matched.coarseReadOnly,
         handle: () => this.#router.handle(request, requestContext, matched),
       };
     }
@@ -6734,9 +6812,11 @@ export class Realm {
     // the stored bytes through the `readSource` operation, and any other
     // method no route claimed. None of it consumes the ACL's outcome: the
     // gate grants no stored-bytes read, so a caller the ACL refused is
-    // refused as it refused them.
+    // refused as it refused them. For a `GET` and a `HEAD` that refusal is
+    // the one a coarse-read-only route gives.
     return {
       consumesCoarseOutcome: false,
+      coarseReadOnly: request.method === 'GET' || request.method === 'HEAD',
       handle: () => this.fallbackHandle(request, requestContext),
     };
   }
@@ -6814,6 +6894,85 @@ export class Realm {
     return (await this.getRealmPolicy()) !== undefined;
   }
 
+  // How a realm with a policy answers a request its ACL refused and nothing
+  // admitted, where that answer differs from the ACL's own. Both cases are
+  // answered before the route runs, so neither resolves anything about the
+  // path. Every other refusal, and every refusal in a realm with no policy, is
+  // the ACL's.
+  //
+  // - A request that authenticated nobody, on a route that consumes the ACL's
+  //   outcome, is told to authenticate in the form the route's own refusals
+  //   take: an `actor-required` error. It gets the same answer for a path
+  //   that names a card and one that names nothing.
+  // - A caller the ACL does not let read the realm, on a coarse-read-only
+  //   route, is told nothing is there. That is what such a caller is told of
+  //   a card no grant admits, and of a card that does not exist, so the
+  //   routes no grant reaches say no more than the ones a grant might.
+  async #refusalUnderPolicy(
+    request: Request,
+    dispatch: RequestDispatch,
+    requiredPermission: RealmAction,
+    requestContext: RequestContext,
+  ): Promise<Response | undefined> {
+    let refusal = requestContext.coarseRefusal;
+    let unauthenticated =
+      refusal instanceof CoarseAuthenticationRequired &&
+      dispatch.consumesCoarseOutcome;
+    let unreadable =
+      refusal instanceof CoarsePermissionInsufficient &&
+      dispatch.coarseReadOnly === true &&
+      requiredPermission === 'read';
+    if (
+      requiredPermission === 'realm-owner' ||
+      !(unauthenticated || unreadable) ||
+      (await this.getRealmPolicy()) === undefined
+    ) {
+      return undefined;
+    }
+    if (!unauthenticated) {
+      return notFound(request, requestContext);
+    }
+    return createResponse({
+      body: JSON.stringify(
+        errorsDocument({
+          status: 401,
+          code: 'actor-required',
+          title: 'Authentication required',
+          detail: AuthenticationErrorMessages.MissingAuthHeader,
+        }),
+        null,
+        2,
+      ),
+      init: {
+        status: 401,
+        headers: {
+          'content-type': SupportedMimeType.JSONAPI,
+          'X-Boxel-Realm-Url': requestContext.realm.url,
+        },
+      },
+      requestContext,
+    });
+  }
+
+  // A `HEAD` passes the realm's permission check whoever sends it, so on a
+  // coarse-read-only route it would hand a caller the ACL would not let read
+  // the realm a file's own validators, and a 404 where nothing is there. In a
+  // realm with a policy such a caller is given the discovery answer instead,
+  // as a `HEAD` of a card they may not read is, so the route says nothing
+  // about the path. A realm with no policy answers as it always has.
+  async #headUnderPolicy(
+    request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response | undefined> {
+    if ((await this.getRealmPolicy()) === undefined) {
+      return undefined;
+    }
+    let probe = await this.#readProbe(request, requestContext);
+    return probe.allowed
+      ? undefined
+      : this.realmIdentityResponse(requestContext);
+  }
+
   // Stands in for the admission decision so a test can show which requests
   // an admission would reach and which the terminal assertion refuses
   // regardless. Pass `undefined` to restore the real decision.
@@ -6853,6 +7012,7 @@ export class Realm {
         mimeType: '*' as const,
         path: '*' as const,
         consumesCoarseOutcome: false,
+        coarseReadOnly: method === 'GET' || method === 'HEAD',
       })),
     ];
   }
@@ -11211,9 +11371,12 @@ export class Realm {
         if (!isOperationFailure(e)) {
           throw e;
         }
+        // Wherever a caller the ACL declined would be told nothing is there,
+        // which is both a card the gate refused and one that does not exist,
+        // they get the discovery answer the ACL's own refusal gives.
         if (
           coarseDeclined.coarseDeclined &&
-          e.error.code === 'operation-not-permitted'
+          refusalForNonReader(e.error).code === 'target-not-found'
         ) {
           return this.realmIdentityResponse(requestContext);
         }
@@ -11647,7 +11810,15 @@ export class Realm {
       if (!isOperationFailure(e)) {
         throw e;
       }
-      return cardJsonAssemblyFromFailure(e);
+      // The read's refusal as this caller is told it (see `#refusalSeenBy`).
+      // A caller the ACL declined is never answered from a shared assembly,
+      // so this one is theirs alone.
+      let error = caller.coarseDeclined
+        ? refusalForNonReader(e.error)
+        : e.error;
+      return cardJsonAssemblyFromFailure(
+        error === e.error ? e : new OperationFailure(error),
+      );
     }
     if (!isDocumentResult(result)) {
       throw new Error(

@@ -305,14 +305,14 @@ module(basename(import.meta.filename), function (hooks) {
     ).filter((path) => path.endsWith('.json')).length;
   }
 
-  function assertNotPermitted(
-    assert: Assert,
-    response: Response,
-    label: string,
-  ) {
-    assert.strictEqual(response.status, 403, `${label}: status`);
-    assert.true(
-      /is not permitted on/.test(response.text),
+  // The gate's refusal, as a caller who may not read the realm is told it:
+  // that nothing is there.
+  function assertNotThere(assert: Assert, response: Response, label: string) {
+    assert.strictEqual(response.status, 404, `${label}: status`);
+    let { code, detail } = response.body.errors[0];
+    assert.deepEqual(
+      { code, detail },
+      { code: 'target-not-found', detail: 'no such target' },
       `${label}: the gate's refusal`,
     );
   }
@@ -344,7 +344,7 @@ module(basename(import.meta.filename), function (hooks) {
       );
 
       let before = storedCount();
-      assertNotPermitted(
+      assertNotThere(
         assert,
         await operations(AUTH.teacher(), create(CLASSROOM, { title: 'Lab' })),
         'a create of a type no rule grants creates of',
@@ -363,7 +363,7 @@ module(basename(import.meta.filename), function (hooks) {
         200,
         'the Homeroom rule admits a create of a Homeroom',
       );
-      assertNotPermitted(
+      assertNotThere(
         assert,
         await operations(AUTH.teacher(), create(CLASSROOM)),
         'the Homeroom rule does not reach Classroom, which Homeroom descends from',
@@ -398,7 +398,7 @@ module(basename(import.meta.filename), function (hooks) {
         'Early dismissal',
       );
 
-      assertNotPermitted(
+      assertNotThere(
         assert,
         await operations(AUTH.teacher(), create(LOOKALIKE)),
         'a ref naming its type "Bulletin" that resolves to Classroom is judged as a Classroom',
@@ -423,7 +423,7 @@ module(basename(import.meta.filename), function (hooks) {
         'and the activity it mints is filled from its declaration',
       );
 
-      assertNotPermitted(
+      assertNotThere(
         assert,
         await operations(AUTH.teacher(), create(ACTIVITY, { note: 'Raw' })),
         'no rule grants a plain create of the ClassroomActivity it mints',
@@ -465,15 +465,30 @@ module(basename(import.meta.filename), function (hooks) {
         'target-not-found',
         'a caller who may read the realm is told the type is not found',
       );
-      assertNotPermitted(
+      assert.deepEqual(
+        gateStats(),
+        {
+          policyLoads: 0,
+          predicateEvaluations: 0,
+          pendingDischarges: 0,
+          definitionLookups: 0,
+        },
+        'without reaching the policy',
+      );
+      assertNotThere(
         assert,
         await operations(AUTH.teacher(), create(nowhere)),
         'a caller who may not read the realm gets the refusal every declined invocation gets',
       );
       assert.deepEqual(
         gateStats(),
-        { policyLoads: 0, predicateEvaluations: 0, pendingDischarges: 0 },
-        'neither reached the policy',
+        {
+          policyLoads: 1,
+          predicateEvaluations: 0,
+          pendingDischarges: 0,
+          definitionLookups: 0,
+        },
+        'whose policy is loaded before the type resolves, and matched against nothing',
       );
     });
 
@@ -487,7 +502,7 @@ module(basename(import.meta.filename), function (hooks) {
         /target realm .* is not/.test(fromReader.body.errors[0].detail),
         `a caller who may read the realm is told the realm is not this one: ${fromReader.body.errors[0].detail}`,
       );
-      assertNotPermitted(
+      assertNotThere(
         assert,
         await operations(
           AUTH.teacher(),
@@ -497,7 +512,12 @@ module(basename(import.meta.filename), function (hooks) {
       );
       assert.deepEqual(
         gateStats(),
-        { policyLoads: 0, predicateEvaluations: 0, pendingDischarges: 0 },
+        {
+          policyLoads: 0,
+          predicateEvaluations: 0,
+          pendingDischarges: 0,
+          definitionLookups: 0,
+        },
         'neither reached the policy',
       );
       assert.strictEqual(
@@ -543,7 +563,12 @@ module(basename(import.meta.filename), function (hooks) {
       );
       assert.deepEqual(
         gateStats(),
-        { policyLoads: 0, predicateEvaluations: 0, pendingDischarges: 0 },
+        {
+          policyLoads: 0,
+          predicateEvaluations: 0,
+          pendingDischarges: 0,
+          definitionLookups: 0,
+        },
         'and no policy was loaded for either',
       );
     });
