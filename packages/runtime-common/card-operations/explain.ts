@@ -250,7 +250,7 @@ async function explain(
     // own refusal.
     let threw = [...trace.outcomes.values()].includes('threw');
     let refusal: OperationError = threw
-      ? { status: 500, code: 'internal-error', title: '', detail: '' }
+      ? { status: 500, code: 'policy-predicate-failed', title: '', detail: '' }
       : { status: 403, code: 'operation-not-permitted', title: '', detail: '' };
     return refused(
       explained,

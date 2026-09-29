@@ -930,25 +930,44 @@ module(basename(import.meta.filename), function (hooks) {
   });
 
   module('fail closed', function () {
-    test('a predicate that throws is a 500, and one that reads a snapshot tier is never evaluated', async function (assert) {
+    test('a predicate that throws refuses as a card that is not there is refused, and one that reads a snapshot tier is never evaluated', async function (assert) {
       const ALGEBRA = `${EDUCATION}syllabi/algebra`;
+      const GEOMETRY = `${EDUCATION}syllabi/geometry`;
       assert.strictEqual(
         (await getCard(`${EDUCATION}syllabi/course-42`, AUTH.teacher())).status,
         200,
         'the predicate holds where it can be evaluated',
       );
+      // The teacher may not read the realm, so the fault reaches them as the
+      // answer for a syllabus that does not exist.
+      let thrown = await getCard(ALGEBRA, AUTH.teacher());
+      let missing = await getCard(GEOMETRY, AUTH.teacher());
       assert.strictEqual(
-        (await getCard(ALGEBRA, AUTH.teacher())).status,
-        500,
-        'and a card+json read is a 500 where it throws',
+        thrown.status,
+        404,
+        'a card+json read where it throws',
       );
-      let batch = await operations(
+      assert.strictEqual(
+        thrown.text.replaceAll('algebra', 'geometry'),
+        missing.text,
+        'is the same body as a card that is not there, but for the URL',
+      );
+      let thrownBatch = await operations(
         EDUCATION,
         AUTH.teacher(),
         invoke('read', { href: ALGEBRA }),
       );
-      assert.strictEqual(batch.status, 500, 'as is an envelope read');
-      assert.strictEqual(errorOf(batch).code, 'internal-error');
+      let missingBatch = await operations(
+        EDUCATION,
+        AUTH.teacher(),
+        invoke('read', { href: GEOMETRY }),
+      );
+      assert.strictEqual(thrownBatch.status, 404, 'as is an envelope read');
+      assert.strictEqual(
+        thrownBatch.text,
+        missingBatch.text,
+        'whose body is the same, byte for byte',
+      );
       assert.strictEqual(
         gateStats().predicateEvaluations,
         3,
@@ -1248,7 +1267,7 @@ module(basename(import.meta.filename), function (hooks) {
           code: 'target-not-found',
         },
         {
-          situation: 'a predicate that throws',
+          situation: 'no realm read, a predicate that throws',
           caller: 'teacher',
           card: () => getCard(`${EDUCATION}syllabi/algebra`, AUTH.teacher()),
           envelope: () =>
@@ -1257,8 +1276,8 @@ module(basename(import.meta.filename), function (hooks) {
               AUTH.teacher(),
               invoke('read', { href: `${EDUCATION}syllabi/algebra` }),
             ),
-          status: 500,
-          code: 'internal-error',
+          status: 404,
+          code: 'target-not-found',
         },
         {
           situation: 'module source, no realm read',

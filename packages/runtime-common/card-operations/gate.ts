@@ -3,6 +3,7 @@ import type { Definition } from '../definitions.ts';
 import { codeRefFromInternalKey } from '../index.ts';
 import type { LocalPath } from '../paths.ts';
 import { isCardResource } from '../card-document-shape.ts';
+import { logger } from '../log.ts';
 import type { CardResource } from '../resource-types.ts';
 import { extensionOfName } from '../file-def-code-ref.ts';
 import { policyFileDefCodeRef } from '../policy-file-def.ts';
@@ -79,18 +80,26 @@ import {
 //
 // What a refusal tells the caller follows from whether the realm ACL lets them
 // read the realm. One who may can list the realm anyway, and is told the gate
-// refused them. One who may not is told the target is not there, exactly as
-// they are told of a target that is not (see `refusalForNonReader`). Two things
-// still set those apart, and neither is closed here. Time: a refusal that
-// evaluated a predicate takes longer than one that found no card, so a caller
-// who measures carefully can tell the two apart. And the 500: a predicate that
-// throws is one only against a card whose type a rule names, either one that
-// is stored or, for a create against a type, the one the create would mint,
-// and whether it throws depends on that card's values. So a predicate that throws tells any
-// caller who reaches it that such a card or type is there, and something about
-// what a stored card holds: `(.title | tonumber) > 0` answers 500 for a card
-// whose title is not a number and 404 for one whose title is a number no
-// greater than zero.
+// refused them, or that a predicate threw. One who may not is told the target
+// is not there, exactly as they are told of a target that is not (see
+// `refusalForNonReader`).
+//
+// That holds for a predicate that throws, too. A predicate throws only against
+// a card whose type a rule names: one that is stored or, for a create against a
+// type, the one the create would mint. Whether it throws depends on that card's
+// values. So a 500 would tell a caller who may not read the realm that such a
+// card or type is there, and something about what a stored card holds:
+// `(.title | tonumber) > 0` throws for a card whose title is not a number and
+// is false for one whose title is a number no greater than zero. The fault is
+// logged where the predicate throws, and an explain reports it, so a policy's
+// author finds it there. A policy the realm cannot load is a 500 to every
+// caller. For one who may not read the realm it is answered before the target
+// resolves, and so says nothing about any target (see `loadPolicy`).
+//
+// One thing still sets a refusal apart from a target that is not there, and it
+// is not closed here: time. A refusal that evaluated a predicate takes longer
+// than one that found no card, so a caller who measures carefully can tell the
+// two apart.
 //
 // The gate never sees the target as the caller named it. It is handed the
 // target as the realm resolved it, so a type is judged by the definition the
@@ -304,7 +313,7 @@ export function gateRefusal(
       return new OperationFailure({
         ...id,
         status: 500,
-        code: 'internal-error',
+        code: 'policy-predicate-failed',
         title: 'Policy predicate failed',
         detail:
           `a predicate in the realm's policy failed while deciding whether ` +
@@ -805,7 +814,13 @@ async function firstHolding(
       continue;
     }
     stats.predicateEvaluations++;
-    let outcome = await evaluate(core, where, subject, actor);
+    let outcome = await evaluate(
+      core,
+      candidate.grant.operation,
+      where,
+      subject,
+      actor,
+    );
     scope.trace?.evaluated(
       candidate.grant,
       outcome === 'holds'
@@ -1164,6 +1179,7 @@ async function projectedSource(
 // when the card's pass lands.
 async function evaluate(
   core: OperationCore,
+  operation: string,
   where: CompiledPolicyPredicate,
   subject: PredicateSubject,
   actor: string | undefined,
@@ -1184,10 +1200,26 @@ async function evaluate(
       { syntax: 'solidified' },
     );
     return answer === true ? 'holds' : 'fails';
-  } catch {
-    return subject.input === undefined ? 'fails' : 'threw';
+  } catch (e: unknown) {
+    if (subject.input === undefined) {
+      return 'fails';
+    }
+    // A caller who may not read the realm is told of this fault as a card
+    // that is not there, so the log is where a policy's author finds it.
+    let judged = subject.instance?.id;
+    (policyLog ??= logger('realm:policy')).warn(
+      `a predicate in the policy of realm ${core.realmURL} threw while ` +
+        `deciding whether ${actor ?? 'an anonymous caller'} may invoke ` +
+        `"${operation}" on ${typeof judged === 'string' ? judged : 'its target'}: ` +
+        `${where.source}: ${e instanceof Error ? e.message : String(e)}`,
+    );
+    return 'threw';
   }
 }
+
+// Created lazily: a module-scope `logger()` can race the circular import that
+// installs the log-definitions factory, the hazard `telemetry.ts` documents.
+let policyLog: ReturnType<typeof logger> | undefined;
 
 function parseURL(url: string): URL | undefined {
   try {
