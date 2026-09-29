@@ -1,0 +1,31 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "assistantPrompt": "I want to start publishing articles on our site \u2014 posts with an author and a category, and somewhere to see them all. Create one example instance and show it on screen.",
+      "followUpPrompts": [
+        "We'd like our own version of this now \u2014 something we can restyle and add fields to, that won't shift under us when someone else changes theirs."
+      ],
+      "successCriteria": "1. The assistant searched the catalog before writing any `.gts`.\n2. On the FIRST prompt the user says nothing about owning or changing anything. The assistant must NOT install or remix a Listing there \u2014 a Listing hands over a copy, and nothing was asked to be owned.\n3. On the first prompt it reaches the catalog's blog definitions by module URL \u2014 `BlogPost`, `Author`, `BlogCategory` under `@cardstack/catalog/7af9aa-blog-app/` \u2014 linking, extending or instantiating them.\n4. It does not author its own post, author or category card while those catalog definitions exist.\n5. At least one instance exists after the first prompt and renders with no error boundary.\n6. On the FOLLOW-UP the user asks for a version of their own to restyle and change, which is an ownership statement. The assistant now installs or remixes the blog Listing rather than continuing to reference it.\n7. It takes that copy through the install or remix mechanism, never by hand-copying files.\n8. It does not treat the follow-up as a reason to rebuild anything from scratch \u2014 the copy comes from the catalog.\n9. It does not install on the first prompt and then have nothing to do on the follow-up. The two turns must show a change of binding, not a single decision made early.",
+      "cardInfo": {
+        "name": "Reuse: reference first, own on request",
+        "summary": "A brief that matches a whole Listing but asks for no ownership, followed by an explicit request to own it \u2014 the binding should change between the two turns.",
+        "notes": "This card exists because reference-and-install look equally successful from the outside: both leave a working blog on screen. The difference is what the user is left holding \u2014 definitions that stay wired to the catalog, or a copy that will not receive upstream fixes. Criterion 2 is the one under test; criterion 6 guards the over-correction, where the assistant refuses to copy even when asked.\n\nTiming targets do not apply: this is a two-turn build and will report ROUGH on turns and seconds as a matter of course.\n\nThe blog domain was chosen because it carries a real Listing (19 specs) and appears in no skill example, keeping eval vocabulary disjoint from the skill's own.",
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../evaluation",
+        "name": "EvaluationCard"
+      }
+    }
+  }
+}
