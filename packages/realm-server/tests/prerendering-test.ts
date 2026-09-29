@@ -8201,6 +8201,427 @@ module(basename(import.meta.filename), function () {
     });
   });
 
+  module('prerender - host chunk import failures', function () {
+    // What a tab reports once it has failed to fetch a host chunk: the
+    // loader's message for the module that needed the chunk, with Chrome's
+    // import failure as its cause.
+    function hostChunkImportFailure(chunkURL: string) {
+      return {
+        message: `encountered error loading module "https://chunk-retry.example/module.gts": unable to fetch https://packages/@cardstack/runtime-common/helpers/ai`,
+        status: 500,
+        title: 'boom',
+        additionalErrors: [
+          {
+            message: `fetch failed for https://packages/@cardstack/runtime-common/helpers/ai: Failed to fetch dynamically imported module: ${chunkURL}`,
+            status: 500,
+            additionalErrors: null,
+          },
+        ],
+      };
+    }
+
+    function attemptResult<T>(
+      response: T,
+      args: { affinityType: 'realm' | 'user'; affinityValue: string },
+      attemptCount: number,
+      evicted: boolean,
+    ) {
+      return {
+        response,
+        timings: {
+          launchMs: 0,
+          renderMs: 1,
+          waits: {
+            semaphoreMs: 0,
+            admissionMs: 0,
+            tabQueueMs: 0,
+            tabStartupMs: 0,
+            tabProbeMs: 0,
+          },
+        },
+        pool: {
+          pageId: `page-${attemptCount}`,
+          affinityType: args.affinityType,
+          affinityValue: args.affinityValue,
+          reused: false,
+          evicted,
+          timedOut: false,
+        },
+      };
+    }
+
+    test('a host chunk import failure is recognised through the errors nested under it', async function (assert) {
+      let runner = new RenderRunner({
+        pagePool: undefined as unknown as PagePool,
+        boxelHostURL: 'https://host.example',
+      });
+      assert.strictEqual(
+        runner.failedHostChunkImport({
+          type: 'module-error',
+          error: hostChunkImportFailure(
+            'https://host.example/assets/ai-abc123.js',
+          ),
+        }),
+        'https://host.example/assets/ai-abc123.js',
+        'names the chunk from the nested cause',
+      );
+      assert.strictEqual(
+        runner.failedHostChunkImport({
+          type: 'module-error',
+          error: {
+            message: `encountered error loading module "https://chunk-retry.example/module.gts": unable to fetch https://chunk-retry.example/missing.gts: 404`,
+            status: 404,
+            additionalErrors: null,
+          },
+        }),
+        undefined,
+        'a card module the loader could not fetch is not a host chunk failure',
+      );
+      assert.strictEqual(
+        runner.failedHostChunkImport(undefined),
+        undefined,
+        'no error, no failure',
+      );
+    });
+
+    // A tab whose module route answers with `routeResponse`, in a pool that
+    // records the affinities it disposes. It answers the few page calls a
+    // module render makes: the session write, the transition to the module
+    // route, the wait for its output, and the read of that output.
+    function fakeModuleTab(
+      routeResponse: (id: string, nonce: string) => ModuleRenderResponse,
+    ) {
+      let disposed: string[] = [];
+      let transition: { id: string; nonce: string } | undefined;
+      let page = {
+        url: () => 'https://host.example/module',
+        isClosed: () => false,
+        waitForFunction: async () => ({}),
+        evaluate: async (_fn: unknown, ...args: unknown[]) => {
+          if (args[0] === 'module' && Array.isArray(args[1])) {
+            let [id, nonce] = args[1] as [string, string];
+            transition = { id, nonce };
+            return undefined;
+          }
+          if (args.length === 0 && transition) {
+            let response = routeResponse(transition.id, transition.nonce);
+            return {
+              status: response.status,
+              value: JSON.stringify(response),
+              id: transition.id,
+              nonce: transition.nonce,
+            };
+          }
+          return undefined;
+        },
+      };
+      let pagePool = {
+        getPage: async () => ({
+          page,
+          reused: true,
+          launchMs: 0,
+          waits: {
+            semaphoreMs: 0,
+            admissionMs: 0,
+            tabQueueMs: 0,
+            tabStartupMs: 0,
+            tabProbeMs: 0,
+          },
+          pageId: 'fake-tab',
+          release: () => {},
+        }),
+        resetConsoleErrors: () => {},
+        takeConsoleErrors: () => [],
+        disposeAffinity: async (affinityKey: string) => {
+          disposed.push(affinityKey);
+        },
+      };
+      return { pagePool: pagePool as unknown as PagePool, disposed };
+    }
+
+    function moduleRouteError(
+      id: string,
+      nonce: string,
+      error: ModuleRenderResponse['error'],
+    ): ModuleRenderResponse {
+      return {
+        id,
+        nonce,
+        status: 'error',
+        isShimmed: false,
+        lastModified: 0,
+        createdAt: 0,
+        deps: [],
+        definitions: {},
+        error,
+      };
+    }
+
+    test('a module render whose route reports a failed host chunk import evicts the tab', async function (assert) {
+      let realm = 'https://chunk-retry.example/';
+      let { pagePool, disposed } = fakeModuleTab((id, nonce) =>
+        moduleRouteError(id, nonce, {
+          type: 'module-error',
+          error: hostChunkImportFailure(
+            'https://host.example/assets/ai-abc123.js',
+          ),
+        }),
+      );
+      let runner = new RenderRunner({
+        pagePool,
+        boxelHostURL: 'https://host.example',
+      });
+      let result = await runner.prerenderModuleAttempt({
+        affinityType: 'realm',
+        affinityValue: realm,
+        realm,
+        url: `${realm}module.gts`,
+        auth: 'test-auth',
+      });
+      assert.strictEqual(
+        result.response.status,
+        'error',
+        'the route error is returned',
+      );
+      assert.true(result.pool.evicted, 'the attempt reports the tab evicted');
+      assert.deepEqual(
+        disposed,
+        [toAffinityKey({ affinityType: 'realm', affinityValue: realm })],
+        'the tab is disposed so the next attempt gets a fresh one',
+      );
+    });
+
+    test('a module render whose route reports an ordinary module error keeps the tab', async function (assert) {
+      let realm = 'https://chunk-retry.example/';
+      let { pagePool, disposed } = fakeModuleTab((id, nonce) =>
+        moduleRouteError(id, nonce, {
+          type: 'module-error',
+          error: {
+            message: `encountered error loading module "${id}": rejected promise from an RSVP chain`,
+            status: 500,
+            additionalErrors: null,
+          },
+        }),
+      );
+      let runner = new RenderRunner({
+        pagePool,
+        boxelHostURL: 'https://host.example',
+      });
+      let result = await runner.prerenderModuleAttempt({
+        affinityType: 'realm',
+        affinityValue: realm,
+        realm,
+        url: `${realm}broken.gts`,
+        auth: 'test-auth',
+      });
+      assert.strictEqual(
+        result.response.status,
+        'error',
+        'the route error is returned',
+      );
+      assert.false(result.pool.evicted, 'the tab is not evicted');
+      assert.deepEqual(disposed, [], 'nothing is disposed');
+    });
+
+    test('module prerender retries on a fresh tab when the evicted tab failed to import a host chunk', async function (assert) {
+      let originalAttempt = RenderRunner.prototype.prerenderModuleAttempt;
+      let prerenderer: Prerenderer | undefined;
+      let attempts: Array<RenderRouteOptions | undefined> = [];
+      let realm = 'https://chunk-retry.example/';
+      let moduleURL = `${realm}module.gts`;
+      try {
+        let attemptCount = 0;
+        RenderRunner.prototype.prerenderModuleAttempt = async function (
+          args: Parameters<RenderRunner['prerenderModuleAttempt']>[0],
+        ) {
+          attempts.push(args.renderOptions);
+          attemptCount++;
+          let baseResponse = {
+            id: args.url,
+            nonce: `nonce-${attemptCount}`,
+            isShimmed: false,
+            lastModified: 0,
+            createdAt: 0,
+            deps: [],
+            definitions: {},
+          };
+          let response: ModuleRenderResponse =
+            attemptCount === 1
+              ? {
+                  ...baseResponse,
+                  status: 'error',
+                  error: {
+                    type: 'module-error',
+                    error: hostChunkImportFailure(
+                      'https://host.example/assets/ai-abc123.js',
+                    ),
+                  },
+                }
+              : { ...baseResponse, status: 'ready' };
+          return attemptResult(
+            response,
+            args,
+            attemptCount,
+            attemptCount === 1,
+          );
+        };
+        prerenderer = getPrerendererForTesting({
+          maxPages: 1,
+          serverURL: 'http://127.0.0.1:4225',
+        });
+        let result = await prerenderer.prerenderModule({
+          affinityType: 'realm',
+          affinityValue: realm,
+          realm,
+          url: moduleURL,
+          auth: 'test-auth',
+        });
+        assert.strictEqual(attempts.length, 2, 'one retry on a fresh tab');
+        assert.strictEqual(
+          attempts[1],
+          undefined,
+          'the retry renders with the same options, not a cleared cache',
+        );
+        assert.strictEqual(
+          result.response.status,
+          'ready',
+          'the fresh tab result is returned',
+        );
+      } finally {
+        RenderRunner.prototype.prerenderModuleAttempt = originalAttempt;
+        await prerenderer?.stop();
+      }
+    });
+
+    test('module prerender returns a module error that names no host chunk without retrying', async function (assert) {
+      let originalAttempt = RenderRunner.prototype.prerenderModuleAttempt;
+      let prerenderer: Prerenderer | undefined;
+      let attemptCount = 0;
+      let realm = 'https://chunk-retry.example/';
+      try {
+        RenderRunner.prototype.prerenderModuleAttempt = async function (
+          args: Parameters<RenderRunner['prerenderModuleAttempt']>[0],
+        ) {
+          attemptCount++;
+          let response: ModuleRenderResponse = {
+            id: args.url,
+            nonce: `nonce-${attemptCount}`,
+            isShimmed: false,
+            lastModified: 0,
+            createdAt: 0,
+            deps: [],
+            definitions: {},
+            status: 'error',
+            error: {
+              type: 'module-error',
+              error: {
+                message: `encountered error loading module "${args.url}": SyntaxError: Unexpected token`,
+                status: 500,
+                additionalErrors: null,
+              },
+            },
+          };
+          return attemptResult(response, args, attemptCount, false);
+        };
+        prerenderer = getPrerendererForTesting({
+          maxPages: 1,
+          serverURL: 'http://127.0.0.1:4225',
+        });
+        let result = await prerenderer.prerenderModule({
+          affinityType: 'realm',
+          affinityValue: realm,
+          realm,
+          url: `${realm}broken.gts`,
+          auth: 'test-auth',
+        });
+        assert.strictEqual(attemptCount, 1, 'no retry');
+        assert.strictEqual(
+          result.response.status,
+          'error',
+          'the module error is returned',
+        );
+      } finally {
+        RenderRunner.prototype.prerenderModuleAttempt = originalAttempt;
+        await prerenderer?.stop();
+      }
+    });
+
+    test('card prerender retries on a fresh tab when the evicted tab failed to import a host chunk', async function (assert) {
+      let originalAttempt = RenderRunner.prototype.prerenderVisitAttempt;
+      let prerenderer: Prerenderer | undefined;
+      let attempts: Array<RenderRouteOptions | undefined> = [];
+      let realm = 'https://chunk-retry.example/';
+      let cardURL = `${realm}card`;
+      try {
+        let attemptCount = 0;
+        RenderRunner.prototype.prerenderVisitAttempt = async function (
+          args: Parameters<RenderRunner['prerenderVisitAttempt']>[0],
+        ) {
+          attempts.push(args.renderOptions);
+          attemptCount++;
+          let baseResponse: RenderResponse = {
+            serialized: null,
+            searchDoc: null,
+            displayNames: null,
+            deps: null,
+            types: null,
+            iconHTML: null,
+            isolatedHTML: `${args.url}-render-${attemptCount}`,
+            headHTML: null,
+            atomHTML: null,
+            embeddedHTML: null,
+            fittedHTML: null,
+            markdown: null,
+          };
+          let card: RenderResponse =
+            attemptCount === 1
+              ? {
+                  ...baseResponse,
+                  error: {
+                    type: 'instance-error',
+                    error: hostChunkImportFailure(
+                      'https://host.example/assets/tool-field-def456.js',
+                    ),
+                  },
+                }
+              : baseResponse;
+          return attemptResult(
+            { card },
+            args,
+            attemptCount,
+            attemptCount === 1,
+          );
+        };
+        prerenderer = getPrerendererForTesting({
+          maxPages: 1,
+          serverURL: 'http://127.0.0.1:4225',
+        });
+        let result = await prerenderCard(prerenderer, {
+          affinityType: 'realm',
+          affinityValue: realm,
+          realm,
+          url: cardURL,
+          auth: 'test-auth',
+        });
+        assert.strictEqual(attempts.length, 2, 'one retry on a fresh tab');
+        assert.deepEqual(
+          attempts[1],
+          { cardRender: true },
+          'the retry renders with the same options, not a cleared cache',
+        );
+        assert.notOk(result.response.error, 'the fresh tab result is returned');
+        assert.strictEqual(
+          result.response.isolatedHTML,
+          `${cardURL}-render-2`,
+          'the response came from the retry',
+        );
+      } finally {
+        RenderRunner.prototype.prerenderVisitAttempt = originalAttempt;
+        await prerenderer?.stop();
+      }
+    });
+  });
+
   module('prerender - file retries', function () {
     test('file prerender retries with clear cache on retry signature', async function (assert) {
       let originalAttempt = RenderRunner.prototype.prerenderVisitAttempt;
