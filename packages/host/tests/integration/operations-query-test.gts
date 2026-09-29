@@ -12,6 +12,7 @@ import {
   GetCardContextName,
   isCardInstance,
   type CardResource,
+  type Saved,
   type getCard as GetCardType,
   type Realm,
   type SearchEntries,
@@ -547,10 +548,10 @@ module('Integration | operations query', function (hooks) {
     function servedItem(
       doc: SearchEntryResults,
       id: string,
-    ): CardResource | undefined {
+    ): CardResource<Saved> | undefined {
       return doc.included?.find(
         (resource) => resource.type === 'card' && resource.id === id,
-      ) as CardResource | undefined;
+      ) as CardResource<Saved> | undefined;
     }
 
     test('a row rendered through the search component leaves its card to load through its own read', async function (assert) {
@@ -568,6 +569,13 @@ module('Integration | operations query', function (hooks) {
       assert.true(
         item?.meta?.relationshipsWithheld,
         'and says they were withheld',
+      );
+      // The store rule itself, awaited: the search component's own inflate
+      // runs without anything waiting on it.
+      await store.inflateSearchEntryItem(item!);
+      assert.notOk(
+        isCardInstance(store.peek(ALGEBRA)),
+        'the store never deposits the row as the card’s instance',
       );
 
       await render(
