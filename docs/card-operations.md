@@ -719,26 +719,16 @@ narrower than its author meant shows up as refusals someone reports. A policy
 wider than its author meant shows up as nothing at all. An explain is how the
 realm's owner asks directly.
 
-A policy card's type declares one, named `explain`, on the `explain` base.
-Invoked on the policy card with an actor, a card and an operation, it runs the
-policy gate of the realm that holds the card, exactly as that invocation
-would. It stops at the decision, invokes nothing, and answers with how the gate
-got there:
+`RealmPolicy` declares one, named `explain`, on the `explain` base, so every
+policy card carries it, a subtype's included. Invoked on the policy card with
+an actor, a card and an operation, it runs the policy gate of the realm that
+holds the card, exactly as that invocation would. It stops at the decision,
+invokes nothing, and answers with how the gate got there. The policy card's
+isolated view asks it from an "Explain a decision" form and renders the
+answer; code asks it the same way:
 
 ```ts
-class SchoolPolicy extends RealmPolicy {
-  @operation static explain = {
-    base: 'explain',
-    params: {
-      actor: StringField,
-      target: StringField,
-      operation: StringField,
-    },
-    nonGrantable: true,
-  } satisfies OperationDeclaration;
-}
-
-let explanation = await operations<typeof SchoolPolicy>(policy).explain({
+let explanation = await operations<typeof RealmPolicy>(policy).explain({
   actor: '@teacher:example.org',
   target: 'https://example.org/education/classrooms/room-204',
   operation: 'read',
