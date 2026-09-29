@@ -178,7 +178,12 @@ function registerSearchRoutes() {
       // Mirror the realm-server's `handle-search`: a request naming a
       // declared query is answered with the realm's own resolution of it,
       // read through the first realm the request names, and its results carry
-      // what the declaration's link strategy lets them.
+      // what the declaration's link strategy lets them. A render's search is
+      // the exception, as it is there: it keeps each row's stored links
+      // whatever the query declares, because the render resolves the cards
+      // those links name itself.
+      let duringRender =
+        (req.headers.get(DURING_PRERENDER_HEADER) ?? '').length > 0;
       let links: LinkStrategy = 'full';
       if (isNamedQueryPayload(payload)) {
         let resolvingRealm = getTestRealmRegistry().get(
@@ -197,13 +202,12 @@ function registerSearchRoutes() {
             {
               actor: authenticatedUser(req),
               realms: realmList,
-              duringRender:
-                (req.headers.get(DURING_PRERENDER_HEADER) ?? '').length > 0,
+              duringRender,
             },
           );
           payload = resolved.query;
           realmList = resolved.query.realms!;
-          links = resolved.links;
+          links = duringRender ? 'full' : resolved.links;
         } catch (e) {
           if (isOperationFailure(e)) {
             return new Response(JSON.stringify(errorsDocument(e.error)), {
