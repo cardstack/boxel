@@ -103,11 +103,6 @@ export default class MessageTool {
     return this.executedBy === AI_BOT_EXECUTOR;
   }
 
-  // Every host tool takes its input under `attributes`. A model can lose that
-  // nesting and send the fields at the top level; nest them again rather than
-  // fail the call on its shape, since the call is otherwise the one the model
-  // meant. Memoized on the request's arguments so each read returns the same
-  // object.
   // Set by validation when it had to convert a stringified argument to make
   // the call valid; the run uses these.
   #coercedArguments: ToolRequest['arguments'] | undefined;
@@ -115,6 +110,11 @@ export default class MessageTool {
     this.#coercedArguments = args as ToolRequest['arguments'];
   }
 
+  // Every host tool takes its input under `attributes`. A model can lose that
+  // nesting and send the fields at the top level; nest them again rather than
+  // fail the call on its shape, since the call is otherwise the one the model
+  // meant. Memoized on the request's arguments so each read returns the same
+  // object.
   get arguments() {
     if (this.#coercedArguments) {
       return this.#coercedArguments;

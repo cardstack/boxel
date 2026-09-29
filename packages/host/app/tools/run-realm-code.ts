@@ -20,10 +20,11 @@ import type * as BaseToolModule from '@cardstack/base/command';
 const MAX_CODE_SIZE = 100_000;
 const MAX_FILES = 20;
 const MAX_FILE_SIZE = 500_000;
-// Host calls run inside this budget, and each write now lints and saves before
-// it returns, so it is much wider than a pure-CPU limit would need to be. It
-// stays under the tool service's own execute timeout.
-const RUN_TIMEOUT_MS = 90_000;
+// Host calls run inside this budget, and each write lints and saves before it
+// returns, so it is much wider than a pure-CPU limit would need to be. With
+// the runner's 60 s boot allowance on top, it stays under the tool service's
+// 120 s execute timeout even when the sandbox starts slowly.
+const RUN_TIMEOUT_MS = 55_000;
 
 // Saves one file and returns the content that was saved (lint may reformat
 // it). `expected` is the content the script last saw, undefined for a file
@@ -45,6 +46,10 @@ class RealmFsSession {
   // Files saved by this run, in the order of their first save.
   readonly saved = new Set<string>();
   private queue: Promise<unknown> = Promise.resolve();
+  // Set once the run has ended. A call that has not started yet is refused,
+  // and a write still in flight is not saved, so nothing lands after the tool
+  // has reported.
+  private closed = false;
 
   constructor(
     private realmURL: string,
@@ -57,9 +62,23 @@ class RealmFsSession {
   // Calls run one at a time, so two unawaited calls cannot race over the same
   // file.
   call(method: RealmRunnerCallMethod, args: unknown[]): Promise<unknown> {
-    let result = this.queue.then(() => this.dispatch(method, args));
+    let result = this.queue.then(() => {
+      if (this.closed) {
+        throw new Error('The run has ended; this realm call was not made');
+      }
+      return this.dispatch(method, args);
+    });
     this.queue = result.catch(() => undefined);
     return result;
+  }
+
+  close() {
+    this.closed = true;
+  }
+
+  // Settles once every call already made has finished or been refused.
+  idle(): Promise<unknown> {
+    return this.queue;
   }
 
   private async dispatch(
@@ -193,6 +212,9 @@ class RealmFsSession {
     if (content.length > MAX_FILE_SIZE) {
       throw new Error(`File is too large after editing: ${url}`);
     }
+    if (this.closed) {
+      throw new Error(`The run has ended; ${url} was not saved`);
+    }
     let saved = await this.writeFile(url, content, expected);
     this.known.set(url, saved);
     this.saved.add(url);
@@ -264,6 +286,11 @@ export default class RunRealmCodeTool extends HostBaseTool<
         (method, args) => session.call(method, args),
       );
     } catch (error) {
+      // Stop the session before reading what it saved: a call the script did
+      // not await can still be running, and must neither save after this
+      // report nor be missing from it.
+      session.close();
+      await session.idle();
       // Writes are saved as they happen, so a failed run can have saved some
       // files already. Name them, so the model knows what state it left.
       let message = error instanceof Error ? error.message : String(error);
@@ -275,6 +302,8 @@ export default class RunRealmCodeTool extends HostBaseTool<
       );
     }
 
+    session.close();
+    await session.idle();
     let commandModule = await this.loadToolModule();
     return new commandModule.RunRealmCodeResult({
       files: [...session.saved].map(

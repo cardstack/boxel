@@ -6,9 +6,9 @@ Choosing the right host-command combination for creating new cards or editing ex
 
 | Tool | Use When |
 |------|----------|
-| **run-realm-code** | **Always — any new file**, `.gts` definitions and `.json` instances alike (use `realm.fs.writeText`) |
+| **SEARCH/REPLACE** | **Always — any new file**, `.gts` definitions and `.json` instances alike (mark the URL line with `(new)`) |
 | **copy-card + patch-fields** | Clone existing card as template, then modify |
-| **write-text-file** | Avoid for source files — use `run-realm-code` instead |
+| **write-text-file** | Avoid — use SEARCH/REPLACE instead (tool calls don't stream and skip the code-patch pipeline) |
 
 ## Editing Cards
 
@@ -16,21 +16,21 @@ Choosing the right host-command combination for creating new cards or editing ex
 |------|----------|----------------|
 | **patch-fields_3e67** ⭐ | Field updates (nested paths, arrays, linksTo) — **preferred** | Card doesn't exist yet |
 | **patchCardInstance** | Full card replacement (use sparingly — replaces entire card) | Surgical edits |
-| **run-realm-code** | Code (.gts), JSON structure, schema changes, new files | Small markdown edits in large docs |
+| **SEARCH/REPLACE** | Code (.gts), JSON structure, schema changes, new files | Small markdown edits in large docs |
 | **ApplyMarkdownEdit** | Targeted edits in large markdown fields | Short fields, code files, non-markdown |
 
 ## Quick Decision
 
 ```
 Card doesn't exist yet?
-├─ New .gts file → `run-realm-code` with `realm.fs.writeText`
-├─ New .json instance → `run-realm-code` with `realm.fs.writeText`
+├─ New .gts file → SEARCH/REPLACE with (new) marker
+├─ New .json instance → SEARCH/REPLACE with (new) marker
 └─ Clone + modify → copy-card → patch-fields
 
 Card already exists?
 ├─ Update fields → patch-fields (preferred)
 ├─ Full replacement → patchCardInstance (sparingly)
-├─ Edit .gts or JSON structure → `run-realm-code`
+├─ Edit .gts or JSON structure → SEARCH/REPLACE
 └─ Small change in big markdown → ApplyMarkdownEdit
 ```
 
@@ -41,5 +41,5 @@ Card already exists?
 
 ## Pair with
 
-- `source-code-editing` — the `run-realm-code` tool call format used by code edits.
+- `source-code-editing` — the SEARCH/REPLACE block format used by code edits.
 - `boxel` — when the schema or relationship is non-trivial.

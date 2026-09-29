@@ -212,8 +212,9 @@ return found;`,
     assert.strictEqual(source.status, 200);
   });
 
-  test('a realm call the script does not await fails the run', async function (assert) {
+  test('a realm call the script does not await fails the run and saves nothing', async function (assert) {
     let toolService = getService('tool-service');
+    let cardService = getService('card-service');
     let command = new RunRealmCodeTool(toolService.toolContext);
 
     await assert.rejects(
@@ -222,8 +223,14 @@ return found;`,
         roomId: '!room:example.com',
         code: `realm.fs.writeText('late.json', '{}');`,
       }),
-      /await every realm call/,
+      /await every realm call.*No file was saved/,
     );
+    // The write was still in flight when the run failed; the session stops
+    // it, so it does not land after the report.
+    let source = await cardService.getSource(
+      new URL(`${testRealmURL}late.json`),
+    );
+    assert.strictEqual(source.status, 404);
   });
 
   test('a script that never returns is stopped by the sandbox, not by the caller', async function (assert) {

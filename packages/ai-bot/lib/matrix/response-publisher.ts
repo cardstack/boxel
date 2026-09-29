@@ -69,8 +69,15 @@ export function toCommandRequest(
         // schema error that does not point at the cause.
         let message = error instanceof Error ? error.message : String(error);
         result['argumentsError'] = message;
+        // The arguments can be a whole script with the user's card source;
+        // log only its ends, which is where a cut or a bad escape shows.
+        let raw = f.arguments;
+        let excerpt =
+          raw.length <= 1000
+            ? raw
+            : `${raw.slice(0, 500)} … ${raw.slice(-500)}`;
         log.warn(
-          `tool call ${id ?? '(no id)'} (${f.name ?? 'unnamed'}) finished with arguments that are not valid JSON: ${message}. Raw arguments (${f.arguments.length} chars): ${f.arguments}`,
+          `tool call ${id ?? '(no id)'} (${f.name ?? 'unnamed'}) finished with arguments that are not valid JSON: ${message}. Raw arguments (${raw.length} chars): ${excerpt}`,
         );
       }
     }

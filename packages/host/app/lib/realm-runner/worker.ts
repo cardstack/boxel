@@ -158,8 +158,9 @@ worker.onmessage = async (event: MessageEvent<RealmRunnerRequest>) => {
     let scriptResult = JSON.stringify(context.dump(value)) ?? '';
     value.dispose();
     if (pending.size > 0) {
-      // A realm call the script did not await would finish after the run is
-      // reported, so its write could never be saved or reported.
+      // A realm call the script did not await would still be running when the
+      // run is reported. Fail the run; the host stops its session, so such a
+      // write is not saved behind the report.
       throw new Error(
         'The script returned before all realm calls finished; await every realm call',
       );

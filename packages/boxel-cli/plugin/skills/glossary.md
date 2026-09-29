@@ -376,7 +376,7 @@ Use the namespaced CLI published from the Boxel monorepo through `npx boxel`. Th
 - **`catalog-reuse`** — Mandatory catalog search before writing any `.gts`. Three searches, by what you need back: **Listing** → an installable bundle (`install` / `remix`); **Spec** → a module export named by its `ref` (CardDef: `linksTo`/`linksToMany` or `extends`; FieldDef: `contains`/`containsMany` or `extends`; component: import into markup; command: import + invoke); **instance** → the thing itself, to point a `linksTo` at (themes, files, `linkedExamples`). Listing and Spec are asked on every build; the instance search is conditional. Queries use `specType` + `matches` (bare words are ANDed — one concept per query, `OR` for alternatives of comparable specificity), relevance-sorted 0–1, broaden once before declaring a gap. A `Spec` is the searchable *pointer*, never the thing. Every hit must be dispositioned. Declares the `search-entries` tool. The general form of `boxel-ui-component-discovery`.
 - **`ember-best-practices`** — Ember.js performance + accessibility rules, 59 `rules/*.md` files across 10 prefix-keyed categories, indexed in its SKILL.md.
 - **`catalog-listing`** — Catalog operations + submission via `SubmissionWorkflowCard`.
-- **`source-code-editing`** — Canonical realm runner edit transport.
+- **`source-code-editing`** — Canonical SEARCH/REPLACE edit transport.
 
 ## 23. Cardinal rules / conventions
 
@@ -402,8 +402,8 @@ In rough priority order:
 - **Format choice = who owns the cell size.** `embedded` for lists; `fitted` for uniform tile grids.
 - **Every user-facing card goes through `design-playbook.md`.**
 - **Delegated render** — `<@fields.X />` injects host CardContainer chrome; override via `:deep()`, theme cascade, or `@displayContainer={{false}}`. → `boxel-ui-guidelines/references/delegated-render-control.md`
-- **Read before writing.** Fetch a file’s current contents before calling `realm.fs.replace`.
-- **the `run-realm-code` tool for file creation and edits** — every source file, `.gts`, `.json`, `.md` and `README` alike.
+- **Read before writing.** Fetch a file’s current contents before a SEARCH/REPLACE edit so the SEARCH block matches exactly.
+- **SEARCH/REPLACE for file creation and edits** — every text file, `.gts`, `.json`, `.md` and `README` alike. There is no file-writing tool (a tool call cannot stream, and skips the code-patch pipeline).
 - **One CardDef per file.** FieldDefs and helpers can co-locate.
 - **Three formats minimum.** Every CardDef ships `isolated`, `embedded`, AND `fitted`.
 
