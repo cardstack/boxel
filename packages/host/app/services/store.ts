@@ -1359,7 +1359,7 @@ export default class StoreService extends Service implements StoreInterface {
       isObsolete?: () => boolean;
       scope?: SearchEntryScope;
     },
-  ): Promise<{ instances: T[]; meta: QueryResultsMeta }>;
+  ): Promise<{ instances: T[]; meta: SearchEntryResults['meta'] }>;
   async search<T extends CardDef | FileDef = CardDef>(
     query: Query,
     realms?: string[],
@@ -1394,7 +1394,7 @@ export default class StoreService extends Service implements StoreInterface {
       // twice unless the caller dedups (e.g. `excludeCardInstanceFileRows()`).
       scope?: SearchEntryScope;
     },
-  ): Promise<T[] | { instances: T[]; meta: QueryResultsMeta }> {
+  ): Promise<T[] | { instances: T[]; meta: SearchEntryResults['meta'] }> {
     if ('asData' in query && query.asData) {
       throw new Error(
         `store.search returns instances only — use store.searchEntries for the raw entry wire format`,
@@ -1601,7 +1601,7 @@ export default class StoreService extends Service implements StoreInterface {
     realms: string[],
     dependencyTrackingContext?: RuntimeDependencyTrackingContext,
     scope?: SearchEntryScope,
-  ): Promise<{ instances: T[]; meta: QueryResultsMeta }> {
+  ): Promise<{ instances: T[]; meta: SearchEntryResults['meta'] }> {
     let collectionDoc = await this.fetchSearchDoc(query, realms, scope);
 
     // Hydrate each result into the store. The data-only entry doc

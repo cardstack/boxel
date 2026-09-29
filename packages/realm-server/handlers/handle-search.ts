@@ -7,10 +7,12 @@ import {
   ifNoneMatchMatches,
   isItemLegSearch,
   logger,
+  markPolicyScoped,
   parseRealmsFromPayload,
   parseSearchRequestPayload,
   parseSearchEntryQueryFromPayload,
   policyScopedQuery,
+  policyScopedRealms,
   runWithSearchTimeBudget,
   sanitizeConsumingRealmHeader,
   SearchBoundError,
@@ -140,6 +142,10 @@ export default function handleSearch(opts: {
     // neither, so no grant is found for one and a realm the caller cannot read
     // contributes nothing to it.
     let invocation = namedQueryInvocation(payload);
+    // A declared query is answered with the server's resolution of it, so
+    // what its result holds of every realm it searches is the server's to
+    // decide, not the caller's filter.
+    let resolvedByServer = isNamedQueryPayload(payload);
     // How much of each result's link graph a named query's declaration lets
     // its results carry. An ad-hoc search declares nothing.
     let declaredLinks: LinkStrategy | undefined;
@@ -207,7 +213,7 @@ export default function handleSearch(opts: {
     );
     attributeSearchRequest(ctxt, working);
     await withSearchConnectionTenant(ctxt, working, () =>
-      respond(ctxt, named, payload, access, declaredLinks),
+      respond(ctxt, named, payload, access, declaredLinks, resolvedByServer),
     );
   };
 
@@ -336,6 +342,7 @@ export default function handleSearch(opts: {
     payload: unknown,
     access: RealmAccess,
     declaredLinks: LinkStrategy | undefined,
+    resolvedByServer: boolean,
   ) {
     let handlerStart = Date.now();
     // Slots the query-shape line is assembled from. `shape` is filled in as
@@ -430,6 +437,13 @@ export default function handleSearch(opts: {
     // anywhere: nothing composed, nothing stood in, nothing folded into its
     // cache key.
     let unread = realmList.filter((realm) => !access.readable.has(realm));
+    // The realms the result marks policy-scoped, so a client reconciling it
+    // against cards it holds adds none of theirs the server did not return.
+    let scopedRealms = policyScopedRealms({
+      realms: realmList,
+      readable: (realm) => access.readable.has(realm),
+      resolvedByServer,
+    });
 
     // How much of each result's link graph this response carries. Decided
     // after the page clamp above, since the clamped page is the only bound on
@@ -507,6 +521,12 @@ export default function handleSearch(opts: {
     // does. Folded only when some realm is one the caller does not read, so
     // a search of realms the caller reads keys the way it would with no
     // policy anywhere.
+    // The mark is part of the body, and it is the one part a declared query
+    // and the ad-hoc query it resolves to do not share, so it keys the cache
+    // too. Folded only when some realm carries it, like the policy scope.
+    if (scopedRealms.length > 0) {
+      cacheKeyOpts.policyScopedRealms = scopedRealms;
+    }
     if (unread.length > 0) {
       cacheKeyOpts.policyScope = Object.fromEntries(
         [...new Set(unread)]
@@ -589,7 +609,7 @@ export default function handleSearch(opts: {
           unread.length === 0
             ? workingInstances
             : realmInstancesFor(realmList, working, workingInstances, access);
-        let doc = await searchEntryRealms(
+        let merged = await searchEntryRealms(
           realmInstances,
           parsed,
           {
@@ -605,6 +625,7 @@ export default function handleSearch(opts: {
                 parsed,
               ),
         );
+        let doc = markPolicyScoped(merged, scopedRealms);
         // If the budget already fired, skip stringifying a document we're about
         // to discard (the time-budget race has already resolved with the 408).
         signal?.throwIfAborted();

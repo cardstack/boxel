@@ -21,6 +21,7 @@ import type {
   ErrorEntry,
   RealmIdentifier,
   RuntimeDependencyTrackingContext,
+  SearchEntryResults,
 } from '@cardstack/runtime-common';
 import {
   subscribeToRealm,
@@ -206,7 +207,7 @@ export class SearchResource<
   // reconciled against in-memory Store state (the client-side filtering step);
   // otherwise it is passed through unchanged.
   private _instances = new TrackedArray<T>();
-  @tracked private _meta: QueryResultsMeta = { page: { total: 0 } };
+  @tracked private _meta: SearchEntryResults['meta'] = { page: { total: 0 } };
   @tracked private _errors: ErrorEntry[] | undefined;
   // The card-api slice the client-side matcher/comparator need. Loaded
   // asynchronously for live searches; until it resolves the search behaves as
@@ -940,11 +941,20 @@ export class SearchResource<
 
     // Add candidates the server didn't return but that match locally, scoped to
     // the query's target realm(s). `unresolvable` candidates are not added.
+    //
+    // Nor is any candidate of a realm the result marks policy-scoped. What the
+    // result holds of such a realm was decided by more than the query this
+    // matcher knows — the caller's policy, or the server's own resolution of a
+    // declared query — so a card of it that the server did not return may be
+    // one it withheld, however well it matches here. Those realms' returned
+    // rows still narrow above; they just never widen.
+    let policyScoped = this.policyScopedRealms;
     let added = candidatePool.filter(
       (instance) =>
         instance.id != null &&
         !serverIds.has(instance.id) &&
         this.isInTargetRealm(instance.id) &&
+        !policyScoped.some((realm) => realm.inRealm(instance.id)) &&
         localMatch(instance) === 'match',
     );
 
@@ -1019,6 +1029,15 @@ export class SearchResource<
       }
     }
     return true;
+  }
+
+  // The realms the current result set marks policy-scoped: of these, only the
+  // rows the server returned may be displayed.
+  @cached
+  private get policyScopedRealms(): RealmPaths[] {
+    return (this._meta?.policyScopedRealms ?? []).map(
+      (realm) => new RealmPaths(ri(realm)),
+    );
   }
 
   private isInTargetRealm(id: RealmResourceIdentifier): boolean {
