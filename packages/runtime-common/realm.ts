@@ -5840,8 +5840,8 @@ export class Realm {
     if (coarseDeclined !== 'all') {
       return err;
     }
-    // The cards the entries so far change, which a later write to one of
-    // them is judged by what they leave.
+    // The cards the entries so far change. A later write to one of them is
+    // judged by what the batch leaves it, not by the card as stored.
     let changed = new Set<string>();
     let ahead: ResolvedEnvelopeEntry[] = [];
     let rehearse = false;
