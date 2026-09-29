@@ -37,8 +37,24 @@ fi
 
 # Fall back to `gh` when a local cache file isn't present and the CLI exists.
 if [ ! -f "$CACHE_FILE" ] && command -v gh >/dev/null 2>&1; then
-  RUN_ID=$(gh run list -w ci.yaml -b main -s success -L 1 \
-    --json databaseId -q '.[0].databaseId' -R "$REPO" 2>/dev/null) || RUN_ID=""
+  # The newest main run that uploaded the artifact, found through the
+  # artifacts list: the workflow runs list filtered by branch can answer with
+  # runs weeks old. See cache_run_ids in scripts/import-cached-index.sh, whose
+  # retry this matches: a lost lookup costs a live index.
+  RUN_ID=""
+  for attempt in 1 2 3; do
+    if RUN_ID=$(gh api "repos/$REPO/actions/artifacts?name=boxel-index-cache&per_page=30" --jq '
+      [.artifacts[]
+        | select(.expired | not)
+        | select(.workflow_run.head_branch == "main")
+        | select(.workflow_run.head_repository_id == .workflow_run.repository_id)
+        | .workflow_run.id]
+      | max // empty' 2>/dev/null); then
+      break
+    fi
+    RUN_ID=""
+    sleep "$attempt"
+  done
   if [ -n "$RUN_ID" ]; then
     echo "[index-cache] Downloading cache from CI run $RUN_ID via gh…"
     mkdir -p "$(dirname "$CACHE_FILE")"
@@ -50,7 +66,7 @@ fi
 if [ ! -f "$CACHE_FILE" ]; then
   echo "[index-cache] No cache file at $CACHE_FILE (and no gh download); will index live."
   echo "[index-cache] To use a cache, fetch the boxel-index-cache artifact from a"
-  echo "[index-cache] successful main CI run into that path (a Claude session can do"
+  echo "[index-cache] main CI run into that path (a Claude session can do"
   echo "[index-cache] this via the GitHub Actions API; raw api.github.com is blocked here)."
   exit 1
 fi
