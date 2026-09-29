@@ -541,25 +541,72 @@ interface PullRequest {
   merge_commit_sha: string | null;
 }
 
+// The pull request lookups only enrich a failure message, so an error answers
+// nothing rather than masking the failure they describe.
+async function lookup<T>(
+  url: string,
+  headers: Record<string, string>,
+): Promise<T | undefined> {
+  try {
+    let response = await fetch(url, { headers });
+    return response.ok ? ((await response.json()) as T) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 // For a commit main does not contain, GitHub lists the open pull requests that
 // carry it, and the merged one it came from when that pull request was
 // squash-merged (a squash lands a new commit on main, never the head itself).
-// The lookup only enriches a failure message, so an error answers no pull
-// requests rather than masking that failure.
+// For a commit on main, it lists the pull request that merged it.
 async function pullRequestsFor(
-  manifest: Manifest,
+  repository: string,
+  sha: string,
   headers: Record<string, string>,
 ): Promise<PullRequest[]> {
-  let url = `https://api.github.com/repos/${manifest.repository}/commits/${manifest.revision}/pulls`;
-  try {
-    let response = await fetch(url, { headers });
-    if (!response.ok) {
-      return [];
-    }
-    return (await response.json()) as PullRequest[];
-  } catch {
+  return (
+    (await lookup<PullRequest[]>(
+      `https://api.github.com/repos/${repository}/commits/${sha}/pulls`,
+      headers,
+    )) ?? []
+  );
+}
+
+// The pull requests that changed `paths` on main since the pin: each path's
+// history on main, narrowed to the commits main has and the pin lacks.
+async function pullRequestsChanging(
+  manifest: Manifest,
+  paths: string[],
+  headers: Record<string, string>,
+): Promise<string[]> {
+  let api = `https://api.github.com/repos/${manifest.repository}`;
+  let compare = await lookup<{ commits: { sha: string }[] }>(
+    `${api}/compare/${manifest.revision}...main`,
+    headers,
+  );
+  if (!compare) {
     return [];
   }
+  let sincePin = new Set(compare.commits.map((c) => c.sha));
+  let shas = new Set<string>();
+  for (let path of paths) {
+    let history = await lookup<{ sha: string }[]>(
+      `${api}/commits?sha=main&path=${encodeURIComponent(path)}&per_page=100`,
+      headers,
+    );
+    for (let { sha } of history ?? []) {
+      if (sincePin.has(sha)) {
+        shas.add(sha);
+      }
+    }
+  }
+  let urls = new Set<string>();
+  for (let sha of shas) {
+    for (let pr of await pullRequestsFor(manifest.repository, sha, headers)) {
+      urls.add(pr.html_url);
+    }
+  }
+  return [...urls];
 }
 
 // The deployed catalog realm serves boxel-catalog's main, so a pin that main
@@ -581,7 +628,11 @@ async function checkPin(manifest: Manifest) {
   }
   let { status } = (await response.json()) as { status: string };
   if (status !== 'behind' && status !== 'identical') {
-    let prs = await pullRequestsFor(manifest, headers);
+    let prs = await pullRequestsFor(
+      manifest.repository,
+      manifest.revision,
+      headers,
+    );
     let merged = prs.find((pr) => pr.merged_at);
     fail(
       `${manifest.revision} is not on ${manifest.repository} main (compare status "${status}"). ` +
@@ -618,8 +669,11 @@ async function checkPin(manifest: Manifest) {
     }
   }
   if (changed.length) {
+    let prs = await pullRequestsChanging(manifest, changed, headers);
     fail(
-      `${manifest.repository} main has changed ${changed.join(', ')} since ${manifest.revision}, so boxel's tests would run against definitions deployments no longer serve. ` +
+      `${manifest.repository} main has changed ${changed.join(', ')} since ${manifest.revision}` +
+        (prs.length ? ` (in ${prs.join(', ')})` : '') +
+        `, so boxel's tests would run against definitions deployments no longer serve. ` +
         `Re-pin to main (pnpm catalog:test-subset --bump), run the manifest's tests against it, and commit the new pin.`,
     );
   }
