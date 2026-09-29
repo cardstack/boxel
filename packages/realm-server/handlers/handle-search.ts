@@ -27,6 +27,7 @@ import {
   LinkShapePolicy,
   requestedLinkShape,
   rowClassForPageSize,
+  searchShapeLinkMode,
   X_BOXEL_LINK_SHAPE_HEADER,
   type Filter,
   type LinkShapeDecision,
@@ -64,6 +65,7 @@ import type {
   VirtualNetwork,
 } from '@cardstack/runtime-common';
 import {
+  effectiveLinkStrategy,
   errorsDocument,
   isNamedQueryPayload,
   isOperationFailure,
@@ -72,6 +74,7 @@ import {
   policyQueryScope,
   resolveNamedQuery,
 } from '@cardstack/runtime-common/card-operations';
+import type { LinkStrategy } from '@cardstack/base/operations';
 import {
   PRERENDER_JOB_ID_HEADER,
   PRERENDER_JOB_PRIORITY_HEADER,
@@ -137,6 +140,9 @@ export default function handleSearch(opts: {
     // neither, so no grant is found for one and a realm the caller cannot read
     // contributes nothing to it.
     let invocation = namedQueryInvocation(payload);
+    // How much of each result's link graph a named query's declaration lets
+    // its results carry. An ad-hoc search declares nothing.
+    let declaredLinks: LinkStrategy | undefined;
     if (
       isNamedQueryPayload(payload) &&
       realmList.length === 0 &&
@@ -167,10 +173,11 @@ export default function handleSearch(opts: {
       if (!resolved) {
         return;
       }
-      payload = resolved;
+      payload = resolved.query;
+      declaredLinks = resolved.links;
       // The declaration's own scope narrows what the request named, and its
       // order is the order it is searched in.
-      named = resolved.realms!;
+      named = resolved.query.realms!;
     }
     // What each realm the caller cannot read contributes. A realm whose policy
     // admits this query is searched with the grants composed into it; every
@@ -200,7 +207,7 @@ export default function handleSearch(opts: {
     );
     attributeSearchRequest(ctxt, working);
     await withSearchConnectionTenant(ctxt, working, () =>
-      respond(ctxt, named, payload, access),
+      respond(ctxt, named, payload, access, declaredLinks),
     );
   };
 
@@ -262,16 +269,16 @@ export default function handleSearch(opts: {
     return access;
   }
 
-  // The ad-hoc query a named one resolves to, or nothing once the refusal has
-  // been answered. The declaration is read through a realm of the first
-  // non-empty group in `resolvingRealms`: one this process already holds where
-  // there is one, and otherwise the group's first, mounted. For a type whose
-  // module this server serves, the definition entry belongs to the module's
-  // own realm whichever realm reads it; for one served elsewhere, it is read
-  // with the reading realm owner's credentials — so the groups put the realms
-  // the caller reads ahead of those they reach only through a policy, and a
-  // realm of the second group reads a declaration only when the caller reads
-  // none of the realms named.
+  // The ad-hoc query a named one resolves to, with the link strategy its
+  // results are served under, or nothing once the refusal has been answered.
+  // The declaration is read through a realm of the first non-empty group in
+  // `resolvingRealms`: one this process already holds where there is one, and
+  // otherwise the group's first, mounted. For a type whose module this server
+  // serves, the definition entry belongs to the module's own realm whichever
+  // realm reads it; for one served elsewhere, it is read with the reading realm
+  // owner's credentials — so the groups put the realms the caller reads ahead
+  // of those they reach only through a policy, and a realm of the second group
+  // reads a declaration only when the caller reads none of the realms named.
   //
   // The realms the query may search are `scope`, the realms the request names,
   // so resolving it never reaches a realm the request did not name. What each
@@ -328,6 +335,7 @@ export default function handleSearch(opts: {
     realmList: string[],
     payload: unknown,
     access: RealmAccess,
+    declaredLinks: LinkStrategy | undefined,
   ) {
     let handlerStart = Date.now();
     // Slots the query-shape line is assembled from. `shape` is filled in as
@@ -441,16 +449,24 @@ export default function handleSearch(opts: {
           ),
           requested: requestedLinkShape(ctxt.get(X_BOXEL_LINK_SHAPE_HEADER)),
         });
-    let resolveLinksOnly = linkShapeDecision?.mode === 'links-only';
+    // A named query's declaration is the other half: it may narrow what the
+    // policy decided, and the policy may narrow what it declares, but neither
+    // widens the other. It is the same for every realm the search fans out to,
+    // since the declaration was resolved once, for the whole search.
+    let links = effectiveLinkStrategy(
+      declaredLinks,
+      linkShapeDecision?.mode === 'links-only',
+    );
     let searchOpts: {
       cacheOnlyDefinitions?: true;
       omitIncluded?: true;
-      resolveLinksOnly?: true;
+      links?: LinkStrategy;
       priority?: number;
     } = {};
     if (cacheOnlyDefinitions) searchOpts.cacheOnlyDefinitions = true;
     if (omitIncluded) searchOpts.omitIncluded = true;
-    if (resolveLinksOnly) searchOpts.resolveLinksOnly = true;
+    // Carried only when it narrows, so a search served whole keys without it.
+    if (links !== 'full') searchOpts.links = links;
     if (jobPriority !== null) searchOpts.priority = jobPriority;
 
     // The inner cache key: the membership query is the key's `query` member
@@ -526,16 +542,22 @@ export default function handleSearch(opts: {
     // visit.
     let linkMode: SearchShapeLinkMode = cacheOnlyDefinitions
       ? 'prerender'
-      : resolveLinksOnly
-        ? 'links-only'
-        : 'full';
+      : searchShapeLinkMode(links);
     shape = describeSearchShape({
       query: parsed,
       realms: realmList,
       linkMode,
       ...(linkShapeDecision
         ? {
-            requestedLinkMode: linkShapeDecision.requested,
+            // What was asked for includes what the invoked query declares, so
+            // a declaration's narrowing is never reported as the policy
+            // downgrading the request.
+            requestedLinkMode: searchShapeLinkMode(
+              effectiveLinkStrategy(
+                declaredLinks,
+                linkShapeDecision.requested === 'links-only',
+              ),
+            ),
             linkShapeLoad: linkShapeDecision.load,
             linkShapeLevel: linkShapeDecision.level,
             linkShapeRowClass: linkShapeDecision.rowClass,
