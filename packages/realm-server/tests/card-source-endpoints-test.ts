@@ -845,24 +845,108 @@ module(basename(import.meta.filename), function () {
           onRealmSetup,
         });
 
-        // A `HEAD` reaches this route without credentials where the matching
+        // A `HEAD` reaches the realm without credentials where the matching
         // `GET` would be refused: the realm exempts the method so a client can
-        // discover which realm serves a URL before it has a token for it. What
-        // the exemption admits here is the source read itself, headers and
-        // all, since this route answers a `HEAD` the same way it answers a
-        // `GET`. Pinned because it is the shape a read that is gated on the
-        // caller has to keep or deliberately change.
-        test('a HEAD is admitted without a JWT where the GET is refused', async function (assert) {
-          let get = await request
-            .get('/person.gts')
-            .set('Accept', 'application/vnd.card+source');
-          assert.strictEqual(get.status, 401, 'the GET is refused');
+        // discover which realm serves a URL before it has a token for it. A
+        // caller the realm would not let read gets only that, the realm's
+        // discovery answer, from this route and from the fallback file and
+        // module serve (a `HEAD` with no `Accept`) alike. It names the realm
+        // and says nothing about the path, so a file that exists and a path
+        // with nothing behind it answer the same. Each pair shares an
+        // extension because the server names a content type from the path's
+        // extension when a response carries none. The realm has no policy.
+        test('a HEAD tells a caller who may not read the realm nothing about the path', async function (assert) {
+          let callers: [string, string | undefined][] = [
+            ['anonymous', undefined],
+            ['unpermitted', `Bearer ${createJWT(testRealm, 'not-john')}`],
+          ];
+          let pairs = [
+            ['/person.gts', '/nothing-is-here.gts'],
+            ['/person-1.json', '/nothing-is-here.json'],
+          ];
+          for (let accept of [
+            'application/vnd.card+source',
+            '*/*',
+            undefined,
+          ]) {
+            for (let pair of pairs) {
+              let answers: {
+                label: string;
+                status: number;
+                headers: Record<string, string>;
+              }[] = [];
+              for (let path of pair) {
+                for (let [caller, authorization] of callers) {
+                  let head = request.head(path);
+                  if (accept) {
+                    head = head.set('Accept', accept);
+                  }
+                  if (authorization) {
+                    head = head.set('Authorization', authorization);
+                  }
+                  let response = await head;
+                  let served = {
+                    ...(response.headers as Record<string, string>),
+                  };
+                  delete served.date;
+                  answers.push({
+                    label: `${caller} HEAD ${path} (accept: ${accept ?? 'none'})`,
+                    status: response.status,
+                    headers: served,
+                  });
+                }
+              }
+              let [first, ...rest] = answers;
+              assert.strictEqual(
+                first.status,
+                200,
+                `${first.label} gets the discovery answer`,
+              );
+              assert.strictEqual(
+                first.headers['x-boxel-realm-url'],
+                testRealmHref,
+                `${first.label} names the realm`,
+              );
+              for (let name of ['etag', 'last-modified']) {
+                assert.notOk(
+                  first.headers[name],
+                  `${first.label} carries no ${name}`,
+                );
+              }
+              for (let answer of rest) {
+                assert.deepEqual(
+                  { status: answer.status, headers: answer.headers },
+                  { status: first.status, headers: first.headers },
+                  `${answer.label} gets the same answer`,
+                );
+              }
+            }
+          }
+        });
 
-          let head = await request
-            .head('/person.gts')
-            .set('Accept', 'application/vnd.card+source');
-          assert.strictEqual(head.status, 200, 'the HEAD is answered');
-          assert.ok(head.headers['etag'], 'and answers with a real validator');
+        test('a HEAD from a caller who may read the realm answers with the file’s own validators', async function (assert) {
+          let authorization = `Bearer ${createJWT(testRealm, 'john', ['read'])}`;
+          for (let accept of ['application/vnd.card+source', undefined]) {
+            let head = request
+              .head('/person.gts')
+              .set('Authorization', authorization);
+            if (accept) {
+              head = head.set('Accept', accept);
+            }
+            let response = await head;
+            let label = `accept: ${accept ?? 'none'}`;
+            assert.strictEqual(response.status, 200, `${label}: HTTP 200`);
+            assert.ok(response.headers['etag'], `${label}: carries an etag`);
+          }
+          let missing = await request
+            .head('/nothing-is-here.gts')
+            .set('Accept', 'application/vnd.card+source')
+            .set('Authorization', authorization);
+          assert.strictEqual(
+            missing.status,
+            404,
+            'and a path with nothing behind it is a 404',
+          );
         });
 
         test('200 with permission', async function (assert) {
