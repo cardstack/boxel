@@ -468,6 +468,9 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           .sort(),
         [
           `GET ${SupportedMimeType.CardJson} /.*`,
+          `POST ${SupportedMimeType.CardJson} (/|/.+/)`,
+          `PATCH ${SupportedMimeType.CardJson} /.+(?<!.json)`,
+          `DELETE ${SupportedMimeType.CardJson} /|/.+(?<!.json)`,
           `GET ${SupportedMimeType.CardJson} /_search`,
           `QUERY ${SupportedMimeType.CardJson} /_search`,
           `POST ${SupportedMimeType.BoxelOperations} /_operations`,
@@ -476,7 +479,7 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           `QUERY ${SupportedMimeType.BoxelOperations} /_operations`,
           `QUERY ${SupportedMimeType.JSONAPI} /_operations`,
         ].sort(),
-        'the card+json read, the search, the operations envelope and the capability check',
+        'the card+json read and writes, the search, the operations envelope and the capability check',
       );
       assert.deepEqual(
         testRealm

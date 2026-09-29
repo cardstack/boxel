@@ -882,10 +882,12 @@ const CONSUMES_COARSE_OUTCOME = { consumesCoarseOutcome: true } as const;
 // they would run what a caller the ACL declined outright asked for (see
 // `RouteOptions.appliesArchivedSeal`): the card+json read once the gate admits
 // the read, the search once a grant would answer it with a row, the operations
-// envelope once every entry has resolved, and the capability check once it
-// would admit a pair. A consumer marked only `CONSUMES_COARSE_OUTCOME` seals a
-// caller as soon as it admits them. The card+json `HEAD` is one, and never
-// admits anyone: the ACL lets every `HEAD` through.
+// envelope once every entry has resolved, the capability check once it would
+// admit a pair, and each card+json write once the gate has decided it and
+// before its batch stages anything (see `#sealAdmittedCardWrite`). A consumer
+// marked only `CONSUMES_COARSE_OUTCOME` seals a caller as soon as it admits
+// them. The card+json `HEAD` is one, and never admits anyone: the ACL lets
+// every `HEAD` through.
 const APPLIES_ARCHIVED_SEAL = {
   consumesCoarseOutcome: true,
   appliesArchivedSeal: true,
@@ -2744,7 +2746,7 @@ export class Realm {
         '(/|/.+/)',
         SupportedMimeType.CardJson,
         this.createCard.bind(this),
-        CONSUMES_COARSE_OUTCOME,
+        APPLIES_ARCHIVED_SEAL,
       )
       .get(
         '/.*',
@@ -2763,13 +2765,13 @@ export class Realm {
         '/.+(?<!.json)',
         SupportedMimeType.CardJson,
         this.patchCardInstance.bind(this),
-        CONSUMES_COARSE_OUTCOME,
+        APPLIES_ARCHIVED_SEAL,
       )
       .delete(
         '/|/.+(?<!.json)',
         SupportedMimeType.CardJson,
         this.removeCard.bind(this),
-        CONSUMES_COARSE_OUTCOME,
+        APPLIES_ARCHIVED_SEAL,
       )
       // The card+source write, its octet-stream spelling and the card+source
       // removal are answered on the realm ACL alone, as the card+source read
@@ -10594,6 +10596,7 @@ export class Realm {
         'create',
       );
       admission.assertSideLoads(maybeIncluded);
+      this.#sealAdmittedCardWrite(requestContext);
       result = (
         await commitBatch(
           this.batchCore,
@@ -11156,6 +11159,7 @@ export class Realm {
           },
         )
       )[0];
+    this.#sealAdmittedCardWrite(requestContext);
     let result = await commit();
     let lastModified = result?.meta.lastModified;
     if (result == null || lastModified == null) {
@@ -11548,6 +11552,25 @@ export class Realm {
           ? err
           : notPermitted(target, base),
     };
+  }
+
+  // Where a card+json write would run: the gate has decided it, and its batch
+  // has staged nothing yet. An archived realm answers a caller its ACL
+  // declined outright with its seal here instead (see `APPLIES_ARCHIVED_SEAL`),
+  // and answers every refusal ahead of here as it does while active.
+  //
+  // The seal is thrown into the handler's catch, where `CardWriteAdmission`'s
+  // `seenBy` puts it to the caller as it puts any failure ahead of the write
+  // lock: as the seal where the lock would admit the write against its card as
+  // stored now, and as the gate's refusal where it would not, as the operations
+  // envelope answers a batch (see `#disclosableFailure`). A create a grant
+  // admits outright leaves the lock nothing to decide, so it meets the seal. A
+  // create whose predicate reads the card it would mint has no stored card to
+  // judge, so it is refused.
+  #sealAdmittedCardWrite(requestContext: RequestContext): void {
+    if (requestContext.archivedSeal) {
+      throw requestContext.archivedSeal;
+    }
   }
 
   // A batch reports a refusal as an operations error, which is the envelope's
@@ -12776,6 +12799,7 @@ export class Realm {
         );
       }
       let precondition = this.#conditionalWrite(request, url);
+      this.#sealAdmittedCardWrite(requestContext);
       // Whether there is a card here is settled by the stored file, read
       // inside the same lock the removal happens under. That is what makes a
       // card removable the moment it is written rather than once indexing has
