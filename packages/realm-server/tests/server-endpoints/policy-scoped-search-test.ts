@@ -736,12 +736,29 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
 
     module('the query', function () {
       // Every statement issued against the index while `fn` runs, with its
-      // bindings.
+      // bindings, in a canonical order. A search issues its page and count
+      // statements concurrently, and each is compiled through card-definition
+      // lookups that are database reads of their own, so which of the two
+      // reaches the database first is a race rather than a property of the
+      // query. Sorted, two searches compare equal exactly when they ran the
+      // same statements.
+      //
+      // `trace` is every statement in the order it was issued, definition
+      // lookups included, each with its offset from the start. It is for a
+      // failed comparison to report: it shows the interleaving the sort hides,
+      // and whether one search looked up a definition the other did not.
       async function indexQueriesDuring(fn: () => Promise<unknown>) {
         let statements: { sql: string; bind: unknown }[] = [];
+        let trace: { atMs: number; sql: string; bind: unknown }[] = [];
+        let start = performance.now();
         let execute = db.execute;
         db.execute = function (this: PgAdapter, ...args) {
           statements.push({ sql: args[0], bind: args[1]?.bind });
+          trace.push({
+            atMs: Math.round((performance.now() - start) * 10) / 10,
+            sql: args[0].slice(0, 120),
+            bind: args[1]?.bind,
+          });
           return execute.apply(this, args);
         };
         try {
@@ -749,7 +766,12 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         } finally {
           db.execute = execute;
         }
-        return indexReads(statements);
+        let key = (statement: { sql: string; bind: unknown }) =>
+          JSON.stringify(statement);
+        let reads = indexReads(statements).sort((a, b) =>
+          key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : 0,
+        );
+        return { reads, trace };
       }
 
       test('a realm contributing no fragment runs the query a direct search of it runs', async function (assert) {
@@ -765,7 +787,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         let served = await indexQueriesDuring(() =>
           federatedSearch(body, PROVIDER_A),
         );
-        assert.true(served.length > 0, 'the search read the index');
+        assert.true(served.reads.length > 0, 'the search read the index');
 
         // The same search run straight through the realm, with no policy in
         // the path: the declaration resolved, the server's page bound applied,
@@ -781,9 +803,19 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           realms[COARSE].searchEntries(query),
         );
 
+        if (!QUnit.equiv(served.reads, direct.reads)) {
+          for (let [label, { trace }] of [
+            ['served', served],
+            ['direct', direct],
+          ] as const) {
+            console.log(
+              `[policy-scoped-search-diag] ${label} trace=${JSON.stringify(trace)}`,
+            );
+          }
+        }
         assert.deepEqual(
-          served,
-          direct,
+          served.reads,
+          direct.reads,
           'the same statements, byte for byte, with the same bindings',
         );
       });
@@ -797,10 +829,10 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           realms: [GRANTS],
           page: { number: 0, size: 3 },
         };
-        let scoped = await indexQueriesDuring(() =>
+        let { reads: scoped } = await indexQueriesDuring(() =>
           federatedSearch(body, PROVIDER_A),
         );
-        let unscoped = await indexQueriesDuring(() =>
+        let { reads: unscoped } = await indexQueriesDuring(() =>
           federatedSearch(body, OWNER),
         );
 
