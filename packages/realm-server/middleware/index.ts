@@ -321,7 +321,7 @@ export async function withSearchConnectionTenant<T>(
 // the request turns out to be still opens its own tenant scope inside this
 // one and is held to its share as before.
 export function orderConnectionsByRealm(
-  deps: Pick<RealmRoutingDeps, 'realms' | 'reconciler'>,
+  deps: Pick<RealmRoutingDeps, 'reconciler'>,
 ) {
   return async function (ctxt: Koa.Context, next: Koa.Next) {
     let realmURL: string | undefined;

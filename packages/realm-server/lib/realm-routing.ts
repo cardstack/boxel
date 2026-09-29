@@ -99,31 +99,35 @@ export async function findOrMountRealm(
 
 // The URL of the realm this process already knows that contains the request
 // URL, the most specific when realms nest. Unlike `findOrMountRealm` it reads
-// only what is in memory: it never queries the registry and never mounts, so
-// it is cheap enough to run ahead of every request. A realm this process has
-// not heard of yet resolves to undefined.
+// only what is in memory: it never queries the registry and never mounts. It
+// looks up each realm root the request could belong to, longest first, so its
+// cost follows the depth of the request's path rather than the number of
+// realms, which matters because it runs ahead of every request. A realm this
+// process has not heard of yet resolves to undefined.
 export function knownRealmURL(
   requestURL: URL,
-  { realms, reconciler }: Pick<RealmRoutingDeps, 'realms' | 'reconciler'>,
+  { reconciler }: Pick<RealmRoutingDeps, 'reconciler'>,
 ): string | undefined {
-  let match: string | undefined;
-  let consider = (url: string) => {
-    if (match && match.length >= url.length) {
-      return;
+  // Registry URLs keep the protocol they were registered under, which is not
+  // always the one the request arrived with.
+  let otherProtocol =
+    requestURL.protocol === 'https:'
+      ? 'http:'
+      : requestURL.protocol === 'http:'
+        ? 'https:'
+        : undefined;
+  for (let candidate of candidateRealmURLs(requestURL)) {
+    let forms = [candidate];
+    if (otherProtocol) {
+      forms.push(otherProtocol + candidate.slice(requestURL.protocol.length));
     }
-    let realmURL = new URL(url);
-    realmURL.protocol = requestURL.protocol;
-    if (new RealmPaths(realmURL).inRealm(requestURL)) {
-      match = url;
+    for (let form of forms) {
+      if (reconciler.knownByUrl.has(form) || reconciler.mounted.has(form)) {
+        return form;
+      }
     }
-  };
-  for (let realm of realms) {
-    consider(realm.url);
   }
-  for (let url of reconciler.knownByUrl.keys()) {
-    consider(url);
-  }
-  return match;
+  return undefined;
 }
 
 // A host routing rule matched against a concrete request URL, together

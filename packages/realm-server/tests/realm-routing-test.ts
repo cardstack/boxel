@@ -406,12 +406,12 @@ module(basename(import.meta.filename), function () {
   });
 
   module('knownRealmURL', function () {
-    // Only what the resolver reads: mounted realms' URLs and the reconciler's
+    // Only what the resolver reads: the reconciler's mounted realms and its
     // known registry rows.
     function deps(mounted: string[], known: string[]) {
       return {
-        realms: mounted.map((url) => ({ url })) as unknown as Realm[],
         reconciler: {
+          mounted: new Map(mounted.map((url) => [url, {}])),
           knownByUrl: new Map(known.map((url) => [url, {}])),
         } as unknown as RealmRegistryReconciler,
       };
@@ -453,6 +453,17 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(
         knownRealmURL(new URL('https://site.example.test/buck/realm'), d),
         'https://site.example.test/buck/realm/',
+      );
+    });
+
+    test('a registry key that is not a URL does not stop a later realm from matching', function (assert) {
+      let d = deps(
+        ['@cardstack/base/'],
+        ['@cardstack/catalog/', 'https://site.example.test/'],
+      );
+      assert.strictEqual(
+        knownRealmURL(new URL('https://site.example.test/index'), d),
+        'https://site.example.test/',
       );
     });
 
