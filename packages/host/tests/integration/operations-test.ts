@@ -660,6 +660,88 @@ module('Integration | operations', function (hooks) {
     }, /`nonGrantable` must be a boolean/);
   });
 
+  test('an explain is carried only where a card declares one, and is never grantable', function (assert) {
+    class Plain extends CardDef {}
+    assert.false(
+      'explain' in getOperations(Plain),
+      'no card carries an explain it did not declare',
+    );
+    class Policy extends CardDef {
+      @operation static explain = {
+        base: 'explain',
+        params: {
+          actor: StringField,
+          target: StringField,
+          operation: StringField,
+        },
+        nonGrantable: true,
+      } satisfies OperationsModule.OperationDeclaration;
+    }
+    assert.strictEqual(
+      getOperations(Policy).explain?.base,
+      'explain',
+      'a card that declares one carries it under the name it declared',
+    );
+    let rejected: [string, () => unknown, RegExp][] = [
+      [
+        'an explain that leaves the flag off',
+        () => {
+          class Open extends CardDef {
+            @operation static explain = {
+              base: 'explain',
+            } as unknown as OperationsModule.OperationDeclaration;
+          }
+          return Open;
+        },
+        /declare it with `nonGrantable: true`/,
+      ],
+      [
+        'an explain that carries a program',
+        () => {
+          class Scripted extends CardDef {
+            @operation static explain = {
+              base: 'explain',
+              nonGrantable: true,
+              transformations: bxl`.status = "x";`,
+            };
+          }
+          return Scripted;
+        },
+        /so it carries no `transformations`/,
+      ],
+      [
+        'an explain that reshapes its answer',
+        () => {
+          class Projected extends CardDef {
+            @operation static explain = {
+              base: 'explain',
+              nonGrantable: true,
+              output: { decision: bxl`.decision` },
+            };
+          }
+          return Projected;
+        },
+        /carries no `output` to reshape it/,
+      ],
+      [
+        'an explain on a file def',
+        () => {
+          class LogFile extends FileDef {
+            @operation static explain = {
+              base: 'explain',
+              nonGrantable: true,
+            };
+          }
+          return LogFile;
+        },
+        /cannot declare a "explain" operation/,
+      ],
+    ];
+    for (let [name, build, pattern] of rejected) {
+      assert.throws(build, pattern, `${name} is refused`);
+    }
+  });
+
   test('a declaration that runs no program carries no raw one', function (assert) {
     // A program stored where nothing runs it is worse than a refusal: it reads
     // as work the operation does.
