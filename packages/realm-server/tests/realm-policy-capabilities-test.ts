@@ -129,7 +129,8 @@ type Rule = { targetType: { module: string; name: string }; grants: Grant[] };
 
 // `Classroom` grants a read and a delete on a predicate, and `rename` and
 // `appendActivity` outright; `create` on it rests on a predicate, which is what
-// a type target cannot decide here. `Bulletin` takes its writes and its creates
+// a type target cannot decide here, and `archive` on one that throws for a
+// title that is not a number, which no classroom's is. `Bulletin` takes its writes and its creates
 // outright, so a type target for one is decided outright too.
 const RULES: Rule[] = [
   {
@@ -140,6 +141,7 @@ const RULES: Rule[] = [
       { operation: 'appendActivity' },
       { operation: 'delete', where: TEACHES },
       { operation: 'create', where: TEACHES },
+      { operation: 'archive', where: '(.title | tonumber) > 0' },
     ],
   },
   {
@@ -379,17 +381,14 @@ module(basename(import.meta.filename), function (hooks) {
   // The same question, asked by carrying the operation out. A read is the
   // card+json `GET` a view would make; everything else travels in the
   // envelope, which is where a write and a create are invoked from.
-  async function invoke(
-    auth: string | undefined,
-    pair: Pair,
-  ): Promise<boolean> {
+  async function invocation(auth: string | undefined, pair: Pair) {
     let withAuth = (req: Test) => (auth ? req.set('Authorization', auth) : req);
     let realm =
       typeof pair.target === 'string' && pair.target.startsWith(LIBRARY)
         ? LIBRARY
         : EDUCATION;
     if (typeof pair.target !== 'string') {
-      let response = await withAuth(
+      return await withAuth(
         request
           .post(`${path(realm)}_operations`)
           .set('Accept', SupportedMimeType.BoxelOperations)
@@ -414,17 +413,15 @@ module(basename(import.meta.filename), function (hooks) {
           ],
         }),
       );
-      return response.status === 200;
     }
     if (pair.operation === 'read') {
-      let response = await withAuth(
+      return await withAuth(
         request
           .get(path(pair.target))
           .set('Accept', SupportedMimeType.CardJson),
       );
-      return response.status === 200;
     }
-    let response = await withAuth(
+    return await withAuth(
       request
         .post(`${path(realm)}_operations`)
         .set('Accept', SupportedMimeType.BoxelOperations)
@@ -446,7 +443,13 @@ module(basename(import.meta.filename), function (hooks) {
         ],
       }),
     );
-    return response.status === 200;
+  }
+
+  async function invoke(
+    auth: string | undefined,
+    pair: Pair,
+  ): Promise<boolean> {
+    return (await invocation(auth, pair)).status === 200;
   }
 
   module('ordering', function () {
@@ -715,6 +718,42 @@ module(basename(import.meta.filename), function (hooks) {
           definitionLookups: 0,
         },
         'each predicate was evaluated once, and neither by the path that holds the write lock',
+      );
+    });
+
+    test('a write whose predicate throws is answered as the fault its invocation is', async function (assert) {
+      let pair = { target: ROOM_207, operation: 'archive' };
+      let [given] = await answers(AUTH.reader(), [pair]);
+      assert.deepEqual(
+        { ...given, target: '<target>' },
+        {
+          operation: 'archive',
+          target: '<target>',
+          allowed: false,
+          reason: 'policy-predicate-failed',
+        },
+        'a reader is told the predicate failed, not that the gate refused them',
+      );
+      let response = await invocation(AUTH.reader(), pair);
+      let [error] = (response.body as { errors: { code: string }[] }).errors;
+      assert.deepEqual(
+        { status: response.status, code: error.code },
+        { status: 500, code: 'policy-predicate-failed' },
+        'which is the code the archive itself answers',
+      );
+      let [denied, absent] = await answers(AUTH.teacher(), [
+        { target: ROOM_204, operation: 'archive' },
+        { target: ABSENT, operation: 'archive' },
+      ]);
+      assert.deepEqual(
+        denied,
+        { operation: 'archive', target: ROOM_204, allowed: false },
+        'a caller who may not read the realm is told a bare boolean',
+      );
+      assert.deepEqual(
+        { ...denied, target: '<target>' },
+        { ...absent, target: '<target>' },
+        'the same one they are told for a card that is not there',
       );
     });
   });
