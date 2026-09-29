@@ -181,21 +181,22 @@ export class ButtonGroup extends Component<ButtonGroupSignature> {
         .pretui-btngroup[data-appearance='filled'] :deep(.pretui-btn[data-appearance]) {
           --pretui-btn-surface: color-mix(in oklch, var(--pretui-tone) 15%, var(--background));
           --pretui-btn-surface-hover: color-mix(in oklch, var(--pretui-btn-tint) 22%, var(--background));
-          --pretui-btn-text: var(--pretui-btn-ink, color-mix(in oklch, var(--pretui-tone) 60%, var(--foreground)));
-          --pretui-btn-text-hover: var(--pretui-btn-ink, color-mix(in oklch, var(--pretui-tone) 40%, var(--foreground)));
+          --pretui-btn-text: var(--pretui-btn-ink, color-mix(in oklch, var(--pretui-tone) 45%, var(--foreground)));
+          --pretui-btn-text-hover: var(--pretui-btn-ink, color-mix(in oklch, var(--pretui-tone) 35%, var(--foreground)));
         }
         .pretui-btngroup[data-appearance='outlined'] :deep(.pretui-btn[data-appearance]) {
           --pretui-btn-surface: var(--pretui-button-secondary-bg, transparent);
           --pretui-btn-surface-hover: color-mix(in oklch, var(--pretui-btn-tint) 18%, var(--pretui-button-secondary-bg, transparent));
           --pretui-btn-edge: var(--pretui-btn-hairline, color-mix(in oklch, var(--pretui-tone) 45%, var(--border)));
-          --pretui-btn-text: var(--pretui-btn-ink, color-mix(in oklch, var(--pretui-tone) 55%, var(--foreground)));
+          --pretui-btn-text: var(--pretui-btn-ink, color-mix(in oklch, var(--pretui-tone) 45%, var(--foreground)));
+          --pretui-btn-text-hover: var(--pretui-btn-ink, color-mix(in oklch, var(--pretui-tone) 40%, var(--foreground)));
         }
         .pretui-btngroup[data-appearance='filled-outlined'] :deep(.pretui-btn[data-appearance]) {
           --pretui-btn-surface: color-mix(in oklch, var(--pretui-tone) 12%, var(--background));
           --pretui-btn-surface-hover: color-mix(in oklch, var(--pretui-btn-tint) 20%, var(--background));
           --pretui-btn-edge: var(--pretui-btn-hairline, color-mix(in oklch, var(--pretui-tone) 40%, var(--border)));
-          --pretui-btn-text: var(--pretui-btn-ink, color-mix(in oklch, var(--pretui-tone) 60%, var(--foreground)));
-          --pretui-btn-text-hover: var(--pretui-btn-ink, color-mix(in oklch, var(--pretui-tone) 40%, var(--foreground)));
+          --pretui-btn-text: var(--pretui-btn-ink, color-mix(in oklch, var(--pretui-tone) 45%, var(--foreground)));
+          --pretui-btn-text-hover: var(--pretui-btn-ink, color-mix(in oklch, var(--pretui-tone) 35%, var(--foreground)));
         }
         .pretui-btngroup[data-appearance='plain'] :deep(.pretui-btn[data-appearance]) {
           --pretui-btn-text: var(--pretui-btn-ink-quiet, color-mix(in oklch, var(--pretui-tone) 40%, var(--foreground)));

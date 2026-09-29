@@ -234,13 +234,13 @@ export class Button extends Component<ButtonSignature> {
            their -hover twins); the rules below are the only ones that paint.
            One border carries the edge, so fill and edge change together. */
         .pretui-btn {
-          /* hover tints: the tone pulled toward --foreground, so a light tone
-             (warning, a mint primary) still reads on a light card, and a dark
-             one on a dark card */
-          --pretui-btn-tint: color-mix(
-            in oklch,
-            var(--pretui-tone) 70%,
-            var(--foreground)
+          /* hover tints: the tone's lightness pulled toward --foreground, so a
+             light tone (warning, a mint primary) still reads on a light card
+             and a dark one on a dark card; chroma is restored (the mix took
+             30% of it) so the tint keeps the tone's hue instead of graying */
+          --pretui-btn-tint: oklch(
+            from color-mix(in oklch, var(--pretui-tone) 70%, var(--foreground))
+              l calc(c / 0.7) h
           );
 
           --pretui-btn-surface: initial;
@@ -411,11 +411,11 @@ export class Button extends Component<ButtonSignature> {
           );
           --pretui-btn-text: var(
             --pretui-btn-ink,
-            color-mix(in oklch, var(--pretui-tone) 60%, var(--foreground))
+            color-mix(in oklch, var(--pretui-tone) 45%, var(--foreground))
           );
           --pretui-btn-text-hover: var(
             --pretui-btn-ink,
-            color-mix(in oklch, var(--pretui-tone) 40%, var(--foreground))
+            color-mix(in oklch, var(--pretui-tone) 35%, var(--foreground))
           );
         }
         .pretui-btn[data-appearance='outlined'] {
@@ -431,7 +431,11 @@ export class Button extends Component<ButtonSignature> {
           );
           --pretui-btn-text: var(
             --pretui-btn-ink,
-            color-mix(in oklch, var(--pretui-tone) 55%, var(--foreground))
+            color-mix(in oklch, var(--pretui-tone) 45%, var(--foreground))
+          );
+          --pretui-btn-text-hover: var(
+            --pretui-btn-ink,
+            color-mix(in oklch, var(--pretui-tone) 40%, var(--foreground))
           );
         }
         .pretui-btn[data-appearance='filled-outlined'] {
@@ -451,11 +455,11 @@ export class Button extends Component<ButtonSignature> {
           );
           --pretui-btn-text: var(
             --pretui-btn-ink,
-            color-mix(in oklch, var(--pretui-tone) 60%, var(--foreground))
+            color-mix(in oklch, var(--pretui-tone) 45%, var(--foreground))
           );
           --pretui-btn-text-hover: var(
             --pretui-btn-ink,
-            color-mix(in oklch, var(--pretui-tone) 40%, var(--foreground))
+            color-mix(in oklch, var(--pretui-tone) 35%, var(--foreground))
           );
         }
         .pretui-btn[data-appearance='plain'] {

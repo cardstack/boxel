@@ -40,9 +40,17 @@ export class IconButton extends Component<IconButtonSignature> {
       ...attributes
     >{{yield}}</Button>
     <style scoped>
-      .pretui-iconbtn {
-        padding: 0;
-        width: var(--pretui-button-h, 2.24em);
+      /* above Button's layer, so these win by layer order, not file order */
+      @layer Component, Composite;
+      @layer Composite {
+        .pretui-iconbtn {
+          padding: 0;
+          width: var(--pretui-button-h, 2.24em);
+        }
+        /* square against Button's 24px minimum height at xs */
+        .pretui-iconbtn[data-size='xs'] {
+          width: max(var(--pretui-button-h, 2.24em), 1.5rem);
+        }
       }
     </style>
   </template>
