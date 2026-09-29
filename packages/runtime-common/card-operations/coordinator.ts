@@ -1,3 +1,4 @@
+import { v4 as uuidV4 } from 'uuid';
 import {
   computeContentHash,
   computeContentHashFromRanges,
@@ -299,6 +300,19 @@ export interface CommitBatchOptions {
   // and answered success: serialization records a link it cannot resolve as
   // an explicit null.
   foreignSideLoadLink?: 'refuse' | 'leave';
+  // Whether the realm names the cards this batch mints. By default a card the
+  // caller names with a `lid` is stored under that id, which is what lets a
+  // caller know a new card's URL before it exists. Set, every card the batch
+  // mints is stored under an id the realm mints instead. The `lid` still names
+  // the card inside the batch: it is the key another entry links to it by, and
+  // the one its result is reported under. It no longer names the file.
+  //
+  // It is for a caller the realm ACL won't let read the realm. What a create
+  // answers depends on what is stored where it lands: it mints a card where
+  // nothing is stored and is refused where a card is. So a caller who picks
+  // the id picks which path the answer describes, and such a caller is never
+  // told which paths hold a card.
+  mintIds?: boolean;
   // Per-request wall-clock collector, threaded from a caller that reports
   // where its write's time went. The stages a commit owns are not observable
   // from outside it — waiting for the realm's write lock and draining
@@ -368,7 +382,12 @@ export async function commitBatch(
   // reports against it: a batch that refuses part of what a caller composed
   // names the entry the caller sent, not the one this function is holding.
   let positions = positionsOf(entries);
-  let { lids, foreignLids } = indexLids(entries, positions, paths);
+  let { lids, foreignLids } = indexLids(
+    entries,
+    positions,
+    paths,
+    opts.mintIds ?? false,
+  );
   // Stamped from outside the lock so the wait for it is its own stage: a batch
   // queued behind another writer of the files it needs spends its time here,
   // and from the handler that is indistinguishable from slow indexing.
@@ -1315,10 +1334,16 @@ function assertOpReachesALock(entry: BatchEntry): void {
   }
 }
 
+// Every `lid` the batch claims, resolved to the identity its card takes. With
+// `mintIds` that identity is one the realm mints rather than the one the `lid`
+// spells (see `CommitBatchOptions.mintIds`), and since staging reads each
+// card's identity from here, the file a create writes and the link another
+// entry records both name the minted one.
 function indexLids(
   entries: BatchEntry[],
   positions: readonly EntryPosition[],
   paths: RealmPaths,
+  mintIds: boolean,
 ): { lids: LidIndex; foreignLids: ReadonlySet<string> } {
   let lids = new Map<string, StagedIdentity>();
   let foreignLids = new Set<string>();
@@ -1360,7 +1385,7 @@ function indexLids(
         if (primaryLid !== undefined) {
           claim(
             primaryLid,
-            createIdentity(entry, primary, paths, new Map()),
+            createIdentity(entry, primary, paths, new Map(), { mintIds }),
             `entry ${positions[index]}`,
           );
         }
@@ -1382,7 +1407,7 @@ function indexLids(
           resource.lid,
           stagedIdentity(
             resource.meta?.adoptsFrom,
-            resource.lid,
+            mintIds ? uuidV4() : resource.lid,
             entry.op === 'create' ? entry.directory : undefined,
             paths,
           ),
@@ -1793,6 +1818,11 @@ function assertWritesFit(
 //
 // Checked inside the lock, against the same critical section the commit runs
 // in, so nothing can take the path between the check and the write.
+//
+// The refusal names the path, since the caller chose it. A caller the realm
+// won't let read it chooses none: its batch mints its ids (see
+// `CommitBatchOptions.mintIds`), so no answer it gets depends on what a path
+// of its choosing holds.
 //
 // A path an earlier entry removes is not what this check is about, so it is
 // left out of it: the stored card is on its way out, and what stops the batch

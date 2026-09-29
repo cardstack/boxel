@@ -2069,12 +2069,14 @@ function assertPathSegment(value: string, what: string): void {
 // or named an operation that mints the type. The `lid` index is consulted
 // first so the file a create writes and the link another entry records are
 // read from one place; an entry with no `lid` cannot be linked to, so its id
-// is minted here.
+// is minted here. With `mintIds` the id is minted whatever the entry names
+// (see `CommitBatchOptions.mintIds`).
 export function createIdentity(
   entry: CreateEntry,
   resource: CardResource | undefined,
   paths: RealmPaths,
   lids: LidIndex,
+  { mintIds = false }: { mintIds?: boolean } = {},
 ): StagedIdentity {
   let lid = localIdOf(entry);
   if (lid !== undefined) {
@@ -2085,7 +2087,7 @@ export function createIdentity(
   }
   return stagedIdentity(
     resource?.meta?.adoptsFrom ?? entry.definition?.of,
-    lid ?? uuidV4(),
+    (mintIds ? undefined : lid) ?? uuidV4(),
     entry.directory,
     paths,
   );

@@ -723,6 +723,19 @@ refusal follows the same rules on both: a caller who may read the realm gets a
 403, and one who may not gets the 404 a card that does not exist gets. The
 card+json body carries no `code`, so there the status is the whole answer.
 
+A caller who may not read the realm doesn't choose where a card they create
+lands. A create mints a card where nothing is stored and is refused where a card
+is, so a caller who chose the path would learn which paths hold a card. On
+either route the realm mints such a caller's new card's id. A `lid` still names
+the card within a batch: it is the key a later entry links the card by, and the
+one its result reports. But the card is stored under the realm's id, so a create
+sent again with the same `lid` mints a second card. Such a caller's `POST` is
+aimed at the realm's root. One aimed at a directory beneath it gets the 404,
+since the card would land beneath that directory, and whether the write succeeds
+would depend on what is stored along its path. A caller who may read the realm
+can list it anyway, so they name their own cards as any writer does, and are
+told when a `lid` is taken.
+
 For a caller the realm admits only through a grant, four things set the card
 routes apart from a batch:
 

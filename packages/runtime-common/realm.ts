@@ -2142,9 +2142,19 @@ interface CardWriteAdmission {
   // Present for a write whose grant rests on a predicate, which the
   // coordinator decides under the write lock (see `BatchEntry.admit`).
   entry: { admit?: (judged: AdmissionSubject | undefined) => Promise<void> };
+  // How the write's batch is committed for this caller. For a caller who may
+  // not read the realm, the realm mints the ids of the cards it creates (see
+  // `CommitBatchOptions.mintIds`).
+  batch: { mintIds?: true };
   // Refuses, by throwing, a document whose side-loads a write the gate
   // admitted would stage.
   assertSideLoads(included: readonly unknown[] | undefined): void;
+  // Refuses, by throwing, a create aimed at a directory beneath the realm's
+  // root by a caller who may not read the realm. The card would land beneath
+  // it, so whether the write succeeds depends on what is stored along the
+  // directory's path: a stored file where a directory is named fails the
+  // write, and nothing there lets it succeed.
+  assertDestination(directory: string): void;
   // An answer the handler gives before the batch runs, such as a 400 for a
   // body that is not a card document, as the caller may be told it. Throws
   // the gate's refusal where the caller may not be told it.
@@ -2156,7 +2166,9 @@ interface CardWriteAdmission {
 // The admission of every write by a caller the realm ACL allowed.
 const COARSE_CARD_WRITE: CardWriteAdmission = {
   entry: {},
+  batch: {},
   assertSideLoads: () => {},
+  assertDestination: () => {},
   answer: async (response) => response,
   seenBy: async (err) => err,
 };
@@ -5449,10 +5461,12 @@ export class Realm {
   // an entry no grant admits refuses the batch with nothing written. A write
   // whose grant rests on a predicate is decided under the write lock, against
   // the card it changes as the batch holds it there, and a refusal there
-  // leaves nothing written either. An operation's program can read `actor()`
-  // and an `assert` can refuse on what it finds, but neither decides who may
-  // invoke it. Treat every operation's result as reachable by any caller
-  // permitted to invoke it.
+  // leaves nothing written either. A caller who may not read the realm
+  // doesn't choose the ids of the cards their batch creates, which the realm
+  // mints. An operation's program can read `actor()` and an `assert` can
+  // refuse on what it finds, but neither decides who may invoke it. Treat
+  // every operation's result as reachable by any caller permitted to invoke
+  // it.
   private async handleOperations(
     request: Request,
     requestContext: RequestContext,
@@ -5750,6 +5764,10 @@ export class Realm {
             // place — which is the case the event's authorship naming exists
             // for, and the only front door that produces it.
             reportAuthorship: true,
+            // A caller the realm ACL won't let read the realm doesn't choose
+            // where the cards it creates land: a `lid` names the card within
+            // the batch and in its result, and the realm mints its id.
+            ...(coarseDeclined === 'all' ? { mintIds: true } : {}),
           },
         );
         // The coordinator answers in the flat order of the entries it staged,
@@ -10501,6 +10519,11 @@ export class Realm {
         'create',
       );
       admission.assertSideLoads(maybeIncluded);
+      // Where the `POST` was aimed — the realm root, or a directory under it.
+      // The card's type directory is named beneath that, and the file beneath
+      // that.
+      let directory = this.paths.local(new URL(request.url));
+      admission.assertDestination(directory);
       result = (
         await commitBatch(
           this.batchCore,
@@ -10516,14 +10539,12 @@ export class Realm {
                 data: primaryResource,
                 ...(maybeIncluded ? { included: maybeIncluded } : {}),
               },
-              // Where the `POST` was aimed — the realm root, or a directory
-              // under it. The card's type directory is named beneath that, and
-              // the file beneath that.
-              directory: this.paths.local(new URL(request.url)),
+              directory,
               ...admission.entry,
             },
           ],
           {
+            ...admission.batch,
             clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
             ...(requestContext.authenticatedUser
               ? { actor: requestContext.authenticatedUser }
@@ -11404,10 +11425,31 @@ export class Realm {
         });
       }
     };
+    // A caller who may read the realm can list it, so where their card lands
+    // tells them nothing, and they choose it as any writer does. One who may
+    // not has the realm choose: it mints the card's id, and the card lands
+    // beneath the realm's root. That caller is told a refusal as a card that
+    // isn't there, so the refusal here says no more than the gate's own.
+    let readsRealm = coarseDeclined !== 'all';
+    let batch = readsRealm ? {} : { mintIds: true as const };
+    let assertDestination = (directory: string) => {
+      if (!readsRealm && directory !== '') {
+        throw new OperationFailure({
+          status: 403,
+          code: 'operation-not-permitted',
+          title: 'Operation not permitted',
+          detail:
+            `a caller who may not read the realm creates a card at the ` +
+            `realm's root, and this "${base}" is aimed at "${directory}/"`,
+        });
+      }
+    };
     if (decision.kind !== 'pending') {
       return {
         entry: {},
+        batch,
         assertSideLoads,
+        assertDestination,
         answer: async (response) => response,
         seenBy: async (err) => err,
       };
@@ -11437,7 +11479,9 @@ export class Realm {
           }
         },
       },
+      batch,
       assertSideLoads,
+      assertDestination,
       answer: async (response) => {
         if (await hidden()) {
           throw notPermitted(target, base);
