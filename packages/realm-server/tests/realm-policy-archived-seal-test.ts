@@ -198,7 +198,8 @@ module(basename(import.meta.filename), function (hooks) {
         .set('Authorization', auth),
     'a named search': (auth) =>
       search(auth, { operation: 'listMine', on: CLASSROOM }),
-    'an ad-hoc search': (auth) => search(auth, { filter: { type: CLASSROOM } }),
+    'an ad-hoc search': (auth) =>
+      search(auth, { filter: { 'item.on': CLASSROOM } }),
     'a batch that reads': (auth) =>
       operations(auth, 'QUERY', { 'boxel:name': 'read' }),
     'a batch that writes': (auth) =>
@@ -294,6 +295,11 @@ module(basename(import.meta.filename), function (hooks) {
       JSON.parse(active['a named search'].text).data,
       [],
       'while active, the named search the grant scopes to them has no rows',
+    );
+    assert.deepEqual(
+      JSON.parse(active['an ad-hoc search'].text).data,
+      [],
+      'while active, an ad-hoc search reaches no grant and has no rows',
     );
 
     await archiveRealm(db, new URL(EDUCATION));
