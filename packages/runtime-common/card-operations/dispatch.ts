@@ -622,6 +622,51 @@ export async function resolveGatedOperation(
   name: string,
   scope: OperationScope = newOperationScope(core),
 ): Promise<GatedOperation> {
+  let { definition, decision } = await resolveAndGate(
+    core,
+    target,
+    name,
+    scope,
+  );
+  return { definition, decision };
+}
+
+// What the policy gate decides about a write one of the card verbs carries
+// out: a card+json `POST` creating a card, a `PATCH` updating one, or a
+// `DELETE` removing one.
+//
+// A verb performs the built-in behavior it is named for, on the document it
+// was sent, whatever the target's type declares under that name. A declaration
+// is how an author specializes the behavior: an `update` with an `input`
+// stage, a `delete` rebound onto `transform` as a soft delete. A grant on the
+// name admits what the declaration does, and the verb would do something else.
+// So a grant reaches a verb only where the name means the built-in behavior,
+// and a write to a type that declares the name is refused here as one no grant
+// admits. The operations envelope runs the declaration, and is where such a
+// grant is used.
+//
+// A caller the realm ACL allowed is answered as the gate answers them, without
+// the policy, and the verb performs the built-in behavior for them whatever the
+// type declares, as it always has.
+export async function resolveFacadeWrite(
+  core: OperationCore,
+  target: OperationTarget,
+  base: 'create' | 'update' | 'delete',
+  scope: OperationScope,
+): Promise<GateDecision> {
+  let { decision, declared } = await resolveAndGate(core, target, base, scope);
+  if (declared && decision.kind !== 'coarse') {
+    throw notPermitted(target, base);
+  }
+  return decision;
+}
+
+async function resolveAndGate(
+  core: OperationCore,
+  target: OperationTarget,
+  name: string,
+  scope: OperationScope,
+): Promise<GatedOperation & { declared: boolean }> {
   let refusal = (e: unknown): unknown =>
     scope.coarseDeclined === 'all' && isOperationFailure(e)
       ? notPermitted(target, name)
@@ -644,7 +689,7 @@ export async function resolveGatedOperation(
   } catch (e: unknown) {
     throw refusal(e);
   }
-  let { definition, typeDefinition, typeChain } = resolved;
+  let { definition, typeDefinition, typeChain, declared } = resolved;
   let decision = await gateOperation(
     core,
     gateSubject(target, typeChain),
@@ -661,7 +706,7 @@ export async function resolveGatedOperation(
   ) {
     throw gateRefusal(core, decision, target, name);
   }
-  return { definition, decision };
+  return { definition, decision, declared: declared === true };
 }
 
 // The target as the gate judges it. A card is judged by the row the index
@@ -700,6 +745,9 @@ async function resolveUngated(
   // the adoption chain recorded on it.
   typeDefinition?: Definition;
   typeChain?: string[];
+  // Whether the name resolved to a declaration on the target's type rather
+  // than to the built-in behavior of that name.
+  declared?: true;
 }> {
   assertInRealm(core, target);
   if (isDefinitionFreeOperation(name)) {
@@ -766,7 +814,12 @@ async function resolveUngated(
     if (!carries(target, kind, declared.base)) {
       throw notAllowed(target, name, kind, declared.base);
     }
-    return { definition: declared, typeDefinition: definition, typeChain };
+    return {
+      definition: declared,
+      typeDefinition: definition,
+      typeChain,
+      declared: true,
+    };
   }
   if (!isBaseOperation(name)) {
     throw new OperationFailure({

@@ -97,7 +97,11 @@ import {
   type EntryCollectionDocument,
   type EntrySingleDocument,
 } from './document-types.ts';
-import type { HtmlQuery, HtmlResource } from './resource-types.ts';
+import type {
+  CardResource,
+  HtmlQuery,
+  HtmlResource,
+} from './resource-types.ts';
 import { HtmlResourceType } from './resource-types.ts';
 import {
   DEFAULT_REDIRECT_STATUS,
@@ -219,6 +223,7 @@ import {
   canonicalizeTarget,
   newOperationScope,
   readShape,
+  resolveFacadeWrite,
   resolveGatedOperation,
   runOperation,
   scopeCallerFor,
@@ -229,9 +234,13 @@ import {
   notPermitted,
   pendingWriteHolds,
   policyGateStats,
+  type PendingWrite,
   type PolicyGateStats,
 } from './card-operations/gate.ts';
-import type { AdmissionSubject } from './card-operations/executors.ts';
+import {
+  namesForeignRealm,
+  type AdmissionSubject,
+} from './card-operations/executors.ts';
 import {
   runOutputTransform,
   type TransformContext,
@@ -286,6 +295,7 @@ import {
   type OperationRequest,
   type OperationResult,
   type OperationSourceResult,
+  type OperationTarget,
 } from './card-operations/types.ts';
 import { erroredTargetRow } from './card-operations/read.ts';
 import { commitBatch } from './card-operations/coordinator.ts';
@@ -310,7 +320,7 @@ import type {
   IncrementalChange,
   SharedIndexPass,
 } from './tasks/indexer.ts';
-import { isCodeRef } from './code-ref.ts';
+import { isCodeRef, isRelativePath } from './code-ref.ts';
 import { merge } from 'lodash-es';
 import { inferContentType } from './infer-content-type.ts';
 import {
@@ -825,12 +835,34 @@ function renderHoldMaxMs(): number {
 const ARCHIVED_SEAL_EXEMPT_PATHS = new Set(['_readiness-check', '_session']);
 // Marks the routes whose handlers hand the realm ACL's recorded outcome to the
 // policy gate: the `/_operations` envelope, which resolves every entry through
-// the gate, and the card+json read, whose operation runs through it. A route
-// consumes the outcome only if every operation it resolves is resolved with
-// the ACL's refusal on it, so no other route does. The card+json writes, the
-// card+source routes and the realm's fallback file and module serve keep the
-// ACL's refusal, which a realm with a policy words differently on some of them
-// (see `#refusalUnderPolicy`).
+// the gate, the card+json read, whose operation runs through it, the search,
+// which hands it to the policy's query lane, and the card+json writes, each of
+// which is resolved through the gate as the `create`, `update` or `delete` it
+// carries out. A route consumes the outcome only if every operation it
+// resolves is resolved with the ACL's refusal on it.
+//
+// No other route does, and each of the rest is a write no grant can reach
+// rather than one left out:
+//
+// - The card+source write, its octet-stream spelling and the card+source
+//   removal put or remove whatever bytes they are sent at whatever path they
+//   name: a module's source, a data file, or a card's stored `.json`. The gate
+//   grants a data file nothing but the read of its bytes, module source is
+//   code and code is served to a caller the ACL allows, and a verbatim
+//   replacement of a card's document can change the type its grants were
+//   matched on. The operations envelope refuses the same replacement to every
+//   caller for that reason. These are the write half of the card+source read,
+//   which is coarse-read-only.
+// - `/_atomic` is a batch of the same verbatim writes: whole-document
+//   replacements, and modules alongside cards. The writes a grant can reach
+//   are the ones the operations envelope carries, all or nothing, as `/_atomic`
+//   does.
+// - The realm's administration routes (`_reindex`, `_invalidate`,
+//   `_permissions` and the rest) do not act on a card at all.
+//
+// So they keep the ACL's refusal, which a realm with a policy words
+// differently on some of them (see `#refusalUnderPolicy`), as does the realm's
+// fallback file and module serve.
 const CONSUMES_COARSE_OUTCOME = { consumesCoarseOutcome: true } as const;
 // Marks the routes that serve code and the file tree, which no policy grant
 // reaches: the card+source read and its `HEAD`, and the directory listing. The
@@ -2052,6 +2084,27 @@ type CoarseAdmission = (
   requestContext: RequestContext,
 ) => boolean | Promise<boolean>;
 
+// What the policy gate's decision on one card+json write hands to the write:
+// the admission its batch entry carries, and how a refusal the batch makes is
+// put to the caller.
+interface CardWriteAdmission {
+  // Present for a write whose grant rests on a predicate, which the
+  // coordinator decides under the write lock (see `BatchEntry.admit`).
+  entry: { admit?: (judged: AdmissionSubject | undefined) => Promise<void> };
+  // Refuses, by throwing, a document whose side-loads a write the gate
+  // admitted would stage.
+  assertSideLoads(included: readonly unknown[] | undefined): void;
+  // A refusal the batch made, in the words the caller may be told it in.
+  seenBy(err: unknown): Promise<unknown>;
+}
+
+// The admission of every write by a caller the realm ACL allowed.
+const COARSE_CARD_WRITE: CardWriteAdmission = {
+  entry: {},
+  assertSideLoads: () => {},
+  seenBy: async (err) => err,
+};
+
 export class Realm {
   #startedUp = new Deferred<void>();
   #matrixClient: MatrixClient;
@@ -2531,6 +2584,8 @@ export class Realm {
         SupportedMimeType.RealmInfo,
         this.readinessCheck.bind(this),
       )
+      // Answered on the realm ACL alone: its writes are verbatim replacements,
+      // which no policy grant reaches (see `CONSUMES_COARSE_OUTCOME`).
       .post(
         '/_atomic',
         SupportedMimeType.JSONAPI,
@@ -2588,7 +2643,12 @@ export class Realm {
         SupportedMimeType.JSONAPI,
         this.invalidateURLs.bind(this),
       )
-      .post('(/|/.+/)', SupportedMimeType.CardJson, this.createCard.bind(this))
+      .post(
+        '(/|/.+/)',
+        SupportedMimeType.CardJson,
+        this.createCard.bind(this),
+        CONSUMES_COARSE_OUTCOME,
+      )
       .get(
         '/.*',
         SupportedMimeType.CardJson,
@@ -2606,12 +2666,18 @@ export class Realm {
         '/.+(?<!.json)',
         SupportedMimeType.CardJson,
         this.patchCardInstance.bind(this),
+        CONSUMES_COARSE_OUTCOME,
       )
       .delete(
         '/|/.+(?<!.json)',
         SupportedMimeType.CardJson,
         this.removeCard.bind(this),
+        CONSUMES_COARSE_OUTCOME,
       )
+      // The card+source write, its octet-stream spelling and the card+source
+      // removal are answered on the realm ACL alone, as the card+source read
+      // is: they replace or remove stored bytes verbatim, which no policy grant
+      // reaches (see `CONSUMES_COARSE_OUTCOME`).
       .post(
         '/.*',
         SupportedMimeType.CardSource,
@@ -6843,10 +6909,12 @@ export class Realm {
     this.#testOnlyCoarseAdmission = admit;
   }
 
-  // Runs in an `/_operations` batch that writes, after every entry has been
-  // resolved through the policy gate and before the coordinator takes the
-  // write lock, so a test can change what a pending write's predicate reads in
-  // the window between the two. Pass `undefined` to remove it.
+  // Runs after the policy gate has matched a write's grants and before the
+  // coordinator takes the write lock — in an `/_operations` batch that writes,
+  // once every entry has been resolved, and in a card+json write whose grant
+  // rests on a predicate — so a test can change what a pending write's
+  // predicate reads in the window between the two. Pass `undefined` to remove
+  // it.
   __testOnlySetBeforeBatchLock(hook: (() => Promise<void>) | undefined): void {
     this.#testOnlyBeforeBatchLock = hook;
   }
@@ -10101,8 +10169,19 @@ export class Realm {
     }
     let lid =
       typeof primaryResource.lid === 'string' ? primaryResource.lid : undefined;
+    // The gate's refusal and the batch's are answered from the one place, so a
+    // card no grant admits and a card that does not exist get the same bytes
+    // (see `#cardWriteRefusal`).
+    let admission = COARSE_CARD_WRITE;
     let result: BatchEntryResult;
     try {
+      admission = await this.#admitCardWrite(
+        request,
+        requestContext,
+        () => this.#createTarget(primaryResource),
+        'create',
+      );
+      admission.assertSideLoads(maybeIncluded);
       result = (
         await commitBatch(
           this.batchCore,
@@ -10122,6 +10201,7 @@ export class Realm {
               // under it. The card's type directory is named beneath that, and
               // the file beneath that.
               directory: this.paths.local(new URL(request.url)),
+              ...admission.entry,
             },
           ],
           {
@@ -10152,7 +10232,12 @@ export class Realm {
         )
       )[0];
     } catch (err: unknown) {
-      return this.#cardWriteRefusal(err, request, requestContext, { lid });
+      return this.#cardWriteRefusal(
+        await admission.seenBy(err),
+        request,
+        requestContext,
+        { lid },
+      );
     }
     let lastModified = result?.meta.lastModified;
     if (result == null || lastModified == null) {
@@ -10508,6 +10593,51 @@ export class Realm {
     timings: RequestTimings,
   ): Promise<Response> {
     let localPath = this.paths.local(new URL(request.url));
+    let instanceURL = this.paths.fileURL(localPath).href.replace(/\.json$/, '');
+    // The gate's refusal and the batch's are answered from the one place, so a
+    // card no grant admits and a card that does not exist get the same bytes
+    // (see `#cardWriteRefusal`).
+    let admission = COARSE_CARD_WRITE;
+    try {
+      // First, so a caller the realm ACL declined is told nothing about what
+      // the path holds before the gate has admitted them to the card there.
+      admission = await this.#admitCardWrite(
+        request,
+        requestContext,
+        () => ({ kind: 'instance', url: instanceURL }),
+        'update',
+      );
+      return await this.#patchAdmittedCard(request, requestContext, timings, {
+        localPath,
+        instanceURL,
+        admission,
+      });
+    } catch (err: unknown) {
+      return this.#cardWriteRefusal(
+        await admission.seenBy(err),
+        request,
+        requestContext,
+        { id: instanceURL },
+      );
+    }
+  }
+
+  // The card+json `PATCH` once the policy gate has had its say. A refusal is
+  // thrown, and `#patchCardInstance` answers it.
+  async #patchAdmittedCard(
+    request: Request,
+    requestContext: RequestContext,
+    timings: RequestTimings,
+    {
+      localPath,
+      instanceURL,
+      admission,
+    }: {
+      localPath: LocalPath;
+      instanceURL: string;
+      admission: CardWriteAdmission;
+    },
+  ): Promise<Response> {
     if (await this.nonJsonFileExists(localPath)) {
       return unsupportedMediaType(request, requestContext);
     }
@@ -10518,8 +10648,6 @@ export class Realm {
       return methodNotAllowed(request, requestContext);
     }
 
-    let url = this.paths.fileURL(localPath);
-    let instanceURL = url.href.replace(/\.json$/, '');
     let duringPrerender = isDuringPrerenderRequest(request);
     // A skip-index-wait caller (see SKIP_INDEX_WAIT_HEADER) takes the same
     // write-side path as a prerender write: index deferred, answer from the
@@ -10549,6 +10677,7 @@ export class Realm {
         }
       }
     }
+    admission.assertSideLoads(maybeIncluded);
 
     // Built after the body is validated, so a payload the realm would have
     // refused anyway still gets the 400 naming what is wrong with it and a
@@ -10582,6 +10711,7 @@ export class Realm {
                 ...(maybeIncluded ? { included: maybeIncluded } : {}),
               },
               ...(reserialize ? { reserialize } : {}),
+              ...admission.entry,
             },
           ],
           {
@@ -10604,14 +10734,7 @@ export class Realm {
           },
         )
       )[0];
-    let result: BatchEntryResult;
-    try {
-      result = await commit();
-    } catch (err: unknown) {
-      return this.#cardWriteRefusal(err, request, requestContext, {
-        id: instanceURL,
-      });
-    }
+    let result = await commit();
     let lastModified = result?.meta.lastModified;
     if (result == null || lastModified == null) {
       // The commit reports a modification time for every file it leaves
@@ -10670,13 +10793,7 @@ export class Realm {
       // canonical serialized form is what does that, and it is how an empty
       // patch stores and indexes a card the realm was holding but had not
       // read.
-      try {
-        result = await commit(true);
-      } catch (err: unknown) {
-        return this.#cardWriteRefusal(err, request, requestContext, {
-          id: instanceURL,
-        });
-      }
+      result = await commit(true);
       lastModified = result?.meta.lastModified ?? lastModified;
       created = result?.meta.created ?? created;
       version = result?.meta.version ?? version;
@@ -10865,6 +10982,130 @@ export class Realm {
     });
   }
 
+  // The type a card+json `POST` mints, as the policy gate judges it: the type
+  // the document names, in the realm it names or this one.
+  //
+  // The gate resolves that type against the realm's root, and the card it
+  // mints resolves a relative module against the file it lands in, a type
+  // directory beneath wherever the `POST` was aimed. So a relative module would
+  // have one type's grants consulted and another type minted, and a caller the
+  // ACL declined names the type by URL or registered prefix, as they do
+  // creating a card through the operations envelope.
+  #createTarget(resource: CardResource): OperationTarget {
+    let { adoptsFrom, realmURL } = resource.meta;
+    if ('module' in adoptsFrom && isRelativePath(adoptsFrom.module)) {
+      throw new OperationFailure({
+        status: 400,
+        code: 'invalid-params',
+        title: 'Invalid document',
+        detail:
+          `the card names the type it mints by the relative module ` +
+          `"${adoptsFrom.module}"; a card that is not stored yet has no ` +
+          `location for a module to be relative to, so a create names its ` +
+          `type by URL or registered prefix`,
+      });
+    }
+    return {
+      kind: 'type',
+      codeRef: adoptsFrom,
+      realm: typeof realmURL === 'string' && realmURL ? realmURL : this.url,
+    };
+  }
+
+  // The policy gate's part in one card+json write, for the caller of
+  // `request`.
+  //
+  // A caller the realm ACL allowed writes as they always have: nothing is
+  // resolved, no policy is loaded, and the batch entry is staged as it was
+  // sent. A caller the ACL declined reaches here only in a realm that names a
+  // policy, and the write is resolved through the gate as the operation the
+  // verb carries out, against the card or type the batch entry names, as the
+  // operations envelope resolves an entry of that name. The gate refuses what
+  // no grant admits by throwing its refusal. A grant that rests on a predicate
+  // is not decided here: the entry carries it to the write lock as `admit`,
+  // where the coordinator judges it against the card the write changes, or,
+  // for a create, the card it would mint.
+  //
+  // A grant admits one card's write, and a document's side-loads write other
+  // cards: each is minted, or, where a card is already stored under its local
+  // id, rewritten. A grant on this card reaches none of them, so a declined
+  // caller's write that would stage one is refused. The operations envelope
+  // carries each as a create entry of its own, judged by its own grants.
+  async #admitCardWrite(
+    request: Request,
+    requestContext: RequestContext,
+    // Asked only for a declined caller, so what it may refuse is refused only
+    // to one.
+    targetOf: () => OperationTarget,
+    base: 'create' | 'update' | 'delete',
+  ): Promise<CardWriteAdmission> {
+    let coarseDeclined = this.#coarseDeclined(requestContext);
+    if (coarseDeclined === 'none') {
+      return COARSE_CARD_WRITE;
+    }
+    let target = targetOf();
+    let core = this.operationCore;
+    let scope = newOperationScope(core, {
+      caller: scopeCallerFor(this.#callerOf(request, requestContext).actor),
+      coarseDeclined,
+    });
+    let decision = await resolveFacadeWrite(core, target, base, scope);
+    let assertSideLoads = (included: readonly unknown[] | undefined) => {
+      // The same test the executors apply to decide which side-loads they
+      // stage: one with no local id has nothing to be written under, and one
+      // naming another realm is not this realm's to write.
+      let staged = (included ?? []).some(
+        (resource) =>
+          isCardResource(resource) &&
+          typeof resource.lid === 'string' &&
+          !namesForeignRealm(resource, this.url),
+      );
+      if (staged) {
+        throw new OperationFailure({
+          ...(target.kind === 'instance' ? { id: target.url } : {}),
+          status: 403,
+          code: 'operation-not-permitted',
+          title: 'Operation not permitted',
+          detail:
+            `a "${base}" that side-loads cards writes those cards too, and a ` +
+            `grant of "${base}" admits this write alone; send each ` +
+            `side-loaded card to /_operations as a create entry of its own`,
+        });
+      }
+    };
+    if (decision.kind !== 'pending') {
+      return { entry: {}, assertSideLoads, seenBy: async (err) => err };
+    }
+    let pending: PendingWrite = { target, name: base, decision, scope };
+    await this.#testOnlyBeforeBatchLock?.();
+    // Whether the write lock has decided the write, admitted or refused. Until
+    // it has, the batch holds a write whose target resolved and whose grants
+    // matched, which never happens for a card that does not exist, so a
+    // refusal made in that window would tell a caller who may not read the
+    // realm that the card is there. Such a refusal is answered as the gate's
+    // unless the write's predicate holds against the card as stored now, as
+    // the operations envelope answers one (see `#disclosableFailure`).
+    let decided = false;
+    return {
+      entry: {
+        admit: async (judged) => {
+          try {
+            await dischargePendingDecision(core, pending, judged);
+          } finally {
+            decided = true;
+          }
+        },
+      },
+      assertSideLoads,
+      seenBy: async (err) =>
+        coarseDeclined !== 'all' ||
+        decided ||
+        (await pendingWriteHolds(core, pending))
+          ? err
+          : notPermitted(target, base),
+    };
+  }
+
   // A batch reports a refusal as an operations error, which is the envelope's
   // currency. The card verbs answer in statuses and bodies clients have always
   // read, so a refusal is carried back across into the response the handler
@@ -10876,6 +11117,11 @@ export class Realm {
   // has always thrown — a payload over the realm's ceiling, say — and it
   // travels the same way, so the status and sentence a client acts on do not
   // move.
+  //
+  // A refusal reaches a caller the realm ACL would not let read the realm as
+  // the operations envelope puts it to them (see `#refusalSeenBy`): a card no
+  // grant admits is the not-found a card that does not exist gets, byte for
+  // byte.
   #cardWriteRefusal(
     err: unknown,
     request: Request,
@@ -10885,7 +11131,8 @@ export class Realm {
     if (!isOperationFailure(err)) {
       throw err;
     }
-    let { status, title, detail } = err.error;
+    let error = this.#refusalSeenBy(err.error, requestContext);
+    let { status, title, detail } = error;
     if (status === 404) {
       return notFound(request, requestContext);
     }
@@ -10904,7 +11151,7 @@ export class Realm {
     // card, not the one being written, so it is the side-load's identity the
     // error carries. Naming the card being written would read as that card
     // colliding, when it had nothing wrong with it.
-    let included = includedCardOf(err.error.meta);
+    let included = includedCardOf(error.meta);
     if (included) {
       let cardError = new CardError(detail, {
         status,
@@ -12030,34 +12277,52 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
-    let localPath = this.paths.local(new URL(request.url));
-    if (await this.nonJsonFileExists(localPath)) {
-      return unsupportedMediaType(request, requestContext);
-    }
+    let requestedPath = this.paths.local(new URL(request.url));
     let reqURL = request.url.replace(/\.json$/, '');
     // strip off query params
     let url = new URL(new URL(reqURL).pathname, reqURL);
-    localPath = this.paths.local(url);
-    if (await this.openFileForMetadata(localPath)) {
-      return methodNotAllowed(request, requestContext);
-    }
-    let precondition = this.#conditionalWrite(request, url);
+    // The gate's refusal and the batch's are answered from the one place, so a
+    // card no grant admits and a card that does not exist get the same bytes
+    // (see `#cardWriteRefusal`).
+    let admission = COARSE_CARD_WRITE;
     try {
+      // First, so a caller the realm ACL declined is told nothing about what
+      // the path holds before the gate has admitted them to the card there.
+      admission = await this.#admitCardWrite(
+        request,
+        requestContext,
+        () => ({ kind: 'instance', url: url.href }),
+        'delete',
+      );
+      if (await this.nonJsonFileExists(requestedPath)) {
+        return unsupportedMediaType(request, requestContext);
+      }
+      if (await this.openFileForMetadata(this.paths.local(url))) {
+        return methodNotAllowed(request, requestContext);
+      }
+      let precondition = this.#conditionalWrite(request, url);
       // Whether there is a card here is settled by the stored file, read
       // inside the same lock the removal happens under. That is what makes a
       // card removable the moment it is written rather than once indexing has
       // caught up with it, and it is also what tells a card's `.json` from a
       // JSON file the realm merely holds — which has no card to remove.
-      await commitBatch(this.batchCore, [{ op: 'delete', href: url.href }], {
-        ...(requestContext.authenticatedUser
-          ? { actor: requestContext.authenticatedUser }
-          : {}),
-        ...(precondition ? { precondition } : {}),
-      });
+      await commitBatch(
+        this.batchCore,
+        [{ op: 'delete', href: url.href, ...admission.entry }],
+        {
+          ...(requestContext.authenticatedUser
+            ? { actor: requestContext.authenticatedUser }
+            : {}),
+          ...(precondition ? { precondition } : {}),
+        },
+      );
     } catch (err: unknown) {
-      return this.#cardWriteRefusal(err, request, requestContext, {
-        id: url.href,
-      });
+      return this.#cardWriteRefusal(
+        await admission.seenBy(err),
+        request,
+        requestContext,
+        { id: url.href },
+      );
     }
     return createResponse({
       body: null,

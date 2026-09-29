@@ -38,6 +38,7 @@ export {
   scopeCallerFor,
   pathsFor,
   readShape,
+  resolveFacadeWrite,
   resolveGatedOperation,
   resolveOperation,
   runOperation,
