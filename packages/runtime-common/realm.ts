@@ -6523,7 +6523,7 @@ export class Realm {
         await this.#assertNotArchived(localPath);
       }
       if (!isLocal && request.method === 'HEAD' && dispatch.coarseReadOnly) {
-        let answer = await this.#headUnderPolicy(request, requestContext);
+        let answer = await this.#headForNonReader(request, requestContext);
         if (answer) {
           return answer;
         }
@@ -6821,17 +6821,15 @@ export class Realm {
 
   // A `HEAD` passes the realm's permission check whoever sends it, so on a
   // coarse-read-only route it would hand a caller the ACL would not let read
-  // the realm a file's own validators, and a 404 where nothing is there. In a
-  // realm with a policy such a caller is given the discovery answer instead,
-  // as a `HEAD` of a card they may not read is, so the route says nothing
-  // about the path. A realm with no policy answers as it always has.
-  async #headUnderPolicy(
+  // the realm a file's own validators, and a 404 where nothing is there. Such
+  // a caller is given the discovery answer instead, as a `HEAD` of a card they
+  // may not read is, so the route says nothing about the path. That answer
+  // carries the realm-identity headers, which are all a client discovering
+  // the realm before it holds credentials reads.
+  async #headForNonReader(
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response | undefined> {
-    if ((await this.getRealmPolicy()) === undefined) {
-      return undefined;
-    }
     let probe = await this.#readProbe(request, requestContext);
     return probe.allowed
       ? undefined
