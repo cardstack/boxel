@@ -1,6 +1,7 @@
 import type Koa from 'koa';
 import type { DBAdapter, Realm } from '@cardstack/runtime-common';
 import {
+  archivedRealmURLs,
   fetchUserPermissions,
   isSessionRevoked,
   param,
@@ -33,23 +34,51 @@ import {
 } from '../middleware/index.ts';
 
 export type MultiRealmAuthorizationState = {
+  // The realms this request named that the caller may read outright. These are
+  // searched as they always have been, and a policy is never consulted for
+  // one: a policy widens what the ACL refused and has nothing to add to what
+  // it allowed.
   realmList: string[];
+  // The realms this request named that the caller may not read, on an
+  // endpoint that carries them rather than refusing. Each is reached only
+  // through its own policy, and contributes rows only where a `query` grant
+  // admits this caller — otherwise nothing. Naming one is not an error: a
+  // federated search asks several realms a question, and a realm that has no
+  // answer for this caller is a realm with no rows, exactly as a realm
+  // holding no matching card is. Always empty on an endpoint that refuses.
+  grantCandidates: string[];
+  // The user the request's token was verified for. Absent on a request that
+  // carried no token, which reached here only because every realm it names
+  // is publicly readable.
+  user?: string;
 };
 
 const MULTI_REALM_AUTH_STATE = 'multiRealmAuthorization';
 const SEARCH_REQUEST_PAYLOAD_STATE = 'searchRequestPayload';
 
-export function multiRealmAuthorization({
-  dbAdapter,
-  realmSecretSeed,
-  realms,
-  reconciler,
-}: {
-  dbAdapter: DBAdapter;
-  realmSecretSeed: string;
-  realms: Realm[];
-  reconciler: RealmRegistryReconciler;
-}): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
+export function multiRealmAuthorization(
+  {
+    dbAdapter,
+    realmSecretSeed,
+    realms,
+    reconciler,
+  }: {
+    dbAdapter: DBAdapter;
+    realmSecretSeed: string;
+    realms: Realm[];
+    reconciler: RealmRegistryReconciler;
+  },
+  {
+    unreadableRealms = 'refuse',
+  }: {
+    // What becomes of a realm a verified caller may not read. `refuse`
+    // answers the whole request 403. `carry` passes the realm on as a grant
+    // candidate, for an endpoint where a realm's policy can admit a caller its
+    // ACL did not, so that each realm answers for itself rather than any one
+    // of them answering for the rest.
+    unreadableRealms?: 'refuse' | 'carry';
+  } = {},
+): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, next: Koa.Next) {
     let request = await fetchRequestFromContext(ctxt);
     let realmList: string[];
@@ -118,6 +147,7 @@ export function multiRealmAuthorization({
     let publishedRealmURLs = await getPublishedRealmURLs(dbAdapter, realmList);
 
     let readableRealms = new Set<string>();
+    let user: string | undefined;
     let authorization = ctxt.req.headers['authorization'];
     if (!authorization) {
       let publicPermissions = await fetchUserPermissions(dbAdapter, {
@@ -129,6 +159,11 @@ export function multiRealmAuthorization({
         publishedRealmURLs,
       );
 
+      // Authentication comes before authorization, and a request that named
+      // nobody is told to say who it is rather than answered for nobody. A
+      // policy grants by who is asking, so there is no grant for this request
+      // to be judged by either — which is why this refuses where an
+      // authenticated caller without permission does not.
       let realmsRequiringAuth = realmList.filter(
         (realmURL) => !readableRealms.has(realmURL),
       );
@@ -156,6 +191,7 @@ export function multiRealmAuthorization({
         throw e;
       }
 
+      user = token.user;
       let permissionsForAllRealms = await fetchUserPermissions(dbAdapter, {
         userId: token.user,
         onlyOwnRealms: false,
@@ -168,7 +204,7 @@ export function multiRealmAuthorization({
       let unauthorizedRealms = realmList.filter(
         (realmURL) => !readableRealms.has(realmURL),
       );
-      if (unauthorizedRealms.length > 0) {
+      if (unreadableRealms === 'refuse' && unauthorizedRealms.length > 0) {
         await sendResponseForForbiddenRequest(
           ctxt,
           `Insufficient permissions to read realms: ${unauthorizedRealms.join(
@@ -179,8 +215,29 @@ export function multiRealmAuthorization({
       }
     }
 
+    // A realm the caller may not read is carried forward rather than refused.
+    // Its rows are then whatever its own policy grants this caller, which is
+    // commonly none — and a realm contributing no rows does not refuse the
+    // realms alongside it. A verified caller therefore never has one realm's
+    // permissions decide the answer for another's.
+    //
+    // An archived realm is not one of them. Archiving a realm is what takes
+    // every caller's permission on it away, so it is unreadable to everyone,
+    // and it stays sealed whatever its policy says: nothing is served from an
+    // archived realm to anyone.
+    let readable = realmList.filter((realmURL) => readableRealms.has(realmURL));
+    let unreadable = realmList.filter(
+      (realmURL) => !readableRealms.has(realmURL),
+    );
+    let archived = await archivedRealmURLs(dbAdapter, unreadable);
+    let grantCandidates = unreadable.filter(
+      (realmURL) => !archived.has(realmURL),
+    );
+
     (ctxt.state as Record<string, unknown>)[MULTI_REALM_AUTH_STATE] = {
-      realmList,
+      realmList: readable,
+      grantCandidates,
+      ...(user === undefined ? {} : { user }),
     } satisfies MultiRealmAuthorizationState;
 
     await next();

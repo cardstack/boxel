@@ -2041,6 +2041,34 @@ export default class RenderRoute extends Route<Model> {
     this.#windowListenersAttached = false;
   }
 
+  // The markers `#ensurePrerenderElements` mints when no render template put
+  // them on the page. A container it creates hangs off `document.body`,
+  // outside the application's root element, so tearing the app down leaves it
+  // behind; they're removed when this route is destroyed instead. Outside
+  // tests the route lives as long as the page, so this changes nothing there.
+  // In a host test run one page hosts every test's app, and a leftover
+  // `[data-prerender-error]` would answer the next test's query for one.
+  #createdPrerenderElements: HTMLElement[] = [];
+  #createdPrerenderElementsDestructorRegistered = false;
+
+  #trackCreatedPrerenderElement(element: HTMLElement) {
+    this.#createdPrerenderElements.push(element);
+    if (
+      this.#createdPrerenderElementsDestructorRegistered ||
+      this.isDestroying ||
+      this.isDestroyed
+    ) {
+      return;
+    }
+    this.#createdPrerenderElementsDestructorRegistered = true;
+    registerDestructor(this, () => {
+      for (let element of this.#createdPrerenderElements) {
+        element.remove();
+      }
+      this.#createdPrerenderElements = [];
+    });
+  }
+
   #ensurePrerenderElements(): {
     container: HTMLElement | null;
     errorElement: HTMLElement | null;
@@ -2055,6 +2083,7 @@ export default class RenderRoute extends Route<Model> {
       container = document.createElement('div');
       container.setAttribute('data-prerender', '');
       document.body.appendChild(container);
+      this.#trackCreatedPrerenderElement(container);
     }
     let errorElement = document.querySelector(
       '[data-prerender-error]',
@@ -2063,6 +2092,7 @@ export default class RenderRoute extends Route<Model> {
       errorElement = document.createElement('pre');
       errorElement.setAttribute('data-prerender-error', '');
       container.appendChild(errorElement);
+      this.#trackCreatedPrerenderElement(errorElement);
     }
     return { container, errorElement };
   }

@@ -360,6 +360,7 @@ export default class SearchSheet extends Component<Signature> {
               @handleSelect={{this.handleCardSelect}}
               @adorn={{true}}
               @mainSearchResource={{this.searchSheetState.mainSearch}}
+              @mainSearchQuery={{this.searchSheetState.mainQuery}}
               @viewId={{this.searchSheetState.activeViewId}}
               @onViewIdChange={{this.handleViewIdChange}}
               @pagination={{this.searchSheetState.pagination}}

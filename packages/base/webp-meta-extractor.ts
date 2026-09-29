@@ -163,3 +163,27 @@ export function extractWebpColorProfile(
     iccProfile,
   });
 }
+
+// Only the extended flavor can animate: a `VP8 ` or `VP8L` first chunk is a
+// single bitstream, while `VP8X` declares an animation (a following `ANIM`
+// chunk and `ANMF` frames) with bit 1 of its flags byte.
+const VP8X_ANIMATION_FLAG = 0x02;
+
+export function extractWebpAnimated(bytes: Uint8Array): boolean | undefined {
+  if (bytes.length < 16) {
+    return undefined;
+  }
+  let chunkFourCC = String.fromCharCode(
+    bytes[12]!,
+    bytes[13]!,
+    bytes[14]!,
+    bytes[15]!,
+  );
+  if (chunkFourCC === 'VP8 ' || chunkFourCC === 'VP8L') {
+    return false;
+  }
+  if (chunkFourCC === 'VP8X' && bytes.length > VP8X_FLAGS_OFFSET) {
+    return (bytes[VP8X_FLAGS_OFFSET]! & VP8X_ANIMATION_FLAG) !== 0;
+  }
+  return undefined;
+}

@@ -1,4 +1,6 @@
 import { ImageDef, contains, field } from './card-api';
+import enumField from './enum';
+import StringField from './string';
 import type { ScreenshotSpec } from './card-api';
 import { IMAGE_RENDITION_SCREENSHOTS } from './file-formats/image-captures';
 import {
@@ -23,6 +25,9 @@ export default ImageDef;
 // reaches lands in the dependency graph of every card in every realm. Attaching
 // image metadata one level down means only realms that actually hold image
 // files pay for the metadata field modules.
+export type ImageAnimation = 'animated' | 'still';
+const ANIMATION_VALUES: ImageAnimation[] = ['animated', 'still'];
+
 export class RasterImageDef extends ImageDef {
   static displayName = 'Raster Image';
 
@@ -30,7 +35,7 @@ export class RasterImageDef extends ImageDef {
   // `getScreenshots`. Declared here and not on `ImageDef` so vectors never
   // pay for them: srcset excludes SVG, and class placement is the only
   // exclusion lever the declaration system offers. See `image-captures` for
-  // the boxes and the GIF residual.
+  // the boxes and the animated-file residual.
   static screenshots: Record<string, ScreenshotSpec> =
     IMAGE_RENDITION_SCREENSHOTS;
 
@@ -43,6 +48,17 @@ export class RasterImageDef extends ImageDef {
   // `ExifMetadataField` for why this is a sibling of `exif` rather than nested
   // inside it.
   @field colorProfile = contains(ColorProfileField);
+
+  // Whether the file holds more than one frame, read from the container:
+  // `'animated'` or `'still'`. A rendition is a still of the first frame, so
+  // `ImagePreview` offers srcset only where this rules animation out. Empty
+  // when the format's reader couldn't tell within its read window, or when the
+  // row predates the field. A string rather than a BooleanField because
+  // BooleanField reads and serializes an unset value as `false`, which would
+  // turn "unknown" into "still".
+  @field animation = contains(
+    enumField(StringField, { options: ANIMATION_VALUES }),
+  );
 }
 
 // A `CodedValueField` as it arrives over the wire: the format's own code plus
@@ -64,23 +80,26 @@ export interface SerializedColorProfile extends Omit<
 }
 
 // The attributes a raster subclass's `extractAttributes` adds on top of the base
-// file identity and dimensions. Both are plain nested objects, which is how a
-// contained FieldDef arrives over the wire.
+// file identity and dimensions. The two metadata groups are plain nested
+// objects, which is how a contained FieldDef arrives over the wire.
 export interface RasterImageAttributes {
   exif?: { capture?: ExifCapture; location?: ExifLocation };
   colorProfile?: SerializedColorProfile;
+  animation?: ImageAnimation;
 }
 
-// Assemble the two metadata attributes from whatever the format's readers could
-// determine, and omit either one entirely when they determined nothing — an
+// Assemble the metadata attributes from whatever the format's readers could
+// determine, and omit each one entirely when they determined nothing — an
 // image with no EXIF and an unreadable header should add no attributes rather
-// than empty ones.
+// than empty ones. Animation follows the same rule: a still is a finding and is
+// kept, while an undetermined answer adds nothing.
 //
 // EXIF's `ColorSpace` tag is folded in only as a fallback: the container header
 // is the better authority, so it wins wherever it spoke.
 export function rasterImageAttributes(
   exif: ExifMetadata | undefined,
   colorProfile: ImageColorProfile | undefined,
+  animated?: boolean,
 ): RasterImageAttributes {
   let { colorSpace: exifColorSpace, ...cameraFacts } = exif ?? {};
   let { colorSpace: headerColorSpace, ...pixelFacts } = colorProfile ?? {};
@@ -99,6 +118,9 @@ export function rasterImageAttributes(
               : {}),
           },
         }
+      : {}),
+    ...(animated !== undefined
+      ? { animation: animated ? 'animated' : 'still' }
       : {}),
   };
 }

@@ -316,10 +316,13 @@ export const localBaseRealm = isEnvironmentMode()
   : 'http://localhost:4201/base';
 // The catalog realm the test stack serves: the pinned catalog test subset
 // (packages/catalog/test-subset.json), at the URL the prerender host bundle
-// resolves `@cardstack/catalog/` to.
+// resolves `@cardstack/catalog/` to. The stack serves it over TLS, and an
+// http URL for it answers with a redirect that a module load in the
+// prerenderer cannot follow, so a definition the realm looks up in a catalog
+// module would never load.
 export const localCatalogRealm = isEnvironmentMode()
   ? `${serviceURL('realm-server')}/catalog/`
-  : 'http://localhost:4201/catalog/';
+  : 'https://localhost:4201/catalog/';
 export const matrixURL = new URL(
   isEnvironmentMode() ? serviceURL('matrix') : 'http://localhost:8008',
 );
@@ -1332,6 +1335,7 @@ export async function createRealm({
   videoSizeLimitBytes,
   transpileCoordinator,
   fullIndexOnStartup,
+  skipBootIndex,
   mediaCacheAdapter,
   screenshotSyncWaitMs,
   readIndexDrainBudgetMs,
@@ -1367,6 +1371,11 @@ export async function createRealm({
   // Production sets this via `resolveFullIndexOnStartup`; tests opt in
   // explicitly because `createRealm` has no realm-registry row to read.
   fullIndexOnStartup?: true;
+  // Forwarded to the Realm constructor's `skipBootIndex` option: the realm
+  // mounts and serves without indexing, as the dev realm server's realms do on
+  // the realm-server test stack, which starts it with
+  // `REALM_SERVER_SKIP_BOOT_INDEX=true`.
+  skipBootIndex?: true;
   // if you are creating a realm  to test it directly without a server, you can
   // also specify `withWorker: true` to also include a worker with your realm
   withWorker?: true;
@@ -1471,6 +1480,7 @@ export async function createRealm({
     },
     {
       ...(fullIndexOnStartup ? { fullIndexOnStartup: true as const } : {}),
+      ...(skipBootIndex ? { skipBootIndex: true as const } : {}),
       ...(screenshotSyncWaitMs !== undefined ? { screenshotSyncWaitMs } : {}),
       ...(linkShapePolicy ? { linkShapePolicy } : {}),
       ...(readIndexDrainBudgetMs !== undefined
@@ -2169,15 +2179,11 @@ export function setupMatrixRoom(
 
   return {
     matrixClient,
+    // Every event the room received at or after `since`, however many that
+    // is. The comparison is inclusive so an event sent in the same millisecond
+    // the caller recorded its start time still counts.
     getMessagesSince: async function (since: number) {
-      let allMessages = await matrixClient.roomMessages(testAuthRoomId!);
-      // Allow same-ms clock values between the test process and matrix so we don't
-      // miss events that are emitted immediately after we record the start time.
-      let messagesAfterSentinel = allMessages.filter(
-        (m) => m.origin_server_ts >= since,
-      );
-
-      return messagesAfterSentinel;
+      return await matrixClient.roomMessagesSince(testAuthRoomId!, since);
     },
   };
 }

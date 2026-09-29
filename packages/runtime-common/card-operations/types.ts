@@ -69,6 +69,18 @@ export interface OperationQueryTemplate extends Omit<
   filter?: OperationQueryFilterTemplate;
 }
 
+// The members that make a search request a named one: the declared query
+// operation to run, the type it is invoked on, and the params to fill it
+// with. The realm resolves the query from its own definition of that type, so
+// a request carrying these is answered with the declaration's query whatever
+// else the request carries — see `resolveNamedQuery`.
+export interface NamedQueryInvocation {
+  operation: string;
+  // A declaration the type inherits resolves the same as its own.
+  on: CodeRef;
+  params?: Record<string, unknown>;
+}
+
 export type OperationQueryFilterTemplate = Omit<
   SearchEntryWireFilter,
   'any' | 'every' | 'not' | 'matches'
@@ -141,6 +153,16 @@ export interface OperationDefinition {
   // recorded reports. A definition-cache entry is rebuilt on demand, so such
   // an entry is replaced rather than corrected.
   readsActor?: true;
+  // Whether a realm's policy may grant this operation. Set, it may not: the
+  // operation is invocable only by a caller the realm's own ACL allows,
+  // whatever any policy says. It marks the operations that edit or disclose
+  // authorization itself, since a grant that reached one could widen every
+  // other grant.
+  //
+  // Absent means grantable, which is what every operation is unless its
+  // declaration asks otherwise, and what a built-in behavior nothing declared
+  // reports.
+  nonGrantable?: true;
   // Set when lowering found problems. The operation is stored either way, so
   // invoking it reports what is wrong with it rather than "unknown
   // operation".
@@ -218,6 +240,9 @@ export type OperationLoweringIssueCode =
   // entry — where appending nothing, or a literal `null`, is worse than
   // refusing.
   | 'incomplete-append'
+  // Lowering itself failed on this operation, rather than finding something
+  // wrong with it. The entry is stored as invalid so that invoking it says so.
+  | 'lowering-failed'
   // An `instance(…)` inside an `appendContainsMany` item. An append edits the
   // card's stored bytes without ever assembling its document, which is the
   // whole reason the behavior exists, so the card's own values are not there
@@ -643,7 +668,9 @@ export type OperationErrorCode =
   // The realm ACL declined the caller, and no grant in the realm's policy
   // admits this operation on this target. The detail is the same whether the
   // target exists or not, and whatever the policy holds, so the refusal says
-  // nothing about the realm beyond the fact of the refusal.
+  // nothing about the realm beyond the fact of the refusal. It reaches the
+  // wire only for a caller who may read the realm: one who may not is told
+  // `target-not-found` instead (see `refusalForNonReader`).
   | 'operation-not-permitted'
   // The bytes an operation would store are over the realm's ceiling for a
   // card or a file of that kind. Separate from `invalid-params` because the
@@ -702,4 +729,36 @@ export class OperationFailure extends Error {
 
 export function isOperationFailure(err: unknown): err is OperationFailure {
   return err instanceof OperationFailure;
+}
+
+// A refusal as a caller the realm ACL would not let read the realm is told it.
+//
+// Such a caller is not told which cards exist. A card no grant admits and a
+// card that is not there get one answer, the same byte for byte: the same
+// code, title and detail, and no `id` or `meta` beyond the entry position the
+// caller sent. The places that raise `target-not-found` write their details for
+// someone debugging the realm, and those details differ with where the absence
+// was noticed. So they are replaced here, where a refusal is serialized, rather
+// than flattened where each is raised. A caller who may read the realm can list
+// it anyway, so they get every detail, and the gate's own refusal as a 403.
+//
+// A refusal of any other kind passes through. Such a caller is refused, as
+// the target is resolved, every invocation the gate did not admit outright, a
+// write whose predicate is still to run included. So nothing past that point
+// is about a target they were not admitted to.
+export function refusalForNonReader(error: OperationError): OperationError {
+  if (
+    error.code !== 'target-not-found' &&
+    error.code !== 'operation-not-permitted'
+  ) {
+    return error;
+  }
+  let entry = error.meta?.entry;
+  return {
+    status: 404,
+    code: 'target-not-found',
+    title: 'Not found',
+    detail: 'no such target',
+    ...(entry !== undefined ? { meta: { entry } } : {}),
+  };
 }

@@ -12,7 +12,10 @@ import pluralize from 'pluralize';
 import { Button, GridContainer } from '@cardstack/boxel-ui/components';
 import { cn, eq, type FittedFormatId } from '@cardstack/boxel-ui/helpers';
 
-import type { CodeRef } from '@cardstack/runtime-common';
+import type {
+  CodeRef,
+  RenderableSearchEntryLike,
+} from '@cardstack/runtime-common';
 
 import { urlForRealmLookup } from '@cardstack/host/lib/utils';
 import type RealmService from '@cardstack/host/services/realm';
@@ -33,7 +36,10 @@ import {
 
 import { SECTION_SHOW_MORE_INCREMENT } from './constants';
 import ResultTile from './result-tile';
+
 import SearchSheetSectionHeader from './section-header';
+
+import type { RealmSectionPager } from './realm-section-pager';
 
 import type { ModifierLike } from '@glint/template';
 
@@ -79,6 +85,9 @@ interface Signature {
     onFocusSection?: (sectionId: string | null) => void;
     getDisplayedCount?: (sectionId: string, totalCount: number) => number;
     onShowMore?: (sectionId: string, totalCount: number) => void;
+    // Loads a realm section's rows past the first page the main search
+    // returned.
+    pager?: RealmSectionPager;
     selectedCards?: (string | NewCardArgs)[];
     multiSelect?: boolean;
     offerToCreate?: {
@@ -118,6 +127,20 @@ export default class ResultSection extends Component<Signature> {
   @service declare realm: RealmService;
 
   recentsIcon = HistoryIcon;
+
+  private get loadedRealmCards(): RenderableSearchEntryLike[] {
+    const section = this.realmSection;
+    if (!section) return [];
+    return this.args.pager?.cards ?? section.cards;
+  }
+
+  get isLoadingMore(): boolean {
+    return this.args.pager?.isLoading ?? false;
+  }
+
+  get loadMoreFailed(): boolean {
+    return this.args.pager?.failed ?? false;
+  }
 
   get realmSection(): RealmSection | null {
     return this.args.section.type === 'realm' ? this.args.section : null;
@@ -176,6 +199,10 @@ export default class ResultSection extends Component<Signature> {
 
   @action
   handleShowMore(totalCount: number) {
+    if (this.loadMoreFailed) {
+      this.args.pager?.retry();
+      return;
+    }
     const sid = this.args.section.sid;
     const onShowMore = this.args.onShowMore;
     if (sid && onShowMore) {
@@ -190,7 +217,7 @@ export default class ResultSection extends Component<Signature> {
     const getDisplayedCount = this.args.getDisplayedCount;
     if (!sid || !getDisplayedCount) return section.cards;
     const limit = getDisplayedCount(sid, section.totalCount);
-    return section.cards.slice(0, limit);
+    return this.loadedRealmCards.slice(0, limit);
   }
 
   get displayedRecentsCards() {
@@ -277,7 +304,7 @@ export default class ResultSection extends Component<Signature> {
   }
 
   get displayShowMore() {
-    return this.hasMoreCards && !this.args.isCompact;
+    return (this.hasMoreCards || this.loadMoreFailed) && !this.args.isCompact;
   }
 
   showCreateForRealm = (realmUrl: string): boolean => {
@@ -400,16 +427,23 @@ export default class ResultSection extends Component<Signature> {
             class='show-more'
             @kind='secondary-light'
             @size='small'
+            @loading={{this.isLoadingMore}}
+            @disabled={{this.isLoadingMore}}
             {{on 'click' (fn this.handleShowMore this.realmSection.totalCount)}}
             data-test-search-sheet-show-more
             data-test-show-more-cards
+            data-test-show-more-failed={{if this.loadMoreFailed 'true'}}
           >
-            Show
-            {{this.nextShowMoreCount}}
-            more
-            {{pluralize 'result' this.nextShowMoreCount}}
-            ({{this.remainingCount}}
-            not shown)
+            {{#if this.loadMoreFailed}}
+              Could not load more results. Retry
+            {{else}}
+              Show
+              {{this.nextShowMoreCount}}
+              more
+              {{pluralize 'result' this.nextShowMoreCount}}
+              ({{this.remainingCount}}
+              not shown)
+            {{/if}}
           </Button>
         {{/if}}
       {{else if this.urlSection}}
