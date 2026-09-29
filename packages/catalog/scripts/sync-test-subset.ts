@@ -535,6 +535,26 @@ function bump(manifest: Manifest) {
   return { ...manifest, revision: sha };
 }
 
+// For a commit main does not contain, GitHub lists only the open pull requests
+// that carry it. The lookup only enriches a failure message, so an error
+// answers no pull requests rather than masking that failure.
+async function pullRequestsFor(
+  manifest: Manifest,
+  headers: Record<string, string>,
+): Promise<string[]> {
+  let url = `https://api.github.com/repos/${manifest.repository}/commits/${manifest.revision}/pulls`;
+  try {
+    let response = await fetch(url, { headers });
+    if (!response.ok) {
+      return [];
+    }
+    let prs = (await response.json()) as { html_url: string }[];
+    return prs.map((pr) => pr.html_url);
+  } catch {
+    return [];
+  }
+}
+
 // The deployed catalog realm serves boxel-catalog's main, so a pin that main
 // does not contain describes definitions no deployment has. A pin that main
 // contains can still be behind it: once main changes a subset file, boxel's
@@ -554,8 +574,10 @@ async function checkPin(manifest: Manifest) {
   }
   let { status } = (await response.json()) as { status: string };
   if (status !== 'behind' && status !== 'identical') {
+    let prs = await pullRequestsFor(manifest, headers);
     fail(
       `${manifest.revision} is not on ${manifest.repository} main (compare status "${status}"). ` +
+        (prs.length ? `It is in ${prs.join(', ')}. ` : '') +
         `Merge the catalog change first, then re-pin to a commit on main (pnpm catalog:test-subset --bump).`,
     );
   }
