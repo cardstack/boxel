@@ -15,6 +15,7 @@ import {
   GATE_REFUSED,
   gateOperation,
   gateRefusal,
+  leavesToLock,
   loadPolicy,
   type GateSubject,
   notPermitted,
@@ -622,10 +623,11 @@ function own<T>(
 // is in the index, the built-in behavior does not consult its definition, and
 // refusing here would make a broken module's cards unreadable.
 //
-// A write the gate could only admit on a predicate is refused here. Its
-// predicate has to be evaluated under the write lock, and a caller resolving
-// through here holds no lock and carries no pending decision to one. A caller
-// that does takes the decision from `resolveGatedOperation` instead.
+// A write the gate left anything for the write lock to decide is refused
+// here: one it could only admit on a predicate, and one to a stored card,
+// whose type the lock judges again from its bytes. A caller resolving through
+// here holds no lock and carries no pending decision to one. A caller that
+// does takes the decision from `resolveGatedOperation` instead.
 export async function resolveOperation(
   core: OperationCore,
   target: OperationTarget,
@@ -638,7 +640,7 @@ export async function resolveOperation(
     name,
     scope,
   );
-  if (decision.kind === 'pending') {
+  if (leavesToLock(decision)) {
     throw notPermitted(target, name);
   }
   return definition;
