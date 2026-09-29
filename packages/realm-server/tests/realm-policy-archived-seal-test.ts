@@ -589,8 +589,10 @@ module(basename(import.meta.filename), function (hooks) {
   test('a card+json write refused before it would run is refused as it is while the realm is active', async function (assert) {
     // Each is a write the teacher's grants would admit, refused before the
     // gate's decision is acted on: a body that is not a card document, a
-    // side-load no grant on the classroom reaches, and a create naming the
-    // type it mints by a module relative to a card not stored yet.
+    // side-load no grant on the card it rides with reaches, and a create naming
+    // the type it mints by a module relative to a card not stored yet. The
+    // side-loading create is one a grant admits outright, which would meet the
+    // seal if the seal came before the side-load check.
     let auth = bearer(TEACHER);
     const REFUSED: Record<string, () => Test> = {
       'a body that is not a card document': () =>
@@ -623,6 +625,29 @@ module(basename(import.meta.filename), function (hooks) {
             },
           ),
         ),
+      'a side-load on a create granted outright': () =>
+        createCard(
+          auth,
+          cardDocument(
+            BULLETIN,
+            { body: 'See the attached' },
+            {
+              included: [
+                {
+                  type: 'card',
+                  lid: 'b9',
+                  attributes: { body: 'Attached' },
+                  meta: {
+                    adoptsFrom: {
+                      module: rri(BULLETIN.module),
+                      name: 'Bulletin',
+                    },
+                  },
+                },
+              ],
+            },
+          ),
+        ),
       'a relative type': () =>
         createCard(
           auth,
@@ -643,7 +668,7 @@ module(basename(import.meta.filename), function (hooks) {
     }
     assert.deepEqual(
       Object.values(active).map((response) => response.status),
-      [400, 404, 400],
+      [400, 404, 404, 400],
       'while active, each is refused',
     );
 
@@ -655,6 +680,7 @@ module(basename(import.meta.filename), function (hooks) {
     await unarchiveRealm(db, new URL(EDUCATION));
     assert.strictEqual(await title(), 'Room 204', 'the classroom is untouched');
     assert.strictEqual(await minted(CLASSROOM), 0, 'and nothing was created');
+    assert.strictEqual(await minted(BULLETIN), 0, 'nor side-loaded');
   });
 
   test('a caller the ACL lets read meets the seal, whatever the policy grants them', async function (assert) {
