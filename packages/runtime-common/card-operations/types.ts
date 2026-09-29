@@ -447,6 +447,7 @@ const WRITES: Readonly<Record<BaseOperation, boolean>> = {
   transform: true,
   appendContainsMany: true,
   appendLine: true,
+  explain: false,
 };
 
 export function isWrite(base: BaseOperation): boolean {
@@ -478,6 +479,12 @@ export interface OperationRequest {
   params?: Record<string, unknown>;
   // The invoking user, as the identity `actor()` resolves to.
   actor: string;
+  // The invoking user as a session the realm vouched for end to end: not
+  // revoked, not delegated to one realm, not an assumed identity. Absent for
+  // anything less. `actor` is an identity to record and compare. This is the
+  // one to judge a caller by in another realm, which is what an explain does,
+  // and nothing else reads it.
+  principal?: string;
   // The caller's own id for this request. Echoed on the realm's index event so
   // a client can tell its own write's event from anyone else's, which is what
   // lets it retire the matching optimistic entry rather than reloading.
@@ -686,12 +693,148 @@ export interface OperationIdentityResult {
   };
 }
 
+// An explain's answer: what the policy gate of the target's realm decides for
+// the question it was asked, and why. It is carried on the wire as it is here,
+// so a card reading it back reads this shape.
+export interface OperationExplainResult {
+  explanation: PolicyExplanation;
+}
+
+// ============================================================================
+// What an explain says.
+//
+// A realm's policy widens what its ACL allows, and a policy wider than its
+// author meant produces no error anywhere: nothing fails, so nothing reports.
+// An explain is how a realm owner asks instead. Given an actor, a target and
+// an operation, it runs the target realm's policy gate exactly as an
+// invocation would, stops at the decision, and reports how the gate reached
+// it: whether the realm's ACL settled the question before any policy was
+// consulted, which of the policy's rules govern the target's type, what each
+// of their grants for the operation said, and what the gate decided.
+//
+// Nothing is invoked and nothing is written. The decision is the gate's own,
+// reached along the same code path, so an explain and the invocation it
+// describes agree for as long as nothing they read changes in between. A
+// write's predicate is the exception to "the same moment": an invocation
+// decides it under the write lock, and an explain against the card as it is
+// stored now, which is the card the lock would hold if no other write landed
+// first.
+// ============================================================================
+
+export interface PolicyExplanation {
+  // The question, as the realm read it. `actor` is null for a caller who
+  // presents no credentials, and `target` is the card's URL.
+  actor: string | null;
+  target: string;
+  operation: string;
+  // What the target realm's own ACL allows the actor. Where it allows the
+  // lane the operation is in, the policy is never consulted, and `rules` is
+  // empty.
+  acl: { read: boolean; write: boolean };
+  decision: PolicyExplanationDecision;
+  reason: PolicyExplanationReason;
+  // The refusal the invocation would answer the actor with, exactly as the
+  // actor would receive it: a 404 for an actor who may not read the target's
+  // realm, whatever the reason, and the reason's own status and code for one
+  // who may. Absent where the invocation would be admitted.
+  refusal?: { status: number; code: OperationErrorCode };
+  // Every rule whose `targetType` is the target's type or one it descends
+  // from, in the order the policy lists them, each with the grants in it that
+  // name the operation. A rule governing the type with no grant for the
+  // operation is here with no grants, since that is what an author looking
+  // for the missing grant needs to see.
+  rules: ExplainedRule[];
+  // The grant that admitted the invocation, where one did: its position in
+  // `rules`, and in that rule's `grants`.
+  admittedBy?: { rule: number; grant: number };
+}
+
+export type PolicyExplanationDecision =
+  // The invocation would be admitted. It can still refuse for reasons of its
+  // own, which are no part of authorization: a param it was not sent, an
+  // assertion the card does not satisfy.
+  | 'allowed'
+  // The invocation would be refused.
+  | 'denied'
+  // Deciding it fails: the policy would not load, or a predicate threw. The
+  // invocation would be refused with a 500, and so would every other
+  // invocation that reached the same fault.
+  | 'failed';
+
+export type PolicyExplanationReason =
+  // The realm's ACL allows the actor this operation's lane, so the policy is
+  // not consulted.
+  | 'acl'
+  // A grant admits it: one with no condition, or one whose predicate held.
+  | 'granted'
+  // No rule governing the target's type has a grant for the operation.
+  | 'no-grant'
+  // Grants for the operation matched, and none of their predicates held.
+  | 'predicate-false'
+  // A predicate threw. Grants union, so this is the answer only where no
+  // other matching grant held.
+  | 'predicate-threw'
+  // The operation is kept out of every policy's reach: declared
+  // `nonGrantable` on the target's type or a type it descends from, or a
+  // behavior no grant reaches here at all — a query, which is authorized on
+  // the search engine's lane, and an explain.
+  | 'non-grantable'
+  // A write to the realm's policy card or to its config card, or a write that
+  // changes or mints any policy card, which no grant reaches whatever the
+  // card's type declares.
+  | 'authorization-infrastructure'
+  // The target is nothing a rule can be matched against for this operation:
+  // a card whose index row records an error, so its type is unknown; a file,
+  // for anything but a read of its stored bytes; or stored bytes with no type
+  // to match, which is what module source and an empty path are.
+  | 'unmatchable-target'
+  // The operation is not one the target carries: resolving it refused before
+  // the policy could be consulted. `refusal` says how.
+  | 'not-resolved'
+  // The actor presented no credentials, and the ACL does not allow an
+  // anonymous caller this lane. The policy admits only an authenticated
+  // caller, so the invocation is answered with a 401 before anything about
+  // the target is read.
+  | 'actor-required'
+  // The realm names a policy it cannot load.
+  | 'policy-unloadable';
+
+export interface ExplainedRule {
+  targetType: { module: string; name: string };
+  grants: ExplainedGrant[];
+}
+
+export interface ExplainedGrant {
+  // The predicate as the author wrote it. Absent for a grant with no
+  // condition.
+  where?: string;
+  // What the predicate reads. `stored` is the target's own stored source
+  // (tier 0): its scalars, contained values and relationship links, as fresh
+  // as the last write. `snapshot` is a predicate annotated as reading computed
+  // values or linked cards (tiers 1 and 2), which lag the index. The gate
+  // reads the stored source alone, so it never evaluates a `snapshot`
+  // predicate, and such a grant admits nothing.
+  tier?: 'stored' | 'snapshot';
+  outcome: ExplainedGrantOutcome;
+}
+
+export type ExplainedGrantOutcome =
+  // A grant with no condition. It admits the invocation outright.
+  | 'unconditional'
+  | 'held'
+  | 'did-not-hold'
+  | 'threw'
+  // The gate decided without evaluating it: an earlier grant admitted the
+  // invocation, a refusal came first, or the predicate reads a snapshot tier.
+  | 'not-evaluated';
+
 // A `delete` answers with `null`: there is no state left to describe.
 export type OperationResult =
   | OperationDocumentResult
   | OperationHeadResult
   | OperationIdentityResult
   | OperationSourceResult
+  | OperationExplainResult
   | null;
 
 export function isDocumentResult(
@@ -719,6 +862,12 @@ export function isSourceResult(
   result: OperationResult,
 ): result is OperationSourceResult {
   return result != null && 'contentType' in result;
+}
+
+export function isExplainResult(
+  result: OperationResult,
+): result is OperationExplainResult {
+  return result != null && 'explanation' in result;
 }
 
 export type OperationErrorCode =
@@ -777,6 +926,11 @@ export type OperationErrorCode =
   // wire only for a caller who may read the realm: one who may not is told
   // `target-not-found` instead (see `refusalForNonReader`).
   | 'operation-not-permitted'
+  // An explain was asked about a target whose realm does not name the policy
+  // card it was invoked on. The card governs nothing there, so there is
+  // nothing for it to explain: the explain belongs on the card that realm's
+  // `policy` key names.
+  | 'policy-not-in-force'
   // The bytes an operation would store are over the realm's ceiling for a
   // card or a file of that kind. Separate from `invalid-params` because the
   // payload is well formed and the remedy is to send less of it, and because

@@ -3,6 +3,7 @@ import { RealmPaths, type LocalPath } from '../paths.ts';
 import {
   OperationFailure,
   isDocumentResult,
+  isExplainResult,
   isOperationFailure,
   isWrite,
   type BaseOperation,
@@ -1145,10 +1146,16 @@ export function projectedResult(
   return projection as Record<string, unknown>;
 }
 
+// An entry that does not write answers with what it read: a read with its
+// document, and an explain with its explanation, as the object a card reads
+// back.
 export function readResult(
   entry: EnvelopeEntry,
   result: OperationResult,
 ): EnvelopeResult {
+  if (isExplainResult(result)) {
+    return result.explanation as unknown as Record<string, unknown>;
+  }
   if (!isDocumentResult(result)) {
     throw new OperationFailure({
       ...(entry.href ? { id: entry.href } : {}),
