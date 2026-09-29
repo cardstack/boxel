@@ -5674,8 +5674,11 @@ export class Realm {
       // the realm gives while active. So is the answer for a batch holding a
       // write the gate left to a predicate that would not admit it: the seal
       // is a failure ahead of the lock like any other, and the catch below
-      // answers it with that write's refusal, as it would any of them.
-      if (requestContext.archivedSeal) {
+      // answers it with that write's refusal, as it would any of them. A
+      // create against a type is among those, since the card its predicate
+      // judges does not exist until the batch stages it. A batch with no
+      // entries runs nothing, and is answered as it is while active.
+      if (requestContext.archivedSeal && resolved.length > 0) {
         throw requestContext.archivedSeal;
       }
 
@@ -6015,17 +6018,23 @@ export class Realm {
       let { actor } = this.#callerOf(request, requestContext);
       let lanes = await this.#capabilityLanes(request, requestContext);
       let { coarseDeclined } = lanes;
-      let answers = await checkCapabilities(this.operationCore, checks, {
-        caller: scopeCallerFor(actor),
-        ...lanes,
-      });
+      let { answers, admitsAny } = await checkCapabilities(
+        this.operationCore,
+        checks,
+        {
+          caller: scopeCallerFor(actor),
+          ...lanes,
+        },
+      );
       // An archived realm answers a caller it reaches only through its policy
-      // with its seal where the check would tell them a grant admits them to
-      // something, and with the answers themselves, every one a denial,
-      // where it would not, as it does while active. A check runs nothing, so
-      // the answers are all there is to decide it by.
+      // with its seal where the gate admits them to one of the pairs, and
+      // with the answers themselves where it admits them to none, as it does
+      // while active. A pair answered `true` on a predicate the check cannot
+      // run, a create against a type, is not one it admits: the predicate may
+      // never hold for this caller. A check runs nothing, so what the gate
+      // decided about its pairs is all there is to decide it by.
       let seal = requestContext.archivedSeal;
-      if (seal && answers.some((answer) => answer.allowed)) {
+      if (seal && admitsAny) {
         throw seal;
       }
       emitCapabilityCheck({
@@ -7188,8 +7197,9 @@ export class Realm {
 
   // Whether a request the realm ACL refused is admitted anyway by a route
   // that consumes the ACL's outcome. This is the single point where a request
-  // the ACL declined could be admitted, and anything admitted here still meets
-  // the archived seal.
+  // the ACL declined could be admitted, and anything admitted here meets the
+  // archived seal where its route would run something a grant admits (see
+  // `APPLIES_ARCHIVED_SEAL`).
   //
   // Admitted means handed to the policy gate, not granted: every operation a
   // consuming route resolves for this request is resolved with the ACL's

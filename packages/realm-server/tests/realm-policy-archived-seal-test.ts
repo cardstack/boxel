@@ -86,9 +86,9 @@ const BULLETIN_MODULE = `
 
 // Every classroom grant rests on the one predicate, so a caller who teaches no
 // classroom is matched by each grant's type and admitted by none of them. A
-// create's predicate reads the card it would mint. A bulletin's writes are
-// granted outright, to every caller the policy judges, and only the requests
-// that say so touch a bulletin.
+// create's predicate reads the classroom it would mint. A bulletin's writes
+// are granted outright, to every caller the policy judges, and only the
+// requests that say so touch a bulletin.
 const POLICY = JSON.stringify({
   data: {
     type: 'card',
@@ -253,12 +253,26 @@ module(basename(import.meta.filename), function (hooks) {
     'an ad-hoc search': (auth) =>
       search(auth, { filter: { 'item.on': CLASSROOM } }),
     'a batch that reads': (auth) =>
-      operations(auth, 'QUERY', { 'boxel:name': 'read' }),
+      operations(auth, 'QUERY', { 'boxel:name': 'read', href: ROOM_204 }),
     'a batch that writes': (auth) =>
       operations(auth, 'POST', {
         'boxel:name': 'rename',
+        href: ROOM_204,
         data: { title: 'Renamed' },
       }),
+    // A classroom the teacher teaches, which a stranger's grant does not admit.
+    'a batch that creates': (auth) =>
+      operations(auth, 'POST', {
+        'boxel:name': 'create',
+        data: {
+          type: 'card',
+          attributes: { title: 'Room 301', teacherIds: [TEACHER] },
+          meta: {
+            adoptsFrom: { module: rri(CLASSROOM.module), name: 'Classroom' },
+          },
+        },
+      }),
+    'an empty batch': (auth) => operations(auth, 'POST'),
     'a capability check': (auth) =>
       request
         .post('/education/_capabilities')
@@ -270,6 +284,7 @@ module(basename(import.meta.filename), function (hooks) {
             checks: [
               { target: ROOM_204, operation: 'read' },
               { target: ROOM_204, operation: 'rename' },
+              { target: CLASSROOM, operation: 'create' },
             ],
           }),
         ),
@@ -321,7 +336,7 @@ module(basename(import.meta.filename), function (hooks) {
   function operations(
     auth: string,
     method: 'POST' | 'QUERY',
-    entry: Record<string, unknown>,
+    entry?: Record<string, unknown>,
   ) {
     let req = request
       .post('/education/_operations')
@@ -333,7 +348,7 @@ module(basename(import.meta.filename), function (hooks) {
     }
     return req.send(
       JSON.stringify({
-        'boxel:operations': [{ op: 'invoke', href: ROOM_204, ...entry }],
+        'boxel:operations': entry ? [{ op: 'invoke', ...entry }] : [],
       }),
     );
   }
@@ -433,6 +448,23 @@ module(basename(import.meta.filename), function (hooks) {
       [],
       'while active, an ad-hoc search reaches no grant and has no rows',
     );
+    assert.strictEqual(
+      active['a batch that creates'].status,
+      404,
+      'while active, a create the grant does not admit is refused',
+    );
+    assert.strictEqual(
+      active['an empty batch'].status,
+      200,
+      'while active, an empty batch is a no-op',
+    );
+    assert.deepEqual(
+      JSON.parse(active['a capability check'].text).checks.map(
+        (answer: { allowed: boolean }) => answer.allowed,
+      ),
+      [false, false, true],
+      'while active, a create against the type answers true, since its predicate is still to run',
+    );
 
     await archiveRealm(db, new URL(EDUCATION));
     let archived = await answers(auth);
@@ -498,6 +530,23 @@ module(basename(import.meta.filename), function (hooks) {
       archived['a card+json create'],
       refusedCreate,
       'a card+json create',
+    );
+    assert.strictEqual(
+      archived['an empty batch'].status,
+      200,
+      'an empty batch runs nothing, so it is the no-op it is while active',
+    );
+    // What a create's predicate judges is the card it would mint, which does
+    // not exist until the batch stages it, and an archived realm stages
+    // nothing. So the create is refused as one no grant admits.
+    assert.strictEqual(
+      archived['a batch that creates'].status,
+      404,
+      'a create whose predicate reads the card it would mint is refused, not sealed',
+    );
+    assert.notOk(
+      archived['a batch that creates'].get('X-Boxel-Realm-Archived'),
+      'and the refusal is not the seal',
     );
 
     await unarchiveRealm(db, new URL(EDUCATION));

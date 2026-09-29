@@ -90,7 +90,7 @@ export async function checkCapabilities(
   core: OperationCore,
   checks: readonly CapabilityCheck[],
   who: CapabilityCaller,
-): Promise<CapabilityAnswer[]> {
+): Promise<CapabilityOutcome> {
   let scope = newOperationScope(core, {
     caller: who.caller,
     // A caller who may read the realm and whose writes are refused outright
@@ -114,44 +114,66 @@ export async function checkCapabilities(
   let outcomes = await settledWithin(STAGING_WIDTH, asked, ([, check]) =>
     decide(core, check, who, scope),
   );
-  let answers = new Map<string, CapabilityDecision>();
+  let decided = new Map<string, PairDecision>();
   asked.forEach(([key], index) => {
     let outcome = outcomes[index];
-    answers.set(
+    decided.set(
       key,
       outcome.status === 'fulfilled'
         ? outcome.value
         : // `decide` answers its own faults, so a rejection here is the check
           // itself failing rather than the gate refusing. Denied, like every
           // other way a decision cannot be reached.
-          { allowed: false },
+          { answer: { allowed: false }, admitted: false },
     );
   });
-  // The echo comes from the question this position asked, so two spellings of
-  // one target each answer in their own terms.
-  return checks.map((check, index) => ({
-    ...answers.get(keys[index])!,
-    operation: check.operation,
-    target: check.target,
-  }));
+  return {
+    // The echo comes from the question this position asked, so two spellings
+    // of one target each answer in their own terms.
+    answers: checks.map((check, index) => ({
+      ...decided.get(keys[index])!.answer,
+      operation: check.operation,
+      target: check.target,
+    })),
+    admitsAny: [...decided.values()].some(({ admitted }) => admitted),
+  };
+}
+
+// What a check answers, and whether the gate admitted any of its pairs
+// outright. A pair answered `true` on a predicate the check could not run is
+// not one it admitted: whether that grant would admit the caller is not known
+// until the call.
+export interface CapabilityOutcome {
+  answers: CapabilityAnswer[];
+  admitsAny: boolean;
 }
 
 // One answer without the question echoed back onto it, which is what the
 // positions do.
 type CapabilityDecision = Omit<CapabilityAnswer, 'operation' | 'target'>;
 
+// One pair's answer, and whether the gate admitted the pair outright rather
+// than leaving it to a predicate the check cannot run.
+interface PairDecision {
+  answer: CapabilityDecision;
+  admitted: boolean;
+}
+
 async function decide(
   core: OperationCore,
   check: CapabilityCheck,
   who: CapabilityCaller,
   scope: OperationScope,
-): Promise<CapabilityDecision> {
+): Promise<PairDecision> {
   // A non-reader is told one thing however the answer was reached, so the
   // reason is dropped rather than computed and discarded — and `conditional`
   // with it, since that would say a grant names the target's type.
   let bare = who.coarseDeclined === 'all';
-  let refused = (reason: OperationErrorCode): CapabilityDecision =>
-    bare ? { allowed: false } : { allowed: false, reason };
+  let refused = (reason: OperationErrorCode): PairDecision => ({
+    answer: bare ? { allowed: false } : { allowed: false, reason },
+    admitted: false,
+  });
+  let admitted: PairDecision = { answer: { allowed: true }, admitted: true };
   try {
     let target = targetFor(core, check.target);
     let { definition, decision } = await resolveGatedOperation(
@@ -164,7 +186,7 @@ async function decide(
       return refused(who.writesRefused);
     }
     if (decision.kind !== 'pending') {
-      return { allowed: true };
+      return admitted;
     }
     // A write the gate matched a grant for and left to its predicate. The
     // write lock decides it against the card as the lock holds it, and a
@@ -178,7 +200,7 @@ async function decide(
         decision,
         scope,
       }))
-        ? { allowed: true }
+        ? admitted
         : refused('operation-not-permitted');
     }
     // A create against a type is judged by the card it would mint, which does
@@ -188,7 +210,10 @@ async function decide(
     // showing, and what it reveals — that the realm's policy grants creates
     // of this type — is what the create itself would reveal, and is no answer
     // about which cards exist.
-    return bare ? { allowed: true } : { allowed: true, conditional: true };
+    return {
+      answer: bare ? { allowed: true } : { allowed: true, conditional: true },
+      admitted: false,
+    };
   } catch (e: unknown) {
     // Anything that is not a refusal is a fault rather than an answer, and the
     // check fails closed on it — one pair the realm could not decide, reported
