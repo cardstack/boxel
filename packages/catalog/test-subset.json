@@ -16,6 +16,7 @@
     "realmServer": [
       "catalog-test-subset-test",
       "realm-policy-activation-test",
+      "realm-policy-archived-seal-test",
       "realm-policy-capabilities-test",
       "realm-policy-card-write-test",
       "realm-policy-compile-test",
