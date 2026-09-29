@@ -6889,15 +6889,12 @@ export class Realm {
           );
         }
         // An admitted caller meets the archived seal where the realm would
-        // run something a grant admits them to, and nowhere before. So one no
+        // run something a grant admits them to, and nowhere before, so one no
         // grant admits gets the answer the realm gives them while it is
-        // active, which for a caller who may not read the realm says nothing
-        // about it. Where that point is depends on the route: a card read's is
-        // the gate's decision, a search's is its first row, and a batch's is
-        // the resolution of its every entry. A route that applies the seal
-        // itself is handed it; every other route is sealed here, as is a
-        // caller the ACL lets read the realm, who can learn it is archived
-        // from any read.
+        // active. Only the route knows where that point is, so a route that
+        // applies the seal itself (see `APPLIES_ARCHIVED_SEAL`) is handed it.
+        // Every other route seals the caller here, as does a caller the ACL
+        // lets read the realm, who can learn it is archived from any read.
         if (await this.#isSealed(localPath)) {
           let seal = new ArchivedRealmError(`Realm ${this.url} is archived`);
           if (

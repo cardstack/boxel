@@ -415,6 +415,37 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       );
     });
 
+    test('exactly the consuming routes that run what an admitted caller asks for apply the archived seal themselves', async function (assert) {
+      assert.deepEqual(
+        testRealm
+          .routeDescriptions()
+          .filter((route) => route.appliesArchivedSeal)
+          .map((route) => `${route.method} ${route.mimeType} ${route.path}`)
+          .sort(),
+        [
+          `GET ${SupportedMimeType.CardJson} /.*`,
+          `GET ${SupportedMimeType.CardJson} /_search`,
+          `QUERY ${SupportedMimeType.CardJson} /_search`,
+          `POST ${SupportedMimeType.BoxelOperations} /_operations`,
+          `POST ${SupportedMimeType.JSONAPI} /_operations`,
+          `POST ${SupportedMimeType.JSON} /_capabilities`,
+          `QUERY ${SupportedMimeType.BoxelOperations} /_operations`,
+          `QUERY ${SupportedMimeType.JSONAPI} /_operations`,
+        ].sort(),
+        'the card+json read, the search, the operations envelope and the capability check',
+      );
+      assert.deepEqual(
+        testRealm
+          .routeDescriptions()
+          .filter(
+            (route) =>
+              route.appliesArchivedSeal && !route.consumesCoarseOutcome,
+          ),
+        [],
+        'each of them consumes the ACL’s outcome',
+      );
+    });
+
     test('exactly the routes that serve code and the file tree are coarse-read-only', async function (assert) {
       assert.deepEqual(
         testRealm
@@ -482,15 +513,17 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
     });
 
     test('the search hands an admitted caller to the query lane, which a realm with no policy answers with no rows', async function (assert) {
-      testRealm.__testOnlySetCoarseAdmission(() => true);
-      try {
-        let response = await request
+      let search = () =>
+        request
           .post('/_search')
           .set('X-HTTP-Method-Override', 'QUERY')
           .set('Accept', SupportedMimeType.CardJson)
           .set('Content-Type', 'application/json')
           .set('Authorization', `Bearer ${createJWT(testRealm, 'stranger')}`)
           .send(JSON.stringify({ filter: { 'item.on': baseCardRef } }));
+      testRealm.__testOnlySetCoarseAdmission(() => true);
+      try {
+        let response = await search();
         assert.strictEqual(response.status, 200, 'admitting: status');
         assert.deepEqual(
           response.body.data,
@@ -501,17 +534,20 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
 
         await archiveRealm(dbAdapter, new URL(testRealm.url));
         try {
-          let sealed = await request
-            .post('/_search')
-            .set('X-HTTP-Method-Override', 'QUERY')
-            .set('Accept', SupportedMimeType.CardJson)
-            .set('Content-Type', 'application/json')
-            .set('Authorization', `Bearer ${createJWT(testRealm, 'stranger')}`)
-            .send('{}');
+          let archived = await search();
           assert.strictEqual(
-            sealed.get('X-Boxel-Realm-Archived'),
-            'true',
-            'admitting: an admitted search of an archived realm meets the seal',
+            archived.status,
+            response.status,
+            'admitting: an archived realm answers with the same status',
+          );
+          assert.strictEqual(
+            archived.text,
+            response.text,
+            'admitting: and the same body, since no grant admits the caller to a row',
+          );
+          assert.notOk(
+            archived.get('X-Boxel-Realm-Archived'),
+            'admitting: and nothing says the realm is archived',
           );
         } finally {
           await unarchiveRealm(dbAdapter, new URL(testRealm.url));
@@ -584,18 +620,22 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
 
         await archiveRealm(dbAdapter, new URL(testRealm.url));
         try {
-          let sealed = await request
+          let archived = await request
             .get('/person-1')
             .set('Accept', SupportedMimeType.CardJson);
           assert.strictEqual(
-            sealed.status,
-            403,
-            'admitting: an admitted read of an archived realm is refused',
+            archived.status,
+            card.status,
+            'admitting: an admitted read the gate refuses is refused in an archived realm as in an active one',
           );
           assert.strictEqual(
-            sealed.get('X-Boxel-Realm-Archived'),
-            'true',
-            'admitting: the refusal is the archived seal',
+            archived.text,
+            card.text,
+            'admitting: with the same body',
+          );
+          assert.notOk(
+            archived.get('X-Boxel-Realm-Archived'),
+            'admitting: and nothing says the realm is archived',
           );
         } finally {
           await unarchiveRealm(dbAdapter, new URL(testRealm.url));
