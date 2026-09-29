@@ -959,7 +959,11 @@ async function cardAdoptionChain(
 // Every grant for `name` in a rule whose type is in the target's adoption
 // chain. The index records that chain on the target's row, a type and every
 // type it descends from, so a rule on `CardDef` matches every card.
-async function matchingGrants(
+//
+// Exported for the query lane, which matches rules the same way against the
+// chain of the type a query names, and then reads the filter off each grant
+// rather than evaluating its predicate.
+export async function matchingGrants(
   policy: CompiledRealmPolicy,
   types: string[],
   name: string,
