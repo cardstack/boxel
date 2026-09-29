@@ -19,6 +19,10 @@ export {
   pendingWriteHolds,
   policyGateStats,
 } from './gate.ts';
+export { checkCapabilities, parseCapabilityChecks } from './capabilities.ts';
+export type { CapabilityCaller } from './capabilities.ts';
+export { CAPABILITY_CHECK_CAP } from './capability-wire.ts';
+export type { CapabilityAnswer, CapabilityCheck } from './capability-wire.ts';
 export { policyQueryScope } from './policy-query.ts';
 export type { PolicyQueryScope } from './policy-query.ts';
 export type {
@@ -100,10 +104,13 @@ export type {
 } from './executors.ts';
 export {
   OPERATIONS_CHANNEL,
+  emitCapabilityCheck,
   emitOperationPerf,
+  setCapabilityCheckSink,
   setOperationPerfSink,
 } from './telemetry.ts';
 export type {
+  CapabilityCheckEvent,
   OperationDiagnostics,
   OperationMissingRead,
   OperationMissingReason,
