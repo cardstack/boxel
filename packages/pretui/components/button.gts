@@ -45,7 +45,7 @@ const VARIANT_AXES: Record<string, [PretuiTone, PretuiAppearance]> =
       outlined: ['neutral', 'outlined'],
       subtle: ['neutral', 'plain'],
       filled: ['primary', 'accent'],
-      link: ['primary', 'plain'],
+      link: ['primary', 'link'],
     } as Record<string, [PretuiTone, PretuiAppearance]>,
   );
 

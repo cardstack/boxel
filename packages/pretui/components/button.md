@@ -69,7 +69,9 @@ shadcn CVA names and Aria pending flags.
 | `size=sm\|default\|lg\|icon\|icon-sm`                           | `s`/`m`/`l` + **IconButton** for icon sizes                   |
 | `isDisabled` / `disabled`                                       | @disabled — accept both                                       |
 | `isPending` / `loading` / `isLoading`                           | @busy — prefer Aria pending (keep focus) over native disabled |
-| `asChild`                                                       | yield or an anchor — do not port Slot                         |
+| `asChild` / `<a>` / `href`                                      | `@href` renders a real `<a>` — do not port Slot               |
+| `variant=link`                                                  | `@variant='link'` → primary × `link`; add `@href` to navigate |
+| `rounded-full` / `shape`                                        | `@shape='pill'` (`'rounded'` default, `'square'`)             |
 | `type=submit`                                                   | ...attributes, already wins                                   |
 
 - [x] Accept `sm`/`md`/`lg` as `@size` aliases.

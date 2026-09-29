@@ -265,6 +265,7 @@ module('Pretui | components/button', function (hooks) {
     await render(
       <template>
         <Button @variant='outline' data-test-outline>Outline</Button>
+        <Button @variant='link' data-test-variant-link>Link</Button>
         <Button @isDisabled={{true}} data-test-aria-disabled>Off</Button>
       </template>,
     );
@@ -274,6 +275,11 @@ module('Pretui | components/button', function (hooks) {
       outline.dataset['appearance'],
       'outlined',
       'outline → neutral × outlined',
+    );
+    assert.strictEqual(
+      btn('[data-test-variant-link]').dataset['appearance'],
+      'link',
+      'link → the link appearance',
     );
     assert.true(
       btn('[data-test-aria-disabled]').disabled,

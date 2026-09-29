@@ -205,8 +205,12 @@ export class ButtonGroup extends Component<ButtonGroupSignature> {
         }
         .pretui-btngroup[data-appearance='link'] :deep(.pretui-btn[data-appearance]) {
           --pretui-btn-text: var(--pretui-button-fg, var(--pretui-tone-ink));
-          padding-inline: 0;
           text-underline-offset: 0.2em;
+        }
+        /* a link-look Button sits flush with text on its own; in a group the
+           labels would run together, so it keeps Button's normal padding */
+        .pretui-btngroup :deep(.pretui-btn[data-appearance='link']) {
+          padding-inline: var(--pretui-button-px, 0.96em);
         }
         /* ── size inheritance: font-size only, Button's own em scale rides ── */
         .pretui-btngroup[data-size='xs'] :deep(.pretui-btn[data-size]) {
