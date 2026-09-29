@@ -335,8 +335,11 @@ module('Acceptance | workspace card | Library pages', function (hooks) {
   let { createAndJoinRoom } = mockMatrixUtils;
   let realm: Realm;
 
-  // One more page than the Library's 100-row page holds.
-  const NOTE_COUNT = 105;
+  // The Library pages this realm's index in steps of PAGE_SIZE, so a second,
+  // shorter page holds the notes past the first.
+  const PAGE_SIZE = 5;
+  const NOTE_COUNT = 7;
+  const LAST_NOTE = noteId(NOTE_COUNT);
   const GRID_ITEM = `${STACK} [data-test-cards-grid-cards] [data-test-cards-grid-item]`;
   const PAGINATION = `${STACK} [data-test-card-list-pagination]`;
 
@@ -364,11 +367,14 @@ module('Acceptance | workspace card | Library pages', function (hooks) {
       static displayName = 'Memo';
       @field cardTitle = contains(StringField);
     }
+    class PagedWorkspace extends Workspace {
+      static libraryPageSize = PAGE_SIZE;
+    }
 
     let notes: Record<string, InstanceType<typeof Note>> = {};
     for (let i = 1; i <= NOTE_COUNT; i++) {
       let n = String(i).padStart(3, '0');
-      notes[`Note/${n}.json`] = new Note({ cardTitle: `Note ${n}` });
+      notes[`${noteId(i)}.json`] = new Note({ cardTitle: `Note ${n}` });
     }
 
     ({ realm } = await setupAcceptanceTestRealm({
@@ -376,8 +382,8 @@ module('Acceptance | workspace card | Library pages', function (hooks) {
       contents: {
         ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'realm.json': realmConfigCardJSON({ name: WORKSPACE_NAME }),
-        'note.gts': { Note, Memo },
-        'index.json': new Workspace(),
+        'note.gts': { Note, Memo, PagedWorkspace },
+        'index.json': new PagedWorkspace(),
         'Memo/1.json': new Memo({ cardTitle: 'Only Memo' }),
         ...notes,
       },
@@ -393,6 +399,10 @@ module('Acceptance | workspace card | Library pages', function (hooks) {
     await click(`${STACK} [data-test-boxel-filter-list-button="${name}"]`);
   }
 
+  function noteId(i: number) {
+    return `Note/${String(i).padStart(3, '0')}`;
+  }
+
   function gridItemCount() {
     return document.querySelectorAll(GRID_ITEM).length;
   }
@@ -405,23 +415,29 @@ module('Acceptance | workspace card | Library pages', function (hooks) {
 
   test('a filter with more rows than a page steps through them page by page', async function (assert) {
     await openLibraryFilter('Note');
-    await waitForGridItems(100);
+    await waitForGridItems(PAGE_SIZE);
 
     assert.dom(PAGINATION).exists('the Library offers page controls');
     assert.dom(`${PAGINATION} [aria-current="page"]`).hasText('1');
     assert
-      .dom(`${GRID_ITEM}[data-test-cards-grid-item="${testRealmURL}Note/105"]`)
+      .dom(
+        `${GRID_ITEM}[data-test-cards-grid-item="${testRealmURL}${LAST_NOTE}"]`,
+      )
       .doesNotExist('the last note is past the first page');
 
     await click(`${PAGINATION} [aria-label="Next"]`);
-    await waitForGridItems(NOTE_COUNT - 100);
+    await waitForGridItems(NOTE_COUNT - PAGE_SIZE);
 
     assert.dom(`${PAGINATION} [aria-current="page"]`).hasText('2');
     assert
-      .dom(`${GRID_ITEM}[data-test-cards-grid-item="${testRealmURL}Note/105"]`)
+      .dom(
+        `${GRID_ITEM}[data-test-cards-grid-item="${testRealmURL}${LAST_NOTE}"]`,
+      )
       .exists('the second page holds the rest');
     assert
-      .dom(`${GRID_ITEM}[data-test-cards-grid-item="${testRealmURL}Note/001"]`)
+      .dom(
+        `${GRID_ITEM}[data-test-cards-grid-item="${testRealmURL}${noteId(1)}"]`,
+      )
       .doesNotExist('and not the first page again');
   });
 
@@ -445,7 +461,7 @@ module('Acceptance | workspace card | Library pages', function (hooks) {
     );
 
     await openLibraryFilter('Note');
-    await waitForGridItems(100);
+    await waitForGridItems(PAGE_SIZE);
 
     // Not awaited: it settles only once the held page is released.
     let clicked = click(`${PAGINATION} [aria-label="Next"]`);
@@ -462,24 +478,26 @@ module('Acceptance | workspace card | Library pages', function (hooks) {
       releaseSecondPage.fulfill();
     }
     await clicked;
-    await waitForGridItems(NOTE_COUNT - 100);
+    await waitForGridItems(NOTE_COUNT - PAGE_SIZE);
     assert.dom(`${STACK} [data-test-card-list-loading]`).doesNotExist();
   });
 
   test('a page emptied by deletions moves back to the last page', async function (assert) {
     await openLibraryFilter('Note');
-    await waitForGridItems(100);
+    await waitForGridItems(PAGE_SIZE);
     await click(`${PAGINATION} [aria-label="Next"]`);
-    await waitForGridItems(NOTE_COUNT - 100);
+    await waitForGridItems(NOTE_COUNT - PAGE_SIZE);
 
     // Every row on page 2, so the notes left fit on one page.
-    for (let i = 101; i <= NOTE_COUNT; i++) {
-      await realm.delete(`Note/${i}.json`);
+    for (let i = PAGE_SIZE + 1; i <= NOTE_COUNT; i++) {
+      await realm.delete(`${noteId(i)}.json`);
     }
 
-    await waitForGridItems(100);
+    await waitForGridItems(PAGE_SIZE);
     assert
-      .dom(`${GRID_ITEM}[data-test-cards-grid-item="${testRealmURL}Note/001"]`)
+      .dom(
+        `${GRID_ITEM}[data-test-cards-grid-item="${testRealmURL}${noteId(1)}"]`,
+      )
       .exists('the grid shows the one page left');
     assert
       .dom(PAGINATION)
@@ -488,9 +506,9 @@ module('Acceptance | workspace card | Library pages', function (hooks) {
 
   test('changing the filter starts again at page 1', async function (assert) {
     await openLibraryFilter('Note');
-    await waitForGridItems(100);
+    await waitForGridItems(PAGE_SIZE);
     await click(`${PAGINATION} [aria-label="Next"]`);
-    await waitForGridItems(NOTE_COUNT - 100);
+    await waitForGridItems(NOTE_COUNT - PAGE_SIZE);
 
     await click(`${STACK} [data-test-boxel-filter-list-button="Memo"]`);
     await waitForGridItems(1);
@@ -499,7 +517,7 @@ module('Acceptance | workspace card | Library pages', function (hooks) {
       .doesNotExist('a filter that fits on one page shows no page controls');
 
     await click(`${STACK} [data-test-boxel-filter-list-button="Note"]`);
-    await waitForGridItems(100);
+    await waitForGridItems(PAGE_SIZE);
     assert.dom(`${PAGINATION} [aria-current="page"]`).hasText('1');
   });
 });

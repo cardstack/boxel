@@ -3219,8 +3219,15 @@ class Isolated extends Component<typeof Workspace> {
       filter: this.libraryFilter,
       sort: this.activeSort?.sort,
       // Bound the unified Library search on the server, one page at a time.
-      page: { size: SEARCH_PAGE_SIZE, number: this.currentLibraryPage - 1 },
+      page: {
+        size: this.libraryPageSize,
+        number: this.currentLibraryPage - 1,
+      },
     };
+  }
+
+  private get libraryPageSize(): number {
+    return (this.args.model.constructor as typeof Workspace).libraryPageSize;
   }
 
   // The Library page (1-based) belongs to the filter + sort it was chosen
@@ -3871,6 +3878,8 @@ export class Workspace extends CardDef {
   static icon = LayoutGridPlusIcon;
   static isolated = Isolated;
   static prefersWideFormat = true;
+  // Rows per Library page. A subclass may page in smaller steps.
+  static libraryPageSize = SEARCH_PAGE_SIZE;
 
   // the edit format IS the workspace's settings page.
   // Five sections; every control wires to live behavior.
