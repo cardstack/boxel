@@ -665,11 +665,12 @@ module(basename(import.meta.filename), function (hooks) {
 
   module('the routes that serve bytes', function () {
     // The card+source read, and the realm's fallback file serve, which answers
-    // an `Accept` no route claims. Both serve a path's stored bytes, so a grant
-    // that admits the read is honored on both.
+    // an `Accept` no route claims, such as `image/png`. (`*/*` is not one: its
+    // `HEAD` is the realm's discovery route.) Both serve a path's stored bytes,
+    // so a grant that admits the read is honored on both.
     const BYTE_ROUTES = [
       { label: 'card+source', accept: SupportedMimeType.CardSource },
-      { label: 'the file serve', accept: '*/*' },
+      { label: 'the file serve', accept: 'image/png' },
     ];
 
     function bearer(

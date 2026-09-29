@@ -7243,6 +7243,10 @@ export class Realm {
   // nothing, and it is what the route tells them of every path no grant can
   // reach (see `#refusalUnderPolicy` and `#headForNonReader`), so the paths a
   // grant might reach say no more than the rest.
+  //
+  // A not-found's body carries the stack it was raised from, so a route builds
+  // this once, ahead of the checks that could each find nothing, rather than
+  // at whichever check did. Built at each, the stack would name the check.
   #bytesNotThere(request: Request, requestContext: RequestContext): Response {
     return request.method === 'HEAD'
       ? this.realmIdentityResponse(requestContext)
@@ -7472,15 +7476,19 @@ export class Realm {
     // the gate grants no module, and trying module extensions on the name
     // would reach one.
     let gated = this.#coarseDeclined(requestContext) === 'all';
+    // Built once before any check runs, for the reason `#bytesNotThere` gives.
+    let declinedNotThere = gated
+      ? this.#bytesNotThere(request, requestContext)
+      : undefined;
     let notThere = (): ModuleLoadResult => ({
       kind: 'not-found',
-      response: gated
-        ? this.#bytesNotThere(request, requestContext)
-        : notFound(
-            request,
-            requestContext,
-            `${this.#virtualNetwork.unresolveURL(request.url)} not found`,
-          ),
+      response:
+        declinedNotThere ??
+        notFound(
+          request,
+          requestContext,
+          `${this.#virtualNetwork.unresolveURL(request.url)} not found`,
+        ),
     });
     let maybeFileRef = await this.getFileWithFallbacks(
       localPath,
@@ -9728,10 +9736,11 @@ export class Realm {
       (!url.pathname.endsWith('.json') &&
         !hasExecutableExtension(url.pathname));
     let localName = this.paths.local(url);
-    let notThere = () =>
-      gated
-        ? this.#bytesNotThere(request, requestContext)
-        : notFound(request, requestContext, `${localName} not found`);
+    // What a declined caller is told whichever check below finds nothing to
+    // serve them, built once before any of them runs (see `#bytesNotThere`).
+    let notThere = gated
+      ? this.#bytesNotThere(request, requestContext)
+      : undefined;
     if (bypassCache) {
       let cachedEntry = gated ? undefined : this.#sourceCache.get(localName);
       if (cachedEntry) {
@@ -9802,12 +9811,18 @@ export class Realm {
         fallbackExtensions,
       );
       if (!handle) {
-        return notThere();
+        return (
+          notThere ??
+          notFound(request, requestContext, `${localName} not found`)
+        );
       }
 
       if (handle.path !== localName) {
         if (alreadyHasExecutableExt || gated) {
-          return notThere();
+          return (
+            notThere ??
+            notFound(request, requestContext, `${localName} not found`)
+          );
         }
         let headers = {
           Location: this.redirectTarget(handle.path),
@@ -9863,7 +9878,10 @@ export class Realm {
         { headersOnly, ...(gated ? { coarseDeclined: true as const } : {}) },
       );
       if (!source) {
-        return notThere();
+        return (
+          notThere ??
+          notFound(request, requestContext, `${localName} not found`)
+        );
       }
       let served = this.#servableSource(handle, source);
       let defaultHeaders: Record<string, string> = {
