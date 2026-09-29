@@ -8,6 +8,7 @@ import {
   isOperationFailure,
   isSourceResult,
   newOperationScope,
+  resolveFacadeWrite,
   resolveGatedOperation,
   resolveOperation,
   runOperation,
@@ -1845,6 +1846,110 @@ module(basename(import.meta.filename), function () {
         declinedWrites(core),
       );
       assert.strictEqual(decision.kind, 'granted');
+    });
+  });
+
+  // A card verb carries out the built-in behavior its method names, so a
+  // grant on the name reaches the verb only where the name means that
+  // behavior. A reader declined only writes, with a policy that grants
+  // `update` on `CardDef` to everyone. The target's row records `Person` and
+  // `CardDef`.
+  module('the policy gate on a card verb’s write', function () {
+    function gatedCore(person: 'declares update' | 'declares nothing') {
+      let { access, loads } = policyStub([
+        { targetType: CARD_DEF, grants: ['update'] },
+      ]);
+      let { core } = stub({ policy: access });
+      let isPerson = (ref: CodeRef) => typeKey(ref) === typeKey(PERSON);
+      let definitionOf = (ref: CodeRef): Definition => ({
+        type: 'card-def',
+        codeRef: ref,
+        displayName: isPerson(ref) ? 'Person' : 'Card',
+        fields: {},
+        fieldDefs: {},
+        ...(isPerson(ref) && person === 'declares update'
+          ? {
+              operations: {
+                update: { base: 'update', deterministic: true },
+              },
+            }
+          : {}),
+      });
+      core.definitionLookup = {
+        async lookupDefinition(ref) {
+          return definitionOf(ref);
+        },
+        async lookupDefinitionEntry(ref) {
+          return {
+            definition: definitionOf(ref),
+            types: [typeKey(ref), typeKey(CARD_DEF)],
+          };
+        },
+      };
+      let instance = core.indexQueryEngine.instance.bind(core.indexQueryEngine);
+      core.indexQueryEngine.instance = async (url, instanceOpts) => {
+        let row = await instance(url, instanceOpts);
+        return row
+          ? ({ ...row, types: [typeKey(PERSON), typeKey(CARD_DEF)] } as any)
+          : row;
+      };
+      return { core, loads };
+    }
+
+    function scope(
+      core: OperationCore,
+      coarseDeclined: 'none' | 'writes' = 'writes',
+    ) {
+      return newOperationScope(core, {
+        caller: scopeCallerFor('@reader:localhost'),
+        coarseDeclined,
+      });
+    }
+
+    test('a grant on the built-in behavior reaches the verb', async function (assert) {
+      let { core } = gatedCore('declares nothing');
+      let decision = await resolveFacadeWrite(
+        core,
+        CARD,
+        'update',
+        scope(core),
+      );
+      assert.strictEqual(decision.kind, 'granted');
+    });
+
+    test('a type that declares the name refuses the verb a grant the envelope would use', async function (assert) {
+      let { core } = gatedCore('declares update');
+      let { decision } = await resolveGatedOperation(
+        core,
+        CARD,
+        'update',
+        scope(core),
+      );
+      assert.strictEqual(
+        decision.kind,
+        'granted',
+        'the grant admits the declared update',
+      );
+      let failure = await refusalFrom(() =>
+        resolveFacadeWrite(core, CARD, 'update', scope(core)),
+      );
+      assert.strictEqual(
+        failure.code,
+        'operation-not-permitted',
+        'and the verb, which would not carry that update out, is refused',
+      );
+    });
+
+    test('a caller the ACL allowed is not judged, whatever the type declares', async function (assert) {
+      let { core, loads } = gatedCore('declares update');
+      let decision = await resolveFacadeWrite(
+        core,
+        CARD,
+        'update',
+        scope(core, 'none'),
+      );
+      assert.strictEqual(decision.kind, 'coarse');
+      assert.strictEqual(loads.count, 0, 'and no policy was loaded');
     });
   });
 });
