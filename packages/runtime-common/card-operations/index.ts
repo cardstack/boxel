@@ -46,6 +46,7 @@ export {
   scopeCallerFor,
   pathsFor,
   readPlan,
+  resolveFacadeWrite,
   resolveGatedOperation,
   resolveOperation,
   runOperation,
@@ -181,7 +182,7 @@ export {
   namedQueryRendering,
   resolveNamedQuery,
 } from './named-query.ts';
-export type { NamedQueryContext } from './named-query.ts';
+export type { NamedQueryContext, ResolvedNamedQuery } from './named-query.ts';
 export type {
   QueryDefinition,
   QueryInvocation,

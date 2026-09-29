@@ -62,9 +62,8 @@ function adoptsFrom(ref: { module: string; name: string }) {
 }
 
 // Is the caller one of the classroom's teachers. Written with `any` and `==`
-// because that is exact. BXL's `contains` matches substrings, so
-// `contains([actor()])` would also admit a caller whose id is part of a
-// listed one, and `contains(actor())` never matches a list at all.
+// because that is exact. BXL's `contains` matches substrings, and a policy
+// that tests membership with it does not compile.
 const TEACHES = '.teacherIds | any(. == actor())';
 const LEADS = '.leadTeacherIds | any(. == actor())';
 
@@ -427,7 +426,7 @@ module(basename(import.meta.filename), function (hooks) {
   }
 
   // The gate's refusal to a caller who may read the realm. Such a caller
-  // reaches the gate only by writing, which only the envelope carries to it.
+  // reaches the gate only by writing.
   function assertNotPermitted(
     assert: Assert,
     response: Response,
@@ -1689,25 +1688,38 @@ module(basename(import.meta.filename), function (hooks) {
     });
 
     test('a route that does not reach the gate keeps the realm ACL’s refusal', async function (assert) {
-      let patch = await request
-        .patch(path(BULLETIN_1))
-        .set('Accept', SupportedMimeType.CardJson)
+      let source = await request
+        .post(`${path(BULLETIN_1)}.json`)
+        .set('Accept', SupportedMimeType.CardSource)
+        .set('Authorization', AUTH.reader())
+        .send(card(adoptsFrom(BULLETIN), { body: 'Patched' }));
+      assert.strictEqual(
+        source.status,
+        403,
+        'a card+source write, though the policy grants update',
+      );
+      assert.strictEqual(source.text, INSUFFICIENT);
+      let atomic = await request
+        .post(`${path(EDUCATION)}_atomic`)
+        .set('Accept', SupportedMimeType.JSONAPI)
         .set('Authorization', AUTH.reader())
         .send(
           JSON.stringify({
-            data: {
-              type: 'card',
-              attributes: { body: 'Patched' },
-              meta: { adoptsFrom: adoptsFrom(BULLETIN) },
-            },
+            'atomic:operations': [
+              {
+                op: 'update',
+                href: './bulletins/b1.json',
+                data: {
+                  type: 'card',
+                  attributes: { body: 'Patched' },
+                  meta: { adoptsFrom: adoptsFrom(BULLETIN) },
+                },
+              },
+            ],
           }),
         );
-      assert.strictEqual(
-        patch.status,
-        403,
-        'a card+json write, though the policy grants update',
-      );
-      assert.strictEqual(patch.text, INSUFFICIENT);
+      assert.strictEqual(atomic.status, 403, 'an /_atomic write');
+      assert.strictEqual(atomic.text, INSUFFICIENT);
       assert.strictEqual(gateStats().policyLoads, 0);
     });
   });
