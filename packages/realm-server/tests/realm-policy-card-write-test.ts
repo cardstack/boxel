@@ -830,7 +830,7 @@ module(basename(import.meta.filename), function (hooks) {
       assert.strictEqual(
         admin.status,
         200,
-        'a caller the ACL allows side-loads as before',
+        'a caller the ACL allows side-loads',
       );
     });
 
@@ -887,7 +887,7 @@ module(basename(import.meta.filename), function (hooks) {
       assert.strictEqual(
         admin.status,
         201,
-        'a caller the ACL allows creates with one as before',
+        'a caller the ACL allows creates with one',
       );
     });
   });
@@ -981,7 +981,7 @@ module(basename(import.meta.filename), function (hooks) {
   });
 
   module('a caller the realm ACL allows', function () {
-    test('writes as before, with no policy loaded and no predicate evaluated', async function (assert) {
+    test('writes with no policy loaded and no predicate evaluated', async function (assert) {
       let patched = await patchCard(
         ROOM_205,
         AUTH.admin(),

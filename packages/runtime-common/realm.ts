@@ -848,7 +848,7 @@ const ARCHIVED_SEAL_EXEMPT_PATHS = new Set(['_readiness-check', '_session']);
 //   removal put or remove whatever bytes they are sent at whatever path they
 //   name: a module's source, a data file, or a card's stored `.json`. The gate
 //   grants a data file nothing but the read of its bytes, module source is
-//   code and code is served to a caller the ACL allows, and a verbatim
+//   code, which only a caller the ACL allows reads or writes, and a verbatim
 //   replacement of a card's document can change the type its grants were
 //   matched on. The operations envelope refuses the same replacement to every
 //   caller for that reason. These are the write half of the card+source read,
@@ -11015,9 +11015,8 @@ export class Realm {
   // The policy gate's part in one card+json write, for the caller of
   // `request`.
   //
-  // A caller the realm ACL allowed writes as they always have: nothing is
-  // resolved, no policy is loaded, and the batch entry is staged as it was
-  // sent. A caller the ACL declined reaches here only in a realm that names a
+  // A caller the realm ACL allowed is not judged at all: nothing is resolved,
+  // no policy is loaded, and the batch entry is staged as it was sent. A caller the ACL declined reaches here only in a realm that names a
   // policy, and the write is resolved through the gate as the operation the
   // verb carries out, against the card or type the batch entry names, as the
   // operations envelope resolves an entry of that name. The gate refuses what

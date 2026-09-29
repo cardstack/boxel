@@ -647,7 +647,7 @@ export async function resolveGatedOperation(
 //
 // A caller the realm ACL allowed is answered as the gate answers them, without
 // the policy, and the verb performs the built-in behavior for them whatever the
-// type declares, as it always has.
+// type declares.
 export async function resolveFacadeWrite(
   core: OperationCore,
   target: OperationTarget,
