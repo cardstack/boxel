@@ -671,15 +671,16 @@ export type PolicyExplanationReason =
   | 'predicate-threw'
   // The operation is kept out of every policy's reach: declared
   // `nonGrantable` on the target's type or a type it descends from, or a
-  // behavior no grant reaches at all — a stored-bytes read, a query, which is
-  // authorized on the search engine's lane, and an explain.
+  // behavior no grant reaches here at all — a query, which is authorized on
+  // the search engine's lane, and an explain.
   | 'non-grantable'
   // A write to the realm's policy card or to its config card, which no grant
   // reaches whatever the card's type declares.
   | 'authorization-infrastructure'
-  // The target is nothing a rule can be matched against: a card whose index
-  // row records an error, so its type is unknown, or a target that is not a
-  // card at all.
+  // The target is nothing a rule can be matched against for this operation:
+  // a card whose index row records an error, so its type is unknown; a file,
+  // for anything but a read of its stored bytes; or stored bytes with no type
+  // to match, which is what module source and an empty path are.
   | 'unmatchable-target'
   // The operation is not one the target carries: resolving it refused before
   // the policy could be consulted. `refusal` says how.
