@@ -45,6 +45,7 @@
       "@cardstack/openrouter/*": ["../openrouter-realm/*"],
       "@cardstack/boxel-host/tools/*": ["../host/app/tools/*"],
       "@cardstack/boxel-host/commands/*": ["../host/app/tools/*"],
+      "@cardstack/boxel-host/lib/*": ["../host/app/lib/*"],
       "@cardstack/boxel-ui": ["../boxel-ui"],
       "@cardstack/boxel-ui/*": ["../boxel-ui/*"],
       "*": ["../host/types/*"]

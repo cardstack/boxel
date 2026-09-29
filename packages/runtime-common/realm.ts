@@ -218,12 +218,13 @@ import {
 import {
   canonicalizeTarget,
   newOperationScope,
-  readShape,
+  readPlan,
   resolveGatedOperation,
   runOperation,
   scopeCallerFor,
 } from './card-operations/dispatch.ts';
-import type { ReadShape } from './card-operations/dispatch.ts';
+import type { ReadPlan } from './card-operations/dispatch.ts';
+import type { LinkStrategy } from '@cardstack/base/operations';
 import {
   dischargePendingDecision,
   notPermitted,
@@ -232,6 +233,15 @@ import {
   type PolicyGateStats,
 } from './card-operations/gate.ts';
 import type { AdmissionSubject } from './card-operations/executors.ts';
+import {
+  checkCapabilities,
+  parseCapabilityChecks,
+  type CapabilityCaller,
+} from './card-operations/capabilities.ts';
+import {
+  emitCapabilityCheck,
+  type CapabilityCheckEvent,
+} from './card-operations/telemetry.ts';
 import {
   runOutputTransform,
   type TransformContext,
@@ -274,6 +284,7 @@ import {
 } from './card-operations/named-query.ts';
 import { settledWithin, STAGING_WIDTH } from './card-operations/coordinator.ts';
 import {
+  effectiveLinkStrategy,
   OperationFailure,
   isDocumentResult,
   isHeadResult,
@@ -832,6 +843,10 @@ const ARCHIVED_SEAL_EXEMPT_PATHS = new Set(['_readiness-check', '_session']);
 // ACL's refusal, which a realm with a policy words differently on some of them
 // (see `#refusalUnderPolicy`).
 const CONSUMES_COARSE_OUTCOME = { consumesCoarseOutcome: true } as const;
+// The capability check's path, named here because two places read it: the
+// route below, and the permission the realm derives from the request's method,
+// which this path is the one `POST` exception to.
+const CAPABILITIES_PATH = '_capabilities';
 // Marks the routes that serve code and the file tree, which no policy grant
 // reaches: the card+source read and its `HEAD`, and the directory listing. The
 // fallback file and module serve is one too, for a `GET` and a `HEAD`. See
@@ -1367,8 +1382,29 @@ function buildEtag(
 // covering the shapes is not on its own covering the validators: the `full`
 // split above is a second dimension, so a reader enumerates the arguments
 // `buildCardJsonEtag` takes rather than this list alone.
-const CARD_JSON_SHAPES = ['full', 'links-only', 'write-echo'] as const;
+const CARD_JSON_SHAPES = [
+  'full',
+  'links-only',
+  'no-links',
+  'write-echo',
+] as const;
 type CardJsonShape = (typeof CARD_JSON_SHAPES)[number];
+
+// The shape a read's link strategy serves. Two vocabularies rather than one
+// because they answer different questions: an operation's strategy says how
+// much of the link graph a read carries, and a card+json shape names a
+// representation a validator has to tell apart — a set that also holds the
+// write echo, which no read produces.
+function cardJsonShapeFor(links: LinkStrategy): CardJsonShape {
+  switch (links) {
+    case 'full':
+      return 'full';
+    case 'ids':
+      return 'links-only';
+    case 'none':
+      return 'no-links';
+  }
+}
 
 function buildCardJsonEtag(
   indexedAt: number | null | undefined,
@@ -2259,10 +2295,11 @@ export class Realm {
   // computed"; an empty array is a valid cached result (no routing rules).
   #cachedHostRoutingMap: HostRoutingRule[] | null = null;
 
-  // Whether a card's `read` carries a transform stage, by card URL. Asked by
-  // the card+json `GET` before it takes either path that answers without
-  // running the read, and the lookup behind it is a database read — so on a
-  // realm serving conditional requests it would be a round trip added to
+  // What a card's `read` would answer with — whether it carries a transform
+  // stage, and how much of the link graph its declaration carries — by card
+  // URL. Asked by the card+json `GET` before it takes either path that answers
+  // without running the read, and the lookup behind it is a database read — so
+  // on a realm serving conditional requests it would be a round trip added to
   // exactly the requests that exist to avoid one.
   //
   // Cleared by `clearRealmIndexCaches()` alongside the entries above, which is
@@ -2273,7 +2310,7 @@ export class Realm {
   // swapping, and does not reach this: a card with foreign-realm dependencies
   // is served no validator at all, so neither fast path is taken and this is
   // never asked.
-  #readShapeByURL = new Map<string, ReadShape>();
+  #readPlanByURL = new Map<string, ReadPlan>();
 
   // This loader is not meant to be used operationally, rather it serves as a
   // template that we clone for each indexing operation
@@ -2571,6 +2608,17 @@ export class Realm {
         '/_operations',
         SupportedMimeType.JSONAPI,
         this.handleOperations.bind(this),
+        CONSUMES_COARSE_OUTCOME,
+      )
+      // What the policy gate would decide, asked ahead of the call, so a view
+      // can hide a control its caller may not use rather than render every
+      // one and let the refusal arrive after the click. It consumes the ACL's
+      // outcome for the same reason the envelope does: the question is
+      // interesting exactly for the caller the ACL declined.
+      .post(
+        '/_capabilities',
+        SupportedMimeType.JSON,
+        this.handleCapabilities.bind(this),
         CONSUMES_COARSE_OUTCOME,
       )
       .post(
@@ -3623,7 +3671,7 @@ export class Realm {
   clearRealmIndexCaches(): void {
     this.invalidateCachedRealmInfo();
     this.#cachedHostRoutingMap = null;
-    this.#readShapeByURL.clear();
+    this.#readPlanByURL.clear();
     // Any realm's compiled policy may read from this one: a policy card here,
     // or a type its rules name. So the move is announced to all of them, and
     // not only to this realm's own.
@@ -5787,6 +5835,136 @@ export class Realm {
     });
   }
 
+  // What the policy gate would decide about a bounded list of
+  // `{ target, operation }` pairs, so a view can hide the controls its caller
+  // may not use.
+  //
+  // A decision and nothing else. Each pair is resolved the way an invocation
+  // resolves it and stops where the gate answers, so a check cannot stage, take
+  // a lock, enqueue an index job or broadcast an event — not because it is
+  // asked not to, but because it never reaches the part of the core that does
+  // any of those. The answer is advisory: the gate decides again at invocation,
+  // against the state as it is then, so nothing may treat one of these as
+  // authorization.
+  //
+  // A malformed body and an over-cap list refuse the whole request, since
+  // neither is one pair's problem and a truncated answer would read to the view
+  // driving off it as a list of denials.
+  private async handleCapabilities(
+    request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    let started = Date.now();
+    try {
+      let body: unknown;
+      try {
+        body = JSON.parse(await request.text());
+      } catch {
+        throw new OperationFailure({
+          status: 400,
+          code: 'invalid-params',
+          title: 'Invalid capability check',
+          detail: `the request body is not valid JSON`,
+        });
+      }
+      let checks = parseCapabilityChecks(body);
+      let { actor } = this.#callerOf(request, requestContext);
+      let lanes = await this.#capabilityLanes(request, requestContext);
+      let { coarseDeclined } = lanes;
+      let answers = await checkCapabilities(this.operationCore, checks, {
+        caller: scopeCallerFor(actor),
+        ...lanes,
+      });
+      emitCapabilityCheck({
+        kind: 'capability-check',
+        realmURL: this.url,
+        actor: actor || null,
+        coarseDeclined,
+        pairs: answers.length,
+        allowed: answers.filter((a) => a.allowed && !a.conditional).length,
+        conditional: answers.filter((a) => a.conditional).length,
+        denied: answers.filter((a) => !a.allowed).length,
+        totalMs: Date.now() - started,
+      } satisfies CapabilityCheckEvent);
+      return this.#capabilitiesResponse(
+        { checks: answers },
+        200,
+        requestContext,
+      );
+    } catch (err: unknown) {
+      if (!isOperationFailure(err)) {
+        throw err;
+      }
+      return this.#capabilitiesResponse(
+        errorsDocument(err.error),
+        err.error.status,
+        requestContext,
+      );
+    }
+  }
+
+  // What the realm ACL declined a capability check's caller, lane by lane.
+  //
+  // One request asks about reads and writes together, and the ACL judged it
+  // once — as a read, which is all the check itself does. So the write lane is
+  // settled here, by asking the same permission check what it would say about a
+  // write of this realm. Without it a caller who may read but not write would
+  // be told the ACL allows them everything, and every write control in the view
+  // would render.
+  //
+  // A write the ACL refuses reaches the policy gate only where the realm would
+  // hand it there: the same `#policyJudges` question the real write is asked.
+  // Anywhere else it is refused before it is routed, so its pair is refused
+  // outright rather than put to a policy that would never see the call.
+  async #capabilityLanes(
+    request: Request,
+    requestContext: RequestContext,
+  ): Promise<Omit<CapabilityCaller, 'caller'>> {
+    if (requestContext.coarseAllowed === undefined) {
+      // The realm never judged this request, which is the realm's own internal
+      // dispatch. Nothing was declined, exactly as `#coarseDeclined` reads it.
+      return { coarseDeclined: 'none' };
+    }
+    let readAllowed = requestContext.coarseAllowed === true;
+    let write = await this.#permissionProbe(request, requestContext, 'write');
+    if (write.allowed) {
+      return { coarseDeclined: readAllowed ? 'none' : 'all' };
+    }
+    let coarseDeclined: CoarseDeclined = readAllowed ? 'writes' : 'all';
+    if (await this.#policyJudges(write.refusal, requestContext)) {
+      return { coarseDeclined };
+    }
+    return {
+      coarseDeclined,
+      writesRefused: requestContext.authenticatedUser
+        ? 'operation-not-permitted'
+        : 'actor-required',
+    };
+  }
+
+  // A capability check answers plain JSON, never a card document: what it
+  // carries is a list of decisions rather than any resource of the realm. It is
+  // never HTTP-cached — the answer follows the policy, the target's stored
+  // values and the caller's permissions, and there is no validator over that
+  // combination for a conditional request to be answered against.
+  #capabilitiesResponse(
+    body: unknown,
+    status: number,
+    requestContext: RequestContext,
+  ): Response {
+    return createResponse({
+      body: JSON.stringify(body, null, 2),
+      init: {
+        status,
+        headers: {
+          'content-type': SupportedMimeType.JSON,
+          'cache-control': 'no-store',
+        },
+      },
+      requestContext,
+    });
+  }
+
   // we track our own writes so that we can eliminate echoes in the file watcher
 
   // Write a file whose content is described as an edit of its own bytes.
@@ -6439,11 +6617,22 @@ export class Realm {
     let requiredPermission: RealmAction = 'read';
     if (localPath === '_permissions') {
       requiredPermission = 'realm-owner';
+    } else if (localPath === CAPABILITIES_PATH) {
+      // A `POST` because it carries a body, and the body is a list of
+      // questions. It writes nothing, so deriving its permission from the
+      // method the way every other `POST` does would refuse a caller who may
+      // read the realm the answer to "may I read this card?" — and would make
+      // the check unaskable in a realm with no policy, where every answer is
+      // the ACL's own and there is nothing to hide. Both lanes are settled
+      // inside the handler, which probes write for itself.
+      requiredPermission = 'read';
     } else if (['PUT', 'PATCH', 'POST', 'DELETE'].includes(request.method)) {
       requiredPermission = 'write';
     }
 
-    let requestContext = await this.createRequestContext(requiredPermission);
+    let requestContext = await this.createRequestContext(requiredPermission, {
+      asksBothLanes: localPath === CAPABILITIES_PATH,
+    });
 
     try {
       if (!isLocal) {
@@ -11277,7 +11466,10 @@ export class Realm {
             result.indexedAt,
             this.getCachedRealmInfoHash(),
             screenshotsEtagFingerprint(result.screenshots),
-            resolveLinksOnly ? 'links-only' : 'full',
+            // The strategy the read reports, not the one this request asked
+            // for: the type's declaration may narrow it further, and a `HEAD`
+            // states the validator the `GET` would send.
+            cardJsonShapeFor(result.links),
             skipLinkAssemblyBudget,
           );
       // The headers a `GET` of this card would send, which for a projected
@@ -11352,8 +11544,19 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
   ): Promise<{ allowed: true } | { allowed: false; refusal: unknown }> {
+    return await this.#permissionProbe(request, requestContext, 'read');
+  }
+
+  // Whether the realm ACL would admit this caller to `action`, asked rather
+  // than enforced: a refusal is an answer the caller has a use for and never
+  // the request's outcome.
+  async #permissionProbe(
+    request: Request,
+    requestContext: RequestContext,
+    action: 'read' | 'write',
+  ): Promise<{ allowed: true } | { allowed: false; refusal: unknown }> {
     try {
-      await this.checkPermission(request, requestContext, 'read', {
+      await this.checkPermission(request, requestContext, action, {
         probe: true,
       });
       return { allowed: true };
@@ -11488,31 +11691,38 @@ export class Realm {
           instanceEntry.type === 'instance' &&
           instanceEntry.indexedAt != null
         ) {
+          // The validator has to name the shape the body will take, and the
+          // type's own `read` declaration is half of what decides that — so
+          // the plan is resolved before the validator is built rather than
+          // where its other answer is consumed. The read that follows composes
+          // the declaration with the request through the same function, so the
+          // two agree by construction.
+          //
+          // Asking here rather than only where a fast path would take the
+          // answer costs a memo hit on a conditional request whose validator
+          // turns out not to match — and that request assembles, which
+          // resolves the same definition anyway.
+          let plan = await readPlan(
+            this.operationCore,
+            url,
+            scope,
+            this.#readPlanByURL,
+          );
+          assembles = plan.shape !== 'plain';
           peekEtag = buildCardJsonEtag(
             instanceEntry.indexedAt,
             realmInfoHash,
             screenshotsEtagFingerprint(instanceEntry.screenshots),
-            resolveLinksOnly ? 'links-only' : 'full',
+            cardJsonShapeFor(
+              effectiveLinkStrategy(plan.links, resolveLinksOnly),
+            ),
             skipLinkAssemblyBudget,
           );
         }
-        // Asked only where an answer would be taken from it: on a conditional
-        // hit, and on a request a configured cache would serve or retain.
-        // Every other request assembles, and the assembly resolves the same
-        // definition anyway.
         let matchedEtag =
           ifNoneMatch && peekEtag && ifNoneMatchMatches(ifNoneMatch, peekEtag)
             ? peekEtag
             : undefined;
-        if (matchedEtag || (documentCache && peekEtag)) {
-          assembles =
-            (await readShape(
-              this.operationCore,
-              url,
-              scope,
-              this.#readShapeByURL,
-            )) !== 'plain';
-        }
         if (matchedEtag && !assembles) {
           return createResponse({
             requestContext,
@@ -11679,7 +11889,7 @@ export class Realm {
         `the read of ${url.href} answered with something other than a document`,
       );
     }
-    let { document, headers, queryBacked, projected } = result;
+    let { document, headers, queryBacked, projected, links } = result;
     if (headers.type === 'file-meta') {
       // A file's metadata is derived from its bytes, so there is no index row
       // to validate it against and nothing here to cache.
@@ -11716,7 +11926,11 @@ export class Realm {
           headers.indexedAt,
           this.getCachedRealmInfoHash(),
           screenshotsEtagFingerprint(headers.screenshots),
-          resolveLinksOnly ? 'links-only' : 'full',
+          // Read off the assembly for the same reason `deps` and `indexedAt`
+          // are: the strategy this body was assembled under is the read's
+          // answer, and the request's own `resolveLinksOnly` is only half of
+          // what decided it.
+          cardJsonShapeFor(links),
           skipLinkAssemblyBudget,
         );
     return {
@@ -14266,6 +14480,13 @@ export class Realm {
   // second fetch.
   private async createRequestContext(
     requiredPermission: RealmAction,
+    // Whether this request will go on to ask the ACL about a permission other
+    // than the one it is judged by. The world-readable shortcut below answers a
+    // read from `*` alone and leaves the realm's own map out, which is
+    // everything a read needs and not enough for a route that also asks whether
+    // the caller may write: read from `*` alone, a realm writer on a public
+    // realm reads as someone who may not write.
+    { asksBothLanes = false }: { asksBothLanes?: boolean } = {},
   ): Promise<RequestContext> {
     let fetched = await fetchRealmPermissions(
       this.#dbAdapter,
@@ -14273,7 +14494,7 @@ export class Realm {
     );
     let isWorldReadable = fetched['*']?.includes('read') ?? false;
     let permissions: RealmPermissions =
-      requiredPermission === 'read' && isWorldReadable
+      requiredPermission === 'read' && isWorldReadable && !asksBothLanes
         ? {
             [this.#matrixClientUserId]: ['assume-user'],
             '*': ['read'],
