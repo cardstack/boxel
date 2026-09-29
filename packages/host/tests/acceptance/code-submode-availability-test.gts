@@ -120,8 +120,9 @@ module('Acceptance | code submode availability', function (hooks) {
     assert.dom('[data-test-boxel-menu-item-text="Code"]').doesNotExist();
   });
 
-  test('code mode is offered by the realm of the card it would open', async function (assert) {
-    // Switching to code mode opens the last card of the right-most stack.
+  // Switching to code mode opens the last card of the right-most stack, so
+  // that card's realm is the one that decides.
+  test('code mode is not offered when the card it would open is in a realm the user cannot read', async function (assert) {
     await visitOperatorMode({
       stacks: [
         [{ id: `${readableRealmURL}Pet/mango`, format: 'isolated' }],
@@ -129,10 +130,10 @@ module('Acceptance | code submode availability', function (hooks) {
       ],
     });
     await openSubmodeMenu();
-    assert
-      .dom('[data-test-boxel-menu-item-text="Code"]')
-      .doesNotExist('not when that card is in a realm the user cannot read');
+    assert.dom('[data-test-boxel-menu-item-text="Code"]').doesNotExist();
+  });
 
+  test('code mode is offered when the card it would open is in a realm the user can read', async function (assert) {
     await visitOperatorMode({
       stacks: [
         [{ id: `${unreadableRealmURL}Pet/mango`, format: 'isolated' }],
@@ -140,9 +141,7 @@ module('Acceptance | code submode availability', function (hooks) {
       ],
     });
     await openSubmodeMenu();
-    assert
-      .dom('[data-test-boxel-menu-item-text="Code"]')
-      .exists('but when it is in a realm the user can read');
+    assert.dom('[data-test-boxel-menu-item-text="Code"]').exists();
   });
 
   test("a card's error offers code mode only in a realm the user can read", async function (assert) {
