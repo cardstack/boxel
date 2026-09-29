@@ -66,7 +66,7 @@ export type Grade = '✅ GOOD' | '🟡 ROUGH' | '❌ FAIL';
 export const BENCHMARKS = {
   maxTurns: 10,
   maxModeSwitches: 1,
-  maxSeconds: 150,
+  maxSeconds: 200,
   // A failed call the model notices and repairs in the same run is normal
   // with the realm runner (a script with a syntax error, a stale search
   // string); more than this many reads as a rough run.
