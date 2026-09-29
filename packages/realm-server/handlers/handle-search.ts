@@ -270,15 +270,15 @@ export default function handleSearch(opts: {
   }
 
   // The ad-hoc query a named one resolves to, with the link strategy its
-  // results are served under, or nothing once the refusal has been answered. The declaration is read through a realm of the first
-  // non-empty group in `resolvingRealms`: one this process already holds where
-  // there is one, and otherwise the group's first, mounted. For a type whose
-  // module this server serves, the definition entry belongs to the module's
-  // own realm whichever realm reads it; for one served elsewhere, it is read
-  // with the reading realm owner's credentials — so the groups put the realms
-  // the caller reads ahead of those they reach only through a policy, and a
-  // realm of the second group reads a declaration only when the caller reads
-  // none of the realms named.
+  // results are served under, or nothing once the refusal has been answered.
+  // The declaration is read through a realm of the first non-empty group in
+  // `resolvingRealms`: one this process already holds where there is one, and
+  // otherwise the group's first, mounted. For a type whose module this server
+  // serves, the definition entry belongs to the module's own realm whichever
+  // realm reads it; for one served elsewhere, it is read with the reading realm
+  // owner's credentials — so the groups put the realms the caller reads ahead
+  // of those they reach only through a policy, and a realm of the second group
+  // reads a declaration only when the caller reads none of the realms named.
   //
   // The realms the query may search are `scope`, the realms the request names,
   // so resolving it never reaches a realm the request did not name. What each

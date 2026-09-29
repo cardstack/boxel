@@ -2725,9 +2725,6 @@ function enumerateFileRenderings(file: IndexedFile): RowRendering[] {
   return candidates;
 }
 
-// Takes the narrow shape rather than a full `IndexedFile`, which is a
-// structural superset of it — so the search and single-file paths, which do
-// hold a full one, still assemble through here unchanged.
 // An item with its relationships taken off. A shallow copy, so the row the
 // item was built from keeps its own.
 function withoutRelationships<T extends CardResource<Saved> | FileMetaResource>(
@@ -2737,6 +2734,9 @@ function withoutRelationships<T extends CardResource<Saved> | FileMetaResource>(
   return rest as T;
 }
 
+// Takes the narrow shape rather than a full `IndexedFile`, which is a
+// structural superset of it — so the search and single-file paths, which do
+// hold a full one, still assemble through here unchanged.
 function fileResourceFromIndex(
   fileURL: URL,
   fileEntry: LinkTargetFile,

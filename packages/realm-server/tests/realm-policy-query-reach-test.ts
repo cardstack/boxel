@@ -5,6 +5,7 @@ import type { Test, SuperTest } from 'supertest';
 import { basename, join } from 'path';
 import { dirSync } from 'tmp';
 import {
+  DURING_PRERENDER_HEADER,
   rri,
   setSearchShapeSink,
   SupportedMimeType,
@@ -656,6 +657,42 @@ module(basename(import.meta.filename), function (hooks) {
         undefined,
         'a request never widens what the query declared',
       );
+    });
+  });
+
+  module('a render', function () {
+    test('a render’s search keeps each row’s stored links, whatever the query declares', async function (assert) {
+      // A render resolves the cards its search answers with itself, and keeps
+      // them for the rest of the indexing job, so a row whose relationships
+      // were withheld would draw its link fields empty in every later render
+      // that shows it. The render skips the assembly pass either way; what it
+      // must not lose is which cards each row links to.
+      for (let [label, send] of [
+        ['the realm’s own search', realmSearch],
+        ['the federated search', federatedSearch],
+      ] as const) {
+        let doc = await search('admin', body('none'), (caller, payload) =>
+          send(caller, payload).set(DURING_PRERENDER_HEADER, 'true'),
+        );
+        let served = items(doc);
+        assert.deepEqual(
+          [...served.keys()],
+          [ALGEBRA, BIOLOGY],
+          `${label}: every row is answered`,
+        );
+        for (let [id, item] of served) {
+          assert.deepEqual(
+            namedTargets(item),
+            LINKS[id],
+            `${label}: ${id} still names its students`,
+          );
+        }
+        assert.deepEqual(
+          closure(doc),
+          [],
+          `${label}: and nothing is assembled`,
+        );
+      }
     });
   });
 

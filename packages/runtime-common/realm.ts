@@ -12234,8 +12234,20 @@ export class Realm {
       // `ids` runs the assembly pass as far as naming each result's targets;
       // `none` answers each result's card with no relationship data and runs
       // no pass at all.
+      //
+      // A prerender's search keeps its own shape whatever a named query
+      // declares: `omitIncluded` skips the pass and leaves each card's stored
+      // links standing, because the render resolves the cards those links name
+      // itself. A render keeps the cards its search answers with for the rest
+      // of the indexing job, so one served with its relationships withheld
+      // would draw its link fields empty in every later render that shows it,
+      // and that HTML is served to every viewer. Prerendered HTML draws a
+      // card's links under every strategy, so withholding them from the render
+      // narrows nothing a caller receives.
       ...(opts?.links === 'ids' ? { resolveLinksOnly: true } : {}),
-      ...(opts?.links === 'none' ? { omitRelationships: true } : {}),
+      ...(opts?.links === 'none' && !opts?.omitIncluded
+        ? { omitRelationships: true }
+        : {}),
       // `!== undefined` so an explicit priority 0 (system-initiated) survives.
       ...(opts?.priority !== undefined ? { priority: opts.priority } : {}),
       ...(opts?.timings ? { timings: opts.timings } : {}),

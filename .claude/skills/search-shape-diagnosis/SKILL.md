@@ -76,11 +76,12 @@ A named query can narrow it too. A `query` declaration's `links` is served under
 
 `requestedLinkMode` carries the preference and `linkModeDowngraded` carries the comparison. Read them together:
 
-| `requestedLinkMode` | `linkMode`   | what happened                                                       |
-| ------------------- | ------------ | ------------------------------------------------------------------- |
-| `full`              | `full`       | the quiet case — no policy engagement                               |
-| `full`              | `links-only` | **the policy degraded this read**; `linkShapeLevel` says which rung |
-| `links-only`        | `links-only` | the caller asked for it; the policy is not implicated               |
+| `requestedLinkMode` | `linkMode`   | what happened                                                                                 |
+| ------------------- | ------------ | --------------------------------------------------------------------------------------------- |
+| `full`              | `full`       | the quiet case — no policy engagement                                                         |
+| `full`              | `links-only` | **the policy degraded this read**; `linkShapeLevel` says which rung                           |
+| `links-only`        | `links-only` | the caller asked for it, or the query it invoked declares `ids`; the policy is not implicated |
+| `none`              | `none`       | the query it invoked declares `none`; the policy is not implicated                            |
 
 `linkShapeLoad`, `linkShapeLevel` and `linkShapeRowClass` are the inputs the decision was taken on, stamped on the request that was decided. They are what separates "the policy did the right thing on bad inputs" from "the policy misjudged good inputs" — different fixes. All three are null on a `prerender` line, which never reaches the policy.
 

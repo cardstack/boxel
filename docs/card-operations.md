@@ -452,6 +452,15 @@ its relationships and the closure behind them. A sparse row asking for a link
 field is narrowed with the rest: under `none` it is not told what that field
 links to.
 
+A search a render runs is the exception. It keeps each row's stored links
+whatever the query declares, and never assembles a closure under any strategy:
+the render resolves the cards those links name itself, and it keeps those cards
+for the rest of the indexing pass, so a row served without them would draw its
+link fields empty in every later render that shows it — HTML that is then served
+to every viewer. Since prerendered HTML draws a card's links under every
+strategy, keeping them in the render withholds nothing a caller would otherwise
+receive.
+
 The request's own narrowing composes with it the way it does with a read: a
 search the realm-server is shedding load on, or one whose caller asked for links
 only, is served `ids` from a `full` query, and nothing a request asks for widens
