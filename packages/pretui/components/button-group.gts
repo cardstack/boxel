@@ -5,6 +5,7 @@ import type {
   PretuiSize,
   PretuiTone,
 } from '../pretui-primitives';
+import type { ButtonShape } from './button';
 
 // Transcribed from wa-button-group: related Pretui Buttons fused into one
 // visual unit — role='group' with a strongly-recommended label, horizontal
@@ -32,6 +33,8 @@ export interface ButtonGroupSignature {
     appearance?: PretuiAppearance;
     /** size (font-size scale) applied to every child Button */
     size?: PretuiSize;
+    /** outer-corner treatment for the whole group; the inner corners stay square */
+    shape?: ButtonShape;
   };
   Blocks: { default: [] };
   Element: HTMLDivElement;
@@ -52,6 +55,7 @@ export class ButtonGroup extends Component<ButtonGroupSignature> {
       data-tone={{@tone}}
       data-appearance={{@appearance}}
       data-size={{@size}}
+      data-shape={{@shape}}
       data-test-pretui-button-group
       ...attributes
     >
@@ -80,6 +84,15 @@ export class ButtonGroup extends Component<ButtonGroupSignature> {
         }
         .pretui-btngroup :deep(.pretui-btn:focus-visible) {
           z-index: 2;
+        }
+        .pretui-btngroup[data-shape='rounded'] :deep(.pretui-btn) {
+          border-radius: var(--pretui-button-radius, calc(var(--radius) - 2px));
+        }
+        .pretui-btngroup[data-shape='pill'] :deep(.pretui-btn) {
+          border-radius: var(--pretui-button-radius, var(--boxel-border-radius-pill));
+        }
+        .pretui-btngroup[data-shape='square'] :deep(.pretui-btn) {
+          border-radius: var(--pretui-button-radius, 0);
         }
         /* attach: square the inner corners, overlap the borders by 1px so
            adjacent edges collapse into one shared line */

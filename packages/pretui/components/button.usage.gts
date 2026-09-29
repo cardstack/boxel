@@ -3,7 +3,8 @@
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { FreestyleUsage } from './freestyle-usage';
-import { Button } from './button';
+import { BUTTON_SHAPES, Button } from './button';
+import type { ButtonShape } from './button';
 import {
   PRETUI_APPEARANCES,
   PRETUI_SIZES,
@@ -21,6 +22,7 @@ import type {
 const TONES = [...PRETUI_TONES];
 const APPEARANCES = [...PRETUI_APPEARANCES];
 const SIZES = [...PRETUI_SIZES];
+const SHAPES = [...BUTTON_SHAPES];
 
 export class ButtonUsage extends GlimmerComponent {
   @tracked tone = 'primary';
@@ -29,17 +31,22 @@ export class ButtonUsage extends GlimmerComponent {
   @tracked busy = false;
   @tracked busyLabel = '';
   @tracked disabled = false;
+  @tracked shape = 'rounded';
   setTone = (v: string) => (this.tone = v);
   setAppearance = (v: string) => (this.appearance = v);
   setSize = (v: string) => (this.size = v);
   setBusy = (v: boolean) => (this.busy = v);
   setBusyLabel = (v: string) => (this.busyLabel = v);
   setDisabled = (v: boolean) => (this.disabled = v);
+  setShape = (v: string) => (this.shape = v);
   get toneVal() {
     return this.tone as PretuiTone;
   }
   get appearanceVal() {
     return this.appearance as PretuiAppearance;
+  }
+  get shapeVal() {
+    return this.shape as ButtonShape;
   }
   get sizeVal() {
     return this.size as PretuiSize;
@@ -50,6 +57,7 @@ export class ButtonUsage extends GlimmerComponent {
     if (this.busy) bits.push('@busy={{true}}');
     if (this.busyLabel) bits.push(`@busyLabel='${this.busyLabel}'`);
     if (this.disabled) bits.push('@disabled={{true}}');
+    if (this.shape !== 'rounded') bits.push(`@shape='${this.shape}'`);
     return `<Button ${bits.join(' ')}>Keep selling</Button>`;
   }
   <template>
@@ -66,6 +74,7 @@ export class ButtonUsage extends GlimmerComponent {
           @busy={{this.busy}}
           @busyLabel={{this.busyLabel}}
           @disabled={{this.disabled}}
+          @shape={{this.shapeVal}}
         >Keep selling</Button>
       </:example>
       <:api as |Args|>
@@ -112,6 +121,14 @@ export class ButtonUsage extends GlimmerComponent {
           @defaultValue={{false}}
           @description='Disables the button.'
           @onInput={{this.setDisabled}}
+        />
+        <Args.String
+          @name='shape'
+          @value={{this.shape}}
+          @options={{SHAPES}}
+          @defaultValue='rounded'
+          @description="Corner treatment. rounded is the theme's --radius less 2px; --pretui-button-radius overrides any shape per instance."
+          @onInput={{this.setShape}}
         />
         <Args.Base
           @name='variant'

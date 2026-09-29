@@ -28,6 +28,25 @@ module('Pretui | components/button', function (hooks) {
     assert.strictEqual(el.dataset['size'], 'm');
     assert.false(el.disabled);
     assert.strictEqual(el.dataset['state'], undefined, 'no busy state at rest');
+    assert.strictEqual(
+      el.dataset['shape'],
+      'rounded',
+      'theme radius by default',
+    );
+  });
+
+  test('@shape picks the corner treatment and falls back to rounded', async function (assert) {
+    await render(
+      <template>
+        <Button @shape='pill' data-test-pill>Follow</Button>
+        <Button @shape='square' data-test-square>Follow</Button>
+        {{! @glint-expect-error - deliberately invalid }}
+        <Button @shape='blob' data-test-unknown>Follow</Button>
+      </template>,
+    );
+    assert.strictEqual(btn('[data-test-pill]').dataset['shape'], 'pill');
+    assert.strictEqual(btn('[data-test-square]').dataset['shape'], 'square');
+    assert.strictEqual(btn('[data-test-unknown]').dataset['shape'], 'rounded');
   });
 
   test('busy stays focusable, announces itself, and shows a decorative spinner', async function (assert) {

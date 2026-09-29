@@ -94,6 +94,9 @@ const fitBusyContent = modifier((busyEl: HTMLElement, [busy]: [boolean]) => {
   };
 });
 
+export const BUTTON_SHAPES = ['rounded', 'pill', 'square'] as const;
+export type ButtonShape = (typeof BUTTON_SHAPES)[number];
+
 export interface ButtonSignature {
   Args: {
     /** single-axis alias over @tone + @appearance */
@@ -106,6 +109,8 @@ export interface ButtonSignature {
      *  doesn't say so itself (e.g. 'Save' → 'Save, saving') */
     busyLabel?: string;
     disabled?: boolean;
+    /** corner treatment; 'rounded' (default) is the theme's --radius less 2px */
+    shape?: ButtonShape;
     /** alias of @disabled */
     isDisabled?: boolean;
     /** aliases of @busy */
@@ -133,6 +138,12 @@ export class Button extends Component<ButtonSignature> {
   }
   get size(): PretuiSize {
     return resolveSize(this.args.size);
+  }
+  get shape(): ButtonShape {
+    let shape = this.args.shape;
+    return shape && (BUTTON_SHAPES as readonly string[]).includes(shape)
+      ? shape
+      : 'rounded';
   }
   get busy() {
     return (
@@ -168,6 +179,7 @@ export class Button extends Component<ButtonSignature> {
       data-appearance={{this.appearance}}
       data-size={{this.size}}
       data-state={{if this.busy 'busy'}}
+      data-shape={{this.shape}}
       disabled={{this.disabled}}
       aria-disabled={{this.ariaDisabled}}
       aria-busy={{if this.busy 'true'}}
@@ -222,10 +234,9 @@ export class Button extends Component<ButtonSignature> {
           min-width: var(--pretui-button-min-w, 0);
           padding: 0.2em var(--pretui-button-px, 0.96em);
           border: 1px solid var(--pretui-btn-edge, transparent);
-          border-radius: var(
-            --pretui-button-radius,
-            var(--boxel-border-radius-sm)
-          );
+          /* a step below the theme's --radius, so a button nests inside a
+             card or dialog of that radius */
+          border-radius: var(--pretui-button-radius, calc(var(--radius) - 2px));
           background: var(--pretui-btn-surface, transparent);
           color: var(--pretui-btn-text, inherit);
           box-shadow: var(--pretui-btn-elevation, none);
@@ -269,6 +280,15 @@ export class Button extends Component<ButtonSignature> {
         .pretui-btn:disabled {
           opacity: 0.45;
           cursor: default;
+        }
+        .pretui-btn[data-shape='pill'] {
+          border-radius: var(
+            --pretui-button-radius,
+            var(--boxel-border-radius-pill)
+          );
+        }
+        .pretui-btn[data-shape='square'] {
+          border-radius: var(--pretui-button-radius, 0);
         }
         /* size scale — font-size only; internals ride the em */
         .pretui-btn[data-size='xs'] {

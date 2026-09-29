@@ -9,6 +9,7 @@ The kit's action primitive: a native `<button>` with a two-axis treatment system
 @appearance? 'accent' | 'filled' | 'outlined' | 'filled-outlined' | 'plain'
 @size?      'xs' | 's' | 'm' | 'l' | 'xl'   (default 'm')
 @busy?, @disabled?
+@shape?     'rounded' | 'pill' | 'square'   (default 'rounded': the theme's --radius less 2px)
 @variant?   single-axis alias resolved onto @tone × @appearance:
             primary|secondary|ghost|destructive|default|outline|outlined|subtle|filled|link
 ```
@@ -30,7 +31,7 @@ Where Pretui improves:
 - **Uniform `em` sizing** (above) — Web Awesome and shadcn both restate padding/height per size.
 - Per-instance escapes (`--pretui-button-h`, `--pretui-button-min-w`, `--pretui-button-px`, `--pretui-button-radius`, `--pretui-button-bg`, `--pretui-button-fg`) are custom properties, so a call site can deviate without `:deep()`.
 
-Deliberately absent versus the field: no `href`/link rendering (use an anchor), no `pill`, no `caret`, no icon slots — icons are just children.
+Deliberately absent versus the field: no `href`/link rendering (use an anchor), no `caret`, no icon slots — icons are just children.
 
 ## Accessibility
 
@@ -48,7 +49,7 @@ Gaps worth knowing:
 
 ## Theming
 
-Tone tokens, all from the Boxel theme contract: `--primary`, `--destructive`, `--info`, `--success`, `--warning` and `--attention`, each with its `-foreground` pair, plus `--foreground`/`--background` for the neutral tone. Recipe tokens: `--background`, `--foreground`, `--border`, `--muted-foreground`, `--shadow-2xs`. Each appearance only sets `--pretui-btn-surface`, `--pretui-btn-text` and `--pretui-btn-edge` (plus `-hover` twins); one border carries the edge, so fill and edge move together on hover. Metrics: `--boxel-border-radius-sm` (the default radius; override per instance with `--pretui-button-radius`), `--track-ui`, `--text-ui-xs|sm|md|lg|xl` under the `--pretui-size-xs|s|m|l|xl` override knobs, `--pretui-dur-snap`, `--pretui-ease-snap`.
+Tone tokens, all from the Boxel theme contract: `--primary`, `--destructive`, `--info`, `--success`, `--warning` and `--attention`, each with its `-foreground` pair, plus `--foreground`/`--background` for the neutral tone. Recipe tokens: `--background`, `--foreground`, `--border`, `--muted-foreground`, `--shadow-2xs`. Each appearance only sets `--pretui-btn-surface`, `--pretui-btn-text` and `--pretui-btn-edge` (plus `-hover` twins); one border carries the edge, so fill and edge move together on hover. Metrics: `--radius` (the `rounded` shape uses `calc(var(--radius) - 2px)`, so a button nests inside a card or dialog of the same radius; `pill` uses `--boxel-border-radius-pill`, `square` is 0, and `--pretui-button-radius` overrides any shape per instance), `--track-ui`, `--text-ui-xs|sm|md|lg|xl` under the `--pretui-size-xs|s|m|l|xl` override knobs, `--pretui-dur-snap`, `--pretui-ease-snap`.
 
 The `accent` recipe paints the tone as the background and its `-foreground` as the text, so a theme that changes `--warning` should change `--warning-foreground` with it. `theme.css` defaults every pair, so a theme that sets neither still renders a readable button.
 

@@ -3,7 +3,7 @@ import Component from '@glimmer/component';
 import { firstDefined } from '../pretui-primitives';
 import type { PretuiSizeArg } from '../pretui-primitives';
 import { Button } from './button';
-import type { ButtonVariant } from './button';
+import type { ButtonShape, ButtonVariant } from './button';
 
 export interface IconButtonSignature {
   Args: {
@@ -11,6 +11,8 @@ export interface IconButtonSignature {
     variant?: ButtonVariant;
     size?: PretuiSizeArg;
     disabled?: boolean;
+    /** 'pill' makes a circle, since the button is square */
+    shape?: ButtonShape;
     /** alias of @disabled */
     isDisabled?: boolean;
   };
@@ -30,6 +32,7 @@ export class IconButton extends Component<IconButtonSignature> {
       @variant={{this.variant}}
       @size={{@size}}
       @disabled={{this.disabled}}
+      @shape={{@shape}}
       class='pretui-iconbtn'
       aria-label={{@label}}
       title={{@label}}

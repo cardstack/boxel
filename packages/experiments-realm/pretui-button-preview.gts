@@ -1,7 +1,7 @@
 import { CardDef, Component } from '@cardstack/base/card-api';
 import { on } from '@ember/modifier';
 import { tracked } from '@glimmer/tracking';
-import { Button } from '@cardstack/pretui/components/button';
+import { BUTTON_SHAPES, Button } from '@cardstack/pretui/components/button';
 import { ButtonGroup } from '@cardstack/pretui/components/button-group';
 import {
   PRETUI_APPEARANCES,
@@ -20,6 +20,7 @@ export class PretuiButtonPreview extends CardDef {
     tones = PRETUI_TONES;
     appearances = PRETUI_APPEARANCES;
     sizes = PRETUI_SIZES;
+    shapes = BUTTON_SHAPES;
 
     @tracked saving = false;
     private timer: ReturnType<typeof setTimeout> | undefined;
@@ -145,6 +146,52 @@ export class PretuiButtonPreview extends CardDef {
             {{#each this.sizes as |size|}}
               <Button @size={{size}}>Size {{size}}</Button>
             {{/each}}
+          </div>
+        </section>
+
+        <section aria-labelledby='shape-heading'>
+          <h2 id='shape-heading'>Shape</h2>
+          <div class='row'>
+            {{#each this.shapes as |shape|}}
+              <Button @shape={{shape}}>{{shape}}</Button>
+            {{/each}}
+            {{#each this.shapes as |shape|}}
+              <ButtonGroup
+                @label='Range'
+                @tone='neutral'
+                @appearance='outlined'
+                @shape={{shape}}
+              >
+                <Button>Day</Button>
+                <Button>Week</Button>
+              </ButtonGroup>
+            {{/each}}
+          </div>
+          <h3>Pill</h3>
+          <div class='row'>
+            {{#each this.appearances as |appearance|}}
+              <Button @appearance={{appearance}} @shape='pill'>Follow</Button>
+            {{/each}}
+          </div>
+          <div class='row'>
+            {{#each this.sizes as |size|}}
+              <Button @size={{size}} @shape='pill'>Size {{size}}</Button>
+            {{/each}}
+          </div>
+          <div class='row'>
+            <ButtonGroup
+              @label='Range'
+              @tone='neutral'
+              @appearance='outlined'
+              @shape='pill'
+            >
+              <Button>Day</Button>
+              <Button>Week</Button>
+              <Button>Month</Button>
+            </ButtonGroup>
+            <Button @shape='pill' @busy={{true}} @busyLabel='Following'>
+              Follow
+            </Button>
           </div>
         </section>
 
