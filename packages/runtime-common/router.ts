@@ -270,12 +270,21 @@ export interface RouteOptions {
   // when the ACL would not let its caller read the realm, whether or not the
   // realm has a policy.
   coarseReadOnly?: true;
+  // The route applies an archived realm's seal itself to a caller the realm
+  // ACL declined outright and its policy was handed, at the point where it
+  // would run what that caller asked for. Anything it refuses them before that
+  // point is refused as it is while the realm is active, so a caller no grant
+  // admits is not told the realm is archived. Only a route that consumes the
+  // ACL's outcome can take this. Every other route that does meets such a
+  // caller with the seal as soon as it admits them.
+  appliesArchivedSeal?: true;
 }
 
 export interface Route {
   handler: Handler;
   consumesCoarseOutcome: boolean;
   coarseReadOnly: boolean;
+  appliesArchivedSeal: boolean;
 }
 
 export interface RouteDescription {
@@ -284,6 +293,7 @@ export interface RouteDescription {
   path: string;
   consumesCoarseOutcome: boolean;
   coarseReadOnly: boolean;
+  appliesArchivedSeal: boolean;
 }
 
 export class Router {
@@ -373,6 +383,7 @@ export class Router {
       handler,
       consumesCoarseOutcome: opts.consumesCoarseOutcome === true,
       coarseReadOnly: opts.coarseReadOnly === true,
+      appliesArchivedSeal: opts.appliesArchivedSeal === true,
     });
   }
 
@@ -390,6 +401,7 @@ export class Router {
             path,
             consumesCoarseOutcome: route.consumesCoarseOutcome,
             coarseReadOnly: route.coarseReadOnly,
+            appliesArchivedSeal: route.appliesArchivedSeal,
           });
         }
       }
