@@ -32,6 +32,7 @@ import {
   isSingleFileMetaDocument,
   isEntryCollectionDocument,
   isSparseItemResource,
+  hasWithheldRelationships,
   loadCardDef,
   resolveFileDefCodeRef,
   searchEntryWireQueryFromQuery,
@@ -1474,7 +1475,12 @@ export default class StoreService extends Service implements StoreInterface {
   // the instance and could clobber a correctly-loaded full one — so the call
   // is a no-op for it; likewise an item carrying an error doc (`meta.error`),
   // which stands in for a card that failed to render and is not a real
-  // instance. `entry`s carry no serialization to deposit. Idempotent:
+  // instance, and an item served with its relationships withheld
+  // (`meta.relationshipsWithheld`, a row of a query declaring `links: 'none'`),
+  // which says nothing about the card's links and would read as a card linking
+  // to nothing. Such a row renders from its HTML, or resolves the card through
+  // its own read, so the card's live instance is always what its own `read`
+  // declares. `entry`s carry no serialization to deposit. Idempotent:
   // depositing is skipped when the instance is already resident.
   async inflateSearchEntryItem(
     resource: CardResource<Saved> | FileMetaResource,
@@ -1482,7 +1488,11 @@ export default class StoreService extends Service implements StoreInterface {
     // Read `meta.error` before the guard: `isSparseItemResource`'s negative
     // narrowing would otherwise reduce `resource` to `never` in the second
     // operand.
-    if (resource.meta.error != null || isSparseItemResource(resource)) {
+    if (
+      resource.meta.error != null ||
+      hasWithheldRelationships(resource) ||
+      isSparseItemResource(resource)
+    ) {
       return;
     }
     await this.addResourceFromSearchData(resource);
@@ -1606,12 +1616,22 @@ export default class StoreService extends Service implements StoreInterface {
 
     // Hydrate each result into the store. The data-only entry doc
     // carries one full `item` (`card`/`file-meta`) serialization per entry in
-    // `included`, reached through the entry's `item` relationship.
+    // `included`, reached through the entry's `item` relationship. An item
+    // served with its relationships withheld is never adopted, since it is
+    // silent about the card's links rather than saying it has none: its card
+    // loads through its own read instead, so the instance carries what the
+    // card's own `read` declares.
     let items = this.itemResourcesFromSearchEntries(collectionDoc);
     let instances = (
       await Promise.all(
         items.map(async (resource) => {
           try {
+            if (hasWithheldRelationships(resource)) {
+              return await this.loadWithheldSearchItem<T>(
+                resource,
+                dependencyTrackingContext,
+              );
+            }
             return await this.addResourceFromSearchData<T>(
               resource,
               dependencyTrackingContext,
@@ -1628,6 +1648,37 @@ export default class StoreService extends Service implements StoreInterface {
     ).filter(Boolean) as T[];
 
     return { instances, meta: collectionDoc.meta };
+  }
+
+  // The instance a search result names whose item was served with its
+  // relationships withheld, read the way any other read of the card is: the
+  // resident instance where there is one, and otherwise the card's own GET. A
+  // card that fails to load is dropped from the results, as one whose item
+  // fails to hydrate is.
+  private async loadWithheldSearchItem<T extends CardDef | FileDef>(
+    resource: CardResource<Saved> | FileMetaResource,
+    dependencyTrackingContext?: RuntimeDependencyTrackingContext,
+  ): Promise<T | undefined> {
+    if (!resource.id) {
+      throw new Error('resource must have an id');
+    }
+    let loaded = isFileMetaResource(resource)
+      ? await this.getFileMetaInstance<T & FileDef>({
+          idOrDoc: resource.id,
+          opts: { dependencyTrackingContext },
+        })
+      : await this.getCardInstance<T & CardDef>({
+          idOrDoc: resource.id,
+          opts: { dependencyTrackingContext },
+        });
+    if (isCardInstance(loaded) || isFileDefInstance(loaded)) {
+      return loaded as T;
+    }
+    storeLogger.warn(
+      `Failed to load search result whose relationships were withheld (id: ${resource.id})`,
+      loaded,
+    );
+    return undefined;
   }
 
   // The instances path's resolved-document layer: the `Query` runs against

@@ -468,12 +468,17 @@ what a query declares. The declaration is applied on a realm's own `_search` and
 on `_federated-search` alike, since the server re-lowers a named query from its
 own definition wherever it is served.
 
-`ids` is the narrowing to reach for here too. The host keeps the cards a search
-answers with as the live instances it renders and edits, so a row served under
-`none` becomes a live card with empty link fields — wherever that card is next
-shown or edited in the host, including where its own `read` would carry its
-links, until it is next reloaded. Under `ids` the host resolves each named link
-itself, as it does for an `ids` read.
+**A query's `none` never becomes the card's live representation.** The host
+keeps the cards a search answers with as the live instances it renders and
+edits, and adopts a `full` or `ids` row as one; under `ids` it resolves each
+named link itself, as it does for an `ids` read. A row served under `none` is
+silent about what its card links to rather than saying it links to nothing, so
+the realm marks the row's card `meta.relationshipsWithheld` and the host never
+adopts it. The row renders from its prerendered HTML, and wherever the card is
+opened, edited or rendered live, the host loads it through its own read, so it
+carries what the card's own `read` declares — never empty link fields the query
+chose not to send. The cost is one request for each such card the host goes on
+to use live, where an adopted row would have needed none.
 
 #### Where it is refused
 
