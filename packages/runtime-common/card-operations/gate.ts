@@ -1384,7 +1384,7 @@ function logThrow(
   if (error.length > THROW_ERROR_LENGTH) {
     error = `${error.slice(0, THROW_ERROR_LENGTH)}…`;
   }
-  (policyLog ??= logger('realm:policy')).warn(
+  policyLog.warn(
     `a predicate in the policy of realm ${core.realmURL} threw while ` +
       `deciding whether ${actor ?? 'an anonymous caller'} may invoke ` +
       `"${operation}" on ${judged}: ${where.source}: ${error}`,
@@ -1398,9 +1398,10 @@ const THROW_ERROR_LENGTH = 200;
 // predicate, so a policy compiled again starts over.
 const lastLoggedThrow = new WeakMap<CompiledPolicyPredicate, number>();
 
-// Created lazily: a module-scope `logger()` can race the circular import that
-// installs the log-definitions factory, the hazard `telemetry.ts` documents.
-let policyLog: ReturnType<typeof logger> | undefined;
+// The channel the policy compiler logs its issues on, so every fault in a
+// realm's policy is in one place. Created once: each `logger()` call applies
+// the configured level again, which would undo a level raised after it.
+const policyLog = logger('realm:policy');
 
 function parseURL(url: string): URL | undefined {
   try {
