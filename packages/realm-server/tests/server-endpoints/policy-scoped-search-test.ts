@@ -1297,10 +1297,13 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
     module('a realm this process has not mounted', function (hooks) {
       // Each is staged the way a realm nothing on this process has touched
       // since it started is: its files on disk and its row in the registry,
-      // and no mount. Neither provider may read either one.
+      // and no mount. Neither provider may read any of them.
       const UNMOUNTED_PRIVATE = 'http://127.0.0.1:4444/unmounted-private/';
       const UNMOUNTED_ENUMERABLE =
         'http://127.0.0.1:4444/unmounted-enumerable/';
+      // Registered with a `disk_id` outside the realms root, so there is no
+      // directory to read its `realm.json` from and none to mount it from.
+      const UNRESOLVABLE = 'http://127.0.0.1:4444/unresolvable/';
       const SCHEDULES = { 'item.on': SCHEDULE };
 
       async function stage(
@@ -1352,6 +1355,10 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
             status: 'closed',
             rank: 2,
           }),
+        });
+        await stage(UNRESOLVABLE, '../unresolvable', {
+          'realm.json': realmConfigCardJSON({ name: 'Unresolvable' }),
+          ...aOpen(),
         });
         // The registry as this process reflects it, which is what the
         // realms are looked up in, brought up to date with the rows just
@@ -1421,6 +1428,26 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           isMounted(UNMOUNTED_ENUMERABLE),
           'the realm was mounted to ask its policy',
         );
+      });
+
+      test('one whose policy cannot be judged is counted as failed, not as granting nothing', async function (assert) {
+        let response = await federatedSearch(
+          { filter: SCHEDULES, realms: [ENUMERABLE, UNRESOLVABLE] },
+          PROVIDER_A,
+        );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        assert.deepEqual(inRealm(UNRESOLVABLE, response), [], 'none from it');
+        assert.deepEqual(
+          inRealm(ENUMERABLE, response).sort(),
+          [`${ENUMERABLE}schedules/a-open`, `${ENUMERABLE}schedules/b-open`],
+          'and the realm beside it answers under its own policy',
+        );
+        assert.true(
+          response.body.meta.incomplete,
+          'the result says it is missing a realm, rather than passing that realm off as holding nothing',
+        );
+        assert.false(isMounted(UNRESOLVABLE), 'it could not be mounted');
       });
     });
   });

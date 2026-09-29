@@ -3,7 +3,9 @@ import { PUBLISHED_DIRECTORY_NAME } from '@cardstack/runtime-common';
 import type { RealmRegistryRow } from './realm-registry-reconciler.ts';
 
 // The directory a realm's files live in, from its registry row alone, so a
-// caller can reach them without mounting the realm.
+// caller can reach them without mounting the realm. The mount takes its
+// directory from here too, which is what makes the files read that way the
+// files the mounted realm reads. A row this refuses cannot be mounted.
 //
 // `disk_id` is kind-specific (see the realm_registry migration column
 // comment): for `bootstrap` it's an absolute path; for `source` it's a
