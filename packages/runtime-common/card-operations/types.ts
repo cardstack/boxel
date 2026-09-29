@@ -135,14 +135,17 @@ function narrowerLinkStrategy(a: LinkStrategy, b: LinkStrategy): LinkStrategy {
   return LINK_STRATEGY_REACH[a] >= LINK_STRATEGY_REACH[b] ? a : b;
 }
 
-// How much of the card's link graph a read carries, from the two places that
-// may narrow it. The one function both the read executor and the card+json
-// validator built ahead of it call, so the body and the validator that
-// describes it cannot disagree about the shape.
+// How much of the card's link graph a read carries, or how much of each
+// result's a named query's results carry, from the two places that may narrow
+// it. The one function the read executor, the card+json validator built ahead
+// of it, and both search endpoints call, so the body and the validator that
+// describes it cannot disagree about the shape, and neither can a query's
+// results served from a realm's own `_search` and from `_federated-search`.
 //
 // The operation declares one, and it is the author's statement about what this
-// card's representation is allowed to reach — uniform across callers, because
-// the serving path never asks how a caller was authorized.
+// card's representation — or this query's results — is allowed to reach,
+// uniform across callers, because the serving path never asks how a caller was
+// authorized.
 //
 // The request carries the other. `resolveLinksOnly` is how the realm sheds
 // load, or how a consumer says it will resolve the links it displays itself;
@@ -202,9 +205,16 @@ export interface OperationDefinition {
   // A saved search, as an entry-wire query whose value slots may still hold
   // markers.
   query?: OperationQueryTemplate;
-  // How much of the target's link graph this read carries: the whole assembled
+  // How much of the target's link graph this read carries, or how much of each
+  // result's link graph this query's results carry: the whole assembled
   // closure, the relationships naming their targets with nothing assembled, or
-  // no relationship data at all. Absent is `full`.
+  // no relationship data at all. Absent is `full`. Only a `read` or a `query`
+  // carries one.
+  //
+  // On a query it governs every result row alike, whatever type the row is and
+  // whatever that type's own `read` declares, and it narrows the row's card
+  // rather than the entry the row is delivered in: the entry still names its
+  // card and carries its renderings.
   //
   // It applies to every caller alike. The serving path never asks how a caller
   // was authorized, so a realm writer and a caller reached by a policy grant
@@ -303,13 +313,13 @@ export type OperationLoweringIssueCode =
   // user id and no card represents a user, so the link would name a card that
   // does not exist.
   | 'actor-not-a-card'
-  // A `links` strategy on a base other than `read`. The strategy narrows the
-  // document a read of the target serves, and no other base serves one: a write
-  // answers without assembling the card's closure, a `readSource` serves stored
-  // bytes, and a `query` answers through search, whose results carry their own
-  // closures that this declaration does not govern.
+  // A `links` strategy on a base other than `read` or `query`. The strategy
+  // narrows the link closure a read of the target or a query's results
+  // assemble, and no other base assembles one: a write answers without
+  // assembling the card's closure, and a `readSource` serves stored bytes.
   | 'links-without-assembly'
-  // A `links` value that is not one of the strategies a read can apply.
+  // A `links` value that is not one of the strategies a read or a query can
+  // apply.
   | 'invalid-link-strategy'
   // A raw BXL program that does not parse.
   | 'invalid-program'
@@ -365,25 +375,62 @@ export interface LowerOperationDeclarationsResult {
   issues: OperationLoweringIssue[];
 }
 
+// What compiling a realm's policy found wrong with it. Each is recorded
+// against the part of the policy that caused it, and that part is inactive:
+// a problem with the card as a whole leaves the policy with no rules, one
+// with a rule leaves that rule out, and one with a grant leaves that grant
+// out. The rest of the policy applies. `policy-not-filterable` alone keeps
+// its grant, for everything but a search.
 export type PolicyIssueCode =
   // The realm's `policy` pointer names a card the index does not hold.
   | 'policy-card-missing'
-  // The pointer names a card the index holds only as an error.
+  // The pointer names a card the index holds only as an error, or one whose
+  // latest index visit failed with the failure kept off its row, so that what
+  // the index holds is an earlier visit's.
   | 'policy-card-unloadable'
   // The pointer names a card that is not a `RealmPolicy`.
   | 'not-a-policy'
-  // A rule whose `targetType` is not a code ref.
+  // A card whose `rules` is not a list, or a rule whose `targetType` is not a
+  // code ref or whose `grants` is not a list.
   | 'invalid-rule'
-  // A rule whose `targetType` resolves to no definition.
+  // A rule whose `targetType` does not resolve against the policy card, or
+  // resolves to no definition.
   | 'unresolved-type'
+  // A rule whose `targetType` is module source, or descends from it. Module
+  // source is readable only with the realm's own read permission, so there is
+  // nothing a rule on it could grant.
+  | 'grants-module-source'
   // A grant with no operation name, or a `where` that is neither BXL source
   // nor the annotated `{ bxl, snapshot }` form.
   | 'invalid-grant'
+  // A grant naming an operation its rule's type neither declares nor carries
+  // as a built-in behavior. A grant matches the name a caller invokes, so such
+  // a grant would match nothing.
+  | 'unknown-operation'
+  // A grant of authorization infrastructure: an operation declared
+  // `nonGrantable` on its rule's type or on any type that type descends from,
+  // or a write on a rule whose type is a `RealmPolicy`. The gate refuses both
+  // whatever a compiled policy holds, so the grant could admit nothing, and
+  // recording it says so where the author wrote it.
+  | 'grants-authorization-infrastructure'
   // A `where` that does not parse, or that the `policy` profile refuses.
   | 'invalid-predicate'
+  // A `where` that calls a builtin which can hold for a value it matches only
+  // in part: `contains`, a regex, a wildcard pattern, a lookup that settles
+  // for the nearest value, or `startswith` and its kin anchored at anything
+  // but a fixed string. `contains` holds for a caller whose id is only part of
+  // a listed one, so such a grant would admit callers it does not name.
+  | 'partial-match'
   // A grant on a query whose `where` does not compile to a search filter. The
   // grant is kept, and admits no search.
-  | 'policy-not-filterable';
+  | 'policy-not-filterable'
+  // A `where` that reads a computed value or a linked card's field without
+  // the `snapshot` annotation. Reserved: compiling does not record it.
+  | 'unsnapshotted-policy-read'
+  // A grant on a type whose representation links to cards of types the
+  // policy grants nothing on, so the grant reaches those cards too. Reserved:
+  // compiling does not record it.
+  | 'grant-reaches-ungranted-type';
 
 // A problem found while compiling a realm's policy. Recorded, never thrown,
 // for the reason lowering records rather than throws: the edit that caused it
@@ -806,10 +853,16 @@ export type PolicyExplanationReason =
 
 export interface ExplainedRule {
   targetType: { module: string; name: string };
+  // Where the rule is in the policy card, as a path into its attributes in
+  // the form a policy issue's `path` takes: `rules[2]`.
+  path: string;
   grants: ExplainedGrant[];
 }
 
 export interface ExplainedGrant {
+  // Where the grant is in the policy card, as `rules[2].grants[1]`, so an
+  // explanation and an issue name the same grant the same way.
+  path: string;
   // The predicate as the author wrote it. Absent for a grant with no
   // condition.
   where?: string;

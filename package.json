@@ -50,7 +50,7 @@
   },
   "engines": {
     "node": ">=24",
-    "pnpm": "^11"
+    "pnpm": "^12"
   },
   "dependencies": {
     "matrix-js-sdk": "38.3.0"

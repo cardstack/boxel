@@ -56,6 +56,21 @@ export const POLICY_FILE_DEF_CODE_REF_BY_EXTENSION: Readonly<
   ),
 );
 
+// The `FileDef` subclasses the indexer types module source as, spelled like
+// the table above. Module source is never grantable, so a policy rule whose
+// type is one of these, or descends from one, can grant nothing, and compiling
+// the policy records it.
+export const MODULE_SOURCE_FILE_DEF_CODE_REFS: readonly ResolvedCodeRef[] =
+  Object.freeze(
+    Object.entries(FILEDEF_CODE_REF_BY_EXTENSION).flatMap(
+      ([extension, { module, name }]) =>
+        executableExtensions.includes(extension) &&
+        module.startsWith(baseRealm.url)
+          ? [{ module: baseRRI(module.slice(baseRealm.url.length)), name }]
+          : [],
+    ),
+  );
+
 // The `FileDef` subclass a policy rule matches a stored file by, from its
 // name alone. Static and synchronous: no module is loaded and no index row is
 // read, so it can be consulted on paths that resolve before any definition
