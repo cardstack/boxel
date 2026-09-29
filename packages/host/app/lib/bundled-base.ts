@@ -409,6 +409,8 @@ export const BUNDLED_BASE_MODULES: Record<
   'xlsx-file-def': () => import('@cardstack/base/xlsx-file-def'),
   'xlsx-meta-extractor': () => import('@cardstack/base/xlsx-meta-extractor'),
   'zip-file-def': () => import('@cardstack/base/zip-file-def'),
+  'image-file-def': () => import('@cardstack/base/image-file-def'),
+  'png-image-def': () => import('@cardstack/base/png-image-def'),
 };
 
 // Registers on the virtual network, so every loader that shares it serves the

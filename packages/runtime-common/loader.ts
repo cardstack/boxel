@@ -237,6 +237,61 @@ function defaultSleep(ms: number): Promise<void> {
 }
 
 let nonce = 0;
+// A bundled base module publishes the classes it declares under its own name as
+// it is evaluated, which the `bundled-base-scoped-css` vite plugin appends to
+// its compiled source. This is the only account of those classes the loader can
+// have: it names the exports of every module it is asked for, and it is never
+// asked for a module reachable only from inside another module's chunk — the
+// bundler resolved that import where the loader could not see it.
+//
+// Read only when the loader has no answer of its own, so nothing it already
+// names changes. The index is built from what has been published so far and
+// extended on later misses, so a module evaluated after the first lookup is
+// still found. Nothing here resolves or fetches: the values are the very class
+// objects the chunk is using, published as a side effect of evaluation that
+// happens regardless.
+const bundledIdentities = new WeakMap<
+  Function,
+  { module: string; name: string }
+>();
+const indexedBundledModules = new Set<string>();
+
+function bundledIdentityFor(
+  value: Function,
+): { module: string; name: string } | undefined {
+  let registry = (
+    globalThis as {
+      __boxelBundledBaseIdentities?: Record<string, Record<string, unknown>>;
+    }
+  ).__boxelBundledBaseIdentities;
+  if (!registry) {
+    return undefined;
+  }
+  let known = bundledIdentities.get(value);
+  if (known) {
+    return known;
+  }
+  for (let moduleName of Object.keys(registry)) {
+    if (indexedBundledModules.has(moduleName)) {
+      continue;
+    }
+    indexedBundledModules.add(moduleName);
+    let exports = registry[moduleName];
+    for (let exportName of Object.keys(exports)) {
+      let exported = exports[exportName];
+      // First registration wins. A class is declared by one module; a module
+      // that merely re-exports it publishes nothing, so there is no contest.
+      if (typeof exported === 'function' && !bundledIdentities.has(exported)) {
+        bundledIdentities.set(exported, {
+          module: `@cardstack/base/${moduleName}`,
+          name: exportName,
+        });
+      }
+    }
+  }
+  return bundledIdentities.get(value);
+}
+
 export class Loader {
   nonce = nonce++; // the nonce is a useful debugging tool that let's us compare loaders
   private log = logger('loader');
@@ -519,10 +574,12 @@ export class Loader {
     }
     let loader = Loader.loaders.get(value);
     if (loader) {
-      return loader.identify(value);
-    } else {
-      return undefined;
+      let ref = loader.identify(value);
+      if (ref) {
+        return ref;
+      }
     }
+    return bundledIdentityFor(value);
   }
 
   identify(value: unknown): { module: string; name: string } | undefined {

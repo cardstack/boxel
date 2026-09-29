@@ -21,6 +21,9 @@
 import { sep } from 'node:path';
 
 const REGISTRY = '__boxelBundledBaseScopedCSS';
+// Where a bundled module publishes the classes it declares, so the loader can
+// name them without having been asked for the module. See DECLARED_EXPORT.
+const IDENTITIES = '__boxelBundledBaseIdentities';
 
 // `<fromFile>.<encoded stylesheet>.glimmer-scoped.css` wherever it appears as
 // a string in the compiled module. A stylesheet is imported for its side
@@ -92,6 +95,18 @@ function withoutComments(code) {
   return out;
 }
 
+// The names a module declares AND exports itself. Only these have a local
+// binding the appended registration can reference; `export { X } from './y'`
+// has none, and the module does not declare X anyway — `./y` does, and it
+// registers X itself.
+//
+// `export default class X` counts when it is named: the binding exists, and
+// the loader credits the name the module exposes it under.
+const DECLARED_EXPORT =
+  /\bexport\s+(?:default\s+)?(?:async\s+)?(?:abstract\s+)?(?:class|function|const|let|var)\s+([A-Za-z_$][\w$]*)/g;
+// `export { X, Y as Z }` with no `from` — X and Z are local bindings too.
+const LOCAL_EXPORT_LIST = /\bexport\s*\{([^}]*)\}\s*(?!\s*from)[;\n]/g;
+
 function isBaseModule(id) {
   return (
     id.includes(`${sep}packages${sep}base${sep}`) && /\.(gts|ts)(\?|$)/.test(id)
@@ -147,7 +162,27 @@ export function bundledBaseScopedCSS() {
             .map((specifier) => resolveSibling(name, specifier)),
         ),
       ].filter((imported) => imported !== name);
-      if (!css.length && !imports.length) {
+      // What this module declares, published under its own name as it is
+      // evaluated. A module reached only from inside another module's chunk is
+      // never served, so the loader is never asked for it and never learns the
+      // classes it declares; this is how it finds out anyway, at no cost —
+      // the module is being evaluated regardless, and nothing here resolves or
+      // fetches anything.
+      let declared = new Set(
+        [...code.matchAll(DECLARED_EXPORT)].map((m) => m[1]),
+      );
+      for (let match of code.matchAll(LOCAL_EXPORT_LIST)) {
+        for (let clause of match[1].split(',')) {
+          let parts = clause.trim().split(/\s+as\s+/);
+          if (!parts[0] || parts[0].startsWith('type ')) {
+            continue;
+          }
+          declared.add((parts[1] ?? parts[0]).trim());
+        }
+      }
+      let declaredNames = [...declared].sort();
+
+      if (!css.length && !imports.length && !declaredNames.length) {
         return null;
       }
       // A name that turns out to be something other than a base module costs
@@ -155,6 +190,13 @@ export function bundledBaseScopedCSS() {
       let registration =
         `\n;(globalThis.${REGISTRY} ??= {})[${JSON.stringify(name)}] = ` +
         `${JSON.stringify({ css, imports })};\n`;
+      if (declaredNames.length) {
+        // An object literal of the module's own bindings, so the values are
+        // the very classes the chunk uses — not a copy, and not a name match.
+        registration +=
+          `;(globalThis.${IDENTITIES} ??= {})[${JSON.stringify(name)}] = ` +
+          `{ ${declaredNames.map((n) => n).join(', ')} };\n`;
+      }
       return { code: code + registration, map: null };
     },
   };
