@@ -1865,7 +1865,12 @@ module(basename(import.meta.filename), function () {
   // `update` on `CardDef` to everyone. The target's row records `Person` and
   // `CardDef`.
   module('the policy gate on a card verb’s write', function () {
-    function gatedCore(person: 'declares update' | 'declares nothing') {
+    function gatedCore(
+      person:
+        | 'declares update'
+        | 'declares update on read'
+        | 'declares nothing',
+    ) {
       let { access, loads } = policyStub([
         { targetType: CARD_DEF, grants: ['update'] },
       ]);
@@ -1881,6 +1886,13 @@ module(basename(import.meta.filename), function () {
           ? {
               operations: {
                 update: { base: 'update', deterministic: true },
+              },
+            }
+          : {}),
+        ...(isPerson(ref) && person === 'declares update on read'
+          ? {
+              operations: {
+                update: { base: 'read', deterministic: true },
               },
             }
           : {}),
@@ -1948,6 +1960,18 @@ module(basename(import.meta.filename), function () {
         'operation-not-permitted',
         'and the verb, which would not carry that update out, is refused',
       );
+    });
+
+    test('a name declared on a base that does not write is refused before the gate judges it as a read', async function (assert) {
+      // The gate judges a declaration by its base, and a reader's reads are the
+      // ACL's to allow, so it would answer that the ACL allowed this one. The
+      // verb would then carry out its built-in write.
+      let { core, loads } = gatedCore('declares update on read');
+      let failure = await refusalFrom(() =>
+        resolveFacadeWrite(core, CARD, 'update', scope(core)),
+      );
+      assert.strictEqual(failure.code, 'operation-not-permitted');
+      assert.strictEqual(loads.count, 0, 'and no policy was loaded');
     });
 
     test('a caller the ACL allowed is not judged, whatever the type declares', async function (assert) {
