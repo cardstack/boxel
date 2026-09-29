@@ -97,6 +97,9 @@ export function analyzeRoom(
 
   // Tool results are keyed by the request id they answer.
   let firstSkillReadTurn: number | undefined;
+  // Turns that read files: a read can add a skill's tools, and tools lead the
+  // cached prefix, so the turn after one is billed cold by design.
+  let readTurns = new Set<number>();
   // Per-turn usage, in turn order. The cache window's first turn depends on
   // which turn first read a skill, and that is not known until the last turn
   // has been seen, so the window accounting runs after this pass rather than
@@ -150,6 +153,9 @@ export function analyzeRoom(
       toolNames.includes('readRealmFile')
     ) {
       firstSkillReadTurn = result.turns;
+    }
+    if (toolNames.includes('readRealmFile')) {
+      readTurns.add(result.turns);
     }
     turnUsage.push({
       promptTokens: usage.promptTokens ?? 0,
@@ -209,7 +215,7 @@ export function analyzeRoom(
   let windowStart =
     firstSkillReadTurn === undefined ? 2 : firstSkillReadTurn + 2;
   for (let [index, usage] of turnUsage.entries()) {
-    if (index + 1 < windowStart) {
+    if (index + 1 < windowStart || readTurns.has(index)) {
       continue;
     }
     result.cacheWindowTurns++;
