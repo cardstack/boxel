@@ -657,6 +657,11 @@ export async function resolveFacadeWrite(
   let { decision } = await resolveAndGate(core, target, base, scope, {
     builtInOnly: true,
   });
+  // The verb writes, and a write the ACL declined is never the ACL's to allow,
+  // so for such a caller the gate's answer is a grant or a refusal.
+  if (decision.kind === 'coarse' && scope.coarseDeclined !== 'none') {
+    throw notPermitted(target, base);
+  }
   return decision;
 }
 

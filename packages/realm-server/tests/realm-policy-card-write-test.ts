@@ -776,6 +776,24 @@ module(basename(import.meta.filename), function (hooks) {
         'a room the caller teaches is told the validator does not match',
       );
     });
+
+    test('a body the verb cannot use says no more than a refusal', async function (assert) {
+      // The handler reads the body after the gate has matched the write's
+      // grants and before the lock has judged its predicate, so its 400 is
+      // not allowed to answer for a card the caller was never admitted to.
+      assertNotThere(
+        assert,
+        await patchCard(ROOM_205, AUTH.teacher(), { data: {} }),
+        await patchCard(ROOM_999, AUTH.teacher(), { data: {} }),
+        [ROOM_205, ROOM_999],
+        'a PATCH whose body is not a card document',
+      );
+      assert.strictEqual(
+        (await patchCard(ROOM_204, AUTH.teacher(), { data: {} })).status,
+        400,
+        'a room the caller teaches is told what is wrong with the body',
+      );
+    });
   });
 
   module('what a grant does not reach over the card verbs', function () {
@@ -877,6 +895,23 @@ module(basename(import.meta.filename), function (hooks) {
         },
       });
       assert.strictEqual(relative.status, 400, 'a relative module');
+      let nested = await createCard(EDUCATION, AUTH.teacher(), {
+        data: {
+          type: 'card',
+          attributes: { body: 'Bake sale' },
+          meta: {
+            adoptsFrom: {
+              type: 'ancestorOf',
+              card: { module: './bulletin', name: 'Bulletin' },
+            },
+          },
+        },
+      });
+      assert.strictEqual(
+        nested.status,
+        400,
+        'a relative module inside a ref that wraps another',
+      );
       let admin = await createCard(EDUCATION, AUTH.admin(), {
         data: {
           type: 'card',

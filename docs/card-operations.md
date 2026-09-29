@@ -593,9 +593,12 @@ routes apart from a batch:
   `meta.adoptsFrom` is refused, because a card that is not stored yet has no
   location for it to be relative to.
 - **A write answers with the card it wrote.** A `POST` or `PATCH` answers with
-  the card's document, without its link closure, so a grant on a card write
-  shows the caller that card as a read of it would. Grant writes with that in
-  mind.
+  the card's indexed document, without its link closure, and without running
+  the type's `read`, so an `output` its `read` declares does not narrow it. A
+  grant of `create` or `update` over the card routes therefore shows the caller
+  the card's whole document, whatever `read` grant they hold, and a `PATCH`
+  that changes nothing still answers with it. Grant a card write only where the
+  caller may see the card.
 
 Some routes answer on the realm's own permissions alone, and no grant reaches
 them: the `card+source` write, its octet-stream spelling and the `card+source`

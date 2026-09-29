@@ -320,7 +320,7 @@ import type {
   IncrementalChange,
   SharedIndexPass,
 } from './tasks/indexer.ts';
-import { isCodeRef, isRelativePath } from './code-ref.ts';
+import { isCodeRef, isRelativePath, moduleFrom } from './code-ref.ts';
 import { merge } from 'lodash-es';
 import { inferContentType } from './infer-content-type.ts';
 import {
@@ -2094,6 +2094,10 @@ interface CardWriteAdmission {
   // Refuses, by throwing, a document whose side-loads a write the gate
   // admitted would stage.
   assertSideLoads(included: readonly unknown[] | undefined): void;
+  // An answer the handler gives before the batch runs, such as a 400 for a
+  // body that is not a card document, as the caller may be told it. Throws
+  // the gate's refusal where the caller may not be told it.
+  answer(response: Response): Promise<Response>;
   // A refusal the batch made, in the words the caller may be told it in.
   seenBy(err: unknown): Promise<unknown>;
 }
@@ -2102,6 +2106,7 @@ interface CardWriteAdmission {
 const COARSE_CARD_WRITE: CardWriteAdmission = {
   entry: {},
   assertSideLoads: () => {},
+  answer: async (response) => response,
   seenBy: async (err) => err,
 };
 
@@ -10625,7 +10630,9 @@ export class Realm {
   }
 
   // The card+json `PATCH` once the policy gate has had its say. A refusal is
-  // thrown, and `#patchCardInstance` answers it.
+  // thrown, and `#patchCardInstance` answers it. An answer given before the
+  // batch runs passes through `admission.answer`, which the gate's refusal
+  // replaces for a caller who may not be told it.
   async #patchAdmittedCard(
     request: Request,
     requestContext: RequestContext,
@@ -10641,13 +10648,15 @@ export class Realm {
     },
   ): Promise<Response> {
     if (await this.nonJsonFileExists(localPath)) {
-      return unsupportedMediaType(request, requestContext);
+      return await admission.answer(
+        unsupportedMediaType(request, requestContext),
+      );
     }
     if (localPath.startsWith('_')) {
-      return methodNotAllowed(request, requestContext);
+      return await admission.answer(methodNotAllowed(request, requestContext));
     }
     if (await this.openFileForMetadata(localPath)) {
-      return methodNotAllowed(request, requestContext);
+      return await admission.answer(methodNotAllowed(request, requestContext));
     }
 
     let duringPrerender = isDuringPrerenderRequest(request);
@@ -10658,24 +10667,30 @@ export class Realm {
 
     let { data: patch, included: maybeIncluded } = await request.json();
     if (!isCardResource(patch)) {
-      return badRequest({
-        message: `The request body was not a card document`,
-        requestContext,
-      });
+      return await admission.answer(
+        badRequest({
+          message: `The request body was not a card document`,
+          requestContext,
+        }),
+      );
     }
     if (maybeIncluded) {
       if (!Array.isArray(maybeIncluded)) {
-        return badRequest({
-          message: `Request body is not valid card JSON-API: included is not array`,
-          requestContext,
-        });
+        return await admission.answer(
+          badRequest({
+            message: `Request body is not valid card JSON-API: included is not array`,
+            requestContext,
+          }),
+        );
       }
       for (let sideLoadedResource of maybeIncluded) {
         if (!isCardResource(sideLoadedResource)) {
-          return badRequest({
-            message: `Request body is not valid card JSON-API: side-loaded data is not a valid card resource`,
-            requestContext,
-          });
+          return await admission.answer(
+            badRequest({
+              message: `Request body is not valid card JSON-API: side-loaded data is not a valid card resource`,
+              requestContext,
+            }),
+          );
         }
       }
     }
@@ -10995,14 +11010,17 @@ export class Realm {
   // creating a card through the operations envelope.
   #createTarget(resource: CardResource): OperationTarget {
     let { adoptsFrom, realmURL } = resource.meta;
-    if ('module' in adoptsFrom && isRelativePath(adoptsFrom.module)) {
+    // Read through a nested ref too: an `ancestorOf` or `fieldOf` names its
+    // module on the card it wraps.
+    let module = moduleFrom(adoptsFrom);
+    if (isRelativePath(module)) {
       throw new OperationFailure({
         status: 400,
         code: 'invalid-params',
         title: 'Invalid document',
         detail:
           `the card names the type it mints by the relative module ` +
-          `"${adoptsFrom.module}"; a card that is not stored yet has no ` +
+          `"${module}"; a card that is not stored yet has no ` +
           `location for a module to be relative to, so a create names its ` +
           `type by URL or registered prefix`,
       });
@@ -11075,18 +11093,28 @@ export class Realm {
       }
     };
     if (decision.kind !== 'pending') {
-      return { entry: {}, assertSideLoads, seenBy: async (err) => err };
+      return {
+        entry: {},
+        assertSideLoads,
+        answer: async (response) => response,
+        seenBy: async (err) => err,
+      };
     }
     let pending: PendingWrite = { target, name: base, decision, scope };
     await this.#testOnlyBeforeBatchLock?.();
     // Whether the write lock has decided the write, admitted or refused. Until
-    // it has, the batch holds a write whose target resolved and whose grants
-    // matched, which never happens for a card that does not exist, so a
-    // refusal made in that window would tell a caller who may not read the
-    // realm that the card is there. Such a refusal is answered as the gate's
-    // unless the write's predicate holds against the card as stored now, as
-    // the operations envelope answers one (see `#disclosableFailure`).
+    // it has, the write's target resolved and its grants matched, which never
+    // happens for a card that does not exist, so anything the handler or the
+    // batch answers in that window, other than the gate's own refusal, would
+    // tell a caller who may not read the realm that the card is there. Such an
+    // answer is replaced by the gate's refusal unless the write's predicate
+    // holds against the card as stored now, as the operations envelope
+    // answers one (see `#disclosableFailure`).
     let decided = false;
+    let hidden = async () =>
+      coarseDeclined === 'all' &&
+      !decided &&
+      !(await pendingWriteHolds(core, pending));
     return {
       entry: {
         admit: async (judged) => {
@@ -11098,10 +11126,18 @@ export class Realm {
         },
       },
       assertSideLoads,
+      answer: async (response) => {
+        if (await hidden()) {
+          throw notPermitted(target, base);
+        }
+        return response;
+      },
+      // The gate's own refusal, which `answer` or the lock raised, needs no
+      // rewording.
       seenBy: async (err) =>
-        coarseDeclined !== 'all' ||
-        decided ||
-        (await pendingWriteHolds(core, pending))
+        (isOperationFailure(err) &&
+          err.error.code === 'operation-not-permitted') ||
+        !(await hidden())
           ? err
           : notPermitted(target, base),
     };
@@ -12296,10 +12332,14 @@ export class Realm {
         'delete',
       );
       if (await this.nonJsonFileExists(requestedPath)) {
-        return unsupportedMediaType(request, requestContext);
+        return await admission.answer(
+          unsupportedMediaType(request, requestContext),
+        );
       }
       if (await this.openFileForMetadata(this.paths.local(url))) {
-        return methodNotAllowed(request, requestContext);
+        return await admission.answer(
+          methodNotAllowed(request, requestContext),
+        );
       }
       let precondition = this.#conditionalWrite(request, url);
       // Whether there is a card here is settled by the stored file, read
