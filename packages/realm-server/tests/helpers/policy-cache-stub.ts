@@ -76,7 +76,7 @@ export function stubPolicyCache({
                 grants: [
                   {
                     operation: 'read',
-                    where: '.teacherIds | contains(actor())',
+                    where: '.teacherIds | any(. == actor())',
                   },
                 ],
               },

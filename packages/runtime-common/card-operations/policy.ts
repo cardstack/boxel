@@ -739,7 +739,7 @@ async function compilePolicy(
       }
       let outcome = await compilePredicate(where.source);
       if ('problem' in outcome) {
-        issue('invalid-predicate', `${grantPath}.where`, outcome.problem);
+        issue(outcome.code, `${grantPath}.where`, outcome.problem);
         continue;
       }
       grants.push(
@@ -867,15 +867,86 @@ function readPredicate(
 const ADMITTED_CALL_DENIAL =
   / does not allow call (?:actor|instance|realmConfig):/;
 
+// The builtins a predicate may not call, because each can hold for a value it
+// matches only in part. `.teacherIds | contains([actor()])` holds for the
+// caller `@bob:server` when the list holds `@bob:server.org`; a regex, a
+// wildcard pattern or a substring search does the same, and a lookup that
+// settles for the nearest value holds for whichever id sorts next to a listed
+// one. A grant written with one admits callers its author never named, and
+// nothing reports it. And a search filter matches whole values, so the query
+// lane could never scope a search the way the gate judges a single card.
+//
+// A name here is refused wherever it appears in a predicate, and not only
+// where it reads `actor()`: a partial match on any value that decides access
+// is one an author has to reason about for every value that value could hold.
+// Names are as BXL resolves them. jq's `index` finds a substring, while Excel's
+// `INDEX` reads a position and is not here.
+//
+// Deliberately admitted, though each can come close:
+//
+// - `startswith` and `endswith`, and `ltrimstr`, `rtrimstr` and `trimstr`.
+//   They are anchored at one end, which is how a namespace is written: a path
+//   under `"…/public/"`, an id on `":example.org"`.
+// - Splitting and rewriting a string (`split`, `splits`, `sub`, `gsub`,
+//   `SUBSTITUTE`, `LEFT` and the rest). They answer no match themselves, and
+//   what they produce is compared exactly. A substring test can be built from
+//   one, but not by an author reaching for a membership test.
+// - Case folding and trimming (`ascii_downcase`, `LOWER`, `TRIM`), which
+//   loosen an equality without making it partial.
+const PARTIAL_MATCH_BUILTINS: ReadonlyMap<string, string> = new Map([
+  ['contains', 'matches substrings'],
+  ['inside', 'is `contains` reversed, and matches substrings'],
+  ['index', 'finds a substring'],
+  ['rindex', 'finds a substring'],
+  ['indices', 'finds a substring'],
+  ['FIND', 'finds a substring'],
+  ['SEARCH', 'finds a substring or a wildcard pattern'],
+  ['test', 'matches a regex anywhere in a string'],
+  ['match', 'matches a regex anywhere in a string'],
+  ['capture', 'matches a regex anywhere in a string'],
+  ['scan', 'matches a regex anywhere in a string'],
+  ['like', 'matches a wildcard pattern'],
+  ['MATCH', 'can settle for the nearest value or a wildcard pattern'],
+  ['LOOKUP', 'settles for the nearest value'],
+  ['LOOKUP_BY', 'settles for the nearest value'],
+  ['VLOOKUP', 'can settle for the nearest value'],
+  ['VLOOKUP_BY', 'can settle for the nearest value'],
+  ['HLOOKUP', 'can settle for the nearest value'],
+  ['XLOOKUP', 'can settle for the nearest value or a wildcard pattern'],
+]);
+
+// The partial-match builtins a predicate calls, each named once, in the order
+// they first appear.
+function partialMatchCalls(bxl: BxlPolicyParser, body: unknown): string[] {
+  let calls = new Set<string>();
+  bxl.visitBxlAst(body, (node) => {
+    let { type, name } = node as { type?: unknown; name?: unknown };
+    if (
+      type === 'call' &&
+      typeof name === 'string' &&
+      PARTIAL_MATCH_BUILTINS.has(name)
+    ) {
+      calls.add(name);
+    }
+  });
+  return [...calls];
+}
+
+type PredicateProblem = {
+  code: 'invalid-predicate' | 'partial-match';
+  problem: string;
+};
+
 async function compilePredicate(
   source: string,
-): Promise<{ canonical: string; body: unknown } | { problem: string }> {
+): Promise<{ canonical: string; body: unknown } | PredicateProblem> {
   let bxl = await loadBxl();
   let program;
   try {
     program = bxl.parseBxlAst(source, { profile: 'policy' });
   } catch (e: unknown) {
     return {
+      code: 'invalid-predicate',
       problem: `\`where\` does not parse: ${e instanceof Error ? e.message : String(e)}`,
     };
   }
@@ -894,14 +965,27 @@ async function compilePredicate(
   // would widen access on a slip.
   if (program.body == null) {
     return {
+      code: 'invalid-predicate',
       problem: '`where` is empty; a grant with no condition leaves `where` out',
     };
   }
   if (refusals.length > 0) {
     return {
+      code: 'invalid-predicate',
       problem: `the \`policy\` profile refuses \`where\`: ${refusals
         .map((issue) => `${issue.code}: ${issue.message}`)
         .join('; ')}`,
+    };
+  }
+  let partial = partialMatchCalls(bxl, program.body);
+  if (partial.length > 0) {
+    return {
+      code: 'partial-match',
+      problem: `\`where\` matches a value only in part, so it can hold for a caller the grant does not name: ${partial
+        .map((name) => `\`${name}\` ${PARTIAL_MATCH_BUILTINS.get(name)}`)
+        .join(
+          '; ',
+        )}. Test membership with \`.list | any(. == actor())\`, and compare strings with \`==\`, \`startswith\` or \`endswith\``,
     };
   }
   return { canonical: program.canonicalSource, body: program.body };
@@ -936,6 +1020,7 @@ export interface BxlPolicyParser {
     severity: 'error' | 'warning';
     message: string;
   }[];
+  visitBxlAst(node: unknown, visitor: (node: unknown) => void): void;
 }
 
 let bxl: Promise<BxlPolicyParser> | undefined;

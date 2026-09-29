@@ -141,6 +141,10 @@ function invoke(
 }
 
 const ROOM_204 = `${EDUCATION}classrooms/room-204`;
+// A classroom whose one teacher id has the teacher's as a part of it, and is
+// not the teacher's.
+const ROOM_305 = `${EDUCATION}classrooms/room-305`;
+const PART_OF_TEACHER = `${TEACHER}.org`;
 
 module(basename(import.meta.filename), function (hooks) {
   let education: Realm;
@@ -235,9 +239,9 @@ module(basename(import.meta.filename), function (hooks) {
     teacher: () => bearer(TEACHER),
   };
 
-  function readRoom(auth: string) {
+  function readRoom(auth: string, room = ROOM_204) {
     return request
-      .get(new URL(ROOM_204).pathname)
+      .get(new URL(room).pathname)
       .set('Accept', SupportedMimeType.CardJson)
       .set('Authorization', auth);
   }
@@ -365,6 +369,76 @@ module(basename(import.meta.filename), function (hooks) {
         await titleOfRoom(),
         'Room 204B',
         'the classroom carries the rename and was not archived',
+      );
+    });
+  });
+
+  module('a predicate that matches a value only in part', function (hooks) {
+    hooks.beforeEach(async function () {
+      await writeTo(
+        education,
+        'classrooms/room-305.json',
+        classroom('Room 305', [PART_OF_TEACHER]),
+      );
+    });
+
+    test('a membership test written with `contains` is inactive, so it admits no one, and the grant beside it applies', async function (assert) {
+      await writeTo(
+        org,
+        'policies/education.json',
+        policyCard([
+          // Would hold for Room 305, since `contains` matches substrings.
+          { operation: 'read', where: '.teacherIds | contains([actor()])' },
+          { operation: 'rename' },
+        ]),
+      );
+      let policy = await education.getCompiledPolicy();
+      assert.deepEqual(
+        policy?.issues.map(({ code, path }) => ({ code, path })),
+        [{ code: 'partial-match', path: 'rules[0].grants[0].where' }],
+        'the grant is recorded against itself',
+      );
+      assert.true(
+        policy?.issues[0]?.message.includes('.list | any(. == actor())'),
+        `the issue names the exact spelling: ${policy?.issues[0]?.message}`,
+      );
+      assert.deepEqual(
+        policy?.rules.flatMap((rule) =>
+          rule.grants.map(({ operation, path }) => ({ operation, path })),
+        ),
+        [{ operation: 'rename', path: 'rules[0].grants[1]' }],
+        'and only the grant beside it is in the policy',
+      );
+
+      assertRefused(
+        assert,
+        await readRoom(AUTH.teacher(), ROOM_305),
+        "a read of a classroom whose teacher id only contains the caller's",
+      );
+      assertRefused(
+        assert,
+        await readRoom(AUTH.teacher()),
+        'a read of the classroom that lists the teacher',
+      );
+      assert.strictEqual(
+        (await rename(AUTH.teacher(), 'Room 204B')).status,
+        200,
+        'the rename grant admits the teacher',
+      );
+    });
+
+    test('the same membership test written with `any(. == actor())` admits the listed teacher alone', async function (assert) {
+      let policy = await education.getCompiledPolicy();
+      assert.deepEqual(policy?.issues, [], 'the policy compiles cleanly');
+      assert.strictEqual(
+        (await readRoom(AUTH.teacher())).status,
+        200,
+        'a read of the classroom that lists the teacher is admitted',
+      );
+      assertRefused(
+        assert,
+        await readRoom(AUTH.teacher(), ROOM_305),
+        "a read of a classroom whose teacher id only contains the caller's",
       );
     });
   });
