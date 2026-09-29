@@ -328,7 +328,7 @@ module(basename(import.meta.filename), function (hooks) {
 
   // The rows the board's last render drew, and the HTML it drew them in.
   async function boardRender() {
-    let row = await prerenderedHtmlRowFor(db, BOARD_CARD);
+    let row = await prerenderedHtmlRowFor(db, `${BOARD_CARD}.json`);
     let html = row?.isolated_html ?? '';
     let drawn = [...html.matchAll(/class="board-row"[^>]*>([^<]*)</g)].map(
       ([, id]) => id.trim(),
