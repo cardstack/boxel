@@ -12,7 +12,7 @@ import {
   usesVolatileCall,
 } from './bxl-emit.ts';
 import { isBxl, isMarker, lowerQueryTemplate } from './query.ts';
-import { isDefinitionFreeBaseOperation } from './types.ts';
+import { isDefinitionFreeBaseOperation, isLinkStrategy } from './types.ts';
 import type {
   LowerOperationDeclarationsResult,
   OperationDefinition,
@@ -161,6 +161,9 @@ const DECLARABLE_BY: Record<BaseOperationName, readonly Definition['type'][]> =
     transform: ['card-def'],
     appendContainsMany: ['card-def'],
     appendLine: ['file-def'],
+    // Reached only through a declaration: nothing implies it, and it answers
+    // only on a policy card.
+    explain: ['card-def'],
   };
 
 function declarableBases(
@@ -189,6 +192,7 @@ function runsNoProgram(base: BaseOperationName, kind: Definition['type']) {
   return (
     base === 'appendLine' ||
     base === 'appendContainsMany' ||
+    base === 'explain' ||
     (base === 'update' && kind === 'file-def')
   );
 }
@@ -277,9 +281,15 @@ export async function lowerOperationDeclarations(
     operations[name] = operation;
   }
   // Carried onto every entry the declaration produced, an invalid one
-  // included, so no finding against a declaration makes it grantable.
+  // included, so no finding against a declaration makes it grantable. An
+  // explain is never grantable whatever its declaration says: the decorator
+  // refuses one that leaves the flag off, and an entry reaching here without
+  // it is marked all the same.
   for (let name of Object.keys(operations)) {
-    if (raw[name]?.nonGrantable === true) {
+    if (
+      raw[name]?.nonGrantable === true ||
+      operations[name].base === 'explain'
+    ) {
       operations[name].nonGrantable = true;
     }
   }
@@ -354,6 +364,36 @@ async function lowerOperation(
     operation.optimistic = declaration.optimistic;
   }
 
+  // A link strategy narrows the document a read of the target serves, and no
+  // other base serves one — so on any other base the declaration would narrow
+  // nothing, and a stored entry carrying one would read as a narrowing that was
+  // never applied. A `query` in particular answers through search, whose results
+  // carry their own closures that this declaration does not govern. The
+  // authoring decorator refuses both of these where they are written; this
+  // keeps them out of a type's entry, which outlives the code that built it.
+  let links = (declaration as { links?: unknown }).links;
+  if (links !== undefined) {
+    if (base !== 'read') {
+      sink.add(
+        'links-without-assembly',
+        'links',
+        `a \`links\` strategy narrows the document a "read" serves, and a "${base}" operation serves no such document, so it would narrow nothing`,
+      );
+    } else if (!isLinkStrategy(links)) {
+      // Not stored. The serving path reads an unrecognized strategy as the
+      // narrowest one, so storing this would answer with a withholding the
+      // author did not ask for; recording it instead refuses the read and says
+      // why.
+      sink.add(
+        'invalid-link-strategy',
+        'links',
+        `"${String(links)}" does not name how much of the link graph a read carries — one of "full", "ids", "none"`,
+      );
+    } else {
+      operation.links = links;
+    }
+  }
+
   let { statements, snapshot } = await lowerClauses(
     declaration,
     paramNames,
@@ -368,7 +408,9 @@ async function lowerOperation(
       'transformations',
       base === 'update'
         ? `an "update" on a file replaces its content wholesale rather than transforming a document, so this program would never be reached`
-        : `an "${base}" operation appends to the stored file rather than running a program over a document, so this program would never be reached`,
+        : base === 'explain'
+          ? `an "explain" operation reports what the realm's policy decides rather than running a program over a document, so this program would never be reached`
+          : `an "${base}" operation appends to the stored file rather than running a program over a document, so this program would never be reached`,
     );
   } else if (rawProgram) {
     // An author's program is written in the readable spelling; canonicalizing
@@ -413,9 +455,22 @@ async function lowerOperation(
       operation.input = input;
     }
   }
-  let output = await lowerOutput(declaration.output, paramNames, sink, context);
-  if (output) {
-    operation.output = output;
+  if (base === 'explain' && declaration.output !== undefined) {
+    sink.add(
+      'unrunnable-program',
+      'output',
+      `an "explain" operation answers with the policy's explanation as the gate reports it, so this projection would never be reached`,
+    );
+  } else {
+    let output = await lowerOutput(
+      declaration.output,
+      paramNames,
+      sink,
+      context,
+    );
+    if (output) {
+      operation.output = output;
+    }
   }
 
   if (base === 'create') {
