@@ -171,6 +171,17 @@ const GONE_LOGO = `${EDUCATION}public/gone.png`;
 const GONE_BULLETIN_SOURCE = `${EDUCATION}bulletins/b9.json`;
 const GONE_PRIVATE_HANDBOOK = `${EDUCATION}private/gonebook.pdf`;
 const GONE_MODULE_SOURCE = `${EDUCATION}classless.gts`;
+const GONE_ROOM_204 = `${EDUCATION}classrooms/room-999`;
+// A data file whose name has no extension, which the gate types as `FileDef`.
+const LICENSE = `${EDUCATION}public/LICENSE`;
+const GONE_LICENSE = `${EDUCATION}public/NOTHERE`;
+// Names whose last segment is dotted, which a reader's read extends as it does
+// a name with no extension: the card+source read redirects `room.v2` to the
+// `.json` stored beside it, and the file serve transpiles `classroom.v2.gts`.
+const DOTTED_CARD = `${EDUCATION}classrooms/room.v2`;
+const GONE_DOTTED_CARD = `${EDUCATION}classrooms/room.v9`;
+const DOTTED_MODULE = `${EDUCATION}classroom.v2`;
+const GONE_DOTTED_MODULE = `${EDUCATION}classroom.v9`;
 
 module(basename(import.meta.filename), function (hooks) {
   let education: Realm;
@@ -203,6 +214,7 @@ module(basename(import.meta.filename), function (hooks) {
               policy: `${ORG}policies/pdf`,
             }),
             'classroom.gts': CLASSROOM_MODULE,
+            'classroom.v2.gts': CLASSROOM_MODULE,
             'bulletin.gts': BULLETIN_MODULE,
             'classrooms/room-204.json': card(
               { module: '../classroom', name: 'Classroom' },
@@ -224,6 +236,11 @@ module(basename(import.meta.filename), function (hooks) {
             // A `.json` that holds no card: a data file.
             'public/schedule.json': JSON.stringify({ periods: [1, 2, 3] }),
             'public/notes.txt': 'term notes',
+            'public/LICENSE': 'MIT License',
+            'classrooms/room.v2.json': card(
+              { module: '../classroom', name: 'Classroom' },
+              { title: 'Room 2', teacherIds: [TEACHER], announcements: [] },
+            ),
             'private/handbook.pdf': '%PDF-1.4 the staff handbook',
           },
           permissions: {
@@ -795,7 +812,7 @@ module(basename(import.meta.filename), function (hooks) {
     test('a FileDef grant serves both and still refuses module source', async function (assert) {
       await policy('anyFile');
       for (let { label, accept } of BYTE_ROUTES) {
-        for (let url of [HANDBOOK, LOGO]) {
+        for (let url of [HANDBOOK, LOGO, LICENSE]) {
           let served = await get(url, accept, AS.teacher());
           assert.strictEqual(served.status, 200, `${label}: ${nameOf(url)}`);
         }
@@ -818,23 +835,75 @@ module(basename(import.meta.filename), function (hooks) {
         { actual: nameOf(MODULE_SOURCE), expected: nameOf(GONE_MODULE_SOURCE) },
         'module source is refused as a missing module is',
       );
-      let module = await get(`${EDUCATION}classroom`, '*/*', AS.teacher());
-      assert.strictEqual(module.status, 404, 'nor is the transpiled module');
-      let fallback = await get(
-        `${EDUCATION}classroom`,
-        SupportedMimeType.CardSource,
-        AS.teacher(),
-      );
-      assert.strictEqual(
-        fallback.status,
-        404,
-        'nor the module an extension-less card+source read would redirect to',
-      );
       assert.strictEqual(
         gateStats().policyLoads,
         loads,
-        'none of which reaches the gate',
+        'module source does not reach the gate',
       );
+      // A name with no extension is read exactly as named, so the module a
+      // reader's read of it would reach is not there: the transpiled module on
+      // the file serve, and the module the card+source read would redirect to.
+      for (let { label, accept } of BYTE_ROUTES) {
+        let module = await get(`${EDUCATION}classroom`, accept, AS.teacher());
+        assert.strictEqual(module.status, 404, `${label}: nor is the module`);
+        assertSameAnswer(
+          assert,
+          module,
+          await get(`${EDUCATION}classless`, accept, AS.teacher()),
+          { actual: '/classroom', expected: '/classless' },
+          `${label}: the module is refused as a missing name is`,
+        );
+      }
+    });
+
+    test('a file whose name has no extension is a data file', async function (assert) {
+      await policy('anyFile');
+      for (let { label, accept } of BYTE_ROUTES) {
+        let license = await get(LICENSE, accept, AS.teacher());
+        assert.strictEqual(license.status, 200, `${label}: served`);
+        assert.strictEqual(textOf(license), 'MIT License', `${label}: bytes`);
+      }
+      await policy('pdf');
+      for (let { label, accept } of BYTE_ROUTES) {
+        assertSameAnswer(
+          assert,
+          await get(LICENSE, accept, AS.teacher()),
+          await get(GONE_LICENSE, accept, AS.teacher()),
+          { actual: nameOf(LICENSE), expected: nameOf(GONE_LICENSE) },
+          `${label}: a PdfDef grant does not cover it`,
+        );
+      }
+    });
+
+    test('a dotted name is read exactly as named', async function (assert) {
+      assert.strictEqual(
+        (await get(DOTTED_CARD, SupportedMimeType.CardSource, AS.reader()))
+          .status,
+        302,
+        "a reader's card+source read of room.v2 is sent to its .json",
+      );
+      assert.strictEqual(
+        (await get(DOTTED_MODULE, 'image/png', AS.reader())).status,
+        200,
+        "a reader's file serve of classroom.v2 is the transpiled module",
+      );
+      await policy('anyFile');
+      for (let { label, accept } of BYTE_ROUTES) {
+        for (let [url, missing] of [
+          [DOTTED_CARD, GONE_DOTTED_CARD],
+          [DOTTED_MODULE, GONE_DOTTED_MODULE],
+        ] as [string, string][]) {
+          let response = await get(url, accept, AS.teacher());
+          assert.strictEqual(response.status, 404, `${label}: ${nameOf(url)}`);
+          assertSameAnswer(
+            assert,
+            response,
+            await get(missing, accept, AS.teacher()),
+            { actual: nameOf(url), expected: nameOf(missing) },
+            `${label}: ${nameOf(url)} is refused as a missing name is`,
+          );
+        }
+      }
     });
 
     test("a card-type grant serves that card's .json and refuses another type's", async function (assert) {
@@ -879,6 +948,13 @@ module(basename(import.meta.filename), function (hooks) {
         teacher.status,
         404,
         'the teacher, whose grant reaches that .json, reads it by its own name',
+      );
+      assertSameAnswer(
+        assert,
+        teacher,
+        await get(GONE_ROOM_204, SupportedMimeType.CardSource, AS.teacher()),
+        { actual: nameOf(ROOM_204), expected: nameOf(GONE_ROOM_204) },
+        'as a name that holds nothing is',
       );
     });
 
@@ -932,11 +1008,41 @@ module(basename(import.meta.filename), function (hooks) {
         AS.teacher(),
       );
       assert.strictEqual(textOf(granted), textOf(reader), "a card's .json");
-      for (let name of ['etag', 'last-modified', 'content-type', 'x-created']) {
-        assert.strictEqual(
-          granted.get(name),
-          reader.get(name),
-          `a card's .json: ${name}`,
+      assert.deepEqual(
+        headersOf(granted),
+        headersOf(reader),
+        "a card's .json: headers",
+      );
+    });
+
+    test('a policy the realm cannot load refuses every path alike', async function (assert) {
+      await education.write(
+        'realm.json',
+        realmConfigCardJSON({
+          name: 'Education',
+          policy: `${ORG}policies/nowhere`,
+        }),
+      );
+      await education.indexing();
+      let names = { actual: nameOf(HANDBOOK), expected: nameOf(GONE_HANDBOOK) };
+      for (let { label, accept } of BYTE_ROUTES) {
+        let existing = await get(HANDBOOK, accept, AS.teacher());
+        assert.strictEqual(existing.status, 500, `${label}: a 500`);
+        assertSameAnswer(
+          assert,
+          existing,
+          await get(GONE_HANDBOOK, accept, AS.teacher()),
+          names,
+          `${label}: for a file and for a path that holds nothing`,
+        );
+        let existingHead = await head(HANDBOOK, accept, AS.teacher());
+        assert.strictEqual(existingHead.status, 500, `${label}: a HEAD's too`);
+        assertSameAnswer(
+          assert,
+          existingHead,
+          await head(GONE_HANDBOOK, accept, AS.teacher()),
+          names,
+          `${label}: a HEAD for a file and for a path that holds nothing`,
         );
       }
     });

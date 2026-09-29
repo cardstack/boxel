@@ -81,8 +81,9 @@ const readProbes: Probe[] = [
     send: (r) =>
       r.get('/person.gts').set('Accept', SupportedMimeType.CardSource),
   },
-  // The card+source read and the raw file serve consume it for a data file or
-  // a card's document, whose bytes a grant can reach, and for nothing else.
+  // The card+source read and the raw file serve consume it for any path but
+  // module source: a data file's or a card's document's bytes are what a grant
+  // can reach, and a name with no extension is read exactly as named.
   {
     label: 'GET card+source of a data file',
     consumes: true,
@@ -102,7 +103,7 @@ const readProbes: Probe[] = [
   },
   {
     label: 'GET transpiled module',
-    consumes: false,
+    consumes: true,
     send: (r) => r.get('/person'),
   },
   {
@@ -535,6 +536,28 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
             `admitting: ${label}: the refusal is the gate’s`,
           );
         }
+        // A name with no extension reaches the route too, which reads it
+        // exactly as named. Nothing is stored under these names, so there is
+        // nothing for the gate to judge, and no module or card the name would
+        // resolve to for a reader is reached.
+        for (let [label, read] of [
+          [
+            'card+source of a name with no extension',
+            request
+              .get('/person-1')
+              .set('Accept', SupportedMimeType.CardSource),
+          ],
+          [
+            'the file serve of a name with no extension',
+            request.get('/person'),
+          ],
+        ] as [string, Test][]) {
+          assert.strictEqual(
+            (await read).status,
+            404,
+            `admitting: ${label} is not there`,
+          );
+        }
         let before = testRealm.__testOnlyPolicyGateStats().policyLoads;
         for (let [label, read] of [
           [
@@ -543,13 +566,6 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
               .get('/person.gts')
               .set('Accept', SupportedMimeType.CardSource),
           ],
-          [
-            'an extension-less card+source read',
-            request
-              .get('/person-1')
-              .set('Accept', SupportedMimeType.CardSource),
-          ],
-          ['the transpiled module serve', request.get('/person')],
           [
             'a directory listing',
             request.get('/').set('Accept', SupportedMimeType.DirectoryListing),
