@@ -10,21 +10,13 @@
 exports.shorthands = undefined;
 
 exports.up = (pgm) => {
-  for (let table of [
-    'prerendered_html',
-    'prerendered_html_pending',
-    'prerendered_html_working',
-  ]) {
+  for (let table of ['prerendered_html', 'prerendered_html_pending']) {
     pgm.dropColumns(table, ['screenshots']);
   }
 };
 
 exports.down = (pgm) => {
-  for (let table of [
-    'prerendered_html',
-    'prerendered_html_pending',
-    'prerendered_html_working',
-  ]) {
+  for (let table of ['prerendered_html', 'prerendered_html_pending']) {
     pgm.addColumns(table, { screenshots: 'jsonb' });
     pgm.sql(
       `UPDATE ${table} SET screenshots = captures WHERE captures IS NOT NULL`,

@@ -5,18 +5,14 @@
 // backfilled, so the previous code revision keeps reading `screenshots` until
 // the removal migration drops it post-deploy.
 //
-// Added to the production table and both twins — `prerendered_html_pending`
-// (a pass stages rows there and the commit copies every production column
-// out) and `prerendered_html_working` — which must stay column-compatible.
+// Added to the production table and its pending twin, which must stay
+// column-compatible: a pass stages rows in `prerendered_html_pending` and the
+// commit copies every production column out.
 
 exports.shorthands = undefined;
 
 exports.up = (pgm) => {
-  for (let table of [
-    'prerendered_html',
-    'prerendered_html_pending',
-    'prerendered_html_working',
-  ]) {
+  for (let table of ['prerendered_html', 'prerendered_html_pending']) {
     pgm.addColumns(table, { captures: 'jsonb' });
     // Carry existing manifests across so already-indexed rows keep serving
     // their captures until their next reindex rewrites them.
@@ -27,11 +23,7 @@ exports.up = (pgm) => {
 };
 
 exports.down = (pgm) => {
-  for (let table of [
-    'prerendered_html',
-    'prerendered_html_pending',
-    'prerendered_html_working',
-  ]) {
+  for (let table of ['prerendered_html', 'prerendered_html_pending']) {
     pgm.dropColumns(table, ['captures']);
   }
 };
