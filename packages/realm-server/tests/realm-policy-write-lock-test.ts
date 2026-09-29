@@ -866,6 +866,36 @@ module(basename(import.meta.filename), function (hooks) {
       );
     });
 
+    test('a write the lock refused is the answer, whatever the entries after it hold', async function (assert) {
+      const MISSING = `${EDUCATION}bulletins/missing`;
+      let behind = (href: string) =>
+        operations(
+          AUTH.teacher(),
+          invoke('rename', { href: ROOM_205, data: { title: 'Renamed' } }),
+          invoke('update', {
+            href,
+            data: {
+              type: 'card',
+              attributes: { body: 'Revised' },
+              meta: { adoptsFrom: adoptsFrom(BULLETIN) },
+            },
+          }),
+        );
+      // The bulletin is rewritten as a policy card after the gate matched the
+      // update on its row, so the lock would refuse the update as well. The
+      // lock refuses the rename first, and that is all the batch may say.
+      betweenGateAndLock(() =>
+        education.write('bulletins/notice.json', policyCard([])),
+      );
+      sameRefusal(
+        assert,
+        await behind(NOTICE),
+        await behind(MISSING),
+        [NOTICE, MISSING],
+        'a refused rename ahead of an update into a card that became a policy card',
+      );
+    });
+
     test('another entry’s failure says no more than a refusal either', async function (assert) {
       let beside = (href: string) =>
         operations(

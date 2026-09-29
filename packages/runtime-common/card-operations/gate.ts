@@ -259,8 +259,8 @@ export interface StoredCardCheck {
 }
 
 // How often the gate loads a policy, evaluates a predicate and reads a
-// definition, per core, and how many pending writes were decided under a
-// write lock. A test asserts on these rather than on outcomes alone, since an
+// definition, per core, and how many writes whose grants rest on predicates
+// were decided under a write lock. A test asserts on these rather than on outcomes alone, since an
 // outcome cannot show that a caller the ACL allowed never reached the policy,
 // or that a read never reached a lock.
 //
@@ -724,10 +724,14 @@ export interface PendingWrite {
   target: OperationTarget;
   // The name the operation was invoked under, which a refusal names.
   name: string;
-  decision: PendingDecision | GrantedDecision;
+  decision: PendingDecision | LockedGrant;
   // The write's own scope, which says who the caller is.
   scope: OperationScope;
 }
+
+// A grant that admitted a write to a stored card outright, whose card the
+// write lock still judges.
+export type LockedGrant = GrantedDecision & { stored: StoredCardCheck };
 
 // What the gate's decision about invoking `name` on `target` leaves the write
 // lock to decide, or undefined where it leaves nothing. It leaves nothing for
@@ -745,7 +749,7 @@ export function pendingWriteFor(
 // Whether a decision leaves anything for the write lock to decide.
 export function leavesToLock(
   decision: GateDecision,
-): decision is PendingDecision | GrantedDecision {
+): decision is PendingDecision | LockedGrant {
   return (
     decision.kind === 'pending' ||
     (decision.kind === 'granted' && decision.stored !== undefined)
@@ -849,6 +853,11 @@ async function admits(
   }
   if (decision.kind === 'granted') {
     return decision.grant;
+  }
+  // A predicate reads the card's fields, and bytes from beneath an append
+  // the batch staged do not say what those will hold.
+  if (judged?.beneathAppend) {
+    return GATE_REFUSED;
   }
   let subject = await storedSubject(
     core,
@@ -1133,9 +1142,9 @@ async function storedSubject(
 // that is gone, one stored as a type other than the one its grants were
 // matched on, or one the write changes that is now a policy card.
 //
-// The lock holds a card as its bytes only where the batch read them. A card an
-// earlier entry in the batch removed, or appended to without holding its
-// bytes, is judged by nothing too, so a write to it is refused.
+// A card an earlier entry in the batch removed is judged by nothing too, so a
+// write to it is refused. A card an earlier entry appended to is judged by
+// the bytes beneath the append, which say what type it is.
 async function lockedCard(
   core: OperationCore,
   href: string,

@@ -25,6 +25,7 @@ export type { PolicyQueryScope } from './policy-query.ts';
 export type {
   GateDecision,
   GrantedDecision,
+  LockedGrant,
   MatchedGrant,
   OperationPolicyAccess,
   PendingDecision,

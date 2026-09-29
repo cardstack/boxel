@@ -17,6 +17,7 @@ import {
   scopeCallerFor,
   type OperationCore,
   type OperationError,
+  type OperationScope,
   type OperationTarget,
 } from '@cardstack/runtime-common/card-operations';
 import { fileContentToBytes } from '@cardstack/runtime-common/stream';
@@ -2104,11 +2105,16 @@ module(basename(import.meta.filename), function () {
 
     // What the gate decides about `name` on the card, then what the lock
     // decides with the card's stored bytes adopting from `storedAs`.
+    // `beneathAppend` hands those bytes over as the lock holds a card that an
+    // earlier entry appended to.
     async function underLock(
       core: OperationCore,
       name: string,
       storedAs: CodeRef,
-      scope = declinedWrites(core),
+      {
+        scope = declinedWrites(core),
+        beneathAppend = false,
+      }: { scope?: OperationScope; beneathAppend?: boolean } = {},
     ): Promise<string> {
       let { decision } = await resolveGatedOperation(core, TARGET, name, scope);
       let pending = pendingWriteFor(TARGET, name, decision, scope);
@@ -2127,6 +2133,7 @@ module(basename(import.meta.filename), function () {
         await dischargePendingDecision(core, pending, {
           id: TARGET.url,
           source,
+          ...(beneathAppend ? { beneathAppend: true as const } : {}),
         });
         return `${decision.kind}, then admitted`;
       } catch (err) {
@@ -2216,31 +2223,46 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(policyGateStats(ordinary).predicateEvaluations, 1);
     });
 
+    test('bytes beneath an append judge a write granted outright by their type alone', async function (assert) {
+      let core = lockedCore();
+      assert.strictEqual(
+        await underLock(core, 'update', PERSON, { beneathAppend: true }),
+        'granted, then admitted',
+        'the type the grant was matched on',
+      );
+      assert.strictEqual(
+        await underLock(core, 'update', REALM_POLICY, { beneathAppend: true }),
+        'granted, then operation-not-permitted',
+        'a policy card',
+      );
+      assert.strictEqual(
+        await underLock(lockedCore({ where: 'true' }), 'update', PERSON, {
+          beneathAppend: true,
+        }),
+        'pending, then operation-not-permitted',
+        'while a predicate, which reads what the append changes, judges nothing from them',
+      );
+    });
+
     test('what leaves nothing to the lock', async function (assert) {
       let core = lockedCore();
       assert.strictEqual(
-        await underLock(
-          core,
-          'read',
-          REALM_POLICY,
-          newOperationScope(core, {
+        await underLock(core, 'read', REALM_POLICY, {
+          scope: newOperationScope(core, {
             caller: scopeCallerFor('@stranger:localhost'),
             coarseDeclined: 'all',
           }),
-        ),
+        }),
         'granted, leaving nothing to the lock',
         'a read, which is decided at the gate',
       );
       assert.strictEqual(
-        await underLock(
-          core,
-          'update',
-          REALM_POLICY,
-          newOperationScope(core, {
+        await underLock(core, 'update', REALM_POLICY, {
+          scope: newOperationScope(core, {
             caller: scopeCallerFor('@admin:localhost'),
             coarseDeclined: 'none',
           }),
-        ),
+        }),
         'coarse, leaving nothing to the lock',
         'a write the realm ACL allows',
       );

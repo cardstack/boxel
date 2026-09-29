@@ -203,6 +203,12 @@ interface EntryCommon {
 export interface AdmissionSubject {
   id: string;
   source: string;
+  // Set where an earlier entry in the batch appended to the card without
+  // holding its bytes, so `source` is the card from beneath that append. An
+  // append never changes a card's type, so these bytes still say what type
+  // the card is. They do not say what its fields will hold once the append
+  // lands.
+  beneathAppend?: true;
 }
 
 export interface CreateEntry extends EntryCommon {
