@@ -222,7 +222,7 @@ export default class SubmodeLayout extends Component<Signature> {
   // current realm when no card is open (see `updateSubmode`).
   private get codeSubmodeOffered() {
     return this.operatorModeStateService.codeSubmodeOffered(
-      this.lastStackItem?.id,
+      this.lastCardIdInRightMostStack ?? this.lastStackItem?.id,
     );
   }
 

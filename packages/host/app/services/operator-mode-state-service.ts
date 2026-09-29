@@ -1337,13 +1337,13 @@ export default class OperatorModeStateService extends Service {
   }
 
   // Whether to offer code mode on `url`, or on the current realm when there is
-  // no `url`. Code mode edits a realm's modules and browses its file tree, and
-  // a realm serves those only to a caller its own permissions let read it: no
-  // policy grant reaches them. A user who reaches the realm only through
-  // grants would find nothing there to open, so code mode is not offered to
-  // them.
+  // no `url` or it is the local id of a card that has no URL yet. Code mode
+  // edits a realm's modules and browses its file tree, and a realm serves
+  // those only to a caller its own permissions let read it: no policy grant
+  // reaches them. A user who reaches the realm only through grants would find
+  // nothing there to open, so code mode is not offered to them.
   codeSubmodeOffered = (url: string | undefined): boolean => {
-    return this.realm.canRead(url ?? this.realmURL);
+    return this.realm.canRead(url && !isLocalId(url) ? url : this.realmURL);
   };
 
   getWritableRealmURL = (preferredURLs: string[] = []) => {
