@@ -1,4 +1,5 @@
 import { isCodeRef } from '../card-document-shape.ts';
+import type { CodeRef } from '../code-ref.ts';
 import { ensureTrailingSlash } from '../paths.ts';
 import type { SearchEntryWireQuery } from '../search-entry.ts';
 import {
@@ -40,6 +41,25 @@ export function isNamedQueryPayload(
     isPlainRecord(payload) &&
     Object.prototype.hasOwnProperty.call(payload, 'operation')
   );
+}
+
+// The operation and the type a named search invokes, or nothing for an ad-hoc
+// one. A policy grant is looked up by these, since a query runs under the name
+// it was invoked with, on the type that declares it — and they are read off
+// the request rather than off what it resolves to, which is a filter and
+// carries neither. `resolveNamedQuery` validates the members and refuses a
+// request where they are not what they must be, so this only recognizes the
+// shape.
+export function namedQueryInvocation(
+  payload: unknown,
+): { operation: string; on: CodeRef } | undefined {
+  if (!isNamedQueryPayload(payload)) {
+    return undefined;
+  }
+  let { operation, on } = payload;
+  return typeof operation === 'string' && operation.length > 0 && isCodeRef(on)
+    ? { operation, on }
+    : undefined;
 }
 
 export interface NamedQueryContext {
@@ -141,6 +161,22 @@ export async function resolveNamedQuery(
           },
         }),
     realms,
+  };
+}
+
+// A named search as the ad-hoc request that asks for its rendering and nothing
+// else: the fieldset and the `htmlQuery` binding, which are what an answer
+// with no rows carries of the request. For a request whose declaration there
+// is no realm to resolve through — every realm it names is one nothing is
+// served from — so that it is answered with the document a search of those
+// realms matching nothing would give.
+export function namedQueryRendering(
+  payload: Record<string, unknown>,
+): Record<string, unknown> {
+  let htmlQuery = htmlQueryBinding(payload.filter);
+  return {
+    ...(payload.fields !== undefined ? { fields: payload.fields } : {}),
+    ...(htmlQuery !== undefined ? { filter: { eq: { htmlQuery } } } : {}),
   };
 }
 

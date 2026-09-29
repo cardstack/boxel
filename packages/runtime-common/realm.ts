@@ -72,9 +72,11 @@ import {
   type CardJsonAssembly,
 } from './card-document-cache.ts';
 import {
+  emptySearchEntryDocument,
   fieldsetFromParam,
   htmlQueryFromParams,
   parseSearchEntryQueryFromPayload,
+  policyScopedQuery,
   type SearchEntryFieldset,
   type SearchEntryQuery,
 } from './search-entry.ts';
@@ -268,6 +270,7 @@ import {
 import { resolveQueryTargets } from './card-operations/find-targets.ts';
 import {
   isNamedQueryPayload,
+  namedQueryInvocation,
   resolveNamedQuery,
 } from './card-operations/named-query.ts';
 import { settledWithin, STAGING_WIDTH } from './card-operations/coordinator.ts';
@@ -294,6 +297,10 @@ import {
   realmPolicyRef,
   type CompiledRealmPolicy,
 } from './card-operations/policy.ts';
+import {
+  policyQueryScope,
+  type PolicyQueryScope,
+} from './card-operations/policy-query.ts';
 import type {
   BatchCore,
   BatchEntryResult,
@@ -2076,6 +2083,7 @@ export class Realm {
   #realmIndexUpdater: RealmIndexUpdater;
   #realmIndexQueryEngine: RealmIndexQueryEngine;
   #policyCache: RealmPolicyCache;
+  #policyTypeKey: string | undefined;
   #operationCore: OperationCore | undefined;
   #batchCore: BatchCore | undefined;
   #adapter: RealmAdapter;
@@ -2490,11 +2498,13 @@ export class Realm {
         '/_search',
         SupportedMimeType.CardJson,
         this.searchEntriesResponse.bind(this),
+        CONSUMES_COARSE_OUTCOME,
       )
       .query(
         '/_search',
         SupportedMimeType.CardJson,
         this.searchEntriesResponse.bind(this),
+        CONSUMES_COARSE_OUTCOME,
       )
       .get(
         '/_types',
@@ -6074,6 +6084,7 @@ export class Realm {
               this.#virtualNetwork,
             ),
           policyCard: async () => (await this.getRealmPolicy())?.card,
+          isPolicyCard: (types) => this.#isPolicyCard(types),
         },
       };
     }
@@ -6089,6 +6100,25 @@ export class Realm {
       return 'none';
     }
     return requestContext.coarseReadAllowed ? 'writes' : 'all';
+  }
+
+  // What this realm's policy contributes to one search, for a caller its ACL
+  // declined outright. Nothing, unless the request named an operation and
+  // authenticated someone: a policy grants by who is asking, and it grants a
+  // named query rather than the freedom to write a filter. An ad-hoc search
+  // therefore reaches no grant, and a caller the ACL declined is answered with
+  // no rows for one. Nor does a search a render is waiting on, which the
+  // caller passes no invocation for: what a render produces is served to
+  // every viewer, so no one viewer's grants may shape it.
+  async #policyQueryScope(
+    invocation: { operation: string; on: CodeRef } | undefined,
+    requestContext: RequestContext,
+  ): Promise<PolicyQueryScope> {
+    let actor = requestContext.authenticatedUser;
+    if (!invocation || !actor) {
+      return { kind: 'denied' };
+    }
+    return await policyQueryScope(this.operationCore, { ...invocation, actor });
   }
 
   // The same, for one read's operation request.
@@ -12246,6 +12276,11 @@ export class Realm {
       });
     }
 
+    // What a policy fragment is looked up by, for a caller this realm's ACL
+    // declined: a query runs under the name it was invoked with, on the type
+    // that declares it. Read before the declaration is resolved, since what it
+    // resolves to is a filter and carries neither.
+    let invocation = namedQueryInvocation(payload);
     if (isNamedQueryPayload(payload)) {
       // A named query searches this realm and no other, so this realm is the
       // whole of the scope it may resolve to.
@@ -12273,6 +12308,44 @@ export class Realm {
     try {
       let searchEntryQuery = parseSearchEntryQueryFromPayload(payload);
       let duringPrerender = isDuringPrerenderRequest(request);
+      // What this realm's policy contributes, for a caller its ACL declined.
+      // A caller it allows is never asked: a policy widens what the ACL
+      // refused and has nothing to add to what it allowed, so their query runs
+      // untouched.
+      //
+      // A caller reaching this realm only through its policy is answered with
+      // the rows their grants admit, and with none where no grant admits the
+      // query. A realm holding nothing for them and a realm granting them
+      // nothing are the same answer, as they are for a card they may not read.
+      let policyScope =
+        this.#coarseDeclined(requestContext) === 'all'
+          ? await this.#policyQueryScope(
+              duringPrerender ? undefined : invocation,
+              requestContext,
+            )
+          : undefined;
+      if (policyScope?.kind === 'denied') {
+        return createResponse({
+          body: JSON.stringify(
+            emptySearchEntryDocument(searchEntryQuery),
+            null,
+            2,
+          ),
+          init: {
+            headers: { 'content-type': SupportedMimeType.CardJson },
+          },
+          requestContext,
+        });
+      }
+      if (policyScope) {
+        // Composed before the page is applied below, so the page the engine
+        // fills is a page of rows the policy admits rather than a page of the
+        // caller's rows with some removed.
+        searchEntryQuery = policyScopedQuery(
+          searchEntryQuery,
+          policyScope.filters,
+        );
+      }
       // Two bounds hold server-side on the live item leg (never during
       // prerender, never on the prerendered-HTML leg): a hard page-size ceiling
       // and the wall-clock time budget. Both hold for every caller — a page
@@ -13667,7 +13740,6 @@ export class Realm {
   // it grants. The type definitions its rules name come from this realm's
   // definition lookup, as an operation's do.
   #makePolicyCache(): RealmPolicyCache {
-    let policyTypeKey: string | undefined;
     return new RealmPolicyCache({
       policyCard: async () => (await this.getRealmPolicy())?.card,
       readCard: (url) => this.#realmIndexQueryEngine.instanceSource(url),
@@ -13683,18 +13755,22 @@ export class Realm {
       lookupDefinition: (codeRef) =>
         this.#definitionLookup.lookupDefinition(codeRef),
       toURL: (identifier) => this.#virtualNetwork.toURL(identifier),
-      isPolicyCard: (types) => {
-        // The index records an adoption chain in the same spelling, so the
-        // key is computed the same way. A subtype of RealmPolicy carries it
-        // too.
-        policyTypeKey ??= internalKeyFor(
-          realmPolicyRef,
-          undefined,
-          this.#virtualNetwork,
-        );
-        return types.includes(policyTypeKey);
-      },
+      isPolicyCard: (types) => this.#isPolicyCard(types),
     });
+  }
+
+  // Whether an adoption chain, as the index records one, is a policy card's.
+  // The compiler asks it of the card a key names, and the gate asks it of
+  // every card a grant would write, so the two agree on what a policy card is.
+  #isPolicyCard(types: string[]): boolean {
+    // The index records an adoption chain in the same spelling, so the key is
+    // computed the same way. A subtype of RealmPolicy carries it too.
+    this.#policyTypeKey ??= internalKeyFor(
+      realmPolicyRef,
+      undefined,
+      this.#virtualNetwork,
+    );
+    return types.includes(this.#policyTypeKey);
   }
 
   // Every part of one parse, which is why they are read together rather than
