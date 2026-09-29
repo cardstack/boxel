@@ -7,7 +7,7 @@ const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const repoRoot = resolve(packageRoot, '../..');
 const realm = join(packageRoot, 'dist-realm');
 const generatedTest = join(realm, 'generated-gallery.test.gts');
-const boxelCli = resolve(repoRoot, '../boxel/packages/boxel-cli/bin/boxel.js');
+const boxelCli = resolve(repoRoot, 'packages/boxel-cli/bin/boxel.js');
 
 if (!existsSync(join(realm, 'gallery-runtime.ts'))) {
   throw new Error('Missing generated realm. Run pnpm build:realm first.');

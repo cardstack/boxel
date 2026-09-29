@@ -5,7 +5,10 @@ import { fileURLToPath } from 'node:url';
 
 import ts from 'typescript';
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const root = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '../../..',
+);
 const inventory = JSON.parse(
   fs.readFileSync(path.join(root, 'docs/api-inventory.json'), 'utf8'),
 );
@@ -78,7 +81,10 @@ assert.deepEqual(
   [...actual].sort(),
   'API exports changed: review and update docs/api-inventory.json',
 );
-const directory = path.join(root, 'test-app/app/content/guides');
+const directory = path.join(
+  root,
+  'packages/choreo-test-app/app/content/guides',
+);
 const pages = new Map(
   fs
     .readdirSync(directory)
@@ -137,7 +143,7 @@ console.log(
 
 const lessons = JSON.parse(
   fs.readFileSync(
-    path.join(root, 'test-app/app/content/demo-lessons.json'),
+    path.join(root, 'packages/choreo-test-app/app/content/demo-lessons.json'),
     'utf8',
   ),
 );
@@ -157,8 +163,8 @@ function literalIds(tree) {
   return ids;
 }
 const demoIds = new Set([
-  ...literalIds(source('test-app/app/lib/catalog.ts')),
-  ...literalIds(source('test-app/app/lib/docs-demos.ts')),
+  ...literalIds(source('packages/choreo-test-app/app/lib/catalog.ts')),
+  ...literalIds(source('packages/choreo-test-app/app/lib/docs-demos.ts')),
 ]);
 assert.equal(
   new Set(lessons.map((lesson) => lesson.id)).size,
@@ -171,9 +177,9 @@ assert.deepEqual(
   'Each catalog demo needs one source-reviewed teaching lesson',
 );
 const embedded = new Set([
-  ...literalIds(source('test-app/app/lib/guides.ts')),
-  ...literalIds(source('test-app/app/lib/guide-reference.ts')),
-  ...literalIds(source('test-app/app/lib/demo-guides.ts')),
+  ...literalIds(source('packages/choreo-test-app/app/lib/guides.ts')),
+  ...literalIds(source('packages/choreo-test-app/app/lib/guide-reference.ts')),
+  ...literalIds(source('packages/choreo-test-app/app/lib/demo-guides.ts')),
 ]);
 for (const lesson of lessons) {
   assert.ok(embedded.has(lesson.id), `${lesson.id} needs a guide embed`);

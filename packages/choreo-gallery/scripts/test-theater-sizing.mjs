@@ -10,7 +10,7 @@ const browser = await chromium.launch({
 });
 try {
   for (const path of [
-    '../../../test-app/app/styles/app.css',
+    '../../choreo-test-app/app/styles/app.css',
     '../styles/app.scoped.css',
   ]) {
     const css = readFileSync(new URL(path, import.meta.url), 'utf8');

@@ -9,7 +9,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 // Generate a clean Ember/Vite consumer, not a copy of the gallery application.
-const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const target = process.argv[2] && resolve(process.argv[2]);
 if (!target || existsSync(target)) {
   throw new Error(
@@ -21,7 +21,7 @@ const write = (name, body) => {
   writeFileSync(join(target, name), body);
 };
 const read = (name) => readFileSync(join(root, name), 'utf8');
-const source = JSON.parse(read('test-app/package.json'));
+const source = JSON.parse(read('packages/choreo-test-app/package.json'));
 const dev = { ...source.devDependencies };
 for (const key of [
   '@chenglou/pretext',
@@ -69,16 +69,16 @@ for (const file of [
   'config/optional-features.json',
   'app/config/environment.d.ts',
 ]) {
-  write(file, read(`test-app/${file}`));
+  write(file, read(`packages/choreo-test-app/${file}`));
 }
 write(
   'config/environment.js',
-  read('test-app/config/environment.js').replaceAll(
+  read('packages/choreo-test-app/config/environment.js').replaceAll(
     'test-app',
     'choreo-tutorial-app',
   ),
 );
-write('app/app.ts', read('test-app/app/app.ts'));
+write('app/app.ts', read('packages/choreo-test-app/app/app.ts'));
 write(
   'tsconfig.json',
   JSON.stringify(
@@ -131,7 +131,11 @@ for (const [route, file, name] of [
   const destination = join(target, 'app/components', `${file}.gts`);
   mkdirSync(dirname(destination), { recursive: true });
   copyFileSync(
-    join(root, 'test-app/app/components/tutorials', `${file}.gts`),
+    join(
+      root,
+      'packages/choreo-test-app/app/components/tutorials',
+      `${file}.gts`,
+    ),
     destination,
   );
   write(
@@ -150,7 +154,7 @@ write(
 
 write(
   'app/config/environment.js',
-  read('test-app/app/config/environment.js').replaceAll(
+  read('packages/choreo-test-app/app/config/environment.js').replaceAll(
     'test-app',
     'choreo-tutorial-app',
   ),

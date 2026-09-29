@@ -2,7 +2,10 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 export async function filmOverlays(browser, origin, out) {
   const score = JSON.parse(
-    await fs.readFile('test-app/app/lib/widget-quick-score.json', 'utf8'),
+    await fs.readFile(
+      'packages/choreo-test-app/app/lib/widget-quick-score.json',
+      'utf8',
+    ),
   );
   const page = await browser.newPage({
     viewport: { width: 1920, height: 1080 },

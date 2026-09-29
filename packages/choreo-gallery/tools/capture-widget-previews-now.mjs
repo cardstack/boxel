@@ -5,7 +5,8 @@ const browser = await chromium.launch({
   headless: true,
   executablePath: process.env.CHROME_PATH,
 });
-const root = 'test-app/public/widget-previews/rendered-20260906';
+const root =
+  'packages/choreo-test-app/public/widget-previews/rendered-20260906';
 const manifest = [];
 try {
   for (const phone of [false, true]) {

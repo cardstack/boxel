@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import { chromium } from 'playwright';
 const catalogIds = [
   ...readFileSync(
-    new URL('../test-app/app/lib/catalog.ts', import.meta.url),
+    new URL('../../choreo-test-app/app/lib/catalog.ts', import.meta.url),
     'utf8',
   ).matchAll(/^ {4}id: '([^']+)'/gm),
 ].map((match) => match[1]);

@@ -31,16 +31,35 @@
     "README.md"
   ],
   "scripts": {
-    "build": "tsc --project tsconfig.json",
-    "lint:types": "tsc --project tsconfig.json --noEmit",
+    "build": "ember-tsc --project tsconfig.json",
+    "lint:types": "ember-tsc --project tsconfig.json --noEmit",
     "prepack": "pnpm run test",
     "test": "pnpm run build && pnpm run test:unit",
-    "test:unit": "node --test test/*.test.mjs"
+    "test:unit": "node --test test/*.test.mjs",
+    "format": "prettier . --cache --write",
+    "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\" --prefixColors auto",
+    "lint:fix": "concurrently \"pnpm:lint:*:fix\" --names \"fix:\" --prefixColors auto && pnpm run format",
+    "lint:format": "prettier . --cache --check",
+    "lint:js": "eslint . --cache",
+    "lint:js:fix": "eslint . --fix"
   },
   "publishConfig": {
     "access": "public"
   },
   "devDependencies": {
-    "typescript": "^5.5.4"
+    "@eslint/js": "^9.39.4",
+    "@glint/ember-tsc": "catalog:",
+    "concurrently": "catalog:",
+    "eslint": "^9.39.4",
+    "eslint-config-prettier": "catalog:",
+    "eslint-plugin-ember": "catalog:",
+    "eslint-plugin-n": "catalog:",
+    "eslint-plugin-simple-import-sort": "^12.1.1",
+    "eslint-plugin-typescript-sort-keys": "catalog:",
+    "globals": "^15.15.0",
+    "prettier": "catalog:",
+    "prettier-plugin-ember-template-tag": "catalog:",
+    "typescript": "catalog:",
+    "typescript-eslint": "catalog:"
   }
 }

@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import { webkit } from 'playwright';
 const ids = [
   ...fs
-    .readFileSync('test-app/app/lib/widget-tour.ts', 'utf8')
+    .readFileSync('packages/choreo-test-app/app/lib/widget-tour.ts', 'utf8')
     .matchAll(/id: '([^']+)'/g),
 ].map((m) => m[1]);
 const b = await webkit.launch({

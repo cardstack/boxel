@@ -1,9 +1,6 @@
 {
   "extends": "@ember/library-tsconfig",
   "include": ["src/**/*"],
-  "glint": {
-    "environment": ["ember-loose", "ember-template-imports"]
-  },
   "compilerOptions": {
     "allowJs": true,
     "baseUrl": ".",

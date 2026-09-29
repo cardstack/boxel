@@ -18,7 +18,7 @@
  * `--enable-unsafe-swiftshader` because the scenes are WebGL and
  * headless has no GPU. Node 22+ for the built-in WebSocket.
  */
-/* eslint-disable n/no-process-exit, n/no-unsupported-features/node-builtins */
+/* eslint-disable n/no-process-exit */
 import { spawn } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
 

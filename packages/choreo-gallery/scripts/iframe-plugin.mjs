@@ -6,7 +6,7 @@ export function boxelIframe() {
     transform(code, id) {
       if (
         process.env.CHOREO_BOXEL_BUILD !== '1' ||
-        !id.includes('/test-app/app/') ||
+        !id.includes('/choreo-test-app/app/') ||
         !/\.(gts|ts)(\?|$)/.test(id)
       ) {
         return;

@@ -3,7 +3,7 @@ const root =
   process.env.WIDGET_PACKAGE || 'out/widget-boxel-publish/iframe/gallery';
 for (const name of ['draco_wasm_wrapper', 'draco_decoder']) {
   fs.copyFileSync(
-    `test-app/public/draco/${name}.js`,
+    `packages/choreo-test-app/public/draco/${name}.js`,
     `${root}/draco/${name}.mjs`,
   );
 }

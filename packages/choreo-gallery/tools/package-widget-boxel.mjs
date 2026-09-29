@@ -10,7 +10,7 @@ const source = process.env.WIDGET_BUILD || 'out/widget-boxel-build',
   out = process.env.WIDGET_PACKAGE || 'out/widget-boxel-publish/iframe/gallery';
 mkdirSync(join(out, 'assets'), { recursive: true });
 // Include narration, fonts, posters, models and every public demo dependency.
-cpSync('test-app/public', out, { recursive: true });
+cpSync('packages/choreo-test-app/public', out, { recursive: true });
 const modules = readdirSync(join(source, 'assets')).filter((n) =>
   n.endsWith('.js'),
 );
@@ -45,10 +45,17 @@ cpSync(
   join(source, '@embroider/virtual/vendor.js'),
   join(out, 'widget-vendor.mjs'),
 );
-cpSync('test-app/public/widget-room.css', join(out, 'widget-room.css'));
-cpSync('test-app/public/widget-previews', join(out, 'widget-previews'), {
-  recursive: true,
-});
+cpSync(
+  'packages/choreo-test-app/public/widget-room.css',
+  join(out, 'widget-room.css'),
+);
+cpSync(
+  'packages/choreo-test-app/public/widget-previews',
+  join(out, 'widget-previews'),
+  {
+    recursive: true,
+  },
+);
 let html = rewrite(readFileSync(join(source, 'index.html'), 'utf8'))
   .replace('./@embroider/virtual/app.css', './widget-app.css')
   .replace('./@embroider/virtual/vendor.js', './widget-vendor.mjs');

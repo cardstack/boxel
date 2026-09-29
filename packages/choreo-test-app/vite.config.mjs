@@ -7,7 +7,7 @@ import { classicEmberSupport, ember, extensions } from '@embroider/vite';
 import { babel } from '@rollup/plugin-babel';
 import { defineConfig } from 'vite';
 
-import { boxelIframe } from '../packages/choreo-gallery/scripts/iframe-plugin.mjs';
+import { boxelIframe } from '../choreo-gallery/scripts/iframe-plugin.mjs';
 
 /**
  * THE DRACO DECODER COMES FROM THREE, not from the repository.

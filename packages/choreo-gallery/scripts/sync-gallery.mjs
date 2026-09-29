@@ -10,7 +10,7 @@ import { dirname, join, resolve } from 'node:path';
 import { scopeStyles } from './scope-css.mjs';
 const root = resolve(import.meta.dirname, '../../..');
 const pkg = resolve(import.meta.dirname, '..');
-const app = join(root, 'test-app/app');
+const app = join(root, 'packages/choreo-test-app/app');
 function walk(dir) {
   return readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
     e.isDirectory() ? walk(join(dir, e.name)) : [join(dir, e.name)],
@@ -144,5 +144,7 @@ write(
   join(pkg, 'styles/app.css'),
   readFileSync(join(app, 'styles/app.css'), 'utf8'),
 );
-cpSync(join(root, 'test-app/public'), join(pkg, 'public'), { recursive: true });
+cpSync(join(root, 'packages/choreo-test-app/public'), join(pkg, 'public'), {
+  recursive: true,
+});
 console.log('Synced the current test-app gallery sources and media for Boxel.');

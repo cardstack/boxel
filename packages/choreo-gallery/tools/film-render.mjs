@@ -16,7 +16,7 @@
  * gives whatever the machine managed that second. Compare the two and you
  * are testing the claim.
  */
-/* eslint-disable n/no-process-exit, n/no-unsupported-features/node-builtins */
+/* eslint-disable n/no-process-exit */
 import { spawn } from 'node:child_process';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 

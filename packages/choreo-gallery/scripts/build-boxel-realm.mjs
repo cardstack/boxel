@@ -28,7 +28,7 @@ const outputRoot = join(packageRoot, 'dist-realm');
 const runtimeEntry = join(packageRoot, 'dist/components/gallery-site.js');
 const sourceCatalog = join(packageRoot, 'src/lib/catalog.ts');
 const stylePath = join(packageRoot, 'styles/app.scoped.css');
-const publicPath = join(repoRoot, 'test-app/public');
+const publicPath = join(repoRoot, 'packages/choreo-test-app/public');
 const iframeBuild = join(packageRoot, 'dist-iframe');
 const realmMediaRoot =
   process.env.CHOREO_REALM_MEDIA_ROOT ??

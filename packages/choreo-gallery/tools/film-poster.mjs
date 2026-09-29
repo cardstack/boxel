@@ -25,7 +25,7 @@
    WebSocket it drives Chrome's debugging protocol over, and it is a CLI,
    so it exits with a status like one. The package's floor is Node 16
    because the LIBRARY has to run there; this file never does. */
-/* eslint-disable n/no-process-exit, n/no-unsupported-features/node-builtins */
+/* eslint-disable n/no-process-exit */
 import { spawn } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
 

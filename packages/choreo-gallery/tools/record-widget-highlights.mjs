@@ -57,7 +57,10 @@ try {
   // Warm only the featured demos before the capture clock starts. The room
   // retains their DOM while parked, so decoding cannot intrude into the film.
   const score = JSON.parse(
-    await fs.readFile('test-app/app/lib/widget-quick-score.json', 'utf8'),
+    await fs.readFile(
+      'packages/choreo-test-app/app/lib/widget-quick-score.json',
+      'utf8',
+    ),
   );
   for (const id of [...new Set(score.actions.map((a) => a.demo))]) {
     await page
@@ -177,7 +180,7 @@ try {
       '-i',
       'pipe:0',
       '-i',
-      'test-app/public/widget-tour/quick-george.mp3',
+      'packages/choreo-test-app/public/widget-tour/quick-george.mp3',
       ...overlayInputs,
       '-map',
       '[video]',
