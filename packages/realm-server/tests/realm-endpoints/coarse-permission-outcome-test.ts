@@ -586,6 +586,18 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       assert.strictEqual(readiness.status, 200, '_readiness-check answers');
     });
 
+    test('a readiness probe that reaches none of its routes asks an anonymous caller for credentials', async function (assert) {
+      // Sent with no `Accept`, the probe passes an archived realm's seal as an
+      // operational endpoint, but no route of the endpoint answers it, so it
+      // meets the realm ACL as any other read does.
+      assertRefusal(
+        assert,
+        await request.get('/_readiness-check'),
+        { status: 401, body: MISSING_AUTH },
+        'GET _readiness-check with no Accept',
+      );
+    });
+
     test('a request for an operational endpoint’s path that the router hands to another route needs that route’s credentials, whatever its Content-Type', async function (assert) {
       // Something for the card+source read of `_readiness-check` to find.
       let stored = await request

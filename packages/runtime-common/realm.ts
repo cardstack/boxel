@@ -2121,6 +2121,12 @@ interface RequestDispatch {
   // off the dispatch that will answer, so nothing else a request for an
   // endpoint's path could be handed to passes with it.
   operationalEndpoint?: boolean;
+  // The answer is an operational endpoint's own route, which answers a caller
+  // without credentials (see `OPERATIONAL_ENDPOINT`). Only a route the router
+  // dispatches the request to is one: the health probe that reaches no route
+  // passes the seal as an operational endpoint, but meets the realm ACL like
+  // any other read.
+  answersWithoutCredentials?: boolean;
   handle: () => Promise<ResponseWithNodeStream>;
 }
 
@@ -6867,6 +6873,7 @@ export class Realm {
             request,
             requestContext,
             requiredPermission,
+            dispatch,
           );
         }
         // An archived realm is sealed for everyone, owner included: once a
@@ -7088,6 +7095,7 @@ export class Realm {
         consumesCoarseOutcome: matched.consumesCoarseOutcome,
         coarseReadOnly: matched.coarseReadOnly,
         operationalEndpoint: matched.operationalEndpoint,
+        answersWithoutCredentials: matched.operationalEndpoint,
         handle: () => this.#router.handle(request, requestContext, matched),
       };
     }
@@ -7126,14 +7134,19 @@ export class Realm {
   // The realm ACL's decision on an external request, recorded on the request
   // context. The decision is the one `checkPermission` makes; an ACL refusal
   // is kept to be answered after routing (see `internalHandle`), while a
-  // credential the realm cannot accept is still refused here.
+  // credential the realm cannot accept is still refused here. `dispatch` is
+  // what will answer the request, which decides whether it needs credentials
+  // at all.
   async #recordCoarsePermission(
     request: Request,
     requestContext: RequestContext,
     requiredPermission: 'read' | 'write' | 'realm-owner',
+    dispatch: RequestDispatch,
   ): Promise<void> {
     try {
-      await this.checkPermission(request, requestContext, requiredPermission);
+      await this.checkPermission(request, requestContext, requiredPermission, {
+        answersWithoutCredentials: dispatch.answersWithoutCredentials,
+      });
       requestContext.coarseAllowed = true;
     } catch (e) {
       if (!isCoarseRefusal(e)) {
@@ -9337,6 +9350,13 @@ export class Realm {
     return response;
   }
 
+  // `answersWithoutCredentials` says the request is dispatched to an
+  // operational endpoint's own route (see
+  // `RequestDispatch.answersWithoutCredentials`), which admits any caller. It
+  // is the dispatch's to say, not the request's: `_session` sent as a
+  // card-source write reaches that write, and needs the credentials every
+  // write does, whatever media type it carries.
+  //
   // `probe` asks whether a caller is permitted rather than enforcing it, which
   // changes two things. The realm-wide `HEAD` exemption does not apply — it
   // exists so a discovery probe reaches an answer without credentials, and a
@@ -9347,7 +9367,10 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
     requiredPermission: 'read' | 'write' | 'realm-owner',
-    { probe = false }: { probe?: boolean } = {},
+    {
+      probe = false,
+      answersWithoutCredentials = false,
+    }: { probe?: boolean; answersWithoutCredentials?: boolean } = {},
   ) {
     let realmPermissions = requestContext.permissions;
     // A refusal the caller asked for rather than ran into is not a failed
@@ -9360,12 +9383,7 @@ export class Realm {
     };
     if (
       requiredPermission !== 'realm-owner' &&
-      // A request the router dispatches to an operational endpoint, the
-      // `_session` sign-in or the `_readiness-check` probe (see
-      // `OPERATIONAL_ENDPOINT`). The route the request reaches decides, not
-      // the path or a media type it carries: `_session` sent as a card-source
-      // write reaches that write, and needs the credentials every write does.
-      (this.#router.lookupRoute(request)?.operationalEndpoint ||
+      (answersWithoutCredentials ||
         (request.method === 'HEAD' && !probe) ||
         // If the realm is public readable or writable, do not require a JWT
         (requiredPermission === 'read' &&
