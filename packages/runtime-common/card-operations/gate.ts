@@ -9,6 +9,7 @@ import { policyFileDefCodeRef } from '../policy-file-def.ts';
 import { localPathFor, pathsFor } from './dispatch.ts';
 import type { OperationCore, OperationScope } from './dispatch.ts';
 import type { AdmissionSubject, BxlMutationModule } from './executors.ts';
+import type { GateTrace } from './gate-trace.ts';
 import type {
   CompiledOperationGrant,
   CompiledPolicyPredicate,
@@ -57,6 +58,8 @@ import {
 // - An operation declared `nonGrantable` on the target's type, refused before
 //   any rule is matched, or on any type the target's type descends from,
 //   refused before a matching grant admits anything.
+// - An explain, which answers what a refusal withholds, whatever its
+//   declaration says.
 // - Any write to the card the realm's policy key names.
 // - Any write to the realm's config card, which holds that key and the
 //   settings a predicate reads through `realmConfig()`.
@@ -153,10 +156,11 @@ export type GateSubject =
 // What the gate reads of an invocation's scope: who the caller is, what the
 // realm ACL declined, and the index rows a card's chain comes from. A create's
 // proposed document is not among them, because it names the type the caller
-// claims.
+// claims. A scope an explain built also carries the trace the gate records
+// into.
 export type GateScope = Pick<
   OperationScope,
-  'caller' | 'coarseDeclined' | 'peekInstance'
+  'caller' | 'coarseDeclined' | 'peekInstance' | 'trace'
 >;
 
 // The gate's refusal. It carries nothing, since what a refusal says is the
@@ -357,6 +361,7 @@ export async function gateOperation(
   loaded?: LoadedPolicy,
 ): Promise<GateDecision | GateRefusal> {
   let { base } = definition;
+  let { trace } = scope;
   if (!declines(scope, base)) {
     return { kind: 'coarse' };
   }
@@ -365,25 +370,32 @@ export async function gateOperation(
   // so a grant for it that a compiled policy holds is never consulted,
   // however that grant came to be there.
   if (definition.nonGrantable) {
+    trace?.refused('non-grantable');
     return GATE_REFUSED;
   }
   // A query is planned and run on the search engine rather than against one
-  // target, so nothing here can grant one.
-  if (base === 'query') {
+  // target, so nothing here can grant one. An explain is granted nowhere: what
+  // it answers is what a refusal withholds, so it is refused here even where
+  // its declaration left the flag off.
+  if (base === 'query' || base === 'explain') {
+    trace?.refused('non-grantable');
     return GATE_REFUSED;
   }
   if (subject.kind === 'unmatched' || !core.policy) {
+    trace?.refused('unmatchable-target');
     return GATE_REFUSED;
   }
   // A type is only what a create mints from. Every other behavior runs
   // against a stored target, and is judged by it or not at all.
   if (subject.kind === 'type' && base !== 'create') {
+    trace?.refused('unmatchable-target');
     return GATE_REFUSED;
   }
   // The gate grants a file one behavior, the read of its stored bytes. What a
   // file def carries besides — its metadata `read`, its writes — is granted on
   // nothing.
   if (subject.kind === 'file' && base !== 'readSource') {
+    trace?.refused('unmatchable-target');
     return GATE_REFUSED;
   }
   // The realm's config card and the card its policy key names together
@@ -398,6 +410,7 @@ export async function gateOperation(
     (namesRealmConfigCard(core, subject.url) ||
       (await namesPolicyCard(core.policy, subject.url)))
   ) {
+    trace?.refused('authorization-infrastructure');
     return GATE_REFUSED;
   }
   // Every other behavior is matched on its card's index row, which is peeked
@@ -408,6 +421,7 @@ export async function gateOperation(
   if (base !== 'readSource') {
     let indexed = await indexedSubject(scope, subject);
     if (!indexed) {
+      trace?.refused('unmatchable-target');
       return GATE_REFUSED;
     }
     if (indexed.kind === GATE_MISSING.kind) {
@@ -417,6 +431,7 @@ export async function gateOperation(
   }
   let { policy } = loaded ?? (await loadPolicy(core));
   if (!policy) {
+    trace?.refused('no-grant');
     return GATE_REFUSED;
   }
   let matchOn =
@@ -425,11 +440,13 @@ export async function gateOperation(
       ? undefined
       : await storedBytesSubject(core, subject.url));
   if (!matchOn) {
+    trace?.refused('unmatchable-target');
     return GATE_REFUSED;
   }
   let { types } = matchOn;
-  let matched = await matchingGrants(policy, types, name, core.policy);
+  let matched = await matchingGrants(policy, types, name, core.policy, trace);
   if (matched.length === 0) {
+    trace?.refused('no-grant');
     return GATE_REFUSED;
   }
   // Once a grant would admit the invocation, and not before, so an
@@ -448,12 +465,14 @@ export async function gateOperation(
     !isDefinitionFreeBaseOperation(name) &&
     (await nonGrantableInChain(core, types.slice(typeDefinition ? 1 : 0), name))
   ) {
+    trace?.refused('non-grantable');
     return GATE_REFUSED;
   }
   if (
     isWrite(base) &&
     (await writesPolicyCard(core, core.policy, types, definition))
   ) {
+    trace?.refused('authorization-infrastructure');
     return GATE_REFUSED;
   }
   let unconditional = matched.find(({ grant }) => !grant.where);
@@ -778,6 +797,14 @@ async function firstHolding(
     }
     stats.predicateEvaluations++;
     let outcome = await evaluate(core, where, subject, actor);
+    scope.trace?.evaluated(
+      candidate.grant,
+      outcome === 'holds'
+        ? 'held'
+        : outcome === 'threw'
+          ? 'threw'
+          : 'did-not-hold',
+    );
     if (outcome === 'holds') {
       return candidate;
     }
@@ -932,6 +959,8 @@ export async function matchingGrants(
   types: string[],
   name: string,
   access: OperationPolicyAccess,
+  // Where an explain records the rules matched. Absent everywhere else.
+  trace?: GateTrace,
 ): Promise<MatchedGrant[]> {
   let chain = new Set(types);
   let matched: MatchedGrant[] = [];
@@ -940,10 +969,10 @@ export async function matchingGrants(
     if (!keys.some((key) => chain.has(key))) {
       continue;
     }
-    for (let grant of rule.grants) {
-      if (grant.operation === name) {
-        matched.push({ rule, grant });
-      }
+    let grants = rule.grants.filter((grant) => grant.operation === name);
+    trace?.ruleMatched(rule, grants);
+    for (let grant of grants) {
+      matched.push({ rule, grant });
     }
   }
   return matched;

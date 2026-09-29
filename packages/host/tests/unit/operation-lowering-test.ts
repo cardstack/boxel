@@ -608,6 +608,70 @@ module('Unit | operation lowering', function (hooks) {
     );
   });
 
+  test('an explain lowers to its params, and is non-grantable whatever reaches lowering', async function (assert) {
+    let { CardDef } = api;
+    let { operation } = operations;
+    class Policy extends CardDef {
+      static displayName = 'Policy';
+      @operation static explain = {
+        base: 'explain',
+        params: {
+          actor: StringField,
+          target: StringField,
+          operation: StringField,
+        },
+        nonGrantable: true,
+      } satisfies OperationsModule.OperationDeclaration;
+    }
+    shim({ Policy });
+
+    let { operations: lowered, issues } = await lower(Policy);
+    assert.deepEqual(issues, [], 'the declaration lowers clean');
+    assert.strictEqual(lowered.explain.base, 'explain');
+    assert.deepEqual(
+      Object.keys(lowered.explain.params ?? {}).sort(),
+      ['actor', 'operation', 'target'],
+      'the question travels as declared params',
+    );
+    assert.true(lowered.explain.nonGrantable, 'the flag reaches the realm');
+
+    // Lowering is exported over plain data, so an entry the decorator never
+    // saw can reach it. One that leaves the flag off is marked anyway, and one
+    // that reshapes the answer is recorded as unreachable.
+    let context: Parameters<typeof lowerOperationDeclarations>[1] = {
+      definition: buildDefinition(Policy),
+      lookupDefinition,
+      identifyCard: (target) => identifyCard(target),
+    };
+    let unmarked = await lowerOperationDeclarations(
+      { explain: { base: 'explain' } } as unknown as Record<
+        string,
+        OperationsModule.OperationDeclaration
+      >,
+      context,
+    );
+    assert.true(
+      unmarked.operations.explain.nonGrantable,
+      'an explain is never grantable, flag or no flag',
+    );
+    let projected = await lowerOperationDeclarations(
+      {
+        explain: {
+          base: 'explain',
+          nonGrantable: true,
+          output: { decision: { $bxl: '.decision' } },
+        },
+      } as unknown as Record<string, OperationsModule.OperationDeclaration>,
+      context,
+    );
+    assert.deepEqual(
+      codes(projected),
+      ['unrunnable-program'],
+      'a projection over the explanation is recorded as never reached',
+    );
+    assert.true(projected.operations.explain.invalid);
+  });
+
   // -------------------------------------------------------------------------
   // The source-level writes
   // -------------------------------------------------------------------------
