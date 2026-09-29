@@ -96,10 +96,9 @@ export function collectGraph(el: Element): GraphNode[] {
            than the picture */
         const look = inner
           .filter((n): n is LookNode => n.kind === 'look')
-          .reduce<ClipLook | undefined>(
-            (all, n) => ({ ...all, ...n.look }),
-            undefined,
-          );
+          .reduce<
+            ClipLook | undefined
+          >((all, n) => ({ ...all, ...n.look }), undefined);
         if (look && node.media && node.media.kind !== 'photo') {
           node.media = { ...node.media, look };
         }

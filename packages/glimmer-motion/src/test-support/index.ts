@@ -351,6 +351,7 @@ export function resetMotion() {
  */
 function unblockLayout() {
   const root = rootProjectionNode.current as
-    { unblockUpdate?: () => void } | undefined;
+    | { unblockUpdate?: () => void }
+    | undefined;
   root?.unblockUpdate?.();
 }

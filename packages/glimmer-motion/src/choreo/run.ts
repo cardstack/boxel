@@ -1559,7 +1559,8 @@ export class ChoreoRun implements Run {
     const span = t.end - t.start;
     const raw = span > 0 ? Math.min(1, Math.max(0, ms / span)) : 1;
     const transition = t.cue.transition as
-      (Record<string, unknown> & { ease?: unknown }) | undefined;
+      | (Record<string, unknown> & { ease?: unknown })
+      | undefined;
     if (isSpring(transition)) {
       const generator = springGenerator({
         keyframes: [0, 100],
@@ -2261,7 +2262,8 @@ export class ChoreoRun implements Run {
     const span = t.end - t.start;
     const raw = span > 0 ? Math.min(1, Math.max(0, ms / span)) : 1;
     const transition = t.cue.transition as
-      (Record<string, unknown> & { ease?: unknown }) | undefined;
+      | (Record<string, unknown> & { ease?: unknown })
+      | undefined;
     if (isSpring(transition)) {
       const pts = t.cue.flight!.points;
       const end = pts[pts.length - 1]!;
@@ -2364,7 +2366,8 @@ export class ChoreoRun implements Run {
     const span = t.end - t.start;
     const p = span > 0 ? Math.min(1, Math.max(0, (now - t.start) / span)) : 1;
     const transition = cue.transition as
-      (Record<string, unknown> & { ease?: unknown; type?: string }) | undefined;
+      | (Record<string, unknown> & { ease?: unknown; type?: string })
+      | undefined;
     const sprung = isSpring(transition);
     const ease = sprung
       ? null

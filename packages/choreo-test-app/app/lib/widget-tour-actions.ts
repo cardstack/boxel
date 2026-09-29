@@ -5,7 +5,14 @@ export interface TourAction {
   at: number;
   index?: number;
   kind?:
-    'click' | 'down' | 'up' | 'range' | 'scroll' | 'pointer' | 'move' | 'shot';
+    | 'click'
+    | 'down'
+    | 'up'
+    | 'range'
+    | 'scroll'
+    | 'pointer'
+    | 'move'
+    | 'shot';
   selector: string;
   value?: number;
 }

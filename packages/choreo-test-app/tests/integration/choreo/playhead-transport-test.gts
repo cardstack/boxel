@@ -13,7 +13,8 @@ import { Playhead } from 'test-app/components/examples/playhead';
 
 function run(): ChoreoRun | null {
   const stage = document.querySelector('.ph-stage') as
-    (HTMLElement & { playhead?: { c?: { run: ChoreoRun | null } } }) | null;
+    | (HTMLElement & { playhead?: { c?: { run: ChoreoRun | null } } })
+    | null;
   return stage?.playhead?.c?.run ?? null;
 }
 

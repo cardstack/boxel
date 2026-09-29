@@ -118,7 +118,8 @@ export type PropValue = number | string;
 export type PropTarget = PropValue | PropValue[];
 /** a step property: a target, or a function of the sprite and the whole changeset */
 export type PropSource =
-  PropTarget | ((sprite: Sprite, changeset: ChangesetLike) => PropTarget);
+  | PropTarget
+  | ((sprite: Sprite, changeset: ChangesetLike) => PropTarget);
 
 export interface ChangesetLike {
   all: Sprite[];

@@ -19,7 +19,9 @@ function handlePressEvent(
   }
 
   const eventName = ('onTap' + (lifecycle === 'End' ? '' : lifecycle)) as
-    'onTapStart' | 'onTap' | 'onTapCancel';
+    | 'onTapStart'
+    | 'onTap'
+    | 'onTapCancel';
 
   const callback = props[eventName];
   if (callback) {

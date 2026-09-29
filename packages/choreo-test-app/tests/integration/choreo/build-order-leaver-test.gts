@@ -78,9 +78,12 @@ module('Integration | choreo | build-order leaver', function (hooks) {
     await rest(900);
     const bo = document.querySelector<HTMLElement>('[data-it="bo"]');
     const stage = document.querySelector('.bo-stage') as
-      (HTMLElement & { buildOrder?: { c?: { run: unknown } } }) | null;
+      | (HTMLElement & { buildOrder?: { c?: { run: unknown } } })
+      | null;
     const run = stage?.buildOrder?.c?.run as
-      { duration: number; isDone(): boolean; time: number } | null | undefined;
+      | { duration: number; isDone(): boolean; time: number }
+      | null
+      | undefined;
     assert.strictEqual(
       document.querySelectorAll('[data-it]').length,
       1,

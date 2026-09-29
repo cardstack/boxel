@@ -53,7 +53,14 @@ export const partOf = (name: string): Part =>
 /* ── effects ─────────────────────────────────────────────────────────────── */
 
 export type EffectName =
-  'dissolve' | 'draw' | 'drift' | 'move' | 'pop' | 'soften' | 'spin' | 'wipe';
+  | 'dissolve'
+  | 'draw'
+  | 'drift'
+  | 'move'
+  | 'pop'
+  | 'soften'
+  | 'spin'
+  | 'wipe';
 
 export interface Effect {
   label: string;
