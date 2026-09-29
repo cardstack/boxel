@@ -832,10 +832,16 @@ export type PolicyExplanationReason =
 
 export interface ExplainedRule {
   targetType: { module: string; name: string };
+  // Where the rule is in the policy card, as a path into its attributes in
+  // the form a policy issue's `path` takes: `rules[2]`.
+  path: string;
   grants: ExplainedGrant[];
 }
 
 export interface ExplainedGrant {
+  // Where the grant is in the policy card, as `rules[2].grants[1]`, so an
+  // explanation and an issue name the same grant the same way.
+  path: string;
   // The predicate as the author wrote it. Absent for a grant with no
   // condition.
   where?: string;
