@@ -105,6 +105,7 @@ export function stubPolicyCache({
       return { definition, types: [typeKey(classroom)] };
     },
     toURL: (identifier) => new URL(identifier),
+    isPolicyCard: (types) => types.includes(policyKey),
     typeKey,
   });
   return { cache, state, card };
