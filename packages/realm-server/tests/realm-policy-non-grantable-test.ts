@@ -375,15 +375,17 @@ module(basename(import.meta.filename), function (hooks) {
     });
   }
 
-  // Resolves invocations on `url` for a reader the realm ACL declined, against
-  // a compiled policy holding `rules`, as the policy would be had compiling let
-  // them through. It shows what the gate refuses of a grant that reached a
-  // compiled policy however it came to be there.
+  // Resolves invocations on `url` for the reader, whom the realm ACL lets read
+  // and not write, against a compiled policy holding `rules`, as the policy
+  // would be had compiling let them through. It shows what the gate refuses of
+  // a grant that reached a compiled policy however it came to be there.
   //
-  // It resolves as a caller that takes the write lock's decision does. The
-  // plain resolution refuses every write it would leave to the lock, which is
-  // every write to a stored card, so through it a write the gate admits would
-  // be refused as well, and a refusal would say nothing about the gate.
+  // It resolves through the gated entry and keeps only the definition, so it
+  // refuses only what the gate refuses: a write the gate admits resolves,
+  // though the write lock would still judge its stored card. The plain
+  // resolution refuses every write it would leave to the lock, which is every
+  // write to a stored card, so through it an admitted write would be refused
+  // too, and a refusal would say nothing about the gate.
   function carrying(
     rules: CompiledRealmPolicy['rules'],
     url: string,
@@ -407,7 +409,7 @@ module(basename(import.meta.filename), function (hooks) {
           name,
           newOperationScope(carried, {
             caller: scopeCallerFor(READER),
-            coarseDeclined: 'all',
+            coarseDeclined: 'writes',
           }),
         )
       ).definition;
@@ -508,7 +510,14 @@ module(basename(import.meta.filename), function (hooks) {
       assert.strictEqual(
         (await resolve('annotate')).base,
         'transform',
-        'the carried policy is the one the gate consults',
+        'the carried grant admits annotate',
+      );
+      // The realm's own policy grants annotate too, so only a carried policy
+      // that grants nothing shows the gate consults the carried one.
+      await assert.rejects(
+        carrying([], LEDGER_1)('annotate'),
+        /operation-not-permitted/,
+        'the gate consults the carried policy, which grants nothing',
       );
       for (let name of ['seal', 'update']) {
         await assert.rejects(
