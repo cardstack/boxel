@@ -469,6 +469,7 @@ const SCOPE: Readonly<Record<BaseOperation, 'instance' | 'type'>> = {
   transform: 'instance',
   appendLine: 'instance',
   appendContainsMany: 'instance',
+  explain: 'instance',
   create: 'type',
   query: 'type',
 };
