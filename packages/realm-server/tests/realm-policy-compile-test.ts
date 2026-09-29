@@ -41,30 +41,58 @@ const REALM_POLICY = {
   name: 'RealmPolicy',
 };
 
+// `lock` is kept out of every policy's reach. `OpenClassroom` redeclares it
+// without the flag, and inherits the rest.
 function classroomModule(rosterField: string) {
   return `
-    import { containsMany, field, CardDef } from "@cardstack/base/card-api";
+    import { contains, containsMany, field, CardDef } from "@cardstack/base/card-api";
     import StringField from "@cardstack/base/string";
+    import { operation } from "@cardstack/base/operations";
     export class Classroom extends CardDef {
       @field ${rosterField} = containsMany(StringField);
+      @field status = contains(StringField);
+
+      @operation static appendActivity = {
+        base: 'transform',
+        set: { status: 'active' },
+      };
+      @operation static approve = {
+        base: 'transform',
+        set: { status: 'approved' },
+      };
+      @operation static rename = {
+        base: 'transform',
+        set: { status: 'renamed' },
+      };
+      @operation static lock = {
+        base: 'transform',
+        set: { status: 'locked' },
+        nonGrantable: true,
+      };
+    }
+    export class OpenClassroom extends Classroom {
+      @operation static lock = {
+        base: 'transform',
+        set: { status: 'locked' },
+      };
     }
   `;
 }
 
 type Grant = { operation: string; where?: unknown };
+type Rule = { targetType: { module: string; name: string }; grants: Grant[] };
+
+const CLASSROOM = { module: `${EDUCATION}classroom`, name: 'Classroom' };
 
 function policyCard(grants: Grant[], adoptsFrom: object = REALM_POLICY) {
+  return policyOf([{ targetType: CLASSROOM, grants }], adoptsFrom);
+}
+
+function policyOf(rules: Rule[], adoptsFrom: object = REALM_POLICY) {
   return JSON.stringify({
     data: {
       type: 'card',
-      attributes: {
-        rules: [
-          {
-            targetType: { module: `${EDUCATION}classroom`, name: 'Classroom' },
-            grants,
-          },
-        ],
-      },
+      attributes: { rules },
       meta: { adoptsFrom },
     },
   });
@@ -252,9 +280,11 @@ module(basename(import.meta.filename), function (hooks) {
             module: rri(`${EDUCATION}classroom`),
             name: 'Classroom',
           },
+          path: 'rules[0]',
           grants: [
             {
               operation: 'read',
+              path: 'rules[0].grants[0]',
               where: {
                 source: '.teacherIds | contains(actor())',
                 canonical: '.teacherIds | contains(actor())',
@@ -263,6 +293,7 @@ module(basename(import.meta.filename), function (hooks) {
             },
             {
               operation: 'appendActivity',
+              path: 'rules[0].grants[1]',
               where: {
                 source: 'actor() in .teacherIds',
                 canonical: '(actor() | IN(.teacherIds))',
@@ -271,6 +302,7 @@ module(basename(import.meta.filename), function (hooks) {
             },
             {
               operation: 'approve',
+              path: 'rules[0].grants[2]',
               where: {
                 source: '.teacherIds[0] == realmConfig("approver")',
                 canonical: '.teacherIds[0] == realmConfig("approver")',
@@ -279,13 +311,14 @@ module(basename(import.meta.filename), function (hooks) {
             },
             {
               operation: 'rename',
+              path: 'rules[0].grants[3]',
               where: {
                 source: 'instance().teacherIds | length > 0',
                 canonical: 'instance().teacherIds | length > 0',
                 snapshot: false,
               },
             },
-            { operation: 'readSource' },
+            { operation: 'readSource', path: 'rules[0].grants[4]' },
           ],
         },
       ],
@@ -380,7 +413,7 @@ module(basename(import.meta.filename), function (hooks) {
         { operation: 'read', where: '.teacherIds | contains(actor())' },
         { operation: 'update', where: 'params("teacher") == actor()' },
         { operation: 'delete', where: '.teacherIds ==' },
-        { operation: 'archive', where: '   ' },
+        { operation: 'transform', where: '   ' },
       ]),
     );
     let policy = await compiled();
@@ -484,6 +517,11 @@ module(basename(import.meta.filename), function (hooks) {
       policy?.issues.map(({ code }) => code),
       ['policy-card-unloadable'],
     );
+    assert.strictEqual(
+      policy?.version,
+      undefined,
+      'and names no version, since nothing was compiled from its bytes',
+    );
 
     await pointAt(`${ORG}note`);
     policy = await compiled();
@@ -502,5 +540,130 @@ module(basename(import.meta.filename), function (hooks) {
     assert.ok(await compiled(), 'the policy compiles while the pointer is set');
     await pointAt(null);
     assert.strictEqual(await compiled(), undefined, 'no policy once it is not');
+  });
+
+  // Each rule or grant here that is refused earns exactly one issue, and each
+  // one beside it that resembles it and earns none compiles.
+  test('each problem is recorded against the rule or grant that has it, and the rest of the policy compiles', async function (assert) {
+    const TS_FILE_DEF = {
+      module: rri('@cardstack/base/ts-file-def'),
+      name: 'TsFileDef',
+    };
+    const GTS_FILE_DEF = {
+      module: rri('@cardstack/base/gts-file-def'),
+      name: 'GtsFileDef',
+    };
+    const JSON_FILE_DEF = {
+      module: rri('@cardstack/base/json-file-def'),
+      name: 'JsonFileDef',
+    };
+    let grants = (...operations: string[]) =>
+      operations.map((operation) => ({ operation }));
+    await writeTo(
+      org,
+      'policies/education.json',
+      policyOf([
+        {
+          targetType: CLASSROOM,
+          grants: [
+            { operation: 'read', where: '.teacherIds | any(. == actor())' },
+            // No such operation on the type, and a built-in behavior only a
+            // file carries.
+            ...grants('enroll', 'appendLine'),
+            // Declared non-grantable on the type.
+            ...grants('lock'),
+            // A built-in behavior every card carries.
+            ...grants('transform', 'query'),
+          ],
+        },
+        {
+          targetType: {
+            module: `${EDUCATION}classroom`,
+            name: 'OpenClassroom',
+          },
+          // Redeclared without the flag, which does not undo it; and an
+          // operation the type inherits.
+          grants: grants('lock', 'approve'),
+        },
+        {
+          targetType: REALM_POLICY,
+          // A write on a RealmPolicy, and two reads of one.
+          grants: grants('read', 'update', 'readSource'),
+        },
+        { targetType: TS_FILE_DEF, grants: grants('readSource') },
+        { targetType: GTS_FILE_DEF, grants: grants('readSource') },
+        // A data file's type, which is grantable.
+        { targetType: JSON_FILE_DEF, grants: grants('readSource') },
+        {
+          targetType: { module: '../no-such-module', name: 'Nothing' },
+          grants: grants('read'),
+        },
+        // An operation a subtype declares, named on a type it descends from,
+        // beside a built-in the type carries.
+        {
+          targetType: {
+            module: rri('@cardstack/base/card-api'),
+            name: 'CardDef',
+          },
+          grants: grants('approve', 'update'),
+        },
+      ]),
+    );
+    let policy = await compiled();
+    assert.deepEqual(
+      policy?.issues.map(({ code, path }) => ({ code, path })),
+      [
+        { code: 'unknown-operation', path: 'rules[0].grants[1].operation' },
+        { code: 'unknown-operation', path: 'rules[0].grants[2].operation' },
+        {
+          code: 'grants-authorization-infrastructure',
+          path: 'rules[0].grants[3].operation',
+        },
+        {
+          code: 'grants-authorization-infrastructure',
+          path: 'rules[1].grants[0].operation',
+        },
+        {
+          code: 'grants-authorization-infrastructure',
+          path: 'rules[2].grants[1].operation',
+        },
+        { code: 'grants-module-source', path: 'rules[3].targetType' },
+        { code: 'grants-module-source', path: 'rules[4].targetType' },
+        { code: 'unresolved-type', path: 'rules[6].targetType' },
+        { code: 'unknown-operation', path: 'rules[7].grants[0].operation' },
+      ],
+      'every refused rule and grant is recorded where it is, and nothing else is',
+    );
+    assert.true(
+      String(policy?.issues[3]?.message).includes('non-grantable on Classroom'),
+      `a subclass's grant names the type that keeps the operation out of reach: ${policy?.issues[3]?.message}`,
+    );
+    assert.deepEqual(
+      policy?.rules.map((rule) => ({
+        rule: rule.path,
+        grants: rule.grants.map(
+          ({ operation, path }) => `${path} ${operation}`,
+        ),
+      })),
+      [
+        {
+          rule: 'rules[0]',
+          grants: [
+            'rules[0].grants[0] read',
+            'rules[0].grants[4] transform',
+            'rules[0].grants[5] query',
+          ],
+        },
+        { rule: 'rules[1]', grants: ['rules[1].grants[1] approve'] },
+        {
+          rule: 'rules[2]',
+          grants: ['rules[2].grants[0] read', 'rules[2].grants[2] readSource'],
+        },
+        { rule: 'rules[5]', grants: ['rules[5].grants[0] readSource'] },
+        { rule: 'rules[7]', grants: ['rules[7].grants[1] update'] },
+      ],
+      'what is left compiles, at the positions the author wrote it',
+    );
+    assert.notOk(policy?.uncompilable, 'the policy as a whole compiled');
   });
 });

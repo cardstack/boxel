@@ -14057,10 +14057,14 @@ export class Realm {
         );
         return isResolvedCodeRef(absolute) ? absolute : undefined;
       },
-      lookupDefinition: (codeRef) =>
-        this.#definitionLookup.lookupDefinition(codeRef),
+      lookupDefinitionEntry: (codeRef) =>
+        this.#definitionLookup.lookupDefinitionEntry(codeRef),
       toURL: (identifier) => this.#virtualNetwork.toURL(identifier),
       isPolicyCard: (types) => this.#isPolicyCard(types),
+      // The index and the definition cache record an adoption chain in this
+      // spelling, so a key computed the same way is found in either.
+      typeKey: (codeRef) =>
+        internalKeyFor(codeRef, undefined, this.#virtualNetwork),
     });
   }
 

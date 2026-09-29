@@ -17,6 +17,11 @@ import { RealmPolicyCache } from '@cardstack/runtime-common/card-operations';
 export interface StubPolicyState {
   version: string;
   fields: Record<string, string>;
+  // What the card's `rules` holds, in place of the one rule, while set.
+  rules: unknown;
+  // Whether the card's latest index visit failed with the failure kept off
+  // its row.
+  failureWithheld: boolean;
   // Thrown by the next definition lookups while set.
   lookupFailure: Error | undefined;
   // Awaited by the next card reads while set.
@@ -40,12 +45,15 @@ export function stubPolicyCache({
   let state: StubPolicyState = {
     version: 'v1',
     fields: { teacherIds: 'contains' },
+    rules: undefined,
+    failureWithheld: false,
     lookupFailure: undefined,
     readGate: undefined,
     reads: 0,
     lookups: 0,
   };
-  let policyKey = `${realmPolicyRef.module}/${realmPolicyRef.name}`;
+  let typeKey = (ref: ResolvedCodeRef) => `${ref.module}/${ref.name}`;
+  let policyKey = typeKey(realmPolicyRef);
   let cache = new RealmPolicyCache({
     policyCard: async () => card,
     readCard: async (): Promise<IndexedInstanceSource> => {
@@ -57,11 +65,12 @@ export function stubPolicyCache({
         sourceContentHash: state.version,
         types: [policyKey],
         error: null,
+        failureWithheld: state.failureWithheld,
         instance: {
           id: rri(card),
           type: 'card',
           attributes: {
-            rules: [
+            rules: state.rules ?? [
               {
                 targetType: { module: classroom.module, name: 'Classroom' },
                 grants: [
@@ -81,21 +90,23 @@ export function stubPolicyCache({
       codeRef.module === classroom.module && codeRef.name === classroom.name
         ? classroom
         : undefined,
-    lookupDefinition: async (): Promise<Definition> => {
+    lookupDefinitionEntry: async () => {
       state.lookups++;
       if (state.lookupFailure) {
         throw state.lookupFailure;
       }
-      return {
+      let definition: Definition = {
         type: 'card-def',
         codeRef: classroom,
         displayName: 'Classroom',
         fields: { ...state.fields },
         fieldDefs: {},
       };
+      return { definition, types: [typeKey(classroom)] };
     },
     toURL: (identifier) => new URL(identifier),
     isPolicyCard: (types) => types.includes(policyKey),
+    typeKey,
   });
   return { cache, state, card };
 }
