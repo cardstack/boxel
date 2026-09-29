@@ -378,13 +378,23 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       return req.send(body);
     }
 
-    function realmSearch(realmURL: string, body: object, user: string) {
+    // `permissions` are the ones the caller holds in the realm, which the
+    // realm's token must claim.
+    function realmSearch(
+      realmURL: string,
+      body: object,
+      user: string,
+      permissions: RealmPermissions['user'] = [],
+    ) {
       return request
         .post(`${new URL(realmURL).pathname}_search`)
         .set('Accept', SupportedMimeType.CardJson)
         .set('Content-Type', 'application/json')
         .set('X-HTTP-Method-Override', 'QUERY')
-        .set('Authorization', `Bearer ${createJWT(realms[realmURL], user)}`)
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(realms[realmURL], user, permissions)}`,
+        )
         .send(body);
     }
 
@@ -865,7 +875,9 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           PROVIDER_A,
         );
         let refused = await realmSearch(GRANTS, { filter: OPEN }, PROVIDER_A);
-        let read = await realmSearch(COARSE, { filter: OPEN }, PROVIDER_A);
+        let read = await realmSearch(COARSE, { filter: OPEN }, PROVIDER_A, [
+          'read',
+        ]);
 
         assert.deepEqual(
           [declared.status, refused.status, read.status],
