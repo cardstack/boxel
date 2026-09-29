@@ -20,6 +20,7 @@
       "realm-policy-gate-test",
       "realm-policy-non-grantable-test",
       "realm-policy-query-filter-test",
+      "realm-policy-row-reach-test",
       "realm-policy-source-read-test",
       "realm-policy-write-lock-test",
       "server-endpoints/policy-scoped-search-test"

@@ -37,7 +37,7 @@ export {
   newOperationScope,
   scopeCallerFor,
   pathsFor,
-  readShape,
+  readPlan,
   resolveGatedOperation,
   resolveOperation,
   runOperation,
@@ -54,6 +54,7 @@ export type {
   ScopeInvocation,
   OperationStoredFile,
   OperationStoredFileMeta,
+  ReadPlan,
   ReadShape,
   RunOperationOptions,
 } from './dispatch.ts';
@@ -183,9 +184,12 @@ export {
   isDocumentResult,
   isHeadResult,
   isIdentityResult,
+  effectiveLinkStrategy,
+  isLinkStrategy,
   isOperationFailure,
   isSourceResult,
   isWrite,
+  linkStrategyOf,
   refusalForNonReader,
 } from './types.ts';
 export type {
