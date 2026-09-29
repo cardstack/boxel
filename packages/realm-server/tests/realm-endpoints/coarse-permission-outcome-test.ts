@@ -296,11 +296,11 @@ const gatedProbes: GatedProbe[] = [
   ),
 ];
 
-// Requests for an operational endpoint's path that the router hands to another
-// route, each sendable with any `Content-Type`. Sent with the one the
-// endpoint's own route is registered under, a request still reaches the route
-// its `Accept` names, so it needs that route's credentials, not the endpoint's
-// none.
+// Requests for an operational endpoint's path whose `Accept` names another
+// route, which the router hands them to. `endpointContentType` is the media
+// type the endpoint's own route is registered under: carried as the request's
+// `Content-Type`, it changes nothing about where the request goes, so it must
+// change nothing about the credentials the request needs.
 interface Lookalike {
   label: string;
   endpointContentType: SupportedMimeType;
@@ -333,7 +333,7 @@ const lookalikes: Lookalike[] = [
   },
   {
     label: 'GET card+source of _readiness-check',
-    endpointContentType: SupportedMimeType.JSONAPI,
+    endpointContentType: SupportedMimeType.RealmInfo,
     write: false,
     send: (r, contentType) =>
       r
