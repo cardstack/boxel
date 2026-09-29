@@ -38,11 +38,21 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 //   of, and a search's own fan-out keeps all the parallelism it has. A tenant
 //   with no one else active is not held to it either, so a tenant working
 //   alone keeps the whole pool.
-// - Untagged work — anything not run under `withConnectionTenant`, which is
-//   everything but search — is ordered with the tenants as one more of them
+// - Untagged work — anything not run under `withConnectionTenant` or
+//   `withConnectionOrdering` — is ordered with the tenants as one more of them
 //   but never held to the share, and never counts as another tenant with work
 //   open. Its connections do count toward whether the pool is oversubscribed.
 //   Writes, locks and the indexer's own commits keep the reach they had.
+// - Ordered work — run under `withConnectionOrdering`, for a request that
+//   names a realm but is not a search — is ordered as that realm, and
+//   otherwise treated as untagged: never held to the share, and never
+//   counted as another tenant with work open. Untagged, a quiet realm's page
+//   load waits in one arrival-order queue behind everything a busy realm has
+//   queued outside its searches: the fetches its indexing makes, its writes.
+//   Ordered as its realm, it holds the fewest and is served next. It stops
+//   short of a tenant's open scope because a replica nearly always has some
+//   realm's request in flight: counted as open, those requests would hold a
+//   searching realm to its share on a pool the rest of the load leaves idle.
 // - Shared work — run under `withSharedWork`, for a computation that callers
 //   on behalf of several tenants may end up waiting on — is ordered as the
 //   tenant whose context started it, but never held to the share. Held to the
@@ -130,7 +140,9 @@ export class ConnectionScheduler {
     let scope = scopeStorage.getStore();
     let key: TenantKey = scope?.tenant ?? UNTAGGED;
     let nested = holdsConnection(scope?.holding);
-    let shared = scope?.shared === true;
+    // Shared and ordered work are both ordered as their tenant but never held
+    // to its share, so both wait in the queue the share does not apply to.
+    let shared = scope?.shared === true || scope?.ordered === true;
     // This arrival counts toward the demand it is judged against.
     if (
       this.#inUse < this.#limit &&
@@ -319,6 +331,25 @@ export function markConnectionHeld(): {
   };
 }
 
+// Run `fn` with the database work it does ordered as `tenant`, but held to no
+// share and without counting the tenant as having work open (see the policy
+// above). A `withConnectionTenant` scope inside it takes over as usual, so a
+// search reached through it is still held to its share.
+export function withConnectionOrdering<T>(
+  tenant: string,
+  fn: () => Promise<T>,
+): Promise<T> {
+  let parent = scopeStorage.getStore();
+  return scopeStorage.run(
+    {
+      tenant,
+      ordered: true,
+      ...(parent?.holding ? { holding: parent.holding } : {}),
+    },
+    fn,
+  );
+}
+
 // The tenant the calling async context's database work is charged to, if any.
 export function currentConnectionTenant(): string | undefined {
   return scopeStorage.getStore()?.tenant;
@@ -328,6 +359,7 @@ interface ConnectionScope {
   tenant?: string;
   holding?: HoldMarker;
   shared?: boolean;
+  ordered?: boolean;
 }
 
 // One checked-out connection some enclosing frame holds. Chained, because a
@@ -354,7 +386,8 @@ interface Waiter {
 }
 
 // A tenant's waiters, split by whether the share applies to them, so that
-// shared work never waits behind the tenant's capped work to reach the front.
+// shared and ordered work never wait behind the tenant's capped work to reach
+// the front.
 interface TenantQueues {
   capped: Waiter[];
   shared: Waiter[];

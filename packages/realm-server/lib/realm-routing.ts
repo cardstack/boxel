@@ -97,6 +97,35 @@ export async function findOrMountRealm(
   return await reconciler.lookupOrMount(rows[0].url);
 }
 
+// The URL of the realm this process already knows that contains the request
+// URL, the most specific when realms nest. Unlike `findOrMountRealm` it reads
+// only what is in memory: it never queries the registry and never mounts, so
+// it is cheap enough to run ahead of every request. A realm this process has
+// not heard of yet resolves to undefined.
+export function knownRealmURL(
+  requestURL: URL,
+  { realms, reconciler }: Pick<RealmRoutingDeps, 'realms' | 'reconciler'>,
+): string | undefined {
+  let match: string | undefined;
+  let consider = (url: string) => {
+    if (match && match.length >= url.length) {
+      return;
+    }
+    let realmURL = new URL(url);
+    realmURL.protocol = requestURL.protocol;
+    if (new RealmPaths(realmURL).inRealm(requestURL)) {
+      match = url;
+    }
+  };
+  for (let realm of realms) {
+    consider(realm.url);
+  }
+  for (let url of reconciler.knownByUrl.keys()) {
+    consider(url);
+  }
+  return match;
+}
+
 // A host routing rule matched against a concrete request URL, together
 // with the realm it belongs to and that realm's canonical form of the
 // path. `canonicalPathname` is the single URL the rule should be served
