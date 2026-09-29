@@ -115,7 +115,7 @@ const classroomModule = `
   }
 `;
 
-function classroom(teacherIds: string[]): LooseSingleCardDocument {
+function classroom(teacherIds: string[]) {
   return {
     data: {
       type: 'card',
