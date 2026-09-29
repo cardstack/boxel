@@ -56,7 +56,7 @@ permissions:
   # Lets the warm-test-images step pull the private GHCR mirror packages.
   packages: read
   pull-requests: read
-  # Lets scripts/import-cached-index.sh (via `gh run list` / `gh run
+  # Lets scripts/import-cached-index.sh (via the artifacts API / `gh run
   # download`) fetch the boxel-index-cache artifact produced by main runs
   # of ci.yaml.
   actions: read
