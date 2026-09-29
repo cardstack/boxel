@@ -103,9 +103,20 @@ function withoutComments(code) {
 // `export default class X` counts when it is named: the binding exists, and
 // the loader credits the name the module exposes it under.
 const DECLARED_EXPORT =
-  /\bexport\s+(?:default\s+)?(?:async\s+)?(?:abstract\s+)?(?:class|function|const|let|var)\s+([A-Za-z_$][\w$]*)/g;
-// `export { X, Y as Z }` with no `from` — X and Z are local bindings too.
+  /\bexport\s+(?!default\b)(?:async\s+)?(?:abstract\s+)?(?:class|function|const|let|var)\s+([A-Za-z_$][\w$]*)/g;
+// `export default class X` binds X and exposes it as `default`, which is the
+// name the module namespace carries and so the name to record.
+const DEFAULT_EXPORT =
+  /\bexport\s+default\s+(?:async\s+)?(?:abstract\s+)?(?:class|function)\s+([A-Za-z_$][\w$]*)/;
+// `export { X }` with no `from`. The name is only a local binding when this
+// module also declares it — `import { X } from './y'; export { X };` exports a
+// name it does not bind, and the bundler emits that as an export alias with no
+// variable behind it. Referencing one in the appended registration is a
+// ReferenceError the moment the module evaluates.
 const LOCAL_EXPORT_LIST = /\bexport\s*\{([^}]*)\}\s*(?!\s*from)[;\n]/g;
+// Any local declaration, exported or not, which is what proves a binding.
+const LOCAL_DECLARATION =
+  /\b(?:class|function|const|let|var)\s+([A-Za-z_$][\w$]*)/g;
 
 function isBaseModule(id) {
   return (
@@ -168,19 +179,34 @@ export function bundledBaseScopedCSS() {
       // classes it declares; this is how it finds out anyway, at no cost —
       // the module is being evaluated regardless, and nothing here resolves or
       // fetches anything.
-      let declared = new Set(
-        [...code.matchAll(DECLARED_EXPORT)].map((m) => m[1]),
+      // `[name the namespace exposes, local binding to read it from]`. The
+      // two differ for `export default class X` and `export { X as Y }`, and
+      // the registry has to key on what the namespace exposes, because that is
+      // the name a code ref carries.
+      let declared = new Map();
+      for (let match of code.matchAll(DECLARED_EXPORT)) {
+        declared.set(match[1], match[1]);
+      }
+      let defaultExport = code.match(DEFAULT_EXPORT);
+      if (defaultExport) {
+        declared.set('default', defaultExport[1]);
+      }
+      let bound = new Set(
+        [...code.matchAll(LOCAL_DECLARATION)].map((m) => m[1]),
       );
       for (let match of code.matchAll(LOCAL_EXPORT_LIST)) {
         for (let clause of match[1].split(',')) {
           let parts = clause.trim().split(/\s+as\s+/);
-          if (!parts[0] || parts[0].startsWith('type ')) {
+          let local = parts[0]?.trim();
+          if (!local || local.startsWith('type ')) {
             continue;
           }
-          declared.add((parts[1] ?? parts[0]).trim());
+          if (bound.has(local)) {
+            declared.set((parts[1] ?? parts[0]).trim(), local);
+          }
         }
       }
-      let declaredNames = [...declared].sort();
+      let declaredNames = [...declared.keys()].sort();
 
       if (!css.length && !imports.length && !declaredNames.length) {
         return null;
@@ -195,7 +221,12 @@ export function bundledBaseScopedCSS() {
         // the very classes the chunk uses — not a copy, and not a name match.
         registration +=
           `;(globalThis.${IDENTITIES} ??= {})[${JSON.stringify(name)}] = ` +
-          `{ ${declaredNames.map((n) => n).join(', ')} };\n`;
+          `{ ${declaredNames
+            .map(
+              (exposed) =>
+                `${JSON.stringify(exposed)}: ${declared.get(exposed)}`,
+            )
+            .join(', ')} };\n`;
       }
       return { code: code + registration, map: null };
     },
