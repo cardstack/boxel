@@ -281,8 +281,9 @@ import {
 import { resolveQueryTargets } from './card-operations/find-targets.ts';
 import {
   isNamedQueryPayload,
-  namedQueryInvocation,
   resolveNamedQuery,
+  searchInvocation,
+  type SearchInvocation,
 } from './card-operations/named-query.ts';
 import { settledWithin, STAGING_WIDTH } from './card-operations/coordinator.ts';
 import {
@@ -5452,29 +5453,6 @@ export class Realm {
       caller: scopeCallerFor(caller.actor),
       coarseDeclined,
     });
-    // A target described by a query is found by running it, and that search
-    // answers from every card of the realm before any entry is gated. The
-    // gate grants operations on cards, not searches over the realm, so a
-    // caller the realm ACL would not let read the realm names each target
-    // outright. The query here is the caller's own, which is what sets it
-    // apart from a query-backed field: that query is part of a card type's
-    // declaration, and a granted read serves its results as part of the card.
-    if (coarseDeclined === 'all') {
-      let described = invocationsIn(parsed).find((entry) => entry.find);
-      if (described) {
-        throw atEntry(
-          new OperationFailure({
-            status: 403,
-            code: 'operation-not-permitted',
-            title: 'Operation not permitted',
-            detail:
-              `entry ${described.position} describes its target with a ` +
-              `query, and running that query is not permitted`,
-          }),
-          described.position,
-        );
-      }
-    }
     // An entry may describe the card it runs against with a query instead of
     // naming one, and this is where such a query becomes cards — against the
     // index as it stands now, which is the pre-batch state every other part of
@@ -5482,6 +5460,13 @@ export class Realm {
     // entries all name an href, so a found target takes the write lock,
     // collides with a parallel sibling and rolls back exactly as a named one
     // does.
+    //
+    // The query is the caller's own, which is what sets it apart from a
+    // query-backed field: that query is part of a card type's declaration, and
+    // a granted read serves its results as part of the card. So for a caller
+    // the realm ACL would not let read the realm, it is an ad-hoc search, and
+    // it finds only the cards a `query` grant on its type admits. Each card it
+    // finds is then gated for the entry's own operation like a named one.
     let tree = await resolveQueryTargets(
       this.operationCore,
       scope,
@@ -6380,15 +6365,15 @@ export class Realm {
   }
 
   // What this realm's policy contributes to one search, for a caller its ACL
-  // declined outright. Nothing, unless the request named an operation and
-  // authenticated someone: a policy grants by who is asking, and it grants a
-  // named query rather than the freedom to write a filter. An ad-hoc search
-  // therefore reaches no grant, and a caller the ACL declined is answered with
-  // no rows for one. Nor does a search a render is waiting on, which the
-  // caller passes no invocation for: what a render produces is served to
-  // every viewer, so no one viewer's grants may shape it.
+  // declined outright. Nothing, unless the request authenticated someone: a
+  // policy grants by who is asking. A named query is granted by its own name,
+  // and an ad-hoc search by the base name `query` on the type its filter
+  // targets, so a grant on a saved search never admits the filter a caller
+  // writes by hand. Nor does a search a render is waiting on reach a grant,
+  // which the caller passes no invocation for: what a render produces is
+  // served to every viewer, so no one viewer's grants may shape it.
   async #policyQueryScope(
-    invocation: { operation: string; on: CodeRef } | undefined,
+    invocation: SearchInvocation | undefined,
     requestContext: RequestContext,
   ): Promise<PolicyQueryScope> {
     let actor = requestContext.authenticatedUser;
@@ -12598,10 +12583,11 @@ export class Realm {
     }
 
     // What a policy fragment is looked up by, for a caller this realm's ACL
-    // declined: a query runs under the name it was invoked with, on the type
-    // that declares it. Read before the declaration is resolved, since what it
+    // declined: a named query runs under the name it was invoked with, on the
+    // type that declares it, and an ad-hoc search as `query` on the type its
+    // filter targets. Read before a declaration is resolved, since what it
     // resolves to is a filter and carries neither.
-    let invocation = namedQueryInvocation(payload);
+    let invocation = searchInvocation(payload);
     // How much of each result's link graph a named query's declaration lets
     // its results carry. An ad-hoc search declares nothing.
     let declaredLinks: LinkStrategy | undefined;

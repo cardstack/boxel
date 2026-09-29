@@ -663,6 +663,12 @@ case, so render an empty state for it.
 A search reads the index, which lags a write the realm has just committed. To
 read a card you just wrote, read the card.
 
+In a realm a caller reaches only through its policy, a saved search is granted
+by its own name, and a search the caller writes by hand is granted as `query`
+on the type its filter names with `on`. So granting `myPatients` grants that
+search and not the freedom to write any filter over `PatientRecord`, and a
+filter that names no type is granted by nothing.
+
 ## Batches
 
 `operations(card).atomic(build)` sends one all-or-nothing batch in that card's
@@ -704,7 +710,11 @@ The builder:
   result.
 - `b.find(filter, { field, expect })` answers a target found by search rather
   than named by reference, usable wherever `b.on(…)` takes a card. `expect:
-'many'` fans the entry out over every match and answers an array.
+'many'` fans the entry out over every match and answers an array. For a
+  caller who reaches the realm only through its policy, the filter is a search
+  they wrote by hand, so it finds only the cards a `query` grant on its type
+  admits, and each card it finds still needs a grant for the entry's own
+  operation.
 
 A builder that returns nothing is answered positionally, with a group's results
 nested where the group sat. A builder that returns handles is answered with

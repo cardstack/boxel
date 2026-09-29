@@ -43,9 +43,9 @@ import { createJWT as createRealmServerJWT } from '../../utils/jwt.ts';
 // A search a realm's policy scopes: the grants a `query` policy compiled to
 // filters, composed into the query a realm runs for a caller its ACL declined.
 //
-// Six realms on one server, one per answer a realm can give a caller it does
-// not let read outright. The type lives in a public library realm so every
-// other realm can hold cards of it.
+// Seven realms on one server, one per answer a realm can give a caller it does
+// not let read outright. The types live in a public library realm so every
+// other realm can hold cards of them.
 //
 // - Grants: its policy admits a provider's own schedules to two named
 //   queries, and also carries a query grant that does not compile to a filter.
@@ -54,6 +54,9 @@ import { createJWT as createRealmServerJWT } from '../../utils/jwt.ts';
 //   grants no query at all.
 // - Unfilterable: its only query grant does not compile to a filter.
 // - Private: it names no policy, and neither provider may read it.
+// - Enumerable: its policy grants `query` itself, the ad-hoc search, over a
+//   provider's own schedules and over every posted notice. It grants a read
+//   of a provider's own schedules, and no read of a notice.
 //
 // Every card a provider could be admitted to in one realm has a twin in the
 // realms that must not admit it, so a filter applied to the wrong realm's
@@ -66,6 +69,7 @@ const COARSE = 'http://127.0.0.1:4444/coarse/';
 const DENIES = 'http://127.0.0.1:4444/denies/';
 const UNFILTERABLE = 'http://127.0.0.1:4444/unfilterable/';
 const PRIVATE = 'http://127.0.0.1:4444/private/';
+const ENUMERABLE = 'http://127.0.0.1:4444/enumerable/';
 
 const OWNER = '@owner:localhost';
 const PROVIDER_A = '@provider-a:localhost';
@@ -79,6 +83,7 @@ const REALM_POLICY = {
 };
 
 const SCHEDULE = { module: `${LIB}schedule`, name: 'ServicePlanSchedule' };
+const NOTICE = { module: `${LIB}notice`, name: 'Notice' };
 
 // `listOpen` does not compare against the caller, so two callers asking it
 // of the same realms send the same request: whatever tells their answers
@@ -113,21 +118,57 @@ const SCHEDULE_MODULE = `
   }
 `;
 
+// A type unrelated to the schedule type, so a search over both types has two
+// types' rules to consult.
+const NOTICE_MODULE = `
+  import { contains, field, CardDef } from "@cardstack/base/card-api";
+  import StringField from "@cardstack/base/string";
+
+  export class Notice extends CardDef {
+    @field title = contains(StringField);
+    @field providerId = contains(StringField);
+    @field status = contains(StringField);
+  }
+`;
+
 const OWN = '.providerId == actor()';
+const POSTED = '.status == "posted"';
 // Refused by the `predicate` profile, so its grant compiles no filter. It
 // holds for every card whose title reads as a positive number, which is every
 // one of provider B's schedules in the Grants realm: a search that let it
 // through would return them.
 const UNFILTERABLE_WHERE = '(.title | tonumber) > 0';
 
-function policyCard(grants: { operation: string; where?: string }[]): string {
+type Grant = { operation: string; where?: string };
+
+function policyCard(grants: Grant[]): string {
+  return policyRules([{ targetType: SCHEDULE, grants }]);
+}
+
+function policyRules(
+  rules: { targetType: { module: string; name: string }; grants: Grant[] }[],
+): string {
   return JSON.stringify({
     data: {
       type: 'card',
-      attributes: {
-        rules: [{ targetType: SCHEDULE, grants }],
-      },
+      attributes: { rules },
       meta: { adoptsFrom: REALM_POLICY },
+    },
+  });
+}
+
+function notice(attributes: {
+  title: string;
+  providerId: string;
+  status: string;
+}) {
+  return JSON.stringify({
+    data: {
+      type: 'card',
+      attributes,
+      meta: {
+        adoptsFrom: { module: rri(NOTICE.module), name: NOTICE.name },
+      },
     },
   });
 }
@@ -189,6 +230,45 @@ const A_OPEN_IN_GRANTS = [1, 3, 5, 7, 9].map(
 const B_OPEN_IN_GRANTS = [2, 4, 6, 8, 10].map(
   (rank) => `${GRANTS}schedules/b-open-${rank}`,
 );
+
+// Each provider's schedules and notices, for a realm that grants a query on
+// both types. Every card one grant admits sits beside one it does not: a
+// schedule of the other provider's, and a notice that is not posted.
+const ENUMERABLE_CARDS: Record<string, string> = {
+  'schedules/a-open.json': schedule({
+    title: 'A open',
+    providerId: PROVIDER_A,
+    status: 'open',
+    rank: 1,
+  }),
+  'schedules/a-closed.json': schedule({
+    title: 'A closed',
+    providerId: PROVIDER_A,
+    status: 'closed',
+    rank: 2,
+  }),
+  'schedules/b-open.json': schedule({
+    title: 'B open',
+    providerId: PROVIDER_B,
+    status: 'open',
+    rank: 3,
+  }),
+  'notices/a-posted.json': notice({
+    title: 'A posted',
+    providerId: PROVIDER_A,
+    status: 'posted',
+  }),
+  'notices/a-draft.json': notice({
+    title: 'A draft',
+    providerId: PROVIDER_A,
+    status: 'draft',
+  }),
+  'notices/b-posted.json': notice({
+    title: 'B posted',
+    providerId: PROVIDER_B,
+    status: 'posted',
+  }),
+};
 
 // One of provider A's schedules, for a realm that must not admit it.
 function aOpen(title = 'A open') {
@@ -262,7 +342,10 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         realms: [
           {
             realmURL: new URL(LIB),
-            fileSystem: { 'schedule.gts': SCHEDULE_MODULE },
+            fileSystem: {
+              'schedule.gts': SCHEDULE_MODULE,
+              'notice.gts': NOTICE_MODULE,
+            },
             permissions: { ...owner, '*': ['read'] },
           },
           {
@@ -321,6 +404,27 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
             fileSystem: aOpen(),
             permissions: { ...owner },
           },
+          {
+            realmURL: new URL(ENUMERABLE),
+            fileSystem: {
+              'realm.json': withPolicy('Enumerable', ENUMERABLE),
+              'policies/policy.json': policyRules([
+                {
+                  targetType: SCHEDULE,
+                  grants: [
+                    { operation: 'query', where: OWN },
+                    { operation: 'read', where: OWN },
+                  ],
+                },
+                {
+                  targetType: NOTICE,
+                  grants: [{ operation: 'query', where: POSTED }],
+                },
+              ]),
+              ...ENUMERABLE_CARDS,
+            },
+            permissions: { ...owner },
+          },
         ],
         dbAdapter,
         publisher,
@@ -338,7 +442,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
 
     // One server for the whole module, since every test but the archived one
     // only reads, and that one puts back what it changes. Booting it indexes
-    // six realms, which runs inside the first test's budget, so that budget
+    // seven realms, which runs inside the first test's budget, so that budget
     // is extended past the per-test timeout.
     hooks.before(function (assert) {
       assert.timeout(300_000);
@@ -543,21 +647,346 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           'and may not enumerate the type to find it',
         );
       });
+    });
 
-      test('an ad-hoc search reaches no grant', async function (assert) {
+    module('an ad-hoc search', function () {
+      function adHoc(realmURLs: string[], filter?: Record<string, unknown>) {
+        return { ...(filter ? { filter } : {}), realms: realmURLs };
+      }
+
+      const SCHEDULES = { 'item.on': SCHEDULE };
+      const NOTICES = { 'item.on': NOTICE };
+
+      test('is authorized as `query` on the type its filter targets', async function (assert) {
         let response = await federatedSearch(
-          {
-            filter: { 'item.on': SCHEDULE, eq: { 'item.status': 'open' } },
-            realms: [GRANTS],
-          },
+          adHoc([ENUMERABLE], SCHEDULES),
           PROVIDER_A,
         );
 
         assert.strictEqual(response.status, 200, 'HTTP 200 status');
         assert.deepEqual(
-          ids(response),
+          ids(response).sort(),
+          [`${ENUMERABLE}schedules/a-closed`, `${ENUMERABLE}schedules/a-open`],
+          "provider A's own schedules, and not B's",
+        );
+
+        let composed = await federatedSearch(
+          adHoc([ENUMERABLE], {
+            ...SCHEDULES,
+            eq: { 'item.status': 'open' },
+          }),
+          PROVIDER_A,
+        );
+        assert.deepEqual(
+          ids(composed),
+          [`${ENUMERABLE}schedules/a-open`],
+          "composed with the caller's own filter: A's open schedule, and not B's open one",
+        );
+      });
+
+      test("the realm's own search answers as the federated one does", async function (assert) {
+        let response = await realmSearch(
+          ENUMERABLE,
+          { filter: SCHEDULES },
+          PROVIDER_A,
+        );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        assert.deepEqual(ids(response).sort(), [
+          `${ENUMERABLE}schedules/a-closed`,
+          `${ENUMERABLE}schedules/a-open`,
+        ]);
+      });
+
+      test('a type whose only grant is `read` returns nothing to one, though the caller may read the card it would find', async function (assert) {
+        let card = await request
+          .get(`${new URL(DENIES).pathname}schedules/a-open`)
+          .set('Accept', SupportedMimeType.CardJson)
+          .set(
+            'Authorization',
+            `Bearer ${createJWT(realms[DENIES], PROVIDER_A)}`,
+          );
+        assert.strictEqual(card.status, 200, 'the card is readable by id');
+
+        let federated = await federatedSearch(
+          adHoc([DENIES], SCHEDULES),
+          PROVIDER_A,
+        );
+        assert.strictEqual(federated.status, 200, 'HTTP 200 status');
+        assert.deepEqual(ids(federated), [], 'and the type is not enumerable');
+
+        let own = await realmSearch(DENIES, { filter: SCHEDULES }, PROVIDER_A);
+        assert.strictEqual(own.status, 200, 'HTTP 200 status');
+        assert.deepEqual(ids(own), [], "nor through the realm's own search");
+      });
+
+      test('a `query` grant admits no read of the cards it finds', async function (assert) {
+        let response = await federatedSearch(
+          adHoc([ENUMERABLE], NOTICES),
+          PROVIDER_A,
+        );
+        assert.deepEqual(
+          ids(response).sort(),
+          [`${ENUMERABLE}notices/a-posted`, `${ENUMERABLE}notices/b-posted`],
+          'every posted notice, whoever posted it, and not the draft',
+        );
+
+        let card = await request
+          .get(`${new URL(ENUMERABLE).pathname}notices/a-posted`)
+          .set('Accept', SupportedMimeType.CardJson)
+          .set(
+            'Authorization',
+            `Bearer ${createJWT(realms[ENUMERABLE], PROVIDER_A)}`,
+          );
+        assert.strictEqual(
+          card.status,
+          404,
+          'no grant admits a read of a notice, so one the search found is not readable by id',
+        );
+      });
+
+      test('a caller granted a named query cannot write its filter by hand', async function (assert) {
+        let named = await federatedSearch(listOpen([GRANTS]), PROVIDER_A);
+        assert.deepEqual(
+          ids(named),
+          A_OPEN_IN_GRANTS,
+          'the saved search serves its rows',
+        );
+
+        let handWritten = await federatedSearch(
+          adHoc([GRANTS], { ...SCHEDULES, eq: { 'item.status': 'open' } }),
+          PROVIDER_A,
+        );
+        assert.strictEqual(handWritten.status, 200, 'HTTP 200 status');
+        assert.deepEqual(
+          ids(handWritten),
           [],
-          'a policy grants a declared query, not the filter a caller writes',
+          'the same filter, sent as an ad-hoc search, is authorized as `query`, which the policy does not grant',
+        );
+
+        let ownRows = await federatedSearch(
+          adHoc([GRANTS], {
+            ...SCHEDULES,
+            eq: { 'item.status': 'open', 'item.providerId': PROVIDER_A },
+          }),
+          PROVIDER_A,
+        );
+        assert.deepEqual(
+          ids(ownRows),
+          [],
+          'even narrowed to the very rows the grant would admit',
+        );
+      });
+
+      test('a filter with no type anchor reaches no grant, and a caller the realm reads is served it', async function (assert) {
+        for (let [label, filter] of [
+          ['no filter at all', undefined],
+          ['a filter anchoring no type', { eq: { 'item.title': 'A open' } }],
+          ['a negated anchor', { not: SCHEDULES }],
+          [
+            'an anchor on a type the realm does not resolve',
+            { 'item.on': { module: `${LIB}nowhere`, name: 'Nowhere' } },
+          ],
+        ] as [string, Record<string, unknown> | undefined][]) {
+          let federated = await federatedSearch(
+            adHoc([ENUMERABLE], filter),
+            PROVIDER_A,
+          );
+          assert.strictEqual(
+            federated.status,
+            200,
+            `${label}: HTTP 200 status`,
+          );
+          assert.deepEqual(ids(federated), [], `${label}: no rows`);
+
+          let own = await realmSearch(
+            ENUMERABLE,
+            filter ? { filter } : {},
+            PROVIDER_A,
+          );
+          assert.strictEqual(own.status, 200, `${label}: HTTP 200 status`);
+          assert.deepEqual(
+            ids(own),
+            [],
+            `${label}: no rows from the realm's own search`,
+          );
+        }
+
+        let coarse = await federatedSearch(adHoc([COARSE]), PROVIDER_A);
+        assert.strictEqual(coarse.status, 200, 'HTTP 200 status');
+        assert.deepEqual(
+          ids(coarse).sort(),
+          [`${COARSE}schedules/a-open`, `${COARSE}schedules/b-open`],
+          'a realm the caller reads outright serves every row, as it always has',
+        );
+      });
+
+      test('a filter over several types admits each type through its own grants', async function (assert) {
+        let response = await federatedSearch(
+          adHoc([ENUMERABLE], { any: [SCHEDULES, NOTICES] }),
+          PROVIDER_A,
+        );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        assert.deepEqual(
+          ids(response).sort(),
+          [
+            `${ENUMERABLE}notices/a-posted`,
+            `${ENUMERABLE}notices/b-posted`,
+            `${ENUMERABLE}schedules/a-closed`,
+            `${ENUMERABLE}schedules/a-open`,
+          ],
+          "A's own schedules and every posted notice: neither B's schedule nor the draft notice",
+        );
+
+        let withUngranted = await federatedSearch(
+          adHoc([DENIES], { any: [SCHEDULES, NOTICES] }),
+          PROVIDER_A,
+        );
+        assert.deepEqual(
+          ids(withUngranted),
+          [],
+          'and in a realm granting a query on neither, nothing',
+        );
+      });
+    });
+
+    module('a batch target found by query', function () {
+      function invokeRead(target: Record<string, unknown>) {
+        return {
+          'boxel:operations': [
+            { op: 'invoke', 'boxel:name': 'read', 'boxel:target': target },
+          ],
+        };
+      }
+
+      function operations(realmURL: string, body: object, user: string) {
+        return request
+          .post(`${new URL(realmURL).pathname}_operations`)
+          .set('Accept', SupportedMimeType.BoxelOperations)
+          .set('Content-Type', SupportedMimeType.BoxelOperations)
+          .set('Authorization', `Bearer ${createJWT(realms[realmURL], user)}`)
+          .send(JSON.stringify(body));
+      }
+
+      function titled(
+        type: { module: string; name: string },
+        title: string,
+        expect?: 'one' | 'many',
+      ) {
+        return {
+          query: { 'item.on': type, eq: { 'item.title': title } },
+          ...(expect ? { expect } : {}),
+        };
+      }
+
+      function errorOf(response: { text: string }) {
+        return (
+          JSON.parse(response.text) as {
+            errors: { code: string; detail: string }[];
+          }
+        ).errors[0];
+      }
+
+      test('an entry whose query and operation are both granted runs against the card it finds', async function (assert) {
+        let response = await operations(
+          ENUMERABLE,
+          invokeRead(titled(SCHEDULE, 'A open')),
+          PROVIDER_A,
+        );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        let [result] = JSON.parse(response.text)['atomic:results'];
+        assert.strictEqual(result.data.id, `${ENUMERABLE}schedules/a-open`);
+      });
+
+      test('a query finds only the cards its grant admits', async function (assert) {
+        let response = await operations(
+          ENUMERABLE,
+          invokeRead({ query: { 'item.on': SCHEDULE }, expect: 'many' }),
+          PROVIDER_A,
+        );
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        let [results] = JSON.parse(response.text)['atomic:results'];
+        assert.deepEqual(
+          (results as { data: { id: string } }[])
+            .map((result) => result.data.id)
+            .sort(),
+          [`${ENUMERABLE}schedules/a-closed`, `${ENUMERABLE}schedules/a-open`],
+          "A's own schedules, and not B's",
+        );
+
+        let othersCard = await operations(
+          ENUMERABLE,
+          invokeRead(titled(SCHEDULE, 'B open')),
+          PROVIDER_A,
+        );
+        let noCard = await operations(
+          ENUMERABLE,
+          invokeRead(titled(SCHEDULE, 'Nobody')),
+          PROVIDER_A,
+        );
+        assert.strictEqual(othersCard.status, 400, 'HTTP 400 status');
+        assert.strictEqual(
+          errorOf(othersCard).code,
+          'invalid-params',
+          'refused as a query matching no card',
+        );
+        assert.strictEqual(
+          othersCard.text,
+          noCard.text,
+          'a card the grant does not admit answers as a card that does not exist',
+        );
+      });
+
+      test('an entry whose operation is granted and whose query is not is refused', async function (assert) {
+        let refused = await operations(
+          DENIES,
+          invokeRead(titled(SCHEDULE, 'A open')),
+          PROVIDER_A,
+        );
+        let matchingNothing = await operations(
+          DENIES,
+          invokeRead(titled(SCHEDULE, 'Nobody')),
+          PROVIDER_A,
+        );
+
+        assert.strictEqual(refused.status, 400, 'HTTP 400 status');
+        assert.true(
+          errorOf(refused).detail.includes('matched no card'),
+          `the query finds nothing: ${errorOf(refused).detail}`,
+        );
+        assert.strictEqual(
+          refused.text,
+          matchingNothing.text,
+          'the answer a query matching no card gets, so the card it would have found is not disclosed',
+        );
+
+        let many = await operations(
+          DENIES,
+          invokeRead(titled(SCHEDULE, 'A open', 'many')),
+          PROVIDER_A,
+        );
+        assert.strictEqual(many.status, 200, 'HTTP 200 status');
+        assert.deepEqual(
+          JSON.parse(many.text)['atomic:results'],
+          [[]],
+          'expecting many, the entry runs against nothing',
+        );
+      });
+
+      test('an entry whose query is granted and whose operation is not is refused', async function (assert) {
+        let refused = await operations(
+          ENUMERABLE,
+          invokeRead(titled(NOTICE, 'A posted')),
+          PROVIDER_A,
+        );
+
+        assert.strictEqual(refused.status, 404, 'HTTP 404 status');
+        assert.deepEqual(
+          (({ code, detail }) => ({ code, detail }))(errorOf(refused)),
+          { code: 'target-not-found', detail: 'no such target' },
+          'the query found the notice, and the gate refused the read of it',
         );
       });
     });

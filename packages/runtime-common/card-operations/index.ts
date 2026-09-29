@@ -180,8 +180,13 @@ export {
   namedQueryInvocation,
   namedQueryRendering,
   resolveNamedQuery,
+  searchInvocation,
 } from './named-query.ts';
-export type { NamedQueryContext, ResolvedNamedQuery } from './named-query.ts';
+export type {
+  NamedQueryContext,
+  ResolvedNamedQuery,
+  SearchInvocation,
+} from './named-query.ts';
 export type {
   QueryDefinition,
   QueryInvocation,

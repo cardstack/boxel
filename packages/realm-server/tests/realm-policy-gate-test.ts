@@ -976,6 +976,28 @@ module(basename(import.meta.filename), function (hooks) {
       );
       assert.strictEqual(batch.status, 500, 'the envelope says the same');
       assert.strictEqual(errorOf(batch).code, 'internal-error');
+      let described = (title: string) =>
+        operations(
+          EDUCATION,
+          AUTH.teacher(),
+          invoke('read', {
+            'boxel:target': {
+              query: { 'item.on': CLASSROOM, eq: { 'item.title': title } },
+            },
+          }),
+        );
+      let found = await described('Room 204');
+      let foundNothing = await described('Room 999');
+      assert.strictEqual(
+        found.status,
+        500,
+        'as does a target described by a query',
+      );
+      assert.strictEqual(
+        found.text,
+        foundNothing.text,
+        'whether or not the query would match a card',
+      );
       let write = await operations(
         EDUCATION,
         AUTH.reader(),
@@ -998,22 +1020,29 @@ module(basename(import.meta.filename), function (hooks) {
       );
     });
 
-    test('a target described by a query is refused', async function (assert) {
-      assertNotThere(
-        assert,
-        await operations(
-          EDUCATION,
-          AUTH.teacher(),
-          invoke('read', {
-            'boxel:target': {
-              query: {
-                'item.on': CLASSROOM,
-                eq: { 'item.title': 'Room 204' },
-              },
+    test('a target described by a query finds nothing a `query` grant does not admit, whatever the entry’s own operation is granted', async function (assert) {
+      assert.strictEqual(
+        (await getCard(ROOM_204, AUTH.teacher())).status,
+        200,
+        'the teacher’s read of the classroom is granted',
+      );
+      let response = await operations(
+        EDUCATION,
+        AUTH.teacher(),
+        invoke('read', {
+          'boxel:target': {
+            query: {
+              'item.on': CLASSROOM,
+              eq: { 'item.title': 'Room 204' },
             },
-          }),
-        ),
-        'a read whose target a search would find',
+          },
+        }),
+      );
+      assert.strictEqual(response.status, 400, 'HTTP 400 status');
+      assert.strictEqual(errorOf(response).code, 'invalid-params');
+      assert.true(
+        errorOf(response).detail.includes('matched no card'),
+        `the query, which no grant admits, found nothing to read: ${errorOf(response).detail}`,
       );
     });
   });
@@ -1455,7 +1484,7 @@ module(basename(import.meta.filename), function (hooks) {
         );
       let matching = await described('Room 204');
       let matchingNothing = await described('Room 999');
-      assert.strictEqual(matching.status, 404);
+      assert.strictEqual(matching.status, 400);
       assert.strictEqual(
         matching.text,
         matchingNothing.text,
