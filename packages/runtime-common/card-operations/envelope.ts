@@ -20,7 +20,7 @@ import type { BatchEntry } from './executors.ts';
 import { pendingWriteFor } from './gate.ts';
 import type { GateDecision, PendingWrite } from './gate.ts';
 import { isCodeRef } from '../card-document-shape.ts';
-import { isRelativePath } from '../code-ref.ts';
+import { isRelativePath, moduleFrom } from '../code-ref.ts';
 import type { CardResource } from '../resource-types.ts';
 import type { SearchEntryWireFilter } from '../search-entry.ts';
 
@@ -822,7 +822,10 @@ export function batchEntryFor(
       // is stored beneath that root and reads a relative module against its
       // own file, so a relative one would name one type to the resolution and
       // another to the card it mints.
-      let module = asRecord(asRecord(entry.data?.meta)?.adoptsFrom)?.module;
+      // Read through a nested ref too: an `ancestorOf` or `fieldOf` names its
+      // module on the card it wraps.
+      let adoptsFrom = asRecord(entry.data?.meta)?.adoptsFrom;
+      let module = isCodeRef(adoptsFrom) ? moduleFrom(adoptsFrom) : undefined;
       if (isRelativePath(module)) {
         throw refuse(
           `entry ${position} names the type it mints by the relative module ` +
