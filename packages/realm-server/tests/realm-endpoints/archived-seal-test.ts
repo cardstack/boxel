@@ -217,6 +217,17 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
         ['/sample.md', '*/*'],
         ['/sample.md', undefined],
       ];
+      // For each content `HEAD` in order, one that finds nothing to read: a
+      // path with nothing behind it in the same bucket, and for the last, the
+      // same file under an `Accept` no route claims. Each shares its twin's
+      // extension, since the server names a content type from the path's
+      // extension when a response carries none.
+      const missingTwins: [string, string | undefined][] = [
+        ['/no-such-card', 'application/vnd.card+json'],
+        ['/no-such-module.gts', 'application/vnd.card+source'],
+        ['/no-such-file.md', '*/*'],
+        ['/sample.md', 'image/png'],
+      ];
       // These read nothing even for a caller who may read the realm: the
       // buckets whose `HEAD` is the discovery answer for everyone, a file the
       // realm is part-way through writing, and the operational endpoints the
@@ -267,7 +278,10 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           ['anonymous', undefined],
           ['unpermitted', `Bearer ${createJWT(testRealm, 'stranger', [])}`],
         ];
-        let heads = [...contentHeads, ...otherHeads];
+        let heads = [...contentHeads, ...missingTwins, ...otherHeads];
+        // Where each caller's answer to `heads[index]` sits in a result.
+        let at = (callerIndex: number, index: number) =>
+          callerIndex * heads.length + index;
         let active = await head(heads, callers);
         for (let answer of active) {
           assert.strictEqual(
@@ -276,16 +290,19 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
             `active: ${answer.label} names the realm`,
           );
         }
-        for (let answer of active.slice(0, contentHeads.length)) {
-          assert.strictEqual(
-            answer.status,
-            200,
-            `active: ${answer.label} gets the discovery answer`,
-          );
-          assert.notOk(
-            answer.headers['etag'],
-            `active: ${answer.label} carries no validator`,
-          );
+        for (let callerIndex = 0; callerIndex < callers.length; callerIndex++) {
+          for (let index = 0; index < contentHeads.length; index++) {
+            let answer = active[at(callerIndex, index)];
+            assert.strictEqual(
+              answer.status,
+              200,
+              `active: ${answer.label} gets the discovery answer`,
+            );
+            assert.notOk(
+              answer.headers['etag'],
+              `active: ${answer.label} carries no validator`,
+            );
+          }
         }
 
         await archiveRealm(dbAdapter, new URL(testRealm.url));
@@ -304,6 +321,17 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
             answer.headers['x-boxel-realm-archived'],
             `archived: ${answer.label} is not told the realm is archived`,
           );
+        }
+        for (let callerIndex = 0; callerIndex < callers.length; callerIndex++) {
+          for (let index = 0; index < contentHeads.length; index++) {
+            let hit = archived[at(callerIndex, index)];
+            let miss = archived[at(callerIndex, contentHeads.length + index)];
+            assert.deepEqual(
+              { status: miss.status, headers: miss.headers },
+              { status: hit.status, headers: hit.headers },
+              `archived: ${miss.label} gets the answer ${hit.label} gets`,
+            );
+          }
         }
       });
 
