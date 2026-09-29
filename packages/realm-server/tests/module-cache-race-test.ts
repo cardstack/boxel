@@ -17,6 +17,7 @@ import {
   param,
   query,
   userInitiatedPriority,
+  type Prerenderer,
 } from '@cardstack/runtime-common';
 import type { PgAdapter } from '@cardstack/postgres';
 import { ModuleCacheCoordinator } from '../lib/module-cache-coordination.ts';
@@ -1423,6 +1424,234 @@ module(basename(import.meta.filename), function () {
           await coordA.shutDown();
           await coordB.shutDown();
         }
+      });
+    },
+  );
+
+  // A module_transpile_cache row outlives the process that wrote it, so a
+  // realm that comes back up finds every row its last run left. Mounted
+  // without a boot index, as the realm-server test stack mounts the dev realm
+  // server's realms (base, catalog and the rest), it clears none of them on
+  // the way up, and nothing was watching the files
+  // while it was down. Whether a row compiled from a file's earlier content is
+  // served then rests on the read alone, which checks the row against the file
+  // as it stands. The same read decides a row another checkout wrote for the
+  // same path against a shared database.
+  module(
+    'Realm.#transpiledModuleCache L2 rows from an earlier run',
+    function (hooks) {
+      let dbAdapter: PgAdapter;
+      let publisher: import('@cardstack/runtime-common').QueuePublisher;
+      let runner: import('@cardstack/runtime-common').QueueRunner;
+      setupDB(hooks, {
+        beforeEach: async (adapter, pub, run) => {
+          dbAdapter = adapter;
+          publisher = pub;
+          runner = run;
+        },
+      });
+
+      const earlierRunRealmURL = 'http://127.0.0.1:5556/earlier-run/';
+      const modulePath = 'earlier-run-card.gts';
+      const canonicalUrl = new URL(modulePath, earlierRunRealmURL).href;
+
+      function cardSource(className: string) {
+        return `
+        import { contains, field, CardDef, Component } from "@cardstack/base/card-api";
+        import StringField from "@cardstack/base/string";
+
+        export class ${className} extends CardDef {
+          @field name = contains(StringField);
+          static isolated = class Isolated extends Component<typeof this> {
+            <template>
+              <div data-test-earlier-run><@fields.name/></div>
+            </template>
+          }
+        }
+      `;
+      }
+
+      // The module serve never reaches a definition lookup, so nothing here
+      // should call its prerenderer; one that throws says so if something does.
+      const unusedPrerenderer: Prerenderer = {
+        async prerenderModule() {
+          throw new Error('prerenderModule not used in this test');
+        },
+        async prerenderVisit() {
+          throw new Error('prerenderVisit not used in this test');
+        },
+        async runCommand() {
+          throw new Error('runCommand not used in this test');
+        },
+      };
+
+      function realmDirHolding(className: string): string {
+        let dir = join(dirSync().name, 'earlier-run-realm');
+        ensureDirSync(dir);
+        writeJSONSync(join(dir, 'realm.json'), {
+          data: {
+            type: 'card',
+            attributes: { cardInfo: { name: 'Earlier Run Realm' } },
+            meta: {
+              adoptsFrom: {
+                module: '@cardstack/base/realm-config',
+                name: 'RealmConfig',
+              },
+            },
+          },
+        });
+        writeFileSync(join(dir, modulePath), cardSource(className));
+        return dir;
+      }
+
+      // Started with no boot index and no file watcher, so between one run and
+      // the next nothing reaches the shared cache but the reads themselves.
+      async function mountRealm(dir: string): Promise<Realm> {
+        let virtualNetwork = createVirtualNetwork();
+        let definitionLookup = new CachingDefinitionLookup(
+          dbAdapter,
+          unusedPrerenderer,
+          virtualNetwork,
+          testCreatePrerenderAuth,
+        );
+        let { realm } = await createRealm({
+          dir,
+          definitionLookup,
+          realmURL: earlierRunRealmURL,
+          permissions: { '*': ['read'] },
+          virtualNetwork,
+          publisher,
+          runner,
+          dbAdapter,
+          skipBootIndex: true,
+        });
+        await realm.start();
+        return realm;
+      }
+
+      async function getModule(
+        realm: Realm,
+        headers: Record<string, string> = {},
+      ): Promise<{ status: number; etag: string | null; body: string }> {
+        let response = await realm.handle(
+          new Request(canonicalUrl, {
+            headers: { Accept: SupportedMimeType.All, ...headers },
+          }),
+        );
+        if (!response) {
+          throw new Error(`${canonicalUrl} was not handled by the realm`);
+        }
+        return {
+          status: response.status,
+          etag: response.headers.get('etag'),
+          body: await response.text(),
+        };
+      }
+
+      async function sharedCacheBody(): Promise<string | null | undefined> {
+        let rows = (await query(dbAdapter, [
+          'SELECT body FROM module_transpile_cache WHERE realm_url =',
+          param(earlierRunRealmURL),
+          'AND canonical_path =',
+          param(canonicalUrl),
+        ])) as { body: string | null }[];
+        return rows[0]?.body;
+      }
+
+      test('a module rewritten while its realm was down is compiled afresh when the realm comes back', async function (assert) {
+        let dir = realmDirHolding('BeforeRestart');
+        let earlierRun = await mountRealm(dir);
+        let first = await getModule(earlierRun);
+        assert.strictEqual(
+          first.status,
+          200,
+          'the earlier run served the module',
+        );
+        assert.true(
+          first.body.includes('BeforeRestart'),
+          'compiled from what was on disk',
+        );
+        assert.true(
+          (await sharedCacheBody())?.includes('BeforeRestart'),
+          'and left that compile in the shared cache',
+        );
+
+        writeFileSync(join(dir, modulePath), cardSource('AfterRestart'));
+
+        let laterRun = await mountRealm(dir);
+        assert.true(
+          (await sharedCacheBody())?.includes('BeforeRestart'),
+          "coming back up leaves the earlier run's compile in the shared cache",
+        );
+
+        // The later run's first request is the one a client holding the
+        // earlier compile makes, such as a prerender tab revalidating what it
+        // imported: a conditional GET carrying the earlier run's validator. It
+        // reaches the validator built from the file and then the shared cache,
+        // with nothing in memory in front of either.
+        if (!first.etag) {
+          throw new Error('the earlier run served the module without an etag');
+        }
+        let revalidated = await getModule(laterRun, {
+          'If-None-Match': first.etag,
+        });
+        assert.strictEqual(
+          revalidated.status,
+          200,
+          "a client revalidating the earlier run's compile is sent a module",
+        );
+        assert.true(
+          revalidated.body.includes('AfterRestart'),
+          'compiled from the file as it now stands',
+        );
+        assert.false(
+          revalidated.body.includes('BeforeRestart'),
+          'rather than the compile the earlier run left',
+        );
+        assert.notStrictEqual(
+          revalidated.etag,
+          first.etag,
+          'under the validator of the version it compiled',
+        );
+        assert.strictEqual(
+          laterRun.__testOnlyGetTranspileCallCount(),
+          1,
+          'by compiling the file',
+        );
+        assert.true(
+          (await sharedCacheBody())?.includes('AfterRestart'),
+          'and the shared cache now holds that compile',
+        );
+      });
+
+      test('a row another checkout wrote for the same path is not served for different content', async function (assert) {
+        let checkoutA = await mountRealm(realmDirHolding('CheckoutA'));
+        let checkoutB = await mountRealm(realmDirHolding('CheckoutB'));
+
+        let fromA = await getModule(checkoutA);
+        assert.true(
+          fromA.body.includes('CheckoutA'),
+          "the first checkout serves its own file's compile",
+        );
+        assert.true(
+          (await sharedCacheBody())?.includes('CheckoutA'),
+          'and leaves it in the shared cache',
+        );
+
+        let fromB = await getModule(checkoutB);
+        assert.true(
+          fromB.body.includes('CheckoutB'),
+          "the second checkout serves its own file's compile",
+        );
+        assert.false(
+          fromB.body.includes('CheckoutA'),
+          'rather than the row the first checkout left',
+        );
+        assert.strictEqual(
+          checkoutB.__testOnlyGetTranspileCallCount(),
+          1,
+          'by compiling its file',
+        );
       });
     },
   );

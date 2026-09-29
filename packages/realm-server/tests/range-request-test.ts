@@ -284,5 +284,68 @@ module(basename(import.meta.filename), function () {
         'Content-Length is exposed',
       );
     });
+
+    // The card+source GET is the other route that serves a path's stored
+    // bytes, and where it reads them straight from the file it answers a range
+    // the same way: a data file always, and a `.json` when the request asks it
+    // not to use its source cache. A `.json` answered from that cache is
+    // served whole, without advertising byte ranges.
+    function getSource(path: string) {
+      return request
+        .get(path)
+        .set('Accept', 'application/vnd.card+source')
+        .buffer(true)
+        .parse(binaryParser);
+    }
+
+    const jsonText = '{"digits":"0123456789"}';
+
+    async function writeJsonSource(path: string) {
+      let response = await request
+        .post(path)
+        .set('Accept', 'application/vnd.card+source')
+        .send(jsonText);
+      QUnit.assert.strictEqual(response.status, 204, 'the .json is written');
+    }
+
+    test('the card+source read of a data file serves a bounded range', async function (assert) {
+      await uploadSample('/source-bounded.png');
+      let response = await getSource('/source-bounded.png').set(
+        'Range',
+        'bytes=2-5',
+      );
+
+      assert.strictEqual(response.status, 206, 'HTTP 206 status');
+      assert.strictEqual(
+        response.headers['content-range'],
+        `bytes 2-5/${bytes.length}`,
+        'Content-Range reports the slice and the total',
+      );
+      assert.deepEqual(
+        new Uint8Array(response.body),
+        new Uint8Array([2, 3, 4, 5]),
+        'body is exactly the requested bytes',
+      );
+    });
+
+    test('the card+source read of a .json serves a bounded range without its cache', async function (assert) {
+      await writeJsonSource('/source-uncached.json');
+      let response = await getSource('/source-uncached.json?noCache').set(
+        'Range',
+        'bytes=2-5',
+      );
+
+      assert.strictEqual(response.status, 206, 'HTTP 206 status');
+      assert.strictEqual(
+        response.headers['content-range'],
+        `bytes 2-5/${jsonText.length}`,
+        'Content-Range reports the slice and the total',
+      );
+      assert.strictEqual(
+        response.body.toString('utf8'),
+        jsonText.slice(2, 6),
+        'body is exactly the requested bytes',
+      );
+    });
   });
 });

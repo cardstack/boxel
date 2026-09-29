@@ -323,7 +323,7 @@ SELECT
   j.concurrency_group
 FROM jobs j
 WHERE j.args->>'realmURL' = '<realm-url>'
-  AND j.job_type IN ('from-scratch-index', 'incremental-index', 'copy-index')
+  AND j.job_type IN ('from-scratch-index', 'incremental-index')
 ORDER BY j.created_at DESC
 LIMIT 20;
 
@@ -1869,7 +1869,7 @@ LIMIT 20;
 
 A job runs in a lane, its `concurrency_group`. Lanes group into **lane families** (`jobs.lane_family`), and a realm's index lanes are one family named `indexing:<realm-url>`; its prerender-html lanes are another, `prerender-html:<realm-url>`.
 
-- **Exclusive work** runs in the group named for the family. So does every job published without a family (`lane_family IS NULL`), which is how from-scratch, copy-index and scoped-css-gc are published.
+- **Exclusive work** runs in the group named for the family. So does every job published without a family (`lane_family IS NULL`), which is how from-scratch and scoped-css-gc are published.
 - **Writer lanes** are groups of their own inside the family, and record the family in `lane_family`. Every incremental pass runs in one: `indexing:<realm-url>#user:<matrix-id>` for a write someone made, `indexing:<realm-url>#owner` for work nobody initiated (a file-watcher echo, system work). One writer's passes share a lane, so they coalesce and run in order; different writers' passes run side by side and are never coalesced.
 - **A `prerender_html` job follows the lane of the index pass that spawned it** into the `prerender-html:<realm-url>` family: an incremental pass's render runs in the same writer's `#user:` / `#owner` lane there, and a from-scratch pass's render, like a reconcile repair, is that family's exclusive work. The bulk-write render hold names the writing user's render lane and ends when that writer's own indexing settles, so it delays that writer's renders only.
 - **Two render jobs of one realm can render the same card at once.** The swap keeps the higher stamp (the live index generation the job adopted once its spawning passes committed), and a job reuses its spawning pass's render scope only when the ledger shows nothing else committed around that pass. Otherwise it renders under its own scope and reads everything afresh; the `index-perf` debug line `renders under its own scope: the realm moved around spawning job <id> (read <base>, committed <gen>, adopted <gen>)` says which.
@@ -1878,8 +1878,9 @@ The claim query applies these rules (`PgQueueRunner.processJobs`):
 
 1. One job at a time per lane.
 2. Exclusive work runs alone: it waits for every running member of its family, and every member waits for it.
-3. Writer lanes of one family run side by side, at most two at once.
-4. A writer job does not start ahead of an older pending exclusive job of its family, whatever the two priorities (the barrier). So a system-tier from-scratch pass takes its turn after the writer passes running when it was queued, and writers queued after it wait for it.
+3. Writer lanes of one family run side by side, at most two at once. While an older exclusive job of the family is pending, they run one at a time (the one-lane cap).
+4. A writer job does not start ahead of an older pending exclusive job of its family at the writer's priority tier or above (the barrier). The tiers are user-initiated (priority 9 and up) and system (below 9).
+5. Below the writer's tier there is no barrier. A high-priority worker never claims a system-tier job, so a user save queued after its realm's system-tier from-scratch pass (or after that pass's own render, in the `prerender-html:` family) is claimed straight past it. The one-lane cap makes the family empty between passes, but the pass starts only if an all-priority worker scans during one of those gaps. A writer's completion wakes idle workers for that. The worker that ran the finished pass, though, is claiming again the moment it commits, and it takes the realm's next queued save. So nothing bounds the pass's wait while the realm keeps saving, and a pause in the realm's saves is what lets it in. A save waits behind an exclusive job only at its own tier; a system-tier from-scratch pass can wait behind a busy realm's saves.
 
 A claim hold (`job_claim_holds`) naming a family holds every lane in it. A hold naming a writer lane holds that lane alone.
 
@@ -1987,8 +1988,8 @@ Passes that never waited behind anything have no blocker and drop out of the joi
 
 - **`held_by = {exclusive work}`**: a job in the family's exclusive lane held the pass: a from-scratch, copy or GC job, or the follow-up a from-scratch pass left behind. Exclusive work runs alone, so every writer lane waits for it.
 - **`held_by` includes `own lane`**: the same writer's earlier pass, in its own writer lane. A writer's own passes stay serial by design, so read-your-writes holds. Coalescing is what shortens these.
-- **`held_by = {another writer lane}`** with two writer lanes running: the family was at its cap of two concurrent writer lanes.
-- **A long wait with an exclusive job queued, not running, between the pass's enqueue and its claim**: the barrier. The pass was a writer job and waited for an older exclusive job of its family to run first, whatever its priority.
+- **`held_by = {another writer lane}`** with two writer lanes running: the family was at its cap of two concurrent writer lanes. With one writer lane running and an exclusive job of the family queued (not running) since before the pass was enqueued: the one-lane cap. The writers took turns so the family could empty for the exclusive job.
+- **A long wait with an exclusive job queued, not running, between the pass's enqueue and its claim, and no other writer lane running**: the barrier. The pass was a writer job and waited for an older exclusive job of its family, at the pass's own tier or above, to run first. A user save behind a system-tier from-scratch pass is not held this way. If one waited long with such a pass queued, look for the one-lane cap instead.
 - **`tax_ratio`** is the wait as a multiple of the pass's own run. A cheap save with a high ratio is the one a user notices.
 
 ### Step 3: score fairness per writer
@@ -2038,7 +2039,7 @@ GROUP BY ROLLUP (writer)
 ORDER BY writer NULLS LAST;
 ```
 
-The `NULL` writer row is the family as a whole. With writer lanes, a pass enqueued during another writer's pass still counts as blocked, but it is claimed at once, so its wait, and its weight in the score, stay near zero; what remains is its share of the commit lock (see `commitLockWaitMs` in [Mode K](#mode-k--the-index-jobs-between-visit-wall-non-render-overhead)). A cheap writer scoring well below 1 while another writer's long passes run means those passes are holding it: check `held_by` in Step 2 for exclusive work or the two-writer-lane cap. Score the `prerender-html:<realm-url>` family the same way to see the render side.
+The `NULL` writer row is the family as a whole. With writer lanes, a pass enqueued during another writer's pass still counts as blocked, but it is claimed at once, so its wait, and its weight in the score, stay near zero; what remains is its share of the commit lock (see `commitLockWaitMs` in [Mode K](#mode-k--the-index-jobs-between-visit-wall-non-render-overhead)). A cheap writer scoring well below 1 while another writer's long passes run means those passes are holding it: check `held_by` in Step 2 for exclusive work, the two-writer-lane cap, or the one-lane cap a queued exclusive job imposes. Score the `prerender-html:<realm-url>` family the same way to see the render side.
 
 ### What Mode P can't tell you
 

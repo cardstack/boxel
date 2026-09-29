@@ -246,7 +246,7 @@ export async function unbuiltIndexFailure(
 //
 // Derived from what moves BYTES, not from what the write-path drain happens to
 // wait for. Only a write moves a card's stored file, and a write's indexing is
-// one of these two. A `from-scratch-index` re-derives rows from files nobody
+// an `incremental-index`. A `from-scratch-index` re-derives rows from files nobody
 // changed, so it moves `indexed_at` without moving content — and the one case
 // where it follows a real content change, a realm republish, cannot matter
 // here: a published realm is created with `['read', 'realm-owner']` and
@@ -256,10 +256,7 @@ export async function unbuiltIndexFailure(
 //
 // Narrow on purpose: this list decides who WAITS, and the lane is shared with
 // passes that run fleet-wide for an hour at a time.
-export const CONTENT_MOVING_INDEX_JOB_TYPES = [
-  'incremental-index',
-  'copy-index',
-];
+export const CONTENT_MOVING_INDEX_JOB_TYPES = ['incremental-index'];
 
 // The jobs in a realm's index lane that write the index, which is what a reader
 // asking "is this realm's index behind its source" is waiting on. A superset of

@@ -13,11 +13,20 @@ export type {
   RealmPolicyCacheEnvironment,
 } from './policy.ts';
 export type { LoweringContext } from './lowering.ts';
-export { notPermitted, policyGateStats } from './gate.ts';
+export {
+  dischargePendingDecision,
+  notPermitted,
+  pendingWriteHolds,
+  policyGateStats,
+} from './gate.ts';
+export { policyQueryScope } from './policy-query.ts';
+export type { PolicyQueryScope } from './policy-query.ts';
 export type {
   GateDecision,
   MatchedGrant,
   OperationPolicyAccess,
+  PendingDecision,
+  PendingWrite,
   PolicyGateStats,
 } from './gate.ts';
 export {
@@ -67,6 +76,7 @@ export {
   stageUpdate,
 } from './executors.ts';
 export type {
+  AdmissionSubject,
   AppendContainsManyEntry,
   AppendLineEntry,
   BatchDocument,
@@ -122,6 +132,7 @@ export {
   needsActor,
   paramsFor,
   parseOperationsEnvelope,
+  pendingWriteOf,
   projectedResult,
   readResult,
   resultsTree,
@@ -152,6 +163,13 @@ export type {
   TransformProgramError,
 } from './transforms.ts';
 export { lowerQueryOperation, lowerQueryTemplate } from './query.ts';
+export {
+  isNamedQueryPayload,
+  namedQueryInvocation,
+  namedQueryRendering,
+  resolveNamedQuery,
+} from './named-query.ts';
+export type { NamedQueryContext } from './named-query.ts';
 export type {
   QueryDefinition,
   QueryInvocation,
@@ -168,6 +186,7 @@ export {
   isOperationFailure,
   isSourceResult,
   isWrite,
+  refusalForNonReader,
 } from './types.ts';
 export type {
   BaseOperation,

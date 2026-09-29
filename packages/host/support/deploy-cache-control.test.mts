@@ -7,9 +7,14 @@
 
 import { strict as assert } from 'assert';
 import { createRequire } from 'module';
-import { existsSync, readdirSync } from 'fs';
+import { existsSync, readdirSync, readFileSync } from 'fs';
 import { isAbsolute, join, relative } from 'path';
-import { test } from 'node:test';
+import { test, type TestContext } from 'node:test';
+
+import {
+  contentVersion,
+  versionStableShellReferences,
+} from '../lib/build/version-stable-shell-references.mjs';
 
 const require = createRequire(import.meta.url);
 const hostDir = join(import.meta.dirname, '..');
@@ -162,13 +167,115 @@ for (let deployTarget of ['s3-preview-staging', 's3-preview-production']) {
   });
 }
 
+// A stable-named file's cache entry is keyed by its URL, so a browser that
+// stored one under a directive that never revalidates keeps running those bytes
+// until the shell names the file by a URL it has not cached. These drive the
+// shell rewrite the build runs, with the dist it reads from held in memory.
+function distOf(files: Record<string, string>) {
+  return (relativePath: string) =>
+    relativePath in files ? Buffer.from(files[relativePath]) : undefined;
+}
+
+function shellNaming(...references: string[]) {
+  return `<html><head>${references.join('')}</head><body></body></html>`;
+}
+
+function versionOf(html: string, path: string) {
+  let reference = new RegExp(`(?:src|href)="/${path}\\?v=([^"&]+)"`).exec(html);
+  return reference?.[1];
+}
+
+test('the shell names each stable-named file by a digest of its bytes', () => {
+  let html = versionStableShellReferences(
+    shellNaming(
+      '<link rel="stylesheet" href="/@embroider/virtual/app.css" />',
+      '<script src="/@embroider/virtual/vendor.js"></script>',
+      '<link href="/boxel-favicon.png" rel="icon" />',
+    ),
+    distOf({
+      '@embroider/virtual/app.css': ':root { --z: 1; }',
+      '@embroider/virtual/vendor.js': 'window.EmberENV = {};',
+      'boxel-favicon.png': 'png bytes',
+    }),
+  );
+
+  for (let path of [
+    '@embroider/virtual/app.css',
+    '@embroider/virtual/vendor.js',
+    'boxel-favicon.png',
+  ]) {
+    assert.ok(versionOf(html, path), `${path} carries a version: ${html}`);
+  }
+});
+
+test("a stable-named file's URL changes exactly when its bytes do", () => {
+  let shell = shellNaming(
+    '<link rel="stylesheet" href="/@embroider/virtual/app.css" />',
+    '<script src="/@embroider/virtual/vendor.js"></script>',
+  );
+  let before = versionStableShellReferences(
+    shell,
+    distOf({
+      '@embroider/virtual/app.css': ':root { --z: 1; }',
+      '@embroider/virtual/vendor.js': 'window.EmberENV = {};',
+    }),
+  );
+  let after = versionStableShellReferences(
+    shell,
+    distOf({
+      '@embroider/virtual/app.css': ':root { --z: 2; }',
+      '@embroider/virtual/vendor.js': 'window.EmberENV = {};',
+    }),
+  );
+
+  assert.notEqual(
+    versionOf(after, '@embroider/virtual/app.css'),
+    versionOf(before, '@embroider/virtual/app.css'),
+    'a changed file is requested under a URL no cache holds yet',
+  );
+  assert.equal(
+    versionOf(after, '@embroider/virtual/vendor.js'),
+    versionOf(before, '@embroider/virtual/vendor.js'),
+    'an unchanged file keeps its URL, and the copy cached for it',
+  );
+});
+
+test('references the rewrite has no business versioning are left as written', () => {
+  let untouched = [
+    // Content-addressed already; its name changes when its bytes do.
+    '<script type="module" src="/assets/main-DMcx_nWD.js"></script>',
+    // Not the dist's.
+    '<script src="//cdn.example.com/lib.js"></script>',
+    '<link rel="stylesheet" href="https://fonts.example.com/font.css" />',
+    // Already carries a query its author chose.
+    '<link rel="stylesheet" href="/@embroider/virtual/app.css?theme=dark" />',
+    // Names a path the build did not write.
+    '<link href="/not-in-the-dist.png" rel="icon" />',
+  ];
+  let shell = shellNaming(...untouched);
+
+  assert.equal(
+    versionStableShellReferences(
+      shell,
+      distOf({
+        'assets/main-DMcx_nWD.js': 'bundle',
+        '@embroider/virtual/app.css': ':root {}',
+        // Where a `//host/…` reference would be read from if it were taken
+        // for a root-relative one.
+        '/cdn.example.com/lib.js': 'lib',
+      }),
+    ),
+    shell,
+  );
+});
+
 // Everything above runs a hand-maintained list through the passes, so it can
-// only confirm that list against itself. This runs a real dist through them
-// instead: it is the only check that can see a path the patterns miss, and the
-// only one that notices the list drifting from what the build emits.
+// only confirm that list against itself. The tests below run a real dist
+// instead: the first is the only check that can see a path the patterns miss,
+// and the only one that notices the list drifting from what the build emits.
 // HOST_DIST_DIR names the dist; the deploy's own output is checked in the build
 // workflow, which is the dist that decides whether a deploy is correct.
-test('a real dist partitions across the two passes', async (t) => {
+function builtDist(t: TestContext): string | undefined {
   let named = process.env.HOST_DIST_DIR;
   let dir = (
     named
@@ -184,6 +291,13 @@ test('a real dist partitions across the two passes', async (t) => {
     // Otherwise skip loudly, so a suite that checked nothing never reads as a
     // suite that checked this and was satisfied.
     t.skip('no built dist on disk; set HOST_DIST_DIR to check one');
+  }
+  return dir;
+}
+
+test('a real dist partitions across the two passes', async (t) => {
+  let dir = builtDist(t);
+  if (!dir) {
     return;
   }
 
@@ -234,6 +348,42 @@ test('a real dist partitions across the two passes', async (t) => {
         `${filePath} (uploaded by ${alias} as \`${upload.cacheControl}\`)`,
       );
     }
+  }
+});
+
+// The rewrite above is only worth anything if the build runs it, and runs it
+// after every file the shell names is on disk. This reads the shell the build
+// wrote and holds each stable-named reference in it to the bytes beside it.
+// References are found here with a broader pattern than the rewrite's own, so
+// a spelling the rewrite does not recognise fails rather than going unchecked.
+test("a real dist's shell names each stable-named file by its content", (t) => {
+  let dir = builtDist(t);
+  if (!dir) {
+    return;
+  }
+
+  let html = readFileSync(join(dir, SHELL), 'utf8');
+  let stableNamed = [
+    ...html.matchAll(/\b(?:src|href)=["']?(\/(?!\/)[^"'\s>]+)/g),
+  ]
+    .map(([, url]) => new URL(url, 'https://dist.invalid'))
+    .filter((url) => !url.pathname.startsWith('/assets/'));
+
+  let paths = stableNamed.map((url) => url.pathname.slice(1));
+  for (let expected of [
+    '@embroider/virtual/vendor.js',
+    '@embroider/virtual/app.css',
+  ]) {
+    assert.ok(paths.includes(expected), `the shell names ${expected}`);
+  }
+
+  for (let url of stableNamed) {
+    let path = url.pathname.slice(1);
+    assert.equal(
+      url.searchParams.get('v'),
+      contentVersion(readFileSync(join(dir, path))),
+      `${path} is named by a digest of the bytes the build wrote there`,
+    );
   }
 });
 

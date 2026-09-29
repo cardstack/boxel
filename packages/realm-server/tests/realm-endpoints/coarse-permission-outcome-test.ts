@@ -7,6 +7,7 @@ import type { Realm } from '@cardstack/runtime-common';
 import {
   SupportedMimeType,
   archiveRealm,
+  baseCardRef,
   unarchiveRealm,
 } from '@cardstack/runtime-common';
 import { setupPermissionedRealmCached, createJWT } from '../helpers/index.ts';
@@ -43,16 +44,6 @@ const readProbes: Probe[] = [
     send: (r) => r.get('/_mtimes').set('Accept', SupportedMimeType.Mtimes),
   },
   {
-    label: 'QUERY /_search',
-    consumes: false,
-    send: (r) =>
-      r
-        .post('/_search')
-        .set('X-HTTP-Method-Override', 'QUERY')
-        .set('Accept', SupportedMimeType.CardJson)
-        .send('not json'),
-  },
-  {
     label: 'GET /_screenshot/',
     consumes: false,
     send: (r) => r.get('/_screenshot/person-1').set('Accept', 'image/png'),
@@ -63,6 +54,16 @@ const readProbes: Probe[] = [
     send: (r) => r.get('/').set('Accept', SupportedMimeType.DirectoryListing),
   },
   // Routes that consume it.
+  {
+    label: 'QUERY /_search',
+    consumes: true,
+    send: (r) =>
+      r
+        .post('/_search')
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Accept', SupportedMimeType.CardJson)
+        .send('not json'),
+  },
   {
     label: 'GET card+json',
     consumes: true,
@@ -374,12 +375,14 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
         [
           `GET ${SupportedMimeType.CardJson} /.*`,
           `HEAD ${SupportedMimeType.CardJson} /.*`,
+          `GET ${SupportedMimeType.CardJson} /_search`,
+          `QUERY ${SupportedMimeType.CardJson} /_search`,
           `POST ${SupportedMimeType.BoxelOperations} /_operations`,
           `POST ${SupportedMimeType.JSONAPI} /_operations`,
           `QUERY ${SupportedMimeType.BoxelOperations} /_operations`,
           `QUERY ${SupportedMimeType.JSONAPI} /_operations`,
         ].sort(),
-        'the consumer set is the card+json read and the operations envelope',
+        'the consumer set is the card+json read, the search, and the operations envelope',
       );
       let nonConsumers = testRealm
         .routeDescriptions()
@@ -387,14 +390,6 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       assert.true(
         nonConsumers.length > 0,
         'the remaining routes are enumerated as non-consumers',
-      );
-      assert.true(
-        nonConsumers.some(
-          (route) =>
-            route.path === '/_search' &&
-            route.mimeType === SupportedMimeType.CardJson,
-        ),
-        'the card+json search routes, registered ahead of the card+json catch-alls, do not consume it',
       );
       assert.deepEqual(
         nonConsumers
@@ -406,10 +401,32 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       );
     });
 
+    test('exactly the routes that serve code and the file tree are coarse-read-only', async function (assert) {
+      assert.deepEqual(
+        testRealm
+          .routeDescriptions()
+          .filter((route) => route.coarseReadOnly)
+          .map((route) => `${route.method} ${route.mimeType} ${route.path}`)
+          .sort(),
+        [
+          `GET ${SupportedMimeType.CardSource} /.*`,
+          `HEAD ${SupportedMimeType.CardSource} /.*`,
+          `GET ${SupportedMimeType.DirectoryListing} .*/`,
+          'GET * *',
+          'HEAD * *',
+        ].sort(),
+        'the card+source read, the directory listing and the fallback file and module serve',
+      );
+    });
+
     test('every consuming route hands an admitted caller to the policy gate', async function (assert) {
+      // The search is the one consumer that does not: it hands an admitted
+      // caller to the policy's query lane, which answers with rows rather than
+      // with a refusal, and is pinned on its own below.
       let consumers = testRealm
         .routeDescriptions()
         .filter((route) => route.consumesCoarseOutcome)
+        .filter((route) => route.path !== '/_search')
         .map((route) => `${route.method} ${route.mimeType}`)
         .filter((route) => route !== `HEAD ${SupportedMimeType.CardJson}`)
         .sort();
@@ -421,10 +438,14 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       testRealm.__testOnlySetCoarseAdmission(() => true);
       try {
         for (let probe of gatedProbes) {
+          let before = testRealm.__testOnlyPolicyGateStats().policyLoads;
           let response = await probe.send(request, testRealm.url);
-          assert.strictEqual(response.status, 403, `${probe.route}: status`);
-          assert.true(
-            response.text.includes('is not permitted on'),
+          // The caller is anonymous, so the ACL would not let them read the
+          // realm, and the gate's refusal reaches them as a not-found.
+          assert.strictEqual(response.status, 404, `${probe.route}: status`);
+          assert.strictEqual(
+            testRealm.__testOnlyPolicyGateStats().policyLoads,
+            before + 1,
             `${probe.route}: the refusal is the gate’s, for a realm with no policy`,
           );
         }
@@ -439,6 +460,46 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           `Bearer ${createJWT(testRealm, 'owner', ['read', 'write', 'realm-owner'])}`,
         );
       assert.strictEqual(person.status, 200, 'and nothing was deleted');
+    });
+
+    test('the search hands an admitted caller to the query lane, which a realm with no policy answers with no rows', async function (assert) {
+      testRealm.__testOnlySetCoarseAdmission(() => true);
+      try {
+        let response = await request
+          .post('/_search')
+          .set('X-HTTP-Method-Override', 'QUERY')
+          .set('Accept', SupportedMimeType.CardJson)
+          .set('Content-Type', 'application/json')
+          .set('Authorization', `Bearer ${createJWT(testRealm, 'stranger')}`)
+          .send(JSON.stringify({ filter: { 'item.on': baseCardRef } }));
+        assert.strictEqual(response.status, 200, 'admitting: status');
+        assert.deepEqual(
+          response.body.data,
+          [],
+          'admitting: no rows, since no grant admits the caller to any',
+        );
+        assert.strictEqual(response.body.meta.page.total, 0);
+
+        await archiveRealm(dbAdapter, new URL(testRealm.url));
+        try {
+          let sealed = await request
+            .post('/_search')
+            .set('X-HTTP-Method-Override', 'QUERY')
+            .set('Accept', SupportedMimeType.CardJson)
+            .set('Content-Type', 'application/json')
+            .set('Authorization', `Bearer ${createJWT(testRealm, 'stranger')}`)
+            .send('{}');
+          assert.strictEqual(
+            sealed.get('X-Boxel-Realm-Archived'),
+            'true',
+            'admitting: an admitted search of an archived realm meets the seal',
+          );
+        } finally {
+          await unarchiveRealm(dbAdapter, new URL(testRealm.url));
+        }
+      } finally {
+        testRealm.__testOnlySetCoarseAdmission(undefined);
+      }
     });
 
     test('an admission reaches only consuming routes, and never a refusal of realm-owner authority', async function (assert) {
@@ -487,16 +548,18 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           'admitting: _permissions reached through the card+json catch-all is refused',
         );
 
+        let before = testRealm.__testOnlyPolicyGateStats().policyLoads;
         let card = await request
           .get('/person-1')
           .set('Accept', SupportedMimeType.CardJson);
         assert.strictEqual(
           card.status,
-          403,
+          404,
           'admitting: an anonymous card+json read reaches its handler, and the policy gate refuses it for a realm with no policy',
         );
-        assert.true(
-          card.text.includes('is not permitted on'),
+        assert.strictEqual(
+          testRealm.__testOnlyPolicyGateStats().policyLoads,
+          before + 1,
           'admitting: the refusal is the gate’s',
         );
 
