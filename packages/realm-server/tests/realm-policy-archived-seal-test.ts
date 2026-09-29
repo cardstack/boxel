@@ -32,10 +32,9 @@ import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
 // An archived realm with a policy. Its ACL lets nobody but its admin and a
 // reader in, and its policy, which lives in an Org realm, admits a teacher to
 // the classrooms they teach, and anyone it judges to the realm's bulletins. A
-// caller the ACL refuses is handed to that
-// policy, and learns the realm is archived only where a grant would have
-// admitted them to something. Everywhere else they get the answer the realm
-// gives them while it is active.
+// caller the ACL refuses is handed to that policy, and learns the realm is
+// archived only where a grant would have admitted them to something.
+// Everywhere else they get the answer the realm gives them while it is active.
 const EDUCATION = 'http://127.0.0.1:4444/education/';
 const ORG = 'http://127.0.0.1:4444/org/';
 const POLICY_CARD = `${ORG}policies/education`;
