@@ -10,7 +10,9 @@ import LintAndFixTool from './lint-and-fix';
 import type { RealmRunnerCallMethod } from '../lib/realm-runner/types';
 
 import type CardService from '../services/card-service';
+import type MatrixService from '../services/matrix-service';
 import type NetworkService from '../services/network';
+import type OperatorModeStateService from '../services/operator-mode-state-service';
 import type RealmService from '../services/realm';
 import type ToolService from '../services/tool-service';
 import type * as BaseToolModule from '@cardstack/base/command';
@@ -202,6 +204,8 @@ export default class RunRealmCodeTool extends HostBaseTool<
   typeof BaseToolModule.RunRealmCodeResult
 > {
   @service declare private cardService: CardService;
+  @service declare private matrixService: MatrixService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private network: NetworkService;
   @service declare private realm: RealmService;
   @service declare private toolService: ToolService;
@@ -214,7 +218,9 @@ export default class RunRealmCodeTool extends HostBaseTool<
     return commandModule.RunRealmCodeInput;
   }
 
-  requireInputFields = ['code', 'realm', 'roomId'];
+  // `realm` and `roomId` fall back to the workspace and room the call came
+  // from, so a model that leaves them out still gets its script run.
+  requireInputFields = ['code'];
 
   protected async run(
     input: BaseToolModule.RunRealmCodeInput,
@@ -224,16 +230,28 @@ export default class RunRealmCodeTool extends HostBaseTool<
         `Realm code must be between 1 and ${MAX_CODE_SIZE} characters`,
       );
     }
-    let realmURL = this.realm.realmOf(rri(input.realm));
-    if (!realmURL || !this.realm.canWrite(input.realm)) {
-      throw new Error(`The current user cannot write ${input.realm}`);
+    let realmInput = input.realm || this.operatorModeStateService.realmURL;
+    let roomId = input.roomId || this.matrixService.currentRoomId;
+    if (!realmInput) {
+      throw new Error('Realm code needs a realm to run in');
+    }
+    if (!roomId) {
+      throw new Error('Realm code needs the room it runs for');
+    }
+    // Resolve to the realm's own identifier: the fallback realm URL can come
+    // without the trailing slash a realm root has.
+    let realmURL = this.realm.realmOf(
+      rri(realmInput.endsWith('/') ? realmInput : `${realmInput}/`),
+    );
+    if (!realmURL || !this.realm.canWrite(realmURL)) {
+      throw new Error(`The current user cannot write ${realmInput}`);
     }
 
     let session = new RealmFsSession(
       this.realmRootURL(realmURL),
       (url) => this.cardService.getSource(new URL(url)),
       (url, content, expected) =>
-        this.writeFile(input.roomId, url, content, expected),
+        this.writeFile(roomId, url, content, expected),
     );
     let runnerResult;
     try {

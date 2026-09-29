@@ -124,6 +124,67 @@ type GenericCommand = Command<
 
 const toolProcessingWaiter = buildWaiter('tool-service:command-processing');
 
+// Converts, where the schema asks for an object, an array or a number, a
+// string value that parses to one. Nothing else changes.
+function coerceToSchema(
+  value: unknown,
+  schema: any,
+): { value: unknown; changed: boolean } {
+  if (!schema || typeof schema !== 'object') {
+    return { value, changed: false };
+  }
+  let type = schema.type;
+  if (typeof value === 'string') {
+    if (type === 'object' || type === 'array') {
+      try {
+        let parsed = JSON.parse(value);
+        let fits =
+          type === 'array'
+            ? Array.isArray(parsed)
+            : parsed && typeof parsed === 'object' && !Array.isArray(parsed);
+        if (fits) {
+          return { value: coerceToSchema(parsed, schema).value, changed: true };
+        }
+      } catch {
+        // not JSON; leave it for validation to report
+      }
+    } else if (
+      (type === 'number' || type === 'integer') &&
+      value.trim() !== '' &&
+      !Number.isNaN(Number(value))
+    ) {
+      return { value: Number(value), changed: true };
+    }
+    return { value, changed: false };
+  }
+  if (Array.isArray(value) && schema.items) {
+    let changed = false;
+    let items = value.map((item) => {
+      let result = coerceToSchema(item, schema.items);
+      changed ||= result.changed;
+      return result.value;
+    });
+    return { value: changed ? items : value, changed };
+  }
+  if (value && typeof value === 'object' && schema.properties) {
+    let changed = false;
+    let out: Record<string, unknown> = {
+      ...(value as Record<string, unknown>),
+    };
+    for (let [key, propertySchema] of Object.entries(schema.properties)) {
+      if (key in out) {
+        let result = coerceToSchema(out[key], propertySchema);
+        if (result.changed) {
+          out[key] = result.value;
+          changed = true;
+        }
+      }
+    }
+    return { value: changed ? out : value, changed };
+  }
+  return { value, changed: false };
+}
+
 export default class ToolService extends Service {
   @service declare private loaderService: LoaderService;
   @service declare private matrixService: MatrixService;
@@ -1245,9 +1306,16 @@ export default class ToolService extends Service {
         additionalProperties: false,
       };
       const ajv = new Ajv();
-      const valid = ajv.validate(jsonSchema, command.arguments);
+      let valid = ajv.validate(jsonSchema, command.arguments);
       if (!valid) {
         error = `Command "${command.name}" validation failed: ${ajv.errorsText()}`;
+        // A model sometimes sends an object argument as its JSON text, or a
+        // number as a string. Run the call if converting those makes it valid.
+        let coerced = coerceToSchema(command.arguments, jsonSchema);
+        if (coerced.changed && ajv.validate(jsonSchema, coerced.value)) {
+          command.setCoercedArguments(coerced.value);
+          error = undefined;
+        }
       }
     }
     if (error) {

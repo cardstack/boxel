@@ -108,7 +108,17 @@ export default class MessageTool {
   // fail the call on its shape, since the call is otherwise the one the model
   // meant. Memoized on the request's arguments so each read returns the same
   // object.
+  // Set by validation when it had to convert a stringified argument to make
+  // the call valid; the run uses these.
+  #coercedArguments: ToolRequest['arguments'] | undefined;
+  setCoercedArguments(args: unknown) {
+    this.#coercedArguments = args as ToolRequest['arguments'];
+  }
+
   get arguments() {
+    if (this.#coercedArguments) {
+      return this.#coercedArguments;
+    }
     let raw = this.toolRequest.arguments;
     if (raw !== this.#rawArguments) {
       this.#rawArguments = raw;

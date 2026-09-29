@@ -1,7 +1,11 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
 import type { ChatCompletionMessageFunctionToolCall } from 'openai/resources/chat/completions';
-import { parsePartialJson } from '../lib/partial-json.ts';
+import {
+  escapeControlCharactersInStrings,
+  parseLenientJson,
+  parsePartialJson,
+} from '../lib/partial-json.ts';
 import { toCommandRequest } from '../lib/matrix/response-publisher.ts';
 
 module('parsePartialJson', () => {
@@ -71,5 +75,51 @@ module('toCommandRequest arguments', () => {
     let request = toCommandRequest(call('{"attributes":{"code":"x"'));
     assert.deepEqual(request.arguments, {});
     assert.strictEqual(request.argumentsError, undefined);
+  });
+});
+
+module('lenient tool arguments', () => {
+  // The shape Claude streamed in small pieces: raw newlines and a tab inside
+  // the code string.
+  let raw =
+    '{"attributes": {\n  "realm": "https://localhost:4201/user/demo/",\n  "code": "await realm.fs.writeText(\'a.gts\', `line 1\n\tline 2`);"\n}}';
+
+  test('raw control characters inside strings are escaped, not fatal', (assert) => {
+    assert.throws(() => JSON.parse(raw));
+    assert.deepEqual(parseLenientJson(raw), {
+      attributes: {
+        realm: 'https://localhost:4201/user/demo/',
+        code: "await realm.fs.writeText('a.gts', `line 1\n\tline 2`);",
+      },
+    });
+  });
+
+  test('the finished call keeps its arguments instead of becoming {}', (assert) => {
+    let request = toCommandRequest(
+      {
+        id: 'call_1',
+        type: 'function',
+        function: { name: 'run-realm-code_6b92', arguments: raw },
+      } as ChatCompletionMessageFunctionToolCall,
+      { finished: true },
+    );
+    assert.strictEqual(request.argumentsError, undefined);
+    assert.strictEqual(
+      request.arguments?.attributes?.realm,
+      'https://localhost:4201/user/demo/',
+    );
+  });
+
+  test('the preview parses a streaming prefix with raw newlines', (assert) => {
+    assert.deepEqual(parsePartialJson('{"attributes": {"code": "a\nb'), {
+      attributes: { code: 'a\nb' },
+    });
+  });
+
+  test('valid JSON and escaped sequences are left alone', (assert) => {
+    assert.strictEqual(
+      escapeControlCharactersInStrings('{"a": "x\\ny"}\n'),
+      '{"a": "x\\ny"}\n',
+    );
   });
 });

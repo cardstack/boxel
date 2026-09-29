@@ -66,6 +66,14 @@ export default class RoomMessageTool extends Component<Signature> {
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private store: StoreService;
 
+  // How much of the call's arguments has arrived. On the element as a plain
+  // data attribute so anything watching a session (the eval runner, and later
+  // a deployed monitor) can tell a long tool call that is still streaming
+  // from a stalled one, even while the box is collapsed.
+  private get argumentsLength() {
+    return JSON.stringify(this.args.messageTool.arguments ?? {}).length;
+  }
+
   private get previewCommandCode() {
     let { name, arguments: payload } = this.args.messageTool;
     return JSON.stringify({ name, payload }, null, 2);
@@ -280,6 +288,8 @@ export default class RoomMessageTool extends Component<Signature> {
         compact=@isCompact
       }}
       data-test-tool-call-id={{@messageTool.toolRequest.id}}
+      data-tool-name={{@messageTool.name}}
+      data-tool-arguments-length={{this.argumentsLength}}
       ...attributes
     >
       {{#if @isStreaming}}

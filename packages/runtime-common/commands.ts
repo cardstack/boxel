@@ -240,6 +240,9 @@ export function decodeToolRequest(
   if (commandRequest.executedBy != null) {
     decodedCommandRequest.executedBy = commandRequest.executedBy;
   }
+  if (commandRequest.argumentsError != null) {
+    decodedCommandRequest.argumentsError = commandRequest.argumentsError;
+  }
   return decodedCommandRequest;
 }
 
@@ -262,6 +265,9 @@ export function encodeCommandRequest(
   }
   if (commandRequest.executedBy != null) {
     encodedCommandRequest.executedBy = commandRequest.executedBy;
+  }
+  if (commandRequest.argumentsError != null) {
+    encodedCommandRequest.argumentsError = commandRequest.argumentsError;
   }
   return encodedCommandRequest;
 }

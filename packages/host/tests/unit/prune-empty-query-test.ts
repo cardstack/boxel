@@ -72,4 +72,14 @@ module('Unit | prune-empty-query', function () {
       sort: [{ by: 'cardTitle' }],
     });
   });
+
+  test('drops the anchor from a relevance sort', function (assert) {
+    let query = {
+      filter: { on: listing, matches: 'recipe' },
+      sort: [{ by: '_matchRelevance', on: listing, direction: 'desc' }],
+    } as unknown as Query;
+    assert.deepEqual(pruneEmptyQueryParts(query).sort, [
+      { by: '_matchRelevance', direction: 'desc' },
+    ]);
+  });
 });

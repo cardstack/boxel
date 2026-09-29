@@ -106,7 +106,7 @@ may share accounts.
 
 ## Watch the run
 
-Do not start a run and look away. While it runs, watch the assistant panel (or
+Every 15 seconds (`EVAL_PROGRESS_SECONDS`) the run prints a `[progress …]` block: each model's current step, whether the bot is generating or a tool is running, its bot-message count, and ⚠ when nothing has changed for two minutes; a finished model shows its grade. Do not start a run and look away. While it runs, watch the assistant panel (or
 the runner's console) for anything irregular: a tool pill that goes red or
 "invalid", an error alert, a block written with `<<<<<<< SEARCH` markers, the
 model asking the user for permission or for file names, the same file read

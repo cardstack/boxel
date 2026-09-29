@@ -1,4 +1,7 @@
-import type { Query } from '@cardstack/runtime-common';
+import {
+  MATCH_RELEVANCE_SORT_KEY,
+  type Query,
+} from '@cardstack/runtime-common';
 
 // Some models fill in every property the tool schema lists, sending `{}`,
 // `[]`, `''` or a `{ module: '', name: '' }` CodeRef for the parts of a query
@@ -25,6 +28,11 @@ export function pruneEmptyQueryParts(query: Query): Query {
     } else {
       result.sort = sort.map((entry) => {
         let { on, ...rest } = entry as Record<string, unknown>;
+        // Relevance is not a field of any card type, so it takes no anchor;
+        // the engine rejects `_matchRelevance` with `on` in every realm.
+        if (rest.by === MATCH_RELEVANCE_SORT_KEY) {
+          return rest;
+        }
         return isUsableCodeRef(on) ? { ...rest, on } : rest;
       });
     }

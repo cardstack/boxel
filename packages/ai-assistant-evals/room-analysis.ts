@@ -24,6 +24,9 @@ export interface RoomAnalysis {
   // Requests the host never answered: the signature of a stuck host.
   unansweredToolCalls: number;
   patchBlocks: number;
+  // realm.fs writes in run-realm-code calls the host applied — the tool that
+  // replaces SEARCH/REPLACE blocks.
+  realmCodeWrites: number;
   gitStyleBlocks: number;
   patchResults: { applied: number; failed: number };
   filesWritten: string[];
@@ -34,6 +37,9 @@ export interface RoomAnalysis {
 const BOT_MESSAGE_MSGTYPE = 'app.boxel.message';
 const TOOL_REQUESTS_KEY = 'app.boxel.toolRequests';
 const BOX_SEARCH_MARKER = '╔═══ SEARCH';
+// Every write call counts; the path is recorded only when it is a literal.
+const REALM_CODE_WRITE =
+  /realm\.fs\.(?:writeText|replace)\(\s*(?:(['"`])([^'"`]+)\1)?/g;
 const FENCE_HEADER =
   /```[a-z]*\n(https?:\/\/[^\s]+|@[a-z0-9-]+\/[^\s]+)(?: \(new\))?\n╔═══ SEARCH/g;
 
@@ -81,6 +87,7 @@ export function analyzeRoom(
     failedToolCalls: [],
     unansweredToolCalls: 0,
     patchBlocks: 0,
+    realmCodeWrites: 0,
     gitStyleBlocks: 0,
     patchResults: { applied: 0, failed: 0 },
     filesWritten: [],
@@ -172,6 +179,20 @@ export function analyzeRoom(
       } else if (outcome.key !== 'applied') {
         result.failedToolCalls.push({ name, reason: outcome.reason });
       }
+      if (name.startsWith('run-realm-code') && outcome?.key === 'applied') {
+        // The host nests top-level fields under `attributes` before it runs a
+        // call, so a model's flat `code` is a real write too.
+        let args = parseArguments(request.arguments);
+        let code = args.attributes?.code ?? args.code;
+        if (typeof code === 'string') {
+          for (let match of code.matchAll(REALM_CODE_WRITE)) {
+            result.realmCodeWrites++;
+            if (match[2]) {
+              result.filesWritten.push(match[2]);
+            }
+          }
+        }
+      }
       if (name.startsWith('show-card')) {
         let args = parseArguments(request.arguments);
         let cardId = args.attributes?.cardId;
@@ -194,7 +215,13 @@ export function analyzeRoom(
     result.cacheWindowTurns++;
     result.cacheWindowInputTokens += usage.promptTokens;
     result.cacheWindowCachedTokens += usage.cachedTokens;
-    if (usage.cachedTokens < 0.5 * usage.promptTokens) {
+    // A turn's prompt is the previous turn's prompt plus what came back since
+    // (a tool result, skill files just read). A working cache serves that
+    // earlier prompt; the new part is billed fresh by design. So a miss is a
+    // turn that reused less than half of the previous prompt — not one whose
+    // new part happens to be large.
+    let previousPrompt = turnUsage[index - 1]?.promptTokens ?? 0;
+    if (usage.cachedTokens < 0.5 * previousPrompt) {
       result.cacheMisses++;
     }
   }

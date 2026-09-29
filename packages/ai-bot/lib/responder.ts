@@ -13,6 +13,7 @@ import type { ISendEventResponse } from 'matrix-js-sdk/lib/matrix.js';
 import type { ChatCompletionMessageFunctionToolCall } from 'openai/resources/chat/completions';
 import type { FunctionToolCall } from '@cardstack/runtime-common/helpers/ai';
 import type OpenAI from 'openai';
+import { parseLenientJson } from './partial-json.ts';
 import type { ChatCompletionSnapshot } from 'openai/lib/ChatCompletionStream';
 import type { MatrixEvent as DiscreteMatrixEvent } from 'matrix-js-sdk';
 import MatrixResponsePublisher, {
@@ -259,6 +260,8 @@ export class Responder {
     // measures generation+streaming+finalize, not the pre-generation wait.
     this.streamStartedAt ??= Date.now();
 
+    this.recordToolCallDeltas(chunk);
+
     // reasoning does not support snapshots, so we need to handle the delta
     const newReasoningContent = (
       chunk.choices?.[0]?.delta as { reasoning?: string }
@@ -356,7 +359,7 @@ export class Responder {
       type: 'function',
       id,
       name: f.name,
-      arguments: JSON.parse(f.arguments),
+      arguments: parseLenientJson(f.arguments) as FunctionToolCall['arguments'],
     };
   }
 
@@ -402,11 +405,80 @@ export class Responder {
     }
   }
   isFinalized = false;
+  // What the provider streamed for each tool call, by delta index, kept so a
+  // call that finishes with empty arguments can be explained: were argument
+  // pieces streamed and lost, or did none arrive?
+  private toolCallDeltaStats = new Map<
+    number,
+    { ids: Set<string>; names: Set<string>; pieces: number; chars: number }
+  >();
+  private nativeFinishReasons = new Set<string>();
+
+  private recordToolCallDeltas(
+    chunk: OpenAI.Chat.Completions.ChatCompletionChunk,
+  ) {
+    let choice = chunk.choices?.[0];
+    let native = (choice as { native_finish_reason?: string | null })
+      ?.native_finish_reason;
+    if (native) {
+      this.nativeFinishReasons.add(native);
+    }
+    for (let delta of choice?.delta?.tool_calls ?? []) {
+      let stats = this.toolCallDeltaStats.get(delta.index) ?? {
+        ids: new Set<string>(),
+        names: new Set<string>(),
+        pieces: 0,
+        chars: 0,
+      };
+      if (delta.id) {
+        stats.ids.add(delta.id);
+      }
+      if (delta.function?.name) {
+        stats.names.add(delta.function.name);
+      }
+      if (delta.function?.arguments) {
+        stats.pieces++;
+        stats.chars += delta.function.arguments.length;
+      }
+      this.toolCallDeltaStats.set(delta.index, stats);
+    }
+  }
+
+  private reportEmptyToolArguments() {
+    let empty = this.responseState.toolCalls.filter((call) => {
+      let args = (call as { function?: { arguments?: string } }).function
+        ?.arguments;
+      return !args || args.trim() === '{}';
+    });
+    if (empty.length === 0) {
+      return;
+    }
+    let deltas = [...this.toolCallDeltaStats.entries()].map(
+      ([index, stats]) => ({
+        index,
+        ids: [...stats.ids],
+        names: [...stats.names],
+        argumentPieces: stats.pieces,
+        argumentChars: stats.chars,
+      }),
+    );
+    log.warn(
+      `tool call(s) finished with empty arguments: ${empty
+        .map((call) => `${call.id ?? '(no id)'} ${call.function?.name ?? ''}`)
+        .join(', ')}. finish_reason=${
+        this.responseState.finishReason ?? 'none'
+      } native_finish_reason=${
+        [...this.nativeFinishReasons].join(',') || 'none'
+      }. Streamed deltas: ${JSON.stringify(deltas)}`,
+    );
+  }
+
   async finalize(opts?: { isCanceled?: boolean }) {
     if (this.isFinalized) {
       return;
     }
     this.isFinalized = true;
+    this.reportEmptyToolArguments();
 
     let isStreamingFinishedChanged =
       this.responseState.updateIsStreamingFinished(true, opts?.isCanceled);

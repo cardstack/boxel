@@ -15,7 +15,61 @@ type Frame = {
 const NUMBER = /^-?(0|[1-9]\d*)(\.\d+)?([eE][+-]?\d+)?$/;
 const LITERALS = new Set(['true', 'false', 'null']);
 
+// Some models, streaming a long tool call in small pieces, write raw newlines
+// and tabs inside JSON strings. That is not valid JSON, but what was meant is
+// unambiguous: escape any control character that sits inside a string, and
+// leave everything else as it is.
+export function escapeControlCharactersInStrings(text: string): string {
+  let out = '';
+  let inString = false;
+  let escaped = false;
+  for (let ch of text) {
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (ch === '\\') {
+        escaped = true;
+      } else if (ch === '"') {
+        inString = false;
+      } else if (ch < ' ') {
+        out +=
+          ch === '\n'
+            ? '\\n'
+            : ch === '\r'
+              ? '\\r'
+              : ch === '\t'
+                ? '\\t'
+                : `\\u${ch.charCodeAt(0).toString(16).padStart(4, '0')}`;
+        continue;
+      }
+    } else if (ch === '"') {
+      inString = true;
+    }
+    out += ch;
+  }
+  return out;
+}
+
+// JSON.parse, and on failure the same text with raw control characters in
+// strings escaped. Throws the original error when neither parses.
+export function parseLenientJson(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch (error) {
+    let repaired = escapeControlCharactersInStrings(text);
+    if (repaired === text) {
+      throw error;
+    }
+    try {
+      return JSON.parse(repaired);
+    } catch {
+      throw error;
+    }
+  }
+}
+
 export function parsePartialJson(text: string): unknown {
+  text = escapeControlCharactersInStrings(text);
   try {
     return JSON.parse(text);
   } catch {

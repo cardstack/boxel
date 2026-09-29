@@ -25,7 +25,7 @@ import ResponseEventData from './response-event-data.ts';
 import { logger } from '@cardstack/runtime-common';
 import type { MatrixClient } from 'matrix-js-sdk';
 
-import { parsePartialJson } from '../partial-json.ts';
+import { parseLenientJson, parsePartialJson } from '../partial-json.ts';
 
 let log = logger('ai-bot');
 
@@ -47,7 +47,9 @@ export function toCommandRequest(
   }
   if (f.arguments) {
     try {
-      result['arguments'] = JSON.parse(f.arguments);
+      result['arguments'] = parseLenientJson(
+        f.arguments,
+      ) as ToolRequest['arguments'];
     } catch (error) {
       // If the arguments are not valid JSON, we'll just return an empty object
       // This will happen during streaming, when the tool call is not yet complete
