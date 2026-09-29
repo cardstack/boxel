@@ -13,6 +13,7 @@ import {
   rri,
 } from '@cardstack/runtime-common';
 import type { PgAdapter } from '@cardstack/postgres';
+import { currentConnectionTenant } from '@cardstack/postgres';
 import { testRealmURL } from './helpers.ts';
 import {
   rejectedPrerenderHtmlJobIds,
@@ -1434,6 +1435,30 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       assert.ok(
         response.text.includes('data-test-home-card'),
         'index HTML is served',
+      );
+    });
+
+    test('a page load queries the database ordered as the published realm', async function (assert) {
+      // Record which tenant each query is charged to, from inside the query
+      // path. Background work may query too, so this asserts the page load's
+      // queries are among them, not that nothing else ran.
+      let tenants = new Set<string | undefined>();
+      let execute = dbAdapter.execute;
+      dbAdapter.execute = function (this: DBAdapter, ...args) {
+        tenants.add(currentConnectionTenant());
+        return execute.apply(this, args);
+      } as DBAdapter['execute'];
+      let response;
+      try {
+        response = await request.get('/published/').set('Accept', 'text/html');
+      } finally {
+        dbAdapter.execute = execute;
+      }
+
+      assert.strictEqual(response.status, 200, 'serves HTML response');
+      assert.true(
+        tenants.has(testRealm.url),
+        `queries ran ordered as ${testRealm.url}; saw ${JSON.stringify([...tenants])}`,
       );
     });
 
