@@ -51,6 +51,7 @@ import { Submodes } from '../submode-switcher';
 
 import CreateListingModal from './create-listing-modal';
 
+import type CapabilitiesService from '../../services/capabilities';
 import type CardService from '../../services/card-service';
 import type MatrixService from '../../services/matrix-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
@@ -69,6 +70,7 @@ interface Signature {
 }
 
 export default class OperatorModeContainer extends Component<Signature> {
+  @service declare private capabilities: CapabilitiesService;
   @service declare private cardService: CardService;
   @service declare matrixService: MatrixService;
   @service declare private operatorModeStateService: OperatorModeStateService;
@@ -171,6 +173,7 @@ export default class OperatorModeContainer extends Component<Signature> {
       getCard: this.getCard,
       getCards: this.getCards,
       getCardCollection: this.getCardCollection,
+      canInvoke: this.capabilities.canInvoke,
       store: this.cardStore,
       toolContext: this.toolContext,
       // populated alongside toolContext for content still reading the
