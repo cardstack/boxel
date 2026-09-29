@@ -16,16 +16,19 @@ export type { LoweringContext } from './lowering.ts';
 export {
   dischargePendingDecision,
   notPermitted,
+  pendingWriteFor,
   pendingWriteHolds,
   policyGateStats,
 } from './gate.ts';
 export type {
   GateDecision,
+  GrantedDecision,
   MatchedGrant,
   OperationPolicyAccess,
   PendingDecision,
   PendingWrite,
   PolicyGateStats,
+  StoredCardCheck,
 } from './gate.ts';
 export {
   assertParamsSupplied,

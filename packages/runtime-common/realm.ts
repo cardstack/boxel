@@ -5537,10 +5537,11 @@ export class Realm {
         // entry keeps its `position`, which is the key both the staging schedule
         // and the results are looked up by.
         //
-        // A write the policy gate could admit only on a predicate carries that
-        // predicate to the coordinator, which decides it under the write lock
-        // where the write stages: against the card it changes, or, for a
-        // create against a type, the card it would mint.
+        // A write a policy grant admitted carries what the gate left undecided
+        // to the coordinator, which decides it under the write lock where the
+        // write stages: the type a stored card's bytes name, and a predicate
+        // the grant rests on, against the card it changes or, for a create
+        // against a type, the card it would mint.
         let staged = new Map<EntryPosition, BatchEntry>();
         for (let [index, write] of writes.entries()) {
           try {
@@ -5711,8 +5712,8 @@ export class Realm {
   }
 
   // What a batch that failed may tell its caller, for a caller the realm ACL
-  // declined outright whose batch holds a write the policy gate left pending
-  // and the write lock has not decided.
+  // declined outright whose batch holds a write the policy gate left to the
+  // write lock and the lock has not decided.
   //
   // Such a write's target resolved, and the gate matched a grant on it, which
   // never happens for a card that does not exist. So a refusal the batch makes
@@ -5721,11 +5722,12 @@ export class Realm {
   // That covers a missing param, a failing `input` stage, a malformed entry,
   // another entry refused while staging, and a later entry refused at
   // resolution, whose position alone says the entries ahead of it resolved.
-  // A write whose predicate does not hold is answered with the gate's refusal
-  // instead, exactly as a card that does not exist is answered. A write whose
-  // predicate holds lets the caller have the answer the batch actually has. A
-  // write the lock already decided is not judged again: one it admitted may
-  // be told, and one it refused is the refusal.
+  // A write the lock would refuse, for its card's type or its predicate, is
+  // answered with the gate's refusal instead, exactly as a card that does not
+  // exist is answered. A write the lock would admit lets the caller have the
+  // answer the batch actually has. A write the lock already decided is not
+  // judged again: one it admitted may be told, and one it refused is the
+  // refusal.
   //
   // The write is judged against its card as stored now, outside the lock.
   // That decides only what the refusal says, never whether anything is

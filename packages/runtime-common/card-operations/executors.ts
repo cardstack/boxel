@@ -192,7 +192,8 @@ interface EntryCommon {
   // the entry stages, or undefined where there is no such card to judge, and
   // refuses by throwing. Absent for an entry that was admitted in full before
   // the batch was composed, which is every entry but a policy-granted write
-  // whose grant carries a predicate.
+  // to a stored card, and a policy-granted create whose grants carry
+  // predicates.
   admit?: (judged: AdmissionSubject | undefined) => Promise<void>;
 }
 
