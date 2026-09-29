@@ -979,6 +979,14 @@ export type OperationErrorCode =
   // wire only for a caller who may read the realm: one who may not is told
   // `target-not-found` instead (see `refusalForNonReader`).
   | 'operation-not-permitted'
+  // The realm ACL declined the caller, no grant in the realm's policy admits
+  // this operation on this target, and a predicate threw while the gate was
+  // deciding. That is a fault in the policy rather than anything the caller
+  // did, so it carries a 500. It is distinct from `internal-error` because it
+  // is a refusal too, and one only a card or type a rule names can raise: a
+  // caller who may not read the realm is told `target-not-found` instead (see
+  // `refusalForNonReader`).
+  | 'policy-predicate-failed'
   // An explain was asked about a target whose realm does not name the policy
   // card it was invoked on. The card governs nothing there, so there is
   // nothing for it to explain: the explain belongs on the card that realm's
@@ -1054,6 +1062,13 @@ export function isOperationFailure(err: unknown): err is OperationFailure {
 // than flattened where each is raised. A caller who may read the realm can list
 // it anyway, so they get every detail, and the gate's own refusal as a 403.
 //
+// A predicate that threw gets the same answer. The gate raises that fault only
+// against a card or type a rule names, and whether a predicate throws depends
+// on the card's stored values. So a 500 would tell such a caller that the card
+// is there, and something about what it holds. The gate logs the fault where
+// the predicate throws. A caller who may read the realm is told it as the 500
+// it is.
+//
 // A refusal of any other kind passes through. Such a caller is refused, as
 // the target is resolved, every invocation the gate did not admit outright, a
 // write whose predicate is still to run included. So nothing past that point
@@ -1061,7 +1076,8 @@ export function isOperationFailure(err: unknown): err is OperationFailure {
 export function refusalForNonReader(error: OperationError): OperationError {
   if (
     error.code !== 'target-not-found' &&
-    error.code !== 'operation-not-permitted'
+    error.code !== 'operation-not-permitted' &&
+    error.code !== 'policy-predicate-failed'
   ) {
     return error;
   }
