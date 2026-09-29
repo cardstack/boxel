@@ -1,9 +1,11 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
+import supertest from 'supertest';
+import type { Test, SuperTest, Response } from 'supertest';
 import { writeFileSync } from 'fs';
 import { basename, join } from 'path';
 import { dirSync } from 'tmp';
-import { rri } from '@cardstack/runtime-common';
+import { rri, SupportedMimeType } from '@cardstack/runtime-common';
 import type {
   QueuePublisher,
   QueueRunner,
@@ -21,6 +23,7 @@ import { resetCatalogRealms } from '../handlers/handle-fetch-catalog-realms.ts';
 import type { RealmHttpServer as Server } from '../server.ts';
 import {
   closeServer,
+  createJWT,
   createVirtualNetwork,
   matrixURL,
   realmConfigCardJSON,
@@ -32,12 +35,15 @@ import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
 // A stored-bytes read is resolved before any definition, so the policy has no
 // type handed to it the way every other behavior does. It types the target
 // itself: a data file by the `FileDef` its extension names, and a card's raw
-// `.json` by the card's own type. These tests drive the operation directly,
-// since that typing happens in the gate whichever route a read arrives by.
+// `.json` by the card's own type. Most of these tests drive the operation
+// directly, since that typing happens in the gate whichever route a read
+// arrives by. The last module reads through the routes that serve bytes over
+// HTTP, which hand a caller the realm ACL declined to that same gate.
 const EDUCATION = 'http://127.0.0.1:4444/education/';
 const ORG = 'http://127.0.0.1:4444/org/';
 const ADMIN = '@education-admin:localhost';
 const ORG_ADMIN = '@org-admin:localhost';
+const READER = '@reader:localhost';
 const TEACHER = '@teacher:localhost';
 
 const REALM_POLICY = {
@@ -157,11 +163,20 @@ const PRIVATE_HANDBOOK = `${EDUCATION}private/handbook.pdf`;
 const NOTES_TXT = `${EDUCATION}public/notes.txt`;
 const NOTES_PDF = `${EDUCATION}public/notes.pdf`;
 const MODULE_SOURCE = `${EDUCATION}classroom.gts`;
+// Paths that hold nothing, each named to the length of a path above that holds
+// something, so a refusal of one and a refusal of the other differ in nothing
+// but the name each repeats back.
+const GONE_HANDBOOK = `${EDUCATION}public/gonebook.pdf`;
+const GONE_LOGO = `${EDUCATION}public/gone.png`;
+const GONE_BULLETIN_SOURCE = `${EDUCATION}bulletins/b9.json`;
+const GONE_PRIVATE_HANDBOOK = `${EDUCATION}private/gonebook.pdf`;
+const GONE_MODULE_SOURCE = `${EDUCATION}classless.gts`;
 
 module(basename(import.meta.filename), function (hooks) {
   let education: Realm;
   let org: Realm;
   let server: Server;
+  let request: SuperTest<Test>;
   let realmsRootPath: string;
 
   setupCatalogTestSubset(hooks);
@@ -213,6 +228,7 @@ module(basename(import.meta.filename), function (hooks) {
           },
           permissions: {
             [ADMIN]: ['read', 'write', 'realm-owner'],
+            [READER]: ['read'],
           },
         },
         {
@@ -237,6 +253,7 @@ module(basename(import.meta.filename), function (hooks) {
       matrixURL,
     });
     server = result.testRealmHttpServer;
+    request = supertest(server);
     education = result.realms.find((realm) => realm.url === EDUCATION)!;
     org = result.realms.find((realm) => realm.url === ORG)!;
   }
@@ -643,6 +660,448 @@ module(basename(import.meta.filename), function (hooks) {
         0,
         'nothing was typed, since there was no policy to match it against',
       );
+    });
+  });
+
+  module('the routes that serve bytes', function () {
+    // The card+source read, and the realm's fallback file serve, which answers
+    // an `Accept` no route claims. Both serve a path's stored bytes, so a grant
+    // that admits the read is honored on both.
+    const BYTE_ROUTES = [
+      { label: 'card+source', accept: SupportedMimeType.CardSource },
+      { label: 'the file serve', accept: '*/*' },
+    ];
+
+    function bearer(
+      user: string,
+      permissions: Parameters<typeof createJWT>[2] = [],
+    ) {
+      return `Bearer ${createJWT(education, user, permissions)}`;
+    }
+
+    const AS = {
+      reader: () => bearer(READER, ['read']),
+      teacher: () => bearer(TEACHER),
+      colleague: () => bearer('@colleague:localhost'),
+    };
+
+    // Collect the raw bytes rather than letting supertest pick a text or JSON
+    // parser from the content type.
+    function binaryParser(
+      res: unknown,
+      callback: (err: Error | null, body: Buffer) => void,
+    ) {
+      let stream = res as NodeJS.ReadableStream;
+      let chunks: Buffer[] = [];
+      stream.on('data', (chunk: Buffer) => chunks.push(chunk));
+      stream.on('end', () => callback(null, Buffer.concat(chunks)));
+    }
+
+    function send(
+      method: 'get' | 'head',
+      url: string,
+      accept: string,
+      auth?: string,
+      headers: Record<string, string> = {},
+    ) {
+      let { pathname, search } = new URL(url);
+      let req = request[method](`${pathname}${search}`).set('Accept', accept);
+      for (let [name, value] of Object.entries(headers)) {
+        req = req.set(name, value);
+      }
+      if (auth) {
+        req = req.set('Authorization', auth);
+      }
+      return req.buffer(true).parse(binaryParser);
+    }
+
+    function get(
+      url: string,
+      accept: string,
+      auth?: string,
+      headers?: Record<string, string>,
+    ) {
+      return send('get', url, accept, auth, headers);
+    }
+
+    function head(url: string, accept: string, auth?: string) {
+      return send('head', url, accept, auth);
+    }
+
+    function textOf(response: Response) {
+      return Buffer.isBuffer(response.body) ? response.body.toString() : '';
+    }
+
+    // Every header but the date, which differs between any two responses.
+    function headersOf(response: Response) {
+      return Object.entries(response.headers as Record<string, string>)
+        .filter(([name]) => name !== 'date')
+        .sort(([a], [b]) => a.localeCompare(b));
+    }
+
+    // The two answers are the same one: status, every header, and a body that
+    // differs only in the path it repeats back.
+    function assertSameAnswer(
+      assert: Assert,
+      actual: Response,
+      expected: Response,
+      names: { actual: string; expected: string },
+      label: string,
+    ) {
+      assert.strictEqual(actual.status, expected.status, `${label}: status`);
+      assert.deepEqual(
+        headersOf(actual),
+        headersOf(expected),
+        `${label}: headers`,
+      );
+      assert.strictEqual(
+        textOf(actual).replaceAll(names.actual, names.expected),
+        textOf(expected),
+        `${label}: body`,
+      );
+    }
+
+    function nameOf(url: string) {
+      return new URL(url).pathname;
+    }
+
+    test('a PdfDef grant serves a .pdf and refuses a .png', async function (assert) {
+      for (let { label, accept } of BYTE_ROUTES) {
+        let pdf = await get(HANDBOOK, accept, AS.teacher());
+        assert.strictEqual(pdf.status, 200, `${label}: the .pdf is served`);
+        assert.strictEqual(
+          textOf(pdf),
+          '%PDF-1.4 the student handbook',
+          `${label}: its stored bytes`,
+        );
+        assert.strictEqual(
+          pdf.get('content-type'),
+          'application/pdf',
+          `${label}: as the type its name says`,
+        );
+        let png = await get(LOGO, accept, AS.teacher());
+        assert.strictEqual(png.status, 404, `${label}: the .png is not there`);
+        assertSameAnswer(
+          assert,
+          png,
+          await get(GONE_LOGO, accept, AS.teacher()),
+          { actual: nameOf(LOGO), expected: nameOf(GONE_LOGO) },
+          `${label}: the .png is refused as a missing file is`,
+        );
+      }
+    });
+
+    test('a FileDef grant serves both and still refuses module source', async function (assert) {
+      await policy('anyFile');
+      for (let { label, accept } of BYTE_ROUTES) {
+        for (let url of [HANDBOOK, LOGO]) {
+          let served = await get(url, accept, AS.teacher());
+          assert.strictEqual(served.status, 200, `${label}: ${nameOf(url)}`);
+        }
+      }
+      let loads = gateStats().policyLoads;
+      let source = await get(
+        MODULE_SOURCE,
+        SupportedMimeType.CardSource,
+        AS.teacher(),
+      );
+      assert.strictEqual(source.status, 404, 'module source is not there');
+      assertSameAnswer(
+        assert,
+        source,
+        await get(
+          GONE_MODULE_SOURCE,
+          SupportedMimeType.CardSource,
+          AS.teacher(),
+        ),
+        { actual: nameOf(MODULE_SOURCE), expected: nameOf(GONE_MODULE_SOURCE) },
+        'module source is refused as a missing module is',
+      );
+      let module = await get(`${EDUCATION}classroom`, '*/*', AS.teacher());
+      assert.strictEqual(module.status, 404, 'nor is the transpiled module');
+      let fallback = await get(
+        `${EDUCATION}classroom`,
+        SupportedMimeType.CardSource,
+        AS.teacher(),
+      );
+      assert.strictEqual(
+        fallback.status,
+        404,
+        'nor the module an extension-less card+source read would redirect to',
+      );
+      assert.strictEqual(
+        gateStats().policyLoads,
+        loads,
+        'none of which reaches the gate',
+      );
+    });
+
+    test("a card-type grant serves that card's .json and refuses another type's", async function (assert) {
+      await policy('classroomSource');
+      for (let { label, accept } of BYTE_ROUTES) {
+        let classroom = await get(ROOM_204_SOURCE, accept, AS.teacher());
+        assert.strictEqual(classroom.status, 200, `${label}: the Classroom`);
+        assert.strictEqual(
+          JSON.parse(textOf(classroom)).data.attributes.title,
+          'Room 204',
+          `${label}: its stored document`,
+        );
+        let bulletin = await get(BULLETIN_SOURCE, accept, AS.teacher());
+        assert.strictEqual(bulletin.status, 404, `${label}: not the Bulletin`);
+        assertSameAnswer(
+          assert,
+          bulletin,
+          await get(GONE_BULLETIN_SOURCE, accept, AS.teacher()),
+          {
+            actual: nameOf(BULLETIN_SOURCE),
+            expected: nameOf(GONE_BULLETIN_SOURCE),
+          },
+          `${label}: the Bulletin is refused as a missing card is`,
+        );
+      }
+    });
+
+    test('a caller the realm ACL declined is not redirected to what a name resolves to', async function (assert) {
+      await policy('classroomSource');
+      let reader = await get(
+        ROOM_204,
+        SupportedMimeType.CardSource,
+        AS.reader(),
+      );
+      assert.strictEqual(reader.status, 302, 'a reader is sent to the .json');
+      let teacher = await get(
+        ROOM_204,
+        SupportedMimeType.CardSource,
+        AS.teacher(),
+      );
+      assert.strictEqual(
+        teacher.status,
+        404,
+        'the teacher, whose grant reaches that .json, reads it by its own name',
+      );
+    });
+
+    test('a HEAD answers as the GET does', async function (assert) {
+      for (let { label, accept } of BYTE_ROUTES) {
+        let refused = await head(LOGO, accept, AS.teacher());
+        let missing = await head(GONE_LOGO, accept, AS.teacher());
+        assert.strictEqual(
+          refused.status,
+          200,
+          `${label}: a file no grant admits gets the discovery answer`,
+        );
+        assert.notOk(refused.get('etag'), `${label}: with no validator`);
+        assert.deepEqual(
+          headersOf(refused),
+          headersOf(missing),
+          `${label}: identical to a HEAD of a path that holds nothing`,
+        );
+        let granted = await head(HANDBOOK, accept, AS.teacher());
+        assert.ok(granted.get('etag'), `${label}: a granted file's validator`);
+        assert.deepEqual(
+          headersOf(granted),
+          headersOf(await head(HANDBOOK, accept, AS.reader())),
+          `${label}: the headers a reader's HEAD gets`,
+        );
+      }
+    });
+
+    test('a grant serves the bytes as a reader gets them', async function (assert) {
+      for (let { label, accept } of BYTE_ROUTES) {
+        let granted = await get(HANDBOOK, accept, AS.teacher());
+        let reader = await get(HANDBOOK, accept, AS.reader());
+        assert.strictEqual(textOf(granted), textOf(reader), `${label}: body`);
+        assert.deepEqual(
+          headersOf(granted),
+          headersOf(reader),
+          `${label}: headers`,
+        );
+      }
+      await policy('classroomSource');
+      // Read first by a reader, so the card+source read holds it in its
+      // source cache.
+      let reader = await get(
+        ROOM_204_SOURCE,
+        SupportedMimeType.CardSource,
+        AS.reader(),
+      );
+      let granted = await get(
+        ROOM_204_SOURCE,
+        SupportedMimeType.CardSource,
+        AS.teacher(),
+      );
+      assert.strictEqual(textOf(granted), textOf(reader), "a card's .json");
+      for (let name of ['etag', 'last-modified', 'content-type', 'x-created']) {
+        assert.strictEqual(
+          granted.get(name),
+          reader.get(name),
+          `a card's .json: ${name}`,
+        );
+      }
+    });
+
+    test('a grant-admitted response is private', async function (assert) {
+      for (let { label, accept } of BYTE_ROUTES) {
+        let response = await get(HANDBOOK, accept, AS.teacher());
+        assert.strictEqual(response.status, 200, `${label}: served`);
+        assert.true(
+          /^private\b/.test(response.get('cache-control') ?? ''),
+          `${label}: with a private cache policy (${response.get('cache-control')})`,
+        );
+      }
+    });
+
+    test('a validator is honored only once the gate admits the read', async function (assert) {
+      for (let { label, accept } of BYTE_ROUTES) {
+        await policy('pdf');
+        let etag = (await get(HANDBOOK, accept, AS.reader())).get('etag');
+        assert.ok(etag, `${label}: the reader's validator`);
+        let conditional = { 'If-None-Match': etag! };
+        let admitted = await get(HANDBOOK, accept, AS.teacher(), conditional);
+        assert.strictEqual(
+          admitted.status,
+          304,
+          `${label}: it matches for a caller a grant admits`,
+        );
+        await policy('classroomSource');
+        let refused = await get(HANDBOOK, accept, AS.teacher(), conditional);
+        assert.strictEqual(
+          refused.status,
+          404,
+          `${label}: and not once the grant is gone`,
+        );
+        assertSameAnswer(
+          assert,
+          refused,
+          await get(GONE_HANDBOOK, accept, AS.teacher(), conditional),
+          { actual: nameOf(HANDBOOK), expected: nameOf(GONE_HANDBOOK) },
+          `${label}: which is the answer for a path that holds nothing`,
+        );
+      }
+      // A card's `.json` is kept in the card+source read's source cache once a
+      // reader has read it, and the cache answers nobody the gate refused.
+      await policy('pdf');
+      await get(ROOM_204_SOURCE, SupportedMimeType.CardSource, AS.reader());
+      let cached = await get(
+        ROOM_204_SOURCE,
+        SupportedMimeType.CardSource,
+        AS.teacher(),
+      );
+      assert.strictEqual(
+        cached.status,
+        404,
+        "a card's .json a reader's read left in the source cache",
+      );
+      assertSameAnswer(
+        assert,
+        cached,
+        await get(
+          `${EDUCATION}classrooms/room-999.json`,
+          SupportedMimeType.CardSource,
+          AS.teacher(),
+        ),
+        {
+          actual: nameOf(ROOM_204_SOURCE),
+          expected: nameOf(`${EDUCATION}classrooms/room-999.json`),
+        },
+        "is refused as a missing card's is",
+      );
+    });
+
+    test('a file predicate sees the path and the caller', async function (assert) {
+      await policy('pathPredicate');
+      for (let { label, accept } of BYTE_ROUTES) {
+        assert.strictEqual(
+          (await get(HANDBOOK, accept, AS.teacher())).status,
+          200,
+          `${label}: the path the predicate admits`,
+        );
+        let elsewhere = await get(PRIVATE_HANDBOOK, accept, AS.teacher());
+        assertSameAnswer(
+          assert,
+          elsewhere,
+          await get(GONE_PRIVATE_HANDBOOK, accept, AS.teacher()),
+          {
+            actual: nameOf(PRIVATE_HANDBOOK),
+            expected: nameOf(GONE_PRIVATE_HANDBOOK),
+          },
+          `${label}: another path is not there`,
+        );
+        assert.strictEqual(
+          (
+            await get(
+              `${PRIVATE_HANDBOOK}?p=/public/handbook.pdf`,
+              accept,
+              AS.teacher(),
+            )
+          ).status,
+          404,
+          `${label}: however the query string spells the admitted path`,
+        );
+        assert.strictEqual(
+          (await get(HANDBOOK, accept, AS.colleague())).status,
+          404,
+          `${label}: nor is the admitted path for a caller the predicate does not name`,
+        );
+      }
+    });
+
+    test("a reader's reads do not reach the gate", async function (assert) {
+      for (let { label, accept } of BYTE_ROUTES) {
+        for (let url of [HANDBOOK, LOGO, ROOM_204_SOURCE]) {
+          let response = await get(url, accept, AS.reader());
+          assert.strictEqual(response.status, 200, `${label}: ${nameOf(url)}`);
+          let etag = response.get('etag');
+          assert.ok(etag, `${label}: ${nameOf(url)} carries a validator`);
+          assert.strictEqual(
+            (await get(url, accept, AS.reader(), { 'If-None-Match': etag! }))
+              .status,
+            304,
+            `${label}: ${nameOf(url)} revalidates`,
+          );
+          assert.strictEqual(
+            (await head(url, accept, AS.reader())).get('etag'),
+            etag,
+            `${label}: ${nameOf(url)} has the same validator on a HEAD`,
+          );
+        }
+      }
+      assert.strictEqual(
+        (await get(MODULE_SOURCE, SupportedMimeType.CardSource, AS.reader()))
+          .status,
+        200,
+        'module source',
+      );
+      assert.strictEqual(
+        (await get(`${EDUCATION}classroom`, '*/*', AS.reader())).status,
+        200,
+        'the transpiled module',
+      );
+      assert.deepEqual(
+        gateStats(),
+        {
+          policyLoads: 0,
+          predicateEvaluations: 0,
+          pendingDischarges: 0,
+          definitionLookups: 0,
+        },
+        'no policy load, no predicate, and no definition lookup',
+      );
+    });
+
+    test('a caller who authenticated nobody is asked to', async function (assert) {
+      for (let { label, accept } of BYTE_ROUTES) {
+        assert.strictEqual(
+          (await get(HANDBOOK, accept)).status,
+          401,
+          `${label}: a file a grant would admit`,
+        );
+        assert.strictEqual(
+          (await get(GONE_HANDBOOK, accept)).status,
+          401,
+          `${label}: a path that holds nothing`,
+        );
+      }
     });
   });
 });

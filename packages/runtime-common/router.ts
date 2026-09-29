@@ -261,8 +261,9 @@ export interface RouteOptions {
   // which is the one place anything may admit it. Every other route is
   // refused with the ACL's own refusal before its handler runs.
   consumesCoarseOutcome?: true;
-  // No policy grant reaches what the route serves: module source, a file's
-  // stored bytes, the file tree. Only the realm ACL admits a caller to it. In
+  // No policy grant reaches what the route serves: module source, the file
+  // tree, and a file's stored bytes wherever `grantableBytes` does not hand
+  // them to the gate. Only the realm ACL admits a caller to it. In
   // a realm with a policy, a caller the ACL does not let read the realm is
   // told nothing is there, as they are told of every card no grant admits
   // them to, rather than that they may not look. A `HEAD`, which the ACL
@@ -270,12 +271,19 @@ export interface RouteOptions {
   // when the ACL would not let its caller read the realm, whether or not the
   // realm has a policy.
   coarseReadOnly?: true;
+  // The route serves a path's stored bytes, and for a path that names a data
+  // file or a card's document those bytes are a `readSource` a policy grant
+  // can reach. A request for one consumes the ACL's outcome and is resolved
+  // through the gate, `HEAD` included. Every other path the route serves stays
+  // `coarseReadOnly`.
+  grantableBytes?: true;
 }
 
 export interface Route {
   handler: Handler;
   consumesCoarseOutcome: boolean;
   coarseReadOnly: boolean;
+  grantableBytes: boolean;
 }
 
 export interface RouteDescription {
@@ -284,6 +292,7 @@ export interface RouteDescription {
   path: string;
   consumesCoarseOutcome: boolean;
   coarseReadOnly: boolean;
+  grantableBytes: boolean;
 }
 
 export class Router {
@@ -373,6 +382,7 @@ export class Router {
       handler,
       consumesCoarseOutcome: opts.consumesCoarseOutcome === true,
       coarseReadOnly: opts.coarseReadOnly === true,
+      grantableBytes: opts.grantableBytes === true,
     });
   }
 
@@ -390,6 +400,7 @@ export class Router {
             path,
             consumesCoarseOutcome: route.consumesCoarseOutcome,
             coarseReadOnly: route.coarseReadOnly,
+            grantableBytes: route.grantableBytes,
           });
         }
       }
