@@ -357,12 +357,13 @@ and is never answered with a `304`.
 
 `output` is **not** an access boundary. See the posture section.
 
-### `links` — how much of the link graph a read carries
+### `links` — how much of the link graph a read or a query carries
 
 A read serves a JSON:API document, and by default it assembles the transitive
 closure of the card's links into `included[]`: the cards it links to, the cards
-those link to, and so on to the end of the graph. A `read` declaration may say
-how much of that to carry.
+those link to, and so on to the end of the graph. A search does the same for
+every row it answers with. A `read` or a `query` declaration may say how much of
+that to carry.
 
 ```ts
 @operation static read = {
@@ -424,14 +425,67 @@ what the card itself computed from it. This is the part that most often
 surprises: `links: 'none'` on a card whose `summary` is computed from its
 linked records still answers with that summary.
 
-`links` is a `read` key: it narrows the document a read of the card serves, and
-no other base serves one. A write answers without assembling the card's closure,
-and a `readSource` serves stored bytes. A `query` answers through search, which
-assembles each result's closure the way any search does; the declaration does
-not govern those results, and a `links` on a `query` is refused rather than
-accepted and ignored. A `links` on any base but `read` is refused where it is
-written, and a stored definition carrying one records a `links-without-assembly`
-issue; a value that is not one of the three records `invalid-link-strategy`.
+#### On a `query`
+
+A `query` declaration narrows its results the same way, with the same three
+values:
+
+```ts
+@operation static allRosters = {
+  base: 'query',
+  query: { filter: { type: () => Roster } },
+  links: 'ids',
+} satisfies OperationDeclaration;
+```
+
+**It governs every row alike, under the query's declaration.** Each row the
+query answers with carries what the query declares, whatever type the row is and
+whatever that type's own `read` declares — the query's results are its
+representation, as a read's document is the read's. The two are separate
+statements, so a type whose `read` narrows its closure is still carried whole by
+a `full` query that returns it. A query that must not reach what its rows link
+to declares that itself.
+
+**It narrows the row's card, never the entry the row arrives in.** A search
+delivers each row as an entry that names its card and carries the renderings
+asked for, and those are untouched: under every strategy the entry still names
+its card, and its prerendered HTML still draws the card's links, as a card's
+prerendered formats do under a narrowed read. What narrows is the card itself —
+its relationships and the closure behind them. A sparse row asking for a link
+field is narrowed with the rest: under `none` it is not told what that field
+links to.
+
+A search a render runs is the exception. It keeps each row's stored links
+whatever the query declares, and never assembles a closure under any strategy:
+the render resolves the cards those links name itself, and it keeps those cards
+for the rest of the indexing pass, so a row served without them would draw its
+link fields empty in every later render that shows it — HTML that is then served
+to every viewer. Since prerendered HTML draws a card's links under every
+strategy, keeping them in the render withholds nothing a caller would otherwise
+receive.
+
+The request's own narrowing composes with it the way it does with a read: a
+search the realm-server is shedding load on, or one whose caller asked for links
+only, is served `ids` from a `full` query, and nothing a request asks for widens
+what a query declares. The declaration is applied on a realm's own `_search` and
+on `_federated-search` alike, since the server re-lowers a named query from its
+own definition wherever it is served.
+
+`ids` is the narrowing to reach for here too. The host keeps the cards a search
+answers with as the live instances it renders and edits, so a row served under
+`none` becomes a live card with empty link fields — wherever that card is next
+shown or edited in the host, including where its own `read` would carry its
+links, until it is next reloaded. Under `ids` the host resolves each named link
+itself, as it does for an `ids` read.
+
+#### Where it is refused
+
+`links` is a `read` and `query` key: it narrows the closure a read of the card
+or a query's results assemble, and no other base assembles one. A write answers
+without assembling the card's closure, and a `readSource` serves stored bytes. A
+`links` on any other base is refused where it is written, and a stored
+definition carrying one records a `links-without-assembly` issue; a value that
+is not one of the three records `invalid-link-strategy`.
 
 ### `optimistic`
 
@@ -579,6 +633,10 @@ Filters name types with the classes themselves. A filter that reads a **linked**
 card's field needs the link that reaches it declared searchable — `@field
 attending = linksTo(Clinician, { searchable: true })` — otherwise the read is
 `unsearchable-read`.
+
+A query may also declare how much of each row's link graph its results carry,
+with the same `links` a read declares — see
+[`links`](#links--how-much-of-the-link-graph-a-read-or-a-query-carries).
 
 Calling it answers the live entries resource a search runs as — `{ entries,
 isLoading, meta }` — and `.query()` answers the wire query behind it, which is

@@ -15,6 +15,7 @@
     "host": ["Integration | realm policy"],
     "realmServer": [
       "catalog-test-subset-test",
+      "realm-policy-activation-test",
       "realm-policy-capabilities-test",
       "realm-policy-card-write-test",
       "realm-policy-compile-test",
@@ -23,6 +24,7 @@
       "realm-policy-gate-test",
       "realm-policy-non-grantable-test",
       "realm-policy-query-filter-test",
+      "realm-policy-query-reach-test",
       "realm-policy-row-reach-test",
       "realm-policy-source-read-test",
       "realm-policy-write-lock-test",
