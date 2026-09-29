@@ -99,7 +99,7 @@ function policyOf(rules: Rule[], adoptsFrom: object = REALM_POLICY) {
 }
 
 const GRANTS: Grant[] = [
-  { operation: 'read', where: '.teacherIds | contains(actor())' },
+  { operation: 'read', where: '.teacherIds | any(. == actor())' },
   {
     operation: 'appendActivity',
     where: { bxl: 'actor() in .teacherIds', snapshot: true },
@@ -286,8 +286,8 @@ module(basename(import.meta.filename), function (hooks) {
               operation: 'read',
               path: 'rules[0].grants[0]',
               where: {
-                source: '.teacherIds | contains(actor())',
-                canonical: '.teacherIds | contains(actor())',
+                source: '.teacherIds | any(. == actor())',
+                canonical: '.teacherIds | any(. == actor())',
                 snapshot: false,
               },
             },
@@ -410,7 +410,7 @@ module(basename(import.meta.filename), function (hooks) {
       org,
       'policies/education.json',
       policyCard([
-        { operation: 'read', where: '.teacherIds | contains(actor())' },
+        { operation: 'read', where: '.teacherIds | any(. == actor())' },
         { operation: 'update', where: 'params("teacher") == actor()' },
         { operation: 'delete', where: '.teacherIds ==' },
         { operation: 'transform', where: '   ' },
@@ -445,6 +445,94 @@ module(basename(import.meta.filename), function (hooks) {
     assert.true(
       String(emptyIssue).includes('`where` is empty'),
       `an empty predicate is refused rather than read as no condition: ${emptyIssue}`,
+    );
+  });
+
+  // Each refused predicate calls one builtin that can hold for a value it
+  // matches only in part. Each admitted one beside it comes close, and
+  // compares exactly or anchors its match at a fixed string.
+  test('a predicate that matches a value only in part is refused, whichever builtin it uses, and one that compares exactly compiles', async function (assert) {
+    let refused: [string, string][] = [
+      ['.teacherIds | contains([actor()])', 'contains'],
+      ['.status | inside("approved or pending")', 'inside'],
+      ['.teacherIds | any(index(actor()) != null)', 'index'],
+      ['.status | rindex("pro") != null', 'rindex'],
+      ['.status | indices("pro") | length > 0', 'indices'],
+      ['ISNUMBER(FIND("appro", .status))', 'FIND'],
+      ['ISNUMBER(SEARCH(actor(), .status))', 'SEARCH'],
+      // Anchored, and refused all the same: the rule is the builtin's.
+      ['.status | test("^approved$")', 'test'],
+      ['(.status | match("appro")) != null', 'match'],
+      ['(.status | capture("(?<s>appro)")) != null', 'capture'],
+      ['[.status | scan("appro")] | length > 0', 'scan'],
+      ['.status like "appro%"', 'like'],
+      ['ISNUMBER(MATCH(actor(), .teacherIds))', 'MATCH'],
+      ['LOOKUP(actor(), .teacherIds) == actor()', 'LOOKUP'],
+      ['VLOOKUP(actor(), .teacherIds, 1) == actor()', 'VLOOKUP'],
+      ['HLOOKUP(actor(), .teacherIds, 1) == actor()', 'HLOOKUP'],
+      ['XLOOKUP(actor(), .teacherIds, .teacherIds) == actor()', 'XLOOKUP'],
+      ['LOOKUP_BY(.teacherIds, "id", actor(), "id") == actor()', 'LOOKUP_BY'],
+      ['VLOOKUP_BY(.teacherIds, "id", actor(), "id") == actor()', 'VLOOKUP_BY'],
+      // The validators, which load lazily.
+      ['matches(.status, actor())', 'matches'],
+      ['isIn(actor(), .status)', 'isIn'],
+      ['.teacherIds | bsearch(actor()) >= 0', 'bsearch'],
+      // Anchored at a value the author did not write.
+      ['.teacherIds | any(startswith(actor()))', 'startswith'],
+      ['actor() | endswith(.status)', 'endswith'],
+      ['(.status | ltrimstr(actor())) != .status', 'ltrimstr'],
+      // jq's internal helpers, which the builtins above are built on.
+      ['.teacherIds | any(_strindices(actor()) | length > 0)', '_strindices'],
+      ['.teacherIds | any(_match_impl(actor(); null; true))', '_match_impl'],
+      // Refused wherever it appears, and not only where it reads the caller.
+      ['.status == "approved" and (.teacherIds | any(test("^@")))', 'test'],
+    ];
+    // Anchored at a fixed string, the way a namespace is written.
+    let admitted = [
+      '.teacherIds | any(. == actor())',
+      '.status | startswith("appro")',
+      'actor() | endswith(":localhost")',
+      '(.status | ltrimstr("un")) == "approved"',
+      '.status | split(",") | any(. == "approved")',
+      '(.status | ascii_downcase) == "approved"',
+      'EXACT(.status, "approved")',
+      // Excel's `INDEX` reads a position; jq's `index` finds a substring.
+      'INDEX(.teacherIds, 1) == actor()',
+    ];
+    await writeTo(
+      org,
+      'policies/education.json',
+      policyCard(
+        [...refused.map(([where]) => where), ...admitted].map((where) => ({
+          operation: 'read',
+          where,
+        })),
+      ),
+    );
+    let policy = await compiled();
+    assert.deepEqual(
+      policy?.issues.map(({ code, path }) => ({ code, path })),
+      refused.map((_, index) => ({
+        code: 'partial-match',
+        path: `rules[0].grants[${index}].where`,
+      })),
+      'each refused predicate is recorded against its grant, and nothing else is',
+    );
+    for (let [index, [where, builtin]] of refused.entries()) {
+      let message = String(policy?.issues[index]?.message);
+      assert.true(
+        message.includes(`\`${builtin}\``),
+        `${where}: the issue names \`${builtin}\`: ${message}`,
+      );
+      assert.true(
+        message.includes('.list | any(. == actor())'),
+        `${where}: and the exact spelling`,
+      );
+    }
+    assert.deepEqual(
+      policy?.rules[0]?.grants.map((grant) => grant.where?.source),
+      admitted,
+      'every predicate that compares exactly compiles',
     );
   });
 

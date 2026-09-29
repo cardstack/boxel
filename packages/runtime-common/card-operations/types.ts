@@ -405,6 +405,12 @@ export type PolicyIssueCode =
   | 'grants-authorization-infrastructure'
   // A `where` that does not parse, or that the `policy` profile refuses.
   | 'invalid-predicate'
+  // A `where` that calls a builtin which can hold for a value it matches only
+  // in part: `contains`, a regex, a wildcard pattern, a lookup that settles
+  // for the nearest value, or `startswith` and its kin anchored at anything
+  // but a fixed string. `contains` holds for a caller whose id is only part of
+  // a listed one, so such a grant would admit callers it does not name.
+  | 'partial-match'
   // A grant on a query whose `where` does not compile to a search filter. The
   // grant is kept, and admits no search.
   | 'policy-not-filterable'

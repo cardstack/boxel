@@ -280,9 +280,6 @@ module(basename(import.meta.filename), function () {
     for (let where of [
       '.teacherIds | any(. == actor())',
       '.teacherIds | any(actor() == .)',
-      // BXL's `contains` matches substrings, so its filter, which matches the
-      // whole value, is narrower than the predicate.
-      '.teacherIds | contains([actor()])',
     ]) {
       let { filter, issues } = await filterFor(where);
       assert.deepEqual(issues, [], where);
@@ -296,18 +293,10 @@ module(basename(import.meta.filename), function () {
 
   test('membership in a list of links compiles to an `eq` on the ids of the cards they link to', async function (assert) {
     let person = `${EDUCATION}people/1`;
-    for (let where of [
-      `.teachers | any(.id == "${person}")`,
-      `.teachers | contains([{id: "${person}"}])`,
-    ]) {
-      let { filter, issues } = await filterFor(where);
-      assert.deepEqual(issues, [], where);
-      assert.deepEqual(
-        filter,
-        { ...ANCHOR, eq: { 'item.teachers.id': person } },
-        where,
-      );
-    }
+    let where = `.teachers | any(.id == "${person}")`;
+    let { filter, issues } = await filterFor(where);
+    assert.deepEqual(issues, [], where);
+    assert.deepEqual(filter, { ...ANCHOR, eq: { 'item.teachers.id': person } });
   });
 
   test('a link compiles to an `eq` on the id of the card it links to', async function (assert) {
@@ -501,8 +490,6 @@ module(basename(import.meta.filename), function () {
       // `==` on a list compares the whole list, while a filter's `eq` on a
       // list matches any one element.
       ['.teacherIds == actor()', /compares a whole list/],
-      // BXL's `contains` with a string on a list holds for no list at all.
-      ['.teacherIds | contains(actor())', /predicate. profile refuses/],
       // Membership inside a `not`, which the index answers element by element.
       ['.teacherIds | any(. == actor()) | not', /inside a `not`/],
       // An id inside a `not`, which the index can spell differently.
@@ -578,6 +565,26 @@ module(basename(import.meta.filename), function () {
       );
     assert.true(evaluate(204));
     assert.false(evaluate(104));
+  });
+
+  // A grant that is only not filterable is kept, and judges one card at a
+  // time. One that matches a value only in part would judge that card wrongly
+  // too, so it is left out.
+  test('a query grant whose predicate matches a value only in part compiles no grant at all, so it neither scopes a search nor judges a card', async function (assert) {
+    for (let where of [
+      '.teacherIds | contains([actor()])',
+      '.teacherIds | any(test(actor()))',
+      '.teacherIds | any(startswith(actor()))',
+      '.teacherIds | any(_strindices(actor()) | length > 0)',
+    ]) {
+      let { grant, issues } = await filterFor(where);
+      assert.deepEqual(
+        issues,
+        [{ code: 'partial-match', path: 'rules[0].grants[0].where' }],
+        where,
+      );
+      assert.strictEqual(grant, undefined, `${where}: no grant compiles`);
+    }
   });
 
   test("a filter reading a contained value is recompiled when the contained type's realm moves", async function (assert) {
