@@ -10,7 +10,10 @@ import type {
   SearchEntryWireQuery,
 } from '../search-entry.ts';
 import type { OperationDiagnostics } from './telemetry.ts';
-import type { BaseOperationName } from '@cardstack/base/operations';
+import type {
+  BaseOperationName,
+  LinkStrategy,
+} from '@cardstack/base/operations';
 
 // ============================================================================
 // The lowered form of a card's `@operation` declarations.
@@ -91,6 +94,74 @@ export type OperationQueryFilterTemplate = Omit<
   matches?: string | OperationTemplate;
 };
 
+// How far each link strategy reaches, widest first.
+//
+// Written as a total map over the union rather than as a list, so a strategy
+// added to `LinkStrategy` without a reach is a type error here rather than a
+// value that compares as widest. It lives in runtime-common rather than beside
+// the union it keys, because a realm module may only take types from
+// `@cardstack/base` — a value import from there breaks the host build.
+const LINK_STRATEGY_REACH: Record<LinkStrategy, number> = {
+  full: 0,
+  ids: 1,
+  none: 2,
+};
+
+export function isLinkStrategy(value: unknown): value is LinkStrategy {
+  return (
+    typeof value === 'string' &&
+    Object.prototype.hasOwnProperty.call(LINK_STRATEGY_REACH, value)
+  );
+}
+
+// What a stored definition's `links` means. Absent is `full`, the whole
+// closure, which is the default for every read.
+//
+// Anything else is JSON the realm reads back, so it is only as good as what
+// wrote it. Lowering records an unrecognized value rather than storing one,
+// which leaves the last branch unreachable through the path definitions
+// actually take — and reads as the narrowest strategy if something ever gets
+// around it, because a narrowing the realm cannot interpret is not a reason to
+// serve more.
+export function linkStrategyOf(value: unknown): LinkStrategy {
+  if (value === undefined) {
+    return 'full';
+  }
+  return isLinkStrategy(value) ? value : 'none';
+}
+
+// Whichever of the two withholds more.
+function narrowerLinkStrategy(a: LinkStrategy, b: LinkStrategy): LinkStrategy {
+  return LINK_STRATEGY_REACH[a] >= LINK_STRATEGY_REACH[b] ? a : b;
+}
+
+// How much of the card's link graph a read carries, from the two places that
+// may narrow it. The one function both the read executor and the card+json
+// validator built ahead of it call, so the body and the validator that
+// describes it cannot disagree about the shape.
+//
+// The operation declares one, and it is the author's statement about what this
+// card's representation is allowed to reach — uniform across callers, because
+// the serving path never asks how a caller was authorized.
+//
+// The request carries the other. `resolveLinksOnly` is how the realm sheds
+// load, or how a consumer says it will resolve the links it displays itself;
+// either way it asks for less than the whole closure.
+//
+// Both only ever narrow, so the answer is whichever of them narrows further.
+// Composing them any other way would let one widen the other: a request that
+// asked for the full closure would defeat a declaration written to withhold
+// it, and the declaration is the half a policy author reasons about.
+export function effectiveLinkStrategy(
+  declared: unknown,
+  resolveLinksOnly: boolean | undefined,
+): LinkStrategy {
+  return narrowerLinkStrategy(
+    linkStrategyOf(declared),
+    resolveLinksOnly ? 'ids' : 'full',
+  );
+}
+
 export interface OperationDefinition {
   // The built-in behavior that carries this operation out. The name the
   // operation is invoked under is the key it is stored under, and the two are
@@ -131,6 +202,21 @@ export interface OperationDefinition {
   // A saved search, as an entry-wire query whose value slots may still hold
   // markers.
   query?: OperationQueryTemplate;
+  // How much of the target's link graph this read carries: the whole assembled
+  // closure, the relationships naming their targets with nothing assembled, or
+  // no relationship data at all. Absent is `full`.
+  //
+  // It applies to every caller alike. The serving path never asks how a caller
+  // was authorized, so a realm writer and a caller reached by a policy grant
+  // receive the same document from the same request — which is what keeps a
+  // response's shape independent of the authorization behind it.
+  //
+  // What it narrows is assembly. A computed value deriving from a card the
+  // caller could not fetch on its own still carries its value under every
+  // strategy: the value is computed when the card is indexed, under the realm's
+  // own authority, and sits in the card's own attributes rather than in the
+  // link closure.
+  links?: LinkStrategy;
   // The author's override of the client's optimistic eligibility.
   optimistic?: boolean;
   // Whether every program this operation runs yields the same result for the
@@ -217,6 +303,14 @@ export type OperationLoweringIssueCode =
   // user id and no card represents a user, so the link would name a card that
   // does not exist.
   | 'actor-not-a-card'
+  // A `links` strategy on a base other than `read`. The strategy narrows the
+  // document a read of the target serves, and no other base serves one: a write
+  // answers without assembling the card's closure, a `readSource` serves stored
+  // bytes, and a `query` answers through search, whose results carry their own
+  // closures that this declaration does not govern.
+  | 'links-without-assembly'
+  // A `links` value that is not one of the strategies a read can apply.
+  | 'invalid-link-strategy'
   // A raw BXL program that does not parse.
   | 'invalid-program'
   // A declared query the realm's own query grammar refuses.
@@ -417,6 +511,12 @@ export interface OperationDocumentResult {
   // unprojected document, so a caller emitting HTTP headers has to keep it out
   // of every shared cache and out of the conditional fast path.
   projected: boolean;
+  // The link strategy this read actually applied — the narrower of what the
+  // operation declares and what the request asked for. Reported rather than
+  // recomputed by a caller, because a validator has to describe the body it is
+  // sent with: two strategies serve different representations of the same card
+  // at the same `indexed_at`, so a caller building one folds this in.
+  links: LinkStrategy;
   // What the index row this document was assembled from says about itself, in
   // the shape a headers-only read answers with. A caller computing HTTP
   // response headers needs both halves out of one read: a validator has to
@@ -465,6 +565,11 @@ export interface OperationHeadResult extends OperationRowHeaders {
   // because a `HEAD` states the headers the `GET` would send and those differ
   // for a projected body — see `projected` on the document result.
   projected: boolean;
+  // The link strategy the full read of this target would apply. Reported by
+  // the headers mode although it assembles nothing, for the same reason
+  // `projected` is: a `HEAD` states the headers a `GET` would send, and the
+  // validator among them names the shape the body would take.
+  links: LinkStrategy;
 }
 
 // The stored bytes of a resource, and what the byte-serve headers are computed

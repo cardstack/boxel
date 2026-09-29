@@ -121,16 +121,6 @@ export async function removeRealmDatabaseArtifacts(args: {
     param(realmURL),
   ]);
   await q([`DELETE FROM prerendered_html WHERE realm_url =`, param(realmURL)]);
-  // No pass writes the shared working tables, but they can still hold a
-  // realm's rows from a release that staged there.
-  await q([
-    `DELETE FROM boxel_index_working WHERE realm_url =`,
-    param(realmURL),
-  ]);
-  await q([
-    `DELETE FROM prerendered_html_working WHERE realm_url =`,
-    param(realmURL),
-  ]);
   // A deleted realm never reindexes, so its interned stylesheets would
   // otherwise never be swept.
   await q([`DELETE FROM scoped_css WHERE realm_url =`, param(realmURL)]);

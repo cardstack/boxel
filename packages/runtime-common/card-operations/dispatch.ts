@@ -26,6 +26,7 @@ import {
   DEFINITION_FREE_BASE_OPERATIONS,
   OperationFailure,
   isDocumentResult,
+  linkStrategyOf,
   isOperationFailure,
   isHeadResult,
   type BaseOperation,
@@ -35,6 +36,7 @@ import {
   type OperationSourceBody,
   type OperationTarget,
 } from './types.ts';
+import type { LinkStrategy } from '@cardstack/base/operations';
 import type { CodeRef, ResolvedCodeRef } from '../code-ref.ts';
 import type { Definition } from '../definitions.ts';
 import type { JsonValue } from '../json-validation.ts';
@@ -852,8 +854,8 @@ async function resolveUngated(
   };
 }
 
-// Whether a `read` of this target may be answered without running it, asked
-// before anything is read.
+// What a `read` of this target would answer with, and whether it may be
+// answered without running it — both asked before anything is read.
 //
 // The card+json `GET` has to know this before it answers, because a projected
 // body is not the representation its validator describes: the ETag is built
@@ -887,35 +889,50 @@ async function resolveUngated(
 // the `output` stage decides that.
 export type ReadShape = 'plain' | 'staged' | 'unresolved';
 
-export async function readShape(
+// What a `read` of this target would answer with, settled from its definition
+// alone. Both members are facts about the type rather than about the request,
+// which is what lets one answer be remembered across requests.
+export interface ReadPlan {
+  shape: ReadShape;
+  // The link strategy the type's `read` declares, `full` where it declares
+  // none. The same hazard `shape` exists for applies to it: an ETag is built
+  // from the index row, and a row says nothing about how much of the link
+  // graph a type's declaration carries — so a caller building a validator
+  // ahead of the assembly folds this in, or a card whose type narrows its
+  // strategy keeps the validator it had and a conditional request is answered
+  // 304 with the wider body still in the client's cache.
+  links: LinkStrategy;
+}
+
+export async function readPlan(
   core: OperationCore,
   url: URL,
   scope: OperationScope = newOperationScope(core),
   // Answers already reached, held by the caller across requests. The
   // definition lookup behind this is a database read, and it lands on the two
   // paths that exist to answer without one — so a caller that can say when the
-  // answer may have changed should hand one in. See `#readShapeByURL`.
-  memo?: Map<string, ReadShape>,
-): Promise<ReadShape> {
+  // answer may have changed should hand one in. See `#readPlanByURL`.
+  memo?: Map<string, ReadPlan>,
+): Promise<ReadPlan> {
   let remembered = memo?.get(url.href);
   if (remembered) {
     return remembered;
   }
-  let shape = await resolveReadShape(core, url, scope);
+  let plan = await resolveReadPlan(core, url, scope);
   // An unresolved read is not remembered: it is a declaration with findings
   // against it, which the author is presumably mid-way through fixing, and
   // the answer costs the same to reach again.
-  if (shape !== 'unresolved') {
-    memo?.set(url.href, shape);
+  if (plan.shape !== 'unresolved') {
+    memo?.set(url.href, plan);
   }
-  return shape;
+  return plan;
 }
 
-async function resolveReadShape(
+async function resolveReadPlan(
   core: OperationCore,
   url: URL,
   scope: OperationScope,
-): Promise<ReadShape> {
+): Promise<ReadPlan> {
   let definition: OperationDefinition;
   try {
     definition = await resolveOperation(
@@ -928,7 +945,7 @@ async function resolveReadShape(
       // fast paths this answer opens — the conditional 304 and the shared
       // response cache — are served without that second resolution, so
       // nothing that judges the caller runs on them. The cross-request memo in
-      // `readShape` is keyed by URL alone, which is sound only while this
+      // `readPlan` is keyed by URL alone, which is sound only while this
       // question stays caller-less. For the same reason the policy gate never
       // runs here, and a caller the realm ACL declined is kept off both fast
       // paths by the handler.
@@ -938,9 +955,18 @@ async function resolveReadShape(
       }),
     );
   } catch {
-    return 'unresolved';
+    // Nothing is known about the read, including how much of the link graph it
+    // would carry, so the widest strategy is reported — which is the one that
+    // keeps the caller off every fast path it could take with a narrower
+    // answer. The refusal this read has coming is what the request gets.
+    return { shape: 'unresolved', links: 'full' };
   }
-  return hasTransforms(definition) ? 'staged' : 'plain';
+  return {
+    shape: hasTransforms(definition) ? 'staged' : 'plain',
+    // Read the same way the executor reads it, so the validator this answer
+    // is folded into names the shape the body will actually take.
+    links: linkStrategyOf(definition.links),
+  };
 }
 
 export async function runOperation(

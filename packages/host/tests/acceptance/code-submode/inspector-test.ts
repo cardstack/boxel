@@ -2523,7 +2523,6 @@ export class ExportedCard extends ExportedCardParent {
       deferred.fulfill();
     });
 
-    await percySnapshot(assert);
     await click('[data-test-create-card-instance]');
     await waitFor('[data-test-create-file-modal]', { count: 0 });
     await deferred.promise;
