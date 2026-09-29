@@ -703,8 +703,6 @@ async function handleArchiveToggle(
   );
 }
 
-// The user a request's realm-server token names. The mock issues its tokens
-// unsigned, so there is nothing to verify, only a claim to read.
 // Whether the test user reads a realm outright. A realm this mock holds no
 // permissions for is one it does not manage (base, skills, catalog), and is
 // read as it always is.
@@ -713,6 +711,8 @@ function callerReads(state: RealmServerMockState, realmURL: string): boolean {
   return permissions === undefined || permissions.includes('read');
 }
 
+// The user a request's realm-server token names. The mock issues its tokens
+// unsigned, so there is nothing to verify, only a claim to read.
 function authenticatedUser(req: Request): string | undefined {
   let authorization = req.headers.get('Authorization');
   if (!authorization) {

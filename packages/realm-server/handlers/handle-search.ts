@@ -512,6 +512,12 @@ export default function handleSearch(opts: {
     if (parsed.scope && parsed.scope !== 'all') {
       cacheKeyOpts.scope = parsed.scope;
     }
+    // The mark is part of the body, and it is the one part a declared query
+    // and the ad-hoc query it resolves to do not share, so it keys the cache
+    // too. Folded only when some realm carries it, like the policy scope.
+    if (scopedRealms.length > 0) {
+      cacheKeyOpts.policyScopedRealms = scopedRealms;
+    }
     // What each realm the caller does not read contributed: the grant filters
     // composed into its query, or that it contributed no rows, or that its
     // policy could not be judged. The realms a caller reads and the ones their
@@ -521,12 +527,6 @@ export default function handleSearch(opts: {
     // does. Folded only when some realm is one the caller does not read, so
     // a search of realms the caller reads keys the way it would with no
     // policy anywhere.
-    // The mark is part of the body, and it is the one part a declared query
-    // and the ad-hoc query it resolves to do not share, so it keys the cache
-    // too. Folded only when some realm carries it, like the policy scope.
-    if (scopedRealms.length > 0) {
-      cacheKeyOpts.policyScopedRealms = scopedRealms;
-    }
     if (unread.length > 0) {
       cacheKeyOpts.policyScope = Object.fromEntries(
         [...new Set(unread)]
