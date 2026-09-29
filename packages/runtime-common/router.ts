@@ -421,6 +421,13 @@ export class Router {
     try {
       return await route.handler(request, requestContext);
     } catch (err) {
+      // The archived seal is answered at the realm's request boundary, with
+      // the marker a client reads it by, wherever in a request it is raised.
+      // A handler raises it where the realm would run what a caller its
+      // policy admitted asked for.
+      if (err instanceof ArchivedRealmError) {
+        throw err;
+      }
       if (err instanceof CardError) {
         // Without this line a thrown CardError is indistinguishable in the
         // request log from a handler that returned the same status
