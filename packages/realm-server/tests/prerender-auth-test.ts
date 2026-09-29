@@ -60,11 +60,36 @@ module(basename(import.meta.filename), function () {
     );
   });
 
-  test('a prefix-form realm id with no way to resolve it fails with a clear error', function (assert) {
-    let createPrerenderAuth = buildCreatePrerenderAuth(secretSeed);
-    assert.throws(
-      () => createPrerenderAuth(userId, { '@cardstack/base/': ['read'] }),
-      /Cannot determine the realm server URL for realm @cardstack\/base\//,
+  test('a realm whose URL cannot be determined gets no token, and the others still do', function (assert) {
+    let virtualNetwork = new VirtualNetwork();
+    virtualNetwork.addRealmMapping(
+      '@cardstack/base/',
+      'http://localhost:4201/base/',
     );
+    let createPrerenderAuth = buildCreatePrerenderAuth(
+      secretSeed,
+      undefined,
+      (realm) => virtualNetwork.toURL(realm),
+    );
+    let auth = createPrerenderAuth(userId, {
+      '@cardstack/base/': ['read'],
+      '@cardstack/catalog/': ['read'],
+    });
+    let sessions = JSON.parse(auth) as Record<string, string>;
+    assert.deepEqual(Object.keys(sessions), ['@cardstack/base/']);
+    assert.strictEqual(
+      claimsFor(auth, '@cardstack/base/').realmServerURL,
+      'http://localhost:4201/',
+    );
+  });
+
+  test('a prefix-form realm id with no resolver gets no token', function (assert) {
+    let createPrerenderAuth = buildCreatePrerenderAuth(secretSeed);
+    let auth = createPrerenderAuth(userId, {
+      '@cardstack/base/': ['read'],
+      'http://localhost:4202/test/': ['read'],
+    });
+    let sessions = JSON.parse(auth) as Record<string, string>;
+    assert.deepEqual(Object.keys(sessions), ['http://localhost:4202/test/']);
   });
 });
