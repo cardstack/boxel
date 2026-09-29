@@ -372,8 +372,12 @@ function typeKey(ref: CodeRef) {
 }
 
 // A policy of `rules`, over types keyed as `module/name`. It counts how often
-// it is loaded.
-function policyStub(rules: { targetType: CodeRef; grants: string[] }[]) {
+// it is loaded. `policyCard` is the card the realm's key names, and a chain
+// holding `REALM_POLICY` is a policy card's.
+function policyStub(
+  rules: { targetType: CodeRef; grants: string[] }[],
+  { policyCard }: { policyCard?: string } = {},
+) {
   let loads = { count: 0 };
   let access: NonNullable<OperationCore['policy']> = {
     async compiledPolicy() {
@@ -393,8 +397,9 @@ function policyStub(rules: { targetType: CodeRef; grants: string[] }[]) {
     },
     resolvedLink: (selfLink) => selfLink,
     async policyCard() {
-      return undefined;
+      return policyCard;
     },
+    isPolicyCard: (types) => types.includes(typeKey(REALM_POLICY)),
   };
   return { access, loads };
 }
@@ -402,6 +407,11 @@ function policyStub(rules: { targetType: CodeRef; grants: string[] }[]) {
 const CARD_DEF: CodeRef = {
   module: 'https://cardstack.com/base/card-api',
   name: 'CardDef',
+} as CodeRef;
+
+const REALM_POLICY: CodeRef = {
+  module: '@cardstack/catalog/realm-policy/realm-policy',
+  name: 'RealmPolicy',
 } as CodeRef;
 
 const MARKDOWN: CodeRef = {
@@ -1845,6 +1855,172 @@ module(basename(import.meta.filename), function () {
         declinedWrites(core),
       );
       assert.strictEqual(decision.kind, 'granted');
+    });
+  });
+
+  // A reader declined only writes, with a policy that grants every write the
+  // cases invoke on `CardDef`. A policy card is one whose chain holds
+  // `REALM_POLICY`, and none of the types these cases declare their writes on
+  // marks any of them non-grantable.
+  module('the policy gate on a policy card', function () {
+    const SCHOOL_POLICY: CodeRef = {
+      module: `${REALM}school-policy`,
+      name: 'SchoolPolicy',
+    } as CodeRef;
+    const MISSING: CodeRef = {
+      module: `${REALM}missing`,
+      name: 'Missing',
+    } as CodeRef;
+    const GRANTED = ['create', 'update', 'setMotto', 'draftPolicy', 'draft'];
+
+    // `rowTypes` is the chain the target's index row records. `operations` is
+    // what every type entry declares, and `MISSING` has no entry at all.
+    function gatedCore({
+      rowTypes = [PERSON, CARD_DEF],
+      policyCard,
+      operations,
+    }: {
+      rowTypes?: CodeRef[];
+      policyCard?: string;
+      operations?: Definition['operations'];
+    } = {}) {
+      let { access } = policyStub([{ targetType: CARD_DEF, grants: GRANTED }], {
+        policyCard,
+      });
+      let { core } = stub({ policy: access, operations });
+      let entry = core.definitionLookup.lookupDefinitionEntry.bind(
+        core.definitionLookup,
+      );
+      core.definitionLookup.lookupDefinitionEntry = async (ref) =>
+        typeKey(ref) === typeKey(MISSING) ? undefined : await entry(ref);
+      let instance = core.indexQueryEngine.instance.bind(core.indexQueryEngine);
+      core.indexQueryEngine.instance = async (url, instanceOpts) => {
+        let row = await instance(url, instanceOpts);
+        return row ? ({ ...row, types: rowTypes.map(typeKey) } as any) : row;
+      };
+      return core;
+    }
+
+    function declinedWrites(core: OperationCore) {
+      return newOperationScope(core, {
+        caller: scopeCallerFor('@reader:localhost'),
+        coarseDeclined: 'writes',
+      });
+    }
+
+    function typeTarget(codeRef: CodeRef): OperationTarget {
+      return { kind: 'type', codeRef, realm: REALM };
+    }
+
+    async function decide(
+      core: OperationCore,
+      target: OperationTarget,
+      name: string,
+    ): Promise<string> {
+      try {
+        let { decision } = await resolveGatedOperation(
+          core,
+          target,
+          name,
+          declinedWrites(core),
+        );
+        return decision.kind;
+      } catch (err) {
+        if (isOperationFailure(err)) {
+          return err.error.code;
+        }
+        throw err;
+      }
+    }
+
+    test('the card the realm’s key names is refused by its identity, whatever its type', async function (assert) {
+      assert.strictEqual(
+        await decide(gatedCore({ policyCard: CARD.url }), CARD, 'update'),
+        'operation-not-permitted',
+        'a key naming the card by its id',
+      );
+      assert.strictEqual(
+        await decide(
+          gatedCore({ policyCard: `${CARD.url}.json` }),
+          CARD,
+          'update',
+        ),
+        'operation-not-permitted',
+        'a key naming the card by its stored source',
+      );
+      assert.strictEqual(
+        await decide(
+          gatedCore({ policyCard: `${REALM}someone-else` }),
+          CARD,
+          'update',
+        ),
+        'granted',
+        'while the same grant admits the write when the key names another card',
+      );
+    });
+
+    test('a card whose chain holds RealmPolicy is refused though no key names it, under any name', async function (assert) {
+      let core = gatedCore({
+        rowTypes: [SCHOOL_POLICY, REALM_POLICY, CARD_DEF],
+        operations: {
+          setMotto: { base: 'transform', deterministic: true },
+        },
+      });
+      assert.strictEqual(
+        await decide(core, CARD, 'update'),
+        'operation-not-permitted',
+        'a built-in write',
+      );
+      assert.strictEqual(
+        await decide(core, CARD, 'setMotto'),
+        'operation-not-permitted',
+        'a named write the type declares for itself',
+      );
+    });
+
+    test('a create is judged by the type it mints', async function (assert) {
+      let core = gatedCore({
+        operations: {
+          draftPolicy: {
+            base: 'create',
+            of: REALM_POLICY,
+            deterministic: true,
+          },
+          draft: { base: 'create', of: PERSON, deterministic: true },
+        },
+      });
+      assert.strictEqual(
+        await decide(core, typeTarget(REALM_POLICY), 'create'),
+        'operation-not-permitted',
+        'a plain create of a policy type',
+      );
+      assert.strictEqual(
+        await decide(core, typeTarget(PERSON), 'draftPolicy'),
+        'operation-not-permitted',
+        'a named create declared on an ordinary type that mints a policy card',
+      );
+      assert.strictEqual(
+        await decide(core, typeTarget(REALM_POLICY), 'draft'),
+        'granted',
+        'a named create declared on a policy type that mints an ordinary card',
+      );
+      assert.strictEqual(
+        await decide(core, typeTarget(PERSON), 'create'),
+        'granted',
+        'a plain create of an ordinary type',
+      );
+    });
+
+    test('a named create whose minted type cannot be read is refused', async function (assert) {
+      let core = gatedCore({
+        operations: {
+          draft: { base: 'create', of: MISSING, deterministic: true },
+        },
+      });
+      assert.strictEqual(
+        await decide(core, typeTarget(PERSON), 'draft'),
+        'operation-not-permitted',
+      );
     });
   });
 });
