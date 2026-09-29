@@ -1211,6 +1211,89 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       });
     });
 
+    module('the query', function () {
+      // Every statement issued against the index while `fn` runs, with its
+      // bindings.
+      async function indexQueriesDuring(fn: () => Promise<unknown>) {
+        let statements: { sql: string; bind: unknown }[] = [];
+        let execute = db.execute;
+        db.execute = function (this: PgAdapter, ...args) {
+          statements.push({ sql: args[0], bind: args[1]?.bind });
+          return execute.apply(this, args);
+        };
+        try {
+          await fn();
+        } finally {
+          db.execute = execute;
+        }
+        return indexReads(statements);
+      }
+
+      test('a realm contributing no fragment runs the query a direct search of it runs', async function (assert) {
+        // A caller the realm reads outright, asking a question no other test
+        // asks, so the answer is computed here rather than served from an
+        // earlier test's cache entry.
+        let body = {
+          operation: 'listAll',
+          on: SCHEDULE,
+          realms: [COARSE],
+          page: { number: 0, size: 4 },
+        };
+        let served = await indexQueriesDuring(() =>
+          federatedSearch(body, PROVIDER_A),
+        );
+        assert.true(served.length > 0, 'the search read the index');
+
+        // The same search run straight through the realm, with no policy in
+        // the path: the declaration resolved, the server's page bound applied,
+        // and nothing else.
+        let { query: resolved } = await resolveNamedQuery(
+          realms[COARSE].operationCore,
+          body,
+          { actor: PROVIDER_A, realms: [COARSE] },
+        );
+        let query = parseSearchEntryQueryFromPayload(resolved);
+        query.itemQuery = applyServerSearchPageBound(query.itemQuery);
+        let direct = await indexQueriesDuring(() =>
+          realms[COARSE].searchEntries(query),
+        );
+
+        assert.deepEqual(
+          served,
+          direct,
+          'the same statements, byte for byte, with the same bindings',
+        );
+      });
+
+      test('a policy-scoped search reads the index as many times as an unscoped one', async function (assert) {
+        // The grant is composed into the query rather than checked row by
+        // row, so scoping a search adds no statement to it.
+        let body = {
+          operation: 'listAll',
+          on: SCHEDULE,
+          realms: [GRANTS],
+          page: { number: 0, size: 3 },
+        };
+        let scoped = await indexQueriesDuring(() =>
+          federatedSearch(body, PROVIDER_A),
+        );
+        let unscoped = await indexQueriesDuring(() =>
+          federatedSearch(body, OWNER),
+        );
+
+        assert.true(unscoped.length > 0, 'the unscoped search read the index');
+        assert.strictEqual(
+          scoped.length,
+          unscoped.length,
+          `one query plan either way (${unscoped.length} index read${unscoped.length === 1 ? '' : 's'})`,
+        );
+        assert.true(
+          scoped.some(({ bind }) => JSON.stringify(bind).includes(PROVIDER_A)),
+          "and the scoped one carries the grant's filter, bound to the caller",
+        );
+      });
+    });
+
     module('a realm this process has not mounted', function (hooks) {
       // Each is staged the way a realm nothing on this process has touched
       // since it started is: its files on disk and its row in the registry,
@@ -1337,89 +1420,6 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         assert.true(
           isMounted(UNMOUNTED_ENUMERABLE),
           'the realm was mounted to ask its policy',
-        );
-      });
-    });
-
-    module('the query', function () {
-      // Every statement issued against the index while `fn` runs, with its
-      // bindings.
-      async function indexQueriesDuring(fn: () => Promise<unknown>) {
-        let statements: { sql: string; bind: unknown }[] = [];
-        let execute = db.execute;
-        db.execute = function (this: PgAdapter, ...args) {
-          statements.push({ sql: args[0], bind: args[1]?.bind });
-          return execute.apply(this, args);
-        };
-        try {
-          await fn();
-        } finally {
-          db.execute = execute;
-        }
-        return indexReads(statements);
-      }
-
-      test('a realm contributing no fragment runs the query a direct search of it runs', async function (assert) {
-        // A caller the realm reads outright, asking a question no other test
-        // asks, so the answer is computed here rather than served from an
-        // earlier test's cache entry.
-        let body = {
-          operation: 'listAll',
-          on: SCHEDULE,
-          realms: [COARSE],
-          page: { number: 0, size: 4 },
-        };
-        let served = await indexQueriesDuring(() =>
-          federatedSearch(body, PROVIDER_A),
-        );
-        assert.true(served.length > 0, 'the search read the index');
-
-        // The same search run straight through the realm, with no policy in
-        // the path: the declaration resolved, the server's page bound applied,
-        // and nothing else.
-        let { query: resolved } = await resolveNamedQuery(
-          realms[COARSE].operationCore,
-          body,
-          { actor: PROVIDER_A, realms: [COARSE] },
-        );
-        let query = parseSearchEntryQueryFromPayload(resolved);
-        query.itemQuery = applyServerSearchPageBound(query.itemQuery);
-        let direct = await indexQueriesDuring(() =>
-          realms[COARSE].searchEntries(query),
-        );
-
-        assert.deepEqual(
-          served,
-          direct,
-          'the same statements, byte for byte, with the same bindings',
-        );
-      });
-
-      test('a policy-scoped search reads the index as many times as an unscoped one', async function (assert) {
-        // The grant is composed into the query rather than checked row by
-        // row, so scoping a search adds no statement to it.
-        let body = {
-          operation: 'listAll',
-          on: SCHEDULE,
-          realms: [GRANTS],
-          page: { number: 0, size: 3 },
-        };
-        let scoped = await indexQueriesDuring(() =>
-          federatedSearch(body, PROVIDER_A),
-        );
-        let unscoped = await indexQueriesDuring(() =>
-          federatedSearch(body, OWNER),
-        );
-
-        assert.true(unscoped.length > 0, 'the unscoped search read the index');
-        assert.strictEqual(
-          scoped.length,
-          unscoped.length,
-          `one query plan either way (${unscoped.length} index read${unscoped.length === 1 ? '' : 's'})`,
-        );
-        assert.true(
-          scoped.some(({ bind }) => JSON.stringify(bind).includes(PROVIDER_A)),
-          "and the scoped one carries the grant's filter, bound to the caller",
         );
       });
     });
