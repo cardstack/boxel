@@ -968,7 +968,8 @@ export async function matchingGrants(
   types: string[],
   name: string,
   access: OperationPolicyAccess,
-  trace: GateTrace | undefined,
+  // Where an explain records the rules matched. Absent everywhere else.
+  trace?: GateTrace,
 ): Promise<MatchedGrant[]> {
   let chain = new Set(types);
   let matched: MatchedGrant[] = [];
