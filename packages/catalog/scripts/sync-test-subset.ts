@@ -535,21 +535,28 @@ function bump(manifest: Manifest) {
   return { ...manifest, revision: sha };
 }
 
-// For a commit main does not contain, GitHub lists only the open pull requests
-// that carry it. The lookup only enriches a failure message, so an error
-// answers no pull requests rather than masking that failure.
+interface PullRequest {
+  html_url: string;
+  merged_at: string | null;
+  merge_commit_sha: string | null;
+}
+
+// For a commit main does not contain, GitHub lists the open pull requests that
+// carry it, and the merged one it came from when that pull request was
+// squash-merged (a squash lands a new commit on main, never the head itself).
+// The lookup only enriches a failure message, so an error answers no pull
+// requests rather than masking that failure.
 async function pullRequestsFor(
   manifest: Manifest,
   headers: Record<string, string>,
-): Promise<string[]> {
+): Promise<PullRequest[]> {
   let url = `https://api.github.com/repos/${manifest.repository}/commits/${manifest.revision}/pulls`;
   try {
     let response = await fetch(url, { headers });
     if (!response.ok) {
       return [];
     }
-    let prs = (await response.json()) as { html_url: string }[];
-    return prs.map((pr) => pr.html_url);
+    return (await response.json()) as PullRequest[];
   } catch {
     return [];
   }
@@ -575,10 +582,16 @@ async function checkPin(manifest: Manifest) {
   let { status } = (await response.json()) as { status: string };
   if (status !== 'behind' && status !== 'identical') {
     let prs = await pullRequestsFor(manifest, headers);
+    let merged = prs.find((pr) => pr.merged_at);
     fail(
       `${manifest.revision} is not on ${manifest.repository} main (compare status "${status}"). ` +
-        (prs.length ? `It is in ${prs.join(', ')}. ` : '') +
-        `Merge the catalog change first, then re-pin to a commit on main (pnpm catalog:test-subset --bump).`,
+        (merged
+          ? `It is from ${merged.html_url}, which was merged as ${merged.merge_commit_sha}. ` +
+            `Re-pin to a commit on main (pnpm catalog:test-subset --bump).`
+          : (prs.length
+              ? `It is in ${prs.map((pr) => pr.html_url).join(', ')}. `
+              : '') +
+            `Merge the catalog change first, then re-pin to a commit on main (pnpm catalog:test-subset --bump).`),
     );
   }
   log(`${manifest.revision} is on ${manifest.repository} main`);
