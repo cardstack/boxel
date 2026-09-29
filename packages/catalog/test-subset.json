@@ -22,7 +22,8 @@
       "realm-policy-non-grantable-test",
       "realm-policy-query-filter-test",
       "realm-policy-source-read-test",
-      "realm-policy-write-lock-test"
+      "realm-policy-write-lock-test",
+      "server-endpoints/policy-scoped-search-test"
     ]
   }
 }

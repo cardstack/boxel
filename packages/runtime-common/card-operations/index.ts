@@ -23,6 +23,8 @@ export { checkCapabilities, parseCapabilityChecks } from './capabilities.ts';
 export type { CapabilityCaller } from './capabilities.ts';
 export { CAPABILITY_CHECK_CAP } from './capability-wire.ts';
 export type { CapabilityAnswer, CapabilityCheck } from './capability-wire.ts';
+export { policyQueryScope } from './policy-query.ts';
+export type { PolicyQueryScope } from './policy-query.ts';
 export type {
   GateDecision,
   MatchedGrant,
@@ -168,7 +170,12 @@ export type {
   TransformProgramError,
 } from './transforms.ts';
 export { lowerQueryOperation, lowerQueryTemplate } from './query.ts';
-export { isNamedQueryPayload, resolveNamedQuery } from './named-query.ts';
+export {
+  isNamedQueryPayload,
+  namedQueryInvocation,
+  namedQueryRendering,
+  resolveNamedQuery,
+} from './named-query.ts';
 export type { NamedQueryContext } from './named-query.ts';
 export type {
   QueryDefinition,
