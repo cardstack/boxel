@@ -320,7 +320,9 @@ import {
 } from './card-operations/policy.ts';
 import {
   policyQueryScope,
+  searchPrincipal,
   type PolicyQueryScope,
+  type SearchPrincipal,
 } from './card-operations/policy-query.ts';
 import type {
   BatchCore,
@@ -1794,6 +1796,14 @@ export interface TokenClaims {
   // ['read'] even when the bound user has broader permissions, so request
   // authorization treats it specially (read-only, no exact-permissions match).
   delegated?: boolean;
+  // Set on the sessions a realm renders its own cards and modules under: the
+  // indexer's, the HTML render's, a module's definition render. Such a session
+  // is a realm-authority principal rather than a person. What it produces is
+  // kept in the index and served to every viewer, so it reads what the realm
+  // ACL grants it and nothing more — a policy, which admits a caller by who
+  // is asking, is never asked about it. The `user` beside it is the identity
+  // the session reads as, not someone a grant was written for.
+  realmAuthority?: true;
 }
 
 export interface AdapterWriteResult {
@@ -2090,6 +2100,11 @@ export type RequestContext = {
   // other than the one the request was sent to, and has to know the caller
   // there as someone that realm would itself accept.
   principal?: string;
+  // Set when the request's token is a realm-authority session
+  // (`TokenClaims.realmAuthority`): a realm rendering its own cards, whose
+  // `authenticatedUser` is the identity it reads as rather than someone a
+  // policy grants to. Identity, not authority, like `authenticatedUser`.
+  realmAuthority?: true;
   // A token the public path verified without the checks above, which that
   // path skips because nothing it serves reads them. `#sessionPrincipal`
   // runs them, for a request that turns out to need a principal.
@@ -6453,21 +6468,38 @@ export class Realm {
 
   // What this realm's policy contributes to one search, for a caller its ACL
   // declined outright. Nothing, unless the request named an operation and
-  // authenticated someone: a policy grants by who is asking, and it grants a
+  // authenticated a user: a policy grants by who is asking, and it grants a
   // named query rather than the freedom to write a filter. An ad-hoc search
   // therefore reaches no grant, and a caller the ACL declined is answered with
-  // no rows for one. Nor does a search a render is waiting on, which the
-  // caller passes no invocation for: what a render produces is served to
-  // every viewer, so no one viewer's grants may shape it.
+  // no rows for one.
+  //
+  // Nor does a realm-authority session reach a grant. It is a realm rendering
+  // its own cards, and what the render produces is served to every viewer, so
+  // it reads what the ACL grants it and nothing more: the ACL's refusal is its
+  // answer, and the policy is never asked — as a federated search never asks
+  // one about it either.
   async #policyQueryScope(
     invocation: { operation: string; on: CodeRef } | undefined,
     requestContext: RequestContext,
   ): Promise<PolicyQueryScope> {
-    let actor = requestContext.authenticatedUser;
-    if (!invocation || !actor) {
+    let principal = this.#searchPrincipal(requestContext);
+    if (!invocation || principal?.kind !== 'user') {
       return { kind: 'denied' };
     }
-    return await policyQueryScope(this.operationCore, { ...invocation, actor });
+    return await policyQueryScope(this.operationCore, {
+      ...invocation,
+      principal,
+    });
+  }
+
+  // Who a search runs for, as the request's session says.
+  #searchPrincipal(
+    requestContext: RequestContext,
+  ): SearchPrincipal | undefined {
+    return searchPrincipal(
+      requestContext.authenticatedUser,
+      requestContext.realmAuthority,
+    );
   }
 
   // The same, for one read's operation request.
@@ -9342,6 +9374,9 @@ export class Realm {
             this.#realmSecretSeed,
           );
           requestContext.authenticatedUser = publicToken.user;
+          if (publicToken.realmAuthority) {
+            requestContext.realmAuthority = true;
+          }
           requestContext.unvouchedSession = {
             user: publicToken.user,
             iat: publicToken.iat,
@@ -9369,6 +9404,9 @@ export class Realm {
 
     try {
       token = this.#adapter.verifyJWT(tokenString, this.#realmSecretSeed);
+      if (token.realmAuthority) {
+        requestContext.realmAuthority = true;
+      }
 
       // Checked against the token's bearer before any assume-user indirection,
       // and ahead of the delegated branch below, so revoking a user also kills
@@ -12942,9 +12980,8 @@ export class Realm {
       // whole of the scope it may resolve to.
       try {
         let resolved = await resolveNamedQuery(this.operationCore, payload, {
-          actor: requestContext.authenticatedUser,
+          principal: this.#searchPrincipal(requestContext),
           realms: [this.url],
-          duringRender: isDuringPrerenderRequest(request),
         });
         payload = resolved.query;
         declaredLinks = resolved.links;
@@ -12977,10 +13014,7 @@ export class Realm {
       // nothing are the same answer, as they are for a card they may not read.
       let policyScope =
         this.#coarseDeclined(requestContext) === 'all'
-          ? await this.#policyQueryScope(
-              duringPrerender ? undefined : invocation,
-              requestContext,
-            )
+          ? await this.#policyQueryScope(invocation, requestContext)
           : undefined;
       if (policyScope?.kind === 'denied') {
         return createResponse({

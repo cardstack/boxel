@@ -1,5 +1,6 @@
 import {
   ensureTrailingSlash,
+  type PrerenderAuthOptions,
   type RealmPermissions,
 } from '@cardstack/runtime-common';
 import { createJWT } from '../jwt.ts';
@@ -11,7 +12,11 @@ export function buildCreatePrerenderAuth(
   let normalizedServerURL = realmServerURL
     ? ensureTrailingSlash(realmServerURL)
     : undefined;
-  return (userId: string, permissions: RealmPermissions): string => {
+  return (
+    userId: string,
+    permissions: RealmPermissions,
+    opts?: PrerenderAuthOptions,
+  ): string => {
     let sessions: { [realm: string]: string } = {};
     for (let [realmURL, realmPermissions] of Object.entries(
       permissions ?? {},
@@ -25,6 +30,7 @@ export function buildCreatePrerenderAuth(
           permissions: realmPermissions,
           sessionRoom: '',
           realmServerURL: resolvedRealmServerURL,
+          ...(opts?.realmAuthority ? { realmAuthority: true as const } : {}),
         },
         '1d',
         secretSeed,

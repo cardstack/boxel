@@ -10,8 +10,8 @@ import {
   systemInitiatedPriority,
   type IndexedFile,
   type ModuleRenderResponse,
+  type CreatePrerenderAuth,
   type Realm,
-  type RealmPermissions,
 } from '@cardstack/runtime-common';
 import { ensureRealmOwnerPermissions } from '@cardstack/runtime-common/tasks/indexer';
 import {
@@ -63,10 +63,7 @@ interface ComputeDeps {
   definitionLookup: CreateRoutesArgs['definitionLookup'];
   virtualNetwork: CreateRoutesArgs['virtualNetwork'];
   prerenderer: NonNullable<CreateRoutesArgs['prerenderer']>;
-  createPrerenderAuth: (
-    userId: string,
-    permissions: RealmPermissions,
-  ) => string;
+  createPrerenderAuth: CreatePrerenderAuth;
 }
 
 interface CachedValidation {
@@ -381,10 +378,7 @@ async function validateToolModules({
   realm: Realm;
   dbAdapter: CreateRoutesArgs['dbAdapter'];
   prerenderer: NonNullable<CreateRoutesArgs['prerenderer']>;
-  createPrerenderAuth: (
-    userId: string,
-    permissions: RealmPermissions,
-  ) => string;
+  createPrerenderAuth: CreatePrerenderAuth;
 }): Promise<SkillToolFailure[]> {
   let modules = new Set<string>();
   for (let skill of skills) {
@@ -405,7 +399,7 @@ async function validateToolModules({
     await fetchUserPermissions(dbAdapter, { userId: owner }),
     realm.url,
   );
-  let auth = createPrerenderAuth(owner, permissions);
+  let auth = createPrerenderAuth(owner, permissions, { realmAuthority: true });
 
   // One prerender per unique module; the prerender server's admission
   // control paces concurrent renders, and system priority keeps this

@@ -26,6 +26,22 @@ export * from './screenshot-card.ts';
 
 type LoggerInstance = ReturnType<typeof import('../index.ts').logger>;
 
+export interface PrerenderAuthOptions {
+  // Mints realm-authority sessions (see `TokenClaims.realmAuthority`). Set by
+  // the renders a realm produces its own index, HTML and definitions with, and
+  // by nothing that renders as a person — a command or a capture run as a
+  // user is that user.
+  realmAuthority?: true;
+}
+
+// The session a prerender tab authenticates as, one token per realm
+// `permissions` names, serialized the way the tab reads it.
+export type CreatePrerenderAuth = (
+  userId: string,
+  permissions: RealmPermissions,
+  opts?: PrerenderAuthOptions,
+) => string;
+
 export interface TaskArgs {
   dbAdapter: DBAdapter;
   queuePublisher: QueuePublisher;
@@ -44,7 +60,7 @@ export interface TaskArgs {
   skipPrerenderHtmlRealms?: string[];
   getReader(fetch: typeof global.fetch, realmURL: string): Reader;
   getAuthedFetch(args: WorkerArgs): Promise<typeof globalThis.fetch>;
-  createPrerenderAuth(userId: string, permissions: RealmPermissions): string;
+  createPrerenderAuth: CreatePrerenderAuth;
   reportStatus(jobInfo: JobInfo | undefined, status: 'start' | 'finish'): void;
   reportProgress?(event: IndexingProgressEvent): void;
   // Request that a realm event be broadcast to subscribed hosts. A task runs

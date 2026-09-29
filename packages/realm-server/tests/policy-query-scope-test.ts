@@ -10,8 +10,10 @@ import type {
 } from '@cardstack/runtime-common';
 import {
   policyQueryScope,
+  RealmAuthorityPolicyScopeError,
   type OperationCore,
   type OperationDefinition,
+  type SearchPrincipal,
 } from '@cardstack/runtime-common/card-operations';
 import type { Definition } from '@cardstack/runtime-common/definitions';
 
@@ -90,7 +92,8 @@ const OWN_FILTER = {
 // A grant as a test writes it. Its position in the policy is filled in.
 type Grant = Omit<CompiledOperationGrant, 'path'>;
 
-function stubCore(grants: Grant[]): OperationCore {
+// `reads` counts how many times the compiled policy is read.
+function stubCore(grants: Grant[], reads = { policy: 0 }): OperationCore {
   let policy: CompiledRealmPolicy = {
     card: `${REALM}policies/policy`,
     version: '1',
@@ -122,7 +125,10 @@ function stubCore(grants: Grant[]): OperationCore {
       },
     },
     policy: {
-      compiledPolicy: async () => policy,
+      compiledPolicy: async () => {
+        reads.policy++;
+        return policy;
+      },
       typeKeys: async (ref: ResolvedCodeRef) => [key(ref)],
       resolvedLink: (selfLink: string) => selfLink,
       policyCard: async () => policy.card,
@@ -134,7 +140,7 @@ function scope(operation: string, grants: Grant[]) {
   return policyQueryScope(stubCore(grants), {
     operation,
     on: SCHEDULE,
-    actor: ACTOR,
+    principal: { kind: 'user', user: ACTOR },
   });
 }
 
@@ -148,6 +154,43 @@ module(basename(import.meta.filename), function () {
       result.kind === 'scoped' ? result.filters : undefined,
       [{ on: SCHEDULE, eq: { providerId: ACTOR } }],
       'the filter in the grammar the engine runs, with actor() filled in',
+    );
+  });
+
+  test('a realm-authority principal is refused before the policy is read, whatever the policy grants', async function (assert) {
+    let reads = { policy: 0 };
+    let core = stubCore(
+      [
+        { operation: 'listOpen', filter: OWN_FILTER },
+        { operation: 'listOpen', filter: { 'item.on': SCHEDULE } },
+      ],
+      reads,
+    );
+    let principal: SearchPrincipal = { kind: 'realm-authority', user: ACTOR };
+
+    await assert.rejects(
+      policyQueryScope(core, {
+        operation: 'listOpen',
+        on: SCHEDULE,
+        principal,
+      }),
+      (e: unknown) =>
+        e instanceof RealmAuthorityPolicyScopeError &&
+        e.message.includes(REALM) &&
+        e.message.includes('"listOpen"'),
+      'the lookup raises rather than answering with a scope, naming the realm and the query',
+    );
+    assert.strictEqual(reads.policy, 0, 'and the policy is never read');
+
+    let scoped = await policyQueryScope(core, {
+      operation: 'listOpen',
+      on: SCHEDULE,
+      principal: { kind: 'user', user: ACTOR },
+    });
+    assert.strictEqual(
+      scoped.kind,
+      'scoped',
+      'the same identity as a user is scoped by the grants as usual',
     );
   });
 

@@ -21,6 +21,7 @@ import {
   isNamedQueryPayload,
   isOperationFailure,
   resolveNamedQuery,
+  searchPrincipal,
 } from '@cardstack/runtime-common/card-operations';
 import { makeCardTypeSummaryDoc } from '@cardstack/runtime-common/document-types';
 
@@ -196,13 +197,15 @@ function registerSearchRoutes() {
           );
         }
         try {
+          // Host tests render inside the app, under the test's own session,
+          // so a render here carries no realm-authority session the way a
+          // real one does. A request a render is waiting on stands for one.
           let resolved = await resolveNamedQuery(
             resolvingRealm.operationCore,
             payload,
             {
-              actor: authenticatedUser(req),
+              principal: searchPrincipal(authenticatedUser(req), duringRender),
               realms: realmList,
-              duringRender,
             },
           );
           payload = resolved.query;

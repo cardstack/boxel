@@ -8,6 +8,7 @@ import {
   scopeCallerFor,
   type OperationCore,
 } from './dispatch.ts';
+import type { SearchPrincipal } from './policy-query.ts';
 import { lowerQueryOperation } from './query.ts';
 import { linkStrategyOf, OperationFailure } from './types.ts';
 import type { LinkStrategy } from '@cardstack/base/operations';
@@ -64,21 +65,21 @@ export function namedQueryInvocation(
 }
 
 export interface NamedQueryContext {
-  // The user the realm authenticated for this request, and the only value
+  // Who the realm authenticated for this request. A user is the only value
   // `actor()` resolves to. Absent when the request authenticated nobody, which
   // refuses only a declaration that compares against the caller.
-  actor: string | undefined;
+  //
+  // A realm-authority principal has no actor either. It is a realm rendering
+  // its own cards, and what a render produces is served to every viewer, so a
+  // declaration compared against the identity it reads as would put one
+  // user's rows into shared HTML. It is refused as a request that
+  // authenticated nobody is — the rule the host applies to the same query
+  // before it would send it from a render.
+  principal: SearchPrincipal | undefined;
   // The realms this request may search. On the federated endpoint these are
   // the realms the request named, each already authorized for the caller; on
   // a realm's own endpoint, that realm.
   realms: string[];
-  // Set for a request a render is waiting on. Such a request has no actor: the
-  // app authenticates as itself to render, and what a render produces is
-  // served to every viewer, so a declaration compared against the render's own
-  // identity would put one user's rows into shared HTML. It is refused as a
-  // request that authenticated nobody is — the rule the host applies to the
-  // same query before it would send it.
-  duringRender?: boolean;
 }
 
 // What a named search request resolves to: the ad-hoc query it runs, and how
@@ -139,7 +140,8 @@ export async function resolveNamedQuery(
       `"params" must be an object keyed the way operation "${operation}" declares them`,
     );
   }
-  let actor = context.duringRender ? undefined : context.actor;
+  let actor =
+    context.principal?.kind === 'user' ? context.principal.user : undefined;
   let scope = newOperationScope(core, {
     caller: scopeCallerFor(actor ?? ''),
   });

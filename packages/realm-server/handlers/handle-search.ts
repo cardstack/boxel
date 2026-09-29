@@ -72,7 +72,9 @@ import {
   namedQueryInvocation,
   namedQueryRendering,
   policyQueryScope,
+  RealmAuthorityPolicyScopeError,
   resolveNamedQuery,
+  type SearchPrincipal,
 } from '@cardstack/runtime-common/card-operations';
 import type { LinkStrategy } from '@cardstack/base/operations';
 import {
@@ -127,13 +129,15 @@ export default function handleSearch(opts: {
   let linkShapePolicy = opts.linkShapePolicy ?? LinkShapePolicy.pinned('full');
   let liveSearchCache = opts.liveSearchCache ?? new LiveSearchCache();
   return async function (ctxt: Koa.Context) {
-    let { realmList, grantCandidates, user } = getMultiRealmAuthorization(ctxt);
+    let { realmList, grantCandidates, principal } =
+      getMultiRealmAuthorization(ctxt);
     let payload = getSearchRequestPayload(ctxt);
     // Every realm the request names, in the order it names them, which is the
     // order their rows are merged in. The middleware has already refused a
     // realm the registry does not know, so each of these is one the caller
     // reads, one reached only through its policy, or one nothing is served
-    // from — an archived realm, which contributes no rows to anyone.
+    // from — an archived realm, which contributes no rows to anyone, or one a
+    // realm-authority session cannot read.
     let named = parseRealmsFromPayload(payload);
     // What a policy fragment is looked up by: a query runs under the name it
     // was invoked with, on the type that declares it. An ad-hoc search names
@@ -167,7 +171,7 @@ export default function handleSearch(opts: {
         resolveNamedSearch(ctxt, request, {
           resolvingRealms: [realmList, grantCandidates],
           scope: named,
-          user,
+          principal,
         }),
       );
       if (!resolved) {
@@ -183,12 +187,7 @@ export default function handleSearch(opts: {
     // admits this query is searched with the grants composed into it; every
     // other one answers as a realm holding no matching row does. Only these
     // realms are asked: a realm the caller reads outright never loads a
-    // policy.
-    //
-    // A request a render is waiting on has no actor, whoever it authenticated
-    // as: what a render produces is served to every viewer, so no one
-    // viewer's grants may shape it. It is scoped by no policy.
-    let duringRender = ctxt.get(DURING_PRERENDER_HEADER).length > 0;
+    // policy, and a realm-authority session has none to ask.
     let readable = new Set(realmList);
     let candidates = new Set(grantCandidates);
     let access = await withSearchConnectionTenant(ctxt, named, () =>
@@ -196,7 +195,7 @@ export default function handleSearch(opts: {
         readable,
         named.filter((realm) => candidates.has(realm)),
         invocation,
-        duringRender ? undefined : user,
+        principal,
       ),
     );
     // The realms this search does work for: those it reads rows from. Each
@@ -228,14 +227,14 @@ export default function handleSearch(opts: {
     readable: Set<string>,
     grantCandidates: string[],
     invocation: { operation: string; on: CodeRef } | undefined,
-    user: string | undefined,
+    principal: SearchPrincipal | undefined,
   ): Promise<RealmAccess> {
     let access: RealmAccess = {
       readable,
       scoped: new Map(),
       failed: new Set(),
     };
-    if (grantCandidates.length === 0 || !invocation || !user) {
+    if (grantCandidates.length === 0 || !invocation || !principal) {
       return access;
     }
     let realms = await resolveRealmsForFederatedRequest(
@@ -252,12 +251,19 @@ export default function handleSearch(opts: {
         try {
           let scope = await policyQueryScope(realm.operationCore, {
             ...invocation,
-            actor: user,
+            principal,
           });
           if (scope.kind === 'scoped') {
             access.scoped.set(url, scope.filters);
           }
         } catch (e) {
+          // Not a policy that could not be judged but a principal no policy
+          // may be asked about, which only broken wiring gets here with. It
+          // fails the whole search rather than passing for a realm that did
+          // not answer.
+          if (e instanceof RealmAuthorityPolicyScopeError) {
+            throw e;
+          }
           log.warn(
             `the policy of ${url} could not be judged for a search, so the search is answered without that realm's rows and marked incomplete`,
             e,
@@ -289,11 +295,11 @@ export default function handleSearch(opts: {
     {
       resolvingRealms,
       scope,
-      user,
+      principal,
     }: {
       resolvingRealms: string[][];
       scope: string[];
-      user: string | undefined;
+      principal: SearchPrincipal | undefined;
     },
   ) {
     let group = resolvingRealms.find((realms) => realms.length > 0) ?? [];
@@ -311,9 +317,8 @@ export default function handleSearch(opts: {
     }
     try {
       return await resolveNamedQuery(resolvingRealm.operationCore, payload, {
-        actor: user,
+        principal,
         realms: scope,
-        duringRender: ctxt.get(DURING_PRERENDER_HEADER).length > 0,
       });
     } catch (e) {
       if (!isOperationFailure(e)) {
