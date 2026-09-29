@@ -536,10 +536,14 @@ function bump(manifest: Manifest) {
 }
 
 interface PullRequest {
+  number: number;
   html_url: string;
   merged_at: string | null;
   merge_commit_sha: string | null;
+  head: { ref: string; sha: string };
 }
+
+const boxelRepository = 'cardstack/boxel';
 
 // The pull request lookups only enrich a failure message, so an error answers
 // nothing rather than masking the failure they describe.
@@ -578,7 +582,7 @@ async function pullRequestsChanging(
   manifest: Manifest,
   paths: string[],
   headers: Record<string, string>,
-): Promise<string[]> {
+): Promise<PullRequest[]> {
   let api = `https://api.github.com/repos/${manifest.repository}`;
   let compare = await lookup<{ commits: { sha: string }[] }>(
     `${api}/compare/${manifest.revision}...main`,
@@ -600,13 +604,67 @@ async function pullRequestsChanging(
       }
     }
   }
-  let urls = new Set<string>();
+  let prs = new Map<string, PullRequest>();
   for (let sha of shas) {
     for (let pr of await pullRequestsFor(manifest.repository, sha, headers)) {
-      urls.add(pr.html_url);
+      prs.set(pr.html_url, pr);
+    }
+  }
+  return [...prs.values()];
+}
+
+// A catalog change and the boxel change that depends on it are made on
+// branches of the same name, which is how boxel-catalog's Boxel Test Subset
+// workflow pairs them. The open boxel pull requests on a catalog pull
+// request's branch whose pin differs from this one carry that boxel side,
+// re-pin included. The branch under check is left out, since the message is
+// addressed to it.
+async function pairedBoxelPullRequests(
+  manifest: Manifest,
+  catalogPrs: PullRequest[],
+  headers: Record<string, string>,
+): Promise<string[]> {
+  let api = `https://api.github.com/repos/${boxelRepository}`;
+  let owner = boxelRepository.split('/')[0];
+  let current = process.env.GITHUB_HEAD_REF || currentBranch();
+  let manifestFile = relative(repoRoot, manifestPath);
+  let urls = new Set<string>();
+  for (let ref of new Set(catalogPrs.map((pr) => pr.head.ref))) {
+    if (ref === current) {
+      continue;
+    }
+    let prs = await lookup<PullRequest[]>(
+      `${api}/pulls?state=open&head=${owner}:${encodeURIComponent(ref)}`,
+      headers,
+    );
+    for (let pr of prs ?? []) {
+      let file = await lookup<{ content: string }>(
+        `${api}/contents/${manifestFile}?ref=${pr.head.sha}`,
+        headers,
+      );
+      let revision = file
+        ? (
+            JSON.parse(
+              Buffer.from(file.content, 'base64').toString('utf8'),
+            ) as Manifest
+          ).revision
+        : undefined;
+      if (revision && revision !== manifest.revision) {
+        urls.add(pr.html_url);
+      }
     }
   }
   return [...urls];
+}
+
+function currentBranch() {
+  try {
+    return execFileSync('git', ['-C', repoRoot, 'branch', '--show-current'], {
+      encoding: 'utf8',
+    }).trim();
+  } catch {
+    return undefined;
+  }
 }
 
 // The deployed catalog realm serves boxel-catalog's main, so a pin that main
@@ -670,11 +728,16 @@ async function checkPin(manifest: Manifest) {
   }
   if (changed.length) {
     let prs = await pullRequestsChanging(manifest, changed, headers);
+    let paired = await pairedBoxelPullRequests(manifest, prs, headers);
     fail(
       `${manifest.repository} main has changed ${changed.join(', ')} since ${manifest.revision}` +
-        (prs.length ? ` (in ${prs.join(', ')})` : '') +
+        (prs.length ? ` (in ${prs.map((pr) => pr.html_url).join(', ')})` : '') +
         `, so boxel's tests would run against definitions deployments no longer serve. ` +
-        `Re-pin to main (pnpm catalog:test-subset --bump), run the manifest's tests against it, and commit the new pin.`,
+        (paired.length
+          ? `The boxel side of that change, which re-pins, is in ${paired.join(', ')}: once that merges, merge main into this branch. ` +
+            `To move the pin without it, re-pin`
+          : `Re-pin`) +
+        ` to main (pnpm catalog:test-subset --bump), run the manifest's tests against it, and commit the new pin.`,
     );
   }
   log(
