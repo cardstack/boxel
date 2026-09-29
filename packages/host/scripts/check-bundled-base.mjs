@@ -187,6 +187,17 @@ const IDENTIFY_USE = /\bidentifyCard\s*\(\s*([A-Za-z_$][\w$]*)\s*[,)]/g;
 // module's own import of its superclass is resolved inside the chunk. A
 // fetched module never has this problem, because evaluating it loads what it
 // extends first — which is exactly what bundling removes.
+// `export { X } from './y'` and `export * from './y'`. A module whose whole
+// content is re-exports declares nothing, and the loader credits the first
+// module it serves with every name that module exposes — so serving a
+// re-exporter before the module that declares the class takes the credit, and
+// every code ref for that class then names a module that does not declare it.
+// Only a re-export from another base module can do this: both are served, and
+// the order decides. Re-exporting from outside base (runtime-common, say)
+// cannot, since the loader is never asked for the declarer as a base module.
+const RE_EXPORT =
+  /\bexport\s*(?:\*(?:\s+as\s+[A-Za-z_$][\w$]*)?|\{[^}]*\})\s*from\s*['"]([^'"]+)['"]\s*;?/g;
+
 const EXTENDS_USE =
   /\bclass\s+[A-Za-z_$][\w$]*\s+extends\s+([A-Za-z_$][\w$]*)/g;
 
@@ -194,6 +205,7 @@ function main() {
   let { table, exceptions } = readTable();
   let closureViolations = [];
   let identityHazards = [];
+  let reexporters = [];
 
   for (let name of table) {
     let file = fileFor(name);
@@ -209,6 +221,18 @@ function main() {
         continue;
       }
       closureViolations.push(`${name} imports ${target}`);
+    }
+
+    let reexportSources = [...code.matchAll(RE_EXPORT)]
+      .map((match) => baseTargetOf(match[1], file))
+      .filter(Boolean);
+    if (
+      reexportSources.length > 0 &&
+      code.replace(RE_EXPORT, '').trim() === ''
+    ) {
+      reexporters.push(
+        `${name} re-exports ${[...new Set(reexportSources)].join(', ')}`,
+      );
     }
 
     let origin = new Map();
@@ -262,8 +286,9 @@ function main() {
 
   let closure = [...new Set(closureViolations)].sort();
   let identity = [...new Set(identityHazards)].sort();
+  let reexport = [...new Set(reexporters)].sort();
 
-  if (closure.length === 0 && identity.length === 0) {
+  if (closure.length === 0 && identity.length === 0 && reexport.length === 0) {
     console.log(
       `ok: ${table.size} bundled base modules are closed under imports, ` +
         `and name no class the loader is never asked for`,
@@ -300,6 +325,22 @@ function main() {
         `in this script.\n`,
     );
     for (let line of identity) {
+      console.error(`  ${line}`);
+    }
+  }
+
+  if (reexport.length > 0) {
+    console.error(
+      `\n${reexport.length} bundled module(s) declare nothing and only ` +
+        `re-export another base module.\n` +
+        `A class is credited to the first module the loader serves that ` +
+        `exposes it, so serving a re-exporter first takes the credit from the ` +
+        `module that declares the class, and every code ref for it then names ` +
+        `a module that does not.\n` +
+        `Add it to FETCHED_RE_EXPORTS instead: fetched, it asks the loader for ` +
+        `what it re-exports from, so the declarer is served first.\n`,
+    );
+    for (let line of reexport) {
       console.error(`  ${line}`);
     }
   }
