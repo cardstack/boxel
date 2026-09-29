@@ -16,6 +16,7 @@ export type { LoweringContext } from './lowering.ts';
 export {
   dischargePendingDecision,
   notPermitted,
+  pendingWriteFor,
   pendingWriteHolds,
   policyGateStats,
 } from './gate.ts';
@@ -27,11 +28,14 @@ export { policyQueryScope } from './policy-query.ts';
 export type { PolicyQueryScope } from './policy-query.ts';
 export type {
   GateDecision,
+  GrantedDecision,
+  LockedGrant,
   MatchedGrant,
   OperationPolicyAccess,
   PendingDecision,
   PendingWrite,
   PolicyGateStats,
+  StoredCardCheck,
 } from './gate.ts';
 export {
   assertParamsSupplied,
