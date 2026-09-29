@@ -2486,6 +2486,8 @@ export function realmConfigCardJSON(
     iconURL?: string;
     backgroundURL?: string;
     includePrerenderedDefaultRealmIndex?: boolean;
+    // The URL of the card whose policy governs the realm.
+    policy?: string;
   } = {},
 ): string {
   let attrs: Record<string, unknown> = {};
@@ -2501,6 +2503,9 @@ export function realmConfigCardJSON(
   if (config.includePrerenderedDefaultRealmIndex !== undefined) {
     attrs.includePrerenderedDefaultRealmIndex =
       config.includePrerenderedDefaultRealmIndex;
+  }
+  if (config.policy !== undefined) {
+    attrs.policy = config.policy;
   }
   return JSON.stringify({
     data: {
