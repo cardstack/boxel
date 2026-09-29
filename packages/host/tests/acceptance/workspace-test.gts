@@ -11,7 +11,7 @@ import {
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { baseRealm, Deferred } from '@cardstack/runtime-common';
+import { baseRealm, Deferred, type Realm } from '@cardstack/runtime-common';
 
 import {
   setupLocalIndexing,
@@ -333,6 +333,7 @@ module('Acceptance | workspace card | Library pages', function (hooks) {
   });
 
   let { createAndJoinRoom } = mockMatrixUtils;
+  let realm: Realm;
 
   // One more page than the Library's 100-row page holds.
   const NOTE_COUNT = 105;
@@ -370,7 +371,7 @@ module('Acceptance | workspace card | Library pages', function (hooks) {
       notes[`Note/${n}.json`] = new Note({ cardTitle: `Note ${n}` });
     }
 
-    await setupAcceptanceTestRealm({
+    ({ realm } = await setupAcceptanceTestRealm({
       mockMatrixUtils,
       contents: {
         ...SYSTEM_CARD_FIXTURE_CONTENTS,
@@ -380,7 +381,7 @@ module('Acceptance | workspace card | Library pages', function (hooks) {
         'Memo/1.json': new Memo({ cardTitle: 'Only Memo' }),
         ...notes,
       },
-    });
+    }));
   });
 
   async function openLibraryFilter(name: string) {
@@ -463,6 +464,26 @@ module('Acceptance | workspace card | Library pages', function (hooks) {
     await clicked;
     await waitForGridItems(NOTE_COUNT - 100);
     assert.dom(`${STACK} [data-test-card-list-loading]`).doesNotExist();
+  });
+
+  test('a page emptied by deletions moves back to the last page', async function (assert) {
+    await openLibraryFilter('Note');
+    await waitForGridItems(100);
+    await click(`${PAGINATION} [aria-label="Next"]`);
+    await waitForGridItems(NOTE_COUNT - 100);
+
+    // Every row on page 2, so the notes left fit on one page.
+    for (let i = 101; i <= NOTE_COUNT; i++) {
+      await realm.delete(`Note/${i}.json`);
+    }
+
+    await waitForGridItems(100);
+    assert
+      .dom(`${GRID_ITEM}[data-test-cards-grid-item="${testRealmURL}Note/001"]`)
+      .exists('the grid shows the one page left');
+    assert
+      .dom(PAGINATION)
+      .doesNotExist('and offers no controls for a single page');
   });
 
   test('changing the filter starts again at page 1', async function (assert) {

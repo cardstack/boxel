@@ -108,15 +108,48 @@ export default class CardList extends Component<Signature> {
       : 'boxel-card-list';
   }
 
-  // The page count when the results span more than one page, else undefined.
-  private pageCount = (total: number | undefined): number | undefined => {
+  // The last page the results reach (1 when there are none), or undefined when
+  // the list is not paged.
+  private lastPage = (total: number | undefined): number | undefined => {
     let size = this.args.query?.page?.size;
-    if (!this.args.onPageChange || !size || !total) {
+    if (!this.args.onPageChange || !size) {
       return undefined;
     }
-    let pages = Math.ceil(total / size);
-    return pages > 1 ? pages : undefined;
+    return Math.max(1, Math.ceil((total ?? 0) / size));
   };
+
+  // The page count when the results span more than one page, else undefined.
+  private pageCount = (total: number | undefined): number | undefined => {
+    let pages = this.lastPage(total);
+    return pages !== undefined && pages > 1 ? pages : undefined;
+  };
+
+  // Settled on the answer to the current query, not a failed fetch — an error
+  // says nothing about how many pages there are.
+  private isSettled = (results: SearchResultsYield): boolean =>
+    !results.isLoading && !results.errors?.length;
+
+  // Deletions can leave the chosen page past the last one, where the query
+  // returns nothing and, once a single page remains, no controls render to
+  // leave it by. Once the results settle there, move the page owner to the
+  // last page. Out of the render that observed it, since the owner's page is
+  // tracked state this render already read.
+  private followLastPage = modifier(
+    (
+      _element: Element,
+      [lastPage, settled, page]: [
+        number | undefined,
+        boolean,
+        number | undefined,
+      ],
+    ) => {
+      if (!settled || lastPage === undefined || (page ?? 1) <= lastPage) {
+        return;
+      }
+      let onPageChange = this.args.onPageChange;
+      void Promise.resolve().then(() => onPageChange?.(lastPage));
+    },
+  );
 
   // The rows to show: none while another page loads, so the loading state
   // stands in for rows from the page the controls just left. Only a page turn
@@ -133,8 +166,8 @@ export default class CardList extends Component<Signature> {
     return turningPage ? [] : results.entries;
   };
 
-  // Clamped, so a page left past the end by deletions still points the
-  // controls at a real page to step back to.
+  // Clamped, so the controls point at a real page in the moment before
+  // `followLastPage` moves a page left past the end back onto one.
   private currentPage = (pages: number): number =>
     Math.min(Math.max(this.args.page ?? 1, 1), pages);
 
@@ -210,7 +243,14 @@ export default class CardList extends Component<Signature> {
           @mode='none'
           as |results|
         >
-          <ul class={{this.listClass}}>
+          <ul
+            class={{this.listClass}}
+            {{this.followLastPage
+              (this.lastPage results.meta.page.total)
+              (this.isSettled results)
+              @page
+            }}
+          >
             {{#each (this.visibleEntries results) key='id' as |entry|}}
               <li
                 class={{cn
