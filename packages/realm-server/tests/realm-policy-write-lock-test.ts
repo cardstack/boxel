@@ -1038,6 +1038,33 @@ module(basename(import.meta.filename), function (hooks) {
       );
     });
 
+    test('a predicate that throws is answered the same whether or not a card after it exists', async function (assert) {
+      // The archive's predicate throws on a title that is not a number. With
+      // the classroom named last present, the lock reaches the archive and
+      // faults. Without it, resolution refuses first and the archive is judged
+      // against its stored card, and the answer has to be the lock's fault
+      // either way.
+      let behind = (href: string) =>
+        operations(
+          AUTH.teacher(),
+          invoke('archive', { href: ROOM_204 }),
+          invoke('rename', { href, data: { title: 'Renamed' } }),
+        );
+      let untaught = await behind(ROOM_205);
+      let missing = await behind(ROOM_999);
+      assert.strictEqual(
+        untaught.text.replaceAll(ROOM_205, ROOM_999),
+        missing.text,
+        'the same answer byte for byte',
+      );
+      assert.strictEqual(
+        (untaught.body as { errors: { meta: { entry: number } }[] }).errors[0]
+          .meta.entry,
+        0,
+        'at the archive whose predicate throws',
+      );
+    });
+
     test('a write linking to a local id the card named last mints is answered the same whether or not that card exists', async function (assert) {
       // The write lock takes the local id from the activity the last entry
       // would mint, stages the link to it and refuses the update the delete

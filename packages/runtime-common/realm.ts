@@ -228,8 +228,8 @@ import type { LinkStrategy } from '@cardstack/base/operations';
 import {
   dischargePendingDecision,
   notPermitted,
-  pendingWriteHolds,
   pendingWriteRefusal,
+  storedWriteRefusal,
   type PendingWrite,
   policyGateStats,
   type PolicyGateStats,
@@ -5810,8 +5810,10 @@ export class Realm {
   // of it and nothing after it, so a card named later in the batch cannot move
   // the answer by existing. A write to a card no earlier entry changes is
   // judged against that card as stored, which is what the lock judges it by:
-  // the lock's own decision where it made one, and the stored bytes where it
-  // did not. The lock decides the others by what staging leaves them. They are
+  // the lock's own decision where it made one, and otherwise the refusal the
+  // lock would give against the stored bytes, a predicate that throws being
+  // the same fault either way. The lock decides the others by what staging
+  // leaves them. They are
   // a write to a card an earlier entry removed, rewrote or appended to, and a
   // create against a type, which is judged by the card it would mint. So those
   // are rehearsed (see `#rehearsedDecisions`) over the entries ahead of the
@@ -5863,9 +5865,7 @@ export class Realm {
         } else {
           let refusal = decided.has(position)
             ? decided.get(position)
-            : (await pendingWriteHolds(this.operationCore, pending))
-              ? undefined
-              : notPermitted(pending.target, pending.name);
+            : await storedWriteRefusal(this.operationCore, pending);
           if (refusal !== undefined) {
             refused = { position, refusal };
             break;

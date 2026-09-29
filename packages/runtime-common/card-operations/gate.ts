@@ -844,20 +844,30 @@ export async function pendingWriteHolds(
   core: OperationCore,
   pending: PendingWrite,
 ): Promise<boolean> {
+  return !(await storedWriteRefusal(core, pending));
+}
+
+// The refusal `pendingWriteHolds` finds, in the words the lock would refuse
+// the write in against the same card: a predicate that throws is the fault it
+// is under the lock, not a refusal. Undefined where the write would be
+// admitted.
+export async function storedWriteRefusal(
+  core: OperationCore,
+  pending: PendingWrite,
+): Promise<OperationFailure | undefined> {
   let { target } = pending;
   let url = target.kind === 'instance' ? parseURL(target.url) : undefined;
   if (!url) {
-    return false;
+    return notPermitted(target, pending.name);
   }
   let source = await core.readFileAsText(
     `${localPathFor(core, url)}.json` as LocalPath,
   );
-  let admission = await admits(
+  return await pendingWriteRefusal(
     core,
     pending,
     source === undefined ? undefined : { id: url.href, source },
   );
-  return 'grant' in admission;
 }
 
 // The grant that admits a pending write against `judged`, or the refusal.
