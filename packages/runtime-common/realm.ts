@@ -363,6 +363,7 @@ import {
   SupportedMimeType,
   isCoarseRefusal,
   lookupRouteTable,
+  routedPath,
 } from './router.ts';
 import { parseQuery } from './query.ts';
 import type { Readable } from 'stream';
@@ -839,13 +840,15 @@ function renderHoldMaxMs(): number {
     ? override
     : DEFAULT_RENDER_HOLD_MAX_MS;
 }
-// `localPath`s (no leading slash) exempt from the archived-realm seal: the
-// realm's public operational endpoints, which must keep working while a realm
-// is archived. `_readiness-check` is the health probe; `_session` is the
-// authentication endpoint. Matched on path rather than `Accept`/`Content-Type`
-// so the exemption holds for header-less probes too. Keep in sync with
-// `#publicEndpoints`.
-const ARCHIVED_SEAL_EXEMPT_PATHS = new Set(['_readiness-check', '_session']);
+// Marks the realm's public operational endpoints, `_session` authentication
+// and the `_readiness-check` health probe, which keep working while the realm
+// is archived (see `RouteOptions.operationalEndpoint`). They are the routes
+// `#publicEndpoints` answers without credentials: keep the two in step.
+const OPERATIONAL_ENDPOINT = { operationalEndpoint: true } as const;
+// The health probe's path as the router matches it, named here because two
+// places read it: the probe's route, and the probe that reaches no route
+// because it sends no `Accept` one answers (see `#isBareReadinessProbe`).
+const READINESS_CHECK_PATH = '/_readiness-check';
 // Marks the routes whose handlers hand the realm ACL's recorded outcome to the
 // policy gate: the `/_operations` envelope, which resolves every entry through
 // the gate, the card+json read, whose operation runs through it, the search,
@@ -2629,6 +2632,7 @@ export class Realm {
         '/_session',
         SupportedMimeType.Session,
         this.createSession.bind(this),
+        OPERATIONAL_ENDPOINT,
       )
       .query(
         '/_sign-capture-urls',
@@ -2646,9 +2650,10 @@ export class Realm {
         this.patchRealmPermissions.bind(this),
       )
       .get(
-        '/_readiness-check',
+        READINESS_CHECK_PATH,
         SupportedMimeType.RealmInfo,
         this.readinessCheck.bind(this),
+        OPERATIONAL_ENDPOINT,
       )
       // Answered on the realm ACL alone: its writes are verbatim replacements,
       // which no policy grant reaches (see `CONSUMES_COARSE_OUTCOME`).
@@ -6868,11 +6873,12 @@ export class Realm {
         // are blocked by this one check. The realm's public operational
         // endpoints stay reachable while archived: the `_readiness-check`
         // health probe (so health checks don't read an archived realm as
-        // down) and `_session` (so authentication still works). They're
-        // matched on `localPath`, independent of request headers, so a bare
-        // health probe that sends no `Accept` header is still exempt. The
-        // archive-management endpoints live on the realm SERVER router and
-        // never reach this boundary, so they stay reachable.
+        // down) and `_session` (so authentication still works). A request
+        // passes as the router dispatches it, not by its path, and a bare
+        // health probe that sends no `Accept` header passes too (see
+        // `#passesArchivedSeal`). The archive-management endpoints live on
+        // the realm SERVER router and never reach this boundary, so they stay
+        // reachable.
         //
         // A `HEAD` passes the ACL whoever sends it, so its passing shows
         // nothing about the caller. It meets the seal only from a caller who
@@ -6882,7 +6888,7 @@ export class Realm {
         // answer does not say whether the realm is archived. It is given here
         // rather than by the route: a route that would answer this caller with
         // a read a grant admits would then run that read in a sealed realm.
-        if (requestContext.coarseAllowed && (await this.#isSealed(localPath))) {
+        if (requestContext.coarseAllowed && (await this.#isSealed(request))) {
           if (
             request.method === 'HEAD' &&
             !(await this.#readProbe(request, requestContext)).allowed
@@ -6920,7 +6926,7 @@ export class Realm {
             )
           );
         }
-        await this.#assertNotArchived(localPath);
+        await this.#assertNotArchived(request);
       }
       if (!isLocal && request.method === 'HEAD' && dispatch.coarseReadOnly) {
         let answer = await this.#headForNonReader(request, requestContext);
@@ -7074,6 +7080,24 @@ export class Realm {
         consumesCoarseOutcome: matched.consumesCoarseOutcome,
         coarseReadOnly: matched.coarseReadOnly,
         handle: () => this.#router.handle(request, requestContext, matched),
+      };
+    }
+    // The health probe sent with no `Accept` its route answers. It is told
+    // nothing is there, in the words the file serve uses for a path that
+    // holds nothing, rather than handed to that serve: an archived realm's
+    // seal lets this probe through, and the file serve would read what the
+    // realm stores at the probe's path. Coarse-read-only, as that serve is,
+    // so a caller the ACL refuses is answered as it would answer them.
+    if (this.#isBareReadinessProbe(request)) {
+      return {
+        consumesCoarseOutcome: false,
+        coarseReadOnly: true,
+        handle: async () =>
+          notFound(
+            request,
+            requestContext,
+            `${this.#virtualNetwork.unresolveURL(request.url)} not found`,
+          ),
       };
     }
     // The raw file serve and the transpiled module serve, both of which read
@@ -7256,21 +7280,45 @@ export class Realm {
     this.#testOnlyBeforeBatchLock = hook;
   }
 
-  async #assertNotArchived(localPath: LocalPath): Promise<void> {
-    if (await this.#isSealed(localPath)) {
+  async #assertNotArchived(request: Request): Promise<void> {
+    if (await this.#isSealed(request)) {
       throw new ArchivedRealmError(`Realm ${this.url} is archived`);
     }
   }
 
-  // Whether the archived seal covers `localPath`: the realm is archived and
-  // the path is not one of the operational endpoints exempt from the seal.
-  // Read fresh (no memoization) for the same reason createRequestContext
-  // does: a peer replica's archive/unarchive must take effect here without a
-  // restart.
-  async #isSealed(localPath: LocalPath): Promise<boolean> {
+  // Whether the archived seal covers `request`: the realm is archived and the
+  // request is not one the seal lets through. Read fresh (no memoization) for
+  // the same reason createRequestContext does: a peer replica's
+  // archive/unarchive must take effect here without a restart.
+  async #isSealed(request: Request): Promise<boolean> {
     return (
-      !ARCHIVED_SEAL_EXEMPT_PATHS.has(localPath) &&
-      (await isRealmArchived(this.#dbAdapter, new URL(this.url)))
+      (await isRealmArchived(this.#dbAdapter, new URL(this.url))) &&
+      !this.#passesArchivedSeal(request)
+    );
+  }
+
+  // The requests an archived realm's seal lets through: one the router
+  // dispatches to an operational endpoint (see `OPERATIONAL_ENDPOINT`), and
+  // the health probe sent with no `Accept` any route answers, which reads
+  // nothing (see `#routeRequest`). Each is matched as the router matches it,
+  // so a request whose path only resembles an endpoint's, such as the
+  // directory `_session/`, or `_session` asked for as card source, is sealed
+  // like any other.
+  #passesArchivedSeal(request: Request): boolean {
+    let route = this.#router.lookupRoute(request);
+    return route
+      ? route.operationalEndpoint
+      : this.#isBareReadinessProbe(request);
+  }
+
+  // Whether `request` is a `GET` or `HEAD` of the health probe's path. Asked
+  // only of a request no route answers, which is the probe sent without the
+  // `Accept` its route is registered under, as a health checker commonly
+  // sends it.
+  #isBareReadinessProbe(request: Request): boolean {
+    return (
+      (request.method === 'GET' || request.method === 'HEAD') &&
+      routedPath(this.paths, request) === READINESS_CHECK_PATH
     );
   }
 

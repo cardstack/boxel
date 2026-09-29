@@ -187,6 +187,18 @@ function matchParameterized(
 
 export type RouteTable<T> = Map<SupportedMimeType, Map<Method, Map<string, T>>>;
 
+// The path a request is routed on: its path within the realm with a leading
+// slash, keeping the trailing slash that names a directory, so a route for a
+// path never matches the directory of the same name.
+export function routedPath(paths: RealmPaths, request: Request): string {
+  // we construct a new URL within RealmPath.local() param that strips off the query string
+  let requestPath = `/${paths.local(new URL(request.url))}`;
+  // add a leading and trailing slashes back so we can match on routing rules for directories.
+  return request.url.endsWith('/') && requestPath !== '/'
+    ? `${requestPath}/`
+    : requestPath;
+}
+
 export function lookupRouteTable<T>(
   routeTable: RouteTable<T>,
   paths: RealmPaths,
@@ -195,13 +207,7 @@ export function lookupRouteTable<T>(
   if (!isHTTPMethod(request.method)) {
     return;
   }
-  // we construct a new URL within RealmPath.local() param that strips off the query string
-  let requestPath = `/${paths.local(new URL(request.url))}`;
-  // add a leading and trailing slashes back so we can match on routing rules for directories.
-  requestPath =
-    request.url.endsWith('/') && requestPath !== '/'
-      ? `${requestPath}/`
-      : requestPath;
+  let requestPath = routedPath(paths, request);
 
   let acceptMimeType = extractSupportedMimeType(
     request.headers.get('Accept') as unknown as null | string | [string],
@@ -270,12 +276,20 @@ export interface RouteOptions {
   // when the ACL would not let its caller read the realm, whether or not the
   // realm has a policy.
   coarseReadOnly?: true;
+  // The route is one of the realm's operational endpoints, which keep working
+  // while the realm is archived: its seal lets through a request the router
+  // dispatches here. The route is the exemption, rather than its path, so a
+  // request for that path which the router hands to another route (a
+  // directory of the same name, or a media type the endpoint does not answer)
+  // is sealed like any other.
+  operationalEndpoint?: true;
 }
 
 export interface Route {
   handler: Handler;
   consumesCoarseOutcome: boolean;
   coarseReadOnly: boolean;
+  operationalEndpoint: boolean;
 }
 
 export interface RouteDescription {
@@ -373,6 +387,7 @@ export class Router {
       handler,
       consumesCoarseOutcome: opts.consumesCoarseOutcome === true,
       coarseReadOnly: opts.coarseReadOnly === true,
+      operationalEndpoint: opts.operationalEndpoint === true,
     });
   }
 
