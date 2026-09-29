@@ -16,18 +16,26 @@ export type { LoweringContext } from './lowering.ts';
 export {
   dischargePendingDecision,
   notPermitted,
+  pendingWriteFor,
   pendingWriteHolds,
   policyGateStats,
 } from './gate.ts';
+export { checkCapabilities, parseCapabilityChecks } from './capabilities.ts';
+export type { CapabilityCaller } from './capabilities.ts';
+export { CAPABILITY_CHECK_CAP } from './capability-wire.ts';
+export type { CapabilityAnswer, CapabilityCheck } from './capability-wire.ts';
 export { policyQueryScope } from './policy-query.ts';
 export type { PolicyQueryScope } from './policy-query.ts';
 export type {
   GateDecision,
+  GrantedDecision,
+  LockedGrant,
   MatchedGrant,
   OperationPolicyAccess,
   PendingDecision,
   PendingWrite,
   PolicyGateStats,
+  StoredCardCheck,
 } from './gate.ts';
 export {
   assertParamsSupplied,
@@ -37,7 +45,7 @@ export {
   newOperationScope,
   scopeCallerFor,
   pathsFor,
-  readShape,
+  readPlan,
   resolveGatedOperation,
   resolveOperation,
   runOperation,
@@ -54,6 +62,7 @@ export type {
   ScopeInvocation,
   OperationStoredFile,
   OperationStoredFileMeta,
+  ReadPlan,
   ReadShape,
   RunOperationOptions,
 } from './dispatch.ts';
@@ -99,10 +108,13 @@ export type {
 } from './executors.ts';
 export {
   OPERATIONS_CHANNEL,
+  emitCapabilityCheck,
   emitOperationPerf,
+  setCapabilityCheckSink,
   setOperationPerfSink,
 } from './telemetry.ts';
 export type {
+  CapabilityCheckEvent,
   OperationDiagnostics,
   OperationMissingRead,
   OperationMissingReason,
@@ -181,11 +193,15 @@ export {
   OperationFailure,
   isDefinitionFreeBaseOperation,
   isDocumentResult,
+  isExplainResult,
   isHeadResult,
   isIdentityResult,
+  effectiveLinkStrategy,
+  isLinkStrategy,
   isOperationFailure,
   isSourceResult,
   isWrite,
+  linkStrategyOf,
   refusalForNonReader,
 } from './types.ts';
 export type {
@@ -193,9 +209,13 @@ export type {
   EntryPosition,
   LowerOperationDeclarationsResult,
   OperationDefinition,
+  ExplainedGrant,
+  ExplainedGrantOutcome,
+  ExplainedRule,
   OperationDocumentResult,
   OperationError,
   OperationErrorCode,
+  OperationExplainResult,
   OperationHeadResult,
   OperationIdentityResult,
   OperationLoweringIssue,
@@ -209,4 +229,7 @@ export type {
   OperationSourceResult,
   OperationTarget,
   OperationTemplate,
+  PolicyExplanation,
+  PolicyExplanationDecision,
+  PolicyExplanationReason,
 } from './types.ts';

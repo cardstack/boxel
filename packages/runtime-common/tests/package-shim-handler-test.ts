@@ -9,6 +9,7 @@ import {
   describeShimError,
   type ShimRetryLogger,
 } from '../package-shim-handler.ts';
+import { VirtualNetwork } from '../virtual-network.ts';
 
 // No-op logger so the retry-focused tests don't print warn/debug
 // noise to CI output. The realm-server harness defaults to
@@ -720,6 +721,115 @@ const tests: SharedTests<Record<string, never>> = Object.freeze({
       'a bigint (which JSON.stringify throws on) still yields a string',
     );
   },
+
+  'a VirtualNetwork retries a shim resolver while the global setTimeout is disabled':
+    async (assert) => {
+      let nativeSetTimeout = globalThis.setTimeout;
+      let nativeClearTimeout = globalThis.clearTimeout;
+      // Wired the way the host wires its network: the fetch timer is the
+      // native one, which a prerender leaves running.
+      let network = new VirtualNetwork(
+        async () => new Response(null, { status: 404 }),
+        {
+          scheduleFetchTimer: (callback, ms) => nativeSetTimeout(callback, ms),
+        },
+      );
+      let attempts = 0;
+      network.shimAsyncModule({
+        id: 'chunk-blip-during-prerender',
+        resolve: async () => {
+          attempts++;
+          if (attempts === 1) {
+            throw new TypeError(
+              'Failed to fetch dynamically imported module: https://host.example/assets/chunk.js',
+            );
+          }
+          return { served: true };
+        },
+      });
+      let hung = Symbol('hung');
+      let bound: ReturnType<typeof setTimeout> | undefined;
+      let outcome: unknown;
+      // What render-timer-stub does to the global setTimeout during a
+      // prerender: the call is accepted and the callback never runs.
+      globalThis.setTimeout = (() => 0) as unknown as typeof setTimeout;
+      try {
+        outcome = await Promise.race([
+          network.getShimmedModule(
+            `${PACKAGES_FAKE_ORIGIN}chunk-blip-during-prerender`,
+          ),
+          new Promise((resolve) => {
+            bound = nativeSetTimeout(() => resolve(hung), 5000);
+          }),
+        ]);
+      } finally {
+        globalThis.setTimeout = nativeSetTimeout;
+        nativeClearTimeout(bound);
+      }
+      assert.notStrictEqual(
+        outcome,
+        hung,
+        'the retry fired instead of waiting on the disabled global setTimeout',
+      );
+      assert.true(
+        (outcome as { served?: boolean } | undefined)?.served,
+        'the module the second attempt resolved is served',
+      );
+      assert.strictEqual(attempts, 2, 'one retry recovered the blip');
+    },
+
+  'the retry log says which attempt a resolver recovered on, and when it gave up':
+    async (assert) => {
+      let warnings: string[] = [];
+      let log: ShimRetryLogger = {
+        warn: (message) => warnings.push(String(message)),
+        debug: () => {},
+      };
+      let calls = 0;
+      let recovering = withResolveRetry(
+        'test:recovers',
+        log,
+        async () => {
+          calls++;
+          if (calls === 1) {
+            throw new Error(
+              'Failed to fetch dynamically imported module: a.js',
+            );
+          }
+          return { ok: true };
+        },
+        { delay: async () => {}, retryDelaysMs: [10, 50, 200] },
+      );
+      await recovering();
+      assert.true(
+        warnings.some(
+          (w) =>
+            w.includes('test:recovers') &&
+            w.includes('recovered on attempt 2/4'),
+        ),
+        `a recovery names its resolver and attempt, got: ${warnings.join(' | ')}`,
+      );
+
+      warnings.length = 0;
+      let failing = withResolveRetry(
+        'test:gives-up',
+        log,
+        async () => {
+          throw new Error('Failed to fetch dynamically imported module: b.js');
+        },
+        { delay: async () => {}, retryDelaysMs: [10, 50] },
+      );
+      await failing().catch(() => {});
+      assert.true(
+        warnings.some(
+          (w) =>
+            w.includes('test:gives-up') &&
+            w.includes('final attempt 3/3') &&
+            w.includes('b.js'),
+        ),
+        `giving up names its resolver, attempt, and error, got: ${warnings.join(' | ')}`,
+      );
+    },
 });
 
 export default tests;
