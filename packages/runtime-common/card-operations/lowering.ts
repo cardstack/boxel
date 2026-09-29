@@ -354,20 +354,20 @@ async function lowerOperation(
     operation.optimistic = declaration.optimistic;
   }
 
-  // A link strategy narrows the document a read of the target serves, and no
-  // other base serves one — so on any other base the declaration would narrow
+  // A link strategy narrows the link closure an answer assembles: the document
+  // a read of the target serves, or the rows a query answers with. No other
+  // base assembles one — so on any other base the declaration would narrow
   // nothing, and a stored entry carrying one would read as a narrowing that was
-  // never applied. A `query` in particular answers through search, whose results
-  // carry their own closures that this declaration does not govern. The
-  // authoring decorator refuses both of these where they are written; this
-  // keeps them out of a type's entry, which outlives the code that built it.
+  // never applied. The authoring decorator refuses both of these where they are
+  // written; this keeps them out of a type's entry, which outlives the code
+  // that built it.
   let links = (declaration as { links?: unknown }).links;
   if (links !== undefined) {
-    if (base !== 'read') {
+    if (base !== 'read' && base !== 'query') {
       sink.add(
         'links-without-assembly',
         'links',
-        `a \`links\` strategy narrows the document a "read" serves, and a "${base}" operation serves no such document, so it would narrow nothing`,
+        `a \`links\` strategy narrows the link closure a "read" or a "query" assembles, and a "${base}" operation assembles none, so it would narrow nothing`,
       );
     } else if (!isLinkStrategy(links)) {
       // Not stored. The serving path reads an unrecognized strategy as the
@@ -377,7 +377,9 @@ async function lowerOperation(
       sink.add(
         'invalid-link-strategy',
         'links',
-        `"${String(links)}" does not name how much of the link graph a read carries — one of "full", "ids", "none"`,
+        `"${String(links)}" does not name how much of the link graph ${
+          base === 'query' ? "a query's results carry" : 'a read carries'
+        } — one of "full", "ids", "none"`,
       );
     } else {
       operation.links = links;
