@@ -1,6 +1,6 @@
 ## What it is
 
-The kit's action primitive: a native `<button>` with a two-axis treatment system and a built-in busy state. Everything that performs an action is this, or wraps it — **IconButton**, **CopyButton**, **ButtonGroup**, **FormFooter** and **ApprovalFooter** all render Buttons. If the thing navigates rather than acts, pass `@href`: the Button renders a real `<a>` with the same treatment, because a `<button>` that only changes the URL lies to assistive tech. If you need a set of mutually exclusive choices styled as buttons, that is **SegmentedControl** (a selection, not an action).
+The kit's action primitive: a native `<button>` with a two-axis treatment system and a built-in busy state. Everything that performs an action is this, or wraps it: **IconButton** and **CopyButton** render a Button, and **ButtonGroup** arranges them. If the thing navigates rather than acts, pass `@href`: the Button renders a real `<a>` with the same treatment, because a `<button>` that only changes the URL lies to assistive tech. If you need a set of mutually exclusive choices styled as buttons, that is **SegmentedControl** (a selection, not an action).
 
 ## The contract
 
