@@ -17,6 +17,7 @@ import { OperationFailure, type EntryPosition } from './types.ts';
 import { settledWithin, STAGING_WIDTH } from './coordinator.ts';
 import type { OperationCore, OperationScope } from './dispatch.ts';
 import { loadPolicy } from './gate.ts';
+import { searchInvocation } from './named-query.ts';
 import { policyQueryScope } from './policy-query.ts';
 import {
   invocationsIn,
@@ -376,7 +377,7 @@ async function runFilter(
   }
   let query =
     scope.coarseDeclined === 'all'
-      ? await grantedQuery(core, scope, parsed)
+      ? await grantedQuery(core, scope, parsed, find.query)
       : parsed;
   if (!query) {
     return { urls: [], total: 0 };
@@ -439,14 +440,14 @@ async function grantedQuery(
   core: OperationCore,
   scope: OperationScope,
   query: SearchEntryQuery,
+  filter: QueryTarget['query'],
 ): Promise<SearchEntryQuery | undefined> {
   await loadPolicy(core);
   if (scope.caller.kind !== 'user') {
     return undefined;
   }
   let granted = await policyQueryScope(core, {
-    operation: 'query',
-    types: query.typeAnchors ?? [],
+    ...searchInvocation({ filter })!,
     actor: scope.caller.actor,
   });
   return granted.kind === 'scoped'

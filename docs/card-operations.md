@@ -667,7 +667,8 @@ In a realm a caller reaches only through its policy, a saved search is granted
 by its own name, and a search the caller writes by hand is granted as `query`
 on the type its filter names with `on`. So granting `myPatients` grants that
 search and not the freedom to write any filter over `PatientRecord`, and a
-filter that names no type is granted by nothing.
+filter that names no type is granted by nothing. For the same reason no saved
+search may be named `query`: the name belongs to the search written by hand.
 
 ## Batches
 

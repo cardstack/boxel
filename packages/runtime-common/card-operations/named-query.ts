@@ -2,7 +2,7 @@ import { isCodeRef } from '../card-document-shape.ts';
 import type { CodeRef } from '../code-ref.ts';
 import { ensureTrailingSlash } from '../paths.ts';
 import {
-  wireFilterTypeAnchors,
+  wireFilterGrantTypes,
   type SearchEntryWireFilter,
   type SearchEntryWireQuery,
 } from '../search-entry.ts';
@@ -87,14 +87,16 @@ export interface SearchInvocation {
 // the hole in every named-query grant, since a caller granted a declared
 // search could write the same filter by hand and be served its rows. Granting
 // a named query grants that saved search, and not the freedom to enumerate
-// its type.
+// its type. No declaration may take the name, so the two never share a grant.
 //
-// The types are the filter's `item.on` anchors, read the way a live search
-// reads them: every entry the filter matches adopts from at least one of them.
-// That is what makes judging the search by their rules sound. A match is
-// always of a type one of them names, so a rule consulted for that anchor is
-// one whose type the match descends from, as it would be were the gate judging
-// the match itself.
+// The types are the filter's `item.on` anchors (see `wireFilterGrantTypes`):
+// every entry the filter matches adopts from at least one of them. That is
+// what makes judging the search by their rules sound. A match is always of a
+// type one of them names, so a rule consulted for that anchor is one whose
+// type the match descends from, as it would be were the gate judging the
+// match itself. And every anchor a match is known to adopt from is kept, so
+// two filters matching the same cards are judged alike however their branches
+// are ordered.
 //
 // A named request whose members are not what they must be is no invocation:
 // resolving it refuses it before anything consults a policy. An ad-hoc filter
@@ -111,7 +113,7 @@ export function searchInvocation(
   }
   let filter = isPlainRecord(payload) ? payload.filter : undefined;
   let anchors = isPlainRecord(filter)
-    ? wireFilterTypeAnchors(filter as SearchEntryWireFilter)
+    ? wireFilterGrantTypes(filter as SearchEntryWireFilter)
     : undefined;
   return {
     operation: 'query',

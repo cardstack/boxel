@@ -10,6 +10,7 @@ import type {
 } from '@cardstack/runtime-common';
 import {
   policyQueryScope,
+  searchInvocation,
   type OperationCore,
   type OperationDefinition,
 } from '@cardstack/runtime-common/card-operations';
@@ -42,6 +43,12 @@ const SCHEDULE: ResolvedCodeRef = {
 const NOTICE: ResolvedCodeRef = {
   module: rri(`${REALM}notice`),
   name: 'Notice',
+};
+// A type the realm cannot resolve a definition for, so nothing about it can be
+// judged.
+const ELSEWHERE: ResolvedCodeRef = {
+  module: rri(`${REALM}elsewhere`),
+  name: 'Elsewhere',
 };
 
 function key(ref: ResolvedCodeRef) {
@@ -105,14 +112,17 @@ type Grant = Omit<CompiledOperationGrant, 'path'>;
 
 function stubCore(
   grants: Grant[],
-  reads: { policy: number } = { policy: 0 },
+  {
+    reads = { policy: 0 },
+    ruleOn = SCHEDULE,
+  }: { reads?: { policy: number }; ruleOn?: ResolvedCodeRef } = {},
 ): OperationCore {
   let policy: CompiledRealmPolicy = {
     card: `${REALM}policies/policy`,
     version: '1',
     rules: [
       {
-        targetType: SCHEDULE,
+        targetType: ruleOn,
         path: 'rules[0]',
         grants: grants.map((grant, index) => ({
           ...grant,
@@ -193,7 +203,7 @@ module(basename(import.meta.filename), function () {
   test('a search on no type is denied, and reads no policy to decide it', async function (assert) {
     let reads = { policy: 0 };
     let result = await policyQueryScope(
-      stubCore([{ operation: 'query', filter: OWN_FILTER }], reads),
+      stubCore([{ operation: 'query', filter: OWN_FILTER }], { reads }),
       { operation: 'query', types: [], actor: ACTOR },
     );
     assert.deepEqual(result, { kind: 'denied' });
@@ -219,6 +229,66 @@ module(basename(import.meta.filename), function () {
       { kind: 'denied' },
       'which, searched alone, is denied',
     );
+  });
+
+  test('a grant on a type several share admits only the cards of a type whose own judgment admits them', async function (assert) {
+    // The rule is on the base type, so its grant's filter is anchored there,
+    // and it is matched for the schedule type, which descends from it. The
+    // other type cannot be judged at all. Unconfined, the base type's filter
+    // would admit the other type's cards too, were one of them a base
+    // schedule, through the grant matched for the schedule type.
+    const BASE_OWN_FILTER = {
+      'item.on': BASE_SCHEDULE,
+      eq: { 'item.providerId': { $ref: 'actor' } },
+    } as CompiledOperationGrant['filter'];
+    let result = await policyQueryScope(
+      stubCore([{ operation: 'query', filter: BASE_OWN_FILTER }], {
+        ruleOn: BASE_SCHEDULE,
+      }),
+      { operation: 'query', types: [SCHEDULE, ELSEWHERE], actor: ACTOR },
+    );
+    assert.deepEqual(result, {
+      kind: 'scoped',
+      filters: [
+        {
+          on: SCHEDULE,
+          any: [{ on: BASE_SCHEDULE, eq: { providerId: ACTOR } }],
+        },
+      ],
+    });
+  });
+
+  test('a filter is judged by every type its matches adopt from, however its branches are ordered', async function (assert) {
+    let typesOf = (filter: Record<string, unknown>) =>
+      searchInvocation({ filter })!
+        .types.map((type) => key(type as ResolvedCodeRef))
+        .sort();
+    let both = [key(BASE_SCHEDULE), key(SCHEDULE)].sort();
+    let base = { 'item.on': BASE_SCHEDULE };
+    let schedule = { 'item.on': SCHEDULE };
+    assert.deepEqual(typesOf({ every: [base, schedule] }), both);
+    assert.deepEqual(typesOf({ every: [schedule, base] }), both);
+    assert.deepEqual(
+      typesOf({ ...base, every: [schedule] }),
+      both,
+      'as is an anchored node over a body that names the other',
+    );
+
+    // Granted on the schedule type alone, which each match of either order
+    // is, so both orders are admitted alike.
+    for (let every of [
+      [base, schedule],
+      [schedule, base],
+    ]) {
+      assert.deepEqual(
+        await scope(
+          'query',
+          [{ operation: 'query', filter: OWN_FILTER }],
+          searchInvocation({ filter: { every } })!.types,
+        ),
+        { kind: 'scoped', filters: [{ on: SCHEDULE, any: [OWN] }] },
+      );
+    }
   });
 
   test('a type named twice is judged once', async function (assert) {
