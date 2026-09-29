@@ -4,7 +4,12 @@ import supertest from 'supertest';
 import type { Test, SuperTest, Response } from 'supertest';
 import { basename, join } from 'path';
 import { dirSync } from 'tmp';
-import { logger, rri, SupportedMimeType } from '@cardstack/runtime-common';
+import {
+  archiveRealm,
+  logger,
+  rri,
+  SupportedMimeType,
+} from '@cardstack/runtime-common';
 import type {
   QueuePublisher,
   QueueRunner,
@@ -291,6 +296,7 @@ module(basename(import.meta.filename), function (hooks) {
   let org: Realm;
   let request: SuperTest<Test>;
   let server: Server;
+  let db: PgAdapter;
 
   setupCatalogTestSubset(hooks);
 
@@ -303,6 +309,7 @@ module(basename(import.meta.filename), function (hooks) {
     publisher: QueuePublisher;
     runner: QueueRunner;
   }) {
+    db = dbAdapter;
     let result = await runTestRealmServerWithRealms({
       virtualNetwork: createVirtualNetwork(),
       realmsRootPath: join(dirSync().name, 'realm_server_1'),
@@ -1193,6 +1200,47 @@ module(basename(import.meta.filename), function (hooks) {
         headersOf(missing),
         'with the same headers as a card that is not there',
       );
+    });
+
+    test('a HEAD the policy would grant is answered by discovery once the realm is archived', async function (assert) {
+      let headersOf = (response: Response) =>
+        Object.entries(response.headers as Record<string, string>)
+          .filter(([name]) => name !== 'date')
+          .sort(([a], [b]) => a.localeCompare(b));
+      let denied = await request
+        .head(path(ROOM_205))
+        .set('Accept', SupportedMimeType.CardJson)
+        .set('Authorization', AUTH.teacher());
+
+      await archiveRealm(db, new URL(EDUCATION));
+      let before = gateStats().policyLoads;
+      let own = await request
+        .head(path(ROOM_204))
+        .set('Accept', SupportedMimeType.CardJson)
+        .set('Authorization', AUTH.teacher());
+      assert.strictEqual(own.status, 200, 'the discovery answer');
+      assert.notOk(own.get('etag'), 'with no card headers');
+      assert.notOk(
+        own.get('X-Boxel-Realm-Archived'),
+        'and nothing saying the realm is archived',
+      );
+      assert.deepEqual(
+        headersOf(own),
+        headersOf(denied),
+        'the same answer the gate’s refusal gets while the realm is active',
+      );
+      assert.strictEqual(
+        gateStats().policyLoads,
+        before,
+        'and the read never reaches the gate',
+      );
+
+      let reader = await request
+        .head(path(ROOM_204))
+        .set('Accept', SupportedMimeType.CardJson)
+        .set('Authorization', AUTH.reader());
+      assert.strictEqual(reader.status, 403, 'a reader meets the seal');
+      assert.strictEqual(reader.get('X-Boxel-Realm-Archived'), 'true');
     });
   });
 
