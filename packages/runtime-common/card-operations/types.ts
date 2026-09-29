@@ -305,12 +305,9 @@ export type PolicyIssueCode =
   | 'unknown-operation'
   // A grant of authorization infrastructure: an operation declared
   // `nonGrantable` on its rule's type or on any type that type descends from,
-  // or a write on a rule whose type is a `RealmPolicy`. The gate refuses a
-  // non-grantable operation whatever a compiled policy holds, and any write to
-  // the policy card the realm's pointer names. It does not refuse a write to
-  // another card of a policy type, so for a rule naming a policy type this
-  // issue is what keeps the write out, by leaving the grant out of the
-  // compiled policy.
+  // or a write on a rule whose type is a `RealmPolicy`. The gate refuses both
+  // whatever a compiled policy holds, so the grant could admit nothing, and
+  // recording it says so where the author wrote it.
   | 'grants-authorization-infrastructure'
   // A `where` that does not parse, or that the `policy` profile refuses.
   | 'invalid-predicate'

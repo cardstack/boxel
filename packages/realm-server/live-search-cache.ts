@@ -50,10 +50,13 @@ export type LiveSearchCacheSummary = ResponseCacheSummary;
 // the TTL is the staleness bound rather than a retention bound, so it has to
 // stay short — here and through `LIVE_SEARCH_CACHE_TTL_MS`.
 //
-// Sharing across users is safe: the body is a pure function of
-// `(realms, query, opts)` — permissions are realm-scoped and
-// `multiRealmAuthorization` has already validated every caller against the
-// full realm list before the handler runs.
+// Sharing across users is safe because the body is a pure function of
+// `(realms, query, opts)`, and every input that tells one caller's answer from
+// another's is in it: which of the named realms the caller reads outright
+// decides whether the key carries a `policyScope` at all, and what each realm
+// the caller does not read contributed — the grant filters composed into its
+// query, or no rows — is that `policyScope`. Two callers share a body only
+// where every realm answered both of them the same way.
 //
 // One deliberate looseness: `_federated-search` drops a realm that fails to
 // mount rather than failing the whole request, so a body computed during a

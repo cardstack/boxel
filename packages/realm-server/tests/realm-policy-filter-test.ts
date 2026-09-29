@@ -211,6 +211,7 @@ function setup(grants: Grant[]) {
       return { definition: found, types: [typeKey(codeRef)] };
     },
     toURL: (identifier) => new URL(identifier),
+    isPolicyCard: (types) => types.includes(policyKey),
     typeKey,
   });
   return { cache, definitions };
