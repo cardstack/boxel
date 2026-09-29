@@ -130,8 +130,9 @@ type Rule = { targetType: { module: string; name: string }; grants: Grant[] };
 // `Classroom` grants a read and a delete on a predicate, and `rename` and
 // `appendActivity` outright; `create` on it rests on a predicate, which is what
 // a type target cannot decide here, and `archive` on one that throws for a
-// title that is not a number, which no classroom's is. `Bulletin` takes its writes and its creates
-// outright, so a type target for one is decided outright too.
+// title that is not a number, which no classroom's is. `Bulletin` takes its
+// writes and its creates outright, so a type target for one is decided
+// outright too.
 const RULES: Rule[] = [
   {
     targetType: CLASSROOM,
