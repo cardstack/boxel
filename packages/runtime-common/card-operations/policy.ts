@@ -979,13 +979,12 @@ async function compilePredicate(
   }
   let partial = partialMatchCalls(bxl, program.body);
   if (partial.length > 0) {
+    let calls = partial
+      .map((name) => `\`${name}\` ${PARTIAL_MATCH_BUILTINS.get(name)}`)
+      .join('; ');
     return {
       code: 'partial-match',
-      problem: `\`where\` matches a value only in part, so it can hold for a caller the grant does not name: ${partial
-        .map((name) => `\`${name}\` ${PARTIAL_MATCH_BUILTINS.get(name)}`)
-        .join(
-          '; ',
-        )}. Test membership with \`.list | any(. == actor())\`, and compare strings with \`==\`, \`startswith\` or \`endswith\``,
+      problem: `\`where\` matches a value only in part, so it can hold for a caller the grant does not name: ${calls}. Test membership with \`.list | any(. == actor())\`, and compare strings with \`==\`, \`startswith\` or \`endswith\``,
     };
   }
   return { canonical: program.canonicalSource, body: program.body };
