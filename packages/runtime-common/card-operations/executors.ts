@@ -192,7 +192,8 @@ interface EntryCommon {
   // the entry stages, or undefined where there is no such card to judge, and
   // refuses by throwing. Absent for an entry that was admitted in full before
   // the batch was composed, which is every entry but a policy-granted write
-  // whose grant carries a predicate.
+  // to a stored card, and a policy-granted create whose grants carry
+  // predicates.
   admit?: (judged: AdmissionSubject | undefined) => Promise<void>;
 }
 
@@ -202,6 +203,12 @@ interface EntryCommon {
 export interface AdmissionSubject {
   id: string;
   source: string;
+  // Set where an earlier entry in the batch appended to the card without
+  // holding its bytes, so `source` is the card from beneath that append. An
+  // append never changes a card's type, so these bytes still say what type
+  // the card is. They do not say what its fields will hold once the append
+  // lands.
+  beneathAppend?: true;
 }
 
 export interface CreateEntry extends EntryCommon {
