@@ -16,6 +16,7 @@ import {
   type OperationResultTree,
   type OperationWriteResult,
   type OperationsSubject,
+  type PolicyExplanation,
   type QueryTargetHandle,
   type SearchEntries,
   type SearchEntryWireQuery,
@@ -104,6 +105,7 @@ export const BASE_OPERATIONS = [
   'transform',
   'appendContainsMany',
   'appendLine',
+  'explain',
 ] as const;
 
 export type BaseOperationName = (typeof BASE_OPERATIONS)[number];
@@ -136,10 +138,31 @@ const CARRIED_BY: Record<BaseOperationName, readonly DefFamily[]> = {
   transform: ['card'],
   appendContainsMany: ['card'],
   appendLine: ['file'],
+  // Carried by nothing on its own. See `DECLARATION_ONLY`.
+  explain: [],
+};
+
+// The behaviors a def reaches only by declaring an operation built on them.
+// Nothing implies one, so a def that declares none has no member for it, and
+// a name nothing declared is not an operation at all.
+//
+// `explain` reports what a realm's policy decides for a caller, a target and
+// an operation, which only means something on a policy card. Implied on every
+// card, it would be a member on every card whose every invocation is refused.
+const DECLARATION_ONLY: Partial<
+  Record<BaseOperationName, readonly DefFamily[]>
+> = {
+  explain: ['card'],
 };
 
 function operationsCarriedBy(family: DefFamily): readonly BaseOperationName[] {
   return BASE_OPERATIONS.filter((base) => CARRIED_BY[base].includes(family));
+}
+
+function declarationOnlyBases(family: DefFamily): readonly BaseOperationName[] {
+  return BASE_OPERATIONS.filter((base) =>
+    DECLARATION_ONLY[base]?.includes(family),
+  );
 }
 
 const CARD_OPERATIONS = operationsCarriedBy('card');
@@ -599,6 +622,19 @@ export interface AppendContainsManyOperationDeclaration extends OperationCommon 
   readonly fields?: { readonly [fieldName: string]: OperationValue };
 }
 
+// Reports what the realm's policy would decide for one caller, target and
+// operation, and invokes nothing. It belongs on a policy card: the realm
+// answers it only for the card a target's realm names as its policy.
+//
+// There is no clause. The question is the payload, which the base operation
+// reads under `actor`, `target` and `operation`. The answer is exactly what a
+// refusal is written to withhold, so no policy may grant it, and the
+// declaration says so with `nonGrantable: true`.
+export interface ExplainOperationDeclaration extends OperationCommon {
+  readonly base: 'explain';
+  readonly nonGrantable: true;
+}
+
 export type OperationDeclaration =
   | TransformOperationDeclaration
   | CreateOperationDeclaration
@@ -607,7 +643,8 @@ export type OperationDeclaration =
   | ReadOperationDeclaration
   | QueryOperationDeclaration
   | AppendLineOperationDeclaration
-  | AppendContainsManyOperationDeclaration;
+  | AppendContainsManyOperationDeclaration
+  | ExplainOperationDeclaration;
 
 // A base operation a def carries with nothing declared on it. It is not a
 // declaration and the union above deliberately cannot express one: an author
@@ -697,6 +734,8 @@ const CLAUSE_KEYS: Record<BaseOperationName, readonly string[]> = {
   // Appending a line takes no clause: the line is the payload, and the base
   // operation reads it under `line`.
   appendLine: [],
+  // Neither does an explain: the question it answers is the payload.
+  explain: [],
 };
 
 // Keys that shape how a base operation answers rather than describing work for
@@ -831,22 +870,48 @@ export function getDeclaredOperations(
 function impliedOperations(
   owner: typeof BaseDef,
 ): readonly BaseOperationName[] {
-  if (isSubclassOf(owner, FieldDef)) {
-    // A field's instances have no URL, so nothing is invocable on one; field
-    // data is reached through the operations of the card that contains it.
-    return [];
-  }
-  if (isSubclassOf(owner, CardDef)) {
+  let family = defFamily(owner);
+  if (family === 'card') {
     return CARD_OPERATIONS;
   }
-  if (isSubclassOf(owner, FileDef)) {
+  if (family === 'file') {
     return FILE_OPERATIONS;
   }
-  // The operations every addressable def shares: a `read` serves the def's
-  // indexed document, and a `readSource` serves the bytes stored at the
-  // instance's URL — a representation every addressable def has whether or
-  // not its document is the interesting one.
-  return BASE_DEF_OPERATIONS;
+  if (family === 'base') {
+    // The operations every addressable def shares: a `read` serves the def's
+    // indexed document, and a `readSource` serves the bytes stored at the
+    // instance's URL — a representation every addressable def has whether or
+    // not its document is the interesting one.
+    return BASE_DEF_OPERATIONS;
+  }
+  return [];
+}
+
+// Which base operations a def type may declare an operation on: the ones it
+// implies, and the ones it reaches only through a declaration.
+function declarableOperations(
+  owner: typeof BaseDef,
+): readonly BaseOperationName[] {
+  let family = defFamily(owner);
+  return family
+    ? [...impliedOperations(owner), ...declarationOnlyBases(family)]
+    : [];
+}
+
+// A field's instances have no URL, so nothing is invocable on one, and it
+// belongs to no family: field data is reached through the operations of the
+// card that contains it.
+function defFamily(owner: typeof BaseDef): DefFamily | undefined {
+  if (isSubclassOf(owner, FieldDef)) {
+    return undefined;
+  }
+  if (isSubclassOf(owner, CardDef)) {
+    return 'card';
+  }
+  if (isSubclassOf(owner, FileDef)) {
+    return 'file';
+  }
+  return 'base';
 }
 
 function declaredOperations(
@@ -981,6 +1046,9 @@ function noProgramReason(
   if (base === 'update' && isSubclassOf(owner, FileDef)) {
     return `an "update" on a file def replaces the file's content wholesale rather than transforming a document`;
   }
+  if (base === 'explain') {
+    return `an "explain" operation reports what the realm's policy decides rather than running a program over a document`;
+  }
   return undefined;
 }
 
@@ -1042,13 +1110,18 @@ function assertValidDeclaration(
   // An author may only specialize a base operation the def type actually
   // carries. Read from the same list `getOperations` synthesizes: only a card
   // has a mutation surface, and a file's metadata is content-derived and
-  // read-only.
-  let implied = impliedOperations(owner);
-  if (!implied.includes(base)) {
+  // read-only. A behavior nothing implies is carried once it is declared.
+  let declarable = declarableOperations(owner);
+  if (!declarable.includes(base)) {
     throw new Error(
       `${label}: this def type carries only ${quoteList(
-        implied,
+        declarable,
       )}, so it cannot declare a "${base}" operation`,
+    );
+  }
+  if (base === 'explain' && declaration.nonGrantable !== true) {
+    throw new Error(
+      `${label}: an "explain" operation reports what the realm's policy decides, which is what a refusal withholds, so no policy may grant it; declare it with \`nonGrantable: true\``,
     );
   }
   let clauseKeys = CLAUSE_KEYS[base];
@@ -1135,6 +1208,11 @@ function assertValidDeclaration(
   if (declaration.output !== undefined && !isPlainObject(declaration.output)) {
     throw new Error(
       `${label}: \`output\` must be a projection object or a bxl program`,
+    );
+  }
+  if (base === 'explain' && declaration.output !== undefined) {
+    throw new Error(
+      `${label}: an "explain" operation answers with the policy's explanation as the gate reports it, so it carries no \`output\` to reshape it`,
     );
   }
   assertReferencesResolve(label, declaration, paramNames);
@@ -1955,6 +2033,7 @@ export type {
   OperationResultTree,
   OperationValueResult,
   OperationWriteResult,
+  PolicyExplanation,
   SearchEntries,
   SearchInvokeOptions,
 } from '@cardstack/runtime-common';
@@ -1972,12 +2051,15 @@ type PayloadArgs<Declaration> = Declaration extends {
 
 // What an operation resolves to, by the behavior it is built on: a write
 // reports the identity and version of what it wrote, a delete reports that
-// there is nothing left to describe, and a read reports its document.
+// there is nothing left to describe, a read reports its document, and an
+// explain reports what the policy decided and why.
 type ResultOf<Declaration> = Declaration extends { base: 'delete' }
   ? null
   : Declaration extends { base: 'read' }
     ? OperationDocument
-    : OperationWriteResult;
+    : Declaration extends { base: 'explain' }
+      ? PolicyExplanation
+      : OperationWriteResult;
 
 // The behaviors invocable on an instance, and the one invocable on a class.
 // A declared `create` appears in both: invoked on the class it mints a card
@@ -1990,6 +2072,7 @@ type InstanceScopedBase =
   | 'transform'
   | 'appendLine'
   | 'appendContainsMany'
+  | 'explain'
   | 'create';
 type TypeScopedBase = 'create' | 'query';
 

@@ -1134,13 +1134,16 @@ async function stageAdmitted(
 }
 
 // The card `href` names, as `against` holds it. What an earlier entry in the
-// run staged is what the card now is. A card an earlier entry removed, or
-// changed without holding its bytes, leaves nothing to judge. An append is the
-// second kind: it stages a description of the card rather than its bytes, and
+// run staged is what the card now is. A card an earlier entry removed leaves
+// nothing to judge. A card the batch never read, which an append's target is,
+// is read from disk, under the lock the batch already holds.
+//
+// An append stages a description of the card rather than its bytes, and
 // leaves whatever the batch read of the card before it in `stored`, so a
-// splice is looked for before the bytes are. A card the batch never read,
-// which an append's target is, is read from disk, under the lock the batch
-// already holds.
+// splice is looked for before the bytes are. A card an earlier entry appended
+// to is handed over as the bytes beneath the append, marked as such: they say
+// what type the card is, which no append changes, and not what its fields
+// will hold.
 async function heldCard(
   core: BatchCore,
   href: string | undefined,
@@ -1153,7 +1156,12 @@ async function heldCard(
     return undefined;
   }
   if (against.splices.has(path)) {
-    return undefined;
+    let beneath =
+      against.stored.get(path)?.content ??
+      (await core.readSourceFile(path))?.content;
+    return beneath === undefined
+      ? undefined
+      : { id: href, source: beneath, beneathAppend: true };
   }
   let held = against.stored.get(path);
   if (held) {

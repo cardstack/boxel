@@ -119,6 +119,52 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
+  test('a card whose rules are not a list does not compile as a whole', async function (assert) {
+    let { cache, state } = setup();
+    state.rules = { targetType: 'everything' };
+    let policy = await cache.get();
+    assert.true(policy?.uncompilable, 'the policy does not compile');
+    assert.deepEqual(policy?.rules, [], 'and has no rules');
+    assert.deepEqual(
+      policy?.issues.map(({ code, path }) => ({ code, path })),
+      [{ code: 'invalid-rule', path: 'rules' }],
+    );
+  });
+
+  // The row of a visit whose failure was withheld is the earlier visit's row,
+  // byte for byte, so nothing but the withholding says it is out of date.
+  test('a card whose latest visit failed with the failure withheld does not compile, until a visit succeeds', async function (assert) {
+    let { cache, state } = setup();
+    let before = await cache.get();
+    assert.strictEqual(before?.rules[0]?.grants.length, 1, 'the grant applies');
+
+    state.failureWithheld = true;
+    noteRealmIndexMoved(ORG);
+    let withheld = await cache.get();
+    assert.true(withheld?.uncompilable, 'the policy does not compile');
+    assert.deepEqual(withheld?.rules, [], 'and grants nothing');
+    assert.strictEqual(
+      withheld?.version,
+      undefined,
+      'nor names the version the earlier visit recorded',
+    );
+    assert.deepEqual(
+      withheld?.issues.map(({ code, path }) => ({ code, path })),
+      [{ code: 'policy-card-unloadable', path: '' }],
+    );
+
+    state.failureWithheld = false;
+    state.version = 'v2';
+    noteRealmIndexMoved(ORG);
+    let after = await cache.get();
+    assert.notOk(after?.uncompilable, 'a visit that succeeds compiles it');
+    assert.strictEqual(
+      after?.rules[0]?.grants.length,
+      1,
+      'and it grants again',
+    );
+  });
+
   test('reads of a cold cache share one compile', async function (assert) {
     let { cache, state } = setup();
     let [a, b, c] = await Promise.all([cache.get(), cache.get(), cache.get()]);

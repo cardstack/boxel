@@ -87,8 +87,11 @@ subclass really will reshape the operation.
 ### `base` — the behavior a declaration builds on
 
 The base operations are `read`, `readSource`, `create`, `update`, `delete`,
-`query`, `transform`, `appendContainsMany` and `appendLine`. Which of them a
-def carries follows from what kind of def it is:
+`query`, `transform`, `appendContainsMany`, `appendLine` and `explain`. Which
+of them a def carries follows from what kind of def it is. `explain` is the
+exception: no def carries it until a card declares an operation on it, and it
+belongs on a policy card (see
+[Asking a policy what it decides](#asking-a-policy-what-it-decides)).
 
 | Def                                | Carries                                                                                                                                                                     |
 | ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -558,6 +561,71 @@ A write answers with an identity and a version, not a document. `version` is
 the fingerprint of the card's stored source; to see the written document, read
 it after the call, or let the store refresh from the realm's invalidation.
 
+## Asking before invoking
+
+A template can ask whether the current session may invoke an operation, so it
+can hide a control the caller cannot use instead of rendering every control and
+letting the refusal arrive after the click:
+
+```gts
+class Isolated extends Component<typeof Classroom> {
+  get canAddActivity() {
+    return this.args.context?.canInvoke?.('appendActivity', this.args.model);
+  }
+  <template>
+    {{#if this.canAddActivity}}
+      <button {{on 'click' this.addActivity}}>Add activity</button>
+    {{/if}}
+  </template>
+}
+```
+
+`canInvoke(operation, target)` answers synchronously: `true` or `false` once the
+realm has answered, `undefined` while it is being asked. The template re-renders
+when the answer lands. Every call made during one render pass goes to the realm
+as one request, so thirty cards each asking about three operations cost one
+round trip, not ninety. `@context.canInvoke` is absent where there is no session
+to ask for (a prerender, a freestyle), so guard on it.
+
+The target is a saved card, or a card class for a "New" button:
+`canInvoke('create', Classroom, { realm })` asks whether this session may create
+a `Classroom`, in `realm` or, when you leave it out, in the realm a class-scoped
+create lands in when it names none.
+
+An answer is refreshed when the realm reindexes the card it is about, and every
+answer in a realm is refreshed when the realm's own config changes. The realm's
+policy card often lives in a realm this session cannot read, and a permission
+change is not broadcast, so an answer more than a few seconds old is also asked
+again the next time the template reads it. The template keeps showing the old
+answer until the new one arrives.
+
+**Nothing may treat a capability answer as authorization.** The realm decides
+again when the operation is invoked, against the state as it is then, so a
+`true` means the operation was allowed a moment ago, not that the call will
+succeed. Hide a control on `false`; never skip or trust the call because of a
+`true`.
+
+Under it is `POST {realm}/_capabilities`, which takes up to 100
+`{ target, operation }` pairs and answers each one. A target is a card's URL, or
+a type's `{ module, name }` for a create. Each answer comes from the realm's own
+permission decision and goes no further, so asking changes nothing in the realm:
+
+- A grant whose predicate reads a stored card is judged against the card as it
+  is stored now. When the operation is invoked, the realm judges the same card
+  again under the write lock.
+- `allowed: true, conditional: true` answers a create against a type whose grant
+  has a predicate. That predicate reads the card the create would write, which
+  does not exist yet, so the check can't evaluate it. Render the control; the
+  call can still be refused.
+- A caller who cannot read the realm gets only `allowed`, with no reason and no
+  `conditional`. A card they may not use and a card that does not exist get the
+  same answer. A create that would be `conditional` for anyone else is `true`
+  for them, since it names no card.
+- A write the realm refuses before any policy can judge it gets `false`: a
+  caller who is not signed in, or a session that may only read.
+- A caller who can read the realm also gets a `reason` on a refusal: the error
+  code the invocation itself would return.
+
 ## Saved searches
 
 A `query` operation is a saved search declared next to the card's other
@@ -714,6 +782,76 @@ Three worth recognizing:
   depends on the card's stored values, so the 500 also says something about
   what the card holds; write predicates that cannot throw on any value the
   card can store.
+
+## Asking a policy what it decides
+
+A realm's policy widens what the realm's own permissions allow. A policy
+narrower than its author meant shows up as refusals someone reports. A policy
+wider than its author meant shows up as nothing at all. An explain is how the
+realm's owner asks directly.
+
+A policy card's type declares one, named `explain`, on the `explain` base.
+Invoked on the policy card with an actor, a card and an operation, it runs the
+policy gate of the realm that holds the card, exactly as that invocation
+would. It stops at the decision, invokes nothing, and answers with how the gate
+got there:
+
+```ts
+class SchoolPolicy extends RealmPolicy {
+  @operation static explain = {
+    base: 'explain',
+    params: {
+      actor: StringField,
+      target: StringField,
+      operation: StringField,
+    },
+    nonGrantable: true,
+  } satisfies OperationDeclaration;
+}
+
+let explanation = await operations<typeof SchoolPolicy>(policy).explain({
+  actor: '@teacher:example.org',
+  target: 'https://example.org/education/classrooms/room-204',
+  operation: 'read',
+});
+// explanation.decision   'allowed' | 'denied' | 'failed'
+// explanation.reason     why, as one code: 'acl', 'granted', 'no-grant',
+//                        'predicate-false', 'predicate-threw', …
+// explanation.acl        what the realm's own permissions allow the actor
+// explanation.rules      every rule governing the card's type, with each of
+//                        its grants for the operation: the predicate, the
+//                        tier it reads, and what it said
+// explanation.admittedBy the grant that admitted it, where one did
+// explanation.refusal    the status and code the actor would be refused with
+```
+
+Some things worth knowing before you read one:
+
+- **It is for the people who run the realms.** The caller asking must be able
+  to read both the policy card's realm and the card's realm, as a session of
+  their own: a revoked session, or one delegated to a single realm, asks as
+  nobody. A caller missing either read is told what a card that does not exist
+  is told, the same response byte for byte. No policy grant ever reaches an
+  explain, the policy's own grant included.
+- **Read is the whole gate.** A reader of both realms learns, for any actor
+  they name, what the card's realm's permissions allow that actor, which the
+  realm's permissions listing shows only to its owners.
+- **There is no asking about yourself.** A caller refused an operation is told
+  as little as the realm's permissions entitle them to, so that they cannot
+  learn which cards exist. An explain would tell them exactly that, so it is
+  not a self-service check, and a view never decides what to show from one.
+- **It explains only the policy the card's realm names.** An explain on any
+  other policy card refuses with `policy-not-in-force`.
+- **`allowed` means the gate admits the invocation.** The operation can still
+  refuse for reasons of its own, such as a param it was not sent or an
+  assertion the card does not satisfy.
+- **A write's predicate is judged against the card as it is stored now.** An
+  invocation decides it under the write lock, so another write landing first
+  can change the answer.
+- **The tier says what a predicate reads.** `stored` is the card's own stored
+  source, which is as fresh as the last write. `snapshot` is a predicate
+  annotated as reading computed values or linked cards. Those lag the index,
+  the gate never evaluates them, and such a grant admits nothing.
 
 ## Where to look next
 
