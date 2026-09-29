@@ -17,6 +17,7 @@ import type { BatchEntryResult, BatchNode } from './coordinator.ts';
 import { assertParamsSupplied, type OperationScope } from './dispatch.ts';
 import { runInputTransform, type TransformContext } from './transforms.ts';
 import type { BatchEntry } from './executors.ts';
+import { pendingWriteFor } from './gate.ts';
 import type { GateDecision, PendingWrite } from './gate.ts';
 import { isCodeRef } from '../card-document-shape.ts';
 import { isRelativePath } from '../code-ref.ts';
@@ -654,15 +655,14 @@ export interface ResolvedEnvelopeEntry {
   scope: OperationScope;
 }
 
-// The write the policy gate left pending on this entry, in the form the write
-// lock decides it in. Undefined for an entry the gate decided outright.
+// What the policy gate left the write lock to decide of this entry, in the
+// form the lock decides it in. Undefined for an entry the gate left nothing
+// to decide of.
 export function pendingWriteOf(
   resolved: ResolvedEnvelopeEntry,
 ): PendingWrite | undefined {
   let { entry, target, decision, scope } = resolved;
-  return decision.kind === 'pending'
-    ? { target, name: entry.name, decision, scope }
-    : undefined;
+  return pendingWriteFor(target, entry.name, decision, scope);
 }
 
 // The two behaviors that are reached somewhere other than here.

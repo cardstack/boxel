@@ -5375,9 +5375,10 @@ export class Realm {
   // invoke an operation the realm's policy grants them: every entry is
   // resolved through the policy gate with the permission's refusal on it, and
   // an entry no grant admits refuses the batch with nothing written. A write
-  // whose grant rests on a predicate is decided under the write lock, against
-  // the card it changes as the batch holds it there, and a refusal there
-  // leaves nothing written either. An operation's program can read `actor()`
+  // a grant admitted to a stored card, and a write whose grant rests on a
+  // predicate, is decided again under the write lock, against the card it
+  // changes as the batch holds it there, and a refusal there leaves nothing
+  // written either. An operation's program can read `actor()`
   // and an `assert` can refuse on what it finds, but neither decides who may
   // invoke it. Treat every operation's result as reachable by any caller
   // permitted to invoke it.
@@ -5510,22 +5511,23 @@ export class Realm {
     );
     if (refusedAt !== -1) {
       // The entries ahead of the refused one all resolved, and one of those
-      // may be a write the gate left pending. A card that does not exist is
+      // may be a write the gate left to the write lock. A card that does not exist is
       // refused where it sits, so the position a refusal names says whether
       // the entries ahead of it resolved, and it is weighed against theirs.
       throw await this.#disclosableFailure(
         (outcomes[refusedAt] as PromiseRejectedResult).reason,
         coarseDeclined,
         outcomes.slice(0, refusedAt).map(fulfilled),
-        new Set(),
+        new Map(),
       );
     }
     let resolved = outcomes.map(fulfilled);
 
-    // The writes the policy gate left pending that the write lock has since
-    // decided, admitted or refused. What a batch that fails may tell a caller
-    // the realm ACL declined outright depends on the ones it has not.
-    let decided = new Set<EntryPosition>();
+    // The writes the policy gate left to the write lock that the lock has
+    // since decided, each with the refusal it gave, or undefined for one it
+    // admitted. What a batch that fails may tell a caller the realm ACL
+    // declined outright depends on these.
+    let decided = new Map<EntryPosition, unknown>();
     let results = new Map<EntryPosition, EnvelopeResult>();
     try {
       // `QUERY` is the read-only spelling, and the realm derives the permission
@@ -5624,10 +5626,11 @@ export class Realm {
         // entry keeps its `position`, which is the key both the staging schedule
         // and the results are looked up by.
         //
-        // A write the policy gate could admit only on a predicate carries that
-        // predicate to the coordinator, which decides it under the write lock
-        // where the write stages: against the card it changes, or, for a
-        // create against a type, the card it would mint.
+        // A write a policy grant admitted carries what the gate left undecided
+        // to the coordinator, which decides it under the write lock where the
+        // write stages: the type a stored card's bytes name, and a predicate
+        // the grant rests on, against the card it changes or, for a create
+        // against a type, the card it would mint.
         let staged = new Map<EntryPosition, BatchEntry>();
         for (let [index, write] of writes.entries()) {
           try {
@@ -5648,9 +5651,11 @@ export class Realm {
                           pending,
                           judged,
                         );
-                      } finally {
-                        decided.add(entry.position);
+                      } catch (refusal: unknown) {
+                        decided.set(entry.position, refusal);
+                        throw refusal;
                       }
+                      decided.set(entry.position, undefined);
                     },
                   }
                 : {}),
@@ -5798,8 +5803,8 @@ export class Realm {
   }
 
   // What a batch that failed may tell its caller, for a caller the realm ACL
-  // declined outright whose batch holds a write the policy gate left pending
-  // and the write lock has not decided.
+  // declined outright whose batch holds a write the policy gate left to the
+  // write lock and the lock has not decided.
   //
   // Such a write's target resolved, and the gate matched a grant on it, which
   // never happens for a card that does not exist. So a refusal the batch makes
@@ -5808,11 +5813,14 @@ export class Realm {
   // That covers a missing param, a failing `input` stage, a malformed entry,
   // another entry refused while staging, and a later entry refused at
   // resolution, whose position alone says the entries ahead of it resolved.
-  // A write whose predicate does not hold is answered with the gate's refusal
-  // instead, exactly as a card that does not exist is answered. A write whose
-  // predicate holds lets the caller have the answer the batch actually has. A
-  // write the lock already decided is not judged again: one it admitted may
-  // be told, and one it refused is the refusal.
+  // A write the lock would refuse, for its card's type or its predicate, is
+  // answered with the gate's refusal instead, exactly as a card that does not
+  // exist is answered. A write the lock would admit lets the caller have the
+  // answer the batch actually has. A write the lock already decided is not
+  // judged again: one it admitted may be told, and one it refused is the
+  // refusal. The first such write in request order is the answer, so a batch
+  // that the lock refused at one entry says nothing about the entries after
+  // it, as a batch refused at resolution says nothing about them either.
   //
   // The write is judged against its card as stored now, outside the lock.
   // That decides only what the refusal says, never whether anything is
@@ -5821,22 +5829,23 @@ export class Realm {
     err: unknown,
     coarseDeclined: CoarseDeclined,
     resolved: readonly ResolvedEnvelopeEntry[],
-    decided: ReadonlySet<EntryPosition>,
+    decided: ReadonlyMap<EntryPosition, unknown>,
   ): Promise<unknown> {
     if (coarseDeclined !== 'all') {
       return err;
     }
     for (let entry of resolved) {
+      let { position } = entry.entry;
+      if (decided.has(position)) {
+        let refusal = decided.get(position);
+        if (refusal !== undefined) {
+          return atEntry(refusal, position);
+        }
+        continue;
+      }
       let pending = pendingWriteOf(entry);
-      if (
-        pending &&
-        !decided.has(entry.entry.position) &&
-        !(await pendingWriteHolds(this.operationCore, pending))
-      ) {
-        return atEntry(
-          notPermitted(pending.target, pending.name),
-          entry.entry.position,
-        );
+      if (pending && !(await pendingWriteHolds(this.operationCore, pending))) {
+        return atEntry(notPermitted(pending.target, pending.name), position);
       }
     }
     return err;

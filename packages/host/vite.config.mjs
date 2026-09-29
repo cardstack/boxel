@@ -342,12 +342,10 @@ export default defineConfig(({ mode }) => ({
   resolve: {
     alias: [
       ...hostToolAliases(),
-      // Base-realm modules also import host helpers as
-      // `@cardstack/boxel-host/lib/<name>` (e.g. lib/three-loader), which the
-      // virtual network shims to app/lib at runtime. Without an alias the
-      // dependency scan cannot resolve them, fails, and skips pre-bundling
-      // altogether, so CommonJS deps and v1 addons then reach the browser
-      // unprocessed.
+      // Bundled base modules import host library modules as
+      // `@cardstack/boxel-host/lib/<name>`, the specifier app/lib/externals.ts
+      // shims for the loader at runtime. Map it onto the same files so the
+      // bundler resolves what the runtime serves.
       {
         find: /^@cardstack\/boxel-host\/lib\/(.*)$/,
         replacement: path.join(__dirname, 'app', 'lib', '$1'),
