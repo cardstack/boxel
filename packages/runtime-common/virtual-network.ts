@@ -187,10 +187,14 @@ export class VirtualNetwork {
     return moduleIdentifier;
   };
 
-  // A shim resolver's retry backoff sleeps on the fetch timer, so a transient
-  // chunk-fetch failure during a prerender is retried rather than left waiting
-  // on a stubbed setTimeout that never fires. The scheduler is read when the
-  // sleep starts, since the constructor assigns it after this field.
+  // A shim resolver's retry backoff sleeps on the fetch timer, so during a
+  // prerender its retries run out and the resolver gives up promptly rather
+  // than waiting on a stubbed setTimeout that never fires. Giving up promptly
+  // matters even though a retried `import()` of a chunk that failed to fetch
+  // fails again in the same document: the prerender recognises that failure
+  // and moves the render to a fresh tab, which it can only do once the render
+  // has failed. The scheduler is read when the sleep starts, since the
+  // constructor assigns it after this field.
   private packageShimHandler = new PackageShimHandler(this.resolveImport, {
     delay: (ms) =>
       new Promise<void>((resolve) => {

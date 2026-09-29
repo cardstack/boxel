@@ -312,8 +312,9 @@ export interface ShimRetryDeps {
   // `defaultDelay` (a thin sleep on the global `setTimeout`) below. An
   // owner whose global `setTimeout` can be disabled — the host during a
   // prerender, where render-timer-stub swallows it — passes a sleep on
-  // a timer that still fires, or a transient failure would wait on a
-  // retry that never comes and hang the render until its timeout.
+  // a timer that still fires. Otherwise the first transient failure
+  // waits forever for its retry, and the render hangs until its timeout
+  // instead of failing with the resolver's error.
   // Tests pass one that records each delay instead of sleeping.
   delay?: (ms: number) => Promise<void>;
   // Override the default backoff schedule. Tests can pass `[]` to
