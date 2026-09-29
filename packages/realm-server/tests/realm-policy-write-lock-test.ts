@@ -401,7 +401,12 @@ module(basename(import.meta.filename), function (hooks) {
 
       assert.deepEqual(
         gateStats(),
-        { policyLoads: 2, predicateEvaluations: 2, pendingDischarges: 2 },
+        {
+          policyLoads: 2,
+          predicateEvaluations: 2,
+          pendingDischarges: 2,
+          definitionLookups: 0,
+        },
         'each write’s predicate was evaluated once, under the lock',
       );
     });
@@ -624,7 +629,12 @@ module(basename(import.meta.filename), function (hooks) {
       assert.strictEqual(events.sent, 0, 'and no realm event was sent');
       assert.deepEqual(
         gateStats(),
-        { policyLoads: 2, predicateEvaluations: 2, pendingDischarges: 2 },
+        {
+          policyLoads: 2,
+          predicateEvaluations: 2,
+          pendingDischarges: 2,
+          definitionLookups: 0,
+        },
         'both predicates were evaluated under the lock',
       );
     });
@@ -833,6 +843,7 @@ module(basename(import.meta.filename), function (hooks) {
         policyLoads: 0,
         predicateEvaluations: 0,
         pendingDischarges: 0,
+        definitionLookups: 0,
       });
     });
   });
