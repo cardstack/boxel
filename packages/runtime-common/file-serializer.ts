@@ -126,6 +126,9 @@ export default async function serialize({
   // the doc was GET from) — persisting an echo would pin a copied card's
   // source file to the original's captures.
   delete result.data.meta.screenshots;
+  // How a search row carrying this card was served, not a fact about the card:
+  // a client writing back a row whose relationships were withheld echoes it.
+  delete result.data.meta.relationshipsWithheld;
   delete result.included;
   delete result.data.links;
   result.data.type = 'card';

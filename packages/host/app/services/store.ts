@@ -1479,8 +1479,9 @@ export default class StoreService extends Service implements StoreInterface {
   // (`meta.relationshipsWithheld`, a row of a query declaring `links: 'none'`),
   // which says nothing about the card's links and would read as a card linking
   // to nothing. Such a row renders from its HTML, or resolves the card through
-  // its own read, so the card's live instance is always what its own `read`
-  // declares. `entry`s carry no serialization to deposit. Idempotent:
+  // its own read, so a query that withholds its rows' links never leaves the
+  // card's live instance with empty link fields. `entry`s carry no
+  // serialization to deposit. Idempotent:
   // depositing is skipped when the instance is already resident.
   async inflateSearchEntryItem(
     resource: CardResource<Saved> | FileMetaResource,
@@ -1619,8 +1620,8 @@ export default class StoreService extends Service implements StoreInterface {
     // `included`, reached through the entry's `item` relationship. An item
     // served with its relationships withheld is never adopted, since it is
     // silent about the card's links rather than saying it has none: its card
-    // loads through its own read instead, so the instance carries what the
-    // card's own `read` declares.
+    // loads through its own read instead, so the instance carries the links
+    // that read serves.
     let items = this.itemResourcesFromSearchEntries(collectionDoc);
     let instances = (
       await Promise.all(

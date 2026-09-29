@@ -108,7 +108,9 @@ export type CardResourceMeta = Meta & {
   // card links to, which is not the same as linking to nothing, so like a
   // sparse item it must never enter the Store as the card's instance — every
   // link field of an instance built from it would read empty, in every live
-  // view and editor, whatever the card's own `read` declares.
+  // view and editor, whatever the card's own `read` declares. It describes the
+  // response rather than the card, so it is stripped from incoming writes and
+  // never persisted into the source file.
   relationshipsWithheld?: true;
   // The result's error doc, when this serialization stands in for a card that
   // failed to render/index. Present => the live `item` cannot render, so a
