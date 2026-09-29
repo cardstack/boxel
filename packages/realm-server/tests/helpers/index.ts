@@ -68,6 +68,8 @@ import {
 import { upsertPublishedRealmInRegistry } from '../../lib/realm-registry-writes.ts';
 
 import {
+  currentConnectionTenant,
+  isSharedWork,
   PgAdapter,
   PgQueuePublisher,
   PgQueueRunner,
@@ -261,16 +263,66 @@ export async function waitUntil<T>(
   );
 }
 
+// Run `fn` and report each database statement issued while it ran, with the
+// connection tenant (see `withConnectionTenant` in `@cardstack/postgres`) it
+// was charged to — `undefined` for untagged work — and whether it ran as
+// shared work (`withSharedWork`). The statements are still run by the real
+// adapter; this only reads the async context each one is issued in, which is
+// the context the adapter's connection scheduler reads too.
+export async function connectionTenantsDuring<T>(
+  dbAdapter: PgAdapter,
+  fn: () => Promise<T>,
+): Promise<{
+  result: T;
+  statements: { sql: string; tenant: string | undefined; shared: boolean }[];
+}> {
+  let statements: {
+    sql: string;
+    tenant: string | undefined;
+    shared: boolean;
+  }[] = [];
+  let execute = dbAdapter.execute;
+  dbAdapter.execute = function (this: PgAdapter, ...args) {
+    statements.push({
+      sql: args[0],
+      tenant: currentConnectionTenant(),
+      shared: isSharedWork(),
+    });
+    return execute.apply(this, args);
+  };
+  try {
+    return { result: await fn(), statements };
+  } finally {
+    dbAdapter.execute = execute;
+  }
+}
+
+// Statements that read the realm index — the rows a search is answering from,
+// as opposed to the bookkeeping around it.
+export function indexReads<S extends { sql: string }>(statements: S[]): S[] {
+  return statements.filter(({ sql }) => /\bFROM\s+boxel_index\b/i.test(sql));
+}
+
+// Statements that read the module definition cache.
+export function definitionCacheReads<S extends { sql: string }>(
+  statements: S[],
+): S[] {
+  return statements.filter(({ sql }) => /\bFROM\s+modules\b/i.test(sql));
+}
+
 export const testRealm = 'http://test-realm/';
 export const localBaseRealm = isEnvironmentMode()
   ? `${serviceURL('realm-server')}/base`
   : 'http://localhost:4201/base';
 // The catalog realm the test stack serves: the pinned catalog test subset
 // (packages/catalog/test-subset.json), at the URL the prerender host bundle
-// resolves `@cardstack/catalog/` to.
+// resolves `@cardstack/catalog/` to. The stack serves it over TLS, and an
+// http URL for it answers with a redirect that a module load in the
+// prerenderer cannot follow, so a definition the realm looks up in a catalog
+// module would never load.
 export const localCatalogRealm = isEnvironmentMode()
   ? `${serviceURL('realm-server')}/catalog/`
-  : 'http://localhost:4201/catalog/';
+  : 'https://localhost:4201/catalog/';
 export const matrixURL = new URL(
   isEnvironmentMode() ? serviceURL('matrix') : 'http://localhost:8008',
 );
@@ -1283,11 +1335,13 @@ export async function createRealm({
   videoSizeLimitBytes,
   transpileCoordinator,
   fullIndexOnStartup,
+  skipBootIndex,
   mediaCacheAdapter,
   screenshotSyncWaitMs,
   readIndexDrainBudgetMs,
   linkShapePolicy,
   cardDocumentCache = new CardDocumentCache(),
+  realmFor,
 }: {
   dir: string;
   definitionLookup: DefinitionLookup;
@@ -1318,6 +1372,11 @@ export async function createRealm({
   // Production sets this via `resolveFullIndexOnStartup`; tests opt in
   // explicitly because `createRealm` has no realm-registry row to read.
   fullIndexOnStartup?: true;
+  // Forwarded to the Realm constructor's `skipBootIndex` option: the realm
+  // mounts and serves without indexing, as the dev realm server's realms do on
+  // the realm-server test stack, which starts it with
+  // `REALM_SERVER_SKIP_BOOT_INDEX=true`.
+  skipBootIndex?: true;
   // if you are creating a realm  to test it directly without a server, you can
   // also specify `withWorker: true` to also include a worker with your realm
   withWorker?: true;
@@ -1340,6 +1399,9 @@ export async function createRealm({
   // instance to read its stats, or `ttlMs: 0` to keep coalescing while
   // disabling retention.
   cardDocumentCache?: CardDocumentCache;
+  // The other realms the realm can reach, for an explain on its policy card
+  // that asks about a target in one of them.
+  realmFor?: (url: URL) => Promise<Realm | undefined>;
 }): Promise<{ realm: Realm; adapter: RealmAdapter }> {
   await insertPermissions(dbAdapter, new URL(realmURL), permissions);
 
@@ -1419,9 +1481,11 @@ export async function createRealm({
       transpileCoordinator,
       mediaCacheAdapter,
       cardDocumentCache,
+      ...(realmFor ? { realmFor } : {}),
     },
     {
       ...(fullIndexOnStartup ? { fullIndexOnStartup: true as const } : {}),
+      ...(skipBootIndex ? { skipBootIndex: true as const } : {}),
       ...(screenshotSyncWaitMs !== undefined ? { screenshotSyncWaitMs } : {}),
       ...(linkShapePolicy ? { linkShapePolicy } : {}),
       ...(readIndexDrainBudgetMs !== undefined
@@ -1713,6 +1777,10 @@ export async function runTestRealmServerWithRealms({
       dbAdapter,
       enableFileWatcher,
       definitionLookup,
+      // Every realm this server holds, as the production server reaches the
+      // realms it serves.
+      realmFor: async (url) =>
+        createdRealms.find((candidate) => candidate.paths.inRealm(url)),
     });
     await realm.logInToMatrix();
     virtualNetwork.mount(realm.handle);
@@ -2120,15 +2188,11 @@ export function setupMatrixRoom(
 
   return {
     matrixClient,
+    // Every event the room received at or after `since`, however many that
+    // is. The comparison is inclusive so an event sent in the same millisecond
+    // the caller recorded its start time still counts.
     getMessagesSince: async function (since: number) {
-      let allMessages = await matrixClient.roomMessages(testAuthRoomId!);
-      // Allow same-ms clock values between the test process and matrix so we don't
-      // miss events that are emitted immediately after we record the start time.
-      let messagesAfterSentinel = allMessages.filter(
-        (m) => m.origin_server_ts >= since,
-      );
-
-      return messagesAfterSentinel;
+      return await matrixClient.roomMessagesSince(testAuthRoomId!, since);
     },
   };
 }

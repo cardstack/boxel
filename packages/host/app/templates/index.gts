@@ -38,6 +38,7 @@ import type IndexController from '@cardstack/host/controllers/index';
 import { getCardCollection } from '@cardstack/host/resources/card-collection';
 import { getCard } from '@cardstack/host/resources/card-resource';
 
+import type CapabilitiesService from '@cardstack/host/services/capabilities';
 import type HostModeStateService from '@cardstack/host/services/host-mode-state-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type StoreService from '@cardstack/host/services/store';
@@ -60,6 +61,7 @@ export interface IndexComponentComponentSignature {
 }
 
 export class IndexComponent extends Component<IndexComponentComponentSignature> {
+  @service declare private capabilities: CapabilitiesService;
   @service declare private toolService: ToolService;
   @service declare private hostModeService: HostModeService;
   @service declare private hostModeStateService: HostModeStateService;
@@ -176,6 +178,7 @@ export class IndexComponent extends Component<IndexComponentComponentSignature> 
       getCard: this.getCard,
       getCards: this.getCards,
       getCardCollection: this.getCardCollection,
+      canInvoke: this.capabilities.canInvoke,
       store: this.cardStore,
       toolContext: this.toolContext,
       commandContext: this.toolContext,

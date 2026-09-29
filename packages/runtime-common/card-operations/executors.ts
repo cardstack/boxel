@@ -186,6 +186,29 @@ interface EntryCommon {
   // the write conditional in the reporting sense: the result says whether the
   // target was still at that version, and the write happens either way.
   baseVersion?: string;
+  // Whether this entry may be carried out at all, where that rests on the
+  // state the entry is about to change and so can only be decided under the
+  // lock. Handed the card the entry is judged by, as the batch holds it where
+  // the entry stages, or undefined where there is no such card to judge, and
+  // refuses by throwing. Absent for an entry that was admitted in full before
+  // the batch was composed, which is every entry but a policy-granted write
+  // to a stored card, and a policy-granted create whose grants carry
+  // predicates.
+  admit?: (judged: AdmissionSubject | undefined) => Promise<void>;
+}
+
+// The card an entry that is admitted under the lock is judged by: the card it
+// changes, as the batch holds it when the entry stages, or, for a create that
+// names no card, the card it would mint.
+export interface AdmissionSubject {
+  id: string;
+  source: string;
+  // Set where an earlier entry in the batch appended to the card without
+  // holding its bytes, so `source` is the card from beneath that append. An
+  // append never changes a card's type, so these bytes still say what type
+  // the card is. They do not say what its fields will hold once the append
+  // lands.
+  beneathAppend?: true;
 }
 
 export interface CreateEntry extends EntryCommon {

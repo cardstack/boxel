@@ -18,7 +18,6 @@ import OperatorModeStackItem, {
   type StackItemComponentAPI,
 } from './stack-item';
 
-import type { CardDefOrId } from './stack-item';
 import type {
   CreateCardFn,
   DeleteCardFn,
@@ -40,10 +39,6 @@ interface Signature {
     deleteCard: DeleteCardFn;
     toolContext: ToolContext;
     close: (stackItem: StackItem, animate?: boolean) => void | Promise<void>;
-    onSelectedCards: (
-      selectedCards: CardDefOrId[],
-      stackItem: StackItem,
-    ) => void;
     setupStackItem: (
       model: StackItem,
       componentAPI: StackItemComponentAPI,
@@ -108,7 +103,6 @@ export default class OperatorModeStack extends Component<Signature> {
             @dismissStackedCardsAbove={{perform this.dismissStackedCardsAbove}}
             @requestDeleteCard={{@deleteCard}}
             @close={{@close}}
-            @onSelectedCards={{@onSelectedCards}}
             @setupStackItem={{this.setupStackItem}}
           />
         {{/each}}

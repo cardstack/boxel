@@ -1218,5 +1218,25 @@ module(basename(import.meta.filename), function () {
         'no realm answered, so zero is what is known — not what matched',
       );
     });
+
+    test('each answering realm reports its own total beside the sum', async function (assert) {
+      let combined = await searchEntryRealms(
+        [answering('http://a/', 3), answering('http://b/', 4)],
+        entryQuery,
+      );
+      assert.strictEqual(combined.meta.page.total, 7);
+      assert.deepEqual(combined.meta.realmTotals, {
+        'http://a/': 3,
+        'http://b/': 4,
+      });
+    });
+
+    test('a realm that did not answer has no per-realm total', async function (assert) {
+      let combined = await searchEntryRealms(
+        [answering('http://a/', 3), failing('http://b/'), undefined],
+        entryQuery,
+      );
+      assert.deepEqual(combined.meta.realmTotals, { 'http://a/': 3 });
+    });
   });
 });

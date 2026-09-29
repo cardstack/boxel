@@ -10,7 +10,7 @@ import {
   newOperationScope,
   paramsFor,
   projectedResult,
-  readShape,
+  readPlan,
   runInputTransform,
   runOperation,
   runOutputTransform,
@@ -77,6 +77,10 @@ function stub(operations?: Definition['operations']): OperationCore {
           fieldDefs: {},
           ...(operations ? { operations } : {}),
         };
+      },
+      async lookupDefinitionEntry(codeRef: CodeRef) {
+        let definition = await this.lookupDefinition(codeRef);
+        return definition ? { definition, types: [] } : undefined;
       },
     },
     indexQueryEngine: {
@@ -466,29 +470,59 @@ module(basename(import.meta.filename), function () {
     });
 
     test('the projection question is answerable without assembling', async function (assert) {
-      assert.strictEqual(
-        await readShape(stub({ read: REDACTING_READ }), new URL(CARD)),
-        'staged',
+      assert.deepEqual(
+        await readPlan(stub({ read: REDACTING_READ }), new URL(CARD)),
+        { shape: 'staged', links: 'full' },
         'a type that declares an output has a stage to run',
       );
-      assert.strictEqual(
-        await readShape(stub(), new URL(CARD)),
-        'plain',
+      assert.deepEqual(
+        await readPlan(stub(), new URL(CARD)),
+        { shape: 'plain', links: 'full' },
         'a type that declares nothing does not',
       );
-      assert.strictEqual(
-        await readShape(
+      assert.deepEqual(
+        await readPlan(
           stub({ read: { base: 'read', deterministic: true } }),
           new URL(CARD),
         ),
-        'plain',
+        { shape: 'plain', links: 'full' },
         'a declared read with no output does not either',
       );
     });
 
+    test('a declared link strategy is answerable without assembling too', async function (assert) {
+      // The validator a conditional request is answered from is built before
+      // anything is assembled, and it has to name the shape the body would
+      // take — so the strategy has to be reachable from the definition alone,
+      // the same way the projection question is.
+      assert.deepEqual(
+        await readPlan(
+          stub({ read: { base: 'read', deterministic: true, links: 'ids' } }),
+          new URL(CARD),
+        ),
+        { shape: 'plain', links: 'ids' },
+        'a narrowed read is still plain, and says how far it reaches',
+      );
+      assert.deepEqual(
+        await readPlan(
+          stub({
+            read: {
+              base: 'read',
+              deterministic: true,
+              links: 'none',
+              output: { source: '{title:.title}', syntax: 'solidified' },
+            },
+          }),
+          new URL(CARD),
+        ),
+        { shape: 'staged', links: 'none' },
+        'the two answers are independent',
+      );
+    });
+
     test('a read that cannot be resolved is answered by assembling, not by a validator', async function (assert) {
-      assert.strictEqual(
-        await readShape(
+      assert.deepEqual(
+        await readPlan(
           stub({
             read: {
               base: 'read',
@@ -506,7 +540,9 @@ module(basename(import.meta.filename), function () {
           }),
           new URL(CARD),
         ),
-        'unresolved',
+        // The widest strategy, which is the one that keeps the caller off
+        // every fast path a narrower answer would have opened.
+        { shape: 'unresolved', links: 'full' },
         'a refusal is coming, and only the full request can report it',
       );
     });

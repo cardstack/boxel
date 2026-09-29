@@ -12,7 +12,7 @@ import {
   usesVolatileCall,
 } from './bxl-emit.ts';
 import { isBxl, isMarker, lowerQueryTemplate } from './query.ts';
-import { isDefinitionFreeBaseOperation } from './types.ts';
+import { isDefinitionFreeBaseOperation, isLinkStrategy } from './types.ts';
 import type {
   LowerOperationDeclarationsResult,
   OperationDefinition,
@@ -161,6 +161,9 @@ const DECLARABLE_BY: Record<BaseOperationName, readonly Definition['type'][]> =
     transform: ['card-def'],
     appendContainsMany: ['card-def'],
     appendLine: ['file-def'],
+    // Reached only through a declaration: nothing implies it, and it answers
+    // only on a policy card.
+    explain: ['card-def'],
   };
 
 function declarableBases(
@@ -189,6 +192,7 @@ function runsNoProgram(base: BaseOperationName, kind: Definition['type']) {
   return (
     base === 'appendLine' ||
     base === 'appendContainsMany' ||
+    base === 'explain' ||
     (base === 'update' && kind === 'file-def')
   );
 }
@@ -254,13 +258,40 @@ export async function lowerOperationDeclarations(
       issues.push(...operation.issues!);
       continue;
     }
-    let operation = await lowerOperation(raw[name], sink, context);
+    let operation: OperationDefinition;
+    try {
+      operation = await lowerOperation(raw[name], sink, context);
+    } catch (e: unknown) {
+      // Lowering records rather than throws, so this is a defect in it. It
+      // costs this operation its validity and nothing else, and the entry
+      // stays stored, flags and all, rather than leaving its name to fall
+      // back to the built-in behavior of the same name.
+      sink.add(
+        'lowering-failed',
+        '',
+        `lowering this operation failed: ${e instanceof Error ? e.message : String(e)}`,
+      );
+      operation = { base: raw[name].base, deterministic: true };
+    }
     if (sink.issues.length > 0) {
       operation.invalid = true;
       operation.issues = sink.issues;
       issues.push(...sink.issues);
     }
     operations[name] = operation;
+  }
+  // Carried onto every entry the declaration produced, an invalid one
+  // included, so no finding against a declaration makes it grantable. An
+  // explain is never grantable whatever its declaration says: the decorator
+  // refuses one that leaves the flag off, and an entry reaching here without
+  // it is marked all the same.
+  for (let name of Object.keys(operations)) {
+    if (
+      raw[name]?.nonGrantable === true ||
+      operations[name].base === 'explain'
+    ) {
+      operations[name].nonGrantable = true;
+    }
   }
   return { operations, issues };
 }
@@ -270,7 +301,7 @@ export async function lowerOperationDeclarations(
 // and nothing else.
 class IssueSink {
   readonly issues: OperationLoweringIssue[] = [];
-  private operation: string;
+  readonly operation: string;
 
   constructor(operation: string) {
     this.operation = operation;
@@ -333,6 +364,36 @@ async function lowerOperation(
     operation.optimistic = declaration.optimistic;
   }
 
+  // A link strategy narrows the document a read of the target serves, and no
+  // other base serves one — so on any other base the declaration would narrow
+  // nothing, and a stored entry carrying one would read as a narrowing that was
+  // never applied. A `query` in particular answers through search, whose results
+  // carry their own closures that this declaration does not govern. The
+  // authoring decorator refuses both of these where they are written; this
+  // keeps them out of a type's entry, which outlives the code that built it.
+  let links = (declaration as { links?: unknown }).links;
+  if (links !== undefined) {
+    if (base !== 'read') {
+      sink.add(
+        'links-without-assembly',
+        'links',
+        `a \`links\` strategy narrows the document a "read" serves, and a "${base}" operation serves no such document, so it would narrow nothing`,
+      );
+    } else if (!isLinkStrategy(links)) {
+      // Not stored. The serving path reads an unrecognized strategy as the
+      // narrowest one, so storing this would answer with a withholding the
+      // author did not ask for; recording it instead refuses the read and says
+      // why.
+      sink.add(
+        'invalid-link-strategy',
+        'links',
+        `"${String(links)}" does not name how much of the link graph a read carries — one of "full", "ids", "none"`,
+      );
+    } else {
+      operation.links = links;
+    }
+  }
+
   let { statements, snapshot } = await lowerClauses(
     declaration,
     paramNames,
@@ -347,7 +408,9 @@ async function lowerOperation(
       'transformations',
       base === 'update'
         ? `an "update" on a file replaces its content wholesale rather than transforming a document, so this program would never be reached`
-        : `an "${base}" operation appends to the stored file rather than running a program over a document, so this program would never be reached`,
+        : base === 'explain'
+          ? `an "explain" operation reports what the realm's policy decides rather than running a program over a document, so this program would never be reached`
+          : `an "${base}" operation appends to the stored file rather than running a program over a document, so this program would never be reached`,
     );
   } else if (rawProgram) {
     // An author's program is written in the readable spelling; canonicalizing
@@ -392,9 +455,22 @@ async function lowerOperation(
       operation.input = input;
     }
   }
-  let output = await lowerOutput(declaration.output, paramNames, sink, context);
-  if (output) {
-    operation.output = output;
+  if (base === 'explain' && declaration.output !== undefined) {
+    sink.add(
+      'unrunnable-program',
+      'output',
+      `an "explain" operation answers with the policy's explanation as the gate reports it, so this projection would never be reached`,
+    );
+  } else {
+    let output = await lowerOutput(
+      declaration.output,
+      paramNames,
+      sink,
+      context,
+    );
+    if (output) {
+      operation.output = output;
+    }
   }
 
   if (base === 'create') {
@@ -416,7 +492,10 @@ async function lowerOperation(
       operation.query = query;
     }
   }
-  if (base === 'appendContainsMany') {
+  if (
+    base === 'appendContainsMany' &&
+    !isBuiltInAppend(sink.operation, declaration as AppendContainsManyClauses)
+  ) {
     let items = await lowerAppendContainsMany(
       declaration as AppendContainsManyClauses,
       paramNames,
@@ -1526,6 +1605,22 @@ interface AppendContainsManyClauses {
   field?: unknown;
   item?: unknown;
   fields?: Record<string, unknown>;
+}
+
+// An append declared under its own name that names nothing to append is the
+// built-in append, which takes its field and items from each invocation. It
+// lowers to no items, which is what the executor reads as the built-in. Under
+// any other name an append that names nothing is incomplete.
+function isBuiltInAppend(
+  name: string,
+  declaration: AppendContainsManyClauses,
+): boolean {
+  return (
+    name === 'appendContainsMany' &&
+    declaration.field === undefined &&
+    declaration.item === undefined &&
+    declaration.fields === undefined
+  );
 }
 
 // `field: 'events', item: {…}` → `items: { events: {…} }`, and `fields: {…}`

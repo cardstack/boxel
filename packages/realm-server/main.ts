@@ -42,6 +42,7 @@ import {
   RealmRegistryReconciler,
   type RealmRegistryRow,
 } from './lib/realm-registry-reconciler.ts';
+import { findOrMountRealm } from './lib/realm-routing.ts';
 import { RealmFileChangesListener } from './lib/realm-file-changes-listener.ts';
 import { RealmIndexUpdatedListener } from './lib/realm-index-updated-listener.ts';
 import { ModuleCacheInvalidationListener } from './lib/module-cache-invalidation-listener.ts';
@@ -515,7 +516,9 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
   // against whether the process's event loop was starved at the time, and heap
   // growth toward the OOM limit is visible (and alertable) on a calm process
   // before a search storm — not only inside saturation windows.
-  let stopHealthSampler = startHealthSampler();
+  let stopHealthSampler = startHealthSampler({
+    connectionStats: () => dbAdapter.connectionStats,
+  });
   let reconciler: RealmRegistryReconciler | undefined;
   let fileChangesListener: RealmFileChangesListener | undefined;
   let indexUpdatedListener: RealmIndexUpdatedListener | undefined;
@@ -684,6 +687,10 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
           ),
           mediaCacheAdapter,
           cardDocumentCache,
+          realmFor: (url: URL) =>
+            reconciler
+              ? findOrMountRealm(url, { realms, reconciler, dbAdapter })
+              : Promise.resolve(undefined),
         },
         {
           ...(fullIndexOnStartup ? { fullIndexOnStartup: true as const } : {}),

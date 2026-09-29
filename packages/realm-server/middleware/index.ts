@@ -13,6 +13,7 @@ import {
 } from '@cardstack/runtime-common';
 import type Koa from 'koa';
 import mime from 'mime-types';
+import { withConnectionTenant } from '@cardstack/postgres';
 import { nodeStreamToText, nodeStreamToBuffer } from '../stream.ts';
 import { retrieveTokenClaim } from '../utils/jwt.ts';
 import {
@@ -278,6 +279,31 @@ export function attributeSearchRequest(
 ): void {
   let searchRequest = ctxt.state[SEARCH_REQUEST] as SearchRequest | undefined;
   searchRequest?.attribute(realms);
+}
+
+// Run the rest of a search request with the database connections it draws on
+// shared out as the realms it names, so that while another realm is searching
+// on this replica its queries wait for their share of the pool rather than
+// behind everything the other realm has queued (see the connection scheduler
+// in `@cardstack/postgres`). The tenant is the set of realms the request
+// names — for most searches, one realm. A request naming several is a tenant
+// of its own rather than a share of each realm's, so two searches whose sets
+// overlap without matching count as different tenants: a realm searched under
+// two sets at once holds up to a share under each while the pool is
+// oversubscribed. Keying by the whole set rather than treating overlapping
+// sets as one keeps realms apart that each federate with a common system
+// realm. Called by whichever handler first knows the realms, beside
+// `attributeSearchRequest`; requests the admission gate did not count run
+// untagged.
+export async function withSearchConnectionTenant<T>(
+  ctxt: Koa.Context,
+  realms: readonly string[],
+  fn: () => Promise<T>,
+): Promise<T> {
+  if (!ctxt.state[SEARCH_REQUEST] || realms.length === 0) {
+    return await fn();
+  }
+  return await withConnectionTenant([...new Set(realms)].sort().join(' '), fn);
 }
 
 // Puts a search through the admission gate (`search-inflight.ts`). A search

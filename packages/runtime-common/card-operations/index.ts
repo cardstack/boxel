@@ -13,12 +13,29 @@ export type {
   RealmPolicyCacheEnvironment,
 } from './policy.ts';
 export type { LoweringContext } from './lowering.ts';
-export { notPermitted, policyGateStats } from './gate.ts';
+export {
+  dischargePendingDecision,
+  notPermitted,
+  pendingWriteFor,
+  pendingWriteHolds,
+  policyGateStats,
+} from './gate.ts';
+export { checkCapabilities, parseCapabilityChecks } from './capabilities.ts';
+export type { CapabilityCaller } from './capabilities.ts';
+export { CAPABILITY_CHECK_CAP } from './capability-wire.ts';
+export type { CapabilityAnswer, CapabilityCheck } from './capability-wire.ts';
+export { policyQueryScope } from './policy-query.ts';
+export type { PolicyQueryScope } from './policy-query.ts';
 export type {
   GateDecision,
+  GrantedDecision,
+  LockedGrant,
   MatchedGrant,
   OperationPolicyAccess,
+  PendingDecision,
+  PendingWrite,
   PolicyGateStats,
+  StoredCardCheck,
 } from './gate.ts';
 export {
   assertParamsSupplied,
@@ -28,7 +45,7 @@ export {
   newOperationScope,
   scopeCallerFor,
   pathsFor,
-  readShape,
+  readPlan,
   resolveGatedOperation,
   resolveOperation,
   runOperation,
@@ -45,6 +62,7 @@ export type {
   ScopeInvocation,
   OperationStoredFile,
   OperationStoredFileMeta,
+  ReadPlan,
   ReadShape,
   RunOperationOptions,
 } from './dispatch.ts';
@@ -67,6 +85,7 @@ export {
   stageUpdate,
 } from './executors.ts';
 export type {
+  AdmissionSubject,
   AppendContainsManyEntry,
   AppendLineEntry,
   BatchDocument,
@@ -89,10 +108,13 @@ export type {
 } from './executors.ts';
 export {
   OPERATIONS_CHANNEL,
+  emitCapabilityCheck,
   emitOperationPerf,
+  setCapabilityCheckSink,
   setOperationPerfSink,
 } from './telemetry.ts';
 export type {
+  CapabilityCheckEvent,
   OperationDiagnostics,
   OperationMissingRead,
   OperationMissingReason,
@@ -122,6 +144,7 @@ export {
   needsActor,
   paramsFor,
   parseOperationsEnvelope,
+  pendingWriteOf,
   projectedResult,
   readResult,
   resultsTree,
@@ -152,6 +175,13 @@ export type {
   TransformProgramError,
 } from './transforms.ts';
 export { lowerQueryOperation, lowerQueryTemplate } from './query.ts';
+export {
+  isNamedQueryPayload,
+  namedQueryInvocation,
+  namedQueryRendering,
+  resolveNamedQuery,
+} from './named-query.ts';
+export type { NamedQueryContext } from './named-query.ts';
 export type {
   QueryDefinition,
   QueryInvocation,
@@ -163,20 +193,29 @@ export {
   OperationFailure,
   isDefinitionFreeBaseOperation,
   isDocumentResult,
+  isExplainResult,
   isHeadResult,
   isIdentityResult,
+  effectiveLinkStrategy,
+  isLinkStrategy,
   isOperationFailure,
   isSourceResult,
   isWrite,
+  linkStrategyOf,
+  refusalForNonReader,
 } from './types.ts';
 export type {
   BaseOperation,
   EntryPosition,
   LowerOperationDeclarationsResult,
   OperationDefinition,
+  ExplainedGrant,
+  ExplainedGrantOutcome,
+  ExplainedRule,
   OperationDocumentResult,
   OperationError,
   OperationErrorCode,
+  OperationExplainResult,
   OperationHeadResult,
   OperationIdentityResult,
   OperationLoweringIssue,
@@ -190,4 +229,7 @@ export type {
   OperationSourceResult,
   OperationTarget,
   OperationTemplate,
+  PolicyExplanation,
+  PolicyExplanationDecision,
+  PolicyExplanationReason,
 } from './types.ts';

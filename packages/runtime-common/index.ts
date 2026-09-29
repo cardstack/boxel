@@ -969,11 +969,7 @@ export interface IndexVisitClientTimings {
 // write-side stamps. Every live row either channel WRITES carries all three,
 // stamped as the row enters the IndexWriter's write path — so a row is
 // always attributable to the pass that wrote it, whether or not its render
-// reported anything. The exception is a row a realm COPY produced
-// (`Batch.copyFrom` / `copyPrerenderedHtmlFrom` clone the source realm's
-// rows rather than rendering them): those keep whatever the source row
-// carried, so they name the source realm's pass, or nothing at all if that
-// row predates these stamps. The stamps are:
+// reported anything. The stamps are:
 //
 //   - `invalidationId` — one UUID per invalidation fan-out: minted when the
 //     `Batch` is created, so a from-scratch pass (which never calls
@@ -1818,6 +1814,15 @@ export type { JsonValue } from './json-validation.ts';
 // import; it reaches neither bxl nor a realm, so nothing here costs a consumer
 // the typecheck program the note below is about.
 export * from './card-operations/client.ts';
+// The capability check's wire shapes and its cap, for the same reason and on
+// the same terms: a card asking `@context.canInvoke` holds these and nothing
+// else, and this module reaches neither bxl nor a realm. The check itself does
+// both, and stays behind the `card-operations` entry.
+export { CAPABILITY_CHECK_CAP } from './card-operations/capability-wire.ts';
+export type {
+  CapabilityAnswer,
+  CapabilityCheck,
+} from './card-operations/capability-wire.ts';
 // Only the lowered *shapes*, not the pass that produces them: lowering reaches
 // `@cardstack/bxl` for the program canonicalizer, and a barrel re-export would
 // pull bxl's sources into the typecheck program of every package that imports
