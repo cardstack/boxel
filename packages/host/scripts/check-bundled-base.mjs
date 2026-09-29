@@ -24,7 +24,14 @@ const SKIP_DIRS = new Set(['node_modules', 'scripts', 'types', 'tests']);
 // card in any realm may import any base module, and nothing here sees those
 // realms. Widen it deliberately — an entry added to quiet this check asserts
 // that card code names the module, and is wrong if it does not.
-const NAMED_BY_CARD_CODE = new Set(['card-api', 'skill']);
+const NAMED_BY_CARD_CODE = new Set([
+  'card-api',
+  'datetime',
+  'json-field',
+  'number',
+  'skill',
+  'url',
+]);
 
 // Read source with comments blanked, so prose that looks like a specifier is
 // not taken for one. A comment is not a regular language — `/*` appears inside
@@ -164,6 +171,25 @@ const RUNTIME_IMPORT =
 const FIELD_USE =
   /\b(?:linksTo|linksToMany)\s*\(\s*(?:\(\)\s*=>\s*)?([A-Za-z_$][\w$]*)/g;
 
+// `identifyCard(Foo)` asks for a class's code ref by name, which is the same
+// question a link's type asks and has the same answer: the module the loader
+// was asked for. A bundled module calling it on a class another bundled module
+// declares gets undefined, since the import between them never reaches the
+// loader. Reading a class's own identity — `identifyCard(this.card)`,
+// `identifyCard(model.constructor)` — asks about a value, not an import, so
+// only a bare imported name counts here.
+const IDENTIFY_USE = /\bidentifyCard\s*\(\s*([A-Za-z_$][\w$]*)\s*[,)]/g;
+
+// `class X extends Y`. An adoption-chain walk asks each level of the prototype
+// chain for its code ref and stops at the first it cannot name, so a class is
+// only as reachable as its least-named ancestor. Serving the subclass does not
+// help: the loader is asked for the module a value adopts from, and that
+// module's own import of its superclass is resolved inside the chunk. A
+// fetched module never has this problem, because evaluating it loads what it
+// extends first — which is exactly what bundling removes.
+const EXTENDS_USE =
+  /\bclass\s+[A-Za-z_$][\w$]*\s+extends\s+([A-Za-z_$][\w$]*)/g;
+
 function main() {
   let { table, exceptions } = readTable();
   let closureViolations = [];
@@ -216,7 +242,11 @@ function main() {
       }
     }
 
-    for (let match of code.matchAll(FIELD_USE)) {
+    for (let match of [
+      ...code.matchAll(FIELD_USE),
+      ...code.matchAll(IDENTIFY_USE),
+      ...code.matchAll(EXTENDS_USE),
+    ]) {
       let declaredIn = origin.get(match[1]);
       if (
         !declaredIn ||
@@ -226,7 +256,7 @@ function main() {
       ) {
         continue;
       }
-      identityHazards.push(`${name} links to ${match[1]} from ${declaredIn}`);
+      identityHazards.push(`${name} names ${match[1]} from ${declaredIn}`);
     }
   }
 
@@ -236,7 +266,7 @@ function main() {
   if (closure.length === 0 && identity.length === 0) {
     console.log(
       `ok: ${table.size} bundled base modules are closed under imports, ` +
-        `and link to no class the loader is never asked for`,
+        `and name no class the loader is never asked for`,
     );
     return;
   }
@@ -257,13 +287,14 @@ function main() {
 
   if (identity.length > 0) {
     console.error(
-      `\n${identity.length} bundled module(s) link to a class another bundled ` +
+      `\n${identity.length} bundled module(s) name a class another bundled ` +
         `module declares.\n` +
         `A class is named only when the loader is asked for the module ` +
         `declaring it, and one bundled module asking for another is resolved ` +
-        `inside the chunk — so a code ref for the link's type names the field ` +
-        `it is held as, and a chooser that filters on it asks for the wrong ` +
-        `type.\n` +
+        `inside the chunk. A link's type, an identifyCard call and a ` +
+        `superclass all read that name as data — a chooser filters on it, and ` +
+        `an adoption-chain walk stops at the first level it cannot name, ` +
+        `truncating the types a file or card is indexed under.\n` +
         `Leave the holder and the declarer both out of the table, or — if card ` +
         `code names the declarer by identifier — add it to NAMED_BY_CARD_CODE ` +
         `in this script.\n`,
