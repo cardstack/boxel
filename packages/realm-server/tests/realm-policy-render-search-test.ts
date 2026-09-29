@@ -52,14 +52,21 @@ import { createJWT as createRealmServerJWT } from '../utils/jwt.ts';
 // - Lib: public. Holds the schedule type, whose `listOpen` is a named query,
 //   and the board type, whose isolated template runs `listOpen` over Board
 //   and Grants and draws the id of every row it gets back.
-// - Board: owned by the board's owner, the identity the realm renders as.
-//   Holds the board and one open schedule of its own.
 // - Grants: the board's owner may not read it. Its policy admits anyone to
 //   their own schedules through `listOpen`, and it holds one for the board's
 //   owner and one for a viewer.
+// - Board: owned by the board's owner, the identity the realm renders as.
+//   Holds the board and one open schedule of its own.
 //
-// A render that composed the policy for the identity it reads as would draw
-// the owner's schedule from Grants into HTML every viewer receives.
+// A render whose search composed the policy for the identity it reads as
+// would be answered with the owner's schedule from Grants. Grants is indexed
+// before Board, so the board's first render already searches a Grants that
+// could answer it.
+//
+// A render that fails leaves the realm's last good HTML in place, so every
+// render read here is checked to be the one just made, and made cleanly:
+// otherwise a render the policy broke would read as the earlier render that
+// it failed to replace.
 // ============================================================================
 
 const LIB = 'http://127.0.0.1:4444/lib/';
@@ -217,14 +224,6 @@ module(basename(import.meta.filename), function (hooks) {
           permissions: { ...owner, '*': ['read'] },
         },
         {
-          realmURL: new URL(BOARD),
-          fileSystem: {
-            'boards/board.json': board(1),
-            'schedules/open.json': schedule('Board open', OWNER),
-          },
-          permissions: BOARD_OWNER_PERMISSIONS,
-        },
-        {
           realmURL: new URL(GRANTS),
           fileSystem: {
             'realm.json': realmConfigCardJSON({
@@ -239,6 +238,14 @@ module(basename(import.meta.filename), function (hooks) {
             'schedules/viewer-open.json': schedule("The viewer's", VIEWER),
           },
           permissions: { ...owner },
+        },
+        {
+          realmURL: new URL(BOARD),
+          fileSystem: {
+            'boards/board.json': board(1),
+            'schedules/open.json': schedule('Board open', OWNER),
+          },
+          permissions: BOARD_OWNER_PERMISSIONS,
         },
       ],
       dbAdapter,
@@ -326,40 +333,57 @@ module(basename(import.meta.filename), function (hooks) {
     return response.body.data.map((entry) => entry.id).sort();
   }
 
-  // The rows the board's last render drew, and the HTML it drew them in.
-  async function boardRender() {
+  // The board's latest render: the HTML it drew, and the rows its search
+  // answered with. A render that failed is a failure here, since the HTML it
+  // leaves behind is an earlier render's.
+  async function boardRender(assert: Assert) {
     let row = await prerenderedHtmlRowFor(db, `${BOARD_CARD}.json`);
+    assert.strictEqual(
+      row?.error_doc ?? null,
+      null,
+      `the board rendered cleanly: ${JSON.stringify(row?.error_doc)}`,
+    );
     let html = row?.isolated_html ?? '';
+    assert.notOk(
+      html.includes('board-no-search-component'),
+      `the render had a search component to run the query with: ${html}`,
+    );
     let drawn = [...html.matchAll(/class="board-row"[^>]*>([^<]*)</g)].map(
       ([, id]) => id.trim(),
     );
-    return { html, drawn: drawn.sort() };
+    return { html, drawn: drawn.sort(), generation: row?.generation ?? -1 };
   }
 
-  async function rerenderBoard(revision: number) {
+  // Renders the board again, and answers that render.
+  async function rerenderBoard(assert: Assert, revision: number) {
+    let before = await prerenderedHtmlRowFor(db, `${BOARD_CARD}.json`);
     let baseline = await maxPrerenderHtmlJobId(db, BOARD);
     await realms[BOARD].write('boards/board.json', board(revision));
     await settlePrerenderHtmlJobs(db, BOARD, {
       afterJobId: baseline,
       timeout: 120_000,
     });
+    let render = await boardRender(assert);
+    assert.true(
+      render.generation > (before?.generation ?? -1),
+      `the HTML is the render just made (generation ${render.generation}, before ${before?.generation})`,
+    );
+    return render;
   }
 
   test('a search fired inside a render composes no policy fragment, whatever the policy grants', async function (assert) {
-    // Rendered again now that everything it draws is indexed, so the rows it
-    // draws are the ones its search answered with rather than whichever had
-    // been reached by the time the realm first indexed.
-    await rerenderBoard(2);
-    let { html, drawn } = await boardRender();
-
-    assert.notOk(
-      html.includes('board-no-search-component'),
-      `the render had a search component to run the query with: ${html}`,
-    );
+    let first = await boardRender(assert);
     assert.deepEqual(
-      drawn,
+      first.drawn,
       [BOARD_SCHEDULE],
-      `the render drew the realm's own schedule and nothing Grants holds: ${html}`,
+      `the realm's first render drew its own schedule and nothing Grants holds: ${first.html}`,
+    );
+
+    let again = await rerenderBoard(assert, 2);
+    assert.deepEqual(
+      again.drawn,
+      [BOARD_SCHEDULE],
+      `and so did the render its next write asked for: ${again.html}`,
     );
   });
 
@@ -437,8 +461,7 @@ module(basename(import.meta.filename), function (hooks) {
 
   // Last, since it takes the policy away.
   test('a render is byte-identical whether or not the realm it searches has a policy', async function (assert) {
-    await rerenderBoard(3);
-    let withPolicy = await boardRender();
+    let withPolicy = await rerenderBoard(assert, 3);
 
     await realms[GRANTS].write(
       'realm.json',
@@ -452,8 +475,7 @@ module(basename(import.meta.filename), function (hooks) {
       'the policy is gone: the grant no longer admits the board owner',
     );
 
-    await rerenderBoard(4);
-    let withoutPolicy = await boardRender();
+    let withoutPolicy = await rerenderBoard(assert, 4);
 
     assert.deepEqual(
       withPolicy.drawn,
