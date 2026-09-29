@@ -670,6 +670,43 @@ module(basename(import.meta.filename), function () {
     scheduler.dispose();
   });
 
+  test('a realm’s ordered connections do not use up its search share', async function (assert) {
+    let scheduler = new ConnectionScheduler({ limit: 8, tenantShare: 4 });
+    let other = openScope(REALM_B);
+
+    // The realm's page loads and indexing fetches hold the whole pool, with
+    // more queued behind its first search.
+    let orderedHeld = await withConnectionOrdering(REALM_A, () =>
+      Promise.all(Array.from({ length: 8 }, () => scheduler.acquire())),
+    );
+    let search = withConnectionOrdering(REALM_A, () =>
+      withConnectionTenant(REALM_A, () => scheduler.acquire()),
+    );
+    let orderedBacklog = Array.from({ length: 3 }, () =>
+      withConnectionOrdering(REALM_A, () => scheduler.acquire()),
+    );
+    assert.strictEqual(
+      scheduler.waitingAtShare,
+      0,
+      'the search waits for a free connection, not at its share',
+    );
+
+    orderedHeld.pop()!();
+    let granted = await settledWithin(search, 50);
+    assert.true(
+      granted.settled,
+      'the freed connection goes to the search, which holds none of its share',
+    );
+
+    await drain(
+      [...orderedHeld, (granted as { value: () => void }).value],
+      orderedBacklog,
+    );
+    other.close();
+    await other.closed;
+    scheduler.dispose();
+  });
+
   test('a search reached inside an ordered request is still held to its share', async function (assert) {
     let scheduler = new ConnectionScheduler({ limit: 4, tenantShare: 1 });
     let other = openScope(REALM_B);

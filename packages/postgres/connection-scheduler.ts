@@ -45,13 +45,16 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 //   Writes, locks and the indexer's own commits keep the reach they had.
 // - Ordered work — run under `withConnectionOrdering`, for a request that
 //   names a realm but is not a search — is ordered as that realm, and
-//   otherwise treated as untagged: never held to the share, and never
-//   counted as another tenant with work open. Untagged, a quiet realm's page
-//   load waits in one arrival-order queue behind everything a busy realm has
-//   queued outside its searches: the fetches its indexing makes, its writes.
-//   Ordered as its realm, it holds the fewest and is served next. It stops
-//   short of a tenant's open scope because a replica nearly always has some
-//   realm's request in flight: counted as open, those requests would hold a
+//   otherwise treated as untagged: never held to the share, never counted
+//   as another tenant with work open, and not counted toward the realm's
+//   share either, so a realm's page loads, writes and indexing fetches leave
+//   its searches the share they had. Its connections do count toward the
+//   realm's place in the order. Untagged, a quiet realm's page load waits in
+//   one arrival-order queue behind everything a busy realm has queued outside
+//   its searches: the fetches its indexing makes, its writes. Ordered as its
+//   realm, it holds the fewest and is served next. It stops short of a
+//   tenant's open scope because a replica nearly always has some realm's
+//   request in flight: counted as open, those requests would hold a
 //   searching realm to its share on a pool the rest of the load leaves idle.
 // - Shared work — run under `withSharedWork`, for a computation that callers
 //   on behalf of several tenants may end up waiting on — is ordered as the
@@ -88,7 +91,11 @@ export class ConnectionScheduler {
   #limit: number;
   #tenantShare: number;
   #inUse = 0;
+  // Connections each key holds, for lowest-held-first ordering.
   #held = new Map<TenantKey, number>();
+  // The part of `#held` a key's share is judged on: everything but ordered
+  // work, which on its own would leave the key untagged (see the policy).
+  #heldTowardShare = new Map<TenantKey, number>();
   #queues = new Map<TenantKey, TenantQueues>();
   #nested: Waiter[] = [];
   #waiting = 0;
@@ -142,16 +149,22 @@ export class ConnectionScheduler {
     let nested = holdsConnection(scope?.holding);
     // Shared and ordered work are both ordered as their tenant but never held
     // to its share, so both wait in the queue the share does not apply to.
-    let shared = scope?.shared === true || scope?.ordered === true;
+    let ordered = scope?.ordered === true;
+    let shared = scope?.shared === true || ordered;
     // This arrival counts toward the demand it is judged against.
     if (
       this.#inUse < this.#limit &&
       (nested || shared || this.#eligible(key, 1))
     ) {
-      return Promise.resolve(this.#grant(key));
+      return Promise.resolve(this.#grant(key, ordered));
     }
     return new Promise((resolve) => {
-      let waiter: Waiter = { key, arrival: this.#arrivals++, resolve };
+      let waiter: Waiter = {
+        key,
+        ordered,
+        arrival: this.#arrivals++,
+        resolve,
+      };
       this.#waiting++;
       if (nested) {
         this.#nested.push(waiter);
@@ -178,7 +191,7 @@ export class ConnectionScheduler {
     if (key === UNTAGGED) {
       return true;
     }
-    if ((this.#held.get(key) ?? 0) < this.#tenantShare) {
+    if ((this.#heldTowardShare.get(key) ?? 0) < this.#tenantShare) {
       return true;
     }
     if (this.#inUse + this.#waiting + arriving <= this.#limit) {
@@ -187,9 +200,12 @@ export class ConnectionScheduler {
     return !anotherTenantOpen(key);
   }
 
-  #grant(key: TenantKey): () => void {
+  #grant(key: TenantKey, ordered: boolean): () => void {
     this.#inUse++;
-    this.#held.set(key, (this.#held.get(key) ?? 0) + 1);
+    increment(this.#held, key);
+    if (!ordered) {
+      increment(this.#heldTowardShare, key);
+    }
     let released = false;
     return () => {
       if (released) {
@@ -197,11 +213,9 @@ export class ConnectionScheduler {
       }
       released = true;
       this.#inUse--;
-      let held = (this.#held.get(key) ?? 1) - 1;
-      if (held > 0) {
-        this.#held.set(key, held);
-      } else {
-        this.#held.delete(key);
+      decrement(this.#held, key);
+      if (!ordered) {
+        decrement(this.#heldTowardShare, key);
       }
       this.#drain();
     };
@@ -214,7 +228,7 @@ export class ConnectionScheduler {
         return;
       }
       this.#waiting--;
-      next.resolve(this.#grant(next.key));
+      next.resolve(this.#grant(next.key, next.ordered));
     }
   }
 
@@ -381,6 +395,7 @@ function holdsConnection(marker: HoldMarker | undefined): boolean {
 
 interface Waiter {
   key: TenantKey;
+  ordered: boolean;
   arrival: number;
   resolve: (release: () => void) => void;
 }
@@ -417,6 +432,19 @@ function anotherTenantOpen(key: string): boolean {
     }
   }
   return false;
+}
+
+function increment(counts: Map<TenantKey, number>, key: TenantKey): void {
+  counts.set(key, (counts.get(key) ?? 0) + 1);
+}
+
+function decrement(counts: Map<TenantKey, number>, key: TenantKey): void {
+  let count = (counts.get(key) ?? 1) - 1;
+  if (count > 0) {
+    counts.set(key, count);
+  } else {
+    counts.delete(key);
+  }
 }
 
 // A count is a positive integer; anything else would either grant nothing or
