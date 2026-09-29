@@ -11,7 +11,7 @@ import {
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { baseRealm } from '@cardstack/runtime-common';
+import { baseRealm, Deferred } from '@cardstack/runtime-common';
 
 import {
   setupLocalIndexing,
@@ -422,6 +422,47 @@ module('Acceptance | workspace card | Library pages', function (hooks) {
     assert
       .dom(`${GRID_ITEM}[data-test-cards-grid-item="${testRealmURL}Note/001"]`)
       .doesNotExist('and not the first page again');
+  });
+
+  test('the next page shows a loading state, not the last page, until it arrives', async function (assert) {
+    // Hold the second page's search on the wire, so the page is caught
+    // between the click and its results.
+    let secondPageRequested = new Deferred<void>();
+    let releaseSecondPage = new Deferred<void>();
+    getService('network').virtualNetwork.mount(
+      async (request: Request) => {
+        if (
+          request.url.endsWith('/_federated-search') &&
+          (await request.clone().json())?.page?.number === 1
+        ) {
+          secondPageRequested.fulfill();
+          await releaseSecondPage.promise;
+        }
+        return null;
+      },
+      { prepend: true },
+    );
+
+    await openLibraryFilter('Note');
+    await waitForGridItems(100);
+
+    // Not awaited: it settles only once the held page is released.
+    let clicked = click(`${PAGINATION} [aria-label="Next"]`);
+    try {
+      await secondPageRequested.promise;
+      await waitFor(`${STACK} [data-test-card-list-loading]`);
+      assert
+        .dom(GRID_ITEM)
+        .doesNotExist('the first page is not left up as if it were the next');
+      assert
+        .dom(`${PAGINATION} [aria-current="page"]`)
+        .hasText('2', 'the controls already point at the page being loaded');
+    } finally {
+      releaseSecondPage.fulfill();
+    }
+    await clicked;
+    await waitForGridItems(NOTE_COUNT - 100);
+    assert.dom(`${STACK} [data-test-card-list-loading]`).doesNotExist();
   });
 
   test('changing the filter starts again at page 1', async function (assert) {

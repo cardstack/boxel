@@ -29,6 +29,7 @@ import {
   type Query,
   type RenderableSearchEntryLike,
   type SearchEntryWireQuery,
+  type SearchResultsYield,
 } from '@cardstack/runtime-common';
 
 import type {
@@ -117,6 +118,21 @@ export default class CardList extends Component<Signature> {
     return pages > 1 ? pages : undefined;
   };
 
+  // The rows to show: none while another page loads, so the loading state
+  // stands in for rows from the page the controls just left. Only a page turn
+  // does this — a filter or search-term change keeps its rows up meanwhile, as
+  // the term changes on every keystroke.
+  private visibleEntries = (
+    results: SearchResultsYield,
+  ): RenderableSearchEntryLike[] => {
+    let shown = results.entriesQuery;
+    let turningPage =
+      results.isLoading &&
+      shown !== undefined &&
+      (shown.page?.number ?? 0) !== (this.args.query?.page?.number ?? 0);
+    return turningPage ? [] : results.entries;
+  };
+
   // Clamped, so a page left past the end by deletions still points the
   // controls at a real page to step back to.
   private currentPage = (pages: number): number =>
@@ -195,7 +211,7 @@ export default class CardList extends Component<Signature> {
           as |results|
         >
           <ul class={{this.listClass}}>
-            {{#each results.entries key='id' as |entry|}}
+            {{#each (this.visibleEntries results) key='id' as |entry|}}
               <li
                 class={{cn
                   'boxel-card-list-item'
@@ -282,7 +298,7 @@ export default class CardList extends Component<Signature> {
               </li>
             {{else}}
               {{#if results.isLoading}}
-                <div class='loading-container'>
+                <div class='loading-container' data-test-card-list-loading>
                   <LoadingIndicator />
                 </div>
               {{else}}

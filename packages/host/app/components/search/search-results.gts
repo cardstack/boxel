@@ -99,6 +99,7 @@ export default class SearchResults extends Component<HostSearchResultsSignature>
     return {
       entries: this.renderables.entries,
       isLoading: this.renderables.isLoading,
+      entriesQuery: this.renderables.entriesQuery,
       meta: this.renderables.meta,
       errors: this.renderables.errors,
     };
