@@ -5820,6 +5820,11 @@ export class Realm {
   // can stop it from deciding anything, or supply a local id an earlier entry
   // links to.
   //
+  // A create against a type that the rehearsal never judges is taken as
+  // refused, as it is against the cards as stored. That happens when its own
+  // params, `input` stage or staging failed, or when staging stopped short of
+  // it. Otherwise its failure would say what its type declares.
+  //
   // None of this decides whether anything is written: it runs once the batch
   // has already failed.
   async #disclosableFailure(
@@ -5878,10 +5883,19 @@ export class Realm {
     }
     if (rehearse) {
       let rehearsed = await this.#rehearsedDecisions(tree, ahead, caller);
-      for (let { entry } of ahead) {
-        let refusal = rehearsed.get(entry.position);
+      for (let entry of ahead) {
+        let { position } = entry.entry;
+        let refusal = rehearsed.get(position);
         if (refusal !== undefined) {
-          return atEntry(refusal, entry.position);
+          return atEntry(refusal, position);
+        }
+        let pending = pendingWriteOf(entry);
+        if (
+          pending &&
+          pending.target.kind !== 'instance' &&
+          !rehearsed.has(position)
+        ) {
+          return atEntry(notPermitted(pending.target, pending.name), position);
         }
       }
     }

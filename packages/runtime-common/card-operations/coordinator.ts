@@ -512,7 +512,23 @@ export async function rehearseBatch(
   batch: BatchNode[],
   opts: Pick<CommitBatchOptions, 'actor' | 'foreignSideLoadLink'> = {},
 ): Promise<void> {
-  let planned = planBatch(core, batch);
+  let planned: PlannedBatch;
+  try {
+    planned = planBatch(core, batch);
+  } catch (err: unknown) {
+    // Planning refuses at the first entry whose local id it cannot take, and
+    // names it. The entries ahead of that one plan without it, and what
+    // staging decides of them does not depend on it, so they are rehearsed
+    // on their own.
+    let ahead = entriesAhead(
+      batch,
+      isOperationFailure(err) ? err.error.meta?.entry : undefined,
+    );
+    if (!ahead) {
+      throw err;
+    }
+    planned = planBatch(core, ahead);
+  }
   if (planned.entries.length === 0) {
     return;
   }
@@ -523,6 +539,30 @@ export async function rehearseBatch(
     opts,
     () => (settings ??= core.realmConfig()),
   );
+}
+
+// `batch` holding only the entries ahead of the one reported under
+// `position`, in request order and in the groups they sat in. Undefined where
+// no entry is reported under it.
+function entriesAhead(
+  batch: BatchNode[],
+  position: unknown,
+): BatchNode[] | undefined {
+  let { entries } = schedule(batch);
+  let at = positionsOf(entries).findIndex((each) => each === position);
+  if (at === -1) {
+    return undefined;
+  }
+  let kept = new Set(entries.slice(0, at));
+  let prune = (nodes: readonly BatchNode[]): BatchNode[] =>
+    nodes.flatMap((node): BatchNode[] => {
+      if (!isGroup(node)) {
+        return kept.has(node) ? [node] : [];
+      }
+      let members = prune(node.members);
+      return members.length > 0 ? [{ ...node, members }] : [];
+    });
+  return prune(batch);
 }
 
 // A batch laid out for staging: the tree with each entry's flat position, its

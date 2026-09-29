@@ -97,15 +97,18 @@ const CLASSROOM_MODULE = `
 // `post` is a named create whose template fills `audience` from the `group`
 // param, and whose `input` stage supplies the group a caller leaves out. So
 // the card it writes is neither the payload it was sent nor the params as the
-// caller named them.
+// caller named them. `about` links to an activity, which one entry in a batch
+// can link to by the local id of another entry that mints it.
 const BULLETIN_MODULE = `
-  import { contains, field, CardDef } from "@cardstack/base/card-api";
+  import { contains, field, linksTo, CardDef } from "@cardstack/base/card-api";
   import StringField from "@cardstack/base/string";
   import { operation, params, bxl } from "@cardstack/base/operations";
+  import { ClassroomActivity } from "./classroom";
 
   export class Bulletin extends CardDef {
     @field body = contains(StringField);
     @field audience = contains(StringField);
+    @field about = linksTo(ClassroomActivity);
 
     @operation static post = {
       base: 'create',
@@ -913,8 +916,9 @@ module(basename(import.meta.filename), function (hooks) {
       // resolution, before anything does. The writes ahead of it are judged
       // against the classroom as the batch leaves it either way: removed by
       // the entry before, or handed to someone else by it. That holds even
-      // when an entry after it refuses the batch before the lock decides
-      // anything, as a local id claimed twice does.
+      // when an entry after it refuses the batch before anything is decided,
+      // as a local id claimed twice does, whether the second claim comes
+      // before the classroom named last or after it.
       let batches: [string, (href: string) => Test][] = [
         [
           'an update of a classroom the batch deleted',
@@ -943,7 +947,7 @@ module(basename(import.meta.filename), function (hooks) {
             ),
         ],
         [
-          'an update of a classroom the batch deleted, ahead of one local id claimed twice',
+          'an update of a classroom the batch deleted, with one local id claimed twice after the classroom named last',
           (href) =>
             operations(
               AUTH.teacher(),
@@ -955,6 +959,21 @@ module(basename(import.meta.filename), function (hooks) {
               invoke('update', { href, data: revision({ title: 'Revised' }) }),
               invoke('create', { data: bulletin }),
               invoke('create', { data: bulletin }),
+            ),
+        ],
+        [
+          'an update of a classroom the batch deleted, with one local id claimed twice before the classroom named last',
+          (href) =>
+            operations(
+              AUTH.teacher(),
+              invoke('delete', { href: ROOM_204 }),
+              invoke('update', {
+                href: ROOM_204,
+                data: revision({ title: 'Revised' }),
+              }),
+              invoke('create', { data: bulletin }),
+              invoke('create', { data: bulletin }),
+              invoke('update', { href, data: revision({ title: 'Revised' }) }),
             ),
         ],
       ];
@@ -1007,6 +1026,87 @@ module(basename(import.meta.filename), function (hooks) {
         1,
         'is refused at the rename rather than at the post',
       );
+      assertNotThere(
+        assert,
+        await operations(
+          AUTH.teacher(),
+          invoke('post', {
+            data: { meta: { adoptsFrom: adoptsFrom(BULLETIN) } },
+          }),
+        ),
+        'a post that names no body, which no card it would mint can be judged by',
+      );
+    });
+
+    test('a write linking to a local id the card named last mints is answered the same whether or not that card exists', async function (assert) {
+      // The write lock takes the local id from the activity the last entry
+      // would mint, stages the link to it and refuses the update the delete
+      // leaves refused. What a caller who may not read the realm is told cannot
+      // come from that, since without the classroom there is no activity and
+      // nothing that link could be staged against.
+      let linked = (attributes: Record<string, unknown>) => ({
+        type: 'card',
+        attributes,
+        relationships: { about: { data: { type: 'card', lid: 'field-trip' } } },
+        meta: { adoptsFrom: adoptsFrom(BULLETIN) },
+      });
+      let fieldTrip = (href: string) =>
+        invoke('appendActivity', {
+          href,
+          data: { note: 'Field trip', lid: 'field-trip' },
+        });
+      let batches: [string, number, (href: string) => Test][] = [
+        [
+          'an update linking to the activity, ahead of an update of a classroom the batch deleted',
+          3,
+          (href) =>
+            operations(
+              AUTH.teacher(),
+              invoke('update', {
+                href: NOTICE,
+                data: linked({ body: 'Revised' }),
+              }),
+              invoke('delete', { href: ROOM_204 }),
+              invoke('update', {
+                href: ROOM_204,
+                data: {
+                  type: 'card',
+                  attributes: { title: 'Revised' },
+                  meta: { adoptsFrom: adoptsFrom(CLASSROOM) },
+                },
+              }),
+              fieldTrip(href),
+            ),
+        ],
+        [
+          'a create linking to the activity, which nothing can mint without it',
+          0,
+          (href) =>
+            operations(
+              AUTH.teacher(),
+              invoke('create', {
+                data: linked({ body: 'Picture day', audience: 'staff' }),
+              }),
+              fieldTrip(href),
+            ),
+        ],
+      ];
+      for (let [label, entry, batch] of batches) {
+        let untaught = await batch(ROOM_205);
+        sameRefusal(
+          assert,
+          untaught,
+          await batch(ROOM_999),
+          [ROOM_205, ROOM_999],
+          label,
+        );
+        assert.strictEqual(
+          (untaught.body as { errors: { meta: { entry: number } }[] }).errors[0]
+            .meta.entry,
+          entry,
+          `${label}: is refused at entry ${entry}`,
+        );
+      }
     });
 
     test('another entry’s failure says no more than a refusal either', async function (assert) {
