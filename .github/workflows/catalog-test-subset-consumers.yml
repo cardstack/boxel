@@ -91,9 +91,10 @@ concurrency:
 
 permissions:
   contents: read
-  # Lets the warm-test-images step pull the private GHCR mirror packages in
-  # boxel's own runs. A caller has to grant it too, since a called workflow
-  # can't hold a permission its caller withholds.
+  # Lets the warm-test-images step pull the private GHCR mirror packages,
+  # whose Actions access admits boxel-catalog as well as boxel, so the pull
+  # works with the caller's token too. A caller has to grant it as well, since
+  # a called workflow can't hold a permission its caller withholds.
   packages: read
 
 jobs:
@@ -226,11 +227,10 @@ jobs:
             git clone --depth=1 https://github.com/cardstack/boxel-skills.git contents
           fi
 
-      # The mirror packages give Actions access only to boxel's own
-      # workflows. A caller's token is denied on every pull, and the step's
-      # retries cost minutes before the stack pulls from Docker Hub anyway.
+      # Warm the test images from the GHCR mirror so the services below start
+      # from a local image instead of an unauthenticated Docker Hub pull.
+      # Best-effort: a miss falls back to a hardened-retry Docker Hub pull.
       - name: Warm test Docker images from the GHCR mirror
-        if: github.repository == 'cardstack/boxel'
         continue-on-error: true
         uses: ./.github/actions/warm-test-images
 
@@ -312,11 +312,8 @@ jobs:
           shopt -s dotglob
           cp -a .test-web-assets-artifact/. ./
 
-      # The mirror packages give Actions access only to boxel's own
-      # workflows. A caller's token is denied on every pull, and the step's
-      # retries cost minutes before the stack pulls from Docker Hub anyway.
+      # As on the host job: best-effort, falling back to Docker Hub on a miss.
       - name: Warm test Docker images from the GHCR mirror
-        if: github.repository == 'cardstack/boxel'
         continue-on-error: true
         uses: ./.github/actions/warm-test-images
 
