@@ -884,6 +884,11 @@ const ADMITTED_CALL_DENIAL =
 // the lazily loaded validators included. jq's `index` finds a substring, while
 // Excel's `INDEX` reads a position and is not here.
 //
+// A name that starts with `_` is refused too. Those are jq's internal helpers,
+// which the registry keeps out of its public names, and the builtins above are
+// built on them: `index` on `_strindices`, `test` on `_match_impl`. Parsing
+// never produces one, so only a predicate that names one meets the refusal.
+//
 // `startswith` and `endswith`, and `ltrimstr`, `rtrimstr` and `trimstr`, are
 // refused unless their argument is a fixed string. Anchored at a fixed string
 // they are how a namespace is written: a path under `"…/public/"`, an id on
@@ -963,6 +968,11 @@ function partialMatchCalls(
     let reason = PARTIAL_MATCH_BUILTINS.get(name);
     if (reason) {
       calls.set(name, reason);
+    } else if (name.startsWith('_')) {
+      calls.set(
+        name,
+        "is one of jq's internal helpers, which the builtins that match in part are built on",
+      );
     } else if (
       ANCHORED_BUILTINS.has(name) &&
       !(Array.isArray(args) && args.length === 1 && isFixedString(args[0]))

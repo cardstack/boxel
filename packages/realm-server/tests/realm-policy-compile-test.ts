@@ -481,6 +481,9 @@ module(basename(import.meta.filename), function (hooks) {
       ['.teacherIds | any(startswith(actor()))', 'startswith'],
       ['actor() | endswith(.status)', 'endswith'],
       ['(.status | ltrimstr(actor())) != .status', 'ltrimstr'],
+      // jq's internal helpers, which the builtins above are built on.
+      ['.teacherIds | any(_strindices(actor()) | length > 0)', '_strindices'],
+      ['.teacherIds | any(_match_impl(actor(); null; true))', '_match_impl'],
       // Refused wherever it appears, and not only where it reads the caller.
       ['.status == "approved" and (.teacherIds | any(test("^@")))', 'test'],
     ];

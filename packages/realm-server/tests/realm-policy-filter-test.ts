@@ -575,6 +575,7 @@ module(basename(import.meta.filename), function () {
       '.teacherIds | contains([actor()])',
       '.teacherIds | any(test(actor()))',
       '.teacherIds | any(startswith(actor()))',
+      '.teacherIds | any(_strindices(actor()) | length > 0)',
     ]) {
       let { grant, issues } = await filterFor(where);
       assert.deepEqual(
