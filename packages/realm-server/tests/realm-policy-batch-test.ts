@@ -97,12 +97,13 @@ const CLASSROOM_MODULE = `
 `;
 
 const BULLETIN_MODULE = `
-  import { contains, field, CardDef } from "@cardstack/base/card-api";
+  import { contains, field, linksTo, CardDef } from "@cardstack/base/card-api";
   import StringField from "@cardstack/base/string";
 
   export class Bulletin extends CardDef {
     @field body = contains(StringField);
     @field audience = contains(StringField);
+    @field follows = linksTo(() => Bulletin);
   }
 `;
 
@@ -173,9 +174,10 @@ function rename(href: string, title: string) {
   return invoke('rename', { href, data: { title } });
 }
 
-function createBulletin(attributes: Record<string, unknown>) {
+function createBulletin(attributes: Record<string, unknown>, lid?: string) {
   return invoke('create', {
     data: {
+      ...(lid ? { lid } : {}),
       type: 'card',
       attributes,
       meta: { adoptsFrom: adoptsFrom(BULLETIN) },
@@ -511,6 +513,7 @@ module(basename(import.meta.filename), function (hooks) {
       // staged too by the time it is refused.
       for (let caller of ['teacher', 'aide'] as const) {
         let before = await beforeBatch();
+        let { pendingDischarges } = gateStats();
         let response = await operations(
           AUTH[caller](),
           rename(ROOM_101, 'Renamed'),
@@ -526,12 +529,21 @@ module(basename(import.meta.filename), function (hooks) {
         );
         assertRefusedAt(assert, response, caller, 2, `the ${caller}`);
         await assertNothingWritten(assert, before, `the ${caller}`);
+        // The rename and the create are the batch's two predicates, and the
+        // update is granted outright. Both predicates were decided under the
+        // lock, so the create was refused there, after the rename staged.
+        assert.strictEqual(
+          gateStats().pendingDischarges - pendingDischarges,
+          2,
+          `the ${caller}: the create was judged under the lock`,
+        );
       }
     });
 
     test('a refused member of a parallel group rolls back its siblings', async function (assert) {
       for (let caller of ['teacher', 'aide'] as const) {
         let before = await beforeBatch();
+        let { pendingDischarges } = gateStats();
         let underTheLock = await operations(
           AUTH[caller](),
           parallel(
@@ -552,8 +564,14 @@ module(basename(import.meta.filename), function (hooks) {
           before,
           `the ${caller}, refused under the lock`,
         );
+        assert.strictEqual(
+          gateStats().pendingDischarges - pendingDischarges,
+          3,
+          `the ${caller}: every member was decided under the lock, the siblings admitted`,
+        );
 
         before = await beforeBatch();
+        ({ pendingDischarges } = gateStats());
         let atTheGate = await operations(
           AUTH[caller](),
           parallel(
@@ -572,6 +590,11 @@ module(basename(import.meta.filename), function (hooks) {
           assert,
           before,
           `the ${caller}, refused at the gate`,
+        );
+        assert.strictEqual(
+          gateStats().pendingDischarges,
+          pendingDischarges,
+          `the ${caller}: refused at the gate, the rename never reached the lock`,
         );
       }
     });
@@ -763,6 +786,48 @@ module(basename(import.meta.filename), function (hooks) {
         pendingDischarges: 0,
         definitionLookups: 0,
       });
+    });
+
+    test('a card a batch mints is linked by its local id from a later entry', async function (assert) {
+      let response = await operations(
+        AUTH.teacher(),
+        createBulletin(
+          { body: 'Picture day', audience: 'staff' },
+          'picture-day',
+        ),
+        invoke('update', {
+          href: NOTICE,
+          data: {
+            type: 'card',
+            relationships: {
+              follows: { data: { lid: 'picture-day', type: 'card' } },
+            },
+            meta: { adoptsFrom: adoptsFrom(BULLETIN) },
+          },
+        }),
+      );
+      assert.strictEqual(response.status, 200, 'the batch commits');
+      let [minted] = resultsOf(response) as {
+        data: { id: string; lid: string };
+      }[];
+      assert.strictEqual(
+        minted.data.lid,
+        'picture-day',
+        'the create answers with the local id it was sent',
+      );
+      let notice = JSON.parse(
+        (await education.operationCore.readFileAsText(
+          'bulletins/notice.json' as LocalPath,
+        ))!,
+      ) as {
+        data: { relationships: { follows: { links: { self: string } } } };
+      };
+      assert.strictEqual(
+        new URL(notice.data.relationships.follows.links.self, `${NOTICE}.json`)
+          .href,
+        minted.data.id,
+        'the update links to the card the create minted',
+      );
     });
 
     test('two members of a parallel group on one card still conflict', async function (assert) {
