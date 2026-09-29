@@ -369,10 +369,10 @@ export interface QueryResultsMeta {
 // tsvector at 1,048,575 bytes and throws SQLSTATE 54000 (`make_tsvector`) above
 // it — which, for a plain GIN expression index, aborts the whole index build.
 // Some instances carry multi-megabyte markdown (base64 image data embedded by
-// image cards), so the raw column can't be indexed. The markdown GIN indexes
-// (prerendered_html and prerendered_html_working) both index
+// image cards), so the raw column can't be indexed. The markdown GIN index on
+// prerendered_html indexes
 // `to_tsvector('english', markdown_search_text(markdown))`, so the query
-// predicate below must call the same function or the planner won't use them.
+// predicate below must call the same function or the planner won't use it.
 export const generalSortFields: Record<string, string> = {
   lastModified: 'i.last_modified',
   createdAt: 'i.resource_created_at',
