@@ -24,6 +24,17 @@ on:
         required: false
         type: string
         default: ""
+      boxel_ref:
+        description: |
+          cardstack/boxel branch, tag or sha to build, for a caller whose
+          run was triggered from another repository (boxel-catalog runs
+          boxel's tests against its own changes), where the triggering
+          commit is not a boxel commit. Empty builds the triggering commit.
+          The cache key and artifact name use the commit actually built,
+          so either way they identify the assets.
+        required: false
+        type: string
+        default: ""
     outputs:
       artifact_name:
         description: Artifact name containing built test web assets
@@ -51,6 +62,9 @@ jobs:
 
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: ${{ inputs.boxel_ref && 'cardstack/boxel' || github.repository }}
+          ref: ${{ inputs.boxel_ref }}
       - uses: ./.github/actions/init
 
       - name: Compute cache key
@@ -58,16 +72,20 @@ jobs:
         shell: bash
         run: |
           ref_slug="$(echo "${GITHUB_REF}" | tr '/' '_')"
+          sha="$(git rev-parse HEAD)"
           skip_catalog="${{ inputs.skip_catalog }}"
           boxel_env="${{ inputs.boxel_environment }}"
           # An empty boxel_environment encodes the standard-mode build;
           # any non-empty slug produces a distinct artifact + cache entry
           # so env-mode and standard-mode builds for the same SHA coexist.
           env_suffix="${boxel_env:-std}"
-          cache_key="test-web-assets-v2-${RUNNER_OS}-${ref_slug}-${GITHUB_SHA}-skip-catalog-${skip_catalog}-env-${env_suffix}"
-          artifact_name="test-web-assets-${GITHUB_SHA}-skip-catalog-${skip_catalog}-env-${env_suffix}"
-          echo "cache_key=$cache_key" >> "$GITHUB_OUTPUT"
-          echo "artifact_name=$artifact_name" >> "$GITHUB_OUTPUT"
+          cache_key="test-web-assets-v2-${RUNNER_OS}-${ref_slug}-${sha}-skip-catalog-${skip_catalog}-env-${env_suffix}"
+          artifact_name="test-web-assets-${sha}-skip-catalog-${skip_catalog}-env-${env_suffix}"
+          {
+            echo "sha=$sha"
+            echo "cache_key=$cache_key"
+            echo "artifact_name=$artifact_name"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Restore cached assets
         id: restore
@@ -108,7 +126,7 @@ jobs:
           const fs = require("fs");
           fs.mkdirSync(".ci/test-web-assets", { recursive: true });
           const manifest = {
-            sha: process.env.GITHUB_SHA,
+            sha: process.env.BUILT_SHA,
             ref: process.env.GITHUB_REF,
             runnerOs: process.env.RUNNER_OS,
             node: process.version,
@@ -122,6 +140,7 @@ jobs:
           fs.writeFileSync(".ci/test-web-assets/manifest.json", JSON.stringify(manifest, null, 2));
           '
         env:
+          BUILT_SHA: ${{ steps.keys.outputs.sha }}
           CACHE_KEY: ${{ steps.keys.outputs.cache_key }}
           CACHE_HIT: ${{ steps.restore.outputs.cache-hit }}
           SKIP_CATALOG: ${{ inputs.skip_catalog }}

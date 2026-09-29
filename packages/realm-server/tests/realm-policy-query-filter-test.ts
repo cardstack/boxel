@@ -109,9 +109,10 @@ function classroom({
   });
 }
 
-// Six classrooms. `c`'s one teacher id merely contains the teacher's, `d` has
-// nothing set at all, and `f` has an empty roster and no room number: the
-// places where a filter is narrower than its predicate.
+// Six classrooms. `c`'s one teacher id merely contains the teacher's, so an
+// exact membership test refuses it on both lanes. `d` has nothing set at all,
+// and `f` has an empty roster and no room number: the places where a filter
+// is narrower than its predicate.
 const CLASSROOMS: Record<string, string> = {
   a: classroom({
     attributes: {
@@ -167,13 +168,6 @@ const CASES: {
 }[] = [
   { where: '.providerId == actor()', admits: ['a', 'e', 'f'] },
   { where: '.teacherIds | any(. == actor())', admits: ['b', 'e'] },
-  {
-    where: '.teacherIds | contains([actor()])',
-    admits: ['b', 'e'],
-    holds: ['b', 'c', 'e'],
-    because:
-      "BXL's `contains` also admits `c`, whose id only contains the teacher's; the filter matches whole ids",
-  },
   { where: '.roomNumber > 200', admits: ['b', 'c', 'e'] },
   {
     where: '.roomNumber < 200',

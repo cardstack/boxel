@@ -845,24 +845,108 @@ module(basename(import.meta.filename), function () {
           onRealmSetup,
         });
 
-        // A `HEAD` reaches this route without credentials where the matching
+        // A `HEAD` reaches the realm without credentials where the matching
         // `GET` would be refused: the realm exempts the method so a client can
-        // discover which realm serves a URL before it has a token for it. What
-        // the exemption admits here is the source read itself, headers and
-        // all, since this route answers a `HEAD` the same way it answers a
-        // `GET`. Pinned because it is the shape a read that is gated on the
-        // caller has to keep or deliberately change.
-        test('a HEAD is admitted without a JWT where the GET is refused', async function (assert) {
-          let get = await request
-            .get('/person.gts')
-            .set('Accept', 'application/vnd.card+source');
-          assert.strictEqual(get.status, 401, 'the GET is refused');
+        // discover which realm serves a URL before it has a token for it. A
+        // caller the realm would not let read gets only that, the realm's
+        // discovery answer, from this route and from the fallback file and
+        // module serve (a `HEAD` with no `Accept`) alike. It names the realm
+        // and says nothing about the path, so a file that exists and a path
+        // with nothing behind it answer the same. Each pair shares an
+        // extension because the server names a content type from the path's
+        // extension when a response carries none. The realm has no policy.
+        test('a HEAD tells a caller who may not read the realm nothing about the path', async function (assert) {
+          let callers: [string, string | undefined][] = [
+            ['anonymous', undefined],
+            ['unpermitted', `Bearer ${createJWT(testRealm, 'not-john')}`],
+          ];
+          let pairs = [
+            ['/person.gts', '/nothing-is-here.gts'],
+            ['/person-1.json', '/nothing-is-here.json'],
+          ];
+          for (let accept of [
+            'application/vnd.card+source',
+            '*/*',
+            undefined,
+          ]) {
+            for (let pair of pairs) {
+              let answers: {
+                label: string;
+                status: number;
+                headers: Record<string, string>;
+              }[] = [];
+              for (let path of pair) {
+                for (let [caller, authorization] of callers) {
+                  let head = request.head(path);
+                  if (accept) {
+                    head = head.set('Accept', accept);
+                  }
+                  if (authorization) {
+                    head = head.set('Authorization', authorization);
+                  }
+                  let response = await head;
+                  let served = {
+                    ...(response.headers as Record<string, string>),
+                  };
+                  delete served.date;
+                  answers.push({
+                    label: `${caller} HEAD ${path} (accept: ${accept ?? 'none'})`,
+                    status: response.status,
+                    headers: served,
+                  });
+                }
+              }
+              let [first, ...rest] = answers;
+              assert.strictEqual(
+                first.status,
+                200,
+                `${first.label} gets the discovery answer`,
+              );
+              assert.strictEqual(
+                first.headers['x-boxel-realm-url'],
+                testRealmHref,
+                `${first.label} names the realm`,
+              );
+              for (let name of ['etag', 'last-modified']) {
+                assert.notOk(
+                  first.headers[name],
+                  `${first.label} carries no ${name}`,
+                );
+              }
+              for (let answer of rest) {
+                assert.deepEqual(
+                  { status: answer.status, headers: answer.headers },
+                  { status: first.status, headers: first.headers },
+                  `${answer.label} gets the same answer`,
+                );
+              }
+            }
+          }
+        });
 
-          let head = await request
-            .head('/person.gts')
-            .set('Accept', 'application/vnd.card+source');
-          assert.strictEqual(head.status, 200, 'the HEAD is answered');
-          assert.ok(head.headers['etag'], 'and answers with a real validator');
+        test('a HEAD from a caller who may read the realm answers with the file’s own validators', async function (assert) {
+          let authorization = `Bearer ${createJWT(testRealm, 'john', ['read'])}`;
+          for (let accept of ['application/vnd.card+source', undefined]) {
+            let head = request
+              .head('/person.gts')
+              .set('Authorization', authorization);
+            if (accept) {
+              head = head.set('Accept', accept);
+            }
+            let response = await head;
+            let label = `accept: ${accept ?? 'none'}`;
+            assert.strictEqual(response.status, 200, `${label}: HTTP 200`);
+            assert.ok(response.headers['etag'], `${label}: carries an etag`);
+          }
+          let missing = await request
+            .head('/nothing-is-here.gts')
+            .set('Accept', 'application/vnd.card+source')
+            .set('Authorization', authorization);
+          assert.strictEqual(
+            missing.status,
+            404,
+            'and a path with nothing behind it is a 404',
+          );
         });
 
         test('200 with permission', async function (assert) {
@@ -1262,6 +1346,47 @@ module(basename(import.meta.filename), function () {
           );
         });
 
+        test('a write of the bytes already stored queues no index job and leaves the file alone', async function (assert) {
+          let source = `//TEST UNCHANGED\n${cardSrc}`;
+          let first = await request
+            .post('/unchanged-source.gts')
+            .set('Accept', 'application/vnd.card+source')
+            .send(source);
+          assert.strictEqual(first.status, 204, 'first write returns 204');
+          await testRealm.incrementalIndexing();
+          let filePath = join(
+            dir.name,
+            'realm_server_1',
+            'test',
+            'unchanged-source.gts',
+          );
+          let mtimeBefore = statSync(filePath).mtimeMs;
+          let baseline = await maxIncrementalIndexJobId();
+
+          let second = await request
+            .post('/unchanged-source.gts')
+            .set('Accept', 'application/vnd.card+source')
+            .send(source);
+          await testRealm.incrementalIndexing();
+
+          assert.strictEqual(second.status, 204, 'second write returns 204');
+          assert.deepEqual(
+            await incrementalIndexJobsSince(baseline),
+            [],
+            'nothing is queued for a write that changes no bytes',
+          );
+          assert.strictEqual(
+            statSync(filePath).mtimeMs,
+            mtimeBefore,
+            'the file is not rewritten',
+          );
+          assert.strictEqual(
+            second.headers['last-modified'],
+            first.headers['last-modified'],
+            'the response reports the modification time the file already has',
+          );
+        });
+
         test('returns once the bytes are durable, with indexing still queued', async function (assert) {
           let since = Date.now();
           let baseline = await maxIncrementalIndexJobId();
@@ -1562,71 +1687,100 @@ module(basename(import.meta.filename), function () {
             });
           }
 
-          let messages = await getMessagesSince(realmEventTimestampStart);
-
+          let initiation = (updatedFile: string) => ({
+            type: APP_BOXEL_REALM_EVENT_TYPE,
+            content: {
+              eventName: 'index',
+              indexType: 'incremental-index-initiation',
+              updatedFile,
+              realmURL: testRealmURL.href,
+            },
+          });
+          let incremental = (invalidations: string[]) => ({
+            type: APP_BOXEL_REALM_EVENT_TYPE,
+            content: {
+              eventName: 'index',
+              indexType: 'incremental',
+              invalidations,
+              clientRequestId: null,
+              realmURL: testRealmURL.href,
+            },
+          });
+          // One initiation and one incremental event for each of the four
+          // writes, in the order the test makes them: the module, the
+          // instance, the module again, the instance again.
           let expected = [
-            {
-              type: APP_BOXEL_REALM_EVENT_TYPE,
-              content: {
-                eventName: 'index',
-                indexType: 'incremental-index-initiation',
-                updatedFile: `${testRealmURL}test-card.gts`,
-                realmURL: testRealmURL.href,
-              },
-            },
-            {
-              type: APP_BOXEL_REALM_EVENT_TYPE,
-              content: {
-                eventName: 'index',
-                indexType: 'incremental',
-                invalidations: [`${testRealmURL}test-card.gts`],
-                clientRequestId: null,
-                realmURL: testRealmURL.href,
-              },
-            },
-            {
-              type: APP_BOXEL_REALM_EVENT_TYPE,
-              content: {
-                eventName: 'index',
-                indexType: 'incremental-index-initiation',
-                updatedFile: `${testRealmURL}test-card.gts`,
-                realmURL: testRealmURL.href,
-              },
-            },
-            {
-              type: APP_BOXEL_REALM_EVENT_TYPE,
-              content: {
-                eventName: 'index',
-                indexType: 'incremental',
-                invalidations: [`${testRealmURL}test-card.gts`, id],
-                clientRequestId: null,
-                realmURL: testRealmURL.href,
-              },
-            },
-            {
-              type: APP_BOXEL_REALM_EVENT_TYPE,
-              content: {
-                eventName: 'index',
-                indexType: 'incremental-index-initiation',
-                updatedFile: `${id}.json`,
-                realmURL: testRealmURL.href,
-              },
-            },
-            {
-              type: APP_BOXEL_REALM_EVENT_TYPE,
-              content: {
-                eventName: 'index',
-                indexType: 'incremental',
-                invalidations: [id],
-                clientRequestId: null,
-                realmURL: testRealmURL.href,
-              },
-            },
+            initiation(`${testRealmURL}test-card.gts`),
+            incremental([`${testRealmURL}test-card.gts`]),
+            initiation(`${id}.json`),
+            incremental([id]),
+            initiation(`${testRealmURL}test-card.gts`),
+            incremental([`${testRealmURL}test-card.gts`, id]),
+            initiation(`${id}.json`),
+            incremental([id]),
           ];
 
-          for (let expectedEvent of expected) {
-            // FIXME is there a better way?
-            let actualEvent = matchRealmEvent(messages, expectedEvent);
+          // The realm hands each event to the room without waiting for it to
+          // be delivered, so the room can still be behind the last response
+          // this test received. Read until every expected event has arrived,
+          // or until the wait runs out and the assertions below say which
+          // one did not.
+          let messages: MatrixEvent[] = [];
+          let claims: (MatrixEvent | undefined)[] = [];
+          let messagesReadAt: number;
+          let deliveryDeadline = Date.now() + 5000;
+          for (;;) {
+            messages = await getMessagesSince(realmEventTimestampStart);
+            messagesReadAt = Date.now();
+            claims = claimRealmEvents(messages, expected);
+            if (claims.every(Boolean) || messagesReadAt >= deliveryDeadline) {
+              break;
+            }
+            await new Promise((resolve) => setTimeout(resolve, 250));
+          }
+
+          // A miss is an event that never reached the room, one that reached
+          // it only after the wait ran out, or one that arrived carrying
+          // members the comparison does not expect. One more read a little
+          // later separates the first two, and every realm event that read
+          // returns, whole and with its timestamp, shows the third.
+          let lateRead:
+            | {
+                at: number;
+                messages: MatrixEvent[];
+                claims: (MatrixEvent | undefined)[];
+              }
+            | undefined;
+          if (!claims.every(Boolean)) {
+            await new Promise((resolve) => setTimeout(resolve, 2000));
+            let lateMessages = await getMessagesSince(realmEventTimestampStart);
+            lateRead = {
+              at: Date.now(),
+              messages: lateMessages,
+              claims: claimRealmEvents(lateMessages, expected),
+            };
+          }
+
+          for (let [index, expectedEvent] of expected.entries()) {
+            let actualEvent = claims[index];
+            if (!actualEvent && lateRead) {
+              console.error(
+                `[card-source-endpoints-test] expected realm event ${index} ${JSON.stringify(
+                  expectedEvent.content,
+                )} was not in the read at ${messagesReadAt}; a later read at ${
+                  lateRead.at
+                } ${
+                  lateRead.claims[index] ? 'found it' : 'did not find it either'
+                }. Realm events since ${realmEventTimestampStart} in the later read: ${JSON.stringify(
+                  lateRead.messages
+                    .filter((m) => m.type === APP_BOXEL_REALM_EVENT_TYPE)
+                    .map((m) => ({
+                      ts: m.origin_server_ts,
+                      content: m.content,
+                    })),
+                )}`,
+              );
+            }
 
             let generation = (actualEvent?.content as any)?.generation;
             if (generation !== undefined) {
@@ -2121,6 +2275,125 @@ module(basename(import.meta.filename), function () {
           );
         });
 
+        // Large enough that the stored file is read back in several chunks,
+        // so the comparison has to carry its position across chunk
+        // boundaries rather than finishing inside the first one.
+        function multiChunkBytes(): Uint8Array {
+          let bytes = new Uint8Array(200 * 1024);
+          for (let i = 0; i < bytes.length; i++) {
+            bytes[i] = i % 251;
+          }
+          return bytes;
+        }
+
+        test('a binary upload of the bytes already stored queues no index job and leaves the file alone', async function (assert) {
+          let bytes = multiChunkBytes();
+          let first = await request
+            .post('/unchanged-upload.bin')
+            .set('Content-Type', 'application/octet-stream')
+            .send(Buffer.from(bytes));
+          assert.strictEqual(first.status, 204, 'first upload returns 204');
+          await testRealm.incrementalIndexing();
+          let filePath = join(
+            dir.name,
+            'realm_server_1',
+            'test',
+            'unchanged-upload.bin',
+          );
+          let mtimeBefore = statSync(filePath).mtimeMs;
+          let baseline = await maxIncrementalIndexJobId();
+
+          let second = await request
+            .post('/unchanged-upload.bin')
+            .set('Content-Type', 'application/octet-stream')
+            .send(Buffer.from(bytes));
+          await testRealm.incrementalIndexing();
+
+          assert.strictEqual(second.status, 204, 'second upload returns 204');
+          assert.deepEqual(
+            await incrementalIndexJobsSince(baseline),
+            [],
+            'nothing is queued for an upload that changes no bytes',
+          );
+          assert.strictEqual(
+            statSync(filePath).mtimeMs,
+            mtimeBefore,
+            'the file is not rewritten',
+          );
+          assert.strictEqual(
+            second.headers['last-modified'],
+            first.headers['last-modified'],
+            'the response reports the modification time the file already has',
+          );
+        });
+
+        test('a binary upload of the bytes already stored is still indexed when the index holds no row built from them', async function (assert) {
+          let bytes = multiChunkBytes();
+          let fileURL = `${testRealmHref}unindexed-upload.bin`;
+          await request
+            .post('/unindexed-upload.bin')
+            .set('Content-Type', 'application/octet-stream')
+            .send(Buffer.from(bytes));
+          await testRealm.incrementalIndexing();
+          // Stands in for an upload whose bytes landed and whose queue insert
+          // then failed: the file is on disk and the index never caught up.
+          await query(dbAdapter, [
+            'DELETE FROM boxel_index WHERE url =',
+            param(fileURL),
+          ]);
+          let baseline = await maxIncrementalIndexJobId();
+
+          let response = await request
+            .post('/unindexed-upload.bin')
+            .set('Content-Type', 'application/octet-stream')
+            .send(Buffer.from(bytes));
+          await testRealm.incrementalIndexing();
+
+          assert.strictEqual(response.status, 204, 'HTTP 204 status');
+          assert.strictEqual(
+            (await incrementalIndexJobsSince(baseline)).length,
+            1,
+            'the repeated upload queues the index pass its bytes never got',
+          );
+          let rows = await query(dbAdapter, [
+            `SELECT url FROM boxel_index WHERE type = 'file' AND url =`,
+            param(fileURL),
+          ]);
+          assert.strictEqual(rows.length, 1, 'the file is back in the index');
+        });
+
+        test('a binary upload the same length as the stored file but differing in its last byte is written and indexed', async function (assert) {
+          let bytes = multiChunkBytes();
+          await request
+            .post('/last-byte-differs.bin')
+            .set('Content-Type', 'application/octet-stream')
+            .send(Buffer.from(bytes));
+          await testRealm.incrementalIndexing();
+          let baseline = await maxIncrementalIndexJobId();
+
+          let changed = bytes.slice();
+          changed[changed.length - 1] = changed[changed.length - 1]! ^ 0xff;
+          let response = await request
+            .post('/last-byte-differs.bin')
+            .set('Content-Type', 'application/octet-stream')
+            .send(Buffer.from(changed));
+          await testRealm.incrementalIndexing();
+
+          assert.strictEqual(response.status, 204, 'HTTP 204 status');
+          assert.strictEqual(
+            (await incrementalIndexJobsSince(baseline)).length,
+            1,
+            'the changed upload is indexed',
+          );
+          let fileBytes = readFileSync(
+            join(dir.name, 'realm_server_1', 'test', 'last-byte-differs.bin'),
+          );
+          assert.true(
+            Buffer.from(changed).equals(fileBytes),
+            'the file holds the changed bytes',
+          );
+        });
+
         test('broadcasts realm events for binary upload', async function (assert) {
           let realmEventTimestampStart = Date.now();
 
@@ -2279,12 +2552,28 @@ module(basename(import.meta.filename), function () {
   });
 });
 
-function matchRealmEvent(events: MatrixEvent[], event: any) {
-  return events.find(
-    (m) =>
-      m.type === event.type &&
-      isEqual(event.content, withoutFixtureVaryingMembers(m.content)),
-  );
+// The event that satisfies each expectation, or undefined where none does. An
+// event satisfies at most one expectation, so two writes that broadcast the
+// same content need an event each rather than sharing one. Content is compared
+// exactly, so an event can only satisfy expectations identical to each other,
+// and taking the first unclaimed match never starves a later expectation.
+function claimRealmEvents(
+  events: MatrixEvent[],
+  expected: { type: string; content: unknown }[],
+): (MatrixEvent | undefined)[] {
+  let claimed = new Set<MatrixEvent>();
+  return expected.map((event) => {
+    let match = events.find(
+      (m) =>
+        !claimed.has(m) &&
+        m.type === event.type &&
+        isEqual(event.content, withoutFixtureVaryingMembers(m.content)),
+    );
+    if (match) {
+      claimed.add(match);
+    }
+    return match;
+  });
 }
 
 // Incremental index events carry two members whose values follow the

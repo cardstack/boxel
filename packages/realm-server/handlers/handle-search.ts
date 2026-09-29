@@ -3,10 +3,14 @@ import {
   applyServerSearchPageBound,
   buildSearchErrorResponse,
   DURING_PRERENDER_HEADER,
+  emptySearchEntryDocument,
   ifNoneMatchMatches,
   isItemLegSearch,
+  logger,
+  parseRealmsFromPayload,
   parseSearchRequestPayload,
   parseSearchEntryQueryFromPayload,
+  policyScopedQuery,
   runWithSearchTimeBudget,
   sanitizeConsumingRealmHeader,
   SearchBoundError,
@@ -23,9 +27,12 @@ import {
   LinkShapePolicy,
   requestedLinkShape,
   rowClassForPageSize,
+  searchShapeLinkMode,
   X_BOXEL_LINK_SHAPE_HEADER,
+  type Filter,
   type LinkShapeDecision,
   type Query,
+  type SearchEntryQuery,
   type SearchShapeCacheOutcome,
   type SearchShapeDescriptor,
   type SearchShapeLinkMode,
@@ -58,11 +65,16 @@ import type {
   VirtualNetwork,
 } from '@cardstack/runtime-common';
 import {
+  effectiveLinkStrategy,
   errorsDocument,
   isNamedQueryPayload,
   isOperationFailure,
+  namedQueryInvocation,
+  namedQueryRendering,
+  policyQueryScope,
   resolveNamedQuery,
 } from '@cardstack/runtime-common/card-operations';
+import type { LinkStrategy } from '@cardstack/base/operations';
 import {
   PRERENDER_JOB_ID_HEADER,
   PRERENDER_JOB_PRIORITY_HEADER,
@@ -77,6 +89,8 @@ import {
 // (server.ts) so a cross-origin browser caller can read it, not just
 // server-side supertest/curl.
 export const LIVE_SEARCH_CACHE_HEADER = 'x-boxel-live-search-cache';
+
+const log = logger('realm-server:search');
 
 // The federated search: the entry wire model over every requested
 // realm. Parses the entry-rooted query (the `item.` membership query,
@@ -113,65 +127,192 @@ export default function handleSearch(opts: {
   let linkShapePolicy = opts.linkShapePolicy ?? LinkShapePolicy.pinned('full');
   let liveSearchCache = opts.liveSearchCache ?? new LiveSearchCache();
   return async function (ctxt: Koa.Context) {
-    let { realmList, user } = getMultiRealmAuthorization(ctxt);
+    let { realmList, grantCandidates, user } = getMultiRealmAuthorization(ctxt);
     let payload = getSearchRequestPayload(ctxt);
-    if (isNamedQueryPayload(payload)) {
+    // Every realm the request names, in the order it names them, which is the
+    // order their rows are merged in. The middleware has already refused a
+    // realm the registry does not know, so each of these is one the caller
+    // reads, one reached only through its policy, or one nothing is served
+    // from — an archived realm, which contributes no rows to anyone.
+    let named = parseRealmsFromPayload(payload);
+    // What a policy fragment is looked up by: a query runs under the name it
+    // was invoked with, on the type that declares it. An ad-hoc search names
+    // neither, so no grant is found for one and a realm the caller cannot read
+    // contributes nothing to it.
+    let invocation = namedQueryInvocation(payload);
+    // How much of each result's link graph a named query's declaration lets
+    // its results carry. An ad-hoc search declares nothing.
+    let declaredLinks: LinkStrategy | undefined;
+    if (
+      isNamedQueryPayload(payload) &&
+      realmList.length === 0 &&
+      grantCandidates.length === 0
+    ) {
+      // Every realm the request names is one nothing is served from, so there
+      // is no realm to read the declaration through and nothing to search.
+      // It is answered as a search of those realms asking for the same
+      // rendering, each of which contributes no rows.
+      payload = { ...namedQueryRendering(payload), realms: named };
+    } else if (isNamedQueryPayload(payload)) {
+      // The declaration is read through a realm something is served from,
+      // preferring one the caller reads. One the caller reaches only through
+      // its policy reads the declaration on that realm's own authority, the
+      // way the policy gate reads it.
+      //
       // Resolving reads the declaration's definition, so it draws on the
       // database as a search of the realms the request names, the same as the
       // search it resolves to.
-      let named = payload;
-      let resolved = await withSearchConnectionTenant(ctxt, realmList, () =>
-        resolveNamedSearch(ctxt, named, realmList, user),
+      let request = payload;
+      let resolved = await withSearchConnectionTenant(ctxt, named, () =>
+        resolveNamedSearch(ctxt, request, {
+          resolvingRealms: [realmList, grantCandidates],
+          scope: named,
+          user,
+        }),
       );
       if (!resolved) {
         return;
       }
-      payload = resolved;
-      realmList = resolved.realms!;
+      payload = resolved.query;
+      declaredLinks = resolved.links;
+      // The declaration's own scope narrows what the request named, and its
+      // order is the order it is searched in.
+      named = resolved.query.realms!;
     }
-    // The realms this search names are known from here: each one's link-shape
-    // level follows the requests that name it, and the database connections
-    // the search draws on are shared out by them.
-    attributeSearchRequest(ctxt, realmList);
-    await withSearchConnectionTenant(ctxt, realmList, () =>
-      respond(ctxt, realmList, payload),
+    // What each realm the caller cannot read contributes. A realm whose policy
+    // admits this query is searched with the grants composed into it; every
+    // other one answers as a realm holding no matching row does. Only these
+    // realms are asked: a realm the caller reads outright never loads a
+    // policy.
+    //
+    // A request a render is waiting on has no actor, whoever it authenticated
+    // as: what a render produces is served to every viewer, so no one
+    // viewer's grants may shape it. It is scoped by no policy.
+    let duringRender = ctxt.get(DURING_PRERENDER_HEADER).length > 0;
+    let readable = new Set(realmList);
+    let candidates = new Set(grantCandidates);
+    let access = await withSearchConnectionTenant(ctxt, named, () =>
+      policyAccess(
+        readable,
+        named.filter((realm) => candidates.has(realm)),
+        invocation,
+        duringRender ? undefined : user,
+      ),
+    );
+    // The realms this search does work for: those it reads rows from. Each
+    // one's link-shape level follows the requests that name it, and the
+    // database connections the search draws on are shared out by them.
+    let working = named.filter(
+      (realm) => access.readable.has(realm) || access.scoped.has(realm),
+    );
+    attributeSearchRequest(ctxt, working);
+    await withSearchConnectionTenant(ctxt, working, () =>
+      respond(ctxt, named, payload, access, declaredLinks),
     );
   };
 
-  // The ad-hoc query a named one resolves to, or nothing once the refusal has
-  // been answered. The declaration is read through a realm the request names:
-  // one this process already holds where there is one, so resolving mounts a
-  // realm only when none of them is mounted. For a type whose module this
-  // server serves, the definition entry belongs to the module's own realm
-  // whichever realm reads it; for one served elsewhere, it is read with the
-  // reading realm owner's credentials. The realms the query may search are the
-  // ones the middleware authorized, so resolving it never widens what the
-  // caller can reach.
+  // What each realm reached only through its policy contributes to this
+  // search: the grant filters for one whose policy admits the query, and
+  // nothing at all for one whose policy does not.
+  //
+  // A realm whose policy cannot be judged — it will not mount, or its policy
+  // will not load — is failed rather than denied. The fan-out counts it as a
+  // realm that did not answer, exactly as it counts a realm whose search
+  // fails, so the result says it is incomplete rather than passing the
+  // missing rows off as rows that do not exist. Either way its rows are
+  // withheld, never served unscoped.
+  //
+  // Mounting a realm to ask is work a search of realms the caller reads never
+  // does.
+  async function policyAccess(
+    readable: Set<string>,
+    grantCandidates: string[],
+    invocation: { operation: string; on: CodeRef } | undefined,
+    user: string | undefined,
+  ): Promise<RealmAccess> {
+    let access: RealmAccess = {
+      readable,
+      scoped: new Map(),
+      failed: new Set(),
+    };
+    if (grantCandidates.length === 0 || !invocation || !user) {
+      return access;
+    }
+    let realms = await resolveRealmsForFederatedRequest(
+      reconciler,
+      grantCandidates,
+    );
+    await Promise.all(
+      realms.map(async (realm, index) => {
+        let url = grantCandidates[index];
+        if (!realm) {
+          access.failed.add(url);
+          return;
+        }
+        try {
+          let scope = await policyQueryScope(realm.operationCore, {
+            ...invocation,
+            actor: user,
+          });
+          if (scope.kind === 'scoped') {
+            access.scoped.set(url, scope.filters);
+          }
+        } catch (e) {
+          log.warn(
+            `the policy of ${url} could not be judged for a search, so the search is answered without that realm's rows and marked incomplete`,
+            e,
+          );
+          access.failed.add(url);
+        }
+      }),
+    );
+    return access;
+  }
+
+  // The ad-hoc query a named one resolves to, with the link strategy its
+  // results are served under, or nothing once the refusal has been answered.
+  // The declaration is read through a realm of the first non-empty group in
+  // `resolvingRealms`: one this process already holds where there is one, and
+  // otherwise the group's first, mounted. For a type whose module this server
+  // serves, the definition entry belongs to the module's own realm whichever
+  // realm reads it; for one served elsewhere, it is read with the reading realm
+  // owner's credentials — so the groups put the realms the caller reads ahead
+  // of those they reach only through a policy, and a realm of the second group
+  // reads a declaration only when the caller reads none of the realms named.
+  //
+  // The realms the query may search are `scope`, the realms the request names,
+  // so resolving it never reaches a realm the request did not name. What each
+  // of them then contributes is decided after, realm by realm.
   async function resolveNamedSearch(
     ctxt: Koa.Context,
     payload: Record<string, unknown>,
-    realmList: string[],
-    user: string | undefined,
+    {
+      resolvingRealms,
+      scope,
+      user,
+    }: {
+      resolvingRealms: string[][];
+      scope: string[];
+      user: string | undefined;
+    },
   ) {
+    let group = resolvingRealms.find((realms) => realms.length > 0) ?? [];
     let resolvingRealm =
-      realmList.map((url) => reconciler.mounted.get(url)).find(Boolean) ??
+      group.map((url) => reconciler.mounted.get(url)).find(Boolean) ??
       (
-        await resolveRealmsForFederatedRequest(
-          reconciler,
-          realmList.slice(0, 1),
-        )
+        await resolveRealmsForFederatedRequest(reconciler, group.slice(0, 1))
       )[0];
     if (!resolvingRealm) {
       await sendResponseForNotFound(
         ctxt,
-        `Realm not available to resolve a named query: ${realmList[0]}`,
+        `Realm not available to resolve a named query: ${group[0]}`,
       );
       return undefined;
     }
     try {
       return await resolveNamedQuery(resolvingRealm.operationCore, payload, {
         actor: user,
-        realms: realmList,
+        realms: scope,
         duringRender: ctxt.get(DURING_PRERENDER_HEADER).length > 0,
       });
     } catch (e) {
@@ -193,6 +334,8 @@ export default function handleSearch(opts: {
     ctxt: Koa.Context,
     realmList: string[],
     payload: unknown,
+    access: RealmAccess,
+    declaredLinks: LinkStrategy | undefined,
   ) {
     let handlerStart = Date.now();
     // Slots the query-shape line is assembled from. `shape` is filled in as
@@ -273,6 +416,21 @@ export default function handleSearch(opts: {
       parsed.itemQuery = applyServerSearchPageBound(parsed.itemQuery);
     }
 
+    // The query each policy-scoped realm runs. Composed here, off the bounded
+    // query, so the page the engine fills is a page of rows the policy admits:
+    // it pages over the composed filter rather than over the caller's and then
+    // discarding, which is what keeps a policy-filtered page full rather than
+    // sparse. Every other realm runs `parsed` untouched.
+    let scopedQueries = new Map<string, SearchEntryQuery>();
+    for (let [realm, filters] of access.scoped) {
+      scopedQueries.set(realm, policyScopedQuery(parsed, filters));
+    }
+    // Whether any realm this search names is one the caller does not read.
+    // Where none is, the search is the one it would be with no policy
+    // anywhere: nothing composed, nothing stood in, nothing folded into its
+    // cache key.
+    let unread = realmList.filter((realm) => !access.readable.has(realm));
+
     // How much of each result's link graph this response carries. Decided
     // after the page clamp above, since the clamped page is the only bound on
     // this search's result count and the cost of a closure scales with it —
@@ -291,16 +449,24 @@ export default function handleSearch(opts: {
           ),
           requested: requestedLinkShape(ctxt.get(X_BOXEL_LINK_SHAPE_HEADER)),
         });
-    let resolveLinksOnly = linkShapeDecision?.mode === 'links-only';
+    // A named query's declaration is the other half: it may narrow what the
+    // policy decided, and the policy may narrow what it declares, but neither
+    // widens the other. It is the same for every realm the search fans out to,
+    // since the declaration was resolved once, for the whole search.
+    let links = effectiveLinkStrategy(
+      declaredLinks,
+      linkShapeDecision?.mode === 'links-only',
+    );
     let searchOpts: {
       cacheOnlyDefinitions?: true;
       omitIncluded?: true;
-      resolveLinksOnly?: true;
+      links?: LinkStrategy;
       priority?: number;
     } = {};
     if (cacheOnlyDefinitions) searchOpts.cacheOnlyDefinitions = true;
     if (omitIncluded) searchOpts.omitIncluded = true;
-    if (resolveLinksOnly) searchOpts.resolveLinksOnly = true;
+    // Carried only when it narrows, so a search served whole keys without it.
+    if (links !== 'full') searchOpts.links = links;
     if (jobPriority !== null) searchOpts.priority = jobPriority;
 
     // The inner cache key: the membership query is the key's `query` member
@@ -332,6 +498,26 @@ export default function handleSearch(opts: {
     if (parsed.scope && parsed.scope !== 'all') {
       cacheKeyOpts.scope = parsed.scope;
     }
+    // What each realm the caller does not read contributed: the grant filters
+    // composed into its query, or that it contributed no rows, or that its
+    // policy could not be judged. The realms a caller reads and the ones their
+    // policy reaches decide the body, so two callers asking the same question
+    // of the same realms share one entry only where each realm answered both
+    // of them the same way — which, for a grant reading `actor()`, it never
+    // does. Folded only when some realm is one the caller does not read, so
+    // a search of realms the caller reads keys the way it would with no
+    // policy anywhere.
+    if (unread.length > 0) {
+      cacheKeyOpts.policyScope = Object.fromEntries(
+        [...new Set(unread)]
+          .sort()
+          .map((realm) => [
+            realm,
+            access.scoped.get(realm) ??
+              (access.failed.has(realm) ? 'failed' : 'none'),
+          ]),
+      );
+    }
 
     // `loggingCorrelationId` / `timings` deliberately stay OUT of the
     // cache-key opts (per-request values would make every key unique) and
@@ -356,16 +542,22 @@ export default function handleSearch(opts: {
     // visit.
     let linkMode: SearchShapeLinkMode = cacheOnlyDefinitions
       ? 'prerender'
-      : resolveLinksOnly
-        ? 'links-only'
-        : 'full';
+      : searchShapeLinkMode(links);
     shape = describeSearchShape({
       query: parsed,
       realms: realmList,
       linkMode,
       ...(linkShapeDecision
         ? {
-            requestedLinkMode: linkShapeDecision.requested,
+            // What was asked for includes what the invoked query declares, so
+            // a declaration's narrowing is never reported as the policy
+            // downgrading the request.
+            requestedLinkMode: searchShapeLinkMode(
+              effectiveLinkStrategy(
+                declaredLinks,
+                linkShapeDecision.requested === 'links-only',
+              ),
+            ),
             linkShapeLoad: linkShapeDecision.load,
             linkShapeLevel: linkShapeDecision.level,
             linkShapeRowClass: linkShapeDecision.rowClass,
@@ -381,17 +573,38 @@ export default function handleSearch(opts: {
     // lazy-mount work entirely.
     let runSearch = async () => {
       let doRun = async (signal?: AbortSignal) => {
+        // Only the realms rows are read from are mounted: the caller reads
+        // them, or their policy scopes the caller into them.
+        let working = realmList.filter(
+          (realm) => access.readable.has(realm) || access.scoped.has(realm),
+        );
         let resolveRealms = () =>
-          resolveRealmsForFederatedRequest(reconciler, realmList, {
+          resolveRealmsForFederatedRequest(reconciler, working, {
             consumingRealm,
           });
-        let realmInstances = timings
+        let workingInstances = timings
           ? await timings.time('resolveRealms', resolveRealms)
           : await resolveRealms();
-        let doc = await searchEntryRealms(realmInstances, parsed, {
-          ...runSearchOpts,
-          ...(signal ? { signal } : {}),
-        });
+        let realmInstances =
+          unread.length === 0
+            ? workingInstances
+            : realmInstancesFor(realmList, working, workingInstances, access);
+        let doc = await searchEntryRealms(
+          realmInstances,
+          parsed,
+          {
+            ...runSearchOpts,
+            ...(signal ? { signal } : {}),
+          },
+          scopedQueries.size === 0
+            ? undefined
+            : queryForRealmInstance(
+                realmInstances,
+                realmList,
+                scopedQueries,
+                parsed,
+              ),
+        );
         // If the budget already fired, skip stringifying a document we're about
         // to discard (the time-budget race has already resolved with the 408).
         signal?.throwIfAborted();
@@ -499,6 +712,74 @@ export default function handleSearch(opts: {
   }
 }
 
+// What the caller may see of each realm a search names. A realm in neither
+// `readable` nor `scoped` nor `failed` contributes no rows: nothing grants the
+// caller a query there, or nothing is served from it.
+interface RealmAccess {
+  // The realms the caller reads outright.
+  readable: Set<string>;
+  // The realms the caller reaches through their policy, with the grant
+  // filters composed into the query each runs.
+  scoped: Map<string, Filter[]>;
+  // The realms whose policy could not be judged.
+  failed: Set<string>;
+}
+
+// The realm instances a fan-out searches, positional with `realmURLs`. A realm
+// rows are read from is the mounted realm itself. A realm whose policy could
+// not be judged is left out, so the merge counts it among the realms that did
+// not answer. Every other realm answers as a search matching nothing does,
+// counted in the per-realm totals like any realm that answered, so a realm
+// that grants the caller nothing reads exactly as one that holds nothing for
+// them.
+function realmInstancesFor(
+  realmURLs: string[],
+  working: string[],
+  workingInstances: Array<Realm | null | undefined>,
+  access: RealmAccess,
+) {
+  let byURL = new Map<string, Realm | null | undefined>();
+  working.forEach((url, index) => byURL.set(url, workingInstances[index]));
+  return realmURLs.map((url) => {
+    if (access.readable.has(url) || access.scoped.has(url)) {
+      return byURL.get(url);
+    }
+    if (access.failed.has(url)) {
+      return undefined;
+    }
+    return {
+      url,
+      searchEntries: async (query: SearchEntryQuery) =>
+        emptySearchEntryDocument(query),
+    };
+  });
+}
+
+// The query each resolved realm instance runs. The instances are positional
+// with the realms the search names, so each one is matched to its query by
+// where it stands rather than by the URL it reports: a realm reached through
+// its policy is always handed its scoped query, and never falls through to the
+// unscoped one because its URL is spelled differently from the request's.
+function queryForRealmInstance(
+  instances: Array<object | null | undefined>,
+  realmURLs: string[],
+  scopedQueries: Map<string, SearchEntryQuery>,
+  unscoped: SearchEntryQuery,
+): (realm: object) => SearchEntryQuery {
+  let byInstance = new Map<object, SearchEntryQuery | undefined>();
+  instances.forEach((instance, index) => {
+    if (instance) {
+      byInstance.set(instance, scopedQueries.get(realmURLs[index]));
+    }
+  });
+  return (realm) => {
+    if (!byInstance.has(realm)) {
+      throw new Error('a search reached a realm it did not name');
+    }
+    return byInstance.get(realm) ?? unscoped;
+  };
+}
+
 // The job-scoped cache + ETag/304 protocol for the federated search
 // handler. Caching is gated on:
 //   (a) `x-boxel-job-id` present and well-formed — only the indexer worker
@@ -514,9 +795,10 @@ export default function handleSearch(opts: {
 // mid-batch — "one consolidated view of the realm-server's state per indexing
 // batch". Same-process writes (the batch's own swap) still trip
 // `Realm.update`'s onInvalidation, so the cache only freezes peer-realm swaps
-// within the job's lifetime. `multiRealmAuthorization` has already validated
-// read access to every realm, so the cache can't surface results across an
-// authorization boundary.
+// within the job's lifetime. The key carries what separates one caller's
+// answer from another's — the realms named, and for each one the caller does
+// not read, what its policy contributed — so the cache can't surface results
+// across an authorization boundary.
 //
 // The inner key is `(realms, query, opts)`; `opts` is whatever the caller
 // folds in — every request member that changes the body — so two requests
@@ -626,10 +908,10 @@ async function respondWithJobScopedSearchCache(
   // `resolveSearchGenerations` for what the scoped key does and does not
   // cover; for a change outside the anchors the TTL is the staleness bound
   // rather than merely a retention bound.
-  // Authorization is realm-scoped and was validated for this exact realm list
-  // by `multiRealmAuthorization` before the handler ran, so a body computed
-  // for one caller is byte-identical to what any other authorized caller
-  // would compute.
+  // A body computed for one caller is served to another only under the same
+  // key, and the key carries every input that tells their answers apart: the
+  // realms named, and for each one the caller does not read, what its policy
+  // contributed (`policyScope`).
   if (args.liveSearch) {
     // Off the critical path: resolves the anchors whose keys are cold or aged
     // out so a later request is scoped, and never blocks this one.

@@ -6768,9 +6768,10 @@ module(basename(import.meta.filename), function () {
         });
 
         test('a probe that sends no Accept names the realm whatever the path', async function (assert) {
-          // What the realm-discovery callers send: no `Accept` of their own,
-          // which matches no route, so the request lands on the module/file
-          // fallback and the realm identity comes off whatever that answers.
+          // A `HEAD` with no `Accept` matches no route, so it lands on the
+          // module/file fallback, and the realm identity comes off whatever
+          // that answers. (Browser and Node `fetch` send `*/*` when the caller
+          // sets no `Accept`, and the discovery route answers that.)
           for (let path of [
             '/person-1',
             '/no-such-card',

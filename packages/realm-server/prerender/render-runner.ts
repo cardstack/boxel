@@ -115,6 +115,47 @@ const CLEAR_CACHE_RETRY_SIGNATURES: readonly (readonly string[])[] = [
   [`Failed to execute 'removeChild' on 'Node'`, 'NotFoundError'],
 ];
 
+// Chrome's message for a native `import()` whose fetch failed. In a prerender
+// tab only the host bundle imports natively (card modules load through the
+// Boxel loader, which rewrites their dynamic imports), so the URL it names is a
+// host chunk. The document remembers the failure: every later `import()` of
+// that chunk fails at once without asking the network again, so the tab cannot
+// serve anything that needs the chunk until a fresh document replaces it. No
+// in-page retry can recover it, which is why it evicts the tab.
+const HOST_CHUNK_IMPORT_FAILURE_RE =
+  /Failed to fetch dynamically imported module:?\s*(\S*)/;
+
+// Searches the error, and the errors nested in it, since the failed import is
+// usually the cause of whatever the render reports on top.
+function failedHostChunkImportIn(
+  renderError: RenderError | undefined,
+): string | undefined {
+  let pending: unknown[] = renderError?.error ? [renderError.error] : [];
+  let visited = new Set<unknown>();
+  while (pending.length > 0) {
+    let error = pending.shift();
+    if (!error || typeof error !== 'object' || visited.has(error)) {
+      continue;
+    }
+    visited.add(error);
+    let { message, stack, additionalErrors } =
+      error as Partial<SerializedError>;
+    for (let text of [message, stack]) {
+      if (typeof text !== 'string') {
+        continue;
+      }
+      let match = HOST_CHUNK_IMPORT_FAILURE_RE.exec(text);
+      if (match) {
+        return match[1] || match[0];
+      }
+    }
+    if (Array.isArray(additionalErrors)) {
+      pending.push(...additionalErrors);
+    }
+  }
+  return undefined;
+}
+
 // Title shown on the SerializedError that wraps a captured console
 // or runtime-exception entry. Distinct labels make it obvious in the
 // error doc which CDP layer surfaced the signal:
@@ -907,6 +948,20 @@ export class RenderRunner {
                 error: renderError.error,
               },
             };
+          } else if (
+            // A module error the route reports leaves the tab usable, except
+            // one caused by a host chunk the tab failed to import: that
+            // failure sticks to the document, so the eviction reason treats
+            // the tab as unusable and it is replaced.
+            response.status === 'error' &&
+            this.failedHostChunkImport(response.error) &&
+            (await this.#maybeEvict(
+              affinityKey,
+              'module render',
+              response.error,
+            ))
+          ) {
+            poolInfo.evicted = true;
           }
         } catch (_e) {
           let renderError = buildInvalidModuleResponseError(
@@ -2352,6 +2407,15 @@ export class RenderRunner {
     return undefined;
   }
 
+  // The host chunk a render failed to import, if its error says one failed —
+  // see HOST_CHUNK_IMPORT_FAILURE_RE. The chunk's URL when the error names it,
+  // or the matched message when it does not.
+  failedHostChunkImport(
+    renderError: RenderError | undefined,
+  ): string | undefined {
+    return failedHostChunkImportIn(renderError);
+  }
+
   #isAuthError(err?: RenderError): boolean {
     let status = Number(err?.error?.status);
     return status === 401 || status === 403;
@@ -2630,6 +2694,9 @@ export class RenderRunner {
       return 'timeout';
     }
     if ((renderError as any).evict) {
+      return 'unusable';
+    }
+    if (failedHostChunkImportIn(renderError)) {
       return 'unusable';
     }
     let normalizedMessage = (renderError.error?.message ?? '')

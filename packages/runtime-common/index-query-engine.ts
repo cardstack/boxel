@@ -4,6 +4,7 @@ import stringify from 'safe-stable-stringify';
 import {
   type CardResource,
   type CodeRef,
+  type Diagnostics,
   baseCardRef,
   internalKeyFor,
   isResolvedCodeRef,
@@ -11,6 +12,7 @@ import {
   getSerializer,
 } from './index.ts';
 import { isValidPrerenderedHtmlFormat } from './prerendered-html-format.ts';
+import { verdictCoversRow } from './index-writer.ts';
 import {
   type Expression,
   type CardExpression,
@@ -292,6 +294,13 @@ export interface IndexedInstanceSource {
   types: string[] | null;
   instance: CardResource | null;
   error: SerializedError | null;
+  // Whether the latest visit failed for a reason the prerender server did not
+  // attribute to the card: a stale host shell, or a gateway failure on a fetch
+  // the visit made. The index keeps such a failure off the row, so the row
+  // reads as healthy, and everything on it, `instance` and `sourceContentHash`
+  // included, is what an earlier visit recorded. The card's source may have
+  // changed since.
+  failureWithheld: boolean;
 }
 
 interface InstanceError extends Partial<
@@ -647,7 +656,7 @@ export class IndexQueryEngine {
     opts?: GetEntryOptions,
   ): Promise<IndexedInstanceSource | undefined> {
     let rows = (await this.#query([
-      'SELECT i.realm_url, i.generation, i.source_content_hash, i.types, i.pristine_doc, i.has_error, i.error_doc',
+      'SELECT i.realm_url, i.generation, i.source_content_hash, i.types, i.pristine_doc, i.has_error, i.error_doc, i.diagnostics',
       `FROM ${tableFromOpts(opts)} AS i`,
       'WHERE',
       ...every([
@@ -667,6 +676,7 @@ export class IndexQueryEngine {
       pristine_doc: CardResource | null;
       has_error: boolean | null;
       error_doc: SerializedError | null;
+      diagnostics: Diagnostics | null;
     }[];
     let row = rows[0];
     if (!row) {
@@ -679,6 +689,9 @@ export class IndexQueryEngine {
       types: row.types,
       instance: row.has_error ? null : row.pristine_doc,
       error: row.has_error ? row.error_doc : null,
+      failureWithheld:
+        !row.has_error &&
+        verdictCoversRow(row.diagnostics ?? undefined, 'instance'),
     };
   }
 

@@ -148,3 +148,58 @@ export class OperationReadTally {
     return this.#missing;
   }
 }
+
+// ============================================================================
+// Per-request telemetry for a capability check.
+//
+// On the same channel as an execution, because a check is a gate decision like
+// any other and an operator reading policy reach wants both in one place. It
+// carries `kind`, which an execution's line does not, so a panel built to show
+// realm-authorized callers reaching the policy path excludes checks on that
+// field alone. Without it every rendered button would count as policy reach,
+// which would make the panel report the shape of a template rather than the
+// shape of the traffic.
+//
+// One line per request rather than one per pair: a check is asked in bulk, a
+// per-pair line would put a view's whole render into the log at the rate the
+// view re-renders, and the counts below are what a panel plots anyway. The
+// pairs themselves are not recorded — a line naming which cards a caller asked
+// about would put in the log exactly what the bare-boolean rule keeps off the
+// wire.
+// ============================================================================
+
+export interface CapabilityCheckEvent {
+  kind: 'capability-check';
+  realmURL: string;
+  // The authenticated caller, as `actor()` resolves it. Null where the request
+  // authenticated nobody.
+  actor: string | null;
+  // What the realm ACL declined this caller, which is what decides whether any
+  // of the pairs reached the policy at all.
+  coarseDeclined: 'none' | 'writes' | 'all';
+  pairs: number;
+  allowed: number;
+  conditional: number;
+  denied: number;
+  totalMs: number;
+}
+
+let capabilityCheckSink: ((event: CapabilityCheckEvent) => void) | undefined;
+
+export function setCapabilityCheckSink(
+  sink: ((event: CapabilityCheckEvent) => void) | undefined,
+): void {
+  capabilityCheckSink = sink;
+}
+
+let capabilityCheckLog: ReturnType<typeof logger> | undefined;
+
+export function emitCapabilityCheck(event: CapabilityCheckEvent): void {
+  if (capabilityCheckSink) {
+    capabilityCheckSink(event);
+    return;
+  }
+  (capabilityCheckLog ??= logger(OPERATIONS_CHANNEL)).info(
+    JSON.stringify({ channel: OPERATIONS_CHANNEL, ...event }),
+  );
+}
