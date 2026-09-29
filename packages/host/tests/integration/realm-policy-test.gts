@@ -97,9 +97,9 @@ const educationPolicy = policyDocument([
   },
 ]);
 
-// A realm whose policy lets a teacher read the classrooms they teach. The
+// A realm whose policy lets a teacher delete the classrooms they teach. The
 // grant that fails comes first, so the answer shows a predicate that did not
-// hold ahead of the one that admitted the read.
+// hold ahead of the one that admitted the delete.
 const TEACHER = '@teacher:localhost';
 const leadsPredicate = '.leadTeacherIds | any(. == actor())';
 const teachesPredicate = '.teacherIds | any(. == actor())';
@@ -118,9 +118,9 @@ const classroomPolicy = policyDocument([
   {
     targetType: { module: '../classroom', name: 'Classroom' },
     grants: [
-      { operation: 'read', where: leadsPredicate },
-      { operation: 'read', where: teachesPredicate },
-      { operation: 'delete' },
+      { operation: 'delete', where: leadsPredicate },
+      { operation: 'delete', where: teachesPredicate },
+      { operation: 'update' },
     ],
   },
 ]);
@@ -474,9 +474,15 @@ module('Integration | realm policy', function (hooks) {
   test('the policy explains what it decides for one caller, one card and one operation', async function (assert) {
     await setupIntegrationTestRealm({
       mockMatrixUtils,
-      // The teacher holds no permission on the realm, so only the policy can
-      // let them read a classroom.
-      permissions: { '@testuser:localhost': ['read', 'write', 'realm-owner'] },
+      // The in-browser realm serves the test's requests without vouching for
+      // a session, so the explain is asked by nobody, and nobody may ask one
+      // only in a realm anyone may read. The teacher reads it like anyone
+      // else and holds no write, so only the policy can let them delete a
+      // classroom.
+      permissions: {
+        '*': ['read'],
+        '@testuser:localhost': ['read', 'write', 'realm-owner'],
+      },
       contents: {
         'realm.json': realmConfigCardJSON({
           policy: `${testRealmURL}policies/classrooms`,
@@ -506,7 +512,7 @@ module('Integration | realm policy', function (hooks) {
       '[data-test-explain-target]',
       `${testRealmURL}classrooms/room-204`,
     );
-    await fillIn('[data-test-explain-operation]', 'read');
+    await fillIn('[data-test-explain-operation]', 'delete');
     await click('[data-test-explain-submit]');
     await waitFor('[data-test-explanation], [data-test-explain-refusal]', {
       timeout: 10_000,
@@ -526,7 +532,7 @@ module('Integration | realm policy', function (hooks) {
     assert.dom('[data-test-explanation-actor]').hasText(TEACHER);
     assert
       .dom('[data-test-explanation-acl]')
-      .hasText('none', "the realm's own permissions give the teacher nothing");
+      .hasText('read', "the realm's own permissions let the teacher only read");
     assert
       .dom('[data-test-explanation-refusal]')
       .doesNotExist('an allowed invocation has no refusal to report');
@@ -544,13 +550,13 @@ module('Integration | realm policy', function (hooks) {
         [leadsPredicate, 'did-not-hold'],
         [teachesPredicate, 'held'],
       ],
-      'each read grant is listed with its predicate and what it said, and the delete grant is not',
+      'each delete grant is listed with its predicate and what it said, and the update grant is not',
     );
     assert
       .dom(
         '[data-test-explanation-grant="held"] [data-test-explanation-admitting]',
       )
-      .exists('the grant that admitted the read is marked');
+      .exists('the grant that admitted the delete is marked');
     assert
       .dom('[data-test-explanation-admitting]')
       .exists({ count: 1 }, 'and no other grant is');
