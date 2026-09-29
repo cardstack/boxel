@@ -97,13 +97,13 @@ export class ButtonUsage extends GlimmerComponent {
           @name='busy'
           @value={{this.busy}}
           @defaultValue={{false}}
-          @description='Shows the spinner and dims the label while an action runs. Presses are ignored, but the button keeps focus (aria-disabled, not disabled).'
+          @description='Swaps the label for a spinner while an action runs, at the same width. Presses are ignored, but the button keeps focus (aria-disabled, not disabled).'
           @onInput={{this.setBusy}}
         />
         <Args.String
           @name='busyLabel'
           @value={{this.busyLabel}}
-          @description='Visually hidden text added to the accessible name while busy. Set it when the visible label does not already say the button is busy.'
+          @description='Shown next to the spinner while busy when it fits in the button, and always added to the accessible name. Set it when the visible label does not already say the button is busy.'
           @onInput={{this.setBusyLabel}}
         />
         <Args.Bool

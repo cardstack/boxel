@@ -2,6 +2,7 @@
 // em-scaled, with a built-in busy state. Everything that performs an action wraps it.
 import Component from '@glimmer/component';
 import { on } from '@ember/modifier';
+import { modifier } from 'ember-modifier';
 import {
   PRETUI_APPEARANCES,
   PRETUI_TONES,
@@ -47,6 +48,51 @@ const VARIANT_AXES: Record<string, [PretuiTone, PretuiAppearance]> =
       link: ['primary', 'plain'],
     } as Record<string, [PretuiTone, PretuiAppearance]>,
   );
+
+// Picks what a busy button shows, without ever changing its width: the
+// spinner with @busyLabel when that fits, else the spinner beside the dimmed
+// label when that fits (a stretched or min-width button), else the spinner
+// alone over the hidden label. Measured with the layout attribute cleared, so
+// the chosen layout can't widen the button and feed back into the check.
+const fitBusyContent = modifier((busyEl: HTMLElement, [busy]: [boolean]) => {
+  let button = busyEl.parentElement;
+  let label = busyEl.nextElementSibling as HTMLElement | null;
+  let text = busyEl.lastElementChild as HTMLElement | null;
+  if (!button || !label || !text) return;
+  if (!busy) {
+    button.removeAttribute('data-busy-layout');
+    return;
+  }
+  let target = button;
+  let labelEl = label;
+  let textEl = text;
+  let measure = () => {
+    target.removeAttribute('data-busy-layout');
+    let style = getComputedStyle(target);
+    let room =
+      target.clientWidth -
+      parseFloat(style.paddingLeft) -
+      parseFloat(style.paddingRight) -
+      0.5;
+    // spinner 1.04em + gap 0.48em, as in the styles below
+    let spinner = parseFloat(style.fontSize) * 1.52;
+    // the busy text is visually hidden here, so scrollWidth is its full width
+    let textWidth = textEl.textContent?.trim() ? textEl.scrollWidth : 0;
+    if (textWidth && room >= textWidth + spinner) {
+      target.setAttribute('data-busy-layout', 'text');
+    } else if (room >= labelEl.offsetWidth + spinner) {
+      target.setAttribute('data-busy-layout', 'inline');
+    }
+  };
+  measure();
+  if (typeof ResizeObserver === 'undefined') return;
+  let observer = new ResizeObserver(measure);
+  observer.observe(target);
+  return () => {
+    observer.disconnect();
+    target.removeAttribute('data-busy-layout');
+  };
+});
 
 export interface ButtonSignature {
   Args: {
@@ -129,17 +175,19 @@ export class Button extends Component<ButtonSignature> {
       data-test-pretui-button
       ...attributes
     >
-      {{#if this.busy}}<span
-          class='pretui-spinner'
-          aria-hidden='true'
-          data-test-pretui-button-spinner
-        ></span>{{/if}}
+      <span class='pretui-btn-busy' {{fitBusyContent this.busy}}>
+        {{#if this.busy}}<span
+            class='pretui-spinner'
+            aria-hidden='true'
+            data-test-pretui-button-spinner
+          ></span>{{/if}}
+        {{! always rendered, so the busy text lands in an existing node }}
+        <span
+          class='pretui-btn-busy-text'
+          data-test-pretui-button-busy-label
+        >{{if this.busy @busyLabel}}</span>
+      </span>
       <span class='pretui-btn-label'>{{yield}}</span>
-      {{! always rendered, so the busy text lands in an existing node }}
-      <span class='pretui-btn-sr' data-test-pretui-button-busy-label>{{if
-          this.busy
-          @busyLabel
-        }}</span>
     </button>
     <style scoped>
       /* layered, so a caller's plain CSS wins without fighting specificity */
@@ -171,6 +219,7 @@ export class Button extends Component<ButtonSignature> {
           justify-content: center;
           gap: 0.48em;
           min-height: var(--pretui-button-h, 2.24em);
+          min-width: var(--pretui-button-min-w, 0);
           padding: 0.2em var(--pretui-button-px, 0.96em);
           border: 1px solid var(--pretui-btn-edge, transparent);
           border-radius: var(
@@ -370,16 +419,46 @@ export class Button extends Component<ButtonSignature> {
         .pretui-btn[data-state='busy'] {
           cursor: progress;
         }
+        /* Busy: the label keeps its box (and its place in the accessible
+           name) and the busy layer sits on top of it, so the width never
+           changes. fitBusyContent picks what the layer shows. */
         .pretui-btn[data-state='busy'] .pretui-btn-label {
+          opacity: 0;
+        }
+        .pretui-btn-busy {
+          position: absolute;
+          inset: 0;
+          display: none;
+          align-items: center;
+          justify-content: center;
+          gap: 0.48em;
+          pointer-events: none;
+        }
+        .pretui-btn[data-state='busy'] .pretui-btn-busy {
+          display: flex;
+        }
+        /* room for the spinner beside the label: both in the row */
+        .pretui-btn[data-busy-layout='inline'] .pretui-btn-busy {
+          position: static;
+        }
+        .pretui-btn[data-busy-layout='inline'] .pretui-btn-label {
           opacity: 0.6;
         }
-        .pretui-btn-sr {
+        .pretui-btn-busy-text {
           position: absolute;
           width: 1px;
           height: 1px;
           overflow: hidden;
           clip-path: inset(50%);
           white-space: nowrap;
+        }
+        /* room for the spinner and @busyLabel: show the busy label */
+        .pretui-btn[data-busy-layout='text'] .pretui-btn-busy-text {
+          position: static;
+          width: auto;
+          height: auto;
+          overflow: visible;
+          clip-path: none;
         }
         @keyframes pretui-spin {
           to {

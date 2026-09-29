@@ -107,7 +107,8 @@ export class PretuiButtonPreview extends CardDef {
                     <td><Button
                         @appearance={{appearance}}
                         @busy={{true}}
-                      >Saving</Button></td>
+                        @busyLabel='Saving'
+                      >Save</Button></td>
                   {{/each}}
                 </tr>
               </tbody>
@@ -117,15 +118,23 @@ export class PretuiButtonPreview extends CardDef {
 
         <section aria-labelledby='busy-heading'>
           <h2 id='busy-heading'>Busy with focus</h2>
-          <p>Tab to the button and press Enter: it stays focused and ignores
-            presses for three seconds while busy.</p>
+          <p>Click the button or tab to the it and press Enter: it stays focused
+            and ignores presses for three seconds while busy.</p>
           <div class='row'>
             <Button
               @busy={{this.saving}}
               @busyLabel='Saving'
               {{on 'click' this.save}}
             >
-              Save changes
+              Save
+            </Button>
+            <Button
+              class='wide'
+              @busy={{this.saving}}
+              @busyLabel='Saving'
+              {{on 'click' this.save}}
+            >
+              Save
             </Button>
           </div>
         </section>
@@ -257,6 +266,9 @@ export class PretuiButtonPreview extends CardDef {
         }
         td {
           padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
+        }
+        .wide {
+          min-width: 10rem;
         }
         .row {
           display: flex;

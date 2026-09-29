@@ -17,7 +17,7 @@ The kit's action primitive: a native `<button>` with a two-axis treatment system
 
 **`@size` sets host `font-size` only.** Minimum height (`2.24em`, floored at 24px for `xs`), padding (`0.96em`), gap, spinner and radius are all `em`, so the whole control scales from one number and `m` stays pixel-identical to the pre-scale cut (2.24 × 12.5px = 28px). No per-size rule duplication, and a season can retune the scale by redefining `--pretui-size-*`.
 
-**`@busy` blocks activation but keeps focus.** It sets `aria-disabled` rather than native `disabled`, swallows clicks (and so form submission) in a capture-phase listener, swaps in an inline spinner, dims the label to 0.6, and, when `@busyLabel` is set, adds it as visually hidden text. One arg, not three.
+**`@busy` blocks activation but keeps focus.** It sets `aria-disabled` rather than native `disabled`, swallows clicks (and so form submission) in a capture-phase listener, and never changes the button's width: the label fades out but keeps its space, and a busy layer on top shows the spinner with `@busyLabel` when both fit, otherwise the spinner beside the dimmed label when the button has room (a stretched or `min-width` button), otherwise the spinner alone. `@busyLabel` is always in the accessible name while busy, visible or not. One arg, not three.
 
 ## Prior art
 
@@ -28,7 +28,7 @@ Where Pretui improves:
 - **Tone is a token indirection, not a colour.** Because tones only write `--pretui-tone`/`--pretui-tone-on`, an appearance recipe is written once and works for every current _and future_ tone. shadcn's `cva` map has to enumerate each combination.
 - **`color-mix` hover derivation.** Hover is `color-mix(in oklch, --foreground 10%, <bg>)` rather than a second hard-coded colour per variant, so a season that changes `--primary` gets a correct hover for free.
 - **Uniform `em` sizing** (above) — Web Awesome and shadcn both restate padding/height per size.
-- Per-instance escapes (`--pretui-button-h`, `--pretui-button-px`, `--pretui-button-radius`, `--pretui-button-bg`, `--pretui-button-fg`) are custom properties, so a call site can deviate without `:deep()`.
+- Per-instance escapes (`--pretui-button-h`, `--pretui-button-min-w`, `--pretui-button-px`, `--pretui-button-radius`, `--pretui-button-bg`, `--pretui-button-fg`) are custom properties, so a call site can deviate without `:deep()`.
 
 Deliberately absent versus the field: no `href`/link rendering (use an anchor), no `pill`, no `caret`, no icon slots — icons are just children.
 
@@ -39,7 +39,7 @@ No APG pattern is required: this is a native `<button>`, which is the whole poin
 Gaps worth knowing:
 
 - **`@busy` keeps the button in the tab order**: `aria-disabled="true"`, never together with native `disabled`, the same choice as Spectrum's `isPending`. `@disabled` still uses native `disabled`; with both set, native wins.
-- **The busy state reaches the accessible name only through the label.** Busy sets `aria-busy="true"`, which screen readers largely ignore on buttons, so a busy button should either say so visibly ("Saving…") or pass `@busyLabel` for visually hidden text. There is no default, because a label that already says it is busy would be announced twice ("Saving Loading"). The text node is always rendered and only filled while busy. Screen readers differ on whether they announce a name change on the focused control, so this still needs a pass with NVDA and VoiceOver.
+- **The busy state reaches the accessible name only through the label.** Busy sets `aria-busy="true"`, which screen readers largely ignore on buttons, so a busy button should either say so visibly ("Saving…") or pass `@busyLabel`, which shows beside the spinner when it fits and is visually hidden otherwise. There is no default, because a label that already says it is busy would be announced twice ("Saving Loading"). The text node is always rendered and only filled while busy. Screen readers differ on whether they announce a name change on the focused control, so this still needs a pass with NVDA and VoiceOver.
 - The spinner is `aria-hidden="true"` and slows down under `prefers-reduced-motion`, which also drops the press nudge.
 - **Focus-visible paints its own ring**: `outline: 2px solid var(--ring)` with a 2px offset. How visible it is depends on the theme's `--ring` against the surface.
 - **Forced colors**: every appearance keeps a 1px border (transparent until forced colors paints it), and disabled switches to `GrayText`.
