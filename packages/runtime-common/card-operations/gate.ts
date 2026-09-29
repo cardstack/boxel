@@ -234,7 +234,7 @@ export interface PendingDecision {
 // row can lag the card's stored bytes. A realm writer can replace a card's
 // source through the card-source route, which answers before the card is
 // indexed again. So under the lock, `dischargePendingDecision` reads the type
-// that the bytes the write stages against name, and refuses the write when
+// named by the bytes the write stages against, and refuses the write when
 // either of these holds:
 //
 // - The bytes name a type other than the one the grants were matched on. The
@@ -1128,11 +1128,10 @@ async function storedSubject(
       };
 }
 
-// A pending write's target card as the lock holds it, where it is still a card
-// the write's grants admit (see `StoredCardCheck`). A card that is gone, one
-// stored as a type other than the one its grants were matched on, and one that
-// the write would change and that is now a policy card are none of them what
-// those grants admit, and are judged by nothing.
+// A pending write's target card as the lock holds it, or undefined where it is
+// no longer a card the write's grants admit (see `StoredCardCheck`): a card
+// that is gone, one stored as a type other than the one its grants were
+// matched on, or one the write changes that is now a policy card.
 //
 // The lock holds a card as its bytes only where the batch read them. A card an
 // earlier entry in the batch removed, or appended to without holding its
