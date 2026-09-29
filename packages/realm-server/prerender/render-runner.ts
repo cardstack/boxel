@@ -949,13 +949,18 @@ export class RenderRunner {
               },
             };
           } else if (
-            response.status === 'error' &&
-            this.failedHostChunkImport(response.error)
-          ) {
             // A module error the route reports leaves the tab usable, except
             // one caused by a host chunk the tab failed to import: that
-            // failure sticks to the document, so the tab is replaced.
-            await this.#evictAffinity(affinityKey, 'module render', 'unusable');
+            // failure sticks to the document, so the eviction reason treats
+            // the tab as unusable and it is replaced.
+            response.status === 'error' &&
+            this.failedHostChunkImport(response.error) &&
+            (await this.#maybeEvict(
+              affinityKey,
+              'module render',
+              response.error,
+            ))
+          ) {
             poolInfo.evicted = true;
           }
         } catch (_e) {

@@ -8284,6 +8284,145 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    // A tab whose module route answers with `routeResponse`, in a pool that
+    // records the affinities it disposes. It answers the few page calls a
+    // module render makes: the session write, the transition to the module
+    // route, the wait for its output, and the read of that output.
+    function fakeModuleTab(
+      routeResponse: (id: string, nonce: string) => ModuleRenderResponse,
+    ) {
+      let disposed: string[] = [];
+      let transition: { id: string; nonce: string } | undefined;
+      let page = {
+        url: () => 'https://host.example/module',
+        isClosed: () => false,
+        waitForFunction: async () => ({}),
+        evaluate: async (_fn: unknown, ...args: unknown[]) => {
+          if (args[0] === 'module' && Array.isArray(args[1])) {
+            let [id, nonce] = args[1] as [string, string];
+            transition = { id, nonce };
+            return undefined;
+          }
+          if (args.length === 0 && transition) {
+            let response = routeResponse(transition.id, transition.nonce);
+            return {
+              status: response.status,
+              value: JSON.stringify(response),
+              id: transition.id,
+              nonce: transition.nonce,
+            };
+          }
+          return undefined;
+        },
+      };
+      let pagePool = {
+        getPage: async () => ({
+          page,
+          reused: true,
+          launchMs: 0,
+          waits: {
+            semaphoreMs: 0,
+            admissionMs: 0,
+            tabQueueMs: 0,
+            tabStartupMs: 0,
+            tabProbeMs: 0,
+          },
+          pageId: 'fake-tab',
+          release: () => {},
+        }),
+        resetConsoleErrors: () => {},
+        takeConsoleErrors: () => [],
+        disposeAffinity: async (affinityKey: string) => {
+          disposed.push(affinityKey);
+        },
+      };
+      return { pagePool: pagePool as unknown as PagePool, disposed };
+    }
+
+    function moduleRouteError(
+      id: string,
+      nonce: string,
+      error: ModuleRenderResponse['error'],
+    ): ModuleRenderResponse {
+      return {
+        id,
+        nonce,
+        status: 'error',
+        isShimmed: false,
+        lastModified: 0,
+        createdAt: 0,
+        deps: [],
+        definitions: {},
+        error,
+      };
+    }
+
+    test('a module render whose route reports a failed host chunk import evicts the tab', async function (assert) {
+      let realm = 'https://chunk-retry.example/';
+      let { pagePool, disposed } = fakeModuleTab((id, nonce) =>
+        moduleRouteError(id, nonce, {
+          type: 'module-error',
+          error: hostChunkImportFailure(
+            'https://host.example/assets/ai-abc123.js',
+          ),
+        }),
+      );
+      let runner = new RenderRunner({
+        pagePool,
+        boxelHostURL: 'https://host.example',
+      });
+      let result = await runner.prerenderModuleAttempt({
+        affinityType: 'realm',
+        affinityValue: realm,
+        realm,
+        url: `${realm}module.gts`,
+        auth: 'test-auth',
+      });
+      assert.strictEqual(
+        result.response.status,
+        'error',
+        'the route error is returned',
+      );
+      assert.true(result.pool.evicted, 'the attempt reports the tab evicted');
+      assert.deepEqual(
+        disposed,
+        [toAffinityKey({ affinityType: 'realm', affinityValue: realm })],
+        'the tab is disposed so the next attempt gets a fresh one',
+      );
+    });
+
+    test('a module render whose route reports an ordinary module error keeps the tab', async function (assert) {
+      let realm = 'https://chunk-retry.example/';
+      let { pagePool, disposed } = fakeModuleTab((id, nonce) =>
+        moduleRouteError(id, nonce, {
+          type: 'module-error',
+          error: {
+            message: `encountered error loading module "${id}": rejected promise from an RSVP chain`,
+            status: 500,
+            additionalErrors: null,
+          },
+        }),
+      );
+      let runner = new RenderRunner({
+        pagePool,
+        boxelHostURL: 'https://host.example',
+      });
+      let result = await runner.prerenderModuleAttempt({
+        affinityType: 'realm',
+        affinityValue: realm,
+        realm,
+        url: `${realm}broken.gts`,
+        auth: 'test-auth',
+      });
+      assert.strictEqual(
+        result.response.status,
+        'error',
+        'the route error is returned',
+      );
+      assert.false(result.pool.evicted, 'the tab is not evicted');
+      assert.deepEqual(disposed, [], 'nothing is disposed');
+    });
+
     test('module prerender retries on a fresh tab when the evicted tab failed to import a host chunk', async function (assert) {
       let originalAttempt = RenderRunner.prototype.prerenderModuleAttempt;
       let prerenderer: Prerenderer | undefined;
