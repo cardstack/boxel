@@ -9006,3 +9006,34 @@ module('absolutizeSkillLinks', () => {
     );
   });
 });
+
+module('skill feature sections', () => {
+  const INDEX = 'https://localhost:4201/skills/index.md';
+  const instructions = [
+    'Before.',
+    '',
+    '<!-- feature:catalog-search -->',
+    'Search the catalog first.',
+    '<!-- /feature:catalog-search -->',
+    '',
+    'After.',
+  ].join('\n');
+  const skill = {
+    id: INDEX,
+    attributes: { title: 'Index', instructions },
+  };
+
+  test('leaves out a feature section when its feature is off', () => {
+    let [message] = skillCardsToMessages([skill]);
+    assert.false(message.includes('Search the catalog first.'));
+    assert.false(message.includes('feature:'), 'the markers are removed too');
+    assert.true(message.includes('Before.'));
+    assert.true(message.includes('After.'));
+  });
+
+  test('keeps a feature section, without its markers, when its feature is on', () => {
+    let [message] = skillCardsToMessages([skill], ['catalog-search']);
+    assert.true(message.includes('Search the catalog first.'));
+    assert.false(message.includes('feature:'), 'the markers are removed');
+  });
+});

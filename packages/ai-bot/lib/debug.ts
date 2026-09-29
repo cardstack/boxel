@@ -14,6 +14,7 @@ import {
   sendDebugMessage,
 } from '@cardstack/runtime-common/ai';
 import type { MatrixClient } from 'matrix-js-sdk';
+import { enabledSkillFeatures } from './skill-features.ts';
 
 export async function handleDebugCommands(
   openai: OpenAI,
@@ -73,7 +74,12 @@ To patch a card:\n
     }
 
     try {
-      let promptParts = await getPromptParts(eventList, userId, client);
+      let promptParts = await getPromptParts(
+        eventList,
+        userId,
+        client,
+        enabledSkillFeatures(),
+      );
       await sendPromptAsDebugMessage(
         client,
         roomId,

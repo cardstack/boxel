@@ -221,6 +221,7 @@ export async function getPromptParts(
   eventList: DiscreteMatrixEvent[],
   aiBotUserId: string,
   client: MatrixClient,
+  enabledSkillFeatures: string[] = [],
 ): Promise<PromptParts> {
   let history: DiscreteMatrixEvent[] = await constructHistory(
     eventList,
@@ -255,6 +256,7 @@ export async function getPromptParts(
     disabledSkillIds,
     client,
     inputModalities,
+    enabledSkillFeatures,
   );
   return {
     shouldRespond,
@@ -1697,6 +1699,7 @@ export async function buildPromptForModel(
   disabledSkillIds: string[] = [],
   client: MatrixClient,
   inputModalities?: string[],
+  enabledSkillFeatures: string[] = [],
 ) {
   // Need to make sure the passed in username is a full id
   if (
@@ -1782,7 +1785,7 @@ export async function buildPromptForModel(
   if (skillCards.length) {
     systemMessageParts.push(SKILL_INSTRUCTIONS_MESSAGE);
     systemMessageParts = systemMessageParts.concat(
-      skillCardsToMessages(skillCards),
+      skillCardsToMessages(skillCards, enabledSkillFeatures),
     );
   }
 
@@ -2650,7 +2653,33 @@ function isRelativeLink(target: string): boolean {
   );
 }
 
-export const skillCardsToMessages = (cards: EnabledSkill[]) => {
+// A skill body can mark a section as belonging to a feature that is off by
+// default:
+//
+//   <!-- feature:catalog-search -->
+//   ...text the model only sees when the feature is on...
+//   <!-- /feature:catalog-search -->
+//
+// The markers are HTML comments, so the same file renders unchanged anywhere
+// else (the coding harness reads it from disk and sees every section). Here, a
+// section whose feature is not in `enabledFeatures` is removed together with
+// its markers; an enabled section keeps its text and loses only the markers.
+const FEATURE_SECTION_RE =
+  /[ \t]*<!--\s*feature:([\w-]+)\s*-->[ \t]*\n?([\s\S]*?)[ \t]*<!--\s*\/feature:\1\s*-->[ \t]*\n?/g;
+
+export function applySkillFeatureFlags(
+  markdown: string,
+  enabledFeatures: string[],
+): string {
+  return markdown.replace(FEATURE_SECTION_RE, (_whole, feature, body) =>
+    enabledFeatures.includes(feature) ? body : '',
+  );
+}
+
+export const skillCardsToMessages = (
+  cards: EnabledSkill[],
+  enabledFeatures: string[] = [],
+) => {
   return cards.map((card) => {
     let headerParts = [`id: ${card.id}`];
     if (card.attributes?.title) {
@@ -2660,6 +2689,7 @@ export const skillCardsToMessages = (cards: EnabledSkill[]) => {
     let header = `Skill (${headerParts.join(', ')}):`;
     let instructions =
       card.attributes?.instructions?.trim() ?? 'No instructions provided.';
+    instructions = applySkillFeatureFlags(instructions, enabledFeatures).trim();
 
     return `${header}\n${absolutizeSkillLinks(instructions, card.id)}`;
   });
