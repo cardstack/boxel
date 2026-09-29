@@ -689,8 +689,8 @@ module('Integration | card-delete', function (hooks) {
       `[data-test-overlay-card="${testRealmURL}Pet/vangogh"] [data-test-overlay-select]`,
     );
     assert
-      .dom('[data-test-copy-button]')
-      .containsText('Copy 2 Cards', 'button text is correct');
+      .dom('[data-test-selection-dropdown-trigger]')
+      .containsText('2', 'both cards are selected');
     // The per-card more-options menu lives inside the type-label tab, which
     // only renders on hover — re-hover Pet/mango to surface it again.
     await triggerEvent(
@@ -716,7 +716,7 @@ module('Integration | card-delete', function (hooks) {
     let notFound = await adapter.openFile('Pet/mango.json');
     assert.strictEqual(notFound, undefined, 'file ref does not exist');
     assert
-      .dom('[data-test-copy-button]')
-      .containsText('Copy 1 Card', 'button text is correct');
+      .dom('[data-test-selection-dropdown-trigger]')
+      .containsText('1', 'the deleted card is removed from the selection');
   });
 });

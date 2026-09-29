@@ -4492,11 +4492,12 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('a card an earlier entry appends to leaves nothing to judge, whatever the batch read of it before', async function (assert) {
+    test('a card an earlier entry appends to is handed as the bytes beneath the append, marked so', async function (assert) {
       // The delete makes the batch read the card whole before anything
       // stages, and the append that runs first stages a description of the
-      // card rather than its bytes. What the delete is judged by is the card
-      // the append leaves, which the batch never holds.
+      // card rather than its bytes. The card the append leaves is never held,
+      // so the delete is handed the bytes from before it, marked as such:
+      // they say what type the card is, and not what its fields will hold.
       let original = eventLog([{ label: 'first' }]);
       let { core } = stub({
         stored: { 'log-1.json': original },
@@ -4521,11 +4522,43 @@ module(basename(import.meta.filename), function () {
           },
         },
       ]).catch(() => undefined);
-      assert.strictEqual(
+      assert.deepEqual(handed, {
+        id: `${REALM}log-1`,
+        source: original,
+        beneathAppend: true,
+      });
+    });
+
+    test('a second append to a card the batch never read whole is handed the bytes beneath the first', async function (assert) {
+      let original = eventLog([{ label: 'first' }]);
+      let s = stub({
+        stored: { 'log-1.json': original },
+        definitions: {
+          EventLog: eventLogDefinition(),
+          LogEvent: logEventDefinition(),
+        },
+      });
+      let handed: unknown[] = [];
+      let append = (label: string): BatchEntry => ({
+        op: 'appendContainsMany',
+        href: `${REALM}log-1`,
+        field: 'events',
+        items: [{ label }],
+        admit: async (judged) => {
+          handed.push(judged);
+        },
+      });
+      await commitBatch(s.core, [append('second'), append('third')]);
+      assert.deepEqual(
         handed,
-        undefined,
-        'not the bytes from before the append',
+        [
+          { id: `${REALM}log-1`, source: original },
+          { id: `${REALM}log-1`, source: original, beneathAppend: true },
+        ],
+        'the first append is handed the card, and the second the bytes beneath the first',
       );
+      assert.strictEqual(s.readsOutsideLock(), 0, 'read inside the lock');
+      assert.strictEqual(s.commits.length, 1, 'and both appends commit');
     });
 
     test('a refusal commits nothing, whichever group holds it', async function (assert) {

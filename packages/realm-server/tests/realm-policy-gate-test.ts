@@ -62,9 +62,8 @@ function adoptsFrom(ref: { module: string; name: string }) {
 }
 
 // Is the caller one of the classroom's teachers. Written with `any` and `==`
-// because that is exact. BXL's `contains` matches substrings, so
-// `contains([actor()])` would also admit a caller whose id is part of a
-// listed one, and `contains(actor())` never matches a list at all.
+// because that is exact. BXL's `contains` matches substrings, and a policy
+// that tests membership with it does not compile.
 const TEACHES = '.teacherIds | any(. == actor())';
 const LEADS = '.leadTeacherIds | any(. == actor())';
 
