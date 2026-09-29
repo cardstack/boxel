@@ -509,9 +509,12 @@ module(basename(import.meta.filename), function (hooks) {
     for (let [index, [where, builtin]] of refused.entries()) {
       let message = String(policy?.issues[index]?.message);
       assert.true(
-        message.includes(`\`${builtin}\``) &&
-          message.includes('.list | any(. == actor())'),
-        `${where}: the issue names \`${builtin}\` and the exact spelling: ${message}`,
+        message.includes(`\`${builtin}\``),
+        `${where}: the issue names \`${builtin}\`: ${message}`,
+      );
+      assert.true(
+        message.includes('.list | any(. == actor())'),
+        `${where}: and the exact spelling`,
       );
     }
     assert.deepEqual(
