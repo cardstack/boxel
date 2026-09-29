@@ -276,12 +276,14 @@ export interface RouteOptions {
   // when the ACL would not let its caller read the realm, whether or not the
   // realm has a policy.
   coarseReadOnly?: true;
-  // The route is one of the realm's operational endpoints, which keep working
-  // while the realm is archived: its seal lets through a request the router
-  // dispatches here. The route is the exemption, rather than its path, so a
-  // request for that path which the router hands to another route (a
-  // directory of the same name, or a media type the endpoint does not answer)
-  // is sealed like any other.
+  // The route is one of the realm's operational endpoints, which answer a
+  // caller without credentials and keep working while the realm is archived:
+  // the realm's credential check and its seal both let through a request the
+  // router dispatches here. The route is the exemption, rather than its path
+  // or a media type the request carries, so a request for that path which the
+  // router hands to another route (a directory of the same name, or a media
+  // type the endpoint does not answer) needs the credentials that route needs
+  // and is sealed like any other.
   operationalEndpoint?: true;
 }
 
@@ -298,6 +300,7 @@ export interface RouteDescription {
   path: string;
   consumesCoarseOutcome: boolean;
   coarseReadOnly: boolean;
+  operationalEndpoint: boolean;
 }
 
 export class Router {
@@ -405,6 +408,7 @@ export class Router {
             path,
             consumesCoarseOutcome: route.consumesCoarseOutcome,
             coarseReadOnly: route.coarseReadOnly,
+            operationalEndpoint: route.operationalEndpoint,
           });
         }
       }

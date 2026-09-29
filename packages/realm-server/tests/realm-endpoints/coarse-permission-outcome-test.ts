@@ -1,7 +1,8 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
 import type { Test, SuperTest, Response } from 'supertest';
-import { basename } from 'path';
+import { existsSync } from 'fs';
+import { basename, join } from 'path';
 import type { PgAdapter } from '@cardstack/postgres';
 import type { Realm } from '@cardstack/runtime-common';
 import {
@@ -10,7 +11,13 @@ import {
   baseCardRef,
   unarchiveRealm,
 } from '@cardstack/runtime-common';
-import { setupPermissionedRealmCached, createJWT } from '../helpers/index.ts';
+import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
+import {
+  setupPermissionedRealmCached,
+  createJWT,
+  realmServerTestMatrix,
+  realmSecretSeed,
+} from '../helpers/index.ts';
 
 // The realm ACL's decision is recorded on the request and answered after
 // routing, so every route — those that consume the recorded outcome and those
@@ -289,6 +296,53 @@ const gatedProbes: GatedProbe[] = [
   ),
 ];
 
+// Requests for an operational endpoint's path that the router hands to another
+// route, each sendable with any `Content-Type`. Sent with the one the
+// endpoint's own route is registered under, a request still reaches the route
+// its `Accept` names, so it needs that route's credentials, not the endpoint's
+// none.
+interface Lookalike {
+  label: string;
+  endpointContentType: SupportedMimeType;
+  write: boolean;
+  send: (request: SuperTest<Test>, contentType: string) => Test;
+}
+
+const lookalikes: Lookalike[] = [
+  {
+    label: 'POST card+source of _session',
+    endpointContentType: SupportedMimeType.Session,
+    write: true,
+    send: (r, contentType) =>
+      r
+        .post('/_session')
+        .set('Accept', SupportedMimeType.CardSource)
+        .set('Content-Type', contentType)
+        .send('written without credentials'),
+  },
+  {
+    label: 'POST octet-stream of _session',
+    endpointContentType: SupportedMimeType.Session,
+    write: true,
+    send: (r, contentType) =>
+      r
+        .post('/_session')
+        .set('Accept', SupportedMimeType.OctetStream)
+        .set('Content-Type', contentType)
+        .send('written without credentials'),
+  },
+  {
+    label: 'GET card+source of _readiness-check',
+    endpointContentType: SupportedMimeType.JSONAPI,
+    write: false,
+    send: (r, contentType) =>
+      r
+        .get('/_readiness-check')
+        .set('Accept', SupportedMimeType.CardSource)
+        .set('Content-Type', contentType),
+  },
+];
+
 function assertRefusal(
   assert: Assert,
   response: Response,
@@ -302,6 +356,7 @@ function assertRefusal(
 module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
   module('on a private realm', function (hooks) {
     let testRealm: Realm;
+    let testRealmPath: string;
     let request: SuperTest<Test>;
     let dbAdapter: PgAdapter;
 
@@ -314,6 +369,7 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       },
       onRealmSetup(args) {
         testRealm = args.testRealm;
+        testRealmPath = args.testRealmPath;
         request = args.request;
         dbAdapter = args.dbAdapter;
       },
@@ -474,6 +530,85 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           'HEAD * *',
         ].sort(),
         'the card+source read, the directory listing and the fallback file and module serve',
+      );
+    });
+
+    test('exactly the sign-in and the readiness check answer a caller without credentials', async function (assert) {
+      assert.deepEqual(
+        testRealm
+          .routeDescriptions()
+          .filter((route) => route.operationalEndpoint)
+          .map((route) => `${route.method} ${route.mimeType} ${route.path}`)
+          .sort(),
+        [
+          `POST ${SupportedMimeType.Session} /_session`,
+          `GET ${SupportedMimeType.RealmInfo} /_readiness-check`,
+        ].sort(),
+      );
+    });
+
+    test('the sign-in and the readiness check answer an anonymous caller', async function (assert) {
+      let matrixClient = new MatrixClient({
+        matrixURL: realmServerTestMatrix.url,
+        username: realmServerTestMatrix.username,
+        seed: realmSecretSeed,
+      });
+      await matrixClient.login();
+      let openIdToken = await matrixClient.getOpenIdToken();
+      let session = await request
+        .post('/_session')
+        .set('Accept', SupportedMimeType.Session)
+        .set('Content-Type', SupportedMimeType.Session)
+        .send(JSON.stringify(openIdToken));
+      assert.strictEqual(session.status, 201, '_session authenticates');
+      assert.ok(
+        session.get('Authorization'),
+        '_session issues a session token',
+      );
+
+      let readiness = await request
+        .get('/_readiness-check')
+        .set('Accept', SupportedMimeType.RealmInfo);
+      assert.strictEqual(readiness.status, 200, '_readiness-check answers');
+    });
+
+    test('a request for an operational endpoint’s path that the router hands to another route needs that route’s credentials, whatever its Content-Type', async function (assert) {
+      // Something for the card+source read of `_readiness-check` to find.
+      let stored = await request
+        .post('/_readiness-check')
+        .set('Accept', SupportedMimeType.CardSource)
+        .set('Content-Type', 'text/plain')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'owner', ['read', 'write', 'realm-owner'])}`,
+        )
+        .send('stored at the probe path');
+      assert.strictEqual(stored.status, 204, 'the owner stores the file');
+
+      for (let lookalike of lookalikes) {
+        for (let contentType of [lookalike.endpointContentType, 'text/plain']) {
+          let label = `${lookalike.label} (Content-Type: ${contentType})`;
+          assertRefusal(
+            assert,
+            await lookalike.send(request, contentType),
+            { status: 401, body: MISSING_AUTH },
+            `anonymous ${label}`,
+          );
+          if (lookalike.write) {
+            assertRefusal(
+              assert,
+              await lookalike
+                .send(request, contentType)
+                .set('Authorization', readerAuth()),
+              { status: 403, body: INSUFFICIENT },
+              `reader ${label}`,
+            );
+          }
+        }
+      }
+      assert.false(
+        existsSync(join(testRealmPath, '_session')),
+        'nothing is written at _session',
       );
     });
 

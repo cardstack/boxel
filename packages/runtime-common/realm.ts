@@ -350,7 +350,6 @@ import type {
   Method,
   Route,
   RouteDescription,
-  RouteTable,
 } from './router.ts';
 import {
   ArchivedRealmError,
@@ -362,7 +361,6 @@ import {
   Router,
   SupportedMimeType,
   isCoarseRefusal,
-  lookupRouteTable,
   routedPath,
 } from './router.ts';
 import { parseQuery } from './query.ts';
@@ -841,9 +839,9 @@ function renderHoldMaxMs(): number {
     : DEFAULT_RENDER_HOLD_MAX_MS;
 }
 // Marks the realm's public operational endpoints, `_session` authentication
-// and the `_readiness-check` health probe, which keep working while the realm
-// is archived (see `RouteOptions.operationalEndpoint`). They are the routes
-// `#publicEndpoints` answers without credentials: keep the two in step.
+// and the `_readiness-check` health probe, which answer a caller without
+// credentials and keep working while the realm is archived (see
+// `RouteOptions.operationalEndpoint`).
 const OPERATIONAL_ENDPOINT = { operationalEndpoint: true } as const;
 // The health probe's path as the router matches it, named here because two
 // places read it: the probe's route, and the probe that reaches no route
@@ -2131,6 +2129,7 @@ export type DispatchDescription =
       path: '*';
       consumesCoarseOutcome: boolean;
       coarseReadOnly: boolean;
+      operationalEndpoint: false;
     };
 
 type CoarseAdmission = (
@@ -2282,16 +2281,6 @@ export class Realm {
   #audioSizeLimitBytes: number;
   #videoSizeLimitBytes: number;
 
-  #publicEndpoints: RouteTable<true> = new Map([
-    [
-      SupportedMimeType.Session,
-      new Map([['POST' as Method, new Map([['/_session', true]])]]),
-    ],
-    [
-      SupportedMimeType.JSONAPI,
-      new Map([['GET' as Method, new Map([['/_readiness-check', true]])]]),
-    ],
-  ]);
   #dbAdapter: DBAdapter;
   #queue: QueuePublisher;
   #virtualNetwork: VirtualNetwork;
@@ -7335,6 +7324,7 @@ export class Realm {
         path: '*' as const,
         consumesCoarseOutcome: false,
         coarseReadOnly: method === 'GET' || method === 'HEAD',
+        operationalEndpoint: false as const,
       })),
     ];
   }
@@ -9359,7 +9349,12 @@ export class Realm {
     };
     if (
       requiredPermission !== 'realm-owner' &&
-      (lookupRouteTable(this.#publicEndpoints, this.paths, request) ||
+      // A request the router dispatches to an operational endpoint, the
+      // `_session` sign-in or the `_readiness-check` probe (see
+      // `OPERATIONAL_ENDPOINT`). The route the request reaches decides, not
+      // the path or a media type it carries: `_session` sent as a card-source
+      // write reaches that write, and needs the credentials every write does.
+      (this.#router.lookupRoute(request)?.operationalEndpoint ||
         (request.method === 'HEAD' && !probe) ||
         // If the realm is public readable or writable, do not require a JWT
         (requiredPermission === 'read' &&
