@@ -1126,6 +1126,20 @@ module(basename(import.meta.filename), function (hooks) {
         headersOf(denied),
         'with the same headers as the card the gate refused',
       );
+      let thrown = await request
+        .head(path(`${EDUCATION}syllabi/algebra`))
+        .set('Accept', SupportedMimeType.CardJson)
+        .set('Authorization', AUTH.teacher());
+      assert.strictEqual(
+        thrown.status,
+        missing.status,
+        'a card whose predicate throws too',
+      );
+      assert.deepEqual(
+        headersOf(thrown),
+        headersOf(missing),
+        'with the same headers as a card that is not there',
+      );
     });
   });
 
