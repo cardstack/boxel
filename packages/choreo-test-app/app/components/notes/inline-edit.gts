@@ -276,6 +276,8 @@ const InlineEditNotes: TOC<object> = <template>
       <h3>Type: why it has to leave layout</h3>
       <div class="dd-col">
         <p>
+          {{! the doubled space is the flight's own mistake, quoted }}
+          {{! template-lint-disable no-whitespace-for-layout }}
           <code>font-size</code>
           is a LAYOUT property, and every arrangement that lets the browser flow
           the words collides with that. A copy per pose means the arriving one

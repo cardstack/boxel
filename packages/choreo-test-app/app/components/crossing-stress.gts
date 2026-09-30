@@ -331,7 +331,13 @@ export class CrossingStress extends Component<CrossingStressSignature> {
       {{on "keydown" this.onKey}}
       {{this.register}}
     >
-      <header class="xstress-hud" {{on "click" this.eat}}>
+      {{! the HUD only stops a click from reaching the deck's click-to-advance;
+          its buttons are the controls }}
+      <header
+        {{! template-lint-disable no-invalid-interactive }}
+        class="xstress-hud"
+        {{on "click" this.eat}}
+      >
         <p class="xstress-index">
           <span>{{this.label}}</span>
           <span class="xstress-phase" data-test-phase>{{this.phase}}</span>
@@ -444,7 +450,9 @@ export class CrossingStress extends Component<CrossingStressSignature> {
               playsinline
               {{playClip}}
             ></video>
+            {{! scrolling the tape must not reach the stage's click-to-advance }}
             <div
+              {{! template-lint-disable no-invalid-interactive }}
               class="xstress-hero-scroll"
               data-test-scroll
               {{liveScroll}}

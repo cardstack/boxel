@@ -1,10 +1,16 @@
 import { array } from '@ember/helper';
+import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 import { modifier } from 'ember-modifier';
 import type { ChoreoContext, ChoreoRun } from 'glimmer-motion';
 import { Choreo, motion } from 'glimmer-motion';
 import type { SHOTS } from 'test-app/components/long-take/shots';
 import { GLIDE, tunedShots } from 'test-app/components/long-take/shots';
+
+/** the desk's meter levels, as percentages of the meter's height */
+const METERS = [62, 78, 41, 90, 55, 73, 34, 84, 47, 68, 29, 81].map((v) =>
+  htmlSafe(`height:${v}%`)
+);
 
 /** the signal path, as an engineering drawing rather than as boxes */
 const WIRES = [
@@ -180,11 +186,8 @@ export class Board extends Component<BoardSignature> {
           <h3>Desk</h3>
           <p>Summing matrix, 32 in / 8 bus</p>
           <div class="lt-meters">
-            {{#each
-              (array 62 78 41 90 55 73 34 84 47 68 29 81) key="@index"
-              as |v|
-            }}
-              <span class="lt-meter"><i style="height:{{v}}%"></i></span>
+            {{#each METERS key="@index" as |meter|}}
+              <span class="lt-meter"><i style={{meter}}></i></span>
             {{/each}}
           </div>
         </div>
