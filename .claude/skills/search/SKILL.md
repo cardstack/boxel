@@ -96,10 +96,10 @@ Yielded `results`:
 - `results.entriesQuery?` — the query `results.entries` answers, absent until
   a search succeeds. While a changed query loads, `entries` still holds the
   previous query's rows (a live re-run of an unchanged query keeps them on
-  purpose), and `isLoading` alone can't tell the two apart. Compare the member
-  you care about against the query you passed — `CardList` compares
-  `page.number` to show its loading state on a page turn instead of the last
-  page's rows.
+  purpose), and `isLoading` alone can't tell the two apart. Compare it against
+  the query you passed — `CardList` shows its loading state instead of the last
+  page's rows only when the two differ in `page.number` and match in everything
+  else (a filter or search-term change keeps the old rows up while it loads).
 
 `@mode` is the hydration gesture for HTML-backed rows — `none` (stay inert),
 `hover` (default), `click`, `touch`. It is host UX only, never on the wire; a

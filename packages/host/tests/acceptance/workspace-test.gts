@@ -520,4 +520,73 @@ module('Acceptance | workspace card | Library pages', function (hooks) {
     await waitForGridItems(PAGE_SIZE);
     assert.dom(`${PAGINATION} [aria-current="page"]`).hasText('1');
   });
+
+  test('a search term that still reaches the page starts again at page 1', async function (assert) {
+    await openLibraryFilter('Note');
+    await waitForGridItems(PAGE_SIZE);
+    await click(`${PAGINATION} [aria-label="Next"]`);
+    await waitForGridItems(NOTE_COUNT - PAGE_SIZE);
+
+    // Every note matches, so page 2 still exists under the new term.
+    await fillIn(`${STACK} [data-test-workspace-search]`, 'Note');
+    await waitForGridItems(PAGE_SIZE);
+    assert.dom(`${PAGINATION} [aria-current="page"]`).hasText('1');
+    assert
+      .dom(
+        `${GRID_ITEM}[data-test-cards-grid-item="${testRealmURL}${noteId(1)}"]`,
+      )
+      .exists('the grid shows the first page of the narrowed list');
+  });
+
+  test('a search term typed past page 1 keeps the rows up while it loads', async function (assert) {
+    // Hold the Library's search for the term, so the grid is caught between
+    // the keystroke and its results.
+    let termRequested = new Deferred<void>();
+    let releaseTerm = new Deferred<void>();
+    getService('network').virtualNetwork.mount(
+      async (request: Request) => {
+        if (request.url.endsWith('/_federated-search')) {
+          let body = await request.clone().json();
+          if (
+            body?.page?.size === PAGE_SIZE &&
+            JSON.stringify(body.filter).includes('Note 00')
+          ) {
+            termRequested.fulfill();
+            await releaseTerm.promise;
+          }
+        }
+        return null;
+      },
+      { prepend: true },
+    );
+
+    await openLibraryFilter('Note');
+    await waitForGridItems(PAGE_SIZE);
+    await click(`${PAGINATION} [aria-label="Next"]`);
+    await waitForGridItems(NOTE_COUNT - PAGE_SIZE);
+
+    // Not awaited: it settles only once the held search is released.
+    let typed = fillIn(`${STACK} [data-test-workspace-search]`, 'Note 00');
+    try {
+      await termRequested.promise;
+      // The controls drop to page 1 in the same render that starts the
+      // narrowed search, so the grid below has seen it load.
+      await waitUntil(
+        () =>
+          find(`${PAGINATION} [aria-current="page"]`)?.textContent?.trim() ===
+          '1',
+      );
+      assert
+        .dom(GRID_ITEM)
+        .exists(
+          { count: NOTE_COUNT - PAGE_SIZE },
+          'the rows on screen stay up until the narrowed list arrives',
+        );
+    } finally {
+      releaseTerm.fulfill();
+    }
+    await typed;
+    await waitForGridItems(PAGE_SIZE);
+    assert.dom(`${PAGINATION} [aria-current="page"]`).hasText('1');
+  });
 });

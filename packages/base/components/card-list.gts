@@ -4,6 +4,7 @@ import { action } from '@ember/object';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 
+import { isEqual } from 'lodash-es';
 import { consume } from 'ember-provide-consume-context';
 import { modifier } from 'ember-modifier';
 
@@ -153,16 +154,19 @@ export default class CardList extends Component<Signature> {
 
   // The rows to show: none while another page loads, so the loading state
   // stands in for rows from the page the controls just left. Only a page turn
-  // does this — a filter or search-term change keeps its rows up meanwhile, as
-  // the term changes on every keystroke.
+  // does this — a query that differs in more than its page (a filter, sort or
+  // search-term change, which also sends the page back to 1) keeps its rows up
+  // meanwhile, as the term changes on every keystroke.
   private visibleEntries = (
     results: SearchResultsYield,
   ): RenderableSearchEntryLike[] => {
     let shown = results.entriesQuery;
+    let current = this.searchResultsQuery;
     let turningPage =
       results.isLoading &&
       shown !== undefined &&
-      (shown.page?.number ?? 0) !== (this.args.query?.page?.number ?? 0);
+      (shown.page?.number ?? 0) !== (current.page?.number ?? 0) &&
+      isEqual({ ...shown, page: undefined }, { ...current, page: undefined });
     return turningPage ? [] : results.entries;
   };
 
