@@ -213,8 +213,9 @@ export interface AdmissionSubject {
 
 export interface CreateEntry extends EntryCommon {
   op: 'create';
-  // The client's own id for the card being minted. It names the file the card
-  // lands in, and it is the key other entries in the batch link to it by.
+  // The client's own id for the card being minted. It is the key other entries
+  // in the batch link to it by, and it names the file the card lands in,
+  // except in a batch that mints its ids (see `CommitBatchOptions.mintIds`).
   // Absent means the realm mints an id, and nothing else in the batch can
   // refer to the card.
   lid?: string;
@@ -2079,12 +2080,14 @@ function assertPathSegment(value: string, what: string): void {
 // or named an operation that mints the type. The `lid` index is consulted
 // first so the file a create writes and the link another entry records are
 // read from one place; an entry with no `lid` cannot be linked to, so its id
-// is minted here.
+// is minted here. With `mintIds` the id is minted whatever the entry names
+// (see `CommitBatchOptions.mintIds`).
 export function createIdentity(
   entry: CreateEntry,
   resource: CardResource | undefined,
   paths: RealmPaths,
   lids: LidIndex,
+  { mintIds = false }: { mintIds?: boolean } = {},
 ): StagedIdentity {
   let lid = localIdOf(entry);
   if (lid !== undefined) {
@@ -2093,12 +2096,24 @@ export function createIdentity(
       return staged;
     }
   }
-  return stagedIdentity(
-    resource?.meta?.adoptsFrom ?? entry.definition?.of,
-    lid ?? uuidV4(),
-    entry.directory,
-    paths,
-  );
+  let type = resource?.meta?.adoptsFrom ?? entry.definition?.of;
+  return lid !== undefined && mintIds
+    ? mintedIdentity(type, lid, entry.directory, paths)
+    : stagedIdentity(type, lid ?? uuidV4(), entry.directory, paths);
+}
+
+// The identity a card takes in a batch that mints its ids (see
+// `CommitBatchOptions.mintIds`). The local id the caller sent is still held to
+// the rule any id is, so what a batch accepts of a request doesn't depend on
+// who sent it. Only where the card lands does.
+export function mintedIdentity(
+  adoptsFrom: CodeRef | undefined,
+  lid: string,
+  directory: string | undefined,
+  paths: RealmPaths,
+): StagedIdentity {
+  stagedIdentity(adoptsFrom, lid, directory, paths);
+  return stagedIdentity(adoptsFrom, uuidV4(), directory, paths);
 }
 
 // Whether a resource declares itself to belong to another realm. One batch
