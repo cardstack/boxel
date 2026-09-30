@@ -431,18 +431,6 @@ module(basename(import.meta.filename), function (hooks) {
       missing.text,
       'as a room that is not there is',
     );
-    assert.strictEqual(
-      (
-        await operations(
-          EDUCATION,
-          AUTH.teacher(),
-          'post',
-          invoke('read', { href: ROOM_1 }),
-        )
-      ).status,
-      200,
-      'an envelope read is admitted alike',
-    );
     assert.deepEqual(
       reads.map(({ grant, outcome, decidedAt, indexed, hypothetical }) => ({
         grant,
@@ -490,14 +478,6 @@ module(basename(import.meta.filename), function (hooks) {
           indexed: true,
           hypothetical: false,
         },
-        // Room 1, through the envelope
-        {
-          grant: 'rules[0].grants[0]',
-          outcome: 'held',
-          decidedAt: 'gate',
-          indexed: true,
-          hypothetical: false,
-        },
       ],
       'each evaluation that decided a read is recorded as a snapshot read',
     );
@@ -523,6 +503,36 @@ module(basename(import.meta.filename), function (hooks) {
         hypothetical: undefined,
       },
       'naming the caller, the operation and the rule’s type, and no card',
+    );
+
+    // An envelope entry is resolved when the envelope is read and again when
+    // it runs, and each resolution is a decision at the gate.
+    let before = reads.length;
+    assert.strictEqual(
+      (
+        await operations(
+          EDUCATION,
+          AUTH.teacher(),
+          'post',
+          invoke('read', { href: ROOM_1 }),
+        )
+      ).status,
+      200,
+      'an envelope read is admitted alike',
+    );
+    let envelopeReads = reads.slice(before);
+    assert.notStrictEqual(envelopeReads.length, 0, 'and is recorded');
+    assert.deepEqual(
+      [
+        ...new Set(
+          envelopeReads.map(
+            ({ grant, outcome, decidedAt }) =>
+              `${grant} ${outcome} at the ${decidedAt}`,
+          ),
+        ),
+      ],
+      ['rules[0].grants[0] held at the gate'],
+      'as the head teacher’s grant holding at the gate',
     );
   });
 
