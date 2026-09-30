@@ -1,7 +1,7 @@
 import stableStringify from 'safe-stable-stringify';
 
 import { now } from '../clock.ts';
-import type { ResolvedCodeRef } from '../code-ref.ts';
+import type { CodeRef, ResolvedCodeRef } from '../code-ref.ts';
 import { computeContentHash } from '../content-hash.ts';
 import { isFilterRefersToNonexistentTypeError } from '../definition-lookup.ts';
 import type { Definition } from '../definitions.ts';
@@ -97,7 +97,7 @@ export interface CompiledOperationGrant {
   // the index holds what its own type makes of the field, which the predicate
   // never reads. Leaving a type out leaves out its descendants too. Absent
   // when there are none.
-  excludedTypes?: ResolvedCodeRef[];
+  excludedTypes?: CodeRef[];
 }
 
 export interface CompiledPolicyPredicate {
@@ -149,8 +149,14 @@ export interface PolicyCompileEnvironment {
   realmURL: string;
   // The types the governed realm holds cards of that descend from `codeRef`,
   // as the first key of each row's adoption chain, sorted. Read on the
-  // realm's own authority, like everything here.
+  // realm's own authority, like everything here. It reads every card of the
+  // type, so it is asked again only once `typeIndexGeneration` moves.
   instanceTypesUnder(codeRef: ResolvedCodeRef): Promise<string[]>;
+  // The newest index generation stamped on `codeRef`'s type watermark in the
+  // governed realm, or on the catch-all one. A card entering or leaving any
+  // type descending from `codeRef` moves it, so while it reads the same,
+  // `instanceTypesUnder` would answer as it did.
+  typeIndexGeneration(codeRef: ResolvedCodeRef): Promise<number>;
 }
 
 // The environment the cache needs beyond compiling: which card the realm's
@@ -332,8 +338,11 @@ export class RealmPolicyCache {
 // quiet the signals are. It is the same five seconds the live search cache
 // allows a result whose dependency it cannot see, for the same reason: it is
 // the staleness bound for what the signals miss. A revalidation is one narrow
-// index read plus the definition lookups, and a steady stream of reads pays it
-// once per interval rather than once per read.
+// index read plus the definition lookups, and one type-watermark read per rule
+// whose query grants' filters read a field. Only when that watermark has moved
+// does it also read the types the governed realm holds under the rule's type,
+// which reads every card of the type. A steady stream of reads pays a
+// revalidation once per interval rather than once per read.
 const MAX_UNVALIDATED_MS = 5_000;
 
 // Every realm's policy cache in this process. A move in one realm has to
@@ -380,9 +389,15 @@ interface Compilation {
   // URLs whose realm's index moving could change what this compiles to.
   inputs: string[];
   // What the governed realm held under each rule type whose grants' filters
-  // read a field, when this was compiled: the types a grant's
-  // `excludedTypes` were chosen from.
-  subtypes: { targetType: ResolvedCodeRef; keys: string[] }[];
+  // read a field: the types a grant's `excludedTypes` were chosen from, and
+  // the type watermark read before them. A revalidation that finds the
+  // watermark unmoved skips reading them again, and one that reads them again
+  // and finds them unchanged records the watermark it read.
+  subtypes: {
+    targetType: ResolvedCodeRef;
+    generation: number;
+    keys: string[];
+  }[];
 }
 
 interface Refresh {
@@ -433,11 +448,19 @@ async function stillCurrent(
       return false;
     }
   }
-  for (let { targetType, keys } of compilation.subtypes) {
-    let held = await env.instanceTypesUnder(targetType);
-    if (held.join('\n') !== keys.join('\n')) {
+  for (let entry of compilation.subtypes) {
+    // Read before the types, so a card landing between the two reads moves
+    // the watermark past the one recorded, and the next revalidation reads
+    // the types again.
+    let generation = await env.typeIndexGeneration(entry.targetType);
+    if (generation === entry.generation) {
+      continue;
+    }
+    let held = await env.instanceTypesUnder(entry.targetType);
+    if (held.join('\n') !== entry.keys.join('\n')) {
       return false;
     }
+    entry.generation = generation;
   }
   return true;
 }
@@ -821,18 +844,29 @@ async function compilePolicy(
       inputs.push(env.realmURL);
       onInput(env.realmURL);
     }
+    // Read before the types, as a revalidation reads them.
+    let generation = await env.typeIndexGeneration(rule.targetType);
     let keys = await env.instanceTypesUnder(rule.targetType);
-    subtypes.push({ targetType: rule.targetType, keys });
+    subtypes.push({ targetType: rule.targetType, generation, keys });
     let own = new Set([env.typeKey(rule.targetType), ruleEntry.types[0]]);
-    let excluded = new Map<CompiledOperationGrant, ResolvedCodeRef[]>();
+    let excluded = new Map<CompiledOperationGrant, CodeRef[]>();
+    let unnamed: string[] = [];
     for (let key of keys) {
-      let codeRef = own.has(key) ? undefined : codeRefFromInternalKey(key);
-      if (!codeRef) {
+      if (own.has(key)) {
         continue;
       }
-      let resolved = attempt(() => env.resolveCodeRef(codeRef, cardURL));
-      // A type whose definition cannot be read cannot be shown to read the
+      let named = codeRefFromInternalKey(key);
+      let ref = named ?? heldTypeRef(key);
+      if (!ref) {
+        unnamed.push(key);
+        continue;
+      }
+      // A type whose definition cannot be read, or whose key names it only in
+      // a shape `codeRefFromInternalKey` refuses, cannot be shown to read the
       // filter's fields alike, so it is left out of every grant.
+      let resolved = named
+        ? attempt(() => env.resolveCodeRef(named, cardURL))
+        : undefined;
       let entry = resolved ? await readType(resolved) : undefined;
       for (let [grant, fields] of reading) {
         if (
@@ -846,17 +880,56 @@ async function compilePolicy(
         ) {
           excluded.set(grant, [
             ...(excluded.get(grant) ?? []),
-            resolved ?? codeRef,
+            resolved ?? ref,
           ]);
         }
       }
     }
     rule.grants = rule.grants.map((grant) => {
+      // A type no filter can name cannot be left out, so a grant that would
+      // have to leave it out scopes no search at all.
+      if (unnamed.length > 0 && reading.has(grant)) {
+        issue(
+          'policy-not-filterable',
+          `${grant.path}.where`,
+          `the grant is on a query, and the realm holds cards of ${unnamed.join(', ')}, which descend from ${rule.targetType.name} and which no search filter can name, so its filter could not leave them out`,
+        );
+        let { filter: _filter, ...unfiltered } = grant;
+        return unfiltered;
+      }
       let excludedTypes = excluded.get(grant);
       return excludedTypes ? { ...grant, excludedTypes } : grant;
     });
   }
   return compiled();
+}
+
+// The type a held key names, for a key `codeRefFromInternalKey` refuses: one
+// with a `fields/` segment, which it cannot tell from a field's key, and one
+// ending `/ancestor`, which names an unexported class through the type it
+// adopts from. Each is read from the key's shape so that `internalKeyFor`
+// turns it back into the key itself, which is what a type filter matches a
+// row's adoption chain on: a module and a name split at the last `/`, and an
+// `ancestorOf` of the type the rest of the key names. Undefined for a key
+// with nothing to split.
+function heldTypeRef(key: string): CodeRef | undefined {
+  let ancestor = '/ancestor';
+  if (key.endsWith(ancestor)) {
+    let card = splitTypeKey(key.slice(0, -ancestor.length));
+    return card ? { type: 'ancestorOf', card } : undefined;
+  }
+  return splitTypeKey(key);
+}
+
+function splitTypeKey(key: string): ResolvedCodeRef | undefined {
+  let lastSlash = key.lastIndexOf('/');
+  if (lastSlash <= 0 || lastSlash === key.length - 1) {
+    return undefined;
+  }
+  return {
+    module: key.slice(0, lastSlash) as ResolvedCodeRef['module'],
+    name: key.slice(lastSlash + 1),
+  };
 }
 
 // What invoking `name` on an instance of a type reaches: the type's own

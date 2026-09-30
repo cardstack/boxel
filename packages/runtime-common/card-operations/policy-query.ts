@@ -268,7 +268,7 @@ async function grantFilters(
 
 // `filter`, less every row any of `excluded` matches. With nothing to
 // exclude it is `filter` itself, unwrapped.
-export function excluding(filter: Filter, excluded: Filter[]): Filter {
+function excluding(filter: Filter, excluded: Filter[]): Filter {
   return excluded.length === 0
     ? filter
     : { every: [filter, { not: { any: excluded } }] };

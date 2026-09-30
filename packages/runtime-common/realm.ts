@@ -15209,6 +15209,8 @@ export class Realm {
       realmURL: this.url,
       instanceTypesUnder: (codeRef) =>
         this.#realmIndexQueryEngine.instanceTypesUnder(codeRef),
+      typeIndexGeneration: (codeRef) =>
+        this.#realmIndexQueryEngine.typeIndexGeneration(codeRef),
     });
   }
 

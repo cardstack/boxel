@@ -207,16 +207,19 @@ type Where = string | { bxl: string; snapshot: boolean };
 
 // A cache whose policy has one rule, on `Classroom`, holding `grants`. A test
 // swaps a definition through `definitions` and reads what the cache compiled.
-// The governed realm holds cards of `Classroom` and of each type in `held`,
-// which a test can change too; `asked` counts the times the cache asked what
-// the realm holds.
+// The governed realm holds cards of `Classroom`, of each type in `held`, and
+// of each type recorded under a key in `heldKeys`, which a test can change
+// too. A test that changes them moves `state.generation`, as the index writer
+// moves the type watermark, and `state.asked` counts the times the cache
+// asked what the realm holds.
 function setup(grants: Grant[]) {
   let definitions = new Map<string, Definition>([
     [CLASSROOM.name, classroomDefinition()],
     [ADDRESS.name, addressDefinition()],
   ]);
   let held: ResolvedCodeRef[] = [];
-  let state = { asked: 0 };
+  let heldKeys: string[] = [];
+  let state = { asked: 0, generation: 1 };
   let typeKey = (ref: ResolvedCodeRef) => `${ref.module}/${ref.name}`;
   let policyKey = typeKey(realmPolicyRef);
   let cache = new RealmPolicyCache({
@@ -268,11 +271,12 @@ function setup(grants: Grant[]) {
     instanceTypesUnder: async (codeRef) => {
       state.asked++;
       return typeKey(codeRef) === typeKey(CLASSROOM)
-        ? [CLASSROOM, ...held].map(typeKey).sort()
+        ? [...[CLASSROOM, ...held].map(typeKey), ...heldKeys].sort()
         : [];
     },
+    typeIndexGeneration: async () => state.generation,
   });
-  return { cache, definitions, held, state };
+  return { cache, definitions, held, heldKeys, state };
 }
 
 async function compile(grants: Grant[]): Promise<CompiledRealmPolicy> {
@@ -859,8 +863,128 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(state.asked, 0);
     });
 
+    test('a descendant whose key names it in a shape the index-key parser refuses is left out all the same', async function (assert) {
+      let { cache, definitions, heldKeys } = setup([
+        { operation: 'query', where: OWN },
+        { operation: 'query' },
+      ]);
+      // A module under a `fields/` directory, and an unexported class named
+      // through the type it adopts from.
+      let underFields = {
+        module: rri(`${EDUCATION}fields/subtypes`),
+        name: COMPUTED.name,
+      };
+      definitions.set(
+        COMPUTED.name,
+        classroomSubtype(COMPUTED.name, {
+          providerId: field('contains', { isComputed: true }),
+        }),
+      );
+      heldKeys.push(
+        `${underFields.module}/${underFields.name}`,
+        `${SUBTYPES_MODULE}/HiddenClassroom/ancestor`,
+      );
+      let policy = (await cache.get())!;
+      assert.deepEqual(policy.issues, []);
+      let [own, unconditional] = grantsOf(policy);
+      assert.deepEqual(own.excludedTypes, [
+        underFields,
+        {
+          type: 'ancestorOf',
+          card: { module: SUBTYPES_MODULE, name: 'HiddenClassroom' },
+        },
+      ]);
+      assert.strictEqual(unconditional.excludedTypes, undefined);
+    });
+
+    test('a descendant no type filter can name leaves the grants whose filters read a field scoping no search', async function (assert) {
+      let { cache, heldKeys } = setup([
+        { operation: 'query', where: OWN },
+        { operation: 'query' },
+      ]);
+      heldKeys.push('unnamed');
+      let policy = (await cache.get())!;
+      assert.deepEqual(
+        policy.issues.map(({ code, path }) => ({ code, path })),
+        [{ code: 'policy-not-filterable', path: 'rules[0].grants[0].where' }],
+      );
+      let [own, unconditional] = grantsOf(policy);
+      assert.strictEqual(own.filter, undefined, 'the grant has no filter');
+      assert.ok(own.where, 'and keeps its predicate');
+      assert.ok(
+        unconditional.filter,
+        'a grant whose filter reads no field keeps its filter',
+      );
+    });
+
+    test('a move in the governed realm that leaves the type watermark where it was revalidates without reading what the realm holds', async function (assert) {
+      let { cache, held, state } = setup([{ operation: 'query', where: OWN }]);
+      await cache.get();
+      assert.strictEqual(state.asked, 1, 'compiling reads it once');
+
+      noteRealmIndexMoved(GOVERNED);
+      await until(
+        () => cache.stats.revalidations === 1,
+        'the move revalidates',
+      );
+      assert.strictEqual(
+        state.asked,
+        1,
+        'an unmoved watermark is not read past',
+      );
+
+      state.generation++;
+      noteRealmIndexMoved(GOVERNED);
+      await until(
+        () => cache.stats.revalidations === 2,
+        'the next move revalidates',
+      );
+      assert.strictEqual(state.asked, 2, 'a moved one is');
+      assert.strictEqual(
+        cache.stats.compiles,
+        1,
+        'and nothing it holds changed',
+      );
+
+      noteRealmIndexMoved(GOVERNED);
+      await until(
+        () => cache.stats.revalidations === 3,
+        'the last move revalidates',
+      );
+      assert.strictEqual(
+        state.asked,
+        2,
+        'the watermark it read is kept, so the same one is not read past again',
+      );
+
+      // A card that lands without its watermark moving goes unseen until the
+      // watermark does, which is what the index writer's stamp guarantees.
+      held.push(COMPUTED);
+      state.generation++;
+      noteRealmIndexMoved(GOVERNED);
+      await until(() => cache.stats.compiles === 2, 'the change recompiles');
+    });
+
+    test("a grant comparing the card's own id reads it as every card type does", async function (assert) {
+      let policy = await compileHolding(
+        [{ operation: 'query', where: `.id == "${EDUCATION}classrooms/1"` }],
+        {
+          [COMPUTED.name]: classroomSubtype(COMPUTED.name, {
+            providerId: field('contains', { isComputed: true }),
+          }),
+        },
+      );
+      assert.deepEqual(policy.issues, []);
+      let [grant] = grantsOf(policy);
+      assert.strictEqual(
+        grant.excludedTypes,
+        undefined,
+        'a descendant inherits `id` as `Classroom` declares it, so none is left out',
+      );
+    });
+
     test("what a grant leaves out follows the governed realm's cards and its descendants' definitions", async function (assert) {
-      let { cache, definitions, held } = setup([
+      let { cache, definitions, held, state } = setup([
         { operation: 'query', where: OWN },
       ]);
       definitions.set(COMPUTED.name, classroomSubtype(COMPUTED.name));
@@ -875,6 +999,7 @@ module(basename(import.meta.filename), function () {
       // realm's move reaches the policy: its card and its types live in other
       // realms.
       held.push(COMPUTED);
+      state.generation++;
       noteRealmIndexMoved(GOVERNED);
       await until(() => cache.stats.compiles === 2, 'the move recompiles');
       let [added] = grantsOf((await cache.get())!);
@@ -900,6 +1025,7 @@ module(basename(import.meta.filename), function () {
       );
 
       held.length = 0;
+      state.generation++;
       noteRealmIndexMoved(GOVERNED);
       await until(() => cache.stats.compiles === 4, 'the last move recompiles');
       let [emptied] = grantsOf((await cache.get())!);
