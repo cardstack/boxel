@@ -44,6 +44,12 @@ import { createJWT as createRealmServerJWT } from '../utils/jwt.ts';
 // teacher holds no permission on School at all, so every row they are served
 // is one that grant admits. The School admin reads the realm outright, so no
 // policy is consulted for them.
+//
+// Each of those cards' `.json` is indexed a second time as a file row, which
+// neither the id nor the `RealmPolicy` exclusion matches. The policy also
+// tries to grant a query over those rows' type, which no file type carries,
+// so what keeps them out of a grant-reached search is that no grant can
+// reach a file row at all.
 // ============================================================================
 
 const SCHOOL = 'http://127.0.0.1:4444/school/';
@@ -54,6 +60,7 @@ const TEACHER = '@teacher:localhost';
 
 const CARD_DEF = { module: baseRRI('card-api'), name: 'CardDef' };
 const REALM_CONFIG = { module: baseRRI('realm-config'), name: 'RealmConfig' };
+const JSON_FILE_DEF = { module: baseRRI('json-file-def'), name: 'JsonFileDef' };
 const REALM_POLICY = {
   module: rri('@cardstack/catalog/realm-policy/realm-policy'),
   name: 'RealmPolicy',
@@ -137,6 +144,7 @@ module(basename(import.meta.filename), function (hooks) {
             'notices/welcome.json': notice('Welcome'),
             'policies/policy.json': policyCard([
               { targetType: CARD_DEF, grants: [{ operation: 'query' }] },
+              { targetType: JSON_FILE_DEF, grants: [{ operation: 'query' }] },
             ]),
             'policies/draft.json': policyCard([]),
             'policies/district.json': policyCard([]),
@@ -233,8 +241,14 @@ module(basename(import.meta.filename), function (hooks) {
     ["the realm's own search", realmSearch],
   ] as const;
 
-  function adHoc(on: { module: string; name: string }) {
-    return { filter: { 'item.on': on }, realms: [SCHOOL] };
+  type Scope = 'cards' | 'files' | 'all';
+
+  function adHoc(on: { module: string; name: string }, scope?: Scope) {
+    return {
+      filter: { 'item.on': on },
+      realms: [SCHOOL],
+      ...(scope ? { scope } : {}),
+    };
   }
 
   type SearchBody = {
@@ -246,14 +260,24 @@ module(basename(import.meta.filename), function (hooks) {
     send: (caller: Caller, payload: object) => Test,
     caller: Caller,
     on: { module: string; name: string },
+    scope?: Scope,
   ): Promise<{ ids: string[]; body: SearchBody }> {
-    let response = await send(caller, adHoc(on));
+    let response = await send(caller, adHoc(on, scope));
     if (response.status !== 200) {
       throw new Error(`search answered ${response.status}: ${response.text}`);
     }
     let body = response.body as SearchBody;
     return { ids: body.data.map((entry) => entry.id).sort(), body };
   }
+
+  test('a query grant on a file type compiles to nothing', async function (assert) {
+    let policy = await school.getCompiledPolicy();
+    assert.deepEqual(
+      policy?.issues.map(({ code, path }) => ({ code, path })),
+      [{ code: 'unknown-operation', path: 'rules[1].grants[0].operation' }],
+      'a file type carries no query, so the grant is recorded and kept out of the policy',
+    );
+  });
 
   for (let [label, send] of ENDPOINTS) {
     module(label, function () {
@@ -283,6 +307,26 @@ module(basename(import.meta.filename), function (hooks) {
       test('a search on RealmConfig finds no config card', async function (assert) {
         let found = await ids(send, 'teacher', REALM_CONFIG);
         assert.deepEqual(found.ids, []);
+      });
+
+      test("no grant finds a card's stored `.json`, in any scope", async function (assert) {
+        assert.deepEqual(
+          (await ids(send, 'teacher', CARD_DEF, 'all')).ids,
+          [WELCOME],
+          'searching cards and files together finds the notice alone: the grant on CardDef matches no file row',
+        );
+        assert.deepEqual(
+          (await ids(send, 'teacher', JSON_FILE_DEF, 'files')).ids,
+          [],
+          'and searching the stored files finds none, since no grant on a file type compiled',
+        );
+        let stored = [...INFRASTRUCTURE, WELCOME].map((id) => `${id}.json`);
+        let admitted = (await ids(send, 'admin', JSON_FILE_DEF, 'files')).ids;
+        assert.deepEqual(
+          admitted.filter((id) => stored.includes(id)),
+          stored.sort(),
+          `though the realm holds a file row for every one of them: ${admitted.join(', ')}`,
+        );
       });
 
       test('a caller the realm ACL admits still finds every one of them', async function (assert) {

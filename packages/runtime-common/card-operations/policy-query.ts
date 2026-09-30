@@ -52,17 +52,29 @@ import { lowerQueryOperation } from './query.ts';
 // cannot make grantable what the type it extends kept out of a policy's
 // reach.
 //
-// Nor does any grant reach the cards that hold a realm's authorization. The
+// Nor does any grant find the cards that hold a realm's authorization. The
 // gate refuses a grant every operation on the realm's config card, on the card
 // its policy key names, and on any policy card. A search never passes the
 // gate, though, and a grant on a type those cards descend from, `CardDef` say,
 // compiles to a filter their rows match. So every filter a scope carries
-// leaves them out, whichever grant it came from: the two named cards by id,
-// and a policy card by the `RealmPolicy` its row's adoption chain holds. The
-// chain is what covers a draft no key names, and a policy card another realm's
-// key names that is stored in this one. A declaration can't do this: `query`
-// is a reserved name no type may mark `nonGrantable`, and a search on
+// leaves their rows out, whichever grant it came from: the two named cards by
+// id, and a policy card by the `RealmPolicy` its row's adoption chain holds.
+// The chain is what covers a draft no key names, and a policy card another
+// realm's key names that is stored in this one. A declaration can't do this:
+// `query` is a reserved name no type may mark `nonGrantable`, and a search on
 // `CardDef` never reads `RealmPolicy`'s declarations anyway.
+//
+// A card's `.json` is indexed a second time as a file row, whose id ends in
+// `.json` and whose chain is a file type's, so neither arm matches it. No
+// grant reaches one: only a card type carries `query`, so every compiled
+// filter is anchored on a card type, and a file row's chain holds none.
+//
+// What this excludes is rows a filter matches. A row the filter admits is
+// served with its whole link closure, as a granted read is, and that closure
+// carries a policy card or the config card the row links to. Nothing here
+// narrows it. How far a grant reaches past its rows is an authoring
+// constraint rather than an enforced boundary: a named query may declare a
+// narrower `links`, and an ad-hoc search serves the full closure.
 // ============================================================================
 
 // What a policy says about one caller's query. A realm the caller reads
