@@ -295,13 +295,7 @@ export class RealmPolicyCache {
       compilation = await compilePolicy(card, row, this.#env, (url) =>
         refresh.inputs.push(url),
       );
-      if (compilation.compiled.issues.length > 0) {
-        log.warn(
-          `the policy ${card} compiled with issues: ${compilation.compiled.issues
-            .map((issue) => `${issue.path || '(card)'}: ${issue.message}`)
-            .join('; ')}`,
-        );
-      }
+      logIssues(card, compilation.compiled.issues);
     }
     // Kept only when no move landed under one of its inputs while this ran. A
     // kept entry is answered from memory until the next move, so keeping one
@@ -315,6 +309,32 @@ export class RealmPolicyCache {
       this.#validatedAt = startedAt;
     }
     return compilation.compiled;
+  }
+}
+
+// One line per compile for the issues that left part of the policy admitting
+// nothing, which is an operator's problem as much as an author's, and a
+// quieter line for the warnings on grants that stay live. A policy with
+// deliberate reach records those on every compile, and at `warn` they would
+// read as a policy that is broken.
+function logIssues(card: string, issues: PolicyIssue[]): void {
+  let describe = (issue: PolicyIssue) =>
+    `${issue.path || '(card)'}: ${issue.code}: ${issue.message}`;
+  let inactive = issues.filter((issue) => issue.severity === 'inactive');
+  let warnings = issues.filter((issue) => issue.severity === 'warning');
+  if (inactive.length > 0) {
+    log.warn(
+      `the policy ${card} compiled with issues that leave part of it inactive: ${inactive
+        .map(describe)
+        .join('; ')}`,
+    );
+  }
+  if (warnings.length > 0) {
+    log.info(
+      `the policy ${card} compiled with warnings on grants that stay live: ${warnings
+        .map(describe)
+        .join('; ')}`,
+    );
   }
 }
 
