@@ -48,7 +48,7 @@ import { createJWT as createRealmServerJWT } from '../../utils/jwt.ts';
 // A search a realm's policy scopes: the grants a `query` policy compiled to
 // filters, composed into the query a realm runs for a caller its ACL declined.
 //
-// Nine realms on one server, one per answer a realm can give a caller it does
+// Ten realms on one server, one per answer a realm can give a caller it does
 // not let read outright. The types live in a public library realm so every
 // other realm can hold cards of them.
 //
@@ -66,6 +66,8 @@ import { createJWT as createRealmServerJWT } from '../../utils/jwt.ts';
 // - Missing: its `realm.json` names a policy card the realm does not hold.
 // - Withheld: its policy grants `query` over every open schedule, and a test
 //   withholds the latest index visit of its policy card.
+// - Borrowed: the same, with its policy card stored in the library realm, as
+//   a school's policy lives in its organization's realm.
 //
 // Every card a provider could be admitted to in one realm has a twin in the
 // realms that must not admit it, so a filter applied to the wrong realm's
@@ -81,6 +83,7 @@ const PRIVATE = 'http://127.0.0.1:4444/private/';
 const ENUMERABLE = 'http://127.0.0.1:4444/enumerable/';
 const MISSING = 'http://127.0.0.1:4444/missing/';
 const WITHHELD = 'http://127.0.0.1:4444/withheld/';
+const BORROWED = 'http://127.0.0.1:4444/borrowed/';
 
 const OWNER = '@owner:localhost';
 const PROVIDER_A = '@provider-a:localhost';
@@ -368,6 +371,9 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
             fileSystem: {
               'schedule.gts': SCHEDULE_MODULE,
               'notice.gts': NOTICE_MODULE,
+              'policies/borrowed.json': policyCard([
+                { operation: 'query', where: OPEN },
+              ]),
             },
             permissions: { ...owner, '*': ['read'] },
           },
@@ -463,6 +469,17 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
               'policies/policy.json': policyCard([
                 { operation: 'query', where: OPEN },
               ]),
+              ...aOpen(),
+            },
+            permissions: { ...owner },
+          },
+          {
+            realmURL: new URL(BORROWED),
+            fileSystem: {
+              'realm.json': realmConfigCardJSON({
+                name: 'Borrowed',
+                policy: `${LIB}policies/borrowed`,
+              }),
               ...aOpen(),
             },
             permissions: { ...owner },
@@ -1151,18 +1168,26 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         );
       });
 
-      test('one whose policy card’s latest visit was withheld is counted as failed, until the card is visited again', async function (assert) {
-        await withholdLatestVisit(`${WITHHELD}policies/policy`);
+      // A search of `realm`, whose policy card is `card`, after that card's
+      // latest index visit is withheld: counted as failed, and answering
+      // again once the visit the search asked for lands, with no edit to the
+      // card.
+      async function withheldUntilVisited(
+        assert: Assert,
+        realm: string,
+        card: string,
+      ) {
+        await withholdLatestVisit(card);
         // Dropped without a refresh, so the search below is the read that
         // finds the row withheld.
-        realms[WITHHELD].__testOnlyClearCaches();
+        realms[realm].__testOnlyClearCaches();
 
         let response = await federatedSearch(
-          { filter: SCHEDULES, realms: [ENUMERABLE, WITHHELD] },
+          { filter: SCHEDULES, realms: [ENUMERABLE, realm] },
           PROVIDER_A,
         );
         assert.strictEqual(response.status, 200, 'HTTP 200 status');
-        assert.deepEqual(inRealm(WITHHELD, response), [], 'none from it');
+        assert.deepEqual(inRealm(realm, response), [], 'none from it');
         assert.deepEqual(
           inRealm(ENUMERABLE, response).sort(),
           [`${ENUMERABLE}schedules/a-open`, `${ENUMERABLE}schedules/b-open`],
@@ -1173,13 +1198,10 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           'the result says it is missing a realm, rather than passing an earlier visit of the policy off as the policy',
         );
 
-        // Nothing edits the card. The read that found it withheld asked for
-        // it to be visited again, and once that visit lands the policy
-        // compiles from the card as it stands.
         let healed = await waitUntil(
           async () => {
             let next = await federatedSearch(
-              { filter: SCHEDULES, realms: [WITHHELD] },
+              { filter: SCHEDULES, realms: [realm] },
               PROVIDER_A,
             );
             return next.body.meta?.incomplete ? undefined : next;
@@ -1191,14 +1213,26 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         );
         assert.deepEqual(
           ids(healed!),
-          [`${WITHHELD}schedules/a-open`],
+          [`${realm}schedules/a-open`],
           'the realm answers with the rows its policy admits',
         );
         assert.strictEqual(
-          realms[WITHHELD].__testOnlyPolicyCacheStats().revisits,
+          realms[realm].__testOnlyPolicyCacheStats().revisits,
           1,
           'one visit was asked for, however many searches found the card withheld',
         );
+      }
+
+      test('one whose policy card’s latest visit was withheld is counted as failed, until the card is visited again', async function (assert) {
+        await withheldUntilVisited(
+          assert,
+          WITHHELD,
+          `${WITHHELD}policies/policy`,
+        );
+      });
+
+      test('the same, for a policy card stored in another realm, which is the realm visited', async function (assert) {
+        await withheldUntilVisited(assert, BORROWED, `${LIB}policies/borrowed`);
       });
     });
 
