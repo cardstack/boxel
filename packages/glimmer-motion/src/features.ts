@@ -1,0 +1,214 @@
+/**
+ * The features the React layer contributes on top of the motion-dom engine (animation, exit, the gestures)
+ * (ported from Motion's packages/framer-motion/src/motion/features/animation/*). Everything else —
+ * springs, keyframes, variants, projection (layout / layoutId) — lives in the engine.
+ */
+import type { MotionNodeOptions, VisualElement } from 'motion-dom';
+import {
+  addScaleCorrector,
+  correctBorderRadius,
+  correctBoxShadow,
+  createAnimationState,
+  Feature,
+  HTMLProjectionNode,
+  isAnimationControls,
+  resolveVariant,
+  setFeatureDefinitions,
+} from 'motion-dom';
+
+import { DragGesture } from './gestures/drag-gesture.ts';
+import { FocusGesture } from './gestures/focus.ts';
+import { HoverGesture } from './gestures/hover.ts';
+import { PanGesture } from './gestures/pan-gesture.ts';
+import { PressGesture } from './gestures/press.ts';
+import { InViewFeature } from './gestures/viewport.ts';
+
+class AnimationFeature extends Feature<unknown> {
+  unmountControls?: VoidFunction;
+  constructor(node: VisualElement) {
+    super(node);
+    node.animationState ||= createAnimationState(node);
+  }
+  updateAnimationControlsSubscription() {
+    const { animate } = this.node.getProps();
+    if (isAnimationControls(animate)) {
+      this.unmountControls = animate.subscribe(this.node);
+    }
+  }
+  mount() {
+    this.updateAnimationControlsSubscription();
+  }
+  update() {
+    const { animate } = this.node.getProps();
+    const { animate: prevAnimate } = this.node.prevProps || {};
+    if (animate !== prevAnimate) {
+      this.updateAnimationControlsSubscription();
+    }
+  }
+  unmount() {
+    this.node.animationState!.reset();
+    this.unmountControls?.();
+  }
+}
+
+let exitId = 0;
+class ExitAnimationFeature extends Feature<unknown> {
+  id = exitId++;
+  isExitComplete = false;
+  update() {
+    if (!this.node.presenceContext) {
+      return;
+    }
+    const { isPresent, onExitComplete } = this.node.presenceContext;
+    const { isPresent: prevIsPresent } = this.node.prevPresenceContext || {};
+    if (!this.node.animationState || isPresent === prevIsPresent) {
+      return;
+    }
+    if (isPresent && prevIsPresent === false) {
+      if (this.isExitComplete) {
+        const { initial, custom } = this.node.getProps();
+        if (
+          typeof initial === 'string' ||
+          (typeof initial === 'object' &&
+            initial !== null &&
+            !Array.isArray(initial))
+        ) {
+          const resolved = resolveVariant(this.node, initial as any, custom);
+          if (resolved) {
+            const {
+              transition: _transition,
+              transitionEnd: _transitionEnd,
+              ...target
+            } = resolved as any;
+            for (const key in target) {
+              this.node.getValue(key)?.jump(target[key]);
+            }
+          }
+        }
+        this.node.animationState.reset();
+        this.node.animationState.animateChanges();
+      } else {
+        this.node.animationState.setActive('exit', false);
+      }
+      this.isExitComplete = false;
+      return;
+    }
+    const exitAnimation = this.node.animationState.setActive(
+      'exit',
+      !isPresent,
+    );
+    if (onExitComplete && !isPresent) {
+      exitAnimation.then(() => {
+        this.isExitComplete = true;
+        onExitComplete(this.id);
+      });
+    }
+  }
+  mount() {
+    const { register, onExitComplete } = this.node.presenceContext || {};
+    if (onExitComplete) {
+      onExitComplete(this.id);
+    }
+    if (register) {
+      this.unmount = register(this.id);
+    }
+  }
+  unmount() {}
+}
+
+const featureProps: Record<string, (keyof MotionNodeOptions)[]> = {
+  animation: [
+    'animate',
+    'variants',
+    'whileHover',
+    'whileTap',
+    'exit',
+    'whileInView',
+    'whileFocus',
+    'whileDrag',
+  ],
+  exit: ['exit'],
+  layout: ['layout', 'layoutId'],
+  drag: ['drag', 'dragControls'],
+  pan: ['onPan', 'onPanStart', 'onPanSessionStart', 'onPanEnd'],
+  focus: ['whileFocus'],
+  hover: ['whileHover', 'onHoverStart', 'onHoverEnd'],
+  tap: ['whileTap', 'onTap', 'onTapStart', 'onTapCancel'],
+  inView: ['whileInView', 'onViewportEnter', 'onViewportLeave'],
+};
+const isEnabled =
+  (names: (keyof MotionNodeOptions)[]) => (props: MotionNodeOptions) =>
+    names.some((n) => !!props[n]);
+
+let initialized = false;
+export function initFeatures() {
+  if (initialized) {
+    return;
+  }
+  initialized = true;
+  // React registers these alongside MeasureLayout; without them a projecting
+  // element's corners and shadow are stretched by whatever scale the layout
+  // animation is applying — a square tile becoming a wide hero comes out with
+  // oval corners, worst on a narrow viewport where the scale is most extreme.
+  // The correction is per-frame, and it only reaches values the element
+  // actually has: a radius that lives in the stylesheet is invisible to it, so
+  // an element that wants round corners through a layout animation sets them
+  // through the modifier (`style=(styles borderRadius='18px')`).
+  addScaleCorrector({
+    borderRadius: {
+      ...correctBorderRadius,
+      applyTo: [
+        'borderTopLeftRadius',
+        'borderTopRightRadius',
+        'borderBottomLeftRadius',
+        'borderBottomRightRadius',
+      ],
+    },
+    borderTopLeftRadius: correctBorderRadius,
+    borderTopRightRadius: correctBorderRadius,
+    borderBottomLeftRadius: correctBorderRadius,
+    borderBottomRightRadius: correctBorderRadius,
+    boxShadow: correctBoxShadow,
+  });
+  setFeatureDefinitions({
+    animation: {
+      isEnabled: isEnabled(featureProps['animation']!),
+      Feature: AnimationFeature as any,
+    },
+    exit: {
+      isEnabled: isEnabled(featureProps['exit']!),
+      Feature: ExitAnimationFeature as any,
+    },
+    layout: {
+      isEnabled: isEnabled(featureProps['layout']!),
+      ProjectionNode: HTMLProjectionNode as any,
+    },
+    // the drag and pan gestures are vendored from Motion (they are not exported by motion-dom)
+    drag: {
+      isEnabled: isEnabled(featureProps['drag']!),
+      Feature: DragGesture as any,
+      ProjectionNode: HTMLProjectionNode as any,
+    },
+    pan: {
+      isEnabled: isEnabled(featureProps['pan']!),
+      Feature: PanGesture as any,
+    },
+    // gestures (hover / press / focus / in-view): Motion's feature classes over the engine's hover() / press()
+    hover: {
+      isEnabled: isEnabled(featureProps['hover']!),
+      Feature: HoverGesture as any,
+    },
+    tap: {
+      isEnabled: isEnabled(featureProps['tap']!),
+      Feature: PressGesture as any,
+    },
+    focus: {
+      isEnabled: isEnabled(featureProps['focus']!),
+      Feature: FocusGesture as any,
+    },
+    inView: {
+      isEnabled: isEnabled(featureProps['inView']!),
+      Feature: InViewFeature as any,
+    },
+  } as any);
+}

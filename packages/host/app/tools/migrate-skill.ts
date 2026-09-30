@@ -81,10 +81,9 @@ files with boxel.kind: skill frontmatter.`;
     // The `type` filter matches the legacy `Skill` card and its subclasses
     // (e.g. `SkillPlus`, `SkillPlusMarkdown`), so every flavour of legacy skill
     // in the realm is migrated.
-    let skills = await this.store.search<Skill>(
-      { filter: { type: skillCardRef } },
-      [realmUrl],
-    );
+    let skills = (await this.store.search({ filter: { type: skillCardRef } }, [
+      realmUrl,
+    ])) as Skill[];
 
     // Sort by id so slug de-duplication is deterministic: re-running the command
     // assigns the same `-2`/`-3` suffixes in the same order, which keeps the

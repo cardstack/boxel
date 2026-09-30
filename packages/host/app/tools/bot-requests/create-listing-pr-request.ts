@@ -39,8 +39,8 @@ export default class CreateListingPRRequestTool extends HostBaseTool<
     let { realm, listingId } = input;
     let listingName: string | undefined;
     let listingSummary: string | undefined;
-    let listing = await this.store.get<Listing>(listingId);
-    if (listing && isCardInstance(listing)) {
+    let listing = await this.store.get(listingId);
+    if (listing && isCardInstance<Listing>(listing)) {
       listingName = listing.name ?? listing.id;
       listingSummary = listing.summary ?? undefined;
     }

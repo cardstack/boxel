@@ -631,7 +631,7 @@ module('Integration | Store', function (hooks) {
 
   test('can add reference to a local id', async function (assert) {
     let instance = new PersonDef({ name: 'Andrea' });
-    await storeService.add(instance, { doNotPersist: true });
+    await storeService.addWithoutPersisting(instance);
     storeService.addReference(instance[localId]);
 
     forceGC();
@@ -668,9 +668,7 @@ module('Integration | Store', function (hooks) {
 
     try {
       // The live store wires up the change subscription that drives autosave.
-      await storeService.add(new PersonDef({ name: 'Mango' }), {
-        doNotPersist: true,
-      });
+      await storeService.addWithoutPersisting(new PersonDef({ name: 'Mango' }));
       assert.true(
         subscribeCount > 0,
         'the live store subscribes a loaded instance for autosave',
@@ -681,9 +679,9 @@ module('Integration | Store', function (hooks) {
       subscribeCount = 0;
       (globalThis as any).__boxelRenderContext = true;
       let renderStore = getService('render-store');
-      await renderStore.add(new PersonDef({ name: 'Van Gogh' }), {
-        doNotPersist: true,
-      });
+      await renderStore.addWithoutPersisting(
+        new PersonDef({ name: 'Van Gogh' }),
+      );
       assert.strictEqual(
         subscribeCount,
         0,
@@ -721,7 +719,7 @@ module('Integration | Store', function (hooks) {
 
       let ephemeral = new PersonDef({ name: 'Mango' });
       assert.strictEqual(
-        await storeService.add(ephemeral, { doNotPersist: true }),
+        await storeService.addWithoutPersisting(ephemeral),
         ephemeral,
         'a memory-only add is served as asked',
       );
@@ -841,7 +839,7 @@ module('Integration | Store', function (hooks) {
 
   test('can drop reference to a local id', async function (assert) {
     let instance = new PersonDef({ name: 'Andrea' });
-    await storeService.add(instance, { doNotPersist: true });
+    await storeService.addWithoutPersisting(instance);
     storeService.addReference(instance[localId]);
     storeService.dropReference(instance[localId]);
     forceGC();
@@ -933,7 +931,7 @@ module('Integration | Store', function (hooks) {
     });
     let card = new FileCard({ attachment: fileDef });
 
-    await storeService.add(card, { doNotPersist: true });
+    await storeService.addWithoutPersisting(card);
 
     assert.strictEqual(
       storeService.peek(fileUrl, { type: 'file-meta' }),
@@ -996,8 +994,8 @@ module('Integration | Store', function (hooks) {
     (alpha as any).bestFriend = beta;
     (beta as any).bestFriend = alpha;
 
-    await storeService.add(alpha, { doNotPersist: true });
-    await storeService.add(beta, { doNotPersist: true });
+    await storeService.addWithoutPersisting(alpha);
+    await storeService.addWithoutPersisting(beta);
 
     assert.strictEqual(
       storeService.peek(alpha[localId]),
@@ -1459,7 +1457,7 @@ module('Integration | Store', function (hooks) {
     this.onSave(() => {
       assert.ok(false, 'save should not happen');
     });
-    let instance = (await storeService.add(
+    let instance = (await storeService.addWithoutPersisting(
       {
         data: {
           attributes: {
@@ -1473,7 +1471,7 @@ module('Integration | Store', function (hooks) {
           },
         },
       },
-      { doNotPersist: true },
+      {},
     )) as CardDefType;
     assert.strictEqual(
       instance.id,
@@ -1501,7 +1499,7 @@ module('Integration | Store', function (hooks) {
       );
     });
     let instance = new PersonDef({ name: 'Andrea' });
-    await storeService.add(instance, { doNotWaitForPersist: true });
+    await storeService.addWithoutWaiting(instance);
     assert.false(didSave, 'the instance has not saved yet');
 
     await waitUntil(() => didSave, { timeout: 10000 });
@@ -1526,8 +1524,7 @@ module('Integration | Store', function (hooks) {
       'realmURL meta is not set on the instance',
     );
 
-    await storeService.add(instance, {
-      doNotPersist: true,
+    await storeService.addWithoutPersisting(instance, {
       realm: testRealmURL,
     });
 
@@ -1547,7 +1544,7 @@ module('Integration | Store', function (hooks) {
       friends: [michael],
     });
 
-    await storeService.add(lin, { doNotPersist: true });
+    await storeService.addWithoutPersisting(lin);
 
     let peekedMichael = storeService.peek(michael[localId]);
     assert.strictEqual(
@@ -1581,7 +1578,7 @@ module('Integration | Store', function (hooks) {
       typeof CardDefType
     >(doc.data, doc, undefined);
     try {
-      await storeService.add(conflictingInstance, { doNotPersist: true });
+      await storeService.addWithoutPersisting(conflictingInstance);
       throw new Error('expected exception to be thrown');
     } catch (err: any) {
       assert.ok(
@@ -1625,7 +1622,7 @@ module('Integration | Store', function (hooks) {
   test<TestContextWithSave>('an unsaved instance will auto save when its data changes', async function (assert) {
     assert.expect(2);
     let instance = new PersonDef({ name: 'Andrea' });
-    await storeService.add(instance, { doNotPersist: true });
+    await storeService.addWithoutPersisting(instance);
 
     this.onSave((url, doc) => {
       assert.strictEqual(
@@ -1813,7 +1810,7 @@ module('Integration | Store', function (hooks) {
 
   test<TestContextWithSave>('getSaveState works for initially unsaved instance', async function (assert) {
     let instance = new PersonDef({ name: 'Andrea' });
-    await storeService.add(instance, { doNotPersist: true });
+    await storeService.addWithoutPersisting(instance);
 
     assert.strictEqual(
       storeService.getSaveState(instance[localId]),
@@ -2540,7 +2537,7 @@ module('Integration | Store', function (hooks) {
     // it never reaches the window the mutation lock covers, which is the
     // window under test here.
     let instance = new PersonDef({ name: 'Overlap' });
-    await storeService.add(instance, { doNotPersist: true });
+    await storeService.addWithoutPersisting(instance);
 
     // Hold the POST open so the second save is guaranteed to arrive while the
     // create is still in flight — the window the per-instance mutation lock
@@ -2649,10 +2646,10 @@ module('Integration | Store', function (hooks) {
 
   test('a save does not send a linked card whose create is still in flight as a card to create', async function (assert) {
     let friend = new PersonDef({ name: 'Friend' });
-    await storeService.add(friend, { doNotPersist: true });
+    await storeService.addWithoutPersisting(friend);
     let person = new PersonDef({ name: 'Person' });
     (person as any).bestFriend = friend;
-    await storeService.add(person, { doNotPersist: true });
+    await storeService.addWithoutPersisting(person);
 
     let hold = holdCreateResponse(friend);
     let personResult: unknown;
@@ -2706,10 +2703,10 @@ module('Integration | Store', function (hooks) {
 
   test("a save started in the same turn as a linked card's create does not send that card again", async function (assert) {
     let friend = new PersonDef({ name: 'Friend' });
-    await storeService.add(friend, { doNotPersist: true });
+    await storeService.addWithoutPersisting(friend);
     let person = new PersonDef({ name: 'Person' });
     (person as any).bestFriend = friend;
-    await storeService.add(person, { doNotPersist: true });
+    await storeService.addWithoutPersisting(person);
 
     let hold = holdCreateResponse(friend);
     let results: unknown[];
@@ -2742,7 +2739,7 @@ module('Integration | Store', function (hooks) {
     let friend = new PersonDef({ name: 'Friend' });
     let person = new PersonDef({ name: 'Person' });
     (person as any).bestFriend = friend;
-    await storeService.add(person, { doNotPersist: true });
+    await storeService.addWithoutPersisting(person);
 
     let hold = holdCreateResponse(friend);
     let personResult: unknown;
@@ -2777,10 +2774,10 @@ module('Integration | Store', function (hooks) {
 
   test('a save waiting on a linked card whose create fails does not hang', async function (assert) {
     let friend = new PersonDef({ name: 'Friend' });
-    await storeService.add(friend, { doNotPersist: true });
+    await storeService.addWithoutPersisting(friend);
     let person = new PersonDef({ name: 'Person' });
     (person as any).bestFriend = friend;
-    await storeService.add(person, { doNotPersist: true });
+    await storeService.addWithoutPersisting(person);
 
     let hold = holdCreateResponse(friend, { fail: true });
     let friendResult: unknown;
@@ -3097,8 +3094,7 @@ module('Integration | Store', function (hooks) {
 
   test('can patch an unsaved instance', async function (assert) {
     let instance = new PersonDef({ name: 'Andrea' });
-    await storeService.add(instance, {
-      doNotPersist: true,
+    await storeService.addWithoutPersisting(instance, {
       realm: testRealmURL,
     });
 
@@ -4506,7 +4502,7 @@ module('Integration | Store', function (hooks) {
 
   test('an unsaved instance live updates when realm event matching local ID is received', async function (assert) {
     let newInstance = new PersonDef({ name: 'Andrea' });
-    await storeService.add(newInstance, { doNotPersist: true });
+    await storeService.addWithoutPersisting(newInstance);
 
     storeService.addReference(`${testRealmURL}Person/hassan`);
     await storeService.flush();
@@ -4530,7 +4526,7 @@ module('Integration | Store', function (hooks) {
   test<TestContextWithSave>('an unsaved instance will auto save after it has been assigned a remote ID', async function (assert) {
     assert.expect(2);
     let newInstance = new PersonDef({ name: 'Andrea' });
-    await storeService.add(newInstance, { doNotPersist: true });
+    await storeService.addWithoutPersisting(newInstance);
 
     storeService.addReference(`${testRealmURL}Person/hassan`);
     await storeService.flush();

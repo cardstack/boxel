@@ -237,9 +237,9 @@ else
 
 fi
 
-# Media cache (declared screenshots: poster/thumb/rendition captures).
+# Media cache (declared captures: poster/thumb/rendition).
 # Without a store the capture pipeline is disabled and every
-# `_screenshot/...?name=` URL 404s forever, so local dev defaults to a disk
+# `_capture/...?name=` URL 404s forever, so local dev defaults to a disk
 # store under the same ~/.local/share/boxel home the dev certs use.
 #
 # An object directory must pair one-to-one with a media_cache_ledger: the
