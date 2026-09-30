@@ -3,6 +3,8 @@ import type { Definition } from '../definitions.ts';
 import { codeRefFromInternalKey } from '../index.ts';
 import type { LocalPath } from '../paths.ts';
 import { isCardResource } from '../card-document-shape.ts';
+import { now } from '../clock.ts';
+import { logger } from '../log.ts';
 import type { CardResource } from '../resource-types.ts';
 import { extensionOfName } from '../file-def-code-ref.ts';
 import { policyFileDefCodeRef } from '../policy-file-def.ts';
@@ -24,7 +26,6 @@ import {
   type BaseOperation,
   type OperationDefinition,
   type OperationTarget,
-  type PolicyIssueCode,
 } from './types.ts';
 
 // ============================================================================
@@ -81,18 +82,26 @@ import {
 //
 // What a refusal tells the caller follows from whether the realm ACL lets them
 // read the realm. One who may can list the realm anyway, and is told the gate
-// refused them. One who may not is told the target is not there, exactly as
-// they are told of a target that is not (see `refusalForNonReader`). Two things
-// still set those apart, and neither is closed here. Time: a refusal that
-// evaluated a predicate takes longer than one that found no card, so a caller
-// who measures carefully can tell the two apart. And the 500: a predicate that
-// throws is one only against a card whose type a rule names, either one that
-// is stored or, for a create against a type, the one the create would mint,
-// and whether it throws depends on that card's values. So a predicate that throws tells any
-// caller who reaches it that such a card or type is there, and something about
-// what a stored card holds: `(.title | tonumber) > 0` answers 500 for a card
-// whose title is not a number and 404 for one whose title is a number no
-// greater than zero.
+// refused them, or that a predicate threw. One who may not is told the target
+// is not there, exactly as they are told of a target that is not (see
+// `refusalForNonReader`).
+//
+// That holds for a predicate that throws, too. A predicate throws only against
+// a card whose type a rule names: one that is stored or, for a create against a
+// type, the one the create would mint. Whether it throws depends on that card's
+// values. So a 500 would tell a caller who may not read the realm that such a
+// card or type is there, and something about what a stored card holds:
+// `(.title | tonumber) > 0` throws for a card whose title is not a number and
+// is false for one whose title is a number no greater than zero. The fault is
+// logged where the predicate throws, and an explain reports it, so a policy's
+// author finds it there. A policy the realm cannot load is a 500 to every
+// caller. For one who may not read the realm it is answered before the target
+// resolves, and so says nothing about any target (see `loadPolicy`).
+//
+// One thing still sets a refusal apart from a target that is not there, and it
+// is not closed here: time. A refusal that evaluated a predicate takes longer
+// than one that found no card, so a caller who measures carefully can tell the
+// two apart.
 //
 // The gate never sees the target as the caller named it. It is handed the
 // target as the realm resolved it, so a type is judged by the definition the
@@ -343,7 +352,7 @@ export function gateRefusal(
       return new OperationFailure({
         ...id,
         status: 500,
-        code: 'internal-error',
+        code: 'policy-predicate-failed',
         title: 'Policy predicate failed',
         detail:
           `a predicate in the realm's policy failed while deciding whether ` +
@@ -360,16 +369,12 @@ export interface LoadedPolicy {
   policy: CompiledRealmPolicy | undefined;
 }
 
-// What a policy that recorded one of these can grant is unknown rather than
-// nothing: the realm names a policy and could not read it as one.
-const UNAVAILABLE_POLICY: ReadonlySet<PolicyIssueCode> = new Set([
-  'policy-card-missing',
-  'policy-card-unloadable',
-  'not-a-policy',
-]);
-
 // Load the realm's compiled policy for a caller the realm ACL declined, and
-// refuse with a 500 when the realm names a policy it cannot load.
+// refuse with a 500 when the realm names a policy that did not compile as a
+// whole. What such a policy grants is unknown rather than nothing: the realm
+// names a policy and could not read it as one. A card missing from the index,
+// a card that will not load, and a card whose rules cannot be read are the
+// same refusal.
 //
 // For a caller who may not read the realm, this runs before the target
 // resolves. That keeps the 500 independent of the target: answered only once a
@@ -380,11 +385,7 @@ export async function loadPolicy(core: OperationCore): Promise<LoadedPolicy> {
   }
   policyGateStats(core).policyLoads++;
   let policy = await core.policy.compiledPolicy();
-  if (
-    policy?.issues.some(
-      (issue) => issue.path === '' && UNAVAILABLE_POLICY.has(issue.code),
-    )
-  ) {
+  if (policy?.uncompilable) {
     throw new OperationFailure({
       status: 500,
       code: 'internal-error',
@@ -813,10 +814,26 @@ export async function dischargePendingDecision(
   if (pending.decision.kind === 'pending') {
     policyGateStats(core).pendingDischarges++;
   }
-  let admission = await admits(core, pending, judged);
-  if (!('grant' in admission)) {
-    throw gateRefusal(core, admission, pending.target, pending.name);
+  let refusal = await pendingWriteRefusal(core, pending, judged);
+  if (refusal) {
+    throw refusal;
   }
+}
+
+// The refusal `dischargePendingDecision` would throw for a pending write
+// judged against `judged`, or undefined where it would admit the write. This
+// never admits anything and counts no discharge: it is for a caller that has
+// to know how the lock would decide a write that is not being decided under
+// it.
+export async function pendingWriteRefusal(
+  core: OperationCore,
+  pending: PendingWrite,
+  judged: AdmissionSubject | undefined,
+): Promise<OperationFailure | undefined> {
+  let admission = await admits(core, pending, judged);
+  return 'grant' in admission
+    ? undefined
+    : gateRefusal(core, admission, pending.target, pending.name);
 }
 
 // Whether a pending write would be admitted against its target card as stored
@@ -828,20 +845,30 @@ export async function pendingWriteHolds(
   core: OperationCore,
   pending: PendingWrite,
 ): Promise<boolean> {
+  return !(await storedWriteRefusal(core, pending));
+}
+
+// The refusal `pendingWriteHolds` finds, in the words the lock would refuse
+// the write in against the same card: a predicate that throws is the fault it
+// is under the lock, not a refusal. Undefined where the write would be
+// admitted.
+export async function storedWriteRefusal(
+  core: OperationCore,
+  pending: PendingWrite,
+): Promise<OperationFailure | undefined> {
   let { target } = pending;
   let url = target.kind === 'instance' ? parseURL(target.url) : undefined;
   if (!url) {
-    return false;
+    return notPermitted(target, pending.name);
   }
   let source = await core.readFileAsText(
     `${localPathFor(core, url)}.json` as LocalPath,
   );
-  let admission = await admits(
+  return await pendingWriteRefusal(
     core,
     pending,
     source === undefined ? undefined : { id: url.href, source },
   );
-  return 'grant' in admission;
 }
 
 // The grant that admits a pending write against `judged`, or the refusal.
@@ -915,7 +942,13 @@ async function firstHolding(
       continue;
     }
     stats.predicateEvaluations++;
-    let outcome = await evaluate(core, where, subject, actor);
+    let outcome = await evaluate(
+      core,
+      candidate.grant.operation,
+      where,
+      subject,
+      actor,
+    );
     scope.trace?.evaluated(
       candidate.grant,
       outcome === 'holds'
@@ -1302,6 +1335,7 @@ async function projectedSource(
 // when the card's pass lands.
 async function evaluate(
   core: OperationCore,
+  operation: string,
   where: CompiledPolicyPredicate,
   subject: PredicateSubject,
   actor: string | undefined,
@@ -1322,10 +1356,69 @@ async function evaluate(
       { syntax: 'solidified' },
     );
     return answer === true ? 'holds' : 'fails';
-  } catch {
-    return subject.input === undefined ? 'fails' : 'threw';
+  } catch (e: unknown) {
+    if (subject.input === undefined) {
+      return 'fails';
+    }
+    let judged = subject.instance?.id;
+    logThrow(
+      core,
+      operation,
+      where,
+      typeof judged === 'string' ? judged : 'its target',
+      actor,
+      e,
+    );
+    return 'threw';
   }
 }
+
+// A caller who may not read the realm is told of a predicate's fault as a card
+// that is not there, so the log is where a policy's author finds it.
+//
+// It logs one line per predicate a minute at most. A capability check
+// evaluates a predicate once for each card it is asked about, and a view asks
+// again as it re-renders, so a line for every throw would put the whole view
+// into the log at the rate it renders. One line says what the author needs:
+// that the predicate throws, on what, and why, and an explain answers which
+// card it throws on. The error is cut short because BXL's quotes the value it
+// failed on, which can be a whole stored field.
+function logThrow(
+  core: OperationCore,
+  operation: string,
+  where: CompiledPolicyPredicate,
+  judged: string,
+  actor: string | undefined,
+  e: unknown,
+): void {
+  let at = now();
+  let last = lastLoggedThrow.get(where);
+  if (last !== undefined && at - last < THROW_LOG_INTERVAL_MS) {
+    return;
+  }
+  lastLoggedThrow.set(where, at);
+  let error = e instanceof Error ? e.message : String(e);
+  if (error.length > THROW_ERROR_LENGTH) {
+    error = `${error.slice(0, THROW_ERROR_LENGTH)}…`;
+  }
+  policyLog.warn(
+    `a predicate in the policy of realm ${core.realmURL} threw while ` +
+      `deciding whether ${actor ?? 'an anonymous caller'} may invoke ` +
+      `"${operation}" on ${judged}: ${where.source}: ${error}`,
+  );
+}
+
+const THROW_LOG_INTERVAL_MS = 60_000;
+const THROW_ERROR_LENGTH = 200;
+
+// When each compiled predicate last logged a throw. Keyed on the compiled
+// predicate, so a policy compiled again starts over.
+const lastLoggedThrow = new WeakMap<CompiledPolicyPredicate, number>();
+
+// The channel the policy compiler logs its issues on, so every fault in a
+// realm's policy is in one place. Created once: each `logger()` call applies
+// the configured level again, which would undo a level raised after it.
+const policyLog = logger('realm:policy');
 
 function parseURL(url: string): URL | undefined {
   try {

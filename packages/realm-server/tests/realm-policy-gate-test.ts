@@ -4,7 +4,12 @@ import supertest from 'supertest';
 import type { Test, SuperTest, Response } from 'supertest';
 import { basename, join } from 'path';
 import { dirSync } from 'tmp';
-import { rri, SupportedMimeType } from '@cardstack/runtime-common';
+import {
+  archiveRealm,
+  logger,
+  rri,
+  SupportedMimeType,
+} from '@cardstack/runtime-common';
 import type {
   QueuePublisher,
   QueueRunner,
@@ -62,9 +67,8 @@ function adoptsFrom(ref: { module: string; name: string }) {
 }
 
 // Is the caller one of the classroom's teachers. Written with `any` and `==`
-// because that is exact. BXL's `contains` matches substrings, so
-// `contains([actor()])` would also admit a caller whose id is part of a
-// listed one, and `contains(actor())` never matches a list at all.
+// because that is exact. BXL's `contains` matches substrings, and a policy
+// that tests membership with it does not compile.
 const TEACHES = '.teacherIds | any(. == actor())';
 const LEADS = '.leadTeacherIds | any(. == actor())';
 
@@ -143,6 +147,38 @@ const SYLLABUS_MODULE = `
     @field title = contains(StringField);
   }
 `;
+
+// Every warning the gate logs on `realm:policy` while `fn` runs. The gate and
+// this suite share the named logger, so a tap on its method factory sees
+// exactly what the gate writes. The level is held at `warn` or louder for the
+// duration, so a quieter LOG_LEVELS setting cannot hide the line a test is
+// looking for.
+async function policyWarningsDuring(
+  fn: () => Promise<void>,
+): Promise<string[]> {
+  let log = logger('realm:policy');
+  let warnings: string[] = [];
+  let originalFactory = log.methodFactory;
+  let originalLevel = log.getLevel();
+  log.methodFactory = (methodName, level, loggerName) => {
+    let raw = originalFactory(methodName, level, loggerName);
+    return (...args: unknown[]) => {
+      if (methodName === 'warn') {
+        warnings.push(args.map(String).join(' '));
+      }
+      raw(...args);
+    };
+  };
+  // Rebinds the logger's methods, which is what puts the tap in place.
+  log.setLevel(originalLevel > log.levels.WARN ? 'warn' : originalLevel);
+  try {
+    await fn();
+  } finally {
+    log.methodFactory = originalFactory;
+    log.setLevel(originalLevel);
+  }
+  return warnings;
+}
 
 type Grant = { operation: string; where?: unknown };
 type Rule = { targetType: { module: string; name: string }; grants: Grant[] };
@@ -260,6 +296,7 @@ module(basename(import.meta.filename), function (hooks) {
   let org: Realm;
   let request: SuperTest<Test>;
   let server: Server;
+  let db: PgAdapter;
 
   setupCatalogTestSubset(hooks);
 
@@ -272,6 +309,7 @@ module(basename(import.meta.filename), function (hooks) {
     publisher: QueuePublisher;
     runner: QueueRunner;
   }) {
+    db = dbAdapter;
     let result = await runTestRealmServerWithRealms({
       virtualNetwork: createVirtualNetwork(),
       realmsRootPath: join(dirSync().name, 'realm_server_1'),
@@ -427,7 +465,7 @@ module(basename(import.meta.filename), function (hooks) {
   }
 
   // The gate's refusal to a caller who may read the realm. Such a caller
-  // reaches the gate only by writing, which only the envelope carries to it.
+  // reaches the gate only by writing.
   function assertNotPermitted(
     assert: Assert,
     response: Response,
@@ -930,25 +968,66 @@ module(basename(import.meta.filename), function (hooks) {
   });
 
   module('fail closed', function () {
-    test('a predicate that throws is a 500, and one that reads a snapshot tier is never evaluated', async function (assert) {
+    test('a predicate that throws refuses as a card that is not there is refused, and one that reads a snapshot tier is never evaluated', async function (assert) {
       const ALGEBRA = `${EDUCATION}syllabi/algebra`;
+      const GEOMETRY = `${EDUCATION}syllabi/geometry`;
       assert.strictEqual(
         (await getCard(`${EDUCATION}syllabi/course-42`, AUTH.teacher())).status,
         200,
         'the predicate holds where it can be evaluated',
       );
+      // The teacher may not read the realm, so the fault reaches them as the
+      // answer for a syllabus that does not exist.
+      let thrown!: Response;
+      let missing!: Response;
+      let thrownBatch!: Response;
+      let missingBatch!: Response;
+      let warnings = await policyWarningsDuring(async () => {
+        thrown = await getCard(ALGEBRA, AUTH.teacher());
+        missing = await getCard(GEOMETRY, AUTH.teacher());
+        thrownBatch = await operations(
+          EDUCATION,
+          AUTH.teacher(),
+          invoke('read', { href: ALGEBRA }),
+        );
+        missingBatch = await operations(
+          EDUCATION,
+          AUTH.teacher(),
+          invoke('read', { href: GEOMETRY }),
+        );
+      });
       assert.strictEqual(
-        (await getCard(ALGEBRA, AUTH.teacher())).status,
-        500,
-        'and a card+json read is a 500 where it throws',
+        thrown.status,
+        404,
+        'a card+json read where it throws',
       );
-      let batch = await operations(
-        EDUCATION,
-        AUTH.teacher(),
-        invoke('read', { href: ALGEBRA }),
+      assert.strictEqual(
+        thrown.text.replaceAll('algebra', 'geometry'),
+        missing.text,
+        'is the same body as a card that is not there, but for the URL',
       );
-      assert.strictEqual(batch.status, 500, 'as is an envelope read');
-      assert.strictEqual(errorOf(batch).code, 'internal-error');
+      assert.strictEqual(thrownBatch.status, 404, 'as is an envelope read');
+      assert.strictEqual(
+        thrownBatch.text,
+        missingBatch.text,
+        'whose body is the same, byte for byte',
+      );
+      let faults = warnings.filter((line) =>
+        line.includes('threw while deciding'),
+      );
+      assert.strictEqual(
+        faults.length,
+        1,
+        'the throw is logged once, however many reads it refuses',
+      );
+      assert.true(
+        faults[0]?.includes(`"read" on ${ALGEBRA}`),
+        `the line names the card the predicate threw on: ${faults[0]}`,
+      );
+      assert.true(
+        faults[0]?.includes('cannot be parsed as number'),
+        'and why it threw',
+      );
       assert.strictEqual(
         gateStats().predicateEvaluations,
         3,
@@ -1107,6 +1186,61 @@ module(basename(import.meta.filename), function (hooks) {
         headersOf(denied),
         'with the same headers as the card the gate refused',
       );
+      let thrown = await request
+        .head(path(`${EDUCATION}syllabi/algebra`))
+        .set('Accept', SupportedMimeType.CardJson)
+        .set('Authorization', AUTH.teacher());
+      assert.strictEqual(
+        thrown.status,
+        missing.status,
+        'a card whose predicate throws too',
+      );
+      assert.deepEqual(
+        headersOf(thrown),
+        headersOf(missing),
+        'with the same headers as a card that is not there',
+      );
+    });
+
+    test('a HEAD the policy would grant is answered by discovery once the realm is archived', async function (assert) {
+      let headersOf = (response: Response) =>
+        Object.entries(response.headers as Record<string, string>)
+          .filter(([name]) => name !== 'date')
+          .sort(([a], [b]) => a.localeCompare(b));
+      let denied = await request
+        .head(path(ROOM_205))
+        .set('Accept', SupportedMimeType.CardJson)
+        .set('Authorization', AUTH.teacher());
+
+      await archiveRealm(db, new URL(EDUCATION));
+      let before = gateStats().policyLoads;
+      let own = await request
+        .head(path(ROOM_204))
+        .set('Accept', SupportedMimeType.CardJson)
+        .set('Authorization', AUTH.teacher());
+      assert.strictEqual(own.status, 200, 'the discovery answer');
+      assert.notOk(own.get('etag'), 'with no card headers');
+      assert.notOk(
+        own.get('X-Boxel-Realm-Archived'),
+        'and nothing saying the realm is archived',
+      );
+      assert.deepEqual(
+        headersOf(own),
+        headersOf(denied),
+        'the same answer the gate’s refusal gets while the realm is active',
+      );
+      assert.strictEqual(
+        gateStats().policyLoads,
+        before,
+        'and the read never reaches the gate',
+      );
+
+      let reader = await request
+        .head(path(ROOM_204))
+        .set('Accept', SupportedMimeType.CardJson)
+        .set('Authorization', AUTH.reader());
+      assert.strictEqual(reader.status, 403, 'a reader meets the seal');
+      assert.strictEqual(reader.get('X-Boxel-Realm-Archived'), 'true');
     });
   });
 
@@ -1248,7 +1382,7 @@ module(basename(import.meta.filename), function (hooks) {
           code: 'target-not-found',
         },
         {
-          situation: 'a predicate that throws',
+          situation: 'no realm read, a predicate that throws',
           caller: 'teacher',
           card: () => getCard(`${EDUCATION}syllabi/algebra`, AUTH.teacher()),
           envelope: () =>
@@ -1257,8 +1391,8 @@ module(basename(import.meta.filename), function (hooks) {
               AUTH.teacher(),
               invoke('read', { href: `${EDUCATION}syllabi/algebra` }),
             ),
-          status: 500,
-          code: 'internal-error',
+          status: 404,
+          code: 'target-not-found',
         },
         {
           situation: 'module source, no realm read',
@@ -1689,25 +1823,38 @@ module(basename(import.meta.filename), function (hooks) {
     });
 
     test('a route that does not reach the gate keeps the realm ACL’s refusal', async function (assert) {
-      let patch = await request
-        .patch(path(BULLETIN_1))
-        .set('Accept', SupportedMimeType.CardJson)
+      let source = await request
+        .post(`${path(BULLETIN_1)}.json`)
+        .set('Accept', SupportedMimeType.CardSource)
+        .set('Authorization', AUTH.reader())
+        .send(card(adoptsFrom(BULLETIN), { body: 'Patched' }));
+      assert.strictEqual(
+        source.status,
+        403,
+        'a card+source write, though the policy grants update',
+      );
+      assert.strictEqual(source.text, INSUFFICIENT);
+      let atomic = await request
+        .post(`${path(EDUCATION)}_atomic`)
+        .set('Accept', SupportedMimeType.JSONAPI)
         .set('Authorization', AUTH.reader())
         .send(
           JSON.stringify({
-            data: {
-              type: 'card',
-              attributes: { body: 'Patched' },
-              meta: { adoptsFrom: adoptsFrom(BULLETIN) },
-            },
+            'atomic:operations': [
+              {
+                op: 'update',
+                href: './bulletins/b1.json',
+                data: {
+                  type: 'card',
+                  attributes: { body: 'Patched' },
+                  meta: { adoptsFrom: adoptsFrom(BULLETIN) },
+                },
+              },
+            ],
           }),
         );
-      assert.strictEqual(
-        patch.status,
-        403,
-        'a card+json write, though the policy grants update',
-      );
-      assert.strictEqual(patch.text, INSUFFICIENT);
+      assert.strictEqual(atomic.status, 403, 'an /_atomic write');
+      assert.strictEqual(atomic.text, INSUFFICIENT);
       assert.strictEqual(gateStats().policyLoads, 0);
     });
   });

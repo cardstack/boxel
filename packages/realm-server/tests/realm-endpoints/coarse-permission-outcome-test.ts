@@ -143,28 +143,6 @@ const writeProbes: Probe[] = [
         .set('Accept', SupportedMimeType.CardSource)
         .send('export const x = 1;'),
   },
-  // Routes that consume it.
-  {
-    label: 'POST card+json',
-    consumes: false,
-    send: (r) =>
-      r.post('/').set('Accept', SupportedMimeType.CardJson).send('not json'),
-  },
-  {
-    label: 'PATCH card+json',
-    consumes: false,
-    send: (r) =>
-      r
-        .patch('/person-1')
-        .set('Accept', SupportedMimeType.CardJson)
-        .send('not json'),
-  },
-  {
-    label: 'DELETE card+json',
-    consumes: false,
-    send: (r) =>
-      r.delete('/person-1').set('Accept', SupportedMimeType.CardJson),
-  },
   {
     label: 'POST card+source',
     consumes: false,
@@ -188,6 +166,28 @@ const writeProbes: Probe[] = [
     consumes: false,
     send: (r) =>
       r.delete('/person.gts').set('Accept', SupportedMimeType.CardSource),
+  },
+  // Routes that consume it.
+  {
+    label: 'POST card+json',
+    consumes: true,
+    send: (r) =>
+      r.post('/').set('Accept', SupportedMimeType.CardJson).send('not json'),
+  },
+  {
+    label: 'PATCH card+json',
+    consumes: true,
+    send: (r) =>
+      r
+        .patch('/person-1')
+        .set('Accept', SupportedMimeType.CardJson)
+        .send('not json'),
+  },
+  {
+    label: 'DELETE card+json',
+    consumes: true,
+    send: (r) =>
+      r.delete('/person-1').set('Accept', SupportedMimeType.CardJson),
   },
   {
     label: 'POST /_operations',
@@ -222,6 +222,47 @@ const gatedProbes: GatedProbe[] = [
   {
     route: `GET ${SupportedMimeType.CardJson}`,
     send: (r) => r.get('/person-1').set('Accept', SupportedMimeType.CardJson),
+  },
+  {
+    route: `POST ${SupportedMimeType.CardJson}`,
+    send: (r, realmURL) =>
+      r
+        .post('/')
+        .set('Accept', SupportedMimeType.CardJson)
+        .send(
+          JSON.stringify({
+            data: {
+              type: 'card',
+              attributes: { firstName: 'Mango' },
+              meta: {
+                adoptsFrom: { module: `${realmURL}person`, name: 'Person' },
+              },
+            },
+          }),
+        ),
+  },
+  {
+    route: `PATCH ${SupportedMimeType.CardJson}`,
+    send: (r, realmURL) =>
+      r
+        .patch('/person-1')
+        .set('Accept', SupportedMimeType.CardJson)
+        .send(
+          JSON.stringify({
+            data: {
+              type: 'card',
+              attributes: { firstName: 'Mango' },
+              meta: {
+                adoptsFrom: { module: `${realmURL}person`, name: 'Person' },
+              },
+            },
+          }),
+        ),
+  },
+  {
+    route: `DELETE ${SupportedMimeType.CardJson}`,
+    send: (r) =>
+      r.delete('/person-1').set('Accept', SupportedMimeType.CardJson),
   },
   ...[SupportedMimeType.BoxelOperations, SupportedMimeType.JSONAPI].flatMap(
     (accept) => [
@@ -388,6 +429,9 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
         [
           `GET ${SupportedMimeType.CardJson} /.*`,
           `HEAD ${SupportedMimeType.CardJson} /.*`,
+          `POST ${SupportedMimeType.CardJson} (/|/.+/)`,
+          `PATCH ${SupportedMimeType.CardJson} /.+(?<!.json)`,
+          `DELETE ${SupportedMimeType.CardJson} /|/.+(?<!.json)`,
           `GET ${SupportedMimeType.CardJson} /_search`,
           `QUERY ${SupportedMimeType.CardJson} /_search`,
           `POST ${SupportedMimeType.BoxelOperations} /_operations`,
@@ -396,7 +440,7 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           `QUERY ${SupportedMimeType.BoxelOperations} /_operations`,
           `QUERY ${SupportedMimeType.JSONAPI} /_operations`,
         ].sort(),
-        'the consumer set is the card+json read, the search, the operations envelope and the capability check',
+        'the consumer set is the card+json read and writes, the search, the operations envelope and the capability check',
       );
       let nonConsumers = testRealm
         .routeDescriptions()
@@ -430,6 +474,34 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           'HEAD * *',
         ].sort(),
         'the card+source read, the directory listing and the fallback file and module serve',
+      );
+    });
+
+    test('exactly the operational endpoints pass the archived seal', async function (assert) {
+      // The probe's `HEAD` is its own route in every media type whose `HEAD`
+      // is the realm's discovery answer, which is every one but card+source
+      // and card+json, whose `HEAD` reads what is stored at the path.
+      let probeHeads = [
+        ...new Set(
+          Object.values(SupportedMimeType).filter(
+            (mimeType) =>
+              mimeType !== SupportedMimeType.CardSource &&
+              mimeType !== SupportedMimeType.CardJson,
+          ),
+        ),
+      ].map((mimeType) => `HEAD ${mimeType} /_readiness-check`);
+      assert.deepEqual(
+        testRealm
+          .routeDescriptions()
+          .filter((route) => route.operationalEndpoint)
+          .map((route) => `${route.method} ${route.mimeType} ${route.path}`)
+          .sort(),
+        [
+          `POST ${SupportedMimeType.Session} /_session`,
+          `GET ${SupportedMimeType.RealmInfo} /_readiness-check`,
+          ...probeHeads,
+        ].sort(),
+        'the session sign-in and the health probe, and none of the routes that read or write what the realm stores',
       );
     });
 

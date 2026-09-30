@@ -114,25 +114,10 @@ const SYLLABUS_MODULE = `
   }
 `;
 
-// A policy type that declares the explain. Both of the Org realm's policy
-// cards are one.
-const EXPLAINABLE_POLICY_MODULE = `
-  import StringField from "@cardstack/base/string";
-  import { operation } from "@cardstack/base/operations";
-  import { RealmPolicy } from "@cardstack/catalog/realm-policy/realm-policy";
-
-  export class ExplainablePolicy extends RealmPolicy {
-    @operation static explain = {
-      base: 'explain',
-      params: {
-        actor: StringField,
-        target: StringField,
-        operation: StringField,
-      },
-      nonGrantable: true,
-    };
-  }
-`;
+const REALM_POLICY = {
+  module: rri('@cardstack/catalog/realm-policy/realm-policy'),
+  name: 'RealmPolicy',
+};
 
 type Grant = { operation: string; where?: unknown };
 type Rule = { targetType: { module: string; name: string }; grants: Grant[] };
@@ -182,12 +167,7 @@ function policyCard(rules: Rule[]) {
     data: {
       type: 'card',
       attributes: { rules },
-      meta: {
-        adoptsFrom: {
-          module: '../explainable-policy',
-          name: 'ExplainablePolicy',
-        },
-      },
+      meta: { adoptsFrom: REALM_POLICY },
     },
   });
 }
@@ -298,7 +278,6 @@ module(basename(import.meta.filename), function (hooks) {
               name: 'Org',
               policy: ORG_POLICY_CARD,
             }),
-            'explainable-policy.gts': EXPLAINABLE_POLICY_MODULE,
             'policies/education.json': policyCard(EDUCATION_RULES),
             'policies/org.json': policyCard(ORG_RULES),
           },
@@ -441,12 +420,26 @@ module(basename(import.meta.filename), function (hooks) {
         rules: [
           {
             targetType: CLASSROOM,
-            grants: [{ where: TEACHES, tier: 'stored', outcome: 'held' }],
+            path: 'rules[0]',
+            grants: [
+              {
+                path: 'rules[0].grants[0]',
+                where: TEACHES,
+                tier: 'stored',
+                outcome: 'held',
+              },
+            ],
           },
           {
             targetType: CLASSROOM,
+            path: 'rules[1]',
             grants: [
-              { where: LEADS, tier: 'stored', outcome: 'not-evaluated' },
+              {
+                path: 'rules[1].grants[0]',
+                where: LEADS,
+                tier: 'stored',
+                outcome: 'not-evaluated',
+              },
             ],
           },
         ],
@@ -502,7 +495,11 @@ module(basename(import.meta.filename), function (hooks) {
       assert.strictEqual(explanation.decision, 'allowed');
       assert.strictEqual(explanation.reason, 'granted');
       assert.deepEqual(explanation.rules, [
-        { targetType: BULLETIN, grants: [{ outcome: 'unconditional' }] },
+        {
+          targetType: BULLETIN,
+          path: 'rules[2]',
+          grants: [{ path: 'rules[2].grants[1]', outcome: 'unconditional' }],
+        },
       ]);
       assert.deepEqual(explanation.admittedBy, { rule: 0, grant: 0 });
     });
@@ -512,8 +509,8 @@ module(basename(import.meta.filename), function (hooks) {
       assert.strictEqual(explanation.decision, 'denied');
       assert.strictEqual(explanation.reason, 'no-grant');
       assert.deepEqual(explanation.rules, [
-        { targetType: CLASSROOM, grants: [] },
-        { targetType: CLASSROOM, grants: [] },
+        { targetType: CLASSROOM, path: 'rules[0]', grants: [] },
+        { targetType: CLASSROOM, path: 'rules[1]', grants: [] },
       ]);
       assert.deepEqual(
         explanation.refusal,
@@ -528,9 +525,20 @@ module(basename(import.meta.filename), function (hooks) {
       assert.deepEqual(numeric.rules, [
         {
           targetType: SYLLABUS,
+          path: 'rules[3]',
           grants: [
-            { where: NUMERIC_TITLE, tier: 'stored', outcome: 'held' },
-            { where: 'true', tier: 'snapshot', outcome: 'not-evaluated' },
+            {
+              path: 'rules[3].grants[0]',
+              where: NUMERIC_TITLE,
+              tier: 'stored',
+              outcome: 'held',
+            },
+            {
+              path: 'rules[3].grants[1]',
+              where: 'true',
+              tier: 'snapshot',
+              outcome: 'not-evaluated',
+            },
           ],
         },
       ]);
@@ -542,17 +550,23 @@ module(basename(import.meta.filename), function (hooks) {
         throwing.rules[0].grants.map((grant) => grant.outcome),
         ['threw', 'not-evaluated'],
       );
-      assert.deepEqual(throwing.refusal, {
-        status: 500,
-        code: 'internal-error',
-      });
+      assert.deepEqual(
+        throwing.refusal,
+        { status: 404, code: 'target-not-found' },
+        'the teacher may not read the realm, so they are told the card is not there',
+      );
     });
 
     test('a write resting on a predicate is judged against the card as it is stored', async function (assert) {
       let own = await explain(TEACHER, ROOM_204, 'delete');
       assert.strictEqual(own.decision, 'allowed');
       assert.deepEqual(own.rules[0].grants, [
-        { where: TEACHES, tier: 'stored', outcome: 'held' },
+        {
+          path: 'rules[0].grants[3]',
+          where: TEACHES,
+          tier: 'stored',
+          outcome: 'held',
+        },
       ]);
       assert.deepEqual(own.admittedBy, { rule: 0, grant: 0 });
 

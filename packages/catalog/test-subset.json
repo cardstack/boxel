@@ -1,6 +1,6 @@
 {
   "repository": "cardstack/boxel-catalog",
-  "revision": "27003bc9cd072d8f8a9de5cc789326e3aa91f3ea",
+  "revision": "c97265ebecbd7590b8f56d6a30ee9528a17014e0",
   "files": [
     {
       "path": "realm-policy/realm-policy.gts",
@@ -12,16 +12,23 @@
     }
   ],
   "tests": {
-    "host": ["Integration | realm policy"],
+    "host": [
+      "Integration | realm policy",
+      "Integration | policy-scoped search"
+    ],
     "realmServer": [
       "catalog-test-subset-test",
+      "realm-policy-activation-test",
+      "realm-policy-batch-test",
       "realm-policy-capabilities-test",
+      "realm-policy-card-write-test",
       "realm-policy-compile-test",
       "realm-policy-create-lane-test",
       "realm-policy-explain-test",
       "realm-policy-gate-test",
       "realm-policy-non-grantable-test",
       "realm-policy-query-filter-test",
+      "realm-policy-query-reach-test",
       "realm-policy-row-reach-test",
       "realm-policy-source-read-test",
       "realm-policy-write-lock-test",
