@@ -150,6 +150,10 @@ jobs:
         if: ${{ !cancelled() }}
         run: pnpm run lint
         working-directory: packages/bxl
+      - name: Lint Choreo ESLint Config
+        if: ${{ !cancelled() }}
+        run: pnpm run lint
+        working-directory: packages/choreo-eslint-config
       - name: Lint Glimmer Motion
         if: ${{ !cancelled() }}
         run: pnpm run lint
