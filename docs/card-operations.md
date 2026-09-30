@@ -978,11 +978,15 @@ a grant is inactive, and the rest of the policy applies. Everyone the policy
 governs sees a policy without that grant, and nothing fails. A validate is how
 the card tells its author which of its grants are live.
 
-A policy card type declares one, named `validate`, on the `validate` base, with
-`nonGrantable: true` and nothing else. It takes no payload. Invoked on the
-policy card, it compiles the card exactly as a realm naming it compiles it,
+`RealmPolicy` declares one, named `validate`, on the `validate` base, so every
+policy card carries it, a subtype's included. It takes no payload. Invoked on
+the policy card, it compiles the card exactly as a realm naming it compiles it,
 from what the card's latest index visit recorded, and answers with what that
-compile found:
+compile found. The policy card's isolated view asks it as soon as someone looks
+at the card, and again whenever the card reloads. It marks each grant in place
+as inactive, or as live but admitting no search, lists the issues with the
+rule and the grant each is about, and says when the policy as a whole is not in
+force. Code asks it the same way:
 
 ```ts
 let validation = await operations<typeof RealmPolicy>(policy).validate();

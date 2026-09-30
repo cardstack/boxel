@@ -1,7 +1,9 @@
 import {
   click,
   fillIn,
+  settled,
   waitFor,
+  waitUntil,
   type RenderingTestContext,
 } from '@ember/test-helpers';
 
@@ -9,6 +11,7 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import {
+  IndexWriter,
   PermissionsContextName,
   rri,
   type LooseSingleCardDocument,
@@ -21,6 +24,7 @@ import type { Loader } from '@cardstack/runtime-common/loader';
 import type StoreService from '@cardstack/host/services/store';
 
 import {
+  getDbAdapter,
   testRealmURL,
   provideConsumeContext,
   realmConfigCardJSON,
@@ -614,5 +618,228 @@ module('Integration | realm policy', function (hooks) {
     assert
       .dom('[data-test-explanation]')
       .doesNotExist('and the earlier answer is not left on the page');
+  });
+  // A policy on classrooms whose grants are, in order: a live read, a delete
+  // whose predicate does not parse, and a live update. A second rule governs a
+  // type that does not resolve.
+  const MISTYPED = `${teachesPredicate} and .title ==`;
+  const UNFILTERABLE = '(.title | tonumber) > 0';
+
+  async function renderPolicyNamed(
+    path: string,
+    rules: Record<string, unknown>[],
+  ) {
+    let { realm } = await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'classroom.gts': classroomModule,
+        [`${path}.json`]: policyDocument(rules),
+      },
+    });
+    // Looking the service up arms the transport the card's own
+    // `operations()` call sends its validate through.
+    getService('operations');
+    let policy = await loadPolicy(path);
+    await renderCard(loader, policy, 'isolated');
+    return realm;
+  }
+
+  // What the card says of each grant once the realm has answered, in order.
+  async function grantStatuses() {
+    await waitFor('[data-test-policy-grant-status]', { timeout: 10_000 });
+    return [
+      ...document.querySelectorAll('[data-test-policy-grant-status]'),
+    ].map((el) => el.getAttribute('data-test-policy-grant-status'));
+  }
+
+  test('a grant that does not compile is marked inactive among the live ones, and its issue names its rule and grant', async function (assert) {
+    await renderPolicyNamed('policies/mistyped', [
+      {
+        targetType: { module: '../classroom', name: 'Classroom' },
+        grants: [
+          { operation: 'read' },
+          { operation: 'delete', where: MISTYPED },
+          { operation: 'update' },
+        ],
+      },
+    ]);
+
+    assert.deepEqual(
+      await grantStatuses(),
+      ['live', 'inactive', 'live'],
+      'the grant that does not compile is inactive, and the others are live',
+    );
+    assert
+      .dom('[data-test-policy-grant-inactive]')
+      .exists({ count: 1 }, 'and it is marked where it is listed');
+    assert
+      .dom('[data-test-policy-grant-status="inactive"] [data-test-operation-grant-operation]')
+      .hasText('delete', 'the marked grant is the delete');
+    assert.dom('[data-test-realm-policy-uncompilable]').doesNotExist();
+
+    assert.dom('[data-test-realm-policy-issues]').exists();
+    assert
+      .dom('[data-test-policy-issue]')
+      .exists({ count: 1 })
+      .hasAttribute('data-test-policy-issue', 'invalid-predicate');
+    assert
+      .dom('[data-test-policy-issue-rule]')
+      .hasText('Classroom', "the issue names its rule's type");
+    assert
+      .dom('[data-test-policy-issue-operation]')
+      .hasText('delete', "and its grant's operation");
+    assert
+      .dom('[data-test-policy-issue-message]')
+      .includesText('does not parse', 'and says what is wrong');
+  });
+
+  test('a query grant whose predicate compiles no search filter is live and not searchable', async function (assert) {
+    await renderPolicyNamed('policies/unfilterable', [
+      {
+        targetType: { module: '../classroom', name: 'Classroom' },
+        grants: [
+          { operation: 'read' },
+          { operation: 'query', where: UNFILTERABLE },
+        ],
+      },
+    ]);
+
+    assert.deepEqual(await grantStatuses(), ['live', 'not-searchable']);
+    assert
+      .dom('[data-test-policy-grant-not-searchable]')
+      .exists({ count: 1 }, 'the query grant says it admits no search');
+    assert
+      .dom('[data-test-policy-grant-inactive]')
+      .doesNotExist('and is not marked inactive');
+    assert
+      .dom('[data-test-policy-issue]')
+      .hasAttribute('data-test-policy-issue', 'policy-not-filterable');
+  });
+
+  test('a rule whose type does not resolve is marked inactive with its grants', async function (assert) {
+    await renderPolicyNamed('policies/unresolved', [
+      {
+        targetType: { module: '../no-such-module', name: 'Nope' },
+        grants: [{ operation: 'read' }],
+      },
+      {
+        targetType: { module: '../classroom', name: 'Classroom' },
+        grants: [{ operation: 'read' }],
+      },
+    ]);
+
+    assert.deepEqual(await grantStatuses(), ['inactive', 'live']);
+    assert
+      .dom('[data-test-policy-rule-inactive]')
+      .exists({ count: 1 }, 'the rule is marked, once');
+    assert
+      .dom('[data-test-policy-grant-inactive]')
+      .doesNotExist('rather than each grant in it');
+    assert
+      .dom('[data-test-policy-issue]')
+      .hasAttribute('data-test-policy-issue', 'unresolved-type');
+    assert.dom('[data-test-policy-issue-rule]').hasText('Nope');
+    assert
+      .dom('[data-test-policy-issue-operation]')
+      .doesNotExist('a rule-level issue names no grant');
+  });
+
+  test('a policy that does not compile at all says so apart from any one grant', async function (assert) {
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'classroom.gts': classroomModule,
+        'policies/broken.json': classroomPolicy,
+      },
+    });
+    getService('operations');
+    let policy = await loadPolicy('policies/broken');
+
+    // The visit that indexes an edit to the card fails for a reason outside
+    // it. The index keeps such a failure off the row, which still holds the
+    // earlier document, so the card still loads.
+    let batch = await new IndexWriter(await getDbAdapter()).createBatch(
+      new URL(testRealmURL),
+      getService('network').virtualNetwork,
+    );
+    await batch.updateEntry(new URL(`${testRealmURL}policies/broken.json`), {
+      type: 'instance-error',
+      error: { message: 'Bad Gateway', status: 502, additionalErrors: null },
+      diagnostics: { gatewayFailure: ['instance'] },
+    });
+    await batch.done();
+
+    await renderCard(loader, policy, 'isolated');
+    await waitFor('[data-test-realm-policy-uncompilable]', { timeout: 10_000 });
+    assert
+      .dom('[data-test-realm-policy-uncompilable]')
+      .includesText('Not in force', 'the whole policy is out of force');
+    assert
+      .dom('[data-test-policy-rule-inactive]')
+      .doesNotExist('which is said once, not on each rule');
+    assert
+      .dom('[data-test-policy-issue]')
+      .hasAttribute('data-test-policy-issue', 'policy-card-unloadable');
+    assert
+      .dom('[data-test-policy-issue-rule]')
+      .doesNotExist('a card-level issue names no rule');
+  });
+
+  test('fixing a grant clears its issue', async function (assert) {
+    let realm = await renderPolicyNamed('policies/fixable', [
+      {
+        targetType: { module: '../classroom', name: 'Classroom' },
+        grants: [{ operation: 'delete', where: MISTYPED }],
+      },
+    ]);
+    assert.deepEqual(await grantStatuses(), ['inactive']);
+
+    await realm.write(
+      'policies/fixable.json',
+      JSON.stringify(
+        policyDocument([
+          {
+            targetType: { module: '../classroom', name: 'Classroom' },
+            grants: [{ operation: 'delete', where: teachesPredicate }],
+          },
+        ]),
+      ),
+    );
+    await waitUntil(
+      () =>
+        document
+          .querySelector('[data-test-policy-grant-status]')
+          ?.getAttribute('data-test-policy-grant-status') === 'live',
+      { timeout: 10_000 },
+    );
+    await settled();
+    assert.deepEqual(await grantStatuses(), ['live'], 'the grant is live');
+    assert
+      .dom('[data-test-realm-policy-issues]')
+      .doesNotExist('and the issue is gone');
+  });
+
+  test('a policy with no issues shows no issue affordance', async function (assert) {
+    await renderPolicyNamed('policies/clean', [
+      {
+        targetType: { module: '../classroom', name: 'Classroom' },
+        grants: [
+          { operation: 'read', where: teachesPredicate },
+          { operation: 'update' },
+        ],
+      },
+    ]);
+
+    assert.deepEqual(
+      await grantStatuses(),
+      ['live', 'live'],
+      'the realm has answered',
+    );
+    assert.dom('[data-test-realm-policy-issues]').doesNotExist();
+    assert.dom('[data-test-realm-policy-uncompilable]').doesNotExist();
+    assert.dom('[data-test-policy-grant-inactive]').doesNotExist();
+    assert.dom('[data-test-policy-grant-not-searchable]').doesNotExist();
+    assert.dom('[data-test-policy-rule-inactive]').doesNotExist();
+    assert.dom('[data-test-realm-policy-validate-failure]').doesNotExist();
   });
 });

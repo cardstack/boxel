@@ -79,20 +79,9 @@ const BULLETIN_MODULE = `
   }
 `;
 
-// A policy type that declares a validate, as a policy card's type does to
-// carry one.
-const VALIDATABLE_POLICY_MODULE = `
-  import { operation } from "@cardstack/base/operations";
-  import { RealmPolicy } from "@cardstack/catalog/realm-policy/realm-policy";
-
-  export class ValidatablePolicy extends RealmPolicy {
-    @operation static validate = { base: 'validate', nonGrantable: true };
-  }
-`;
-
-const VALIDATABLE_POLICY = {
-  module: `${ORG}validatable-policy`,
-  name: 'ValidatablePolicy',
+const REALM_POLICY = {
+  module: rri('@cardstack/catalog/realm-policy/realm-policy'),
+  name: 'RealmPolicy',
 };
 
 type Grant = { operation: string; where?: unknown };
@@ -103,7 +92,7 @@ function policyCard(rules: Rule[]) {
     data: {
       type: 'card',
       attributes: { rules },
-      meta: { adoptsFrom: VALIDATABLE_POLICY },
+      meta: { adoptsFrom: REALM_POLICY },
     },
   });
 }
@@ -130,7 +119,7 @@ const ORG_RULES: Rule[] = [
     grants: [{ operation: 'read' }, { operation: 'validate' }],
   },
   {
-    targetType: VALIDATABLE_POLICY,
+    targetType: REALM_POLICY,
     grants: [{ operation: 'validate' }],
   },
 ];
@@ -201,7 +190,6 @@ module(basename(import.meta.filename), function (hooks) {
               name: 'Org',
               policy: ORG_POLICY_CARD,
             }),
-            'validatable-policy.gts': VALIDATABLE_POLICY_MODULE,
             'policies/education.json': policyCard(CLEAN_RULES),
             'policies/org.json': policyCard(ORG_RULES),
             'notes/n1.json': card(CARD_DEF, { cardInfo: { name: 'A note' } }),
@@ -574,24 +562,8 @@ module(basename(import.meta.filename), function (hooks) {
       );
     });
 
-    test('a policy card whose type declares no validate has none', async function (assert) {
-      await writeTo(
-        org,
-        'policies/plain.json',
-        JSON.stringify({
-          data: {
-            type: 'card',
-            attributes: { rules: CLEAN_RULES },
-            meta: {
-              adoptsFrom: {
-                module: rri('@cardstack/catalog/realm-policy/realm-policy'),
-                name: 'RealmPolicy',
-              },
-            },
-          },
-        }),
-      );
-      let response = await ask(ASKER.orgAdmin(), `${ORG}policies/plain`);
+    test('a card whose type declares no validate has none', async function (assert) {
+      let response = await ask(ASKER.orgAdmin(), `${ORG}notes/n1`);
       assert.strictEqual(response.status, 404, response.text);
       assert.strictEqual(errorOf(response)?.code, 'unknown-operation');
     });
