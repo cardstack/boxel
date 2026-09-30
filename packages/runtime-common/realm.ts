@@ -2511,20 +2511,22 @@ export class Realm {
   #cachedHostRoutingMap: HostRoutingRule[] | null = null;
 
   // What a card's `read` would answer with — whether it carries a transform
-  // stage, and how much of the link graph its declaration carries — by card
-  // URL. Asked by the card+json `GET` before it takes either path that answers
-  // without running the read, and the lookup behind it is a database read — so
-  // on a realm serving conditional requests it would be a round trip added to
-  // exactly the requests that exist to avoid one.
+  // stage, how much of the link graph its declaration carries, and which
+  // prerendered formats it serves data-only — by card URL. Asked by the
+  // card+json `GET` before it takes either path that answers without running
+  // the read, and by the routes that serve a card's markup without running it,
+  // and the lookup behind it is a database read — so on a realm serving
+  // conditional requests it would be a round trip added to exactly the
+  // requests that exist to avoid one.
   //
   // Cleared by `clearRealmIndexCaches()` alongside the entries above, which is
-  // sound because the answer is a function of the card's `adoptsFrom` and its
-  // type's declarations, and neither moves without an index swap — a card's
-  // stored type is changed by a write, and a module's declarations by
-  // reindexing it. A foreign realm's module could change without this realm
-  // swapping, and does not reach this: a card with foreign-realm dependencies
-  // is served no validator at all, so neither fast path is taken and this is
-  // never asked.
+  // sound for the answers `readPlan` keeps: those are a function of the card's
+  // stored type and of declarations in this realm's own modules (or the base
+  // realm's, which change only with a deploy), and neither moves without an
+  // index swap — a card's stored type is changed by a write, and a module's
+  // declarations by reindexing it. A type declared in another realm's module
+  // can change on that realm's schedule, so `readPlan` resolves it afresh on
+  // every ask rather than keeping it here, as it does a path holding no card.
   #readPlanByURL = new Map<string, ReadPlan>();
 
   // This loader is not meant to be used operationally, rather it serves as a

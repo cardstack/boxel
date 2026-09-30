@@ -2,6 +2,7 @@ import { screenshotsMetaFromManifest } from '../capture-spec.ts';
 import { isSingleCardDocument } from '../document-types.ts';
 import {
   canonicalizeTarget,
+  htmlDeclarationOf,
   instanceTargetURL,
   localPathFor,
   newOperationScope,
@@ -10,7 +11,6 @@ import {
 import {
   effectiveLinkStrategy,
   OperationFailure,
-  unshareableFormatsOf,
   type OperationDefinition,
   type OperationDocumentResult,
   type OperationHeadResult,
@@ -22,7 +22,6 @@ import type {
   OperationScope,
   RunOperationOptions,
 } from './dispatch.ts';
-import type { PrerenderedHtmlFormat } from '../prerendered-html-format.ts';
 import type { LinkStrategy } from '@cardstack/base/operations';
 import type { LocalPath } from '../paths.ts';
 import type { SingleFileMetaDocument } from '../document-types.ts';
@@ -93,14 +92,7 @@ export async function readOperation(
   if (opts.headersOnly) {
     return await readHeaders(core, url, localPath, links, scope);
   }
-  return await readDocument(
-    core,
-    url,
-    localPath,
-    links,
-    unshareableFormatsOf(definition.html),
-    opts,
-  );
+  return await readDocument(core, url, localPath, links, opts, scope);
 }
 
 // A declaration may specialize `read` by running a `program` over the target,
@@ -138,11 +130,8 @@ async function readDocument(
   url: URL,
   localPath: LocalPath,
   links: LinkStrategy,
-  // The formats the read declares unshareable. A read serves no markup of its
-  // own, but an errored one carries the card's last-known-good isolated
-  // markup in place of the card, and that is withheld with the rest.
-  unshareableFormats: PrerenderedHtmlFormat[],
   opts: RunOperationOptions,
+  scope: OperationScope,
 ): Promise<OperationDocumentResult> {
   // The index decides first, and the bytes on disk are the fallback — not the
   // other way round. Classifying by the URL's extension before asking would be
@@ -169,6 +158,12 @@ async function readDocument(
     throw await missingTarget(core, url, localPath);
   }
   if (result.type === 'error') {
+    // A read serves no markup of its own, but an errored one carries the
+    // card's last-known-good isolated markup in place of the card. The read
+    // this executor runs for an errored card is the built-in one, since the
+    // card's type is resolved off a healthy row, so what the type withholds is
+    // read off the errored row the realm holds for it.
+    let { unshareableFormats } = await htmlDeclarationOf(core, url, scope);
     throw errorRowFailure(url, result, {
       withholdMarkup: unshareableFormats.includes('isolated'),
     });
