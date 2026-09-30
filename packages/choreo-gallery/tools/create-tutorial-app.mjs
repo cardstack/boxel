@@ -68,12 +68,17 @@ const pack = (name) => {
 };
 
 // A directory outside the checkout doesn't see its .mise.toml, so the app
-// carries the same Node and pnpm pins.
-const tools = Object.fromEntries(
-  [...read('.mise.toml').matchAll(/^(node|pnpm) = "([^"]+)"$/gm)].map(
-    ([, tool, version]) => [tool, version],
-  ),
-);
+// carries the same Node and pnpm pins, and the same minimum mise version.
+const miseConfig = read('.mise.toml');
+const miseValue = (key) => {
+  const value = miseConfig.match(new RegExp(`^${key} = "([^"]+)"$`, 'm'))?.[1];
+  if (!value) {
+    throw new Error(`${key} is not set in .mise.toml`);
+  }
+  return value;
+};
+const tools = { node: miseValue('node'), pnpm: miseValue('pnpm') };
+const miseMinVersion = miseValue('min_version');
 const rootPackage = JSON.parse(read('package.json'));
 const source = JSON.parse(read('packages/choreo-test-app/package.json'));
 const dev = { ...source.devDependencies };
@@ -207,7 +212,7 @@ write(
 );
 write(
   '.mise.toml',
-  `[tools]\nnode = "${tools.node}"\npnpm = "${tools.pnpm}"\n`,
+  `min_version = "${miseMinVersion}"\n\n[tools]\nnode = "${tools.node}"\npnpm = "${tools.pnpm}"\n`,
 );
 
 write(
