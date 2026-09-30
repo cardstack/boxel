@@ -1,0 +1,95 @@
+# Working with parallel Claude sessions
+
+Several Claude Code sessions routinely run against this repo at once, each in
+its own worktree. They can talk to each other directly: `ListAgents` names the
+sessions an agent can reach, and `SendMessage` addresses one by name. That
+costs nothing to set up for sessions on the same machine.
+
+Reaching the sessions running on your _other_ machines — and in the cloud —
+takes one setting per machine. This page is that setup. What the agents then do
+with the channel is the `agent-peer-collaboration` skill's subject, and agent
+sessions load it on their own.
+
+## Why bother
+
+Sessions on one machine contend over local resources: the ports, the Docker
+containers, the single test stack, the realm-server test lane. Sessions on
+different machines share none of that. What they do share is the repo, the pull
+requests, and your account, which is enough for real collisions and real
+corroboration:
+
+- **Duplicate debugging.** A cause that arrives through `main`, a dependency
+  bump, or a broken tool hits every checkout at once. Two sessions on two
+  machines will independently debug it unless one of them asks.
+- **The GitHub API budget** is per user. `gh pr view` and `gh pr checks` draw
+  on one bucket shared by every session on the account; when it empties, every
+  GraphQL-based monitor goes silently blind, on all your machines.
+- **Competing pull requests.** Two sessions can open two PRs for one fix as
+  easily as two worktrees can.
+- **Environmental evidence.** A failure that reproduces on another machine
+  shares no stack, no containers, and no host build with yours, so it rules out
+  local state in a way a same-machine repro cannot. One that reproduces on only
+  one machine names that machine as the suspect.
+
+## Turn it on
+
+Remote Control is what makes a session reachable from outside its own machine.
+Three ways in, from most to least persistent:
+
+| Scope              | How                                                                                                     |
+| ------------------ | ------------------------------------------------------------------------------------------------------- |
+| Every session      | `"remoteControlAtStartup": true` in your user settings, or the `/config` toggle for all sessions        |
+| One live session   | `/remote-control`                                                                                       |
+| A dedicated server | `claude remote-control` in the directory you want to work in (`--spawn=worktree` isolates each session) |
+
+Prerequisites: be logged in with an account that carries a subscription, and
+run `claude` once in the directory so the workspace trust prompt is out of the
+way. Organization policy can disable Remote Control outright, in which case the
+command says so rather than failing quietly.
+
+**Keep the setting in your user settings, not in the repo's.** It makes every
+session in a directory reachable from claude.ai and the Claude mobile app,
+which is a decision each person makes for their own machines. A checked-in
+value would also apply to CI checkouts and to throwaway agent worktrees, which
+have no use for it.
+
+## Give each machine its own session-name prefix
+
+A session's name is its address. Names are generated per session from the
+project, so every session in this repo — on every machine — reads as a
+variation on the same stem, and a listing of a dozen of them tells you nothing
+about where any of them is running. Two that coincide outright have to be
+disambiguated by hand on every send. Prefix each machine's sessions instead:
+
+```json
+{ "remoteControlSessionNamePrefix": "<short-machine-label>" }
+```
+
+The environment variable `CLAUDE_REMOTE_CONTROL_SESSION_NAME_PREFIX` and the
+`--remote-control-session-name-prefix` flag do the same thing. Keep the label
+short — it is a prefix on every session name you will read in a listing.
+
+## Decide what you accept
+
+`crossSessionInbound` governs messages arriving from your other sessions:
+`accept` delivers them, `hold` parks each one for your approval, and `refuse`
+turns the inbox off. A repository that tightens this wins over a personal
+`accept`.
+
+Permission modes interact with it: a session that bypasses permission prompts
+holds messages from a peer that did not attest its own permission mode. So a
+permissive session and a default-mode session will not exchange messages
+freely, and a message can expire unread while waiting for an approval nobody
+is watching for.
+
+## What to expect once it is on
+
+- `ListAgents` labels each row by kind — subagents, sessions on this machine,
+  sessions on other machines, cloud sessions.
+- A session without Remote Control is invisible there. The listing is a floor
+  on who is live, never a roster, so an absence proves nothing about another
+  machine.
+- A peer on the same machine reports back when it refuses or holds a message. A
+  peer on another machine reports nothing at all, so silence from one carries no
+  information in either direction — it is not consent.
+- `notify_when_idle` subscribes only to a session on the same machine.
