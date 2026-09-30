@@ -46,6 +46,7 @@ export {
   scopeCallerFor,
   pathsFor,
   readPlan,
+  resolveFacadeWrite,
   resolveGatedOperation,
   resolveOperation,
   runOperation,
