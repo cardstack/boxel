@@ -67,7 +67,7 @@ CS-13283 (running the imported tests in CI) follows as its own PR.
 - **Template lint is installed but not enforced yet.** The source repo's CI never ran it, and it reports 14 findings, some of them deliberate (inline styles and a `<style>` element in the film components). `ember-template-lint` and its config stay so the pre-commit autofix works. `lint:hbs` joins the `lint` script in CS-13320, which addresses the findings.
 - **Paths:** gallery scripts, tools and the test app's `vite.config.mjs` assumed the source repo's layout (`<root>/test-app/…`). They now use `packages/choreo-test-app/…`. The hand-run tools under `packages/choreo-gallery/tools/` expect to run from the monorepo root.
 - **CI:** `ci-lint.yaml` lints the four packages, building glimmer-motion, choreo-player and the gallery first where dependents type-check against their output.
-- **Lockfile:** besides choreo's own dependencies (44 new name@versions), existing entries across the workspace gain a `(supports-color@8.1.1)` peer suffix. No existing name@version is added or removed, so this is re-keying only.
+- **Lockfile:** regenerated on top of `main`'s lockfile, so every existing workspace package resolves exactly the versions it did before; no name@version is removed. Choreo's own dependencies add 40 name@versions, including a newer embroider build stack (`@embroider/compat` 4.1.25, `core` 4.6.7, `vite` 1.7.13) that only `choreo-test-app` uses. Existing entries also gain a `(supports-color@8.1.1)` peer suffix and some extra peer variants, which is re-keying only.
 
 ## Merge method
 
