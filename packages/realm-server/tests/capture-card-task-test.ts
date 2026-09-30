@@ -22,6 +22,10 @@ module(basename(import.meta.filename), function () {
       await runSharedTest(captureCardTaskTests, assert, {});
     });
 
+    test('a capture that persists renders as a realm-authority session, and one answered only to its requester does not', async function (assert) {
+      await runSharedTest(captureCardTaskTests, assert, {});
+    });
+
     test('refuses a runner with no access to the realm', async function (assert) {
       await runSharedTest(captureCardTaskTests, assert, {});
     });

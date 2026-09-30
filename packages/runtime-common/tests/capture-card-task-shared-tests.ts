@@ -5,8 +5,8 @@ import type {
   QueuePublisher,
 } from '../index.ts';
 import type { SharedTests } from '../helpers/index.ts';
-import type { TaskArgs } from '../tasks/index.ts';
-import { captureCard } from '../tasks/capture-card.ts';
+import type { PrerenderAuthOptions, TaskArgs } from '../tasks/index.ts';
+import { captureCard, type CapturePersistArgs } from '../tasks/capture-card.ts';
 
 const REALM_URL = 'http://localhost:4201/experiments/';
 const CARD_ID = `${REALM_URL}Person/fadhlan`;
@@ -50,6 +50,7 @@ function makeTaskArgs({
   onCreatePrerenderAuth?: (
     userId: string,
     permissions: Record<string, any>,
+    opts?: PrerenderAuthOptions,
   ) => void;
   onPrerenderCapture?: (args: any) => void;
 }): TaskArgs {
@@ -92,22 +93,25 @@ function makeTaskArgs({
     matrixURL: 'http://localhost:8008',
     getReader: () => ({}) as any,
     getAuthedFetch: async () => fetch,
-    createPrerenderAuth: (userId, permissions) => {
-      onCreatePrerenderAuth?.(userId, permissions);
+    createPrerenderAuth: (userId, permissions, opts) => {
+      onCreatePrerenderAuth?.(userId, permissions, opts);
       return 'signed-auth-token';
     },
     reportStatus: () => {},
   };
 }
 
-function capture(taskArgs: TaskArgs) {
+function capture(
+  taskArgs: TaskArgs,
+  persist: CapturePersistArgs | null = null,
+) {
   return captureCard(taskArgs)({
     realmURL: REALM_URL,
     runAs: '@alice:localhost',
     cardId: CARD_ID,
     format: 'isolated',
     captureSpec: null,
-    persist: null,
+    persist,
     surface: 'post',
     loggingCorrelationId: null,
     jobInfo: { id: 1 } as any,
@@ -292,6 +296,49 @@ const tests = Object.freeze({
       'the capture carries the realm’s current loader epoch',
     );
   },
+
+  // A persisted capture is served to every reader of the card, so what its
+  // render's searches find must not depend on who asked for it.
+  'a capture that persists renders as a realm-authority session, and one answered only to its requester does not':
+    async (assert) => {
+      assert.expect(2);
+      let dbRows = [
+        {
+          username: '@alice:localhost',
+          realm_url: REALM_URL,
+          read: true,
+          write: false,
+          realm_owner: false,
+        },
+      ];
+      let minted: (PrerenderAuthOptions | undefined)[] = [];
+      let taskArgs = makeTaskArgs({
+        dbRows,
+        onCreatePrerenderAuth: (_userId, _permissions, opts) => {
+          minted.push(opts);
+        },
+      });
+
+      await capture(taskArgs, {
+        realmURL: REALM_URL,
+        sourceURL: CARD_ID.replace(/\.json$/, ''),
+        captureSpecHash: 'spec-hash',
+        sourceGeneration: 1,
+        lane: 'declared',
+      });
+      await capture(taskArgs);
+
+      assert.deepEqual(
+        minted[0],
+        { realmAuthority: true },
+        'the persisting capture mints realm authority',
+      );
+      assert.strictEqual(
+        minted[1],
+        undefined,
+        "the requester's own capture mints their ordinary session",
+      );
+    },
 
   'refuses a runner with no access to the realm': async (assert) => {
     assert.expect(2);

@@ -194,7 +194,15 @@ const captureCard: Task<CaptureCardArgs, CapturePrerenderResponse> = ({
         userId: runAsUserId,
       });
       allUserPermissions[normalizedRealmURL] = userPermissions;
-      let auth = createPrerenderAuth(runAsUserId, allUserPermissions);
+      // A capture that persists is served from the MediaCache to every reader
+      // of the card, so it renders as a realm-authority session: no policy
+      // scopes what its searches find. One answered only to its requester is
+      // that requester's.
+      let auth = createPrerenderAuth(
+        runAsUserId,
+        allUserPermissions,
+        persist ? { realmAuthority: true } : undefined,
+      );
       permissionsMs = Date.now() - permissionsStart;
 
       // A capture reuses a pooled prerender page that may still hold a module

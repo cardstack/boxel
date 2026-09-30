@@ -57,6 +57,11 @@ class MockOperatorModeStateService extends Service {
     return 2;
   }
 
+  // Every realm here is one the user may read.
+  codeSubmodeOffered() {
+    return true;
+  }
+
   async createStackItem(
     id: string,
     stackIndex: number,

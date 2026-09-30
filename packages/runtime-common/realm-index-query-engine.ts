@@ -196,7 +196,10 @@ type Options = {
   // `omitIncluded`, which skips the pass and leaves the stored links standing
   // on each item, this withholds even which cards an item points at. It
   // narrows the item and never the entry: the entry still names its item and
-  // carries its renderings. Read by `searchEntries` alone.
+  // carries its renderings. Each item it narrows is marked
+  // `meta.relationshipsWithheld`, so a consumer that keeps full items as live
+  // instances can tell one silent about its links from one that has none.
+  // Read by `searchEntries` alone.
   omitRelationships?: boolean;
   // Per-request wall-clock collector, threaded from `searchRealms` when a
   // request carries a correlation id. The post-SQL stages here — the SQL
@@ -2722,13 +2725,17 @@ function enumerateFileRenderings(file: IndexedFile): RowRendering[] {
   return candidates;
 }
 
-// An item with its relationships taken off. A shallow copy, so the row the
+// An item with its relationships taken off, and marked as withheld so it is
+// never read as a card that links to nothing. A shallow copy, so the row the
 // item was built from keeps its own.
 function withoutRelationships<T extends CardResource<Saved> | FileMetaResource>(
   item: T,
 ): T {
   let { relationships: _withheld, ...rest } = item;
-  return rest as T;
+  return {
+    ...rest,
+    meta: { ...rest.meta, relationshipsWithheld: true },
+  } as T;
 }
 
 // Takes the narrow shape rather than a full `IndexedFile`, which is a

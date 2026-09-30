@@ -249,6 +249,7 @@ export function createRoutes(args: CreateRoutesArgs) {
     multiRealmAuthorization(args, { unreadableRealms: 'carry' }),
     handleSearch({
       reconciler: args.reconciler,
+      realmsRootPath: args.realmsRootPath,
       searchCache,
       dbAdapter: args.dbAdapter,
       virtualNetwork: args.virtualNetwork,

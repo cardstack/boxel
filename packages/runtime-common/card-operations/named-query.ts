@@ -1,13 +1,18 @@
 import { isCodeRef } from '../card-document-shape.ts';
 import type { CodeRef } from '../code-ref.ts';
 import { ensureTrailingSlash } from '../paths.ts';
-import type { SearchEntryWireQuery } from '../search-entry.ts';
+import {
+  wireFilterGrantTypes,
+  type SearchEntryWireFilter,
+  type SearchEntryWireQuery,
+} from '../search-entry.ts';
 import {
   newOperationScope,
   resolveOperation,
   scopeCallerFor,
   type OperationCore,
 } from './dispatch.ts';
+import type { SearchPrincipal } from './policy-query.ts';
 import { lowerQueryOperation } from './query.ts';
 import { linkStrategyOf, OperationFailure } from './types.ts';
 import type { LinkStrategy } from '@cardstack/base/operations';
@@ -63,22 +68,76 @@ export function namedQueryInvocation(
     : undefined;
 }
 
+// What a search asks a realm's policy to grant: an operation, on the types
+// whose rules are consulted for it.
+export interface SearchInvocation {
+  // The name a grant must carry to contribute. A named query's own name, or
+  // the base name `query` for an ad-hoc search.
+  operation: string;
+  // The one type a named query is declared on, or each type an ad-hoc
+  // search's filter anchors to. Empty where the filter admits an entry of any
+  // type, since then there is no type whose rules to consult.
+  types: CodeRef[];
+}
+
+// The invocation a search request makes, read off the request before a named
+// query resolves.
+//
+// An ad-hoc search is a filter the caller wrote, and it is still an
+// invocation: of `query`, on the type it targets. Were it none, it would be
+// the hole in every named-query grant, since a caller granted a declared
+// search could write the same filter by hand and be served its rows. Granting
+// a named query grants that saved search, and not the freedom to enumerate
+// its type. No declaration may take the name, so the two never share a grant.
+//
+// The types are the filter's `item.on` anchors (see `wireFilterGrantTypes`):
+// every entry the filter matches adopts from at least one of them. That is
+// what makes judging the search by their rules sound. A match is always of a
+// type one of them names, so a rule consulted for that anchor is one whose
+// type the match descends from, as it would be were the gate judging the
+// match itself. And every anchor a match is known to adopt from is kept, so
+// two filters matching the same cards are judged alike however their branches
+// are ordered.
+//
+// A named request whose members are not what they must be is no invocation:
+// resolving it refuses it before anything consults a policy. An ad-hoc filter
+// that does not parse is refused by the parser, after this has read it, so an
+// anchor that is not a code ref is read as no anchor at all.
+export function searchInvocation(
+  payload: unknown,
+): SearchInvocation | undefined {
+  if (isNamedQueryPayload(payload)) {
+    let named = namedQueryInvocation(payload);
+    return named
+      ? { operation: named.operation, types: [named.on] }
+      : undefined;
+  }
+  let filter = isPlainRecord(payload) ? payload.filter : undefined;
+  let anchors = isPlainRecord(filter)
+    ? wireFilterGrantTypes(filter as SearchEntryWireFilter)
+    : undefined;
+  return {
+    operation: 'query',
+    types: anchors?.every((anchor) => isCodeRef(anchor)) ? anchors : [],
+  };
+}
+
 export interface NamedQueryContext {
-  // The user the realm authenticated for this request, and the only value
+  // Who the realm authenticated for this request. A user is the only value
   // `actor()` resolves to. Absent when the request authenticated nobody, which
   // refuses only a declaration that compares against the caller.
-  actor: string | undefined;
+  //
+  // A realm-authority principal has no actor either. It is a render, and what
+  // a render produces is served to every viewer, so a declaration compared
+  // against the identity it reads as would put one user's rows into shared
+  // HTML. It is refused as a request that
+  // authenticated nobody is — the rule the host applies to the same query
+  // before it would send it from a render.
+  principal: SearchPrincipal | undefined;
   // The realms this request may search. On the federated endpoint these are
   // the realms the request named, each already authorized for the caller; on
   // a realm's own endpoint, that realm.
   realms: string[];
-  // Set for a request a render is waiting on. Such a request has no actor: the
-  // app authenticates as itself to render, and what a render produces is
-  // served to every viewer, so a declaration compared against the render's own
-  // identity would put one user's rows into shared HTML. It is refused as a
-  // request that authenticated nobody is — the rule the host applies to the
-  // same query before it would send it.
-  duringRender?: boolean;
 }
 
 // What a named search request resolves to: the ad-hoc query it runs, and how
@@ -139,7 +198,8 @@ export async function resolveNamedQuery(
       `"params" must be an object keyed the way operation "${operation}" declares them`,
     );
   }
-  let actor = context.duringRender ? undefined : context.actor;
+  let actor =
+    context.principal?.kind === 'user' ? context.principal.user : undefined;
   let scope = newOperationScope(core, {
     caller: scopeCallerFor(actor ?? ''),
   });
@@ -188,10 +248,14 @@ export async function resolveNamedQuery(
 
 // A named search as the ad-hoc request that asks for its rendering and nothing
 // else: the fieldset and the `htmlQuery` binding, which are what an answer
-// with no rows carries of the request. For a request whose declaration there
-// is no realm to resolve through — every realm it names is one nothing is
-// served from — so that it is answered with the document a search of those
-// realms matching nothing would give.
+// with no rows carries of the request. For a request no realm it names can
+// answer a row to, so that it is answered with the document a search of those
+// realms matching nothing would give without its declaration being read.
+//
+// The request it returns carries no filter, so it may only be searched where
+// no realm is read by the caller or scoped by a policy: every realm must
+// answer it as one holding nothing for the caller does. Run against a realm
+// that serves rows, it would match every row that realm holds.
 export function namedQueryRendering(
   payload: Record<string, unknown>,
 ): Record<string, unknown> {

@@ -20,7 +20,6 @@ import {
 import { NodeAdapter } from './node-realm.ts';
 import yargs from 'yargs';
 import { RealmServer } from './server.ts';
-import { join } from 'path';
 import * as Sentry from '@sentry/node';
 import { PgAdapter, PgQueuePublisher } from '@cardstack/postgres';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
@@ -42,6 +41,7 @@ import {
   RealmRegistryReconciler,
   type RealmRegistryRow,
 } from './lib/realm-registry-reconciler.ts';
+import { realmDiskPath } from './lib/realm-disk-path.ts';
 import { findOrMountRealm } from './lib/realm-routing.ts';
 import { RealmFileChangesListener } from './lib/realm-file-changes-listener.ts';
 import { RealmIndexUpdatedListener } from './lib/realm-index-updated-listener.ts';
@@ -55,7 +55,6 @@ import { startEventLoopHeartbeat } from './liveness/event-loop-heartbeat.ts';
 import { startLivenessResponder } from './liveness/index.ts';
 import { resolveFullIndexOnStartup } from './lib/full-index-on-startup.ts';
 import { systemInitiatedIndexPriority } from '@cardstack/runtime-common/jobs/indexing';
-import { PUBLISHED_DIRECTORY_NAME } from '@cardstack/runtime-common';
 
 // FD-level synchronous stderr write — `writeSync(2, ...)` calls the
 // write(2) syscall directly, bypassing Node's stream layer.
@@ -639,13 +638,14 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
   reconciler = new RealmRegistryReconciler({
     dbAdapter,
     prepareRealmFromRow: (row: RealmRegistryRow) => {
-      let diskPath: string;
-      if (row.kind === 'bootstrap') {
-        diskPath = row.disk_id;
-      } else if (row.kind === 'source') {
-        diskPath = join(realmsRootPath, row.disk_id);
-      } else {
-        diskPath = join(realmsRootPath, PUBLISHED_DIRECTORY_NAME, row.disk_id);
+      // The directory `mayNameRealmPolicy` reads a realm's `realm.json` from
+      // to decide whether to mount it, so the file it reads is the one the
+      // mounted realm reads its policy pointer from.
+      let diskPath = realmDiskPath(row, realmsRootPath);
+      if (!diskPath) {
+        throw new Error(
+          `the disk_id of ${row.url} does not resolve to a directory under the realms root`,
+        );
       }
       const reconciledAdapter = new NodeAdapter(diskPath, ENABLE_FILE_WATCHER);
       let fullIndexOnStartup = resolveFullIndexOnStartup(

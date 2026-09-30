@@ -218,6 +218,14 @@ export default class SubmodeLayout extends Component<Signature> {
     return this.store.peek(stackItem.id)?.id;
   }
 
+  // Switching to code mode opens the right-most stack's last card, or the
+  // current realm when no card is open (see `updateSubmode`).
+  private get codeSubmodeOffered() {
+    return this.operatorModeStateService.codeSubmodeOffered(
+      this.lastCardIdInRightMostStack ?? this.lastStackItem?.id,
+    );
+  }
+
   private get isToggleWorkspaceChooserDisabled() {
     return this.operatorModeStateService.state.stacks.length === 0;
   }
@@ -483,6 +491,7 @@ export default class SubmodeLayout extends Component<Signature> {
                 class='submode-switcher'
                 @isCollapsed={{this.submodeSwitcherCollapsed}}
                 @submode={{this.operatorModeStateService.state.submode}}
+                @codeSubmodeOffered={{this.codeSubmodeOffered}}
                 @onSubmodeSelect={{this.updateSubmode}}
               />
               {{#if @newFileOptions}}

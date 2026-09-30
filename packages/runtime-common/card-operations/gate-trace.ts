@@ -19,8 +19,8 @@ export type GateTraceRefusal =
   // An operation no policy may grant: declared `nonGrantable` on the target's
   // type or one it descends from, or a behavior no grant reaches here.
   | 'non-grantable'
-  // A write to the realm's policy card or to its config card, or a write
-  // that changes or mints any policy card.
+  // Any operation on the realm's policy card or on its config card, or one
+  // that reads, changes or mints any policy card.
   | 'authorization-infrastructure'
   // The target is nothing a rule can be matched against for this operation:
   // a card whose index row records an error, so its type is unknown; a file,

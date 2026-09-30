@@ -392,7 +392,9 @@ const prerenderHtml: Task<PrerenderHtmlArgs, PrerenderHtmlResult> = ({
       permissions,
       realmURL,
     );
-    let auth = createPrerenderAuth(userId, prerenderPermissions);
+    let auth = createPrerenderAuth(userId, prerenderPermissions, {
+      realmAuthority: true,
+    });
 
     let _fetch = await getAuthedFetch(args);
     let reader = getReader(_fetch, realmURL);
