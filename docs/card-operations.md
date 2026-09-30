@@ -929,7 +929,7 @@ reads one has to say so:
 An annotated predicate is judged against the snapshot: the stored source with
 the card's index row laid under it. The stored source still answers wherever it
 holds a value, so only the computed values and linked cards' fields come from
-the row. **This is a window, and the annotation is how you accept it.** If
+the row, and a computed value always comes from the row. **This is a window, and the annotation is how you accept it.** If
 `headTeacher` is computed from the roster, taking someone off the roster does
 not stop the grant admitting them until the classroom is indexed again. That
 holds at the gate and under the write lock alike: a write's predicate reads the
@@ -953,6 +953,8 @@ The policy records which tier each `where` reads when it compiles, as
 - A `where` that reads a computed value or a linked card's field without the
   annotation.
 - A `where` that reads a value no snapshot holds, annotated or not.
+- An annotated `where` on `create` that reads a computed value or a linked
+  card's field, which could never admit.
 
 An annotated `where` that reads only the stored source is judged against the
 stored source and pays no index read. Where a `where` reads a value whole

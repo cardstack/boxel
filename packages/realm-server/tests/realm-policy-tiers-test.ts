@@ -32,6 +32,10 @@ const ADDRESS: ResolvedCodeRef = {
   module: rri(`${EDUCATION}address`),
   name: 'Address',
 };
+const FLAGS: ResolvedCodeRef = {
+  module: rri(`${EDUCATION}flags`),
+  name: 'Flags',
+};
 const ACTIVITY: ResolvedCodeRef = {
   module: rri(`${EDUCATION}activity`),
   name: 'Activity',
@@ -95,11 +99,12 @@ function definition(
   };
 }
 
-// A classroom stores its status, its roster of teacher ids, an address and a
-// list of activities, and links to a lead teacher (searchable), a mentor (not
-// searchable), its teachers (a list of links) and a query-filled roll. Its
-// summary is computed, as is a line of its address and a label on each
-// activity. A person links to their school.
+// A classroom stores its status, its roster of teacher ids, an address, its
+// flags and a list of activities, and links to a lead teacher (searchable), a
+// mentor (not searchable), a coach (annotated `searchable` with no route), its
+// teachers (a list of links) and a query-filled roll. Its summary is
+// computed, as is a line of its address, the first of its flags and a label
+// on each activity. A person links to their school.
 const DEFINITIONS = new Map<string, Definition>([
   [
     CLASSROOM.name,
@@ -113,8 +118,10 @@ const DEFINITIONS = new Map<string, Definition>([
         isPrimitive: false,
         fieldOrCard: ACTIVITY,
       }),
+      flags: compound(FLAGS),
       lead: link(PERSON, 'linksTo', { searchable: true }),
       mentor: link(PERSON, 'linksTo'),
+      coach: link(PERSON, 'linksTo', { searchable: [] }),
       teachers: link(PERSON, 'linksToMany', { searchable: true }),
       honorRoll: link(PERSON, 'linksToMany', {
         query: { filter: { type: PERSON } },
@@ -128,6 +135,17 @@ const DEFINITIONS = new Map<string, Definition>([
       {
         street: field('contains'),
         line: field('contains', { isComputed: true }),
+      },
+      'field-def',
+    ),
+  ],
+  [
+    FLAGS.name,
+    definition(
+      FLAGS,
+      {
+        verified: field('contains', { isComputed: true }),
+        note: field('contains'),
       },
       'field-def',
     ),
@@ -246,6 +264,8 @@ const STORED = [
   '.status | ascii_downcase == "open"',
   'has("status")',
   '.teacherIds[0] == realmConfig("approver")',
+  '.status | IN("open", "closed")',
+  '.flags.note',
 ];
 
 // Predicates that read a computed value or a linked card's field, each of
@@ -268,12 +288,21 @@ const SNAPSHOT: [string, RegExp][] = [
   ['tostring | length > 0', /`\.` is read whole/],
   ['[.[]] | length > 0', /`\.` is read whole/],
   ['with_entries(select(.value == 1)) | length > 0', /`\.` is read whole/],
+  // A predicate holds where its output is `true`, so its output is read.
+  ['first(.flags[])', /`\.flags` is read whole/],
+  ['.flags | first(.[])', /`\.flags` is read whole/],
+  ['[.flags[]][0]', /`\.flags` is read whole/],
+  ['.flags.verified', /`\.flags\.verified` is computed/],
+  // `IN` compares its input whole with each value it is given.
+  ['.flags | IN({ verified: null, note: null })', /`\.flags` is read whole/],
+  ['.lead | IN({ id: "x" })', /`\.lead` is read whole/],
 ];
 
 // Predicates that read a value outside the stored source that no snapshot
 // holds, so the annotation cannot supply it.
 const UNHELD: [string, RegExp][] = [
   ['.mentor.name == "Ada"', /`\.mentor` is not marked `searchable`/],
+  ['.coach.name == "Ada"', /`\.coach` is not marked `searchable`/],
   ['.teachers | any(.name == "Ada")', /`\.teachers` is a list of links/],
   ['.activities | any(.label == "trip")', /computed inside a list/],
   ['.honorRoll | length > 0', /`\.honorRoll` is filled by a query/],
@@ -365,6 +394,29 @@ module(basename(import.meta.filename), function () {
           snapshot: undefined,
         },
       ],
+    );
+  });
+
+  test('a create grant judged against the snapshot records `unsnapshotted-policy-read`, since the card a create mints has no index row', async function (assert) {
+    let policy = await compile([
+      {
+        operation: 'create',
+        where: { bxl: '.summary == actor()', snapshot: true },
+      },
+      { operation: 'create', where: '.status == "open"' },
+    ]);
+    assert.deepEqual(
+      policy.issues.map(({ code, path }) => ({ code, path })),
+      [{ code: 'unsnapshotted-policy-read', path: 'rules[0].grants[0].where' }],
+    );
+    assert.true(
+      /judged by the card it would mint/.test(policy.issues[0]?.message ?? ''),
+      policy.issues[0]?.message,
+    );
+    assert.deepEqual(
+      policy.rules[0].grants.map(({ path }) => path),
+      ['rules[0].grants[1]'],
+      'a create grant that reads the stored source compiles',
     );
   });
 

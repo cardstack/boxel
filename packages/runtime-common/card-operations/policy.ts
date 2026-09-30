@@ -775,6 +775,17 @@ async function compilePolicy(
         continue;
       }
       let snapshot = where.snapshot && tiers.snapshot !== undefined;
+      // A plain create is judged by the card it would mint, which has no
+      // index row until it is written, so a grant judged against the
+      // snapshot would never admit one.
+      if (snapshot && tiers.snapshot && operation === 'create') {
+        issue(
+          'unsnapshotted-policy-read',
+          `${grantPath}.where`,
+          `\`where\` reads \`.${tiers.snapshot.path}\`, which no snapshot holds for a create: \`create\` is judged by the card it would mint, which the index holds nothing of until it is written`,
+        );
+        continue;
+      }
       grants.push(
         await withFilter(
           {

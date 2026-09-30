@@ -430,7 +430,9 @@ export type PolicyIssueCode =
   // the `snapshot` annotation, or that reads one no snapshot holds: a linked
   // card's field behind a list of links, a link not marked `searchable`, or a
   // link inside a contained value, a computed value inside a list, or a
-  // relationship a query fills. The grant is left out in both lanes.
+  // relationship a query fills. Also a `create` grant whose `where` is judged
+  // against the snapshot, since the card a create mints has no index row. The
+  // grant is left out in both lanes.
   | 'unsnapshotted-policy-read'
   // A grant on a type whose representation links to cards of types the
   // policy grants nothing on, so the grant reaches those cards too. Reserved:

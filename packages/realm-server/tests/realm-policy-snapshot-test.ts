@@ -13,6 +13,11 @@ import type {
   Realm,
 } from '@cardstack/runtime-common';
 import {
+  dischargePendingDecision,
+  newOperationScope,
+  pendingWriteFor,
+  resolveGatedOperation,
+  scopeCallerFor,
   setPolicySnapshotReadSink,
   type PolicySnapshotReadEvent,
 } from '@cardstack/runtime-common/card-operations';
@@ -54,6 +59,7 @@ const REALM_POLICY = {
 };
 const CLASSROOM = { module: `${EDUCATION}classroom`, name: 'Classroom' };
 const BULLETIN = { module: `${EDUCATION}bulletin`, name: 'Bulletin' };
+const OFFICE = { module: `${EDUCATION}office`, name: 'Office' };
 
 const TEACHER_MODULE = `
   import { contains, field, CardDef } from "@cardstack/base/card-api";
@@ -98,6 +104,24 @@ const BULLETIN_MODULE = `
   }
 `;
 
+// An office's desk is a contained value, whose nameplate is computed from its
+// occupant.
+const OFFICE_MODULE = `
+  import { contains, field, CardDef, FieldDef } from "@cardstack/base/card-api";
+  import StringField from "@cardstack/base/string";
+  export class Desk extends FieldDef {
+    @field occupant = contains(StringField);
+    @field nameplate = contains(StringField, {
+      computeVia: function (this: Desk) {
+        return this.occupant;
+      },
+    });
+  }
+  export class Office extends CardDef {
+    @field desk = contains(Desk);
+  }
+`;
+
 const HEADS = { bxl: '.headTeacher == actor()', snapshot: true };
 const LEADS = { bxl: '.lead.handle == actor()', snapshot: true };
 const AUTHORS = '.authorIds | any(. == actor())';
@@ -106,9 +130,11 @@ type Grant = { operation: string; where?: unknown };
 type Rule = { targetType: { module: string; name: string }; grants: Grant[] };
 
 // A classroom is read by its head teacher, or by the teacher it links to as
-// its lead, and renamed and created by its head teacher: each judged against
-// the snapshot. A bulletin is read and deleted by its authors, judged against
-// its stored source.
+// its lead, and renamed by its head teacher: each judged against the
+// snapshot. Its create grant is judged against the snapshot too, which a
+// create cannot be. A bulletin is read and deleted by its authors, judged
+// against its stored source. An office is read by whoever its desk's
+// nameplate names.
 const RULES: Rule[] = [
   {
     targetType: CLASSROOM,
@@ -124,6 +150,15 @@ const RULES: Rule[] = [
     grants: [
       { operation: 'read', where: AUTHORS },
       { operation: 'delete', where: AUTHORS },
+    ],
+  },
+  {
+    targetType: OFFICE,
+    grants: [
+      {
+        operation: 'read',
+        where: { bxl: '.desk.nameplate == actor()', snapshot: true },
+      },
     ],
   },
 ];
@@ -217,6 +252,13 @@ module(basename(import.meta.filename), function (hooks) {
             'teacher.gts': TEACHER_MODULE,
             'classroom.gts': CLASSROOM_MODULE,
             'bulletin.gts': BULLETIN_MODULE,
+            'office.gts': OFFICE_MODULE,
+            'offices/o1.json': card('../office', 'Office', {
+              desk: { occupant: TEACHER },
+            }),
+            'offices/o2.json': card('../office', 'Office', {
+              desk: { occupant: COLLEAGUE },
+            }),
             'teachers/ada.json': card('../teacher', 'Teacher', {
               handle: '@ada:localhost',
             }),
@@ -392,7 +434,15 @@ module(basename(import.meta.filename), function (hooks) {
 
   test('an annotated predicate compiles and is judged against the snapshot', async function (assert) {
     let policy = await education.getCompiledPolicy();
-    assert.deepEqual(policy?.issues, [], 'the policy compiles cleanly');
+    assert.deepEqual(
+      policy?.issues.map(({ code, path }) => ({ code, path })),
+      [{ code: 'unsnapshotted-policy-read', path: 'rules[0].grants[3].where' }],
+      'the create grant judged against the snapshot is recorded, since the card a create mints has no index row',
+    );
+    assert.true(
+      /judged by the card it would mint/.test(policy?.issues[0]?.message ?? ''),
+      `the issue says why: ${policy?.issues[0]?.message}`,
+    );
     assert.deepEqual(
       policy?.rules.map((rule) =>
         rule.grants.map(({ operation, where }) => [operation, where?.snapshot]),
@@ -402,13 +452,131 @@ module(basename(import.meta.filename), function (hooks) {
           ['read', true],
           ['read', true],
           ['rename', true],
-          ['create', true],
         ],
         [
           ['read', false],
           ['delete', false],
         ],
+        [['read', true]],
       ],
+      'every other grant compiles',
+    );
+  });
+
+  test('a computed value inside a contained value is read from the index row', async function (assert) {
+    assert.strictEqual(
+      (await getCard(`${EDUCATION}offices/o1`, AUTH.teacher())).status,
+      200,
+      'the teacher reads the office whose desk the index says bears their nameplate',
+    );
+    assert.strictEqual(
+      (await getCard(`${EDUCATION}offices/o2`, AUTH.teacher())).status,
+      404,
+      'and not the colleague’s',
+    );
+  });
+
+  test('a row that expanded a card the link no longer names says nothing about the card it names now', async function (assert) {
+    assert.strictEqual(
+      (await getCard(ROOM_2, AUTH.teacher())).status,
+      200,
+      'the teacher reads room 2 as the lead the row expanded',
+    );
+    // Room 2's row keeps the teacher's handle, but as the expansion of a
+    // different card than the one its stored link names.
+    await db.execute(
+      `UPDATE boxel_index
+       SET search_doc = jsonb_set(search_doc, '{lead,id}', '${JSON.stringify(`${EDUCATION}teachers/ada`)}'::jsonb)
+       WHERE file_alias = '${ROOM_2}' AND type = 'instance'`,
+    );
+    assert.strictEqual(
+      (await getCard(ROOM_2, AUTH.teacher())).status,
+      404,
+      'the handle is not read as the linked card’s',
+    );
+  });
+
+  test('a computed value is the index row’s to answer, whatever the stored source holds under its key', async function (assert) {
+    // A hand-written `.json` that holds a value under the computed key. The
+    // serializer never writes one, so only a raw write can.
+    await education.write(
+      'classrooms/room-3.json',
+      JSON.stringify({
+        data: {
+          type: 'card',
+          attributes: {
+            title: 'Room 3',
+            teacherIds: [COLLEAGUE],
+            headTeacher: TEACHER,
+          },
+          meta: { adoptsFrom: { module: '../classroom', name: 'Classroom' } },
+        },
+      }),
+    );
+    await education.indexing();
+    assert.strictEqual(
+      (await getCard(ROOM_3, AUTH.teacher())).status,
+      404,
+      'the stored key does not admit the teacher',
+    );
+    assert.strictEqual(
+      (await getCard(ROOM_3, AUTH.colleague())).status,
+      200,
+      'the head teacher the index computed is admitted',
+    );
+  });
+
+  test('under the write lock, a card with no index row has no snapshot, and the grant does not hold', async function (assert) {
+    let core = education.operationCore;
+    let scope = newOperationScope(core, {
+      caller: scopeCallerFor(TEACHER),
+      coarseDeclined: 'all',
+    });
+    let target = { kind: 'instance' as const, url: ROOM_1 };
+    let { decision } = await resolveGatedOperation(
+      core,
+      target,
+      'rename',
+      scope,
+    );
+    assert.strictEqual(
+      decision.kind,
+      'pending',
+      'the rename rests on its predicate',
+    );
+    let pending = pendingWriteFor(target, 'rename', decision, scope);
+    if (!pending) {
+      throw new Error('expected the gate to leave the rename to the lock');
+    }
+    // The row goes between the gate's decision and the lock's.
+    await db.execute(
+      `UPDATE boxel_index SET is_deleted = TRUE
+       WHERE file_alias = '${ROOM_1}' AND type = 'instance'`,
+    );
+    await assert.rejects(
+      dischargePendingDecision(core, pending, {
+        id: ROOM_1,
+        source: classroom('Room 1', [TEACHER], 'ada'),
+      }),
+      (e: any) => e.error?.code === 'operation-not-permitted',
+      'the lock refuses the write',
+    );
+    assert.deepEqual(
+      reads.map(({ grant, outcome, decidedAt, indexed }) => ({
+        grant,
+        outcome,
+        decidedAt,
+        indexed,
+      })),
+      [
+        {
+          grant: 'rules[0].grants[2]',
+          outcome: 'did-not-hold',
+          decidedAt: 'lock',
+          indexed: false,
+        },
+      ],
+      'and records a snapshot read of a card that had no row',
     );
   });
 
