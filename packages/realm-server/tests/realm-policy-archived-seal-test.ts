@@ -510,6 +510,7 @@ module(basename(import.meta.filename), function (hooks) {
       'a named search',
       'a batch that reads',
       'a batch that writes',
+      'a batch that creates',
       'a capability check',
       'a card+json update',
       'a card+json delete',
@@ -536,18 +537,6 @@ module(basename(import.meta.filename), function (hooks) {
       200,
       'an empty batch runs nothing, so it is the no-op it is while active',
     );
-    // What a create's predicate judges is the card it would mint, which does
-    // not exist until the batch stages it, and an archived realm stages
-    // nothing. So the create is refused as one no grant admits.
-    assert.strictEqual(
-      archived['a batch that creates'].status,
-      404,
-      'a create whose predicate reads the card it would mint is refused, not sealed',
-    );
-    assert.notOk(
-      archived['a batch that creates'].get('X-Boxel-Realm-Archived'),
-      'and the refusal is not the seal',
-    );
 
     await unarchiveRealm(db, new URL(EDUCATION));
     assert.strictEqual(
@@ -556,6 +545,15 @@ module(basename(import.meta.filename), function (hooks) {
       'the rename, the update and the delete never ran',
     );
     assert.strictEqual(await minted(CLASSROOM), 0, 'nor did the create');
+    let created = await search(
+      bearer(ADMIN, ['read', 'write', 'realm-owner']),
+      { filter: { 'item.on': CLASSROOM, eq: { 'item.title': 'Room 301' } } },
+    );
+    assert.deepEqual(
+      JSON.parse(created.text).data,
+      [],
+      'and the create never ran',
+    );
   });
 
   test('a card+json write the gate grants outright meets the seal, and nothing is written', async function (assert) {

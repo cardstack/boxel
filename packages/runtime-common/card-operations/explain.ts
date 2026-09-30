@@ -13,6 +13,9 @@ import {
 } from './dispatch.ts';
 import { GateTrace } from './gate-trace.ts';
 import {
+  GATE_FAULTED,
+  GATE_REFUSED,
+  gateRefusal,
   namesPolicyCard,
   pendingWriteHolds,
   type GateDecision,
@@ -250,9 +253,12 @@ async function explain(
     // a 500 where a predicate threw and none held, and otherwise the gate's
     // own refusal.
     let threw = [...trace.outcomes.values()].includes('threw');
-    let refusal: OperationError = threw
-      ? { status: 500, code: 'internal-error', title: '', detail: '' }
-      : { status: 403, code: 'operation-not-permitted', title: '', detail: '' };
+    let refusal = gateRefusal(
+      core,
+      threw ? GATE_FAULTED : GATE_REFUSED,
+      target,
+      question.operation,
+    ).error;
     return refused(
       explained,
       refusalReason(trace, refusal.status),

@@ -550,10 +550,11 @@ module(basename(import.meta.filename), function (hooks) {
         throwing.rules[0].grants.map((grant) => grant.outcome),
         ['threw', 'not-evaluated'],
       );
-      assert.deepEqual(throwing.refusal, {
-        status: 500,
-        code: 'internal-error',
-      });
+      assert.deepEqual(
+        throwing.refusal,
+        { status: 404, code: 'target-not-found' },
+        'the teacher may not read the realm, so they are told the card is not there',
+      );
     });
 
     test('a write resting on a predicate is judged against the card as it is stored', async function (assert) {
