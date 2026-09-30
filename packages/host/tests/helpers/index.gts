@@ -2486,7 +2486,7 @@ export function realmConfigCardJSON(
     iconURL?: string;
     backgroundURL?: string;
     includePrerenderedDefaultRealmIndex?: boolean;
-    // The URL of the realm's policy card.
+    // The URL of the card whose policy governs the realm.
     policy?: string;
   } = {},
 ): string {
