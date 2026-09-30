@@ -979,10 +979,10 @@ governs sees a policy without that grant, and nothing fails. A validate is how
 the card tells its author which of its grants are live.
 
 A policy card type declares one, named `validate`, on the `validate` base, with
-`nonGrantable: true` and nothing else. It takes no payload. Invoked on the
-policy card, it compiles the card exactly as a realm naming it compiles it,
-from what the card's latest index visit recorded, and answers with what that
-compile found:
+`nonGrantable: true` and nothing else. It takes no payload, so a declaration
+carrying `params` or `input` is refused. Invoked on the policy card, it
+compiles the card exactly as a realm naming it compiles it, from what the
+card's latest index visit recorded, and answers with what that compile found:
 
 ```ts
 let validation = await operations<typeof RealmPolicy>(policy).validate();
@@ -997,35 +997,60 @@ let validation = await operations<typeof RealmPolicy>(policy).validate();
 
 Some things worth knowing before you read one:
 
-- **A grant missing from `rules` is inactive.** An issue says why. The one
-  issue that leaves its grant live is `policy-not-filterable`: a grant on a
-  query whose predicate does not compile to a search filter admits no search.
+- **A grant missing from `rules` is inactive.** An issue says why.
+- **A grant in `rules` can still admit nothing, and says so with
+  `admitsNothing`.** `unfilterable` is a grant on a query whose predicate
+  compiled no search filter, which `policy-not-filterable` explains: a query is
+  authorized only by composing a grant's filter into the search, so such a
+  grant has nothing to compose. `snapshot` is a grant on anything but a query
+  whose predicate is annotated as reading a snapshot tier, which the gate never
+  evaluates. On a query, the same annotation compiles into the search filter
+  and admits what it matches.
 - **An uncompilable policy is different in kind.** A policy with one inactive
   grant denies that grant. A policy that did not compile at all denies
   everything it would have granted, and a realm naming it answers every
-  signed-in caller its ACL declines with a 500 until it is fixed. The card-level issue says why: most
-  often, the card's latest index visit failed and what the index holds is an
-  earlier visit's.
+  signed-in caller its ACL declines with a 500 until it is fixed. The
+  card-level issue says why: most often, the card's latest index visit failed
+  and what the index holds is an earlier visit's.
 - **It is the same answer for every realm that names the card.** Each of them
   compiles the card from the same row and the same type definitions. The one
   exception is a type in a realm the server has not mounted, such as one
   another realm server serves, whose definition each realm reads as its own
-  owner. A card no realm names answers the same way,
-  which is how a draft is checked before a realm is pointed at it.
+  owner. A card no realm names answers the same way, which is how a draft is
+  checked before a realm is pointed at it.
 - **It is live, and nothing is cached.** A fix shows on the next validate after
   the card reindexes. A realm naming the card revalidates its own compiled
   policy within five seconds of any change to the card or to a type its rules
   name, so what a validate shows is in force there within that bound.
-- **It is for readers of the card's realm.** No policy grant reaches a
-  validate, and none reaches a policy card at all, so only a caller the card's
-  own realm lets read it is answered.
-- **A problem with a realm's pointer is not on any policy card.** A realm whose
-  `policy` names a card the index does not hold (`policy-card-missing`), or a
-  card that is not a `RealmPolicy` (`not-a-policy`), has no policy card for a
-  validate to be asked of. That realm refuses as an uncompilable policy does,
-  and records the issue on the `realm:policy` log channel. A policy card whose
-  latest index visit failed outright renders its index error, as any card
-  does.
+- **It is for readers of every realm the policy reaches.** What a validate
+  reports describes the definitions of the types its rules name: whether each
+  is there, the operations it declares and which of them no policy may grant,
+  and the fields a search filter could read. Those are read on the realm
+  server's own authority, so a caller is answered only when they can read the
+  card's realm and every other realm this server serves that compiling read a
+  definition from, judged by a session of their own. Anyone else is refused
+  with a 403. No policy grant reaches a validate, and none reaches a policy card
+  at all.
+- **A problem with a realm's pointer shows on the realm's config card.** A
+  realm whose `policy` names a card the index does not hold
+  (`policy-card-missing`), or a card that is not a `RealmPolicy`
+  (`not-a-policy`), refuses as an uncompilable policy does, and has no policy
+  card for the problem to land on. So the config card, the `RealmConfig` card
+  at `realm.json`, declares a validate of its own, `validatePolicy`. Invoked on
+  the realm's own config card, it compiles the card the realm's pointer names
+  as the realm compiles it, and answers in the same shape. A realm that names
+  no policy, or whose pointer it could not read as a card's id and dropped,
+  answers with no `card` and nothing in `issues` or `rules`. The card shows
+  the answer beside its `policy` field: in force, or not in force with the
+  issue that takes it out of force.
+- **The config card tells only a reader of the realm the pointer names.** The
+  pointer can name a card in any realm, so whether a card is there is what the
+  answer would disclose. The realm holding the named card is judged before
+  anything about the card is read: a caller who cannot read it, or a pointer
+  into an archived realm or one no realm here serves, gets the same 403
+  whatever is or is not there. The other realms compiling read are judged as
+  a validate of the policy card judges them. A policy card whose latest index
+  visit failed outright renders its index error, as any card does.
 
 ## Where to look next
 

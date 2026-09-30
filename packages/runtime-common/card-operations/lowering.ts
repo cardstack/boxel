@@ -387,9 +387,21 @@ async function lowerOperation(
 ): Promise<OperationDefinition> {
   let base: BaseOperationName = declaration.base;
   let operation: OperationDefinition = { base, deterministic: true };
-  let params = lowerParams(declaration.params, sink, context);
-  if (params) {
-    operation.params = params;
+  // A validate takes no payload: the card it is invoked on is the whole
+  // question. So a schema or an input program stored for one would never be
+  // read.
+  let takesNoPayload = base === 'validate';
+  if (takesNoPayload && declaration.params !== undefined) {
+    sink.add(
+      'unrunnable-program',
+      'params',
+      `a "validate" operation takes no payload, since the card it is invoked on is the whole question, so these params would never be read`,
+    );
+  } else {
+    let params = lowerParams(declaration.params, sink, context);
+    if (params) {
+      operation.params = params;
+    }
   }
   let paramNames = new Set(Object.keys(declaration.params ?? {}));
 
@@ -481,7 +493,13 @@ async function lowerOperation(
     }
   }
 
-  if (declaration.input) {
+  if (takesNoPayload && declaration.input) {
+    sink.add(
+      'unrunnable-program',
+      'input',
+      `a "validate" operation takes no payload, since the card it is invoked on is the whole question, so this input program would never be reached`,
+    );
+  } else if (declaration.input) {
     let input = lowerExpression(
       declaration.input.$bxl,
       'input',

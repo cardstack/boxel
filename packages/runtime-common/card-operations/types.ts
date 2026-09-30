@@ -336,7 +336,9 @@ export type OperationLoweringIssueCode =
   | 'base-not-carried'
   // A raw program declared on a base that runs none. The two appends edit the
   // stored file and a file's content is replaced wholesale, so a program
-  // stored for one of them would never be reached.
+  // stored for one of them would never be reached. So is a payload stage, a
+  // `params` schema or an `input` program, declared on a base that takes no
+  // payload.
   | 'unrunnable-program'
   // An `appendContainsMany` that does not say what to append where: no field,
   // no item for a field it names, or both spellings at once with no rule for
@@ -532,8 +534,8 @@ export interface OperationRequest {
   // The invoking user as a session the realm vouched for end to end: not
   // revoked, not delegated to one realm, not an assumed identity. Absent for
   // anything less. `actor` is an identity to record and compare. This is the
-  // one to judge a caller by in another realm, which is what an explain does,
-  // and a validate of a realm's config card, and nothing else reads it.
+  // one to judge a caller by in another realm, which is what an explain and a
+  // validate do, and nothing else reads it.
   principal?: string;
   // The caller's own id for this request. Echoed on the realm's index event so
   // a client can tell its own write's event from anyone else's, which is what
@@ -924,15 +926,15 @@ export interface OperationValidateResult {
 // whose owner may not read it there holds the rule as unresolved where a
 // validate does not.
 //
-// Invoked on a realm's config card, a validate answers for the policy that
-// realm names instead, as the realm holds it in force: its own compilation,
-// not a fresh one. That is where the problems with the realm's pointer show,
-// which have no policy card to land on: a pointer naming a card the index
-// does not hold, or one that is not a RealmPolicy. The pointer can name a
-// card in any realm, and whether a card is there is what a refusal withholds
-// from a caller who cannot read its realm. So the answer goes only to a caller
-// who can read both realms, the config card's and the policy card's, the way
-// an explain's does.
+// Invoked on a realm's config card, a validate answers for the card that
+// realm's pointer names instead, compiled as that realm compiles it. That is
+// where the problems with the pointer show, which have no policy card to land
+// on: a pointer naming a card the index does not hold, or one that is not a
+// RealmPolicy. The pointer can name a card in any realm, and whether a card
+// is there is what a refusal withholds from a caller who cannot read its
+// realm. So the realm holding the card must be one the caller reads, judged
+// before anything about the card is read, as well as every other realm
+// compiling read.
 // ============================================================================
 
 export interface PolicyValidation {
@@ -955,7 +957,8 @@ export interface PolicyValidation {
   // The rules that compiled, in the order the card lists them, each with its
   // grants that compiled. This is what a realm naming the card puts in force.
   // A rule or grant the card holds that is not here is inactive, and an issue
-  // says why.
+  // says why. A grant here can still admit nothing, and says so with
+  // `admitsNothing`.
   rules: ValidatedRule[];
 }
 
@@ -976,7 +979,23 @@ export interface ValidatedRule {
 export interface ValidatedGrant {
   // Where the grant is in the policy card, as `rules[2].grants[1]`.
   path: string;
+  // Set on a grant that compiled and can admit nothing, with the reason. The
+  // policy keeps such a grant exactly as it compiled, so it is in force, and it
+  // has no invocation to admit.
+  admitsNothing?: ValidatedGrantInertia;
 }
+
+export type ValidatedGrantInertia =
+  // A grant on a query whose `where` compiled no search filter. A query is
+  // authorized only by composing a grant's filter into the search, and the
+  // gate refuses every invocation built on one, so the grant has nothing to
+  // compose. `policy-not-filterable` says why there is no filter.
+  | 'unfilterable'
+  // A grant whose `where` is annotated as reading a snapshot tier, on anything
+  // but a query. The gate reads a card's stored source alone and never
+  // evaluates such a predicate. On a query, the same annotation compiles into
+  // the search filter and admits what it matches.
+  | 'snapshot';
 
 // A `delete` answers with `null`: there is no state left to describe.
 export type OperationResult =

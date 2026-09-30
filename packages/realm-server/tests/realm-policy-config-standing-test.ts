@@ -40,6 +40,7 @@ const ORG = 'http://127.0.0.1:4444/org/';
 const CONFIG_CARD = `${EDUCATION}realm`;
 const POLICY_CARD = `${ORG}policies/education`;
 const MISSING_CARD = `${ORG}policies/no-such-card`;
+const UNSERVED_CARD = 'http://127.0.0.1:4444/nowhere/policies/education';
 const ORG_NOTE = `${ORG}notes/n1`;
 const EDUCATION_NOTE = `${EDUCATION}notes/n1`;
 const ORG_ADMIN = '@org-admin:localhost';
@@ -327,6 +328,18 @@ module(basename(import.meta.filename), function (hooks) {
         codesOf(answered).map(({ code }) => code),
         ['not-a-policy'],
         'while a caller who reads both realms is told why',
+      );
+    });
+
+    test('a pointer into a realm no realm here serves is refused as one the caller cannot read is', async function (assert) {
+      let unreadable = await ask(ASKER.educationReader());
+      await pointAt(UNSERVED_CARD);
+      let unserved = await ask(ASKER.orgAdmin());
+      assert.strictEqual(unserved.status, 403, unserved.text);
+      assert.deepEqual(
+        unserved.body,
+        unreadable.body,
+        'whether a realm is served here is not told either',
       );
     });
 
