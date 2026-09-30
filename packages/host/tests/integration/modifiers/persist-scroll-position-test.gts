@@ -204,6 +204,8 @@ module('Integration | modifier | persist-scroll-position', function (hooks) {
   test('holds the restore-pending tag while the container box is still changing', async function (assert) {
     let onChange = () => {};
 
+    // Taken before render: the modifier starts its reveal cap as it installs.
+    let mountedAt = performance.now();
     await render(
       <template>
         {{! template-lint-disable no-inline-styles }}
@@ -220,14 +222,14 @@ module('Integration | modifier | persist-scroll-position', function (hooks) {
     let scroller = document.querySelector('.scroller') as HTMLElement;
 
     // Timing record for the failure message: the gap before each frame of the
-    // simulated transition, the step at which the tag came off (if it did),
-    // and the time since mount (past the modifier's reveal cap, the cap
-    // rather than the quiet check untagged it). A reveal here means the
-    // modifier judged the box quiet while it was still changing, and these
-    // say whether slow frames were in play.
-    let mountedAt = performance.now();
+    // simulated transition, and the step and time since mount at which the
+    // tag came off (if it did). A reveal here means the modifier judged the
+    // box quiet while it was still changing; the frame gaps say whether slow
+    // frames were in play, and an untag time at or past the modifier's reveal
+    // cap (1000ms) points at the cap instead.
     let frameGapsMs: number[] = [];
     let untaggedAtStep: number | undefined;
+    let untaggedAtMs: number | undefined;
     let step = 0;
     let untagObserver = new MutationObserver(() => {
       if (
@@ -235,6 +237,7 @@ module('Integration | modifier | persist-scroll-position', function (hooks) {
         !scroller.hasAttribute('data-scroll-restore-pending')
       ) {
         untaggedAtStep = step;
+        untaggedAtMs = Math.round(performance.now() - mountedAt);
       }
     });
     untagObserver.observe(scroller, {
@@ -264,9 +267,9 @@ module('Integration | modifier | persist-scroll-position', function (hooks) {
         '',
         `still tagged while the box keeps changing (untagged at step: ${
           untaggedAtStep ?? 'never'
-        }; frame gaps ms: ${JSON.stringify(frameGapsMs)}; ms since mount: ${Math.round(
-          performance.now() - mountedAt,
-        )})`,
+        }; untagged at ms since mount: ${
+          untaggedAtMs ?? 'never'
+        }; frame gaps ms: ${JSON.stringify(frameGapsMs)})`,
       );
 
     // The transition is over; once the box has been quiet long enough (and the
@@ -318,7 +321,11 @@ module('Integration | modifier | persist-scroll-position', function (hooks) {
     });
     staller.observe(scroller);
 
-    for (let height = 20; height <= 200; height += 15) {
+    // A quiet check fooled by the stall would reveal on the very next frame,
+    // so the transition only needs to run a couple of frames past it.
+    // Stopping there keeps the whole run well inside the modifier's reveal
+    // cap on a slow runner.
+    for (let height = 20; height <= stallAtHeight + 30; height += 15) {
       scroller.style.height = `${height}px`;
       // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- test must emulate a per-frame size transition
       await new Promise((resolve) => requestAnimationFrame(resolve));
