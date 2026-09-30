@@ -297,8 +297,9 @@ import {
 import { resolveQueryTargets } from './card-operations/find-targets.ts';
 import {
   isNamedQueryPayload,
-  namedQueryInvocation,
   resolveNamedQuery,
+  searchInvocation,
+  type SearchInvocation,
 } from './card-operations/named-query.ts';
 import { settledWithin, STAGING_WIDTH } from './card-operations/coordinator.ts';
 import {
@@ -2194,9 +2195,19 @@ interface CardWriteAdmission {
   // Present for a write the gate left the write lock to decide, which the
   // coordinator decides there (see `BatchEntry.admit`).
   entry: { admit?: (judged: AdmissionSubject | undefined) => Promise<void> };
+  // How the write's batch is committed for this caller (see `#mintPosture`).
+  // Every card+json write commits under it, so for a caller who may not read
+  // the realm, the realm mints the ids of any card the write creates.
+  batch: { mintIds?: true };
   // Refuses, by throwing, a document whose side-loads a write the gate
   // admitted would stage.
   assertSideLoads(included: readonly unknown[] | undefined): void;
+  // Refuses, by throwing, a create aimed at a directory beneath the realm's
+  // root by a caller who may not read the realm. The card would land beneath
+  // it, so whether the write succeeds depends on what is stored along the
+  // directory's path: a stored file where a directory is named fails the
+  // write, and nothing there lets it succeed.
+  assertDestination(directory: string): void;
   // An answer the handler gives before the batch runs, such as a 400 for a
   // body that is not a card document, as the caller may be told it. Throws
   // the gate's refusal where the caller may not be told it.
@@ -2208,7 +2219,9 @@ interface CardWriteAdmission {
 // The admission of every write by a caller the realm ACL allowed.
 const COARSE_CARD_WRITE: CardWriteAdmission = {
   entry: {},
+  batch: {},
   assertSideLoads: () => {},
+  assertDestination: () => {},
   answer: async (response) => response,
   seenBy: async (err) => err,
 };
@@ -5517,10 +5530,11 @@ export class Realm {
   // a grant admitted to a stored card, and a write whose grant rests on a
   // predicate, is decided again under the write lock, against the card it
   // changes as the batch holds it there, and a refusal there leaves nothing
-  // written either. An operation's program can read `actor()`
-  // and an `assert` can refuse on what it finds, but neither decides who may
-  // invoke it. Treat every operation's result as reachable by any caller
-  // permitted to invoke it.
+  // written either. A caller who may not read the realm doesn't choose the
+  // ids of the cards their batch creates, which the realm mints. An
+  // operation's program can read `actor()` and an `assert` can refuse on what
+  // it finds, but neither decides who may invoke it. Treat every operation's
+  // result as reachable by any caller permitted to invoke it.
   private async handleOperations(
     request: Request,
     requestContext: RequestContext,
@@ -5591,29 +5605,6 @@ export class Realm {
       caller: scopeCallerFor(caller.actor),
       coarseDeclined,
     });
-    // A target described by a query is found by running it, and that search
-    // answers from every card of the realm before any entry is gated. The
-    // gate grants operations on cards, not searches over the realm, so a
-    // caller the realm ACL would not let read the realm names each target
-    // outright. The query here is the caller's own, which is what sets it
-    // apart from a query-backed field: that query is part of a card type's
-    // declaration, and a granted read serves its results as part of the card.
-    if (coarseDeclined === 'all') {
-      let described = invocationsIn(parsed).find((entry) => entry.find);
-      if (described) {
-        throw atEntry(
-          new OperationFailure({
-            status: 403,
-            code: 'operation-not-permitted',
-            title: 'Operation not permitted',
-            detail:
-              `entry ${described.position} describes its target with a ` +
-              `query, and running that query is not permitted`,
-          }),
-          described.position,
-        );
-      }
-    }
     // An entry may describe the card it runs against with a query instead of
     // naming one, and this is where such a query becomes cards — against the
     // index as it stands now, which is the pre-batch state every other part of
@@ -5621,6 +5612,13 @@ export class Realm {
     // entries all name an href, so a found target takes the write lock,
     // collides with a parallel sibling and rolls back exactly as a named one
     // does.
+    //
+    // The query is the caller's own, which is what sets it apart from a
+    // query-backed field: that query is part of a card type's declaration, and
+    // a granted read serves its results as part of the card. So for a caller
+    // the realm ACL would not let read the realm, it is an ad-hoc search, and
+    // it finds only the cards a `query` grant on its type admits. Each card it
+    // finds is then gated for the entry's own operation like a named one.
     let tree = await resolveQueryTargets(
       this.operationCore,
       scope,
@@ -5804,6 +5802,7 @@ export class Realm {
             // place — which is the case the event's authorship naming exists
             // for, and the only front door that produces it.
             reportAuthorship: true,
+            ...this.#mintPosture(coarseDeclined),
           },
         );
         // The coordinator answers in the flat order of the entries it staged,
@@ -6018,7 +6017,12 @@ export class Realm {
       }
     }
     if (rehearse) {
-      let rehearsed = await this.#rehearsedDecisions(tree, ahead, caller);
+      let rehearsed = await this.#rehearsedDecisions(
+        tree,
+        ahead,
+        caller,
+        coarseDeclined,
+      );
       for (let entry of ahead) {
         let { position } = entry.entry;
         let refusal = rehearsed.get(position);
@@ -6053,6 +6057,10 @@ export class Realm {
     tree: readonly EnvelopeNode[],
     resolved: readonly ResolvedEnvelopeEntry[],
     caller: { actor: string; clientRequestId: string },
+    // The creates are rehearsed under the ids the batch itself mints them
+    // under (see `#mintPosture`), so a card a write is judged by is the card
+    // the lock would judge it by.
+    coarseDeclined: CoarseDeclined,
   ): Promise<Map<EntryPosition, OperationFailure | undefined>> {
     let rehearsed = new Map<EntryPosition, OperationFailure | undefined>();
     let admit = async (
@@ -6085,6 +6093,7 @@ export class Realm {
     try {
       await rehearseBatch(this.batchCore, stagedTree(tree, staged), {
         actor: caller.actor || undefined,
+        ...this.#mintPosture(coarseDeclined),
       });
     } catch {
       // A refusal from an admission is already in `rehearsed`, and anything
@@ -6665,16 +6674,26 @@ export class Realm {
     return requestContext.coarseReadAllowed ? 'writes' : 'all';
   }
 
+  // How a batch this caller commits names the cards it creates. A caller who
+  // may not read the realm doesn't choose where a card lands, so the realm
+  // mints its id (see `CommitBatchOptions.mintIds`). A caller who may read the
+  // realm can list it, so where their card lands tells them nothing, and they
+  // name it as any writer does. Every route that commits a create for a caller
+  // the ACL declined takes its batch options from here.
+  #mintPosture(coarseDeclined: CoarseDeclined): { mintIds?: true } {
+    return coarseDeclined === 'all' ? { mintIds: true } : {};
+  }
+
   // What this realm's policy contributes to one search, for a caller its ACL
-  // declined outright. Nothing, unless the request named an operation and
-  // authenticated someone: a policy grants by who is asking, and it grants a
-  // named query rather than the freedom to write a filter. An ad-hoc search
-  // therefore reaches no grant, and a caller the ACL declined is answered with
-  // no rows for one. Nor does a search a render is waiting on, which the
-  // caller passes no invocation for: what a render produces is served to
-  // every viewer, so no one viewer's grants may shape it.
+  // declined outright. Nothing, unless the request authenticated someone: a
+  // policy grants by who is asking. A named query is granted by its own name,
+  // and an ad-hoc search by the base name `query` on the type its filter
+  // targets, so a grant on a saved search never admits the filter a caller
+  // writes by hand. Nor does a search a render is waiting on reach a grant,
+  // which the caller passes no invocation for: what a render produces is
+  // served to every viewer, so no one viewer's grants may shape it.
   async #policyQueryScope(
-    invocation: { operation: string; on: CodeRef } | undefined,
+    invocation: SearchInvocation | undefined,
     requestContext: RequestContext,
   ): Promise<PolicyQueryScope> {
     let actor = requestContext.authenticatedUser;
@@ -10956,6 +10975,11 @@ export class Realm {
         'create',
       );
       admission.assertSideLoads(maybeIncluded);
+      // Where the `POST` was aimed — the realm root, or a directory under it.
+      // The card's type directory is named beneath that, and the file beneath
+      // that.
+      let directory = this.paths.local(new URL(request.url));
+      admission.assertDestination(directory);
       result = (
         await commitBatch(
           this.batchCore,
@@ -10971,14 +10995,12 @@ export class Realm {
                 data: primaryResource,
                 ...(maybeIncluded ? { included: maybeIncluded } : {}),
               },
-              // Where the `POST` was aimed — the realm root, or a directory
-              // under it. The card's type directory is named beneath that, and
-              // the file beneath that.
-              directory: this.paths.local(new URL(request.url)),
+              directory,
               ...admission.entry,
             },
           ],
           {
+            ...admission.batch,
             clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
             ...(requestContext.authenticatedUser
               ? { actor: requestContext.authenticatedUser }
@@ -11069,6 +11091,11 @@ export class Realm {
       // names that as the reconciliation point, alongside `api.setId`); the
       // response document is not part of that path, and could not be — the
       // index answers in ids, never in the `lid` a caller would match on.
+      // A card the realm minted the id of is the exception (see
+      // `#mintPosture`): its URL's last segment is the realm's id, never its
+      // `lid`, so the host pairs it with its local id only from the `POST`
+      // response's `data.id`, which the save flow hands to `api.setId`. The
+      // caller it mints for sends no side-loads, since the gate refuses them.
       // Writes that answer from the serialized echo — prerender and
       // skip-index-wait callers — return no `included` at all and always have.
       let entry = await timings.time('readback', () =>
@@ -11499,6 +11526,7 @@ export class Realm {
             },
           ],
           {
+            ...admission.batch,
             clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
             ...(requestContext.authenticatedUser
               ? { actor: requestContext.authenticatedUser }
@@ -11861,11 +11889,30 @@ export class Realm {
         });
       }
     };
+    // A caller the realm names new cards for has the realm choose where a card
+    // lands: the realm mints its id, and the card lands beneath the realm's
+    // root. That caller is told a refusal as a card that isn't there, so the
+    // refusal here says no more than the gate's own.
+    let batch = this.#mintPosture(coarseDeclined);
+    let assertDestination = (directory: string) => {
+      if (batch.mintIds && directory !== '') {
+        throw new OperationFailure({
+          status: 403,
+          code: 'operation-not-permitted',
+          title: 'Operation not permitted',
+          detail:
+            `a caller who may not read the realm creates a card at the ` +
+            `realm's root, and this "${base}" is aimed at "${directory}/"`,
+        });
+      }
+    };
     let pending = pendingWriteFor(target, base, decision, scope);
     if (!pending) {
       return {
         entry: {},
+        batch,
         assertSideLoads,
+        assertDestination,
         answer: async (response) => response,
         seenBy: async (err) => err,
       };
@@ -11894,7 +11941,9 @@ export class Realm {
           }
         },
       },
+      batch,
       assertSideLoads,
+      assertDestination,
       answer: async (response) => {
         if (await hidden()) {
           throw notPermitted(target, base);
@@ -13145,6 +13194,7 @@ export class Realm {
         this.batchCore,
         [{ op: 'delete', href: url.href, ...admission.entry }],
         {
+          ...admission.batch,
           ...(requestContext.authenticatedUser
             ? { actor: requestContext.authenticatedUser }
             : {}),
@@ -13353,10 +13403,11 @@ export class Realm {
     }
 
     // What a policy fragment is looked up by, for a caller this realm's ACL
-    // declined: a query runs under the name it was invoked with, on the type
-    // that declares it. Read before the declaration is resolved, since what it
+    // declined: a named query runs under the name it was invoked with, on the
+    // type that declares it, and an ad-hoc search as `query` on the type its
+    // filter targets. Read before a declaration is resolved, since what it
     // resolves to is a filter and carries neither.
-    let invocation = namedQueryInvocation(payload);
+    let invocation = searchInvocation(payload);
     // A declared query is answered with this realm's resolution of it, so
     // what its result holds is the realm's to decide, not the caller's filter.
     let resolvedByServer = isNamedQueryPayload(payload);

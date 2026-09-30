@@ -10,18 +10,19 @@ import type {
 } from '@cardstack/runtime-common';
 import {
   policyQueryScope,
+  searchInvocation,
   type OperationCore,
   type OperationDefinition,
 } from '@cardstack/runtime-common/card-operations';
 import type { Definition } from '@cardstack/runtime-common/definitions';
 
 // ============================================================================
-// What a realm's policy contributes to one named query, decided against a
-// stubbed definition cache and compiled policy, so what is under test is the
-// lookup alone: which grants contribute a filter, what `actor()` becomes in
-// it, and which declarations no grant can reach. The endpoints that compose
-// the result into a search are covered against real realms in
-// `server-endpoints/policy-scoped-search-test`.
+// What a realm's policy contributes to one query, named or ad hoc, decided
+// against a stubbed definition cache and compiled policy, so what is under
+// test is the lookup alone: which grants contribute a filter, what `actor()`
+// becomes in it, which declarations no grant can reach, and how a search on
+// several types is judged. The endpoints that compose the result into a search
+// are covered against real realms in `server-endpoints/policy-scoped-search-test`.
 // ============================================================================
 
 const REALM = 'http://example.test/school/';
@@ -37,6 +38,17 @@ const BASE_SCHEDULE: ResolvedCodeRef = {
 const SCHEDULE: ResolvedCodeRef = {
   module: rri(`${REALM}service-plan`),
   name: 'ServicePlanSchedule',
+};
+// A type no rule names, and that descends from neither schedule type.
+const NOTICE: ResolvedCodeRef = {
+  module: rri(`${REALM}notice`),
+  name: 'Notice',
+};
+// A type the realm cannot resolve a definition for, so nothing about it can be
+// judged.
+const ELSEWHERE: ResolvedCodeRef = {
+  module: rri(`${REALM}elsewhere`),
+  name: 'Elsewhere',
 };
 
 function key(ref: ResolvedCodeRef) {
@@ -79,6 +91,14 @@ const DEFINITIONS = new Map<string, Definition>([
       listGuarded: listing(),
     }),
   ],
+  [key(NOTICE), definitionOf(NOTICE, {})],
+]);
+
+// The adoption chain the index records beside each type's definition.
+const CHAINS = new Map<string, string[]>([
+  [key(BASE_SCHEDULE), [key(BASE_SCHEDULE)]],
+  [key(SCHEDULE), [key(SCHEDULE), key(BASE_SCHEDULE)]],
+  [key(NOTICE), [key(NOTICE)]],
 ]);
 
 // The filter a query grant compiles to: the caller's own schedules.
@@ -90,13 +110,19 @@ const OWN_FILTER = {
 // A grant as a test writes it. Its position in the policy is filled in.
 type Grant = Omit<CompiledOperationGrant, 'path'>;
 
-function stubCore(grants: Grant[]): OperationCore {
+function stubCore(
+  grants: Grant[],
+  {
+    reads = { policy: 0 },
+    ruleOn = SCHEDULE,
+  }: { reads?: { policy: number }; ruleOn?: ResolvedCodeRef } = {},
+): OperationCore {
   let policy: CompiledRealmPolicy = {
     card: `${REALM}policies/policy`,
     version: '1',
     rules: [
       {
-        targetType: SCHEDULE,
+        targetType: ruleOn,
         path: 'rules[0]',
         grants: grants.map((grant, index) => ({
           ...grant,
@@ -117,12 +143,15 @@ function stubCore(grants: Grant[]): OperationCore {
       async lookupDefinitionEntry(ref: ResolvedCodeRef) {
         return {
           definition: DEFINITIONS.get(key(ref)),
-          types: [key(SCHEDULE), key(BASE_SCHEDULE)],
+          types: CHAINS.get(key(ref)),
         };
       },
     },
     policy: {
-      compiledPolicy: async () => policy,
+      compiledPolicy: async () => {
+        reads.policy++;
+        return policy;
+      },
       typeKeys: async (ref: ResolvedCodeRef) => [key(ref)],
       resolvedLink: (selfLink: string) => selfLink,
       policyCard: async () => policy.card,
@@ -130,13 +159,20 @@ function stubCore(grants: Grant[]): OperationCore {
   } as unknown as OperationCore;
 }
 
-function scope(operation: string, grants: Grant[]) {
+function scope(
+  operation: string,
+  grants: Grant[],
+  types: CodeRef[] = [SCHEDULE],
+) {
   return policyQueryScope(stubCore(grants), {
     operation,
-    on: SCHEDULE,
+    types,
     actor: ACTOR,
   });
 }
+
+// The filter `OWN_FILTER` compiles to, in the grammar the engine runs.
+const OWN = { on: SCHEDULE, eq: { providerId: ACTOR } };
 
 module(basename(import.meta.filename), function () {
   test('a query grant contributes its filter, bound to the caller', async function (assert) {
@@ -146,8 +182,133 @@ module(basename(import.meta.filename), function () {
     assert.strictEqual(result.kind, 'scoped');
     assert.deepEqual(
       result.kind === 'scoped' ? result.filters : undefined,
-      [{ on: SCHEDULE, eq: { providerId: ACTOR } }],
+      [OWN],
       'the filter in the grammar the engine runs, with actor() filled in',
+    );
+  });
+
+  test('an ad-hoc search is a query on its type, which a grant on a named query does not reach', async function (assert) {
+    assert.deepEqual(
+      await scope('query', [{ operation: 'listOpen', filter: OWN_FILTER }]),
+      { kind: 'denied' },
+      'a grant on a saved search is not a grant to write any filter over its type',
+    );
+    assert.deepEqual(
+      await scope('query', [{ operation: 'query', filter: OWN_FILTER }]),
+      { kind: 'scoped', filters: [OWN] },
+      'a grant on `query` is',
+    );
+  });
+
+  test('a search on no type is denied, and reads no policy to decide it', async function (assert) {
+    let reads = { policy: 0 };
+    let result = await policyQueryScope(
+      stubCore([{ operation: 'query', filter: OWN_FILTER }], { reads }),
+      { operation: 'query', types: [], actor: ACTOR },
+    );
+    assert.deepEqual(result, { kind: 'denied' });
+    assert.strictEqual(reads.policy, 0, 'no rule could admit it');
+  });
+
+  test('a search on several types admits each type only through its own grants', async function (assert) {
+    assert.deepEqual(
+      await scope(
+        'query',
+        [{ operation: 'query', filter: OWN_FILTER }],
+        [SCHEDULE, NOTICE],
+      ),
+      { kind: 'scoped', filters: [{ on: SCHEDULE, any: [OWN] }] },
+      "the schedule type's grant, confined to schedules, and nothing for the type no rule names",
+    );
+    assert.deepEqual(
+      await scope(
+        'query',
+        [{ operation: 'query', filter: OWN_FILTER }],
+        [NOTICE],
+      ),
+      { kind: 'denied' },
+      'which, searched alone, is denied',
+    );
+  });
+
+  test('a grant on a type several share admits only the cards of a type whose own judgment admits them', async function (assert) {
+    // The rule is on the base type, so its grant's filter is anchored there,
+    // and it is matched for the schedule type, which descends from it. The
+    // other type cannot be judged at all. Unconfined, the base type's filter
+    // would admit the other type's cards too, were one of them a base
+    // schedule, through the grant matched for the schedule type.
+    const BASE_OWN_FILTER = {
+      'item.on': BASE_SCHEDULE,
+      eq: { 'item.providerId': { $ref: 'actor' } },
+    } as CompiledOperationGrant['filter'];
+    let result = await policyQueryScope(
+      stubCore([{ operation: 'query', filter: BASE_OWN_FILTER }], {
+        ruleOn: BASE_SCHEDULE,
+      }),
+      { operation: 'query', types: [SCHEDULE, ELSEWHERE], actor: ACTOR },
+    );
+    assert.deepEqual(result, {
+      kind: 'scoped',
+      filters: [
+        {
+          on: SCHEDULE,
+          any: [{ on: BASE_SCHEDULE, eq: { providerId: ACTOR } }],
+        },
+      ],
+    });
+  });
+
+  test('a filter is judged by every type its matches adopt from, however its branches are ordered', async function (assert) {
+    let typesOf = (filter: Record<string, unknown>) =>
+      searchInvocation({ filter })!
+        .types.map((type) => key(type as ResolvedCodeRef))
+        .sort();
+    let both = [key(BASE_SCHEDULE), key(SCHEDULE)].sort();
+    let base = { 'item.on': BASE_SCHEDULE };
+    let schedule = { 'item.on': SCHEDULE };
+    assert.deepEqual(typesOf({ every: [base, schedule] }), both);
+    assert.deepEqual(typesOf({ every: [schedule, base] }), both);
+    assert.deepEqual(
+      typesOf({ ...base, every: [schedule] }),
+      both,
+      'as is an anchored node over a body that names the other',
+    );
+    // An `every` may skip a branch that anchors nothing, since a match
+    // satisfies every branch and so adopts from the anchored ones anyway. An
+    // `any` may not: a match of its unanchored branch can be of any type at
+    // all, so no list of types bounds what the filter matches.
+    assert.deepEqual(
+      typesOf({ any: [schedule, { eq: { 'item.title': 'x' } }] }),
+      [],
+      'an `any` with a branch that anchors nothing is judged by no type',
+    );
+
+    // Granted on the schedule type alone, which each match of either order
+    // is, so both orders are admitted alike.
+    for (let every of [
+      [base, schedule],
+      [schedule, base],
+    ]) {
+      assert.deepEqual(
+        await scope(
+          'query',
+          [{ operation: 'query', filter: OWN_FILTER }],
+          searchInvocation({ filter: { every } })!.types,
+        ),
+        { kind: 'scoped', filters: [{ on: SCHEDULE, any: [OWN] }] },
+      );
+    }
+  });
+
+  test('a type named twice is judged once', async function (assert) {
+    assert.deepEqual(
+      await scope(
+        'query',
+        [{ operation: 'query', filter: OWN_FILTER }],
+        [SCHEDULE, { ...SCHEDULE }],
+      ),
+      { kind: 'scoped', filters: [OWN] },
+      'as a search on the one type is',
     );
   });
 

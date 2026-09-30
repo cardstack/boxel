@@ -846,6 +846,22 @@ module('Integration | operations', function (hooks) {
     );
   });
 
+  test('a saved search may not be named `query`', function (assert) {
+    // A search the caller writes by hand is invoked, and granted by a realm's
+    // policy, under the name `query`. A saved search declared under it would
+    // share that grant with every filter a caller writes over the type, so the
+    // name is refused and the base, which every saved search builds on, is not.
+    assert.throws(() => {
+      class Listing extends CardDef {
+        @operation static query = {
+          base: 'query',
+          query: { filter: { type: () => Listing } },
+        };
+      }
+      return Listing;
+    }, /"query" is a reserved operation name/);
+  });
+
   test('the decorator refuses every name the realm answers definition-free', function (assert) {
     // The two lists are one decision with two homes: dispatch skips the
     // definition lookup for `DEFINITION_FREE_BASE_OPERATIONS`, and that is
