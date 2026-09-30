@@ -306,6 +306,46 @@ module('Integration | tools | search-entries', function (hooks) {
     );
   });
 
+  test('a relevance sort carrying the filter type anchor still ranks spec rows', async function (assert) {
+    // A model that copies the filter's `on` onto the relevance sort entry
+    // must still get ranked rows back, not a silently empty result.
+    let specRef = { module: rri('@cardstack/base/spec'), name: 'Spec' };
+    let result = await runSearch({
+      query: {
+        filter: { type: specRef, matches: 'writer' },
+        sort: [{ by: '_matchRelevance', on: specRef, direction: 'desc' }],
+      },
+      realms: [testRealmURL],
+    });
+    assert.deepEqual(
+      result.results.map((r: { url: string }) => r.url),
+      [`${testRealmURL}Spec/author`],
+    );
+    assert.strictEqual(typeof result.results[0].matchRelevance, 'number');
+    assert.false(result.incomplete, 'every searched realm answered');
+  });
+
+  test('a filter carrying several operators is rejected, naming them', async function (assert) {
+    // The shape a schema-literal model produces: every declared operator
+    // present and empty beside the type anchor.
+    let specRef = { module: rri('@cardstack/base/spec'), name: 'Spec' };
+    await assert.rejects(
+      runSearch({
+        query: {
+          filter: {
+            eq: {},
+            any: [],
+            not: {},
+            every: [],
+            on: specRef,
+            type: specRef,
+          } as unknown as Query['filter'],
+        },
+      }),
+      /a filter may use only one operator, but found "any", "every", "not", "eq"/,
+    );
+  });
+
   test('limit defaults to 5, is honored, and clamps at 10', async function (assert) {
     let query: Query = {
       filter: {

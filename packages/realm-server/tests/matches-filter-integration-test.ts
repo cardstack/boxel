@@ -7,6 +7,7 @@ import {
   IndexQueryEngine,
   param,
   query,
+  rri,
   VirtualNetwork,
   type DefinitionLookup,
 } from '@cardstack/runtime-common';
@@ -403,6 +404,47 @@ module(basename(import.meta.filename), function () {
         }),
         [`${testRealmURL}zebra-sparse.json`, `${testRealmURL}zebra-dense.json`],
         'asc reverses the ranking',
+      );
+    });
+
+    test('a relevance sort carrying a type anchor ranks the same as one without', async function (assert) {
+      await seedRow(dbAdapter, {
+        url: `${testRealmURL}zebra-dense.json`,
+        markdown: 'zebra zebra zebra — a whole herd of zebra on the plain.',
+      });
+      await seedRow(dbAdapter, {
+        url: `${testRealmURL}zebra-sparse.json`,
+        markdown: 'a single zebra grazing quietly.',
+      });
+
+      let petRef = { module: rri(`${testRealmURL}pet`), name: 'Pet' };
+      // The stub definition lookup throws if consulted, so this also pins
+      // that the anchor is never resolved as a field's owning type.
+      assert.deepEqual(
+        await relevanceUrls({
+          filter: { matches: 'zebra' },
+          sort: [
+            {
+              by: '_matchRelevance',
+              on: petRef,
+            },
+          ],
+        }),
+        [`${testRealmURL}zebra-dense.json`, `${testRealmURL}zebra-sparse.json`],
+        'the denser row ranks first, and the default direction is still desc',
+      );
+      await assert.rejects(
+        engine.searchCards(new URL(testRealmURL), {
+          filter: { not: { matches: 'zebra' } },
+          sort: [
+            {
+              by: '_matchRelevance',
+              on: petRef,
+            },
+          ],
+        }),
+        /requires at least one positive `matches` filter/,
+        'the anchor does not exempt it from the engine backstop',
       );
     });
 

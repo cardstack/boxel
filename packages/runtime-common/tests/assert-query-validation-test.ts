@@ -207,6 +207,112 @@ const tests = Object.freeze({
       }
     }
   },
+
+  'assertQuery rejects a filter that combines more than one operator': async (
+    assert,
+  ) => {
+    // The validator, the SQL compiler, and the client-side matcher each pick
+    // an operator from a multi-operator node in a different order, so such a
+    // node would be validated on one operator and run on another. Only
+    // `type`/`on` may accompany an operator.
+    let rejected: [unknown, RegExp][] = [
+      [
+        {
+          filter: {
+            eq: {},
+            any: [],
+            not: {},
+            every: [],
+            on: sampleRef,
+            type: sampleRef,
+          },
+        },
+        /filter: a filter may use only one operator, but found "any", "every", "not", "eq"/,
+      ],
+      [
+        { filter: { on: sampleRef, any: [], eq: { name: 'Mark' } } },
+        /filter: a filter may use only one operator, but found "any", "eq"/,
+      ],
+      [
+        {
+          filter: {
+            every: [{ contains: { name: 'a' }, matches: 'mango' }],
+          },
+        },
+        /filter\/every\/\[0\]: a filter may use only one operator, but found "contains", "matches"/,
+      ],
+    ];
+    for (let [query, message] of rejected) {
+      assert.throws(
+        () => assertQuery(query as Parameters<typeof assertQuery>[0]),
+        (err: Error) =>
+          err instanceof InvalidQueryError && message.test(err.message),
+        `${JSON.stringify(query)} is rejected, and the error names the operators`,
+      );
+    }
+
+    let accepted = [
+      { filter: { type: sampleRef } },
+      { filter: { type: sampleRef, eq: { name: 'Mark' } } },
+      { filter: { on: sampleRef, type: sampleRef, matches: 'mango' } },
+      { filter: { on: sampleRef, any: [] } },
+    ];
+    for (let query of accepted) {
+      try {
+        assertQuery(query);
+        assert.ok(true, `accepted ${JSON.stringify(query)}`);
+      } catch (err) {
+        assert.ok(
+          false,
+          `unexpected throw for ${JSON.stringify(query)}: ${
+            (err as Error).message
+          }`,
+        );
+      }
+    }
+  },
+
+  'assertQuery treats a relevance sort the same with or without on': async (
+    assert,
+  ) => {
+    // `_matchRelevance` is a computed column, not a field of any card type, so
+    // an `on` beside it has nothing to anchor: it is tolerated, and the
+    // positive-`matches` requirement applies either way.
+    for (let sort of [
+      [{ by: '_matchRelevance', direction: 'desc' }],
+      [{ by: '_matchRelevance', on: sampleRef, direction: 'desc' }],
+    ]) {
+      assert.throws(
+        () => assertQuery({ filter: { type: sampleRef }, sort }),
+        (err: Error) =>
+          err instanceof InvalidQueryError &&
+          /requires at least one positive `matches` filter/.test(err.message),
+        `${JSON.stringify(sort)} without a matches term is rejected`,
+      );
+      try {
+        assertQuery({ filter: { type: sampleRef, matches: 'mango' }, sort });
+        assert.ok(true, `accepted ${JSON.stringify(sort)} with a matches term`);
+      } catch (err) {
+        assert.ok(
+          false,
+          `unexpected throw for ${JSON.stringify(sort)}: ${
+            (err as Error).message
+          }`,
+        );
+      }
+    }
+    assert.throws(
+      () =>
+        assertQuery({
+          filter: { matches: 'mango' },
+          sort: [{ by: '_matchRelevance', on: { name: 'Spec' } }],
+        }),
+      (err: Error) =>
+        err instanceof InvalidQueryError &&
+        /sort\[0\]\/on: type is not valid/.test(err.message),
+      'a malformed on beside _matchRelevance is still rejected',
+    );
+  },
 } as SharedTests<{}>);
 
 export default tests;

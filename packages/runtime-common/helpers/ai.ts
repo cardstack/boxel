@@ -191,7 +191,7 @@ export async function basicMappings(loader: Loader) {
       filter: {
         type: 'object',
         description:
-          "Filter criteria for the query. This object conforms to one of several structures (e.g., CardTypeFilter, EqFilter, AnyFilter). All properties within are optional and depend on the specific filter type. 'on' (a CodeRef) can specify context for field paths. Example properties: 'type' (CodeRef for CardTypeFilter), 'any'/'every' (array of filters), 'not' (a filter to negate), 'eq'/'contains' (object mapping field paths to values), 'range' (object mapping field paths to range constraints like {gt: 5}). Refer to the Query.Filter documentation for complete details.",
+          "Filter criteria for the query. Each filter object uses at most one operator — 'eq', 'in', 'contains', 'range', 'matches', 'any', 'every', or 'not' — optionally alongside 'type' (a CodeRef restricting results to that card type) and/or 'on' (a CodeRef giving the card type its field paths belong to). A filter with only 'type' is valid. To combine operators, nest one filter per operator under 'every' (all must hold) or 'any' (at least one must hold). Omit every operator you are not using; a filter carrying more than one operator is rejected.",
         properties: {
           type: {
             type: 'object',
@@ -259,6 +259,17 @@ export async function basicMappings(loader: Loader) {
             description:
               'An object where keys are field paths. Values are objects specifying range constraints (e.g., { gt: 10, lte: 20 }).',
           },
+          in: {
+            type: 'object',
+            properties: {},
+            description:
+              'An object where keys are field paths and values are arrays of acceptable values; a field matches when it equals any of them.',
+          },
+          matches: {
+            type: 'string',
+            description:
+              "Full-text search over each result's rendered content. Bare words are ANDed; put OR between alternatives (e.g., 'blog OR article'). Pair it with 'type' to search within one card type, and sort by '_matchRelevance' to put the best matches first.",
+          },
         },
       },
       sort: {
@@ -271,7 +282,7 @@ export async function basicMappings(loader: Loader) {
             by: {
               type: 'string',
               description:
-                "Field path to sort by (e.g., 'createdAt', 'author.name').",
+                "Field path to sort by (e.g., 'author.name', with 'on' naming the card type it belongs to), or a general sort key that needs no 'on': 'lastModified', 'createdAt', 'cardURL', or '_matchRelevance'. '_matchRelevance' ranks by full-text relevance, defaults to 'desc' (best match first), and requires a 'matches' term in the filter.",
             },
             on: {
               type: 'object',
@@ -281,7 +292,7 @@ export async function basicMappings(loader: Loader) {
               },
               required: ['module', 'name'],
               description:
-                "Optional. A CodeRef (module and name) specifying the card type if 'by' is a field of that card. Required if 'by' is not a general sort field.",
+                "A CodeRef (module and name) naming the card type 'by' is a field of. Required when 'by' is a card field; not needed for a general sort key.",
             },
             direction: {
               enum: ['asc', 'desc'],

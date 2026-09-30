@@ -11,6 +11,7 @@ import {
   type CodeRef,
   isCodeRef,
   generalSortFields,
+  isMatchRelevanceSort,
   MATCH_RELEVANCE_SORT_KEY,
 } from './index.ts';
 
@@ -328,10 +329,7 @@ export function assertQuery(
   // re-checks as a backstop for callers that bypass `assertQuery`.
   if (
     Array.isArray(query.sort) &&
-    query.sort.some(
-      (s: Record<string, unknown>) =>
-        !('on' in s) && s.by === MATCH_RELEVANCE_SORT_KEY,
-    ) &&
+    query.sort.some(isMatchRelevanceSort) &&
     collectPositiveMatchTerms(query.filter).length === 0
   ) {
     throw new InvalidQueryError(
@@ -424,11 +422,16 @@ function assertSortExpression(
     }
   }
 
+  // A relevance sort needs no `on` and ignores one, though a present `on`
+  // must still be a well-formed ref.
+  if (isMatchRelevanceSort(sort)) {
+    if ('on' in sort) {
+      assertCardType(sort.on, pointer.concat('on'));
+    }
+    return;
+  }
   if (!('on' in sort)) {
-    if (
-      Object.keys(generalSortFields).includes(sort.by) ||
-      sort.by === MATCH_RELEVANCE_SORT_KEY
-    ) {
+    if (Object.keys(generalSortFields).includes(sort.by)) {
       return;
     }
     throw new InvalidQueryError(
@@ -466,6 +469,17 @@ function assertPage(
   }
 }
 
+const FILTER_OPERATORS = [
+  'any',
+  'every',
+  'not',
+  'eq',
+  'in',
+  'contains',
+  'range',
+  'matches',
+] as const;
+
 // The operator validators below report a failure by throwing and return
 // nothing on success, so a collection of them is walked with `forEach`.
 // `every` reads each callback's `undefined` as false and stops, which would
@@ -489,6 +503,18 @@ function assertFilter(
 
   if ('on' in filter) {
     assertCardType(filter.on, pointer.concat('on'));
+  }
+
+  // The engine and the client-side matcher each pick an operator from a node
+  // in their own order, so a node carrying several would be validated on one
+  // operator and executed on another. Only `type`/`on` may sit beside one.
+  let operators = FILTER_OPERATORS.filter((key) => key in filter);
+  if (operators.length > 1) {
+    throw new InvalidQueryError(
+      `${pointer.join('/') || '/'}: a filter may use only one operator, but found ${operators
+        .map((key) => `"${key}"`)
+        .join(', ')}; combine operators by nesting them under "every" or "any"`,
+    );
   }
 
   if ('any' in filter) {
