@@ -42,7 +42,8 @@ const REALM_POLICY = {
 };
 
 // `lock` is kept out of every policy's reach. `OpenClassroom` redeclares it
-// without the flag, and inherits the rest.
+// without the flag, and inherits the rest. The head teacher is computed from
+// the roster, so only the index holds it.
 function classroomModule(rosterField: string) {
   return `
     import { contains, containsMany, field, CardDef } from "@cardstack/base/card-api";
@@ -51,6 +52,11 @@ function classroomModule(rosterField: string) {
     export class Classroom extends CardDef {
       @field ${rosterField} = containsMany(StringField);
       @field status = contains(StringField);
+      @field headTeacher = contains(StringField, {
+        computeVia: function (this: Classroom) {
+          return this.${rosterField}?.[0];
+        },
+      });
 
       @operation static appendActivity = {
         base: 'transform',
@@ -102,7 +108,7 @@ const GRANTS: Grant[] = [
   { operation: 'read', where: '.teacherIds | any(. == actor())' },
   {
     operation: 'appendActivity',
-    where: { bxl: 'actor() in .teacherIds', snapshot: true },
+    where: { bxl: '.headTeacher == actor()', snapshot: true },
   },
   { operation: 'approve', where: '.teacherIds[0] == realmConfig("approver")' },
   { operation: 'rename', where: 'instance().teacherIds | length > 0' },
@@ -295,8 +301,8 @@ module(basename(import.meta.filename), function (hooks) {
               operation: 'appendActivity',
               path: 'rules[0].grants[1]',
               where: {
-                source: 'actor() in .teacherIds',
-                canonical: '(actor() | IN(.teacherIds))',
+                source: '.headTeacher == actor()',
+                canonical: '.headTeacher == actor()',
                 snapshot: true,
               },
             },
@@ -402,6 +408,47 @@ module(basename(import.meta.filename), function (hooks) {
       compiles(),
       2,
       "the type's changed definition compiled the policy again",
+    );
+  });
+
+  test('a predicate that reads a computed value without the annotation records `unsnapshotted-policy-read`, and the rest of the policy compiles', async function (assert) {
+    await writeTo(
+      org,
+      'policies/education.json',
+      policyCard([
+        { operation: 'read', where: '.teacherIds | any(. == actor())' },
+        { operation: 'approve', where: '.headTeacher == actor()' },
+        {
+          operation: 'rename',
+          where: { bxl: '.headTeacher == actor()', snapshot: true },
+        },
+        {
+          operation: 'appendActivity',
+          where: { bxl: '.status == "open"', snapshot: true },
+        },
+      ]),
+    );
+    let policy = await compiled();
+    assert.deepEqual(
+      policy?.issues.map(({ code, path }) => ({ code, path })),
+      [{ code: 'unsnapshotted-policy-read', path: 'rules[0].grants[1].where' }],
+      'the unannotated read of the computed value is recorded against its grant',
+    );
+    assert.true(
+      /`\.headTeacher` is computed/.test(policy?.issues[0]?.message ?? ''),
+      `the issue names the computed value: ${policy?.issues[0]?.message}`,
+    );
+    assert.deepEqual(
+      policy?.rules[0].grants.map(({ operation, where }) => [
+        operation,
+        where?.snapshot,
+      ]),
+      [
+        ['read', false],
+        ['rename', true],
+        ['appendActivity', false],
+      ],
+      'the other grants compile: annotated, the computed read is judged against the snapshot, and an annotated read of the stored source is judged against the stored source',
     );
   });
 

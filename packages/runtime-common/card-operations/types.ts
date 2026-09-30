@@ -427,7 +427,10 @@ export type PolicyIssueCode =
   // grant is kept, and admits no search.
   | 'policy-not-filterable'
   // A `where` that reads a computed value or a linked card's field without
-  // the `snapshot` annotation. Reserved: compiling does not record it.
+  // the `snapshot` annotation, or that reads one no snapshot holds: a linked
+  // card's field behind a list of links, a link not marked `searchable`, or a
+  // link inside a contained value, a computed value inside a list, or a
+  // relationship a query fills. The grant is left out in both lanes.
   | 'unsnapshotted-policy-read'
   // A grant on a type whose representation links to cards of types the
   // policy grants nothing on, so the grant reaches those cards too. Reserved:
@@ -871,9 +874,10 @@ export interface ExplainedGrant {
   // What the predicate reads. `stored` is the target's own stored source
   // (tier 0): its scalars, contained values and relationship links, as fresh
   // as the last write. `snapshot` is a predicate annotated as reading computed
-  // values or linked cards (tiers 1 and 2), which lag the index. The gate
-  // reads the stored source alone, so it never evaluates a `snapshot`
-  // predicate, and such a grant admits nothing.
+  // values or linked cards (tiers 1 and 2), judged against the stored source
+  // with the index's values for those laid under it. The index lags the
+  // stored source, so such a grant decides on what the card held when it was
+  // last indexed.
   tier?: 'stored' | 'snapshot';
   outcome: ExplainedGrantOutcome;
 }
@@ -885,7 +889,7 @@ export type ExplainedGrantOutcome =
   | 'did-not-hold'
   | 'threw'
   // The gate decided without evaluating it: an earlier grant admitted the
-  // invocation, a refusal came first, or the predicate reads a snapshot tier.
+  // invocation, or a refusal came first.
   | 'not-evaluated';
 
 // A `delete` answers with `null`: there is no state left to describe.

@@ -12,6 +12,7 @@ import { MODULE_SOURCE_FILE_DEF_CODE_REFS } from '../policy-file-def.ts';
 import { rri } from '../realm-identifiers.ts';
 import { carriesBuiltIn } from './dispatch.ts';
 import { compilePolicyFilter } from './policy-filter.ts';
+import { classifyPredicateTiers } from './policy-tiers.ts';
 import {
   isDefinitionFreeBaseOperation,
   type BaseOperation,
@@ -93,7 +94,12 @@ export interface CompiledPolicyPredicate {
   source: string;
   // The canonical BXL that the `policy` profile accepted.
   canonical: string;
-  // Whether the author annotated the predicate as reading a snapshot tier.
+  // Whether the gate judges the predicate against the snapshot: the target's
+  // stored source with its indexed computed values and linked cards' values
+  // laid under it. Set where the author annotated the predicate
+  // `snapshot: true` and it reads one of those. An annotated predicate that
+  // reads the stored source alone is judged against the stored source, and
+  // pays no index read.
   snapshot: boolean;
 }
 
@@ -745,6 +751,30 @@ async function compilePolicy(
         issue(outcome.code, `${grantPath}.where`, outcome.problem);
         continue;
       }
+      // Which tier the predicate reads is settled here, from the rule's type,
+      // and ahead of the search filter: a predicate that reads the index
+      // without saying so is inactive in both lanes, not a query grant that
+      // happens to have no filter.
+      let tiers = await classifyPredicateTiers(outcome.body, definition, {
+        lookupDefinition: readDefinition,
+      });
+      if (tiers.unheld) {
+        issue(
+          'unsnapshotted-policy-read',
+          `${grantPath}.where`,
+          `\`where\` reads \`.${tiers.unheld.path}\`, which no snapshot holds: ${tiers.unheld.reason}`,
+        );
+        continue;
+      }
+      if (tiers.snapshot && !where.snapshot) {
+        issue(
+          'unsnapshotted-policy-read',
+          `${grantPath}.where`,
+          `\`where\` reads \`.${tiers.snapshot.path}\`, and ${tiers.snapshot.reason}, which only the index holds. A predicate reads the card's stored source unless it is written as \`{ bxl, snapshot: true }\`, which judges it against the index and keeps deciding on the indexed value until the card is indexed again; a grant that has to stop admitting as soon as the card changes reads the stored source instead`,
+        );
+        continue;
+      }
+      let snapshot = where.snapshot && tiers.snapshot !== undefined;
       grants.push(
         await withFilter(
           {
@@ -753,11 +783,11 @@ async function compilePolicy(
             where: {
               source: where.source,
               canonical: outcome.canonical,
-              snapshot: where.snapshot,
+              snapshot,
             },
           },
           granted.base,
-          { body: outcome.body, snapshot: where.snapshot },
+          { body: outcome.body, snapshot },
           resolved,
           definition,
         ),

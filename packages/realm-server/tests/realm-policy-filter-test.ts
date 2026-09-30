@@ -322,12 +322,34 @@ module(basename(import.meta.filename), function () {
   });
 
   test('a computed field compiles for a predicate annotated as reading a snapshot, whose values are what the index holds', async function (assert) {
-    let { filter, issues } = await filterFor({
+    let { filter, issues, grant } = await filterFor({
       bxl: '.summary == actor()',
       snapshot: true,
     });
     assert.deepEqual(issues, []);
     assert.deepEqual(filter, { ...ANCHOR, eq: { 'item.summary': ACTOR } });
+    assert.true(grant?.where?.snapshot, 'the grant is judged as a snapshot');
+  });
+
+  test('a field the stored source does not hold records `unsnapshotted-policy-read` rather than `policy-not-filterable`, and compiles no grant', async function (assert) {
+    for (let [where, reason] of [
+      ['.summary == actor()', /computed.*snapshot: true/],
+      ['.roster | any(.id == actor())', /filled by a query/],
+    ] as [string, RegExp][]) {
+      let { grant, issues, messages } = await filterFor(where);
+      assert.deepEqual(
+        issues,
+        [
+          {
+            code: 'unsnapshotted-policy-read',
+            path: 'rules[0].grants[0].where',
+          },
+        ],
+        where,
+      );
+      assert.strictEqual(grant, undefined, `${where}: no grant compiles`);
+      assert.true(reason.test(messages[0] ?? ''), `${where}: ${messages[0]}`);
+    }
   });
 
   test('a field of a contained value compiles to an `eq` on its dotted path', async function (assert) {
@@ -504,9 +526,6 @@ module(basename(import.meta.filename), function () {
       ['.lead.id == actor()', /only with an absolute URL/],
       ['.teachers | any(.id == actor())', /only with an absolute URL/],
       ['.id == "@cardstack/catalog/classrooms/1"', /only with an absolute URL/],
-      // A field the stored source does not hold.
-      ['.summary == actor()', /computed.*snapshot: true/],
-      ['.roster | any(.id == actor())', /filled by a query/],
       // A field the index holds in a form the stored source does not.
       ['.published == true', /boolean field holds its unset value/],
       ['.published == null', /compares only the base string and number/],

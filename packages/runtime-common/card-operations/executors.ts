@@ -1260,6 +1260,10 @@ export interface BxlMutationModule {
       resolveReference?: (reference: string) => string;
     },
   ): unknown;
+  mergeBxlMutationOverlays(
+    stored: unknown,
+    overlays: ProgramOverlays | undefined,
+  ): { root: unknown };
   mutateBxlCardSource(
     document: { data: CardResource },
     source: string,

@@ -907,6 +907,64 @@ could be seen side by side: with a `readSource` grant and no `read`, the editor
 shows the stored document beside a preview that is refused. The host keeps such
 a caller from being led there, but it is not a boundary. The endpoints are.
 
+### What a predicate reads
+
+A grant's `where` reads the card's stored source by default: its own values,
+its contained values, and the ids its links hold. That is as fresh as the last
+write, so a grant written against it stops admitting a caller the moment a
+write takes them off the card. `.teachers | any(.id == actor())` and
+`.teacherIds | any(. == actor())` both read the stored source.
+
+A computed value and a linked card's fields are not in the stored source. Only
+the index holds them, and the index lags the stored source. A `where` that
+reads one has to say so:
+
+```json
+{
+  "operation": "read",
+  "where": { "bxl": ".headTeacher == actor()", "snapshot": true }
+}
+```
+
+An annotated predicate is judged against the snapshot: the stored source with
+the card's index row laid under it. The stored source still answers wherever it
+holds a value, so only the computed values and linked cards' fields come from
+the row. **This is a window, and the annotation is how you accept it.** If
+`headTeacher` is computed from the roster, taking someone off the roster does
+not stop the grant admitting them until the classroom is indexed again. That
+holds at the gate and under the write lock alike: a write's predicate reads the
+row as it stands when the lock is taken, not the state the write changes. A
+realm that needs a grant to stop admitting as soon as a card changes writes its
+predicate against the stored source.
+
+The snapshot holds a computed value on the card itself or inside one of its
+single contained values, and the fields of the card a single link on the card
+points to, for a link marked `searchable`. It holds nothing inside a list: not
+a computed value on each item, and not the fields behind a list of links. It
+does not hold a linked card's own links beyond their ids, a link inside a
+contained value, or a relationship a `query` fills. A card with no index row
+yet, or whose row records an error, has no snapshot, and an annotated
+predicate does not hold for it. So a snapshot grant never admits a create
+against a type: the card it would mint has no row.
+
+The policy records which tier each `where` reads when it compiles, as
+`unsnapshotted-policy-read` against the grant, and leaves the grant out:
+
+- A `where` that reads a computed value or a linked card's field without the
+  annotation.
+- A `where` that reads a value no snapshot holds, annotated or not.
+
+An annotated `where` that reads only the stored source is judged against the
+stored source and pays no index read. Where a `where` reads a value whole
+(`tostring`, a comparison of a whole contained value or link, `to_entries`),
+it reads everything beneath that value, and that counts as reading any
+computed value or linked card beneath it.
+
+Each time a snapshot predicate decides an invocation, the realm logs a
+`policy-snapshot-read` line on its `boxel:operations` channel, naming the grant
+and the rule's type, so an operator can count the windows a realm has
+accepted.
+
 ## Asking a policy what it decides
 
 A realm's policy widens what the realm's own permissions allow. A policy
@@ -966,8 +1024,9 @@ Some things worth knowing before you read one:
   can change the answer.
 - **The tier says what a predicate reads.** `stored` is the card's own stored
   source, which is as fresh as the last write. `snapshot` is a predicate
-  annotated as reading computed values or linked cards. Those lag the index,
-  the gate never evaluates them, and such a grant admits nothing.
+  annotated as reading computed values or linked cards, judged against the
+  card's index row as it stands, which lags the stored source (see
+  [What a predicate reads](#what-a-predicate-reads)).
 
 ## Where to look next
 
