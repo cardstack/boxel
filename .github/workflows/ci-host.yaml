@@ -64,7 +64,8 @@ permissions:
 jobs:
   check-percy:
     name: Check if Percy is needed
-    runs-on: ubuntu-latest
+    # Follows host-test onto RunsOn, which waits on it; see host-test.
+    runs-on: ${{ vars.HOST_TEST_RUNS_ON && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && format('runs-on={0}-check-percy/{1}', github.run_id, vars.HOST_TEST_RUNS_ON) || 'ubuntu-latest' }}
     timeout-minutes: 10
     outputs:
       percy_needed: ${{ steps.check.outputs.percy_needed }}
@@ -139,7 +140,8 @@ jobs:
     # as it would be for a pull request on that branch. Anything comparing
     # timings with PR runs wants it on.
     name: Check if cached index is usable
-    runs-on: ubuntu-latest
+    # Follows host-test onto RunsOn, which waits on it; see host-test.
+    runs-on: ${{ vars.HOST_TEST_RUNS_ON && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && format('runs-on={0}-check-index-cache/{1}', github.run_id, vars.HOST_TEST_RUNS_ON) || 'ubuntu-latest' }}
     timeout-minutes: 10
     outputs:
       use_cache: ${{ steps.check.outputs.use_cache }}
@@ -279,6 +281,9 @@ jobs:
       # URLs into the host bundle. The standard-mode build still exists
       # in ci.yaml for `matrix-client-test` / `vscode-boxel-tools-package`.
       boxel_environment: ci
+      # host-test waits on this build, so it follows host-test onto RunsOn,
+      # under the same variable and the same fork guard; see host-test.
+      runs_on_spec: ${{ vars.HOST_TEST_RUNS_ON && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && vars.HOST_TEST_RUNS_ON || '' }}
     concurrency:
       group: ci-host-test-web-assets-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
@@ -286,7 +291,9 @@ jobs:
   live-test:
     name: Live Tests (realm)
     if: github.event.action != 'ready_for_review'
-    runs-on: ubuntu-latest
+    # Same service stack as a host-test shard, so it moves with host-test onto
+    # RunsOn under the same variable and guard; see host-test.
+    runs-on: ${{ vars.HOST_TEST_RUNS_ON && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && format('runs-on={0}-live-test/{1}', github.run_id, vars.HOST_TEST_RUNS_ON) || 'ubuntu-latest' }}
     # See the note on host-test's timeout. This job has never taken more than
     # ~10 minutes when healthy.
     timeout-minutes: 25
@@ -319,8 +326,12 @@ jobs:
           shopt -s dotglob
           cp -a .test-web-assets-artifact/. ./
 
+      # Non-fatal, as in host-test: the workaround is for GitHub's Azure VMs, and
+      # a RunsOn EC2 instance has no interface named eth0.
       - name: Disable TCP/UDP network offloading
-        run: sudo ethtool -K eth0 tx off rx off
+        run: |
+          sudo ethtool -K eth0 tx off rx off ||
+            echo "could not disable offloading on eth0; continuing"
       # EXPERIMENT — this replaces an apt install of dbus-x11 and upower, added
       # in October 2025 to reduce Percy instability. Every Percy cause diagnosed
       # since has been elsewhere (a module-level panel-width singleton, the
@@ -501,6 +512,11 @@ jobs:
     # fork's code must never run inside our AWS account.
     # The label carries the shard index because RunsOn needs a label unique to
     # each matrix entry, or one shard's instance can be claimed by another.
+    #
+    # The three jobs this one needs (check-percy, check-index-cache and the
+    # test-web-assets build) follow it onto RunsOn under the same variable and
+    # guard. Left on ubuntu-latest, they queue behind GitHub's cap and hold the
+    # shards back with them.
     runs-on: ${{ vars.HOST_TEST_RUNS_ON && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && format('runs-on={0}-host-test-{1}/{2}', github.run_id, matrix.shardIndex, vars.HOST_TEST_RUNS_ON) || 'ubuntu-latest' }}
     # Without this a wedged shard inherits GitHub's 360-minute default and
     # holds a runner for six hours doing nothing, which starves the pool for
@@ -1060,7 +1076,9 @@ jobs:
       group: host-percy-finalize-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
     needs: [host-test, check-percy]
-    runs-on: ubuntu-latest
+    # Follows host-test onto RunsOn, so a run's tail doesn't queue behind
+    # GitHub's cap either; see host-test.
+    runs-on: ${{ vars.HOST_TEST_RUNS_ON && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && format('runs-on={0}-percy-finalize/{1}', github.run_id, vars.HOST_TEST_RUNS_ON) || 'ubuntu-latest' }}
     timeout-minutes: 15
     # Job-level so the reject step can test for their presence in its `if:` —
     # a step's own `env:` block is not in scope for that step's condition.
@@ -1243,7 +1261,8 @@ jobs:
       group: host-merge-reports-and-publish-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
     needs: host-test
-    runs-on: ubuntu-latest
+    # Follows host-test onto RunsOn; see host-test.
+    runs-on: ${{ vars.HOST_TEST_RUNS_ON && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && format('runs-on={0}-merge-reports/{1}', github.run_id, vars.HOST_TEST_RUNS_ON) || 'ubuntu-latest' }}
     timeout-minutes: 15
     permissions:
       # checks/pull-requests: needed by publish-unit-test-result-action to post
@@ -1344,7 +1363,9 @@ jobs:
       group: host-memory-baseline-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
     needs: host-test
-    runs-on: ubuntu-latest
+    # Follows host-test onto RunsOn; see host-test. It only reads the shards'
+    # memory reports, so where it runs doesn't change what it measures.
+    runs-on: ${{ vars.HOST_TEST_RUNS_ON && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && format('runs-on={0}-memory-baseline/{1}', github.run_id, vars.HOST_TEST_RUNS_ON) || 'ubuntu-latest' }}
     timeout-minutes: 15
     permissions:
       contents: read
@@ -1388,6 +1409,10 @@ jobs:
     # report comes from a qualifying PR run rather than from this run's
     # merge-and-publish job.
     needs: [host-test]
+    # Stays on ubuntu-latest while the rest of this workflow follows host-test
+    # onto RunsOn: a RunsOn instance is reachable over SSM from our AWS
+    # account, and this job's contents: write token has no reason to be there.
+    # Nothing waits on it, so the queue it sits in holds nothing back.
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
