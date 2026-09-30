@@ -64,8 +64,11 @@ const IDS_CLASSROOM = type('classroom', 'IdsClassroom');
 const HONORS_BOARD = type('classroom', 'HonorsBoard');
 const EXCURSION = type('classroom', 'Excursion');
 const LEDGER = type('classroom', 'Ledger');
+const NOTICEBOARD = type('classroom', 'Noticeboard');
 const STUDENT = type('student', 'Student');
 const GUARDIAN = type('student', 'Guardian');
+// `Student` as a module that re-exports it names it.
+const SCHOOL_STUDENT = type('school', 'Student');
 
 const TEACHES = '.teacherIds | any(. == actor())';
 
@@ -90,7 +93,7 @@ function studentModule({ withGuardian }: { withGuardian: boolean }) {
 // `HonorsBoard` reaches students only through a query-backed field, and
 // `Excursion` reaches guardians only through a field it contains. `Ledger`
 // links to authorization infrastructure: a policy card and a realm config
-// card.
+// card. `Noticeboard` pins a card of any type.
 const CLASSROOM_MODULE = `
   import { contains, containsMany, field, linksTo, linksToMany, CardDef, FieldDef } from "@cardstack/base/card-api";
   import StringField from "@cardstack/base/string";
@@ -144,6 +147,15 @@ const CLASSROOM_MODULE = `
     @field policy = linksTo(() => RealmPolicy);
     @field settings = linksTo(() => RealmConfig);
   }
+
+  export class Noticeboard extends CardDef {
+    @field teacherIds = containsMany(StringField);
+    @field pinned = linksTo(() => CardDef);
+  }
+`;
+
+const SCHOOL_MODULE = `
+  export { Student } from "./student";
 `;
 
 type Grant = { operation: string; where?: unknown };
@@ -220,6 +232,7 @@ module(basename(import.meta.filename), function (hooks) {
             }),
             'student.gts': studentModule({ withGuardian: true }),
             'classroom.gts': CLASSROOM_MODULE,
+            'school.gts': SCHOOL_MODULE,
             'students/ada.json': card(
               { module: '../student', name: 'Student' },
               { name: 'Ada' },
@@ -319,13 +332,13 @@ module(basename(import.meta.filename), function (hooks) {
     );
     let [student, guardian] = reachIssues(policy).map((issue) => issue.message);
     assert.true(
-      /`read` on Classroom .* the Student cards linked through `students`, and no rule grants Student/.test(
+      /`read` on Classroom .* the Student cards linked through `students`, and no rule grants a read of Student/.test(
         student,
       ),
       `the message names the granted type, the reached type and the path: ${student}`,
     );
     assert.true(
-      /the Guardian cards linked through `students\.guardian`, and no rule grants Guardian/.test(
+      /the Guardian cards linked through `students\.guardian`, and no rule grants a read of Guardian/.test(
         guardian,
       ),
       `a type two links away is named with the whole path: ${guardian}`,
@@ -368,6 +381,52 @@ module(basename(import.meta.filename), function (hooks) {
       rule(CARD_DEF, 'read'),
     ]);
     assert.deepEqual(reached(policy), []);
+  });
+
+  test('a rule that names a type through a module re-exporting it grants it', async function (assert) {
+    let policy = await compile([
+      rule(CLASSROOM, 'read'),
+      rule(SCHOOL_STUDENT, 'read'),
+      rule(GUARDIAN, 'read'),
+    ]);
+    assert.deepEqual(reached(policy), []);
+  });
+
+  test('a rule that lets no caller read its type does not grant it', async function (assert) {
+    // A delete hands the caller no student to read, so the students the
+    // classroom carries are still ones no rule hands over.
+    let policy = await compile([
+      rule(CLASSROOM, 'read'),
+      rule(STUDENT, 'delete'),
+      rule(GUARDIAN, 'read'),
+    ]);
+    assert.deepEqual(reached(policy), [
+      {
+        code: 'grant-reaches-ungranted-type',
+        path: 'rules[0].grants[0]',
+        via: 'students',
+      },
+    ]);
+  });
+
+  test('a link typed as a card of any type is not answered by granting that type', async function (assert) {
+    let policy = await compile([rule(NOTICEBOARD, 'read')]);
+    assert.deepEqual(reached(policy), [
+      {
+        code: 'grant-reaches-ungranted-type',
+        path: 'rules[0].grants[0]',
+        via: 'pinned',
+      },
+    ]);
+    let [message] = reachIssues(policy).map((issue) => issue.message);
+    assert.true(
+      message.includes('a link typed as CardDef can hold a card of any type'),
+      message,
+    );
+    assert.false(
+      message.includes('grant a read of CardDef'),
+      `it does not suggest granting every card: ${message}`,
+    );
   });
 
   test('a closure that reaches an ungranted type only through a query-backed field records it', async function (assert) {
@@ -501,8 +560,19 @@ module(basename(import.meta.filename), function (hooks) {
       },
     ]);
     assert.deepEqual(
-      policy.issues.map(({ code, path }) => ({ code, path })),
-      [{ code: 'policy-not-filterable', path: 'rules[0].grants[0].where' }],
+      policy.issues.map(({ code, path, severity }) => ({
+        code,
+        path,
+        severity,
+      })),
+      [
+        {
+          code: 'policy-not-filterable',
+          path: 'rules[0].grants[0].where',
+          severity: 'inactive',
+        },
+      ],
+      'and the grant itself admits nothing',
     );
   });
 

@@ -1,5 +1,6 @@
 import stableStringify from 'safe-stable-stringify';
 
+import { isResolvedCodeRef } from '../card-document-shape.ts';
 import { now } from '../clock.ts';
 import type { ResolvedCodeRef } from '../code-ref.ts';
 import { computeContentHash } from '../content-hash.ts';
@@ -12,7 +13,11 @@ import { MODULE_SOURCE_FILE_DEF_CODE_REFS } from '../policy-file-def.ts';
 import { rri } from '../realm-identifiers.ts';
 import { carriesBuiltIn } from './dispatch.ts';
 import { compilePolicyFilter } from './policy-filter.ts';
-import { reachIssues, type ReachingGrant } from './policy-reach.ts';
+import {
+  reachIssues,
+  type ReachingGrant,
+  type ReadableType,
+} from './policy-reach.ts';
 import {
   isDefinitionFreeBaseOperation,
   linkStrategyOf,
@@ -835,19 +840,29 @@ async function compilePolicy(
   // rule has compiled, since whether a reached type is granted is a question
   // about the whole policy.
   let reaching: ReachingGrant[] = [];
+  let readable: ReadableType[] = [];
   for (let rule of rules) {
     let entry = await readType(rule.targetType);
     if (!entry) {
       continue;
     }
+    let { definition } = entry;
     for (let grant of rule.grants) {
-      let lane = reachLane(entry.definition, grant);
+      let lane = reachLane(definition, grant);
       if (lane) {
-        reaching.push({ rule, grant, definition: entry.definition, ...lane });
+        reaching.push({ rule, grant, definition, ...lane });
       }
     }
+    if (rule.grants.some((grant) => letsCallerRead(definition, grant))) {
+      readable.push({
+        codeRef: rule.targetType,
+        definedAs: isResolvedCodeRef(definition.codeRef)
+          ? definition.codeRef
+          : undefined,
+      });
+    }
   }
-  for (let found of await reachIssues(reaching, rules, {
+  for (let found of await reachIssues(reaching, readable, {
     readType: readReachedType,
     typeKey: (codeRef) => env.typeKey(codeRef),
     isPolicyCard: (types) => env.isPolicyCard(types),
@@ -896,6 +911,22 @@ function reachLane(
       : { governedBy: 'ad-hoc-query', links: 'full', rendered: true };
   }
   return undefined;
+}
+
+// Whether a grant lets a caller read the cards it admits: a read of the
+// card's document, a read of its stored source, or a search that compiled a
+// filter. A write or a delete hands the caller no card to read, and a query
+// grant with no filter admits no search.
+function letsCallerRead(
+  definition: Definition,
+  grant: CompiledOperationGrant,
+): boolean {
+  let base = grantedOperation(definition, grant.operation)?.base;
+  return (
+    base === 'read' ||
+    base === 'readSource' ||
+    (base === 'query' && grant.filter !== undefined)
+  );
 }
 
 // What invoking `name` on an instance of a type reaches: the type's own

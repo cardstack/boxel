@@ -46,8 +46,11 @@ import type { LinkStrategy } from '@cardstack/base/operations';
 //   serves a document and no rendering.
 //
 // A reached type counts as granted when a rule on it, or on a type it
-// descends from, keeps a grant. Authorization infrastructure never counts as
-// granted, even under a catch-all rule. A `CardDef` rule reaches a
+// descends from, keeps a grant that lets a caller read one: a `read`, a
+// `readSource`, or a `query` that compiled a filter. A rule that only lets a
+// caller write or delete the type has not made its cards readable, so the
+// reach still hands over something no rule does. Authorization infrastructure
+// never counts as granted, even under a catch-all rule. A `CardDef` rule reaches a
 // `RealmPolicy` by ancestry, yet the gate refuses every grant-reached caller
 // every operation on one, and a policy card's attributes are its whole rule
 // list. The realm config card is refused in the same way.
@@ -70,6 +73,15 @@ export interface ReachingGrant {
   links: LinkStrategy;
   // Whether the grant serves its rows' prerendered HTML.
   rendered: boolean;
+}
+
+// A rule's type, as the rule names it and as its definition names it. A rule
+// may name its type through a module that re-exports it, and the adoption
+// chain a reached type's definition records spells the type by the module
+// that defines it, so the rule is matched under both, as the gate matches it.
+export interface ReadableType {
+  codeRef: ResolvedCodeRef;
+  definedAs: ResolvedCodeRef | undefined;
 }
 
 export interface ReachEnvironment {
@@ -95,8 +107,10 @@ export interface ReachIssue {
 // The type whose own fields every card has, and which the walk leaves out.
 // They are on every card whatever type the rule names, so the grant's author
 // did not add the reach, and a warning about it would be recorded on every
-// grant in every policy. Today the one link among them is `cardInfo.theme`:
-// how a card looks, which every render of it already draws.
+// grant in every policy. The links among them are the card's theme
+// (`cardInfo.theme`, and the computed `cardTheme`) and its thumbnail image
+// (`cardInfo.cardThumbnail`): how a card looks, which every render of it
+// already draws. A link added to `CardDef` or `CardInfoField` is left out too.
 const cardDefRef: ResolvedCodeRef = {
   module: rri('@cardstack/base/card-api'),
   name: 'CardDef',
@@ -106,6 +120,15 @@ const realmConfigRef: ResolvedCodeRef = {
   module: rri('@cardstack/base/realm-config'),
   name: 'RealmConfig',
 };
+
+// The types every card or file descends from. A link typed as one of them can
+// hold a card of any type, so granting the type it names would grant every
+// card, and the message does not offer that.
+const baseTypeRefs: ResolvedCodeRef[] = [
+  cardDefRef,
+  { module: rri('@cardstack/base/card-api'), name: 'BaseDef' },
+  { module: rri('@cardstack/base/file-api'), name: 'FileDef' },
+];
 
 // A type the walk reached, and the fields it was reached through, from the
 // rule's type.
@@ -117,21 +140,37 @@ interface Reached {
 
 export async function reachIssues(
   reaching: ReachingGrant[],
-  rules: CompiledPolicyRule[],
+  readable: ReadableType[],
   env: ReachEnvironment,
 ): Promise<ReachIssue[]> {
   if (reaching.length === 0) {
     return [];
   }
   let granted = new Set<string>();
-  for (let rule of rules) {
-    let key = rule.grants.length > 0 ? keyOf(rule.targetType, env) : undefined;
-    if (key) {
+  for (let type of readable) {
+    for (let key of keysOf(type, env)) {
       granted.add(key);
     }
   }
   let configKey = keyOf(realmConfigRef, env);
+  let baseKeys = new Set(
+    baseTypeRefs.flatMap((ref) => {
+      let key = keyOf(ref, env);
+      return key ? [key] : [];
+    }),
+  );
   let walker = new ClosureWalker(env);
+  let message = (
+    reach: ReachingGrant,
+    reached: Reached,
+    kind: UngrantedKind,
+    lane: 'document' | 'rendering',
+  ) => {
+    let anyType = baseKeys.has(keyOf(reached.codeRef, env) ?? '');
+    return lane === 'document'
+      ? documentMessage(reach, reached, kind, anyType)
+      : renderingMessage(reach, reached, kind, anyType);
+  };
 
   let issues: ReachIssue[] = [];
   for (let reach of reaching) {
@@ -142,7 +181,7 @@ export async function reachIssues(
           issues.push({
             code: 'grant-reaches-ungranted-type',
             path: reach.grant.path,
-            message: documentMessage(reach, reached, kind),
+            message: message(reach, reached, kind, 'document'),
           });
         }
       }
@@ -154,7 +193,7 @@ export async function reachIssues(
           issues.push({
             code: 'render-reaches-ungranted-type',
             path: reach.grant.path,
-            message: renderingMessage(reach, reached, kind),
+            message: message(reach, reached, kind, 'rendering'),
           });
         }
       }
@@ -214,11 +253,19 @@ class ClosureWalker {
     definition: Definition,
     lane: 'document' | 'rendering',
   ): Promise<Reached[]> {
-    let seen = new Set<string>();
-    let rootKey = keyOf(root, this.#env);
-    if (rootKey) {
-      seen.add(rootKey);
-    }
+    // The rule's type is where the walk starts, however the rule spelled it,
+    // so a link back to it is not a reach.
+    let seen = new Set<string>(
+      keysOf(
+        {
+          codeRef: root,
+          definedAs: isResolvedCodeRef(definition.codeRef)
+            ? definition.codeRef
+            : undefined,
+        },
+        this.#env,
+      ),
+    );
     let reached: Reached[] = [];
     let queue: { definition: Definition; via: string[]; isRoot: boolean }[] = [
       { definition, via: [], isRoot: true },
@@ -326,46 +373,58 @@ function documentMessage(
   reach: ReachingGrant,
   reached: Reached,
   kind: UngrantedKind,
+  anyType: boolean,
 ): string {
   let { operation } = reach.grant;
   let from = reach.rule.targetType.name;
   let to = reached.codeRef.name;
-  let fix = narrowingFix(reach);
   let serves =
     reach.governedBy === 'read'
       ? `\`${operation}\` on ${from} serves the card with its links assembled`
       : `\`${operation}\` on ${from} serves its rows with their links assembled`;
-  return `${serves}, so it hands every caller it admits the ${to} cards linked through \`${reached.via.join('.')}\`, and ${ungrantedClause(to, kind)}. ${
-    kind === 'ungranted'
-      ? `To keep them out, ${fix}; to hand them over deliberately, grant ${to} in a rule of its own.`
-      : `To keep them out, ${fix}.`
-  } A declaration on ${to} does not narrow this: a closure never consults a linked type's declaration`;
+  return `${serves}, so it hands every caller it admits the ${to} cards linked through \`${reached.via.join('.')}\`, and ${ungrantedClause(to, kind, anyType)}. To keep them out, ${narrowingFix(reach)}${deliberately(to, kind, anyType)}. A declaration on ${to} does not narrow this: a closure never consults a linked type's declaration`;
 }
 
 function renderingMessage(
   reach: ReachingGrant,
   reached: Reached,
   kind: UngrantedKind,
+  anyType: boolean,
 ): string {
   let { operation } = reach.grant;
   let from = reach.rule.targetType.name;
   let to = reached.codeRef.name;
-  return `the prerendered HTML of the ${from} rows \`${operation}\` serves can draw the ${to} cards linked through \`${reached.via.join('.')}\`, and ${ungrantedClause(to, kind)}. A render draws a card's links whatever strategy its document is served under, so narrowing \`links\` does not keep them out of the HTML. ${
-    kind === 'ungranted'
-      ? `To keep them out, keep ${from}'s templates from embedding them; to hand them over deliberately, grant ${to} in a rule of its own`
-      : `To keep them out, keep ${from}'s templates from embedding them`
-  }`;
+  return `the prerendered HTML of the ${from} rows \`${operation}\` serves can draw the ${to} cards linked through \`${reached.via.join('.')}\`, and ${ungrantedClause(to, kind, anyType)}. A render draws a card's links whatever strategy its document is served under, so narrowing \`links\` does not keep them out of the HTML. To keep them out, keep ${from}'s templates from embedding them${deliberately(to, kind, anyType)}`;
 }
 
-function ungrantedClause(to: string, kind: UngrantedKind): string {
+function ungrantedClause(
+  to: string,
+  kind: UngrantedKind,
+  anyType: boolean,
+): string {
   switch (kind) {
     case 'ungranted':
-      return `no rule grants ${to}`;
+      return anyType
+        ? `no rule grants a read of ${to}, and a link typed as ${to} can hold a card of any type`
+        : `no rule grants a read of ${to}`;
     case 'policy card':
       return `${to} is a policy card type: a policy card's attributes are its whole rule list, and no rule grants one`;
     case 'config card':
       return `${to} is the realm config card type, and no rule grants a realm's config card`;
   }
+}
+
+// The other way out: granting the reached type on purpose. Not offered for
+// authorization infrastructure, which no rule grants, nor for a type every
+// card descends from, since granting it would grant every card.
+function deliberately(
+  to: string,
+  kind: UngrantedKind,
+  anyType: boolean,
+): string {
+  return kind === 'ungranted' && !anyType
+    ? `; to hand them over deliberately, grant a read of ${to} in a rule of its own`
+    : '';
 }
 
 function narrowingFix(reach: ReachingGrant): string {
@@ -386,6 +445,17 @@ function keyOf(
   env: ReachEnvironment,
 ): string | undefined {
   return attempt(() => env.typeKey(codeRef));
+}
+
+function keysOf(type: ReadableType, env: ReachEnvironment): string[] {
+  let keys = new Set<string>();
+  for (let ref of [type.codeRef, type.definedAs]) {
+    let key = ref ? keyOf(ref, env) : undefined;
+    if (key) {
+      keys.add(key);
+    }
+  }
+  return [...keys];
 }
 
 function attempt<T>(fn: () => T): T | undefined {
