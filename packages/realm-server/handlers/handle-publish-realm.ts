@@ -239,6 +239,40 @@ async function ensureRealmIndexBoilerplateOptIn(
   }
 }
 
+// A published realm names no policy, so it answers on its ACL alone. The
+// source's pointer is an absolute card id, so a copy of it would name the
+// source's policy card rather than anything in the snapshot: the published
+// realm would be governed by the source's live policy, and a create or update
+// grant there could admit a signed-in caller's write into a realm nobody may
+// write. Removed from the copy before it is swapped in, so a published realm
+// already mounted never reads the source's pointer, even for a moment.
+//
+// A `realm.json` that doesn't parse is left alone, since a realm reads no
+// policy from it either. One that parses and can't be rewritten fails the
+// publish.
+async function dropRealmPolicyPointer(realmPath: string): Promise<void> {
+  let realmJsonPath = join(realmPath, 'realm.json');
+  if (!(await pathExists(realmJsonPath))) {
+    return;
+  }
+  let realmConfigDoc: { data?: { attributes?: Record<string, unknown> } };
+  try {
+    realmConfigDoc = await readJson(realmJsonPath);
+  } catch {
+    return;
+  }
+  let attributes = realmConfigDoc?.data?.attributes;
+  if (
+    !attributes ||
+    typeof attributes !== 'object' ||
+    !('policy' in attributes)
+  ) {
+    return;
+  }
+  delete attributes.policy;
+  await writeJson(realmJsonPath, realmConfigDoc, { spaces: 2 });
+}
+
 export default function handlePublishRealm({
   dbAdapter,
   definitionLookup,
@@ -510,6 +544,7 @@ export default function handlePublishRealm({
           await remove(backupPath);
           await copy(sourceRealmPath, tempCopyPath);
           try {
+            await dropRealmPolicyPointer(tempCopyPath);
             if (await pathExists(publishedRealmPath)) {
               await move(publishedRealmPath, backupPath);
             }
