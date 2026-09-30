@@ -764,11 +764,16 @@ module(basename(import.meta.filename), function (hooks) {
       );
     });
 
-    test('a validator for the data-only answer names the withholding', async function (assert) {
+    test('a validator names the withheld formats a request selects, and no others', async function (assert) {
       let withheld = (await cardHtml(BIOLOGY, 'embedded')).get('etag') ?? '';
       assert.true(
-        withheld.includes('dataonly-embedded,fitted'),
-        `the validator names the formats served data-only, got ${withheld}`,
+        withheld.endsWith(':dataonly-embedded"'),
+        `the validator names the withheld format asked for, got ${withheld}`,
+      );
+      let shared = (await cardHtml(BIOLOGY, 'isolated')).get('etag') ?? '';
+      assert.true(
+        /^"\d+:\d+"$/.test(shared),
+        `a shared format of the same card keeps the plain index:html validator a client rebuilds, got ${shared}`,
       );
       let plain = (await cardHtml(ALGEBRA, 'embedded')).get('etag') ?? '';
       assert.false(

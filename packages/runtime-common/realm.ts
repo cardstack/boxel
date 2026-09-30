@@ -74,6 +74,7 @@ import {
 import {
   emptySearchEntryDocument,
   fieldsetFromParam,
+  htmlQueryFormats,
   htmlQueryFromParams,
   markPolicyScoped,
   parseSearchEntryQueryFromPayload,
@@ -1650,11 +1651,15 @@ function buildEntryHtmlEtag(
       ? `${base}:lb-off`
       : `${base}:lb${assembledLinkResourceBudget()}`;
   }
-  // The formats the card's type serves data-only decide whether a rendering
-  // rides the body at all, and the type's declaration can change while the
-  // card's own generations stand still — a type declared in another realm's
-  // module, say. So they are named, and a validator issued before the
-  // declaration changed never matches the body served after.
+  // The withheld formats this request selects. For a healthy card the body
+  // already shows a withheld rendering as `none` above, but an errored card
+  // answers a withheld format with an error rendering at the same generation
+  // it answers a shared one with its last-known-good markup, and the type's
+  // declaration can change while the card's own generations stand still — a
+  // type declared in another realm's module, say. So they are named, and a
+  // validator issued before the declaration changed never matches the body
+  // served after. A request selecting only shared formats names none, so its
+  // pure-html body keeps the `<index>:<html>` validator a client rebuilds.
   if (unshareableFormats.length > 0) {
     base = `${base}:dataonly-${unshareableFormats.join(',')}`;
   }
@@ -13338,7 +13343,14 @@ export class Realm {
       this.getCachedRealmInfoHash(),
       resolveLinksOnly,
       duringPrerender,
-      unshareableFormats,
+      // Only the withheld formats this request selects decide its body; an
+      // htmlQuery naming no format selects among every one.
+      fieldset.html
+        ? unshareableFormats.filter((format) => {
+            let asked = htmlQueryFormats(htmlQuery);
+            return asked.length === 0 || asked.includes(format);
+          })
+        : [],
     );
     let ifNoneMatch = request.headers.get('if-none-match');
     if (ifNoneMatch && ifNoneMatchMatches(ifNoneMatch, etag)) {
