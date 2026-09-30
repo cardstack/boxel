@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import {
   copyFileSync,
   existsSync,
@@ -21,8 +22,65 @@ const write = (name, body) => {
   writeFileSync(join(target, name), body);
 };
 const read = (name) => readFileSync(join(root, name), 'utf8');
+
+// The generated app is its own pnpm workspace, where `catalog:` means
+// nothing, so each catalog specifier becomes the range pnpm-workspace.yaml
+// gives it. The catalog is a flat block of `name: range` lines.
+const catalog = {};
+let inCatalog = false;
+for (const line of read('pnpm-workspace.yaml').split('\n')) {
+  if (/^\S/.test(line)) {
+    inCatalog = line.trimEnd() === 'catalog:';
+    continue;
+  }
+  const entry = inCatalog && line.match(/^\s+("[^"]+"|[^\s#"]\S*):\s*(\S+)/);
+  if (entry) {
+    catalog[entry[1].replace(/^"|"$/g, '')] = entry[2].replace(/^"|"$/g, '');
+  }
+}
+const resolveCatalog = (dependencies) =>
+  Object.fromEntries(
+    Object.entries(dependencies).map(([name, specifier]) => {
+      if (specifier !== 'catalog:') {
+        return [name, specifier];
+      }
+      if (!catalog[name]) {
+        throw new Error(`${name} is not in the pnpm-workspace.yaml catalog`);
+      }
+      return [name, catalog[name]];
+    }),
+  );
+
+// The app installs the libraries from tarballs, which pnpm pack builds (via
+// each package's prepack) and writes with catalog: and workspace:
+// specifiers already resolved, so the app doesn't depend on the checkout.
+const pack = (name) => {
+  mkdirSync(join(target, 'vendor'), { recursive: true });
+  execFileSync(
+    'pnpm',
+    ['pack', '--out', join(target, 'vendor', `${name}.tgz`)],
+    {
+      cwd: join(root, 'packages', name),
+      stdio: 'inherit',
+    },
+  );
+  return `file:./vendor/${name}.tgz`;
+};
+
+// A directory outside the checkout doesn't see its .mise.toml, so the app
+// carries the same Node and pnpm pins.
+const tools = Object.fromEntries(
+  [...read('.mise.toml').matchAll(/^(node|pnpm) = "([^"]+)"$/gm)].map(
+    ([, tool, version]) => [tool, version],
+  ),
+);
+const rootPackage = JSON.parse(read('package.json'));
 const source = JSON.parse(read('packages/choreo-test-app/package.json'));
 const dev = { ...source.devDependencies };
+const dependencies = resolveCatalog({
+  'motion-dom': source.dependencies['motion-dom'],
+  'motion-utils': source.dependencies['motion-utils'],
+});
 for (const key of [
   '@chenglou/pretext',
   '@types/three',
@@ -45,19 +103,20 @@ write(
       scripts: {
         start: 'vite --host 127.0.0.1 --port 4600',
         build: 'vite build',
-        'lint:types': 'glint',
+        'lint:types': 'ember-tsc --noEmit',
       },
       dependencies: {
-        'glimmer-motion': `file:${join(root, 'packages/glimmer-motion')}`,
-        'choreo-player': `file:${join(root, 'packages/choreo-player')}`,
-        'motion-dom': source.dependencies['motion-dom'],
-        'motion-utils': source.dependencies['motion-utils'],
+        'glimmer-motion': pack('glimmer-motion'),
+        'choreo-player': pack('choreo-player'),
+        ...dependencies,
       },
-      devDependencies: dev,
+      devDependencies: resolveCatalog(dev),
       ember: source.ember,
       'ember-addon': source['ember-addon'],
       exports: { './*': './app/*' },
-      packageManager: JSON.parse(read('package.json')).packageManager,
+      engines: rootPackage.engines,
+      devEngines: rootPackage.devEngines,
+      packageManager: `pnpm@${tools.pnpm}`,
     },
     null,
     2,
@@ -85,7 +144,6 @@ write(
     {
       extends: '@ember/app-tsconfig',
       include: ['app', 'types'],
-      glint: { environment: ['ember-loose', 'ember-template-imports'] },
       compilerOptions: {
         allowJs: true,
         noEmitOnError: false,
@@ -143,13 +201,13 @@ for (const [route, file, name] of [
     `import { ${name} } from '../components/${file}';\n<template><${name} /></template>\n`,
   );
 }
-console.log(
-  `Created ${target}\nRun pnpm install, pnpm build, and pnpm start there. Local package dependencies point to ${root}; build those packages first.`,
-);
-
 write(
   'pnpm-workspace.yaml',
-  'overrides:\n  vscode-languageserver-protocol: 3.18.2\nallowBuilds:\n  esbuild: true\n  core-js: true\n',
+  'allowBuilds:\n  esbuild: true\n  core-js: true\n',
+);
+write(
+  '.mise.toml',
+  `[tools]\nnode = "${tools.node}"\npnpm = "${tools.pnpm}"\n`,
 );
 
 write(
@@ -158,4 +216,8 @@ write(
     'test-app',
     'choreo-tutorial-app',
   ),
+);
+
+console.log(
+  `Created ${target}\nRun mise trust, pnpm install, pnpm build, and pnpm start there.`,
 );
