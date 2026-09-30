@@ -12,10 +12,15 @@
     }
   ],
   "tests": {
-    "host": ["Integration | realm policy"],
+    "host": [
+      "Integration | realm policy",
+      "Integration | policy-scoped search"
+    ],
     "realmServer": [
       "catalog-test-subset-test",
       "realm-policy-activation-test",
+      "realm-policy-archived-seal-test",
+      "realm-policy-batch-test",
       "realm-policy-capabilities-test",
       "realm-policy-card-write-test",
       "realm-policy-compile-test",
@@ -25,6 +30,7 @@
       "realm-policy-non-grantable-test",
       "realm-policy-query-filter-test",
       "realm-policy-query-reach-test",
+      "realm-policy-render-search-test",
       "realm-policy-row-reach-test",
       "realm-policy-source-read-test",
       "realm-policy-write-lock-test",

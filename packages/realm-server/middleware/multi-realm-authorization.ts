@@ -2,6 +2,7 @@ import type Koa from 'koa';
 import type { DBAdapter, Realm } from '@cardstack/runtime-common';
 import {
   archivedRealmURLs,
+  DURING_PRERENDER_HEADER,
   fetchUserPermissions,
   isSessionRevoked,
   param,
@@ -16,6 +17,10 @@ import {
   AuthenticationError,
   AuthenticationErrorMessages,
 } from '@cardstack/runtime-common/router';
+import {
+  searchPrincipal,
+  type SearchPrincipal,
+} from '@cardstack/runtime-common/card-operations';
 import type { RealmRegistryReconciler } from '../lib/realm-registry-reconciler.ts';
 import {
   retrieveTokenClaim,
@@ -45,12 +50,15 @@ export type MultiRealmAuthorizationState = {
   // admits this caller — otherwise nothing. Naming one is not an error: a
   // federated search asks several realms a question, and a realm that has no
   // answer for this caller is a realm with no rows, exactly as a realm
-  // holding no matching card is. Always empty on an endpoint that refuses.
+  // holding no matching card is. Always empty on an endpoint that refuses,
+  // and for a realm-authority principal, which no policy admits.
   grantCandidates: string[];
-  // The user the request's token was verified for. Absent on a request that
-  // carried no token, which reached here only because every realm it names
-  // is publicly readable.
-  user?: string;
+  // Who the request's token was verified for: the user it names, or a
+  // realm-authority principal — a session a realm renders its own cards under,
+  // or any request a render tab sends. Absent on a request that carried no
+  // token, which reached here only because every realm it names is publicly
+  // readable.
+  principal?: SearchPrincipal;
 };
 
 const MULTI_REALM_AUTH_STATE = 'multiRealmAuthorization';
@@ -147,7 +155,7 @@ export function multiRealmAuthorization(
     let publishedRealmURLs = await getPublishedRealmURLs(dbAdapter, realmList);
 
     let readableRealms = new Set<string>();
-    let user: string | undefined;
+    let principal: SearchPrincipal | undefined;
     let authorization = ctxt.req.headers['authorization'];
     if (!authorization) {
       let publicPermissions = await fetchUserPermissions(dbAdapter, {
@@ -191,7 +199,16 @@ export function multiRealmAuthorization(
         throw e;
       }
 
-      user = token.user;
+      // A render tab marks every request it sends, whatever session it holds:
+      // a session minted before its minter carried the claim, or one a
+      // command or a request-only capture runs under. What such a request
+      // reads is a render's, so it is read as one. A caller who sets the
+      // marker themselves only narrows their own search to what the ACL
+      // grants them.
+      principal = searchPrincipal(
+        token.user,
+        token.realmAuthority || ctxt.get(DURING_PRERENDER_HEADER).length > 0,
+      );
       let permissionsForAllRealms = await fetchUserPermissions(dbAdapter, {
         userId: token.user,
         onlyOwnRealms: false,
@@ -225,19 +242,28 @@ export function multiRealmAuthorization(
     // every caller's permission on it away, so it is unreadable to everyone,
     // and it stays sealed whatever its policy says: nothing is served from an
     // archived realm to anyone.
+    //
+    // Nor is any realm a realm-authority principal cannot read. That
+    // principal is a render, and what a render produces is served to every
+    // viewer, so it reads what the realm ACL grants it and nothing more: no
+    // policy is asked about it, and a realm it cannot read contributes no rows
+    // to it, as an archived realm contributes none to anyone.
     let readable = realmList.filter((realmURL) => readableRealms.has(realmURL));
     let unreadable = realmList.filter(
       (realmURL) => !readableRealms.has(realmURL),
     );
-    let archived = await archivedRealmURLs(dbAdapter, unreadable);
-    let grantCandidates = unreadable.filter(
-      (realmURL) => !archived.has(realmURL),
-    );
+    let grantCandidates: string[] = [];
+    if (principal?.kind !== 'realm-authority') {
+      let archived = await archivedRealmURLs(dbAdapter, unreadable);
+      grantCandidates = unreadable.filter(
+        (realmURL) => !archived.has(realmURL),
+      );
+    }
 
     (ctxt.state as Record<string, unknown>)[MULTI_REALM_AUTH_STATE] = {
       realmList: readable,
       grantCandidates,
-      ...(user === undefined ? {} : { user }),
+      ...(principal === undefined ? {} : { principal }),
     } satisfies MultiRealmAuthorizationState;
 
     await next();

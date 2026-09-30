@@ -210,6 +210,19 @@ function isReservedByInvocation(name: string): boolean {
   return RESERVED_BY_INVOCATION.includes(name);
 }
 
+// A name the search surface owns. An ad-hoc search, a filter a caller writes
+// with no operation named, is invoked as `query` on the type it targets, and a
+// realm's policy grants it by that name. A saved search declared under the
+// same name would be granted by the same grant, so a caller granted that saved
+// search could drop its filter and write any other over the type. The base is
+// declarable, since it is what every saved search builds on; only the name is
+// taken.
+const RESERVED_BY_SEARCH: readonly string[] = ['query'];
+
+function isReservedBySearch(name: string): boolean {
+  return RESERVED_BY_SEARCH.includes(name);
+}
+
 // ============================================================================
 // Typed references
 //
@@ -793,6 +806,11 @@ export const operation = function (
   if (isReservedByInvocation(key)) {
     throw new Error(
       `${declarationLabel(owner, key)}: "${key}" is a member of the invocation surface — operations(instance).${key} and a batch builder's ${key} are that, so a declaration under this name would never be reached`,
+    );
+  }
+  if (isReservedBySearch(key)) {
+    throw new Error(
+      `${declarationLabel(owner, key)}: "${key}" is a reserved operation name — it is the name a search the caller writes by hand is invoked and granted under, so a saved search needs a name of its own`,
     );
   }
   assertNameAvailable(owner, key);

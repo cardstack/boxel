@@ -339,6 +339,7 @@ export const BUNDLED_BASE_MODULES: Record<
   website: () => import('@cardstack/base/website'),
   'cards-grid': () => import('@cardstack/base/cards-grid'),
   'datetime-stamp': () => import('@cardstack/base/datetime-stamp'),
+  'audio-file-def': () => import('@cardstack/base/audio-file-def'),
   'audio-metadata': () => import('@cardstack/base/audio-metadata'),
   'audio-waveform': () => import('@cardstack/base/audio-waveform'),
   'avif-meta-extractor': () => import('@cardstack/base/avif-meta-extractor'),
@@ -362,10 +363,14 @@ export const BUNDLED_BASE_MODULES: Record<
     import('@cardstack/base/file-formats/midi-preview'),
   'file-formats/model3d-captures': () =>
     import('@cardstack/base/file-formats/model3d-captures'),
+  'file-formats/model3d-preview': () =>
+    import('@cardstack/base/file-formats/model3d-preview'),
   'file-formats/office-captures': () =>
     import('@cardstack/base/file-formats/office-captures'),
   'file-formats/office-preview': () =>
     import('@cardstack/base/file-formats/office-preview'),
+  'file-formats/pdf-captures': () =>
+    import('@cardstack/base/file-formats/pdf-captures'),
   'file-formats/pdf-viewer': () =>
     import('@cardstack/base/file-formats/pdf-viewer'),
   'file-formats/video-captures': () =>
@@ -373,6 +378,7 @@ export const BUNDLED_BASE_MODULES: Record<
   'file-formats/video-preview': () =>
     import('@cardstack/base/file-formats/video-preview'),
   'flac-meta-extractor': () => import('@cardstack/base/flac-meta-extractor'),
+  'font-file-def': () => import('@cardstack/base/font-file-def'),
   'font-meta-extractor': () => import('@cardstack/base/font-meta-extractor'),
   'gif-meta-extractor': () => import('@cardstack/base/gif-meta-extractor'),
   'gltf-meta-extractor': () => import('@cardstack/base/gltf-meta-extractor'),
@@ -381,6 +387,7 @@ export const BUNDLED_BASE_MODULES: Record<
   'id3v2-parser': () => import('@cardstack/base/id3v2-parser'),
   'image-animation': () => import('@cardstack/base/image-animation'),
   'image-color-profile': () => import('@cardstack/base/image-color-profile'),
+  'image-file-def': () => import('@cardstack/base/image-file-def'),
   'iso-bmff': () => import('@cardstack/base/iso-bmff'),
   'jpg-meta-extractor': () => import('@cardstack/base/jpg-meta-extractor'),
   'json-file-def': () => import('@cardstack/base/json-file-def'),
@@ -392,6 +399,7 @@ export const BUNDLED_BASE_MODULES: Record<
   'office-extract': () => import('@cardstack/base/office-extract'),
   'ogg-meta-extractor': () => import('@cardstack/base/ogg-meta-extractor'),
   ooxml: () => import('@cardstack/base/ooxml'),
+  'pdf-file-def': () => import('@cardstack/base/pdf-file-def'),
   'pdf-meta-extractor': () => import('@cardstack/base/pdf-meta-extractor'),
   'png-meta-extractor': () => import('@cardstack/base/png-meta-extractor'),
   'pptx-file-def': () => import('@cardstack/base/pptx-file-def'),
@@ -399,8 +407,11 @@ export const BUNDLED_BASE_MODULES: Record<
   'stl-meta-extractor': () => import('@cardstack/base/stl-meta-extractor'),
   'svg-meta-extractor': () => import('@cardstack/base/svg-meta-extractor'),
   'text-file-def': () => import('@cardstack/base/text-file-def'),
+  'three-d-model-def': () => import('@cardstack/base/three-d-model-def'),
   'three-mf-meta-extractor': () =>
     import('@cardstack/base/three-mf-meta-extractor'),
+  'ts-file-def': () => import('@cardstack/base/ts-file-def'),
+  'video-file-def': () => import('@cardstack/base/video-file-def'),
   'vorbis-comment-parser': () =>
     import('@cardstack/base/vorbis-comment-parser'),
   'wav-meta-extractor': () => import('@cardstack/base/wav-meta-extractor'),

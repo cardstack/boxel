@@ -394,7 +394,10 @@ A declaration on `read` itself governs the card's plain `GET`, which is what
 the host loads a card with to render it live — in every mode, for every user.
 Under `ids` the host resolves the named links itself as it displays them. Under
 `none` it is never told what the card links to, so wherever the host renders the
-card live its link fields come up empty, including for the realm's own writers.
+card live from its `GET` its link fields come up empty, including for the realm's
+own writers. A card the host first holds from a search row that carried its
+links — an ad-hoc search's, or a `full` query's — keeps them: what a search
+carries is governed by the search, not by the card's `read`.
 Prerendered HTML is different: it is rendered from the card's stored source
 under the realm's own authority, so the card's prerendered formats still draw
 its links, and so does every view the host fills from them, such as search
@@ -471,12 +474,22 @@ what a query declares. The declaration is applied on a realm's own `_search` and
 on `_federated-search` alike, since the server re-lowers a named query from its
 own definition wherever it is served.
 
-`ids` is the narrowing to reach for here too. The host keeps the cards a search
-answers with as the live instances it renders and edits, so a row served under
-`none` becomes a live card with empty link fields — wherever that card is next
-shown or edited in the host, including where its own `read` would carry its
-links, until it is next reloaded. Under `ids` the host resolves each named link
-itself, as it does for an `ids` read.
+**A query's `none` never becomes the card's live representation.** The host
+keeps the cards a search answers with as the live instances it renders and
+edits, and adopts a `full` or `ids` row as one; under `ids` it resolves each
+named link itself, as it does for an `ids` read. A row served under `none` is
+silent about what its card links to rather than saying it links to nothing, so
+the realm marks the row's card `meta.relationshipsWithheld` and the host never
+adopts it. The row renders from its prerendered HTML, and wherever the card is
+opened, edited or rendered live, the host loads it through its own read, so a
+query's `none` never leaves a live card with empty link fields the query chose
+not to send. The cost is one request for each such card the host goes on to use
+live, where an adopted row would have needed none.
+
+The rule runs one way. A row that carries more than the card's own `read` — an
+ad-hoc search's or a `full` query's row of a type whose `read` narrows — is
+adopted as it came, since what a search carries is governed by the search, and
+the host then holds the card with the links that row carried.
 
 #### Where it is refused
 
@@ -663,6 +676,13 @@ case, so render an empty state for it.
 A search reads the index, which lags a write the realm has just committed. To
 read a card you just wrote, read the card.
 
+In a realm a caller reaches only through its policy, a saved search is granted
+by its own name, and a search the caller writes by hand is granted as `query`
+on the type its filter names with `on`. So granting `myPatients` grants that
+search and not the freedom to write any filter over `PatientRecord`, and a
+filter that names no type is granted by nothing. For the same reason no saved
+search may be named `query`: the name belongs to the search written by hand.
+
 ## Batches
 
 `operations(card).atomic(build)` sends one all-or-nothing batch in that card's
@@ -704,7 +724,11 @@ The builder:
   result.
 - `b.find(filter, { field, expect })` answers a target found by search rather
   than named by reference, usable wherever `b.on(…)` takes a card. `expect:
-'many'` fans the entry out over every match and answers an array.
+'many'` fans the entry out over every match and answers an array. For a
+  caller who reaches the realm only through its policy, the filter is a search
+  they wrote by hand, so it finds only the cards a `query` grant on its type
+  admits, and each card it finds still needs a grant for the entry's own
+  operation.
 
 A builder that returns nothing is answered positionally, with a group's results
 nested where the group sat. A builder that returns handles is answered with
@@ -714,6 +738,25 @@ them.
 A batch commits in one realm, under one write lock, as one index job and one
 event. An entry naming a card in another realm is refused before anything is
 sent.
+
+A realm's policy judges a batch entry by entry. For a caller the realm's own
+permissions decline, each entry is gated against its own target and the
+operation that target's type declares, and one entry's grant admits nothing
+for another, even on the same card: a grant to rename a classroom does not
+let the delete beside it through. An entry that runs against the cards a
+`b.find(…)` answers is gated once per card, so an `expect: 'many'` entry that
+finds three cards is three decisions. One refusal refuses the batch, wherever
+it comes from. The gate refuses an entry no grant admits before anything is
+staged. The write lock refuses a write whose predicate does not hold against
+the card it changes (for a create anchored on a card, that card), and a create
+against a type whose predicate does not hold for the card it would mint, after
+the entries ahead of it have staged. Either way nothing is written, no index
+job is enqueued and no event is sent. The refusal names its entry in
+`meta.entry`, a path such as `[0].boxel:target[1]` for the second card an entry
+found. A caller who may not read the realm is told that entry and nothing
+else, in the same 404 a missing card gets, and never which card it was. Such a
+caller's `b.find(…)` finds only the cards a `query` grant on its type admits,
+and a query no grant admits answers as one that matched no card.
 
 ## Authoring errors
 
@@ -749,10 +792,10 @@ The codes are `unknown-operation`, `operation-not-allowed`,
 `invalid-operation`, `invalid-params`, `target-not-found`,
 `target-not-indexed`, `target-errored`, `assertion-failed`, `version-conflict`,
 `precondition-unverifiable`, `actor-required`, `operation-not-permitted`,
-`payload-too-large`, `wrong-entry-point`, `conflicting-targets` and
-`internal-error`.
+`policy-predicate-failed`, `payload-too-large`, `wrong-entry-point`,
+`conflicting-targets` and `internal-error`.
 
-Three worth recognizing:
+Four worth recognizing:
 
 - `assertion-failed` — a precondition did not hold. Nothing was written.
 - `actor-required` — the operation reads the actor and the request
@@ -762,13 +805,18 @@ Three worth recognizing:
   no grant in the realm's policy admits the operation. Only a caller who may
   read the realm is told this, as a 403. A caller who may not is told
   `target-not-found`, in a 404 identical to the one for a card that does not
-  exist, so the refusal does not tell them which cards are there. Two things
-  still can, and neither is concealed: a refusal that evaluated a policy
-  predicate takes measurably longer than one that found no card, and a
-  predicate that throws answers 500 rather than 404. Whether a predicate throws
-  depends on the card's stored values, so the 500 also says something about
-  what the card holds; write predicates that cannot throw on any value the
-  card can store.
+  exist, so the refusal does not tell them which cards are there. One thing
+  still can, and it is not concealed: a refusal that evaluated a policy
+  predicate takes measurably longer than one that found no card.
+- `policy-predicate-failed` — the realm's permissions declined the caller, no
+  grant admitted the operation, and a predicate in the realm's policy threw.
+  It is a 500, since the fault is the policy's. Only a caller who may read the
+  realm is told this. A caller who may not gets the same 404 as for a card
+  that does not exist. Whether a predicate throws depends on the card's stored
+  values, so a 500 would say that the card is there and something about what
+  it holds. The realm logs the fault on its `realm:policy` channel, and an
+  explain reports it as `predicate-threw`. Write predicates that cannot throw
+  on any value the card can store.
 
 ## The card routes and a realm's policy
 
@@ -780,6 +828,19 @@ under the write lock, against the card as it stands when the write runs. A
 refusal follows the same rules on both: a caller who may read the realm gets a
 403, and one who may not gets the 404 a card that does not exist gets. The
 card+json body carries no `code`, so there the status is the whole answer.
+
+A caller who may not read the realm doesn't choose where a card they create
+lands. A create mints a card where nothing is stored and is refused where a card
+is, so a caller who chose the path would learn which paths hold a card. On
+either route the realm mints such a caller's new card's id. A `lid` still names
+the card within a batch: it is the key a later entry links the card by, and the
+one its result reports. But the card is stored under the realm's id, so a create
+sent again with the same `lid` mints a second card. Such a caller's `POST` is
+aimed at the realm's root. One aimed at a directory beneath it gets the 404,
+since the card would land beneath that directory, and whether the write succeeds
+would depend on what is stored along its path. A caller who may read the realm
+can list it anyway, so they name their own cards as any writer does, and are
+told when a `lid` is taken.
 
 For a caller the realm admits only through a grant, four things set the card
 routes apart from a batch:
@@ -809,6 +870,42 @@ and `_permissions`. The first two write or remove stored bytes verbatim, whether
 those are module source, a data file or a card's whole document, and a verbatim
 replacement can change a card's type out from under the grant that admitted it.
 The administration routes do not act on a card at all.
+
+### Stored bytes, and code
+
+A `readSource` grant is honored on the routes that serve a path's bytes, the
+`card+source` read and the realm's file serve, as it is through `operations()`.
+It reaches a data file by the `FileDef` its extension names, and a card's `.json`
+by the card's own type. Grant it with care. A card's `.json` is its whole stored
+document, including every field a `read` projection omits, so a `readSource`
+grant beside a narrower `read` hands the caller everything the `read` was
+written to leave out.
+
+Code is never granted. A module's source, the transpiled module a browser's
+`import` loads, and a directory listing are served only to a caller the realm's
+own permissions let read it:
+
+- A rule whose `targetType` is module source (`TsFileDef`, `GtsFileDef`, or a
+  type descending from one) compiles to nothing and records
+  `grants-module-source`. The rest of the policy applies.
+- A rule on `FileDef` reaches every data file and no module.
+- A directory has no type, so no rule can name one.
+
+A caller who reaches the realm only through grants is told of each of these
+what they are told of a path that holds nothing, and a copy the realm cached
+for a reader is never served to them.
+
+So code mode, which edits a realm's modules and browses its file tree, needs
+the realm's own read permission. The host does not lead a caller without it
+there: the submode switcher, a card's error and an attached file offer no way
+in, and the assistant's tools that open code mode refuse. A caller who arrives
+anyway, by a shared link, finds the file tree and every module refused, and can
+open only a file a grant reaches.
+
+That is the one place the difference between a card's `.json` and its `read`
+could be seen side by side: with a `readSource` grant and no `read`, the editor
+shows the stored document beside a preview that is refused. The host keeps such
+a caller from being led there, but it is not a boundary. The endpoints are.
 
 ## Asking a policy what it decides
 

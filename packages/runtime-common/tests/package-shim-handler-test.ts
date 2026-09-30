@@ -6,6 +6,7 @@ import {
   wrapWithStrictNamespace,
   isRetryableShimResolveError,
   withResolveRetry,
+  withResolveDeadline,
   describeShimError,
   type ShimRetryLogger,
 } from '../package-shim-handler.ts';
@@ -632,6 +633,129 @@ const tests: SharedTests<Record<string, never>> = Object.freeze({
         'shimmed-module reflects the eventually-resolved exports',
       );
       assert.strictEqual(attempts, 2, 'one retry was sufficient');
+    },
+
+  // The loader awaits a shim resolver with no clock of its own, so without
+  // the handler's deadline a resolver that never settles parks every import
+  // of its specifier forever, naming nothing. These pin the deadline that
+  // turns that into an error.
+  'withResolveDeadline rejects when the resolver never settles': async (
+    assert,
+  ) => {
+    let fire: (() => void) | undefined;
+    let cancelled = false;
+    let bounded = withResolveDeadline(
+      'never-settles',
+      () => new Promise<never>(() => {}),
+      {
+        resolveDeadlineMs: 1234,
+        scheduleTimeout: (callback) => {
+          fire = callback;
+          return () => {
+            cancelled = true;
+          };
+        },
+      },
+    );
+    let settled = bounded();
+    fire!();
+    try {
+      await settled;
+      assert.ok(false, 'expected the deadline to reject');
+    } catch (err: any) {
+      assert.strictEqual(err.name, 'ShimResolveTimeout');
+      assert.ok(
+        err.message.includes('never-settles'),
+        `the message names the specifier: ${err.message}`,
+      );
+      assert.ok(
+        err.message.includes('1234ms'),
+        'the message names the deadline it exceeded',
+      );
+    }
+    assert.true(cancelled, 'the armed timer is cancelled once it has fired');
+  },
+
+  'withResolveDeadline cancels its timer when the resolver settles first':
+    async (assert) => {
+      let cancelled = false;
+      let bounded = withResolveDeadline(
+        'settles-fine',
+        async () => ({ ok: true }),
+        {
+          scheduleTimeout: () => () => {
+            cancelled = true;
+          },
+        },
+      );
+      assert.deepEqual(await bounded(), { ok: true });
+      assert.true(
+        cancelled,
+        'a resolver that answers leaves no timer holding the event loop open',
+      );
+    },
+
+  'a prefix shim deadline names the module that was asked for': async (
+    assert,
+  ) => {
+    let fire: (() => void) | undefined;
+    let bounded = withResolveDeadline(
+      (rest: string) => `@stalled-prefix/${rest}`,
+      () => new Promise<never>(() => {}),
+      {
+        scheduleTimeout: (callback) => {
+          fire = callback;
+          return () => {};
+        },
+      },
+    );
+    let settled = bounded('some-module');
+    fire!();
+    try {
+      await settled;
+      assert.ok(false, 'expected the deadline to reject');
+    } catch (err: any) {
+      assert.ok(
+        err.message.includes('@stalled-prefix/some-module'),
+        `the message names the requested module, not just the prefix: ${err.message}`,
+      );
+    }
+  },
+
+  'a shimAsyncModule resolver that never settles fails the lookup rather than hanging it':
+    async (assert) => {
+      let fire: (() => void) | undefined;
+      let handler = new PackageShimHandler(
+        (id) => `${PACKAGES_FAKE_ORIGIN}${id}`,
+      );
+      handler.shimAsyncModule(
+        {
+          id: 'stalled-module',
+          resolve: () => new Promise<never>(() => {}),
+        },
+        {
+          delay: async () => {},
+          retryDelaysMs: [],
+          scheduleTimeout: (callback) => {
+            fire = callback;
+            return () => {};
+          },
+        },
+      );
+      let lookup = handler.lookupModule(
+        `${PACKAGES_FAKE_ORIGIN}stalled-module`,
+      );
+      fire!();
+      try {
+        await lookup;
+        assert.ok(false, 'expected the lookup to reject');
+      } catch (err: any) {
+        assert.strictEqual(err.name, 'ShimResolveTimeout');
+        assert.ok(
+          err.message.includes('stalled-module'),
+          `the message names the specifier: ${err.message}`,
+        );
+      }
     },
 
   'shimAsyncModule returns null from handle() when the resolver throws permanently':

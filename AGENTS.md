@@ -11,6 +11,11 @@
 - pnpm is required for all scripts; use the pinned version as specified above.
 - Docker is required (Postgres, Synapse, SMTP, Stripe CLI container). Ensure the daemon is running and you can run `docker` without sudo.
 
+## Parallel agent sessions
+
+- Other sessions may be live on this machine, and — when Remote Control is enabled — on the user's other machines and in the cloud. `ListAgents` names them, labelled by kind, and `SendMessage` addresses one by name. Coordinate rather than duplicating work; the `agent-peer-collaboration` skill carries the protocol and the shared-resource rules.
+- Enabling cross-machine reachability is a human step, documented in [docs/parallel-claude-sessions.md](docs/parallel-claude-sessions.md). If a peer you expect is missing from `ListAgents`, say so instead of assuming it is gone — a session without Remote Control is simply invisible there.
+
 ## GitHub Actions failure triage helper
 
 - Use `pnpm ci:failures -- ...` to quickly summarize failed jobs and extract actionable test failures from GitHub Actions logs.

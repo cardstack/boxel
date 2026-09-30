@@ -143,7 +143,6 @@ log.info(
 );
 
 let prerenderer = createRemotePrerenderer(prerendererUrl);
-let createPrerenderAuth = buildCreatePrerenderAuth(REALM_SECRET_SEED);
 if (fromUrls.length !== toUrls.length) {
   log.error(
     `Mismatched number of URLs, the --fromUrl params must be matched to the --toUrl params`,
@@ -168,6 +167,13 @@ for (let i = 0; i < fromUrls.length; i++) {
     virtualNetwork.addRealmMapping(from, to.href);
   }
 }
+// The worker has no single server URL of its own: each token names the origin
+// its realm is mapped to, and ids in prefix form resolve through the mappings.
+let createPrerenderAuth = buildCreatePrerenderAuth(
+  REALM_SECRET_SEED,
+  undefined,
+  (realm) => virtualNetwork.toURL(realm),
+);
 let autoMigrate = migrateDB || undefined;
 
 (async () => {

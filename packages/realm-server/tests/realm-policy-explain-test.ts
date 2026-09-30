@@ -43,6 +43,7 @@ const EDUCATION = 'http://127.0.0.1:4444/education/';
 const ORG = 'http://127.0.0.1:4444/org/';
 const POLICY_CARD = `${ORG}policies/education`;
 const ORG_POLICY_CARD = `${ORG}policies/org`;
+const ORG_NOTE = `${ORG}notes/n1`;
 const EDUCATION_ADMIN = '@education-admin:localhost';
 const IT_ADMIN = '@it-admin:localhost';
 const ORG_ADMIN = '@org-admin:localhost';
@@ -280,6 +281,7 @@ module(basename(import.meta.filename), function (hooks) {
             }),
             'policies/education.json': policyCard(EDUCATION_RULES),
             'policies/org.json': policyCard(ORG_RULES),
+            'notes/n1.json': card(CARD_DEF, { cardInfo: { name: 'A note' } }),
           },
           permissions: {
             [ORG_ADMIN]: ['read', 'write', 'realm-owner'],
@@ -550,10 +552,11 @@ module(basename(import.meta.filename), function (hooks) {
         throwing.rules[0].grants.map((grant) => grant.outcome),
         ['threw', 'not-evaluated'],
       );
-      assert.deepEqual(throwing.refusal, {
-        status: 500,
-        code: 'internal-error',
-      });
+      assert.deepEqual(
+        throwing.refusal,
+        { status: 404, code: 'target-not-found' },
+        'the teacher may not read the realm, so they are told the card is not there',
+      );
     });
 
     test('a write resting on a predicate is judged against the card as it is stored', async function (assert) {
@@ -597,7 +600,7 @@ module(basename(import.meta.filename), function (hooks) {
       assert.deepEqual(read.refusal, { status: 404, code: 'target-not-found' });
     });
 
-    test('an operation the card does not carry, a write to authorization infrastructure, and a caller with no credentials', async function (assert) {
+    test('an operation the card does not carry, an operation on authorization infrastructure, and a caller with no credentials', async function (assert) {
       let bogusForTeacher = await explain(TEACHER, ROOM_204, 'bogus');
       assert.strictEqual(bogusForTeacher.reason, 'not-resolved');
       assert.deepEqual(
@@ -615,6 +618,17 @@ module(basename(import.meta.filename), function (hooks) {
       let config = await explain(READER, EDUCATION_CONFIG, 'update');
       assert.strictEqual(config.decision, 'denied');
       assert.strictEqual(config.reason, 'authorization-infrastructure');
+      let configRead = await explain(TEACHER, EDUCATION_CONFIG, 'read');
+      assert.strictEqual(configRead.decision, 'denied');
+      assert.strictEqual(
+        configRead.reason,
+        'authorization-infrastructure',
+        'a read of it is refused as a write is',
+      );
+      assert.deepEqual(configRead.refusal, {
+        status: 404,
+        code: 'target-not-found',
+      });
 
       let anonymous = await explain('', ROOM_204, 'read');
       assert.strictEqual(anonymous.actor, null);
@@ -816,14 +830,20 @@ module(basename(import.meta.filename), function (hooks) {
     });
 
     test('a caller reaching the policy’s realm only through a grant is refused', async function (assert) {
-      let read = await request
-        .get(path(POLICY_CARD))
-        .set('Accept', SupportedMimeType.CardJson)
-        .set('Authorization', ASKER.teacher());
+      let readAsTeacher = (url: string) =>
+        request
+          .get(path(url))
+          .set('Accept', SupportedMimeType.CardJson)
+          .set('Authorization', ASKER.teacher());
       assert.strictEqual(
-        read.status,
+        (await readAsTeacher(ORG_NOTE)).status,
         200,
-        'the Org policy grants the teacher a read of the policy card',
+        'the Org policy grants the teacher a read of a card there',
+      );
+      assert.strictEqual(
+        (await readAsTeacher(POLICY_CARD)).status,
+        404,
+        'though not of the policy card, which no grant reads',
       );
       let explained = await ask(ASKER.teacher(), {
         actor: TEACHER,
