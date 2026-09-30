@@ -20,6 +20,33 @@ fi
 . "$_REPO_ROOT/scripts/env-slug.sh"
 unset _ENV_VARS_DIR _REPO_ROOT
 
+# Prints mkcert's CA root directory, or nothing. Call it inside `$(...)`: it
+# changes IFS and PATH, which a command substitution's subshell keeps to itself.
+#
+# mkcert must never be reached through a mise shim. A shim is mise itself, and
+# mise builds its environment by sourcing this file, which would ask mkcert for
+# its CA root again, through the shim again. Each level waits on the next, so
+# the chain grows until the process table is full, and every shell on the
+# machine then fails to fork. Two guards keep that from starting. mkcert is
+# looked up and run with mise's shim directories removed from PATH, so only a
+# real binary can answer. And the call carries a marker that makes a nested
+# lookup return at once, which cuts the chain at its second level should a shim
+# reach mkcert some other way.
+_boxel_mkcert_caroot() {
+  [ -n "${_BOXEL_MKCERT_CAROOT_LOOKUP:-}" ] && return 0
+  _boxel_path=""
+  IFS=:
+  for _boxel_dir in $PATH; do
+    case "$_boxel_dir" in
+      */mise/shims | */mise/shims/ | "${MISE_DATA_DIR:-/nonexistent}/shims") ;;
+      *) _boxel_path="${_boxel_path:+$_boxel_path:}$_boxel_dir" ;;
+    esac
+  done
+  PATH="$_boxel_path"
+  command -v mkcert >/dev/null 2>&1 || return 0
+  _BOXEL_MKCERT_CAROOT_LOOKUP=1 mkcert -CAROOT 2>/dev/null || true
+}
+
 export PGPORT="${PGPORT:-5435}"
 
 # Turbo mode: boost parallelism for local development.
@@ -224,9 +251,10 @@ else
     # file is re-sourced on every shell prompt, because mise reads the
     # environment back through it and `.mise.toml` pre-exports it. A fork per
     # prompt per shell is enough to exhaust the process table on a machine with
-    # many worktrees open. `command -v` is a builtin and costs nothing.
-    if [ -z "${NODE_EXTRA_CA_CERTS:-}" ] && command -v mkcert >/dev/null 2>&1; then
-      _BOXEL_MKCERT_CAROOT="$(mkcert -CAROOT 2>/dev/null || true)"
+    # many worktrees open. _boxel_mkcert_caroot, above, is what keeps the one
+    # lookup that does happen from re-entering this file through a mise shim.
+    if [ -z "${NODE_EXTRA_CA_CERTS:-}" ]; then
+      _BOXEL_MKCERT_CAROOT="$(_boxel_mkcert_caroot)"
       if [ -n "$_BOXEL_MKCERT_CAROOT" ] && [ -f "$_BOXEL_MKCERT_CAROOT/rootCA.pem" ]; then
         export NODE_EXTRA_CA_CERTS="$_BOXEL_MKCERT_CAROOT/rootCA.pem"
       fi
@@ -312,10 +340,11 @@ fi
 # Tested before the subprocess, for the reason given at the other call site
 # above: a developer's own value is left alone, and this file is re-sourced per
 # prompt, so a fork here is a fork per prompt per shell.
-if [ -z "${NODE_EXTRA_CA_CERTS:-}" ] && command -v mkcert >/dev/null 2>&1; then
-  _BOXEL_MKCERT_CAROOT="$(mkcert -CAROOT 2>/dev/null || true)"
+if [ -z "${NODE_EXTRA_CA_CERTS:-}" ]; then
+  _BOXEL_MKCERT_CAROOT="$(_boxel_mkcert_caroot)"
   if [ -n "$_BOXEL_MKCERT_CAROOT" ] && [ -f "$_BOXEL_MKCERT_CAROOT/rootCA.pem" ]; then
     export NODE_EXTRA_CA_CERTS="$_BOXEL_MKCERT_CAROOT/rootCA.pem"
   fi
   unset _BOXEL_MKCERT_CAROOT
 fi
+unset -f _boxel_mkcert_caroot
