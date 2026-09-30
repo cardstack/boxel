@@ -749,10 +749,10 @@ The codes are `unknown-operation`, `operation-not-allowed`,
 `invalid-operation`, `invalid-params`, `target-not-found`,
 `target-not-indexed`, `target-errored`, `assertion-failed`, `version-conflict`,
 `precondition-unverifiable`, `actor-required`, `operation-not-permitted`,
-`payload-too-large`, `wrong-entry-point`, `conflicting-targets` and
-`internal-error`.
+`policy-predicate-failed`, `payload-too-large`, `wrong-entry-point`,
+`conflicting-targets` and `internal-error`.
 
-Three worth recognizing:
+Four worth recognizing:
 
 - `assertion-failed` — a precondition did not hold. Nothing was written.
 - `actor-required` — the operation reads the actor and the request
@@ -762,13 +762,18 @@ Three worth recognizing:
   no grant in the realm's policy admits the operation. Only a caller who may
   read the realm is told this, as a 403. A caller who may not is told
   `target-not-found`, in a 404 identical to the one for a card that does not
-  exist, so the refusal does not tell them which cards are there. Two things
-  still can, and neither is concealed: a refusal that evaluated a policy
-  predicate takes measurably longer than one that found no card, and a
-  predicate that throws answers 500 rather than 404. Whether a predicate throws
-  depends on the card's stored values, so the 500 also says something about
-  what the card holds; write predicates that cannot throw on any value the
-  card can store.
+  exist, so the refusal does not tell them which cards are there. One thing
+  still can, and it is not concealed: a refusal that evaluated a policy
+  predicate takes measurably longer than one that found no card.
+- `policy-predicate-failed` — the realm's permissions declined the caller, no
+  grant admitted the operation, and a predicate in the realm's policy threw.
+  It is a 500, since the fault is the policy's. Only a caller who may read the
+  realm is told this. A caller who may not gets the same 404 as for a card
+  that does not exist. Whether a predicate throws depends on the card's stored
+  values, so a 500 would say that the card is there and something about what
+  it holds. The realm logs the fault on its `realm:policy` channel, and an
+  explain reports it as `predicate-threw`. Write predicates that cannot throw
+  on any value the card can store.
 
 ## The card routes and a realm's policy
 
@@ -830,26 +835,16 @@ narrower than its author meant shows up as refusals someone reports. A policy
 wider than its author meant shows up as nothing at all. An explain is how the
 realm's owner asks directly.
 
-A policy card's type declares one, named `explain`, on the `explain` base.
-Invoked on the policy card with an actor, a card and an operation, it runs the
-policy gate of the realm that holds the card, exactly as that invocation
-would. It stops at the decision, invokes nothing, and answers with how the gate
-got there:
+`RealmPolicy` declares one, named `explain`, on the `explain` base, so every
+policy card carries it, a subtype's included. Invoked on the policy card with
+an actor, a card and an operation, it runs the policy gate of the realm that
+holds the card, exactly as that invocation would. It stops at the decision,
+invokes nothing, and answers with how the gate got there. The policy card's
+isolated view asks it from an "Explain a decision" form and renders the
+answer; code asks it the same way:
 
 ```ts
-class SchoolPolicy extends RealmPolicy {
-  @operation static explain = {
-    base: 'explain',
-    params: {
-      actor: StringField,
-      target: StringField,
-      operation: StringField,
-    },
-    nonGrantable: true,
-  } satisfies OperationDeclaration;
-}
-
-let explanation = await operations<typeof SchoolPolicy>(policy).explain({
+let explanation = await operations<typeof RealmPolicy>(policy).explain({
   actor: '@teacher:example.org',
   target: 'https://example.org/education/classrooms/room-204',
   operation: 'read',
@@ -876,10 +871,12 @@ Some things worth knowing before you read one:
 - **Read is the whole gate.** A reader of both realms learns, for any actor
   they name, what the card's realm's permissions allow that actor, which the
   realm's permissions listing shows only to its owners.
-- **There is no asking about yourself.** A caller refused an operation is told
-  as little as the realm's permissions entitle them to, so that they cannot
-  learn which cards exist. An explain would tell them exactly that, so it is
-  not a self-service check, and a view never decides what to show from one.
+- **It is not a self-service check.** A caller who may not read the card's
+  realm is told as little as the realm's permissions entitle them to, so that
+  they cannot learn which cards exist, and an explain would tell them exactly
+  that. Such a caller cannot ask about the card at all, themselves included. A
+  caller who reads both realms can ask about any actor, themselves included,
+  but a view never decides what to show from an explain.
 - **It explains only the policy the card's realm names.** An explain on any
   other policy card refuses with `policy-not-in-force`.
 - **`allowed` means the gate admits the invocation.** The operation can still

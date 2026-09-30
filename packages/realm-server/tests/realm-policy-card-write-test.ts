@@ -778,31 +778,57 @@ module(basename(import.meta.filename), function (hooks) {
       assert.strictEqual(gateStats().policyLoads, 0, 'no policy was loaded');
     });
 
-    test('a predicate that throws is a fault in the policy, on either transport', async function (assert) {
-      let patched = await patchCard(NOTICE_1, AUTH.teacher(), {
-        data: {
-          type: 'card',
-          attributes: { body: 'Moved' },
-          meta: { adoptsFrom: adoptsFrom(NOTICE) },
-        },
-      });
+    test('a predicate that throws is, to a caller who may not read the realm, a card that is not there, on either transport', async function (assert) {
+      const NOTICE_9 = `${EDUCATION}notices/n9`;
+      let moved = {
+        type: 'card',
+        attributes: { body: 'Moved' },
+        meta: { adoptsFrom: adoptsFrom(NOTICE) },
+      };
+      assertNotThere(
+        assert,
+        await patchCard(NOTICE_1, AUTH.teacher(), { data: moved }),
+        await patchCard(NOTICE_9, AUTH.teacher(), { data: moved }),
+        [NOTICE_1, NOTICE_9],
+        'PATCH',
+      );
+      let update = (href: string) =>
+        operations(
+          EDUCATION,
+          AUTH.teacher(),
+          invoke('update', { href, data: moved }),
+        );
+      assertNotThere(
+        assert,
+        await update(NOTICE_1),
+        await update(NOTICE_9),
+        [NOTICE_1, NOTICE_9],
+        'the envelope update',
+      );
+      assert.strictEqual(
+        (await stored(education, NOTICE_1))?.body,
+        'Assembly',
+        'nothing was written',
+      );
+    });
+
+    test('a predicate that throws is a fault in the policy to a caller who may read the realm, on either transport', async function (assert) {
+      let moved = {
+        type: 'card',
+        attributes: { body: 'Moved' },
+        meta: { adoptsFrom: adoptsFrom(NOTICE) },
+      };
+      let patched = await patchCard(NOTICE_1, AUTH.reader(), { data: moved });
       assert.strictEqual(patched.status, 500, 'PATCH');
       let enveloped = await operations(
         EDUCATION,
-        AUTH.teacher(),
-        invoke('update', {
-          href: NOTICE_1,
-          data: {
-            type: 'card',
-            attributes: { body: 'Moved' },
-            meta: { adoptsFrom: adoptsFrom(NOTICE) },
-          },
-        }),
+        AUTH.reader(),
+        invoke('update', { href: NOTICE_1, data: moved }),
       );
       assert.strictEqual(enveloped.status, 500, 'the envelope update');
       assert.strictEqual(
         (enveloped.body as { errors: { code: string }[] }).errors[0].code,
-        'internal-error',
+        'policy-predicate-failed',
       );
       assert.strictEqual(
         (await stored(education, NOTICE_1))?.body,

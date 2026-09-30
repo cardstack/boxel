@@ -364,31 +364,16 @@ export async function commitBatch(
   batch: BatchNode[],
   opts: CommitBatchOptions = {},
 ): Promise<BatchEntryResult[]> {
-  let paths = new RealmPaths(new URL(core.realmURL));
-  // The tree resolved into the flat request order everything but staging works
-  // from, once, before anything runs.
-  let { tree, entries } = schedule(batch);
+  // Planned before the lock is taken, because the plan is what says which
+  // files to lock (see `planBatch`).
+  let planned = planBatch(core, batch, opts.mintIds ?? false);
+  let { paths, entries, positions, lids } = planned;
   if (entries.length === 0) {
     // Nothing to serialize the realm's writers behind, and nothing to
     // announce. Taking the lock and broadcasting an empty index event would
     // tell every subscriber that something changed.
     return [];
   }
-  // Resolved before the lock is taken, because it is what says which files to
-  // lock. It is path math over what the entries name — every `lid` in the
-  // batch mapped to the URL its card will land at — and it reads nothing, so
-  // nothing it produces can be stale by the time the lock is held.
-  //
-  // The caller's own numbering is resolved first because the lid index
-  // reports against it: a batch that refuses part of what a caller composed
-  // names the entry the caller sent, not the one this function is holding.
-  let positions = positionsOf(entries);
-  let { lids, foreignLids } = indexLids(
-    entries,
-    positions,
-    paths,
-    opts.mintIds ?? false,
-  );
   // Stamped from outside the lock so the wait for it is its own stage: a batch
   // queued behind another writer of the files it needs spends its time here,
   // and from the handler that is indistinguishable from slow indexing.
@@ -478,72 +463,19 @@ export async function commitBatch(
       // batch is about to change it, and before staging, so a refusal costs
       // nothing but the locks it already holds.
       await opts.precondition?.();
-      // Filled by position rather than appended to: a parallel group's members
-      // finish in whatever order their work takes, and everything downstream
-      // reads these in the order the caller sent them.
-      let staged: StagedChange[] = new Array(entries.length);
-      // The version each entry's merge was computed over, captured as it stages
-      // rather than read back at the end: `stored` moves underneath the batch
-      // as entries compose, so by the commit it no longer holds what the first
-      // entry to touch a file merged over.
-      let baseHashes: (string | undefined)[] = new Array(entries.length);
+      let staged: StagedChange[];
+      let baseHashes: (string | undefined)[];
       // Stamped from a `finally`: an entry that cannot be carried out throws
       // from the staging work, and a write that failed is exactly the one whose
       // time someone is trying to account for.
       let stageStart = Date.now();
       try {
-        let { stored, storedMeta } = await readPreState(core, entries, paths);
-        // The cards the batch read before any entry staged, which is how an
-        // entry admitted under the lock tells a card an earlier entry removed
-        // from one the batch never read.
-        let readBeforeStaging = new Set(stored.keys());
-        let state: StagingState = {
-          stored,
-          storedMeta,
-          // What an append stages for a file it never read whole. Kept beside
-          // `stored` rather than in it: the two describe the same file in
-          // different terms, and an executor that needs one cannot work from
-          // the other.
-          splices: new Map<LocalPath, SplicedSource>(),
-        };
-        // The top level is a serial group, which is what makes a flat list
-        // behave as it always has.
-        await stageRun(tree, 'serial', () => state, {
-          entries,
-          positions,
-          staged,
-          baseHashes,
-          budget: stagingBudget(STAGING_WIDTH),
-          stage: (entry, position, against) => {
-            let stage = () =>
-              stageEntry(entry, position, {
-                realmURL: core.realmURL,
-                paths,
-                lids,
-                foreignLids,
-                foreignSideLoadLink: opts.foreignSideLoadLink,
-                stored: against.stored,
-                storedMeta: against.storedMeta,
-                splices: against.splices,
-                openSourceBytes: core.openSourceBytes,
-                fileExists: core.fileExists,
-                indexedCardValues: core.indexedCardValues,
-                actor: opts.actor ?? '',
-                realmConfig,
-                serializeCard: core.serializeCard,
-                codeRefKey: core.codeRefKey,
-                resolveModuleId: core.resolveModuleId,
-                storedLink: core.storedLink,
-                resolvedLink: core.resolvedLink,
-                lookupDefinition: core.lookupDefinition,
-              });
-            return entry.admit
-              ? stageAdmitted(entry, entry.admit, position, stage, () =>
-                  heldCard(core, entry.href, paths, against, readBeforeStaging),
-                )
-              : stage();
-          },
-        });
+        ({ staged, baseHashes } = await stageBatch(
+          core,
+          planned,
+          opts,
+          realmConfig,
+        ));
         // First, because linking a side-load to the card already stored
         // takes its write out of the batch, and the checks after it have to
         // see the batch that will commit.
@@ -580,6 +512,187 @@ export async function commitBatch(
       }
     },
   );
+}
+
+// Stage a batch the way `commitBatch` does, without taking its write locks or
+// waiting on indexing, and commit nothing. It throws what staging refuses.
+//
+// What it is for is the decisions staging makes along the way. An entry's
+// `admit` is called against the card as the entries before it leave it, as it
+// is under the lock, so a caller learns here how the lock would decide a batch
+// that never took it. Nothing it reads is held still, so nothing it decides
+// admits a write: the batch that commits is decided again under the lock.
+export async function rehearseBatch(
+  core: BatchCore,
+  batch: BatchNode[],
+  opts: Pick<
+    CommitBatchOptions,
+    'actor' | 'foreignSideLoadLink' | 'mintIds'
+  > = {},
+): Promise<void> {
+  let mintIds = opts.mintIds ?? false;
+  let planned: PlannedBatch;
+  try {
+    planned = planBatch(core, batch, mintIds);
+  } catch (err: unknown) {
+    // Planning refuses at the first entry whose local id it cannot take, and
+    // names it. The entries ahead of that one plan without it, and what
+    // staging decides of them does not depend on it, so they are rehearsed
+    // on their own.
+    let ahead = entriesAhead(
+      batch,
+      isOperationFailure(err) ? err.error.meta?.entry : undefined,
+    );
+    if (!ahead) {
+      throw err;
+    }
+    planned = planBatch(core, ahead, mintIds);
+  }
+  if (planned.entries.length === 0) {
+    return;
+  }
+  let settings: Promise<Record<string, JsonValue>> | undefined;
+  await stageBatch(
+    core,
+    planned,
+    opts,
+    () => (settings ??= core.realmConfig()),
+  );
+}
+
+// `batch` holding only the entries ahead of the one reported under
+// `position`, in request order and in the groups they sat in. Undefined where
+// no entry is reported under it.
+function entriesAhead(
+  batch: BatchNode[],
+  position: unknown,
+): BatchNode[] | undefined {
+  let { entries } = schedule(batch);
+  let at = positionsOf(entries).findIndex((each) => each === position);
+  if (at === -1) {
+    return undefined;
+  }
+  let kept = new Set(entries.slice(0, at));
+  let prune = (nodes: readonly BatchNode[]): BatchNode[] =>
+    nodes.flatMap((node): BatchNode[] => {
+      if (!isGroup(node)) {
+        return kept.has(node) ? [node] : [];
+      }
+      let members = prune(node.members);
+      return members.length > 0 ? [{ ...node, members }] : [];
+    });
+  return prune(batch);
+}
+
+// A batch laid out for staging: the tree with each entry's flat position, its
+// entries in request order, the position each is reported under, and where
+// each `lid` in it will land.
+interface PlannedBatch {
+  paths: RealmPaths;
+  tree: Scheduled[];
+  entries: BatchEntry[];
+  positions: EntryPosition[];
+  lids: LidIndex;
+  foreignLids: ReadonlySet<string>;
+}
+
+// Everything the batch's shape says before anything is read. It is path math
+// over what the entries name, each `lid` mapped to the URL its card will land
+// at, and it reads nothing, so none of it can be stale by the time a lock is
+// held.
+//
+// The caller's own numbering is resolved first because the lid index reports
+// against it: a batch that refuses part of what a caller composed names the
+// entry the caller sent, not the one this function is holding.
+//
+// With `mintIds` each `lid` maps to an id the realm mints instead (see
+// `CommitBatchOptions.mintIds`), so a batch rehearsed with it lands each card
+// where the batch it rehearses would.
+function planBatch(
+  core: BatchCore,
+  batch: BatchNode[],
+  mintIds: boolean,
+): PlannedBatch {
+  let paths = new RealmPaths(new URL(core.realmURL));
+  // The tree resolved into the flat request order everything but staging works
+  // from, once, before anything runs.
+  let { tree, entries } = schedule(batch);
+  let positions = positionsOf(entries);
+  let { lids, foreignLids } = indexLids(entries, positions, paths, mintIds);
+  return { paths, tree, entries, positions, lids, foreignLids };
+}
+
+// Stage every entry against the realm's stored files, in the batch's schedule,
+// and deciding each admission left to it where the entry stages. Reads, and
+// writes nothing.
+async function stageBatch(
+  core: BatchCore,
+  { paths, tree, entries, positions, lids, foreignLids }: PlannedBatch,
+  opts: Pick<CommitBatchOptions, 'actor' | 'foreignSideLoadLink'>,
+  realmConfig: () => Promise<Record<string, JsonValue>>,
+): Promise<{ staged: StagedChange[]; baseHashes: (string | undefined)[] }> {
+  // Filled by position rather than appended to: a parallel group's members
+  // finish in whatever order their work takes, and everything downstream
+  // reads these in the order the caller sent them.
+  let staged: StagedChange[] = new Array(entries.length);
+  // The version each entry's merge was computed over, captured as it stages
+  // rather than read back at the end: `stored` moves underneath the batch
+  // as entries compose, so by the commit it no longer holds what the first
+  // entry to touch a file merged over.
+  let baseHashes: (string | undefined)[] = new Array(entries.length);
+  let { stored, storedMeta } = await readPreState(core, entries, paths);
+  // The cards the batch read before any entry staged, which is how an
+  // entry admitted under the lock tells a card an earlier entry removed
+  // from one the batch never read.
+  let readBeforeStaging = new Set(stored.keys());
+  let state: StagingState = {
+    stored,
+    storedMeta,
+    // What an append stages for a file it never read whole. Kept beside
+    // `stored` rather than in it: the two describe the same file in
+    // different terms, and an executor that needs one cannot work from
+    // the other.
+    splices: new Map<LocalPath, SplicedSource>(),
+  };
+  // The top level is a serial group, which is what makes a flat list
+  // behave as it always has.
+  await stageRun(tree, 'serial', () => state, {
+    entries,
+    positions,
+    staged,
+    baseHashes,
+    budget: stagingBudget(STAGING_WIDTH),
+    stage: (entry, position, against) => {
+      let stage = () =>
+        stageEntry(entry, position, {
+          realmURL: core.realmURL,
+          paths,
+          lids,
+          foreignLids,
+          foreignSideLoadLink: opts.foreignSideLoadLink,
+          stored: against.stored,
+          storedMeta: against.storedMeta,
+          splices: against.splices,
+          openSourceBytes: core.openSourceBytes,
+          fileExists: core.fileExists,
+          indexedCardValues: core.indexedCardValues,
+          actor: opts.actor ?? '',
+          realmConfig,
+          serializeCard: core.serializeCard,
+          codeRefKey: core.codeRefKey,
+          resolveModuleId: core.resolveModuleId,
+          storedLink: core.storedLink,
+          resolvedLink: core.resolvedLink,
+          lookupDefinition: core.lookupDefinition,
+        });
+      return entry.admit
+        ? stageAdmitted(entry, entry.admit, position, stage, () =>
+            heldCard(core, entry.href, paths, against, readBeforeStaging),
+          )
+        : stage();
+    },
+  });
+  return { staged, baseHashes };
 }
 
 // The position each entry is reported under, in batch order.
