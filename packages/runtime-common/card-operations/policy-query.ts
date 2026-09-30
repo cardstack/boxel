@@ -157,6 +157,22 @@ export async function policyQueryScope(
   return filters.length > 0 ? { kind: 'scoped', filters } : DENIED;
 }
 
+// What this realm's policy contributes to a search `principal` sends, where
+// the request may have authenticated nobody. Only a user is granted anything.
+// A request that authenticated nobody has no grant to be judged by. A
+// realm-authority principal is a render, and what a render produces is served
+// to every viewer, so it reads what the ACL grants it and the policy is never
+// asked about it.
+export async function principalQueryScope(
+  core: OperationCore,
+  invocation: { operation: string; types: readonly CodeRef[] },
+  principal: SearchPrincipal | undefined,
+): Promise<PolicyQueryScope> {
+  return principal?.kind === 'user'
+    ? await policyQueryScope(core, { ...invocation, principal })
+    : DENIED;
+}
+
 // What the policy contributes to `operation` on the one type `on`.
 async function typeScope(
   core: OperationCore,

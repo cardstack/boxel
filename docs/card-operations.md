@@ -634,11 +634,13 @@ in the realm:
   can read the realm runs every query unscoped, so they get `true`. Anyone else
   gets `true` when the realm's policy holds a grant on that query, for the
   query's type, whose predicate compiles to a search filter, and `false`
-  otherwise. That `true` says a grant applies to the caller, not that any row
-  will match: a query grant narrows which rows the search returns rather than
-  admitting a card. It tells a caller who cannot read the realm only what a
-  create's `true` does, that the policy grants this operation on this type,
-  and nothing about which cards exist.
+  otherwise. A query grant names no caller: its predicate narrows the rows the
+  search returns by who is asking. So every signed-in caller the realm's ACL
+  declines gets the same answer for a given query, and `true` doesn't mean
+  this caller will see any rows. A control shown on it can lead to an empty
+  result. It tells a caller who cannot read the realm only what a create's
+  `true` does, that the policy grants this operation on this type, and nothing
+  about which cards exist.
 - A query asked about a card rather than its type gets `false`, with the reason
   `wrong-entry-point` for a caller who can read the realm, because a query is
   not invoked on a card.

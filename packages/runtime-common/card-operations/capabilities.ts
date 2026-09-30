@@ -18,11 +18,7 @@ import {
 } from './dispatch.ts';
 import { GateTrace } from './gate-trace.ts';
 import { storedWriteRefusal } from './gate.ts';
-import {
-  policyQueryScope,
-  type PolicyQueryScope,
-  type SearchPrincipal,
-} from './policy-query.ts';
+import { principalQueryScope, type SearchPrincipal } from './policy-query.ts';
 import {
   OperationFailure,
   isOperationFailure,
@@ -71,16 +67,20 @@ import {
 // the caller holds on it (`policyQueryScope`). The gate refuses every query
 // for that reason, and a check that stopped at the gate would call a query
 // refused that the search serves. So a query pair is answered by the search's
-// own judgment, the same call the search makes, and the check still has no
-// reading of the policy of its own.
+// own judgment, the same call the search makes (`principalQueryScope`), and
+// the check still has no reading of the policy of its own.
 //
 // That judgment is a weaker one than the gate's. A query grant does not admit
-// or refuse a target; it scopes which rows come back. So `true` for a query
-// says that a grant on it applies to this caller, not that any row will
-// match. Only a caller the ACL would not let read the realm is judged this
-// way, since one who may read it runs the query unscoped. They are told a
-// bare `true`, which reveals what a create's bare `true` does: that the policy
-// grants this operation on this type. It says nothing about which cards exist.
+// or refuse a target, and it names no caller: its predicate narrows the rows
+// the search returns by who is asking. So `true` for a query says the policy
+// holds a grant on it for this type that compiled a search filter, and it is
+// the same answer for every signed-in caller the ACL declines. It does not say
+// any row will match for this one: a caller the filter matches nothing for is
+// told `true` too, and their search returns no rows. Only a caller the ACL
+// would not let read the realm is judged this way, since one who may read it
+// runs the query unscoped. They are told a bare `true`, which reveals what a
+// create's bare `true` does: that the policy grants this operation on this
+// type. It says nothing about which cards exist.
 //
 // A query pair's target is that type. A card target names no search a query
 // could run in, and is refused the way invoking the query on the card is.
@@ -286,11 +286,11 @@ async function searchDecision(
   operation: string,
   who: CapabilityCaller,
 ): Promise<PairDecision> {
-  let principal = who.searchPrincipal;
-  let scope: PolicyQueryScope =
-    principal?.kind === 'user'
-      ? await policyQueryScope(core, { operation, types: [on], principal })
-      : { kind: 'denied' };
+  let scope = await principalQueryScope(
+    core,
+    { operation, types: [on] },
+    who.searchPrincipal,
+  );
   return {
     answer: { allowed: scope.kind === 'scoped' },
     admitted: false,

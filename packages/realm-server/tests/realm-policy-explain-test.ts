@@ -108,6 +108,15 @@ const CLASSROOM_MODULE = `
       query: { filter: { type: () => Classroom } },
     };
   }
+
+  // Redeclares the query its parent keeps out of every policy's reach, without
+  // the flag.
+  export class Seminar extends Classroom {
+    @operation static listAudited = {
+      base: 'query',
+      query: { filter: { type: () => Seminar } },
+    };
+  }
 `;
 
 const BULLETIN_MODULE = `
@@ -220,6 +229,7 @@ const ROOM_204 = `${EDUCATION}classrooms/room-204`;
 const ROOM_205 = `${EDUCATION}classrooms/room-205`;
 const ROOM_206 = `${EDUCATION}classrooms/room-206`;
 const ROOM_999 = `${EDUCATION}classrooms/room-999`;
+const SEMINAR_1 = `${EDUCATION}classrooms/seminar-1`;
 const BULLETIN_1 = `${EDUCATION}bulletins/b1`;
 const ALGEBRA = `${EDUCATION}syllabi/algebra`;
 const COURSE_42 = `${EDUCATION}syllabi/course-42`;
@@ -258,6 +268,10 @@ module(basename(import.meta.filename), function (hooks) {
             'bulletin.gts': BULLETIN_MODULE,
             'syllabus.gts': SYLLABUS_MODULE,
             'classrooms/room-204.json': classroom('Room 204', [TEACHER]),
+            'classrooms/seminar-1.json': card(
+              { module: '../classroom', name: 'Seminar' },
+              { title: 'Seminar 1', teacherIds: [TEACHER] },
+            ),
             'classrooms/room-205.json': classroom('Room 205', [COLLEAGUE]),
             'classrooms/room-206.json': classroom(
               'Room 206',
@@ -679,6 +693,18 @@ module(basename(import.meta.filename), function (hooks) {
         audited.reason,
         'non-grantable',
         'a query declared non-grantable is one no grant reaches, on the search engine as anywhere',
+      );
+      let redeclared = await explain(TEACHER, SEMINAR_1, 'listAudited');
+      assert.strictEqual(
+        redeclared.reason,
+        'non-grantable',
+        'and so is one a subclass redeclares without the flag, since the type it extends kept it out of reach',
+      );
+      let seminarsOwn = await explain(TEACHER, SEMINAR_1, 'listMine');
+      assert.strictEqual(
+        seminarsOwn.reason,
+        'query-lane',
+        'while a query nothing in its chain flags is still left to the search',
       );
       let reader = await explain(READER, ROOM_204, 'listMine');
       assert.deepEqual(

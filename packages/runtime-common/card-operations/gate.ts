@@ -438,9 +438,18 @@ export async function gateOperation(
   // A query is planned and run on the search engine rather than against one
   // target, so nothing here can grant one. Its grants are judged by the search
   // that runs it, which composes their filters into the query
-  // (`policyQueryScope`).
+  // (`policyQueryScope`). The search also refuses one a type up the target's
+  // chain declares `nonGrantable` where the target's own type redeclares it
+  // without the flag, so a trace records that query as kept out of reach.
+  // Only a traced decision asks, since the refusal is the same either way.
   if (base === 'query') {
-    trace?.refused('query-lane');
+    if (trace) {
+      trace.refused(
+        (await queryKeptOutOfReach(core, scope, subject, name))
+          ? 'non-grantable'
+          : 'query-lane',
+      );
+    }
     return GATE_REFUSED;
   }
   // An explain is granted nowhere: what it answers is what a refusal
@@ -609,6 +618,26 @@ async function indexedSubject(
     return types;
   }
   return { kind: 'card', url: subject.url, types };
+}
+
+// Whether a type in the chain of the card or type a query is invoked on
+// declares the query `nonGrantable`. A subclass that redeclares the name
+// without the flag does not make grantable what the type it extends kept out
+// of a policy's reach, on the search engine as anywhere.
+async function queryKeptOutOfReach(
+  core: OperationCore,
+  scope: GateScope,
+  subject: GateSubject,
+  name: string,
+): Promise<boolean> {
+  if (subject.kind === 'unmatched') {
+    return false;
+  }
+  let indexed = await indexedSubject(scope, subject);
+  if (!indexed || indexed.kind === GATE_MISSING.kind) {
+    return false;
+  }
+  return await nonGrantableInChain(core, indexed.types, name);
 }
 
 // What the bytes a stored-bytes read will serve are, judged from those bytes.

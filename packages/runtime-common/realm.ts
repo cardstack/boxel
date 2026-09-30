@@ -327,7 +327,7 @@ import {
   type CompiledRealmPolicy,
 } from './card-operations/policy.ts';
 import {
-  policyQueryScope,
+  principalQueryScope,
   searchPrincipal,
   type PolicyQueryScope,
   type SearchPrincipal,
@@ -6793,20 +6793,20 @@ export class Realm {
   // what a render produces is served to every viewer, so it reads what the ACL
   // grants it and nothing more: the ACL's refusal is its answer, and the
   // policy is never asked — as a federated search never asks one about it
-  // either.
+  // either. A capability check asks the same of a query it is asked about.
   async #policyQueryScope(
     invocation: SearchInvocation | undefined,
     request: Request,
     requestContext: RequestContext,
   ): Promise<PolicyQueryScope> {
-    let principal = this.#searchPrincipal(request, requestContext);
-    if (!invocation || principal?.kind !== 'user') {
+    if (!invocation) {
       return { kind: 'denied' };
     }
-    return await policyQueryScope(this.operationCore, {
-      ...invocation,
-      principal,
-    });
+    return await principalQueryScope(
+      this.operationCore,
+      invocation,
+      this.#searchPrincipal(request, requestContext),
+    );
   }
 
   // Who a search runs for. A realm-authority principal is a session a realm
