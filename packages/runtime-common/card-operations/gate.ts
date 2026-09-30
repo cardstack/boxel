@@ -804,10 +804,26 @@ export async function dischargePendingDecision(
   if (pending.decision.kind === 'pending') {
     policyGateStats(core).pendingDischarges++;
   }
-  let admission = await admits(core, pending, judged);
-  if (!('grant' in admission)) {
-    throw gateRefusal(core, admission, pending.target, pending.name);
+  let refusal = await pendingWriteRefusal(core, pending, judged);
+  if (refusal) {
+    throw refusal;
   }
+}
+
+// The refusal `dischargePendingDecision` would throw for a pending write
+// judged against `judged`, or undefined where it would admit the write. This
+// never admits anything and counts no discharge: it is for a caller that has
+// to know how the lock would decide a write that is not being decided under
+// it.
+export async function pendingWriteRefusal(
+  core: OperationCore,
+  pending: PendingWrite,
+  judged: AdmissionSubject | undefined,
+): Promise<OperationFailure | undefined> {
+  let admission = await admits(core, pending, judged);
+  return 'grant' in admission
+    ? undefined
+    : gateRefusal(core, admission, pending.target, pending.name);
 }
 
 // Whether a pending write would be admitted against its target card as stored
@@ -819,20 +835,30 @@ export async function pendingWriteHolds(
   core: OperationCore,
   pending: PendingWrite,
 ): Promise<boolean> {
+  return !(await storedWriteRefusal(core, pending));
+}
+
+// The refusal `pendingWriteHolds` finds, in the words the lock would refuse
+// the write in against the same card: a predicate that throws is the fault it
+// is under the lock, not a refusal. Undefined where the write would be
+// admitted.
+export async function storedWriteRefusal(
+  core: OperationCore,
+  pending: PendingWrite,
+): Promise<OperationFailure | undefined> {
   let { target } = pending;
   let url = target.kind === 'instance' ? parseURL(target.url) : undefined;
   if (!url) {
-    return false;
+    return notPermitted(target, pending.name);
   }
   let source = await core.readFileAsText(
     `${localPathFor(core, url)}.json` as LocalPath,
   );
-  let admission = await admits(
+  return await pendingWriteRefusal(
     core,
     pending,
     source === undefined ? undefined : { id: url.href, source },
   );
-  return 'grant' in admission;
 }
 
 // The grant that admits a pending write against `judged`, or the refusal.
