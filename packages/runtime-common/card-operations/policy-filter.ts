@@ -59,8 +59,9 @@ import type { OperationQueryFilterTemplate } from './types.ts';
 // the index then holds what that type makes of it. So the compiled policy
 // also records, for each path a grant's filter compares, the descendants the
 // governed realm holds cards of that read that path differently
-// (`readsPathAlike`). A search keeps each comparison from admitting their
-// cards, and leaves the rest of the filter to judge them.
+// (`readsPathAlike`), and a search keeps each comparison of the path from
+// judging their cards (`withoutMisreadings`). The rest of the filter judges
+// them as it judges any card.
 //
 // What the checks do not reach:
 //
