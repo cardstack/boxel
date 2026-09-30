@@ -1624,12 +1624,16 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       // Registered with a `disk_id` outside the realms root, so there is no
       // directory to read its `realm.json` from and none to mount it from.
       const UNRESOLVABLE = 'http://127.0.0.1:4444/unresolvable/';
+      // Registered the same way, and readable by provider A.
+      const UNRESOLVABLE_READABLE =
+        'http://127.0.0.1:4444/unresolvable-readable/';
       const SCHEDULES = { 'item.on': SCHEDULE };
 
       async function stage(
         realmURL: string,
         diskId: string,
         files: Record<string, string>,
+        permissions: RealmPermissions = {},
       ) {
         let dir = join(realmServer.testingOnlyRealmsRootPath, diskId);
         for (let [path, content] of Object.entries(files)) {
@@ -1643,6 +1647,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         });
         await insertPermissions(db, new URL(realmURL), {
           [OWNER]: ['read', 'write', 'realm-owner'],
+          ...permissions,
         });
       }
 
@@ -1722,6 +1727,17 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           'realm.json': realmConfigCardJSON({ name: 'Unresolvable' }),
           ...aOpen(),
         });
+        await stage(
+          UNRESOLVABLE_READABLE,
+          '../unresolvable-readable',
+          {
+            'realm.json': realmConfigCardJSON({
+              name: 'Unresolvable readable',
+            }),
+            ...aOpen(),
+          },
+          { [PROVIDER_A]: ['read'] },
+        );
         // The registry as this process reflects it, which is what the
         // realms are looked up in, brought up to date with the rows just
         // written rather than waiting on the notification they sent.
@@ -1942,6 +1958,46 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         assert.false(
           isMounted(UNMOUNTED_PRIVATE),
           'which is still not mounted',
+        );
+      });
+
+      test('a named query naming a realm the caller reads that will not mount, and one their policy reaches, reads the declaration through the second, and tries the first once', async function (assert) {
+        let reconciler = realmServer.testingOnlyReconciler;
+        let lookupOrMount = reconciler.lookupOrMount;
+        let attempts = 0;
+        reconciler.lookupOrMount = function (
+          this: typeof reconciler,
+          ...args: Parameters<typeof lookupOrMount>
+        ) {
+          if (args[0] === UNRESOLVABLE_READABLE) {
+            attempts++;
+          }
+          return lookupOrMount.apply(this, args);
+        };
+        let response;
+        try {
+          response = await federatedSearch(
+            listOpen([UNRESOLVABLE_READABLE, GRANTS]),
+            PROVIDER_A,
+          );
+        } finally {
+          reconciler.lookupOrMount = lookupOrMount;
+        }
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        assert.deepEqual(
+          ids(response),
+          A_OPEN_IN_GRANTS,
+          "provider A's open schedules, which the policy's grant admits",
+        );
+        assert.true(
+          response.body.meta.incomplete,
+          'the realm the caller reads is counted among the realms that failed to answer',
+        );
+        assert.strictEqual(
+          attempts,
+          1,
+          'and it was tried once, though both reading the declaration and the search itself would mount it',
         );
       });
 

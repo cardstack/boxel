@@ -205,8 +205,8 @@ function registerSearchRoutes() {
           .find(Boolean);
         if (!resolvingRealm) {
           // As there, a declaration no realm can be read through searches no
-          // realm: each counts as one that did not answer, and the result is
-          // empty and marked incomplete rather than refused.
+          // realm, and the result is empty and marked incomplete rather than
+          // refused.
           unresolved = true;
           payload = { ...namedQueryRendering(payload), realms: realmList };
         } else {
@@ -267,7 +267,11 @@ function registerSearchRoutes() {
       let scopedQueries = new Map<object, SearchEntryQuery>();
       let realms = await Promise.all(
         realmList.map(async (realmURL) => {
-          if (unresolved) {
+          // A realm the caller reads is one the declaration would have
+          // searched, so it counts as one that did not answer. Every other
+          // realm answers with no rows below: none is in process, so none has
+          // a policy to ask.
+          if (unresolved && readable(realmURL)) {
             return undefined;
           }
           let realm = getSearchEntrySearchableRealmForURL(realmURL, payload);

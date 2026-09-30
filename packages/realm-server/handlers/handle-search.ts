@@ -185,17 +185,20 @@ export default function handleSearch(opts: {
       return urls.filter((_url, index) => answers[index]);
     };
     // Each realm this request mounts, mounted once however many steps ask for
-    // it: a realm that will not mount is tried once, and each step after
-    // counts it as the one that tried did.
+    // it — reading a named query's declaration, asking a policy, and the
+    // search itself: a realm that will not mount is tried once, and each step
+    // after counts it as the one that tried did.
     let mounts = new Map<string, Promise<Realm | undefined>>();
-    let mountRealms = (urls: string[]) =>
+    let mountRealms: MountRealms = (urls, opts) =>
       Promise.all(
         urls.map((url) => {
           let mount = mounts.get(url);
           if (!mount) {
-            mount = resolveRealmsForFederatedRequest(reconciler, [url]).then(
-              ([realm]) => realm,
-            );
+            mount = resolveRealmsForFederatedRequest(
+              reconciler,
+              [url],
+              opts,
+            ).then(([realm]) => realm);
             mounts.set(url, mount);
           }
           return mount;
@@ -214,18 +217,15 @@ export default function handleSearch(opts: {
     let declaredLinks: LinkStrategy | undefined;
     if (isNamedQueryPayload(payload)) {
       // The realms the declaration may be read through: the ones the caller
-      // reads, or, where they read none, the ones whose policy could admit
-      // them. One the caller reaches only through its policy reads the
-      // declaration on that realm's own authority, the way the policy gate
-      // reads it. No policy admits a request with no actor, so for one of
-      // those there are none of the latter.
-      let resolvingRealms =
-        realmList.length > 0
-          ? realmList
-          : policyActor
-            ? await realmsThatMayNamePolicy(grantCandidates)
-            : [];
-      if (resolvingRealms.length === 0) {
+      // reads, and the ones whose policy could admit them, which are offered
+      // only once no realm the caller reads will mount. One the caller
+      // reaches only through its policy reads the declaration on that realm's
+      // own authority, the way the policy gate reads it. No policy admits a
+      // request with no actor, so for one of those there are none of the
+      // latter.
+      let policyRealms = async () =>
+        policyActor ? await realmsThatMayNamePolicy(grantCandidates) : [];
+      if (realmList.length === 0 && (await policyRealms()).length === 0) {
         // No realm the request names can contribute a row to this caller:
         // each is archived, which nothing is served from, or one the caller
         // cannot read whose policy could not admit them, since it names none
@@ -242,9 +242,14 @@ export default function handleSearch(opts: {
         payload = { ...namedQueryRendering(payload), realms: named };
         consultPolicies = false;
       } else {
-        let resolvingRealm = await realmToResolveThrough(
-          resolvingRealms,
-          mountRealms,
+        // Mounting a realm to read the declaration through, and resolving
+        // it, draw on the database as a search of the realms the request
+        // names, the same as the search it resolves to.
+        let resolvingRealm = await withSearchConnectionTenant(ctxt, named, () =>
+          realmToResolveThrough(
+            [async () => realmList, policyRealms],
+            mountRealms,
+          ),
         );
         if (!resolvingRealm) {
           // None of the realms the declaration may be read through will
@@ -256,17 +261,9 @@ export default function handleSearch(opts: {
           // caller reads, and each reached only through a policy it may name.
           // Every other realm answers with no rows, as it would whatever the
           // declaration said.
-          unresolved = new Set([
-            ...realmList,
-            ...(policyActor
-              ? await realmsThatMayNamePolicy(grantCandidates)
-              : []),
-          ]);
+          unresolved = new Set([...realmList, ...(await policyRealms())]);
           payload = { ...namedQueryRendering(payload), realms: named };
         } else {
-          // Resolving reads the declaration's definition, so it draws on the
-          // database as a search of the realms the request names, the same as
-          // the search it resolves to.
           let request = payload;
           let resolved = await withSearchConnectionTenant(ctxt, named, () =>
             resolveNamedSearch(ctxt, request, {
@@ -319,6 +316,7 @@ export default function handleSearch(opts: {
       respond(ctxt, named, payload, access, declaredLinks, {
         requested,
         resolvedByServer,
+        mountRealms,
       }),
     );
   };
@@ -345,7 +343,7 @@ export default function handleSearch(opts: {
     invocation: SearchInvocation | undefined,
     user: string | undefined,
     realmsThatMayNamePolicy: (urls: string[]) => Promise<string[]>,
-    mountRealms: (urls: string[]) => Promise<Array<Realm | undefined>>,
+    mountRealms: MountRealms,
   ): Promise<RealmAccess> {
     let access: RealmAccess = {
       readable,
@@ -384,34 +382,38 @@ export default function handleSearch(opts: {
     return access;
   }
 
-  // The realm a named query's declaration is read through: one of
-  // `resolvingRealms` this process already holds where there is one, and
-  // otherwise the first of them that mounts. They are mounted one at a time,
-  // in the order offered, so no realm is mounted past the one read through.
-  // A realm that will not mount is passed over, as the fan-out passes over a
-  // realm it cannot reach, so it decides nothing for the realms after it.
-  // `undefined` when none will mount.
+  // The realm a named query's declaration is read through. The realms are
+  // offered in groups, and a group is looked at only once no realm in the
+  // groups before it will mount. Within a group, one this process already
+  // holds is taken where there is one, and otherwise the first that mounts.
+  // They are mounted one at a time, in the order offered, so no realm is
+  // mounted past the one read through. A realm that will not mount is passed
+  // over, as the fan-out passes over a realm it cannot reach, so it decides
+  // nothing for the realms after it. `undefined` when none will mount.
   //
   // For a type whose module this server serves, the definition entry belongs
   // to the module's own realm whichever realm reads it; for one served
   // elsewhere, it is read with the reading realm owner's credentials — so the
-  // realms offered are the ones the caller reads wherever there are any, and
-  // a realm reached only through its policy reads a declaration only when the
-  // caller reads none of the realms named.
+  // realms the caller reads are offered first, and a realm reached only
+  // through its policy reads a declaration only when none of those will. Such
+  // a realm reads the declaration a request naming only that realm would
+  // read, so reading through it tells the caller nothing that request would
+  // not.
   async function realmToResolveThrough(
-    resolvingRealms: string[],
-    mountRealms: (urls: string[]) => Promise<Array<Realm | undefined>>,
+    groups: Array<() => Promise<string[]>>,
+    mountRealms: MountRealms,
   ) {
-    let held = resolvingRealms
-      .map((url) => reconciler.mounted.get(url))
-      .find(Boolean);
-    if (held) {
-      return held;
-    }
-    for (let url of resolvingRealms) {
-      let [realm] = await mountRealms([url]);
-      if (realm) {
-        return realm;
+    for (let group of groups) {
+      let urls = await group();
+      let held = urls.map((url) => reconciler.mounted.get(url)).find(Boolean);
+      if (held) {
+        return held;
+      }
+      for (let url of urls) {
+        let [realm] = await mountRealms([url]);
+        if (realm) {
+          return realm;
+        }
       }
     }
     return undefined;
@@ -467,7 +469,12 @@ export default function handleSearch(opts: {
     {
       requested,
       resolvedByServer,
-    }: { requested: string[]; resolvedByServer: boolean },
+      mountRealms,
+    }: {
+      requested: string[];
+      resolvedByServer: boolean;
+      mountRealms: MountRealms;
+    },
   ) {
     let handlerStart = Date.now();
     // Slots the query-shape line is assembled from. `shape` is filled in as
@@ -719,14 +726,13 @@ export default function handleSearch(opts: {
     let runSearch = async () => {
       let doRun = async (signal?: AbortSignal) => {
         // Only the realms rows are read from are mounted: the caller reads
-        // them, or their policy scopes the caller into them.
+        // them, or their policy scopes the caller into them. A realm an
+        // earlier step of the request already tried to mount is answered as
+        // that step found it, so one that would not mount is not tried again.
         let working = realmList.filter(
           (realm) => access.readable.has(realm) || access.scoped.has(realm),
         );
-        let resolveRealms = () =>
-          resolveRealmsForFederatedRequest(reconciler, working, {
-            consumingRealm,
-          });
+        let resolveRealms = () => mountRealms(working, { consumingRealm });
         let workingInstances = timings
           ? await timings.time('resolveRealms', resolveRealms)
           : await resolveRealms();
@@ -857,6 +863,13 @@ export default function handleSearch(opts: {
     }
   }
 }
+
+// Mounts each realm, or finds it already mounted, positional with `urls`; a
+// realm that will not mount is `undefined`.
+type MountRealms = (
+  urls: string[],
+  opts?: { consumingRealm?: string | null },
+) => Promise<Array<Realm | undefined>>;
 
 // What the caller may see of each realm a search names. A realm in neither
 // `readable` nor `scoped` nor `failed` contributes no rows: nothing grants the
