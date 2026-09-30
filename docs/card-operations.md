@@ -754,8 +754,9 @@ the entries ahead of it have staged. Either way nothing is written, no index
 job is enqueued and no event is sent. The refusal names its entry in
 `meta.entry`, a path such as `[0].boxel:target[1]` for the second card an entry
 found. A caller who may not read the realm is told that entry and nothing
-else, in the same 404 a missing card gets, and may not describe a target with a
-query at all.
+else, in the same 404 a missing card gets, and never which card it was. Such a
+caller's `b.find(…)` finds only the cards a `query` grant on its type admits,
+and a query no grant admits answers as one that matched no card.
 
 ## Authoring errors
 
