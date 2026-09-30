@@ -69,32 +69,6 @@
    PRIMARY KEY ( realm_url, staging_id, url, type ) 
 );
 
- CREATE TABLE IF NOT EXISTS boxel_index_working (
-   url TEXT NOT NULL,
-   file_alias TEXT NOT NULL,
-   type TEXT NOT NULL,
-   generation INTEGER NOT NULL,
-   realm_url TEXT NOT NULL,
-   pristine_doc BLOB,
-   search_doc BLOB,
-   error_doc BLOB,
-   deps BLOB DEFAULT '[]',
-   types BLOB,
-   icon_html TEXT,
-   indexed_at,
-   is_deleted BOOLEAN,
-   last_modified,
-   display_names BLOB,
-   resource_created_at,
-   has_error BOOLEAN DEFAULT false NOT NULL,
-   last_known_good_deps BLOB,
-   diagnostics BLOB,
-   job_id INTEGER,
-   host_shell_generation INTEGER,
-   source_content_hash TEXT,
-   PRIMARY KEY ( url, realm_url, type ) 
-);
-
  CREATE TABLE IF NOT EXISTS incoming_webhooks (
    id NOT NULL,
    username TEXT NOT NULL,
@@ -195,29 +169,6 @@
    job_id INTEGER,
    staging_id TEXT NOT NULL,
    PRIMARY KEY ( realm_url, staging_id, url, type ) 
-);
-
- CREATE TABLE IF NOT EXISTS prerendered_html_working (
-   url TEXT NOT NULL,
-   file_alias TEXT NOT NULL,
-   realm_url TEXT NOT NULL,
-   type TEXT NOT NULL,
-   fitted_html BLOB,
-   embedded_html BLOB,
-   atom_html TEXT,
-   head_html TEXT,
-   isolated_html TEXT,
-   markdown TEXT,
-   deps BLOB,
-   last_known_good_deps BLOB,
-   generation INTEGER NOT NULL,
-   is_deleted BOOLEAN,
-   error_doc BLOB,
-   rendered_at,
-   job_id INTEGER,
-   diagnostics BLOB,
-   screenshots BLOB,
-   PRIMARY KEY ( url, realm_url, type ) 
 );
 
  CREATE TABLE IF NOT EXISTS realm_file_meta (
