@@ -110,4 +110,22 @@ module('Pretui | components/navigation-menu', function (hooks) {
     assert.false(panel('coffee').hidden);
     assert.strictEqual(document.activeElement, link, 'focus did not fall to the page');
   });
+
+  test('after a click open and close, a hover-opened panel still closes on leave', async function (assert) {
+    await render(<template><NavigationMenu @items={{SITE}} /></template>);
+    await click(trigger('coffee'));
+    await click(trigger('coffee'));
+    trigger('coffee').focus();
+    await triggerEvent(trigger('tea'), 'pointerenter');
+    assert.false(panel('tea').hidden);
+    await triggerEvent('[data-test-pretui-navigation-menu]', 'pointerleave');
+    assert.true(panel('tea').hidden, 'focus on a clicked trigger does not hold a hover panel open');
+  });
+
+  test('a caller id on the nav does not break outside-press detection', async function (assert) {
+    await render(<template><NavigationMenu @items={{SITE}} @openOnHover={{false}} id='site-nav' /></template>);
+    await click(trigger('coffee'));
+    await triggerEvent(panel('coffee').querySelector('a') as HTMLElement, 'pointerdown');
+    assert.false(panel('coffee').hidden, 'a press inside the panel is not an outside press');
+  });
 });

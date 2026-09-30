@@ -4,6 +4,9 @@ import { tracked } from '@glimmer/tracking';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { guidFor } from '@ember/object/internals';
+// type-only gap: 'ember-modifier' resolves at realm runtime; glint cannot see
+// it here (accepted parse baseline, same as toaster.gts / focus.gts)
+import { modifier } from 'ember-modifier';
 import { listenDocument } from '../focus';
 
 export interface NavigationMenuLink {
@@ -105,11 +108,11 @@ export class NavigationMenu extends Component<NavigationMenuSignature> {
     this.openedByHover = true;
     this.setOpen(id);
   };
-  leave = (event: Event) => {
-    // keyboard focus inside the navigation keeps the panel; hiding it would
-    // drop focus to the page
-    let root = event.currentTarget as HTMLElement;
-    if (root.contains(document.activeElement)) {
+  leave = () => {
+    // keyboard focus inside the open panel keeps it; hiding it would drop
+    // focus to the page. Focus left on a clicked trigger does not count.
+    let panel = this.openId === null ? null : document.getElementById(this.panelId(this.openId));
+    if (panel?.contains(document.activeElement)) {
       return;
     }
     if (this.openedByHover && this.openId !== null) {
@@ -143,17 +146,25 @@ export class NavigationMenu extends Component<NavigationMenuSignature> {
       return;
     }
     let target = event.target as Node | null;
-    let root = target?.ownerDocument?.getElementById(this.guid);
+    let root = this.rootEl;
     if (root && target && root.contains(target)) {
       return;
     }
     this.setOpen(null);
   };
 
+  /** The root element, held by reference: a caller's `id` may replace ours. */
+  private rootEl: HTMLElement | null = null;
+  captureRoot = modifier((el: HTMLElement) => {
+    this.rootEl = el;
+    return () => {
+      this.rootEl = null;
+    };
+  });
+
   <template>
     {{! template-lint-disable no-invalid-interactive }}
     <nav
-      id={{this.guid}}
       class='pretui-navmenu'
       aria-label={{if @label @label 'Main'}}
       data-test-pretui-navigation-menu
@@ -161,6 +172,7 @@ export class NavigationMenu extends Component<NavigationMenuSignature> {
       {{on 'focusout' this.onFocusOut}}
       {{on 'pointerleave' this.leave}}
       {{listenDocument 'pointerdown' this.onOutside true}}
+      {{this.captureRoot}}
       ...attributes
     >
       <ul class='pretui-navmenu-list'>

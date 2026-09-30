@@ -23,7 +23,7 @@
 // Local-only test file; run with `boxel test` from this directory — do NOT
 // push to the realm (a pushed *.test.gts opts the realm into a QUnit gate).
 import { module, test } from 'qunit';
-import { render, click, focus, triggerKeyEvent } from '@ember/test-helpers';
+import { render, click, focus, settled, triggerKeyEvent } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
 import { DEMOS_TOASTER } from './components/toaster.usage';
 import { tracked } from '@glimmer/tracking';
@@ -41,12 +41,12 @@ function fixture(n: number): ToastItem[] {
 // ── 1. The rules, as data ────────────────────────────────────────────────
 
 module('Pretui | toaster | rules', function () {
-  test('the cap renders the newest and queues the rest', function (assert) {
+  test('the cap renders the oldest, newest-first, and queues the rest', function (assert) {
     let items = fixture(6);
     assert.deepEqual(
       visibleToasts(items, 3).map((t) => t.id),
-      ['t0', 't1', 't2'],
-      'the first three of a newest-first list render',
+      ['t3', 't4', 't5'],
+      'the three that arrived first render; newer ones wait',
     );
     assert.strictEqual(queuedCount(items, 3), 3, 'three wait behind the cap');
     assert.strictEqual(
@@ -219,9 +219,40 @@ module('Pretui | toaster | render', function (hooks) {
       'and the overflow is stated rather than silently dropped',
     );
     assert.notOk(
-      region?.querySelector('[data-test-pretui-toast-item="q0"]'),
+      region?.querySelector('[data-test-pretui-toast-item="q4"]'),
       'a queued toast has no element, so its clock has not started',
     );
+  });
+
+  test('a toast already on screen stays when more arrive past the cap', async function (assert) {
+    let store = new ToastStore();
+    await render(<template><Toaster @store={{store}} @limit={{2}} /></template>);
+    store.show({ id: 'first', title: 'First', duration: 0 });
+    await settled();
+    let first = document.querySelector('[data-test-pretui-toast-item="first"]');
+    assert.ok(first, 'the first toast renders');
+    store.show({ id: 'second', title: 'Second', duration: 0 });
+    store.show({ id: 'third', title: 'Third', duration: 0 });
+    await settled();
+    assert.strictEqual(
+      document.querySelector('[data-test-pretui-toast-item="first"]'),
+      first,
+      'the same element, never pushed out and re-mounted',
+    );
+    assert.notOk(document.querySelector('[data-test-pretui-toast-item="third"]'), 'the newest waits');
+  });
+
+  test('replacing a toast by id restarts its clock', async function (assert) {
+    let store = new ToastStore();
+    await render(<template><Toaster @store={{store}} /></template>);
+    store.show({ id: 'save', title: 'Saving…', duration: 30 });
+    await settled();
+    let before = document.querySelector('[data-test-pretui-toast-item="save"] [data-test-pretui-toast-life]');
+    store.show({ id: 'save', title: 'Saved', duration: 30 });
+    await settled();
+    let after = document.querySelector('[data-test-pretui-toast-item="save"] [data-test-pretui-toast-life]');
+    assert.ok(before && after);
+    assert.notStrictEqual(after, before, 'a fresh life bar, so the clock starts again');
   });
 
   test('the life bar carries its own duration and a sticky toast has none', async function (assert) {

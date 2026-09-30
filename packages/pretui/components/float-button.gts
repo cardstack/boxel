@@ -4,6 +4,9 @@ import { tracked } from '@glimmer/tracking';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { guidFor } from '@ember/object/internals';
+// type-only gap: 'ember-modifier' resolves at realm runtime; glint cannot see
+// it here (accepted parse baseline, same as toaster.gts / focus.gts)
+import { modifier } from 'ember-modifier';
 import { Button } from './button';
 import { listenDocument, listenDocumentCapture } from '../focus';
 import type { PretuiToneArg } from '../pretui-primitives';
@@ -71,7 +74,6 @@ export interface FloatButtonSignature {
 export class FloatButton extends Component<FloatButtonSignature> {
   private guid = guidFor(this);
   @tracked private internalOpen = false;
-  private trigger: HTMLElement | null = null;
 
   get dialId(): string {
     return this.guid + '-dial';
@@ -104,13 +106,14 @@ export class FloatButton extends Component<FloatButtonSignature> {
     this.args.onOpenChange?.(next);
   }
 
+  /** The main button, looked up from the root: the dial may have been
+   * opened through a controlled @open without it ever being clicked. */
   private closeAndReturn() {
     this.setOpen(false);
-    this.trigger?.focus();
+    this.rootEl?.querySelector<HTMLElement>('.pretui-float-main')?.focus();
   }
 
-  onMain = (event: Event) => {
-    this.trigger = event.currentTarget as HTMLElement;
+  onMain = () => {
     if (this.hasDial) {
       this.setOpen(!this.isOpen);
     } else {
@@ -125,7 +128,9 @@ export class FloatButton extends Component<FloatButtonSignature> {
 
   onKey = (event: Event) => {
     let ev = event as KeyboardEvent;
-    if (ev.key !== 'Escape' || !this.isOpen) {
+    // only an Escape from inside the dial; another widget's Escape is its own
+    let target = ev.target as Node | null;
+    if (ev.key !== 'Escape' || !this.isOpen || !target || !this.rootEl?.contains(target)) {
       return;
     }
     ev.preventDefault();
@@ -138,22 +143,31 @@ export class FloatButton extends Component<FloatButtonSignature> {
       return;
     }
     let target = event.target as Node | null;
-    let root = target?.ownerDocument?.getElementById(this.guid);
+    let root = this.rootEl;
     if (root && target && root.contains(target)) {
       return;
     }
     this.setOpen(false);
   };
 
+  /** The root element, held by reference: a caller's `id` may replace ours. */
+  private rootEl: HTMLElement | null = null;
+  captureRoot = modifier((el: HTMLElement) => {
+    this.rootEl = el;
+    return () => {
+      this.rootEl = null;
+    };
+  });
+
   <template>
     <div
-      id={{this.guid}}
       class='pretui-float'
       data-placement={{this.placement}}
       data-position={{if @position @position 'absolute'}}
       data-open={{if this.isOpen 'true' 'false'}}
       data-opens={{if this.opensUp 'up' 'down'}}
       data-test-pretui-float-button
+      {{this.captureRoot}}
       ...attributes
     >
       {{#if this.isOpen}}

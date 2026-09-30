@@ -249,14 +249,21 @@ export class ReadinessPanel extends Component<ReadinessPanelSignature> {
   }
 
   /** Unrecognised input resolves to `unknown` rather than to nothing. */
+  /** One normalisation, used everywhere a state is read: a state this panel
+   * does not recognise (an `'error'` from a backend) is `unknown`, on its row,
+   * in its word and in the verdict alike. */
+  private normState(state: ReadinessGateState): ReadinessGateState {
+    return GATE_TREATMENT[state] ? state : 'unknown';
+  }
   private treatmentFor(state: ReadinessGateState): GateTreatment {
-    return GATE_TREATMENT[state] ?? GATE_TREATMENT.unknown;
+    return GATE_TREATMENT[this.normState(state)] ?? GATE_TREATMENT.unknown;
   }
   private wordFor(state: ReadinessGateState): string {
-    return this.args.stateText?.[state] ?? this.treatmentFor(state).text;
+    let norm = this.normState(state);
+    return this.args.stateText?.[norm] ?? this.treatmentFor(norm).text;
   }
   private has(states: ReadinessGateState[]): boolean {
-    return this.gates.some((gate) => states.includes(gate.state));
+    return this.gates.some((gate) => states.includes(this.normState(gate.state)));
   }
 
   get verdict(): ReadinessVerdict {
@@ -307,7 +314,7 @@ export class ReadinessPanel extends Component<ReadinessPanelSignature> {
       return {
         key: gate.id ?? gate.name + '#' + String(index),
         name: gate.name,
-        state: GATE_TREATMENT[gate.state] ? gate.state : 'unknown',
+        state: this.normState(gate.state),
         stateText: this.wordFor(gate.state),
         glyph: treatment.glyph,
         hue: treatment.hue,
@@ -318,7 +325,7 @@ export class ReadinessPanel extends Component<ReadinessPanelSignature> {
     });
   }
   get passedCount(): number {
-    return this.gates.filter((gate) => gate.state === 'pass').length;
+    return this.gates.filter((gate) => this.normState(gate.state) === 'pass').length;
   }
   get skeletonRows(): number[] {
     let count = Math.max(1, Math.min(12, this.args.loadingRows ?? 3));

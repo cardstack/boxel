@@ -9,6 +9,7 @@ import { Button } from './button';
 import type { PretuiSize } from '../pretui-primitives';
 import { Menu } from './menu';
 import type { MenuEntry } from '../internal/menu';
+import { destructiveLast } from '../internal/menu';
 import { clampIndex } from '../internal/toggle-controls';
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -121,8 +122,10 @@ export interface HoverActionsSignature {
 //    tabindex is the difference between 4 and 200 tab stops on a fifty-row
 //    list. The sources put every button in the tab order — which is not a
 //    keyboard path, it is a keyboard tax.
-//  * **Escape returns focus to the host**, so a reader who opened the cluster
-//    can leave it without tabbing forward through it.
+//  * **Escape returns focus to the host.** With `@actions`, the cluster also
+//    parks — its buttons leave the tab order until focus leaves the root — so
+//    the next Tab moves past it. Controls in a caller's `<:actions>` block are
+//    the caller's, and are not parked.
 //  * **Real icons and real names.** `↺` / `▷` / `→` as button text announce
 //    as "anticlockwise open circle arrow"; every action here carries a
 //    required `label`, drawn as `title` and as `sr-only` text, with the glyph
@@ -135,8 +138,9 @@ export interface HoverActionsSignature {
 export class HoverActions extends Component<HoverActionsSignature> {
   @tracked private focusIndex = 0;
   @tracked private navigating = false;
-  /** After Escape the cluster drops out of the tab order until focus leaves
-   * the root, so the next Tab moves past the actions instead of back in. */
+  /** After Escape the `@actions` cluster drops out of the tab order until
+   * focus leaves the root, so the next Tab moves past the actions instead of
+   * back in. It does not reach controls a caller yields in `<:actions>`. */
   @tracked private parked = false;
 
   get actions(): readonly HoverAction[] {
@@ -181,13 +185,15 @@ export class HoverActions extends Component<HoverActionsSignature> {
     return this.inline.length + (this.hasOverflow ? 1 : 0);
   }
   get menuItems(): MenuEntry[] {
-    return this.overflow.map((item) => ({
-      label: item.label,
-      icon: item.icon,
-      disabled: item.disabled,
-      destructive: item.destructive,
-      onSelect: () => this.fire(item),
-    }));
+    return destructiveLast(
+      this.overflow.map((item) => ({
+        label: item.label,
+        icon: item.icon,
+        disabled: item.disabled,
+        destructive: item.destructive,
+        onSelect: () => this.fire(item),
+      })),
+    );
   }
 
   iconOf = (item: HoverAction) => iconFor(item.icon);
@@ -275,8 +281,8 @@ export class HoverActions extends Component<HoverActionsSignature> {
 
   onRootFocusOut = (event: Event) => {
     let root = event.currentTarget as HTMLElement;
-    let to = (event as FocusEvent).relatedTarget;
-    if (!(to instanceof Node) || !root.contains(to)) {
+    let to = (event as FocusEvent).relatedTarget as Node | null;
+    if (!to || !root.contains(to)) {
       this.parked = false;
     }
   };

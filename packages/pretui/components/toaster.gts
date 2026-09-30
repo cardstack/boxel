@@ -65,7 +65,7 @@ import { htmlSafe } from '@ember/template';
 // type-only gap: 'ember-modifier' resolves at realm runtime; glint cannot see
 // it here (accepted parse baseline, same as menu.gts / focus.gts)
 import { modifier } from 'ember-modifier';
-import { listenDocument } from '../focus';
+import { listenDocument, listenDocumentCapture } from '../focus';
 
 // ── The toast model ──────────────────────────────────────────────────────
 
@@ -192,11 +192,18 @@ export class ToastStore {
 // ── Pure helpers, so the queue rules are testable without a DOM ──────────
 
 /** The toasts that get rendered: newest first, capped at `limit`. */
+/**
+ * The toasts on screen: the OLDEST `limit`, still newest-first. A toast that
+ * has been rendered stays rendered until it is dismissed — its clock is
+ * running and it may hold focus — so a new arrival past the cap waits rather
+ * than pushing a visible toast out.
+ */
 export function visibleToasts(
   items: readonly ToastItem[],
   limit: number,
 ): ToastItem[] {
-  return items.slice(0, Math.max(0, limit));
+  let cap = Math.max(0, limit);
+  return cap === 0 ? [] : items.slice(Math.max(0, items.length - cap));
 }
 
 /** How many are waiting behind the cap. Their clocks have not started —
@@ -340,6 +347,8 @@ export class Toaster extends Component<ToasterSignature> {
 
   /** The only inline style here, and it carries one clamped number — the
    * animation's own duration. The rest of the toast is tokens. */
+  one = (item: ToastItem): ToastItem[] => [item];
+
   lifeStyle = (item: ToastItem) => {
     let seconds = Math.max(0, Math.min(600, this.secondsOf(item)));
     return htmlSafe('--pretui-toast-life: ' + seconds + 's');
@@ -492,7 +501,7 @@ export class Toaster extends Component<ToasterSignature> {
       data-pause-focus={{this.pauseFocusAttr}}
       data-test-pretui-toaster
       {{this.captureRegion}}
-      {{listenDocument 'keydown' this.onDocumentKey false}}
+      {{listenDocumentCapture 'keydown' this.onDocumentKey}}
       {{listenDocument 'visibilitychange' this.onVisibility false}}
       ...attributes
     >
@@ -549,13 +558,18 @@ export class Toaster extends Component<ToasterSignature> {
 
           {{#if (this.hasClock item)}}
             {{!-- The clock. An animationend on THIS element is the
-                  dismissal, so no timer handle exists to leak or re-arm. --}}
-            <span
-              class='pretui-toast-life'
-              aria-hidden='true'
-              data-test-pretui-toast-life
-              {{this.agesOut item.id}}
-            ></span>
+                  dismissal, so no timer handle exists to leak or re-arm.
+                  Keyed on the item object, so a same-id replacement (a
+                  Saving… that becomes Saved) gets a fresh bar and a fresh
+                  clock rather than the old one's remainder. --}}
+            {{#each (this.one item) key='@identity' as |current|}}
+              <span
+                class='pretui-toast-life'
+                aria-hidden='true'
+                data-test-pretui-toast-life
+                {{this.agesOut current.id}}
+              ></span>
+            {{/each}}
           {{/if}}
         </div>
       {{/each}}

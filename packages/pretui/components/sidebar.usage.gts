@@ -218,7 +218,7 @@ export class SidebarUsage extends Component {
         />
         <Args.Bool
           @name='shortcut'
-          @description='Bind the Cmd or Ctrl shortcut. The listener is owned by a modifier that removes it, so mounting two sidebars does not stack two global listeners.'
+          @description='Bind the Cmd or Ctrl shortcut. With several sidebars mounted, one press toggles one rail: the one holding focus, or the first mounted when focus is in none.'
           @defaultValue={{true}}
         />
         <Args.String

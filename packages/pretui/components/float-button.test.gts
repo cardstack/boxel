@@ -9,6 +9,13 @@ import { click, render, triggerEvent, triggerKeyEvent } from '@ember/test-helper
 import { setupCardTest } from '@cardstack/host/tests/helpers';
 import { FloatButton } from './float-button';
 import type { FloatButtonAction } from './float-button';
+import { on } from '@ember/modifier';
+import { tracked } from '@glimmer/tracking';
+
+class Open {
+  @tracked open = true;
+  set = (v: boolean) => (this.open = v);
+}
 
 function root(): HTMLElement {
   return document.querySelector('[data-test-pretui-float-button]') as HTMLElement;
@@ -122,5 +129,42 @@ module('Pretui | components/float-button', function (hooks) {
     await click(main());
     assert.deepEqual(requests, [false], 'the toggle is reported');
     assert.false(dial().hidden, 'and the caller still owns the state');
+  });
+
+  test('Escape from another widget is that widget’s, not the dial’s', async function (assert) {
+    let actions: FloatButtonAction[] = [{ id: 'note', label: 'New note' }];
+    let heard = 0;
+    let hear = (e: Event) => {
+      if ((e as KeyboardEvent).key === 'Escape') heard++;
+    };
+    await render(<template>
+      <input class='t-other' aria-label='Other' {{on 'keydown' hear}} />
+      <FloatButton @label='Create' @actions={{actions}} />
+    </template>);
+    await click(main());
+    let other = document.querySelector('.t-other') as HTMLElement;
+    other.focus();
+    await triggerKeyEvent(other, 'keydown', 'Escape');
+    assert.strictEqual(heard, 1, 'the other widget heard its Escape');
+    assert.strictEqual(main().getAttribute('aria-expanded'), 'true', 'and the dial stayed open');
+  });
+
+  test('a dial opened through @open, never clicked, still returns focus to the button', async function (assert) {
+    let actions: FloatButtonAction[] = [{ id: 'note', label: 'New note' }];
+    let state = new Open();
+    await render(<template><FloatButton @label='Create' @actions={{actions}} @open={{state.open}} @onOpenChange={{state.set}} /></template>);
+    let action = document.querySelector('[data-test-pretui-float-action="note"]') as HTMLElement;
+    action.focus();
+    await click(action);
+    assert.false(state.open, 'the choice closed it');
+    assert.strictEqual(document.activeElement, main(), 'and focus went back to the button, not the page');
+  });
+
+  test('a caller id does not break outside-press detection', async function (assert) {
+    let actions: FloatButtonAction[] = [{ id: 'note', label: 'New note' }];
+    await render(<template><FloatButton @label='Create' @actions={{actions}} id='fab' /></template>);
+    await click(main());
+    await triggerEvent(dial(), 'pointerdown');
+    assert.strictEqual(main().getAttribute('aria-expanded'), 'true', 'a press inside is not outside');
   });
 });

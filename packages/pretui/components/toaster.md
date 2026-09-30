@@ -27,7 +27,7 @@ Agents trained on shadcn will type `<Toaster />` and `toast('Saved')`; the secon
 
 **The clock is a CSS animation, not a timer.** Each toast with a duration renders a life bar running for its own seconds, and the toast is removed on that element's `animationend`. That one decision is what the rest follows from: pausing is `animation-play-state`, so no elapsed time is measured or re-armed; a tab going hidden toggles the same property; where the animation never runs the toast simply waits to be dismissed rather than vanishing early. What it costs is an exit animation — removal is immediate and the survivors reflow with a transition. The duration is seconds, not milliseconds, and is clamped to 600.
 
-**The cap is a queue, not a clip.** Toasts past `@limit` are not rendered, so their clock has not started, and the region shows how many are waiting.
+**The cap is a queue, not a clip.** The first `@limit` toasts to arrive are the ones on screen; a toast already shown stays until it is dismissed, so a new arrival never pushes a running toast out. Toasts past the cap are not rendered, so their clock has not started, and the region shows how many are waiting. A `show` with an existing id replaces that toast and restarts its clock.
 
 **Dismissal hands focus on.** Dismissing the toast you are focused on moves focus to the next toast's dismiss control, and when the last one goes, back to whatever had focus before the region was entered. Neither the action button nor the dismiss control ever drops focus on the body.
 

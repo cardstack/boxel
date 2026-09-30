@@ -165,8 +165,10 @@ const measuresPane = modifier(
       let width = entry.contentRect.width;
       apply(width > 0 && width < breakpoint);
     });
+    // The observer reports once as soon as observation starts, and does so
+    // asynchronously — a synchronous first report here would write tracked
+    // state during the render that installed this modifier.
     observer.observe(element);
-    apply(element.clientWidth > 0 && element.clientWidth < breakpoint);
     return () => observer.disconnect();
   },
 );
@@ -214,7 +216,7 @@ export interface SidebarSignature {
     mobile?: boolean;
     /** Pane width in px below which the rail becomes a drawer. Default `640`. */
     mobileBreakpoint?: number;
-    /** Draw the hairline between rail and content. Default `true`. */
+    /** Draw the hairline between rail and content. Default `false`. */
     bordered?: boolean;
   };
   Blocks: {
@@ -287,7 +289,11 @@ export class Sidebar extends Component<SidebarSignature> {
     if (this.args.open !== undefined) {
       return this.args.open;
     }
-    return this.mobile ? this.drawerOpen : this.internal;
+    if (this.mobile) {
+      return this.drawerOpen;
+    }
+    // a pinned rail is open, whatever a shortcut or trigger asked for
+    return this.collapsible === 'none' ? true : this.internal;
   }
   get collapsible(): SidebarCollapsible {
     return this.args.collapsible ?? 'rail';
@@ -383,8 +389,17 @@ export class Sidebar extends Component<SidebarSignature> {
     this.narrowPane = narrow;
   };
 
+  /** The shell element, so the shortcut can tell which sidebar owns focus. */
+  private rootEl: HTMLElement | null = null;
+  captureRoot = modifier((el: HTMLElement) => {
+    this.rootEl = el;
+    return () => {
+      this.rootEl = null;
+    };
+  });
+
   onShortcut = (event: Event) => {
-    if (!this.shortcutEnabled) {
+    if (!this.shortcutEnabled || (this.collapsible === 'none' && !this.mobile)) {
       return;
     }
     let key = event as KeyboardEvent;
@@ -399,6 +414,13 @@ export class Sidebar extends Component<SidebarSignature> {
     }
     let target = key.target as HTMLElement | null;
     if (target && target.closest && target.closest(TEXT_ENTRY)) {
+      return;
+    }
+    // Every sidebar with @shortcut listens, but one press toggles one rail:
+    // the innermost sidebar that holds focus, or, with focus in none, the
+    // first to see the key (the rest see it already taken).
+    let owner = (document.activeElement as HTMLElement | null)?.closest?.('.pretui-sidebar-shell') ?? null;
+    if (owner ? owner !== this.rootEl : key.defaultPrevented) {
       return;
     }
     key.preventDefault();
@@ -422,9 +444,10 @@ export class Sidebar extends Component<SidebarSignature> {
             a non-widget element, and the shortcut has to work while focus is
             anywhere on the page anyway. Capture phase and non-passive so it
             may preventDefault; owned by this element, so it is removed with
-            the component rather than accumulating one listener per mount the
-            way shadcn's window-level binding does. --}}
+            the component. Each mounted sidebar has its own listener, and
+            onShortcut routes one press to one of them. --}}
       {{listenDocumentCapture 'keydown' this.onShortcut}}
+      {{this.captureRoot}}
       ...attributes
     >
       {{#if this.mobile}}

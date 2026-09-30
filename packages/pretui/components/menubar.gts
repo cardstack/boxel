@@ -670,6 +670,11 @@ export class Menubar extends Component<MenubarSignature> {
     if (result.effect === 'activate') {
       let row = this.focusRow;
       let top = this.topRows[s.index];
+      // disabled rows are visible, focusable, announced — and inert: the key
+      // does nothing, as a click does nothing
+      if (row ? row.disabled : top?.disabled) {
+        return;
+      }
       this.index = s.index;
       this.closeAll();
       this.navigating = true;
@@ -879,6 +884,9 @@ export class Menubar extends Component<MenubarSignature> {
     this.navigating = true;
     this.index = i;
     this.openIndex = this.ctx.hasMenu(i) ? i : -1;
+    // a title with no menu ends the bar's active state, as apply() does, so
+    // a later hover cannot reopen a menu the user thinks is closed
+    this.barActive = this.openIndex >= 0;
     this.openPath = [];
     this.focusKey = undefined;
     this.typeahead.reset();

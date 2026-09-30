@@ -7,6 +7,7 @@ import { IconButton } from './icon-button';
 import type { PretuiTone } from '../pretui-primitives';
 import { Menu } from './menu';
 import type { MenuEntry } from '../internal/menu';
+import { destructiveLast } from '../internal/menu';
 import { listen } from '../focus';
 import { iconFor } from '../icon-registry';
 
@@ -79,10 +80,11 @@ export function selectionSummary(
  * partly rendered by `Menu`: the DOM is the only place that knows the final
  * order of the controls.
  *
- * `count` is an argument purely so the modifier re-runs — and re-seeds the
- * tab stop — when the action list changes.
+ * The tab stop is re-seated whenever the bar's controls change — a new
+ * action, a removed one, a yielded control — by a MutationObserver, so the
+ * bar never ends up with two tab stops or none.
  */
-const rovingToolbar = modifier((el: HTMLElement, [_count]: [number]) => {
+const rovingToolbar = modifier((el: HTMLElement) => {
   let members = () =>
     Array.from(el.querySelectorAll<HTMLElement>('[data-actionbar-item]'));
 
@@ -131,9 +133,19 @@ const rovingToolbar = modifier((el: HTMLElement, [_count]: [number]) => {
     }
   };
 
+  // keep the reader's stop if it survived the change, otherwise the first
+  let reseat = () => {
+    let list = members();
+    let kept = list.findIndex((member) => member.tabIndex === 0);
+    seat(kept === -1 ? 0 : kept);
+  };
+  let observer = new MutationObserver(reseat);
+  observer.observe(el, { childList: true, subtree: true });
+
   el.addEventListener('keydown', onKeydown);
   el.addEventListener('focusin', onFocusin);
   return () => {
+    observer.disconnect();
     el.removeEventListener('keydown', onKeydown);
     el.removeEventListener('focusin', onFocusin);
   };
@@ -223,19 +235,14 @@ export class ActionBar extends Component<ActionBarSignature> {
     return this.overflowActions.length > 0;
   }
   get overflowItems(): MenuEntry[] {
-    return this.overflowActions.map((action) => ({
-      label: action.label,
-      icon: action.icon,
-      disabled: action.disabled,
-      destructive: action.destructive,
-      onSelect: () => this.run(action),
-    }));
-  }
-  get itemCount(): number {
-    return (
-      this.inlineActions.length +
-      (this.hasOverflow ? 1 : 0) +
-      (this.args.onClear ? 1 : 0)
+    return destructiveLast(
+      this.overflowActions.map((action) => ({
+        label: action.label,
+        icon: action.icon,
+        disabled: action.disabled,
+        destructive: action.destructive,
+        onSelect: () => this.run(action),
+      })),
     );
   }
 
@@ -279,7 +286,7 @@ export class ActionBar extends Component<ActionBarSignature> {
         aria-label={{this.barLabel}}
         data-position={{if @position @position 'floating'}}
         data-test-pretui-action-bar
-        {{rovingToolbar this.itemCount}}
+        {{rovingToolbar}}
         {{listen 'keydown' this.onKeydown}}
         ...attributes
       >

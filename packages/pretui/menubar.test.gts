@@ -284,6 +284,7 @@ class BarFixture {
         label: 'Edit',
         items: [
           { label: 'Undo', kbd: 'Mod+Z' },
+          { label: 'Redo', disabled: true, onSelect: this.ran('redo') },
           { kind: 'toggle', label: 'Track changes', checked: 'mixed' },
         ],
       },
@@ -484,6 +485,28 @@ module('Pretui | menubar | render', function (hooks) {
     );
     assert.strictEqual(titles()[0].getAttribute('aria-expanded'), 'false', 'and closes the old one');
     assert.strictEqual(label(rows()[0]), 'Undo', "and Edit's menu is the one showing");
+  });
+
+  test('hovering a title with no menu ends the active bar, so a later hover opens nothing', async function (assert) {
+    let state = new BarFixture();
+    await render(<template><Menubar @items={{state.items}} /></template>);
+    await click(titles()[0]);
+    await triggerEvent(titles()[3], 'pointerover');
+    assert.strictEqual(panels().length, 0, 'Help has no menu, so File closed');
+    await triggerEvent(titles()[1], 'pointerover');
+    assert.strictEqual(panels().length, 0, 'and the bar is idle again: hovering Edit opens nothing');
+  });
+
+  test('Enter on a disabled row does nothing, as a click does nothing', async function (assert) {
+    let state = new BarFixture();
+    await render(<template><Menubar @items={{state.items}} /></template>);
+    await click(titles()[1]);
+    await triggerKeyEvent(titles()[1], 'keydown', 'ArrowDown');
+    await triggerKeyEvent(document.activeElement as HTMLElement, 'keydown', 'ArrowDown');
+    assert.strictEqual(label(document.activeElement), 'Redo', 'focus is on the disabled row');
+    await triggerKeyEvent(document.activeElement as HTMLElement, 'keydown', 'Enter');
+    assert.strictEqual(panels().length, 1, 'the menu stays open');
+    assert.strictEqual(state.log, '—', 'and nothing fired');
   });
 
   test('clicking the open title closes it again', async function (assert) {
