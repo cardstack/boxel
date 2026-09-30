@@ -5,6 +5,7 @@ import {
   INDEX_WRITING_JOB_TYPES,
   readLaneHoldersBestEffort,
   indexingConcurrencyGroup,
+  indexingWriterLane,
   INCREMENTAL_INDEX_JOB_TIMEOUT_SEC,
   CONTENT_MOVING_INDEX_JOB_TYPES,
   prerenderSpawnedPriority,
@@ -340,6 +341,7 @@ import type { BatchEntry } from './card-operations/executors.ts';
 import type {
   DeferredPrerenderHtml,
   FromScratchResult,
+  IncrementalArgs,
   IncrementalChange,
   SharedIndexPass,
 } from './tasks/indexer.ts';
@@ -649,6 +651,22 @@ function readRealmPolicyReference(
   // Kept as the resolved URL, so whatever reads the pointer is handed one
   // spelling of it however the owner wrote it.
   return { card: url.href };
+}
+
+// The user a realm's permissions name as its owner: its human owner, where
+// the realm's bot owns it too. Undefined when no owner is a matrix user.
+function realmOwnerIn(permissions: RealmPermissions): string | undefined {
+  let userIds = Object.entries(permissions)
+    .filter(([_, realmActions]) => realmActions.includes('realm-owner'))
+    .map(([userId]) => userId);
+  if (userIds.length > 1) {
+    // we want to use the realm's human owner for the realm and not the bot
+    userIds = userIds.filter((userId) => !userId.startsWith('@realm/'));
+  }
+  let [userId] = userIds;
+  // real matrix user ID's always start with an '@', if it doesn't that
+  // means we are testing
+  return userId?.startsWith('@') ? userId : undefined;
 }
 
 // A realm's pointer to the card that holds its policy. Only the card's URL is
@@ -7050,23 +7068,10 @@ export class Realm {
   };
 
   async getRealmOwnerUserId(): Promise<string> {
-    let permissions = await fetchRealmPermissions(
-      this.#dbAdapter,
-      new URL(this.url),
+    let userId = realmOwnerIn(
+      await fetchRealmPermissions(this.#dbAdapter, new URL(this.url)),
     );
-
-    let userIds = Object.entries(permissions)
-      .filter(([_, realmActions]) => realmActions.includes('realm-owner'))
-      .map(([userId]) => userId);
-    if (userIds.length > 1) {
-      // we want to use the realm's human owner for the realm and not the bot
-      userIds = userIds.filter((userId) => !userId.startsWith('@realm/'));
-    }
-
-    let [userId] = userIds;
-    // real matrix user ID's always start with an '@', if it doesn't that
-    // means we are testing
-    if (userId?.startsWith('@')) {
+    if (userId) {
       return userId;
     }
     // hard coded test URLs
@@ -13731,10 +13736,30 @@ export class Realm {
       // the rows their grants admit, and with none where no grant admits the
       // query. A realm holding nothing for them and a realm granting them
       // nothing are the same answer, as they are for a card they may not read.
-      let policyScope =
-        this.#coarseDeclined(requestContext) === 'all'
-          ? await this.#policyQueryScope(invocation, request, requestContext)
-          : undefined;
+      // A policy that did not compile is neither: the search is refused with
+      // the 500 the gate gives every operation it would judge.
+      let policyScope: PolicyQueryScope | undefined;
+      if (this.#coarseDeclined(requestContext) === 'all') {
+        try {
+          policyScope = await this.#policyQueryScope(
+            invocation,
+            request,
+            requestContext,
+          );
+        } catch (err: unknown) {
+          if (!isOperationFailure(err)) {
+            throw err;
+          }
+          return createResponse({
+            body: JSON.stringify(errorsDocument(err.error), null, 2),
+            init: {
+              status: err.error.status,
+              headers: { 'content-type': SupportedMimeType.CardJson },
+            },
+            requestContext,
+          });
+        }
+      }
       // Marked policy-scoped, so a client holding this realm's cards adds none
       // the realm did not return: the caller's policy decided the rows, or the
       // realm resolved the declared query they named. The mark is the same
@@ -15162,13 +15187,21 @@ export class Realm {
   // errored or not a RealmPolicy compiles to a policy that grants nothing, with
   // the reason recorded in its `issues`.
   //
-  // Nothing on a request's path calls this, so no realm pays for it until
-  // something needs the policy.
+  // A request loads it when the realm's ACL declined its caller: the gate
+  // reads it for every operation it judges, a search that reaches the realm
+  // only through its policy reads it to scope the query, and the byte routes
+  // read it before answering such a caller. An explain reads it as well, since
+  // it runs the gate for the actor it names. A caller the ACL admits loads it
+  // for nothing else.
   async getCompiledPolicy(): Promise<CompiledRealmPolicy | undefined> {
     return await this.#policyCache.get();
   }
 
-  __testOnlyPolicyCacheStats(): { compiles: number; revalidations: number } {
+  __testOnlyPolicyCacheStats(): {
+    compiles: number;
+    revalidations: number;
+    revisits: number;
+  } {
     return { ...this.#policyCache.stats };
   }
 
@@ -15206,7 +15239,55 @@ export class Realm {
       // spelling, so a key computed the same way is found in either.
       typeKey: (codeRef) =>
         internalKeyFor(codeRef, undefined, this.#virtualNetwork),
+      revisitCard: (file, realmURL) => this.#revisitPolicyCard(file, realmURL),
     });
+  }
+
+  // Indexes the policy card stored at `file` again, in the realm at `realmURL`
+  // that holds it, once its latest visit was withheld.
+  //
+  // That realm is commonly not this one, and may not be mounted in this
+  // process, so the visit goes on the queue rather than through a realm's
+  // index updater: an incremental pass of the one file, run as that realm's
+  // owner, that nobody publishes to wait on. Such a pass announces itself when
+  // it lands (see `incrementalIndex`), and the announcement is what moves the
+  // compiled policy on in every process holding one. It carries no ignore
+  // data, as a pass from a process that has not indexed the realm from
+  // scratch carries none, and it runs in the owner's lane of the realm's
+  // index, where work nobody initiated runs.
+  //
+  // At the user-initiated tier, because the callers the policy refuses are
+  // waiting on it. At the system tier it could only be claimed behind every
+  // job already queued, and a realm-wide backlog can hold that for over an
+  // hour.
+  async #revisitPolicyCard(file: string, realmURL: string): Promise<void> {
+    let owner =
+      realmURL === this.url
+        ? await this.getRealmOwnerUserId()
+        : realmOwnerIn(
+            await fetchRealmPermissions(this.#dbAdapter, new URL(realmURL)),
+          );
+    if (!owner) {
+      throw new Error(`the realm ${realmURL} has no owner to index it as`);
+    }
+    let args: IncrementalArgs = {
+      realmURL,
+      realmUsername: getMatrixUsername(owner),
+      changes: [{ url: file, operation: 'update' }],
+      ignoreData: {},
+      coalescedCallers: [],
+      deferPrerenderHtml: false,
+      carriedPrerenderHtmlChanges: [],
+      readsOwnWrite: false,
+    };
+    let job = await this.#queue.publish({
+      jobType: 'incremental-index',
+      ...indexingWriterLane(realmURL, undefined),
+      timeout: INCREMENTAL_INDEX_JOB_TIMEOUT_SEC,
+      priority: userInitiatedPriority,
+      args,
+    });
+    await job.done;
   }
 
   // Whether an adoption chain, as the index records one, is a policy card's.

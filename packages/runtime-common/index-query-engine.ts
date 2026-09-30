@@ -288,6 +288,9 @@ export interface IndexedInstance {
 // An instance's row as its index visit left it, and nothing from its render.
 // `error` is set when the visit itself failed, and `instance` otherwise.
 export interface IndexedInstanceSource {
+  // The row's own URL: the file the instance is stored in, which is what an
+  // index visit of it is asked to visit.
+  url: string;
   realmURL: string;
   generation: number;
   sourceContentHash: string | null;
@@ -656,7 +659,7 @@ export class IndexQueryEngine {
     opts?: GetEntryOptions,
   ): Promise<IndexedInstanceSource | undefined> {
     let rows = (await this.#query([
-      'SELECT i.realm_url, i.generation, i.source_content_hash, i.types, i.pristine_doc, i.has_error, i.error_doc, i.diagnostics',
+      'SELECT i.url, i.realm_url, i.generation, i.source_content_hash, i.types, i.pristine_doc, i.has_error, i.error_doc, i.diagnostics',
       `FROM ${tableFromOpts(opts)} AS i`,
       'WHERE',
       ...every([
@@ -669,6 +672,7 @@ export class IndexQueryEngine {
       ]),
       'LIMIT 1',
     ] as Expression)) as unknown as {
+      url: string;
       realm_url: string;
       generation: number;
       source_content_hash: string | null;
@@ -683,6 +687,7 @@ export class IndexQueryEngine {
       return undefined;
     }
     return {
+      url: row.url,
       realmURL: row.realm_url,
       generation: Number(row.generation),
       sourceContentHash: row.source_content_hash ?? null,

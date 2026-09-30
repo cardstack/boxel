@@ -3,7 +3,11 @@ import type { Definition } from '../definitions.ts';
 import type { Filter } from '../query.ts';
 import { policyFilterFromWire } from '../search-entry.ts';
 import type { OperationCore } from './dispatch.ts';
-import { matchingGrants, nonGrantableInChain } from './gate.ts';
+import {
+  matchingGrants,
+  nonGrantableInChain,
+  policyUnavailable,
+} from './gate.ts';
 import type { CompiledRealmPolicy } from './policy.ts';
 import { lowerQueryOperation } from './query.ts';
 
@@ -40,6 +44,12 @@ import { lowerQueryOperation } from './query.ts';
 //
 // A caller with nothing to contribute is scoped to nothing rather than to
 // everything: an absent grant is a refusal here, as it is at the gate.
+//
+// A policy that did not compile as a whole grants nothing, and yet is not a
+// refusal. What it would grant is unknown: the realm names a policy and cannot
+// read it as one. So the query is refused with the gate's own 500, rather than
+// answered as though the policy granted nothing, and a federated search counts
+// the realm as one that did not answer.
 //
 // Authorization infrastructure is outside the grant model here as it is at
 // the gate. A query declared `nonGrantable` contributes nothing, however the
@@ -167,6 +177,11 @@ async function typeScope(
   let policy = await core.policy?.compiledPolicy();
   if (!policy) {
     return DENIED;
+  }
+  // Before the type is resolved, as the gate refuses before its target
+  // resolves, so the refusal says nothing about the type.
+  if (policy.uncompilable) {
+    throw policyUnavailable();
   }
   let entry = await targetTypeEntry(core, on);
   if (!entry?.types) {

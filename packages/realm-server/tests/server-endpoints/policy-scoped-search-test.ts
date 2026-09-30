@@ -39,6 +39,7 @@ import {
   realmSecretSeed,
   runTestRealmServerWithRealms,
   setupDB,
+  waitUntil,
 } from '../helpers/index.ts';
 import { setupCatalogTestSubset } from '../helpers/catalog-test-subset.ts';
 import { createJWT as createRealmServerJWT } from '../../utils/jwt.ts';
@@ -47,7 +48,7 @@ import { createJWT as createRealmServerJWT } from '../../utils/jwt.ts';
 // A search a realm's policy scopes: the grants a `query` policy compiled to
 // filters, composed into the query a realm runs for a caller its ACL declined.
 //
-// Seven realms on one server, one per answer a realm can give a caller it does
+// Nine realms on one server, one per answer a realm can give a caller it does
 // not let read outright. The types live in a public library realm so every
 // other realm can hold cards of them.
 //
@@ -62,6 +63,9 @@ import { createJWT as createRealmServerJWT } from '../../utils/jwt.ts';
 //   every open schedule and every posted notice. It grants a read of a
 //   provider's own schedules only, and no read of a notice, so what a caller
 //   may find and what they may read differ in both directions.
+// - Missing: its `realm.json` names a policy card the realm does not hold.
+// - Withheld: its policy grants `query` over every open schedule, and a test
+//   withholds the latest index visit of its policy card.
 //
 // Every card a provider could be admitted to in one realm has a twin in the
 // realms that must not admit it, so a filter applied to the wrong realm's
@@ -75,6 +79,8 @@ const DENIES = 'http://127.0.0.1:4444/denies/';
 const UNFILTERABLE = 'http://127.0.0.1:4444/unfilterable/';
 const PRIVATE = 'http://127.0.0.1:4444/private/';
 const ENUMERABLE = 'http://127.0.0.1:4444/enumerable/';
+const MISSING = 'http://127.0.0.1:4444/missing/';
+const WITHHELD = 'http://127.0.0.1:4444/withheld/';
 
 const OWNER = '@owner:localhost';
 const PROVIDER_A = '@provider-a:localhost';
@@ -439,6 +445,25 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
                 },
               ]),
               ...ENUMERABLE_CARDS,
+            },
+            permissions: { ...owner },
+          },
+          {
+            realmURL: new URL(MISSING),
+            fileSystem: {
+              'realm.json': withPolicy('Missing', MISSING),
+              ...aOpen(),
+            },
+            permissions: { ...owner },
+          },
+          {
+            realmURL: new URL(WITHHELD),
+            fileSystem: {
+              'realm.json': withPolicy('Withheld', WITHHELD),
+              'policies/policy.json': policyCard([
+                { operation: 'query', where: OPEN },
+              ]),
+              ...aOpen(),
             },
             permissions: { ...owner },
           },
@@ -1061,6 +1086,118 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           (({ code, detail }) => ({ code, detail }))(errorOf(refused)),
           { code: 'target-not-found', detail: 'no such target' },
           'the query found the notice, and the gate refused the read of it',
+        );
+      });
+    });
+
+    // A realm that names a policy it cannot read as one. What such a policy
+    // would grant is unknown, which is not the same as nothing, so the realm
+    // answers as one that failed, as the gate answers such a caller with a
+    // 500.
+    module('a realm whose policy does not compile', function () {
+      const SCHEDULES = { 'item.on': SCHEDULE };
+
+      // What the index writer leaves when a visit fails for a reason outside
+      // the card: the row keeps the earlier visit's document and reads as
+      // healthy, and the verdict is recorded in its diagnostics.
+      async function withholdLatestVisit(card: string) {
+        await db.execute(
+          `UPDATE boxel_index
+           SET diagnostics = jsonb_set(
+             COALESCE(diagnostics, '{}'::jsonb),
+             '{gatewayFailure}',
+             '["instance"]'::jsonb
+           )
+           WHERE url = $1 AND type = 'instance'`,
+          { bind: [`${card}.json`] },
+        );
+      }
+
+      test('one whose policy card is missing is counted as failed, not as granting nothing', async function (assert) {
+        let response = await federatedSearch(
+          { filter: SCHEDULES, realms: [ENUMERABLE, MISSING] },
+          PROVIDER_A,
+        );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        assert.deepEqual(inRealm(MISSING, response), [], 'none from it');
+        assert.deepEqual(
+          inRealm(ENUMERABLE, response).sort(),
+          [`${ENUMERABLE}schedules/a-open`, `${ENUMERABLE}schedules/b-open`],
+          'and the realm beside it answers under its own policy',
+        );
+        assert.true(
+          response.body.meta.incomplete,
+          'the result says it is missing a realm, rather than passing that realm off as holding nothing',
+        );
+      });
+
+      test('its own search is refused as a read of one of its cards is', async function (assert) {
+        let card = await request
+          .get(`${new URL(MISSING).pathname}schedules/a-open`)
+          .set('Accept', SupportedMimeType.CardJson)
+          .set(
+            'Authorization',
+            `Bearer ${createJWT(realms[MISSING], PROVIDER_A)}`,
+          );
+        assert.strictEqual(card.status, 500, 'the read is refused');
+
+        let own = await realmSearch(MISSING, { filter: SCHEDULES }, PROVIDER_A);
+        assert.strictEqual(own.status, 500, 'and so is the search');
+        assert.strictEqual(
+          own.body.errors?.[0]?.title,
+          'Policy unavailable',
+          'with the refusal the gate gives',
+        );
+      });
+
+      test('one whose policy card’s latest visit was withheld is counted as failed, until the card is visited again', async function (assert) {
+        await withholdLatestVisit(`${WITHHELD}policies/policy`);
+        // Dropped without a refresh, so the search below is the read that
+        // finds the row withheld.
+        realms[WITHHELD].__testOnlyClearCaches();
+
+        let response = await federatedSearch(
+          { filter: SCHEDULES, realms: [ENUMERABLE, WITHHELD] },
+          PROVIDER_A,
+        );
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        assert.deepEqual(inRealm(WITHHELD, response), [], 'none from it');
+        assert.deepEqual(
+          inRealm(ENUMERABLE, response).sort(),
+          [`${ENUMERABLE}schedules/a-open`, `${ENUMERABLE}schedules/b-open`],
+          'and the realm beside it answers under its own policy',
+        );
+        assert.true(
+          response.body.meta.incomplete,
+          'the result says it is missing a realm, rather than passing an earlier visit of the policy off as the policy',
+        );
+
+        // Nothing edits the card. The read that found it withheld asked for
+        // it to be visited again, and once that visit lands the policy
+        // compiles from the card as it stands.
+        let healed = await waitUntil(
+          async () => {
+            let next = await federatedSearch(
+              { filter: SCHEDULES, realms: [WITHHELD] },
+              PROVIDER_A,
+            );
+            return next.body.meta?.incomplete ? undefined : next;
+          },
+          {
+            timeout: 60_000,
+            timeoutMessage: 'the visit of the policy card lands',
+          },
+        );
+        assert.deepEqual(
+          ids(healed!),
+          [`${WITHHELD}schedules/a-open`],
+          'the realm answers with the rows its policy admits',
+        );
+        assert.strictEqual(
+          realms[WITHHELD].__testOnlyPolicyCacheStats().revisits,
+          1,
+          'one visit was asked for, however many searches found the card withheld',
         );
       });
     });
