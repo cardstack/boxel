@@ -49,3 +49,5 @@ Where it is thinner: five presets and no custom keyframes, no exit choreography 
 `--pretui-inview-duration` (from `@duration`), `--pretui-inview-delay` (from `@delay`), `--pretui-inview-stagger` (from `@stagger`), `--pretui-inview-i` (each child's index), `--pretui-inview-from` (the preset's starting transform), `--pretui-inview-display` and `--pretui-inview-item-display`, over the shared `--pretui-motion-distance` and `--pretui-motion-scale`.
 
 Sharing the distance and scale tokens with the rest of the motion module is what keeps entrances consistent: a season that shortens travel shortens it for every entrance in the product at once, rather than per call site.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

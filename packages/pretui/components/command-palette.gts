@@ -712,260 +712,262 @@ export class CommandPalette extends Component<CommandPaletteSignature> {
     </dialog>
 
     <style scoped>
-      .pretui-palette {
-        border: 0;
-        padding: 0;
-        width: min(620px, calc(100vw - 32px));
-        max-height: min(70dvh, 560px);
-        margin-block-start: 12vh;
-        background: var(--popover);
-        color: var(--foreground);
-        border-radius: var(--radius-surface, 12px);
-        box-shadow: var(
-          --pretui-shadow-overlay,
-          0 0 0 1px var(--border),
-          0 16px 48px rgb(16 24 40 / 0.22)
-        );
-        font-family: var(--font-sans);
-        overflow: hidden;
-        opacity: 1;
-        transform: none;
-        transition:
-          opacity 160ms cubic-bezier(0.23, 1, 0.32, 1),
-          transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
-      }
-      .pretui-palette::backdrop {
-        background: var(--pretui-overlay-scrim, rgb(16 24 40 / 0.4));
-      }
-      @starting-style {
-        .pretui-palette[open] {
-          opacity: 0;
-          transform: translateY(-8px) scale(0.985);
+      @layer PretComponent {
+        .pretui-palette {
+          border: 0;
+          padding: 0;
+          width: min(620px, calc(100vw - 32px));
+          max-height: min(70dvh, 560px);
+          margin-block-start: 12vh;
+          background: var(--popover);
+          color: var(--foreground);
+          border-radius: var(--radius-surface, 12px);
+          box-shadow: var(
+            --pretui-shadow-overlay,
+            0 0 0 1px var(--border),
+            0 16px 48px rgb(16 24 40 / 0.22)
+          );
+          font-family: var(--font-sans);
+          overflow: hidden;
+          opacity: 1;
+          transform: none;
+          transition:
+            opacity 160ms cubic-bezier(0.23, 1, 0.32, 1),
+            transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
         }
-      }
-      .pal-shell {
-        display: grid;
-        grid-template-rows: auto minmax(0, 1fr) auto;
-        max-height: inherit;
-      }
-      .pal-field {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        padding-block: 10px;
-        padding-inline: 14px;
-        box-shadow: 0 1px 0 var(--border);
-      }
-      .pal-crumbs {
-        display: flex;
-        align-items: center;
-        gap: 4px;
-        flex: none;
-      }
-      .pal-crumb {
-        padding-block: 2px;
-        padding-inline: 7px;
-        border-radius: var(--radius-chip, 5px);
-        background: var(--inset, var(--boxel-100));
-        box-shadow: var(
-          --pretui-shadow-hairline,
-          0 0 0 1px var(--border)
-        );
-        font-size: var(--text-ui-xs, 11px);
-        font-weight: 500;
-        color: var(--muted-foreground);
-        white-space: nowrap;
-      }
-      .pal-inputwrap {
-        position: relative;
-        display: flex;
-        flex: 1;
-        min-width: 0;
-      }
-      .pal-ghost {
-        position: absolute;
-        inset-block: 0;
-        inset-inline-start: 0;
-        display: flex;
-        align-items: center;
-        font-size: var(--text-body, 15px);
-        color: var(--muted-foreground);
-        pointer-events: none;
-      }
-      .pal-input {
-        flex: 1;
-        min-width: 0;
-        border: 0;
-        background: none;
-        color: inherit;
-        font: inherit;
-        font-size: var(--text-body, 15px);
-        padding-block: 4px;
-        padding-inline: 0;
-      }
-      .pal-input:focus {
-        outline: none;
-      }
-      .pal-input::placeholder {
-        color: var(--muted-foreground);
-      }
-      .pal-list {
-        margin: 0;
-        padding: 6px;
-        list-style: none;
-        overflow-y: auto;
-        overscroll-behavior: contain;
-      }
-      .pal-list menu {
-        margin: 0;
-        padding: 0;
-        list-style: none;
-      }
-      .pal-group-label {
-        display: block;
-        padding-block: 6px 3px;
-        padding-inline: 9px;
-        font-size: var(--text-ui-xs, 11px);
-        font-weight: 600;
-        letter-spacing: var(--track-eyebrow, 0.06em);
-        text-transform: uppercase;
-        color: var(--muted-foreground);
-      }
-      .pal-row {
-        display: grid;
-        grid-template-columns: 15px 1fr auto;
-        align-items: center;
-        gap: 9px;
-        min-height: 36px;
-        padding-block: 5px;
-        padding-inline: 7px 10px;
-        border-radius: var(--radius-control, 7px);
-        cursor: default;
-        scroll-margin: 8px;
-      }
-      .pal-row[data-active='true'] {
-        background: var(--hover, var(--boxel-100));
-      }
-      .pal-row[data-destructive='true'] {
-        color: var(--pretui-destructive-ink, var(--boxel-danger));
-      }
-      .pal-row[aria-disabled='true'] {
-        opacity: 0.42;
-      }
-      .pal-text {
-        display: grid;
-        gap: 1px;
-        min-width: 0;
-      }
-      .pal-label {
-        font-size: var(--text-ui-md, 12.5px);
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-      .pal-hit {
-        color: var(--pretui-palette-hit, var(--primary));
-        font-weight: 600;
-      }
-      .pal-desc,
-      .pal-path {
-        font-size: var(--text-ui-xs, 11px);
-        color: var(--muted-foreground);
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-      .pal-kbd {
-        font-family: var(--font-mono);
-        font-size: var(--text-ui-xs, 11px);
-        font-variant-numeric: tabular-nums;
-        color: var(--muted-foreground);
-        white-space: nowrap;
-      }
-      .pal-check {
-        position: relative;
-        width: 15px;
-        height: 15px;
-      }
-      .pal-row[data-check='on'] .pal-check::after {
-        content: '';
-        position: absolute;
-        inset-block-start: 2px;
-        inset-inline-start: 4px;
-        width: 5px;
-        height: 9px;
-        border: solid currentColor;
-        border-width: 0 1.75px 1.75px 0;
-        transform: rotate(43deg);
-      }
-      .pal-row[data-check='mixed'] .pal-check::after {
-        content: '';
-        position: absolute;
-        inset-block-start: 6px;
-        inset-inline-start: 2px;
-        width: 9px;
-        height: 1.75px;
-        background: currentColor;
-        border-radius: 1px;
-      }
-      .pal-chevron {
-        position: relative;
-        width: 10px;
-        height: 10px;
-      }
-      .pal-chevron::after {
-        content: '';
-        position: absolute;
-        inset-block-start: 2px;
-        inset-inline-start: 2px;
-        width: 5px;
-        height: 5px;
-        border: solid currentColor;
-        border-width: 1.5px 1.5px 0 0;
-        transform: rotate(45deg);
-        opacity: 0.75;
-      }
-      .pal-empty {
-        padding-block: 34px;
-        text-align: center;
-        font-size: var(--text-ui-md, 12.5px);
-        color: var(--muted-foreground);
-      }
-      .pal-footer {
-        display: flex;
-        align-items: center;
-        gap: 14px;
-        padding-block: 8px;
-        padding-inline: 14px;
-        box-shadow: 0 -1px 0 var(--border);
-        background: var(--inset, var(--boxel-100));
-      }
-      .pal-hint {
-        display: inline-flex;
-        align-items: center;
-        gap: 4px;
-        font-size: var(--text-ui-xs, 11px);
-        color: var(--muted-foreground);
-      }
-      .pal-sr {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        overflow: hidden;
-        clip-path: inset(50%);
-        white-space: nowrap;
-      }
-      @media (any-pointer: coarse) {
+        .pretui-palette::backdrop {
+          background: var(--pretui-overlay-scrim, rgb(16 24 40 / 0.4));
+        }
+        @starting-style {
+          .pretui-palette[open] {
+            opacity: 0;
+            transform: translateY(-8px) scale(0.985);
+          }
+        }
+        .pal-shell {
+          display: grid;
+          grid-template-rows: auto minmax(0, 1fr) auto;
+          max-height: inherit;
+        }
+        .pal-field {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          padding-block: 10px;
+          padding-inline: 14px;
+          box-shadow: 0 1px 0 var(--border);
+        }
+        .pal-crumbs {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          flex: none;
+        }
+        .pal-crumb {
+          padding-block: 2px;
+          padding-inline: 7px;
+          border-radius: var(--radius-chip, 5px);
+          background: var(--inset, var(--boxel-100));
+          box-shadow: var(
+            --pretui-shadow-hairline,
+            0 0 0 1px var(--border)
+          );
+          font-size: var(--text-ui-xs, 11px);
+          font-weight: 500;
+          color: var(--muted-foreground);
+          white-space: nowrap;
+        }
+        .pal-inputwrap {
+          position: relative;
+          display: flex;
+          flex: 1;
+          min-width: 0;
+        }
+        .pal-ghost {
+          position: absolute;
+          inset-block: 0;
+          inset-inline-start: 0;
+          display: flex;
+          align-items: center;
+          font-size: var(--text-body, 15px);
+          color: var(--muted-foreground);
+          pointer-events: none;
+        }
+        .pal-input {
+          flex: 1;
+          min-width: 0;
+          border: 0;
+          background: none;
+          color: inherit;
+          font: inherit;
+          font-size: var(--text-body, 15px);
+          padding-block: 4px;
+          padding-inline: 0;
+        }
+        .pal-input:focus {
+          outline: none;
+        }
+        .pal-input::placeholder {
+          color: var(--muted-foreground);
+        }
+        .pal-list {
+          margin: 0;
+          padding: 6px;
+          list-style: none;
+          overflow-y: auto;
+          overscroll-behavior: contain;
+        }
+        .pal-list menu {
+          margin: 0;
+          padding: 0;
+          list-style: none;
+        }
+        .pal-group-label {
+          display: block;
+          padding-block: 6px 3px;
+          padding-inline: 9px;
+          font-size: var(--text-ui-xs, 11px);
+          font-weight: 600;
+          letter-spacing: var(--track-eyebrow, 0.06em);
+          text-transform: uppercase;
+          color: var(--muted-foreground);
+        }
         .pal-row {
-          min-height: 44px;
+          display: grid;
+          grid-template-columns: 15px 1fr auto;
+          align-items: center;
+          gap: 9px;
+          min-height: 36px;
+          padding-block: 5px;
+          padding-inline: 7px 10px;
+          border-radius: var(--radius-control, 7px);
+          cursor: default;
+          scroll-margin: 8px;
+        }
+        .pal-row[data-active='true'] {
+          background: var(--hover, var(--boxel-100));
+        }
+        .pal-row[data-destructive='true'] {
+          color: var(--pretui-destructive-ink, var(--boxel-danger));
+        }
+        .pal-row[aria-disabled='true'] {
+          opacity: 0.42;
+        }
+        .pal-text {
+          display: grid;
+          gap: 1px;
+          min-width: 0;
+        }
+        .pal-label {
+          font-size: var(--text-ui-md, 12.5px);
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .pal-hit {
+          color: var(--pretui-palette-hit, var(--primary));
+          font-weight: 600;
+        }
+        .pal-desc,
+        .pal-path {
+          font-size: var(--text-ui-xs, 11px);
+          color: var(--muted-foreground);
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .pal-kbd {
+          font-family: var(--font-mono);
+          font-size: var(--text-ui-xs, 11px);
+          font-variant-numeric: tabular-nums;
+          color: var(--muted-foreground);
+          white-space: nowrap;
+        }
+        .pal-check {
+          position: relative;
+          width: 15px;
+          height: 15px;
+        }
+        .pal-row[data-check='on'] .pal-check::after {
+          content: '';
+          position: absolute;
+          inset-block-start: 2px;
+          inset-inline-start: 4px;
+          width: 5px;
+          height: 9px;
+          border: solid currentColor;
+          border-width: 0 1.75px 1.75px 0;
+          transform: rotate(43deg);
+        }
+        .pal-row[data-check='mixed'] .pal-check::after {
+          content: '';
+          position: absolute;
+          inset-block-start: 6px;
+          inset-inline-start: 2px;
+          width: 9px;
+          height: 1.75px;
+          background: currentColor;
+          border-radius: 1px;
+        }
+        .pal-chevron {
+          position: relative;
+          width: 10px;
+          height: 10px;
+        }
+        .pal-chevron::after {
+          content: '';
+          position: absolute;
+          inset-block-start: 2px;
+          inset-inline-start: 2px;
+          width: 5px;
+          height: 5px;
+          border: solid currentColor;
+          border-width: 1.5px 1.5px 0 0;
+          transform: rotate(45deg);
+          opacity: 0.75;
+        }
+        .pal-empty {
+          padding-block: 34px;
+          text-align: center;
+          font-size: var(--text-ui-md, 12.5px);
+          color: var(--muted-foreground);
         }
         .pal-footer {
-          display: none;
+          display: flex;
+          align-items: center;
+          gap: 14px;
+          padding-block: 8px;
+          padding-inline: 14px;
+          box-shadow: 0 -1px 0 var(--border);
+          background: var(--inset, var(--boxel-100));
         }
-      }
-      @media (prefers-reduced-motion: reduce) {
-        .pretui-palette {
-          transition: none;
+        .pal-hint {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          font-size: var(--text-ui-xs, 11px);
+          color: var(--muted-foreground);
+        }
+        .pal-sr {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          overflow: hidden;
+          clip-path: inset(50%);
+          white-space: nowrap;
+        }
+        @media (any-pointer: coarse) {
+          .pal-row {
+            min-height: 44px;
+          }
+          .pal-footer {
+            display: none;
+          }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .pretui-palette {
+            transition: none;
+          }
         }
       }
     </style>

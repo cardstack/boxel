@@ -49,6 +49,8 @@ Gaps, in order:
 
 `--pretui-selected` is the notable one: it is the kit's "this row is the chosen one" fill, shared with selection states elsewhere, and a season that leaves it at the default light blue while retuning `--primary` to a warm hue will produce an active page whose fill and ink disagree. Define the pair together, and check `--pretui-primary-ink` for contrast against `--pretui-selected` rather than against `--card`.
 
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
+
 ## React ecosystem
 
 Compose onto **DataTable** / **List**. Accept `page` / `pageSize` /

@@ -51,3 +51,5 @@ Trigger: **Input**'s tokens. Surface: **Popover**'s, including the `--pretui-pop
 The range-specific dressing is where a season earns its keep: `data-range-start`, `data-in-range` and `data-range-end` should read as one continuous band, which usually means asymmetric radii on the endpoints and a flat fill between them. Because those are `data-*` attributes rather than component args, a season can do that entirely in CSS.
 
 Check `data-in-range` against `--hover` per season: the in-range fill and the pointer-hover fill often use the same token, and when they do, the user cannot tell the committed range from the one they are previewing.
+
+The styles sit in `@layer PretComposite`, above Input's `PretComponent` layer, so what this component sets on Input wins by layer order. A caller's unlayered CSS overrides both without a more specific selector.

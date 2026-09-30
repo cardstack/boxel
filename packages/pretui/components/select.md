@@ -46,6 +46,8 @@ Forwarded through the boxel-ui knob channel: `--boxel-form-control-border-radius
 
 A season must define `--popover` distinctly from `--card`, and `--pretui-primary-ink` as a _readable-on-popover_ variant of `--primary` — a saturated brand colour used directly as selected-row ink often fails contrast on a white dropdown.
 
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
+
 ## React ecosystem
 
 | React                     | Pretui                          |

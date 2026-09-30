@@ -174,40 +174,42 @@ export class Stat extends Component<StatSignature> {
       </span>
     </div>
     <style scoped>
-      .pretui-stat {
-        display: grid;
-        gap: 3px;
-        align-content: start;
-      }
-      .pretui-stat-label {
-        font-family: var(--font-mono);
-        font-size: 10.5px;
-        letter-spacing: var(--track-eyebrow, 0.08em);
-        text-transform: uppercase;
-        color: var(--muted-foreground);
-      }
-      .pretui-stat-value {
-        font-size: var(--text-stat, 25px);
-        font-weight: 600;
-        letter-spacing: var(--track-heading, -0.02em);
-        font-variant-numeric: tabular-nums;
-        line-height: var(--pretui-stat-line, 1.2);
-        /* Column reservation (@minDigits): one tabular digit advance is 1ch
-           plus the tracking that follows it. Unset it resolves to 0 and the
-           box is content-sized exactly as before. */
-        min-width: calc(
-          var(--pretui-stat-min-digits, 0) *
-            (1ch + var(--track-heading, -0.02em))
-        );
-      }
-      .pretui-stat-foot {
-        display: flex;
-        align-items: baseline;
-        gap: 6px;
-      }
-      .pretui-stat-hint {
-        font-size: var(--text-ui-xs, 11px);
-        color: var(--ink-3, var(--boxel-400));
+      @layer PretComponent {
+        .pretui-stat {
+          display: grid;
+          gap: 3px;
+          align-content: start;
+        }
+        .pretui-stat-label {
+          font-family: var(--font-mono);
+          font-size: 10.5px;
+          letter-spacing: var(--track-eyebrow, 0.08em);
+          text-transform: uppercase;
+          color: var(--muted-foreground);
+        }
+        .pretui-stat-value {
+          font-size: var(--text-stat, 25px);
+          font-weight: 600;
+          letter-spacing: var(--track-heading, -0.02em);
+          font-variant-numeric: tabular-nums;
+          line-height: var(--pretui-stat-line, 1.2);
+          /* Column reservation (@minDigits): one tabular digit advance is 1ch
+             plus the tracking that follows it. Unset it resolves to 0 and the
+             box is content-sized exactly as before. */
+          min-width: calc(
+            var(--pretui-stat-min-digits, 0) *
+              (1ch + var(--track-heading, -0.02em))
+          );
+        }
+        .pretui-stat-foot {
+          display: flex;
+          align-items: baseline;
+          gap: 6px;
+        }
+        .pretui-stat-hint {
+          font-size: var(--text-ui-xs, 11px);
+          color: var(--ink-3, var(--boxel-400));
+        }
       }
     </style>
   </template>

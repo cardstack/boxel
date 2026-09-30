@@ -94,14 +94,16 @@ const ThemeInlineControls: TemplateOnlyComponent<ThemePopoverControlsSignature> 
       {{/if}}
     </span>
     <style scoped>
-      .pretui-theme-inline {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-      }
-      .pretui-theme-inline-pick {
-        min-width: 170px;
-        font-size: var(--text-ui, 12px);
+      @layer PretComponent {
+        .pretui-theme-inline {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+        }
+        .pretui-theme-inline-pick {
+          min-width: 170px;
+          font-size: var(--text-ui, 12px);
+        }
       }
     </style>
   </template>
@@ -142,40 +144,42 @@ const ThemePopoverControls: TemplateOnlyComponent<ThemePopoverControlsSignature>
       </:default>
     </Popover>
     <style scoped>
-      .pretui-theme-trigger {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        width: 26px;
-        height: 26px;
-        border: 0;
-        border-radius: var(--radius-chip, 6px);
-        background: transparent;
-        color: var(--muted-foreground);
-        font-size: 14px;
-        line-height: 1;
-        cursor: pointer;
-      }
-      .pretui-theme-trigger:hover,
-      .pretui-theme-trigger[data-state='open'] {
-        background: var(--hover, var(--boxel-100));
-        color: var(--foreground);
-      }
-      .pretui-theme-pop {
-        display: grid;
-        gap: 8px;
-        min-width: 210px;
-      }
-      .pretui-theme-pop-cap {
-        font-size: var(--text-ui-xs, 11px);
-        font-weight: 600;
-        letter-spacing: 0.06em;
-        text-transform: uppercase;
-        color: var(--muted-foreground);
-      }
-      .pretui-theme-name {
-        font-size: var(--text-ui, 12px);
-        color: var(--muted-foreground);
+      @layer PretComponent {
+        .pretui-theme-trigger {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 26px;
+          height: 26px;
+          border: 0;
+          border-radius: var(--radius-chip, 6px);
+          background: transparent;
+          color: var(--muted-foreground);
+          font-size: 14px;
+          line-height: 1;
+          cursor: pointer;
+        }
+        .pretui-theme-trigger:hover,
+        .pretui-theme-trigger[data-state='open'] {
+          background: var(--hover, var(--boxel-100));
+          color: var(--foreground);
+        }
+        .pretui-theme-pop {
+          display: grid;
+          gap: 8px;
+          min-width: 210px;
+        }
+        .pretui-theme-pop-cap {
+          font-size: var(--text-ui-xs, 11px);
+          font-weight: 600;
+          letter-spacing: 0.06em;
+          text-transform: uppercase;
+          color: var(--muted-foreground);
+        }
+        .pretui-theme-name {
+          font-size: var(--text-ui, 12px);
+          color: var(--muted-foreground);
+        }
       }
     </style>
   </template>
@@ -308,42 +312,44 @@ export class ThemeFrame extends Component<ThemeFrameSignature> {
       </div>
     </div>
     <style scoped>
-      .pretui-theme-frame {
-        min-height: 100%;
-      }
-      /* the scoped theme channel only carries custom properties, so the
-         frame owns the native color-scheme switch for form controls */
-      .pretui-theme-frame[data-theme='dark'] {
-        color-scheme: dark;
-      }
-      .pretui-theme-frame[data-theme='light'] {
-        color-scheme: light;
-      }
-      .pretui-theme-surface {
-        min-height: 100%;
-      }
-      .pretui-theme-bar {
-        /* in-flow (not sticky): pages may carry their own sticky top bar
-           (the workbench format) and the bar must not collide with it.
-           No box of its own — the segmented control and select carry their
-           own rounded chrome, and wrapping rounded controls in another
-           rounded container reads as double chrome. */
-        display: flex;
-        align-items: center;
-        justify-content: flex-start;
-        gap: 8px;
-        width: fit-content;
-        margin: 10px 0 0 10px;
-      }
-      .pretui-theme-name {
-        font-size: var(--text-ui, 12px);
-        letter-spacing: var(--track-ui, 0.01em);
-        color: var(--muted-foreground);
-        white-space: nowrap;
-      }
-      .pretui-theme-pick {
-        min-width: 180px;
-        font-size: var(--text-ui, 12px);
+      @layer PretComponent {
+        .pretui-theme-frame {
+          min-height: 100%;
+        }
+        /* the scoped theme channel only carries custom properties, so the
+           frame owns the native color-scheme switch for form controls */
+        .pretui-theme-frame[data-theme='dark'] {
+          color-scheme: dark;
+        }
+        .pretui-theme-frame[data-theme='light'] {
+          color-scheme: light;
+        }
+        .pretui-theme-surface {
+          min-height: 100%;
+        }
+        .pretui-theme-bar {
+          /* in-flow (not sticky): pages may carry their own sticky top bar
+             (the workbench format) and the bar must not collide with it.
+             No box of its own — the segmented control and select carry their
+             own rounded chrome, and wrapping rounded controls in another
+             rounded container reads as double chrome. */
+          display: flex;
+          align-items: center;
+          justify-content: flex-start;
+          gap: 8px;
+          width: fit-content;
+          margin: 10px 0 0 10px;
+        }
+        .pretui-theme-name {
+          font-size: var(--text-ui, 12px);
+          letter-spacing: var(--track-ui, 0.01em);
+          color: var(--muted-foreground);
+          white-space: nowrap;
+        }
+        .pretui-theme-pick {
+          min-width: 180px;
+          font-size: var(--text-ui, 12px);
+        }
       }
     </style>
   </template>

@@ -163,109 +163,112 @@ export const FreestyleUsage: TemplateOnlyComponent<FreestyleUsageSignature> =
       {{/if}}
     </div>
     <style scoped>
-      .FreestyleUsage {
-        display: grid;
-        gap: var(--space-3, 8px);
-        align-content: start;
-        min-width: 0;
-        max-width: 100%;
-      }
-      .FreestyleUsage-description {
-        margin: 0;
-        max-width: 78ch;
-        font-size: var(--text-ui-md, 12.5px);
-        color: var(--muted-foreground);
-        line-height: 1.5;
-      }
-      .FreestyleUsage-stage {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) 280px;
-        gap: var(--space-5, 14px);
-        align-items: start;
-      }
-      @media (max-width: 900px) {
-        .FreestyleUsage-stage {
-          grid-template-columns: minmax(0, 1fr);
+      @layer PretComponent {
+        .FreestyleUsage {
+          display: grid;
+          gap: var(--space-3, 8px);
+          align-content: start;
+          min-width: 0;
+          max-width: 100%;
         }
-      }
-      .FreestyleUsage-previewCol {
-        display: grid;
-        gap: var(--space-3, 8px);
-        min-width: 0;
-      }
-      /* workbench panel chrome: bordered card, header row, clipped body */
-      .wb-panel {
-        background: var(--card);
-        border-radius: 6px;
-        box-shadow: var(--pretui-shadow-hairline, 0 0 0 1px var(--border));
-        overflow: hidden;
-        min-width: 0;
-      }
-      .wb-panel-h {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        min-height: 36px;
-        padding: 8px var(--space-4, 11px);
-        box-shadow: inset 0 -1px 0 var(--border);
-      }
-      h3.wb-cap {
-        margin: 0;
-      }
-      .wb-th-right {
-        text-align: right;
-      }
-      .wb-codestrip {
-        display: flex;
-        align-items: center;
-        gap: var(--space-4, 11px);
-        padding: 6px var(--space-4, 11px);
-        box-shadow: inset 0 1px 0 var(--border);
-        background: var(--card);
-        overflow-x: auto;
-      }
-      .wb-code {
-        font-family: var(--font-mono);
-        font-size: var(--text-ui, 12px);
-        color: var(--muted-foreground);
-        white-space: pre;
-        flex: 1;
-      }
-      .wb-codestrip > :last-child {
-        flex: none;
-        margin-left: auto;
-      }
-      .FreestyleUsage-props {
-        background: var(--card);
-        border-radius: 6px;
-        box-shadow: var(--pretui-shadow-hairline, 0 0 0 1px var(--border));
-        padding: var(--space-4, 11px) var(--space-5, 14px) var(--space-5, 14px);
-        min-width: 0;
-        align-self: start;
-        position: sticky;
-        top: 52px;
-      }
-      /* THE caps treatment — panel and group headers only */
-      .FreestyleUsage-sectionTitle {
-        margin: 0 0 var(--space-3, 8px);
-        font-size: var(--text-ui-xs, 11px);
-        font-weight: 600;
-        letter-spacing: 0.06em;
-        text-transform: uppercase;
-        color: var(--muted-foreground);
-      }
-      .FreestyleUsage-api {
-        min-width: 0;
-      }
-      .FreestyleUsage-source {
-        margin: 0;
-        font-family: var(--font-mono);
-        font-size: var(--text-ui-sm, 11.5px);
-        background: var(--inset, var(--boxel-100));
-        border-radius: var(--radius);
-        box-shadow: inset 0 0 0 1px var(--border);
-        padding: var(--space-4, 11px);
-        overflow-x: auto;
+        .FreestyleUsage-description {
+          margin: 0;
+          max-width: 78ch;
+          font-size: var(--text-ui-md, 12.5px);
+          color: var(--muted-foreground);
+          line-height: 1.5;
+        }
+        .FreestyleUsage-stage {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) 280px;
+          gap: var(--space-5, 14px);
+          align-items: start;
+        }
+        @media (max-width: 900px) {
+          .FreestyleUsage-stage {
+            grid-template-columns: minmax(0, 1fr);
+          }
+        }
+        .FreestyleUsage-previewCol {
+          display: grid;
+          gap: var(--space-3, 8px);
+          min-width: 0;
+        }
+        /* workbench panel chrome: bordered card, header row, clipped body */
+        .wb-panel {
+          background: var(--card);
+          border-radius: 6px;
+          box-shadow: var(--pretui-shadow-hairline, 0 0 0 1px var(--border));
+          overflow: hidden;
+          min-width: 0;
+        }
+        .wb-panel-h {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          min-height: 36px;
+          padding: 8px var(--space-4, 11px);
+          box-shadow: inset 0 -1px 0 var(--border);
+        }
+        h3.wb-cap {
+          margin: 0;
+        }
+        .wb-th-right {
+          text-align: right;
+        }
+        .wb-codestrip {
+          display: flex;
+          align-items: center;
+          gap: var(--space-4, 11px);
+          padding: 6px var(--space-4, 11px);
+          box-shadow: inset 0 1px 0 var(--border);
+          background: var(--card);
+          overflow-x: auto;
+        }
+        .wb-code {
+          font-family: var(--font-mono);
+          font-size: var(--text-ui, 12px);
+          color: var(--muted-foreground);
+          white-space: pre;
+          flex: 1;
+        }
+        .wb-codestrip > :last-child {
+          flex: none;
+          margin-left: auto;
+        }
+        .FreestyleUsage-props {
+          background: var(--card);
+          border-radius: 6px;
+          box-shadow: var(--pretui-shadow-hairline, 0 0 0 1px var(--border));
+          padding: var(--space-4, 11px) var(--space-5, 14px)
+            var(--space-5, 14px);
+          min-width: 0;
+          align-self: start;
+          position: sticky;
+          top: 52px;
+        }
+        /* THE caps treatment — panel and group headers only */
+        .FreestyleUsage-sectionTitle {
+          margin: 0 0 var(--space-3, 8px);
+          font-size: var(--text-ui-xs, 11px);
+          font-weight: 600;
+          letter-spacing: 0.06em;
+          text-transform: uppercase;
+          color: var(--muted-foreground);
+        }
+        .FreestyleUsage-api {
+          min-width: 0;
+        }
+        .FreestyleUsage-source {
+          margin: 0;
+          font-family: var(--font-mono);
+          font-size: var(--text-ui-sm, 11.5px);
+          background: var(--inset, var(--boxel-100));
+          border-radius: var(--radius);
+          box-shadow: inset 0 0 0 1px var(--border);
+          padding: var(--space-4, 11px);
+          overflow-x: auto;
+        }
       }
     </style>
   </template>;

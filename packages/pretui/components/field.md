@@ -52,6 +52,8 @@ Repointed into descendants when invalid: `--border` → `--destructive`, `--back
 
 The 5px row gap, 16px label line-height and 16px reserved message line are fixed. A season must keep `--ink-3` and `--destructive` distinguishable at 11.5px — hint and error occupy the same slot, so weight (500 on the error) plus hue is the only differentiator, and hue alone fails WCAG 1.4.1.
 
+The styles sit in `@layer PretComposite`, above Input's `PretComponent` layer, so what this component sets on Input wins by layer order. A caller's unlayered CSS overrides both without a more specific selector.
+
 ## React ecosystem
 
 shadcn `Field` / Aria Field. **FormField** is the form-kit wrapper.

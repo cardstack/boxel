@@ -44,23 +44,25 @@ export class Avatar extends Component<AvatarSignature> {
       {{#if this.showImage}}<img src={{@src}} alt={{@name}} {{on 'error' this.imageError}} />{{else}}{{this.initials}}{{/if}}
     </span>
     <style scoped>
-      .pretui-avatar {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        border-radius: 50%;
-        font-family: var(--font-mono);
-        font-weight: 600;
-        background: color-mix(in oklch, var(--pretui-chip-hue, var(--primary)) 16%, var(--card));
-        color: color-mix(in oklch, var(--foreground) 20%, var(--pretui-chip-hue, var(--primary)));
-        box-shadow: 0 0 0 1px color-mix(in oklch, var(--pretui-chip-hue, var(--primary)) 28%, var(--border));
-        overflow: hidden;
-        flex: none;
-      }
-      .pretui-avatar img {
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
+      @layer PretComponent {
+        .pretui-avatar {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          border-radius: 50%;
+          font-family: var(--font-mono);
+          font-weight: 600;
+          background: color-mix(in oklch, var(--pretui-chip-hue, var(--primary)) 16%, var(--card));
+          color: color-mix(in oklch, var(--foreground) 20%, var(--pretui-chip-hue, var(--primary)));
+          box-shadow: 0 0 0 1px color-mix(in oklch, var(--pretui-chip-hue, var(--primary)) 28%, var(--border));
+          overflow: hidden;
+          flex: none;
+        }
+        .pretui-avatar img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+        }
       }
     </style>
   </template>

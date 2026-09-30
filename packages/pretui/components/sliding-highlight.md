@@ -54,3 +54,5 @@ Other notes:
 The published measurement properties (`--pretui-highlight-x/y/w/h/on`) are read-only outputs; a season should not set them.
 
 Because `pill` is a raised card face, it depends on `--card` and the kit's shadow tokens reading distinctly against whatever rail it sits on — a season that makes the rail and the card the same colour leaves a pill visible only by its shadow, which is the most common way this primitive is undermined.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

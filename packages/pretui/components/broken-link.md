@@ -46,3 +46,5 @@ Gaps:
 `--inset` (fill), `--ink-3` (ink and the 50%-alpha strike), `--line-strong` (the dashed outline), `--font-mono`, `--text-ui-sm`. The 6px radius, 2px/8px padding and 11px glyph are fixed.
 
 Note this component uses **no semantic tone token at all** — no `--destructive`, no `--warning`. That is deliberate (see above) and a season should resist re-pointing it at an error colour. The one thing a season must get right is `--ink-3` against `--inset`: everything here is drawn at the quiet end of the palette, so a season that compresses its greys will render broken links effectively invisible.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

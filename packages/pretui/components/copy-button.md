@@ -57,3 +57,5 @@ Gaps, and the first is significant:
 `--success` (the confirmation check) plus **IconButton**'s and **Button**'s full token set for the button itself — `--pretui-tone`/`--pretui-tone-on` per variant, `--radius`, `--hover`, `--border`, `--control-h`.
 
 `data-state="copied"` is reflected on the button, so a season can dress the confirmed state beyond the glyph swap — a tinted background, for example — without touching the component. That is the intended extension point, and it is worth using: a colour-only-by-default confirmation on a 28px button is easy to miss.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
