@@ -918,9 +918,10 @@ export interface OperationValidateResult {
 // validate reports is what each of them holds, however many there are, and a
 // card no realm names yet reports the same, which is how a draft is checked
 // before any realm is pointed at it. The one input that can differ is a type
-// served by another realm server. Each realm reads that type's definition as
-// its own owner, so a realm whose owner may not read it there holds the rule
-// as unresolved where a validate does not.
+// in a realm the server has not mounted, such as one another realm server
+// serves. Each realm reads that type's definition as its own owner, so a realm
+// whose owner may not read it there holds the rule as unresolved where a
+// validate does not.
 // ============================================================================
 
 export interface PolicyValidation {

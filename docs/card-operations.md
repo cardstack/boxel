@@ -1008,8 +1008,9 @@ Some things worth knowing before you read one:
   earlier visit's.
 - **It is the same answer for every realm that names the card.** Each of them
   compiles the card from the same row and the same type definitions. The one
-  exception is a type served by another realm server, whose definition each
-  realm reads as its own owner. A card no realm names answers the same way,
+  exception is a type in a realm the server has not mounted, such as one
+  another realm server serves, whose definition each realm reads as its own
+  owner. A card no realm names answers the same way,
   which is how a draft is checked before a realm is pointed at it.
 - **It is live, and nothing is cached.** A fix shows on the next validate after
   the card reindexes. A realm naming the card revalidates its own compiled
