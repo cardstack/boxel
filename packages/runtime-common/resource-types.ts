@@ -103,6 +103,15 @@ export type CardResourceMeta = Meta & {
   // the instance and could clobber a correctly-loaded full one). Absence
   // marks the serialization full.
   sparseFields?: string[];
+  // Set on a search item served with its relationships withheld: a row of a
+  // query that declares `links: 'none'`. The item says nothing about what the
+  // card links to, which is not the same as linking to nothing, so like a
+  // sparse item it must never enter the Store as the card's instance — every
+  // link field of an instance built from it would read empty, in every live
+  // view and editor, whatever the card's own `read` declares. It describes the
+  // response rather than the card, so it is stripped from incoming writes and
+  // never persisted into the source file.
+  relationshipsWithheld?: true;
   // The result's error doc, when this serialization stands in for a card that
   // failed to render/index. Present => the live `item` cannot render, so a
   // consumer falls through to the host error component (the terminal rung of
@@ -183,6 +192,9 @@ export type FileMetaResourceResourceMeta = Meta & {
   // See CardResourceMeta.sparseFields — a file-meta serialization can likewise
   // be field-limited.
   sparseFields?: string[];
+  // See CardResourceMeta.relationshipsWithheld — a file-meta search item is
+  // served without its relationships under the same declaration.
+  relationshipsWithheld?: true;
   // See CardResourceMeta.error — a file-meta serialization can likewise carry
   // the result's error doc when it failed to render.
   error?: ErrorEntry;
@@ -407,6 +419,7 @@ export {
   isEntryResource,
   isHtmlResource,
   isSparseItemResource,
+  hasWithheldRelationships,
 } from './card-document-shape.ts';
 
 // The map/set key for a JSON:API `(type, id)` identity pair lives in its own

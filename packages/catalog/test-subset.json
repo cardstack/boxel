@@ -12,10 +12,14 @@
     }
   ],
   "tests": {
-    "host": ["Integration | realm policy"],
+    "host": [
+      "Integration | realm policy",
+      "Integration | policy-scoped search"
+    ],
     "realmServer": [
       "catalog-test-subset-test",
       "realm-policy-activation-test",
+      "realm-policy-batch-test",
       "realm-policy-capabilities-test",
       "realm-policy-card-write-test",
       "realm-policy-compile-test",

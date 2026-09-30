@@ -7,10 +7,12 @@ import {
   ifNoneMatchMatches,
   isItemLegSearch,
   logger,
+  markPolicyScoped,
   parseRealmsFromPayload,
   parseSearchRequestPayload,
   parseSearchEntryQueryFromPayload,
   policyScopedQuery,
+  policyScopedRealms,
   runWithSearchTimeBudget,
   sanitizeConsumingRealmHeader,
   SearchBoundError,
@@ -139,11 +141,19 @@ export default function handleSearch(opts: {
     // from — an archived realm, which contributes no rows to anyone, or one a
     // realm-authority principal cannot read.
     let named = parseRealmsFromPayload(payload);
+    // The realms the request named, before a declaration narrows them. The
+    // policy-scoped mark names these, so it never says which of them a
+    // declaration searched.
+    let requested = named;
     // What a policy fragment is looked up by: a query runs under the name it
     // was invoked with, on the type that declares it. An ad-hoc search names
     // neither, so no grant is found for one and a realm the caller cannot read
     // contributes nothing to it.
     let invocation = namedQueryInvocation(payload);
+    // A declared query is answered with the server's resolution of it, so
+    // what its result holds of every realm it searches is the server's to
+    // decide, not the caller's filter.
+    let resolvedByServer = isNamedQueryPayload(payload);
     // How much of each result's link graph a named query's declaration lets
     // its results carry. An ad-hoc search declares nothing.
     let declaredLinks: LinkStrategy | undefined;
@@ -206,7 +216,10 @@ export default function handleSearch(opts: {
     );
     attributeSearchRequest(ctxt, working);
     await withSearchConnectionTenant(ctxt, working, () =>
-      respond(ctxt, named, payload, access, declaredLinks),
+      respond(ctxt, named, payload, access, declaredLinks, {
+        requested,
+        resolvedByServer,
+      }),
     );
   };
 
@@ -341,6 +354,10 @@ export default function handleSearch(opts: {
     payload: unknown,
     access: RealmAccess,
     declaredLinks: LinkStrategy | undefined,
+    {
+      requested,
+      resolvedByServer,
+    }: { requested: string[]; resolvedByServer: boolean },
   ) {
     let handlerStart = Date.now();
     // Slots the query-shape line is assembled from. `shape` is filled in as
@@ -432,9 +449,16 @@ export default function handleSearch(opts: {
     }
     // Whether any realm this search names is one the caller does not read.
     // Where none is, the search is the one it would be with no policy
-    // anywhere: nothing composed, nothing stood in, nothing folded into its
-    // cache key.
+    // anywhere: nothing composed and nothing stood in, and nothing folded into
+    // its cache key beyond the mark a declared query carries.
     let unread = realmList.filter((realm) => !access.readable.has(realm));
+    // The realms the result marks policy-scoped, so a client reconciling it
+    // against cards it holds adds none of theirs the server did not return.
+    let scopedRealms = policyScopedRealms({
+      realms: requested,
+      readable: (realm) => access.readable.has(realm),
+      resolvedByServer,
+    });
 
     // How much of each result's link graph this response carries. Decided
     // after the page clamp above, since the clamped page is the only bound on
@@ -502,6 +526,12 @@ export default function handleSearch(opts: {
     // pre-scope requests.
     if (parsed.scope && parsed.scope !== 'all') {
       cacheKeyOpts.scope = parsed.scope;
+    }
+    // The mark is part of the body, and it is the one part a declared query
+    // and the ad-hoc query it resolves to do not share, so it keys the cache
+    // too. Folded only when some realm carries it, like the policy scope.
+    if (scopedRealms.length > 0) {
+      cacheKeyOpts.policyScopedRealms = scopedRealms;
     }
     // What each realm the caller does not read contributed: the grant filters
     // composed into its query, or that it contributed no rows, or that its
@@ -594,7 +624,7 @@ export default function handleSearch(opts: {
           unread.length === 0
             ? workingInstances
             : realmInstancesFor(realmList, working, workingInstances, access);
-        let doc = await searchEntryRealms(
+        let merged = await searchEntryRealms(
           realmInstances,
           parsed,
           {
@@ -610,6 +640,7 @@ export default function handleSearch(opts: {
                 parsed,
               ),
         );
+        let doc = markPolicyScoped(merged, scopedRealms);
         // If the budget already fired, skip stringifying a document we're about
         // to discard (the time-budget race has already resolved with the 408).
         signal?.throwIfAborted();

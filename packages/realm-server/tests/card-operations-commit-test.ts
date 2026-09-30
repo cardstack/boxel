@@ -344,6 +344,8 @@ function makeFileSystem(): Record<string, string | LooseSingleCardDocument> {
         'file-update-refused',
         'mixed-card',
         'mixed-rollback-card',
+        'echoed-withheld-unchanged',
+        'echoed-withheld-changed',
       ].map((name) => [
         `${name}.json`,
         {
@@ -1428,6 +1430,79 @@ module(basename(import.meta.filename), function (hooks) {
       jobsBefore,
       'nothing is queued for indexing',
     );
+  });
+
+  test('a search row’s withheld-relationships marker is never written into a stored file', async function (assert) {
+    // A search row served with its card's relationships withheld is marked so
+    // in the card's `meta`. The mark says how that response was served, not
+    // anything about the card, so a client writing back what it was served
+    // stores none of it.
+    let echoedMeta = {
+      adoptsFrom: PERSON,
+      relationshipsWithheld: true as const,
+    };
+    let before = readFileSync(
+      realmFile('echoed-withheld-unchanged.json'),
+      'utf8',
+    );
+    await commit([
+      {
+        op: 'update',
+        href: `${testRealmHref}echoed-withheld-unchanged`,
+        document: {
+          data: {
+            type: 'card',
+            attributes: { firstName: 'Original' },
+            meta: echoedMeta,
+          },
+        },
+      },
+    ]);
+    assert.strictEqual(
+      readFileSync(realmFile('echoed-withheld-unchanged.json'), 'utf8'),
+      before,
+      'an update that echoes only the marker leaves the file exactly as it is',
+    );
+
+    await commit([
+      {
+        op: 'update',
+        href: `${testRealmHref}echoed-withheld-changed`,
+        document: {
+          data: {
+            type: 'card',
+            attributes: { firstName: 'Changed' },
+            meta: echoedMeta,
+          },
+        },
+      },
+      {
+        op: 'create',
+        lid: 'echoed-withheld-created',
+        document: {
+          data: {
+            type: 'card',
+            attributes: { firstName: 'Created' },
+            meta: echoedMeta,
+          },
+        },
+      },
+    ]);
+    for (let [path, firstName] of [
+      ['echoed-withheld-changed.json', 'Changed'],
+      ['Person/echoed-withheld-created.json', 'Created'],
+    ]) {
+      let stored = JSON.parse(readFileSync(realmFile(path), 'utf8'));
+      assert.strictEqual(
+        stored.data.attributes.firstName,
+        firstName,
+        `${path}: the write landed`,
+      );
+      assert.false(
+        'relationshipsWithheld' in stored.data.meta,
+        `${path}: and the marker was not stored with it`,
+      );
+    }
   });
 
   // ==========================================================================
