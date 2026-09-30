@@ -883,7 +883,7 @@ module(basename(import.meta.filename), function () {
     test('an already-captured spec serves on a gated realm with zero capture work', async function (assert) {
       await seedInstanceRow('card-1');
       await putMedia(dbAdapter, adapter, {
-        renderedAs: REALM_AUTHORITY_RENDER,
+        renderedAs: ANONYMOUS_RENDER,
         realmURL: REALM_URL,
         sourceURL: `${REALM_URL}card-1`,
         captureSpecHash: await captureSpecHash({ format: 'isolated' }),
@@ -1382,7 +1382,7 @@ module(basename(import.meta.filename), function () {
       // answers a HEAD from the generic handlers, not this route.
       await seedInstanceRow('card-1');
       await putMedia(dbAdapter, adapter, {
-        renderedAs: REALM_AUTHORITY_RENDER,
+        renderedAs: ANONYMOUS_RENDER,
         realmURL: REALM_URL,
         sourceURL: `${REALM_URL}card-1`,
         captureSpecHash: await captureSpecHash({ format: 'isolated' }),
@@ -1987,7 +1987,7 @@ module(basename(import.meta.filename), function () {
       test('a ledger hit is visibly the hit path: one request record, zero render attribution', async function (assert) {
         await seedInstanceRow('card-1');
         await putMedia(dbAdapter, adapter, {
-          renderedAs: REALM_AUTHORITY_RENDER,
+          renderedAs: ANONYMOUS_RENDER,
           realmURL: REALM_URL,
           sourceURL: `${REALM_URL}card-1`,
           captureSpecHash: await captureSpecHash({ format: 'isolated' }),
