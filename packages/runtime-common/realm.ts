@@ -2302,13 +2302,14 @@ const COARSE_CARD_WRITE: CardWriteAdmission = {
   sealed: async (seal) => seal,
 };
 
-// A realm a server serves, found without being started. Finding it answers
+// A realm a server serves, found without being mounted. Finding it answers
 // which realm a URL is in, so a caller can be judged against that realm's
-// permissions before the server pays to start it.
+// permissions before the server pays to mount it.
 export interface ServedRealm {
   // The realm's URL.
   url: string;
-  // The realm, started if it is not running.
+  // The realm, mounted if it is not. One found among the realms this process
+  // has already published may still be starting.
   mount(): Promise<Realm | undefined>;
 }
 
@@ -2628,9 +2629,9 @@ export class Realm {
       // across every realm in the process. Optional — without one, each card
       // GET assembles its own body.
       cardDocumentCache?: CardDocumentCache;
-      // The realm this server serves at a URL, found without starting it. An
+      // The realm this server serves at a URL, found without mounting it. An
       // explain on this realm's policy card asks about a target in whichever
-      // realm that card governs, which is commonly another one, and starts
+      // realm that card governs, which is commonly another one, and mounts
       // that realm only for a caller who may read it. Without it, an explain
       // reaches only this realm's own targets.
       realmFor?: (url: URL) => Promise<ServedRealm | undefined>;
@@ -6689,9 +6690,9 @@ export class Realm {
   // The realm an explain's target belongs to, reached on the realm server's
   // own authority: the explain decides for itself what its caller may be
   // told. A target in this realm is this realm's, and any other is the realm
-  // the server serves it from. That realm is found without being started, and
+  // the server serves it from. That realm is found without being mounted, and
   // whether it is archived and what its ACL allows are read from the database,
-  // so it is started only when the explain reaches for its core.
+  // so it is mounted only when the explain reaches for its core.
   async #targetRealm(href: string): Promise<TargetRealm | undefined> {
     let url: URL;
     try {

@@ -82,8 +82,8 @@ import {
 // ============================================================================
 
 // The realm a target belongs to, as an explain reaches it. It is found without
-// being started, so what the explain asks of it first, whether its caller may
-// read it, is answered before the server pays to start a realm the caller may
+// being mounted, so what the explain asks of it first, whether its caller may
+// read it, is answered before the server pays to mount a realm the caller may
 // be told nothing about.
 export interface TargetRealm {
   // Where the target the explain was asked about resolves, in this realm.
@@ -93,8 +93,9 @@ export interface TargetRealm {
   // because a request is judged on one of them: the one its method needs.
   aclFor(caller: ScopeCaller): Promise<Acl>;
   // The realm's operation core, whose policy gate the explain runs. Reaching
-  // it starts the realm if it is not running. Undefined for a realm that will
-  // not start.
+  // it mounts the realm if it is not mounted. A realm this process has already
+  // published may still be starting, and until it has indexed, a target there
+  // is told of as a missing one. Undefined for a realm that will not mount.
   core(): Promise<OperationCore | undefined>;
 }
 
@@ -126,8 +127,8 @@ export async function explainOperation(
   // Whether the target's realm is served here, whether the caller may read
   // it, and whether the target is there are all answered as a missing target
   // is, before anything else about the target is read. The first two are
-  // answered before the realm is started, so a caller cannot make the server
-  // start a realm by asking about it unless they may read it.
+  // answered before the realm is mounted, so a caller cannot make the server
+  // mount a realm by asking about it unless they may read it.
   if (!realm || !(await realm.aclFor(asker)).read) {
     throw noSuchTarget();
   }
