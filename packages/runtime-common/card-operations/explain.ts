@@ -363,8 +363,17 @@ async function explainSearch(
   };
   // A named query is resolved before anything consults a policy, for every
   // caller, and a request naming one that does not resolve is refused as it
-  // is sent.
-  if (!('filter' in search)) {
+  // is sent. So is an ad-hoc filter the search grammar does not accept.
+  if ('filter' in search) {
+    try {
+      parseSearchEntryQueryFromPayload({ filter: search.filter });
+    } catch {
+      return refused(base, 'not-resolved', {
+        status: 400,
+        code: 'invalid-params',
+      });
+    }
+  } else {
     try {
       let resolved = await resolveNamedQuery(core, payload, {
         principal:

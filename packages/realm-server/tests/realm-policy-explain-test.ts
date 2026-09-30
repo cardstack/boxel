@@ -1290,6 +1290,27 @@ module(basename(import.meta.filename), function (hooks) {
         { status: refused.status, code: errorOf(refused)?.code },
         'refused as the search itself refuses',
       );
+
+      let unparsed = { 'item.on': CLASSROOM, nonsense: true };
+      let malformed = await answer({
+        actor: TEACHER,
+        target: EDUCATION,
+        operation: 'query',
+        search: { filter: unparsed },
+      });
+      assert.strictEqual(malformed.reason, 'not-resolved');
+      let malformedSearch = await request
+        .post(`${path(EDUCATION)}_search`)
+        .set('Accept', SupportedMimeType.CardJson)
+        .set('Content-Type', 'application/json')
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Authorization', AS_TEACHER())
+        .send({ filter: unparsed });
+      assert.strictEqual(
+        malformed.refusal?.status,
+        malformedSearch.status,
+        'a filter the search refuses to parse is refused with the status the search gives',
+      );
     });
 
     test('a draft answers for the search lane too', async function (assert) {
