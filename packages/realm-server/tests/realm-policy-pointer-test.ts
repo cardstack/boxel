@@ -8,7 +8,11 @@ import type { Realm } from '@cardstack/runtime-common';
 import { mayNameRealmPolicy } from '../lib/realm-policy-pointer.ts';
 import { RealmRegistryReconciler } from '../lib/realm-registry-reconciler.ts';
 import { insertSourceRealmInRegistry } from '../lib/realm-registry-writes.ts';
-import { realmConfigCardJSON, setupDB } from './helpers/index.ts';
+import {
+  createVirtualNetwork,
+  realmConfigCardJSON,
+  setupDB,
+} from './helpers/index.ts';
 
 // Whether a realm may name a policy, told without mounting it: read from the
 // realm's `realm.json` on disk, found through its registry row. The realms
@@ -53,8 +57,16 @@ module(basename(import.meta.filename), function (hooks) {
     return url;
   }
 
+  // The network a realm on this server is mounted on, which resolves the
+  // prefix form of a pointer.
+  let virtualNetwork = createVirtualNetwork();
+
   function mayName(url: string) {
-    return mayNameRealmPolicy(url, { reconciler, realmsRootPath });
+    return mayNameRealmPolicy(url, {
+      reconciler,
+      realmsRootPath,
+      virtualNetwork,
+    });
   }
 
   test('a realm.json that names no policy, or one its owner cleared, says so', async function (assert) {
@@ -68,22 +80,44 @@ module(basename(import.meta.filename), function (hooks) {
     assert.false(await mayName(blank), 'a blank `policy`');
   });
 
-  test('a realm.json with a pointer may name a policy, well-formed or not', async function (assert) {
+  test('a realm.json with a pointer the realm would keep may name a policy', async function (assert) {
     let named = await realm(
       'named',
       realmConfigCardJSON({ policy: 'http://127.0.0.1:4444/lib/policy' }),
     );
-    let malformed = await realm(
-      'malformed',
-      realmConfigCardJSON({ policy: 5 }),
+    let prefixed = await realm(
+      'prefixed',
+      realmConfigCardJSON({ policy: '@cardstack/catalog/policies/policy' }),
     );
     await reconciler.reconcile();
 
     assert.true(await mayName(named), 'a card URL');
-    assert.true(
-      await mayName(malformed),
-      'a value the realm itself would refuse, and so is left to it to refuse',
+    assert.true(await mayName(prefixed), 'a realm-prefixed card id');
+  });
+
+  test('a realm.json with a pointer the realm would drop names no policy, as the realm mounted would say', async function (assert) {
+    let number = await realm('number', realmConfigCardJSON({ policy: 5 }));
+    let object = await realm(
+      'object',
+      realmConfigCardJSON({ policy: { card: 'http://127.0.0.1:4444/p' } }),
     );
+    let relative = await realm(
+      'relative',
+      realmConfigCardJSON({ policy: 'policies/policy' }),
+    );
+    let script = await realm(
+      'script',
+      realmConfigCardJSON({ policy: 'javascript:void 0' }),
+    );
+    await reconciler.reconcile();
+
+    assert.false(await mayName(number), 'a number');
+    assert.false(await mayName(object), 'an object');
+    assert.false(
+      await mayName(relative),
+      'a relative reference, which has no base to resolve against',
+    );
+    assert.false(await mayName(script), 'a URL that is not http(s)');
   });
 
   test('a realm this process holds answers from the pointer it read, not from disk', async function (assert) {

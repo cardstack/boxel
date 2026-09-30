@@ -9,6 +9,7 @@ import {
   applyServerSearchPageBound,
   archiveRealm,
   composePolicyScopedFilter,
+  DURING_PRERENDER_HEADER,
   insertPermissions,
   parseSearchEntryQueryFromPayload,
   rri,
@@ -473,12 +474,19 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       },
     });
 
-    function federatedSearch(body: Record<string, unknown>, user?: string) {
+    function federatedSearch(
+      body: Record<string, unknown>,
+      user?: string,
+      { duringRender = false }: { duringRender?: boolean } = {},
+    ) {
       let req = request
         .post('/_federated-search')
         .set('Accept', SupportedMimeType.CardJson)
         .set('Content-Type', 'application/json')
         .set('X-HTTP-Method-Override', 'QUERY');
+      if (duringRender) {
+        req = req.set(DURING_PRERENDER_HEADER, 'true');
+      }
       if (user) {
         req = req.set(
           'Authorization',
@@ -1222,6 +1230,30 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         assert.strictEqual(response.body.errors[0].code, 'unknown-operation');
       });
 
+      test('a named query a render is waiting on reads no declaration through a realm only a policy reaches, since no policy admits a render', async function (assert) {
+        let granted = await federatedSearch(listOpen([GRANTS]), PROVIDER_A, {
+          duringRender: true,
+        });
+        assert.strictEqual(granted.status, 200, 'HTTP 200 status');
+        assert.deepEqual(
+          ids(granted),
+          [],
+          "none of provider A's own rows, which their grant admits outside a render",
+        );
+
+        let undeclared = await federatedSearch(
+          { operation: 'everything', on: SCHEDULE, realms: [GRANTS] },
+          PROVIDER_A,
+          { duringRender: true },
+        );
+        assert.strictEqual(
+          undeclared.status,
+          200,
+          'an operation the type does not declare is not refused, since no realm named could answer it a row either way',
+        );
+        assert.deepEqual(ids(undeclared), []);
+      });
+
       test('a request that authenticates nobody is still told to', async function (assert) {
         let response = await federatedSearch(listOpen([COARSE, GRANTS]));
 
@@ -1341,6 +1373,9 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       // Its policy admits a provider's own schedules to the `listOpen` named
       // query.
       const UNMOUNTED_GRANTS = 'http://127.0.0.1:4444/unmounted-grants/';
+      // Its `realm.json` points at a policy with a relative reference, which
+      // the realm drops as malformed, so it has no policy.
+      const UNMOUNTED_MALFORMED = 'http://127.0.0.1:4444/unmounted-malformed/';
       // Registered with a `disk_id` outside the realms root, so there is no
       // directory to read its `realm.json` from and none to mount it from.
       const UNRESOLVABLE = 'http://127.0.0.1:4444/unresolvable/';
@@ -1411,6 +1446,16 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
             status: 'open',
             rank: 2,
           }),
+        });
+        await stage(UNMOUNTED_MALFORMED, 'unmounted-malformed', {
+          'realm.json': realmConfigCardJSON({
+            name: 'Unmounted malformed',
+            policy: 'policies/policy',
+          }),
+          'policies/policy.json': policyCard([
+            { operation: 'listOpen', where: OWN },
+          ]),
+          ...aOpen(),
         });
         await stage(UNRESOLVABLE, '../unresolvable', {
           'realm.json': realmConfigCardJSON({ name: 'Unresolvable' }),
@@ -1511,6 +1556,33 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         );
         assert.false(
           isMounted(UNMOUNTED_PRIVATE),
+          'and it is still not mounted',
+        );
+      });
+
+      test('a named query naming only one whose realm.json holds a pointer the realm would drop is answered with no rows, and it is not mounted', async function (assert) {
+        assert.false(
+          isMounted(UNMOUNTED_MALFORMED),
+          'precondition: nothing on this process has mounted it',
+        );
+
+        let response = await federatedSearch(
+          {
+            operation: 'everything',
+            on: SCHEDULE,
+            realms: [UNMOUNTED_MALFORMED],
+          },
+          PROVIDER_A,
+        );
+
+        assert.strictEqual(
+          response.status,
+          200,
+          'answered as the realm, mounted, would have it answered: with no policy, so a request no realm could answer a row is not refused',
+        );
+        assert.deepEqual(ids(response), []);
+        assert.false(
+          isMounted(UNMOUNTED_MALFORMED),
           'and it is still not mounted',
         );
       });

@@ -147,6 +147,12 @@ export default function handleSearch(opts: {
     // anchor names no type whose rules could admit it, so a realm the caller
     // cannot read contributes nothing to it.
     let invocation = searchInvocation(payload);
+    // Who the policies of the realms the caller cannot read are asked about.
+    // A request a render is waiting on has no actor, whoever it authenticated
+    // as: what a render produces is served to every viewer, so no one
+    // viewer's grants may shape it. It is scoped by no policy.
+    let duringRender = ctxt.get(DURING_PRERENDER_HEADER).length > 0;
+    let policyActor = duringRender ? undefined : user;
     // Which of the realms the caller cannot read may name a policy, which is
     // the only way such a realm contributes rows. Each realm is asked once
     // for the request, though both reading a named query's declaration and
@@ -157,7 +163,11 @@ export default function handleSearch(opts: {
         urls.map((url) => {
           let answer = policyPointers.get(url);
           if (!answer) {
-            answer = mayNameRealmPolicy(url, { reconciler, realmsRootPath });
+            answer = mayNameRealmPolicy(url, {
+              reconciler,
+              realmsRootPath,
+              virtualNetwork,
+            });
             policyPointers.set(url, answer);
           }
           return answer;
@@ -165,6 +175,10 @@ export default function handleSearch(opts: {
       );
       return urls.filter((_url, index) => answers[index]);
     };
+    // Whether the policies of the realms the caller cannot read are asked
+    // what they contribute. They are not when the search is one no realm can
+    // answer rows to, which is then run with no filter of its own.
+    let consultPolicies = true;
     // How much of each result's link graph a named query's declaration lets
     // its results carry. An ad-hoc search declares nothing.
     let declaredLinks: LinkStrategy | undefined;
@@ -173,22 +187,30 @@ export default function handleSearch(opts: {
       // reads, or, where they read none, the ones whose policy could admit
       // them. One the caller reaches only through its policy reads the
       // declaration on that realm's own authority, the way the policy gate
-      // reads it.
+      // reads it. No policy admits a request with no actor, so for one of
+      // those there are none of the latter.
       let resolvingRealms =
         realmList.length > 0
           ? realmList
-          : await realmsThatMayNamePolicy(grantCandidates);
+          : policyActor
+            ? await realmsThatMayNamePolicy(grantCandidates)
+            : [];
       if (resolvingRealms.length === 0) {
         // No realm the request names can contribute a row to this caller:
         // each is archived, which nothing is served from, or one the caller
-        // cannot read that names no policy. Whatever the declaration says,
-        // every realm answers with no rows, so it is not read, and no realm
-        // is mounted to read it. The request is answered as a search of
+        // cannot read whose policy could not admit them, since it names none
+        // or the request has no actor to admit. Whatever the declaration
+        // says, every realm answers with no rows, so it is not read, and no
+        // realm is mounted to read it. The request is answered as a search of
         // those realms asking for the same rendering. So is a request that
         // resolving would refuse, such as one naming an operation the type
         // does not declare: no realm it names could answer it a row either
         // way.
+        //
+        // The rendering carries no filter, so no policy is asked about it:
+        // a grant composed onto it would be narrowed by nothing but itself.
         payload = { ...namedQueryRendering(payload), realms: named };
+        consultPolicies = false;
       } else {
         // Resolving reads the declaration's definition, so it draws on the
         // database as a search of the realms the request names, the same as
@@ -216,19 +238,14 @@ export default function handleSearch(opts: {
     // other one answers as a realm holding no matching row does. Only these
     // realms are asked: a realm the caller reads outright never loads a
     // policy.
-    //
-    // A request a render is waiting on has no actor, whoever it authenticated
-    // as: what a render produces is served to every viewer, so no one
-    // viewer's grants may shape it. It is scoped by no policy.
-    let duringRender = ctxt.get(DURING_PRERENDER_HEADER).length > 0;
     let readable = new Set(realmList);
     let candidates = new Set(grantCandidates);
     let access = await withSearchConnectionTenant(ctxt, named, () =>
       policyAccess(
         readable,
-        named.filter((realm) => candidates.has(realm)),
+        consultPolicies ? named.filter((realm) => candidates.has(realm)) : [],
         invocation,
-        duringRender ? undefined : user,
+        policyActor,
         realmsThatMayNamePolicy,
       ),
     );
