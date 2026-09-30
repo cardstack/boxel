@@ -53,18 +53,48 @@ if ! command -v gh >/dev/null 2>&1; then
   exit 1
 fi
 
-# Find a recent successful CI run on main that produced the cache artifact.
-# Not every successful main run has one — the cache-index job is skipped
-# when change-check decides nothing boxel-related changed — so walk the
-# most recent runs until a download succeeds instead of pinning to the
-# single latest run.
+# The main-branch CI runs that uploaded an artifact, newest commit first.
+#
+# Asked of the artifacts list rather than the workflow runs list. On this
+# repository the runs list filtered by branch (and by status) does not return
+# the newest runs: it can answer with runs weeks old, and a different set from
+# one call to the next, so a cache picked from it can predate much of main and
+# the boot index then re-renders everything main changed since. The artifacts
+# list returns the artifact itself as soon as the cache-index job uploads it.
+#
+# That also means a cache is usable without the rest of its run passing. The
+# cache-index job verifies its dump before uploading it, so an unrelated test
+# failing elsewhere in the run says nothing about the cache.
+#
+# Sorted by run id, which grows with every run, so the newest main commit
+# wins even when an older run's upload lands after it. A fork's branch named
+# `main` is excluded by requiring the run's head repository to be this one.
+#
+# A failed request is retried: the lookup is one API call standing between a
+# shard and its cache, and losing it costs the shard a from-scratch index. An
+# answer with no artifacts is not retried.
+#
+# Each attempt's output is held until it succeeds, because a failed `gh api`
+# prints the error response on stdout.
+cache_run_ids() {
+  local attempt ids
+  for attempt in 1 2 3; do
+    if ids=$(gh api "repos/$REPO/actions/artifacts?name=$1&per_page=30" --jq '
+      [.artifacts[]
+        | select(.expired | not)
+        | select(.workflow_run.head_branch == "main")
+        | select(.workflow_run.head_repository_id == .workflow_run.repository_id)
+        | .workflow_run.id]
+      | unique | reverse | .[:10] | .[]' 2>/dev/null); then
+      [ -n "$ids" ] && echo "$ids"
+      return 0
+    fi
+    sleep "$attempt"
+  done
+  return 1
+}
+
 echo "Looking for cached index from CI..."
-RUN_IDS=$(gh run list -w ci.yaml -b main -s success -L 10 \
-  --json databaseId -q '.[].databaseId' -R "$REPO" 2>/dev/null) || RUN_IDS=""
-if [ -z "$RUN_IDS" ]; then
-  echo "No successful CI runs on main found, skipping."
-  exit 1
-fi
 
 # Phase timings: this script is on the critical path of every CI shard that
 # uses it, and "the import took a while" is not actionable — the download and
@@ -74,6 +104,10 @@ DOWNLOAD_START=$(date +%s)
 CACHE_FILE=""
 for ARTIFACT_NAME in $ARTIFACT_NAMES; do
   CANDIDATE="$DOWNLOAD_DIR/${ARTIFACT_NAME}.sql.gz"
+  RUN_IDS=$(cache_run_ids "$ARTIFACT_NAME") || RUN_IDS=""
+  if [ -z "$RUN_IDS" ]; then
+    echo "No unexpired ${ARTIFACT_NAME} artifact from main found."
+  fi
   for RUN_ID in $RUN_IDS; do
     echo "Trying artifact ${ARTIFACT_NAME} from CI run $RUN_ID..."
     if gh run download "$RUN_ID" -n "$ARTIFACT_NAME" -D "$DOWNLOAD_DIR" -R "$REPO" 2>/dev/null \

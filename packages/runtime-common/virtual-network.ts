@@ -92,10 +92,11 @@ export class VirtualNetwork {
     nativeFetch = createEnvironmentAwareFetch(),
     opts?: {
       fetchHeaderTimeoutMs?: number;
-      // A timer scheduler for the fetch retry path. Defaults to the global
+      // A timer scheduler for the fetch retry path, which includes the
+      // package shim resolvers' retry backoff. Defaults to the global
       // setTimeout; the host passes a NATIVE (un-stubbed) scheduler so the
-      // header-timeout abort and retry backoff still fire during prerender,
-      // where render-timer-stub disables the global setTimeout.
+      // header-timeout abort and both retry backoffs still fire during
+      // prerender, where render-timer-stub disables the global setTimeout.
       scheduleFetchTimer?: (callback: () => void, ms: number) => unknown;
     },
   ) {
@@ -187,7 +188,20 @@ export class VirtualNetwork {
     return moduleIdentifier;
   };
 
-  private packageShimHandler = new PackageShimHandler(this.resolveImport);
+  // A shim resolver's retry backoff sleeps on the fetch timer, so during a
+  // prerender its retries run out and the resolver gives up promptly rather
+  // than waiting on a stubbed setTimeout that never fires. Giving up promptly
+  // matters even though a retried `import()` of a chunk that failed to fetch
+  // fails again in the same document: the prerender recognises that failure
+  // and moves the render to a fresh tab, which it can only do once the render
+  // has failed. The scheduler is read when the sleep starts, since the
+  // constructor assigns it after this field.
+  private packageShimHandler = new PackageShimHandler(this.resolveImport, {
+    delay: (ms) =>
+      new Promise<void>((resolve) => {
+        this.scheduleFetchTimer(resolve, ms);
+      }),
+  });
 
   shimModule(moduleIdentifier: string, module: ModuleLike) {
     this.packageShimHandler.shimModule(moduleIdentifier, module);

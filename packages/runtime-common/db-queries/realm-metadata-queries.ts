@@ -2,7 +2,13 @@
 // on realm_metadata.archived_at (NULL = active, non-null = archived at
 // that timestamp).
 import type { DBAdapter } from '../db.ts';
-import { dbExpression, param, query } from '../expression.ts';
+import {
+  dbExpression,
+  param,
+  query,
+  separatedByCommas,
+  type Expression,
+} from '../expression.ts';
 
 // `now()` is Postgres-only; SQLite spells it `CURRENT_TIMESTAMP`. These
 // helpers are a shared runtime-common API, so render the timestamp
@@ -46,6 +52,22 @@ export async function isRealmArchived(
     param(realmURL.href),
   ])) as { archived_at: string | null }[];
   return results.length > 0 && results[0].archived_at != null;
+}
+
+// The realms among `realmURLs` that are archived, in one read.
+export async function archivedRealmURLs(
+  dbAdapter: DBAdapter,
+  realmURLs: string[],
+): Promise<Set<string>> {
+  if (realmURLs.length === 0) {
+    return new Set();
+  }
+  let results = (await query(dbAdapter, [
+    `SELECT url FROM realm_metadata WHERE archived_at IS NOT NULL AND url IN (`,
+    ...separatedByCommas(realmURLs.map((url) => [param(url)])),
+    `)`,
+  ] as Expression)) as { url: string }[];
+  return new Set(results.map((row) => row.url));
 }
 
 export interface ArchivedRealm {

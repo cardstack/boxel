@@ -72,13 +72,16 @@ There is no per-render key. "Searches per page render" is not answerable from th
 
 Between `full` and `links-only` the choice is not the caller's alone. The link-shape policy picks the shape per read from the load the process is under, and may overrule a caller that asked for the closure. So `linkMode` alone cannot tell "the caller asked for links-only" from "the caller asked for the closure and was downgraded" — and those are different findings about a slow page.
 
+A named query can narrow it too. A `query` declaration's `links` is served under `links-only` for `ids` and under `none` for `none` — the one mode that skips the assembly pass on live traffic, as `prerender` skips it, so split it out rather than folding it into `links-only`, which still runs the pass. The declaration counts as part of what was asked for, so a narrowing it makes never reads as a downgrade.
+
 `requestedLinkMode` carries the preference and `linkModeDowngraded` carries the comparison. Read them together:
 
-| `requestedLinkMode` | `linkMode`   | what happened                                                       |
-| ------------------- | ------------ | ------------------------------------------------------------------- |
-| `full`              | `full`       | the quiet case — no policy engagement                               |
-| `full`              | `links-only` | **the policy degraded this read**; `linkShapeLevel` says which rung |
-| `links-only`        | `links-only` | the caller asked for it; the policy is not implicated               |
+| `requestedLinkMode` | `linkMode`   | what happened                                                                                 |
+| ------------------- | ------------ | --------------------------------------------------------------------------------------------- |
+| `full`              | `full`       | the quiet case — no policy engagement                                                         |
+| `full`              | `links-only` | **the policy degraded this read**; `linkShapeLevel` says which rung                           |
+| `links-only`        | `links-only` | the caller asked for it, or the query it invoked declares `ids`; the policy is not implicated |
+| `none`              | `none`       | the query it invoked declares `none`; the policy is not implicated                            |
 
 `linkShapeLoad`, `linkShapeLevel` and `linkShapeRowClass` are the inputs the decision was taken on, stamped on the request that was decided. They are what separates "the policy did the right thing on bad inputs" from "the policy misjudged good inputs" — different fixes. All three are null on a `prerender` line, which never reaches the policy.
 
@@ -140,7 +143,7 @@ sum by (cache) (count_over_time(<base> [5m]))
 sum by (linkMode) (count_over_time(<base> [5m]))
 ```
 
-`full` and `links-only` are live user traffic. `prerender` is headless traffic of every kind; narrow to indexing with `| jobId != ""` and hand those off to `indexing-diagnostics`.
+`full`, `links-only` and `none` are live user traffic. `prerender` is headless traffic of every kind; narrow to indexing with `| jobId != ""` and hand those off to `indexing-diagnostics`.
 
 ### Searches per index pass, by card type
 
