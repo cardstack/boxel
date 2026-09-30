@@ -116,6 +116,35 @@ module('lenient tool arguments', () => {
     });
   });
 
+  test('an extra closing brace after a complete call is dropped', (assert) => {
+    // The ending Claude wrote on a long run-realm-code call: one `}` too many.
+    let extra =
+      '{"description": "Add a company field.", "attributes": {"code": "await realm.fs.replace(p, a, JSON.stringify(b, null, 2));\\n"}}}';
+    assert.throws(() => JSON.parse(extra));
+    assert.deepEqual(parseLenientJson(extra), {
+      description: 'Add a company field.',
+      attributes: {
+        code: 'await realm.fs.replace(p, a, JSON.stringify(b, null, 2));\n',
+      },
+    });
+    let request = toCommandRequest(
+      {
+        id: 'call_1',
+        type: 'function',
+        function: { name: 'run-realm-code_6b92', arguments: extra },
+      } as ChatCompletionMessageFunctionToolCall,
+      { finished: true },
+    );
+    assert.strictEqual(request.argumentsError, undefined);
+    assert.strictEqual(request.arguments?.description, 'Add a company field.');
+  });
+
+  test('cut-off arguments and other trailing text are still errors', (assert) => {
+    assert.throws(() => parseLenientJson('{"attributes":{"code":"x"}'));
+    assert.throws(() => parseLenientJson('{"a":1}{"b":2}'));
+    assert.throws(() => parseLenientJson('{"a":1} trailing'));
+  });
+
   test('valid JSON and escaped sequences are left alone', (assert) => {
     assert.strictEqual(
       escapeControlCharactersInStrings('{"a": "x\\ny"}\n'),

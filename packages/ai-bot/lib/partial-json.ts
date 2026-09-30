@@ -50,18 +50,41 @@ export function escapeControlCharactersInStrings(text: string): string {
   return out;
 }
 
+// Some models, closing a long tool call, write one closing brace too many
+// (`..."}}}` for an object that needs `"}}`). Everything before the extra
+// closers is a complete value, so drop closers from the end, one at a time,
+// until the text parses. Text that is cut off never parses this way, and
+// any other trailing text is left as an error.
+function parseWithoutExtraClosers(text: string): unknown {
+  let end = text.trimEnd().length;
+  while (end > 0 && (text[end - 1] === '}' || text[end - 1] === ']')) {
+    end = text.slice(0, end - 1).trimEnd().length;
+    try {
+      return JSON.parse(text.slice(0, end));
+    } catch {
+      // Still not a complete value; try one closer fewer.
+    }
+  }
+  throw new Error('no complete value before the trailing closers');
+}
+
 // JSON.parse, and on failure the same text with raw control characters in
-// strings escaped. Throws the original error when neither parses.
+// strings escaped and extra trailing closers dropped. Throws the original
+// error when none of these parses.
 export function parseLenientJson(text: string): unknown {
   try {
     return JSON.parse(text);
   } catch (error) {
     let repaired = escapeControlCharactersInStrings(text);
-    if (repaired === text) {
-      throw error;
+    if (repaired !== text) {
+      try {
+        return JSON.parse(repaired);
+      } catch {
+        // Fall through to the trailing-closer repair.
+      }
     }
     try {
-      return JSON.parse(repaired);
+      return parseWithoutExtraClosers(repaired);
     } catch {
       throw error;
     }
