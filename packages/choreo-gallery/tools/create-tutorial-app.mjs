@@ -4,6 +4,7 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  rmSync,
   writeFileSync,
 } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -54,16 +55,23 @@ const resolveCatalog = (dependencies) =>
 // The app installs the libraries from tarballs, which pnpm pack builds (via
 // each package's prepack) and writes with catalog: and workspace:
 // specifiers already resolved, so the app doesn't depend on the checkout.
+// Packing runs before anything else is written, so a failed pack removes the
+// target (which this run created) and a retry can reuse the same path.
 const pack = (name) => {
   mkdirSync(join(target, 'vendor'), { recursive: true });
-  execFileSync(
-    'pnpm',
-    ['pack', '--out', join(target, 'vendor', `${name}.tgz`)],
-    {
-      cwd: join(root, 'packages', name),
-      stdio: 'inherit',
-    },
-  );
+  try {
+    execFileSync(
+      'pnpm',
+      ['pack', '--out', join(target, 'vendor', `${name}.tgz`)],
+      {
+        cwd: join(root, 'packages', name),
+        stdio: 'inherit',
+      },
+    );
+  } catch (error) {
+    rmSync(target, { recursive: true, force: true });
+    throw error;
+  }
   return `file:./vendor/${name}.tgz`;
 };
 
