@@ -1,4 +1,8 @@
-import { waitFor, type RenderingTestContext } from '@ember/test-helpers';
+import {
+  fillIn,
+  waitFor,
+  type RenderingTestContext,
+} from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
@@ -152,6 +156,25 @@ module('Integration | realm config policy standing', function (hooks) {
         '[data-test-field="policy"] [data-test-realm-policy-issue="policy-card-missing"]',
       )
       .exists('the issue is shown in the policy field’s row');
+  });
+
+  test('an edit the save has not reached shows no standing until the realm has read it', async function (assert) {
+    let realm = await renderConfig(MISSING, 'edit');
+    await fillIn('[data-test-field="policy"] input', POLICY);
+    assert
+      .dom('[data-test-realm-policy-status]')
+      .doesNotExist(
+        'the answer about the saved pointer is not shown beside a different one',
+      );
+
+    await realm.write(
+      'realm.json',
+      realmConfigCardJSON({ name: 'Education', policy: POLICY }),
+    );
+    await waitFor('[data-test-realm-policy-status="in-force"]', {
+      timeout: 10_000,
+    });
+    assert.deepEqual(issuesShown(), [], 'and once it has, the standing is');
   });
 
   test('fixing the pointer clears the issue', async function (assert) {

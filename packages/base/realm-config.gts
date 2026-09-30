@@ -856,6 +856,18 @@ function isLiveRender(): boolean {
     .__boxelRenderContext;
 }
 
+// A pointer written as an absolute http(s) URL, as the realm resolves one.
+function httpURL(pointer: string): string | undefined {
+  try {
+    let url = new URL(pointer);
+    return url.protocol === 'http:' || url.protocol === 'https:'
+      ? url.href
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 interface PolicyStandingSignature {
   Args: { config: RealmConfig };
 }
@@ -896,24 +908,41 @@ class PolicyStanding extends GlimmerComponent<PolicyStandingSignature> {
     return this.args.config.policy?.trim() ?? '';
   }
 
+  // The realm's answer, when it is about the pointer this card shows. The
+  // realm reads the pointer from `realm.json` as saved, and the field can
+  // hold an edit the save has not reached, so an answer about another
+  // pointer is kept back until one about this pointer arrives. The answer
+  // names the card by its URL. A pointer written as a realm-prefixed id
+  // cannot be resolved here to compare, and is taken as the one the realm
+  // read.
+  private get current(): PolicyValidation | undefined {
+    let validation = this.validation;
+    if (!validation) {
+      return undefined;
+    }
+    let shown = httpURL(this.pointer);
+    let about = validation.card
+      ? shown === undefined || shown === validation.card
+      : shown === undefined;
+    return about ? validation : undefined;
+  }
+
   private get inForce(): boolean {
-    return Boolean(this.validation?.card && !this.validation.uncompilable);
+    return Boolean(this.current?.card && !this.current.uncompilable);
   }
 
   private get notInForce(): boolean {
-    return Boolean(this.validation?.card && this.validation.uncompilable);
+    return Boolean(this.current?.card && this.current.uncompilable);
   }
 
   // The realm names no policy although the field holds a value: the realm
   // did not read it as a card's URL or realm-prefixed id, and dropped it.
   private get unreadPointer(): boolean {
-    return Boolean(
-      this.validation && !this.validation.card && this.pointer.length,
-    );
+    return Boolean(this.current && !this.current.card && this.pointer.length);
   }
 
   private get issueCount(): number {
-    return this.validation?.issues.length ?? 0;
+    return this.current?.issues.length ?? 0;
   }
 
   private watch = modifier((_element, [realm]: [string | undefined]) => {
@@ -979,7 +1008,7 @@ class PolicyStanding extends GlimmerComponent<PolicyStandingSignature> {
             until this is fixed.
           </p>
           <ul class='issues'>
-            {{#each this.validation.issues as |issue|}}
+            {{#each this.current.issues as |issue|}}
               <li data-test-realm-policy-issue={{issue.code}}>
                 <code>{{issue.code}}</code>
                 {{issue.message}}
