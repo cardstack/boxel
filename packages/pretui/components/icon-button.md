@@ -8,6 +8,7 @@ A square **Button** carrying an icon instead of text, with a mandatory label. Us
 @label: string   (required)
 @variant?: ButtonVariant   (default 'secondary'; the same spellings Button accepts)
 @size?: 'xs' | 's' | 'm' | 'l' | 'xl'   (default 'm', forwarded to Button)
+@shape?: 'rounded' | 'pill' | 'square'   (forwarded to Button; 'pill' is a circle, since the button is square)
 @disabled?, @isDisabled?
 <:default>   — the icon
 Element: HTMLButtonElement
@@ -17,7 +18,7 @@ Element: HTMLButtonElement
 
 The default variant is `secondary`, not `primary` — icon buttons are almost always secondary chrome, and defaulting the other way would fill toolbars with accent fills.
 
-Sizing is one rule: `padding: 0; width: var(--pretui-button-h, 2.24em)`, the same em-scaled metric Button uses for its height, so the result is a square at every `@size`. The rule targets `.pretui-iconbtn` directly: the class and this template's scope attribute both ride `...attributes` onto the composed Button's root element, so a plain compound selector is what matches it.
+Sizing is one rule: `padding: 0; width: var(--pretui-button-h, 2.24em)`, the same em-scaled metric Button uses for its height, so the result is a square at every `@size`; at `xs` the width takes the same 24px floor as Button's height. The rules sit in `@layer PretComposite`, above Button's `PretComponent` layer, so they win by layer order rather than by stylesheet order. The rule targets `.pretui-iconbtn` directly: the class and this template's scope attribute both ride `...attributes` onto the composed Button's root element, so a plain compound selector is what matches it.
 
 ## Prior art
 
@@ -25,7 +26,7 @@ Sizing is one rule: `padding: 0; width: var(--pretui-button-h, 2.24em)`, the sam
 
 Pretui's improvement over both is small and real: **the label cannot be forgotten.** Web Awesome catches it at runtime in the console, shadcn does not catch it at all, and here it is a required arg. Making the mistake unrepresentable beats warning about it.
 
-The deliberate limitation versus the field: **`@variant` and `@size`, no `@tone`/`@appearance` axes.** The parent Button has seven tones and five appearances; IconButton exposes the four legacy variants. So there is no `warning`-toned icon button without dropping to `Button` and doing the square sizing yourself. That is an inconsistency in the control family rather than a considered restriction, and it is the obvious next version.
+The deliberate limitation versus the field: **`@variant` and `@size`, no `@tone`/`@appearance` axes.** The parent Button has seven tones and six appearances; IconButton exposes the four legacy variants. So there is no `warning`-toned icon button without dropping to `Button` and doing the square sizing yourself. That is an inconsistency in the control family rather than a considered restriction, and it is the obvious next version.
 
 ## Accessibility
 

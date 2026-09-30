@@ -36,8 +36,6 @@ import {
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupRenderingTest } from '../helpers/setup';
 
-import type { CardDef as CardDefType } from '@cardstack/base/card-api';
-
 module('Integration | store search public API', function (hooks) {
   setupRenderingTest(hooks);
   setupBaseRealm(hooks);
@@ -82,10 +80,9 @@ module('Integration | store search public API', function (hooks) {
   });
 
   test('search returns instances only and hydrates them into the store', async function (assert) {
-    let instances = await storeService.search<CardDefType>(
-      { filter: { type: bookRef } },
-      [testRealmURL],
-    );
+    let instances = await storeService.search({ filter: { type: bookRef } }, [
+      testRealmURL,
+    ]);
 
     assert.strictEqual(instances.length, 2, 'both books are returned');
     for (let instance of instances) {
@@ -106,10 +103,9 @@ module('Integration | store search public API', function (hooks) {
     // BaseDef terminates both kinds' type chains, so as a filter it matches
     // file rows too — but it selects no kind, so `search` pins the 'cards'
     // scope for it just like an untyped query.
-    let instances = await storeService.search<CardDefType>(
-      { filter: { type: baseRef } },
-      [testRealmURL],
-    );
+    let instances = await storeService.search({ filter: { type: baseRef } }, [
+      testRealmURL,
+    ]);
 
     assert.true(
       instances.every((instance) => isCardInstance(instance)),
@@ -122,10 +118,9 @@ module('Integration | store search public API', function (hooks) {
   });
 
   test('search with includeMeta returns the single { instances, meta } shape', async function (assert) {
-    let result = await storeService.search<CardDefType>(
+    let result = await storeService.searchWithMeta(
       { filter: { type: bookRef } },
       [testRealmURL],
-      { includeMeta: true },
     );
 
     assert.deepEqual(Object.keys(result).sort(), ['instances', 'meta']);
