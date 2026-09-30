@@ -12,8 +12,11 @@ import { MODULE_SOURCE_FILE_DEF_CODE_REFS } from '../policy-file-def.ts';
 import { rri } from '../realm-identifiers.ts';
 import { carriesBuiltIn } from './dispatch.ts';
 import { compilePolicyFilter } from './policy-filter.ts';
+import { reachIssues, type ReachingGrant } from './policy-reach.ts';
 import {
   isDefinitionFreeBaseOperation,
+  linkStrategyOf,
+  policyIssueSeverity,
   type BaseOperation,
   type OperationQueryFilterTemplate,
   type PolicyIssue,
@@ -358,10 +361,24 @@ interface Compilation {
   row: string;
   // Fingerprints of the definition entries compiling read, keyed by code ref.
   // A missing fingerprint marks a type with no definition.
-  definitions: Map<string, { codeRef: ResolvedCodeRef; fingerprint?: string }>;
+  definitions: Map<string, DefinitionInput>;
   // URLs whose realm's index moving could change what this compiles to.
   inputs: string[];
 }
+
+interface DefinitionInput {
+  codeRef: ResolvedCodeRef;
+  fingerprint?: string;
+  // Set for a type only the reach check read. Such a type decides no grant, so
+  // a lookup of it that fails is recorded as `UNREADABLE` rather than failing
+  // the read.
+  diagnostic?: true;
+}
+
+// The fingerprint of a diagnostic type whose lookup failed. It matches no
+// entry, so the revalidation after the type can be read again recompiles, and
+// it matches itself, so revalidating while the lookup still fails does not.
+const UNREADABLE = 'unreadable';
 
 interface Refresh {
   card: string;
@@ -406,8 +423,18 @@ async function stillCurrent(
   if (rowIdentity(row) !== compilation.row) {
     return false;
   }
-  for (let { codeRef, fingerprint } of compilation.definitions.values()) {
-    if ((await fingerprintedEntry(codeRef, env))?.fingerprint !== fingerprint) {
+  for (let {
+    codeRef,
+    fingerprint,
+    diagnostic,
+  } of compilation.definitions.values()) {
+    let current = diagnostic
+      ? await fingerprintedEntry(codeRef, env).then(
+          (found) => found?.fingerprint,
+          () => UNREADABLE,
+        )
+      : (await fingerprintedEntry(codeRef, env))?.fingerprint;
+    if (current !== fingerprint) {
       return false;
     }
   }
@@ -460,7 +487,7 @@ async function compilePolicy(
   let rules: CompiledPolicyRule[] = [];
   let cardURL = new URL(card);
   let issue = (code: PolicyIssueCode, path: string, message: string) =>
-    issues.push({ code, path, message });
+    issues.push({ code, path, message, severity: policyIssueSeverity(code) });
   // An error row carries the last good visit's fingerprint forward, as a row
   // whose failure was withheld carries everything forward, so only a row that
   // holds the card's current document says which bytes it describes.
@@ -521,6 +548,44 @@ async function compilePolicy(
   let readDefinition = async (
     codeRef: ResolvedCodeRef,
   ): Promise<Definition | undefined> => (await readType(codeRef))?.definition;
+  // A type the reach check reads, recorded as an input like every other. The
+  // types a closure crosses decide no grant, so one that cannot be read leaves
+  // its branch of the closure unwalked rather than failing the whole policy.
+  // Only a type nothing else read is recorded as diagnostic: one a rule or a
+  // filter read already decides a grant, and fails the read as it would have.
+  let readReachedType = (
+    codeRef: ResolvedCodeRef,
+  ): Promise<{ definition: Definition; types: string[] } | undefined> => {
+    let key = `${codeRef.module}#${codeRef.name}`;
+    if (entries.has(key)) {
+      return readType(codeRef);
+    }
+    let moduleURL = safeURL(codeRef.module, env);
+    if (moduleURL && !inputs.includes(moduleURL)) {
+      inputs.push(moduleURL);
+      onInput(moduleURL);
+    }
+    let read = fingerprintedEntry(codeRef, env).then(
+      (found) => {
+        definitions.set(key, {
+          codeRef,
+          fingerprint: found?.fingerprint,
+          diagnostic: true,
+        });
+        return found;
+      },
+      () => {
+        definitions.set(key, {
+          codeRef,
+          fingerprint: UNREADABLE,
+          diagnostic: true,
+        });
+        return undefined;
+      },
+    );
+    entries.set(key, read);
+    return read;
+  };
   // A grant on a query carries the search filter its predicate compiles to,
   // or has none and records why. No other grant carries one.
   let withFilter = async (
@@ -765,7 +830,72 @@ async function compilePolicy(
     }
     rules.push({ targetType: resolved, path: rulePath, grants });
   }
+
+  // What each live grant hands over beyond the cards it names. Read once every
+  // rule has compiled, since whether a reached type is granted is a question
+  // about the whole policy.
+  let reaching: ReachingGrant[] = [];
+  for (let rule of rules) {
+    let entry = await readType(rule.targetType);
+    if (!entry) {
+      continue;
+    }
+    for (let grant of rule.grants) {
+      let lane = reachLane(entry.definition, grant);
+      if (lane) {
+        reaching.push({ rule, grant, definition: entry.definition, ...lane });
+      }
+    }
+  }
+  for (let found of await reachIssues(reaching, rules, {
+    readType: readReachedType,
+    typeKey: (codeRef) => env.typeKey(codeRef),
+    isPolicyCard: (types) => env.isPolicyCard(types),
+  })) {
+    issue(found.code, found.path, found.message);
+  }
   return compiled();
+}
+
+// How a grant hands its rows over: the document it serves under the link
+// strategy that governs it, and whether it serves their prerendered HTML. A
+// `read` grant's strategy is the declaration it invokes, the granted type's
+// own `read` or a named operation built on it. A named query's is the query's.
+// An ad-hoc `query` has no declaration, so nothing narrows what it serves.
+//
+// Undefined for a grant that serves no rows' closure: one on any other base,
+// since a write's echo is the card and a stored-bytes read serves bytes, and a
+// query grant that compiled no filter, which admits no search.
+function reachLane(
+  definition: Definition,
+  grant: CompiledOperationGrant,
+): Pick<ReachingGrant, 'governedBy' | 'links' | 'rendered'> | undefined {
+  let name = grant.operation;
+  let declared = isDefinitionFreeBaseOperation(name)
+    ? undefined
+    : ownOperation(definition, name);
+  let base = declared
+    ? declared.base
+    : carriesBuiltIn(definition.type, name)
+      ? name
+      : undefined;
+  if (base === 'read') {
+    return {
+      governedBy: 'read',
+      links: linkStrategyOf(declared?.links),
+      rendered: false,
+    };
+  }
+  if (base === 'query' && grant.filter) {
+    return declared
+      ? {
+          governedBy: 'named-query',
+          links: linkStrategyOf(declared.links),
+          rendered: true,
+        }
+      : { governedBy: 'ad-hoc-query', links: 'full', rendered: true };
+  }
+  return undefined;
 }
 
 // What invoking `name` on an instance of a type reaches: the type's own
