@@ -10,7 +10,10 @@ import type {
   SearchEntryWireQuery,
 } from '../search-entry.ts';
 import type { OperationDiagnostics } from './telemetry.ts';
-import type { BaseOperationName } from '@cardstack/base/operations';
+import type {
+  BaseOperationName,
+  LinkStrategy,
+} from '@cardstack/base/operations';
 
 // ============================================================================
 // The lowered form of a card's `@operation` declarations.
@@ -91,6 +94,77 @@ export type OperationQueryFilterTemplate = Omit<
   matches?: string | OperationTemplate;
 };
 
+// How far each link strategy reaches, widest first.
+//
+// Written as a total map over the union rather than as a list, so a strategy
+// added to `LinkStrategy` without a reach is a type error here rather than a
+// value that compares as widest. It lives in runtime-common rather than beside
+// the union it keys, because a realm module may only take types from
+// `@cardstack/base` — a value import from there breaks the host build.
+const LINK_STRATEGY_REACH: Record<LinkStrategy, number> = {
+  full: 0,
+  ids: 1,
+  none: 2,
+};
+
+export function isLinkStrategy(value: unknown): value is LinkStrategy {
+  return (
+    typeof value === 'string' &&
+    Object.prototype.hasOwnProperty.call(LINK_STRATEGY_REACH, value)
+  );
+}
+
+// What a stored definition's `links` means. Absent is `full`, the whole
+// closure, which is the default for every read.
+//
+// Anything else is JSON the realm reads back, so it is only as good as what
+// wrote it. Lowering records an unrecognized value rather than storing one,
+// which leaves the last branch unreachable through the path definitions
+// actually take — and reads as the narrowest strategy if something ever gets
+// around it, because a narrowing the realm cannot interpret is not a reason to
+// serve more.
+export function linkStrategyOf(value: unknown): LinkStrategy {
+  if (value === undefined) {
+    return 'full';
+  }
+  return isLinkStrategy(value) ? value : 'none';
+}
+
+// Whichever of the two withholds more.
+function narrowerLinkStrategy(a: LinkStrategy, b: LinkStrategy): LinkStrategy {
+  return LINK_STRATEGY_REACH[a] >= LINK_STRATEGY_REACH[b] ? a : b;
+}
+
+// How much of the card's link graph a read carries, or how much of each
+// result's a named query's results carry, from the two places that may narrow
+// it. The one function the read executor, the card+json validator built ahead
+// of it, and both search endpoints call, so the body and the validator that
+// describes it cannot disagree about the shape, and neither can a query's
+// results served from a realm's own `_search` and from `_federated-search`.
+//
+// The operation declares one, and it is the author's statement about what this
+// card's representation — or this query's results — is allowed to reach,
+// uniform across callers, because the serving path never asks how a caller was
+// authorized.
+//
+// The request carries the other. `resolveLinksOnly` is how the realm sheds
+// load, or how a consumer says it will resolve the links it displays itself;
+// either way it asks for less than the whole closure.
+//
+// Both only ever narrow, so the answer is whichever of them narrows further.
+// Composing them any other way would let one widen the other: a request that
+// asked for the full closure would defeat a declaration written to withhold
+// it, and the declaration is the half a policy author reasons about.
+export function effectiveLinkStrategy(
+  declared: unknown,
+  resolveLinksOnly: boolean | undefined,
+): LinkStrategy {
+  return narrowerLinkStrategy(
+    linkStrategyOf(declared),
+    resolveLinksOnly ? 'ids' : 'full',
+  );
+}
+
 export interface OperationDefinition {
   // The built-in behavior that carries this operation out. The name the
   // operation is invoked under is the key it is stored under, and the two are
@@ -131,6 +205,28 @@ export interface OperationDefinition {
   // A saved search, as an entry-wire query whose value slots may still hold
   // markers.
   query?: OperationQueryTemplate;
+  // How much of the target's link graph this read carries, or how much of each
+  // result's link graph this query's results carry: the whole assembled
+  // closure, the relationships naming their targets with nothing assembled, or
+  // no relationship data at all. Absent is `full`. Only a `read` or a `query`
+  // carries one.
+  //
+  // On a query it governs every result row alike, whatever type the row is and
+  // whatever that type's own `read` declares, and it narrows the row's card
+  // rather than the entry the row is delivered in: the entry still names its
+  // card and carries its renderings.
+  //
+  // It applies to every caller alike. The serving path never asks how a caller
+  // was authorized, so a realm writer and a caller reached by a policy grant
+  // receive the same document from the same request — which is what keeps a
+  // response's shape independent of the authorization behind it.
+  //
+  // What it narrows is assembly. A computed value deriving from a card the
+  // caller could not fetch on its own still carries its value under every
+  // strategy: the value is computed when the card is indexed, under the realm's
+  // own authority, and sits in the card's own attributes rather than in the
+  // link closure.
+  links?: LinkStrategy;
   // The author's override of the client's optimistic eligibility.
   optimistic?: boolean;
   // Whether every program this operation runs yields the same result for the
@@ -217,6 +313,14 @@ export type OperationLoweringIssueCode =
   // user id and no card represents a user, so the link would name a card that
   // does not exist.
   | 'actor-not-a-card'
+  // A `links` strategy on a base other than `read` or `query`. The strategy
+  // narrows the link closure a read of the target or a query's results
+  // assemble, and no other base assembles one: a write answers without
+  // assembling the card's closure, and a `readSource` serves stored bytes.
+  | 'links-without-assembly'
+  // A `links` value that is not one of the strategies a read or a query can
+  // apply.
+  | 'invalid-link-strategy'
   // A raw BXL program that does not parse.
   | 'invalid-program'
   // A declared query the realm's own query grammar refuses.
@@ -271,25 +375,62 @@ export interface LowerOperationDeclarationsResult {
   issues: OperationLoweringIssue[];
 }
 
+// What compiling a realm's policy found wrong with it. Each is recorded
+// against the part of the policy that caused it, and that part is inactive:
+// a problem with the card as a whole leaves the policy with no rules, one
+// with a rule leaves that rule out, and one with a grant leaves that grant
+// out. The rest of the policy applies. `policy-not-filterable` alone keeps
+// its grant, for everything but a search.
 export type PolicyIssueCode =
   // The realm's `policy` pointer names a card the index does not hold.
   | 'policy-card-missing'
-  // The pointer names a card the index holds only as an error.
+  // The pointer names a card the index holds only as an error, or one whose
+  // latest index visit failed with the failure kept off its row, so that what
+  // the index holds is an earlier visit's.
   | 'policy-card-unloadable'
   // The pointer names a card that is not a `RealmPolicy`.
   | 'not-a-policy'
-  // A rule whose `targetType` is not a code ref.
+  // A card whose `rules` is not a list, or a rule whose `targetType` is not a
+  // code ref or whose `grants` is not a list.
   | 'invalid-rule'
-  // A rule whose `targetType` resolves to no definition.
+  // A rule whose `targetType` does not resolve against the policy card, or
+  // resolves to no definition.
   | 'unresolved-type'
+  // A rule whose `targetType` is module source, or descends from it. Module
+  // source is readable only with the realm's own read permission, so there is
+  // nothing a rule on it could grant.
+  | 'grants-module-source'
   // A grant with no operation name, or a `where` that is neither BXL source
   // nor the annotated `{ bxl, snapshot }` form.
   | 'invalid-grant'
+  // A grant naming an operation its rule's type neither declares nor carries
+  // as a built-in behavior. A grant matches the name a caller invokes, so such
+  // a grant would match nothing.
+  | 'unknown-operation'
+  // A grant of authorization infrastructure: an operation declared
+  // `nonGrantable` on its rule's type or on any type that type descends from,
+  // or a write on a rule whose type is a `RealmPolicy`. The gate refuses both
+  // whatever a compiled policy holds, so the grant could admit nothing, and
+  // recording it says so where the author wrote it.
+  | 'grants-authorization-infrastructure'
   // A `where` that does not parse, or that the `policy` profile refuses.
   | 'invalid-predicate'
+  // A `where` that calls a builtin which can hold for a value it matches only
+  // in part: `contains`, a regex, a wildcard pattern, a lookup that settles
+  // for the nearest value, or `startswith` and its kin anchored at anything
+  // but a fixed string. `contains` holds for a caller whose id is only part of
+  // a listed one, so such a grant would admit callers it does not name.
+  | 'partial-match'
   // A grant on a query whose `where` does not compile to a search filter. The
   // grant is kept, and admits no search.
-  | 'policy-not-filterable';
+  | 'policy-not-filterable'
+  // A `where` that reads a computed value or a linked card's field without
+  // the `snapshot` annotation. Reserved: compiling does not record it.
+  | 'unsnapshotted-policy-read'
+  // A grant on a type whose representation links to cards of types the
+  // policy grants nothing on, so the grant reaches those cards too. Reserved:
+  // compiling does not record it.
+  | 'grant-reaches-ungranted-type';
 
 // A problem found while compiling a realm's policy. Recorded, never thrown,
 // for the reason lowering records rather than throws: the edit that caused it
@@ -353,6 +494,7 @@ const WRITES: Readonly<Record<BaseOperation, boolean>> = {
   transform: true,
   appendContainsMany: true,
   appendLine: true,
+  explain: false,
 };
 
 export function isWrite(base: BaseOperation): boolean {
@@ -384,6 +526,12 @@ export interface OperationRequest {
   params?: Record<string, unknown>;
   // The invoking user, as the identity `actor()` resolves to.
   actor: string;
+  // The invoking user as a session the realm vouched for end to end: not
+  // revoked, not delegated to one realm, not an assumed identity. Absent for
+  // anything less. `actor` is an identity to record and compare. This is the
+  // one to judge a caller by in another realm, which is what an explain does,
+  // and nothing else reads it.
+  principal?: string;
   // The caller's own id for this request. Echoed on the realm's index event so
   // a client can tell its own write's event from anyone else's, which is what
   // lets it retire the matching optimistic entry rather than reloading.
@@ -417,6 +565,12 @@ export interface OperationDocumentResult {
   // unprojected document, so a caller emitting HTTP headers has to keep it out
   // of every shared cache and out of the conditional fast path.
   projected: boolean;
+  // The link strategy this read actually applied — the narrower of what the
+  // operation declares and what the request asked for. Reported rather than
+  // recomputed by a caller, because a validator has to describe the body it is
+  // sent with: two strategies serve different representations of the same card
+  // at the same `indexed_at`, so a caller building one folds this in.
+  links: LinkStrategy;
   // What the index row this document was assembled from says about itself, in
   // the shape a headers-only read answers with. A caller computing HTTP
   // response headers needs both halves out of one read: a validator has to
@@ -465,6 +619,11 @@ export interface OperationHeadResult extends OperationRowHeaders {
   // because a `HEAD` states the headers the `GET` would send and those differ
   // for a projected body — see `projected` on the document result.
   projected: boolean;
+  // The link strategy the full read of this target would apply. Reported by
+  // the headers mode although it assembles nothing, for the same reason
+  // `projected` is: a `HEAD` states the headers a `GET` would send, and the
+  // validator among them names the shape the body would take.
+  links: LinkStrategy;
 }
 
 // The stored bytes of a resource, and what the byte-serve headers are computed
@@ -581,12 +740,154 @@ export interface OperationIdentityResult {
   };
 }
 
+// An explain's answer: what the policy gate of the target's realm decides for
+// the question it was asked, and why. It is carried on the wire as it is here,
+// so a card reading it back reads this shape.
+export interface OperationExplainResult {
+  explanation: PolicyExplanation;
+}
+
+// ============================================================================
+// What an explain says.
+//
+// A realm's policy widens what its ACL allows, and a policy wider than its
+// author meant produces no error anywhere: nothing fails, so nothing reports.
+// An explain is how a realm owner asks instead. Given an actor, a target and
+// an operation, it runs the target realm's policy gate exactly as an
+// invocation would, stops at the decision, and reports how the gate reached
+// it: whether the realm's ACL settled the question before any policy was
+// consulted, which of the policy's rules govern the target's type, what each
+// of their grants for the operation said, and what the gate decided.
+//
+// Nothing is invoked and nothing is written. The decision is the gate's own,
+// reached along the same code path, so an explain and the invocation it
+// describes agree for as long as nothing they read changes in between. A
+// write's predicate is the exception to "the same moment": an invocation
+// decides it under the write lock, and an explain against the card as it is
+// stored now, which is the card the lock would hold if no other write landed
+// first.
+// ============================================================================
+
+export interface PolicyExplanation {
+  // The question, as the realm read it. `actor` is null for a caller who
+  // presents no credentials, and `target` is the card's URL.
+  actor: string | null;
+  target: string;
+  operation: string;
+  // What the target realm's own ACL allows the actor. Where it allows the
+  // lane the operation is in, the policy is never consulted, and `rules` is
+  // empty.
+  acl: { read: boolean; write: boolean };
+  decision: PolicyExplanationDecision;
+  reason: PolicyExplanationReason;
+  // The refusal the invocation would answer the actor with, exactly as the
+  // actor would receive it: a 404 for an actor who may not read the target's
+  // realm, whatever the reason, and the reason's own status and code for one
+  // who may. Absent where the invocation would be admitted.
+  refusal?: { status: number; code: OperationErrorCode };
+  // Every rule whose `targetType` is the target's type or one it descends
+  // from, in the order the policy lists them, each with the grants in it that
+  // name the operation. A rule governing the type with no grant for the
+  // operation is here with no grants, since that is what an author looking
+  // for the missing grant needs to see.
+  rules: ExplainedRule[];
+  // The grant that admitted the invocation, where one did: its position in
+  // `rules`, and in that rule's `grants`.
+  admittedBy?: { rule: number; grant: number };
+}
+
+export type PolicyExplanationDecision =
+  // The invocation would be admitted. It can still refuse for reasons of its
+  // own, which are no part of authorization: a param it was not sent, an
+  // assertion the card does not satisfy.
+  | 'allowed'
+  // The invocation would be refused.
+  | 'denied'
+  // Deciding it fails: the policy would not load, or a predicate threw. The
+  // invocation would be refused with a 500, and so would every other
+  // invocation that reached the same fault.
+  | 'failed';
+
+export type PolicyExplanationReason =
+  // The realm's ACL allows the actor this operation's lane, so the policy is
+  // not consulted.
+  | 'acl'
+  // A grant admits it: one with no condition, or one whose predicate held.
+  | 'granted'
+  // No rule governing the target's type has a grant for the operation.
+  | 'no-grant'
+  // Grants for the operation matched, and none of their predicates held.
+  | 'predicate-false'
+  // A predicate threw. Grants union, so this is the answer only where no
+  // other matching grant held.
+  | 'predicate-threw'
+  // The operation is kept out of every policy's reach: declared
+  // `nonGrantable` on the target's type or a type it descends from, or a
+  // behavior no grant reaches here at all — a query, which is authorized on
+  // the search engine's lane, and an explain.
+  | 'non-grantable'
+  // A write to the realm's policy card or to its config card, or a write that
+  // changes or mints any policy card, which no grant reaches whatever the
+  // card's type declares.
+  | 'authorization-infrastructure'
+  // The target is nothing a rule can be matched against for this operation:
+  // a card whose index row records an error, so its type is unknown; a file,
+  // for anything but a read of its stored bytes; or stored bytes with no type
+  // to match, which is what module source and an empty path are.
+  | 'unmatchable-target'
+  // The operation is not one the target carries: resolving it refused before
+  // the policy could be consulted. `refusal` says how.
+  | 'not-resolved'
+  // The actor presented no credentials, and the ACL does not allow an
+  // anonymous caller this lane. The policy admits only an authenticated
+  // caller, so the invocation is answered with a 401 before anything about
+  // the target is read.
+  | 'actor-required'
+  // The realm names a policy it cannot load.
+  | 'policy-unloadable';
+
+export interface ExplainedRule {
+  targetType: { module: string; name: string };
+  // Where the rule is in the policy card, as a path into its attributes in
+  // the form a policy issue's `path` takes: `rules[2]`.
+  path: string;
+  grants: ExplainedGrant[];
+}
+
+export interface ExplainedGrant {
+  // Where the grant is in the policy card, as `rules[2].grants[1]`, so an
+  // explanation and an issue name the same grant the same way.
+  path: string;
+  // The predicate as the author wrote it. Absent for a grant with no
+  // condition.
+  where?: string;
+  // What the predicate reads. `stored` is the target's own stored source
+  // (tier 0): its scalars, contained values and relationship links, as fresh
+  // as the last write. `snapshot` is a predicate annotated as reading computed
+  // values or linked cards (tiers 1 and 2), which lag the index. The gate
+  // reads the stored source alone, so it never evaluates a `snapshot`
+  // predicate, and such a grant admits nothing.
+  tier?: 'stored' | 'snapshot';
+  outcome: ExplainedGrantOutcome;
+}
+
+export type ExplainedGrantOutcome =
+  // A grant with no condition. It admits the invocation outright.
+  | 'unconditional'
+  | 'held'
+  | 'did-not-hold'
+  | 'threw'
+  // The gate decided without evaluating it: an earlier grant admitted the
+  // invocation, a refusal came first, or the predicate reads a snapshot tier.
+  | 'not-evaluated';
+
 // A `delete` answers with `null`: there is no state left to describe.
 export type OperationResult =
   | OperationDocumentResult
   | OperationHeadResult
   | OperationIdentityResult
   | OperationSourceResult
+  | OperationExplainResult
   | null;
 
 export function isDocumentResult(
@@ -614,6 +915,12 @@ export function isSourceResult(
   result: OperationResult,
 ): result is OperationSourceResult {
   return result != null && 'contentType' in result;
+}
+
+export function isExplainResult(
+  result: OperationResult,
+): result is OperationExplainResult {
+  return result != null && 'explanation' in result;
 }
 
 export type OperationErrorCode =
@@ -668,8 +975,23 @@ export type OperationErrorCode =
   // The realm ACL declined the caller, and no grant in the realm's policy
   // admits this operation on this target. The detail is the same whether the
   // target exists or not, and whatever the policy holds, so the refusal says
-  // nothing about the realm beyond the fact of the refusal.
+  // nothing about the realm beyond the fact of the refusal. It reaches the
+  // wire only for a caller who may read the realm: one who may not is told
+  // `target-not-found` instead (see `refusalForNonReader`).
   | 'operation-not-permitted'
+  // The realm ACL declined the caller, no grant in the realm's policy admits
+  // this operation on this target, and a predicate threw while the gate was
+  // deciding. That is a fault in the policy rather than anything the caller
+  // did, so it carries a 500. It is distinct from `internal-error` because it
+  // is a refusal too, and one only a card or type a rule names can raise: a
+  // caller who may not read the realm is told `target-not-found` instead (see
+  // `refusalForNonReader`).
+  | 'policy-predicate-failed'
+  // An explain was asked about a target whose realm does not name the policy
+  // card it was invoked on. The card governs nothing there, so there is
+  // nothing for it to explain: the explain belongs on the card that realm's
+  // `policy` key names.
+  | 'policy-not-in-force'
   // The bytes an operation would store are over the realm's ceiling for a
   // card or a file of that kind. Separate from `invalid-params` because the
   // payload is well formed and the remedy is to send less of it, and because
@@ -727,4 +1049,44 @@ export class OperationFailure extends Error {
 
 export function isOperationFailure(err: unknown): err is OperationFailure {
   return err instanceof OperationFailure;
+}
+
+// A refusal as a caller the realm ACL would not let read the realm is told it.
+//
+// Such a caller is not told which cards exist. A card no grant admits and a
+// card that is not there get one answer, the same byte for byte: the same
+// code, title and detail, and no `id` or `meta` beyond the entry position the
+// caller sent. The places that raise `target-not-found` write their details for
+// someone debugging the realm, and those details differ with where the absence
+// was noticed. So they are replaced here, where a refusal is serialized, rather
+// than flattened where each is raised. A caller who may read the realm can list
+// it anyway, so they get every detail, and the gate's own refusal as a 403.
+//
+// A predicate that threw gets the same answer. The gate raises that fault only
+// against a card or type a rule names, and whether a predicate throws depends
+// on the card's stored values. So a 500 would tell such a caller that the card
+// is there, and something about what it holds. The gate logs the fault where
+// the predicate throws. A caller who may read the realm is told it as the 500
+// it is.
+//
+// A refusal of any other kind passes through. Such a caller is refused, as
+// the target is resolved, every invocation the gate did not admit outright, a
+// write whose predicate is still to run included. So nothing past that point
+// is about a target they were not admitted to.
+export function refusalForNonReader(error: OperationError): OperationError {
+  if (
+    error.code !== 'target-not-found' &&
+    error.code !== 'operation-not-permitted' &&
+    error.code !== 'policy-predicate-failed'
+  ) {
+    return error;
+  }
+  let entry = error.meta?.entry;
+  return {
+    status: 404,
+    code: 'target-not-found',
+    title: 'Not found',
+    detail: 'no such target',
+    ...(entry !== undefined ? { meta: { entry } } : {}),
+  };
 }

@@ -56,7 +56,7 @@ permissions:
   # Lets the warm-test-images step pull the private GHCR mirror packages.
   packages: read
   pull-requests: read
-  # Lets scripts/import-cached-index.sh (via `gh run list` / `gh run
+  # Lets scripts/import-cached-index.sh (via the artifacts API / `gh run
   # download`) fetch the boxel-index-cache artifact produced by main runs
   # of ci.yaml.
   actions: read
@@ -490,7 +490,20 @@ jobs:
 
   host-test:
     name: Host Tests
-    runs-on: ubuntu-latest
+    # EXPERIMENT — shards can run on RunsOn: ephemeral EC2 spot
+    # instances in our own AWS account, which take the sixteen shards out of
+    # GitHub's concurrent-job cap so the rest of CI stops queueing behind them.
+    # Setting the repo variable HOST_TEST_RUNS_ON to a RunsOn spec such as
+    # `cpu=4/ram=16/family=m8i+m7i+m7a+m6i+m6a/image=ubuntu24-full-x64` (the
+    # shape of a public repo's ubuntu-latest) turns it on. RunsOn refuses a
+    # spec without `family` and runs the job on a fallback that fails it; the
+    # more families listed, the more spot pools an instance can come from.
+    # Deleting the variable puts every shard back on ubuntu-latest without a
+    # PR. Fork PRs always stay on GitHub's runners: the repo is public, and a
+    # fork's code must never run inside our AWS account.
+    # The label carries the shard index because RunsOn needs a label unique to
+    # each matrix entry, or one shard's instance can be claimed by another.
+    runs-on: ${{ vars.HOST_TEST_RUNS_ON && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && format('runs-on={0}-host-test-{1}/{2}', github.run_id, matrix.shardIndex, vars.HOST_TEST_RUNS_ON) || 'ubuntu-latest' }}
     # Without this a wedged shard inherits GitHub's 360-minute default and
     # holds a runner for six hours doing nothing, which starves the pool for
     # every other PR in the repo. A healthy shard has never exceeded ~19
@@ -548,8 +561,12 @@ jobs:
       # this is to hopefully address the CI network flakiness that we
       # occasionally see in host tests.
       # https://github.com/actions/runner-images/issues/1187#issuecomment-686735760
+      # Non-fatal, as in actions/init: the workaround is for GitHub's Azure VMs,
+      # and a RunsOn EC2 instance has no interface named eth0.
       - name: Disable TCP/UDP network offloading
-        run: sudo ethtool -K eth0 tx off rx off
+        run: |
+          sudo ethtool -K eth0 tx off rx off ||
+            echo "could not disable offloading on eth0; continuing"
       # EXPERIMENT — this replaces an apt install of dbus-x11 and upower, added
       # in October 2025 to reduce Percy instability. Every Percy cause diagnosed
       # since has been elsewhere (a module-level panel-width singleton, the

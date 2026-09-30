@@ -65,6 +65,7 @@ import {
   RealmRegistryReconciler,
   type RealmRegistryRow,
 } from '../../lib/realm-registry-reconciler.ts';
+import { realmDiskPath } from '../../lib/realm-disk-path.ts';
 import { upsertPublishedRealmInRegistry } from '../../lib/realm-registry-writes.ts';
 
 import {
@@ -514,16 +515,11 @@ export function makeTestReconciler(
           `test reconciler cannot construct realms; URL not pre-mounted: ${row.url}`,
         );
       }
-      let diskPath: string;
-      if (row.kind === 'bootstrap') {
-        diskPath = row.disk_id;
-      } else if (row.kind === 'source') {
-        diskPath = join(dynamicMountDeps.realmsRootPath, row.disk_id);
-      } else {
-        diskPath = join(
-          dynamicMountDeps.realmsRootPath,
-          PUBLISHED_DIRECTORY_NAME,
-          row.disk_id,
+      // Resolved as the production mount resolves it.
+      let diskPath = realmDiskPath(row, dynamicMountDeps.realmsRootPath);
+      if (!diskPath) {
+        throw new Error(
+          `the disk_id of ${row.url} does not resolve to a directory under the realms root`,
         );
       }
       let adapter = new NodeAdapter(
@@ -1335,11 +1331,13 @@ export async function createRealm({
   videoSizeLimitBytes,
   transpileCoordinator,
   fullIndexOnStartup,
+  skipBootIndex,
   mediaCacheAdapter,
   screenshotSyncWaitMs,
   readIndexDrainBudgetMs,
   linkShapePolicy,
   cardDocumentCache = new CardDocumentCache(),
+  realmFor,
 }: {
   dir: string;
   definitionLookup: DefinitionLookup;
@@ -1370,6 +1368,11 @@ export async function createRealm({
   // Production sets this via `resolveFullIndexOnStartup`; tests opt in
   // explicitly because `createRealm` has no realm-registry row to read.
   fullIndexOnStartup?: true;
+  // Forwarded to the Realm constructor's `skipBootIndex` option: the realm
+  // mounts and serves without indexing, as the dev realm server's realms do on
+  // the realm-server test stack, which starts it with
+  // `REALM_SERVER_SKIP_BOOT_INDEX=true`.
+  skipBootIndex?: true;
   // if you are creating a realm  to test it directly without a server, you can
   // also specify `withWorker: true` to also include a worker with your realm
   withWorker?: true;
@@ -1392,6 +1395,9 @@ export async function createRealm({
   // instance to read its stats, or `ttlMs: 0` to keep coalescing while
   // disabling retention.
   cardDocumentCache?: CardDocumentCache;
+  // The other realms the realm can reach, for an explain on its policy card
+  // that asks about a target in one of them.
+  realmFor?: (url: URL) => Promise<Realm | undefined>;
 }): Promise<{ realm: Realm; adapter: RealmAdapter }> {
   await insertPermissions(dbAdapter, new URL(realmURL), permissions);
 
@@ -1471,9 +1477,11 @@ export async function createRealm({
       transpileCoordinator,
       mediaCacheAdapter,
       cardDocumentCache,
+      ...(realmFor ? { realmFor } : {}),
     },
     {
       ...(fullIndexOnStartup ? { fullIndexOnStartup: true as const } : {}),
+      ...(skipBootIndex ? { skipBootIndex: true as const } : {}),
       ...(screenshotSyncWaitMs !== undefined ? { screenshotSyncWaitMs } : {}),
       ...(linkShapePolicy ? { linkShapePolicy } : {}),
       ...(readIndexDrainBudgetMs !== undefined
@@ -1765,6 +1773,10 @@ export async function runTestRealmServerWithRealms({
       dbAdapter,
       enableFileWatcher,
       definitionLookup,
+      // Every realm this server holds, as the production server reaches the
+      // realms it serves.
+      realmFor: async (url) =>
+        createdRealms.find((candidate) => candidate.paths.inRealm(url)),
     });
     await realm.logInToMatrix();
     virtualNetwork.mount(realm.handle);
@@ -2172,15 +2184,11 @@ export function setupMatrixRoom(
 
   return {
     matrixClient,
+    // Every event the room received at or after `since`, however many that
+    // is. The comparison is inclusive so an event sent in the same millisecond
+    // the caller recorded its start time still counts.
     getMessagesSince: async function (since: number) {
-      let allMessages = await matrixClient.roomMessages(testAuthRoomId!);
-      // Allow same-ms clock values between the test process and matrix so we don't
-      // miss events that are emitted immediately after we record the start time.
-      let messagesAfterSentinel = allMessages.filter(
-        (m) => m.origin_server_ts >= since,
-      );
-
-      return messagesAfterSentinel;
+      return await matrixClient.roomMessagesSince(testAuthRoomId!, since);
     },
   };
 }

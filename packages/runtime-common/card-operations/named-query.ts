@@ -1,6 +1,11 @@
 import { isCodeRef } from '../card-document-shape.ts';
+import type { CodeRef } from '../code-ref.ts';
 import { ensureTrailingSlash } from '../paths.ts';
-import type { SearchEntryWireQuery } from '../search-entry.ts';
+import {
+  wireFilterGrantTypes,
+  type SearchEntryWireFilter,
+  type SearchEntryWireQuery,
+} from '../search-entry.ts';
 import {
   newOperationScope,
   resolveOperation,
@@ -8,7 +13,8 @@ import {
   type OperationCore,
 } from './dispatch.ts';
 import { lowerQueryOperation } from './query.ts';
-import { OperationFailure } from './types.ts';
+import { linkStrategyOf, OperationFailure } from './types.ts';
+import type { LinkStrategy } from '@cardstack/base/operations';
 
 // ============================================================================
 // A named query: a search request that names a declared query operation
@@ -42,6 +48,79 @@ export function isNamedQueryPayload(
   );
 }
 
+// The operation and the type a named search invokes, or nothing for an ad-hoc
+// one. A policy grant is looked up by these, since a query runs under the name
+// it was invoked with, on the type that declares it — and they are read off
+// the request rather than off what it resolves to, which is a filter and
+// carries neither. `resolveNamedQuery` validates the members and refuses a
+// request where they are not what they must be, so this only recognizes the
+// shape.
+export function namedQueryInvocation(
+  payload: unknown,
+): { operation: string; on: CodeRef } | undefined {
+  if (!isNamedQueryPayload(payload)) {
+    return undefined;
+  }
+  let { operation, on } = payload;
+  return typeof operation === 'string' && operation.length > 0 && isCodeRef(on)
+    ? { operation, on }
+    : undefined;
+}
+
+// What a search asks a realm's policy to grant: an operation, on the types
+// whose rules are consulted for it.
+export interface SearchInvocation {
+  // The name a grant must carry to contribute. A named query's own name, or
+  // the base name `query` for an ad-hoc search.
+  operation: string;
+  // The one type a named query is declared on, or each type an ad-hoc
+  // search's filter anchors to. Empty where the filter admits an entry of any
+  // type, since then there is no type whose rules to consult.
+  types: CodeRef[];
+}
+
+// The invocation a search request makes, read off the request before a named
+// query resolves.
+//
+// An ad-hoc search is a filter the caller wrote, and it is still an
+// invocation: of `query`, on the type it targets. Were it none, it would be
+// the hole in every named-query grant, since a caller granted a declared
+// search could write the same filter by hand and be served its rows. Granting
+// a named query grants that saved search, and not the freedom to enumerate
+// its type. No declaration may take the name, so the two never share a grant.
+//
+// The types are the filter's `item.on` anchors (see `wireFilterGrantTypes`):
+// every entry the filter matches adopts from at least one of them. That is
+// what makes judging the search by their rules sound. A match is always of a
+// type one of them names, so a rule consulted for that anchor is one whose
+// type the match descends from, as it would be were the gate judging the
+// match itself. And every anchor a match is known to adopt from is kept, so
+// two filters matching the same cards are judged alike however their branches
+// are ordered.
+//
+// A named request whose members are not what they must be is no invocation:
+// resolving it refuses it before anything consults a policy. An ad-hoc filter
+// that does not parse is refused by the parser, after this has read it, so an
+// anchor that is not a code ref is read as no anchor at all.
+export function searchInvocation(
+  payload: unknown,
+): SearchInvocation | undefined {
+  if (isNamedQueryPayload(payload)) {
+    let named = namedQueryInvocation(payload);
+    return named
+      ? { operation: named.operation, types: [named.on] }
+      : undefined;
+  }
+  let filter = isPlainRecord(payload) ? payload.filter : undefined;
+  let anchors = isPlainRecord(filter)
+    ? wireFilterGrantTypes(filter as SearchEntryWireFilter)
+    : undefined;
+  return {
+    operation: 'query',
+    types: anchors?.every((anchor) => isCodeRef(anchor)) ? anchors : [],
+  };
+}
+
 export interface NamedQueryContext {
   // The user the realm authenticated for this request, and the only value
   // `actor()` resolves to. Absent when the request authenticated nobody, which
@@ -60,8 +139,23 @@ export interface NamedQueryContext {
   duringRender?: boolean;
 }
 
-// The ad-hoc search request a named one resolves to, in the grammar the
-// search endpoints parse. Every refusal is an `OperationFailure` carrying the
+// What a named search request resolves to: the ad-hoc query it runs, and how
+// much of each result's link graph its results carry.
+export interface ResolvedNamedQuery {
+  // In the grammar the search endpoints parse.
+  query: SearchEntryWireQuery;
+  // The strategy the declaration names, `full` where it names none. It is the
+  // declaration's half of what a response carries; the endpoint serving it
+  // composes it with the request's half through `effectiveLinkStrategy`, so a
+  // declaration written to withhold links is never widened by a request, and
+  // it holds on every endpoint a named query is served from. It travels beside
+  // the query rather than in it because it shapes the answer rather than which
+  // rows match, and the search grammar has no member for it.
+  links: LinkStrategy;
+}
+
+// The ad-hoc search request a named one resolves to, and the link strategy its
+// results are served under. Every refusal is an `OperationFailure` carrying the
 // status it is answered with.
 //
 // Where the declaration names a member, the declaration's stands; where it
@@ -82,7 +176,7 @@ export async function resolveNamedQuery(
   core: OperationCore,
   payload: Record<string, unknown>,
   context: NamedQueryContext,
-): Promise<SearchEntryWireQuery> {
+): Promise<ResolvedNamedQuery> {
   let {
     operation,
     on,
@@ -130,17 +224,43 @@ export async function resolveNamedQuery(
   ) as SearchEntryWireQuery;
   let htmlQuery = htmlQueryBinding(callerFilter);
   return {
-    ...(callerMembers as SearchEntryWireQuery),
-    ...declared,
-    ...(htmlQuery === undefined
-      ? {}
-      : {
-          filter: {
-            ...declared.filter,
-            eq: { ...declared.filter?.eq, htmlQuery },
-          },
-        }),
-    realms,
+    query: {
+      ...(callerMembers as SearchEntryWireQuery),
+      ...declared,
+      ...(htmlQuery === undefined
+        ? {}
+        : {
+            filter: {
+              ...declared.filter,
+              eq: { ...declared.filter?.eq, htmlQuery },
+            },
+          }),
+      realms,
+    },
+    // Read the way the read executor reads a read's, so a value lowering would
+    // have refused to store serves as the narrowest strategy rather than as
+    // the widest.
+    links: linkStrategyOf(definition.links),
+  };
+}
+
+// A named search as the ad-hoc request that asks for its rendering and nothing
+// else: the fieldset and the `htmlQuery` binding, which are what an answer
+// with no rows carries of the request. For a request no realm it names can
+// answer a row to, so that it is answered with the document a search of those
+// realms matching nothing would give without its declaration being read.
+//
+// The request it returns carries no filter, so it may only be searched where
+// no realm is read by the caller or scoped by a policy: every realm must
+// answer it as one holding nothing for the caller does. Run against a realm
+// that serves rows, it would match every row that realm holds.
+export function namedQueryRendering(
+  payload: Record<string, unknown>,
+): Record<string, unknown> {
+  let htmlQuery = htmlQueryBinding(payload.filter);
+  return {
+    ...(payload.fields !== undefined ? { fields: payload.fields } : {}),
+    ...(htmlQuery !== undefined ? { filter: { eq: { htmlQuery } } } : {}),
   };
 }
 

@@ -246,9 +246,10 @@ export function createRoutes(args: CreateRoutesArgs) {
   );
   router.all(
     '/_federated-search',
-    multiRealmAuthorization(args),
+    multiRealmAuthorization(args, { unreadableRealms: 'carry' }),
     handleSearch({
       reconciler: args.reconciler,
+      realmsRootPath: args.realmsRootPath,
       searchCache,
       dbAdapter: args.dbAdapter,
       virtualNetwork: args.virtualNetwork,

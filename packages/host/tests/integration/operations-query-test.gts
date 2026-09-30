@@ -10,10 +10,15 @@ import { module, test } from 'qunit';
 import {
   CardSearchDefaultRealmContextName,
   GetCardContextName,
+  isCardInstance,
+  type CardResource,
+  type Saved,
   type getCard as GetCardType,
   type Realm,
   type SearchEntries,
+  type SearchEntryResults,
   type NamedSearchWireQuery,
+  SupportedMimeType,
 } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
@@ -30,6 +35,10 @@ import {
 } from '../helpers';
 import { setupBaseRealm } from '../helpers/base-realm';
 import { setupMockMatrix } from '../helpers/mock-matrix';
+import {
+  registerDefaultRoutes,
+  registerRealmServerRoute,
+} from '../helpers/realm-server-mock/routes';
 import { setupRenderingTest } from '../helpers/setup';
 
 import type { CardContext, CardDef } from '@cardstack/base/card-api';
@@ -111,6 +120,54 @@ const MEMO_MODULE = `
     @field body = contains(StringField);
   }
 `;
+
+// A saved search that withholds its rows' relationships, on a type whose own
+// `read` declares nothing and so carries its links whole.
+const STUDENT_MODULE = `
+  import { contains, field, CardDef } from "@cardstack/base/card-api";
+  import StringField from "@cardstack/base/string";
+
+  export class Student extends CardDef {
+    @field name = contains(StringField);
+  }
+`;
+
+const ROSTER_MODULE = `
+  import {
+    contains,
+    field,
+    linksToMany,
+    CardDef,
+  } from "@cardstack/base/card-api";
+  import StringField from "@cardstack/base/string";
+  import { operation } from "@cardstack/base/operations";
+  import { Student } from "./student";
+
+  export class Roster extends CardDef {
+    @field title = contains(StringField);
+    @field students = linksToMany(Student);
+
+    @operation static listNone = {
+      base: 'query',
+      query: { filter: { type: () => Roster } },
+      links: 'none',
+    };
+  }
+`;
+
+const ALGEBRA = `${testRealmURL}rosters/algebra`;
+const ADA = `${testRealmURL}students/ada`;
+const BEN = `${testRealmURL}students/ben`;
+
+function studentFile(name: string) {
+  return {
+    data: {
+      type: 'card',
+      attributes: { name },
+      meta: { adoptsFrom: { module: testRRI('student'), name: 'Student' } },
+    },
+  };
+}
 
 function reportRef() {
   return { module: testRRI('report'), name: 'Report' };
@@ -202,6 +259,21 @@ module('Integration | operations query', function (hooks) {
           status: 'open',
           postedBy: '@someone-else:localhost',
         }),
+        'student.gts': STUDENT_MODULE,
+        'roster.gts': ROSTER_MODULE,
+        'students/ada.json': studentFile('Ada'),
+        'students/ben.json': studentFile('Ben'),
+        'rosters/algebra.json': {
+          data: {
+            type: 'card',
+            attributes: { title: 'Algebra' },
+            relationships: {
+              'students.0': { links: { self: '../students/ada' } },
+              'students.1': { links: { self: '../students/ben' } },
+            },
+            meta: { adoptsFrom: { module: testRRI('roster'), name: 'Roster' } },
+          },
+        },
       },
     }));
     await setupIntegrationTestRealm({
@@ -448,6 +520,130 @@ module('Integration | operations query', function (hooks) {
       saved('myReports').query(),
       'outside a render the same search resolves against the signed-in user',
     );
+  });
+
+  module('a query declaring `none`', function () {
+    // Each row's card is served with its relationships withheld, which is
+    // silent about what the card links to rather than saying it links to
+    // nothing. The host keeps full search rows as live instances, so a row
+    // adopted as one would show every link field empty, in every view and
+    // editor, although the card's own `read` carries its links.
+    type RosterCard = CardDef & { students: CardDef[] };
+
+    async function listNone(): Promise<
+      NamedSearchWireQuery & { fields: { entry: string[] } }
+    > {
+      let { Roster } = await loader.import<{ Roster: typeof CardDef }>(
+        `${testRealmURL}roster`,
+      );
+      return {
+        ...((
+          operations(Roster as never) as any
+        ).listNone.query() as NamedSearchWireQuery),
+        fields: { entry: ['html', 'item'] },
+      };
+    }
+
+    // The card a served row carries, as the realm sent it.
+    function servedItem(
+      doc: SearchEntryResults,
+      id: string,
+    ): CardResource<Saved> | undefined {
+      return doc.included?.find(
+        (resource) => resource.type === 'card' && resource.id === id,
+      ) as CardResource<Saved> | undefined;
+    }
+
+    test('a row rendered through the search component leaves its card to load through its own read', async function (assert) {
+      let store = getService('store');
+      let query = await listNone();
+      let item = servedItem(
+        await store.searchEntries(query, [testRealmURL]),
+        ALGEBRA,
+      );
+      assert.strictEqual(
+        item?.relationships,
+        undefined,
+        'the row arrives with its card’s relationships withheld',
+      );
+      assert.true(
+        item?.meta?.relationshipsWithheld,
+        'and says they were withheld',
+      );
+      // The store rule itself, awaited: the search component's own inflate
+      // runs without anything waiting on it.
+      await store.inflateSearchEntryItem(item!);
+      assert.notOk(
+        isCardInstance(store.peek(ALGEBRA)),
+        'the store never deposits the row as the card’s instance',
+      );
+
+      await render(
+        <template>
+          <CardSearchContext as |context|>
+            <context.searchResultsComponent @query={{query}} />
+          </CardSearchContext>
+        </template>,
+      );
+      await waitUntil(() =>
+        Boolean(
+          document.querySelector(`[data-test-search-result="${ALGEBRA}"]`),
+        ),
+      );
+      await settled();
+
+      let roster = await store.get(ALGEBRA);
+      assert.true(
+        isCardInstance(roster),
+        'opened after its row rendered, the card loads',
+      );
+      assert.deepEqual(
+        (roster as RosterCard).students.map((student) => student.id),
+        [ADA, BEN],
+        'and carries the links its own read declares',
+      );
+    });
+
+    test('a row answered to the store’s search is loaded through its card’s own read', async function (assert) {
+      // The store's instance search takes an ad-hoc query, which declares no
+      // strategy of its own, so the rows a `none` query answers with are
+      // replayed to it as the realm served them.
+      let store = getService('store');
+      let served = await store.searchEntries(
+        { ...(await listNone()), fields: { entry: ['item'] } },
+        [testRealmURL],
+      );
+      assert.true(
+        servedItem(served, ALGEBRA)?.meta?.relationshipsWithheld,
+        'the replayed row is one the realm served with its relationships withheld',
+      );
+      registerRealmServerRoute({
+        path: '/_federated-search',
+        handler: async () =>
+          new Response(JSON.stringify(served), {
+            status: 200,
+            headers: { 'content-type': SupportedMimeType.CardJson },
+          }),
+      });
+      try {
+        let results = (await store.search(
+          { filter: { type: { module: testRRI('roster'), name: 'Roster' } } },
+          [testRealmURL],
+        )) as RosterCard[];
+        assert.deepEqual(
+          results.map((result) => result.id),
+          [ALGEBRA],
+          'the search answers with the card',
+        );
+        assert.deepEqual(
+          results[0].students.map((student) => student.id),
+          [ADA, BEN],
+          'and the instance it answers with carries the links its own read declares',
+        );
+      } finally {
+        registerDefaultRoutes();
+      }
+    });
   });
 
   test('a saved search is invoked on the class that declares it', async function (assert) {
