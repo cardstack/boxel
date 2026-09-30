@@ -1067,6 +1067,7 @@ module(basename(import.meta.filename), function () {
   module('/_screenshot-card persistence', function (hooks) {
     const REALM_URL = 'http://example.test/';
     const CARD_ID = `${REALM_URL}Person/fadhlan`;
+    const OWNER = '@owner:localhost';
     const PNG_BYTES = new TextEncoder().encode('stub-png-bytes');
     const PNG_BASE64 = Buffer.from(PNG_BYTES).toString('base64');
     const READY: ScreenshotPrerenderResponse = {
@@ -1094,7 +1095,9 @@ module(basename(import.meta.filename), function () {
         adapter = new FakeMediaCacheAdapter();
         // The ledger fast path is gated on realm read; `@stranger:localhost`
         // is deliberately left without permissions for the negative tests.
+        // A persisting capture renders as the realm's owner.
         await insertPermissions(dbAdapter, new URL(REALM_URL), {
+          [OWNER]: ['read', 'write', 'realm-owner'],
           '@someone:localhost': ['read'],
         });
       },
@@ -1212,6 +1215,12 @@ module(basename(import.meta.filename), function () {
         sourceGeneration: 1,
         lane: 'on-demand',
       });
+      assert.strictEqual(
+        (published[0]?.args as any)?.runAs,
+        OWNER,
+        'a capture served to every reader renders as the realm owner, not the requester',
+      );
+      assert.strictEqual((published[0]?.args as any)?.realmUsername, OWNER);
 
       let attrs = response.body.data.attributes;
       assert.strictEqual(attrs.status, 'ready');
@@ -1228,6 +1237,60 @@ module(basename(import.meta.filename), function () {
           base64: PNG_BASE64,
         },
       ]);
+    });
+
+    test('a capture answered only to its requester renders as the requester', async function (assert) {
+      await seedInstanceRow();
+      let { queue, published } = makePersistQueue('ready');
+
+      await post(persistApp(queue), {
+        realmURL: REALM_URL,
+        cardId: CARD_ID,
+        format: 'isolated',
+        captureSpec: { captures: [{ name: 'only' }] },
+      }).expect(201);
+
+      assert.strictEqual(
+        (published[0]?.args as any)?.persist,
+        null,
+        'a batch never persists',
+      );
+      assert.strictEqual(
+        (published[0]?.args as any)?.runAs,
+        '@someone:localhost',
+        'so it renders with the requester’s own permissions',
+      );
+      assert.strictEqual(
+        (published[0]?.args as any)?.realmUsername,
+        '@someone:localhost',
+      );
+    });
+
+    test('a realm whose permissions name no owner captures without persisting', async function (assert) {
+      await insertPermissions(dbAdapter, new URL(REALM_URL), { [OWNER]: [] });
+      await seedInstanceRow();
+      let { queue, published } = makePersistQueue('ready');
+
+      let response = await post(persistApp(queue), {
+        realmURL: REALM_URL,
+        cardId: CARD_ID,
+        format: 'isolated',
+      }).expect(201);
+
+      assert.strictEqual(
+        (published[0]?.args as any)?.persist,
+        null,
+        'with no owner to render as, nothing is persisted for other readers',
+      );
+      assert.strictEqual(
+        (published[0]?.args as any)?.runAs,
+        '@someone:localhost',
+        'and the capture renders as the requester it is answered to',
+      );
+      assert.false(
+        'captures' in response.body.data.attributes,
+        'no served URL is returned',
+      );
     });
 
     test('the POST surface emits a request telemetry record whose correlation id rides the job args', async function (assert) {

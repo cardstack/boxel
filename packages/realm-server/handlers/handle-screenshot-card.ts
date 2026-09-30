@@ -23,7 +23,9 @@ import {
   type ScreenshotPrerenderResponse,
   type ScreenshotRequestPerfEvent,
 } from '@cardstack/runtime-common';
-import RealmPermissionChecker from '@cardstack/runtime-common/realm-permission-checker';
+import RealmPermissionChecker, {
+  realmOwnerUserId,
+} from '@cardstack/runtime-common/realm-permission-checker';
 import {
   enqueueScreenshotCardJob,
   estimateScreenshotQueueWait,
@@ -76,9 +78,18 @@ interface CaptureResult {
  * is closed (the gate blocks new GET-triggered captures, never serving).
  * This endpoint skips that gate deliberately: it is an authenticated
  * surface with full captureSpec power under realm-read trust. Realm read is
- * enforced in two places: the ledger fast path (and the generation probe
- * feeding it) checks it here, since it answers before any job exists; the
- * render path relies on the worker task's permission check.
+ * enforced in two places: a capture that persists (and the ledger fast path
+ * and generation probe feeding it) checks it here, since it answers before
+ * any job exists and renders as someone other than the requester; a capture
+ * answered only to its requester relies on the worker task's permission
+ * check.
+ *
+ * A capture that persists is served to every reader of the card, so it
+ * renders as the realm's owner — the identity the GET `_screenshot/` route
+ * and the index render under — and its image shows what the owner's
+ * permissions reach in other realms, never what the requester's do. A
+ * capture that does not persist is the requester's alone and renders with
+ * their permissions.
  *
  * A request whose canonical identity already has a ledger entry answers
  * from the store with zero render work — which is also what lets a
@@ -94,8 +105,9 @@ interface CaptureResult {
  * its ledger identity — any singular spec on a capture format, custom
  * geometry and pdf output included — and null when nothing persists (a
  * batch, a `target` capture, a non-capture format such as fitted, a card
- * the index doesn't know, a server without a MediaCache store, or a caller
- * without realm read) — embed the `base64` in that case.
+ * the index doesn't know, a server without a MediaCache store, a caller
+ * without realm read, or a realm whose permissions name no owner) — embed
+ * the `base64` in that case.
  *
  * Request body (JSON:API):
  * ```json
@@ -162,7 +174,8 @@ interface CaptureResult {
  * ledger fast path, no MediaCache persist, and every `captures` entry's
  * `url` is null.
  *
- * The `runAs` user is derived from the authenticated JWT.
+ * The requester is derived from the authenticated JWT; the job's `runAs` is
+ * the realm owner for a capture that persists and the requester otherwise.
  */
 
 // The captureSpec bounds and strict parse live in `capture-spec.ts`
@@ -282,6 +295,12 @@ export default function handleScreenshotCard({
       // a store. Without either, the capture still runs; it just isn't
       // persisted and the response carries no served URL.
       let entryKey: MediaCacheEntryKey | undefined;
+      // Who the capture renders as. A persisted capture is served to every
+      // reader of the card, so it renders as the realm's owner — the identity
+      // the GET `_screenshot/` route and the index render under — and never
+      // with the requester's reach into other realms. A capture answered only
+      // to its requester renders as the requester.
+      let renderAs = userId;
       let generationLookupMs: number | undefined;
       let ledgerLookupMs: number | undefined;
       if (mediaCacheAdapter && spec) {
@@ -292,7 +311,8 @@ export default function handleScreenshotCard({
         // existence on a private realm). Read is checked the way the realm
         // itself checks it — exact rows plus the `*` and `users` grants. A
         // caller without read goes straight to the render path, whose
-        // permissions the worker enforces, and never persists.
+        // permissions the worker enforces, and never persists. Nor does a
+        // capture of a realm whose permissions name no owner to render as.
         let permissions = await fetchRealmPermissions(
           dbAdapter,
           new URL(normalizedRealmURL),
@@ -301,7 +321,8 @@ export default function handleScreenshotCard({
           permissions,
           matrixClient,
         ).can(userId, 'read');
-        if (mayRead) {
+        let owner = realmOwnerUserId(permissions);
+        if (mayRead && owner) {
           let generationLookupStart = Date.now();
           let generation = await findLiveInstanceGeneration(dbAdapter, {
             realmURL: normalizedRealmURL,
@@ -315,6 +336,7 @@ export default function handleScreenshotCard({
               captureSpecHash: await captureSpecHash(spec),
               sourceGeneration: generation,
             };
+            renderAs = owner;
           }
         }
       }
@@ -384,8 +406,8 @@ export default function handleScreenshotCard({
       let job = await enqueueScreenshotCardJob(
         {
           realmURL: normalizedRealmURL,
-          realmUsername: userId,
-          runAs: userId,
+          realmUsername: renderAs,
+          runAs: renderAs,
           cardId: normalizedCardId,
           format,
           captureSpec,
@@ -476,13 +498,14 @@ export default function handleScreenshotCard({
       ) {
         // Capture-only response — reached when nothing persists: a batch, a
         // non-capture format such as fitted, an unindexed instance, a
-        // store-less server, or a caller without realm read. The engine's
-        // byte-only entries have no durable served URL. Normalize them into the
-        // one captures[] shape callers build on — url: null marks "no durable
-        // reference, embed the base64" — so captures[i].url is never a
-        // silently-undefined read. Honors the base64 opt-out here too. A paged
-        // capture carries its page count instead of the pixel extent it does
-        // not have — the same count the engine bounds the document against.
+        // store-less server, a caller without realm read, or a realm with no
+        // owner to render as. The engine's byte-only entries have no durable
+        // served URL. Normalize them into the one captures[] shape callers
+        // build on — url: null marks "no durable reference, embed the
+        // base64" — so captures[i].url is never a silently-undefined read.
+        // Honors the base64 opt-out here too. A paged capture carries its
+        // page count instead of the pixel extent it does not have — the same
+        // count the engine bounds the document against.
         attributes.captures = result.captures.map(
           (c): CaptureResult => ({
             name: c.name,

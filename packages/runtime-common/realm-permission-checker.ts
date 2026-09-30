@@ -34,6 +34,26 @@ export async function effectiveRealmPermissions(
   );
 }
 
+/**
+ * The matrix user a realm's shared artifacts are made as: the one its
+ * permissions name `realm-owner`. When both a person and the realm's own
+ * `@realm/` bot hold the grant, the person is the owner. Undefined when no
+ * matrix user holds it — a `*` or bare-username owner row names no one a
+ * session can be minted for.
+ */
+export function realmOwnerUserId(
+  realmPermissions: RealmPermissions,
+): string | undefined {
+  let userIds = Object.entries(realmPermissions)
+    .filter(([_, realmActions]) => realmActions.includes('realm-owner'))
+    .map(([userId]) => userId);
+  if (userIds.length > 1) {
+    userIds = userIds.filter((userId) => !userId.startsWith('@realm/'));
+  }
+  let [userId] = userIds;
+  return userId?.startsWith('@') ? userId : undefined;
+}
+
 export default class RealmPermissionChecker {
   private realmPermissions: RealmPermissions = {};
   private matrixClient: MatrixClient;

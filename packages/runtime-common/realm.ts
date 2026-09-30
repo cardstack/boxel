@@ -425,7 +425,9 @@ import {
 } from './matrix-client.ts';
 import { PACKAGES_FAKE_ORIGIN } from './package-shim-handler.ts';
 
-import RealmPermissionChecker from './realm-permission-checker.ts';
+import RealmPermissionChecker, {
+  realmOwnerUserId,
+} from './realm-permission-checker.ts';
 import type {
   ResponseWithNodeStream,
   VirtualNetwork,
@@ -7055,21 +7057,12 @@ export class Realm {
       new URL(this.url),
     );
 
-    let userIds = Object.entries(permissions)
-      .filter(([_, realmActions]) => realmActions.includes('realm-owner'))
-      .map(([userId]) => userId);
-    if (userIds.length > 1) {
-      // we want to use the realm's human owner for the realm and not the bot
-      userIds = userIds.filter((userId) => !userId.startsWith('@realm/'));
-    }
-
-    let [userId] = userIds;
-    // real matrix user ID's always start with an '@', if it doesn't that
-    // means we are testing
-    if (userId?.startsWith('@')) {
+    let userId = realmOwnerUserId(permissions);
+    if (userId) {
       return userId;
     }
-    // hard coded test URLs
+    // An owner row that names no matrix user means we are testing: hard coded
+    // test URLs
 
     // TODO::`( this should be removed.
     if ((globalThis as any).__environment === 'test') {
