@@ -80,8 +80,7 @@ when authoring a destructive change.
   pending row, so a column added to a production table must be added to its
   pending twin in the same migration. Changing only one breaks the commit
   with `column "..." does not exist`. The pending tables carry two extra columns
-  (`job_id`, `staging_id`) that production does not. No pass writes the shared
-  `boxel_index_working` / `prerendered_html_working` tables.
+  (`job_id`, `staging_id`) that production does not.
 - **Moving an already-applied migration between directories re-runs it** under
   the new tracking table. Only safe if its `up()` is idempotent (`IF EXISTS` /
   `ifNotExists`). Moving a not-yet-applied file is always clean.
