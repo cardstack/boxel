@@ -1131,7 +1131,9 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         assert.deepEqual(
           policy?.rules[0].grants.map((grant) => ({
             operation: grant.operation,
-            excluded: grant.excludedTypes?.map(({ name }) => name),
+            excluded: grant.excludedTypes?.map((type) =>
+              'name' in type ? type.name : type,
+            ),
           })),
           [
             { operation: 'listClassrooms', excluded: ['AssignedClassroom'] },

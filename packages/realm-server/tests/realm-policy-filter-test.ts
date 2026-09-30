@@ -6,6 +6,7 @@ import {
   noteRealmIndexMoved,
   realmPolicyRef,
   rri,
+  type CodeRef,
   type CompiledOperationGrant,
   type CompiledRealmPolicy,
   type Definition,
@@ -285,6 +286,13 @@ async function compile(grants: Grant[]): Promise<CompiledRealmPolicy> {
     throw new Error('the realm has no policy');
   }
   return policy;
+}
+
+// The names of the types a grant leaves out, sorted.
+function typeNames(types: CodeRef[] | undefined): string[] | undefined {
+  return types
+    ?.map((type) => ('name' in type ? type.name : JSON.stringify(type)))
+    .sort();
 }
 
 function grantsOf(policy: CompiledRealmPolicy): CompiledOperationGrant[] {
@@ -750,7 +758,7 @@ module(basename(import.meta.filename), function () {
       );
       let [grant] = grantsOf(policy);
       assert.deepEqual(
-        grant.excludedTypes?.map(({ name }) => name).sort(),
+        typeNames(grant.excludedTypes),
         ways.map(([name]) => name).sort(),
       );
     });
@@ -819,7 +827,7 @@ module(basename(import.meta.filename), function () {
         'and a descendant that stores what `Classroom` computes is read alike too',
       );
       assert.deepEqual(
-        own.excludedTypes?.map(({ name }) => name).sort(),
+        typeNames(own.excludedTypes),
         [COMPUTED.name, 'RetypedClassroom'],
         'while the same predicate unannotated leaves out both',
       );
