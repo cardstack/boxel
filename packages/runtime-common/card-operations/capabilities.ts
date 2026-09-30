@@ -15,7 +15,7 @@ import {
   type OperationScope,
   type ScopeCaller,
 } from './dispatch.ts';
-import { pendingWriteHolds } from './gate.ts';
+import { storedWriteRefusal } from './gate.ts';
 import {
   OperationFailure,
   isOperationFailure,
@@ -192,16 +192,17 @@ async function decide(
     // write lock decides it against the card as the lock holds it, and a
     // check holds no lock, so it asks the same question of the card as it is
     // stored now: the answer the lock would give if nothing changes before the
-    // call takes it.
+    // call takes it. A refusal is reported in the lock's own words, so a
+    // reader is told a predicate that threw as the fault the invocation
+    // answers, not as a refusal.
     if (target.kind === 'instance') {
-      return (await pendingWriteHolds(core, {
+      let refusal = await storedWriteRefusal(core, {
         target,
         name: check.operation,
         decision,
         scope,
-      }))
-        ? admitted
-        : refused('operation-not-permitted');
+      });
+      return refusal ? refused(refusal.error.code) : admitted;
     }
     // A create against a type is judged by the card it would mint, which does
     // not exist while the control that would mint it is being rendered. So

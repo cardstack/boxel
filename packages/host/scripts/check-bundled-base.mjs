@@ -24,6 +24,11 @@ const SKIP_DIRS = new Set(['node_modules', 'scripts', 'types', 'tests']);
 // card in any realm may import any base module, and nothing here sees those
 // realms. Widen it deliberately — an entry added to quiet this check asserts
 // that card code names the module, and is wrong if it does not.
+//
+// It holds only for a loader some card has already made import the module, so
+// it is the weakest of the exemptions and the last one to reach for. A
+// superclass does not need it at all: that case is decided by what the
+// subclass is, not by who imports the parent. See `isFieldClass`.
 const NAMED_BY_CARD_CODE = new Set(['card-api', 'skill']);
 
 // Read source with comments blanked, so prose that looks like a specifier is
@@ -164,10 +169,140 @@ const RUNTIME_IMPORT =
 const FIELD_USE =
   /\b(?:linksTo|linksToMany)\s*\(\s*(?:\(\)\s*=>\s*)?([A-Za-z_$][\w$]*)/g;
 
+// `identifyCard(Foo)` asks for a class's code ref by name, which is the same
+// question a link's type asks and has the same answer: the module the loader
+// was asked for. A bundled module calling it on a class another bundled module
+// declares gets undefined, since the import between them never reaches the
+// loader. Reading a class's own identity — `identifyCard(this.card)`,
+// `identifyCard(model.constructor)` — asks about a value, not an import, so
+// only a bare imported name counts here.
+const IDENTIFY_USE = /\bidentifyCard\s*\(\s*([A-Za-z_$][\w$]*)\s*[,)]/g;
+
+// `class X extends Y`. An adoption-chain walk asks each level of the prototype
+// chain for its code ref and stops at the first it cannot name, so a class is
+// only as reachable as its least-named ancestor. Serving the subclass does not
+// help: the loader is asked for the module a value adopts from, and that
+// module's own import of its superclass is resolved inside the chunk. A
+// fetched module never has this problem, because evaluating it loads what it
+// extends first — which is exactly what bundling removes.
+const EXTENDS_USE =
+  /\bclass\s+([A-Za-z_$][\w$]*)\s+extends\s+([A-Za-z_$][\w$]*)/g;
+
+// Which base module each imported name comes from, keyed by the local name and
+// carrying the name the declaring module exports it under — `import { X as Y }`
+// is looked up in the declarer as X, not Y.
+function importOrigins(code, file) {
+  let origin = new Map();
+  for (let match of code.matchAll(IMPORT_STATEMENT)) {
+    let target = baseTargetOf(match[2], file);
+    if (!target) {
+      continue;
+    }
+    let named = match[1].match(/\{([\s\S]*?)\}/);
+    if (named) {
+      for (let piece of named[1].split(',')) {
+        let local = piece.trim();
+        if (!local || local.startsWith('type ')) {
+          continue;
+        }
+        let [exported, alias] = local.includes(' as ')
+          ? local.split(' as ').map((part) => part.trim())
+          : [local, local];
+        origin.set(alias, { module: target, name: exported });
+      }
+    }
+    let defaultImport = match[1]
+      .replace(/\{[\s\S]*?\}/, '')
+      .replace(/^\s*,|,\s*$/g, '')
+      .trim();
+    for (let piece of defaultImport.split(',')) {
+      let local = piece.trim();
+      if (/^[A-Za-z_$][\w$]*$/.test(local)) {
+        // A default import is exposed under whatever name the importer chose;
+        // the declaring module's own name for it is `default`.
+        origin.set(local, { module: target, name: 'default' });
+      }
+    }
+  }
+  return origin;
+}
+
+// Every base module's classes as `module#class -> what it extends`. Built over
+// all of base, not only the table: a chain can pass through a module that is
+// not bundled.
+function classIndex() {
+  let index = new Map();
+  let defaultAliases = new Map();
+  for (let name of baseModules()) {
+    let file = fileFor(name);
+    if (!file) {
+      continue;
+    }
+    let code = withoutComments(readFileSync(file, 'utf8'));
+    let origin = importOrigins(code, file);
+    let defaultExport = code.match(
+      /\bexport\s+default\s+(?:abstract\s+)?class\s+([A-Za-z_$][\w$]*)/,
+    );
+    if (defaultExport) {
+      defaultAliases.set(`${name}#default`, `${name}#${defaultExport[1]}`);
+    }
+    for (let match of code.matchAll(EXTENDS_USE)) {
+      let from = origin.get(match[2]);
+      index.set(`${name}#${match[1]}`, {
+        parent: from ? from.name : match[2],
+        module: from ? from.module : name,
+      });
+    }
+  }
+  for (let [alias, real] of defaultAliases) {
+    let entry = index.get(real);
+    if (entry) {
+      index.set(alias, entry);
+    }
+  }
+  return index;
+}
+
+// Whether a class is a FieldDef. Plenty of things walk a field's ancestry —
+// code mode does, through `CardTypeService.toType` and
+// `CodeSemanticsService` — but those go through `getAncestor`, which registers
+// an `ancestorOf` local identity as it climbs, so the level above a bundled
+// field answers with a ref relative to it rather than with undefined.
+//
+// The walks that truncate are the ones that climb with a raw prototype hop and
+// stop at the first level `identifyCard` cannot name: `routes/render/meta.ts`,
+// the file-def extractor, and the definition indexing in `routes/module.ts`.
+// All three start from a card or a file def. So only a card or file def has to
+// answer for its chain, and a field's unnamed ancestor is never reached by
+// anything that would truncate on it.
+//
+// An unresolvable chain answers false, so the rule fires rather than goes
+// quiet on something it could not read.
+function isFieldClass(index, moduleName, className) {
+  let key = `${moduleName}#${className}`;
+  let seen = new Set();
+  while (!seen.has(key)) {
+    seen.add(key);
+    let entry = index.get(key);
+    if (!entry) {
+      return false;
+    }
+    if (entry.parent === 'FieldDef') {
+      return true;
+    }
+    if (entry.parent === 'CardDef' || entry.parent === 'FileDef') {
+      return false;
+    }
+    key = `${entry.module}#${entry.parent}`;
+  }
+  return false;
+}
+
 function main() {
   let { table, exceptions } = readTable();
   let closureViolations = [];
   let identityHazards = [];
+  let classes = classIndex();
 
   for (let name of table) {
     let file = fileFor(name);
@@ -185,39 +320,18 @@ function main() {
       closureViolations.push(`${name} imports ${target}`);
     }
 
-    let origin = new Map();
-    for (let match of code.matchAll(IMPORT_STATEMENT)) {
-      let target = baseTargetOf(match[2], file);
-      if (!target) {
-        continue;
-      }
-      let named = match[1].match(/\{([\s\S]*?)\}/);
-      if (named) {
-        for (let piece of named[1].split(',')) {
-          let local = piece.trim();
-          if (!local || local.startsWith('type ')) {
-            continue;
-          }
-          origin.set(
-            local.includes(' as ') ? local.split(' as ')[1].trim() : local,
-            target,
-          );
-        }
-      }
-      let defaultImport = match[1]
-        .replace(/\{[\s\S]*?\}/, '')
-        .replace(/^\s*,|,\s*$/g, '')
-        .trim();
-      for (let piece of defaultImport.split(',')) {
-        let local = piece.trim();
-        if (/^[A-Za-z_$][\w$]*$/.test(local)) {
-          origin.set(local, target);
-        }
-      }
-    }
+    let origin = importOrigins(code, file);
 
-    for (let match of code.matchAll(FIELD_USE)) {
-      let declaredIn = origin.get(match[1]);
+    let uses = [
+      ...[...code.matchAll(FIELD_USE)].map((m) => ({ referenced: m[1] })),
+      ...[...code.matchAll(IDENTIFY_USE)].map((m) => ({ referenced: m[1] })),
+      ...[...code.matchAll(EXTENDS_USE)].map((m) => ({
+        referenced: m[2],
+        subclass: m[1],
+      })),
+    ];
+    for (let use of uses) {
+      let declaredIn = origin.get(use.referenced)?.module;
       if (
         !declaredIn ||
         declaredIn === name ||
@@ -226,7 +340,12 @@ function main() {
       ) {
         continue;
       }
-      identityHazards.push(`${name} links to ${match[1]} from ${declaredIn}`);
+      if (use.subclass && isFieldClass(classes, name, use.subclass)) {
+        continue;
+      }
+      identityHazards.push(
+        `${name} names ${use.referenced} from ${declaredIn}`,
+      );
     }
   }
 
@@ -236,7 +355,7 @@ function main() {
   if (closure.length === 0 && identity.length === 0) {
     console.log(
       `ok: ${table.size} bundled base modules are closed under imports, ` +
-        `and link to no class the loader is never asked for`,
+        `and name no class the loader is never asked for`,
     );
     return;
   }
@@ -257,15 +376,17 @@ function main() {
 
   if (identity.length > 0) {
     console.error(
-      `\n${identity.length} bundled module(s) link to a class another bundled ` +
+      `\n${identity.length} bundled module(s) name a class another bundled ` +
         `module declares.\n` +
         `A class is named only when the loader is asked for the module ` +
         `declaring it, and one bundled module asking for another is resolved ` +
-        `inside the chunk — so a code ref for the link's type names the field ` +
-        `it is held as, and a chooser that filters on it asks for the wrong ` +
-        `type.\n` +
-        `Leave the holder and the declarer both out of the table, or — if card ` +
-        `code names the declarer by identifier — add it to NAMED_BY_CARD_CODE ` +
+        `inside the chunk. A link's type, an identifyCard call and a ` +
+        `superclass all read that name as data — a chooser filters on it, and ` +
+        `an adoption-chain walk stops at the first level it cannot name, ` +
+        `truncating the types a file or card is indexed under.\n` +
+        `Leave the holder out of the table — a fetched holder imports the ` +
+        `declarer through the loader, which is what names it — or, if card ` +
+        `code names the declarer by identifier, add it to NAMED_BY_CARD_CODE ` +
         `in this script.\n`,
     );
     for (let line of identity) {
