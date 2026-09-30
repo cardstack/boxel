@@ -6290,6 +6290,7 @@ export class Realm {
         checks,
         {
           caller: scopeCallerFor(actor),
+          searchPrincipal: this.#searchPrincipal(request, requestContext),
           ...lanes,
         },
       );
@@ -6298,8 +6299,10 @@ export class Realm {
       // with the answers themselves where it admits them to none, as it does
       // while active. A pair answered `true` on a predicate the check cannot
       // run, a create against a type, is not one it admits: the predicate may
-      // never hold for this caller. A check runs nothing, so what the gate
-      // decided about its pairs is all there is to decide it by.
+      // never hold for this caller. Nor is a query answered `true`: a search
+      // meets the seal only where it would return a row, and the check runs
+      // no search. A check runs nothing, so what it decided about its pairs
+      // is all there is to decide it by.
       let seal = requestContext.archivedSeal;
       if (seal && admitsAny) {
         throw seal;
@@ -6348,7 +6351,7 @@ export class Realm {
   async #capabilityLanes(
     request: Request,
     requestContext: RequestContext,
-  ): Promise<Omit<CapabilityCaller, 'caller'>> {
+  ): Promise<Omit<CapabilityCaller, 'caller' | 'searchPrincipal'>> {
     if (requestContext.coarseAllowed === undefined) {
       // The realm never judged this request, which is the realm's own internal
       // dispatch. Nothing was declined, exactly as `#coarseDeclined` reads it.

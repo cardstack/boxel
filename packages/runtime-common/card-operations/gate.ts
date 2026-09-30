@@ -175,8 +175,8 @@ export type GateSubject =
 // What the gate reads of an invocation's scope: who the caller is, what the
 // realm ACL declined, and the index rows a card's chain comes from. A create's
 // proposed document is not among them, because it names the type the caller
-// claims. A scope an explain built also carries the trace the gate records
-// into.
+// claims. A scope an explain or a capability check built also carries the
+// trace the gate records into.
 export type GateScope = Pick<
   OperationScope,
   'caller' | 'coarseDeclined' | 'peekInstance' | 'trace'
@@ -436,10 +436,17 @@ export async function gateOperation(
     return GATE_REFUSED;
   }
   // A query is planned and run on the search engine rather than against one
-  // target, so nothing here can grant one. An explain is granted nowhere: what
-  // it answers is what a refusal withholds, so it is refused here even where
-  // its declaration left the flag off.
-  if (base === 'query' || base === 'explain') {
+  // target, so nothing here can grant one. Its grants are judged by the search
+  // that runs it, which composes their filters into the query
+  // (`policyQueryScope`).
+  if (base === 'query') {
+    trace?.refused('query-lane');
+    return GATE_REFUSED;
+  }
+  // An explain is granted nowhere: what it answers is what a refusal
+  // withholds, so it is refused here even where its declaration left the flag
+  // off.
+  if (base === 'explain') {
     trace?.refused('non-grantable');
     return GATE_REFUSED;
   }

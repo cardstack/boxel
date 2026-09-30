@@ -96,6 +96,17 @@ const CLASSROOM_MODULE = `
       params: { note: StringField },
       fill: { note: params('note'), author: actor() },
     };
+
+    @operation static listMine = {
+      base: 'query',
+      query: { filter: { type: () => Classroom } },
+    };
+
+    @operation static listAudited = {
+      base: 'query',
+      nonGrantable: true,
+      query: { filter: { type: () => Classroom } },
+    };
   }
 `;
 
@@ -124,8 +135,8 @@ type Grant = { operation: string; where?: unknown };
 type Rule = { targetType: { module: string; name: string }; grants: Grant[] };
 
 // Two rules govern `Classroom`, so a read is admitted by either one's grant.
-// `rename` and `appendActivity` are granted outright, and a `delete` rests on
-// the same predicate a read does. `Bulletin` takes its reads and updates
+// `rename` and `appendActivity` are granted outright, and a `delete` and the
+// `listMine` query rest on the same predicate a read does. `Bulletin` takes its reads and updates
 // outright. A `Syllabus` read rests on a predicate that throws for any title
 // that is not a number, or on one annotated as reading a snapshot tier, which
 // the gate never evaluates.
@@ -137,6 +148,7 @@ const EDUCATION_RULES: Rule[] = [
       { operation: 'rename' },
       { operation: 'appendActivity' },
       { operation: 'delete', where: TEACHES },
+      { operation: 'listMine', where: TEACHES },
     ],
   },
   { targetType: CLASSROOM, grants: [{ operation: 'read', where: LEADS }] },
@@ -637,6 +649,43 @@ module(basename(import.meta.filename), function (hooks) {
         status: 401,
         code: 'actor-required',
       });
+    });
+
+    test("a query is left to the search it is named in, unless it is kept out of every policy's reach", async function (assert) {
+      let granted = await explain(TEACHER, ROOM_204, 'listMine');
+      assert.deepEqual(
+        {
+          decision: granted.decision,
+          reason: granted.reason,
+          refusal: granted.refusal,
+          rules: granted.rules,
+        },
+        {
+          decision: 'denied',
+          reason: 'query-lane',
+          refusal: { status: 404, code: 'target-not-found' },
+          rules: [],
+        },
+        'a query the teacher holds a grant on is not called non-grantable: invoking it on the card is refused as it is, and no rule is judged here',
+      );
+      let adHoc = await explain(TEACHER, ROOM_204, 'query');
+      assert.strictEqual(
+        adHoc.reason,
+        'query-lane',
+        'and so is the ad-hoc query, which a search runs under the base name',
+      );
+      let audited = await explain(TEACHER, ROOM_204, 'listAudited');
+      assert.strictEqual(
+        audited.reason,
+        'non-grantable',
+        'a query declared non-grantable is one no grant reaches, on the search engine as anywhere',
+      );
+      let reader = await explain(READER, ROOM_204, 'listMine');
+      assert.deepEqual(
+        { decision: reader.decision, reason: reader.reason },
+        { decision: 'allowed', reason: 'acl' },
+        "a reader runs the query unscoped, on the realm's own permissions",
+      );
     });
   });
 

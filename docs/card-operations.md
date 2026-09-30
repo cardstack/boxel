@@ -590,7 +590,11 @@ to ask for (a prerender, a freestyle), so guard on it.
 The target is a saved card, or a card class for a "New" button:
 `canInvoke('create', Classroom, { realm })` asks whether this session may create
 a `Classroom`, in `realm` or, when you leave it out, in the realm a class-scoped
-create lands in when it names none.
+create lands in when it names none. A [saved search](#saved-searches) takes its
+class too, since a search names a query with the type that declares it:
+`canInvoke('myPatients', PatientRecord, { realm })` asks whether this session
+may run it over `realm`'s cards. Name the realm, since the realm a create would
+land in is seldom the one the search reads.
 
 An answer is refreshed when the realm reindexes the card it is about, and every
 answer in a realm is refreshed when the realm's own config changes. The realm's
@@ -607,8 +611,9 @@ succeed. Hide a control on `false`; never skip or trust the call because of a
 
 Under it is `POST {realm}/_capabilities`, which takes up to 100
 `{ target, operation }` pairs and answers each one. A target is a card's URL, or
-a type's `{ module, name }` for a create. Each answer comes from the realm's own
-permission decision and goes no further, so asking changes nothing in the realm:
+a type's `{ module, name }` for a create or a query. Each answer comes from the
+realm's own permission decision and goes no further, so asking changes nothing
+in the realm:
 
 - A grant whose predicate reads a stored card is judged against the card as it
   is stored now. When the operation is invoked, the realm judges the same card
@@ -625,6 +630,18 @@ permission decision and goes no further, so asking changes nothing in the realm:
   caller who is not signed in, or a session that may only read.
 - A caller who can read the realm also gets a `reason` on a refusal: the error
   code the invocation itself would return.
+- A query is answered as the search it is named in authorizes it. A caller who
+  can read the realm runs every query unscoped, so they get `true`. Anyone else
+  gets `true` when the realm's policy holds a grant on that query, for the
+  query's type, whose predicate compiles to a search filter, and `false`
+  otherwise. That `true` says a grant applies to the caller, not that any row
+  will match: a query grant narrows which rows the search returns rather than
+  admitting a card. It tells a caller who cannot read the realm only what a
+  create's `true` does, that the policy grants this operation on this type,
+  and nothing about which cards exist.
+- A query asked about a card rather than its type gets `false`, with the reason
+  `wrong-entry-point` for a caller who can read the realm, because a query is
+  not invoked on a card.
 
 ## Saved searches
 
