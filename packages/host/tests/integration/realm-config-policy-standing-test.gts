@@ -1,19 +1,24 @@
 import {
+  click,
+  fillIn,
   rerender,
   waitFor,
   type RenderingTestContext,
 } from '@ember/test-helpers';
+import GlimmerComponent from '@glimmer/component';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import {
+  baseRealm,
   rri,
   type LooseSingleCardDocument,
   type Realm,
 } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
+import OperatorMode from '@cardstack/host/components/operator-mode/container';
 import type StoreService from '@cardstack/host/services/store';
 
 import {
@@ -22,20 +27,24 @@ import {
   setupCardLogs,
   setupLocalIndexing,
   setupIntegrationTestRealm,
+  setupOperatorModeStateCleanup,
 } from '../helpers';
 import { setupBaseRealm } from '../helpers/base-realm';
 import { setupCatalogTestSubset } from '../helpers/catalog-test-subset';
 import { setupMockMatrix } from '../helpers/mock-matrix';
-import { renderCard } from '../helpers/render-component';
+import { renderComponent } from '../helpers/render-component';
 import { setupRenderingTest } from '../helpers/setup';
 
 import type { CardDef } from '@cardstack/base/card-api';
 
+const CONFIG = `${testRealmURL}realm`;
 const POLICY = `${testRealmURL}policies/education`;
 const MISSING = `${testRealmURL}policies/no-such-card`;
 const NOTE = `${testRealmURL}notes/n1`;
 
 const CARD_DEF = { module: rri('@cardstack/base/card-api'), name: 'CardDef' };
+
+const noop = () => {};
 
 // Anyone may read every card in the realm, and every grant compiles.
 const policy: LooseSingleCardDocument = {
@@ -62,10 +71,14 @@ const note: LooseSingleCardDocument = {
   },
 };
 
-// The realm's config card shows whether the policy its pointer names is in
-// force, beside the pointer, including the problems with the pointer itself.
+type RealmConfig = CardDef & { policy?: string };
+
+// The realm's config card shows the policy card its pointer names, and
+// whether that policy is in force, beside the pointer, including the problems
+// with the pointer itself.
 module('Integration | realm config policy standing', function (hooks) {
   setupRenderingTest(hooks);
+  setupOperatorModeStateCleanup(hooks);
   setupBaseRealm(hooks);
   setupCatalogTestSubset(hooks);
   setupLocalIndexing(hooks);
@@ -73,7 +86,7 @@ module('Integration | realm config policy standing', function (hooks) {
   let loader: Loader;
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
-    activeRealms: [testRealmURL],
+    activeRealms: [baseRealm.url, testRealmURL],
     autostart: true,
   });
 
@@ -86,13 +99,16 @@ module('Integration | realm config policy standing', function (hooks) {
     async () => await loader.import('@cardstack/base/card-api'),
   );
 
-  // The in-browser realm serves the test's requests without vouching for a
-  // session, so the card's validate is asked by nobody, and nobody is told a
-  // policy's standing only in a realm anyone may read.
+  // Rendered in operator mode, which is where a realm owner reads and edits
+  // the config card: it provides the session's permissions, its capability
+  // checks, and the stack a clicked card opens in. The in-browser realm
+  // serves the test's requests without vouching for a session, so the card's
+  // validate is asked by nobody, and nobody is told a policy's standing only
+  // in a realm anyone may read.
   async function renderConfig(
     pointer: string | undefined,
     format: 'isolated' | 'edit' = 'isolated',
-  ): Promise<{ realm: Realm; config: CardDef & { policy?: string } }> {
+  ): Promise<{ realm: Realm; config: RealmConfig }> {
     let { realm } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       permissions: {
@@ -110,19 +126,22 @@ module('Integration | realm config policy standing', function (hooks) {
     });
     await getService('realm').login(testRealmURL);
     // Looking the service up arms the transport the card's own
-    // `operations()` call sends its validate through, and registering the
-    // message service, as operator mode does, delivers the realm's index
-    // events to the card.
+    // `operations()` call sends its validate through.
     getService('operations');
-    getService('message-service').register();
-    let store = getService('store') as StoreService;
-    let config = (await store.get(`${testRealmURL}realm`)) as CardDef & {
-      policy?: string;
-    };
-    await renderCard(loader, config, format);
+    getService('operator-mode-state-service').restore({
+      stacks: [[{ id: CONFIG, format }]],
+    });
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+    await waitFor(`[data-test-stack-card="${CONFIG}"]`);
     await waitFor('[data-test-realm-policy-standing="answered"]', {
       timeout: 10_000,
     });
+    let store = getService('store') as StoreService;
+    let config = (await store.get(CONFIG)) as RealmConfig;
     return { realm, config };
   }
 
@@ -132,7 +151,28 @@ module('Integration | realm config policy standing', function (hooks) {
     );
   }
 
-  test('a pointer to a card the index does not hold shows policy-card-missing', async function (assert) {
+  test('the policy card the pointer names renders in its fitted view, and opens in a stack of its own', async function (assert) {
+    await renderConfig(POLICY);
+    await waitFor('[data-test-realm-config-policy-card="shown"]');
+    assert
+      .dom('[data-test-realm-config-policy-card-fitted]')
+      .containsText('Education', "the policy card's own fitted view renders");
+    assert
+      .dom('[data-test-realm-config-policy-pointer]')
+      .hasText(POLICY, 'with the pointer beneath it');
+    assert
+      .dom('[data-test-realm-policy-status="in-force"]')
+      .hasText('In force.');
+    assert.deepEqual(issuesShown(), [], 'and no issue is listed');
+
+    await click('[data-test-realm-config-policy-card-fitted]');
+    await waitFor('[data-test-stack-card-index="1"]');
+    assert
+      .dom(`[data-test-stack-card-index="1"][data-test-stack-card="${POLICY}"]`)
+      .exists('clicking the card opens the policy in a new stack item');
+  });
+
+  test('a pointer to a card the index does not hold shows policy-card-missing, and no card', async function (assert) {
     await renderConfig(MISSING);
     assert
       .dom('[data-test-realm-config-policy-pointer]')
@@ -144,14 +184,29 @@ module('Integration | realm config policy standing', function (hooks) {
     assert
       .dom('[data-test-realm-policy-issue="policy-card-missing"]')
       .includesText(MISSING, 'the issue names the card the pointer names');
+    await waitFor('[data-test-realm-config-policy-card]');
+    assert
+      .dom('[data-test-realm-config-policy-card]')
+      .hasAttribute(
+        'data-test-realm-config-policy-card',
+        'missing',
+        'a reader of the realm is told there is no card at the URL',
+      );
+    assert
+      .dom('[data-test-realm-config-policy-card-fitted]')
+      .doesNotExist('there is no card to render');
   });
 
-  test('a pointer to a card that is not a policy shows not-a-policy', async function (assert) {
+  test('a pointer to a card that is not a policy shows not-a-policy, beside that card', async function (assert) {
     await renderConfig(NOTE);
     assert
       .dom('[data-test-realm-policy-status="not-in-force"]')
       .exists('the policy is shown as not in force');
     assert.deepEqual(issuesShown(), ['not-a-policy']);
+    await waitFor('[data-test-realm-config-policy-card="shown"]');
+    assert
+      .dom('[data-test-realm-config-policy-card-fitted]')
+      .containsText('A note', 'the card the pointer names is the one shown');
   });
 
   test('the problem shows beside the pointer where it is edited', async function (assert) {
@@ -163,7 +218,24 @@ module('Integration | realm config policy standing', function (hooks) {
       .exists('the issue is shown in the policy field’s row');
   });
 
-  test('fixing the pointer clears the issue once the save lands', async function (assert) {
+  test('typing a fixed pointer clears the issue once the save lands', async function (assert) {
+    await renderConfig(MISSING, 'edit');
+    assert.deepEqual(issuesShown(), ['policy-card-missing']);
+
+    await fillIn('[data-test-field="policy"] input', POLICY);
+    await waitFor('[data-test-realm-policy-status="in-force"]', {
+      timeout: 10_000,
+    });
+    assert.deepEqual(issuesShown(), [], 'the issue is gone');
+    await waitFor('[data-test-realm-config-policy-card="shown"]');
+    assert
+      .dom(
+        '[data-test-field="policy"] [data-test-realm-config-policy-card-fitted]',
+      )
+      .containsText('Education', 'and the card it names renders beside it');
+  });
+
+  test('an answer about the saved pointer is not shown beside a different one', async function (assert) {
     let { config } = await renderConfig(MISSING, 'edit');
     assert.deepEqual(issuesShown(), ['policy-card-missing']);
 
@@ -172,7 +244,7 @@ module('Integration | realm config policy standing', function (hooks) {
     assert
       .dom('[data-test-realm-policy-status]')
       .doesNotExist(
-        'the standing of the saved pointer is not shown beside a different one',
+        'the standing of the saved pointer is not shown beside a pointer typed since',
       );
 
     await waitFor('[data-test-realm-policy-status="in-force"]', {
@@ -183,6 +255,17 @@ module('Integration | realm config policy standing', function (hooks) {
       [],
       'once the save lands, the realm reports the fixed pointer in force',
     );
+  });
+
+  test('emptying the pointer takes its answer away at once', async function (assert) {
+    let { config } = await renderConfig(MISSING, 'edit');
+    assert.deepEqual(issuesShown(), ['policy-card-missing']);
+
+    config.policy = '';
+    await rerender();
+    assert
+      .dom('[data-test-realm-policy-status]')
+      .doesNotExist('an empty field is not shown the old pointer’s problem');
   });
 
   test('creating the card the pointer names clears the issue', async function (assert) {
@@ -200,15 +283,6 @@ module('Integration | realm config policy standing', function (hooks) {
     );
   });
 
-  test('a policy that compiles shows as in force with no issue affordance', async function (assert) {
-    await renderConfig(POLICY);
-    assert
-      .dom('[data-test-realm-policy-status="in-force"]')
-      .hasText('In force.');
-    assert.deepEqual(issuesShown(), [], 'no issue is listed');
-    assert.dom('[data-test-realm-policy-status="not-in-force"]').doesNotExist();
-  });
-
   test('a realm with no policy shows no issue affordance', async function (assert) {
     await renderConfig(undefined);
     assert
@@ -219,6 +293,7 @@ module('Integration | realm config policy standing', function (hooks) {
     assert
       .dom('[data-test-realm-policy-status]')
       .doesNotExist('nothing is said about a policy the realm does not name');
+    assert.dom('[data-test-realm-config-policy-card]').doesNotExist();
   });
 
   test('a pointer the realm cannot read as a card id says the realm names no policy', async function (assert) {

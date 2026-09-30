@@ -84,8 +84,11 @@ export async function validateOperation(
 // judged before anything about the card is read, and must be one this server
 // serves and the caller reads: a pointer into a realm the caller cannot read,
 // an archived one, or one no realm here serves is refused in the same bytes,
-// whatever is or is not there. The rest of what compiling reads is judged as
-// a validate of the policy card judges it.
+// whatever is or is not there. A realm URL nothing serves is not itself a
+// secret, but this cannot tell one from a realm that is registered and failed
+// to mount, whose cards are still in the index and are not the caller's to be
+// told about. The rest of what compiling reads is judged as a validate of the
+// policy card judges it.
 //
 // Compiled rather than read from the realm's policy cache, since the answer is
 // refused unless the caller reads every realm compiling read, which only a
@@ -105,14 +108,22 @@ async function realmPolicyValidation(
   if (!pointer) {
     return { realms: [], issues: [], rules: [] };
   }
-  let subject = `the policy this realm names`;
   if ((await core.readsRealmOf?.(pointer, asker))?.read !== true) {
-    throw notReported(card, subject);
+    throw new OperationFailure({
+      id: card.href,
+      status: 403,
+      code: 'operation-not-permitted',
+      title: 'Operation not permitted',
+      detail:
+        `the card this realm's policy pointer names is not in a realm you ` +
+        `can read here, so whether it is there, and what it compiles to, is ` +
+        `not reported to you`,
+    });
   }
   let { compiled, reads } = await core.compilePolicyCard(new URL(pointer));
   let realms = await servedRealmsRead(core, asker, reads);
   if (!realms) {
-    throw notReported(card, subject);
+    throw notReported(card, `the policy this realm names`);
   }
   return validation(compiled, realms);
 }
