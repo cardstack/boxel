@@ -993,6 +993,9 @@ let validation = await operations<typeof RealmPolicy>(policy).validate();
 // validation.rules         the rules that compiled, each with its grants that
 //                          compiled: what a realm naming the card puts in force
 // validation.uncompilable  set when the policy as a whole did not compile
+// validation.realms        the realms this server serves whose index compiling
+//                          read: the card's own, and the ones its rules' types
+//                          live in, so a view knows which to watch for a fix
 ```
 
 Some things worth knowing before you read one:
@@ -1019,7 +1022,7 @@ Some things worth knowing before you read one:
   owner. A card no realm names answers the same way, which is how a draft is
   checked before a realm is pointed at it.
 - **It is live, and nothing is cached.** A fix shows on the next validate after
-  the card reindexes. A realm naming the card revalidates its own compiled
+  the card, or a realm in `realms`, reindexes. A realm naming the card revalidates its own compiled
   policy within five seconds of any change to the card or to a type its rules
   name, so what a validate shows is in force there within that bound.
 - **It is for readers of every realm the policy reaches.** What a validate

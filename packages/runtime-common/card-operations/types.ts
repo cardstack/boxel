@@ -931,6 +931,13 @@ export interface PolicyValidation {
   // read. Absent when what the index holds of the card is an earlier visit's.
   card: string;
   version?: string;
+  // The realms this server serves whose index compiling read: the card's own,
+  // and each one a type its rules name, or a type those descend from, is
+  // defined in. A change indexed in any of them can change what the card
+  // compiles to, so a view that shows a validation asks again when one of them
+  // is indexed. The caller may read every one of them, since a validate is
+  // refused to anyone who may not.
+  realms: string[];
   // Set when the policy as a whole did not compile. A realm that names it
   // grants nothing through it, and refuses every caller its ACL declines with
   // a 500. `issues` says why, and `rules` is empty.

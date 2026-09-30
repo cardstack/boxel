@@ -6714,13 +6714,13 @@ export class Realm {
     return peer.#asTargetRealm(url);
   }
 
-  // Whether a caller may read the realm this server serves `href` from, for a
-  // validate, reached the way an explain reaches a target's realm. Undefined
-  // where no realm here holds `href`.
+  // The realm this server serves `href` from, and whether a caller may read
+  // it, for a validate, reached the way an explain reaches a target's realm.
+  // Undefined where no realm here holds `href`.
   async #readsRealmOf(
     href: string,
     caller: ScopeCaller,
-  ): Promise<boolean | undefined> {
+  ): Promise<{ realm: string; read: boolean } | undefined> {
     let url: URL;
     try {
       url = new URL(this.#resolveAtomicHref(href), this.paths.url);
@@ -6728,7 +6728,7 @@ export class Realm {
       return undefined;
     }
     if (this.paths.inRealm(url)) {
-      return (await this.#aclFor(caller)).read;
+      return { realm: this.url, read: (await this.#aclFor(caller)).read };
     }
     let peer: Realm | undefined;
     try {
@@ -6740,9 +6740,9 @@ export class Realm {
       return undefined;
     }
     if (await isRealmArchived(this.#dbAdapter, new URL(peer.url))) {
-      return false;
+      return { realm: peer.url, read: false };
     }
-    return (await peer.#aclFor(caller)).read;
+    return { realm: peer.url, read: (await peer.#aclFor(caller)).read };
   }
 
   #asTargetRealm(url: URL): TargetRealm {

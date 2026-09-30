@@ -62,7 +62,8 @@ export async function validateOperation(
   }
   let { compiled, reads } = await core.compilePolicyCard(card);
   let asker = scopeCallerFor(request.principal ?? '');
-  if (!(await readsEveryServedRealm(core, asker, reads))) {
+  let realms = await servedRealmsRead(core, asker, reads);
+  if (!realms) {
     throw new OperationFailure({
       id: card.href,
       status: 403,
@@ -73,30 +74,43 @@ export async function validateOperation(
         `read, so what it compiles to is not reported to you`,
     });
   }
-  return { validation: validation(compiled) };
+  return { validation: validation(compiled, realms) };
 }
 
-// Whether the caller may read every realm this server serves that one of the
-// URLs is in. A core that cannot say judges no one able to.
-async function readsEveryServedRealm(
+// The realms this server serves that one of the URLs is in, each once in the
+// order first read, when the caller may read every one of them. Undefined
+// when they may not, and from a core that cannot say.
+async function servedRealmsRead(
   core: OperationCore,
   asker: ScopeCaller,
   urls: string[],
-): Promise<boolean> {
+): Promise<string[] | undefined> {
   if (!core.readsRealmOf) {
-    return false;
+    return undefined;
   }
+  let realms: string[] = [];
   for (let url of urls) {
-    if ((await core.readsRealmOf(url, asker)) === false) {
-      return false;
+    let served = await core.readsRealmOf(url, asker);
+    if (!served) {
+      continue;
+    }
+    if (!served.read) {
+      return undefined;
+    }
+    if (!realms.includes(served.realm)) {
+      realms.push(served.realm);
     }
   }
-  return true;
+  return realms;
 }
 
-function validation(compiled: CompiledRealmPolicy): PolicyValidation {
+function validation(
+  compiled: CompiledRealmPolicy,
+  realms: string[],
+): PolicyValidation {
   return {
     card: compiled.card,
+    realms,
     ...(compiled.version !== undefined ? { version: compiled.version } : {}),
     ...(compiled.uncompilable ? { uncompilable: true as const } : {}),
     issues: compiled.issues.map(positioned),

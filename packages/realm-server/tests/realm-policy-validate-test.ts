@@ -331,6 +331,7 @@ module(basename(import.meta.filename), function (hooks) {
       assert.deepEqual(validation, {
         card: POLICY_CARD,
         version: validation.version,
+        realms: [ORG, EDUCATION],
         issues: [],
         rules: [
           {
@@ -347,6 +348,11 @@ module(basename(import.meta.filename), function (hooks) {
         typeof validation.version,
         'string',
         'the version of the card compiled is reported',
+      );
+      assert.deepEqual(
+        validation.realms,
+        [ORG, EDUCATION],
+        "the realms it compiled from are the card's own and the one its rules' types live in",
       );
     });
 
@@ -618,10 +624,18 @@ module(basename(import.meta.filename), function (hooks) {
         'policies/draft.json',
         policyCard([{ targetType: CARD_DEF, grants: [{ operation: 'read' }] }]),
       );
+      let draft = await ask(ASKER.orgReader(), DRAFT_CARD);
       assert.strictEqual(
-        (await ask(ASKER.orgReader(), DRAFT_CARD)).status,
+        draft.status,
         200,
         'and is answered about a policy that reaches only realms they can read',
+      );
+      assert.deepEqual(
+        (draft.body as { 'atomic:results': PolicyValidation[] })[
+          'atomic:results'
+        ][0].realms,
+        [ORG],
+        'a realm this server does not serve, such as the base realm, is not among them',
       );
     });
 
