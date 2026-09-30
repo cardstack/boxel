@@ -39,7 +39,11 @@ import {
   type RenderVisitResponse,
   type Stats,
 } from '../index.ts';
-import { putMedia, type MediaCacheAdapter } from '../media-cache.ts';
+import {
+  putMedia,
+  REALM_AUTHORITY_RENDER,
+  type MediaCacheAdapter,
+} from '../media-cache.ts';
 import {
   screenshotLedgerSourceURL,
   type ScreenshotManifest,
@@ -902,6 +906,9 @@ export async function persistDeclaredScreenshots({
         sourceURL,
         captureSpecHash: entry.specHash,
         sourceGeneration,
+        // Declared captures are drawn by the realm's own render, which every
+        // reader of the card is served.
+        renderedAs: REALM_AUTHORITY_RENDER,
         sourceContentHash:
           entry.keyBy === 'file-content' ? (contentHash ?? null) : null,
         lane: 'declared',

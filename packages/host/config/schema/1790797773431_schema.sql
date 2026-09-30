@@ -96,7 +96,8 @@
    width INTEGER,
    height INTEGER,
    diagnostics BLOB,
-   PRIMARY KEY ( realm_url, source_url, capture_spec_hash, source_generation ) 
+   rendered_as TEXT DEFAULT '' NOT NULL,
+   PRIMARY KEY ( realm_url, source_url, capture_spec_hash, source_generation, rendered_as ) 
 );
 
  CREATE TABLE IF NOT EXISTS module_transpile_cache (

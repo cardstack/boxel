@@ -4,6 +4,8 @@ import { createResponse } from './create-response.ts';
 import type { DBAdapter } from './db.ts';
 import { logger } from './log.ts';
 import {
+  ANONYMOUS_RENDER,
+  REALM_AUTHORITY_RENDER,
   touchMediaCacheEntry,
   type MediaCacheAdapter,
   type MediaCacheEntry,
@@ -41,9 +43,20 @@ export function mediaCacheVisibility(
     : 'private';
 }
 
-function hitCacheControl(requestContext: RequestContext): string {
+// A capture drawn as one user is that user's view of the card, so no shared
+// cache may hold it, whatever the realm's own visibility. The realm's own
+// captures and anonymous ones draw nothing a reader of the realm may not see.
+function hitCacheControl(
+  requestContext: RequestContext,
+  entry: MediaCacheEntry,
+): string {
+  let visibility =
+    entry.renderedAs === REALM_AUTHORITY_RENDER ||
+    entry.renderedAs === ANONYMOUS_RENDER
+      ? mediaCacheVisibility(requestContext)
+      : 'private';
   return (
-    `${mediaCacheVisibility(requestContext)}, ` +
+    `${visibility}, ` +
     `max-age=${MEDIA_CACHE_MAX_AGE_SECONDS}, ` +
     `stale-while-revalidate=${MEDIA_CACHE_STALE_WHILE_REVALIDATE_SECONDS}`
   );
@@ -101,7 +114,7 @@ export async function serveMediaCacheEntry({
   let headers: Record<string, string> = {
     'content-type': entry.contentType,
     etag,
-    'cache-control': hitCacheControl(requestContext),
+    'cache-control': hitCacheControl(requestContext, entry),
   };
   // A PDF opens in the browser's viewer (or downloads), where the filename
   // shown is otherwise the URL's last segment plus its query string. Name it

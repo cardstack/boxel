@@ -1701,6 +1701,7 @@ export async function runTestRealmServerWithRealms({
   prerenderer: providedPrerenderer,
   liveSearchCache,
   linkShapePolicy,
+  mediaCacheAdapter,
 }: {
   realmsRootPath: string;
   realms: {
@@ -1727,6 +1728,9 @@ export async function runTestRealmServerWithRealms({
   // Omit and every live read keeps its closure, which is what a server with no
   // admission gate to read a load from would do anyway.
   linkShapePolicy?: LinkShapePolicy;
+  // The store every capture surface persists to: the worker's capture task,
+  // each realm's `_screenshot/` route, and the server's `_screenshot-card`.
+  mediaCacheAdapter?: MediaCacheAdapter;
 }) {
   stripTlsEnvVars();
   ensureDirSync(realmsRootPath);
@@ -1749,6 +1753,7 @@ export async function runTestRealmServerWithRealms({
     realmServerMatrixUsername: testRealmServerMatrixUsername,
     prerenderer,
     createPrerenderAuth: testCreatePrerenderAuth,
+    mediaCacheAdapter,
   });
   await worker.run();
 
@@ -1773,6 +1778,7 @@ export async function runTestRealmServerWithRealms({
       dbAdapter,
       enableFileWatcher,
       definitionLookup,
+      mediaCacheAdapter,
       // Every realm this server holds, as the production server reaches the
       // realms it serves.
       realmFor: async (url) =>
@@ -1821,6 +1827,7 @@ export async function runTestRealmServerWithRealms({
     prerenderer,
     liveSearchCache,
     linkShapePolicy,
+    mediaCacheAdapter,
   });
   let testRealmHttpServer = await awaitListening(
     testRealmServer.listen(parseInt(serverURL.port)),

@@ -12,6 +12,7 @@ import {
   insertPermissions,
   param,
   putMedia,
+  REALM_AUTHORITY_RENDER,
   query,
   setScreenshotPerfSink,
 } from '@cardstack/runtime-common';
@@ -1298,6 +1299,7 @@ module(basename(import.meta.filename), function () {
     test('a ledger hit reports the ledger row’s own lane', async function (assert) {
       await seedInstanceRow();
       await putMedia(dbAdapter, adapter, {
+        renderedAs: REALM_AUTHORITY_RENDER,
         realmURL: REALM_URL,
         sourceURL: CARD_ID,
         captureSpecHash: await captureSpecHash({ format: 'isolated' }),
@@ -1370,6 +1372,7 @@ module(basename(import.meta.filename), function () {
     test('a ledger hit answers with zero render work', async function (assert) {
       await seedInstanceRow();
       await putMedia(dbAdapter, adapter, {
+        renderedAs: REALM_AUTHORITY_RENDER,
         realmURL: REALM_URL,
         sourceURL: CARD_ID,
         captureSpecHash: await captureSpecHash({ format: 'isolated' }),
@@ -1406,6 +1409,7 @@ module(basename(import.meta.filename), function () {
       // classify as a custom capture.
       await seedInstanceRow();
       await putMedia(dbAdapter, adapter, {
+        renderedAs: REALM_AUTHORITY_RENDER,
         realmURL: REALM_URL,
         sourceURL: CARD_ID,
         captureSpecHash: await captureSpecHash({ format: 'isolated' }),
@@ -1439,6 +1443,7 @@ module(basename(import.meta.filename), function () {
       // must not serve it — the two specs are distinct capture identities,
       // so a canonical entry is the wrong image for this request.
       await putMedia(dbAdapter, adapter, {
+        renderedAs: REALM_AUTHORITY_RENDER,
         realmURL: REALM_URL,
         sourceURL: CARD_ID,
         captureSpecHash: await captureSpecHash({ format: 'isolated' }),
@@ -1497,6 +1502,7 @@ module(basename(import.meta.filename), function () {
         deviceScaleFactor: 2,
       };
       await putMedia(dbAdapter, adapter, {
+        renderedAs: REALM_AUTHORITY_RENDER,
         realmURL: REALM_URL,
         sourceURL: CARD_ID,
         captureSpecHash: await captureSpecHash({
@@ -1536,6 +1542,7 @@ module(basename(import.meta.filename), function () {
       await seedInstanceRow(2);
       // A capture of generation 1 exists, but the instance has moved on.
       await putMedia(dbAdapter, adapter, {
+        renderedAs: REALM_AUTHORITY_RENDER,
         realmURL: REALM_URL,
         sourceURL: CARD_ID,
         captureSpecHash: await captureSpecHash({ format: 'isolated' }),
@@ -1717,6 +1724,7 @@ module(basename(import.meta.filename), function () {
       let ledgerBytes = new TextEncoder().encode('private-ledger-bytes');
       let ledgerBase64 = Buffer.from(ledgerBytes).toString('base64');
       await putMedia(dbAdapter, adapter, {
+        renderedAs: REALM_AUTHORITY_RENDER,
         realmURL: REALM_URL,
         sourceURL: CARD_ID,
         captureSpecHash: await captureSpecHash({ format: 'isolated' }),
@@ -1777,6 +1785,7 @@ module(basename(import.meta.filename), function () {
     test('a ledger hit refreshes a stale last-accessed stamp', async function (assert) {
       await seedInstanceRow();
       await putMedia(dbAdapter, adapter, {
+        renderedAs: REALM_AUTHORITY_RENDER,
         realmURL: REALM_URL,
         sourceURL: CARD_ID,
         captureSpecHash: await captureSpecHash({ format: 'isolated' }),

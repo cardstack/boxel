@@ -22,6 +22,7 @@
       "realm-policy-archived-seal-test",
       "realm-policy-batch-test",
       "realm-policy-capabilities-test",
+      "realm-policy-capture-authority-test",
       "realm-policy-card-write-test",
       "realm-policy-compile-test",
       "realm-policy-create-lane-test",

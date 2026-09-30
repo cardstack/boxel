@@ -10,6 +10,7 @@ import {
   screenshotCard,
   type ScreenshotPersistArgs,
 } from '../tasks/screenshot-card.ts';
+import { ANONYMOUS_RENDER } from '../media-cache.ts';
 
 const REALM_URL = 'http://localhost:4201/experiments/';
 const CARD_ID = `${REALM_URL}Person/fadhlan`;
@@ -107,10 +108,11 @@ function makeTaskArgs({
 function capture(
   taskArgs: TaskArgs,
   persist: ScreenshotPersistArgs | null = null,
+  runAs = '@alice:localhost',
 ) {
   return screenshotCard(taskArgs)({
     realmURL: REALM_URL,
-    runAs: '@alice:localhost',
+    runAs,
     cardId: CARD_ID,
     format: 'isolated',
     captureSpec: null,
@@ -300,9 +302,10 @@ const tests = Object.freeze({
     );
   },
 
-  // A persisted capture is served to every reader of the card, so what its
-  // render's searches find must not depend on who asked for it.
-  'a capture that persists renders as a realm-authority session, and one answered only to its requester does not':
+  // A capture is something a reader asks for, so it draws what that reader may
+  // see, whether it is answered only to them or persisted and served back to
+  // them later.
+  "a capture renders on its requester's ordinary session, whether or not it persists":
     async (assert) => {
       assert.expect(2);
       let dbRows = [
@@ -314,11 +317,11 @@ const tests = Object.freeze({
           realm_owner: false,
         },
       ];
-      let minted: (PrerenderAuthOptions | undefined)[] = [];
+      let minted: { userId: string; opts?: PrerenderAuthOptions }[] = [];
       let taskArgs = makeTaskArgs({
         dbRows,
-        onCreatePrerenderAuth: (_userId, _permissions, opts) => {
-          minted.push(opts);
+        onCreatePrerenderAuth: (userId, _permissions, opts) => {
+          minted.push({ userId, opts });
         },
       });
 
@@ -327,20 +330,83 @@ const tests = Object.freeze({
         sourceURL: CARD_ID.replace(/\.json$/, ''),
         captureSpecHash: 'spec-hash',
         sourceGeneration: 1,
-        lane: 'declared',
+        lane: 'on-demand',
       });
       await capture(taskArgs);
 
       assert.deepEqual(
         minted[0],
-        { realmAuthority: true },
-        'the persisting capture mints realm authority',
+        { userId: '@alice:localhost', opts: undefined },
+        "the persisting capture mints the requester's ordinary session",
       );
-      assert.strictEqual(
+      assert.deepEqual(
         minted[1],
-        undefined,
-        "the requester's own capture mints their ordinary session",
+        { userId: '@alice:localhost', opts: undefined },
+        'and so does one answered only to them',
       );
+    },
+
+  'a capture for a reader who authenticated nobody renders with no session':
+    async (assert) => {
+      assert.expect(3);
+      let minted = false;
+      let renderAuth: string | undefined;
+      let result = await capture(
+        makeTaskArgs({
+          dbRows: [
+            {
+              username: '*',
+              realm_url: REALM_URL,
+              read: true,
+              write: false,
+              realm_owner: false,
+            },
+          ],
+          onCreatePrerenderAuth: () => {
+            minted = true;
+          },
+          onPrerenderScreenshot: (args) => {
+            renderAuth = args.auth;
+          },
+        }),
+        null,
+        ANONYMOUS_RENDER,
+      );
+
+      assert.strictEqual(result.status, 'ready');
+      assert.false(minted, 'no session is minted for anyone');
+      assert.strictEqual(
+        renderAuth,
+        '{}',
+        'the render carries no session, so it reaches only what anyone may read',
+      );
+    },
+
+  'a capture for a reader who authenticated nobody is refused where anyone may not read':
+    async (assert) => {
+      assert.expect(2);
+      let rendered = false;
+      let result = await capture(
+        makeTaskArgs({
+          dbRows: [
+            {
+              username: '@alice:localhost',
+              realm_url: REALM_URL,
+              read: true,
+              write: false,
+              realm_owner: false,
+            },
+          ],
+          onPrerenderScreenshot: () => {
+            rendered = true;
+          },
+        }),
+        null,
+        ANONYMOUS_RENDER,
+      );
+
+      assert.strictEqual(result.status, 'error');
+      assert.false(rendered, 'nothing renders');
     },
 
   'refuses a runner with no access to the realm': async (assert) => {

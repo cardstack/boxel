@@ -16,6 +16,7 @@ import {
   findMediaCacheEntry,
   mediaCacheMissResponse,
   putMedia,
+  REALM_AUTHORITY_RENDER,
   serveMediaCacheEntry,
 } from '@cardstack/runtime-common';
 
@@ -48,6 +49,7 @@ module(basename(import.meta.filename), function (hooks) {
       dbAdapter = _dbAdapter;
       adapter = new FakeMediaCacheAdapter();
       await putMedia(dbAdapter, adapter, {
+        renderedAs: REALM_AUTHORITY_RENDER,
         realmURL: REALM_URL,
         sourceURL: `${REALM_URL}card-1`,
         captureSpecHash: 'spec-1',
@@ -208,6 +210,7 @@ module(basename(import.meta.filename), function (hooks) {
     // captures age out on generation — so serving one skips the write even
     // past the throttle window
     await putMedia(dbAdapter, adapter, {
+      renderedAs: REALM_AUTHORITY_RENDER,
       realmURL: REALM_URL,
       sourceURL: `${REALM_URL}card-2`,
       captureSpecHash: 'spec-declared',

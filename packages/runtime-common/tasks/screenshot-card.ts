@@ -3,8 +3,10 @@ import type * as JSONTypes from 'json-typescript';
 import type { Task } from './index.ts';
 
 import {
+  ANONYMOUS_RENDER,
   captureSpecHash,
   fetchEffectiveRealmPermissions,
+  fetchRealmPermissions,
   fetchUserPermissions,
   isCaptureFormat,
   jobIdentity,
@@ -23,8 +25,9 @@ import {
   ensureTrailingSlash,
 } from '../index.ts';
 
-// The ledger identity a capture persists under (see
-// `ScreenshotCardArgs.persist`).
+// The capture a job persists (see `ScreenshotCardArgs.persist`). Its ledger
+// row is keyed by this and by the authority the job rendered with, which the
+// task takes from `runAs` rather than from the producer.
 export interface ScreenshotPersistArgs extends JSONTypes.Object {
   realmURL: string;
   sourceURL: string;
@@ -36,6 +39,8 @@ export interface ScreenshotPersistArgs extends JSONTypes.Object {
 export interface ScreenshotCardArgs extends JSONTypes.Object {
   realmURL: string;
   realmUsername: string;
+  // The reader the capture renders as: the user who asked for it, or
+  // `ANONYMOUS_RENDER` for a reader who authenticated nobody.
   runAs: string;
   cardId: string;
   format: ScreenshotFormat;
@@ -157,19 +162,32 @@ const screenshotCard: Task<ScreenshotCardArgs, ScreenshotPrerenderResponse> = ({
     let prerenderStart: number | undefined;
     let prerenderMs: number | undefined;
     let response!: ScreenshotPrerenderResponse;
+    // A capture is something a reader asks for, so it renders with that
+    // reader's authority: their reach across realms, on an ordinary session a
+    // realm's policy scopes as them. A reader who authenticated nobody renders
+    // with no session, reaching only what anyone may read. The authority it
+    // renders with also keys it in the ledger, so it is served back only to
+    // the reader it was drawn as.
+    let anonymous = runAs === ANONYMOUS_RENDER;
+    let renderedAs = anonymous
+      ? ANONYMOUS_RENDER
+      : ensureFullMatrixUserId(runAs, matrixURL);
     try {
-      let runAsUserId = ensureFullMatrixUserId(runAs, matrixURL);
       // The effective set the realm itself enforces: its `users` and `*`
       // grants unioned with the runner's own row. A session token is rejected
       // when its permissions claim differs from that union in either
       // direction, so on a realm that carries a shared grant the runner's row
       // alone is not a mintable set.
-      let userPermissions = await fetchEffectiveRealmPermissions(
-        dbAdapter,
-        new URL(normalizedRealmURL),
-        runAsUserId,
-        matrixURL,
-      );
+      let userPermissions = anonymous
+        ? ((
+            await fetchRealmPermissions(dbAdapter, new URL(normalizedRealmURL))
+          )['*'] ?? [])
+        : await fetchEffectiveRealmPermissions(
+            dbAdapter,
+            new URL(normalizedRealmURL),
+            renderedAs,
+            matrixURL,
+          );
       if (userPermissions.length === 0) {
         let message = `${jobIdentity(jobInfo)} ${runAs} does not have permissions in ${normalizedRealmURL}`;
         log.error(message);
@@ -191,20 +209,18 @@ const screenshotCard: Task<ScreenshotCardArgs, ScreenshotPrerenderResponse> = ({
       // card references render correctly during the screenshot. Only the realm
       // being captured carries the effective set: the per-user enumeration
       // behind the sibling entries reads each realm's own row and its `*` row
-      // without unioning them, and never consults `users` rows.
-      let allUserPermissions = await fetchUserPermissions(dbAdapter, {
-        userId: runAsUserId,
-      });
-      allUserPermissions[normalizedRealmURL] = userPermissions;
-      // A capture that persists is served from the MediaCache to every reader
-      // of the card, so it renders as a realm-authority session: no policy
-      // scopes what its searches find. One answered only to its requester is
-      // that requester's.
-      let auth = createPrerenderAuth(
-        runAsUserId,
-        allUserPermissions,
-        persist ? { realmAuthority: true } : undefined,
-      );
+      // without unioning them, and never consults `users` rows. An anonymous
+      // render carries no session at all, and its requests go unauthenticated.
+      let auth: string;
+      if (anonymous) {
+        auth = JSON.stringify({});
+      } else {
+        let allUserPermissions = await fetchUserPermissions(dbAdapter, {
+          userId: renderedAs,
+        });
+        allUserPermissions[normalizedRealmURL] = userPermissions;
+        auth = createPrerenderAuth(renderedAs, allUserPermissions);
+      }
       permissionsMs = Date.now() - permissionsStart;
 
       // A capture reuses a pooled prerender page that may still hold a module
@@ -303,6 +319,7 @@ const screenshotCard: Task<ScreenshotCardArgs, ScreenshotPrerenderResponse> = ({
           let persistStart = Date.now();
           let { deduped } = await putMedia(dbAdapter, mediaCacheAdapter, {
             ...persist,
+            renderedAs,
             bytes,
             contentType: response.contentType ?? 'image/png',
             width: response.width ?? null,
@@ -381,7 +398,11 @@ const screenshotCard: Task<ScreenshotCardArgs, ScreenshotPrerenderResponse> = ({
       // Best-effort: the ledger copy of the breakdown must never fail the
       // capture.
       try {
-        await updateMediaCacheDiagnostics(dbAdapter, persist, { ...event });
+        await updateMediaCacheDiagnostics(
+          dbAdapter,
+          { ...persist, renderedAs },
+          { ...event },
+        );
       } catch (e: any) {
         log.warn(
           `${jobIdentity(jobInfo)} failed to record capture diagnostics on the ledger row`,

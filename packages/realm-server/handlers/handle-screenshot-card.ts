@@ -19,7 +19,7 @@ import {
   type CaptureSpec,
   type DBAdapter,
   type MediaCacheEntry,
-  type MediaCacheEntryKey,
+  type MediaCacheCaptureKey,
   type ScreenshotPrerenderResponse,
   type ScreenshotRequestPerfEvent,
 } from '@cardstack/runtime-common';
@@ -68,12 +68,16 @@ interface CaptureResult {
 /**
  * Handler for `POST /_screenshot-card`.
  *
- * Captures one card and persists the capture to the MediaCache under its
- * canonical identity (instance URL × canonical capture spec × the
- * instance's current index generation) — the same key the GET
- * `_screenshot/` DSL resolves, so a capture published here serves on that
+ * Captures one card as its requester — with their reach across realms, on
+ * an ordinary session a realm's policy scopes as them — and persists the
+ * capture to the MediaCache under its canonical identity (instance URL ×
+ * canonical capture spec × the instance's current index generation) and
+ * that requester. That is the key the GET `_screenshot/` DSL resolves for
+ * the same reader, so a capture published here serves back to them on that
  * route immediately, even on realms whose `allowArbitraryScreenshots` gate
  * is closed (the gate blocks new GET-triggered captures, never serving).
+ * Another reader of the card is never served it: it draws what its
+ * requester may see.
  * This endpoint skips that gate deliberately: it is an authenticated
  * surface with full captureSpec power under realm-read trust. Realm read is
  * enforced in two places: the ledger fast path (and the generation probe
@@ -281,7 +285,7 @@ export default function handleScreenshotCard({
       // is indexed (the generation is part of the key) and this server has
       // a store. Without either, the capture still runs; it just isn't
       // persisted and the response carries no served URL.
-      let entryKey: MediaCacheEntryKey | undefined;
+      let entryKey: MediaCacheCaptureKey | undefined;
       let generationLookupMs: number | undefined;
       let ledgerLookupMs: number | undefined;
       if (mediaCacheAdapter && spec) {
@@ -348,7 +352,10 @@ export default function handleScreenshotCard({
 
       if (entryKey && spec) {
         let ledgerLookupStart = Date.now();
-        let entry = await findMediaCacheEntry(dbAdapter, entryKey);
+        let entry = await findMediaCacheEntry(dbAdapter, {
+          ...entryKey,
+          servedTo: userId,
+        });
         ledgerLookupMs = Date.now() - ledgerLookupStart;
         if (entry) {
           let serveStart = Date.now();
