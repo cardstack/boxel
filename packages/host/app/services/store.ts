@@ -1574,15 +1574,21 @@ export default class StoreService extends Service implements StoreInterface {
   // `Store` interface's methods and nothing else, and `search` among them
   // runs card-initiated — under the page, realms, and concurrency caps —
   // with a realm-less search targeting the current realm instead of every
-  // realm the user can see. So a card can't dodge the caps (or fan out to
-  // all realms) by reaching for `@context.store.search` directly instead of
-  // `getCards`, nor by reaching past it for a sibling that runs the same
-  // search uncapped (`searchWithMeta`, `searchEntries`).
+  // realm the user can see. Card code that uses the store as declared
+  // therefore stays on the capped path: calling `@context.store.search`
+  // directly instead of `getCards`, or reaching for a sibling that runs the
+  // same search uncapped (`searchWithMeta`, `searchEntries`), lands on the
+  // caps or on nothing. That holds at runtime, where the TypeScript
+  // interface is not present, which is why the gate is this allowlist.
   //
-  // The `Store` interface not declaring a method is what puts it off the
-  // allowlist, but it is not what keeps a card out of it: card code is
-  // untrusted and reaches this object at runtime, where a TypeScript
-  // interface is not present. The gate is the allowlist.
+  // It is that gate, not an isolation boundary. Card code runs in the host's
+  // own JS realm, and the Ember owner is a symbol away — from this service,
+  // and from every card component, which is itself owned — so code written
+  // to get past the facade can. Holding the caps against such code needs
+  // them enforced by the realm server.
+  //
+  // Writes through the facade are refused rather than landing on this
+  // service, which the whole host app shares.
   //
   // The host app injects the store service itself, never this view, so host
   // search is unconstrained.
@@ -1604,32 +1610,32 @@ export default class StoreService extends Service implements StoreInterface {
             });
           };
         }
-        // Two kinds of key pass through without being on the allowlist,
-        // because withholding them breaks the object without guarding
-        // anything:
-        //
-        //   - Symbols, which carry JS plumbing (`Symbol.toPrimitive`,
-        //     `Symbol.toStringTag`) that the engine and debuggers reach for.
-        //     No card names a method through one — this service's methods are
-        //     all string-keyed.
-        //   - `Object.prototype` members. `toString` and `valueOf` are how a
-        //     value converts to a primitive, so withholding them turns any
-        //     `String(store)` — a log line, an error message, a template
-        //     interpolation — into a "Cannot convert object to primitive
-        //     value" throw.
-        //
-        // Absent keys answer `undefined` rather than throwing, so a card that
-        // reaches for a withheld method fails where it calls it.
-        if (
-          typeof prop === 'string' &&
-          !CARD_FACING_STORE_METHODS.has(prop) &&
-          !(prop in Object.prototype)
-        ) {
-          return undefined;
+        // A string key off the allowlist answers `undefined` rather than
+        // throwing, so a card that reaches for a withheld method fails where
+        // it calls it. `Object.prototype` members are the exception, because
+        // `toString` and `valueOf` are how a value converts to a primitive:
+        // withholding them turns any `String(store)` — a log line, an error
+        // message, a template interpolation — into a "Cannot convert object
+        // to primitive value" throw. They come from `Object.prototype` itself,
+        // unbound, so their `this` is the facade: `valueOf()` answers the
+        // facade rather than this service, and `__defineGetter__` meets the
+        // refusing write traps below.
+        if (typeof prop === 'string' && !CARD_FACING_STORE_METHODS.has(prop)) {
+          return prop in Object.prototype
+            ? Reflect.get(Object.prototype, prop)
+            : undefined;
         }
+        // Symbols pass through, since they carry JS plumbing
+        // (`Symbol.toPrimitive`, `Symbol.toStringTag`) that the engine and
+        // debuggers reach for, and no card names a method through one: this
+        // service's methods are all string-keyed. The owner symbol is among
+        // them (see above).
         let value = Reflect.get(target, prop, target);
         return typeof value === 'function' ? value.bind(target) : value;
       },
+      set: () => false,
+      defineProperty: () => false,
+      deleteProperty: () => false,
     }) as unknown as StoreInterface;
   }
 

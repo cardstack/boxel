@@ -3473,5 +3473,75 @@ module(`Integration | search resource`, function (hooks) {
         );
       }
     });
+
+    // The allowlist only gates property reads, so the two other ways to the
+    // service have to be closed too: an `Object.prototype` member handing back
+    // the service it was bound to, and a write landing on the service the
+    // whole host app shares.
+    test('the card-facing store gives no way back to the service and refuses writes', async function (assert) {
+      let cardStore = storeService.cardFacingStore(
+        () => 'http://current/',
+      ) as unknown as Record<string, any>;
+      let realGet = storeService.get;
+      let realSearch = storeService.search;
+
+      assert.strictEqual(
+        cardStore.valueOf(),
+        cardStore,
+        'valueOf answers the facade, not the service',
+      );
+      assert.strictEqual(
+        (cardStore.valueOf() as Record<string, unknown>).searchWithMeta,
+        undefined,
+        'so an uncapped sibling stays out of reach through it',
+      );
+      assert.strictEqual(
+        String(cardStore),
+        '[object Object]',
+        'the facade still converts to a string',
+      );
+
+      assert.throws(
+        () => {
+          cardStore.get = () => 'replaced';
+        },
+        TypeError,
+        'assigning a method through the facade is refused',
+      );
+      assert.throws(
+        () => cardStore.__defineGetter__('search', () => 'replaced'),
+        TypeError,
+        'defining a getter through the facade is refused',
+      );
+      assert.throws(
+        () => Object.defineProperty(cardStore, 'patch', { value: 'replaced' }),
+        TypeError,
+        'defining a property on the facade is refused',
+      );
+      assert.throws(
+        () => {
+          delete cardStore.search;
+        },
+        TypeError,
+        'deleting a method through the facade is refused',
+      );
+
+      assert.strictEqual(
+        storeService.get,
+        realGet,
+        "the service's get is untouched",
+      );
+      assert.strictEqual(
+        storeService.search,
+        realSearch,
+        "the service's search is untouched",
+      );
+      for (let name of ['get', 'search', 'patch']) {
+        assert.false(
+          Object.prototype.hasOwnProperty.call(storeService, name),
+          `nothing was installed as an own ${name} on the service`,
+        );
+      }
+    });
   });
 });
