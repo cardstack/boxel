@@ -109,6 +109,18 @@ module('Pretui | toaster | store', function () {
     );
   });
 
+  test('an auto id skips one a caller already supplied', function (assert) {
+    let store = new ToastStore();
+    store.show({ id: 'toast-1', title: 'Supplied' });
+    let auto = store.show({ title: 'Auto' });
+    assert.notStrictEqual(auto, 'toast-1', 'the generated id is a fresh one');
+    assert.deepEqual(
+      store.items.map((t) => t.title),
+      ['Auto', 'Supplied'],
+      'both toasts are in the stack',
+    );
+  });
+
   test('showing an existing id replaces in place rather than reordering', function (assert) {
     let store = new ToastStore();
     store.show({ id: 'job', title: 'Saving…' });
@@ -322,7 +334,16 @@ module('Pretui | toaster | render', function (hooks) {
     let outside = document.querySelector('[data-test-outside]') as HTMLElement;
     await focus(outside);
 
-    await triggerKeyEvent(document, 'keydown', 'F6');
+    let f6 = new KeyboardEvent('keydown', {
+      key: 'F6',
+      bubbles: true,
+      cancelable: true,
+    });
+    document.dispatchEvent(f6);
+    assert.true(
+      f6.defaultPrevented,
+      'the toaster consumes F6 so the browser does not move focus again',
+    );
     let inside = document.querySelector(
       '[data-test-pretui-toast-dismiss]',
     ) as HTMLElement;

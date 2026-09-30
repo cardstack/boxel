@@ -278,10 +278,16 @@ export interface SidebarSignature {
 export class Sidebar extends Component<SidebarSignature> {
   @tracked private internal = this.args.defaultOpen ?? true;
   @tracked private narrowPane = false;
+  /** The drawer's own uncontrolled state, separate from the rail's expanded
+   * state, so a narrow pane starts with the modal closed. */
+  @tracked private drawerOpen = false;
   railId = `${guidFor(this)}-rail`;
 
   get open(): boolean {
-    return this.args.open ?? this.internal;
+    if (this.args.open !== undefined) {
+      return this.args.open;
+    }
+    return this.mobile ? this.drawerOpen : this.internal;
   }
   get collapsible(): SidebarCollapsible {
     return this.args.collapsible ?? 'rail';
@@ -328,6 +334,11 @@ export class Sidebar extends Component<SidebarSignature> {
 
   private setOpen = (next: boolean) => {
     // Internal state moves only while UNcontrolled; the callback always fires.
+    if (this.args.open === undefined && this.mobile) {
+      this.drawerOpen = next;
+      this.args.onOpenChange?.(next);
+      return;
+    }
     if (this.args.open === undefined) {
       this.internal = next;
     }
@@ -366,6 +377,9 @@ export class Sidebar extends Component<SidebarSignature> {
     }
   };
   setNarrow = (narrow: boolean) => {
+    if (narrow !== this.narrowPane) {
+      this.drawerOpen = false;
+    }
     this.narrowPane = narrow;
   };
 

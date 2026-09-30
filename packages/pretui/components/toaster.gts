@@ -147,7 +147,7 @@ export class ToastStore {
    * toast in place, which is how a "Saving…" becomes a "Saved" without the
    * stack jumping. */
   show = (input: ToastInput): string => {
-    let id = input.id ?? 'toast-' + ++this.seq;
+    let id = input.id ?? this.nextFreeId();
     let next: ToastItem = { ...input, id };
     let at = this.items.findIndex((item) => item.id === id);
     if (at >= 0) {
@@ -159,6 +159,16 @@ export class ToastStore {
     }
     return id;
   };
+
+  /** Skips any number a caller-supplied id already holds, so an auto id never
+   * replaces someone else's toast. */
+  private nextFreeId(): string {
+    let id: string;
+    do {
+      id = 'toast-' + ++this.seq;
+    } while (this.items.some((item) => item.id === id));
+    return id;
+  }
 
   dismiss = (id: string) => {
     let hit = this.items.find((item) => item.id === id);
@@ -452,6 +462,9 @@ export class Toaster extends Component<ToasterSignature> {
     if (!region) {
       return;
     }
+    // Consumed, or a browser that cycles F6 into its own chrome takes focus
+    // straight back out of the region.
+    ev.preventDefault();
     let active = document.activeElement;
     if (active instanceof HTMLElement && region.contains(active)) {
       this.restorePriorFocus();

@@ -1,15 +1,4 @@
-// The usage pages this module used to hold now live in
-// components/<slug>.usage.gts; what remains here is the fixtures they
-// share. The header below describes those pages, not this file.
-// Pretui — demo-menu: usage pages for the menu tier (menu.gts).
-//
-// Three pages, one data structure. The `MenuNode` tree defined once at the
-// top of this file is handed unchanged to `Menu` and to `CommandPalette`, so
-// the pages demonstrate the claim rather than restating it: a command defined
-// once, with one shortcut and one enabled rule, shows up in both surfaces.
-//
-// The fiction is the sourcing desk from examples.gts — a lot document open on
-// a trader's screen, with the menu a trader would actually pull down.
+// Pretui — demo-menu: the `MenuState` fixture and platform options the menu usage pages share.
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import type { MenuEntry, ShortcutPlatform } from './internal/menu';

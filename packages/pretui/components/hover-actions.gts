@@ -135,6 +135,9 @@ export interface HoverActionsSignature {
 export class HoverActions extends Component<HoverActionsSignature> {
   @tracked private focusIndex = 0;
   @tracked private navigating = false;
+  /** After Escape the cluster drops out of the tab order until focus leaves
+   * the root, so the next Tab moves past the actions instead of back in. */
+  @tracked private parked = false;
 
   get actions(): readonly HoverAction[] {
     return this.args.actions ?? [];
@@ -188,7 +191,8 @@ export class HoverActions extends Component<HoverActionsSignature> {
   }
 
   iconOf = (item: HoverAction) => iconFor(item.icon);
-  isRoving = (index: number): boolean => index === this.rovingIndex;
+  isRoving = (index: number): boolean =>
+    !this.parked && index === this.rovingIndex;
   isFocusTarget = (index: number): boolean =>
     this.navigating && index === this.rovingIndex;
   get rovingIndex(): number {
@@ -199,7 +203,9 @@ export class HoverActions extends Component<HoverActionsSignature> {
     return clampIndex(this.focusIndex, 0, count - 1);
   }
   get moreRoving(): boolean {
-    return this.hasOverflow && this.rovingIndex === this.moreIndex;
+    return (
+      !this.parked && this.hasOverflow && this.rovingIndex === this.moreIndex
+    );
   }
   get moreFocusTarget(): boolean {
     return this.navigating && this.moreRoving;
@@ -239,6 +245,7 @@ export class HoverActions extends Component<HoverActionsSignature> {
         ev.preventDefault();
         ev.stopPropagation();
         this.navigating = false;
+        this.parked = true;
         root.focus();
       }
       return;
@@ -266,12 +273,21 @@ export class HoverActions extends Component<HoverActionsSignature> {
     this.focusIndex = (step + count) % count;
   };
 
+  onRootFocusOut = (event: Event) => {
+    let root = event.currentTarget as HTMLElement;
+    let to = (event as FocusEvent).relatedTarget;
+    if (!(to instanceof Node) || !root.contains(to)) {
+      this.parked = false;
+    }
+  };
+
   onFocusIn = (event: Event) => {
     let target = event.target as HTMLElement | null;
     let member = target?.closest('[data-ha-index]') as HTMLElement | null;
     if (!member) {
       return;
     }
+    this.parked = false;
     let index = Number(member.dataset.haIndex);
     if (Number.isNaN(index) || index === this.rovingIndex) {
       return;
@@ -289,6 +305,7 @@ export class HoverActions extends Component<HoverActionsSignature> {
       data-placement={{this.placement}}
       data-reveal={{this.reveal}}
       data-test-pretui-hover-actions
+      {{listen 'focusout' this.onRootFocusOut}}
       ...attributes
     >
       <div class='pretui-ha-host'>{{yield}}</div>
