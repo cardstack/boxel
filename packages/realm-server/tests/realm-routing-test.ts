@@ -9,7 +9,10 @@ import {
   RealmRegistryReconciler,
   type RealmRegistryRow,
 } from '../lib/realm-registry-reconciler.ts';
-import { resolveRealmsForFederatedRequest } from '../lib/realm-routing.ts';
+import {
+  knownRealmURL,
+  resolveRealmsForFederatedRequest,
+} from '../lib/realm-routing.ts';
 
 // CS-10054: fixture for Realm.getHostRoutingMap coverage. One rule uses
 // a relative reference (the recommended form, portable across realm URL
@@ -399,6 +402,87 @@ module(basename(import.meta.filename), function () {
 
       await fixture.settle();
       await otherMountPromise;
+    });
+  });
+
+  module('knownRealmURL', function () {
+    // Only what the resolver reads: the reconciler's mounted realms and its
+    // known registry rows.
+    function deps(mounted: string[], known: string[]) {
+      return {
+        reconciler: {
+          mounted: new Map(mounted.map((url) => [url, {}])),
+          knownByUrl: new Map(known.map((url) => [url, {}])),
+        } as unknown as RealmRegistryReconciler,
+      };
+    }
+
+    test('resolves a request to the most specific realm that contains it, mounted or only known', function (assert) {
+      let d = deps(
+        ['https://realms.example.test/'],
+        [
+          'https://realms.example.test/buck/site/',
+          'https://site.example.test/',
+        ],
+      );
+      assert.strictEqual(
+        knownRealmURL(
+          new URL('https://realms.example.test/buck/site/Person/1.json'),
+          d,
+        ),
+        'https://realms.example.test/buck/site/',
+        'the nested realm, not the root realm around it',
+      );
+      assert.strictEqual(
+        knownRealmURL(new URL('https://realms.example.test/other/x'), d),
+        'https://realms.example.test/',
+      );
+      assert.strictEqual(
+        knownRealmURL(new URL('https://site.example.test/'), d),
+        'https://site.example.test/',
+        'a published site’s page load',
+      );
+    });
+
+    test('matches whatever protocol the request arrived under, and the realm root without its slash', function (assert) {
+      let d = deps([], ['https://site.example.test/buck/realm/']);
+      assert.strictEqual(
+        knownRealmURL(new URL('http://site.example.test/buck/realm/index'), d),
+        'https://site.example.test/buck/realm/',
+      );
+      assert.strictEqual(
+        knownRealmURL(new URL('https://site.example.test/buck/realm'), d),
+        'https://site.example.test/buck/realm/',
+      );
+    });
+
+    test('a registry key that is not a URL does not stop a later realm from matching', function (assert) {
+      let d = deps(
+        ['@cardstack/base/'],
+        ['@cardstack/catalog/', 'https://site.example.test/'],
+      );
+      assert.strictEqual(
+        knownRealmURL(new URL('https://site.example.test/index'), d),
+        'https://site.example.test/',
+      );
+    });
+
+    test('a request no known realm contains resolves to nothing', function (assert) {
+      let d = deps(
+        ['https://realms.example.test/base/'],
+        ['https://site.example.test/'],
+      );
+      assert.strictEqual(
+        knownRealmURL(
+          new URL('https://realms.example.test/_server-session'),
+          d,
+        ),
+        undefined,
+      );
+      assert.strictEqual(
+        knownRealmURL(new URL('https://elsewhere.example.test/'), d),
+        undefined,
+      );
     });
   });
 });
