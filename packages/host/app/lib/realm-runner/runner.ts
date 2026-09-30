@@ -54,19 +54,42 @@ function makeRealmWorker(absoluteURL: URL): Worker {
 
 // `onCall` does the work of each `realm.*` call the script makes. Its answer,
 // or the message of what it throws, goes back into the sandbox.
+// `signal` ends the run from outside: the worker stops and the promise
+// rejects with the signal's reason, so a caller with its own deadline is never
+// outlived by the run.
 export default function runRealmCode(
   request: Omit<Extract<RealmRunnerRequest, { type: 'run' }>, 'type'>,
   onCall: RealmRunnerCallHandler,
+  signal?: AbortSignal,
 ): Promise<RealmRunnerResult> {
   return new Promise((resolve, reject) => {
     let workerURL = resolveWorkerURL(WorkerURL);
     let worker = makeRealmWorker(workerURL);
     let timer: number;
+    let settled = false;
+    let onAbort = () =>
+      settle(() =>
+        reject(
+          signal?.reason instanceof Error
+            ? signal.reason
+            : new Error('Realm code was stopped'),
+        ),
+      );
     let settle = (finish: () => void) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
       window.clearTimeout(timer);
+      signal?.removeEventListener('abort', onAbort);
       worker.terminate();
       finish();
     };
+    if (signal?.aborted) {
+      onAbort();
+      return;
+    }
+    signal?.addEventListener('abort', onAbort);
 
     timer = window.setTimeout(() => {
       settle(() =>

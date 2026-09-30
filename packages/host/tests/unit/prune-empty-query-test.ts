@@ -82,4 +82,14 @@ module('Unit | prune-empty-query', function () {
       { by: '_matchRelevance', direction: 'desc' },
     ]);
   });
+
+  test('drops a relevance sort when no search terms are left', function (assert) {
+    let query = {
+      filter: { type: listing, matches: '' },
+      sort: [{ by: '_matchRelevance', direction: 'desc' }],
+    } as unknown as Query;
+    assert.deepEqual(pruneEmptyQueryParts(query), {
+      filter: { type: listing },
+    });
+  });
 });

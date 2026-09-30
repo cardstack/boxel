@@ -21,10 +21,13 @@ const MAX_CODE_SIZE = 100_000;
 const MAX_FILES = 20;
 const MAX_FILE_SIZE = 500_000;
 // Host calls run inside this budget, and each write lints and saves before it
-// returns, so it is much wider than a pure-CPU limit would need to be. With
-// the runner's 60 s boot allowance on top, it stays under the tool service's
-// 120 s execute timeout even when the sandbox starts slowly.
+// returns, so it is much wider than a pure-CPU limit would need to be.
 const RUN_TIMEOUT_MS = 55_000;
+// One deadline for the whole call: sandbox start, the script, and the write
+// in flight when it ends. It is under the tool service's 120 s execute
+// timeout, so this tool always reports first, with every file it saved, and
+// nothing is saved after that report.
+const CALL_DEADLINE_MS = 100_000;
 
 // Saves one file and returns the content that was saved (lint may reformat
 // it). `expected` is the content the script last saw, undefined for a file
@@ -276,6 +279,16 @@ export default class RunRealmCodeTool extends HostBaseTool<
         this.writeFile(roomId, url, content, expected),
     );
     let runnerResult;
+    let deadline = new AbortController();
+    let deadlineTimer = setTimeout(
+      () =>
+        deadline.abort(
+          new Error(
+            `Realm code did not finish within ${CALL_DEADLINE_MS / 1000} s`,
+          ),
+        ),
+      CALL_DEADLINE_MS,
+    );
     try {
       runnerResult = await runRealmCode(
         {
@@ -284,8 +297,10 @@ export default class RunRealmCodeTool extends HostBaseTool<
           timeoutMs: RUN_TIMEOUT_MS,
         },
         (method, args) => session.call(method, args),
+        deadline.signal,
       );
     } catch (error) {
+      clearTimeout(deadlineTimer);
       // Stop the session before reading what it saved: a call the script did
       // not await can still be running, and must neither save after this
       // report nor be missing from it.
@@ -302,6 +317,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
       );
     }
 
+    clearTimeout(deadlineTimer);
     session.close();
     await session.idle();
     let commandModule = await this.loadToolModule();

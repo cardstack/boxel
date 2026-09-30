@@ -20,8 +20,14 @@ export function pruneEmptyQueryParts(query: Query): Query {
     result.filter = filter;
   }
   if (Array.isArray(result.sort)) {
+    // A relevance sort ranks by the query's search terms; with none left
+    // (a model often sends an empty `matches`), the engine rejects it.
+    let hasTerms = hasPositiveMatches(filter);
     let sort = (result.sort as unknown[]).filter(
-      (entry) => isObject(entry) && isNonEmptyString(entry.by),
+      (entry) =>
+        isObject(entry) &&
+        isNonEmptyString(entry.by) &&
+        (hasTerms || entry.by !== MATCH_RELEVANCE_SORT_KEY),
     );
     if (sort.length === 0) {
       delete result.sort;
@@ -109,4 +115,26 @@ function isUsableCodeRef(value: unknown): boolean {
     return true;
   }
   return isNonEmptyString(value.module) && isNonEmptyString(value.name);
+}
+
+// Whether the filter searches for any text, outside a `not`.
+function hasPositiveMatches(
+  filter: Record<string, unknown> | undefined,
+): boolean {
+  if (!filter) {
+    return false;
+  }
+  if (isNonEmptyString(filter.matches)) {
+    return true;
+  }
+  for (let key of LIST_KEYS) {
+    let items = filter[key];
+    if (
+      Array.isArray(items) &&
+      items.some((item) => hasPositiveMatches(item as Record<string, unknown>))
+    ) {
+      return true;
+    }
+  }
+  return false;
 }
