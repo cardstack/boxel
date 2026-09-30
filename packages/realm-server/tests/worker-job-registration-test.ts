@@ -69,6 +69,7 @@ module(basename(import.meta.filename), function () {
         'prerender_html',
         'run-command',
         'scoped-css-gc',
+        'screenshot-card',
       ],
       'all job types are registered',
     );
