@@ -32,3 +32,9 @@ boxel-dev-all.pids
 # the /custom/modules/ mount.
 __pycache__/
 *.pyc
+# Choreo gallery tools run from the repo root: realm-sync config is
+# machine-specific (workspace path, realm URL), and out/ and videos/ hold
+# generated builds and renders.
+/.choreo-realm-sync.json
+/out/
+/videos/

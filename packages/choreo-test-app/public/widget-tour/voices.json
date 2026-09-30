@@ -1,0 +1,189 @@
+{
+  "narrationReady": true,
+  "narrator": "George",
+  "provider": "ElevenLabs",
+  "model": "eleven_multilingual_v2",
+  "stops": [
+    {
+      "id": "gestures",
+      "seconds": 8.176327
+    },
+    {
+      "id": "enter",
+      "seconds": 4.728163
+    },
+    {
+      "id": "presence",
+      "seconds": 5.146122
+    },
+    {
+      "id": "keyframes",
+      "seconds": 5.276735
+    },
+    {
+      "id": "path",
+      "seconds": 4.675918
+    },
+    {
+      "id": "pointer",
+      "seconds": 5.877551
+    },
+    {
+      "id": "stagger",
+      "seconds": 3.892245
+    },
+    {
+      "id": "trail",
+      "seconds": 6.817959
+    },
+    {
+      "id": "tabs",
+      "seconds": 7.000816
+    },
+    {
+      "id": "layout",
+      "seconds": 5.250612
+    },
+    {
+      "id": "lists",
+      "seconds": 6.217143
+    },
+    {
+      "id": "reorder",
+      "seconds": 5.198367
+    },
+    {
+      "id": "grid",
+      "seconds": 5.799184
+    },
+    {
+      "id": "inline-edit",
+      "seconds": 6.870204
+    },
+    {
+      "id": "lightbox",
+      "seconds": 7.131429
+    },
+    {
+      "id": "split",
+      "seconds": 7.549388
+    },
+    {
+      "id": "inbox",
+      "seconds": 8.907755
+    },
+    {
+      "id": "far",
+      "seconds": 6.635102
+    },
+    {
+      "id": "crossing",
+      "seconds": 5.694694
+    },
+    {
+      "id": "escort",
+      "seconds": 6.50449
+    },
+    {
+      "id": "interrupt",
+      "seconds": 6.948571
+    },
+    {
+      "id": "sequence",
+      "seconds": 6.4
+    },
+    {
+      "id": "wires",
+      "seconds": 7.183673
+    },
+    {
+      "id": "jump",
+      "seconds": 5.877551
+    },
+    {
+      "id": "parallax",
+      "seconds": 5.746939
+    },
+    {
+      "id": "reveal",
+      "seconds": 5.198367
+    },
+    {
+      "id": "drift",
+      "seconds": 9.613061
+    },
+    {
+      "id": "hang",
+      "seconds": 7.053061
+    },
+    {
+      "id": "header",
+      "seconds": 5.616327
+    },
+    {
+      "id": "fold",
+      "seconds": 7.78449
+    },
+    {
+      "id": "sheet",
+      "seconds": 6.269388
+    },
+    {
+      "id": "mockup",
+      "seconds": 8.437551
+    },
+    {
+      "id": "camera",
+      "seconds": 6.870204
+    },
+    {
+      "id": "long-take",
+      "seconds": 7.183673
+    },
+    {
+      "id": "sylva",
+      "seconds": 8.672653
+    },
+    {
+      "id": "subdivision",
+      "seconds": 6.217143
+    },
+    {
+      "id": "rack",
+      "seconds": 7.967347
+    },
+    {
+      "id": "grip",
+      "seconds": 7.053061
+    },
+    {
+      "id": "drag",
+      "seconds": 5.982041
+    },
+    {
+      "id": "slides",
+      "seconds": 7.549388
+    },
+    {
+      "id": "presentation",
+      "seconds": 6.922449
+    },
+    {
+      "id": "towers",
+      "seconds": 8.96
+    },
+    {
+      "id": "sagrada",
+      "seconds": 8.907755
+    },
+    {
+      "id": "playhead",
+      "seconds": 7.549388
+    },
+    {
+      "id": "build-order",
+      "seconds": 10.710204
+    }
+  ],
+  "narrationPath": "widget-tour/narration-george-fast-v1"
+}

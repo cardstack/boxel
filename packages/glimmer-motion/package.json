@@ -1,0 +1,124 @@
+{
+  "name": "glimmer-motion",
+  "version": "0.0.0",
+  "description": "Motion, Choreographed. The Motion engine for Ember — and a timeline for the scene.",
+  "keywords": [
+    "ember-addon",
+    "animation",
+    "motion",
+    "glimmer",
+    "transition",
+    "layout-animation",
+    "gesture",
+    "drag"
+  ],
+  "repository": "https://github.com/cardstack/choreo",
+  "license": "MIT",
+  "author": "Cardstack",
+  "exports": {
+    ".": {
+      "types": "./declarations/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./test-support": {
+      "types": "./declarations/test-support/index.d.ts",
+      "default": "./dist/test-support/index.js"
+    },
+    "./*": {
+      "types": "./declarations/*.d.ts",
+      "default": "./dist/*.js"
+    },
+    "./addon-main.js": "./addon-main.cjs"
+  },
+  "typesVersions": {
+    "*": {
+      "*": [
+        "declarations/*",
+        "declarations/*/index"
+      ]
+    }
+  },
+  "files": [
+    "addon-main.cjs",
+    "declarations",
+    "dist",
+    "VENDORED.md"
+  ],
+  "scripts": {
+    "build": "rollup --config && node scripts/fix-declarations.mjs",
+    "format": "prettier . --cache --write",
+    "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\" --prefixColors auto",
+    "lint:fix": "concurrently \"pnpm:lint:*:fix\" --names \"fix:\" --prefixColors auto && pnpm run format",
+    "lint:format": "prettier . --cache --check",
+    "lint:js": "eslint . --cache",
+    "lint:js:fix": "eslint . --fix",
+    "lint:types": "ember-tsc --noEmit",
+    "prepack": "rollup --config && node scripts/fix-declarations.mjs",
+    "realm": "node scripts/build-realm-bundle.mjs",
+    "realm:local": "node scripts/build-realm-bundle.mjs --no-sync",
+    "realm:stage": "node scripts/build-realm-bundle.mjs --no-mirror",
+    "start": "rollup --config --watch",
+    "test": "echo 'A v2 addon does not have tests, run tests in test-app'"
+  },
+  "dependencies": {
+    "@embroider/addon-shim": "^1.8.9",
+    "decorator-transforms": "catalog:"
+  },
+  "devDependencies": {
+    "@babel/core": "catalog:",
+    "@babel/eslint-parser": "^7.25.1",
+    "@babel/plugin-transform-typescript": "catalog:",
+    "@babel/runtime": "catalog:",
+    "@ember/library-tsconfig": "^1.1.3",
+    "@ember/test-helpers": "^4.0.5",
+    "@embroider/addon-dev": "^8.0.0",
+    "@eslint/js": "^9.39.4",
+    "@glimmer/component": "catalog:",
+    "@glimmer/tracking": "^1.1.2",
+    "@glimmer/validator": "^0.95.0",
+    "@glint/ember-tsc": "catalog:",
+    "@glint/template": "catalog:",
+    "@rollup/plugin-babel": "catalog:",
+    "babel-plugin-ember-template-compilation": "catalog:",
+    "concurrently": "catalog:",
+    "ember-modifier": "^4.3.0",
+    "ember-source": "catalog:",
+    "ember-template-lint": "^6.0.0",
+    "esbuild": "^0.25.0",
+    "eslint": "^9.39.4",
+    "eslint-config-prettier": "catalog:",
+    "eslint-plugin-ember": "catalog:",
+    "eslint-plugin-import": "catalog:",
+    "eslint-plugin-n": "catalog:",
+    "eslint-plugin-simple-import-sort": "^12.1.1",
+    "eslint-plugin-typescript-sort-keys": "catalog:",
+    "globals": "^15.15.0",
+    "motion-dom": "catalog:",
+    "motion-utils": "catalog:",
+    "prettier": "catalog:",
+    "prettier-plugin-ember-template-tag": "catalog:",
+    "rollup": "catalog:",
+    "typescript": "catalog:",
+    "typescript-eslint": "catalog:"
+  },
+  "peerDependenciesMeta": {
+    "@ember/test-helpers": {
+      "optional": true
+    }
+  },
+  "ember-addon": {
+    "version": 2,
+    "type": "addon",
+    "main": "addon-main.cjs",
+    "app-js": {}
+  },
+  "peerDependencies": {
+    "@ember/test-helpers": ">=3.0.0",
+    "@glimmer/component": "^2.0.0",
+    "@glimmer/tracking": "^1.1.2",
+    "ember-modifier": "^4.3.0",
+    "ember-source": ">=5.4.0",
+    "motion-dom": "^13.1.1",
+    "motion-utils": "^13.0.0"
+  }
+}
