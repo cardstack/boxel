@@ -386,14 +386,20 @@ export async function loadPolicy(core: OperationCore): Promise<LoadedPolicy> {
   policyGateStats(core).policyLoads++;
   let policy = await core.policy.compiledPolicy();
   if (policy?.uncompilable) {
-    throw new OperationFailure({
-      status: 500,
-      code: 'internal-error',
-      title: 'Policy unavailable',
-      detail: `the realm's policy could not be loaded`,
-    });
+    throw policyUnavailable();
   }
   return { policy };
+}
+
+// The refusal `loadPolicy` gives for a policy that did not compile, for a
+// caller that has to give it before anything reaches the gate.
+export function policyUnavailable(): OperationFailure {
+  return new OperationFailure({
+    status: 500,
+    code: 'internal-error',
+    title: 'Policy unavailable',
+    detail: `the realm's policy could not be loaded`,
+  });
 }
 
 // Decide whether a caller the realm ACL declined may invoke `name`, which

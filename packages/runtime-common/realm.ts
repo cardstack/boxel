@@ -241,6 +241,7 @@ import {
   storedWriteRefusal,
   type PendingWrite,
   policyGateStats,
+  policyUnavailable,
   type PolicyGateStats,
 } from './card-operations/gate.ts';
 import {
@@ -457,6 +458,7 @@ import {
   isSampledContentHash,
 } from './content-hash.ts';
 import { resolveFileDefCodeRef, urlNamesFile } from './file-def-code-ref.ts';
+import { policyFileDefCodeRef } from './policy-file-def.ts';
 
 import type { Utils } from './matrix-backend-authentication.ts';
 import { MatrixBackendAuthentication } from './matrix-backend-authentication.ts';
@@ -877,7 +879,7 @@ const READINESS_CHECK_PATH = '/_readiness-check';
 //   replacement of a card's document can change the type its grants were
 //   matched on. The operations envelope refuses the same replacement to every
 //   caller for that reason. These are the write half of the card+source read,
-//   which is coarse-read-only.
+//   which a grant reaches only to read a data file's or a card's stored bytes.
 // - `/_atomic` is a batch of the same verbatim writes: whole-document
 //   replacements, and modules alongside cards. The writes a grant can reach
 //   are the ones the operations envelope carries, all or nothing, as `/_atomic`
@@ -886,18 +888,48 @@ const READINESS_CHECK_PATH = '/_readiness-check';
 //   `_permissions` and the rest) do not act on a card at all.
 //
 // So they keep the ACL's refusal, which a realm with a policy words
-// differently on some of them (see `#refusalUnderPolicy`), as does the realm's
-// fallback file and module serve.
+// differently on some of them (see `#refusalUnderPolicy`), as do the directory
+// listing and the module serve.
+//
+// The card+source read and the realm's fallback file serve consume it path by
+// path instead: for a data file or a card's document, whose bytes a
+// `readSource` grant reaches, and for nothing else they serve (see
+// `GRANTABLE_BYTES`).
 const CONSUMES_COARSE_OUTCOME = { consumesCoarseOutcome: true } as const;
 // The capability check's path, named here because two places read it: the
 // route below, and the permission the realm derives from the request's method,
 // which this path is the one `POST` exception to.
 const CAPABILITIES_PATH = '_capabilities';
 // Marks the routes that serve code and the file tree, which no policy grant
-// reaches: the card+source read and its `HEAD`, and the directory listing. The
-// fallback file and module serve is one too, for a `GET` and a `HEAD`. See
+// reaches: the directory listing, and the card+source read and its `HEAD`
+// wherever `GRANTABLE_BYTES` does not lift it. The fallback file and module
+// serve is one too, for a `GET` and a `HEAD`, on the same terms. See
 // `RouteOptions.coarseReadOnly`.
 const COARSE_READ_ONLY = { coarseReadOnly: true } as const;
+// Marks the card+source read and its `HEAD`, which serve a data file's or a
+// card's stored bytes as well as module source. A `readSource` grant reaches
+// the first two and never the third, so a request naming a data file or a
+// card's document consumes the ACL's outcome and every other request the
+// route takes stays coarse-read-only (see `namesGrantableBytes`). The fallback
+// file serve divides the same way, for a `GET` and a `HEAD`.
+const GRANTABLE_BYTES = { coarseReadOnly: true, grantableBytes: true } as const;
+
+// Whether a byte route's read of `localPath` is one a `readSource` grant can
+// reach: any file but module source, typed as the gate types it (see
+// `policyFileDefCodeRef`), so a name with no extension, a `LICENSE` or a
+// `.gitignore`, is a data file here as it is over the operations envelope. It
+// is decided from the name alone, before anything is read, so it says nothing
+// about what the path holds. A directory is not a file at all.
+//
+// A name this admits can still be one a reader's read would extend: the byte
+// routes try module extensions on a name that has none of its own, so a
+// reader's `./classroom` is the transpiled module and a reader's `room.v2` can
+// be redirected to `room.v2.json`. For a caller the ACL declined, the handlers
+// read such a name exactly as named, so it reaches no module and no redirect.
+function namesGrantableBytes(localPath: LocalPath): boolean {
+  let name = localPath.slice(localPath.lastIndexOf('/') + 1);
+  return name !== '' && policyFileDefCodeRef(localPath) !== undefined;
+}
 const ROUTER_METHODS: Method[] = [
   'GET',
   'QUERY',
@@ -2111,7 +2143,9 @@ export type RequestContext = {
   // carries the refusal the ACL made in `coarseRefusal`, and the realm answers
   // with exactly that refusal for any route that does not consume the outcome
   // (see `RouteOptions.consumesCoarseOutcome`). Unset for a realm-internal
-  // dispatch, which the ACL does not judge.
+  // dispatch, which the ACL does not judge. A `HEAD` of bytes a grant can
+  // reach, which the ACL admits from anyone, records the refusal its read
+  // probe got here as well (see `#grantableBytesDispatch`).
   coarseAllowed?: boolean;
   coarseRefusal?: CoarseRefusal;
   // For a request the ACL declined for writing, whether it would have allowed
@@ -2144,6 +2178,7 @@ export type DispatchDescription =
       path: '*';
       consumesCoarseOutcome: boolean;
       coarseReadOnly: boolean;
+      grantableBytes: boolean;
       operationalEndpoint: boolean;
     };
 
@@ -2803,13 +2838,13 @@ export class Realm {
         '/.*',
         SupportedMimeType.CardSource,
         this.getSourceOrRedirect.bind(this),
-        COARSE_READ_ONLY,
+        GRANTABLE_BYTES,
       )
       .get(
         '/.*',
         SupportedMimeType.CardSource,
         this.getSourceOrRedirect.bind(this),
-        COARSE_READ_ONLY,
+        GRANTABLE_BYTES,
       )
       .delete(
         '/.+',
@@ -7284,11 +7319,15 @@ export class Realm {
     let route = this.#router.lookupRoute(request);
     if (route) {
       let matched: Route = route;
+      let serve = () => this.#router.handle(request, requestContext, matched);
+      if (matched.grantableBytes && namesGrantableBytes(localPath)) {
+        return this.#grantableBytesDispatch(request, requestContext, serve);
+      }
       return {
         consumesCoarseOutcome: matched.consumesCoarseOutcome,
         coarseReadOnly: matched.coarseReadOnly,
         operationalEndpoint: matched.operationalEndpoint,
-        handle: () => this.#router.handle(request, requestContext, matched),
+        handle: serve,
       };
     }
     // The health probe sent with no `Accept` its routes answer. It is told
@@ -7312,14 +7351,80 @@ export class Realm {
     }
     // The raw file serve and the transpiled module serve, both of which read
     // the stored bytes through the `readSource` operation, and any other
-    // method no route claimed. None of it consumes the ACL's outcome: the
-    // gate grants no stored-bytes read, so a caller the ACL refused is
-    // refused as it refused them. For a `GET` and a `HEAD` that refusal is
-    // the one a coarse-read-only route gives.
+    // method no route claimed. A `GET` or a `HEAD` of a data file or a card's
+    // document is divided from the rest as the card+source read's is: it
+    // consumes the ACL's outcome, and the gate decides its read. Nothing else
+    // here consumes it, so a caller the ACL refused is refused as it refused
+    // them, and for a `GET` and a `HEAD` that refusal is the one a
+    // coarse-read-only route gives.
+    let serve = () => this.fallbackHandle(request, requestContext);
+    let reads = request.method === 'GET' || request.method === 'HEAD';
+    if (reads && namesGrantableBytes(localPath)) {
+      return this.#grantableBytesDispatch(request, requestContext, serve);
+    }
     return {
       consumesCoarseOutcome: false,
-      coarseReadOnly: request.method === 'GET' || request.method === 'HEAD',
-      handle: () => this.fallbackHandle(request, requestContext),
+      coarseReadOnly: reads,
+      handle: serve,
+    };
+  }
+
+  // What answers a byte route's read of a path whose bytes a `readSource`
+  // grant can reach (see `GRANTABLE_BYTES`). It consumes the realm ACL's
+  // outcome, so a caller the ACL declined reaches the route wherever the
+  // realm's policy has them to judge, and the route reads the bytes for them
+  // through the gate.
+  //
+  // A `HEAD` passes the ACL whoever sends it, so it asks the read question
+  // here, as a `HEAD` of a card does. A caller the ACL would not let read the
+  // realm has that refusal recorded, and where it is admitted despite it, as
+  // a `GET` would be, is read for through the gate like their `GET`. Everyone
+  // else it refuses gets the discovery answer, as they do for every other path
+  // on the route.
+  //
+  // A declined caller is refused a policy that did not compile before the
+  // route opens anything, as the operations envelope refuses it before it
+  // resolves a target, so the 500 is the same for every path whether or not
+  // it holds a file.
+  #grantableBytesDispatch(
+    request: Request,
+    requestContext: RequestContext,
+    serve: () => Promise<ResponseWithNodeStream>,
+  ): RequestDispatch {
+    return {
+      consumesCoarseOutcome: true,
+      handle: async () => {
+        if (request.method === 'HEAD' && requestContext.coarseAllowed) {
+          let probe = await this.#readProbe(request, requestContext);
+          if (!probe.allowed) {
+            let { refusal } = probe;
+            if (!isCoarseRefusal(refusal)) {
+              return this.realmIdentityResponse(requestContext);
+            }
+            requestContext.coarseAllowed = false;
+            requestContext.coarseRefusal = refusal;
+            if (
+              !(await this.#admitsDespiteCoarseRefusal(request, requestContext))
+            ) {
+              return this.realmIdentityResponse(requestContext);
+            }
+          }
+        }
+        if (
+          this.#coarseDeclined(requestContext) === 'all' &&
+          (await this.getCompiledPolicy())?.uncompilable
+        ) {
+          let { error } = policyUnavailable();
+          return responseWithError(
+            new CardError(error.detail, {
+              status: error.status,
+              title: error.title,
+            }),
+            requestContext,
+          );
+        }
+        return await serve();
+      },
     };
   }
 
@@ -7356,6 +7461,12 @@ export class Realm {
   // that consumes the ACL's outcome. This is the single point where a request
   // the ACL declined could be admitted, and anything admitted here still meets
   // the archived seal.
+  //
+  // The ACL lets every `HEAD` through, so a route that answers one with a read
+  // asks the read question itself. The byte routes' `HEAD` then admits its
+  // caller through here (see `#grantableBytesDispatch`), and the card+json
+  // `HEAD` by the same test on its own (see `headCard`). The seal answers a
+  // `HEAD` of a sealed realm before it is routed, so neither reaches one.
   //
   // Admitted means handed to the policy gate, not granted: every operation a
   // consuming route resolves for this request is resolved with the ACL's
@@ -7473,6 +7584,23 @@ export class Realm {
       : this.realmIdentityResponse(requestContext);
   }
 
+  // What a byte route tells a caller the realm ACL would not let read the
+  // realm, of a path whose bytes the gate did not serve them: a `GET` is told
+  // nothing is there and a `HEAD` gets the discovery answer. It is the same
+  // answer for a file no grant admits them to and for a path that holds
+  // nothing, and it is what the route tells them of every path no grant can
+  // reach (see `#refusalUnderPolicy` and `#headForNonReader`), so the paths a
+  // grant might reach say no more than the rest.
+  //
+  // A not-found's body carries the stack it was raised from, so a route builds
+  // this once, ahead of the checks that could each find nothing, rather than
+  // at whichever check did. Built at each, the stack would name the check.
+  #bytesNotThere(request: Request, requestContext: RequestContext): Response {
+    return request.method === 'HEAD'
+      ? this.realmIdentityResponse(requestContext)
+      : notFound(request, requestContext);
+  }
+
   // Stands in for the admission decision so a test can show which requests
   // an admission would reach and which the terminal assertion refuses
   // regardless. Pass `undefined` to restore the real decision.
@@ -7535,6 +7663,7 @@ export class Realm {
         path: '*' as const,
         consumesCoarseOutcome: false,
         coarseReadOnly: method === 'GET' || method === 'HEAD',
+        grantableBytes: method === 'GET' || method === 'HEAD',
         operationalEndpoint: false,
       })),
     ];
@@ -7566,7 +7695,11 @@ export class Realm {
     let start = Date.now();
     let url = new URL(request.url);
     let localPath = this.paths.local(url);
+    // A caller whose read the policy gate decides is never answered from the
+    // module cache, which holds what was compiled for a reader, and reaches no
+    // module to fill it with (see `loadModuleFromDisk`).
     let moduleCachingDisabled =
+      this.#coarseDeclined(requestContext) === 'all' ||
       this.#disableModuleCaching ||
       Boolean(request.headers.get('X-Boxel-Disable-Module-Cache'));
 
@@ -7708,19 +7841,32 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
   ): Promise<ModuleLoadResult> {
-    let maybeFileRef = await this.getFileWithFallbacks(
-      localPath,
-      executableExtensions,
-    );
-    if (!maybeFileRef) {
-      return {
-        kind: 'not-found',
-        response: notFound(
+    // A caller the realm ACL declined, whose read the policy gate decides (see
+    // `#grantableBytesDispatch`). They read a data file exactly as named, and
+    // are told of anything else as they are told of a path that holds nothing:
+    // the gate grants no module, and trying module extensions on the name
+    // would reach one.
+    let gated = this.#coarseDeclined(requestContext) === 'all';
+    // Built once before any check runs, for the reason `#bytesNotThere` gives.
+    let declinedNotThere = gated
+      ? this.#bytesNotThere(request, requestContext)
+      : undefined;
+    let notThere = (): ModuleLoadResult => ({
+      kind: 'not-found',
+      response:
+        declinedNotThere ??
+        notFound(
           request,
           requestContext,
           `${this.#virtualNetwork.unresolveURL(request.url)} not found`,
         ),
-      };
+    });
+    let maybeFileRef = await this.getFileWithFallbacks(
+      localPath,
+      gated ? [] : executableExtensions,
+    );
+    if (!maybeFileRef) {
+      return notThere();
     }
 
     let fileRef = maybeFileRef;
@@ -7736,22 +7882,32 @@ export class Realm {
       // what comes back. What the two paths do not share is the caches around
       // that compile: a module answered from one of them is answered without
       // any read at all.
-      let source = await this.#readStoredSource(
-        this.#callerOf(request, requestContext),
-        fileRef.path,
-        // Nothing here holds on to the bytes, so a `HEAD` asks only for what
-        // its headers are computed from.
-        { headersOnly: request.method === 'HEAD' ? true : undefined },
-      );
+      let source: OperationSourceResult | undefined;
+      try {
+        source = await this.#readStoredSource(
+          this.#callerOf(request, requestContext),
+          fileRef.path,
+          {
+            // Nothing here holds on to the bytes, so a `HEAD` asks only for
+            // what its headers are computed from.
+            headersOnly: request.method === 'HEAD' ? true : undefined,
+            ...(gated ? { coarseDeclined: true as const } : {}),
+          },
+        );
+      } catch (e: unknown) {
+        // The gate's own failures, a policy the realm cannot load among them,
+        // carry the status they chose rather than the one the module serve
+        // answers every other throw with.
+        if (gated && e instanceof CardError) {
+          return {
+            kind: 'non-module',
+            response: responseWithError(e, requestContext),
+          };
+        }
+        throw e;
+      }
       if (!source) {
-        return {
-          kind: 'not-found',
-          response: notFound(
-            request,
-            requestContext,
-            `${this.#virtualNetwork.unresolveURL(request.url)} not found`,
-          ),
-        };
+        return notThere();
       }
       return {
         kind: 'non-module',
@@ -7777,6 +7933,12 @@ export class Realm {
           },
         ),
       };
+    }
+
+    if (gated) {
+      // Not reached: a path the gate reads for names no module, and no module
+      // extension was tried on it.
+      return notThere();
     }
 
     if (fileRef[Symbol.for('shimmed-module')]) {
@@ -9214,16 +9376,29 @@ export class Realm {
   //
   // A refusal here is a file that stopped existing between the caller's
   // resolution and this read — a delete landing in that window — so it becomes
-  // the 404 the same request a moment later would have produced. Nothing else
-  // this operation can refuse is reachable: the path is resolved, so it is
-  // neither a directory nor a name the realm declines to serve.
+  // the 404 the same request a moment later would have produced. For a caller
+  // the realm ACL allowed, nothing else this operation can refuse is
+  // reachable: the path is resolved, so it is neither a directory nor a name
+  // the realm declines to serve.
   // The caller is passed rather than the request it came from: the module
   // serve's read happens inside work shared between concurrent requests, where
   // there is no one request to take it from.
+  //
+  // `coarseDeclined` is for a caller the realm ACL would not let read the
+  // realm, whose read the policy gate decides. A read no grant admits is
+  // refused to them as a path that holds nothing, which is how they are told
+  // of a path that does not, so both come back here as no bytes.
   async #readStoredSource(
     caller: OperationCaller,
     localPath: LocalPath,
-    opts: { headersOnly?: true; skipStoredFileMeta?: true } = {},
+    {
+      coarseDeclined,
+      ...opts
+    }: {
+      headersOnly?: true;
+      skipStoredFileMeta?: true;
+      coarseDeclined?: true;
+    } = {},
   ): Promise<OperationSourceResult | undefined> {
     let result: OperationResult;
     try {
@@ -9236,6 +9411,7 @@ export class Realm {
           },
           name: 'readSource',
           ...caller,
+          ...(coarseDeclined ? { coarseDeclined } : {}),
         },
         // No route reaching here validates on the read's `version` — each
         // builds its own validator from a fingerprint of the file, hashed from
@@ -9247,26 +9423,28 @@ export class Realm {
       if (!isOperationFailure(e)) {
         throw e;
       }
-      if (e.error.code === 'target-not-found') {
+      let error = coarseDeclined ? refusalForNonReader(e.error) : e.error;
+      if (error.code === 'target-not-found') {
         return undefined;
       }
       // Any other refusal carries a status the operation chose, and what
       // carries that status the rest of the way is a `CardError` — a bare
       // refusal reaching the source route's router would answer 500 for
-      // something that named its own answer. Nothing a stored-bytes read can
-      // refuse reaches here today, the resolved path having ruled out the rest,
-      // so this is about the next refusal added to that executor rather than a
-      // live fault.
+      // something that named its own answer. For a caller the ACL allowed,
+      // nothing the executor can refuse reaches here, the resolved path having
+      // ruled out the rest. For a declined one the gate's failures do: a
+      // policy the realm cannot load, say.
       //
-      // It carries the status only as far as the source route. The byte serve
-      // is reached through the module fallback, whose own error handling
-      // answers every throw alike, so a refusal there arrives under that
-      // handler's status rather than this one — as every error on that path
-      // already does.
-      throw new CardError(e.error.detail, {
-        status: e.error.status,
-        title: e.error.title,
-        id: e.error.id,
+      // It carries the status only as far as the source route and, for a
+      // declined caller, the byte serve. For anyone else the byte serve is
+      // reached through the module fallback, whose own error handling answers
+      // every throw alike, so a refusal there arrives under that handler's
+      // status rather than this one — as every error on that path already
+      // does.
+      throw new CardError(error.detail, {
+        status: error.status,
+        title: error.title,
+        id: error.id,
       });
     }
     if (!isSourceResult(result)) {
@@ -9358,10 +9536,14 @@ export class Realm {
     let contentType = options?.defaultHeaders?.['content-type'];
     // Only advertise `public` caching when the realm is world-readable;
     // otherwise the response is auth-gated and must not be stored by shared
-    // caches (e.g. CDNs) where it could be served to another user.
-    let cacheVisibility = requestContext.permissions['*']?.includes('read')
-      ? 'public'
-      : 'private';
+    // caches (e.g. CDNs) where it could be served to another user. Bytes a
+    // policy grant admitted are this caller's alone, whatever the realm's
+    // permissions say.
+    let cacheVisibility =
+      requestContext.permissions['*']?.includes('read') &&
+      this.#coarseDeclined(requestContext) === 'none'
+        ? 'public'
+        : 'private';
     // Serve realm-hosted images (e.g. realm icons and backgrounds) with an
     // explicit Cache-Control so browsers don't fall back to Last-Modified
     // heuristics. must-revalidate + ETag keeps updates responsive while
@@ -9912,12 +10094,27 @@ export class Realm {
     requestContext: RequestContext,
   ): Promise<ResponseWithNodeStream> {
     let url = new URL(request.url);
+    // A caller the realm ACL declined, whose read the policy gate decides (see
+    // `#grantableBytesDispatch`). They read the path exactly as named, with no
+    // extension fallback and so no redirect, and outside the source cache,
+    // which neither answers them nor keeps what was read for them. So nothing
+    // the route read or validated for a reader reaches them before the gate
+    // has admitted them, and nothing read for them reaches a reader. Once the
+    // gate admits them, their response is assembled as a reader's is.
+    let gated = this.#coarseDeclined(requestContext) === 'all';
     let bypassCache =
       url.searchParams.has('noCache') ||
       (!url.pathname.endsWith('.json') &&
         !hasExecutableExtension(url.pathname));
     let localName = this.paths.local(url);
-    if (bypassCache) {
+    // What a declined caller is told whichever check below finds nothing to
+    // serve them, built once before any of them runs (see `#bytesNotThere`).
+    let notThere = gated
+      ? this.#bytesNotThere(request, requestContext)
+      : undefined;
+    if (gated) {
+      // The source cache is left as it is, for the reason above.
+    } else if (bypassCache) {
       let cachedEntry = this.#sourceCache.get(localName);
       if (cachedEntry) {
         this.#dropSourceCacheEntry(cachedEntry.canonicalPath);
@@ -9965,9 +10162,10 @@ export class Realm {
       // like "hello.test" resolve to "hello.test.gts". Only skip fallbacks
       // when the URL already has an executable extension.
       let alreadyHasExecutableExt = hasExecutableExtension(localName);
-      let fallbackExtensions = alreadyHasExecutableExt
-        ? []
-        : [...executableExtensions, '.json'];
+      let fallbackExtensions =
+        alreadyHasExecutableExt || gated
+          ? []
+          : [...executableExtensions, '.json'];
       // Snapshot the source-cache generation BEFORE the first await for every
       // candidate getFileWithFallbacks could resolve to. invalidateCache(path)
       // bumps the counter synchronously, so if it fires while we're reading
@@ -9978,20 +10176,27 @@ export class Realm {
       // re-fill the slot invalidate just cleared, serving a file that is
       // already gone from disk. bypassCache requests never set the cache, so
       // they need no snapshot.
-      let sourceCacheGenSnapshot = bypassCache
-        ? undefined
-        : this.#snapshotSourceCacheGeneration(localName);
+      let sourceCacheGenSnapshot =
+        bypassCache || gated
+          ? undefined
+          : this.#snapshotSourceCacheGeneration(localName);
       let handle = await this.getFileWithFallbacks(
         localName,
         fallbackExtensions,
       );
       if (!handle) {
-        return notFound(request, requestContext, `${localName} not found`);
+        return (
+          notThere ??
+          notFound(request, requestContext, `${localName} not found`)
+        );
       }
 
       if (handle.path !== localName) {
-        if (alreadyHasExecutableExt) {
-          return notFound(request, requestContext, `${localName} not found`);
+        if (alreadyHasExecutableExt || gated) {
+          return (
+            notThere ??
+            notFound(request, requestContext, `${localName} not found`)
+          );
         }
         let headers = {
           Location: this.redirectTarget(handle.path),
@@ -10044,10 +10249,13 @@ export class Realm {
       let source = await this.#readStoredSource(
         this.#callerOf(request, requestContext),
         handle.path,
-        { headersOnly },
+        { headersOnly, ...(gated ? { coarseDeclined: true as const } : {}) },
       );
       if (!source) {
-        return notFound(request, requestContext, `${localName} not found`);
+        return (
+          notThere ??
+          notFound(request, requestContext, `${localName} not found`)
+        );
       }
       let served = this.#servableSource(handle, source);
       let defaultHeaders: Record<string, string> = {
