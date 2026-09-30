@@ -494,6 +494,10 @@ export function assembleImplementPrompt(
     issue: context.issue,
     knowledge: context.knowledge,
     toolResults: toolResultsData.length > 0 ? toolResultsData : undefined,
+    // The turn prompts gate their reuse steps on this. Without it the flag is
+    // system-prompt-only: a `--no-catalog-reuse` run is told the catalog is
+    // off limits and then told it MUST produce a table of catalog modules.
+    enableCatalogReuse: context.enableCatalogReuse !== false,
   });
 }
 
