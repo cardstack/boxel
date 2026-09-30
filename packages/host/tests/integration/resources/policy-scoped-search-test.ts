@@ -214,21 +214,18 @@ module('Integration | policy-scoped search', function (hooks) {
   // A schedule held in the store and never saved, standing in for a card the
   // user created before the realm has indexed it.
   async function createLocally(realmURL: string, path: string) {
-    return (await storeService.add(
-      {
-        data: {
-          type: 'card',
-          id: `${realmURL}${path}`,
-          attributes: {
-            title: `Local ${path}`,
-            providerId: USER,
-            status: 'open',
-          },
-          meta: { adoptsFrom: SCHEDULE },
+    return await storeService.addWithoutPersisting<ScheduleCard>({
+      data: {
+        type: 'card',
+        id: `${realmURL}${path}`,
+        attributes: {
+          title: `Local ${path}`,
+          providerId: USER,
+          status: 'open',
         },
-      } as LooseSingleCardDocument,
-      { doNotPersist: true },
-    )) as ScheduleCard;
+        meta: { adoptsFrom: SCHEDULE },
+      },
+    } as LooseSingleCardDocument);
   }
 
   test('a matching card of a policy-scoped realm that the server did not return is not merged into the result', async function (this: RenderingTestContext, assert) {
