@@ -42,7 +42,7 @@ import {
   type RealmRegistryRow,
 } from './lib/realm-registry-reconciler.ts';
 import { realmDiskPath } from './lib/realm-disk-path.ts';
-import { findOrMountRealm } from './lib/realm-routing.ts';
+import { findRealm } from './lib/realm-routing.ts';
 import { RealmFileChangesListener } from './lib/realm-file-changes-listener.ts';
 import { RealmIndexUpdatedListener } from './lib/realm-index-updated-listener.ts';
 import { ModuleCacheInvalidationListener } from './lib/module-cache-invalidation-listener.ts';
@@ -689,7 +689,7 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
           cardDocumentCache,
           realmFor: (url: URL) =>
             reconciler
-              ? findOrMountRealm(url, { realms, reconciler, dbAdapter })
+              ? findRealm(url, { realms, reconciler, dbAdapter })
               : Promise.resolve(undefined),
         },
         {
