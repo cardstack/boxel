@@ -482,6 +482,8 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       },
     });
 
+    // `duringRender` sends the request as a realm's own render sends it: on
+    // the realm-authority session it renders under, from a tab that marks it.
     function federatedSearch(
       body: object,
       user?: string,
@@ -499,7 +501,11 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         req = req.set(
           'Authorization',
           `Bearer ${createRealmServerJWT(
-            { user, sessionRoom: `session-room-${user}` },
+            {
+              user,
+              sessionRoom: `session-room-${user}`,
+              ...(duringRender ? { realmAuthority: true as const } : {}),
+            },
             realmSecretSeed,
           )}`,
         );
@@ -1260,7 +1266,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         assert.strictEqual(response.body.errors[0].code, 'unknown-operation');
       });
 
-      test('a named query a render is waiting on reads no declaration through a realm only a policy reaches, since no policy admits a render', async function (assert) {
+      test("a named query a realm's own render is waiting on reads no declaration through a realm only a policy reaches, since no policy admits a render", async function (assert) {
         let granted = await federatedSearch(listOpen([GRANTS]), PROVIDER_A, {
           duringRender: true,
         });

@@ -271,10 +271,12 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (hooks) {
     },
   });
 
+  // `realmAuthority` sends the session a realm renders its own cards under.
   function federatedSearch(
     body: Record<string, unknown>,
     user?: string,
     headers: Record<string, string> = {},
+    opts?: { realmAuthority?: true },
   ) {
     let req = request
       .post('/_federated-search')
@@ -286,7 +288,11 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (hooks) {
       req = req.set(
         'Authorization',
         `Bearer ${createRealmServerJWT(
-          { user, sessionRoom: `session-room-${user}` },
+          {
+            user,
+            sessionRoom: `session-room-${user}`,
+            ...(opts?.realmAuthority ? { realmAuthority: true as const } : {}),
+          },
           realmSecretSeed,
         )}`,
       );
@@ -299,14 +305,28 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (hooks) {
     body: Record<string, unknown>,
     user: string,
     headers: Record<string, string> = {},
+    opts?: { realmAuthority?: true },
   ) {
+    let token = opts?.realmAuthority
+      ? realm.createJWT(
+          {
+            user,
+            realm: realm.url,
+            permissions: ['read'],
+            sessionRoom: `session-room-${user}`,
+            realmServerURL: realm.realmServerURL,
+            realmAuthority: true,
+          },
+          '1d',
+        )
+      : createJWT(realm, user, ['read']);
     return request
       .post(`${new URL(realm.url).pathname}_search`)
       .set('Accept', 'application/vnd.card+json')
       .set('Content-Type', 'application/json')
       .set('X-HTTP-Method-Override', 'QUERY')
       .set(headers)
-      .set('Authorization', `Bearer ${createJWT(realm, user, ['read'])}`)
+      .set('Authorization', `Bearer ${token}`)
       .send(body);
   }
 
@@ -522,13 +542,16 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (hooks) {
         realms: [SCHOOL],
       };
 
-      let inRender = await federatedSearch(request, PROVIDER_A, {
-        [DURING_PRERENDER_HEADER]: 'true',
-      });
+      let inRender = await federatedSearch(
+        request,
+        PROVIDER_A,
+        { [DURING_PRERENDER_HEADER]: 'true' },
+        { realmAuthority: true },
+      );
       assert.strictEqual(
         inRender.status,
         401,
-        'what a render produces is served to every viewer, so it never resolves against the identity it rendered as',
+        'what a realm renders of its own cards is served to every viewer, so it never resolves against the identity it rendered as',
       );
       assert.strictEqual(inRender.body.errors[0].code, 'actor-required');
 
@@ -537,6 +560,15 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (hooks) {
         live.status,
         200,
         'and the same request outside a render resolves against its user',
+      );
+
+      let askedFor = await federatedSearch(request, PROVIDER_A, {
+        [DURING_PRERENDER_HEADER]: 'true',
+      });
+      assert.strictEqual(
+        askedFor.status,
+        200,
+        "as does a render a user asked for, which runs on that user's own session",
       );
     });
   });
@@ -796,6 +828,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (hooks) {
         { operation: 'listMySchedules', on: SCHEDULE },
         PROVIDER_A,
         { [DURING_PRERENDER_HEADER]: 'true' },
+        { realmAuthority: true },
       );
 
       assert.strictEqual(response.status, 401, 'HTTP 401 status');
