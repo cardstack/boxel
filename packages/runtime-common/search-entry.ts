@@ -1065,6 +1065,64 @@ export function wireFilterTypeAnchors(
   return undefined;
 }
 
+// The card types a policy is asked about for an ad-hoc search with this
+// filter, or `undefined` when the filter admits an entry of any type.
+//
+// Every entry the filter matches adopts from at least one of them, as with
+// `wireFilterTypeAnchors`, and on the same readings of a node: an unanchored
+// node is read only through its one deciding member, and `any` only when all
+// of its branches are anchored. It differs in what it keeps. Where a live
+// search needs only enough of a filter's anchors to bound its matches, a
+// policy is asked about every type a match is known to adopt from, since each
+// such type brings its own rules. So an `every` contributes the anchors of all
+// of its anchored branches rather than the first one found, and an anchored
+// node contributes its own anchor together with those its body names. Two
+// filters that match the same cards are then asked about the same types,
+// whichever order their branches are written in.
+//
+// A match of an `every` adopts from all of its anchors at once, so each of
+// them brings rules the gate would consult for that match. A match of an `any`
+// adopts from the anchors of one branch, and `policyQueryScope` confines what
+// each type's rules admit to that type's cards, so the other branches' types
+// admit nothing of it.
+export function wireFilterGrantTypes(
+  filter: SearchEntryWireFilter | undefined,
+): CodeRef[] | undefined {
+  if (!filter) {
+    return undefined;
+  }
+  let own = filter[ITEM_ANCHOR];
+  let body = grantTypesOfBody(filter);
+  if (own) {
+    return [own, ...(body ?? [])];
+  }
+  return body;
+}
+
+function grantTypesOfBody(
+  filter: SearchEntryWireFilter,
+): CodeRef[] | undefined {
+  let member = soleShapeMember(filter);
+  if (member === 'every' && filter.every?.length) {
+    let types = filter.every.flatMap(
+      (branch) => wireFilterGrantTypes(branch) ?? [],
+    );
+    return types.length > 0 ? types : undefined;
+  }
+  if (member === 'any' && filter.any?.length) {
+    let types: CodeRef[] = [];
+    for (let branch of filter.any) {
+      let branchTypes = wireFilterGrantTypes(branch);
+      if (!branchTypes) {
+        return undefined;
+      }
+      types.push(...branchTypes);
+    }
+    return types;
+  }
+  return undefined;
+}
+
 // The members that decide what a filter node matches, as opposed to the
 // `item.on` anchor that gates whichever of them runs.
 const SHAPE_MEMBERS = [

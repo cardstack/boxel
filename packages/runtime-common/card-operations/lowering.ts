@@ -197,6 +197,9 @@ function runsNoProgram(base: BaseOperationName, kind: Definition['type']) {
   );
 }
 
+// The name an ad-hoc search is invoked under, which no declaration may take.
+const AD_HOC_QUERY_NAME = 'query';
+
 // Lower every declared operation on one type.
 //
 // `raw` is the authored view — `getDeclaredOperations`, not `getOperations`.
@@ -228,6 +231,32 @@ export async function lowerOperationDeclarations(
             operation: name,
             path: name,
             message: `"${name}" is a reserved operation name — the realm serves it from the bytes stored at the target's URL and reads no definition to do so`,
+          },
+        ],
+      };
+      operations[name] = operation;
+      issues.push(...operation.issues!);
+      continue;
+    }
+    if (name === AD_HOC_QUERY_NAME) {
+      // An ad-hoc search is invoked and granted under this name, so a stored
+      // saved search under it would share that grant with every filter a
+      // caller writes over the type. The authoring decorator refuses the
+      // name, and this keeps a stored entry from carrying it past the code
+      // that did. It is stored invalid, so invoking it by name is refused
+      // rather than served. It is stored on the `query` base whatever base the
+      // declaration named, so whatever reads the entry, a policy compiling a
+      // grant on the name included, reads the name as the ad-hoc search.
+      let operation: OperationDefinition = {
+        base: 'query',
+        deterministic: true,
+        invalid: true,
+        issues: [
+          {
+            code: 'reserved-name',
+            operation: name,
+            path: name,
+            message: `"${name}" is a reserved operation name — it is the name a search the caller writes by hand is invoked and granted under, so a saved search needs a name of its own`,
           },
         ],
       };
