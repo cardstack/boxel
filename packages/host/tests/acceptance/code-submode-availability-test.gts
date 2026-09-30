@@ -5,6 +5,7 @@ import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
 
+import ShowCardTool from '@cardstack/host/tools/show-card';
 import ShowFileTool from '@cardstack/host/tools/show-file';
 import SwitchSubmodeTool from '@cardstack/host/tools/switch-submode';
 
@@ -234,6 +235,18 @@ module('Acceptance | code submode availability', function (hooks) {
       operatorModeStateService.state.submode,
       'code',
       'a module of a realm the user can read is shown in code mode',
+    );
+    await assert.rejects(
+      new ShowCardTool(toolContext).execute({
+        cardId: `${unreadableRealmURL}Pet/mango`,
+      }),
+      /Code mode is not available/,
+      'in code mode, a card whose module the user cannot read is not shown',
+    );
+    assert.strictEqual(
+      operatorModeStateService.state.codePath?.href,
+      `${readableRealmURL}pet.gts`,
+      'and the editor stays where it was',
     );
   });
 });
