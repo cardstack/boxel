@@ -9,6 +9,7 @@ import { policyFileDefCodeRef } from '../policy-file-def.ts';
 import { localPathFor, pathsFor } from './dispatch.ts';
 import type { OperationCore, OperationScope } from './dispatch.ts';
 import type { AdmissionSubject, BxlMutationModule } from './executors.ts';
+import type { GateTrace } from './gate-trace.ts';
 import type {
   CompiledOperationGrant,
   CompiledPolicyPredicate,
@@ -23,7 +24,6 @@ import {
   type BaseOperation,
   type OperationDefinition,
   type OperationTarget,
-  type PolicyIssueCode,
 } from './types.ts';
 
 // ============================================================================
@@ -58,6 +58,8 @@ import {
 // - An operation declared `nonGrantable` on the target's type, refused before
 //   any rule is matched, or on any type the target's type descends from,
 //   refused before a matching grant admits anything.
+// - An explain, which answers what a refusal withholds, whatever its
+//   declaration says.
 // - Any write to the card the realm's policy key names.
 // - Any write to the realm's config card, which holds that key and the
 //   settings a predicate reads through `realmConfig()`.
@@ -66,7 +68,9 @@ import {
 //   before a matching grant admits anything. It does not matter whether a
 //   realm's policy key names the card. A key can come to name a card no key
 //   names today, and a card another realm's key names is that realm's
-//   authorization wherever it is stored.
+//   authorization wherever it is stored. The gate judges a stored card by its
+//   index row, and the write lock judges it again by its stored bytes (see
+//   `StoredCardCheck`).
 //
 // Every way the gate can fail denies. A compiled policy with no rule for the
 // type, a predicate that answers anything but `true`, and a target whose type
@@ -154,10 +158,11 @@ export type GateSubject =
 // What the gate reads of an invocation's scope: who the caller is, what the
 // realm ACL declined, and the index rows a card's chain comes from. A create's
 // proposed document is not among them, because it names the type the caller
-// claims.
+// claims. A scope an explain built also carries the trace the gate records
+// into.
 export type GateScope = Pick<
   OperationScope,
-  'caller' | 'coarseDeclined' | 'peekInstance'
+  'caller' | 'coarseDeclined' | 'peekInstance' | 'trace'
 >;
 
 // The gate's refusal. It carries nothing, since what a refusal says is the
@@ -198,7 +203,7 @@ export type GateDecision =
   | { kind: 'coarse' }
   // A grant admits the invocation: a grant with no condition, or, for a read,
   // one whose predicate held against the target as it is stored now.
-  | { kind: 'granted'; grant: MatchedGrant }
+  | GrantedDecision
   // A write whose every matching grant carries a predicate. A write's
   // predicate has to judge the state the write will change, and only the
   // write lock holds that state still. So its predicates are not evaluated
@@ -206,22 +211,59 @@ export type GateDecision =
   // with `dischargePendingDecision`. Any one of them holding admits the write.
   | PendingDecision;
 
+export interface GrantedDecision {
+  kind: 'granted';
+  grant: MatchedGrant;
+  // For a write to a stored card, what the write lock judges that card by
+  // before the write goes ahead.
+  stored?: StoredCardCheck;
+}
+
 export interface PendingDecision {
   kind: 'pending';
   grants: MatchedGrant[];
   // The target type's definition-cache entry, which describes the source a
   // predicate reads.
   typeDefinition: Definition | undefined;
-  // For a card target, the key the index records the card's own type under,
-  // as it stood when the grants were matched. The grants hold for that type,
-  // so a card stored as some other type by the time the lock is taken is not
-  // one they admit.
-  matchedType?: string;
+  // For a write to a stored card, what the write lock judges that card by
+  // before it evaluates a predicate.
+  stored?: StoredCardCheck;
+}
+
+// A stored card a grant admitted a write to, as the gate matched the grants,
+// for the write lock to judge again.
+//
+// The gate reads a card's type off its index row, outside the lock, and the
+// row can lag the card's stored bytes. A realm writer can replace a card's
+// source through the card-source route, which answers before the card is
+// indexed again. So under the lock, `dischargePendingDecision` reads the type
+// named by the bytes the write stages against, and refuses the write when
+// either of these holds:
+//
+// - The bytes name a type other than the one the grants were matched on. The
+//   grants hold for that type, and a card of another type is not one they
+//   admit.
+// - The type they name is a policy card's, so the rule that keeps a grant off
+//   every policy card holds against the bytes as well as the row. That covers
+//   a card another realm's policy key names, which this realm's key rule does
+//   not reach.
+//
+// A write the realm ACL allowed carries none of this and is never judged.
+export interface StoredCardCheck {
+  // The key the index recorded the card's own type under when the grants
+  // were matched.
+  matchedType: string;
+  // Whether the policy-card rule judged this card's type at the gate, and so
+  // judges it again under the lock. It does for every write but a named
+  // create, which mints the type its declaration names and leaves the card it
+  // is anchored on as it is. The gate judged that minted type from its
+  // definition, which no stored card's bytes can change.
+  changesCard: boolean;
 }
 
 // How often the gate loads a policy, evaluates a predicate and reads a
-// definition, per core, and how many pending writes were decided under a
-// write lock. A test asserts on these rather than on outcomes alone, since an
+// definition, per core, and how many writes whose grants rest on predicates
+// were decided under a write lock. A test asserts on these rather than on outcomes alone, since an
 // outcome cannot show that a caller the ACL allowed never reached the policy,
 // or that a read never reached a lock.
 //
@@ -317,16 +359,12 @@ export interface LoadedPolicy {
   policy: CompiledRealmPolicy | undefined;
 }
 
-// What a policy that recorded one of these can grant is unknown rather than
-// nothing: the realm names a policy and could not read it as one.
-const UNAVAILABLE_POLICY: ReadonlySet<PolicyIssueCode> = new Set([
-  'policy-card-missing',
-  'policy-card-unloadable',
-  'not-a-policy',
-]);
-
 // Load the realm's compiled policy for a caller the realm ACL declined, and
-// refuse with a 500 when the realm names a policy it cannot load.
+// refuse with a 500 when the realm names a policy that did not compile as a
+// whole. What such a policy grants is unknown rather than nothing: the realm
+// names a policy and could not read it as one. A card missing from the index,
+// a card that will not load, and a card whose rules cannot be read are the
+// same refusal.
 //
 // For a caller who may not read the realm, this runs before the target
 // resolves. That keeps the 500 independent of the target: answered only once a
@@ -337,11 +375,7 @@ export async function loadPolicy(core: OperationCore): Promise<LoadedPolicy> {
   }
   policyGateStats(core).policyLoads++;
   let policy = await core.policy.compiledPolicy();
-  if (
-    policy?.issues.some(
-      (issue) => issue.path === '' && UNAVAILABLE_POLICY.has(issue.code),
-    )
-  ) {
+  if (policy?.uncompilable) {
     throw new OperationFailure({
       status: 500,
       code: 'internal-error',
@@ -366,6 +400,7 @@ export async function gateOperation(
   loaded?: LoadedPolicy,
 ): Promise<GateDecision | GateRefusal> {
   let { base } = definition;
+  let { trace } = scope;
   if (!declines(scope, base)) {
     return { kind: 'coarse' };
   }
@@ -374,25 +409,32 @@ export async function gateOperation(
   // so a grant for it that a compiled policy holds is never consulted,
   // however that grant came to be there.
   if (definition.nonGrantable) {
+    trace?.refused('non-grantable');
     return GATE_REFUSED;
   }
   // A query is planned and run on the search engine rather than against one
-  // target, so nothing here can grant one.
-  if (base === 'query') {
+  // target, so nothing here can grant one. An explain is granted nowhere: what
+  // it answers is what a refusal withholds, so it is refused here even where
+  // its declaration left the flag off.
+  if (base === 'query' || base === 'explain') {
+    trace?.refused('non-grantable');
     return GATE_REFUSED;
   }
   if (subject.kind === 'unmatched' || !core.policy) {
+    trace?.refused('unmatchable-target');
     return GATE_REFUSED;
   }
   // A type is only what a create mints from. Every other behavior runs
   // against a stored target, and is judged by it or not at all.
   if (subject.kind === 'type' && base !== 'create') {
+    trace?.refused('unmatchable-target');
     return GATE_REFUSED;
   }
   // The gate grants a file one behavior, the read of its stored bytes. What a
   // file def carries besides — its metadata `read`, its writes — is granted on
   // nothing.
   if (subject.kind === 'file' && base !== 'readSource') {
+    trace?.refused('unmatchable-target');
     return GATE_REFUSED;
   }
   // The realm's config card and the card its policy key names together
@@ -400,13 +442,15 @@ export async function gateOperation(
   // declare. This rule follows the cards' identities rather than their types
   // because the gate judges a card's type by its index row, which can lag the
   // stored bytes. A card a realm writer has just rewritten as a policy card
-  // reads as its old type until its index pass lands.
+  // reads as its old type here until its index pass lands, and only the write
+  // lock judges it by its bytes.
   if (
     subject.kind === 'card' &&
     isWrite(base) &&
     (namesRealmConfigCard(core, subject.url) ||
       (await namesPolicyCard(core.policy, subject.url)))
   ) {
+    trace?.refused('authorization-infrastructure');
     return GATE_REFUSED;
   }
   // Every other behavior is matched on its card's index row, which is peeked
@@ -417,6 +461,7 @@ export async function gateOperation(
   if (base !== 'readSource') {
     let indexed = await indexedSubject(scope, subject);
     if (!indexed) {
+      trace?.refused('unmatchable-target');
       return GATE_REFUSED;
     }
     if (indexed.kind === GATE_MISSING.kind) {
@@ -426,6 +471,7 @@ export async function gateOperation(
   }
   let { policy } = loaded ?? (await loadPolicy(core));
   if (!policy) {
+    trace?.refused('no-grant');
     return GATE_REFUSED;
   }
   let matchOn =
@@ -434,11 +480,13 @@ export async function gateOperation(
       ? undefined
       : await storedBytesSubject(core, subject.url));
   if (!matchOn) {
+    trace?.refused('unmatchable-target');
     return GATE_REFUSED;
   }
   let { types } = matchOn;
-  let matched = await matchingGrants(policy, types, name, core.policy);
+  let matched = await matchingGrants(policy, types, name, core.policy, trace);
   if (matched.length === 0) {
+    trace?.refused('no-grant');
     return GATE_REFUSED;
   }
   // Once a grant would admit the invocation, and not before, so an
@@ -457,25 +505,33 @@ export async function gateOperation(
     !isDefinitionFreeBaseOperation(name) &&
     (await nonGrantableInChain(core, types.slice(typeDefinition ? 1 : 0), name))
   ) {
+    trace?.refused('non-grantable');
     return GATE_REFUSED;
   }
   if (
     isWrite(base) &&
     (await writesPolicyCard(core, core.policy, types, definition))
   ) {
+    trace?.refused('authorization-infrastructure');
     return GATE_REFUSED;
   }
+  // A write to a stored card was matched on its row, and the write lock
+  // judges the card again from its bytes.
+  let lockCheck: { stored: StoredCardCheck } | undefined =
+    isWrite(base) && matchOn.kind === 'card' && types[0]
+      ? {
+          stored: {
+            matchedType: types[0],
+            changesCard: !mintsDeclaredType(definition),
+          },
+        }
+      : undefined;
   let unconditional = matched.find(({ grant }) => !grant.where);
   if (unconditional) {
-    return { kind: 'granted', grant: unconditional };
+    return { kind: 'granted', grant: unconditional, ...lockCheck };
   }
   if (isWrite(base)) {
-    return {
-      kind: 'pending',
-      grants: matched,
-      typeDefinition,
-      ...(matchOn.kind === 'card' && types[0] ? { matchedType: types[0] } : {}),
-    };
+    return { kind: 'pending', grants: matched, typeDefinition, ...lockCheck };
   }
   // A read has one state to judge, and nothing to wait for, so its predicate
   // is evaluated here, against the target as it is stored now.
@@ -671,28 +727,60 @@ async function readSubject(
     : undefined;
 }
 
-// A write the gate left pending, and what deciding it reads.
+// A write a grant admitted that the write lock still has to decide, and what
+// deciding it reads: a write whose grants rest on predicates, or a write to a
+// stored card, whose type the lock judges again (see `StoredCardCheck`).
 export interface PendingWrite {
   target: OperationTarget;
   // The name the operation was invoked under, which a refusal names.
   name: string;
-  decision: PendingDecision;
+  decision: PendingDecision | LockedGrant;
   // The write's own scope, which says who the caller is.
   scope: OperationScope;
 }
 
-// Decide a pending write under the write lock it holds.
+// A grant that admitted a write to a stored card outright, whose card the
+// write lock still judges.
+export type LockedGrant = GrantedDecision & { stored: StoredCardCheck };
+
+// What the gate's decision about invoking `name` on `target` leaves the write
+// lock to decide, or undefined where it leaves nothing. It leaves nothing for
+// a read, for a write the realm ACL allowed, and for a create against a type
+// that a grant admitted outright, which has no stored card to judge.
+export function pendingWriteFor(
+  target: OperationTarget,
+  name: string,
+  decision: GateDecision,
+  scope: OperationScope,
+): PendingWrite | undefined {
+  return leavesToLock(decision) ? { target, name, decision, scope } : undefined;
+}
+
+// Whether a decision leaves anything for the write lock to decide.
+export function leavesToLock(
+  decision: GateDecision,
+): decision is PendingDecision | LockedGrant {
+  return (
+    decision.kind === 'pending' ||
+    (decision.kind === 'granted' && decision.stored !== undefined)
+  );
+}
+
+// Decide a write a grant admitted, under the write lock it holds.
 //
-// A write's predicate judges the state the write changes, and only the lock
-// holds that still: between the gate matching a write's grants and the write
-// taking its lock, another writer can change the very field a predicate reads.
-// So whatever takes the lock hands in the card the write is judged by, as it
-// holds it where the write stages, and the predicates are evaluated against
-// that rather than against anything read before the lock.
+// The gate judged the write outside the lock, and between the gate matching a
+// write's grants and the write taking its lock, another writer can change the
+// card the write changes: its type, or the very field a predicate reads. So
+// whatever takes the lock hands in the card the write is judged by, as it
+// holds it where the write stages, and the write is judged against that
+// rather than against anything read before the lock. A write to a stored card
+// is judged first by the type its bytes name (see `StoredCardCheck`), whether
+// a grant admitted it outright or on a predicate. Then a write whose grants
+// rest on predicates has them evaluated.
 //
-// Only the predicates run again. The grants, and the compiled predicates on
-// them, were matched at the gate from the policy it loaded, and they travel
-// here on the decision, so nothing loads the policy a second time.
+// Only those run again. The grants, and the compiled predicates on them, were
+// matched at the gate from the policy it loaded, and they travel here on the
+// decision, so nothing loads the policy a second time.
 //
 // What a predicate judges is the target the grants were matched on. A write to
 // a card judges the card it changes. That includes a named create anchored on
@@ -713,7 +801,9 @@ export async function dischargePendingDecision(
   // no such card.
   judged: AdmissionSubject | undefined,
 ): Promise<void> {
-  policyGateStats(core).pendingDischarges++;
+  if (pending.decision.kind === 'pending') {
+    policyGateStats(core).pendingDischarges++;
+  }
   let admission = await admits(core, pending, judged);
   if (!('grant' in admission)) {
     throw gateRefusal(core, admission, pending.target, pending.name);
@@ -751,10 +841,40 @@ async function admits(
   { target, decision, scope }: PendingWrite,
   judged: AdmissionSubject | undefined,
 ): Promise<Admission> {
-  let subject =
-    target.kind === 'instance'
-      ? await lockedSubject(core, target.url, decision, judged?.source)
-      : await mintedSubject(core, judged);
+  if (target.kind !== 'instance') {
+    // A create against a type, which only a decision resting on predicates
+    // leaves to the lock.
+    if (decision.kind !== 'pending') {
+      return GATE_REFUSED;
+    }
+    let minted = await mintedSubject(core, judged);
+    return minted
+      ? await firstHolding(core, decision.grants, minted, scope)
+      : GATE_REFUSED;
+  }
+  let card = await lockedCard(
+    core,
+    target.url,
+    decision.stored,
+    judged?.source,
+  );
+  if (!card) {
+    return GATE_REFUSED;
+  }
+  if (decision.kind === 'granted') {
+    return decision.grant;
+  }
+  // A predicate reads the card's fields, and bytes from beneath an append
+  // the batch staged do not say what those will hold.
+  if (judged?.beneathAppend) {
+    return GATE_REFUSED;
+  }
+  let subject = await storedSubject(
+    core,
+    card.url,
+    decision.typeDefinition,
+    card.resource,
+  );
   return subject
     ? await firstHolding(core, decision.grants, subject, scope)
     : GATE_REFUSED;
@@ -787,6 +907,14 @@ async function firstHolding(
     }
     stats.predicateEvaluations++;
     let outcome = await evaluate(core, where, subject, actor);
+    scope.trace?.evaluated(
+      candidate.grant,
+      outcome === 'holds'
+        ? 'held'
+        : outcome === 'threw'
+          ? 'threw'
+          : 'did-not-hold',
+    );
     if (outcome === 'holds') {
       return candidate;
     }
@@ -878,11 +1006,18 @@ async function writesPolicyCard(
   types: string[],
   definition: OperationDefinition,
 ): Promise<boolean> {
-  let written =
-    definition.base === 'create' && definition.of
-      ? await mintedChain(core, definition.of)
-      : types;
+  let written = mintsDeclaredType(definition)
+    ? await mintedChain(core, definition.of)
+    : types;
   return !written || access.isPolicyCard(written);
+}
+
+// Whether a write mints the type its declaration names, as a named create
+// does, rather than writing the type of the target it is invoked on.
+function mintsDeclaredType(
+  definition: OperationDefinition,
+): definition is OperationDefinition & { of: CodeRef } {
+  return definition.base === 'create' && Boolean(definition.of);
 }
 
 // The adoption chain of the type a named create mints, as the definition
@@ -893,11 +1028,17 @@ async function mintedChain(
   of: CodeRef,
 ): Promise<string[] | undefined> {
   let resolved = core.resolveCodeRef(of, new URL(core.realmURL));
-  if (!resolved) {
-    return undefined;
-  }
+  return resolved ? await recordedChain(core, resolved) : undefined;
+}
+
+// The adoption chain the definition cache records beside a type's
+// definition. Undefined when it cannot be read.
+async function recordedChain(
+  core: OperationCore,
+  type: ResolvedCodeRef,
+): Promise<string[] | undefined> {
   try {
-    return (await core.definitionLookup.lookupDefinitionEntry(resolved))?.types;
+    return (await core.definitionLookup.lookupDefinitionEntry(type))?.types;
   } catch {
     return undefined;
   }
@@ -941,6 +1082,8 @@ export async function matchingGrants(
   types: string[],
   name: string,
   access: OperationPolicyAccess,
+  // Where an explain records the rules matched. Absent everywhere else.
+  trace?: GateTrace,
 ): Promise<MatchedGrant[]> {
   let chain = new Set(types);
   let matched: MatchedGrant[] = [];
@@ -949,10 +1092,10 @@ export async function matchingGrants(
     if (!keys.some((key) => chain.has(key))) {
       continue;
     }
-    for (let grant of rule.grants) {
-      if (grant.operation === name) {
-        matched.push({ rule, grant });
-      }
+    let grants = rule.grants.filter((grant) => grant.operation === name);
+    trace?.ruleMatched(rule, grants);
+    for (let grant of grants) {
+      matched.push({ rule, grant });
     }
   }
   return matched;
@@ -1014,26 +1157,31 @@ async function storedSubject(
       };
 }
 
-// A pending write's target card as the lock holds it. A card that is gone, or
-// that is stored as a type other than the one its grants were matched on, is
-// not what those grants admit, and is judged by nothing.
-async function lockedSubject(
+// A pending write's target card as the lock holds it, or undefined where it is
+// no longer a card the write's grants admit (see `StoredCardCheck`): a card
+// that is gone, one stored as a type other than the one its grants were
+// matched on, or one the write changes that is now a policy card.
+//
+// A card an earlier entry in the batch removed is judged by nothing too, so a
+// write to it is refused. A card an earlier entry appended to is judged by
+// the bytes beneath the append, which say what type it is.
+async function lockedCard(
   core: OperationCore,
   href: string,
-  decision: PendingDecision,
+  check: StoredCardCheck | undefined,
   storedSource: string | undefined,
-): Promise<PredicateSubject | undefined> {
+): Promise<{ url: URL; resource: CardResource } | undefined> {
   let url = parseURL(href);
   let resource =
     storedSource === undefined ? undefined : cardResourceIn(storedSource);
-  if (!url || !resource || !core.policy) {
+  if (!url || !resource || !core.policy || !check) {
     return undefined;
   }
   let adoptsFrom = resource.meta?.adoptsFrom;
   let storedType = adoptsFrom
     ? core.resolveCodeRef(adoptsFrom, url)
     : undefined;
-  if (!storedType || !decision.matchedType) {
+  if (!storedType) {
     return undefined;
   }
   let keys: string[];
@@ -1042,10 +1190,20 @@ async function lockedSubject(
   } catch {
     return undefined;
   }
-  if (!keys.includes(decision.matchedType)) {
+  if (!keys.includes(check.matchedType)) {
     return undefined;
   }
-  return await storedSubject(core, url, decision.typeDefinition, resource);
+  if (check.changesCard) {
+    // The chain comes from the definition cache rather than the row, which
+    // lags a module edit the way it lags a card's: a type that now extends
+    // `RealmPolicy` makes its cards policy cards before they are indexed
+    // again.
+    let chain = await recordedChain(core, storedType);
+    if (!chain || core.policy.isPolicyCard(chain)) {
+      return undefined;
+    }
+  }
+  return { url, resource };
 }
 
 // The card a create against a type would mint, as a predicate reads it:

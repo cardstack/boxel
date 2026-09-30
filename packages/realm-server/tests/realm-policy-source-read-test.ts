@@ -58,8 +58,9 @@ const CARD_DEF = { module: rri('@cardstack/base/card-api'), name: 'CardDef' };
 // reaches nothing there.
 const TEACHES = '.teacherIds | any(. == actor())';
 // A predicate over what a data-file target does have: the path it names and
-// the caller.
-const PUBLIC_AND_TEACHER = `(instance().id | contains("/public/")) and (actor() == "${TEACHER}")`;
+// the caller. The path is tested at its end, so a query string that repeated
+// it would satisfy the test if the query string reached the id.
+const PUBLIC_AND_TEACHER = `(instance().id | endswith("/public/handbook.pdf")) and (actor() == "${TEACHER}")`;
 
 const CLASSROOM_MODULE = `
   import { contains, containsMany, field, CardDef } from "@cardstack/base/card-api";
@@ -493,7 +494,10 @@ module(basename(import.meta.filename), function (hooks) {
       await assert.rejects(
         resolveGatedOperation(
           core,
-          { kind: 'instance', url: `${PRIVATE_HANDBOOK}?p=/public/` },
+          {
+            kind: 'instance',
+            url: `${PRIVATE_HANDBOOK}?p=/public/handbook.pdf`,
+          },
           'readSource',
           scope(),
         ),

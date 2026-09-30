@@ -266,7 +266,9 @@ export interface RouteOptions {
   // a realm with a policy, a caller the ACL does not let read the realm is
   // told nothing is there, as they are told of every card no grant admits
   // them to, rather than that they may not look. A `HEAD`, which the ACL
-  // admits from anyone, gets them the realm's discovery answer.
+  // admits from anyone, is answered with the realm's discovery response
+  // when the ACL would not let its caller read the realm, whether or not the
+  // realm has a policy.
   coarseReadOnly?: true;
 }
 
