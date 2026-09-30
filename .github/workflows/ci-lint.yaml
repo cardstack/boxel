@@ -166,6 +166,16 @@ jobs:
         if: ${{ !cancelled() }}
         run: pnpm run lint
         working-directory: packages/choreo-gallery
+      - name: Build Glimmer Motion, Choreo Player and Choreo Gallery
+        # Build coverage, not a lint prerequisite: lint type-checks these
+        # packages from source. The builds catch what only rollup sees, such
+        # as the gallery's `?raw` guide imports, fix-declarations and
+        # scope-css.
+        if: ${{ !cancelled() }}
+        run: |
+          (cd packages/glimmer-motion && pnpm run build)
+          (cd packages/choreo-player && pnpm run build)
+          (cd packages/choreo-gallery && pnpm run build)
 
   catalog:
     # The catalog (cardstack/boxel-catalog) type-checks and lints its cards
