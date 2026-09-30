@@ -75,8 +75,10 @@ import {
   emptySearchEntryDocument,
   fieldsetFromParam,
   htmlQueryFromParams,
+  markPolicyScoped,
   parseSearchEntryQueryFromPayload,
   policyScopedQuery,
+  policyScopedRealms,
   type SearchEntryFieldset,
   type SearchEntryQuery,
 } from './search-entry.ts';
@@ -13150,6 +13152,9 @@ export class Realm {
     // that declares it. Read before the declaration is resolved, since what it
     // resolves to is a filter and carries neither.
     let invocation = namedQueryInvocation(payload);
+    // A declared query is answered with this realm's resolution of it, so
+    // what its result holds is the realm's to decide, not the caller's filter.
+    let resolvedByServer = isNamedQueryPayload(payload);
     // How much of each result's link graph a named query's declaration lets
     // its results carry. An ad-hoc search declares nothing.
     let declaredLinks: LinkStrategy | undefined;
@@ -13198,10 +13203,24 @@ export class Realm {
               requestContext,
             )
           : undefined;
+      // Marked policy-scoped, so a client holding this realm's cards adds none
+      // the realm did not return: the caller's policy decided the rows, or the
+      // realm resolved the declared query they named. The mark is the same
+      // whether the policy admitted some rows or none.
+      let scopedRealms = policyScopedRealms({
+        realms: [this.url],
+        // A policy is consulted exactly when the caller does not read this
+        // realm outright.
+        readable: () => policyScope === undefined,
+        resolvedByServer,
+      });
       if (policyScope?.kind === 'denied') {
         return createResponse({
           body: JSON.stringify(
-            emptySearchEntryDocument(searchEntryQuery),
+            markPolicyScoped(
+              emptySearchEntryDocument(searchEntryQuery),
+              scopedRealms,
+            ),
             null,
             2,
           ),
@@ -13264,9 +13283,12 @@ export class Realm {
         });
       // Cut an over-budget item-leg search off (408) rather than run it to
       // completion; the signal stops the `loadLinks` fan-out promptly.
-      let doc = itemLegBounded
-        ? await runWithSearchTimeBudget(runSearch)
-        : await runSearch();
+      let doc = markPolicyScoped(
+        itemLegBounded
+          ? await runWithSearchTimeBudget(runSearch)
+          : await runSearch(),
+        scopedRealms,
+      );
       return createResponse({
         body: JSON.stringify(doc, null, 2),
         init: {
