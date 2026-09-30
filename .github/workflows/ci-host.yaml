@@ -490,7 +490,7 @@ jobs:
 
   host-test:
     name: Host Tests
-    # EXPERIMENT (CS-13263) — shards can run on RunsOn: ephemeral EC2 spot
+    # EXPERIMENT — shards can run on RunsOn: ephemeral EC2 spot
     # instances in our own AWS account, which take the sixteen shards out of
     # GitHub's concurrent-job cap so the rest of CI stops queueing behind them.
     # Setting the repo variable HOST_TEST_RUNS_ON to a RunsOn spec such as
