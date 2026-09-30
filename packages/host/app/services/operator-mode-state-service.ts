@@ -150,6 +150,12 @@ interface OpenFileSubscriber {
 export type ModuleInspectorView = 'schema' | 'spec' | 'preview';
 export const DEFAULT_MODULE_INSPECTOR_VIEW: ModuleInspectorView = 'schema';
 
+// What a tool that would open code mode answers where it is not offered (see
+// `OperatorModeStateService#codeSubmodeOffered`).
+export function codeSubmodeUnavailable(url: string | null | undefined): string {
+  return `Code mode is not available${url ? ` for ${url}` : ''}: it needs read permission on the realm, which serves its modules and file tree only to a user who may read it`;
+}
+
 // Read the user's persisted AI Assistant open/closed preference. Defaults to
 // `false` for first-ever visits, so the panel is closed unless the URL state
 // (which takes precedence) or a remembered preference opens it.
@@ -1341,7 +1347,7 @@ export default class OperatorModeStateService extends Service {
   // edits a realm's modules and browses its file tree, and a realm serves
   // those only to a caller its own permissions let read it: no policy grant
   // reaches them. A user who reaches the realm only through grants would find
-  // nothing there to open, so code mode is not offered to them.
+  // its file tree and modules refused, so code mode is not offered to them.
   codeSubmodeOffered = (url: string | undefined): boolean => {
     return this.realm.canRead(url && !isLocalId(url) ? url : this.realmURL);
   };

@@ -816,7 +816,7 @@ A `readSource` grant is honored on the routes that serve a path's bytes, the
 `card+source` read and the realm's file serve, as it is through `operations()`.
 It reaches a data file by the `FileDef` its extension names, and a card's `.json`
 by the card's own type. Grant it with care. A card's `.json` is its whole stored
-document, a superset of what any `read` projection returns, so a `readSource`
+document, including every field a `read` projection omits, so a `readSource`
 grant beside a narrower `read` hands the caller everything the `read` was
 written to leave out.
 
@@ -835,11 +835,16 @@ what they are told of a path that holds nothing, and a copy the realm cached
 for a reader is never served to them.
 
 So code mode, which edits a realm's modules and browses its file tree, needs
-the realm's own read permission, and the host does not offer it without that
-permission. This also settles where the difference between a card's `.json` and
-its `read` would be most confusing: an editor showing a file whose rendered card
-is refused, or the reverse. No caller who reaches a realm only through grants
-can stand there.
+the realm's own read permission. The host does not lead a caller without it
+there: the submode switcher, a card's error and an attached file offer no way
+in, and the assistant's tools that open code mode refuse. A caller who arrives
+anyway, by a shared link, finds the file tree and every module refused, and can
+open only a file a grant reaches.
+
+That is the one place the difference between a card's `.json` and its `read`
+could be seen side by side: with a `readSource` grant and no `read`, the editor
+shows the stored document beside a preview that is refused. The host keeps such
+a caller from being led there, but it is not a boundary. The endpoints are.
 
 ## Asking a policy what it decides
 
