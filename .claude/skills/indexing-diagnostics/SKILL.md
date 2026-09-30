@@ -531,8 +531,6 @@ Rows whose job has no `jobs` row are never removed that way — see [step 9](#9-
 
 **An attempt that has lost its job cannot commit.** The queue can let a handler run on after it lost the job: a deadline that expires marks the job rejected without cancelling it, and a lease that lapses lets another worker claim the job. The first statement of every commit checks that the attempt still holds its job — the job `unfulfilled`, its reservation open, and a lapsed lease not taken by a live one, the same test `attemptJobFinalize` applies to a verdict — and otherwise throws `[job: <id>.<rid>] no longer holds its job (…), so its index pass of <realm> does not commit`. That line in a worker log is a zombie handler being stopped, not a failure of the job; its staged rows are cleared once the job ends.
 
-No pass writes the shared `boxel_index_working` / `prerendered_html_working` tables. Anything in them was staged by a release that used them, and says nothing about a current pass.
-
 What is staged in a realm right now, one row per pass:
 
 ```sql
