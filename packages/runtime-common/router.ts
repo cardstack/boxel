@@ -185,7 +185,7 @@ function matchParameterized(
   return plain;
 }
 
-export type RouteTable<T> = Map<SupportedMimeType, Map<Method, Map<string, T>>>;
+type RouteTable<T> = Map<SupportedMimeType, Map<Method, Map<string, T>>>;
 
 // The path a request is routed on: its path within the realm with a leading
 // slash, keeping the trailing slash that names a directory, so a route for a
@@ -199,7 +199,7 @@ export function routedPath(paths: RealmPaths, request: Request): string {
     : requestPath;
 }
 
-export function lookupRouteTable<T>(
+function lookupRouteTable<T>(
   routeTable: RouteTable<T>,
   paths: RealmPaths,
   request: Request,
