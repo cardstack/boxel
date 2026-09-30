@@ -1274,6 +1274,12 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           realms: [GRANTS],
           page: { number: 0, size: 3 },
         };
+        // The compiled policy is revalidated on its first read once a few
+        // seconds have passed since it was last validated, and that
+        // revalidation is an index read of its own rather than the search's.
+        // Read it here, outside the window measured, so what is counted below
+        // is the search's statements alone.
+        await realms[GRANTS].getCompiledPolicy();
         let scoped = await indexQueriesDuring(() =>
           federatedSearch(body, PROVIDER_A),
         );
