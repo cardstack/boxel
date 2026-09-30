@@ -125,10 +125,16 @@ export const BUNDLED_BASE_MODULES: Record<
   // the two module records that leaves behind expose the same class from the
   // same chunk, so nothing compares them and disagrees.
   //
-  // `file-api`, `command`, `commands/search-card-result`, `theme`, `index`,
-  // `command-field`, `frontmatter-parse` and `file-formats/index` are out on
-  // the same rule; `FETCHED_RE_EXPORTS` lists the ones a bundled module still
-  // imports, which are the ones the closure check has to allow.
+  // `file-api`, `command`, `commands/search-card-result`, `theme`,
+  // `image-file-def`, `index`, `command-field` and `file-formats/index` are
+  // out on the same rule; `FETCHED_RE_EXPORTS` lists the ones a bundled module
+  // still imports, which are the ones the closure check has to allow.
+  //
+  // What a module passes through decides this, not how much of it is
+  // re-export: only a card or file def has a code ref read as a type, so
+  // `frontmatter-parse` is bundled — it passes a function through — while
+  // `image-file-def` is not, because it re-exports card-api's `ImageDef`
+  // beside the classes it declares itself.
   'card-api': () => import('@cardstack/base/card-api'),
   '-private': () => import('@cardstack/base/-private'),
   'card-serialization': () => import('@cardstack/base/card-serialization'),
@@ -269,6 +275,9 @@ export const BUNDLED_BASE_MODULES: Record<
   // while a direct import of it still fetched a separate copy — the closure
   // rule above, broken.
   //
+  // `commands/search-card-result` has the same closure problem, importing
+  // `./commands/search-result-list`.
+  //
   // Both also re-export classes they do not declare: `command` re-exports the
   // search input and result fields from `commands/*`, and
   // `commands/search-card-result` re-exports `JsonField` from `json-field`.
@@ -346,8 +355,6 @@ export const BUNDLED_BASE_MODULES: Record<
   'brand-functional-palette': () =>
     import('@cardstack/base/brand-functional-palette'),
   'brand-logo': () => import('@cardstack/base/brand-logo'),
-  'commands/search-card-result': () =>
-    import('@cardstack/base/commands/search-card-result'),
   coordinate: () => import('@cardstack/base/coordinate'),
   country: () => import('@cardstack/base/country'),
   'css-value': () => import('@cardstack/base/css-value'),
@@ -398,7 +405,6 @@ export const BUNDLED_BASE_MODULES: Record<
   'id3v2-parser': () => import('@cardstack/base/id3v2-parser'),
   'image-animation': () => import('@cardstack/base/image-animation'),
   'image-color-profile': () => import('@cardstack/base/image-color-profile'),
-  'image-file-def': () => import('@cardstack/base/image-file-def'),
   'iso-bmff': () => import('@cardstack/base/iso-bmff'),
   'jpg-meta-extractor': () => import('@cardstack/base/jpg-meta-extractor'),
   'json-file-def': () => import('@cardstack/base/json-file-def'),
@@ -419,7 +425,6 @@ export const BUNDLED_BASE_MODULES: Record<
   'stl-meta-extractor': () => import('@cardstack/base/stl-meta-extractor'),
   'svg-meta-extractor': () => import('@cardstack/base/svg-meta-extractor'),
   'text-file-def': () => import('@cardstack/base/text-file-def'),
-  theme: () => import('@cardstack/base/theme'),
   'three-d-model-def': () => import('@cardstack/base/three-d-model-def'),
   'three-mf-meta-extractor': () =>
     import('@cardstack/base/three-mf-meta-extractor'),

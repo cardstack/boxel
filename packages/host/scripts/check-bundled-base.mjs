@@ -185,19 +185,33 @@ const IDENTIFY_USE = /\bidentifyCard\s*\(\s*([A-Za-z_$][\w$]*)\s*[,)]/g;
 // module's own import of its superclass is resolved inside the chunk. A
 // fetched module never has this problem, because evaluating it loads what it
 // extends first — which is exactly what bundling removes.
-// `export { X } from './y'` and `export * from './y'`. A module whose whole
-// content is re-exports declares nothing, and the loader credits the first
-// module it serves with every name that module exposes — so serving a
-// re-exporter before the module that declares the class takes the credit, and
-// every code ref for that class then names a module that does not declare it.
-// Only a re-export from another base module can do this: both are served, and
-// the order decides. Re-exporting from outside base (runtime-common, say)
-// cannot, since the loader is never asked for the declarer as a base module.
-const RE_EXPORT =
-  /\bexport\s*(?:\*(?:\s+as\s+[A-Za-z_$][\w$]*)?|\{[^}]*\})\s*from\s*['"]([^'"]+)['"]\s*;?/g;
-
 const EXTENDS_USE =
   /\bclass\s+([A-Za-z_$][\w$]*)\s+extends\s+([A-Za-z_$][\w$]*)/g;
+
+// A name a module exports whose binding another base module declares. The
+// loader credits the first module it serves with every name that module
+// exposes, so a module that passes a class through takes the credit from the
+// module that declares it, and every code ref for that class then names a
+// module that does not declare it.
+//
+// Four shapes reach that: `export { X } from './y'`, `export * from './y'`,
+// and — where `X` was imported from a base module — `export default X` and
+// `export { X }`. Testing whether a module is *entirely* re-exports would miss
+// the last two and any module that declares classes of its own beside one it
+// passes through; the loader credits every name a served module exposes, so
+// one is enough.
+const EXPORT_FROM =
+  /\bexport\s*(?:\*(?:\s+as\s+[A-Za-z_$][\w$]*)?|\{([^}]*)\})\s*from\s*['"]([^'"]+)['"]/g;
+const EXPORT_DEFAULT_NAME = /\bexport\s+default\s+([A-Za-z_$][\w$]*)\s*;/g;
+const EXPORT_LOCAL_LIST = /\bexport\s*\{([^}]*)\}\s*(?!\s*from)[;\n]/g;
+
+// Only a card or file def matters here. Its code ref is read as a type — the
+// filter a chooser searches by, and a level of every subclass's adoption chain
+// — so naming the wrong module for one is a wrong answer someone acts on. A
+// function's ref is read by nothing, and a contained field's is supplied by
+// the field that holds it, so passing either through costs nothing. That is
+// decided from base's own class graph rather than from a list, so no module
+// has to be vouched for by hand.
 
 // Which base module each imported name comes from, keyed by the local name and
 // carrying the name the declaring module exports it under — `import { X as Y }`
@@ -289,6 +303,29 @@ function classIndex() {
 //
 // An unresolvable chain answers false, so the rule fires rather than goes
 // quiet on something it could not read.
+// Whether a class is a CardDef or FileDef. Only those have a code ref read as
+// a type, so only those are worth refusing a pass-through over. A Glimmer
+// component or a plain class reaches neither root and answers false.
+function isCardOrFileClass(index, moduleName, className) {
+  let key = `${moduleName}#${className}`;
+  let seen = new Set();
+  while (!seen.has(key)) {
+    seen.add(key);
+    let entry = index.get(key);
+    if (!entry) {
+      return false;
+    }
+    if (entry.parent === 'CardDef' || entry.parent === 'FileDef') {
+      return true;
+    }
+    if (entry.parent === 'FieldDef') {
+      return false;
+    }
+    key = `${entry.module}#${entry.parent}`;
+  }
+  return false;
+}
+
 function isFieldClass(index, moduleName, className) {
   let key = `${moduleName}#${className}`;
   let seen = new Set();
@@ -313,7 +350,7 @@ function main() {
   let { table, exceptions } = readTable();
   let closureViolations = [];
   let identityHazards = [];
-  let reexporters = [];
+  let passThroughs = [];
   let classes = classIndex();
 
   for (let name of table) {
@@ -332,19 +369,57 @@ function main() {
       closureViolations.push(`${name} imports ${target}`);
     }
 
-    let reexportSources = [...code.matchAll(RE_EXPORT)]
-      .map((match) => baseTargetOf(match[1], file))
-      .filter(Boolean);
-    if (
-      reexportSources.length > 0 &&
-      code.replace(RE_EXPORT, '').trim() === ''
-    ) {
-      reexporters.push(
-        `${name} re-exports ${[...new Set(reexportSources)].join(', ')}`,
-      );
-    }
-
     let origin = importOrigins(code, file);
+
+    let borrowed = [];
+    for (let match of code.matchAll(EXPORT_FROM)) {
+      let target = baseTargetOf(match[2], file);
+      if (!target || target === name) {
+        continue;
+      }
+      if (match[1] === undefined) {
+        // `export * from './y'` names nothing, so every class `./y` declares
+        // is passed through.
+        for (let key of classes.keys()) {
+          let [from, declared] = key.split('#');
+          if (from === target) {
+            borrowed.push([declared, target]);
+          }
+        }
+        continue;
+      }
+      for (let piece of match[1].split(',')) {
+        let local = piece.trim().split(/\s+as\s+/)[0];
+        if (local && !local.startsWith('type ')) {
+          borrowed.push([local, target]);
+        }
+      }
+    }
+    for (let re of [EXPORT_DEFAULT_NAME, EXPORT_LOCAL_LIST]) {
+      for (let match of code.matchAll(re)) {
+        let names =
+          re === EXPORT_DEFAULT_NAME ? [match[1]] : match[1].split(',');
+        for (let piece of names) {
+          let local = piece.trim().split(/\s+as\s+/)[0];
+          if (!local || local.startsWith('type ')) {
+            continue;
+          }
+          let from = origin.get(local);
+          if (from && from.module !== name) {
+            borrowed.push([from.name, from.module]);
+          }
+        }
+      }
+    }
+    for (let [declared, from] of borrowed) {
+      if (!classes.has(`${from}#${declared}`)) {
+        continue;
+      }
+      if (!isCardOrFileClass(classes, from, declared)) {
+        continue;
+      }
+      passThroughs.push(`${name} passes through ${declared} from ${from}`);
+    }
 
     let uses = [
       ...[...code.matchAll(FIELD_USE)].map((m) => ({ referenced: m[1] })),
@@ -375,9 +450,13 @@ function main() {
 
   let closure = [...new Set(closureViolations)].sort();
   let identity = [...new Set(identityHazards)].sort();
-  let reexport = [...new Set(reexporters)].sort();
+  let passThrough = [...new Set(passThroughs)].sort();
 
-  if (closure.length === 0 && identity.length === 0 && reexport.length === 0) {
+  if (
+    closure.length === 0 &&
+    identity.length === 0 &&
+    passThrough.length === 0
+  ) {
     console.log(
       `ok: ${table.size} bundled base modules are closed under imports, ` +
         `and name no class the loader is never asked for`,
@@ -419,18 +498,18 @@ function main() {
     }
   }
 
-  if (reexport.length > 0) {
+  if (passThrough.length > 0) {
     console.error(
-      `\n${reexport.length} bundled module(s) declare nothing and only ` +
-        `re-export another base module.\n` +
+      `\n${passThrough.length} bundled module(s) export a name another base ` +
+        `module declares.\n` +
         `A class is credited to the first module the loader serves that ` +
-        `exposes it, so serving a re-exporter first takes the credit from the ` +
-        `module that declares the class, and every code ref for it then names ` +
-        `a module that does not.\n` +
-        `Add it to FETCHED_RE_EXPORTS instead: fetched, it asks the loader for ` +
-        `what it re-exports from, so the declarer is served first.\n`,
+        `exposes it, so passing one through takes the credit from the module ` +
+        `that declares it, and every code ref for that class then names a ` +
+        `module that does not.\n` +
+        `Leave it out of the table: fetched, it asks the loader for what it ` +
+        `re-exports from, so the declarer is served first.\n`,
     );
-    for (let line of reexport) {
+    for (let line of passThrough) {
       console.error(`  ${line}`);
     }
   }

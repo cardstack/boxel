@@ -75,8 +75,10 @@ import {
   emptySearchEntryDocument,
   fieldsetFromParam,
   htmlQueryFromParams,
+  markPolicyScoped,
   parseSearchEntryQueryFromPayload,
   policyScopedQuery,
+  policyScopedRealms,
   type SearchEntryFieldset,
   type SearchEntryQuery,
 } from './search-entry.ts';
@@ -235,6 +237,9 @@ import {
   notPermitted,
   pendingWriteFor,
   pendingWriteHolds,
+  pendingWriteRefusal,
+  storedWriteRefusal,
+  type PendingWrite,
   policyGateStats,
   type PolicyGateStats,
 } from './card-operations/gate.ts';
@@ -284,6 +289,7 @@ import {
   targetFor,
   writeResult,
   type EnvelopeEntry,
+  type EnvelopeNode,
   type EnvelopeResult,
   type ResolvedEnvelopeEntry,
 } from './card-operations/envelope.ts';
@@ -311,7 +317,7 @@ import {
   type OperationTarget,
 } from './card-operations/types.ts';
 import { erroredTargetRow } from './card-operations/read.ts';
-import { commitBatch } from './card-operations/coordinator.ts';
+import { commitBatch, rehearseBatch } from './card-operations/coordinator.ts';
 import {
   noteRealmIndexMoved,
   RealmPolicyCache,
@@ -363,6 +369,7 @@ import {
   SupportedMimeType,
   isCoarseRefusal,
   lookupRouteTable,
+  routedPath,
 } from './router.ts';
 import { parseQuery } from './query.ts';
 import type { Readable } from 'stream';
@@ -839,13 +846,17 @@ function renderHoldMaxMs(): number {
     ? override
     : DEFAULT_RENDER_HOLD_MAX_MS;
 }
-// `localPath`s (no leading slash) exempt from the archived-realm seal: the
-// realm's public operational endpoints, which must keep working while a realm
-// is archived. `_readiness-check` is the health probe; `_session` is the
-// authentication endpoint. Matched on path rather than `Accept`/`Content-Type`
-// so the exemption holds for header-less probes too. Keep in sync with
-// `#publicEndpoints`.
-const ARCHIVED_SEAL_EXEMPT_PATHS = new Set(['_readiness-check', '_session']);
+// Marks the realm's public operational endpoints, which keep working while
+// the realm is archived (see `RouteOptions.operationalEndpoint`): `_session`
+// authentication, and the `_readiness-check` health probe, both its `GET` and
+// its `HEAD` in every media type whose `HEAD` is the realm's discovery answer.
+// `#publicEndpoints` answers the `_session` `POST` and the probe's `GET`
+// without credentials, as a `HEAD` needs none: keep the two in step.
+const OPERATIONAL_ENDPOINT = { operationalEndpoint: true } as const;
+// The health probe's path as the router matches it, named here because the
+// probe's routes read it, and so does the probe that reaches no route because
+// it sends no `Accept` they answer (see `#isBareReadinessProbe`).
+const READINESS_CHECK_PATH = '/_readiness-check';
 // Marks the routes whose handlers hand the realm ACL's recorded outcome to the
 // policy gate: the `/_operations` envelope, which resolves every entry through
 // the gate, the card+json read, whose operation runs through it, the search,
@@ -2114,6 +2125,11 @@ export type RequestContext = {
 interface RequestDispatch {
   consumesCoarseOutcome: boolean;
   coarseReadOnly?: boolean;
+  // The answer is one of the realm's operational endpoints, which an archived
+  // realm's seal lets through (see `OPERATIONAL_ENDPOINT`). The seal reads it
+  // off the dispatch that will answer, so nothing else a request for an
+  // endpoint's path could be handed to passes with it.
+  operationalEndpoint?: boolean;
   handle: () => Promise<ResponseWithNodeStream>;
 }
 
@@ -2128,6 +2144,7 @@ export type DispatchDescription =
       path: '*';
       consumesCoarseOutcome: boolean;
       coarseReadOnly: boolean;
+      operationalEndpoint: boolean;
     };
 
 type CoarseAdmission = (
@@ -2629,6 +2646,7 @@ export class Realm {
         '/_session',
         SupportedMimeType.Session,
         this.createSession.bind(this),
+        OPERATIONAL_ENDPOINT,
       )
       .query(
         '/_sign-capture-urls',
@@ -2646,9 +2664,10 @@ export class Realm {
         this.patchRealmPermissions.bind(this),
       )
       .get(
-        '/_readiness-check',
+        READINESS_CHECK_PATH,
         SupportedMimeType.RealmInfo,
         this.readinessCheck.bind(this),
+        OPERATIONAL_ENDPOINT,
       )
       // Answered on the realm ACL alone: its writes are verbatim replacements,
       // which no policy grant reaches (see `CONSUMES_COARSE_OUTCOME`).
@@ -2798,15 +2817,28 @@ export class Realm {
     // of the caller, which is what lets a client work out which realm serves a
     // URL — and whether that realm is public — before it has credentials for
     // it.
+    //
+    // The health probe's `HEAD` is that same answer, which reads nothing, and
+    // is registered ahead of the catch-all as the probe's own route so that it
+    // stays reachable while the realm is archived: `*/*`, which a health
+    // checker's `HEAD` commonly sends, is one of these buckets.
     Object.values(SupportedMimeType).forEach((mimeType) => {
       if (
         mimeType !== SupportedMimeType.CardSource &&
         mimeType !== SupportedMimeType.CardJson
       ) {
-        this.#router.head('/.*', mimeType as SupportedMimeType, async () => {
+        let discovery = async () => {
           let requestContext = await this.createRequestContext('read');
           return this.realmIdentityResponse(requestContext);
-        });
+        };
+        this.#router
+          .head(
+            READINESS_CHECK_PATH,
+            mimeType as SupportedMimeType,
+            discovery,
+            OPERATIONAL_ENDPOINT,
+          )
+          .head('/.*', mimeType as SupportedMimeType, discovery);
       }
     });
     // card+json is the one bucket where a `HEAD` is a read: a caller permitted
@@ -5586,9 +5618,10 @@ export class Realm {
       // may be a write the gate left to the write lock. A card that does not exist is
       // refused where it sits, so the position a refusal names says whether
       // the entries ahead of it resolved, and it is weighed against theirs.
+      // Nothing has reached the write lock, so it has decided nothing.
       throw await this.#disclosableFailure(
         (outcomes[refusedAt] as PromiseRejectedResult).reason,
-        coarseDeclined,
+        { coarseDeclined, tree, caller },
         outcomes.slice(0, refusedAt).map(fulfilled),
         new Map(),
       );
@@ -5693,48 +5726,29 @@ export class Realm {
         isWrite(definition.base),
       );
       if (writes.length > 0) {
-        // Each entry's `input` stage and `params` check, which `stageWriteEntry`
-        // runs in the order `runOperation` runs them for a read. The transformed
-        // entry keeps its `position`, which is the key both the staging schedule
-        // and the results are looked up by.
-        //
-        // A write a policy grant admitted carries what the gate left undecided
-        // to the coordinator, which decides it under the write lock where the
-        // write stages: the type a stored card's bytes name, and a predicate
-        // the grant rests on, against the card it changes or, for a create
-        // against a type, the card it would mint.
+        // Each write in request order, as the coordinator stages it, keyed by
+        // the position it was sent under (see `#stagedWrite`).
         let staged = new Map<EntryPosition, BatchEntry>();
         for (let [index, write] of writes.entries()) {
-          try {
-            writes[index] = await stageWriteEntry(
-              write,
-              this.#transformContext(write.entry, caller),
-            );
-            let { entry, definition } = writes[index];
-            let pending = pendingWriteOf(writes[index]);
-            staged.set(entry.position, {
-              ...batchEntryFor(entry, definition),
-              ...(pending
-                ? {
-                    admit: async (judged: AdmissionSubject | undefined) => {
-                      try {
-                        await dischargePendingDecision(
-                          this.operationCore,
-                          pending,
-                          judged,
-                        );
-                      } catch (refusal: unknown) {
-                        decided.set(entry.position, refusal);
-                        throw refusal;
-                      }
-                      decided.set(entry.position, undefined);
-                    },
-                  }
-                : {}),
-            });
-          } catch (err: unknown) {
-            throw atEntry(err, write.entry.position);
-          }
+          let { transformed, batchEntry } = await this.#stagedWrite(
+            write,
+            caller,
+            async (pending, judged, position) => {
+              try {
+                await dischargePendingDecision(
+                  this.operationCore,
+                  pending,
+                  judged,
+                );
+              } catch (refusal: unknown) {
+                decided.set(position, refusal);
+                throw refusal;
+              }
+              decided.set(position, undefined);
+            },
+          );
+          writes[index] = transformed;
+          staged.set(transformed.entry.position, batchEntry);
         }
         await this.#testOnlyBeforeBatchLock?.();
         // The tree the caller sent, with the entries that only read taken out of
@@ -5800,7 +5814,7 @@ export class Realm {
     } catch (err: unknown) {
       throw await this.#disclosableFailure(
         err,
-        coarseDeclined,
+        { coarseDeclined, tree, caller },
         resolved,
         decided,
       );
@@ -5876,7 +5890,7 @@ export class Realm {
 
   // What a batch that failed may tell its caller, for a caller the realm ACL
   // declined outright whose batch holds a write the policy gate left to the
-  // write lock and the lock has not decided.
+  // write lock.
   //
   // Such a write's target resolved, and the gate matched a grant on it, which
   // never happens for a card that does not exist. So a refusal the batch makes
@@ -5888,39 +5902,204 @@ export class Realm {
   // A write the lock would refuse, for its card's type or its predicate, is
   // answered with the gate's refusal instead, exactly as a card that does not
   // exist is answered. A write the lock would admit lets the caller have the
-  // answer the batch actually has. A write the lock already decided is not
-  // judged again: one it admitted may be told, and one it refused is the
-  // refusal. The first such write in request order is the answer, so a batch
-  // that the lock refused at one entry says nothing about the entries after
-  // it, as a batch refused at resolution says nothing about them either.
+  // answer the batch actually has. The first write in request order that the
+  // lock would refuse is the answer, so a batch the lock refused at one entry
+  // says nothing about the entries after it, as a batch refused at resolution
+  // says nothing about them either.
   //
-  // The write is judged against its card as stored now, outside the lock.
-  // That decides only what the refusal says, never whether anything is
-  // written, since a batch that reaches here writes nothing.
+  // How the lock would decide each write is worked out from the entries ahead
+  // of it and nothing after it, so a card named later in the batch cannot move
+  // the answer by existing. A write to a card no earlier entry changes is
+  // judged against that card as stored, which is what the lock judges it by:
+  // the lock's own decision where it made one, and otherwise the refusal the
+  // lock would give against the stored bytes, a predicate that throws being
+  // the same fault either way. The lock decides the others by what staging
+  // leaves them. They are
+  // a write to a card an earlier entry removed, rewrote or appended to, and a
+  // create against a type, which is judged by the card it would mint. So those
+  // are rehearsed (see `#rehearsedDecisions`) over the entries ahead of the
+  // first write its stored card refuses, and never taken from the lock. The
+  // lock plans the whole batch before it stages any of it, and a later entry
+  // can stop it from deciding anything, or supply a local id an earlier entry
+  // links to.
+  //
+  // A create against a type that the rehearsal never judges is taken as
+  // refused, as it is against the cards as stored. That happens when its own
+  // params, `input` stage or staging failed, or when staging stopped short of
+  // it. Otherwise its failure would say what its type declares.
+  //
+  // None of this decides whether anything is written: it runs once the batch
+  // has already failed.
   async #disclosableFailure(
     err: unknown,
-    coarseDeclined: CoarseDeclined,
+    {
+      coarseDeclined,
+      tree,
+      caller,
+    }: {
+      coarseDeclined: CoarseDeclined;
+      tree: readonly EnvelopeNode[];
+      caller: { actor: string; clientRequestId: string };
+    },
     resolved: readonly ResolvedEnvelopeEntry[],
+    // The lock's decisions, for a batch that reached it.
     decided: ReadonlyMap<EntryPosition, unknown>,
   ): Promise<unknown> {
     if (coarseDeclined !== 'all') {
       return err;
     }
+    // The cards the entries so far change. A later write to one of them is
+    // judged by what the batch leaves it, not by the card as stored.
+    let changed = new Set<string>();
+    let ahead: ResolvedEnvelopeEntry[] = [];
+    let rehearse = false;
+    let refused: { position: EntryPosition; refusal: unknown } | undefined;
     for (let entry of resolved) {
       let { position } = entry.entry;
-      if (decided.has(position)) {
-        let refusal = decided.get(position);
+      let pending = pendingWriteOf(entry);
+      if (pending) {
+        if (
+          pending.target.kind !== 'instance' ||
+          changed.has(pending.target.url)
+        ) {
+          rehearse = true;
+        } else {
+          let refusal = decided.has(position)
+            ? decided.get(position)
+            : await storedWriteRefusal(this.operationCore, pending);
+          if (refusal !== undefined) {
+            refused = { position, refusal };
+            break;
+          }
+        }
+      }
+      ahead.push(entry);
+      if (
+        isWrite(entry.definition.base) &&
+        entry.definition.base !== 'create' &&
+        entry.target.kind === 'instance'
+      ) {
+        changed.add(entry.target.url);
+      }
+    }
+    if (rehearse) {
+      let rehearsed = await this.#rehearsedDecisions(tree, ahead, caller);
+      for (let entry of ahead) {
+        let { position } = entry.entry;
+        let refusal = rehearsed.get(position);
         if (refusal !== undefined) {
           return atEntry(refusal, position);
         }
-        continue;
-      }
-      let pending = pendingWriteOf(entry);
-      if (pending && !(await pendingWriteHolds(this.operationCore, pending))) {
-        return atEntry(notPermitted(pending.target, pending.name), position);
+        let pending = pendingWriteOf(entry);
+        if (
+          pending &&
+          pending.target.kind !== 'instance' &&
+          !rehearsed.has(position)
+        ) {
+          return atEntry(notPermitted(pending.target, pending.name), position);
+        }
       }
     }
-    return err;
+    return refused ? atEntry(refused.refusal, refused.position) : err;
+  }
+
+  // How the write lock would decide the writes in `resolved` that the gate
+  // left to it, each keyed by position with the refusal it would give, or
+  // undefined where it would admit the write.
+  //
+  // The writes are staged in request order as the lock stages them, against
+  // the realm as stored now, and nothing is committed. What they are staged
+  // with is `resolved` and nothing else, local ids included. A write that
+  // cannot be staged ends the rehearsal there, since nothing can say what it
+  // would leave its card. So does anything staging refuses, as it ends the
+  // batch under the lock, and whatever that was is the batch's failure to
+  // report or not, so it is not rethrown here.
+  async #rehearsedDecisions(
+    tree: readonly EnvelopeNode[],
+    resolved: readonly ResolvedEnvelopeEntry[],
+    caller: { actor: string; clientRequestId: string },
+  ): Promise<Map<EntryPosition, OperationFailure | undefined>> {
+    let rehearsed = new Map<EntryPosition, OperationFailure | undefined>();
+    let admit = async (
+      pending: PendingWrite,
+      judged: AdmissionSubject | undefined,
+      position: EntryPosition,
+    ) => {
+      let refusal = await pendingWriteRefusal(
+        this.operationCore,
+        pending,
+        judged,
+      );
+      rehearsed.set(position, refusal);
+      if (refusal) {
+        throw refusal;
+      }
+    };
+    let staged = new Map<EntryPosition, BatchEntry>();
+    for (let write of resolved) {
+      if (!isWrite(write.definition.base)) {
+        continue;
+      }
+      try {
+        let { batchEntry } = await this.#stagedWrite(write, caller, admit);
+        staged.set(write.entry.position, batchEntry);
+      } catch {
+        break;
+      }
+    }
+    try {
+      await rehearseBatch(this.batchCore, stagedTree(tree, staged), {
+        actor: caller.actor || undefined,
+      });
+    } catch {
+      // A refusal from an admission is already in `rehearsed`, and anything
+      // else staging refused only ends the rehearsal.
+    }
+    return rehearsed;
+  }
+
+  // One write's `input` stage and `params` check, which `stageWriteEntry` runs
+  // in the order `runOperation` runs them for a read, and the entry the
+  // coordinator stages for it. The transformed write keeps its `position`,
+  // which is the key both the staging schedule and the results are looked up
+  // by.
+  //
+  // A write a policy grant admitted carries what the gate left undecided to
+  // the coordinator, which decides it where the write stages: the type a
+  // stored card's bytes name, and a predicate the grant rests on, against the
+  // card it changes or, for a create against a type, the card it would mint.
+  // `admit` is what decides it there, handed the card staging judges it by.
+  async #stagedWrite(
+    write: ResolvedEnvelopeEntry,
+    caller: { actor: string; clientRequestId: string },
+    admit: (
+      pending: PendingWrite,
+      judged: AdmissionSubject | undefined,
+      position: EntryPosition,
+    ) => Promise<void>,
+  ): Promise<{ transformed: ResolvedEnvelopeEntry; batchEntry: BatchEntry }> {
+    try {
+      let transformed = await stageWriteEntry(
+        write,
+        this.#transformContext(write.entry, caller),
+      );
+      let { entry, definition } = transformed;
+      let pending = pendingWriteOf(transformed);
+      return {
+        transformed,
+        batchEntry: {
+          ...batchEntryFor(entry, definition),
+          ...(pending
+            ? {
+                admit: (judged: AdmissionSubject | undefined) =>
+                  admit(pending, judged, entry.position),
+              }
+            : {}),
+        },
+      };
+    } catch (err: unknown) {
+      throw atEntry(err, write.entry.position);
+    }
   }
 
   // A batch's answer is never HTTP-cached. It is not a resource with a
@@ -6830,6 +7009,7 @@ export class Realm {
     });
 
     try {
+      let dispatch = this.#routeRequest(request, localPath, requestContext);
       if (!isLocal) {
         // A capture-URL token (`?token=` on a `_screenshot/` GET) authorizes
         // exactly this request without an Authorization header — the door for
@@ -6868,11 +7048,12 @@ export class Realm {
         // are blocked by this one check. The realm's public operational
         // endpoints stay reachable while archived: the `_readiness-check`
         // health probe (so health checks don't read an archived realm as
-        // down) and `_session` (so authentication still works). They're
-        // matched on `localPath`, independent of request headers, so a bare
-        // health probe that sends no `Accept` header is still exempt. The
-        // archive-management endpoints live on the realm SERVER router and
-        // never reach this boundary, so they stay reachable.
+        // down) and `_session` (so authentication still works). A request
+        // passes by the dispatch that answers it, not by its path (see
+        // `RequestDispatch.operationalEndpoint`), and a bare health probe
+        // that sends no `Accept` header passes too. The archive-management
+        // endpoints live on the realm SERVER router and never reach this
+        // boundary, so they stay reachable.
         //
         // A `HEAD` passes the ACL whoever sends it, so its passing shows
         // nothing about the caller. It meets the seal only from a caller who
@@ -6882,7 +7063,7 @@ export class Realm {
         // answer does not say whether the realm is archived. It is given here
         // rather than by the route: a route that would answer this caller with
         // a read a grant admits would then run that read in a sealed realm.
-        if (requestContext.coarseAllowed && (await this.#isSealed(localPath))) {
+        if (requestContext.coarseAllowed && (await this.#isSealed(dispatch))) {
           if (
             request.method === 'HEAD' &&
             !(await this.#readProbe(request, requestContext)).allowed
@@ -6892,7 +7073,6 @@ export class Realm {
           throw new ArchivedRealmError(`Realm ${this.url} is archived`);
         }
       }
-      let dispatch = this.#routeRequest(request, localPath, requestContext);
       // The terminal assertion: nothing reaches a handler with the ACL's
       // refusal on it unless its route consumes that outcome, so a route that
       // says nothing is refused exactly as the ACL would have refused it. A
@@ -6920,7 +7100,7 @@ export class Realm {
             )
           );
         }
-        await this.#assertNotArchived(localPath);
+        await this.#assertNotArchived(dispatch);
       }
       if (!isLocal && request.method === 'HEAD' && dispatch.coarseReadOnly) {
         let answer = await this.#headForNonReader(request, requestContext);
@@ -7073,7 +7253,27 @@ export class Realm {
       return {
         consumesCoarseOutcome: matched.consumesCoarseOutcome,
         coarseReadOnly: matched.coarseReadOnly,
+        operationalEndpoint: matched.operationalEndpoint,
         handle: () => this.#router.handle(request, requestContext, matched),
+      };
+    }
+    // The health probe sent with no `Accept` its routes answer. It is told
+    // nothing is there, in the words the file serve uses for a path that
+    // holds nothing, rather than handed to that serve: an archived realm's
+    // seal lets this probe through, and the file serve would read what the
+    // realm stores at the probe's path. Coarse-read-only, as that serve is,
+    // so a caller the ACL refuses is answered as it would answer them.
+    if (this.#isBareReadinessProbe(request)) {
+      return {
+        consumesCoarseOutcome: false,
+        coarseReadOnly: true,
+        operationalEndpoint: true,
+        handle: async () =>
+          notFound(
+            request,
+            requestContext,
+            `${this.#virtualNetwork.unresolveURL(request.url)} not found`,
+          ),
       };
     }
     // The raw file serve and the transpiled module serve, both of which read
@@ -7256,21 +7456,35 @@ export class Realm {
     this.#testOnlyBeforeBatchLock = hook;
   }
 
-  async #assertNotArchived(localPath: LocalPath): Promise<void> {
-    if (await this.#isSealed(localPath)) {
+  async #assertNotArchived(dispatch: RequestDispatch): Promise<void> {
+    if (await this.#isSealed(dispatch)) {
       throw new ArchivedRealmError(`Realm ${this.url} is archived`);
     }
   }
 
-  // Whether the archived seal covers `localPath`: the realm is archived and
-  // the path is not one of the operational endpoints exempt from the seal.
-  // Read fresh (no memoization) for the same reason createRequestContext
-  // does: a peer replica's archive/unarchive must take effect here without a
-  // restart.
-  async #isSealed(localPath: LocalPath): Promise<boolean> {
+  // Whether the archived seal covers the request `dispatch` answers: the
+  // realm is archived and the dispatch is not an operational endpoint. That
+  // is read off the dispatch rather than the request's path, so a request
+  // whose path only resembles an endpoint's, such as the directory
+  // `_session/`, or `_session` asked for as card source, is sealed like any
+  // other. Read fresh (no memoization) for the same reason
+  // createRequestContext does: a peer replica's archive/unarchive must take
+  // effect here without a restart.
+  async #isSealed(dispatch: RequestDispatch): Promise<boolean> {
     return (
-      !ARCHIVED_SEAL_EXEMPT_PATHS.has(localPath) &&
+      !dispatch.operationalEndpoint &&
       (await isRealmArchived(this.#dbAdapter, new URL(this.url)))
+    );
+  }
+
+  // Whether `request` is a `GET` or `HEAD` of the health probe's path. Asked
+  // only of a request no route answers, which is the probe sent without an
+  // `Accept` its routes are registered under, as a health checker commonly
+  // sends it.
+  #isBareReadinessProbe(request: Request): boolean {
+    return (
+      (request.method === 'GET' || request.method === 'HEAD') &&
+      routedPath(this.paths, request) === READINESS_CHECK_PATH
     );
   }
 
@@ -7287,6 +7501,7 @@ export class Realm {
         path: '*' as const,
         consumesCoarseOutcome: false,
         coarseReadOnly: method === 'GET' || method === 'HEAD',
+        operationalEndpoint: false,
       })),
     ];
   }
@@ -12934,6 +13149,9 @@ export class Realm {
     // that declares it. Read before the declaration is resolved, since what it
     // resolves to is a filter and carries neither.
     let invocation = namedQueryInvocation(payload);
+    // A declared query is answered with this realm's resolution of it, so
+    // what its result holds is the realm's to decide, not the caller's filter.
+    let resolvedByServer = isNamedQueryPayload(payload);
     // How much of each result's link graph a named query's declaration lets
     // its results carry. An ad-hoc search declares nothing.
     let declaredLinks: LinkStrategy | undefined;
@@ -12982,10 +13200,24 @@ export class Realm {
               requestContext,
             )
           : undefined;
+      // Marked policy-scoped, so a client holding this realm's cards adds none
+      // the realm did not return: the caller's policy decided the rows, or the
+      // realm resolved the declared query they named. The mark is the same
+      // whether the policy admitted some rows or none.
+      let scopedRealms = policyScopedRealms({
+        realms: [this.url],
+        // A policy is consulted exactly when the caller does not read this
+        // realm outright.
+        readable: () => policyScope === undefined,
+        resolvedByServer,
+      });
       if (policyScope?.kind === 'denied') {
         return createResponse({
           body: JSON.stringify(
-            emptySearchEntryDocument(searchEntryQuery),
+            markPolicyScoped(
+              emptySearchEntryDocument(searchEntryQuery),
+              scopedRealms,
+            ),
             null,
             2,
           ),
@@ -13048,9 +13280,12 @@ export class Realm {
         });
       // Cut an over-budget item-leg search off (408) rather than run it to
       // completion; the signal stops the `loadLinks` fan-out promptly.
-      let doc = itemLegBounded
-        ? await runWithSearchTimeBudget(runSearch)
-        : await runSearch();
+      let doc = markPolicyScoped(
+        itemLegBounded
+          ? await runWithSearchTimeBudget(runSearch)
+          : await runSearch(),
+        scopedRealms,
+      );
       return createResponse({
         body: JSON.stringify(doc, null, 2),
         init: {

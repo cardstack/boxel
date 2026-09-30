@@ -477,6 +477,34 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       );
     });
 
+    test('exactly the operational endpoints pass the archived seal', async function (assert) {
+      // The probe's `HEAD` is its own route in every media type whose `HEAD`
+      // is the realm's discovery answer, which is every one but card+source
+      // and card+json, whose `HEAD` reads what is stored at the path.
+      let probeHeads = [
+        ...new Set(
+          Object.values(SupportedMimeType).filter(
+            (mimeType) =>
+              mimeType !== SupportedMimeType.CardSource &&
+              mimeType !== SupportedMimeType.CardJson,
+          ),
+        ),
+      ].map((mimeType) => `HEAD ${mimeType} /_readiness-check`);
+      assert.deepEqual(
+        testRealm
+          .routeDescriptions()
+          .filter((route) => route.operationalEndpoint)
+          .map((route) => `${route.method} ${route.mimeType} ${route.path}`)
+          .sort(),
+        [
+          `POST ${SupportedMimeType.Session} /_session`,
+          `GET ${SupportedMimeType.RealmInfo} /_readiness-check`,
+          ...probeHeads,
+        ].sort(),
+        'the session sign-in and the health probe, and none of the routes that read or write what the realm stores',
+      );
+    });
+
     test('every consuming route hands an admitted caller to the policy gate', async function (assert) {
       // Two consumers answer an admitted caller with something other than a
       // refusal, and each is pinned on its own. The search hands them to the
