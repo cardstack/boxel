@@ -273,6 +273,15 @@ module(basename(import.meta.filename), function () {
       both,
       'as is an anchored node over a body that names the other',
     );
+    // An `every` may skip a branch that anchors nothing, since a match
+    // satisfies every branch and so adopts from the anchored ones anyway. An
+    // `any` may not: a match of its unanchored branch can be of any type at
+    // all, so no list of types bounds what the filter matches.
+    assert.deepEqual(
+      typesOf({ any: [schedule, { eq: { 'item.title': 'x' } }] }),
+      [],
+      'an `any` with a branch that anchors nothing is judged by no type',
+    );
 
     // Granted on the schedule type alone, which each match of either order
     // is, so both orders are admitted alike.
