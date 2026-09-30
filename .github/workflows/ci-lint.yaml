@@ -14,9 +14,20 @@ on:
     paths-ignore:
       - "packages/observability/**"
 
+# Pull requests: a new push cancels the run in progress for the same branch.
+# Pushes to main share one group but never cancel a run in progress: GitHub
+# keeps at most one running and one pending run per group, and a newer pending
+# run replaces the older one. A burst of merges therefore runs the commit in
+# progress and then the newest, rather than every commit in between, while every
+# run that starts still finishes (Percy finalisation, the baseline update and
+# the index-cache artifact all read complete main runs). Everything else,
+# including ci-bisect pushes whose every commit must be tested, and hand-run
+# builds, keeps a group of its own (CS-13358). The main group is `push:main`
+# because `:` cannot appear in a branch name, so no pull request's head_ref
+# (a fork's `main`, say) can land in it and cancel a main run.
 concurrency:
-  group: ci-lint-${{ github.head_ref || github.run_id }}
-  cancel-in-progress: true
+  group: ci-lint-${{ github.head_ref || (github.event_name == 'push' && github.ref == 'refs/heads/main' && 'push:main') || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   checks: write
