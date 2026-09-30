@@ -13,7 +13,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const target = process.argv[2] && resolve(process.argv[2]);
 if (!target || existsSync(target)) {
   throw new Error(
-    'Choose a new directory: node scripts/create-tutorial-app.mjs /tmp/my-choreo-app',
+    'Choose a new directory: node packages/choreo-gallery/tools/create-tutorial-app.mjs /tmp/my-choreo-app',
   );
 }
 const write = (name, body) => {

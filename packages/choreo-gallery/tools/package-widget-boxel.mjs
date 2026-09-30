@@ -78,10 +78,10 @@ html = html.replace(
 html = html.replace(
   '<head>',
   '<head><script>' +
-    readFileSync('scripts/widget-boxel-bridge.js', 'utf8').replaceAll(
-      '</script>',
-      '<\\/script>',
-    ) +
+    readFileSync(
+      new URL('./widget-boxel-bridge.js', import.meta.url),
+      'utf8',
+    ).replaceAll('</script>', '<\\/script>') +
     '</script>',
 );
 writeFileSync(join(out, 'widget-room.html'), html);

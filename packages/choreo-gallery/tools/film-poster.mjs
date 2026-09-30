@@ -3,7 +3,7 @@
  *
  * A card cannot run a film: the grid mounts forty-odd demos at once and
  * these two are the most expensive things in the building, so the tile
- * wears a poster instead (see test-app/app/components/film-tile.gts).
+ * wears a poster instead (see packages/choreo-test-app/app/components/film-tile.gts).
  * The poster is not drawn — it is the film, one frame of it, read back
  * through the picture port's own `snapshot()`. That is the same call
  * every still join makes, so the still is graded exactly as the film
@@ -12,8 +12,8 @@
  * Headless and muted, which matters: this boots a narrated film.
  *
  *   pnpm --filter test-app start          # in another shell
- *   node scripts/film-poster.mjs towers gate 18 13
- *   cwebp -q 78 out/towers-gate.jpg -o test-app/public/towers-poster.webp
+ *   node packages/choreo-gallery/tools/film-poster.mjs towers gate 18 13
+ *   cwebp -q 78 out/towers-gate.jpg -o packages/choreo-test-app/public/towers-poster.webp
  *
  * A shot is a beat index (`?from=N`), or the word `gate`, which captures
  * the film's own door — the evening the construct dresses the poster
@@ -39,7 +39,9 @@ const SHOTS = process.argv.slice(3);
 const SETTLE = Number(process.env['FILM_SETTLE'] ?? 9000);
 
 if (!FILM || SHOTS.length === 0) {
-  console.error('usage: node scripts/film-poster.mjs <film> <shot…>');
+  console.error(
+    'usage: node packages/choreo-gallery/tools/film-poster.mjs <film> <shot…>',
+  );
   process.exit(2);
 }
 

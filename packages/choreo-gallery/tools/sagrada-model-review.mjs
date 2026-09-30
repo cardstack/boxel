@@ -6,7 +6,7 @@ const out =
 const baseline = process.argv[2];
 if (!baseline) {
   throw Error(
-    'Usage: node scripts/sagrada-model-review.mjs /absolute/path/to/baseline.html',
+    'Usage: node packages/choreo-gallery/tools/sagrada-model-review.mjs /absolute/path/to/baseline.html',
   );
 }
 mkdirSync(out, { recursive: true });

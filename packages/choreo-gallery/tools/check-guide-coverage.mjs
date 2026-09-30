@@ -10,7 +10,10 @@ const root = path.resolve(
   '../../..',
 );
 const inventory = JSON.parse(
-  fs.readFileSync(path.join(root, 'docs/api-inventory.json'), 'utf8'),
+  fs.readFileSync(
+    path.join(root, 'packages/choreo-gallery/docs/api-inventory.json'),
+    'utf8',
+  ),
 );
 const files = {
   'glimmer-motion': 'packages/glimmer-motion/src/index.ts',
@@ -79,7 +82,7 @@ assert.equal(
 assert.deepEqual(
   [...listed].sort(),
   [...actual].sort(),
-  'API exports changed: review and update docs/api-inventory.json',
+  'API exports changed: review and update packages/choreo-gallery/docs/api-inventory.json',
 );
 const directory = path.join(
   root,

@@ -2,8 +2,8 @@
  * THE PEEK — load a URL in headless Chrome, print what its console said,
  * and write one PNG of it. Muted, windowless, disposable.
  *
- *   node scripts/film-peek.mjs 'http://localhost:4200/sagrada?embed' out/peek.png
- *   node scripts/film-peek.mjs <url> <png> [debug-port] [settle-ms]
+ *   node packages/choreo-gallery/tools/film-peek.mjs 'http://localhost:4200/sagrada?embed' out/peek.png
+ *   node packages/choreo-gallery/tools/film-peek.mjs <url> <png> [debug-port] [settle-ms]
  *
  * It exists because a film can pass every typecheck, lint and test in
  * the building and still throw at construction in the browser: Phase 2
@@ -26,7 +26,7 @@ const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const [url, out, portArg, settleArg] = process.argv.slice(2);
 if (!url || !out) {
   console.error(
-    'usage: node scripts/film-peek.mjs <url> <png> [port] [settle-ms]',
+    'usage: node packages/choreo-gallery/tools/film-peek.mjs <url> <png> [port] [settle-ms]',
   );
   process.exit(2);
 }

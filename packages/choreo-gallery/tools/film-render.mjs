@@ -2,7 +2,7 @@
  * THE DETERMINISTIC RENDER — an exact film stood at a time, frame by
  * frame, and read back.
  *
- *   node scripts/film-render.mjs <url> <out-dir> <name> [fps] [from] [to] [port]
+ *   node packages/choreo-gallery/tools/film-render.mjs <url> <out-dir> <name> [fps] [from] [to] [port]
  *
  * This is the other half of `film-peek.mjs`. A peek watches the film run;
  * this one does not let it run at all. It calls `renderAt(t)` for every
@@ -25,7 +25,7 @@ const [url, out, name, fpsArg, fromArg, toArg, portArg, sizeArg] =
   process.argv.slice(2);
 if (!url || !out || !name) {
   console.error(
-    'usage: node scripts/film-render.mjs <url> <out-dir> <name> [fps] [from] [to] [port] [WxH]',
+    'usage: node packages/choreo-gallery/tools/film-render.mjs <url> <out-dir> <name> [fps] [from] [to] [port] [WxH]',
   );
   process.exit(2);
 }

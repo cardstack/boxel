@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { chromium } from 'playwright';
 
@@ -45,7 +46,9 @@ try {
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
   await page.clock.install();
-  await page.addInitScript({ path: 'scripts/widget-capture-clock.js' });
+  await page.addInitScript({
+    path: fileURLToPath(new URL('./widget-capture-clock.js', import.meta.url)),
+  });
   const captureUrl = new URL(
     process.env.CAPTURE_URL ?? 'http://localhost:4590/_widgets',
   );
