@@ -14,6 +14,7 @@
   "tests": {
     "host": [
       "Integration | realm policy",
+      "Integration | realm config policy standing",
       "Integration | policy-scoped search"
     ],
     "realmServer": [
@@ -24,6 +25,7 @@
       "realm-policy-capabilities-test",
       "realm-policy-card-write-test",
       "realm-policy-compile-test",
+      "realm-policy-config-standing-test",
       "realm-policy-create-lane-test",
       "realm-policy-explain-test",
       "realm-policy-gate-test",

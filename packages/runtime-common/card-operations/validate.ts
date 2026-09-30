@@ -1,4 +1,9 @@
-import { instanceTargetURL, type OperationCore } from './dispatch.ts';
+import {
+  instanceTargetURL,
+  scopeCallerFor,
+  type OperationCore,
+} from './dispatch.ts';
+import { namesRealmConfigCard } from './gate.ts';
 import type { CompiledRealmPolicy } from './policy.ts';
 import {
   OperationFailure,
@@ -28,6 +33,12 @@ import {
 // Compiling reads the card's row and the definitions of the types its rules
 // name, on the realm server's own authority, as a realm's policy cache does.
 // Nothing it compiles is cached or put in force.
+//
+// Invoked on the realm's config card, it answers for the policy the realm
+// names, from the realm's own compilation: what is in force, rather than what
+// compiling the card again would say. Two problems live in the pointer rather
+// than in any policy card, a card the index does not hold and a card that is
+// not a RealmPolicy, and this is where their author sees them.
 // ============================================================================
 
 export async function validateOperation(
@@ -35,6 +46,9 @@ export async function validateOperation(
   request: OperationRequest,
 ): Promise<OperationValidateResult> {
   let card = instanceTargetURL(request);
+  if (namesRealmConfigCard(core, card)) {
+    return { validation: await realmPolicyValidation(core, request, card) };
+  }
   if (!core.compilePolicyCard) {
     throw new OperationFailure({
       id: card.href,
@@ -46,6 +60,50 @@ export async function validateOperation(
   }
   let compiled = await core.compilePolicyCard(card);
   return { validation: validation(compiled) };
+}
+
+// The realm's policy as the realm holds it, for a validate of its config card.
+//
+// A realm writer may point the realm at a card in any realm, including one
+// they cannot read, and what this answers says whether a card is there and
+// what it holds. Whether a card is there is exactly what a refusal withholds
+// from a caller who cannot read its realm. So, as with an explain, the caller
+// must be able to read both realms: the config card's, which the gate checks,
+// since no grant reaches the config card, and the policy card's, which this
+// checks, judged by a session that realm would accept as the caller's own.
+// A caller who cannot read the policy card's realm, or whose policy card is
+// in no realm this server serves, gets one refusal, the same bytes whatever
+// the card is or whether it is there.
+async function realmPolicyValidation(
+  core: OperationCore,
+  request: OperationRequest,
+  card: URL,
+): Promise<PolicyValidation> {
+  if (!core.policy) {
+    throw new OperationFailure({
+      id: card.href,
+      status: 500,
+      code: 'internal-error',
+      title: 'Cannot validate',
+      detail: `operation "${request.name}" reports the realm's policy, and this realm cannot read one`,
+    });
+  }
+  let compiled = await core.policy.compiledPolicy();
+  if (!compiled) {
+    return { issues: [], rules: [] };
+  }
+  let asker = scopeCallerFor(request.principal ?? '');
+  let holder = await core.targetRealm?.(compiled.card);
+  if (!holder || !(await holder.aclFor(asker)).read) {
+    throw new OperationFailure({
+      id: card.href,
+      status: 403,
+      code: 'operation-not-permitted',
+      title: 'Operation not permitted',
+      detail: `the realm's policy card is not in a realm you can read, so what it compiles to is reported only to a caller who can read that realm`,
+    });
+  }
+  return validation(compiled);
 }
 
 function validation(compiled: CompiledRealmPolicy): PolicyValidation {

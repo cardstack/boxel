@@ -9,10 +9,18 @@ import {
   linksTo,
   realmURL,
 } from './card-api';
+import type { RealmEventContent } from './matrix-event';
 import BooleanField from './boolean';
 import NumberField from './number';
 import StringField from './string';
 import { JsonField } from './json-field';
+import {
+  operation,
+  operations,
+  OperationsError,
+  type OperationDeclaration,
+  type PolicyValidation,
+} from './operations';
 import CardInfoTemplates from './default-templates/card-info';
 import {
   cardDefComputedFields,
@@ -22,6 +30,7 @@ import {
   getField,
   getFieldIcon,
   REDIRECT_STATUS_CODES,
+  subscribeToRealm,
   validateRedirectTarget,
   validateRoutingPath,
 } from '@cardstack/runtime-common';
@@ -43,8 +52,11 @@ import SettingsIcon from '@cardstack/boxel-icons/settings';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import type Owner from '@ember/owner';
+import { restartableTask } from 'ember-concurrency';
+import { modifier } from 'ember-modifier';
 import { startCase } from 'lodash-es';
 import type { FieldsTypeFor } from './card-api';
 
@@ -837,6 +849,201 @@ export class RealmSettingsField extends JsonField {
   static edit = RealmSettingsEdit;
 }
 
+// A render for the indexer rather than for someone looking at the card. Base
+// cards read this global to tell the two apart.
+function isLiveRender(): boolean {
+  return !(globalThis as { __boxelRenderContext?: unknown })
+    .__boxelRenderContext;
+}
+
+interface PolicyStandingSignature {
+  Args: { config: RealmConfig };
+}
+
+// Whether the policy this realm names is in force, as the realm holds it.
+//
+// The pointer is written on this card, and two of the problems that take a
+// realm's whole policy out of force are problems with the pointer rather than
+// with any policy card: it names a card the index does not hold, or one that
+// is not a RealmPolicy. Either one refuses every caller the realm's
+// permissions decline, and the realm's log is the only other place that says
+// why. So the card asks the realm, through `validatePolicy`, and shows the
+// answer beside the pointer.
+//
+// Asked only in a live render. Prerendered HTML is shared by everyone who
+// reads the card, and the realm tells a policy's standing only to a caller
+// who can read the realm holding the policy card. Asked again whenever the
+// realm finishes indexing, because the realm reads the pointer from
+// `realm.json` as saved, not from the field as typed, so a fix takes effect
+// when the save lands.
+class PolicyStanding extends GlimmerComponent<PolicyStandingSignature> {
+  @tracked private validation: PolicyValidation | undefined;
+  @tracked private unavailable: string | undefined;
+  @tracked private answered = false;
+
+  // Only the realm's own config card names the realm's policy. A RealmConfig
+  // stored anywhere else governs nothing.
+  private get realm(): string | undefined {
+    let realm = this.args.config[realmURL];
+    let id = this.args.config.id;
+    if (!realm || !id || id !== new URL('realm', realm).href) {
+      return undefined;
+    }
+    return realm.href;
+  }
+
+  private get pointer(): string {
+    return this.args.config.policy?.trim() ?? '';
+  }
+
+  private get inForce(): boolean {
+    return Boolean(this.validation?.card && !this.validation.uncompilable);
+  }
+
+  private get notInForce(): boolean {
+    return Boolean(this.validation?.card && this.validation.uncompilable);
+  }
+
+  // The realm names no policy although the field holds a value: the realm
+  // did not read it as a card's URL or realm-prefixed id, and dropped it.
+  private get unreadPointer(): boolean {
+    return Boolean(
+      this.validation && !this.validation.card && this.pointer.length,
+    );
+  }
+
+  private get issueCount(): number {
+    return this.validation?.issues.length ?? 0;
+  }
+
+  private watch = modifier((_element, [realm]: [string | undefined]) => {
+    if (!realm || !isLiveRender()) {
+      return;
+    }
+    let unsubscribe = subscribeToRealm(realm, this.onRealmEvent);
+    this.load.perform();
+    return () => unsubscribe();
+  });
+
+  private onRealmEvent = (event: RealmEventContent) => {
+    if (
+      event.eventName === 'index' &&
+      (event.indexType === 'incremental' || event.indexType === 'full')
+    ) {
+      this.load.perform();
+    }
+  };
+
+  private load = restartableTask(async () => {
+    try {
+      this.validation = await operations<typeof RealmConfig>(
+        this.args.config,
+      ).validatePolicy();
+      this.unavailable = undefined;
+    } catch (err) {
+      this.validation = undefined;
+      this.unavailable =
+        err instanceof OperationsError
+          ? (err.detail ?? err.message)
+          : err instanceof Error
+            ? err.message
+            : String(err);
+    }
+    this.answered = true;
+  });
+
+  <template>
+    <div
+      class='policy-standing'
+      data-test-realm-policy-standing={{if this.answered 'answered'}}
+      {{this.watch this.realm}}
+    >
+      {{#if this.inForce}}
+        <p class='standing in-force' data-test-realm-policy-status='in-force'>
+          In force.
+          {{#if this.issueCount}}
+            The policy card lists
+            {{this.issueCount}}
+            {{if (eq this.issueCount 1) 'issue' 'issues'}}
+            with its rules.
+          {{/if}}
+        </p>
+      {{else if this.notInForce}}
+        <div
+          class='standing not-in-force'
+          role='status'
+          data-test-realm-policy-status='not-in-force'
+        >
+          <p class='standing-title'>
+            Not in force. The realm refuses every caller its permissions decline
+            until this is fixed.
+          </p>
+          <ul class='issues'>
+            {{#each this.validation.issues as |issue|}}
+              <li data-test-realm-policy-issue={{issue.code}}>
+                <code>{{issue.code}}</code>
+                {{issue.message}}
+              </li>
+            {{/each}}
+          </ul>
+        </div>
+      {{else if this.unreadPointer}}
+        <p
+          class='standing not-in-force'
+          role='status'
+          data-test-realm-policy-status='unread-pointer'
+        >
+          The realm doesn't read this as a card's URL or realm-prefixed id, so
+          it names no policy. Its permissions alone decide who may do what.
+        </p>
+      {{else if this.unavailable}}
+        <p
+          class='standing unavailable'
+          data-test-realm-policy-status='unavailable'
+        >
+          The realm didn't report this policy's standing:
+          {{this.unavailable}}
+        </p>
+      {{/if}}
+    </div>
+    <style scoped>
+      .policy-standing {
+        display: contents;
+      }
+      .standing {
+        margin: 0;
+        font-size: var(--boxel-font-size-sm);
+      }
+      .in-force {
+        color: var(--boxel-450);
+      }
+      .not-in-force {
+        background: #fef3c7;
+        color: #78350f;
+        border: 1px solid #fcd34d;
+        border-radius: var(--boxel-border-radius-sm, 6px);
+        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
+      }
+      .standing-title {
+        margin: 0;
+      }
+      .issues {
+        margin: var(--boxel-sp-xxs) 0 0;
+        padding-left: var(--boxel-sp);
+      }
+      .issues code {
+        font-family: var(--boxel-font-family-mono, monospace);
+        background: rgba(0, 0, 0, 0.05);
+        padding: 0 0.25rem;
+        border-radius: 0.1875rem;
+      }
+      .unavailable {
+        color: var(--boxel-450);
+      }
+    </style>
+  </template>
+}
+
 class RealmConfigEmbedded extends Component<typeof RealmConfig> {
   <template>
     <div class='realm-config-embedded' data-test-realm-config-embedded>
@@ -958,6 +1165,10 @@ class RealmConfigEdit extends Component<typeof RealmConfig> {
     return this.args.model as unknown as CardDef;
   }
 
+  get config(): RealmConfig {
+    return this.args.model as unknown as RealmConfig;
+  }
+
   <template>
     <div class='realm-config-edit' data-test-realm-config-edit>
       <Header @hasBottomBorder={{true}} class='card-info-header'>
@@ -1010,7 +1221,14 @@ class RealmConfigEdit extends Component<typeof RealmConfig> {
               @icon={{getFieldIcon @model key}}
               data-test-field={{key}}
             >
-              <Field />
+              {{#if (eq key 'policy')}}
+                <div class='policy-field'>
+                  <Field />
+                  <PolicyStanding @config={{this.config}} />
+                </div>
+              {{else}}
+                <Field />
+              {{/if}}
             </FieldContainer>
           {{/each-in}}
         </section>
@@ -1059,6 +1277,10 @@ class RealmConfigEdit extends Component<typeof RealmConfig> {
         padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
         font-size: var(--boxel-font-size-sm);
       }
+      .policy-field {
+        display: grid;
+        gap: var(--boxel-sp-xs);
+      }
       .warning code {
         font-family: var(--boxel-font-family-mono, monospace);
         background: rgba(0, 0, 0, 0.05);
@@ -1070,6 +1292,14 @@ class RealmConfigEdit extends Component<typeof RealmConfig> {
 }
 
 class RealmConfigIsolated extends Component<typeof RealmConfig> {
+  get config(): RealmConfig {
+    return this.args.model as unknown as RealmConfig;
+  }
+
+  get pointer(): string {
+    return this.args.model.policy?.trim() ?? '';
+  }
+
   <template>
     <article class='realm-config-isolated' data-test-realm-config-isolated>
       <header class='header'>
@@ -1099,6 +1329,20 @@ class RealmConfigIsolated extends Component<typeof RealmConfig> {
       <section class='section'>
         <h2 class='section-title'>Settings</h2>
         <@fields.config @format='embedded' />
+      </section>
+
+      <section class='section policy' data-test-realm-config-policy>
+        <h2 class='section-title'>Policy</h2>
+        {{#if this.pointer}}
+          <code class='pointer' data-test-realm-config-policy-pointer>
+            {{this.pointer}}
+          </code>
+        {{else}}
+          <p class='empty' data-test-realm-config-policy-none>
+            No policy. The realm's permissions alone decide who may do what.
+          </p>
+        {{/if}}
+        <PolicyStanding @config={{this.config}} />
       </section>
     </article>
     <style scoped>
@@ -1138,6 +1382,21 @@ class RealmConfigIsolated extends Component<typeof RealmConfig> {
       }
       .empty {
         color: var(--boxel-450);
+      }
+      .policy {
+        display: grid;
+        gap: var(--boxel-sp-xs);
+      }
+      .policy .section-title {
+        margin: 0;
+      }
+      .pointer {
+        font-family: var(--boxel-font-family-mono, monospace);
+        font-size: var(--boxel-font-size-sm);
+        overflow-wrap: anywhere;
+      }
+      .policy .empty {
+        margin: 0;
       }
     </style>
   </template>
@@ -1193,6 +1452,16 @@ export class RealmConfig extends CardDef {
     description:
       'The RealmPolicy card that governs this realm, by its URL or realm-prefixed id. Absent for a realm with no policy. Only the pointer lives here; the rules live on the card it names',
   });
+
+  // What the policy this realm names compiles to, as the realm holds it in
+  // force: the answer says when the policy is not in force at all, and why,
+  // including a pointer to a card the index does not hold or to one that is
+  // not a RealmPolicy. The realm answers only a caller who can read both this
+  // realm and the realm holding the policy card, so no policy may grant it.
+  @operation static validatePolicy = {
+    base: 'validate',
+    nonGrantable: true,
+  } satisfies OperationDeclaration;
 
   @field cardTitle = contains(StringField, {
     computeVia: function (this: RealmConfig) {

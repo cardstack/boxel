@@ -163,11 +163,13 @@ export interface OperationCore {
   // without it admits no such caller.
   policy?: OperationPolicyAccess;
   // The realm that serves `href`, and the URL `href` resolves to there, for
-  // the explain operation, which runs that realm's policy gate. A target
-  // commonly lives in a realm other than the policy card's, so this reaches
-  // any realm the server serves, on the server's own authority: the explain
-  // judges for itself what its caller may be told. Undefined where no realm
-  // this server serves holds `href`. A core without it explains nothing.
+  // the explain operation, which runs that realm's policy gate, and for a
+  // validate of the realm's config card, which asks whether its caller may
+  // read the realm holding the policy card. Either card commonly lives in a
+  // realm other than the one asking, so this reaches any realm the server
+  // serves, on the server's own authority: each operation judges for itself
+  // what its caller may be told. Undefined where no realm this server serves
+  // holds `href`. A core without it explains nothing.
   targetRealm?(href: string): Promise<TargetRealm | undefined>;
   // The policy card at `card` compiled as a realm that names it compiles it,
   // on the server's own authority, for the validate operation. Compiled from
@@ -490,7 +492,8 @@ const CARRIED_BY: Readonly<Record<BaseOperation, readonly DefKind[]>> = {
 // them. Nothing implies one, so a target whose type declares none has no
 // operation by that name, and asking for it is asking for an operation that
 // does not exist. An explain and a validate are the two: each answers only on
-// a policy card, and a policy card's type is what declares it.
+// the card that declares it, a policy card, or for a validate the realm's
+// config card too.
 const DECLARATION_ONLY: Readonly<Partial<Record<BaseOperation, true>>> =
   Object.assign(Object.create(null) as Partial<Record<BaseOperation, true>>, {
     explain: true,
