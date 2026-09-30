@@ -76,7 +76,7 @@
   --muted-foreground: var(--boxel-500);
   --accent: var(--boxel-200);
   --accent-foreground: var(--boxel-dark);
-  --destructive: var(--boxel-danger);
+  --destructive: var(--boxel-destructive);
   --destructive-foreground: var(--boxel-50);
 
   /* form + focus */
@@ -146,8 +146,8 @@
   --warning-foreground: var(--boxel-dark);
   --info: var(--boxel-blue);
   --info-foreground: var(--boxel-light);
-  --attention: var(--boxel-amber);
-  --attention-foreground: var(--boxel-dark);
+  --attention: var(--boxel-dark-amber);
+  --attention-foreground: var(--boxel-light);
   --overlay: var(--boxel-dark-50);
 
   /* Hue as ink. `--x`/`--x-foreground` cover ink *on* a hue's fill; `--x-ink` is
@@ -187,7 +187,10 @@
   --boxel-button-secondary-foreground: var(--foreground);
   --boxel-button-secondary-border: var(--boxel-button-border-color);
   --boxel-button-secondary-active-border: var(--foreground);
-  --boxel-button-destructive-active-background: var(--boxel-danger-hover);
+  --boxel-button-destructive-active-background: var(--boxel-dark-red);
+  /* not reset at themed-card boundaries: it names only contract tokens, so
+     it resolves against the card's own theme there */
+  --boxel-menu-dangerous-foreground: var(--destructive);
   --boxel-button-link-primary-foreground: var(--boxel-highlight-hover);
   --boxel-button-disabled-opacity: 1;
   --boxel-button-disabled-background: var(--boxel-border-color);
@@ -257,7 +260,7 @@
   --muted-foreground: #b6b6be;
   --accent: #797788;
   --accent-foreground: var(--boxel-light);
-  --destructive: var(--boxel-danger);
+  --destructive: var(--boxel-destructive);
   --destructive-foreground: var(--boxel-light-100);
   --canvas: #1e1b26;
   --inset: #302d3b;
@@ -276,15 +279,17 @@
   --primary-ink: color-mix(in oklch, var(--primary) 60%, var(--foreground));
   --secondary-ink: color-mix(in oklch, var(--secondary) 60%, var(--foreground));
   --accent-ink: color-mix(in oklch, var(--accent) 60%, var(--foreground));
+  /* destructive, success, info and attention mix in more --foreground to read
+     on the dark surfaces */
   --destructive-ink: color-mix(
     in oklch,
-    var(--destructive) 60%,
+    var(--destructive) 30%,
     var(--foreground)
   );
-  --success-ink: color-mix(in oklch, var(--success) 60%, var(--foreground));
+  --success-ink: color-mix(in oklch, var(--success) 40%, var(--foreground));
   --warning-ink: color-mix(in oklch, var(--warning) 60%, var(--foreground));
-  --info-ink: color-mix(in oklch, var(--info) 60%, var(--foreground));
-  --attention-ink: color-mix(in oklch, var(--attention) 60%, var(--foreground));
+  --info-ink: color-mix(in oklch, var(--info) 40%, var(--foreground));
+  --attention-ink: color-mix(in oklch, var(--attention) 40%, var(--foreground));
   --sidebar: #555366;
   --sidebar-foreground: var(--boxel-light);
   --sidebar-primary: var(--boxel-highlight);
@@ -304,7 +309,8 @@
   --boxel-button-secondary-foreground: var(--foreground);
   --boxel-button-secondary-border: var(--border);
   --boxel-button-secondary-active-border: var(--foreground);
-  --boxel-button-destructive-active-background: var(--boxel-danger-hover);
+  --boxel-button-destructive-active-background: var(--boxel-dark-red);
+  --boxel-menu-dangerous-foreground: var(--destructive-ink);
   --boxel-button-disabled-opacity: 1;
   --boxel-button-disabled-background: #444051;
   --boxel-button-disabled-foreground: #817c93;
@@ -366,7 +372,7 @@
     --muted-foreground: #b6b6be;
     --accent: #797788;
     --accent-foreground: var(--boxel-light);
-    --destructive: var(--boxel-danger);
+    --destructive: var(--boxel-destructive);
     --destructive-foreground: var(--boxel-light-100);
     --canvas: #1e1b26;
     --inset: #302d3b;
@@ -391,15 +397,15 @@
     --accent-ink: color-mix(in oklch, var(--accent) 60%, var(--foreground));
     --destructive-ink: color-mix(
       in oklch,
-      var(--destructive) 60%,
+      var(--destructive) 30%,
       var(--foreground)
     );
-    --success-ink: color-mix(in oklch, var(--success) 60%, var(--foreground));
+    --success-ink: color-mix(in oklch, var(--success) 40%, var(--foreground));
     --warning-ink: color-mix(in oklch, var(--warning) 60%, var(--foreground));
-    --info-ink: color-mix(in oklch, var(--info) 60%, var(--foreground));
+    --info-ink: color-mix(in oklch, var(--info) 40%, var(--foreground));
     --attention-ink: color-mix(
       in oklch,
-      var(--attention) 60%,
+      var(--attention) 40%,
       var(--foreground)
     );
     --sidebar: #555366;
@@ -410,5 +416,6 @@
     --sidebar-accent-foreground: var(--boxel-light);
     --sidebar-border: var(--boxel-550);
     --sidebar-ring: var(--boxel-highlight);
+    --boxel-menu-dangerous-foreground: var(--destructive-ink);
   }
 }
