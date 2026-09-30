@@ -198,12 +198,12 @@ jobs:
           use_cache=true
           while IFS= read -r file; do
             case "$file" in
-              # Realm content whose name reads like a spec file. Matched ahead
-              # of the spec-file arm, which spans `/` and would otherwise treat
-              # it as inert; this keeps such a file gated by the package globs'
-              # own verdict.
+              # Realm content under a package's `tests/`. Matched ahead of the
+              # test-code arm below, which covers the rest of `tests/` and would
+              # otherwise treat it as inert; this keeps a fixture gated by the
+              # package globs' own verdict.
               #
-              # One prefix per package the spec arm covers, rather than
+              # One prefix per package the test-code arm covers, rather than
               # `packages/*/`: a wildcard here reaches packages those globs
               # never gated, and would make a fixture in one of them newly
               # force a from-scratch index.
@@ -213,29 +213,27 @@ jobs:
                 echo "Realm fixture change detected: $file"
                 break
                 ;;
-              # A spec file cannot change how anything indexes or renders: the
+              # Test code cannot change how anything indexes or renders: the
               # realm servers this stack starts boot from main.ts / worker.ts,
               # and the host bundle is built from app sources, so nothing under
-              # a package's `tests/` is ever loaded by either. Matched ahead of
-              # the package globs below, which would otherwise catch every one
-              # of them — editing a realm-server test was the single most
-              # common cause of a needless from-scratch index.
+              # a package's `tests/` is ever loaded by either. That covers the
+              # spec files and everything they lean on — helpers, shared test
+              # bodies, the realm-server suite's own test-database scripts.
+              # Matched ahead of the package globs below, which would otherwise
+              # catch every one of them.
               #
-              # Scoped to spec files, not to `tests/`: a fixture directory
-              # under `tests/` is realm content — `realm-server/tests/fixtures/
-              # realistic` is served as the node-test realm — and stays gated.
-              # The arm above is what keeps it that way, because the names
-              # overlap: `fixtures/realistic/code-ref-test.gts` is a card that
-              # reads as a spec file.
+              # The exception is a fixture directory, which is realm content:
+              # `realm-server/tests/fixtures/realistic` is served as the
+              # node-test realm. The arm above keeps fixtures gated, including
+              # the ones named like spec files, such as
+              # `fixtures/realistic/code-ref-test.gts`.
               #
               # `case` patterns are not path-aware — `*` spans `/` — which is
-              # what lets one pattern per package cover its nested spec
-              # directories, and equally what makes the fixtures arm above
-              # necessary rather than merely tidy.
-              packages/realm-server/tests/*-test.ts|packages/realm-server/tests/*-test.gts|\
-              packages/runtime-common/tests/*-test.ts|packages/runtime-common/tests/*-test.gts|\
-              packages/boxel-ui/tests/*-test.ts|packages/boxel-ui/tests/*-test.gts|\
-              packages/boxel-ui/docs-app/tests/*-test.ts|packages/boxel-ui/docs-app/tests/*-test.gts)
+              # what lets one pattern per package cover its nested directories,
+              # and equally what makes the fixtures arm above necessary rather
+              # than merely tidy.
+              packages/realm-server/tests/*|packages/runtime-common/tests/*|\
+              packages/boxel-ui/tests/*|packages/boxel-ui/docs-app/tests/*)
                 ;;
               packages/realm-server/*|packages/runtime-common/*|packages/postgres/*|packages/boxel-ui/*|package.json|pnpm-lock.yaml|pnpm-workspace.yaml)
                 use_cache=false
