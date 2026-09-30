@@ -6,6 +6,7 @@
 //
 //   node run-eval.ts https://localhost:4201/experiments/Evaluation/hello-world
 //   node run-eval.ts <eval-card-url> "Claude Sonnet 4.6,GPT-5.5" --headed
+//   node run-eval.ts contact-computed-edit-restyle "GPT-5.6 Luna"
 //
 // Options: --headed (one browser window, one model at a time), --tabs (one
 // window, one tab per model), --session <id> (add these models to an earlier
@@ -23,7 +24,11 @@ import { join } from 'node:path';
 import { loginWithPassword } from './matrix-api.ts';
 import { RealmClient, type CardDocument } from './realm-api.ts';
 import { loadEvaluationBundle, type Evaluation } from './eval-card.ts';
-import { WRITER_PASSWORD, WRITER_USER } from './eval-config.ts';
+import {
+  REALM_SERVER_URL,
+  WRITER_PASSWORD,
+  WRITER_USER,
+} from './eval-config.ts';
 import { grade, type RunResult } from './run-result.ts';
 import { canLogIn, evalUsers } from './ensure-users.ts';
 
@@ -106,14 +111,25 @@ function parseArgs(argv: string[]): Args {
   }
   if (!positional[0]) {
     throw new Error(
-      'usage: node run-eval.ts <evaluation-card-url> [comma,separated,models] [--headless|--headed] [--session <id>] [--no-cards]',
+      'usage: node run-eval.ts <evaluation-card-url | evaluation name> [comma,separated,models] [--headless|--headed] [--session <id>] [--no-cards]',
     );
   }
-  args.evalCardUrl = positional[0];
+  args.evalCardUrl = evaluationUrl(positional[0]);
   if (positional[1]) {
     args.models = positional[1];
   }
   return args;
+}
+
+// An evaluation is named by its card URL, or by the name of its file under
+// eval-realm/Evaluation/ (with or without `.json`), which `pnpm eval:setup`
+// pushes to the writer's evaluations workspace.
+function evaluationUrl(nameOrUrl: string): string {
+  if (/^https?:\/\//.test(nameOrUrl)) {
+    return nameOrUrl;
+  }
+  let name = nameOrUrl.replace(/\.json$/, '');
+  return `${REALM_SERVER_URL.replace(/\/$/, '')}/${WRITER_USER}/evals/Evaluation/${name}`;
 }
 
 function slugify(s: string) {
