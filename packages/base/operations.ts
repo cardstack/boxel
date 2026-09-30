@@ -1174,6 +1174,15 @@ function assertValidDeclaration(
       `${label}: a "validate" operation reports what a policy card compiles to, which only a caller the realm's own permissions let read the card may learn, so no policy may grant it; declare it with \`nonGrantable: true\``,
     );
   }
+  if (base === 'validate') {
+    for (let key of ['params', 'input'] as const) {
+      if (declaration[key] !== undefined) {
+        throw new Error(
+          `${label}: a "validate" operation takes no payload, since the card it is invoked on is the whole question, so it carries no \`${key}\``,
+        );
+      }
+    }
+  }
   let clauseKeys = CLAUSE_KEYS[base];
   let legalKeys = new Set<string>([
     ...COMMON_DECLARATION_KEYS,

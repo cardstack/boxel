@@ -25,7 +25,7 @@ import {
 } from './gate.ts';
 import type { GateTrace } from './gate-trace.ts';
 import { explainOperation, type TargetRealm } from './explain.ts';
-import type { CompiledRealmPolicy } from './policy.ts';
+import type { CompiledPolicyCard } from './policy.ts';
 import { validateOperation } from './validate.ts';
 import {
   DEFINITION_FREE_BASE_OPERATIONS,
@@ -170,10 +170,21 @@ export interface OperationCore {
   // this server serves holds `href`. A core without it explains nothing.
   targetRealm?(href: string): Promise<TargetRealm | undefined>;
   // The policy card at `card` compiled as a realm that names it compiles it,
-  // on the server's own authority, for the validate operation. Compiled from
-  // what the card's latest index visit recorded, and neither cached nor put
-  // in force anywhere. A core without it validates nothing.
-  compilePolicyCard?(card: URL): Promise<CompiledRealmPolicy>;
+  // on the server's own authority, for the validate operation, with every URL
+  // compiling read. Compiled from what the card's latest index visit recorded,
+  // and neither cached nor put in force anywhere. A core without it validates
+  // nothing.
+  compilePolicyCard?(card: URL): Promise<CompiledPolicyCard>;
+  // Whether `caller` may read the realm this server serves `href` from, by
+  // that realm's own permissions, reached on the server's own authority as an
+  // explain reaches a target's realm. False for an archived realm, which
+  // answers every request with a refusal. Undefined where no realm this server
+  // serves holds `href`: the definition lookup reads such a module as the
+  // owner of the realm asking, as it does for every card in that realm.
+  readsRealmOf?(
+    href: string,
+    caller: ScopeCaller,
+  ): Promise<boolean | undefined>;
 }
 
 // The realm's own `FileRef`, narrowed to what a stored-bytes read uses. Stated

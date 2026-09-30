@@ -801,6 +801,34 @@ module('Integration | operations', function (hooks) {
         /carries no `output` to reshape it/,
       ],
       [
+        'a validate that takes params',
+        () => {
+          class WithParams extends CardDef {
+            @operation static validate = {
+              base: 'validate',
+              nonGrantable: true,
+              params: { realm: StringField },
+            } as unknown as OperationsModule.OperationDeclaration;
+          }
+          return WithParams;
+        },
+        /takes no payload.*so it carries no `params`/,
+      ],
+      [
+        'a validate that takes an input',
+        () => {
+          class WithInput extends CardDef {
+            @operation static validate = {
+              base: 'validate',
+              nonGrantable: true,
+              input: bxl`{ strict: true }`,
+            } as unknown as OperationsModule.OperationDeclaration;
+          }
+          return WithInput;
+        },
+        /takes no payload.*so it carries no `input`/,
+      ],
+      [
         'a validate on a file def',
         () => {
           class LogFile extends FileDef {

@@ -5810,8 +5810,8 @@ export class Realm {
       // Keyed by position rather than by index, because a position is a path
       // through the tree for an entry inside a group and there is no array for
       // one to be an index into.
-      // Resolved once, and only for a batch that explains: it can cost a
-      // revocation read no other operation needs.
+      // Resolved once, and only for a batch that explains or validates: it can
+      // cost a revocation read no other operation needs.
       let principal: Promise<string | undefined> | undefined;
       for (let { entry, target, definition } of resolved) {
         if (isWrite(definition.base)) {
@@ -5820,7 +5820,7 @@ export class Realm {
         let result: OperationResult;
         try {
           let asker =
-            definition.base === 'explain'
+            definition.base === 'explain' || definition.base === 'validate'
               ? await (principal ??= this.#sessionPrincipal(requestContext))
               : undefined;
           result = await runOperation(this.operationCore, {
@@ -6676,6 +6676,7 @@ export class Realm {
         // pointer names, and kept by neither.
         compilePolicyCard: (card) =>
           compilePolicyCard(card.href, this.#policyCompileEnvironment()),
+        readsRealmOf: (href, caller) => this.#readsRealmOf(href, caller),
       };
     }
     return this.#operationCore;
@@ -6711,6 +6712,37 @@ export class Realm {
       return undefined;
     }
     return peer.#asTargetRealm(url);
+  }
+
+  // Whether a caller may read the realm this server serves `href` from, for a
+  // validate, reached the way an explain reaches a target's realm. Undefined
+  // where no realm here holds `href`.
+  async #readsRealmOf(
+    href: string,
+    caller: ScopeCaller,
+  ): Promise<boolean | undefined> {
+    let url: URL;
+    try {
+      url = new URL(this.#resolveAtomicHref(href), this.paths.url);
+    } catch {
+      return undefined;
+    }
+    if (this.paths.inRealm(url)) {
+      return (await this.#aclFor(caller)).read;
+    }
+    let peer: Realm | undefined;
+    try {
+      peer = await this.#realmFor?.(url);
+    } catch {
+      return undefined;
+    }
+    if (!peer?.paths.inRealm(url)) {
+      return undefined;
+    }
+    if (await isRealmArchived(this.#dbAdapter, new URL(peer.url))) {
+      return false;
+    }
+    return (await peer.#aclFor(caller)).read;
   }
 
   #asTargetRealm(url: URL): TargetRealm {
