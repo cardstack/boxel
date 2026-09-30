@@ -430,11 +430,12 @@ export type PolicyIssueCode =
   // A `where` that reads a computed value or a linked card's field without
   // the `snapshot` annotation. Reserved: compiling does not record it.
   | 'unsnapshotted-policy-read'
-  // A `read` or `query` grant whose document links to cards of a type no rule
-  // grants, so the grant hands those cards to every caller it admits. A type
-  // that is authorization infrastructure counts as ungranted whatever the
-  // rules say. The grant is kept: the reach is often deliberate, and this
-  // tells the author it is there.
+  // A `read` or `query` grant whose document, under the link strategy that
+  // governs it, carries cards of a type no rule grants, so the grant hands
+  // those cards to every caller it admits. A type that is authorization
+  // infrastructure counts as ungranted whatever the rules say. The grant is
+  // kept: the reach is often deliberate, and this tells the author it is
+  // there.
   | 'grant-reaches-ungranted-type'
   // A `query` grant whose rows' prerendered HTML can draw cards of a type no
   // rule grants. Search rows carry their renderings, and a render draws the
