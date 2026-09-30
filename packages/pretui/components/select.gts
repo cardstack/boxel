@@ -144,147 +144,149 @@ export class Select extends Component<SelectSignature> {
           --boxel-dropdown-highlight-color: var(--hover, var(--boxel-100));
           --boxel-dropdown-selected-text-color: var(--foreground);
         }
-        /* trigger — dressed to match .pretui-input exactly: hairline rides
-           box-shadow (not border) so the box metrics stay identical */
-        .pretui-selectwrap :deep(.pretui-selecttrigger) {
-          align-items: center;
-          height: var(--control-h, 28px);
-          border: 0;
-          border-radius: var(--radius);
-          font: inherit;
-          font-size: var(--text-ui-md, 12.5px);
-          letter-spacing: var(--track-ui, 0.01em);
-          color: var(--foreground);
-          background: var(--field, var(--boxel-light));
-          box-shadow: 0 0 0 1px var(--input);
-          width: 100%;
-          text-align: left;
-          transition: none;
-        }
-        .pretui-selectwrap :deep(.pretui-selecttrigger[aria-expanded='true']),
-        .pretui-selectwrap :deep(.pretui-selecttrigger:focus-visible) {
-          /* The ring rides box-shadow so it costs no layout — but forced-colors
-             paints no box-shadow at all, leaving this trigger with no focus
-             indicator in high contrast. A transparent outline paints nothing
-             normally, never participates in layout, and forced-colors forces
-             outline-color to a system colour. boxel-ui's own device. */
-          outline: 2px solid transparent;
-          outline-offset: 1px;
-          box-shadow: 0 0 0 2px var(--primary), var(--pretui-shadow-inset, inset 0 1px 2px rgb(0 0 0 / 0.16));
-        }
-        .pretui-selectwrap :deep(.pretui-selecttrigger[aria-disabled='true']) {
-          opacity: 0.45;
-          background: var(--field, var(--boxel-light));
-          color: var(--foreground);
-        }
-        .pretui-selectwrap :deep(.boxel-trigger) {
-          width: 100%;
-          font: inherit;
-          font-size: var(--text-ui-md, 12.5px);
-          letter-spacing: var(--track-ui, 0.01em);
-        }
-        .pretui-selectwrap :deep(.boxel-trigger-content) {
-          min-width: 0;
-          overflow: hidden;
-        }
-        .pretui-selectwrap :deep(.boxel-trigger-placeholder) {
-          color: var(--ink-3, var(--boxel-400));
-          font: inherit;
-          font-size: var(--text-ui-md, 12.5px);
-          letter-spacing: var(--track-ui, 0.01em);
-        }
-        .pretui-selectwrap :deep(.pretui-selecttrigger svg) {
-          flex: none;
-          --icon-color: var(--ink-3, var(--boxel-400));
-        }
-        /* dropdown — the old .pretui-listbox look (popover bg, r10, overlay
-           shadow, 4px padding); boxel's own margin-top: 4px matches the old
-           @distance 4 */
-        .pretui-selectwrap :deep(.pretui-select-dropdown.ember-power-select-dropdown) {
-          background: var(--popover);
-          border: 0;
-          border-radius: 10px;
-          box-shadow: var(--pretui-shadow-overlay, 0 0 0 1px var(--border), 0 8px 28px rgb(0 0 0 / 0.16));
-          overflow: hidden;
-        }
-        .pretui-selectwrap :deep(.pretui-select-dropdown.ember-basic-dropdown-content--above) {
-          margin-bottom: 4px;
-        }
-        .pretui-selectwrap :deep(.pretui-select-dropdown ul) {
-          padding: 4px;
-          gap: 1px;
-        }
-        .pretui-selectwrap :deep(.pretui-select-dropdown li.ember-power-select-option) {
-          min-height: 28px;
-          margin: 0;
-          padding: 0 8px;
-          align-items: center;
-          border-radius: 6px;
-          font-size: var(--text-ui-md, 12.5px);
-          letter-spacing: var(--track-ui, 0.01em);
-          background: transparent;
-          color: var(--foreground);
-          transition: none;
-        }
-        .pretui-selectwrap :deep(.pretui-select-dropdown li.ember-power-select-option:hover),
-        .pretui-selectwrap :deep(.pretui-select-dropdown li.ember-power-select-option--highlighted) {
-          background: var(--hover, var(--boxel-100));
-          color: var(--foreground);
-        }
-        /* checked row: bold primary ink; power-select opens with the highlight
-           on it, echoing the old traveling highlight's landing spot */
-        .pretui-selectwrap :deep(.pretui-select-dropdown li.ember-power-select-option--selected),
-        .pretui-selectwrap :deep(.pretui-select-dropdown li.ember-power-select-option--selected:hover),
-        .pretui-selectwrap :deep(.pretui-select-dropdown li.ember-power-select-option--selected.ember-power-select-option--highlighted) {
-          font-weight: 600;
-          color: var(--pretui-primary-ink, var(--primary));
-        }
-        .pretui-selectwrap :deep(.pretui-select-dropdown li.ember-power-select-option--selected:hover),
-        .pretui-selectwrap :deep(.pretui-select-dropdown li.ember-power-select-option--selected.ember-power-select-option--highlighted) {
-          background: var(--hover, var(--boxel-100));
-        }
-        .pretui-selectwrap :deep(.pretui-select-dropdown .boxel-select-option-checkmark-container) {
-          width: auto;
-        }
-        .pretui-selectwrap :deep(.pretui-select-dropdown .boxel-select-option-checkmark) {
-          width: 12px;
-          height: 12px;
-        }
-        /* search box (auto-enabled past 7 options) in the Pretui field dress */
-        .pretui-selectwrap :deep(.pretui-select-dropdown .ember-power-select-search) {
-          padding: 4px 4px 0;
-          border-bottom: 0;
-        }
-        .pretui-selectwrap :deep(.pretui-select-dropdown input.ember-power-select-search-input) {
-          height: 24px;
-          padding: 0 8px;
-          border: 0;
-          border-radius: 6px;
-          font: inherit;
-          font-size: var(--text-ui-md, 12.5px);
-          letter-spacing: var(--track-ui, 0.01em);
-          color: var(--foreground);
-          background: var(--field, var(--boxel-light));
-          box-shadow: 0 0 0 1px var(--input);
-          width: 100%;
-          box-sizing: border-box;
-        }
-        .pretui-selectwrap :deep(.pretui-select-dropdown input.ember-power-select-search-input:focus) {
-          outline: 2px solid transparent;
-          outline-offset: -1px;
-          border: 0;
-          box-shadow: 0 0 0 2px var(--primary);
-        }
-        .pretui-selectwrap :deep(.pretui-select-dropdown .ember-power-select-option--no-matches-message) {
-          min-height: 28px;
-          display: flex;
-          align-items: center;
-          padding: 0 8px;
-          color: var(--ink-3, var(--boxel-400));
-          font-style: normal;
-          font-size: var(--text-ui-md, 12.5px);
-          text-align: left;
-        }
+      }
+      /* Unlayered: BoxelSelect's own rules are unlayered, and unlayered CSS
+         beats any layer, so these overrides only win from outside one. */
+      /* trigger — dressed to match .pretui-input exactly: hairline rides
+         box-shadow (not border) so the box metrics stay identical */
+      .pretui-selectwrap :deep(.pretui-selecttrigger) {
+        align-items: center;
+        height: var(--control-h, 28px);
+        border: 0;
+        border-radius: var(--radius);
+        font: inherit;
+        font-size: var(--text-ui-md, 12.5px);
+        letter-spacing: var(--track-ui, 0.01em);
+        color: var(--foreground);
+        background: var(--field, var(--boxel-light));
+        box-shadow: 0 0 0 1px var(--input);
+        width: 100%;
+        text-align: left;
+        transition: none;
+      }
+      .pretui-selectwrap :deep(.pretui-selecttrigger[aria-expanded='true']),
+      .pretui-selectwrap :deep(.pretui-selecttrigger:focus-visible) {
+        /* The ring rides box-shadow so it costs no layout — but forced-colors
+           paints no box-shadow at all, leaving this trigger with no focus
+           indicator in high contrast. A transparent outline paints nothing
+           normally, never participates in layout, and forced-colors forces
+           outline-color to a system colour. boxel-ui's own device. */
+        outline: 2px solid transparent;
+        outline-offset: 1px;
+        box-shadow: 0 0 0 2px var(--primary), var(--pretui-shadow-inset, inset 0 1px 2px rgb(0 0 0 / 0.16));
+      }
+      .pretui-selectwrap :deep(.pretui-selecttrigger[aria-disabled='true']) {
+        opacity: 0.45;
+        background: var(--field, var(--boxel-light));
+        color: var(--foreground);
+      }
+      .pretui-selectwrap :deep(.boxel-trigger) {
+        width: 100%;
+        font: inherit;
+        font-size: var(--text-ui-md, 12.5px);
+        letter-spacing: var(--track-ui, 0.01em);
+      }
+      .pretui-selectwrap :deep(.boxel-trigger-content) {
+        min-width: 0;
+        overflow: hidden;
+      }
+      .pretui-selectwrap :deep(.boxel-trigger-placeholder) {
+        color: var(--ink-3, var(--boxel-400));
+        font: inherit;
+        font-size: var(--text-ui-md, 12.5px);
+        letter-spacing: var(--track-ui, 0.01em);
+      }
+      .pretui-selectwrap :deep(.pretui-selecttrigger svg) {
+        flex: none;
+        --icon-color: var(--ink-3, var(--boxel-400));
+      }
+      /* dropdown — the old .pretui-listbox look (popover bg, r10, overlay
+         shadow, 4px padding); boxel's own margin-top: 4px matches the old
+         @distance 4 */
+      .pretui-selectwrap :deep(.pretui-select-dropdown.ember-power-select-dropdown) {
+        background: var(--popover);
+        border: 0;
+        border-radius: 10px;
+        box-shadow: var(--pretui-shadow-overlay, 0 0 0 1px var(--border), 0 8px 28px rgb(0 0 0 / 0.16));
+        overflow: hidden;
+      }
+      .pretui-selectwrap :deep(.pretui-select-dropdown.ember-basic-dropdown-content--above) {
+        margin-bottom: 4px;
+      }
+      .pretui-selectwrap :deep(.pretui-select-dropdown ul) {
+        padding: 4px;
+        gap: 1px;
+      }
+      .pretui-selectwrap :deep(.pretui-select-dropdown li.ember-power-select-option) {
+        min-height: 28px;
+        margin: 0;
+        padding: 0 8px;
+        align-items: center;
+        border-radius: 6px;
+        font-size: var(--text-ui-md, 12.5px);
+        letter-spacing: var(--track-ui, 0.01em);
+        background: transparent;
+        color: var(--foreground);
+        transition: none;
+      }
+      .pretui-selectwrap :deep(.pretui-select-dropdown li.ember-power-select-option:hover),
+      .pretui-selectwrap :deep(.pretui-select-dropdown li.ember-power-select-option--highlighted) {
+        background: var(--hover, var(--boxel-100));
+        color: var(--foreground);
+      }
+      /* checked row: bold primary ink; power-select opens with the highlight
+         on it, echoing the old traveling highlight's landing spot */
+      .pretui-selectwrap :deep(.pretui-select-dropdown li.ember-power-select-option--selected),
+      .pretui-selectwrap :deep(.pretui-select-dropdown li.ember-power-select-option--selected:hover),
+      .pretui-selectwrap :deep(.pretui-select-dropdown li.ember-power-select-option--selected.ember-power-select-option--highlighted) {
+        font-weight: 600;
+        color: var(--pretui-primary-ink, var(--primary));
+      }
+      .pretui-selectwrap :deep(.pretui-select-dropdown li.ember-power-select-option--selected:hover),
+      .pretui-selectwrap :deep(.pretui-select-dropdown li.ember-power-select-option--selected.ember-power-select-option--highlighted) {
+        background: var(--hover, var(--boxel-100));
+      }
+      .pretui-selectwrap :deep(.pretui-select-dropdown .boxel-select-option-checkmark-container) {
+        width: auto;
+      }
+      .pretui-selectwrap :deep(.pretui-select-dropdown .boxel-select-option-checkmark) {
+        width: 12px;
+        height: 12px;
+      }
+      /* search box (auto-enabled past 7 options) in the Pretui field dress */
+      .pretui-selectwrap :deep(.pretui-select-dropdown .ember-power-select-search) {
+        padding: 4px 4px 0;
+        border-bottom: 0;
+      }
+      .pretui-selectwrap :deep(.pretui-select-dropdown input.ember-power-select-search-input) {
+        height: 24px;
+        padding: 0 8px;
+        border: 0;
+        border-radius: 6px;
+        font: inherit;
+        font-size: var(--text-ui-md, 12.5px);
+        letter-spacing: var(--track-ui, 0.01em);
+        color: var(--foreground);
+        background: var(--field, var(--boxel-light));
+        box-shadow: 0 0 0 1px var(--input);
+        width: 100%;
+        box-sizing: border-box;
+      }
+      .pretui-selectwrap :deep(.pretui-select-dropdown input.ember-power-select-search-input:focus) {
+        outline: 2px solid transparent;
+        outline-offset: -1px;
+        border: 0;
+        box-shadow: 0 0 0 2px var(--primary);
+      }
+      .pretui-selectwrap :deep(.pretui-select-dropdown .ember-power-select-option--no-matches-message) {
+        min-height: 28px;
+        display: flex;
+        align-items: center;
+        padding: 0 8px;
+        color: var(--ink-3, var(--boxel-400));
+        font-style: normal;
+        font-size: var(--text-ui-md, 12.5px);
+        text-align: left;
       }
     </style>
   </template>
