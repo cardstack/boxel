@@ -8,7 +8,7 @@
       ],
       "successCriteria": "1. One definition exists: a Contact with `firstName`, `lastName` and `email`, and a `fullName` that is a `computeVia` of the first and last name, not a stored field.\n2. Two Contact instances exist with different names and emails. One of them is open on screen with no error boundary and shows its full name.\n3. After the follow-up: the same `contact.gts` was edited in place (a `run-realm-code` call with `realm.fs.replace`, or a read and a rewrite of that file). No second Contact definition was written, and the two instances were edited, not deleted and created again.\n4. The Contact has a `phone` field, and the card shows it under the email.\n5. Both instances have a phone number, and keep their names and emails from the first prompt.\n6. The design changed visibly from the first version (for example layout, spacing, type or color) and uses theme variables, not hard-coded colors. The contact still renders with no error boundary.\n7. Every tool call applied or was repaired by the model, the assistant did not ask a question or wait for confirmation before acting, and the whole flow took at most 20 turns.",
       "cardInfo": {
-        "name": "Contact — computed field, instances, edit and restyle",
+        "name": "Contact Card — computed field, instances, edit and restyle",
         "summary": "A step between hello world and the cookbook: one definition with a computed field and two instances, then a follow-up that adds a field, edits the existing files and the instances in place, and restyles the card.",
         "notes": null,
         "cardThumbnailURL": null
