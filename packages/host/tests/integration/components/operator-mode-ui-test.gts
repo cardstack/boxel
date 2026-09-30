@@ -858,6 +858,18 @@ module('Integration | operator-mode | ui', function (hooks) {
       backgroundColor: 'rgb(102, 56, 255)',
       color: 'rgb(255, 255, 255)',
     };
+    // The header's text colour is its own; its background is painted by the
+    // surface layer that header motion reshapes.
+    let assertHeader = (
+      stackCard: string,
+      { backgroundColor, color }: typeof customStyle,
+    ) => {
+      let header = `[data-stack-card="${stackCard}"] [data-test-card-header]`;
+      assert.dom(header).hasStyle({ color });
+      assert
+        .dom(`${header} > .header-motion-surface`)
+        .hasStyle({ backgroundColor });
+    };
     ctx.setCardInOperatorModeState(cardId);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -865,23 +877,15 @@ module('Integration | operator-mode | ui', function (hooks) {
       },
     );
     assert.dom(`[data-test-stack-card="${cardId}"]`).exists();
-    assert
-      .dom(`[data-stack-card="${cardId}"] [data-test-card-header]`)
-      .hasStyle(customStyle);
+    assertHeader(cardId, customStyle);
 
     await click(`[data-test-card="${testRealmURL}BlogPost/1"]`);
     assert.dom(`[data-test-stack-card="${testRealmURL}BlogPost/1"]`).exists();
-    assert
-      .dom(
-        `[data-stack-card="${testRealmURL}BlogPost/1"] [data-test-card-header]`,
-      )
-      .hasStyle({
-        backgroundColor: 'rgb(255, 255, 255)',
-        color: 'rgb(0, 0, 0)',
-      });
-    assert
-      .dom(`[data-stack-card="${cardId}"] [data-test-card-header]`)
-      .hasStyle(customStyle);
+    assertHeader(`${testRealmURL}BlogPost/1`, {
+      backgroundColor: 'rgb(255, 255, 255)',
+      color: 'rgb(0, 0, 0)',
+    });
+    assertHeader(cardId, customStyle);
 
     await click(
       `[data-stack-card="${testRealmURL}BlogPost/1"] [data-test-close-button]`,
@@ -889,9 +893,7 @@ module('Integration | operator-mode | ui', function (hooks) {
     await waitFor(`[data-test-stack-card="${testRealmURL}BlogPost/1"]`, {
       count: 0,
     });
-    assert
-      .dom(`[data-stack-card="${cardId}"] [data-test-card-header]`)
-      .hasStyle(customStyle);
+    assertHeader(cardId, customStyle);
   });
 
   test('search sheet shows type picker in the search bar', async function (assert) {

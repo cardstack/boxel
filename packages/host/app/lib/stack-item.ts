@@ -6,10 +6,17 @@ import type { Store, StoreReadType } from '@cardstack/runtime-common';
 
 import { knownFileMetaUrls } from './known-file-meta-urls';
 
+import type { CardOpenOrigin } from './card-open-origin';
+import type { HTMLComponent } from './html-component';
+import type { WorkspaceOpenOrigin } from './workspace-open-origin';
+
 import type { Format } from '@cardstack/base/card-api';
 
 interface Args {
   format: Format;
+  openingOrigin?: CardOpenOrigin;
+  deferContent?: boolean;
+  workspaceOrigin?: WorkspaceOpenOrigin;
   request?: Deferred<string>;
   stackIndex: number;
   id: string;
@@ -109,6 +116,16 @@ export class StackItem {
   // recent interaction even though B was opened more recently.
   lastInteractedAt: number;
   readonly instanceId: string;
+  @tracked openingOrigin?: CardOpenOrigin;
+  @tracked deferContent = false;
+  // The index's prerendered isolated HTML, shown inert while the live body is
+  // deferred behind a crossing. Never persisted or cloned.
+  @tracked placeholder?: HTMLComponent;
+  // A card opened into a new stack from another stack's card: where it
+  // settles back to on close. In memory only; never persisted or cloned.
+  returnTo?: StackItem;
+  // Kept for the return portal; never persisted or cloned.
+  @tracked workspaceOrigin?: WorkspaceOpenOrigin;
   #id: string;
   relationshipContext?:
     | {
@@ -129,6 +146,9 @@ export class StackItem {
       lastInteractedAt,
     } = args;
 
+    this.openingOrigin = args.openingOrigin;
+    this.deferContent = args.deferContent ?? false;
+    this.workspaceOrigin = args.workspaceOrigin;
     this.type = inferStackItemType(type);
     // CardDef instance ids are stored without a `.json` extension, so the
     // strip sanitizes inputs that erroneously include one. FileDef rows are

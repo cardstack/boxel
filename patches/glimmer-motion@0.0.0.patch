@@ -1,0 +1,136 @@
+diff --git a/declarations/choreo.d.ts b/declarations/choreo.d.ts
+index 0b5139d..480b130 100644
+--- a/declarations/choreo.d.ts
++++ b/declarations/choreo.d.ts
+@@ -110,6 +110,15 @@ interface Signature {
+          * the host's job (the crossing flag the gallery's entrances check).
+          */
+         quiet?: boolean;
++        /**
++         * Whether a pass could play anything. When `false` and the region has
++         * no run, leaver or retained participant in flight, a render measures
++         * nothing: the before/after rect reads of an idle pass force layout on
++         * every render of the page, only for the pass to compile no cues.
++         * Participants that mount meanwhile are treated as already at rest.
++         * Omit it to measure every render.
++         */
++        armed?: boolean;
+         /**
+          * Treat a subtree swap as one crossing pass (§4.7): scroll intent is
+          * applied inside the pass — after the swap renders, before final bounds
+diff --git a/dist/choreo/run.js b/dist/choreo/run.js
+index 9fd1aee..b6c11b4 100644
+--- a/dist/choreo/run.js
++++ b/dist/choreo/run.js
+@@ -108,7 +108,9 @@ function applyHold(ve, el, values) {
+       priorStyle
+     });
+   }
+-  ve.scheduleRender();
++  // Holds such as a hidden counterpart must be applied before the first
++  // painted frame, just like the Move's pinned starting geometry.
++  ve.render();
+   return held;
+ }
+ function releaseHold(ve, el, held) {
+@@ -1664,7 +1666,13 @@ class ChoreoRun {
+     if (!layer || !el.isConnected || t.perch) {
+       return;
+     }
+-    const box = el.getBoundingClientRect();
++    // A Move has already pinned its first frame. Promote the measured
++    // destination layout, not the painted box carrying that transform.
++    const destination = t.cue.sprite.final?.page;
++    const box = destination ? {
++      left: destination.x, top: destination.y,
++      width: destination.width, height: destination.height
++    } : el.getBoundingClientRect();
+     const layerBox = layer.getBoundingClientRect();
+     const s = ChoreoRun.layerScale(layer, layerBox);
+     const width = box.width / s.x;
+@@ -1682,6 +1690,11 @@ class ChoreoRun {
+     el.style.width = `${width}px`;
+     el.style.height = `${height}px`;
+     el.style.margin = '0';
++    // Percentage constraints belonged to the original parent, not the layer.
++    el.style.minWidth = '0';
++    el.style.maxWidth = 'none';
++    el.style.minHeight = '0';
++    el.style.maxHeight = 'none';
+     if (t.cue.raise?.shadow) {
+       el.style.filter = 'drop-shadow(0 18px 24px rgba(0,0,0,0.35))';
+     }
+@@ -1930,8 +1943,8 @@ class ChoreoRun {
+       return;
+     }
+     const pts = flight.points;
+-    const at = Math.min(pts.length - 1 - 1e-9, Math.max(0, p) * (pts.length - 1));
+-    const index = Math.floor(at);
++    const at = Math.min(pts.length - 1, Math.max(0, p) * (pts.length - 1));
++    const index = Math.min(pts.length - 2, Math.floor(at));
+     const local = at - index;
+     const a = pts[index];
+     const b = pts[Math.min(index + 1, pts.length - 1)];
+@@ -2242,6 +2255,12 @@ class ChoreoRun {
+       t.platform?.forEach(a => a.cancel());
+       t.platform = undefined;
+       this.dropCameraAnimation(t);
++      // Measure the destination under its real parent, not in the raised
++      // layer. A kept run promotes it again when reassert evaluates.
++      if (t.perch) {
++        this.restore(t);
++        t.started = false;
++      }
+     }
+     const touched = new Set();
+     this.retired = {
+@@ -2421,4 +2440,4 @@ function execute(compiled, options) {
+ }
+ 
+ export { ChoreoRun, activeRuns, execute };
+-//# sourceMappingURL=run.js.map
++// The upstream source map predates the host promotion patch.
+diff --git a/dist/choreo.js b/dist/choreo.js
+index 83377bb..3ae25be 100644
+--- a/dist/choreo.js
++++ b/dist/choreo.js
+@@ -327,6 +327,15 @@ class Choreo extends Component {
+     // (`layout` / `layoutId`) snapshot here too, so `{{motion layout=true}}`
+     // works inside a <Choreo> without a <LayoutGroup> wrapped around it.
+     snapshotOnRender();
++    if (!this.passPending && this.idle()) {
++      // Nothing can play and nothing is in flight: an idle pass would read
++      // every participant's rect before and after the patch (forcing layout
++      // in the middle of rendering) only to compile no cues. What mounted
++      // meanwhile is at rest, and the region has rendered.
++      this.arrived.clear();
++      this.rendered = true;
++      return undefined;
++    }
+     if (!this.passPending) {
+       this.passPending = true;
+       this.snapshot();
+@@ -337,6 +346,9 @@ class Choreo extends Component {
+     return undefined;
+   }
+   /* eslint-enable ember/no-side-effects */
++  idle() {
++    return this.args.armed === false && !(this.run && !this.run.isDone()) && !this.orphans.size && !this.leaving.size && !this.claimed.size;
++  }
+   snapshot() {
+     this.snapshots.clear();
+     this.rootSnapshot = this.element?.getBoundingClientRect();
+@@ -1036,11 +1048,11 @@ class Choreo extends Component {
+   * layers ride the frame with the content they annotate.
+   */
+   static {
+-    setComponentTemplate(precompileTemplate("\n    {{this.renderDetector}}\n    <div data-choreo={{if @id @id \"\"}} {{this.host}} ...attributes>\n      <div data-choreo-orphans style=\"position:absolute;inset:0;pointer-events:none;overflow:visible\" {{this.layer}}></div>\n      {{!-- the elevated layer: where c.Raise promotes the living \u2014 above every\n          stacking context and clip in the region (\xA76.3) --}}\n      <div data-choreo-raised style=\"position:absolute;inset:0;pointer-events:none;overflow:visible;z-index:2147483000\" {{this.raised}}></div>\n      {{!-- the wires: geometry drawn between sprites, every frame (\xA76.1) --}}\n      <svg data-choreo-tethers style=\"position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible\" {{this.tethers}}></svg>\n      {{yield this.context}}\n    </div>\n  ", {
++    setComponentTemplate(precompileTemplate("\n    {{this.renderDetector}}\n    <div data-choreo={{if @id @id \"\"}} {{this.host}} ...attributes>\n      <div data-choreo-orphans style=\"position:absolute;inset:0;pointer-events:none;overflow:visible\" {{this.layer}}></div>\n      {{!-- the elevated layer: where c.Raise promotes the living \u2014 above every\n          stacking context and clip in the region (\xA76.3) --}}\n      <div data-choreo-raised style=\"position:absolute;inset:0;pointer-events:none;overflow:visible;z-index:var(--choreo-raised-z-index,2147483000)\" {{this.raised}}></div>\n      {{!-- the wires: geometry drawn between sprites, every frame (\xA76.1) --}}\n      <svg data-choreo-tethers style=\"position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible\" {{this.tethers}}></svg>\n      {{yield this.context}}\n    </div>\n  ", {
+       strictMode: true
+     }), this);
+   }
+ }
+ 
+ export { Choreo, Choreo as default };
+-//# sourceMappingURL=choreo.js.map
++// The upstream source map predates the configurable raised-layer patch.

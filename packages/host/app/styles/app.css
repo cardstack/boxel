@@ -13,6 +13,9 @@
   --host-search-sheet-z-index: 300;
 
   --host-workspace-chooser-z-index: 200;
+
+  --host-card-motion-z-index: 150;
+  --host-stack-exit-z-index: 100;
 }
 
 .error {
@@ -51,4 +54,193 @@
 .ember-application .monaco-editor .monaco-editor-overlaymessage .anchor.top,
 .ember-application .monaco-editor .monaco-editor-overlaymessage .anchor.below {
   display: none;
+}
+/* Named snapshot planes sit above the ordinary DOM stacking contexts. Back
+   to front:
+   -1 scenes: surfaces around a crossing (the dashboard, reflowing stacks)
+    0 stack underlay: the parent card's tray
+    1 stack body       2 stack header       3 stack title and realm icon
+    4 card shadow      5 card bitmap
+    6 platter: the workspace's cards over the realm background (the card)
+    7 companion: the realm icon flying to or from the header
+    8 stationary chrome: the top bar and AI panel
+    9 edge chrome: neighbour-stack buttons
+   10 persistent chrome: Boxel, account, search, AI */
+::view-transition-group(.boxel-scene),
+::view-transition-group(.boxel-reflow) {
+  z-index: -1;
+}
+
+::view-transition-group(.boxel-stack-underlay) {
+  z-index: 0;
+  overflow: visible;
+}
+
+/* The tray contains no matched header/body text. Preserve its outer shadow
+   while its independent content layers handle proportional scaling. */
+::view-transition-old(.boxel-stack-underlay),
+::view-transition-new(.boxel-stack-underlay) {
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+}
+
+::view-transition-group(.boxel-stack-body) {
+  z-index: 1;
+}
+
+::view-transition-group(.boxel-stack-header) {
+  z-index: 2;
+}
+
+::view-transition-group(.boxel-stack-title),
+::view-transition-group(.boxel-stack-icon) {
+  z-index: 3;
+}
+
+::view-transition-group(.boxel-card-bitmap) {
+  z-index: 5;
+}
+
+::view-transition-group(.boxel-card-shadow) {
+  z-index: 4;
+  overflow: visible;
+}
+
+::view-transition-old(.boxel-card-shadow),
+::view-transition-new(.boxel-card-shadow) {
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+}
+
+/* Keep the two raster alphas complementary for the whole Choreo clock.
+   The UA's shorter blend animation must not change modes mid-crossfade. */
+::view-transition-old(.boxel-stack-underlay),
+::view-transition-new(.boxel-stack-underlay),
+::view-transition-old(.boxel-card-shadow),
+::view-transition-new(.boxel-card-shadow) {
+  mix-blend-mode: plus-lighter !important;
+}
+
+/* A reflowing neighbour keeps its faces at natural size, centred at the top
+   of its widening frame, which reveals the wider face instead of scaling. */
+::view-transition-old(.boxel-reflow),
+::view-transition-new(.boxel-reflow) {
+  width: auto !important;
+  height: auto !important;
+  object-fit: none !important;
+  left: 50%;
+  translate: -50% 0;
+}
+
+/* A platter of cards grown out of a crossing card's seed sits above the card
+   (a realm background), and the companion flying to its header above both. */
+::view-transition-group(.boxel-platter) {
+  z-index: 6;
+}
+
+::view-transition-group(.boxel-companion) {
+  z-index: 7;
+}
+
+::view-transition-group(.boxel-stationary-chrome) {
+  z-index: 8;
+}
+
+::view-transition-group(.boxel-edge-chrome) {
+  z-index: 9;
+}
+
+/* Boxel, account, search and AI stay above every scene. Their faces add up
+   while they cross, so a control that does not change never dims. */
+::view-transition-group(.boxel-persistent-chrome) {
+  z-index: 10;
+}
+
+::view-transition-old(.boxel-persistent-chrome),
+::view-transition-new(.boxel-persistent-chrome) {
+  mix-blend-mode: plus-lighter;
+  /* Natural size from the top left: the Boxel button's icon stays put while
+     the dashboard's wordmark fades in beside it, never stretched. */
+  width: auto;
+  height: auto;
+  object-fit: none;
+}
+
+/* JIT capture surfaces live outside card overflow. Their ink is already
+   painted into the snapshots; the browser interpolates only snapshot geometry
+   and opacity. Same bounds as the primary face; never scale the caster alone. */
+.bitmap-shadow {
+  position: fixed;
+  box-sizing: border-box;
+  pointer-events: none;
+  background: none;
+  z-index: var(--host-card-motion-z-index);
+}
+
+[data-bitmap-shadowed] {
+  box-shadow: none !important;
+}
+
+/* The bitmap shadow hands back at its resting value. Without this the card's
+   own box-shadow transition would fade in from none after the landing. */
+[data-bitmap-shadowed],
+[data-bitmap-shadow-landing] {
+  transition: none !important;
+}
+
+/* Fit the whole content viewport uniformly; no cover crop or font distortion. */
+::view-transition-old(.boxel-stack-body),
+::view-transition-new(.boxel-stack-body) {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center top;
+}
+
+/* Natural-size raster content sits at the independently moving group's center.
+   Choreo applies one uniform scale from the source size to the final size. */
+::view-transition-old(.boxel-stack-title),
+::view-transition-new(.boxel-stack-title),
+::view-transition-old(.boxel-stack-icon),
+::view-transition-new(.boxel-stack-icon) {
+  width: 100%;
+  height: 100%;
+  object-fit: none;
+  object-position: center;
+  transform-origin: center;
+}
+
+/* Header content is resolved once. Its empty surface owns shape and shadow. */
+[data-header-motion-parts] {
+  position: relative;
+  isolation: isolate;
+  background: transparent !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+.header-motion-surface,
+.header-motion-shadow {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  transform-origin: 0 0;
+}
+.header-motion-shadow {
+  z-index: -2;
+}
+.header-motion-surface {
+  background: var(
+    --boxel-card-header-background-color,
+    var(--header-surface-background)
+  );
+}
+[data-header-motion-parts].is-editing:not(.expanded-card-header-pill)
+  > .header-motion-surface {
+  background: var(--boxel-highlight);
+}
+[data-choreo-raised] [data-header-motion-parts] {
+  overflow: visible;
 }

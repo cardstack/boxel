@@ -1,5 +1,6 @@
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import { schedule } from '@ember/runloop';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
@@ -25,12 +26,14 @@ import type { Icon } from '@cardstack/boxel-ui/icons';
 import { logger, ri } from '@cardstack/runtime-common';
 
 import config from '@cardstack/host/config/environment';
+import type HostMotionService from '@cardstack/host/services/host-motion';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 
 import AddWorkspace from './add-workspace';
 import ArchivedWorkspace from './archived-workspace';
+import TileWindow from './tile-window';
 import Workspace from './workspace';
 import WorkspaceLoadingIndicator from './workspace-loading-indicator';
 
@@ -44,15 +47,43 @@ interface Signature {
   Element: HTMLDivElement;
   Args: {
     topBarCenterElement: Element | null;
+    active?: boolean;
   };
 }
 
 const log = logger('component:workspace-chooser');
 
 export default class WorkspaceChooser extends Component<Signature> {
+  private get active() {
+    return this.args.active !== false;
+  }
   @service declare matrixService: MatrixService;
   @service declare realmServer: RealmServerService;
   @service declare realm: RealmService;
+  @service declare private hostMotion: HostMotionService;
+
+  // The chooser stays mounted while hidden, so reopening it is not a new
+  // render of its tiles. Start each opening like the first: no selection
+  // ring, focus on the default tile, and that tile in view unless a
+  // crossing is landing on the dashboard (its tile is measured in place).
+  private wasActive = this.args.active !== false;
+  private onReopen = modifier(
+    (element: HTMLElement, [active]: [boolean | undefined]) => {
+      let opening = active !== false && !this.wasActive;
+      this.wasActive = active !== false;
+      if (!opening) return;
+      schedule('afterRender', () => {
+        if (this.isDestroying) return;
+        this.selectedIndex = null;
+        let tile = element.querySelector<HTMLElement>(
+          `[data-nav-index="${this.currentIndex}"]`,
+        );
+        tile?.focus({ preventScroll: true });
+        if (!this.hostMotion.bitmapActive)
+          tile?.scrollIntoView({ block: 'nearest' });
+      });
+    },
+  );
 
   // Archived realms are tucked away below the fold and collapsed by default —
   // they're rarely needed, so the section stays out of the way and the list
@@ -530,12 +561,15 @@ export default class WorkspaceChooser extends Component<Signature> {
   // From the selected tile, find the nearest row in the given direction and
   // pick the tile whose horizontal center is closest to the current one.
   private moveVertically(container: HTMLElement, direction: 1 | -1) {
-    let tiles = [...container.querySelectorAll('[data-nav-index]')].map(
-      (element) => ({
-        index: Number((element as HTMLElement).dataset.navIndex),
-        rect: element.getBoundingClientRect(),
-      }),
-    );
+    let tiles = [
+      ...container.querySelectorAll('[data-nav-index], [data-nav-placeholder]'),
+    ].map((element) => ({
+      index: Number(
+        (element as HTMLElement).dataset.navIndex ??
+          (element as HTMLElement).dataset.navPlaceholder,
+      ),
+      rect: element.getBoundingClientRect(),
+    }));
     let current = tiles.find((tile) => tile.index === this.currentIndex);
     if (!current) {
       return;
@@ -574,9 +608,11 @@ export default class WorkspaceChooser extends Component<Signature> {
     {{! template-lint-disable no-invalid-interactive }}
     <div
       class='workspace-chooser'
+      ...attributes
       data-test-workspace-chooser
       {{on 'keydown' this.onKeydown}}
       {{on 'focusin' this.onFocusIn}}
+      {{this.onReopen @active}}
     >
       {{#if @topBarCenterElement}}
         {{#in-element @topBarCenterElement}}
@@ -683,13 +719,19 @@ export default class WorkspaceChooser extends Component<Signature> {
                   as |realmIdentifier i|
                 }}
                   {{#let (add this.userWorkspacesNavBase i) as |navIndex|}}
-                    <Workspace
-                      @realmIdentifier={{realmIdentifier}}
-                      @showMenu={{true}}
-                      @navIndex={{navIndex}}
-                      @isSelected={{eq this.currentIndex navIndex}}
-                      @selectionActive={{this.isSelectionActive}}
-                    />
+                    <TileWindow
+                      @index={{navIndex}}
+                      @selected={{eq this.currentIndex navIndex}}
+                      @active={{this.active}}
+                    >
+                      <Workspace
+                        @realmIdentifier={{realmIdentifier}}
+                        @showMenu={{true}}
+                        @navIndex={{navIndex}}
+                        @isSelected={{eq this.currentIndex navIndex}}
+                        @selectionActive={{this.isSelectionActive}}
+                      />
+                    </TileWindow>
                   {{/let}}
                 {{/each}}
               </div>
@@ -767,14 +809,6 @@ export default class WorkspaceChooser extends Component<Signature> {
       </div>
     </div>
     <style scoped>
-      @keyframes fadeIn {
-        from {
-          opacity: 0;
-        }
-        to {
-          opacity: 1;
-        }
-      }
       .workspace-chooser {
         position: absolute;
         background-color: var(--boxel-800);
@@ -820,11 +854,8 @@ export default class WorkspaceChooser extends Component<Signature> {
         height: 100%;
         padding: calc(5rem + 3.75rem) 5rem 5rem;
         overflow: auto;
-        /* Fade in only the contents; the dark chooser background above
-           paints immediately so the grey operator-mode canvas never flashes
-           between the (dark) sign-in screen and the (dark) chooser. */
-        opacity: 0;
-        animation: fadeIn 0.5s ease-in forwards;
+        /* The dashboard is a stationary, opaque back plane for the portal.
+           An independent entrance fade would compete with its return. */
       }
       .sections-wrapper {
         display: flex;
