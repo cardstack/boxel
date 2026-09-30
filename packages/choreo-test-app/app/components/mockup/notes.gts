@@ -200,9 +200,9 @@ export class NotesApp extends Component<NotesAppSignature> {
             changeset is the same shape — some kept cards changed seats — so a
             single Move covers both, and the body fades in while they travel. }}
         <c.Parallel>
-          {{! @size={{false}}: the opened card takes its new height at once and
+          {{!-- @size={{false}}: the opened card takes its new height at once and
           only the travel is animated. Scaling the box instead would smear the
-          title and the body text for the length of the spring. }}
+          title and the body text for the length of the spring. --}}
           <c.Move @of={{c.moved "card"}} @spring={{seat}} @size={{false}} />
           <c.Tween
             @of={{c.inserted "body"}}

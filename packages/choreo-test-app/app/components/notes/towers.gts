@@ -220,20 +220,23 @@ const TowersNotes: TOC<{
           <a
             href="https://threeui.com/browse"
             target="_blank"
-            rel="noopener"
+            rel="noopener noreferrer"
           >threeui</a>
           by
-          <a href="https://x.com/MengTo" target="_blank" rel="noopener">Meng To</a>,
-          vendored whole on its own pinned three r149 and reached through one
-          function-call bridge: pose goals for a cascaded camera chase,
-          annotation tubes drawn on the geometry itself, a shader post pass that
-          converts the linear render to sRGB before it grades (grain, edge
-          aberration, a per-chapter and per-country grade with its own contrast
-          and warmth, no vignette), the sun moved per shot, the air thickened
-          per shot, snow that settles and rain that leaves the ground wet, a
-          frame budget that owns the pixel ratio, a master fader and a hold —
-          and the one-frame synchronous snapshot that makes every still-based
-          join possible. The full design note lives at
+          <a
+            href="https://x.com/MengTo"
+            target="_blank"
+            rel="noopener noreferrer"
+          >Meng To</a>, vendored whole on its own pinned three r149 and reached
+          through one function-call bridge: pose goals for a cascaded camera
+          chase, annotation tubes drawn on the geometry itself, a shader post
+          pass that converts the linear render to sRGB before it grades (grain,
+          edge aberration, a per-chapter and per-country grade with its own
+          contrast and warmth, no vignette), the sun moved per shot, the air
+          thickened per shot, snow that settles and rain that leaves the ground
+          wet, a frame budget that owns the pixel ratio, a master fader and a
+          hold — and the one-frame synchronous snapshot that makes every
+          still-based join possible. The full design note lives at
           <code>docs/choreo-splices.md</code>; the quality pass and its numbers
           in
           <code>notes/towers-quality.md</code>.

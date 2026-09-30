@@ -1568,13 +1568,13 @@ export class SylvaStage extends Component<{
                         <a
                           href="https://x.com/MengTo"
                           target="_blank"
-                          rel="noopener"
+                          rel="noopener noreferrer"
                         >Meng To</a>
                         ·
                         <a
                           href="https://threeui.com/browse"
                           target="_blank"
-                          rel="noopener"
+                          rel="noopener noreferrer"
                         >threeui</a>
                         — “Living Green”</p>
                     {{else}}

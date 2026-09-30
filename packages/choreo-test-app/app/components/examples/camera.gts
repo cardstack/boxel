@@ -393,9 +393,9 @@ export class Camera extends Component {
                 {{this.focusedShot.stamp}}</span>
             </div>
             <div class="cam-grade-tools">
-              <span
+              <button
+                type="button"
                 class={{this.dockHeartClass}}
-                role="button"
                 aria-label="Love this one"
                 {{on "click" (fn this.setVerdict this.focusedShot "loved")}}
               >
@@ -405,10 +405,10 @@ export class Camera extends Component {
                     d="M12 21s-7.2-4.6-9.6-8.8C.4 8.8 1.5 4.6 5.2 3.4 7.8 2.5 10.2 3.6 12 6.2c1.8-2.6 4.2-3.7 6.8-2.8 3.7 1.2 4.8 5.4 2.8 8.8C19.2 16.4 12 21 12 21z"
                   />
                 </svg>
-              </span>
-              <span
+              </button>
+              <button
+                type="button"
                 class={{this.dockPassClass}}
-                role="button"
                 aria-label="Pass"
                 {{on "click" (fn this.setVerdict this.focusedShot "passed")}}
               >
@@ -421,7 +421,7 @@ export class Camera extends Component {
                     d="M7 7l10 10M17 7L7 17"
                   />
                 </svg>
-              </span>
+              </button>
             </div>
           {{/if}}
         </div>

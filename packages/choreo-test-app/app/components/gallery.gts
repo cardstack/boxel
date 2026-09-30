@@ -277,7 +277,11 @@ export class Gallery extends Component {
       <h1>Motion,<br /><em>Choreographed.</em></h1>
       <p class="lede">
         The
-        <a href="https://motion.dev" target="_blank" rel="noopener">Motion</a>
+        <a
+          href="https://motion.dev"
+          target="_blank"
+          rel="noopener noreferrer"
+        >Motion</a>
         engine for Ember — and a timeline for the scene.
       </p>
       {{! the row is itself the demo: switching the list is a View Transition,

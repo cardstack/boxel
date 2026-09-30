@@ -563,6 +563,7 @@ export class Rack extends Component {
     const near = Math.round(this.p);
     if (near !== this.lit) {
       this.lit = near;
+      this.rail?.setAttribute('aria-valuenow', `${near}`);
       this.rail
         ?.querySelectorAll<HTMLElement>('.rk-notch')
         .forEach((el, i) => el.classList.toggle('is-on', i === near));
@@ -1035,13 +1036,17 @@ export class Rack extends Component {
             </c.Sequence>
           </Choreo>
 
+          {{! the notches are pointer shortcuts to a stop; the keyboard moves
+              the rail with its arrow keys }}
           <div
+            {{! template-lint-disable no-nested-interactive require-presentational-children }}
             class="rk-rail"
             role="slider"
             tabindex="0"
             aria-label="Arrangement"
             aria-valuemin="0"
             aria-valuemax={{LAST}}
+            aria-valuenow="0"
             {{this.railed}}
             {{on "keydown" this.key}}
             {{on "pointerdown" this.grab}}

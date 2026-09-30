@@ -88,7 +88,7 @@ export class ReorderGrid extends Component {
             class="cover"
             @group={{group}}
             @value={{album}}
-            @style={{(tileStyle album.wash)}}
+            @style={{tileStyle album.wash}}
             @transition={{tuneObject "grid" snap "ReorderItem transition 1"}}
             @whileDrag={{tuneObject "grid" whileDrag "ReorderItem whileDrag 2"}}
           >
