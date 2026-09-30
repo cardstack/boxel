@@ -260,6 +260,12 @@ export class EntryResultRow extends GlimmerComponent<EntryResultRowSignature> {
     <li
       class='result-entry {{@format}}'
       data-test-result-entry={{@url}}
+      {{@context.cardComponentModifier
+        cardId=@url
+        format='data'
+        fieldType=undefined
+        fieldName=undefined
+      }}
       ...attributes
     >
       <span class='entry-content'>

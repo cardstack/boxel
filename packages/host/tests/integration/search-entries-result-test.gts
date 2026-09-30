@@ -241,7 +241,25 @@ module('Integration | search-entries-result', function (hooks) {
 
       assert
         .dom('[data-test-search-entries-count]')
-        .hasText('1 result (incomplete: a realm failed)');
+        .hasText('1 of 4 results (incomplete: a realm failed)');
+    });
+
+    test('shows the full match total when the page is truncated', async function (assert) {
+      // The tool caps a page (default limit 5), so a broad search returns fewer
+      // rows than it matched. The header is the only place that signals there
+      // are more — the paginator only pages the rows already returned.
+      await renderEntriesResult({
+        rows: [
+          { url: 'http://test/Author/1', kind: 'card', cardTitle: 'Ada' },
+          { url: 'http://test/Author/2', kind: 'card', cardTitle: 'Alan' },
+        ],
+        total: 40,
+      });
+
+      assert.dom('[data-test-search-entries-count]').hasText('2 of 40 results');
+      assert
+        .dom('[data-test-toggle-show-button]')
+        .doesNotExist('the paginator cannot reveal matches beyond the page');
     });
   });
 

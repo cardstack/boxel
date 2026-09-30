@@ -59,12 +59,23 @@ export class SearchEntriesResult extends CardDef {
   @field cardDescription = contains(StringField);
 
   static embedded = class Embedded extends Component<typeof this> {
+    // `results` is one page; `total` is the full match count across realms. Show
+    // `of {total}` only when the page is truncated, so a capped search (the
+    // tool's default limit is 5) still signals there are more matches — the
+    // paginator can't, since it only pages the rows already returned.
+    get countLabel() {
+      let shown = this.args.model.results?.length ?? 0;
+      let total = this.args.model.total;
+      let hasMore = total != null && total > shown;
+      let noun = shown === 1 && !hasMore ? 'result' : 'results';
+      return hasMore ? `${shown} of ${total} ${noun}` : `${shown} ${noun}`;
+    }
+
     <template>
       <div data-test-search-entries-result>
         <SearchResultList @items={{@model.results}} as |visibleResults|>
           <p class='result-count' data-test-search-entries-count>
-            {{@model.results.length}}
-            {{if (eq @model.results.length 1) 'result' 'results'}}{{if
+            {{this.countLabel}}{{if
               @model.incomplete
               ' (incomplete: a realm failed)'
               ''
@@ -95,7 +106,7 @@ export class SearchEntriesResult extends CardDef {
         .result-count {
           margin: 0 0 var(--boxel-sp-xs);
           font-weight: 500;
-          color: var(--boxel-450);
+          color: var(--muted-foreground);
         }
         .result-list {
           list-style-type: none;
