@@ -44,7 +44,7 @@ Lead with specific, checkable evidence: exact assertion text, job URL, durations
 
 ### The single test stack
 
-In standard (non-`BOXEL_ENVIRONMENT`) mode the machine supports **exactly one** `test-services` stack at a time — the fixed ports (4200/4201/4202/4206/4210/4211/4221/4222, plus the Docker-published 8008 synapse and 5001 smtp4dev) and the Docker containers are shared. Every worktree rides the same one. Ports published by Docker are held by `docker-proxy`, so `ss -p` can't name an owner for them; use `docker inspect` there.
+In standard (non-`BOXEL_ENVIRONMENT`) mode the machine supports **exactly one** `test-services` stack at a time — the fixed ports (4200/4201/4202/4206/4210/4211/4213/4221/4222 — 4213 is the base worker manager in the matrix variant — plus the Docker-published 8008 synapse and 5001 smtp4dev) and the Docker containers are shared. Every worktree rides the same one. Ports published by Docker are held by `docker-proxy`, so `ss -p` can't name an owner for them; use `docker inspect` there.
 
 - **Before starting**, check whether one is up. If a peer has one, use it or wait — a second collides and breaks both.
 - **Teardown is a shared-resource action, and the more destructive one.** Having launched a stack confers no right to stop it; it becomes shared infrastructure the moment anyone depends on it. Ownership is _who depends on it now_, not who started it — a stack outlives the session that launched it, so its worktree can look stale while every service's cwd lives in it.
