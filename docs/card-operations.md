@@ -586,7 +586,11 @@ caller who is also granted another query, or the ad-hoc `query`, that serves it.
 A query's `html` composes with its `links`. A row served under `none` usually
 renders from its prerendered HTML; one also served data-only for the format asked
 for has neither markup nor a card the host may adopt, so the host renders it from
-the card's own read.
+the card's own read. That read is gated like any other, so a caller reached only
+through a `query` grant, with no `read` grant on the row's type, is refused it and
+cannot render such a row. A query meant for such callers declares `ids` rather
+than `none` — its rows then carry cards the host renders from — or leaves the
+format shareable, or the policy grants `read` on the row's type as well.
 
 #### Where it is refused
 
