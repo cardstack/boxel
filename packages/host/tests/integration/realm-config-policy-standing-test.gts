@@ -7,7 +7,11 @@ import {
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { rri, type LooseSingleCardDocument } from '@cardstack/runtime-common';
+import {
+  rri,
+  type LooseSingleCardDocument,
+  type Realm,
+} from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import type StoreService from '@cardstack/host/services/store';
@@ -88,8 +92,8 @@ module('Integration | realm config policy standing', function (hooks) {
   async function renderConfig(
     pointer: string | undefined,
     format: 'isolated' | 'edit' = 'isolated',
-  ): Promise<{ config: CardDef & { policy?: string } }> {
-    await setupIntegrationTestRealm({
+  ): Promise<{ realm: Realm; config: CardDef & { policy?: string } }> {
+    let { realm } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       permissions: {
         '*': ['read'],
@@ -119,7 +123,7 @@ module('Integration | realm config policy standing', function (hooks) {
     await waitFor('[data-test-realm-policy-standing="answered"]', {
       timeout: 10_000,
     });
-    return { config };
+    return { realm, config };
   }
 
   function issuesShown() {
@@ -178,6 +182,21 @@ module('Integration | realm config policy standing', function (hooks) {
       issuesShown(),
       [],
       'once the save lands, the realm reports the fixed pointer in force',
+    );
+  });
+
+  test('creating the card the pointer names clears the issue', async function (assert) {
+    let { realm } = await renderConfig(MISSING);
+    assert.deepEqual(issuesShown(), ['policy-card-missing']);
+
+    await realm.write('policies/no-such-card.json', JSON.stringify(policy));
+    await waitFor('[data-test-realm-policy-status="in-force"]', {
+      timeout: 10_000,
+    });
+    assert.deepEqual(
+      issuesShown(),
+      [],
+      'the realm reports the policy in force',
     );
   });
 

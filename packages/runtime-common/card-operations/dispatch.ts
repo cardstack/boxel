@@ -175,16 +175,17 @@ export interface OperationCore {
   // and neither cached nor put in force anywhere. A core without it validates
   // nothing.
   compilePolicyCard?(card: URL): Promise<CompiledPolicyCard>;
-  // Whether `caller` may read the realm this server serves `href` from, by
-  // that realm's own permissions, reached on the server's own authority as an
-  // explain reaches a target's realm. False for an archived realm, which
-  // answers every request with a refusal. Undefined where no realm this server
-  // serves holds `href`: the definition lookup reads such a module as the
-  // owner of the realm asking, as it does for every card in that realm.
+  // The realm this server serves `href` from, and whether `caller` may read
+  // it by that realm's own permissions, reached on the server's own authority
+  // as an explain reaches a target's realm. An archived realm, which answers
+  // every request with a refusal, is one no caller may read. Undefined where
+  // no realm this server serves holds `href`: the definition lookup reads such
+  // a module as the owner of the realm asking, as it does for every card in
+  // that realm.
   readsRealmOf?(
     href: string,
     caller: ScopeCaller,
-  ): Promise<boolean | undefined>;
+  ): Promise<{ realm: string; read: boolean } | undefined>;
 }
 
 // The realm's own `FileRef`, narrowed to what a stored-bytes read uses. Stated

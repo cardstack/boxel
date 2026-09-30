@@ -213,6 +213,11 @@ module(basename(import.meta.filename), function (hooks) {
     test('a policy that compiles is reported in force, with no issues', async function (assert) {
       let validation = await standing();
       assert.strictEqual(validation.card, POLICY_CARD);
+      assert.deepEqual(
+        validation.realms,
+        [ORG],
+        'the realm holding the policy card is the one served realm compiling read',
+      );
       assert.notOk(validation.uncompilable, 'the policy is in force');
       assert.deepEqual(
         codesOf(validation),
@@ -287,7 +292,7 @@ module(basename(import.meta.filename), function (hooks) {
         let validation = await standing();
         assert.deepEqual(
           validation,
-          { issues: [], rules: [] },
+          { realms: [], issues: [], rules: [] },
           `a pointer of ${JSON.stringify(pointer)} names no policy`,
         );
       }

@@ -884,10 +884,12 @@ interface PolicyStandingSignature {
 //
 // Asked only in a live render. Prerendered HTML is shared by everyone who
 // reads the card, and the realm tells a policy's standing only to a caller
-// who can read the realm holding the policy card. Asked again whenever the
+// who can read every realm the policy reaches. Asked again whenever this
 // realm finishes indexing, because the realm reads the pointer from
-// `realm.json` as saved, not from the field as typed, so a fix takes effect
-// when the save lands.
+// `realm.json` as saved, not from the field as typed, so a fix to the pointer
+// takes effect when the save lands. Asked again, too, whenever a realm the
+// last answer compiled from finishes indexing, which is where a fix to the
+// policy card, or to a type its rules name, lands.
 class PolicyStanding extends GlimmerComponent<PolicyStandingSignature> {
   @tracked private validation: PolicyValidation | undefined;
   @tracked private unavailable: string | undefined;
@@ -945,13 +947,35 @@ class PolicyStanding extends GlimmerComponent<PolicyStandingSignature> {
     return this.current?.issues.length ?? 0;
   }
 
-  private watch = modifier((_element, [realm]: [string | undefined]) => {
-    if (!realm || !isLiveRender()) {
+  // The realms whose indexing can change the answer: this one, which holds
+  // the pointer, and each one the last answer says compiling read. Kept as
+  // one string so that an answer naming the same realms subscribes to
+  // nothing new.
+  private get watched(): string {
+    let realms = new Set<string>();
+    if (this.realm) {
+      realms.add(this.realm);
+      for (let realm of this.validation?.realms ?? []) {
+        realms.add(realm);
+      }
+    }
+    return [...realms].sort().join(' ');
+  }
+
+  private ask = modifier((_element, [realm]: [string | undefined]) => {
+    if (realm && isLiveRender()) {
+      this.load.perform();
+    }
+  });
+
+  private listen = modifier((_element, [watched]: [string]) => {
+    if (!watched || !isLiveRender()) {
       return;
     }
-    let unsubscribe = subscribeToRealm(realm, this.onRealmEvent);
-    this.load.perform();
-    return () => unsubscribe();
+    let unsubscribes = watched
+      .split(' ')
+      .map((realm) => subscribeToRealm(realm, this.onRealmEvent));
+    return () => unsubscribes.forEach((unsubscribe) => unsubscribe());
   });
 
   private onRealmEvent = (event: RealmEventContent) => {
@@ -985,7 +1009,8 @@ class PolicyStanding extends GlimmerComponent<PolicyStandingSignature> {
     <div
       class='policy-standing'
       data-test-realm-policy-standing={{if this.answered 'answered'}}
-      {{this.watch this.realm}}
+      {{this.ask this.realm}}
+      {{this.listen this.watched}}
     >
       {{#if this.inForce}}
         <p class='standing in-force' data-test-realm-policy-status='in-force'>

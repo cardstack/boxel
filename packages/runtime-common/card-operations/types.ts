@@ -944,9 +944,16 @@ export interface PolicyValidation {
   // `card` is absent only on a validate of a realm's config card, for a realm
   // that names no policy, including one whose pointer the realm could not
   // read as a card's id. Such a realm is governed by its permissions alone,
-  // and `issues` and `rules` are empty.
+  // and `realms`, `issues` and `rules` are empty.
   card?: string;
   version?: string;
+  // The realms this server serves whose index compiling read: the card's own,
+  // and each one a type its rules name, or a type those descend from, is
+  // defined in. A change indexed in any of them can change what the card
+  // compiles to, so a view that shows a validation asks again when one of them
+  // is indexed. The caller may read every one of them, since a validate is
+  // refused to anyone who may not.
+  realms: string[];
   // Set when the policy as a whole did not compile. A realm that names it
   // grants nothing through it, and refuses every caller its ACL declines with
   // a 500. `issues` says why, and `rules` is empty.

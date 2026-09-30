@@ -993,6 +993,9 @@ let validation = await operations<typeof RealmPolicy>(policy).validate();
 // validation.rules         the rules that compiled, each with its grants that
 //                          compiled: what a realm naming the card puts in force
 // validation.uncompilable  set when the policy as a whole did not compile
+// validation.realms        the realms this server serves whose index compiling
+//                          read: the card's own, and the ones its rules' types
+//                          live in, so a view knows which to watch for a fix
 ```
 
 Some things worth knowing before you read one:
@@ -1019,7 +1022,7 @@ Some things worth knowing before you read one:
   owner. A card no realm names answers the same way, which is how a draft is
   checked before a realm is pointed at it.
 - **It is live, and nothing is cached.** A fix shows on the next validate after
-  the card reindexes. A realm naming the card revalidates its own compiled
+  the card, or a realm in `realms`, reindexes. A realm naming the card revalidates its own compiled
   policy within five seconds of any change to the card or to a type its rules
   name, so what a validate shows is in force there within that bound.
 - **It is for readers of every realm the policy reaches.** What a validate
@@ -1040,9 +1043,10 @@ Some things worth knowing before you read one:
   the realm's own config card, it compiles the card the realm's pointer names
   as the realm compiles it, and answers in the same shape. A realm that names
   no policy, or whose pointer it could not read as a card's id and dropped,
-  answers with no `card` and nothing in `issues` or `rules`. The card shows
-  the answer beside its `policy` field: in force, or not in force with the
-  issue that takes it out of force.
+  answers with no `card` and nothing in `realms`, `issues` or `rules`. The
+  card shows the answer beside its `policy` field: in force, or not in force
+  with the issue that takes it out of force, and asks again when its own realm
+  or any realm in `realms` is indexed.
 - **The config card tells only a reader of the realm the pointer names.** The
   pointer can name a card in any realm, so whether a card is there is what the
   answer would disclose. The realm holding the named card is judged before
