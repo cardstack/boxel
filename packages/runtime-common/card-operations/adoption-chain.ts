@@ -29,15 +29,21 @@ import type { RealmResourceIdentifier } from '../realm-identifiers.ts';
 // does not export, a type whose definition is missing, or a key with no module
 // and name in it. A class its module does not export is recognized from the
 // chain alone, and is never read as a type in whatever module its key's
-// spelling points to. The chain's first key has no type before it, so it is
-// read as a module and a name whatever its spelling.
+// spelling points to. The chain's first key has no type before it to say
+// where it sits, so a first key spelled as an unexported class's is not read
+// at all: it might be one. A caller that has read the first type's own entry
+// judges the chain from its second key.
 export async function chainType(
   chain: readonly string[],
   index: number,
   read: (codeRef: ResolvedCodeRef) => Promise<Definition | undefined>,
 ): Promise<{ codeRef: ResolvedCodeRef; definition: Definition } | undefined> {
   let key = chain[index];
-  if (index > 0 && isUnexportedClass(key, chain[index - 1])) {
+  if (
+    index === 0
+      ? reachedFrom(key) !== undefined
+      : isUnexportedClass(key, chain[index - 1])
+  ) {
     return undefined;
   }
   let codeRef = typeRefOf(key);

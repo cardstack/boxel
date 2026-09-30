@@ -16,6 +16,7 @@ import {
   type OperationDefinition,
   type SearchPrincipal,
 } from '@cardstack/runtime-common/card-operations';
+import { nonGrantableInChain } from '@cardstack/runtime-common/card-operations/gate';
 import type { Definition } from '@cardstack/runtime-common/definitions';
 
 // ============================================================================
@@ -506,6 +507,31 @@ module(basename(import.meta.filename), function () {
     assert.false(
       lookups.includes(key(LOOKALIKE)),
       'and the type exported at the path its key spells is not read in its place',
+    );
+  });
+
+  test('a chain’s first key spelled as an unexported class’s is judged as a type with no definition', async function (assert) {
+    let lookups: string[] = [];
+    let core = stubCore([], { lookups });
+    assert.true(
+      await nonGrantableInChain(
+        core,
+        [LOCAL_ANCESTOR_KEY, key(BASE_SCHEDULE)],
+        'listOpen',
+      ),
+      'no type before it says where the class sits, so it might be one, and the chain is refused',
+    );
+    assert.false(
+      lookups.includes(key(LOOKALIKE)),
+      'and the type exported at the path its key spells is not read in its place',
+    );
+    assert.false(
+      await nonGrantableInChain(
+        core,
+        [key(RATED), key(RATED_BASE)],
+        'listOpen',
+      ),
+      'a first key under a `fields/` directory is read as the type it names',
     );
   });
 });
