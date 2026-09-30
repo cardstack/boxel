@@ -357,12 +357,13 @@ and is never answered with a `304`.
 
 `output` is **not** an access boundary. See the posture section.
 
-### `links` — how much of the link graph a read carries
+### `links` — how much of the link graph a read or a query carries
 
 A read serves a JSON:API document, and by default it assembles the transitive
 closure of the card's links into `included[]`: the cards it links to, the cards
-those link to, and so on to the end of the graph. A `read` declaration may say
-how much of that to carry.
+those link to, and so on to the end of the graph. A search does the same for
+every row it answers with. A `read` or a `query` declaration may say how much of
+that to carry.
 
 ```ts
 @operation static read = {
@@ -424,14 +425,67 @@ what the card itself computed from it. This is the part that most often
 surprises: `links: 'none'` on a card whose `summary` is computed from its
 linked records still answers with that summary.
 
-`links` is a `read` key: it narrows the document a read of the card serves, and
-no other base serves one. A write answers without assembling the card's closure,
-and a `readSource` serves stored bytes. A `query` answers through search, which
-assembles each result's closure the way any search does; the declaration does
-not govern those results, and a `links` on a `query` is refused rather than
-accepted and ignored. A `links` on any base but `read` is refused where it is
-written, and a stored definition carrying one records a `links-without-assembly`
-issue; a value that is not one of the three records `invalid-link-strategy`.
+#### On a `query`
+
+A `query` declaration narrows its results the same way, with the same three
+values:
+
+```ts
+@operation static allRosters = {
+  base: 'query',
+  query: { filter: { type: () => Roster } },
+  links: 'ids',
+} satisfies OperationDeclaration;
+```
+
+**It governs every row alike, under the query's declaration.** Each row the
+query answers with carries what the query declares, whatever type the row is and
+whatever that type's own `read` declares — the query's results are its
+representation, as a read's document is the read's. The two are separate
+statements, so a type whose `read` narrows its closure is still carried whole by
+a `full` query that returns it. A query that must not reach what its rows link
+to declares that itself.
+
+**It narrows the row's card, never the entry the row arrives in.** A search
+delivers each row as an entry that names its card and carries the renderings
+asked for, and those are untouched: under every strategy the entry still names
+its card, and its prerendered HTML still draws the card's links, as a card's
+prerendered formats do under a narrowed read. What narrows is the card itself —
+its relationships and the closure behind them. A sparse row asking for a link
+field is narrowed with the rest: under `none` it is not told what that field
+links to.
+
+A search a render runs is the exception. It keeps each row's stored links
+whatever the query declares, and never assembles a closure under any strategy:
+the render resolves the cards those links name itself, and it keeps those cards
+for the rest of the indexing pass, so a row served without them would draw its
+link fields empty in every later render that shows it — HTML that is then served
+to every viewer. Since prerendered HTML draws a card's links under every
+strategy, keeping them in the render withholds nothing a caller would otherwise
+receive.
+
+The request's own narrowing composes with it the way it does with a read: a
+search the realm-server is shedding load on, or one whose caller asked for links
+only, is served `ids` from a `full` query, and nothing a request asks for widens
+what a query declares. The declaration is applied on a realm's own `_search` and
+on `_federated-search` alike, since the server re-lowers a named query from its
+own definition wherever it is served.
+
+`ids` is the narrowing to reach for here too. The host keeps the cards a search
+answers with as the live instances it renders and edits, so a row served under
+`none` becomes a live card with empty link fields — wherever that card is next
+shown or edited in the host, including where its own `read` would carry its
+links, until it is next reloaded. Under `ids` the host resolves each named link
+itself, as it does for an `ids` read.
+
+#### Where it is refused
+
+`links` is a `read` and `query` key: it narrows the closure a read of the card
+or a query's results assemble, and no other base assembles one. A write answers
+without assembling the card's closure, and a `readSource` serves stored bytes. A
+`links` on any other base is refused where it is written, and a stored
+definition carrying one records a `links-without-assembly` issue; a value that
+is not one of the three records `invalid-link-strategy`.
 
 ### `optimistic`
 
@@ -580,6 +634,10 @@ card's field needs the link that reaches it declared searchable — `@field
 attending = linksTo(Clinician, { searchable: true })` — otherwise the read is
 `unsearchable-read`.
 
+A query may also declare how much of each row's link graph its results carry,
+with the same `links` a read declares — see
+[`links`](#links--how-much-of-the-link-graph-a-read-or-a-query-carries).
+
 Calling it answers the live entries resource a search runs as — `{ entries,
 isLoading, meta }` — and `.query()` answers the wire query behind it, which is
 what a card hands to `@context.searchResultsComponent` to render the rows
@@ -712,6 +770,46 @@ Three worth recognizing:
   what the card holds; write predicates that cannot throw on any value the
   card can store.
 
+## The card routes and a realm's policy
+
+A realm's policy can admit a caller the realm's own permissions decline. The
+card+json writes reach the policy the way a batch does: a `POST` that creates a
+card is judged as `create` on the type it names, a `PATCH` as `update` on the
+card, and a `DELETE` as `delete`. A grant whose `where` reads the card is decided
+under the write lock, against the card as it stands when the write runs. A
+refusal follows the same rules on both: a caller who may read the realm gets a
+403, and one who may not gets the 404 a card that does not exist gets. The
+card+json body carries no `code`, so there the status is the whole answer.
+
+For a caller the realm admits only through a grant, four things set the card
+routes apart from a batch:
+
+- **A verb is the built-in behavior.** A `PATCH` merges the document it is sent
+  and a `DELETE` removes the card, whatever the card's type declares under those
+  names. A type that declares its own `update` or `delete` means by the name
+  what its declaration says, so a grant on the name is used through
+  `operations()`, and the card route refuses the write.
+- **No side-loads.** A document's `included` cards are written too, and a grant
+  on one card does not reach another. Create each as its own entry in a batch.
+- **A create names its type by URL or registered prefix.** A relative module in
+  `meta.adoptsFrom` is refused, because a card that is not stored yet has no
+  location for it to be relative to.
+- **A write answers with the card it wrote.** A `POST` or `PATCH` answers with
+  the card's indexed document, without its link closure, and without running
+  the type's `read`, so an `output` its `read` declares does not narrow it. A
+  grant of `create` or `update` over the card routes therefore shows the caller
+  the card's whole document, whatever `read` grant they hold, and a `PATCH`
+  that changes nothing still answers with it. Grant a card write only where the
+  caller may see the card.
+
+Some routes answer on the realm's own permissions alone, and no grant reaches
+them: the `card+source` write, its octet-stream spelling and the `card+source`
+removal; `/_atomic`; and the realm's administration routes, such as `_reindex`
+and `_permissions`. The first two write or remove stored bytes verbatim, whether
+those are module source, a data file or a card's whole document, and a verbatim
+replacement can change a card's type out from under the grant that admitted it.
+The administration routes do not act on a card at all.
+
 ## Asking a policy what it decides
 
 A realm's policy widens what the realm's own permissions allow. A policy
@@ -719,26 +817,16 @@ narrower than its author meant shows up as refusals someone reports. A policy
 wider than its author meant shows up as nothing at all. An explain is how the
 realm's owner asks directly.
 
-A policy card's type declares one, named `explain`, on the `explain` base.
-Invoked on the policy card with an actor, a card and an operation, it runs the
-policy gate of the realm that holds the card, exactly as that invocation
-would. It stops at the decision, invokes nothing, and answers with how the gate
-got there:
+`RealmPolicy` declares one, named `explain`, on the `explain` base, so every
+policy card carries it, a subtype's included. Invoked on the policy card with
+an actor, a card and an operation, it runs the policy gate of the realm that
+holds the card, exactly as that invocation would. It stops at the decision,
+invokes nothing, and answers with how the gate got there. The policy card's
+isolated view asks it from an "Explain a decision" form and renders the
+answer; code asks it the same way:
 
 ```ts
-class SchoolPolicy extends RealmPolicy {
-  @operation static explain = {
-    base: 'explain',
-    params: {
-      actor: StringField,
-      target: StringField,
-      operation: StringField,
-    },
-    nonGrantable: true,
-  } satisfies OperationDeclaration;
-}
-
-let explanation = await operations<typeof SchoolPolicy>(policy).explain({
+let explanation = await operations<typeof RealmPolicy>(policy).explain({
   actor: '@teacher:example.org',
   target: 'https://example.org/education/classrooms/room-204',
   operation: 'read',
@@ -765,10 +853,12 @@ Some things worth knowing before you read one:
 - **Read is the whole gate.** A reader of both realms learns, for any actor
   they name, what the card's realm's permissions allow that actor, which the
   realm's permissions listing shows only to its owners.
-- **There is no asking about yourself.** A caller refused an operation is told
-  as little as the realm's permissions entitle them to, so that they cannot
-  learn which cards exist. An explain would tell them exactly that, so it is
-  not a self-service check, and a view never decides what to show from one.
+- **It is not a self-service check.** A caller who may not read the card's
+  realm is told as little as the realm's permissions entitle them to, so that
+  they cannot learn which cards exist, and an explain would tell them exactly
+  that. Such a caller cannot ask about the card at all, themselves included. A
+  caller who reads both realms can ask about any actor, themselves included,
+  but a view never decides what to show from an explain.
 - **It explains only the policy the card's realm names.** An explain on any
   other policy card refuses with `policy-not-in-force`.
 - **`allowed` means the gate admits the invocation.** The operation can still

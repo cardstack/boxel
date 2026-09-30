@@ -15,6 +15,7 @@ import {
   GATE_REFUSED,
   gateOperation,
   gateRefusal,
+  leavesToLock,
   loadPolicy,
   type GateSubject,
   notPermitted,
@@ -547,6 +548,15 @@ function carries(
   );
 }
 
+// Whether a type of this kind answers `name` with a built-in behavior when it
+// declares nothing under that name: the behavior an instance of the type runs
+// when a caller invokes the name on it.
+export function carriesBuiltIn(kind: DefKind, name: string): boolean {
+  return (
+    isBaseOperation(name) && own(ALLOWED_BASE_OPERATIONS[kind], name) != null
+  );
+}
+
 // The base operations that resolve without consulting a definition.
 //
 // A definition is consulted for two reasons — to find a declaration of the
@@ -613,10 +623,11 @@ function own<T>(
 // is in the index, the built-in behavior does not consult its definition, and
 // refusing here would make a broken module's cards unreadable.
 //
-// A write the gate could only admit on a predicate is refused here. Its
-// predicate has to be evaluated under the write lock, and a caller resolving
-// through here holds no lock and carries no pending decision to one. A caller
-// that does takes the decision from `resolveGatedOperation` instead.
+// A write the gate left anything for the write lock to decide is refused
+// here: one it could only admit on a predicate, and one to a stored card,
+// whose type the lock judges again from its bytes. A caller resolving through
+// here holds no lock and carries no pending decision to one. A caller that
+// does takes the decision from `resolveGatedOperation` instead.
 export async function resolveOperation(
   core: OperationCore,
   target: OperationTarget,
@@ -629,7 +640,7 @@ export async function resolveOperation(
     name,
     scope,
   );
-  if (decision.kind === 'pending') {
+  if (leavesToLock(decision)) {
     throw notPermitted(target, name);
   }
   return definition;
@@ -663,6 +674,58 @@ export async function resolveGatedOperation(
   name: string,
   scope: OperationScope = newOperationScope(core),
 ): Promise<GatedOperation> {
+  return await resolveAndGate(core, target, name, scope);
+}
+
+// What the policy gate decides about a write one of the card verbs carries
+// out: a card+json `POST` creating a card, a `PATCH` updating one, or a
+// `DELETE` removing one.
+//
+// A verb performs the built-in behavior it is named for, on the document it
+// was sent, whatever the target's type declares under that name. A declaration
+// is how an author specializes the behavior: an `update` with an `input`
+// stage, a `delete` rebound onto `transform` as a soft delete. A grant on the
+// name admits what the declaration does, and the verb would do something else.
+// So a grant reaches a verb only where the name means the built-in behavior,
+// and a write to a type that declares the name is refused as one no grant
+// admits. The operations envelope runs the declaration, and is where such a
+// grant is used.
+//
+// That refusal is made before the gate judges anything, for every caller the
+// realm ACL declined. The gate judges an operation by the base its declaration
+// builds on, and the verb writes whatever that base is: a declared `update`
+// built on `read` would read to the gate as a read the ACL allowed a reader,
+// and the verb would then write for them with no grant at all.
+//
+// A caller the realm ACL allowed is answered as the gate answers them, without
+// the policy, and the verb performs the built-in behavior for them whatever the
+// type declares.
+export async function resolveFacadeWrite(
+  core: OperationCore,
+  target: OperationTarget,
+  base: 'create' | 'update' | 'delete',
+  scope: OperationScope,
+): Promise<GateDecision> {
+  let { decision } = await resolveAndGate(core, target, base, scope, {
+    builtInOnly: true,
+  });
+  // The verb writes, and a write the ACL declined is never the ACL's to allow,
+  // so for such a caller the gate's answer is a grant or a refusal.
+  if (decision.kind === 'coarse' && scope.coarseDeclined !== 'none') {
+    throw notPermitted(target, base);
+  }
+  return decision;
+}
+
+async function resolveAndGate(
+  core: OperationCore,
+  target: OperationTarget,
+  name: string,
+  scope: OperationScope,
+  // Refuse a name the target's type declares, for a caller the ACL declined,
+  // before the gate runs (see `resolveFacadeWrite`).
+  opts: { builtInOnly?: true } = {},
+): Promise<GatedOperation> {
   let refusal = (e: unknown): unknown =>
     scope.coarseDeclined === 'all' && isOperationFailure(e)
       ? notPermitted(target, name)
@@ -688,7 +751,10 @@ export async function resolveGatedOperation(
     }
     throw refusal(e);
   }
-  let { definition, typeDefinition, typeChain } = resolved;
+  let { definition, typeDefinition, typeChain, declared } = resolved;
+  if (opts.builtInOnly && declared && scope.coarseDeclined !== 'none') {
+    throw notPermitted(target, name);
+  }
   let decision = await gateOperation(
     core,
     gateSubject(target, typeChain),
@@ -744,6 +810,9 @@ async function resolveUngated(
   // the adoption chain recorded on it.
   typeDefinition?: Definition;
   typeChain?: string[];
+  // Whether the name resolved to a declaration on the target's type rather
+  // than to the built-in behavior of that name.
+  declared?: true;
 }> {
   assertInRealm(core, target);
   if (isDefinitionFreeOperation(name)) {
@@ -810,7 +879,12 @@ async function resolveUngated(
     if (!carries(target, kind, declared.base)) {
       throw notAllowed(target, name, kind, declared.base);
     }
-    return { definition: declared, typeDefinition: definition, typeChain };
+    return {
+      definition: declared,
+      typeDefinition: definition,
+      typeChain,
+      declared: true,
+    };
   }
   if (!isBaseOperation(name) || own(DECLARATION_ONLY, name)) {
     throw new OperationFailure({
