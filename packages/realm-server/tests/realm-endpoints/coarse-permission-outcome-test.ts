@@ -296,50 +296,21 @@ const gatedProbes: GatedProbe[] = [
   ),
 ];
 
-// Requests for an operational endpoint's path whose `Accept` names another
-// route, which the router hands them to. `endpointContentType` is the media
-// type the endpoint's own route is registered under: carried as the request's
-// `Content-Type`, it changes nothing about where the request goes, so it must
-// change nothing about the credentials the request needs.
-interface Lookalike {
-  label: string;
-  endpointContentType: SupportedMimeType;
-  write: boolean;
-  send: (request: SuperTest<Test>, contentType: string) => Test;
-}
-
-const lookalikes: Lookalike[] = [
+// The realm's operational endpoints, each by the method, path and media type
+// its own route is registered under. A request for one of these paths whose
+// `Accept` names another route is handed to that route, so the media type the
+// endpoint's route is registered under, carried as the request's
+// `Content-Type`, must change nothing about the credentials it needs.
+const operationalEndpoints: {
+  method: 'GET' | 'POST';
+  path: string;
+  mimeType: SupportedMimeType;
+}[] = [
+  { method: 'POST', path: '/_session', mimeType: SupportedMimeType.Session },
   {
-    label: 'POST card+source of _session',
-    endpointContentType: SupportedMimeType.Session,
-    write: true,
-    send: (r, contentType) =>
-      r
-        .post('/_session')
-        .set('Accept', SupportedMimeType.CardSource)
-        .set('Content-Type', contentType)
-        .send('written without credentials'),
-  },
-  {
-    label: 'POST octet-stream of _session',
-    endpointContentType: SupportedMimeType.Session,
-    write: true,
-    send: (r, contentType) =>
-      r
-        .post('/_session')
-        .set('Accept', SupportedMimeType.OctetStream)
-        .set('Content-Type', contentType)
-        .send('written without credentials'),
-  },
-  {
-    label: 'GET card+source of _readiness-check',
-    endpointContentType: SupportedMimeType.RealmInfo,
-    write: false,
-    send: (r, contentType) =>
-      r
-        .get('/_readiness-check')
-        .set('Accept', SupportedMimeType.CardSource)
-        .set('Content-Type', contentType),
+    method: 'GET',
+    path: '/_readiness-check',
+    mimeType: SupportedMimeType.RealmInfo,
   },
 ];
 
@@ -611,21 +582,61 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
         .send('stored at the probe path');
       assert.strictEqual(stored.status, 204, 'the owner stores the file');
 
-      for (let lookalike of lookalikes) {
-        for (let contentType of [lookalike.endpointContentType, 'text/plain']) {
-          let label = `${lookalike.label} (Content-Type: ${contentType})`;
+      // Every other route the router can hand an endpoint's path to: one
+      // registered for the endpoint's method whose path, which the router
+      // matches as an anchored regular expression, matches the endpoint's.
+      let lookalikes = operationalEndpoints.flatMap((endpoint) =>
+        testRealm
+          .routeDescriptions()
+          .filter(
+            (route) =>
+              route.method === endpoint.method &&
+              route.mimeType !== '*' &&
+              !route.operationalEndpoint &&
+              new RegExp(`^${route.path}$`).test(endpoint.path),
+          )
+          .map((route) => ({ endpoint, accept: String(route.mimeType) })),
+      );
+      let reached = lookalikes.map(
+        ({ endpoint, accept }) =>
+          `${endpoint.method} ${accept} ${endpoint.path}`,
+      );
+      for (let route of [
+        `POST ${SupportedMimeType.CardSource} /_session`,
+        `POST ${SupportedMimeType.OctetStream} /_session`,
+        `GET ${SupportedMimeType.CardSource} /_readiness-check`,
+      ]) {
+        assert.true(
+          reached.includes(route),
+          `${route} is among the routes the endpoints' paths reach`,
+        );
+      }
+
+      for (let { endpoint, accept } of lookalikes) {
+        for (let contentType of [endpoint.mimeType, 'text/plain']) {
+          let send = () => {
+            let sent = (
+              endpoint.method === 'POST'
+                ? request.post(endpoint.path)
+                : request.get(endpoint.path)
+            )
+              .set('Accept', accept)
+              .set('Content-Type', contentType);
+            return endpoint.method === 'POST'
+              ? sent.send('written without credentials')
+              : sent;
+          };
+          let label = `${endpoint.method} ${endpoint.path} (Accept: ${accept}, Content-Type: ${contentType})`;
           assertRefusal(
             assert,
-            await lookalike.send(request, contentType),
+            await send(),
             { status: 401, body: MISSING_AUTH },
             `anonymous ${label}`,
           );
-          if (lookalike.write) {
+          if (endpoint.method === 'POST') {
             assertRefusal(
               assert,
-              await lookalike
-                .send(request, contentType)
-                .set('Authorization', readerAuth()),
+              await send().set('Authorization', readerAuth()),
               { status: 403, body: INSUFFICIENT },
               `reader ${label}`,
             );
