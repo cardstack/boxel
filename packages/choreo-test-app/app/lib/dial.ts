@@ -88,16 +88,15 @@ export class Dial<T extends DialConfig> {
    */
   @tracked private revision = 0;
 
+  private id: string;
+  private config: T;
   private off: () => void;
   private bumping = false;
   private gone = false;
 
-  constructor(
-    private id: string,
-    name: string,
-    private config: T,
-    options: DialOptions = {}
-  ) {
+  constructor(id: string, name: string, config: T, options: DialOptions = {}) {
+    this.id = id;
+    this.config = config;
     DialStore.registerPanel(id, name, config, undefined, {
       persist: options.persist ?? true,
       retainOnUnmount: options.retain ?? true,

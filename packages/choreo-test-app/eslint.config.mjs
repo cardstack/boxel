@@ -20,6 +20,26 @@ const esmParserOptions = {
   ecmaVersion: 'latest',
 };
 
+// Flat config replaces a rule's options rather than merging them, so every
+// block that sets `no-restricted-syntax` has to repeat these.
+const erasableSyntax = [
+  {
+    selector: 'TSEnumDeclaration',
+    message:
+      'TypeScript `enum` is not erasable; use a `const` object with `as const` or a union of string literals.',
+  },
+  {
+    selector: 'TSParameterProperty',
+    message:
+      'Parameter properties are not erasable; declare the class property explicitly.',
+  },
+  {
+    selector: 'TSModuleDeclaration:not([declare=true])',
+    message:
+      'TypeScript `namespace`/`module` blocks emit runtime code and are not erasable.',
+  },
+];
+
 export default defineConfig([
   globalIgnores([
     '**/dist/',
@@ -88,24 +108,7 @@ export default defineConfig([
           varsIgnorePattern: '^_',
         },
       ],
-      'no-restricted-syntax': [
-        'error',
-        {
-          selector: 'TSEnumDeclaration',
-          message:
-            'TypeScript `enum` is not erasable; use a `const` object with `as const` or a union of string literals.',
-        },
-        {
-          selector: 'TSParameterProperty',
-          message:
-            'Parameter properties are not erasable; declare the class property explicitly.',
-        },
-        {
-          selector: 'TSModuleDeclaration:not([declare=true])',
-          message:
-            'TypeScript `namespace`/`module` blocks emit runtime code and are not erasable.',
-        },
-      ],
+      'no-restricted-syntax': ['error', ...erasableSyntax],
     },
   },
   {
@@ -129,6 +132,7 @@ export default defineConfig([
     rules: {
       'no-restricted-syntax': [
         'error',
+        ...erasableSyntax,
         {
           selector:
             'Literal[value=/^\\/(draco|models|still|og\\.png|robots\\.txt|xstress-loop\\.mp4)/]',
