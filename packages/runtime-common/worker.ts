@@ -22,7 +22,7 @@ import {
   type IndexWriter,
   type QueuePublisher,
   type DBAdapter,
-  type RealmPermissions,
+  type CreatePrerenderAuth,
   CachingDefinitionLookup,
 } from './index.ts';
 import { MatrixClient } from './matrix-client.ts';
@@ -216,10 +216,7 @@ export class Worker {
   #indexJobsOnly: boolean;
   #skipPrerenderHtmlRealms: string[];
   #mediaCacheAdapter: MediaCacheAdapter | undefined;
-  #createPrerenderAuth: (
-    userId: string,
-    permissions: RealmPermissions,
-  ) => string;
+  #createPrerenderAuth: CreatePrerenderAuth;
 
   constructor({
     indexWriter,
@@ -258,10 +255,7 @@ export class Worker {
     // The MediaCache object store, absent when the process has none
     // configured (media-cache tasks then no-op).
     mediaCacheAdapter?: MediaCacheAdapter;
-    createPrerenderAuth: (
-      userId: string,
-      permissions: RealmPermissions,
-    ) => string;
+    createPrerenderAuth: CreatePrerenderAuth;
   }) {
     this.#queue = queue;
     this.#indexWriter = indexWriter;
