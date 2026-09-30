@@ -287,6 +287,32 @@ function makeFileSystem() {
         };
       }
 
+      // Capture-only components still signalling under the attributes'
+      // former names. Neither reads as a signal to the engine's wait, so
+      // without the legacy-name guard both would persist their frame as a
+      // successful capture.
+      class LegacyPendingShot extends Component<typeof LegacySignals> {
+        <template>
+          <div data-screenshot-pending='true'>never ready</div>
+        </template>
+      }
+      class LegacyFailedShot extends Component<typeof LegacySignals> {
+        <template>
+          <div data-screenshot-failed='fixture: content cannot decode'>
+            broken
+          </div>
+        </template>
+      }
+
+      export class LegacySignals extends CardDef {
+        @field name = contains(StringField);
+        static captures: Record<string, CaptureSpec> = {
+          ok: { format: 'fitted', width: 170, height: 250 },
+          legacyPending: { render: LegacyPendingShot, width: 320, height: 180 },
+          legacyFailed: { render: LegacyFailedShot, width: 320, height: 180 },
+        };
+      }
+
       // Renders the linked card in a display format, so the persisted
       // isolated_html carries the linked data as text — the inspectable
       // twin of the capture-only path above.
@@ -1113,6 +1139,52 @@ module(basename(import.meta.filename), function (hooks) {
       ),
       `the error carries the component's stated cause (got: ${doomedError?.message})`,
     );
+  });
+
+  test('a component signalling under a former attribute name fails its slot, naming the rename', async function (assert) {
+    await writeAndSettle(
+      'legacy-signals.json',
+      JSON.stringify({
+        data: {
+          attributes: { name: 'Legacy signals' },
+          meta: {
+            adoptsFrom: { module: rri('./product'), name: 'LegacySignals' },
+          },
+        },
+      }),
+    );
+
+    let row = await prerenderedHtmlRowFor(
+      testDbAdapter,
+      `${testRealm}legacy-signals.json`,
+    );
+    assert.ok(row, 'the instance row still indexes');
+    let manifest = row!.captures as CaptureManifest | null;
+    assert.ok(manifest?.ok, 'the sibling slot captures');
+    assert.notOk(
+      manifest?.legacyPending,
+      'no manifest entry lands for the data-screenshot-pending slot',
+    );
+    assert.notOk(
+      manifest?.legacyFailed,
+      'no manifest entry lands for the data-screenshot-failed slot',
+    );
+
+    let errors = (row!.diagnostics as any)?.captureErrors as
+      | { name: string; message: string }[]
+      | undefined;
+    for (let [slot, attribute, rename] of [
+      ['legacyPending', 'data-screenshot-pending', 'data-capture-pending'],
+      ['legacyFailed', 'data-screenshot-failed', 'data-capture-failed'],
+    ]) {
+      let error = errors?.find((e) => e.name === slot);
+      assert.ok(
+        error?.message.includes(
+          `signals with ${attribute}, which is no longer read — rename it to ${rename}`,
+        ),
+        `the ${slot} slot's error names the rename (got: ${error?.message})`,
+      );
+    }
   });
 
   test('a re-render captures at the new generation and supersedes the prior ledger row', async function (assert) {

@@ -2211,19 +2211,22 @@ async function waitForCapturePendingClear(
         document.querySelector('[data-capture-pending]') == null,
       { timeout: CAPTURE_PENDING_WAIT_MS, polling: 'mutation' },
     );
-    // A component still signalling readiness under the attribute's former
-    // name reads here as no signal at all, so the wait above clears at once
-    // and the capture persists whatever half-painted frame is on screen —
-    // plausible bytes, wrong content, no error anywhere. Fail the slot
-    // instead, naming the attribute to rename.
-    if (
-      await page.evaluate(
-        () => document.querySelector('[data-screenshot-pending]') != null,
-      )
-    ) {
+    // A component still signalling under either attribute's former name
+    // reads here as no signal at all, so the wait above clears at once and
+    // the capture persists whatever frame is on screen — a half-painted one,
+    // or one the component already declared broken — as plausible bytes with
+    // no error anywhere. Fail the slot instead, naming the attribute to
+    // rename.
+    let legacySignal = await page.evaluate(
+      () =>
+        ['data-screenshot-pending', 'data-screenshot-failed'].find(
+          (attribute) => document.querySelector(`[${attribute}]`) != null,
+        ) ?? null,
+    );
+    if (legacySignal) {
       return buildInvalidRenderResponseError(
         page,
-        `capture-only component for capture "${name}" signals readiness with data-screenshot-pending, which is no longer read — rename it to data-capture-pending`,
+        `capture-only component for capture "${name}" signals with ${legacySignal}, which is no longer read — rename it to ${legacySignal.replace('screenshot', 'capture')}`,
         { title: 'Capture render never painted' },
       );
     }
