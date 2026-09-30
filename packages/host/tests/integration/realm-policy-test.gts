@@ -698,7 +698,7 @@ module('Integration | realm policy', function (hooks) {
       .includesText('does not parse', 'and says what is wrong');
   });
 
-  test('a query grant whose predicate compiles no search filter is live and not searchable', async function (assert) {
+  test('a query grant whose predicate compiles no search filter is inactive, and its issue says why', async function (assert) {
     await renderPolicyNamed('policies/unfilterable', [
       {
         targetType: { module: '../classroom', name: 'Classroom' },
@@ -709,16 +709,58 @@ module('Integration | realm policy', function (hooks) {
       },
     ]);
 
-    assert.deepEqual(await grantStatuses(), ['live', 'not-searchable']);
+    assert.deepEqual(
+      await grantStatuses(),
+      ['live', 'inactive'],
+      'a query is authorized only through a filter, so the grant admits nothing',
+    );
     assert
-      .dom('[data-test-policy-grant-not-searchable]')
-      .exists({ count: 1 }, 'the query grant says it admits no search');
+      .dom(
+        '[data-test-policy-grant-status="inactive"] [data-test-operation-grant-operation]',
+      )
+      .hasText('query', 'the marked grant is the query');
     assert
       .dom('[data-test-policy-grant-inactive]')
-      .doesNotExist('and is not marked inactive');
+      .exists({ count: 1 }, 'and it is marked where it is listed');
+    assert
+      .dom('[data-test-policy-grant-note]')
+      .doesNotExist('its issue says why, rather than a note');
     assert
       .dom('[data-test-policy-issue]')
+      .exists({ count: 1 })
       .hasAttribute('data-test-policy-issue', 'policy-not-filterable');
+    assert.dom('[data-test-policy-issue-operation]').hasText('query');
+  });
+
+  test('a grant whose condition reads a snapshot is inactive on anything but a query, and says why', async function (assert) {
+    await renderPolicyNamed('policies/snapshot', [
+      {
+        targetType: { module: '../classroom', name: 'Classroom' },
+        grants: [
+          {
+            operation: 'read',
+            where: { bxl: teachesPredicate, snapshot: true },
+          },
+          { operation: 'update', where: teachesPredicate },
+        ],
+      },
+    ]);
+
+    assert.deepEqual(
+      await grantStatuses(),
+      ['inactive', 'live'],
+      'the gate never evaluates a snapshot condition, so the read admits nothing',
+    );
+    assert
+      .dom('[data-test-policy-grant-note]')
+      .exists({ count: 1 })
+      .includesText(
+        'reads a snapshot',
+        'the grant says why, since no issue does',
+      );
+    assert
+      .dom('[data-test-realm-policy-issues]')
+      .doesNotExist('compiling recorded no issue');
   });
 
   test('a rule whose type does not resolve is marked inactive with its grants', async function (assert) {
@@ -778,7 +820,11 @@ module('Integration | realm policy', function (hooks) {
     await waitFor('[data-test-realm-policy-uncompilable]', { timeout: 10_000 });
     assert
       .dom('[data-test-realm-policy-uncompilable]')
-      .includesText('Not in force', 'the whole policy is out of force');
+      .includesText('Not in force', 'the whole policy is out of force')
+      .includesText(
+        "This card's latest index visit failed",
+        'and says why of the card itself',
+      );
     assert
       .dom('[data-test-policy-rule-inactive]')
       .doesNotExist('which is said once, not on each rule');
@@ -843,7 +889,6 @@ module('Integration | realm policy', function (hooks) {
     assert.dom('[data-test-realm-policy-issues]').doesNotExist();
     assert.dom('[data-test-realm-policy-uncompilable]').doesNotExist();
     assert.dom('[data-test-policy-grant-inactive]').doesNotExist();
-    assert.dom('[data-test-policy-grant-not-searchable]').doesNotExist();
     assert.dom('[data-test-policy-rule-inactive]').doesNotExist();
     assert.dom('[data-test-realm-policy-validate-failure]').doesNotExist();
   });
