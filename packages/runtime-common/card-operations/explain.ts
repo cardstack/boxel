@@ -107,7 +107,11 @@ import {
 // instead. The draft rides the explain of the card in force, so the card that
 // has something to explain is still the one the realm names, and the draft is
 // read on exactly the authority the live form is. It is compiled for this
-// answer alone: no cache holds it, and the policy in force is untouched.
+// answer alone: no cache holds it, and the policy in force is untouched. A
+// draft names its own types, and they resolve as the live policy's do, on the
+// target realm's authority. So what compiling one records can tell a reader
+// of both realms what that realm's definitions hold for a type they name,
+// which the live form tells only whoever may write the policy card.
 //
 // A search. A search is not decided by the gate: the search engine composes
 // the grants that admit it into its filter, and it reads the index, so it is
