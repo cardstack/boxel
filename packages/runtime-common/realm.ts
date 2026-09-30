@@ -3,6 +3,7 @@ import { resolveRangeHeader } from './http-range.ts';
 import {
   awaitRealmIndexSettled,
   INDEX_WRITING_JOB_TYPES,
+  indexLag,
   readLaneHoldersBestEffort,
   indexingConcurrencyGroup,
   INCREMENTAL_INDEX_JOB_TIMEOUT_SEC,
@@ -269,7 +270,10 @@ import type {
   OperationStoredFileMeta,
   ScopeCaller,
 } from './card-operations/dispatch.ts';
-import type { TargetRealm } from './card-operations/explain.ts';
+import {
+  assertWithinExplainCap,
+  type TargetRealm,
+} from './card-operations/explain.ts';
 import {
   assertTravelsInEnvelope,
   assertVersionableEntry,
@@ -321,10 +325,12 @@ import {
 import { erroredTargetRow } from './card-operations/read.ts';
 import { commitBatch, rehearseBatch } from './card-operations/coordinator.ts';
 import {
+  compileDraftPolicy,
   noteRealmIndexMoved,
   RealmPolicyCache,
   realmPolicyRef,
   type CompiledRealmPolicy,
+  type PolicyCompileEnvironment,
 } from './card-operations/policy.ts';
 import {
   policyQueryScope,
@@ -5792,6 +5798,15 @@ export class Realm {
         throw requestContext.archivedSeal;
       }
 
+      // Every explain in the batch is bounded together, before any of them is
+      // explained: each entry is within the cap alone, and enough of them
+      // would enumerate every actor or every card all the same.
+      assertWithinExplainCap(
+        resolved
+          .filter(({ definition }) => definition.base === 'explain')
+          .map(({ entry }) => ({ params: paramsFor(entry) })),
+      );
+
       // Reads run first and against the state the batch started from, which is
       // what "an entry sees pre-batch state" means for a mixed batch: a read
       // entry never observes what a write entry in the same batch stages, and
@@ -6668,6 +6683,12 @@ export class Realm {
             ),
           policyCard: async () => (await this.getRealmPolicy())?.card,
           isPolicyCard: (types) => this.#isPolicyCard(types),
+          compileDraft: (card, document) =>
+            compileDraftPolicy(
+              card,
+              document,
+              this.#policyCompileEnvironment(),
+            ),
         },
         targetRealm: (href) => this.#targetRealm(href),
       };
@@ -6712,6 +6733,9 @@ export class Realm {
       url,
       core: this.operationCore,
       aclFor: (caller) => this.#aclFor(caller),
+      indexLag: async () =>
+        (await indexLag(this.#dbAdapter, this.url)) ??
+        this.#realmIndexUpdater.indexLag(),
     };
   }
 
@@ -15188,6 +15212,14 @@ export class Realm {
   #makePolicyCache(): RealmPolicyCache {
     return new RealmPolicyCache({
       policyCard: async () => (await this.getRealmPolicy())?.card,
+      ...this.#policyCompileEnvironment(),
+    });
+  }
+
+  // What compiling a policy reads, whether the cache compiles the card the
+  // realm's key names or an explain compiles a draft of it.
+  #policyCompileEnvironment(): PolicyCompileEnvironment {
+    return {
       readCard: (url) => this.#realmIndexQueryEngine.instanceSource(url),
       resolveCodeRef: (codeRef, relativeTo) => {
         let absolute = codeRefWithAbsoluteIdentifier(
@@ -15206,7 +15238,7 @@ export class Realm {
       // spelling, so a key computed the same way is found in either.
       typeKey: (codeRef) =>
         internalKeyFor(codeRef, undefined, this.#virtualNetwork),
-    });
+    };
   }
 
   // Whether an adoption chain, as the index records one, is a policy card's.

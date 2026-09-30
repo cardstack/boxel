@@ -17,6 +17,7 @@ import {
   type OperationWriteResult,
   type OperationsSubject,
   type PolicyExplanation,
+  type PolicyExplanationListing,
   type QueryTargetHandle,
   type SearchEntries,
   type SearchEntryWireQuery,
@@ -2052,6 +2053,7 @@ export type {
   OperationValueResult,
   OperationWriteResult,
   PolicyExplanation,
+  PolicyExplanationListing,
   SearchEntries,
   SearchInvokeOptions,
 } from '@cardstack/runtime-common';
@@ -2070,14 +2072,17 @@ type PayloadArgs<Declaration> = Declaration extends {
 // What an operation resolves to, by the behavior it is built on: a write
 // reports the identity and version of what it wrote, a delete reports that
 // there is nothing left to describe, a read reports its document, and an
-// explain reports what the policy decided and why.
+// explain reports what the policy decided and why — or, for one whose params
+// ask for a `list`, one page of explanations.
 type ResultOf<Declaration> = Declaration extends { base: 'delete' }
   ? null
   : Declaration extends { base: 'read' }
     ? OperationDocument
-    : Declaration extends { base: 'explain' }
-      ? PolicyExplanation
-      : OperationWriteResult;
+    : Declaration extends { base: 'explain'; params: { list: unknown } }
+      ? PolicyExplanationListing
+      : Declaration extends { base: 'explain' }
+        ? PolicyExplanation
+        : OperationWriteResult;
 
 // The behaviors invocable on an instance, and the one invocable on a class.
 // A declared `create` appears in both: invoked on the class it mints a card

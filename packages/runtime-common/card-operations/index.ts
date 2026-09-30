@@ -200,9 +200,11 @@ export type {
 } from './query.ts';
 export {
   DEFINITION_FREE_BASE_OPERATIONS,
+  EXPLAIN_CAP,
   OperationFailure,
   isDefinitionFreeBaseOperation,
   isDocumentResult,
+  isExplainListingResult,
   isExplainResult,
   isHeadResult,
   isIdentityResult,
@@ -221,10 +223,13 @@ export type {
   OperationDefinition,
   ExplainedGrant,
   ExplainedGrantOutcome,
+  ExplainedIndexLag,
   ExplainedRule,
+  ExplainedSearch,
   OperationDocumentResult,
   OperationError,
   OperationErrorCode,
+  OperationExplainListingResult,
   OperationExplainResult,
   OperationHeadResult,
   OperationIdentityResult,
@@ -241,5 +246,6 @@ export type {
   OperationTemplate,
   PolicyExplanation,
   PolicyExplanationDecision,
+  PolicyExplanationListing,
   PolicyExplanationReason,
 } from './types.ts';
