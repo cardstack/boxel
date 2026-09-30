@@ -55,8 +55,8 @@ const DEFAULT_FALLBACK_DIRS = [
   // Package-local interactive skills (`packages/software-factory/.agents/skills`)
   // are the primary skill set for the runbook (interactive Claude Code) loop.
   // Listing them here lets the orchestrator's resolver pick them up too.
-  // `boxel-ui-component-discovery` (gated by `--enable-boxel-ui-discovery`)
-  // now resolves from the plugin dir above, not from here.
+  // The reuse skills (`catalog-reuse`, `boxel-ui-component-discovery`)
+  // resolve from the plugin dir above, not from here.
   join(PACKAGE_ROOT, '.agents', 'skills'),
 ];
 
@@ -83,6 +83,7 @@ const SKILL_PRIORITY: readonly string[] = [
   'boxel-api',
   'boxel-command',
   'boxel-file-def',
+  'catalog-reuse',
   'boxel-ui-component-discovery',
   'ember-best-practices',
   'software-factory-operations',
@@ -175,7 +176,49 @@ export interface SkillResolver {
   resolve(issue: IssueData, project: ProjectData): string[];
 }
 
+export interface SkillResolverConfig {
+  /**
+   * Whether this run does catalog reuse. Defaults to on, matching
+   * `factory-issue-loop-wiring.ts` and `factory-entrypoint.ts`: only an
+   * explicit `false` opts out.
+   */
+  enableCatalogReuse?: boolean;
+}
+
 export class DefaultSkillResolver implements SkillResolver {
+  #enableCatalogReuse: boolean;
+
+  constructor({ enableCatalogReuse = true }: SkillResolverConfig = {}) {
+    this.#enableCatalogReuse = enableCatalogReuse;
+  }
+
+  /**
+   * The reuse skills, in the core rather than discoverable on demand — and
+   * empty when the run has opted out.
+   *
+   * Catalog reuse only happens if it happens before authoring, and a skill the
+   * agent has to decide to read is one it reads after it has already started.
+   * Being in the core is also what lets the prompts defer method to the skill
+   * instead of restating it.
+   *
+   * The flag has to reach here, not just the system prompt. A skill is
+   * rendered into the context through an unguarded `{{#each skills}}`, so a
+   * `--no-catalog-reuse` run that still loads `catalog-reuse` is handed
+   * "MANDATORY before writing any `.gts`" underneath a firewall line naming
+   * the catalog as off limits — two instructions, one of which the run drops
+   * for reasons it does not control.
+   *
+   * Listing a name a skill directory does not supply is silent — the loader
+   * warns and continues — so `tests/factory-skill-loader.test.ts` holds these
+   * names to what actually resolves.
+   */
+  private reuseSkills(): string[] {
+    if (!this.#enableCatalogReuse) {
+      return [];
+    }
+    return ['catalog-reuse', 'boxel-ui-component-discovery'];
+  }
+
   /**
    * Determine which skills to load based on issue and project context.
    *
@@ -200,12 +243,23 @@ export class DefaultSkillResolver implements SkillResolver {
       return ['boxel-file-structure'];
     }
 
-    // Design-foundation turns author a brand guide + tokens + family
-    // coherence sheet — taste work, not card code. File-structure covers
-    // the KA JSON; boxel-design carries the visual-language method (it
-    // resolves from the materialized catalog's fallback dirs).
+    // `issueType === 'design'` is the design-FOUNDATION turn
+    // (`Issues/design-foundation-seed` → `issue-design-foundation.md`), not
+    // the per-card design turn: that one is `context.phase === 'design'` on an
+    // ordinary implementation issue, whose issueType stays `feature`, so it
+    // takes the lean core below and gets the reuse skills from there.
+    //
+    // The foundation turn authors a brand guide, a Theme, tokens and a
+    // coherence sheet — taste work, not card code. File-structure covers the
+    // KA JSON; boxel-design carries the visual-language method.
+    //
+    // It gets the reuse skills for a read-only sweep of the domain before it
+    // writes the guide. The guide binds every later turn, so a rendering form
+    // it fixes in ignorance of the catalog is one no later turn can adopt —
+    // which is why `issue-design-foundation.md` sends it to look first and
+    // stops its authority at the token layer.
     if (issueType === 'design') {
-      return ['boxel-file-structure', 'boxel-design'];
+      return ['boxel-file-structure', 'boxel-design', ...this.reuseSkills()];
     }
 
     // Lean core: small always-on set; everything else on demand via the
@@ -216,6 +270,7 @@ export class DefaultSkillResolver implements SkillResolver {
       'software-factory-operations',
       'boxel-file-structure',
       'boxel-workspace-cardinal-rules',
+      ...this.reuseSkills(),
     ];
     for (let skillName of extractKnowledgeSkillTags(project, issue)) {
       if (!leanSkills.includes(skillName)) {
