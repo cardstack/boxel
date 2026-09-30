@@ -244,12 +244,18 @@ let nonce = 0;
 // asked for a module reachable only from inside another module's chunk — the
 // bundler resolved that import where the loader could not see it.
 //
-// Read only when the loader has no answer of its own, so nothing it already
-// names changes. The index is built from what has been published so far and
-// extended on later misses, so a module evaluated after the first lookup is
-// still found. Nothing here resolves or fetches: the values are the very class
-// objects the chunk is using, published as a side effect of evaluation that
-// happens regardless.
+// Read before the loader's own record, and it wins. Only a module that
+// *declares* a class publishes it, so this answers with the declarer or not at
+// all — it can correct an attribution but never invent one. The loader's own
+// record cannot make that promise: it credits the first module it is asked for
+// that exposes a name, so a bundled module re-exporting a class it did not
+// declare takes the credit whenever it happens to be served first, and the
+// answer then depends on which card imported what.
+//
+// The index is built from what has been published so far and extended on later
+// lookups, so a module evaluated after the first one is still found. Nothing
+// here resolves or fetches: the values are the very class objects the chunk is
+// using, published as a side effect of an evaluation that happens regardless.
 const bundledIdentities = new WeakMap<
   Function,
   { module: string; name: string }
@@ -572,14 +578,9 @@ export class Loader {
     if (typeof value !== 'function') {
       return undefined;
     }
-    let loader = Loader.loaders.get(value);
-    if (loader) {
-      let ref = loader.identify(value);
-      if (ref) {
-        return ref;
-      }
-    }
-    return bundledIdentityFor(value);
+    return (
+      bundledIdentityFor(value) ?? Loader.loaders.get(value)?.identify(value)
+    );
   }
 
   identify(value: unknown): { module: string; name: string } | undefined {

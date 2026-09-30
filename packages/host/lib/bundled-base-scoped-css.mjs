@@ -114,9 +114,14 @@ const DEFAULT_EXPORT =
 // variable behind it. Referencing one in the appended registration is a
 // ReferenceError the moment the module evaluates.
 const LOCAL_EXPORT_LIST = /\bexport\s*\{([^}]*)\}\s*(?!\s*from)[;\n]/g;
-// Any local declaration, exported or not, which is what proves a binding.
+// A module-level declaration, which is what proves a binding the appended
+// registration can reference. Anchored to the start of a line so a name
+// declared inside a function body does not count: `card-api` has a local
+// `let meta` inside one and re-exports an imported `meta`, and taking the
+// inner one for a binding would publish a name the module does not declare.
+// The `export` form is matched separately by DECLARED_EXPORT.
 const LOCAL_DECLARATION =
-  /\b(?:class|function|const|let|var)\s+([A-Za-z_$][\w$]*)/g;
+  /^(?:export\s+)?(?:async\s+)?(?:abstract\s+)?(?:class|function|const|let|var)\s+([A-Za-z_$][\w$]*)/gm;
 
 function isBaseModule(id) {
   return (
@@ -184,17 +189,17 @@ export function bundledBaseScopedCSS() {
       // the registry has to key on what the namespace exposes, because that is
       // the name a code ref carries.
       let declared = new Map();
-      for (let match of code.matchAll(DECLARED_EXPORT)) {
+      for (let match of scannable.matchAll(DECLARED_EXPORT)) {
         declared.set(match[1], match[1]);
       }
-      let defaultExport = code.match(DEFAULT_EXPORT);
+      let defaultExport = scannable.match(DEFAULT_EXPORT);
       if (defaultExport) {
         declared.set('default', defaultExport[1]);
       }
       let bound = new Set(
-        [...code.matchAll(LOCAL_DECLARATION)].map((m) => m[1]),
+        [...scannable.matchAll(LOCAL_DECLARATION)].map((m) => m[1]),
       );
-      for (let match of code.matchAll(LOCAL_EXPORT_LIST)) {
+      for (let match of scannable.matchAll(LOCAL_EXPORT_LIST)) {
         for (let clause of match[1].split(',')) {
           let parts = clause.trim().split(/\s+as\s+/);
           let local = parts[0]?.trim();
