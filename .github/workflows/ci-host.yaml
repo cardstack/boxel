@@ -64,7 +64,8 @@ permissions:
 jobs:
   check-percy:
     name: Check if Percy is needed
-    runs-on: ubuntu-latest
+    # Follows host-test onto RunsOn, which waits on it; see host-test.
+    runs-on: ${{ vars.HOST_TEST_RUNS_ON && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && format('runs-on={0}-check-percy/{1}', github.run_id, vars.HOST_TEST_RUNS_ON) || 'ubuntu-latest' }}
     timeout-minutes: 10
     outputs:
       percy_needed: ${{ steps.check.outputs.percy_needed }}
@@ -139,7 +140,8 @@ jobs:
     # as it would be for a pull request on that branch. Anything comparing
     # timings with PR runs wants it on.
     name: Check if cached index is usable
-    runs-on: ubuntu-latest
+    # Follows host-test onto RunsOn, which waits on it; see host-test.
+    runs-on: ${{ vars.HOST_TEST_RUNS_ON && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && format('runs-on={0}-check-index-cache/{1}', github.run_id, vars.HOST_TEST_RUNS_ON) || 'ubuntu-latest' }}
     timeout-minutes: 10
     outputs:
       use_cache: ${{ steps.check.outputs.use_cache }}
@@ -281,6 +283,9 @@ jobs:
       # URLs into the host bundle. The standard-mode build still exists
       # in ci.yaml for `matrix-client-test` / `vscode-boxel-tools-package`.
       boxel_environment: ci
+      # host-test waits on this build, so it follows host-test onto RunsOn,
+      # under the same variable and the same fork guard; see host-test.
+      runs_on_spec: ${{ vars.HOST_TEST_RUNS_ON && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && vars.HOST_TEST_RUNS_ON || '' }}
     concurrency:
       group: ci-host-test-web-assets-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
@@ -503,6 +508,11 @@ jobs:
     # fork's code must never run inside our AWS account.
     # The label carries the shard index because RunsOn needs a label unique to
     # each matrix entry, or one shard's instance can be claimed by another.
+    #
+    # The three jobs this one needs (check-percy, check-index-cache and the
+    # test-web-assets build) follow it onto RunsOn under the same variable and
+    # guard. Left on ubuntu-latest, they queue behind GitHub's cap and hold the
+    # shards back with them.
     runs-on: ${{ vars.HOST_TEST_RUNS_ON && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && format('runs-on={0}-host-test-{1}/{2}', github.run_id, matrix.shardIndex, vars.HOST_TEST_RUNS_ON) || 'ubuntu-latest' }}
     # Without this a wedged shard inherits GitHub's 360-minute default and
     # holds a runner for six hours doing nothing, which starves the pool for
