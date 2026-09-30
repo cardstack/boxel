@@ -35,7 +35,8 @@ import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
 // The topology is the policy gate suite's: an Education realm whose policy
 // card lives in an Org realm nobody the Education realm serves can read. A
 // teacher holds no permission on the Education realm, so every write they send
-// reaches the policy.
+// reaches the policy. A reader may read the Education realm and not write it,
+// so their writes reach it too.
 const EDUCATION = 'http://127.0.0.1:4444/education/';
 const ORG = 'http://127.0.0.1:4444/org/';
 const POLICY_CARD = `${ORG}policies/education`;
@@ -43,6 +44,7 @@ const ADMIN = '@education-admin:localhost';
 const ORG_ADMIN = '@org-admin:localhost';
 const TEACHER = '@teacher:localhost';
 const COLLEAGUE = '@colleague:localhost';
+const READER = '@reader:localhost';
 
 const REALM_POLICY = {
   module: rri('@cardstack/catalog/realm-policy/realm-policy'),
@@ -236,6 +238,7 @@ module(basename(import.meta.filename), function (hooks) {
           },
           permissions: {
             [ADMIN]: ['read', 'write', 'realm-owner'],
+            [READER]: ['read'],
           },
         },
         {
@@ -284,6 +287,7 @@ module(basename(import.meta.filename), function (hooks) {
   const AUTH = {
     admin: () => bearer(ADMIN, ['read', 'write', 'realm-owner']),
     teacher: () => bearer(TEACHER),
+    reader: () => bearer(READER, ['read']),
   };
 
   function path(url: string) {
@@ -676,23 +680,10 @@ module(basename(import.meta.filename), function (hooks) {
         invoke('rename', { href: ROOM_207, data: { title: 'Renamed' } }),
         invoke('archive', { href: ROOM_204 }),
       );
+      assertNotThere(assert, response, 'an archive whose predicate throws');
       assert.strictEqual(
-        response.status,
-        500,
-        'an archive whose predicate throws',
-      );
-      let [error] = (
-        response.body as {
-          errors: { code: string; title: string; meta: { entry: number } }[];
-        }
-      ).errors;
-      assert.deepEqual(
-        { code: error.code, title: error.title },
-        { code: 'internal-error', title: 'Policy predicate failed' },
-        'is the fault the gate reports for a predicate that throws',
-      );
-      assert.strictEqual(
-        error.meta.entry,
+        (response.body as { errors: { meta: { entry: number } }[] }).errors[0]
+          .meta.entry,
         1,
         'naming the entry whose predicate threw',
       );
@@ -720,6 +711,36 @@ module(basename(import.meta.filename), function (hooks) {
           definitionLookups: 0,
         },
         'both predicates were evaluated under the lock',
+      );
+    });
+
+    test('a caller who may read the realm is told a predicate that throws is a fault in the policy', async function (assert) {
+      let response = await operations(
+        AUTH.reader(),
+        invoke('archive', { href: ROOM_204 }),
+      );
+      assert.strictEqual(
+        response.status,
+        500,
+        'an archive whose predicate throws',
+      );
+      let [error] = (
+        response.body as { errors: { code: string; title: string }[] }
+      ).errors;
+      assert.deepEqual(
+        { code: error.code, title: error.title },
+        { code: 'policy-predicate-failed', title: 'Policy predicate failed' },
+        'is the fault the gate reports for a predicate that throws',
+      );
+      assert.strictEqual(
+        (await stored(ROOM_204))?.attributes.title,
+        'Room 204',
+        'and nothing was written',
+      );
+      assert.strictEqual(
+        gateStats().pendingDischarges,
+        1,
+        'the predicate was decided under the lock',
       );
     });
 
@@ -817,6 +838,23 @@ module(basename(import.meta.filename), function (hooks) {
         `${label}: the same refusal as a card that does not exist`,
       );
     }
+
+    test('a predicate that throws under the lock says no more than a refusal', async function (assert) {
+      let archive = (href: string) =>
+        operations(AUTH.teacher(), invoke('archive', { href }));
+      sameRefusal(
+        assert,
+        await archive(ROOM_204),
+        await archive(ROOM_999),
+        [ROOM_204, ROOM_999],
+        'an archive whose predicate throws',
+      );
+      assert.strictEqual(
+        gateStats().pendingDischarges,
+        1,
+        'the predicate was decided under the lock',
+      );
+    });
 
     test('a missing param on a card the caller may not write says no more than a refusal', async function (assert) {
       let noTitle = (href: string) =>
