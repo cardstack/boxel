@@ -171,7 +171,7 @@ module('Integration | operations optimistic', function (hooks) {
     let url = `${testRealmURL}${localPath}`;
     let store = getService('store');
     store.addReference(url);
-    let instance = await store.get<CardDefType>(url);
+    let instance = await store.get(url);
     if (!instance || !('id' in instance)) {
       throw new Error(`${localPath} did not load: ${JSON.stringify(instance)}`);
     }

@@ -592,7 +592,7 @@ module('Integration | operations query', function (hooks) {
       );
       await settled();
 
-      let roster = await store.get<RosterCard>(ALGEBRA);
+      let roster = await store.get(ALGEBRA);
       assert.true(
         isCardInstance(roster),
         'opened after its row rendered, the card loads',
@@ -626,10 +626,10 @@ module('Integration | operations query', function (hooks) {
           }),
       });
       try {
-        let results = await store.search<RosterCard>(
+        let results = (await store.search(
           { filter: { type: { module: testRRI('roster'), name: 'Roster' } } },
           [testRealmURL],
-        );
+        )) as RosterCard[];
         assert.deepEqual(
           results.map((result) => result.id),
           [ALGEBRA],
@@ -647,9 +647,7 @@ module('Integration | operations query', function (hooks) {
   });
 
   test('a saved search is invoked on the class that declares it', async function (assert) {
-    let card = await getService('store').get<CardDef>(
-      `${testRealmURL}reports/open-1`,
-    );
+    let card = await getService('store').get(`${testRealmURL}reports/open-1`);
     await settled();
 
     assert.strictEqual(
