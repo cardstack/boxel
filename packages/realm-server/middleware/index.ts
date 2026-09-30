@@ -585,6 +585,14 @@ export function jwtMiddleware(
       // then we will need to compare the token with what is configured on the
       // server.
       let token = retrieveTokenClaim(authorization, secretSeed);
+      // A delegated session reads one realm, read-only, on its user's behalf,
+      // and every route behind this middleware acts as the user in full. Each
+      // one would honor it for more than it was minted to do, so it is refused
+      // here as a token that does not belong, as a realm refuses one naming
+      // another realm.
+      if (token.delegated) {
+        throw new AuthenticationError(AuthenticationErrorMessages.TokenInvalid);
+      }
       if (await isSessionRevoked(dbAdapter, token.user, token.iat)) {
         throw new AuthenticationError(
           AuthenticationErrorMessages.SessionRevoked,

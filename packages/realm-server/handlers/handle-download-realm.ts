@@ -146,6 +146,16 @@ export default function handleDownloadRealm({
     } else {
       try {
         let token = retrieveTokenClaim(authorization, realmSecretSeed);
+        // A delegated session reads one realm, read-only, through that realm's
+        // own endpoints, which hold it to that realm. This route judges a
+        // download by what its user reads anywhere, so it refuses the session
+        // as a token that does not belong, as every realm-server route that
+        // acts as the user does.
+        if (token.delegated) {
+          throw new AuthenticationError(
+            AuthenticationErrorMessages.TokenInvalid,
+          );
+        }
         if (await isSessionRevoked(dbAdapter, token.user, token.iat)) {
           throw new AuthenticationError(
             AuthenticationErrorMessages.SessionRevoked,
