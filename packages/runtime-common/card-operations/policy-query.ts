@@ -29,7 +29,10 @@ import { lowerQueryOperation } from './query.ts';
 //   query runs under the name it was invoked with, so a grant on `read` never
 //   contributes. Reading a card whose id you were given and enumerating every
 //   card of a type are different powers, and a type meant to be both carries
-//   two grants whose predicates may well differ.
+//   two grants whose predicates may well differ. An ad-hoc search runs under
+//   the base name `query`, so a grant on a named query never contributes to
+//   one either: granting a saved search is not granting the freedom to write
+//   any filter over its type.
 // - Only a grant that compiled a filter. A grant whose predicate has none is
 //   recorded as `policy-not-filterable` when the policy compiles, and it
 //   contributes nothing here rather than widening the search to rows it cannot
@@ -59,7 +62,7 @@ export type PolicyQueryScope =
 
 const DENIED: PolicyQueryScope = { kind: 'denied' };
 
-// What this realm's policy contributes to `operation` invoked on `on` by
+// What this realm's policy contributes to `operation` invoked on `types` by
 // `actor`. The core is the realm's own, bound to its own authority, as the
 // gate's is: a policy card commonly lives in a realm the caller cannot read.
 //
@@ -67,30 +70,61 @@ const DENIED: PolicyQueryScope = { kind: 'denied' };
 // so a request that authenticated nobody has no grant to be judged by,
 // whatever the policy holds — the rule the realm already applies before it
 // hands a refused request to the gate at all.
+//
+// A search on no type at all has no rules to consult, so it is denied without
+// reading the policy. One on several types — an ad-hoc search whose filter
+// takes any of several anchored branches — is judged type by type, and what
+// each type's grants admit is confined to that type's cards, so each type
+// contributes exactly what a search on it alone would. A grant compiled on a
+// type the several share is anchored on that shared type, and unconfined it
+// would reach, through the type it was matched for, the cards of one whose
+// own judgment refused them — a type the realm cannot resolve, say.
 export async function policyQueryScope(
   core: OperationCore,
-  invocation: { operation: string; on: CodeRef; actor: string },
+  invocation: { operation: string; types: readonly CodeRef[]; actor: string },
+): Promise<PolicyQueryScope> {
+  let { operation, types, actor } = invocation;
+  let distinct = [
+    ...new Map(types.map((type) => [JSON.stringify(type), type])).values(),
+  ];
+  if (distinct.length === 0) {
+    return DENIED;
+  }
+  if (distinct.length === 1) {
+    return await typeScope(core, operation, distinct[0], actor);
+  }
+  let scopes = await Promise.all(
+    distinct.map((on) => typeScope(core, operation, on, actor)),
+  );
+  let filters: Filter[] = [];
+  for (let [index, scope] of scopes.entries()) {
+    if (scope.kind === 'scoped') {
+      filters.push({ on: distinct[index], any: scope.filters });
+    }
+  }
+  return filters.length > 0 ? { kind: 'scoped', filters } : DENIED;
+}
+
+// What the policy contributes to `operation` on the one type `on`.
+async function typeScope(
+  core: OperationCore,
+  operation: string,
+  on: CodeRef,
+  actor: string,
 ): Promise<PolicyQueryScope> {
   let policy = await core.policy?.compiledPolicy();
   if (!policy) {
     return DENIED;
   }
-  let entry = await targetTypeEntry(core, invocation.on);
+  let entry = await targetTypeEntry(core, on);
   if (!entry?.types) {
     return DENIED;
   }
-  let { operation } = invocation;
   // Refused before any rule is matched, as the gate refuses it.
   if (ownDeclaration(entry.definition, operation)?.nonGrantable) {
     return DENIED;
   }
-  let filters = await grantFilters(
-    policy,
-    entry.types,
-    operation,
-    invocation.actor,
-    core,
-  );
+  let filters = await grantFilters(policy, entry.types, operation, actor, core);
   if (filters.length === 0) {
     return DENIED;
   }

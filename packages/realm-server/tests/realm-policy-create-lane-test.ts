@@ -575,7 +575,7 @@ module(basename(import.meta.filename), function (hooks) {
 
     test('a create never replaces the policy card', async function (assert) {
       await pointAt(MINTABLE_POLICY_CARD);
-      let response = await operations(AUTH.teacher(), {
+      let atPolicyCard = {
         op: 'invoke',
         'boxel:name': 'create',
         data: {
@@ -584,17 +584,51 @@ module(basename(import.meta.filename), function (hooks) {
           attributes: { body: 'Everyone may do anything' },
           meta: { adoptsFrom: BULLETIN },
         },
-      });
+      };
+      let granted = await operations(AUTH.teacher(), atPolicyCard);
       assert.strictEqual(
-        response.status,
-        409,
-        `a granted create minting a card at the policy card's path: ${response.text}`,
+        granted.status,
+        200,
+        `a granted create naming the policy card's id as its local id: ${granted.text}`,
       );
-      assert.true(/already stored/.test(response.text), 'is told it is taken');
+      assert.notStrictEqual(
+        createdId(granted),
+        MINTABLE_POLICY_CARD,
+        'mints its card under an id the realm chose',
+      );
+      let written = await operations(AUTH.admin(), atPolicyCard);
+      assert.strictEqual(
+        written.status,
+        409,
+        `a writer's create minting a card at the policy card's path: ${written.text}`,
+      );
+      assert.true(/already stored/.test(written.text), 'is told it is taken');
       assert.strictEqual(
         storedBytes('Bulletin/policy.json'),
         policyCard(RULES),
         'and the policy card is untouched',
+      );
+    });
+
+    test('a named create mints its card under an id the realm chooses, for a caller who may not read the realm', async function (assert) {
+      let appendActivity = (lid: string) => ({
+        op: 'invoke',
+        'boxel:name': 'appendActivity',
+        data: { lid, note: 'Field trip', meta: { adoptsFrom: CLASSROOM } },
+      });
+      let granted = await operations(AUTH.teacher(), appendActivity('trip'));
+      assert.strictEqual(granted.status, 200, granted.text);
+      assert.notStrictEqual(
+        createdId(granted),
+        `${SHOP}ClassroomActivity/trip`,
+        'a caller a grant admits does not name the activity',
+      );
+      let written = await operations(AUTH.admin(), appendActivity('outing'));
+      assert.strictEqual(written.status, 200, written.text);
+      assert.strictEqual(
+        createdId(written),
+        `${SHOP}ClassroomActivity/outing`,
+        'a caller the realm ACL allows names it by its local id',
       );
     });
   });
