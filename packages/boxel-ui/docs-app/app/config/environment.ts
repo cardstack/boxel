@@ -1,7 +1,7 @@
 import loadConfigFromMeta from '@embroider/config-meta-loader';
 import { assert } from '@ember/debug';
 
-const config = loadConfigFromMeta('test-app') as unknown;
+const config = loadConfigFromMeta('boxel-ui-docs-app') as unknown;
 
 assert(
   'config is not an object',
