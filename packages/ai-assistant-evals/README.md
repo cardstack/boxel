@@ -46,8 +46,8 @@ endpoint is the URL.
 Three evaluations ship. `hello-world` is the smallest build there is, one
 definition and one instance shown on screen — the one to start from, and the
 one to reach for when checking that a change did not break the basics.
-`contact-computed-edit-restyle` is the step up: one definition with a computed
-field and two instances, then a follow-up that adds a field, edits the
+`linkedin-profile-computed-edit-restyle` is the step up: one definition with a
+computed field and two instances, then a follow-up that adds a field, edits the
 definition and both instances in place, and restyles the card.
 `cookbook-computeds-links-instances-restyle` is the substantial one: two definitions linked by a
 `linksToMany`, a computed field on each, three instances, and then a follow-up
@@ -62,7 +62,7 @@ the prompt.
 ```sh
 pnpm eval:setup                                    # once, and after editing eval-realm/
 pnpm eval https://localhost:4201/user/evals/Evaluation/hello-world
-pnpm eval contact-computed-edit-restyle "GPT-5.6 Luna"   # the file name under eval-realm/Evaluation/ works too
+pnpm eval linkedin-profile-computed-edit-restyle "GPT-5.6 Luna"   # the file name under eval-realm/Evaluation/ works too
 pnpm eval https://localhost:4201/user/evals/Evaluation/hello-world "Claude Sonnet 4.6,GPT-5.5" --headless
 pnpm eval:judge https://localhost:4201/user/evals/EvaluationResultCard/<id> --score 8 --analysis-file notes.md
 ```

@@ -6,7 +6,7 @@
 //
 //   node run-eval.ts https://localhost:4201/experiments/Evaluation/hello-world
 //   node run-eval.ts <eval-card-url> "Claude Sonnet 4.6,GPT-5.5" --headed
-//   node run-eval.ts contact-computed-edit-restyle "GPT-5.6 Luna"
+//   node run-eval.ts linkedin-profile-computed-edit-restyle "GPT-5.6 Luna"
 //
 // Options: --headed (one browser window, one model at a time), --tabs (one
 // window, one tab per model), --session <id> (add these models to an earlier
