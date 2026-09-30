@@ -1,5 +1,5 @@
 import {
-  fillIn,
+  rerender,
   waitFor,
   type RenderingTestContext,
 } from '@ember/test-helpers';
@@ -7,11 +7,7 @@ import {
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import {
-  rri,
-  type LooseSingleCardDocument,
-  type Realm,
-} from '@cardstack/runtime-common';
+import { rri, type LooseSingleCardDocument } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import type StoreService from '@cardstack/host/services/store';
@@ -92,8 +88,8 @@ module('Integration | realm config policy standing', function (hooks) {
   async function renderConfig(
     pointer: string | undefined,
     format: 'isolated' | 'edit' = 'isolated',
-  ): Promise<Realm> {
-    let { realm } = await setupIntegrationTestRealm({
+  ): Promise<{ config: CardDef & { policy?: string } }> {
+    await setupIntegrationTestRealm({
       mockMatrixUtils,
       permissions: {
         '*': ['read'],
@@ -110,15 +106,20 @@ module('Integration | realm config policy standing', function (hooks) {
     });
     await getService('realm').login(testRealmURL);
     // Looking the service up arms the transport the card's own
-    // `operations()` call sends its validate through.
+    // `operations()` call sends its validate through, and registering the
+    // message service, as operator mode does, delivers the realm's index
+    // events to the card.
     getService('operations');
+    getService('message-service').register();
     let store = getService('store') as StoreService;
-    let config = (await store.get(`${testRealmURL}realm`)) as CardDef;
+    let config = (await store.get(`${testRealmURL}realm`)) as CardDef & {
+      policy?: string;
+    };
     await renderCard(loader, config, format);
     await waitFor('[data-test-realm-policy-standing="answered"]', {
       timeout: 10_000,
     });
-    return realm;
+    return { config };
   }
 
   function issuesShown() {
@@ -158,40 +159,26 @@ module('Integration | realm config policy standing', function (hooks) {
       .exists('the issue is shown in the policy field’s row');
   });
 
-  test('an edit the save has not reached shows no standing until the realm has read it', async function (assert) {
-    let realm = await renderConfig(MISSING, 'edit');
-    await fillIn('[data-test-field="policy"] input', POLICY);
+  test('fixing the pointer clears the issue once the save lands', async function (assert) {
+    let { config } = await renderConfig(MISSING, 'edit');
+    assert.deepEqual(issuesShown(), ['policy-card-missing']);
+
+    config.policy = POLICY;
+    await rerender();
     assert
       .dom('[data-test-realm-policy-status]')
       .doesNotExist(
-        'the answer about the saved pointer is not shown beside a different one',
+        'the standing of the saved pointer is not shown beside a different one',
       );
 
-    await realm.write(
-      'realm.json',
-      realmConfigCardJSON({ name: 'Education', policy: POLICY }),
-    );
     await waitFor('[data-test-realm-policy-status="in-force"]', {
       timeout: 10_000,
     });
-    assert.deepEqual(issuesShown(), [], 'and once it has, the standing is');
-  });
-
-  test('fixing the pointer clears the issue', async function (assert) {
-    let realm = await renderConfig(MISSING);
-    assert.deepEqual(issuesShown(), ['policy-card-missing']);
-
-    await realm.write(
-      'realm.json',
-      realmConfigCardJSON({ name: 'Education', policy: POLICY }),
+    assert.deepEqual(
+      issuesShown(),
+      [],
+      'once the save lands, the realm reports the fixed pointer in force',
     );
-    await waitFor('[data-test-realm-policy-status="in-force"]', {
-      timeout: 10_000,
-    });
-    assert.deepEqual(issuesShown(), [], 'the issue is gone');
-    assert
-      .dom('[data-test-realm-policy-status="not-in-force"]')
-      .doesNotExist('and the policy is no longer shown as not in force');
   });
 
   test('a policy that compiles shows as in force with no issue affordance', async function (assert) {
