@@ -527,12 +527,232 @@ function bump(manifest: Manifest) {
   );
   let sha = output.split(/\s/)[0];
   if (!/^[0-9a-f]{40}$/.test(sha)) {
-    fail(`could not resolve main of ${manifest.repository}`);
+    fail(`could not resolve ${manifest.repository} main`);
   }
   let raw = readFileSync(manifestPath, 'utf8');
   writeFileSync(manifestPath, raw.replace(manifest.revision, sha));
   log(`pinned ${manifest.repository} at ${sha}`);
   return { ...manifest, revision: sha };
+}
+
+interface PullRequest {
+  html_url: string;
+  merged_at: string | null;
+  merge_commit_sha: string | null;
+}
+
+const boxelRepository = 'cardstack/boxel';
+
+// The pull request lookups only enrich a failure message, so an error answers
+// nothing rather than masking the failure they describe.
+async function lookup<T>(
+  url: string,
+  headers: Record<string, string>,
+  init?: RequestInit,
+): Promise<T | undefined> {
+  try {
+    let response = await fetch(url, { ...init, headers });
+    return response.ok ? ((await response.json()) as T) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+// For a commit main does not contain, GitHub lists the open pull requests that
+// carry it, and the merged one it came from when that pull request was
+// squash-merged (a squash lands a new commit on main, never the head itself).
+// For a commit on main, it lists the pull request that merged it.
+async function pullRequestsFor(
+  repository: string,
+  sha: string,
+  headers: Record<string, string>,
+): Promise<PullRequest[]> {
+  return (
+    (await lookup<PullRequest[]>(
+      `https://api.github.com/repos/${repository}/commits/${sha}/pulls`,
+      headers,
+    )) ?? []
+  );
+}
+
+// The pull requests that changed `paths` on main since the pin: each path's
+// history on main, narrowed to the commits main has and the pin lacks.
+async function pullRequestsChanging(
+  manifest: Manifest,
+  paths: string[],
+  headers: Record<string, string>,
+): Promise<string[]> {
+  let api = `https://api.github.com/repos/${manifest.repository}`;
+  let compare = await lookup<{ commits: { sha: string }[] }>(
+    `${api}/compare/${manifest.revision}...main`,
+    headers,
+  );
+  if (!compare) {
+    return [];
+  }
+  let sincePin = new Set(compare.commits.map((c) => c.sha));
+  let shas = new Set<string>();
+  for (let path of paths) {
+    let history = await lookup<{ sha: string }[]>(
+      `${api}/commits?sha=main&path=${encodeURIComponent(path)}&per_page=100`,
+      headers,
+    );
+    for (let { sha } of history ?? []) {
+      if (sincePin.has(sha)) {
+        shas.add(sha);
+      }
+    }
+  }
+  let urls = new Set<string>();
+  for (let sha of shas) {
+    for (let pr of await pullRequestsFor(manifest.repository, sha, headers)) {
+      urls.add(pr.html_url);
+    }
+  }
+  return [...urls];
+}
+
+const boxelPinsQuery = `
+  query ($owner: String!, $name: String!, $path: String!, $mainPath: String!, $after: String) {
+    repository(owner: $owner, name: $name) {
+      main: object(expression: $mainPath) { ... on Blob { text } }
+      pullRequests(states: OPEN, first: 100, after: $after) {
+        pageInfo { hasNextPage endCursor }
+        nodes {
+          url
+          headRefName
+          commits(last: 1) {
+            nodes { commit { file(path: $path) { object { ... on Blob { text } } } } }
+          }
+        }
+      }
+    }
+  }
+`;
+
+interface BoxelPinsAnswer {
+  data?: {
+    repository: {
+      main: { text?: string } | null;
+      pullRequests: {
+        pageInfo: { hasNextPage: boolean; endCursor: string | null };
+        nodes: {
+          url: string;
+          headRefName: string;
+          commits: {
+            nodes: {
+              commit: { file: { object: { text?: string } | null } | null };
+            }[];
+          };
+        }[];
+      };
+    };
+  };
+}
+
+// The catalog revision boxel main pins, and the one each open boxel pull
+// request pins at its head, read from their manifests with a GraphQL query
+// per hundred pull requests. A pull request whose branch has no manifest, or
+// one that doesn't parse, is left out. GraphQL takes no anonymous requests, so
+// without GITHUB_TOKEN this answers nothing.
+async function boxelPins(headers: Record<string, string>) {
+  let [owner, name] = boxelRepository.split('/');
+  let path = relative(repoRoot, manifestPath);
+  let revisionIn = (text: string | undefined) => {
+    try {
+      return text ? (JSON.parse(text) as Manifest).revision : undefined;
+    } catch {
+      return undefined;
+    }
+  };
+  let main: string | undefined;
+  let pullRequests: { url: string; branch: string; revision: string }[] = [];
+  let after: string | null = null;
+  do {
+    let answer: BoxelPinsAnswer | undefined = await lookup<BoxelPinsAnswer>(
+      'https://api.github.com/graphql',
+      headers,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          query: boxelPinsQuery,
+          variables: { owner, name, path, mainPath: `main:${path}`, after },
+        }),
+      },
+    );
+    if (!answer?.data) {
+      break;
+    }
+    let { repository } = answer.data;
+    main ??= revisionIn(repository.main?.text);
+    for (let pr of repository.pullRequests.nodes) {
+      let revision = revisionIn(pr.commits.nodes[0]?.commit.file?.object?.text);
+      if (revision) {
+        pullRequests.push({ url: pr.url, branch: pr.headRefName, revision });
+      }
+    }
+    let { hasNextPage, endCursor } = repository.pullRequests.pageInfo;
+    after = hasNextPage ? endCursor : null;
+  } while (after);
+  return { main, pullRequests };
+}
+
+// Where a pin that clears a changed-subset-file failure is already waiting:
+// boxel main, or open boxel pull requests other than the branch under check,
+// whose pin has every subset file as catalog main has it. That is the check's
+// own condition, so merging one of them is what makes this branch pass.
+async function pinsMatchingMain(
+  manifest: Manifest,
+  mainBlobs: Map<string, string | undefined>,
+  headers: Record<string, string>,
+) {
+  let pins = await boxelPins(headers);
+  let matches = new Map<string, Promise<boolean>>();
+  let matchesMain = (revision: string) => {
+    if (!matches.has(revision)) {
+      matches.set(
+        revision,
+        Promise.all(
+          [...mainBlobs].map(async ([path, sha]) => {
+            let blob = await lookup<{ sha: string }>(
+              `https://api.github.com/repos/${manifest.repository}/contents/${path}?ref=${revision}`,
+              headers,
+            );
+            return blob?.sha === sha;
+          }),
+        ).then((each) => each.every(Boolean)),
+      );
+    }
+    return matches.get(revision)!;
+  };
+  if (
+    pins.main &&
+    pins.main !== manifest.revision &&
+    (await matchesMain(pins.main))
+  ) {
+    return { main: true, pullRequests: [] };
+  }
+  let current = process.env.GITHUB_HEAD_REF || currentBranch();
+  let candidates = pins.pullRequests.filter(
+    (pr) => pr.branch !== current && pr.revision !== manifest.revision,
+  );
+  let matching = await Promise.all(
+    candidates.map((pr) => matchesMain(pr.revision)),
+  );
+  return {
+    main: false,
+    pullRequests: candidates.filter((_, i) => matching[i]).map((pr) => pr.url),
+  };
+}
+
+function currentBranch() {
+  try {
+    return execFileSync('git', ['-C', repoRoot, 'branch', '--show-current'], {
+      encoding: 'utf8',
+    }).trim();
+  } catch {
+    return undefined;
+  }
 }
 
 // The deployed catalog realm serves boxel-catalog's main, so a pin that main
@@ -554,9 +774,21 @@ async function checkPin(manifest: Manifest) {
   }
   let { status } = (await response.json()) as { status: string };
   if (status !== 'behind' && status !== 'identical') {
+    let prs = await pullRequestsFor(
+      manifest.repository,
+      manifest.revision,
+      headers,
+    );
+    let merged = prs.find((pr) => pr.merged_at);
     fail(
       `${manifest.revision} is not on ${manifest.repository} main (compare status "${status}"). ` +
-        `Merge the catalog change first, then re-pin to a commit on main (pnpm catalog:test-subset --bump).`,
+        (merged
+          ? `It is from ${merged.html_url}, which was merged as ${merged.merge_commit_sha}. ` +
+            `Re-pin to a commit on ${manifest.repository} main (pnpm catalog:test-subset --bump).`
+          : (prs.length
+              ? `It is in ${prs.map((pr) => pr.html_url).join(', ')}. `
+              : '') +
+            `Merge the ${manifest.repository} change first, then re-pin to a commit on ${manifest.repository} main (pnpm catalog:test-subset --bump).`),
     );
   }
   log(`${manifest.revision} is on ${manifest.repository} main`);
@@ -574,18 +806,31 @@ async function checkPin(manifest: Manifest) {
     }
     return ((await response.json()) as { sha: string }).sha;
   };
+  let mainBlobs = new Map<string, string | undefined>();
   let changed: string[] = [];
   for (let { path } of manifest.files) {
-    if (
-      (await blobSha(path, 'main')) !== (await blobSha(path, manifest.revision))
-    ) {
+    let sha = await blobSha(path, 'main');
+    mainBlobs.set(path, sha);
+    if (sha !== (await blobSha(path, manifest.revision))) {
       changed.push(path);
     }
   }
   if (changed.length) {
+    let prs = await pullRequestsChanging(manifest, changed, headers);
+    let waiting = await pinsMatchingMain(manifest, mainBlobs, headers);
+    let steps = `to ${manifest.repository} main (pnpm catalog:test-subset --bump), run the manifest's tests against it, and commit the new pin.`;
+    let [one, ...more] = waiting.pullRequests;
     fail(
-      `${manifest.repository} main has changed ${changed.join(', ')} since ${manifest.revision}, so boxel's tests would run against definitions deployments no longer serve. ` +
-        `Re-pin to main (pnpm catalog:test-subset --bump), run the manifest's tests against it, and commit the new pin.`,
+      `${manifest.repository} main has changed ${changed.join(', ')} since ${manifest.revision}` +
+        (prs.length ? ` (in ${prs.join(', ')})` : '') +
+        `, so boxel's tests would run against definitions deployments no longer serve. ` +
+        (waiting.main
+          ? `${boxelRepository} main already pins a revision that matches ${manifest.repository} main: merge ${boxelRepository} main into this branch.`
+          : one
+            ? more.length
+              ? `${waiting.pullRequests.join(', ')} already pin a revision that matches ${manifest.repository} main: once one merges, merge ${boxelRepository} main into this branch. To move the pin without them, re-pin ${steps}`
+              : `${one} already pins a revision that matches ${manifest.repository} main: once it merges, merge ${boxelRepository} main into this branch. To move the pin without it, re-pin ${steps}`
+            : `Re-pin ${steps}`),
     );
   }
   log(

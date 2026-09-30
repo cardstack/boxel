@@ -394,7 +394,10 @@ A declaration on `read` itself governs the card's plain `GET`, which is what
 the host loads a card with to render it live — in every mode, for every user.
 Under `ids` the host resolves the named links itself as it displays them. Under
 `none` it is never told what the card links to, so wherever the host renders the
-card live its link fields come up empty, including for the realm's own writers.
+card live from its `GET` its link fields come up empty, including for the realm's
+own writers. A card the host first holds from a search row that carried its
+links — an ad-hoc search's, or a `full` query's — keeps them: what a search
+carries is governed by the search, not by the card's `read`.
 Prerendered HTML is different: it is rendered from the card's stored source
 under the realm's own authority, so the card's prerendered formats still draw
 its links, and so does every view the host fills from them, such as search
@@ -471,12 +474,22 @@ what a query declares. The declaration is applied on a realm's own `_search` and
 on `_federated-search` alike, since the server re-lowers a named query from its
 own definition wherever it is served.
 
-`ids` is the narrowing to reach for here too. The host keeps the cards a search
-answers with as the live instances it renders and edits, so a row served under
-`none` becomes a live card with empty link fields — wherever that card is next
-shown or edited in the host, including where its own `read` would carry its
-links, until it is next reloaded. Under `ids` the host resolves each named link
-itself, as it does for an `ids` read.
+**A query's `none` never becomes the card's live representation.** The host
+keeps the cards a search answers with as the live instances it renders and
+edits, and adopts a `full` or `ids` row as one; under `ids` it resolves each
+named link itself, as it does for an `ids` read. A row served under `none` is
+silent about what its card links to rather than saying it links to nothing, so
+the realm marks the row's card `meta.relationshipsWithheld` and the host never
+adopts it. The row renders from its prerendered HTML, and wherever the card is
+opened, edited or rendered live, the host loads it through its own read, so a
+query's `none` never leaves a live card with empty link fields the query chose
+not to send. The cost is one request for each such card the host goes on to use
+live, where an adopted row would have needed none.
+
+The rule runs one way. A row that carries more than the card's own `read` — an
+ad-hoc search's or a `full` query's row of a type whose `read` narrows — is
+adopted as it came, since what a search carries is governed by the search, and
+the host then holds the card with the links that row carried.
 
 #### Where it is refused
 
@@ -714,6 +727,24 @@ them.
 A batch commits in one realm, under one write lock, as one index job and one
 event. An entry naming a card in another realm is refused before anything is
 sent.
+
+A realm's policy judges a batch entry by entry. For a caller the realm's own
+permissions decline, each entry is gated against its own target and the
+operation that target's type declares, and one entry's grant admits nothing
+for another, even on the same card: a grant to rename a classroom does not
+let the delete beside it through. An entry that runs against the cards a
+`b.find(…)` answers is gated once per card, so an `expect: 'many'` entry that
+finds three cards is three decisions. One refusal refuses the batch, wherever
+it comes from. The gate refuses an entry no grant admits before anything is
+staged. The write lock refuses a write whose predicate does not hold against
+the card it changes (for a create anchored on a card, that card), and a create
+against a type whose predicate does not hold for the card it would mint, after
+the entries ahead of it have staged. Either way nothing is written, no index
+job is enqueued and no event is sent. The refusal names its entry in
+`meta.entry`, a path such as `[0].boxel:target[1]` for the second card an entry
+found. A caller who may not read the realm is told that entry and nothing
+else, in the same 404 a missing card gets, and may not describe a target with a
+query at all.
 
 ## Authoring errors
 
