@@ -2,8 +2,6 @@ dist/
 dist-realm/
 tmp/
 *.log
-# realm-sync config points at a local Boxel workspace; machine-specific
-.choreo-realm-sync.json
 
 /dist-iframe/
 /public/*
