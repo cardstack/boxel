@@ -177,7 +177,7 @@ export default class UseAiAssistantTool extends HostBaseTool<
     let attachedCardIds = input.attachedCardIds ?? [];
     let loadAttachedCardPromises = attachedCardIds.map(
       async (attachedCardId) => {
-        return this.store.get<CardAPI.CardDef>(attachedCardId);
+        return this.store.get(attachedCardId);
       },
     );
     let loadedAttachedCardOrErrors = await Promise.all(
