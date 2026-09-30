@@ -512,6 +512,7 @@ module(basename(import.meta.filename), function (hooks) {
       'a batch that writes',
       'a batch that creates',
       'a capability check',
+      'a card+json create',
       'a card+json update',
       'a card+json delete',
     ]) {
@@ -522,15 +523,17 @@ module(basename(import.meta.filename), function (hooks) {
       [],
       'an ad-hoc search reaches no grant, so it has no rows, archived or not',
     );
-    // A create whose predicate reads the card it would mint has nothing
-    // stored to judge before the write lock stages that card, and nothing is
-    // staged in an archived realm, so it is refused as a create no grant
-    // admits is.
+    // A create's predicate reads the card it would mint, which is judged as
+    // the write lock would judge it, so one the grant does not admit is
+    // refused as it is while the realm is active.
     assertNotSealed(
       assert,
-      archived['a card+json create'],
+      await createCard(
+        auth,
+        cardDocument(CLASSROOM, { title: 'Room 302', teacherIds: [STRANGER] }),
+      ),
       refusedCreate,
-      'a card+json create',
+      'a card+json create the grant does not admit',
     );
     assert.strictEqual(
       archived['an empty batch'].status,
