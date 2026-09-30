@@ -248,10 +248,14 @@ export async function resolveNamedQuery(
 
 // A named search as the ad-hoc request that asks for its rendering and nothing
 // else: the fieldset and the `htmlQuery` binding, which are what an answer
-// with no rows carries of the request. For a request whose declaration there
-// is no realm to resolve through — every realm it names is one nothing is
-// served from — so that it is answered with the document a search of those
-// realms matching nothing would give.
+// with no rows carries of the request. For a request no realm it names can
+// answer a row to, so that it is answered with the document a search of those
+// realms matching nothing would give without its declaration being read.
+//
+// The request it returns carries no filter, so it may only be searched where
+// no realm is read by the caller or scoped by a policy: every realm must
+// answer it as one holding nothing for the caller does. Run against a realm
+// that serves rows, it would match every row that realm holds.
 export function namedQueryRendering(
   payload: Record<string, unknown>,
 ): Record<string, unknown> {

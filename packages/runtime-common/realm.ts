@@ -557,9 +557,9 @@ function assignRealmConfig(
 // has to fail in: a realm with no policy is governed by its realm permissions
 // alone, whereas falling back to some default would grant access nobody
 // wrote, and refusing to start would take the realm down over a typo in its
-// settings. A null or blank value is how an owner writes "no policy" — the
-// field's editor stores one when its input is cleared — so it is dropped
-// without a warning; every other value says what it was in the log.
+// settings. A value `namesNoRealmPolicy` accepts is how an owner writes "no
+// policy", so it is dropped without a warning; every other value says what it
+// was in the log.
 //
 // Only the pointer is read here. What the card says, and whether it loads at
 // all, is decided by whatever follows it.
@@ -570,7 +570,7 @@ function assignRealmPolicy(
   log: { warn: (message: string) => void },
 ): void {
   delete realmInfo.policy;
-  if (policy === null || (typeof policy === 'string' && !policy.trim())) {
+  if (namesNoRealmPolicy(policy)) {
     return;
   }
   let reference = readRealmPolicyReference(policy, virtualNetwork);
@@ -581,6 +581,35 @@ function assignRealmPolicy(
     return;
   }
   realmInfo.policy = reference;
+}
+
+// Whether a RealmConfig card's `policy` value leaves the realm with no policy
+// as its owner wrote it: absent, null, or a blank string, which the field's
+// editor stores when its input is cleared. Any other value is an attempt to
+// name a policy card, and may still be refused as malformed when the realm
+// reads it. Exported so a reader of a realm's `realm.json` that has not
+// mounted the realm draws the same line the realm does.
+export function namesNoRealmPolicy(policy: unknown): boolean {
+  return (
+    policy === undefined ||
+    policy === null ||
+    (typeof policy === 'string' && !policy.trim())
+  );
+}
+
+// Whether a RealmConfig card's `policy` value leaves the realm with a policy
+// to load: a pointer `assignRealmPolicy` keeps, rather than one it drops as
+// naming no policy or as malformed. Exported so a reader of a realm's
+// `realm.json` that has not mounted the realm gives the answer the realm,
+// mounted on the same virtual network, would give.
+export function namesRealmPolicy(
+  policy: unknown,
+  virtualNetwork: VirtualNetwork,
+): boolean {
+  return (
+    !namesNoRealmPolicy(policy) &&
+    !('problem' in readRealmPolicyReference(policy, virtualNetwork))
+  );
 }
 
 // The reference a `policy` value makes, or what is wrong with it in words for
