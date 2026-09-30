@@ -16,8 +16,9 @@ module.exports = {
     {
       // Test fixtures set exact geometry inline so the engine's measurements
       // are deterministic, and bind gestures to plain elements to exercise
-      // the engine directly.
-      files: ['tests/**'],
+      // the engine directly. The leading ** also matches the absolute paths
+      // the pre-commit autofix passes.
+      files: ['**/tests/**'],
       rules: {
         'no-inline-styles': false,
         'no-invalid-interactive': false,
