@@ -929,10 +929,12 @@ const CONSUMES_COARSE_OUTCOME = { consumesCoarseOutcome: true } as const;
 // they would run what a caller the ACL declined outright asked for (see
 // `RouteOptions.appliesArchivedSeal`): the card+json read once the gate admits
 // the read, the search once a grant would answer it with a row, the operations
-// envelope once every entry has resolved, and the capability check once it
-// would admit a pair. A consumer marked only `CONSUMES_COARSE_OUTCOME` seals a
-// caller as soon as it admits them. The card+json `HEAD` is one, and never
-// admits anyone: the ACL lets every `HEAD` through.
+// envelope once every entry has resolved, the capability check once it would
+// admit a pair, and each card+json write once the gate has decided it and
+// before its batch runs (see `#sealAdmittedCardWrite`). A consumer
+// marked only `CONSUMES_COARSE_OUTCOME` seals a caller as soon as it admits
+// them. The card+json `HEAD` is one, and never admits anyone: the ACL lets
+// every `HEAD` through.
 const APPLIES_ARCHIVED_SEAL = {
   consumesCoarseOutcome: true,
   appliesArchivedSeal: true,
@@ -2281,6 +2283,12 @@ interface CardWriteAdmission {
   answer(response: Response): Promise<Response>;
   // A refusal the batch made, in the words the caller may be told it in.
   seenBy(err: unknown): Promise<unknown>;
+  // What an archived realm answers the write with where it would run: its
+  // seal where the write lock would admit the write, and the lock's refusal
+  // where it would not (see `#sealAdmittedCardWrite`). `staged` is the batch
+  // entry the handler would commit. A create against a type is rehearsed with
+  // it, since the card its predicate judges is the one staging mints.
+  sealed(seal: ArchivedRealmError, staged?: BatchEntry): Promise<unknown>;
 }
 
 // The admission of every write by a caller the realm ACL allowed.
@@ -2291,6 +2299,7 @@ const COARSE_CARD_WRITE: CardWriteAdmission = {
   assertDestination: () => {},
   answer: async (response) => response,
   seenBy: async (err) => err,
+  sealed: async (seal) => seal,
 };
 
 export class Realm {
@@ -2848,7 +2857,7 @@ export class Realm {
         '(/|/.+/)',
         SupportedMimeType.CardJson,
         this.createCard.bind(this),
-        CONSUMES_COARSE_OUTCOME,
+        APPLIES_ARCHIVED_SEAL,
       )
       .get(
         '/.*',
@@ -2867,13 +2876,13 @@ export class Realm {
         '/.+(?<!.json)',
         SupportedMimeType.CardJson,
         this.patchCardInstance.bind(this),
-        CONSUMES_COARSE_OUTCOME,
+        APPLIES_ARCHIVED_SEAL,
       )
       .delete(
         '/|/.+(?<!.json)',
         SupportedMimeType.CardJson,
         this.removeCard.bind(this),
-        CONSUMES_COARSE_OUTCOME,
+        APPLIES_ARCHIVED_SEAL,
       )
       // The card+source write, its octet-stream spelling and the card+source
       // removal are answered on the realm ACL alone, as the card+source read
@@ -11135,52 +11144,47 @@ export class Realm {
       // that.
       let directory = this.paths.local(new URL(request.url));
       admission.assertDestination(directory);
+      let entry: BatchEntry = {
+        // One entry, carrying its side-loads. A `POST` with `included` is
+        // already a multi-card write, and a create stages the primary together
+        // with every side-load that named itself with a `lid`, under the one
+        // index job and the one index event this request has always produced.
+        op: 'create',
+        document: {
+          data: primaryResource,
+          ...(maybeIncluded ? { included: maybeIncluded } : {}),
+        },
+        directory,
+        ...admission.entry,
+      };
+      await this.#sealAdmittedCardWrite(requestContext, admission, entry);
       result = (
-        await commitBatch(
-          this.batchCore,
-          [
-            {
-              // One entry, carrying its side-loads. A `POST` with `included`
-              // is already a multi-card write, and a create stages the primary
-              // together with every side-load that named itself with a `lid`,
-              // under the one index job and the one index event this request
-              // has always produced.
-              op: 'create',
-              document: {
-                data: primaryResource,
-                ...(maybeIncluded ? { included: maybeIncluded } : {}),
-              },
-              directory,
-              ...admission.entry,
-            },
-          ],
-          {
-            ...admission.batch,
-            clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
-            ...(requestContext.authenticatedUser
-              ? { actor: requestContext.authenticatedUser }
-              : {}),
-            // Waiting decides two things and an echoing caller wants neither:
-            // the batch drains indexing already in flight before it stages,
-            // and it returns only once its own index job has landed. A
-            // prerender-originated write MUST NOT wait — the job it would wait
-            // on needs the render slot, and on the queued-command path the
-            // worker, that this caller is holding, so waiting deadlocks — and
-            // it has nothing to read back either, since it answers from what
-            // it wrote. Skipping the drain costs the write nothing: serializing
-            // a card resolves its type through `lookupDefinition`, which reads
-            // the module off disk rather than out of the index, and the commit
-            // drops a rewritten module's cached definition as it writes the
-            // bytes.
-            ...(answerFromEcho ? { waitForIndex: false } : {}),
-            reportStoredContent: answerFromEcho,
-            // A side-load claiming another realm is not this realm's to
-            // create, and a `POST` carrying one has always stored the card
-            // with that edge empty rather than refusing the write.
-            foreignSideLoadLink: 'leave',
-            timings,
-          },
-        )
+        await commitBatch(this.batchCore, [entry], {
+          ...admission.batch,
+          clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
+          ...(requestContext.authenticatedUser
+            ? { actor: requestContext.authenticatedUser }
+            : {}),
+          // Waiting decides two things and an echoing caller wants neither:
+          // the batch drains indexing already in flight before it stages,
+          // and it returns only once its own index job has landed. A
+          // prerender-originated write MUST NOT wait — the job it would wait
+          // on needs the render slot, and on the queued-command path the
+          // worker, that this caller is holding, so waiting deadlocks — and
+          // it has nothing to read back either, since it answers from what
+          // it wrote. Skipping the drain costs the write nothing: serializing
+          // a card resolves its type through `lookupDefinition`, which reads
+          // the module off disk rather than out of the index, and the commit
+          // drops a rewritten module's cached definition as it writes the
+          // bytes.
+          ...(answerFromEcho ? { waitForIndex: false } : {}),
+          reportStoredContent: answerFromEcho,
+          // A side-load claiming another realm is not this realm's to
+          // create, and a `POST` carrying one has always stored the card
+          // with that edge empty rather than refusing the write.
+          foreignSideLoadLink: 'leave',
+          timings,
+        })
       )[0];
     } catch (err: unknown) {
       return this.#cardWriteRefusal(
@@ -11701,6 +11705,7 @@ export class Realm {
           },
         )
       )[0];
+    await this.#sealAdmittedCardWrite(requestContext, admission);
     let result = await commit();
     let lastModified = result?.meta.lastModified;
     if (result == null || lastModified == null) {
@@ -12070,6 +12075,7 @@ export class Realm {
         assertDestination,
         answer: async (response) => response,
         seenBy: async (err) => err,
+        sealed: async (seal) => seal,
       };
     }
     await this.#testOnlyBeforeBatchLock?.();
@@ -12086,6 +12092,9 @@ export class Realm {
       coarseDeclined === 'all' &&
       !decided &&
       !(await pendingWriteHolds(core, pending));
+    // The archived realm's answer, once `sealed` has judged the write. It is
+    // already in the words the caller may be told it in.
+    let sealedAnswer: unknown;
     return {
       entry: {
         admit: async (judged) => {
@@ -12108,12 +12117,97 @@ export class Realm {
       // The gate's own refusal, which `answer` or the lock raised, needs no
       // rewording.
       seenBy: async (err) =>
+        (sealedAnswer !== undefined && err === sealedAnswer) ||
         (isOperationFailure(err) &&
           err.error.code === 'operation-not-permitted') ||
         !(await hidden())
           ? err
           : notPermitted(target, base),
+      sealed: async (seal, staged) => {
+        let refusal =
+          target.kind === 'instance'
+            ? await storedWriteRefusal(core, pending)
+            : await this.#rehearsedCreateRefusal(pending, staged, {
+                ...batch,
+                ...(requestContext.authenticatedUser
+                  ? { actor: requestContext.authenticatedUser }
+                  : {}),
+              });
+        sealedAnswer = refusal ?? seal;
+        return sealedAnswer;
+      },
     };
+  }
+
+  // How the write lock would decide a card+json create against a type that the
+  // gate left to a predicate: the refusal it would give, or undefined where it
+  // would admit the create. The predicate reads the card the create mints, so
+  // the create is staged as the handler would commit it, with nothing
+  // committed, and judged where staging judges it. `commit` is how the handler
+  // commits the batch for this caller: who is asking, and whether the realm
+  // mints the ids of what the create stages. A create that staging ends before
+  // judging it is refused, since nothing then says a grant admits it.
+  async #rehearsedCreateRefusal(
+    pending: PendingWrite,
+    staged: BatchEntry | undefined,
+    commit: { actor?: string; mintIds?: true },
+  ): Promise<OperationFailure | undefined> {
+    let refusal: OperationFailure | undefined = notPermitted(
+      pending.target,
+      pending.name,
+    );
+    if (!staged) {
+      return refusal;
+    }
+    try {
+      await rehearseBatch(
+        this.batchCore,
+        [
+          {
+            ...staged,
+            admit: async (judged: AdmissionSubject | undefined) => {
+              refusal = await pendingWriteRefusal(
+                this.operationCore,
+                pending,
+                judged,
+              );
+              if (refusal) {
+                throw refusal;
+              }
+            },
+          },
+        ],
+        { ...commit, foreignSideLoadLink: 'leave' },
+      );
+    } catch {
+      // A refusal from the admission is already in `refusal`, and anything
+      // else staging refused leaves the decision where the admission left it.
+    }
+    return refusal;
+  }
+
+  // Where a card+json write would run: the gate has decided it, and its batch
+  // has not run. An archived realm answers a caller its ACL declined outright
+  // here instead (see `APPLIES_ARCHIVED_SEAL`), and answers every refusal ahead
+  // of here as it does while active.
+  //
+  // The answer is the seal where the write lock would admit the write, and the
+  // lock's refusal where it would not, as the operations envelope answers a
+  // batch (see `#disclosableFailure`). A write a grant admits outright leaves
+  // the lock nothing to decide, so it meets the seal. An update or a delete is
+  // judged against its card as stored now. A create whose predicate reads the
+  // card it would mint is rehearsed with `staged`, the entry the handler would
+  // commit, so it is judged by that card as the lock would judge it. The answer
+  // is thrown into the handler's catch, which passes it on as it is.
+  async #sealAdmittedCardWrite(
+    requestContext: RequestContext,
+    admission: CardWriteAdmission,
+    staged?: BatchEntry,
+  ): Promise<void> {
+    let seal = requestContext.archivedSeal;
+    if (seal) {
+      throw await admission.sealed(seal, staged);
+    }
   }
 
   // A batch reports a refusal as an operations error, which is the envelope's
@@ -13342,6 +13436,7 @@ export class Realm {
         );
       }
       let precondition = this.#conditionalWrite(request, url);
+      await this.#sealAdmittedCardWrite(requestContext, admission);
       // Whether there is a card here is settled by the stored file, read
       // inside the same lock the removal happens under. That is what makes a
       // card removable the moment it is written rather than once indexing has

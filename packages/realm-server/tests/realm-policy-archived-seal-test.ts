@@ -31,10 +31,10 @@ import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
 
 // An archived realm with a policy. Its ACL lets nobody but its admin and a
 // reader in, and its policy, which lives in an Org realm, admits a teacher to
-// the classrooms they teach. A caller the ACL refuses is handed to that
-// policy, and learns the realm is archived only where a grant would have
-// admitted them to something. Everywhere else they get the answer the realm
-// gives them while it is active.
+// the classrooms they teach, and anyone it judges to the realm's bulletins. A
+// caller the ACL refuses is handed to that policy, and learns the realm is
+// archived only where a grant would have admitted them to something.
+// Everywhere else they get the answer the realm gives them while it is active.
 const EDUCATION = 'http://127.0.0.1:4444/education/';
 const ORG = 'http://127.0.0.1:4444/org/';
 const POLICY_CARD = `${ORG}policies/education`;
@@ -50,6 +50,7 @@ const REALM_POLICY = {
 };
 
 const CLASSROOM = { module: `${EDUCATION}classroom`, name: 'Classroom' };
+const BULLETIN = { module: `${EDUCATION}bulletin`, name: 'Bulletin' };
 const TEACHES = '.teacherIds | any(. == actor())';
 
 const CLASSROOM_MODULE = `
@@ -74,9 +75,20 @@ const CLASSROOM_MODULE = `
   }
 `;
 
-// Every grant rests on the one predicate, so a caller who teaches no classroom
-// is matched by each grant's type and admitted by none of them. A create's
-// predicate reads the classroom it would mint.
+const BULLETIN_MODULE = `
+  import { contains, field, CardDef } from "@cardstack/base/card-api";
+  import StringField from "@cardstack/base/string";
+
+  export class Bulletin extends CardDef {
+    @field body = contains(StringField);
+  }
+`;
+
+// Every classroom grant rests on the one predicate, so a caller who teaches no
+// classroom is matched by each grant's type and admitted by none of them. A
+// create's predicate reads the classroom it would mint. A bulletin's writes
+// are granted outright, to every caller the policy judges, and only the
+// requests that say so touch a bulletin.
 const POLICY = JSON.stringify({
   data: {
     type: 'card',
@@ -89,6 +101,16 @@ const POLICY = JSON.stringify({
             { operation: 'rename', where: TEACHES },
             { operation: 'listMine', where: TEACHES },
             { operation: 'create', where: TEACHES },
+            { operation: 'update', where: TEACHES },
+            { operation: 'delete', where: TEACHES },
+          ],
+        },
+        {
+          targetType: BULLETIN,
+          grants: [
+            { operation: 'create' },
+            { operation: 'update' },
+            { operation: 'delete' },
           ],
         },
       ],
@@ -107,7 +129,25 @@ function classroom(title: string, teacherIds: string[]) {
   });
 }
 
+// A card+json write's document, naming its type by URL, as a caller the ACL
+// declined names the type a create mints.
+function cardDocument(
+  type: { module: string; name: string },
+  attributes: Record<string, unknown>,
+  rest: { included?: unknown[] } = {},
+) {
+  return JSON.stringify({
+    data: {
+      type: 'card',
+      attributes,
+      meta: { adoptsFrom: { module: rri(type.module), name: type.name } },
+    },
+    ...rest,
+  });
+}
+
 const ROOM_204 = `${EDUCATION}classrooms/room-204`;
+const BULLETIN_1 = `${EDUCATION}bulletins/b1`;
 
 module(basename(import.meta.filename), function (hooks) {
   let education: Realm;
@@ -140,7 +180,17 @@ module(basename(import.meta.filename), function (hooks) {
               policy: POLICY_CARD,
             }),
             'classroom.gts': CLASSROOM_MODULE,
+            'bulletin.gts': BULLETIN_MODULE,
             'classrooms/room-204.json': classroom('Room 204', [TEACHER]),
+            'bulletins/b1.json': JSON.stringify({
+              data: {
+                type: 'card',
+                attributes: { body: 'Picture day is Friday' },
+                meta: {
+                  adoptsFrom: { module: '../bulletin', name: 'Bulletin' },
+                },
+              },
+            }),
           },
           permissions: {
             [ADMIN]: ['read', 'write', 'realm-owner'],
@@ -238,7 +288,40 @@ module(basename(import.meta.filename), function (hooks) {
             ],
           }),
         ),
+    // A classroom the teacher would teach, so a create's predicate admits the
+    // teacher against the card it would mint, and no one else.
+    'a card+json create': (auth) =>
+      createCard(
+        auth,
+        cardDocument(CLASSROOM, { title: 'Room 301', teacherIds: [TEACHER] }),
+      ),
+    'a card+json update': (auth) =>
+      patchCard(ROOM_204, auth, cardDocument(CLASSROOM, { title: 'Patched' })),
+    'a card+json delete': (auth) => deleteCard(ROOM_204, auth),
   };
+
+  function createCard(auth: string, body: string) {
+    return request
+      .post(new URL(EDUCATION).pathname)
+      .set('Accept', SupportedMimeType.CardJson)
+      .set('Authorization', auth)
+      .send(body);
+  }
+
+  function patchCard(url: string, auth: string, body: string) {
+    return request
+      .patch(new URL(url).pathname)
+      .set('Accept', SupportedMimeType.CardJson)
+      .set('Authorization', auth)
+      .send(body);
+  }
+
+  function deleteCard(url: string, auth: string) {
+    return request
+      .delete(new URL(url).pathname)
+      .set('Accept', SupportedMimeType.CardJson)
+      .set('Authorization', auth);
+  }
 
   function search(auth: string, body: Record<string, unknown>) {
     return request
@@ -298,6 +381,53 @@ module(basename(import.meta.filename), function (hooks) {
       .set('Accept', SupportedMimeType.CardJson)
       .set('Authorization', bearer(ADMIN, ['read', 'write', 'realm-owner']));
     return JSON.parse(response.text).data.attributes.title;
+  }
+
+  function assertNotSealed(
+    assert: Assert,
+    archived: Response,
+    active: Response,
+    label: string,
+  ) {
+    assert.strictEqual(
+      archived.status,
+      active.status,
+      `${label}: the status it has while the realm is active`,
+    );
+    assert.strictEqual(
+      archived.text,
+      active.text,
+      `${label}: the body it has while the realm is active`,
+    );
+    assert.notOk(
+      archived.get('X-Boxel-Realm-Archived'),
+      `${label}: nothing says the realm is archived`,
+    );
+  }
+
+  // How many cards of a type a create has minted in the Education realm. A
+  // create stores its card beneath a directory named for its type, which no
+  // fixture uses.
+  async function minted(type: { name: string }) {
+    let listing = await request
+      .get(`${new URL(EDUCATION).pathname}${type.name}/`)
+      .set('Accept', SupportedMimeType.DirectoryListing)
+      .set('Authorization', bearer(ADMIN, ['read', 'write', 'realm-owner']));
+    if (listing.status === 404) {
+      return 0;
+    }
+    return Object.keys(
+      (listing.body as { data: { relationships: Record<string, unknown> } })
+        .data.relationships,
+    ).length;
+  }
+
+  async function bulletinBody() {
+    let response = await request
+      .get(new URL(BULLETIN_1).pathname)
+      .set('Accept', SupportedMimeType.CardJson)
+      .set('Authorization', bearer(ADMIN, ['read', 'write', 'realm-owner']));
+    return JSON.parse(response.text).data.attributes.body;
   }
 
   test('a caller no grant admits is answered as the realm answers them while it is active', async function (assert) {
@@ -363,6 +493,15 @@ module(basename(import.meta.filename), function (hooks) {
       .set('Accept', SupportedMimeType.CardJson)
       .set('Authorization', auth);
     assert.strictEqual(active.status, 200, 'while active, the grant admits');
+    let refusedCreate = await createCard(
+      auth,
+      cardDocument(CLASSROOM, { title: 'Room 302', teacherIds: [STRANGER] }),
+    );
+    assert.strictEqual(
+      refusedCreate.status,
+      404,
+      'while active, a create of a classroom the teacher would not teach is refused',
+    );
 
     await archiveRealm(db, new URL(EDUCATION));
     let archived = await answers(auth);
@@ -373,6 +512,9 @@ module(basename(import.meta.filename), function (hooks) {
       'a batch that writes',
       'a batch that creates',
       'a capability check',
+      'a card+json create',
+      'a card+json update',
+      'a card+json delete',
     ]) {
       assertSealed(assert, archived[label], label);
     }
@@ -381,6 +523,18 @@ module(basename(import.meta.filename), function (hooks) {
       [],
       'an ad-hoc search reaches no grant, so it has no rows, archived or not',
     );
+    // A create's predicate reads the card it would mint, which is judged as
+    // the write lock would judge it, so one the grant does not admit is
+    // refused as it is while the realm is active.
+    assertNotSealed(
+      assert,
+      await createCard(
+        auth,
+        cardDocument(CLASSROOM, { title: 'Room 302', teacherIds: [STRANGER] }),
+      ),
+      refusedCreate,
+      'a card+json create the grant does not admit',
+    );
     assert.strictEqual(
       archived['an empty batch'].status,
       200,
@@ -388,7 +542,12 @@ module(basename(import.meta.filename), function (hooks) {
     );
 
     await unarchiveRealm(db, new URL(EDUCATION));
-    assert.strictEqual(await title(), 'Room 204', 'the rename never ran');
+    assert.strictEqual(
+      await title(),
+      'Room 204',
+      'the rename, the update and the delete never ran',
+    );
+    assert.strictEqual(await minted(CLASSROOM), 0, 'nor did the create');
     let created = await search(
       bearer(ADMIN, ['read', 'write', 'realm-owner']),
       { filter: { 'item.on': CLASSROOM, eq: { 'item.title': 'Room 301' } } },
@@ -400,6 +559,131 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
+  test('a card+json write the gate grants outright meets the seal, and nothing is written', async function (assert) {
+    let auth = bearer(STRANGER);
+    await archiveRealm(db, new URL(EDUCATION));
+    assertSealed(
+      assert,
+      await createCard(auth, cardDocument(BULLETIN, { body: 'Bake sale' })),
+      'a create',
+    );
+    assertSealed(
+      assert,
+      await patchCard(
+        BULLETIN_1,
+        auth,
+        cardDocument(BULLETIN, { body: 'Picture day is Monday' }),
+      ),
+      'an update',
+    );
+    assertSealed(assert, await deleteCard(BULLETIN_1, auth), 'a delete');
+
+    await unarchiveRealm(db, new URL(EDUCATION));
+    assert.strictEqual(
+      await bulletinBody(),
+      'Picture day is Friday',
+      'the update and the delete never ran',
+    );
+    assert.strictEqual(await minted(BULLETIN), 0, 'nor did the create');
+  });
+
+  test('a card+json write refused before it would run is refused as it is while the realm is active', async function (assert) {
+    // Each is a write the teacher's grants would admit, refused before the
+    // gate's decision is acted on: a body that is not a card document, a
+    // side-load no grant on the card it rides with reaches, and a create naming
+    // the type it mints by a module relative to a card not stored yet. The
+    // side-loading create is one a grant admits outright, which would meet the
+    // seal if the seal came before the side-load check.
+    let auth = bearer(TEACHER);
+    const REFUSED: Record<string, () => Test> = {
+      'a body that is not a card document': () =>
+        patchCard(
+          ROOM_204,
+          auth,
+          JSON.stringify({ data: { type: 'not-a-card' } }),
+        ),
+      'a side-load': () =>
+        patchCard(
+          ROOM_204,
+          auth,
+          cardDocument(
+            CLASSROOM,
+            { title: 'Patched' },
+            {
+              included: [
+                {
+                  type: 'card',
+                  lid: 'room-301',
+                  attributes: { title: 'Room 301', teacherIds: [TEACHER] },
+                  meta: {
+                    adoptsFrom: {
+                      module: rri(CLASSROOM.module),
+                      name: 'Classroom',
+                    },
+                  },
+                },
+              ],
+            },
+          ),
+        ),
+      'a side-load on a create granted outright': () =>
+        createCard(
+          auth,
+          cardDocument(
+            BULLETIN,
+            { body: 'See the attached' },
+            {
+              included: [
+                {
+                  type: 'card',
+                  lid: 'b9',
+                  attributes: { body: 'Attached' },
+                  meta: {
+                    adoptsFrom: {
+                      module: rri(BULLETIN.module),
+                      name: 'Bulletin',
+                    },
+                  },
+                },
+              ],
+            },
+          ),
+        ),
+      'a relative type': () =>
+        createCard(
+          auth,
+          JSON.stringify({
+            data: {
+              type: 'card',
+              attributes: { title: 'Room 301', teacherIds: [TEACHER] },
+              meta: {
+                adoptsFrom: { module: './classroom', name: 'Classroom' },
+              },
+            },
+          }),
+        ),
+    };
+    let active: Record<string, Response> = {};
+    for (let [label, send] of Object.entries(REFUSED)) {
+      active[label] = await send();
+    }
+    assert.deepEqual(
+      Object.values(active).map((response) => response.status),
+      [400, 404, 404, 400],
+      'while active, each is refused',
+    );
+
+    await archiveRealm(db, new URL(EDUCATION));
+    for (let [label, send] of Object.entries(REFUSED)) {
+      assertNotSealed(assert, await send(), active[label], label);
+    }
+
+    await unarchiveRealm(db, new URL(EDUCATION));
+    assert.strictEqual(await title(), 'Room 204', 'the classroom is untouched');
+    assert.strictEqual(await minted(CLASSROOM), 0, 'and nothing was created');
+    assert.strictEqual(await minted(BULLETIN), 0, 'nor side-loaded');
+  });
+
   test('a caller the ACL lets read meets the seal, whatever the policy grants them', async function (assert) {
     await archiveRealm(db, new URL(EDUCATION));
     let archived = await answers(bearer(READER, ['read']));
@@ -408,6 +692,11 @@ module(basename(import.meta.filename), function (hooks) {
     }
 
     await unarchiveRealm(db, new URL(EDUCATION));
-    assert.strictEqual(await title(), 'Room 204', 'the rename never ran');
+    assert.strictEqual(
+      await title(),
+      'Room 204',
+      'the rename, the update and the delete never ran',
+    );
+    assert.strictEqual(await minted(CLASSROOM), 0, 'nor did the create');
   });
 });
