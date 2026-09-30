@@ -2408,10 +2408,49 @@ module(basename(import.meta.filename), function () {
         );
       });
 
-      test('a republished realm names no policy either', async function (assert) {
+      // A snapshot whose `realm.json` names its source's policy, which a
+      // published realm has no writer to fix for itself. A republish replaces
+      // the file, and the mounted realm stops answering from the pointer it
+      // memoized.
+      test('republishing a snapshot that names its source policy drops the pointer', async function (assert) {
         let first = await publish();
         assert.strictEqual(first.status, 202, 'first publish accepted');
         await awaitPublishedRealmReady();
+
+        let publishedRealm =
+          (await testRealmServer.testingOnlyReconciler.lookupOrMount(
+            publishedRealmURL,
+          ))!;
+        let realmConfig = readJsonSync(
+          join(
+            dir.name,
+            'realm_server_3',
+            '_published',
+            first.body.data.id,
+            'realm.json',
+          ),
+        ) as { data: { attributes: Record<string, unknown> } };
+        realmConfig.data.attributes.policy = policyCard;
+        await publishedRealm.write(
+          'realm.json',
+          JSON.stringify(realmConfig, null, 2),
+        );
+        await publishedRealm.indexing();
+        assert.deepEqual(
+          await publishedRealm.getRealmPolicy(),
+          { card: policyCard },
+          'the snapshot names its source policy',
+        );
+        assert.strictEqual(
+          (
+            await cardJsonCreate(
+              publishedRealmURL,
+              stranger(publishedRealmURL, ['read']),
+            )
+          ).status,
+          201,
+          "the source's policy admits a signed-in caller's create into the snapshot",
+        );
 
         let second = await publish();
         assert.strictEqual(second.status, 202, 'republish accepted');
