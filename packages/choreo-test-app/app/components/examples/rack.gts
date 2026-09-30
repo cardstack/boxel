@@ -26,6 +26,7 @@ import { preventSelect } from 'test-app/lib/pointer';
  */
 const STOPS = ['A–Z', 'Vowels', 'Bag', 'Points', 'Plot', 'Game'];
 const LAST = STOPS.length - 1;
+const STOP_ZERO = STOPS[0];
 
 /**
  * ONE SCORE, NOT THREE.
@@ -564,6 +565,7 @@ export class Rack extends Component {
     if (near !== this.lit) {
       this.lit = near;
       this.rail?.setAttribute('aria-valuenow', `${near}`);
+      this.rail?.setAttribute('aria-valuetext', STOPS[near] ?? '');
       this.rail
         ?.querySelectorAll<HTMLElement>('.rk-notch')
         .forEach((el, i) => el.classList.toggle('is-on', i === near));
@@ -1036,8 +1038,8 @@ export class Rack extends Component {
             </c.Sequence>
           </Choreo>
 
-          {{! the notches are pointer shortcuts to a stop; the keyboard moves
-              the rail with its arrow keys }}
+          {{! the notches are pointer shortcuts to a stop, out of the tab
+              order; the keyboard moves the rail with its arrow keys }}
           <div
             {{! template-lint-disable no-nested-interactive require-presentational-children }}
             class="rk-rail"
@@ -1047,6 +1049,7 @@ export class Rack extends Component {
             aria-valuemin="0"
             aria-valuemax={{LAST}}
             aria-valuenow="0"
+            aria-valuetext={{STOP_ZERO}}
             {{this.railed}}
             {{on "keydown" this.key}}
             {{on "pointerdown" this.grab}}
@@ -1059,6 +1062,7 @@ export class Rack extends Component {
               <button
                 type="button"
                 class="rk-notch"
+                tabindex="-1"
                 data-notch={{i}}
                 style={{notch i}}
                 {{on "click" this.pick}}
