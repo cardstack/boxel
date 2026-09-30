@@ -61,10 +61,13 @@ import { createJWT as createRealmServerJWT } from '../utils/jwt.ts';
 // the rows the requester sees and the other does not.
 // ============================================================================
 
-const LIB = 'http://127.0.0.1:4444/lib/';
-const BOARD = 'http://127.0.0.1:4444/board/';
-const GRANTS = 'http://127.0.0.1:4444/grants/';
-const PRIVATE = 'http://127.0.0.1:4444/private/';
+// Paths of this file's own: a prerender tab pooled by realm keeps the modules
+// it loaded, so realms that share a URL with another suite's would render
+// that suite's cards.
+const LIB = 'http://127.0.0.1:4444/capture-lib/';
+const BOARD = 'http://127.0.0.1:4444/capture-board/';
+const GRANTS = 'http://127.0.0.1:4444/capture-grants/';
+const PRIVATE = 'http://127.0.0.1:4444/capture-private/';
 
 const OWNER = '@owner:localhost';
 const BOARD_OWNER = '@board-owner:localhost';
@@ -379,6 +382,16 @@ module(basename(import.meta.filename), function (hooks) {
       `the other reader's capture: ${JSON.stringify(others.body)}`,
     );
 
+    assert.strictEqual(
+      requesters.body.data.attributes.status,
+      'ready',
+      `the requester's capture rendered: ${requesters.body.data.attributes.error}`,
+    );
+    assert.strictEqual(
+      others.body.data.attributes.status,
+      'ready',
+      `the other reader's capture rendered: ${others.body.data.attributes.error}`,
+    );
     let requesterCapture = requesters.body.data.attributes.captures[0];
     let otherCapture = others.body.data.attributes.captures[0];
     assert.strictEqual(
