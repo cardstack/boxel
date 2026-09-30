@@ -65,6 +65,7 @@ import {
   RealmRegistryReconciler,
   type RealmRegistryRow,
 } from '../../lib/realm-registry-reconciler.ts';
+import { realmDiskPath } from '../../lib/realm-disk-path.ts';
 import { upsertPublishedRealmInRegistry } from '../../lib/realm-registry-writes.ts';
 
 import {
@@ -514,16 +515,11 @@ export function makeTestReconciler(
           `test reconciler cannot construct realms; URL not pre-mounted: ${row.url}`,
         );
       }
-      let diskPath: string;
-      if (row.kind === 'bootstrap') {
-        diskPath = row.disk_id;
-      } else if (row.kind === 'source') {
-        diskPath = join(dynamicMountDeps.realmsRootPath, row.disk_id);
-      } else {
-        diskPath = join(
-          dynamicMountDeps.realmsRootPath,
-          PUBLISHED_DIRECTORY_NAME,
-          row.disk_id,
+      // Resolved as the production mount resolves it.
+      let diskPath = realmDiskPath(row, dynamicMountDeps.realmsRootPath);
+      if (!diskPath) {
+        throw new Error(
+          `the disk_id of ${row.url} does not resolve to a directory under the realms root`,
         );
       }
       let adapter = new NodeAdapter(
