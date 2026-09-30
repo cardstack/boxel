@@ -183,7 +183,7 @@ async function typeScope(
   // Only once a grant would contribute, as at the gate, so a query nothing
   // grants pays no definition reads for a refusal it was getting anyway. The
   // chain starts at the queried type, whose own declaration was read above.
-  if (await nonGrantableInChain(core, entry.types.slice(1), operation)) {
+  if (await nonGrantableInChain(core, entry.types, operation, 1)) {
     return DENIED;
   }
   return { kind: 'scoped', filters };
