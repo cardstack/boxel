@@ -172,6 +172,31 @@ export default async function percySnapshot(
   // there before changing its wording.
   console.log(`[percy-snapshot] attempted ${JSON.stringify(snapshotName)}`);
 
+  // PROBE (not for merge): every scope the captured DOM names, against the
+  // rules actually injected. A scope with no rule renders unstyled. Reported
+  // per snapshot so one run shows whether this is confined to one snapshot or
+  // affects the whole suite.
+  {
+    let scopes = new Set<string>();
+    for (let el of document.querySelectorAll('*')) {
+      for (let attr of el.getAttributeNames()) {
+        if (attr.startsWith('data-scopedcss-')) {
+          scopes.add(attr);
+        }
+      }
+    }
+    let injectedCss = Array.from(
+      document.querySelectorAll('style[data-boxel-scoped-css]'),
+    )
+      .map((node) => node.textContent ?? '')
+      .join('\n');
+    let unstyled = [...scopes].filter((scope) => !injectedCss.includes(scope));
+    console.log(
+      `[SCOPE-AUDIT] ${JSON.stringify(snapshotName)} scopes=${scopes.size} ` +
+        `unstyled=${unstyled.length} first=${unstyled[0] ?? '-'}`,
+    );
+  }
+
   const percyStart = performance.now();
   let abandoned = false;
   const upload = originalPercySnapshot(...args) as Promise<void>;
