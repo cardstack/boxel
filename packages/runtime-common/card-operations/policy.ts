@@ -370,13 +370,16 @@ export class RealmPolicyCache {
 // another, while the card's visit is still withheld.
 //
 // The first is asked for as soon as the row is read: a gateway failure has
-// usually passed by the time its row is written, so a visit at once succeeds.
-// One that is withheld again met a cause that outlasted a visit, such as a
-// stale host shell, which lasts as long as a deploy overlap. Asking at the
+// usually passed by the time its row is written, so a visit made then usually
+// succeeds. A visit that is withheld again met a cause that outlasted it, such
+// as a stale host shell, which lasts as long as a deploy overlap. Asking at the
 // rate the cache revalidates would spend a visit every few seconds for every
 // realm the card governs, in every process, for as long as that lasts. This
-// spends one a minute, and keeps the policy out of service for at most a
-// minute past the moment the cause clears, for as long as callers ask.
+// asks about once a minute while the cache is read or its inputs move, so once
+// the cause clears the policy is back within about a minute, plus however long
+// the visit waits in the queue and runs. An ask that joins a pass which had
+// already visited the card settles having visited nothing, and waits the same
+// minute (see `Realm#revisitPolicyCard`).
 const WITHHELD_REVISIT_COOLDOWN_MS = 60_000;
 
 // How long an entry is answered from memory without a revalidation, however

@@ -26,6 +26,9 @@ export interface StubPolicyState {
   lookupFailure: Error | undefined;
   // Awaited by the next card reads while set.
   readGate: Promise<void> | undefined;
+  // Awaited by the next visits the cache asks for while set, so a test can
+  // act while a visit is still running.
+  revisitGate: Promise<void> | undefined;
   // What a visit the cache asks for does once it runs, standing in for what
   // the visit's commit would change. A visit does nothing while unset.
   onRevisit: (() => void) | undefined;
@@ -54,6 +57,7 @@ export function stubPolicyCache({
     failureWithheld: false,
     lookupFailure: undefined,
     readGate: undefined,
+    revisitGate: undefined,
     onRevisit: undefined,
     reads: 0,
     lookups: 0,
@@ -118,7 +122,7 @@ export function stubPolicyCache({
     revisitCard: async (file, realmURL) => {
       state.revisits.push({ file, realmURL });
       // Settles on a later turn, as a queued visit does.
-      await Promise.resolve();
+      await (state.revisitGate ?? Promise.resolve());
       state.onRevisit?.();
     },
   });

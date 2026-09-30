@@ -223,6 +223,35 @@ module(basename(import.meta.filename), function (hooks) {
     assert.strictEqual(state.revisits.length, 2, 'and nothing asks again');
   });
 
+  // A pass nobody waits on announces itself before it returns, so the refresh
+  // its announcement starts runs while the visit is still running.
+  test('no read asks for another visit while the one it asked for is still running', async function (assert) {
+    let { cache, state } = setup();
+    setNow(1_000_000);
+    state.failureWithheld = true;
+    let release!: () => void;
+    state.revisitGate = new Promise((resolve) => (release = resolve));
+    await cache.get();
+    assert.strictEqual(state.revisits.length, 1, 'a visit is asked for');
+
+    noteRealmIndexMoved(ORG);
+    await until(
+      () => cache.stats.revalidations === 1,
+      'the refresh after the move lands',
+    );
+    // Past the revalidation bound, and past the cooldown too, had the visit
+    // settled when it was asked for.
+    setNow(1_070_000);
+    assert.true((await cache.get())?.uncompilable, 'the policy still refuses');
+    assert.strictEqual(cache.stats.revalidations, 2);
+    assert.strictEqual(
+      state.revisits.length,
+      1,
+      'and neither the refresh nor the read asks for another visit',
+    );
+    release();
+  });
+
   test('reads of a cold cache share one compile', async function (assert) {
     let { cache, state } = setup();
     let [a, b, c] = await Promise.all([cache.get(), cache.get(), cache.get()]);

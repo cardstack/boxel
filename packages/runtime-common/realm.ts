@@ -173,6 +173,7 @@ import {
   isNode,
   logger,
   fetchRealmPermissions,
+  fetchRealmOwnerUsername,
   isSessionRevoked,
   isRealmArchived,
   baseRealm,
@@ -651,22 +652,6 @@ function readRealmPolicyReference(
   // Kept as the resolved URL, so whatever reads the pointer is handed one
   // spelling of it however the owner wrote it.
   return { card: url.href };
-}
-
-// The user a realm's permissions name as its owner: its human owner, where
-// the realm's bot owns it too. Undefined when no owner is a matrix user.
-function realmOwnerIn(permissions: RealmPermissions): string | undefined {
-  let userIds = Object.entries(permissions)
-    .filter(([_, realmActions]) => realmActions.includes('realm-owner'))
-    .map(([userId]) => userId);
-  if (userIds.length > 1) {
-    // we want to use the realm's human owner for the realm and not the bot
-    userIds = userIds.filter((userId) => !userId.startsWith('@realm/'));
-  }
-  let [userId] = userIds;
-  // real matrix user ID's always start with an '@', if it doesn't that
-  // means we are testing
-  return userId?.startsWith('@') ? userId : undefined;
 }
 
 // A realm's pointer to the card that holds its policy. Only the card's URL is
@@ -7068,10 +7053,23 @@ export class Realm {
   };
 
   async getRealmOwnerUserId(): Promise<string> {
-    let userId = realmOwnerIn(
-      await fetchRealmPermissions(this.#dbAdapter, new URL(this.url)),
+    let permissions = await fetchRealmPermissions(
+      this.#dbAdapter,
+      new URL(this.url),
     );
-    if (userId) {
+
+    let userIds = Object.entries(permissions)
+      .filter(([_, realmActions]) => realmActions.includes('realm-owner'))
+      .map(([userId]) => userId);
+    if (userIds.length > 1) {
+      // we want to use the realm's human owner for the realm and not the bot
+      userIds = userIds.filter((userId) => !userId.startsWith('@realm/'));
+    }
+
+    let [userId] = userIds;
+    // real matrix user ID's always start with an '@', if it doesn't that
+    // means we are testing
+    if (userId?.startsWith('@')) {
       return userId;
     }
     // hard coded test URLs
@@ -15260,19 +15258,27 @@ export class Realm {
   // waiting on it. At the system tier it could only be claimed behind every
   // job already queued, and a realm-wide backlog can hold that for over an
   // hour.
+  //
+  // Not `readsOwnWrite`, so an ask may join a pass of the owner's lane that
+  // is already running and covers the file, including the pass whose own
+  // announcement started the refresh that asked. That join is what keeps the
+  // caches that read one card on one visit of it. Every realm the card
+  // governs, in every process, hears the same index move and asks from the
+  // refresh it starts, and an ask that lands while the visit runs joins it and
+  // settles with it. The cost is an ask that joins a pass which has already
+  // visited the file: it settles having visited nothing, and its cache waits
+  // out the cooldown before asking again.
   async #revisitPolicyCard(file: string, realmURL: string): Promise<void> {
-    let owner =
+    let realmUsername =
       realmURL === this.url
-        ? await this.getRealmOwnerUserId()
-        : realmOwnerIn(
-            await fetchRealmPermissions(this.#dbAdapter, new URL(realmURL)),
-          );
-    if (!owner) {
+        ? await this.getRealmOwnerUsername()
+        : await fetchRealmOwnerUsername(this.#dbAdapter, realmURL);
+    if (!realmUsername) {
       throw new Error(`the realm ${realmURL} has no owner to index it as`);
     }
     let args: IncrementalArgs = {
       realmURL,
-      realmUsername: getMatrixUsername(owner),
+      realmUsername,
       changes: [{ url: file, operation: 'update' }],
       ignoreData: {},
       coalescedCallers: [],

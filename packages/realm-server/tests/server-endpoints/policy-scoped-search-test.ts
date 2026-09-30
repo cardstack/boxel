@@ -1185,7 +1185,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
             return next.body.meta?.incomplete ? undefined : next;
           },
           {
-            timeout: 60_000,
+            timeout: 30_000,
             timeoutMessage: 'the visit of the policy card lands',
           },
         );
