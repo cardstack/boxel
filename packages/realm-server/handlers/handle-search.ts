@@ -71,10 +71,11 @@ import {
   errorsDocument,
   isNamedQueryPayload,
   isOperationFailure,
-  namedQueryInvocation,
   namedQueryRendering,
   policyQueryScope,
   resolveNamedQuery,
+  searchInvocation,
+  type SearchInvocation,
 } from '@cardstack/runtime-common/card-operations';
 import type { LinkStrategy } from '@cardstack/base/operations';
 import {
@@ -141,11 +142,12 @@ export default function handleSearch(opts: {
     // policy-scoped mark names these, so it never says which of them a
     // declaration searched.
     let requested = named;
-    // What a policy fragment is looked up by: a query runs under the name it
-    // was invoked with, on the type that declares it. An ad-hoc search names
-    // neither, so no grant is found for one and a realm the caller cannot read
-    // contributes nothing to it.
-    let invocation = namedQueryInvocation(payload);
+    // What a policy fragment is looked up by: a named query runs under the
+    // name it was invoked with, on the type that declares it, and an ad-hoc
+    // search as `query` on the type its filter targets. A filter with no type
+    // anchor names no type whose rules could admit it, so a realm the caller
+    // cannot read contributes nothing to it.
+    let invocation = searchInvocation(payload);
     // A declared query is answered with the server's resolution of it, so
     // what its result holds of every realm it searches is the server's to
     // decide, not the caller's filter.
@@ -236,11 +238,11 @@ export default function handleSearch(opts: {
   // withheld, never served unscoped.
   //
   // Mounting a realm to ask is work a search of realms the caller reads never
-  // does.
+  // does, and neither does a search on no type, which no rule could admit.
   async function policyAccess(
     readable: Set<string>,
     grantCandidates: string[],
-    invocation: { operation: string; on: CodeRef } | undefined,
+    invocation: SearchInvocation | undefined,
     user: string | undefined,
   ): Promise<RealmAccess> {
     let access: RealmAccess = {
@@ -248,7 +250,7 @@ export default function handleSearch(opts: {
       scoped: new Map(),
       failed: new Set(),
     };
-    if (grantCandidates.length === 0 || !invocation || !user) {
+    if (grantCandidates.length === 0 || !invocation?.types.length || !user) {
       return access;
     }
     let realms = await resolveRealmsForFederatedRequest(

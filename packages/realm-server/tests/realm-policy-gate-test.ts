@@ -1056,6 +1056,28 @@ module(basename(import.meta.filename), function (hooks) {
       );
       assert.strictEqual(batch.status, 500, 'the envelope says the same');
       assert.strictEqual(errorOf(batch).code, 'internal-error');
+      let described = (title: string) =>
+        operations(
+          EDUCATION,
+          AUTH.teacher(),
+          invoke('read', {
+            'boxel:target': {
+              query: { 'item.on': CLASSROOM, eq: { 'item.title': title } },
+            },
+          }),
+        );
+      let found = await described('Room 204');
+      let foundNothing = await described('Room 999');
+      assert.strictEqual(
+        found.status,
+        500,
+        'as does a target described by a query',
+      );
+      assert.strictEqual(
+        found.text,
+        foundNothing.text,
+        'whether or not the query would match a card',
+      );
       let write = await operations(
         EDUCATION,
         AUTH.reader(),
@@ -1078,22 +1100,29 @@ module(basename(import.meta.filename), function (hooks) {
       );
     });
 
-    test('a target described by a query is refused', async function (assert) {
-      assertNotThere(
-        assert,
-        await operations(
-          EDUCATION,
-          AUTH.teacher(),
-          invoke('read', {
-            'boxel:target': {
-              query: {
-                'item.on': CLASSROOM,
-                eq: { 'item.title': 'Room 204' },
-              },
+    test('a target described by a query finds nothing a `query` grant does not admit, whatever the entry’s own operation is granted', async function (assert) {
+      assert.strictEqual(
+        (await getCard(ROOM_204, AUTH.teacher())).status,
+        200,
+        'the teacher’s read of the classroom is granted',
+      );
+      let response = await operations(
+        EDUCATION,
+        AUTH.teacher(),
+        invoke('read', {
+          'boxel:target': {
+            query: {
+              'item.on': CLASSROOM,
+              eq: { 'item.title': 'Room 204' },
             },
-          }),
-        ),
-        'a read whose target a search would find',
+          },
+        }),
+      );
+      assert.strictEqual(response.status, 400, 'HTTP 400 status');
+      assert.strictEqual(errorOf(response).code, 'invalid-params');
+      assert.true(
+        errorOf(response).detail.includes('matched no card'),
+        `the query, which no grant admits, found nothing to read: ${errorOf(response).detail}`,
       );
     });
   });
@@ -1590,7 +1619,7 @@ module(basename(import.meta.filename), function (hooks) {
         );
       let matching = await described('Room 204');
       let matchingNothing = await described('Room 999');
-      assert.strictEqual(matching.status, 404);
+      assert.strictEqual(matching.status, 400);
       assert.strictEqual(
         matching.text,
         matchingNothing.text,
@@ -1783,6 +1812,73 @@ module(basename(import.meta.filename), function (hooks) {
         'and nobody is asked to sign in',
       );
       assert.strictEqual(anonymous.text, MISSING_AUTH);
+    });
+  });
+
+  module('a target a query finds', function () {
+    // The policy above with one rule more: a `query` grant on every
+    // classroom, so a caller who may not read the realm can find classrooms
+    // by query. Each one found is then gated on the entry's own operation,
+    // which for a delete admits only a classroom the caller teaches.
+    async function enumerable() {
+      await org.write(
+        'policies/enumerable.json',
+        policyCard([
+          ...RULES,
+          { targetType: CLASSROOM, grants: [{ operation: 'query' }] },
+        ]),
+      );
+      await org.indexing();
+      await pointAt(`${ORG}policies/enumerable`);
+    }
+
+    const EVERY_CLASSROOM = { query: { 'item.on': CLASSROOM }, expect: 'many' };
+
+    test('each card a query finds is gated, and one refused refuses the batch without naming it', async function (assert) {
+      await enumerable();
+      let response = await operations(
+        EDUCATION,
+        AUTH.teacher(),
+        invoke('delete', { 'boxel:target': EVERY_CLASSROOM }),
+      );
+      assertNotThere(
+        assert,
+        response,
+        'a delete of every classroom, two of which the teacher does not teach',
+      );
+      let [error] = (
+        JSON.parse(response.text) as {
+          errors: { id?: string; meta?: { entry?: string } }[];
+        }
+      ).errors;
+      assert.strictEqual(error.id, undefined, 'the refusal carries no id');
+      assert.true(
+        /^\[0\]\.boxel:target\[[0-3]\]$/.test(error.meta?.entry ?? ''),
+        `it names the found entry by position alone: ${error.meta?.entry}`,
+      );
+      for (let room of [ROOM_204, ROOM_205, ROOM_206, HOMEROOM]) {
+        assert.strictEqual(
+          (await getCard(room, AUTH.admin())).status,
+          200,
+          `${room} was not deleted`,
+        );
+      }
+    });
+
+    test('an entry both grants admit runs against every card the query finds', async function (assert) {
+      await enumerable();
+      let response = await operations(
+        EDUCATION,
+        AUTH.teacher(),
+        invoke('rename', {
+          'boxel:target': EVERY_CLASSROOM,
+          data: { title: 'Renamed' },
+        }),
+      );
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      for (let room of [ROOM_204, ROOM_205, ROOM_206, HOMEROOM]) {
+        assert.strictEqual(await titleOf(room), 'Renamed', `${room} renamed`);
+      }
     });
   });
 

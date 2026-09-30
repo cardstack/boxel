@@ -24,9 +24,9 @@ import {
   errorsDocument,
   isNamedQueryPayload,
   isOperationFailure,
-  namedQueryInvocation,
   policyQueryScope,
   resolveNamedQuery,
+  searchInvocation,
 } from '@cardstack/runtime-common/card-operations';
 import { makeCardTypeSummaryDoc } from '@cardstack/runtime-common/document-types';
 
@@ -191,7 +191,7 @@ function registerSearchRoutes() {
       let duringRender =
         (req.headers.get(DURING_PRERENDER_HEADER) ?? '').length > 0;
       let links: LinkStrategy = 'full';
-      let invocation = namedQueryInvocation(payload);
+      let invocation = searchInvocation(payload);
       let resolvedByServer = isNamedQueryPayload(payload);
       let requested = realmList;
       if (isNamedQueryPayload(payload)) {
@@ -247,8 +247,9 @@ function registerSearchRoutes() {
       );
 
       // Mirror the realm-server's `handle-search` for a realm the caller does
-      // not read: its policy's grants for the invoked query are composed into
-      // the query it runs, it contributes no rows where nothing grants the
+      // not read: its policy's grants for the invoked query, a named one or
+      // `query` on the types an ad-hoc filter targets, are composed into the
+      // query it runs, it contributes no rows where nothing grants the
       // caller that query, and it answers as a realm that did not answer where
       // its policy cannot be judged. A render's search reads every realm, as
       // it runs under realm authority there. The result marks the realms whose
