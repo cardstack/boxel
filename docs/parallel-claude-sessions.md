@@ -86,6 +86,29 @@ allows — five minutes by default, `never` to remove the deadline — and is th
 dropped, which is how a message goes unread while waiting for an approval
 nobody was watching for.
 
+**For collaboration, set `accept`.** The protocols agents follow are
+time-sensitive — an announcement before a shared resource is taken, a handoff
+when it is released — and a held message is not a late message: it is dropped
+once the deadline passes, and nothing tells the sender. `accept` is what makes
+the channel usable when nobody is watching it.
+
+Leaving it unset is cautious rather than wrong, and on a fleet where every
+session runs the same permission mode it behaves the same as `accept`. It
+turns awkward in a mixed fleet, or when a sender asserts no mode class at all
+— as a peer reached over Remote Control may not — because delivery into a
+bypassing session is then held, and a remote sender gets no receipt either
+way. Its message is dropped and your session reads as merely busy.
+
+`refuse` takes a session out of the protocol. It can still send, but no peer's
+announcement reaches it, so it cannot take part in any coordination that
+depends on being told — and peers have no way to learn that. Use it for a
+session you want left alone, not for one you expect to collaborate.
+
+Accepting delivery is not granting authority. A peer's message is a
+teammate's input, not your consent: the receiving session's own permission
+rules still govern everything it does with that input, and no session may ask
+a peer to do what its own permissions refused.
+
 `isolatePeerMachines` covers the other direction: it requires explicit
 approval before one of your sessions can reach a peer on another machine at
 all. Reachability and unattended traffic are separate decisions — turn Remote
