@@ -673,7 +673,9 @@ module('Integration | realm policy', function (hooks) {
       .dom('[data-test-policy-grant-inactive]')
       .exists({ count: 1 }, 'and it is marked where it is listed');
     assert
-      .dom('[data-test-policy-grant-status="inactive"] [data-test-operation-grant-operation]')
+      .dom(
+        '[data-test-policy-grant-status="inactive"] [data-test-operation-grant-operation]',
+      )
       .hasText('delete', 'the marked grant is the delete');
     assert.dom('[data-test-realm-policy-uncompilable]').doesNotExist();
 
