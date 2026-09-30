@@ -100,6 +100,16 @@ const NOTICE_MODULE = `
   }
 `;
 
+// A card that links to any other, in the Open realm.
+const FLYER_MODULE = `
+  import { contains, field, linksTo, CardDef } from "@cardstack/base/card-api";
+  import StringField from "@cardstack/base/string";
+  export class Flyer extends CardDef {
+    @field headline = contains(StringField);
+    @field about = linksTo(CardDef);
+  }
+`;
+
 type Grant = { operation: string; where?: unknown };
 type Rule = { targetType: { module: string; name: string }; grants: Grant[] };
 
@@ -194,6 +204,11 @@ const BULLETIN_9 = `${EDUCATION}bulletins/b9`;
 const NOTICE_1 = `${EDUCATION}notices/n1`;
 const OPEN_NOTE = `${OPEN}notes/n1`;
 const OPEN_CONFIG = `${OPEN}realm`;
+const FLYER = { module: `${OPEN}flyer`, name: 'Flyer' };
+// Stored where a create of the type naming the local id `taken`, or
+// `room-301`, would mint its card.
+const TAKEN_BULLETIN = `${EDUCATION}Bulletin/taken`;
+const TAKEN_CLASSROOM = `${EDUCATION}Classroom/room-301`;
 
 module(basename(import.meta.filename), function (hooks) {
   let education: Realm;
@@ -241,6 +256,11 @@ module(basename(import.meta.filename), function (hooks) {
               { module: '../notice', name: 'Notice' },
               { body: 'Assembly', status: 'posted' },
             ),
+            'Bulletin/taken.json': card(
+              { module: '../bulletin', name: 'Bulletin' },
+              { body: 'Already here' },
+            ),
+            'Classroom/room-301.json': classroom('Room 301', [COLLEAGUE]),
           },
           permissions: {
             [ADMIN]: ['read', 'write', 'realm-owner'],
@@ -266,6 +286,7 @@ module(basename(import.meta.filename), function (hooks) {
             }),
             'policies/open.json': policyCard(OPEN_RULES),
             'notes/n1.json': card(CARD_DEF, { cardInfo: { name: 'A note' } }),
+            'flyer.gts': FLYER_MODULE,
           },
           permissions: {
             [ADMIN]: ['read', 'write', 'realm-owner'],
@@ -383,6 +404,23 @@ module(basename(import.meta.filename), function (hooks) {
         meta: { adoptsFrom: adoptsFrom(type) },
       },
     };
+  }
+
+  // A new card's document, naming the card by a local id.
+  function withLid(doc: { data: Record<string, unknown> }, lid: string) {
+    return { ...doc, data: { ...doc.data, lid } };
+  }
+
+  function createdId(response: Response): string {
+    return (response.body as { data: { id: string } }).data.id;
+  }
+
+  function results(response: Response) {
+    return (
+      JSON.parse(response.text) as {
+        'atomic:results': { data: { id: string; lid?: string } }[];
+      }
+    )['atomic:results'];
   }
 
   // A card's stored document as the realm holds it on disk.
@@ -976,6 +1014,334 @@ module(basename(import.meta.filename), function (hooks) {
         admin.status,
         201,
         'a caller the ACL allows creates with one',
+      );
+    });
+  });
+
+  // A create's answer depends on what is stored where its card lands, so a
+  // caller who may not read the realm does not choose that place: the realm
+  // mints the card's id, beneath the realm's root. One who may read the realm
+  // can list it anyway, and chooses as any writer does.
+  module('where a created card lands', function () {
+    test('a caller who may not read the realm creates under an id the realm mints, so a taken local id is answered as a free one is', async function (assert) {
+      for (let lid of ['taken', 'fresh']) {
+        let posted = await createCard(
+          EDUCATION,
+          AUTH.teacher(),
+          withLid(newCard(BULLETIN, { body: 'Bake sale' }), lid),
+        );
+        assert.strictEqual(
+          posted.status,
+          201,
+          `a POST naming "${lid}": ${posted.text}`,
+        );
+        let id = createdId(posted);
+        assert.notStrictEqual(
+          id,
+          `${EDUCATION}Bulletin/${lid}`,
+          `a POST naming "${lid}": the local id does not name the card`,
+        );
+        assert.true(
+          id.startsWith(`${EDUCATION}Bulletin/`),
+          `a POST naming "${lid}": the card is stored under its type: ${id}`,
+        );
+        assert.strictEqual(
+          (await stored(education, id))?.body,
+          'Bake sale',
+          `a POST naming "${lid}": the card holds what was sent`,
+        );
+
+        let enveloped = await operations(
+          EDUCATION,
+          AUTH.teacher(),
+          invoke('create', {
+            data: withLid(newCard(BULLETIN, { body: 'Car wash' }), lid).data,
+          }),
+        );
+        assert.strictEqual(
+          enveloped.status,
+          200,
+          `an envelope create naming "${lid}": ${enveloped.text}`,
+        );
+        let [result] = results(enveloped);
+        assert.strictEqual(
+          result.data.lid,
+          lid,
+          `an envelope create naming "${lid}": its result names the card by that local id`,
+        );
+        assert.notStrictEqual(
+          result.data.id,
+          `${EDUCATION}Bulletin/${lid}`,
+          `an envelope create naming "${lid}": under an id the realm minted`,
+        );
+        assert.strictEqual(
+          (await stored(education, result.data.id))?.body,
+          'Car wash',
+          `an envelope create naming "${lid}": the card holds what was sent`,
+        );
+      }
+      assert.deepEqual(
+        await stored(education, TAKEN_BULLETIN),
+        { body: 'Already here' },
+        'the card stored under the taken id is untouched',
+      );
+      assert.strictEqual(
+        await stored(education, `${EDUCATION}Bulletin/fresh`),
+        undefined,
+        'and nothing is stored under the free one',
+      );
+    });
+
+    test('a local id is held to the rule a card’s id is, whoever sends it, on either transport', async function (assert) {
+      for (let lid of ['', 'a/b']) {
+        let label = `a local id of ${JSON.stringify(lid)}`;
+        let [minted, named] = await Promise.all(
+          [AUTH.teacher(), AUTH.admin()].map((auth) =>
+            operations(
+              EDUCATION,
+              auth,
+              invoke('create', {
+                data: withLid(newCard(BULLETIN, { body: 'Bake sale' }), lid)
+                  .data,
+              }),
+            ),
+          ),
+        );
+        assert.strictEqual(named.status, 400, `${label}: a writer's create`);
+        assert.strictEqual(
+          minted.text,
+          named.text,
+          `${label}: a caller the realm mints ids for gets the same answer`,
+        );
+
+        let [mintedPost, namedPost] = await Promise.all(
+          [AUTH.teacher(), AUTH.admin()].map((auth) =>
+            createCard(
+              EDUCATION,
+              auth,
+              withLid(newCard(BULLETIN, { body: 'Bake sale' }), lid),
+            ),
+          ),
+        );
+        assert.strictEqual(namedPost.status, 400, `${label}: a writer's POST`);
+        let message = (response: Response) =>
+          (JSON.parse(response.text) as { errors: { message: string }[] })
+            .errors[0].message;
+        assert.deepEqual(
+          [mintedPost.status, message(mintedPost)],
+          [namedPost.status, message(namedPost)],
+          `${label}: a POST from a caller the realm mints ids for gets the same answer`,
+        );
+      }
+    });
+
+    test('a local id the realm does not store a card under still links the batch’s cards to each other', async function (assert) {
+      let response = await operations(
+        OPEN,
+        AUTH.openTeacher(),
+        invoke('create', {
+          data: {
+            lid: 'note',
+            type: 'card',
+            attributes: { cardInfo: { name: 'A new note' } },
+            meta: { adoptsFrom: CARD_DEF },
+          },
+        }),
+        invoke('create', {
+          data: {
+            lid: 'flyer',
+            type: 'card',
+            attributes: { headline: 'Read this' },
+            relationships: {
+              about: { data: { lid: 'note', type: 'card' } },
+            },
+            meta: { adoptsFrom: adoptsFrom(FLYER) },
+          },
+        }),
+      );
+      assert.strictEqual(response.status, 200, response.text);
+      let [note, flyer] = results(response);
+      assert.deepEqual(
+        [note.data.lid, flyer.data.lid],
+        ['note', 'flyer'],
+        'each result names its card by the local id it was sent',
+      );
+      assert.notStrictEqual(
+        note.data.id,
+        `${OPEN}CardDef/note`,
+        'the note is stored under an id the realm minted',
+      );
+      let flyerSource = JSON.parse(
+        (await open.operationCore.readFileAsText(
+          `${flyer.data.id.slice(OPEN.length)}.json` as LocalPath,
+        ))!,
+      ) as {
+        data: { relationships: { about: { links: { self: string } } } };
+      };
+      assert.strictEqual(
+        new URL(
+          flyerSource.data.relationships.about.links.self,
+          `${flyer.data.id}.json`,
+        ).href,
+        note.data.id,
+        'the flyer links to the note the first entry minted',
+      );
+    });
+
+    test('a create at a taken local id and one at a free id that then fails are answered alike, on either transport', async function (assert) {
+      // Over the realm's ceiling for a card, which is checked after where the
+      // card lands is. The predicate on a Classroom create holds for the card
+      // either would mint, so each is judged as far as the ceiling.
+      let oversized = 'x'.repeat(600 * 1024);
+      let atTaken = withLid(
+        newCard(CLASSROOM, { title: oversized, teacherIds: [TEACHER] }),
+        'room-301',
+      );
+      let atFree = withLid(
+        newCard(CLASSROOM, { title: oversized, teacherIds: [TEACHER] }),
+        'room-399',
+      );
+      let taken = await createCard(EDUCATION, AUTH.teacher(), atTaken);
+      let free = await createCard(EDUCATION, AUTH.teacher(), atFree);
+      assert.strictEqual(free.status, 413, 'a POST at a free id: status');
+      assert.strictEqual(taken.status, 413, 'a POST at a taken id: status');
+      assert.strictEqual(
+        taken.text.replaceAll('room-301', 'room-399'),
+        free.text,
+        'a POST at a taken id: the same answer as at a free one',
+      );
+
+      let takenEnvelope = await operations(
+        EDUCATION,
+        AUTH.teacher(),
+        invoke('create', { data: atTaken.data }),
+      );
+      let freeEnvelope = await operations(
+        EDUCATION,
+        AUTH.teacher(),
+        invoke('create', { data: atFree.data }),
+      );
+      assert.strictEqual(
+        freeEnvelope.status,
+        413,
+        'an envelope create at a free id: status',
+      );
+      assert.strictEqual(
+        takenEnvelope.status,
+        413,
+        'an envelope create at a taken id: status',
+      );
+      assert.strictEqual(
+        takenEnvelope.text.replaceAll('room-301', 'room-399'),
+        freeEnvelope.text,
+        'an envelope create at a taken id: the same answer as at a free one',
+      );
+      assert.deepEqual(
+        await stored(education, TAKEN_CLASSROOM),
+        { title: 'Room 301', teacherIds: [COLLEAGUE] },
+        'the room stored under the taken id is untouched',
+      );
+    });
+
+    test('a caller who may not read the realm creates at its root, whatever is stored along the path a POST names', async function (assert) {
+      assertNotThere(
+        assert,
+        await createCard(
+          `${BULLETIN_1}.json/`,
+          AUTH.teacher(),
+          newCard(BULLETIN, { body: 'Tucked in' }),
+        ),
+        await createCard(
+          `${BULLETIN_9}.json/`,
+          AUTH.teacher(),
+          newCard(BULLETIN, { body: 'Tucked in' }),
+        ),
+        [`${BULLETIN_1}.json/`, `${BULLETIN_9}.json/`],
+        'a POST aimed beneath a stored card',
+      );
+      let intoDirectory = await createCard(
+        `${EDUCATION}bulletins/`,
+        AUTH.teacher(),
+        newCard(BULLETIN, { body: 'Tucked in' }),
+      );
+      assert.strictEqual(
+        intoDirectory.status,
+        404,
+        'a POST aimed at a directory the realm holds',
+      );
+      for (let directory of [
+        `${BULLETIN_9}.json/`,
+        `${EDUCATION}bulletins/Bulletin/`,
+      ]) {
+        let listing = await request
+          .get(path(directory))
+          .set('Accept', SupportedMimeType.DirectoryListing)
+          .set('Authorization', AUTH.admin());
+        assert.strictEqual(
+          listing.status,
+          404,
+          `nothing was minted beneath ${directory}`,
+        );
+      }
+
+      let filed = await createCard(
+        `${EDUCATION}bulletins/`,
+        AUTH.reader(),
+        withLid(newCard(BULLETIN, { body: 'Filed' }), 'filed'),
+      );
+      assert.strictEqual(filed.status, 201, `a reader's POST: ${filed.text}`);
+      assert.strictEqual(
+        createdId(filed),
+        `${EDUCATION}bulletins/Bulletin/filed`,
+        'a caller who may read the realm files the card where they aimed it, under their own local id',
+      );
+    });
+
+    test('a caller who may read the realm names its own card, and is told a taken id is taken, on either transport', async function (assert) {
+      for (let [label, auth] of [
+        ['a reader a grant admits', AUTH.reader()],
+        ['a caller the realm ACL allows', AUTH.admin()],
+      ] as const) {
+        let posted = await createCard(
+          EDUCATION,
+          auth,
+          withLid(newCard(BULLETIN, { body: 'Bake sale' }), 'taken'),
+        );
+        assert.strictEqual(posted.status, 409, `${label}: POST`);
+        assert.true(
+          /already stored at Bulletin\/taken\.json/.test(posted.text),
+          `${label}: POST names the path: ${posted.text}`,
+        );
+        let enveloped = await operations(
+          EDUCATION,
+          auth,
+          invoke('create', {
+            data: withLid(newCard(BULLETIN, { body: 'Bake sale' }), 'taken')
+              .data,
+          }),
+        );
+        assert.strictEqual(enveloped.status, 409, `${label}: envelope`);
+        assert.true(
+          /already stored at Bulletin\/taken\.json/.test(enveloped.text),
+          `${label}: the envelope names the path: ${enveloped.text}`,
+        );
+      }
+      assert.deepEqual(
+        await stored(education, TAKEN_BULLETIN),
+        { body: 'Already here' },
+        'the card stored under the taken id is untouched',
+      );
+
+      let named = await createCard(
+        EDUCATION,
+        AUTH.reader(),
+        withLid(newCard(BULLETIN, { body: 'Bake sale' }), 'reader-note'),
+      );
+      assert.strictEqual(named.status, 201, 'a reader creating at a free id');
+      assert.strictEqual(
+        createdId(named),
+        `${EDUCATION}Bulletin/reader-note`,
+        'is stored under the local id they named',
       );
     });
   });
