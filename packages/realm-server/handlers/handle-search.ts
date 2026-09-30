@@ -195,13 +195,13 @@ export default function handleSearch(opts: {
       // reads, or, where they read none, the ones whose policy could admit
       // them. One the caller reaches only through its policy reads the
       // declaration on that realm's own authority, the way the policy gate
-      // reads it. No policy admits a request that authenticated nobody, and a
-      // realm-authority principal carries no grant candidates, so for either
-      // there are none of the latter.
+      // reads it. No policy admits a request that authenticated nobody, nor a
+      // realm-authority principal, so for either there are none of the
+      // latter.
       let resolvingRealms =
         realmList.length > 0
           ? realmList
-          : principal
+          : principal?.kind === 'user'
             ? await realmsThatMayNamePolicy(grantCandidates)
             : [];
       if (resolvingRealms.length === 0) {
