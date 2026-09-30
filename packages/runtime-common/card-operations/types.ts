@@ -409,9 +409,11 @@ export type PolicyIssueCode =
   | 'unknown-operation'
   // A grant of authorization infrastructure: an operation declared
   // `nonGrantable` on its rule's type or on any type that type descends from,
-  // or a write on a rule whose type is a `RealmPolicy`. The gate refuses both
-  // whatever a compiled policy holds, so the grant could admit nothing, and
-  // recording it says so where the author wrote it.
+  // or any grant on a rule whose type is a `RealmPolicy`. The gate refuses
+  // both whatever a compiled policy holds, so the grant could admit nothing,
+  // and recording it says so where the author wrote it. A query grant on a
+  // policy type is recorded too, since it would contribute a filter that
+  // lists policy cards.
   | 'grants-authorization-infrastructure'
   // A `where` that does not parse, or that the `policy` profile refuses.
   | 'invalid-predicate'
@@ -831,9 +833,9 @@ export type PolicyExplanationReason =
   // behavior no grant reaches here at all — a query, which is authorized on
   // the search engine's lane, and an explain.
   | 'non-grantable'
-  // A write to the realm's policy card or to its config card, or a write that
-  // changes or mints any policy card, which no grant reaches whatever the
-  // card's type declares.
+  // Any operation on the realm's policy card or on its config card, or one
+  // that reads, changes or mints any policy card, which no grant reaches
+  // whatever the card's type declares.
   | 'authorization-infrastructure'
   // The target is nothing a rule can be matched against for this operation:
   // a card whose index row records an error, so its type is unknown; a file,

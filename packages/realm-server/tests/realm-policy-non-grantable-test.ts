@@ -32,13 +32,14 @@ import {
 import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
 
 // Authorization infrastructure stays outside what a realm's policy can grant.
-// An operation whose declaration is `nonGrantable`, any write to the card the
-// realm's `policy` key names, and any write to a policy card at all, are
-// invocable only by a caller the realm's own ACL allows. The policy here
-// grants every built-in write on every card, which is the broadest grant
-// there is, and each named operation the tests invoke on the type that
-// declares it. A reader of the realm holds no write permission, so each of
-// their writes reaches the gate.
+// An operation whose declaration is `nonGrantable`, and any operation on the
+// realm's config card, on the card the realm's `policy` key names, or on a
+// policy card at all, are invocable only by a caller the realm's own ACL
+// allows. The policy here grants every built-in write and every read on every
+// card, which is the broadest grant there is, and each named operation the
+// tests invoke on the type that declares it. A reader of the realm holds no
+// write permission, so each of their writes reaches the gate. A stranger holds
+// no permission at all, so each of their reads reaches it too.
 //
 // The school realm also stores the policy card the Education realm's `policy`
 // key names, a card the school realm's own key does not name.
@@ -50,6 +51,7 @@ const PLAIN_POLICY = `${SCHOOL}policies/plain`;
 const EDUCATION_POLICY = `${SCHOOL}policies/education`;
 const ADMIN = '@school-admin:localhost';
 const READER = '@reader:localhost';
+const STRANGER = '@stranger:localhost';
 
 const CARD_DEF = { module: rri('@cardstack/base/card-api'), name: 'CardDef' };
 const REALM_POLICY = {
@@ -193,6 +195,11 @@ const RULES: Rule[] = [
   // A named write on a policy type, which compiling records and leaves out
   // too.
   { targetType: SCHOOL_POLICY, grants: [{ operation: 'setMotto' }] },
+  // Every read of every card: its assembled document, and its stored source.
+  {
+    targetType: CARD_DEF,
+    grants: [{ operation: 'read' }, { operation: 'readSource' }],
+  },
 ];
 
 // What the Education realm's policy grants, which is only read.
@@ -336,6 +343,7 @@ module(basename(import.meta.filename), function (hooks) {
   const AUTH = {
     admin: () => bearer(ADMIN, ['read', 'write', 'realm-owner']),
     reader: () => bearer(READER, ['read']),
+    stranger: () => bearer(STRANGER),
   };
 
   function operations(auth: string, ...entries: unknown[]) {
@@ -415,6 +423,34 @@ module(basename(import.meta.filename), function (hooks) {
       ).definition;
   }
 
+  // What each way of reading a card answers: its assembled document over the
+  // operations envelope and the card+json read, and its stored source over the
+  // card+source read and the realm's file serve, which answers an `Accept` no
+  // route claims. The envelope sends a stored-bytes read to those two routes.
+  async function readStatuses(auth: string, url: string) {
+    let source = `${url}.json`;
+    let get = (target: string, accept: string) =>
+      request
+        .get(new URL(target).pathname)
+        .set('Accept', accept)
+        .set('Authorization', auth);
+    return {
+      read: (await operations(auth, invoke('read', { href: url }))).status,
+      cardJson: (await get(url, SupportedMimeType.CardJson)).status,
+      cardSource: (await get(source, SupportedMimeType.CardSource)).status,
+      fileServe: (await get(source, 'image/png')).status,
+    };
+  }
+
+  function everyRead(status: number) {
+    return {
+      read: status,
+      cardJson: status,
+      cardSource: status,
+      fileServe: status,
+    };
+  }
+
   function assertNotPermitted(
     assert: Assert,
     response: Response,
@@ -487,7 +523,13 @@ module(basename(import.meta.filename), function (hooks) {
         compiled?.rules.map((rule) =>
           rule.grants.map((grant) => grant.operation),
         ),
-        [CARD_DEF_GRANTS, ['annotate'], ['draftPolicy', 'draftLedger'], []],
+        [
+          CARD_DEF_GRANTS,
+          ['annotate'],
+          ['draftPolicy', 'draftLedger'],
+          [],
+          ['read', 'readSource'],
+        ],
         'the grants beside them compile',
       );
     });
@@ -658,6 +700,24 @@ module(basename(import.meta.filename), function (hooks) {
       );
     });
 
+    test('no grant admits a read of it or of its stored source', async function (assert) {
+      assert.deepEqual(
+        await readStatuses(AUTH.stranger(), NOTE),
+        everyRead(200),
+        'the grant admits every read of an ordinary card',
+      );
+      assert.deepEqual(
+        await readStatuses(AUTH.stranger(), POLICY_CARD),
+        everyRead(404),
+        'and none of the card the key names',
+      );
+      assert.deepEqual(
+        await readStatuses(AUTH.reader(), POLICY_CARD),
+        everyRead(200),
+        'which a realm reader still reads every way',
+      );
+    });
+
     test('a pointer that names the card by its stored source still loads the policy', async function (assert) {
       await school.write(
         'realm.json',
@@ -777,6 +837,26 @@ module(basename(import.meta.filename), function (hooks) {
           await attributesOf(url),
           before,
           `${label}: the card is unchanged`,
+        );
+      }
+    });
+
+    test('no grant admits a read of one, whether or not a key names it', async function (assert) {
+      let cards: [string, string][] = [
+        [PLAIN_POLICY, 'a RealmPolicy no key names'],
+        [DRAFT_POLICY, 'a subtype no key names'],
+        [EDUCATION_POLICY, 'the card another realm’s key names'],
+      ];
+      for (let [url, label] of cards) {
+        assert.deepEqual(
+          await readStatuses(AUTH.stranger(), url),
+          everyRead(404),
+          `${label}: no read reaches it`,
+        );
+        assert.deepEqual(
+          await readStatuses(AUTH.reader(), url),
+          everyRead(200),
+          `${label}: a realm reader still reads it`,
         );
       }
     });
@@ -964,6 +1044,19 @@ module(basename(import.meta.filename), function (hooks) {
         (await attributesOf(REALM_CONFIG_CARD)).policy,
         POLICY_CARD,
         'the realm still names its policy card',
+      );
+    });
+
+    test('no grant admits a read of it or of its stored source', async function (assert) {
+      assert.deepEqual(
+        await readStatuses(AUTH.stranger(), REALM_CONFIG_CARD),
+        everyRead(404),
+        'a read granted on CardDef reaches none of it',
+      );
+      assert.deepEqual(
+        await readStatuses(AUTH.reader(), REALM_CONFIG_CARD),
+        everyRead(200),
+        'while a realm reader still reads it every way',
       );
     });
 

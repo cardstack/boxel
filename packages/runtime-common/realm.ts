@@ -15211,7 +15211,7 @@ export class Realm {
 
   // Whether an adoption chain, as the index records one, is a policy card's.
   // The compiler asks it of the card a key names, and the gate asks it of
-  // every card a grant would write, so the two agree on what a policy card is.
+  // every card a grant would reach, so the two agree on what a policy card is.
   #isPolicyCard(types: string[]): boolean {
     // The index records an adoption chain in the same spelling, so the key is
     // computed the same way. A subtype of RealmPolicy carries it too.
