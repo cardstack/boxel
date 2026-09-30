@@ -90,6 +90,13 @@ const MAX_TOOL_INDEX_WAIT_RETRIES = isTesting() ? 20 : 300;
 // which is what un-sticks both the UI spinner and the waiting ai-bot — is
 // only sent once execute settles.
 const TOOL_EXECUTE_TIMEOUT_MS = isTesting() ? 3_000 : 120_000;
+// Upper bound on validating one tool request in the drain. Validation loads
+// the tool's module and input schema; a load that never settles would hold
+// the drain pass, and with it every later drain pass in the tab.
+const VALIDATE_TIMEOUT_MS = isTesting() ? 3_000 : 60_000;
+// When a validation is still running after this long, log the step it is on
+// and what the loader and store are waiting for.
+const VALIDATE_WATCHDOG_MS = isTesting() ? 1_000 : 20_000;
 
 // Promise.race with a cleared timer: the losing execute keeps running (we
 // cannot cancel it), but the run task settles and reports. That means a
@@ -477,10 +484,10 @@ export default class ToolService extends Service {
 
   private async drainToolProcessingQueue() {
     let waiterToken = toolProcessingWaiter.beginAsync();
+    let finishedProcessingTools: (() => void) | undefined;
     try {
       await this.flushToolProcessingQueue;
 
-      let finishedProcessingTools: () => void;
       this.flushToolProcessingQueue = new Promise(
         (res) => (finishedProcessingTools = res),
       );
@@ -694,9 +701,22 @@ export default class ToolService extends Service {
           // single throw killed the whole drain pass silently: the request
           // stayed claimed forever, its spinner never cleared, and the bot
           // waited forever. Report it as a failed result instead.
+          //
+          // The same holds for a validate() that never settles, and there the
+          // cost is larger: every later drain pass awaits this one, so every
+          // tool in the tab stops. Bound it like execute, and log what it is
+          // waiting on if it is slow, so the stuck step can be named.
           let isValid = false;
+          let watchdog = setTimeout(
+            () => this.logSlowValidation(messageTool),
+            VALIDATE_WATCHDOG_MS,
+          );
           try {
-            isValid = await this.validate(messageTool);
+            isValid = await withTimeout(
+              this.validate(messageTool),
+              VALIDATE_TIMEOUT_MS,
+              `Validating tool "${messageTool.name}"`,
+            );
           } catch (e) {
             let error = e instanceof Error ? e : new Error(String(e));
             console.error(
@@ -730,6 +750,11 @@ export default class ToolService extends Service {
               }
             }
             continue;
+          } finally {
+            clearTimeout(watchdog);
+            if (messageTool.id) {
+              this.validationSteps.delete(messageTool.id);
+            }
           }
           if (!isValid) {
             continue;
@@ -763,8 +788,13 @@ export default class ToolService extends Service {
           }
         }
       }
-      finishedProcessingTools!();
+    } catch (e) {
+      console.error('A tool processing pass failed', e);
     } finally {
+      // Every pass awaits the one before it, so a pass that throws must
+      // still release the next: otherwise no tool in the tab runs again, and
+      // each one that arrives shows its spinner forever.
+      finishedProcessingTools?.();
       toolProcessingWaiter.endAsync(waiterToken);
     }
   }
@@ -1241,6 +1271,28 @@ export default class ToolService extends Service {
     });
   }
 
+  // Which step each in-flight validation is on, for the slow-validation log.
+  private validationSteps = new Map<string, string>();
+
+  private markValidationStep(command: MessageTool, step: string) {
+    if (command.id) {
+      this.validationSteps.set(command.id, step);
+    }
+  }
+
+  private logSlowValidation(command: MessageTool) {
+    let step = command.id ? this.validationSteps.get(command.id) : undefined;
+    let moduleImports = this.loaderService.loader.inFlightModuleImports;
+    let queryLoads = this.store.queryLoadsInFlight();
+    console.warn(
+      `Tool "${command.name}" (${command.id}) is still validating after ${VALIDATE_WATCHDOG_MS}ms, at step: ${
+        step ?? 'before the first load'
+      }. Loader imports in flight: ${JSON.stringify(
+        moduleImports,
+      )}. Store query loads in flight: ${JSON.stringify(queryLoads)}`,
+    );
+  }
+
   async validate(command: MessageTool): Promise<boolean> {
     let error: string | undefined;
     // ai-bot ran this one itself (e.g. readRealmFile): the host has no command
@@ -1272,6 +1324,10 @@ export default class ToolService extends Service {
     } else if (!toolCodeRef) {
       error = `No command for the name "${command.name}" was found`;
     } else {
+      this.markValidationStep(
+        command,
+        `load tool module ${toolCodeRef.module}`,
+      );
       let ToolConstructor = (await getClass(
         toolCodeRef,
         this.loaderService.loader,
@@ -1289,7 +1345,9 @@ export default class ToolService extends Service {
           'service:loader-service',
         ) as LoaderService
       ).loader;
+      this.markValidationStep(command, 'load basic field mappings');
       let mappings = await basicMappings(loader);
+      this.markValidationStep(command, 'build input JSON schema');
       // `description` is the UI label only (see TOOL_CALL_DESCRIPTION_SCHEMA),
       // so it is not required here even though the tool definition given to
       // the model lists it as required.
