@@ -18,7 +18,6 @@
     ],
     "realmServer": [
       "catalog-test-subset-test",
-      "publish-unpublish-realm-test",
       "realm-policy-activation-test",
       "realm-policy-archived-seal-test",
       "realm-policy-batch-test",
@@ -29,6 +28,7 @@
       "realm-policy-explain-test",
       "realm-policy-gate-test",
       "realm-policy-non-grantable-test",
+      "realm-policy-publish-test",
       "realm-policy-query-filter-test",
       "realm-policy-query-reach-test",
       "realm-policy-render-search-test",
