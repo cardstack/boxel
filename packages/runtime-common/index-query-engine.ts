@@ -62,7 +62,6 @@ import type { SerializedError } from './error.ts';
 import type { ScreenshotManifest } from './capture-spec.ts';
 import type { DBAdapter } from './db.ts';
 import {
-  ALL_TYPES_KEY,
   coerceTypes,
   normalizeRealmMetaValue,
   type BoxelIndexTable,
@@ -1066,38 +1065,6 @@ export class IndexQueryEngine {
       .map(({ type_key }) => type_key)
       .filter((key): key is string => typeof key === 'string')
       .sort();
-  }
-
-  // The newest index generation a pass stamped on `ref`'s keys, or on the
-  // catch-all key, in a realm's type watermarks. A pass stamps the whole
-  // adoption chain of every row it touches, the chain the row leaves as well
-  // as the one it lands on, and moves the catch-all key when it cannot name
-  // them all. So while this reads the same, no card has entered or left `ref`
-  // or any type descending from it, and `instanceTypesUnder` would answer as
-  // it did. A realm with no stamp for any of them reads as 0.
-  async typeIndexGeneration(
-    realmURL: URL,
-    ref: ResolvedCodeRef,
-  ): Promise<number> {
-    let typeKeys = [...(await this.typeKeysFor(ref)), ALL_TYPES_KEY];
-    let [row] = (await this.#query([
-      'SELECT MAX(index_generation) AS generation',
-      'FROM realm_type_generations',
-      'WHERE',
-      ...every([
-        ['realm_url =', param(realmURL.href)],
-        [
-          'type_key IN',
-          ...addExplicitParens(
-            separatedByCommas(typeKeys.map((key) => [param(key)])),
-          ),
-        ],
-      ]),
-    ] as Expression)) as unknown as { generation: number | string | null }[];
-    let generation = row?.generation;
-    return typeof generation === 'string'
-      ? parseInt(generation)
-      : (generation ?? 0);
   }
 
   private async getDefinition(codeRef: CodeRef): Promise<Definition> {

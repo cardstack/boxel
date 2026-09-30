@@ -15209,8 +15209,10 @@ export class Realm {
       realmURL: this.url,
       instanceTypesUnder: (codeRef) =>
         this.#realmIndexQueryEngine.instanceTypesUnder(codeRef),
-      typeIndexGeneration: (codeRef) =>
-        this.#realmIndexQueryEngine.typeIndexGeneration(codeRef),
+      instanceTypeKeys: async () =>
+        (await this.#realmIndexQueryEngine.fetchCardTypeSummary()).instances
+          .map((summary) => summary.code_ref)
+          .sort(),
     });
   }
 

@@ -57,10 +57,10 @@ import type { OperationQueryFilterTemplate } from './types.ts';
 // card whose type descends from it. A descendant can declare a field the
 // predicate reads differently, computed where the rule's type stores it, and
 // the index then holds what that type makes of it. So the compiled policy
-// also records, for each grant, the descendants the governed realm holds
-// cards of that read one of the filter's fields differently
-// (`readsFieldsAlike`), and a search leaves their cards out of what the
-// grant admits.
+// also records, for each path a grant's filter compares, the descendants the
+// governed realm holds cards of that read that path differently
+// (`readsPathAlike`). A search keeps each comparison from admitting their
+// cards, and leaves the rest of the filter to judge them.
 //
 // What the checks do not reach:
 //
@@ -137,16 +137,16 @@ export async function compilePolicyFilter(
   }
 }
 
-// The fields of the rule's type a compiled filter reads: the first name of
-// every path its field-keyed members compare, each once. A filter's other
+// The paths a compiled filter compares, each once, as the index names them:
+// every key of its field-keyed members, `item.` left off. A filter's other
 // members read no field: `item.on` names a type, and `any`, `every` and `not`
 // only combine what they hold.
-export function fieldsFilterReads(filter: Filter): string[] {
-  let names = new Set<string>();
+export function pathsFilterReads(filter: Filter): string[] {
+  let paths = new Set<string>();
   let visit = (node: Filter) => {
     for (let operator of FIELD_KEYED_OPERATORS) {
       for (let path of Object.keys(node[operator] ?? {})) {
-        names.add(path.replace(/^item\./, '').split('.')[0]);
+        paths.add(path.replace(/^item\./, ''));
       }
     }
     node.any?.forEach(visit);
@@ -156,42 +156,89 @@ export function fieldsFilterReads(filter: Filter): string[] {
     }
   };
   visit(filter);
-  return [...names].sort();
+  return [...paths].sort();
 }
 
-const FIELD_KEYED_OPERATORS = ['eq', 'contains', 'in', 'range'] as const;
+// The members of a filter that compare fields, in either grammar a filter
+// is held in.
+export const FIELD_KEYED_OPERATORS = ['eq', 'contains', 'in', 'range'] as const;
 
-// Whether a card of the type `other` defines reads each of `fields` as a card
-// of the rule's type does, so the filter compiled against the rule's type
-// means for it what it means for the rule's own cards.
+// Whether a card of the type `other` defines reads `path` as a card of the
+// rule's type does, so a comparison compiled against the rule's type means
+// for it what it means for the rule's own cards.
 //
-// Only a field's own declaration is compared. It names the type the rest of a
-// path resolves through, so two types declaring a field alike read every path
-// under it alike. Anything else in the declaration counts as a difference,
-// whether or not the compiler would have accepted it: being computed, being
-// filled by a query, having another type, being a list rather than a single
-// value, or being absent. Treating one as different only makes the filter
-// narrower.
+// Each field on the path is compared by its declaration in the two types,
+// and a difference in anything that decides what the index holds for it
+// counts, whether or not the compiler would have accepted it: being computed,
+// being filled by a query, being a list rather than a single value, or being
+// absent. So does the type of a primitive, since a subclass of a base field
+// can index something else. A compound value's type counts only through the
+// fields the path goes on to read, which are compared in the two types'
+// definitions of it; where the two name one type, the rest of the path reads
+// alike. A link read only for its `id` reads the id of whatever card it links
+// to, so its target type does not count. `searchable` decides what the index
+// holds of a linked card's fields, which a filter never reads. Treating a
+// difference as one only makes the filter narrower.
 //
 // A predicate annotated `snapshot: true` reads what the index holds, as the
 // filter does, so for it a field computed in one type and stored in the other
 // is read alike.
-export function readsFieldsAlike(
+export async function readsPathAlike(
   ruleType: Definition,
   other: Definition,
-  fields: string[],
+  path: string,
   snapshot: boolean,
-): boolean {
-  return fields.every((name) => {
-    let declared = fieldOf(ruleType, name);
-    let redeclared = fieldOf(other, name);
+  lookupDefinition: (
+    codeRef: ResolvedCodeRef,
+  ) => Promise<Definition | undefined>,
+): Promise<boolean> {
+  let names = path.split('.');
+  let [ours, theirs] = [ruleType, other];
+  for (let [index, name] of names.entries()) {
+    let declared = fieldOf(ours, name);
+    let redeclared = fieldOf(theirs, name);
     if (!declared || !redeclared) {
       return false;
     }
-    let reading = (field: FieldDefinition) =>
-      stableStringify(snapshot ? { ...field, isComputed: false } : field);
-    return reading(declared) === reading(redeclared);
-  });
+    let last = index === names.length - 1;
+    let idOfLink =
+      (declared.type === 'linksTo' || declared.type === 'linksToMany') &&
+      index === names.length - 2 &&
+      names[index + 1] === 'id';
+    let throughCompound = !last && !idOfLink && !declared.isPrimitive;
+    let reading = (field: FieldDefinition) => {
+      let { searchable: _searchable, ...rest } = field;
+      return stableStringify({
+        ...rest,
+        ...(snapshot ? { isComputed: false } : {}),
+        ...(idOfLink || throughCompound ? { fieldOrCard: undefined } : {}),
+      });
+    };
+    if (reading(declared) !== reading(redeclared)) {
+      return false;
+    }
+    if (last || idOfLink) {
+      return true;
+    }
+    if (
+      stableStringify(declared.fieldOrCard) ===
+      stableStringify(redeclared.fieldOrCard)
+    ) {
+      return true;
+    }
+    let [ourType, theirType] = await Promise.all(
+      [declared, redeclared].map((field) =>
+        isResolvedCodeRef(field.fieldOrCard)
+          ? lookupDefinition(field.fieldOrCard)
+          : undefined,
+      ),
+    );
+    if (!ourType || !theirType) {
+      return false;
+    }
+    [ours, theirs] = [ourType, theirType];
+  }
+  return false;
 }
 
 function fieldOf(

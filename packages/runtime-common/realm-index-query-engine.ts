@@ -869,15 +869,6 @@ export class RealmIndexQueryEngine {
     );
   }
 
-  // The newest index generation stamped on `ref`'s type watermark in this
-  // realm, or on the catch-all one.
-  async typeIndexGeneration(ref: ResolvedCodeRef): Promise<number> {
-    return await this.#indexQueryEngine.typeIndexGeneration(
-      new URL(this.#realm.url),
-      ref,
-    );
-  }
-
   async fetchCardTypeSummary() {
     let results = await this.#indexQueryEngine.fetchCardTypeSummary(
       new URL(this.#realm.url),

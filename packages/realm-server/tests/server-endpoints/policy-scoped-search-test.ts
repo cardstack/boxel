@@ -164,9 +164,18 @@ const CLASSROOM_MODULE = `
   export class Classroom extends CardDef {
     @field title = contains(StringField);
     @field ownerId = contains(StringField);
+    @field visibility = contains(StringField);
     @field rank = contains(NumberField);
 
     @operation static listClassrooms = {
+      base: 'query',
+      query: {
+        filter: { type: () => Classroom },
+        sort: [{ on: () => Classroom, by: 'rank', direction: 'asc' }],
+      },
+    };
+
+    @operation static listVisibleClassrooms = {
       base: 'query',
       query: {
         filter: { type: () => Classroom },
@@ -198,6 +207,7 @@ const CLASSROOM_MODULE = `
 
 const OWN = '.providerId == actor()';
 const OWN_CLASSROOM = '.ownerId == actor()';
+const OWN_OR_PUBLIC_CLASSROOM = `${OWN_CLASSROOM} or .visibility == "public"`;
 const OPEN = '.status == "open"';
 const POSTED = '.status == "posted"';
 // Refused by the `predicate` profile, so its grant compiles no filter. It
@@ -341,7 +351,12 @@ const ENUMERABLE_CARDS: Record<string, string> = {
 
 function classroom(
   name: string,
-  attributes: { title: string; rank: number; ownerId?: string },
+  attributes: {
+    title: string;
+    rank: number;
+    ownerId?: string;
+    visibility?: string;
+  },
 ) {
   return JSON.stringify({
     data: {
@@ -373,6 +388,7 @@ const SUBTYPE_CLASSROOMS: Record<string, string> = {
   'classrooms/assigned-4.json': classroom('AssignedClassroom', {
     title: 'Assigned 4',
     rank: 4,
+    visibility: 'public',
   }),
   'classrooms/b-5.json': classroom('Classroom', {
     title: 'B 5',
@@ -558,6 +574,10 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
                     { operation: 'listClassrooms', where: OWN_CLASSROOM },
                     { operation: 'query', where: OWN_CLASSROOM },
                     { operation: 'read', where: OWN_CLASSROOM },
+                    {
+                      operation: 'listVisibleClassrooms',
+                      where: OWN_OR_PUBLIC_CLASSROOM,
+                    },
                   ],
                 },
               ]),
@@ -1125,30 +1145,77 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         assert.deepEqual(totals, [3, 3]);
       });
 
-      test("the types a grant leaves out are the realm's own descendants that read its fields differently, and a rule type with none composes as it did", async function (assert) {
+      test("a grant records as misreading a path the realm's own descendants that declare it differently, and a rule type with none composes as it did", async function (assert) {
         let policy = await realms[SUBTYPES].getCompiledPolicy();
         assert.deepEqual(policy?.issues, [], 'every grant compiles');
+        let assigned = [{ type: { name: 'AssignedClassroom' } }];
         assert.deepEqual(
           policy?.rules[0].grants.map((grant) => ({
             operation: grant.operation,
-            excluded: grant.excludedTypes?.map((type) =>
-              'name' in type ? type.name : type,
-            ),
+            misread: grant.misreadingTypes?.map(({ path, types }) => ({
+              path,
+              types: types.map(({ type }) => ({
+                type: { name: 'name' in type ? type.name : undefined },
+              })),
+            })),
           })),
           [
-            { operation: 'listClassrooms', excluded: ['AssignedClassroom'] },
-            { operation: 'query', excluded: ['AssignedClassroom'] },
-            { operation: 'read', excluded: undefined },
+            {
+              operation: 'listClassrooms',
+              misread: [{ path: 'ownerId', types: assigned }],
+            },
+            {
+              operation: 'query',
+              misread: [{ path: 'ownerId', types: assigned }],
+            },
+            { operation: 'read', misread: undefined },
+            {
+              operation: 'listVisibleClassrooms',
+              misread: [{ path: 'ownerId', types: assigned }],
+            },
           ],
-          'each query grant leaves out the one descendant the realm holds cards of that computes the owner, and a read grant carries no filter to leave anything out of',
+          'each query grant records the one descendant the realm holds cards of that computes the owner, against the owner alone, and a read grant carries no filter to record anything against',
         );
 
         let grants = await realms[GRANTS].getCompiledPolicy();
         assert.true(
           grants?.rules
             .flatMap((rule) => rule.grants)
-            .every((grant) => !('excludedTypes' in grant)),
-          'a policy whose rule type has no descendant in its realm leaves nothing out of any grant',
+            .every((grant) => !('misreadingTypes' in grant)),
+          'a policy whose rule type has no descendant in its realm records nothing on any grant',
+        );
+      });
+
+      test("a card whose type misreads one branch of a grant's predicate is still found through a branch it reads alike", async function (assert) {
+        let asA = await federatedSearch(
+          {
+            operation: 'listVisibleClassrooms',
+            on: CLASSROOM,
+            realms: [SUBTYPES],
+          },
+          PROVIDER_A,
+        );
+        assert.strictEqual(asA.status, 200, 'HTTP 200 status');
+        assert.deepEqual(
+          ids(asA),
+          ['a-1', 'elective-3', 'assigned-4', 'a-6'].map(
+            (name) => `${SUBTYPES}classrooms/${name}`,
+          ),
+          'their own classrooms, and the public assigned one, found through `visibility`; not the assigned one that is not public, which only the owner branch could admit',
+        );
+
+        let asB = await federatedSearch(
+          {
+            operation: 'listVisibleClassrooms',
+            on: CLASSROOM,
+            realms: [SUBTYPES],
+          },
+          PROVIDER_B,
+        );
+        assert.deepEqual(
+          ids(asB),
+          ['assigned-4', 'b-5'].map((name) => `${SUBTYPES}classrooms/${name}`),
+          'another caller finds the public assigned classroom too, and their own',
         );
       });
 

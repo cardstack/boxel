@@ -13,8 +13,8 @@ import { rri } from '../realm-identifiers.ts';
 import { carriesBuiltIn } from './dispatch.ts';
 import {
   compilePolicyFilter,
-  fieldsFilterReads,
-  readsFieldsAlike,
+  pathsFilterReads,
+  readsPathAlike,
 } from './policy-filter.ts';
 import {
   isDefinitionFreeBaseOperation,
@@ -90,14 +90,25 @@ export interface CompiledOperationGrant {
   // filter, which is recorded as a `policy-not-filterable` issue. That grant
   // admits no search, and its predicate is kept as it is.
   filter?: OperationQueryFilterTemplate;
-  // For a grant carrying a filter, the types a search leaves out of what it
-  // admits: the descendants of the rule's type that the governed realm holds
-  // cards of and that read a field the filter compares differently from the
-  // rule's type. `item.on` admits a descendant's cards, and for such a card
-  // the index holds what its own type makes of the field, which the predicate
-  // never reads. Leaving a type out leaves out its descendants too. Absent
-  // when there are none.
-  excludedTypes?: CodeRef[];
+  // For a grant carrying a filter, each path it compares that some card of
+  // the governed realm reads differently from the rule's type, with the types
+  // of those cards: descendants of the rule's type whose own declarations
+  // read the path otherwise. `item.on` admits a descendant's cards, and for
+  // such a card the index holds what its own type makes of the path, which
+  // the predicate never reads. So a search keeps each comparison of the path
+  // from judging those cards, and leaves the rest of the filter to. Absent
+  // when no card of the realm reads a path differently.
+  misreadingTypes?: { path: string; types: MisreadingType[] }[];
+}
+
+// A type whose cards read a path differently from the rule's type.
+export interface MisreadingType {
+  type: CodeRef;
+  // The types descending from it that the governed realm holds cards of and
+  // that read the path as the rule's type does, having redeclared it back. A
+  // type filter matches a type's descendants too, so these are named for the
+  // search to keep. Absent when there are none.
+  except?: CodeRef[];
 }
 
 export interface CompiledPolicyPredicate {
@@ -150,13 +161,14 @@ export interface PolicyCompileEnvironment {
   // The types the governed realm holds cards of that descend from `codeRef`,
   // as the first key of each row's adoption chain, sorted. Read on the
   // realm's own authority, like everything here. It reads every card of the
-  // type, so it is asked again only once `typeIndexGeneration` moves.
+  // type, so it is asked again only once `instanceTypeKeys` changes.
   instanceTypesUnder(codeRef: ResolvedCodeRef): Promise<string[]>;
-  // The newest index generation stamped on `codeRef`'s type watermark in the
-  // governed realm, or on the catch-all one. A card entering or leaving any
-  // type descending from `codeRef` moves it, so while it reads the same,
-  // `instanceTypesUnder` would answer as it did.
-  typeIndexGeneration(codeRef: ResolvedCodeRef): Promise<number>;
+  // The types the governed realm holds cards of, as the first key of each
+  // row's adoption chain, sorted: the realm's own summary of its cards, one
+  // small read. Which of them descend from a type changes only when this
+  // does, so while it reads the same, `instanceTypesUnder` would answer as it
+  // did. An edit to a card leaves it as it was.
+  instanceTypeKeys(): Promise<string[]>;
 }
 
 // The environment the cache needs beyond compiling: which card the realm's
@@ -338,11 +350,12 @@ export class RealmPolicyCache {
 // quiet the signals are. It is the same five seconds the live search cache
 // allows a result whose dependency it cannot see, for the same reason: it is
 // the staleness bound for what the signals miss. A revalidation is one narrow
-// index read plus the definition lookups, and one type-watermark read per rule
-// whose query grants' filters read a field. Only when that watermark has moved
-// does it also read the types the governed realm holds under the rule's type,
-// which reads every card of the type. A steady stream of reads pays a
-// revalidation once per interval rather than once per read.
+// index read plus the definition lookups, and, for a policy whose query
+// grants' filters read a field, a read of the governed realm's summary of the
+// types it holds cards of. Only when that has changed does it also read the
+// types the realm holds under each such rule's type, which reads every card
+// of the type. A steady stream of reads pays a revalidation once per interval
+// rather than once per read.
 const MAX_UNVALIDATED_MS = 5_000;
 
 // Every realm's policy cache in this process. A move in one realm has to
@@ -389,15 +402,13 @@ interface Compilation {
   // URLs whose realm's index moving could change what this compiles to.
   inputs: string[];
   // What the governed realm held under each rule type whose grants' filters
-  // read a field: the types a grant's `excludedTypes` were chosen from, and
-  // the type watermark read before them. A revalidation that finds the
-  // watermark unmoved skips reading them again, and one that reads them again
-  // and finds them unchanged records the watermark it read.
-  subtypes: {
-    targetType: ResolvedCodeRef;
-    generation: number;
-    keys: string[];
-  }[];
+  // read a field: the types a grant's `misreadingTypes` were chosen from.
+  subtypes: { targetType: ResolvedCodeRef; keys: string[] }[];
+  // The realm's `instanceTypeKeys`, read before `subtypes` was. A
+  // revalidation that finds them unchanged skips reading `subtypes` again,
+  // and one that reads it again and finds it unchanged records the keys it
+  // read.
+  heldTypes?: string;
 }
 
 interface Refresh {
@@ -448,19 +459,20 @@ async function stillCurrent(
       return false;
     }
   }
-  for (let entry of compilation.subtypes) {
-    // Read before the types, so a card landing between the two reads moves
-    // the watermark past the one recorded, and the next revalidation reads
-    // the types again.
-    let generation = await env.typeIndexGeneration(entry.targetType);
-    if (generation === entry.generation) {
-      continue;
+  if (compilation.subtypes.length > 0) {
+    // Read before the types under each rule, so a card of a new type landing
+    // between the reads leaves the recorded keys behind, and the next
+    // revalidation reads the types again.
+    let heldTypes = (await env.instanceTypeKeys()).join('\n');
+    if (heldTypes !== compilation.heldTypes) {
+      for (let { targetType, keys } of compilation.subtypes) {
+        let held = await env.instanceTypesUnder(targetType);
+        if (held.join('\n') !== keys.join('\n')) {
+          return false;
+        }
+      }
+      compilation.heldTypes = heldTypes;
     }
-    let held = await env.instanceTypesUnder(entry.targetType);
-    if (held.join('\n') !== entry.keys.join('\n')) {
-      return false;
-    }
-    entry.generation = generation;
   }
   return true;
 }
@@ -509,6 +521,7 @@ async function compilePolicy(
   let definitions: Compilation['definitions'] = new Map();
   let inputs = [card];
   let subtypes: Compilation['subtypes'] = [];
+  let heldTypes: string | undefined;
   let rules: CompiledPolicyRule[] = [];
   let cardURL = new URL(card);
   let issue = (code: PolicyIssueCode, path: string, message: string) =>
@@ -526,6 +539,7 @@ async function compilePolicy(
     definitions,
     inputs,
     subtypes,
+    heldTypes,
   });
   // The policy as a whole did not compile, for the reason recorded. It has no
   // rules.
@@ -821,16 +835,16 @@ async function compilePolicy(
   }
 
   // A filter is compiled against its rule's type, and `item.on` admits every
-  // type descending from it as well. Each grant's filter leaves out the
-  // descendants the governed realm holds cards of that read one of its
-  // fields differently. The realm's rows are an input from here on, since a
-  // card of a new descendant can change what a grant leaves out.
+  // type descending from it as well. For each path a grant's filter compares,
+  // the grant records the descendants the governed realm holds cards of that
+  // read the path differently. The realm's rows are an input from here on,
+  // since a card of a new descendant can change what a grant records.
   for (let rule of rules) {
     let reading = new Map<CompiledOperationGrant, string[]>();
     for (let grant of rule.grants) {
-      let fields = grant.filter ? fieldsFilterReads(grant.filter) : [];
-      if (fields.length > 0) {
-        reading.set(grant, fields);
+      let paths = grant.filter ? pathsFilterReads(grant.filter) : [];
+      if (paths.length > 0) {
+        reading.set(grant, paths);
       }
     }
     if (reading.size === 0) {
@@ -844,12 +858,12 @@ async function compilePolicy(
       inputs.push(env.realmURL);
       onInput(env.realmURL);
     }
-    // Read before the types, as a revalidation reads them.
-    let generation = await env.typeIndexGeneration(rule.targetType);
+    // Read before the types under any rule, as a revalidation reads them.
+    heldTypes ??= (await env.instanceTypeKeys()).join('\n');
     let keys = await env.instanceTypesUnder(rule.targetType);
-    subtypes.push({ targetType: rule.targetType, generation, keys });
+    subtypes.push({ targetType: rule.targetType, keys });
     let own = new Set([env.typeKey(rule.targetType), ruleEntry.types[0]]);
-    let excluded = new Map<CompiledOperationGrant, CodeRef[]>();
+    let held: HeldType[] = [];
     let unnamed: string[] = [];
     for (let key of keys) {
       if (own.has(key)) {
@@ -861,47 +875,85 @@ async function compilePolicy(
         unnamed.push(key);
         continue;
       }
-      // A type whose definition cannot be read, or whose key names it only in
-      // a shape `codeRefFromInternalKey` refuses, cannot be shown to read the
-      // filter's fields alike, so it is left out of every grant.
+      // A type whose key names it only in a shape `codeRefFromInternalKey`
+      // refuses has no definition read here, and one whose definition cannot
+      // be read has none either. Neither can be shown to read a path alike.
       let resolved = named
         ? attempt(() => env.resolveCodeRef(named, cardURL))
         : undefined;
       let entry = resolved ? await readType(resolved) : undefined;
-      for (let [grant, fields] of reading) {
-        if (
-          !entry ||
-          !readsFieldsAlike(
-            ruleEntry.definition,
-            entry.definition,
-            fields,
-            grant.where?.snapshot ?? false,
-          )
-        ) {
-          excluded.set(grant, [
-            ...(excluded.get(grant) ?? []),
-            resolved ?? ref,
-          ]);
-        }
-      }
+      held.push({ key, ref: resolved ?? ref, entry });
     }
-    rule.grants = rule.grants.map((grant) => {
-      // A type no filter can name cannot be left out, so a grant that would
-      // have to leave it out scopes no search at all.
-      if (unnamed.length > 0 && reading.has(grant)) {
+    let grants: CompiledOperationGrant[] = [];
+    for (let grant of rule.grants) {
+      let paths = reading.get(grant);
+      if (!paths) {
+        grants.push(grant);
+        continue;
+      }
+      // A type no filter can name cannot be kept from a comparison, so a
+      // grant whose filter compares a field scopes no search at all.
+      if (unnamed.length > 0) {
         issue(
           'policy-not-filterable',
           `${grant.path}.where`,
-          `the grant is on a query, and the realm holds cards of ${unnamed.join(', ')}, which descend from ${rule.targetType.name} and which no search filter can name, so its filter could not leave them out`,
+          `the grant is on a query, and the realm holds cards of ${unnamed.join(', ')}, which descend from ${rule.targetType.name} and which no search filter can name, so its filter could not be kept from misreading them`,
         );
         let { filter: _filter, ...unfiltered } = grant;
-        return unfiltered;
+        grants.push(unfiltered);
+        continue;
       }
-      let excludedTypes = excluded.get(grant);
-      return excludedTypes ? { ...grant, excludedTypes } : grant;
-    });
+      let snapshot = grant.where?.snapshot ?? false;
+      let misreadingTypes: { path: string; types: MisreadingType[] }[] = [];
+      for (let path of paths) {
+        let misreading: HeldType[] = [];
+        for (let type of held) {
+          if (
+            !type.entry ||
+            !(await readsPathAlike(
+              ruleEntry.definition,
+              type.entry.definition,
+              path,
+              snapshot,
+              readDefinition,
+            ))
+          ) {
+            misreading.push(type);
+          }
+        }
+        if (misreading.length === 0) {
+          continue;
+        }
+        let misreads = new Set(misreading.map(({ key }) => key));
+        misreadingTypes.push({
+          path,
+          types: misreading.map(({ key, ref }) => {
+            let except = held
+              .filter(
+                (other) =>
+                  !misreads.has(other.key) && other.entry?.types.includes(key),
+              )
+              .map((other) => other.ref);
+            return except.length > 0 ? { type: ref, except } : { type: ref };
+          }),
+        });
+      }
+      grants.push(
+        misreadingTypes.length > 0 ? { ...grant, misreadingTypes } : grant,
+      );
+    }
+    rule.grants = grants;
   }
   return compiled();
+}
+
+// A type the governed realm holds cards of under a rule's type: the key the
+// index records it by, the ref a type filter names it by, and its definition
+// entry where one could be read.
+interface HeldType {
+  key: string;
+  ref: CodeRef;
+  entry?: { definition: Definition; types: string[] };
 }
 
 // The type a held key names, for a key `codeRefFromInternalKey` refuses: one
