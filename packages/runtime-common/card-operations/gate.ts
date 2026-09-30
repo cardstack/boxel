@@ -56,9 +56,9 @@ import {
 // writable through a grant, one grant could be made into every grant. Were any
 // of it readable through one, a caller the realm admits only through grants
 // could read the whole policy that judges them: every rule, whom it grants,
-// and under which predicates. So these are refused to every caller the ACL
-// declined, however the compiled policy came to grant them, and only the
-// realm's own permissions reach them:
+// and under which predicates. So an operation invoked on any of these is
+// refused to every caller the ACL declined, however the compiled policy came to
+// grant it:
 //
 // - An operation declared `nonGrantable` on the target's type, refused before
 //   any rule is matched, or on any type the target's type descends from,
@@ -119,9 +119,12 @@ import {
 // its link closure, whatever the linked cards' types, and the results of its
 // query-backed fields. So a grant on a type reaches every card that type's
 // representation carries, and granting `read` on a type asserts that all of it
-// is fit for every caller the grant admits. Nothing here narrows that reach. A
-// response's shape never depends on how its caller was authorized, so a
-// narrower one has to be declared on the operation, for every caller alike.
+// is fit for every caller the grant admits. Nothing here narrows that reach,
+// and that includes a policy card or the realm's config card that a granted
+// card links to: the rules above refuse an operation invoked on one, not a card
+// assembled into another's closure. A response's shape never depends on how
+// its caller was authorized, so a narrower one has to be declared on the
+// operation, for every caller alike.
 // ============================================================================
 
 // What the gate reads for a caller the realm ACL declined. The realm supplies

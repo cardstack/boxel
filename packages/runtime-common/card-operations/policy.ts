@@ -128,7 +128,7 @@ export interface PolicyCompileEnvironment {
   toURL(identifier: string): URL;
   // Whether an adoption chain, as the index or the definition cache records
   // one, makes a card or a type a RealmPolicy. The gate asks the same of every
-  // card a grant would write, so the two agree on what a policy card is.
+  // card a grant would reach, so the two agree on what a policy card is.
   isPolicyCard(types: string[]): boolean;
   // The key a type is recorded under in an adoption chain, the index's and
   // the definition cache's alike.
