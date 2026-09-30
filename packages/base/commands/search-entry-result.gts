@@ -1,3 +1,4 @@
+import { eq } from '@cardstack/boxel-ui/helpers';
 import { IconSearchThick } from '@cardstack/boxel-ui/icons';
 import {
   CardDef,
@@ -12,6 +13,7 @@ import BooleanField from '../boolean';
 import CodeRefField from '../code-ref';
 import NumberField from '../number';
 import { QueryField } from './search-card-result';
+import { EntryResultRow, SearchResultList } from './search-result-list';
 
 export class SearchEntriesInput extends CardDef {
   static displayName = 'Search Entries';
@@ -57,21 +59,64 @@ export class SearchEntriesResult extends CardDef {
   @field cardDescription = contains(StringField);
 
   static embedded = class Embedded extends Component<typeof this> {
+    // `results` is one page; `total` is the full match count across realms. Show
+    // `of {total}` only when the page is truncated, so a capped search (the
+    // tool's default limit is 5) still signals there are more matches — the
+    // paginator can't, since it only pages the rows already returned.
+    get countLabel() {
+      let shown = this.args.model.results?.length ?? 0;
+      let total = this.args.model.total;
+      let hasMore = total != null && total > shown;
+      let noun = shown === 1 && !hasMore ? 'result' : 'results';
+      return hasMore ? `${shown} of ${total} ${noun}` : `${shown} ${noun}`;
+    }
+
     <template>
       <div data-test-search-entries-result>
-        <p>{{@model.results.length}}
-          of
-          {{@model.total}}
-          results{{if @model.incomplete ' (incomplete: a realm failed)' ''}}</p>
-        <ol>
-          {{#each @model.results as |result|}}
-            <li data-test-search-entry={{result.url}}>
-              {{if result.cardTitle result.cardTitle result.name}}
-              ({{result.url}})
-            </li>
-          {{/each}}
-        </ol>
+        <SearchResultList @items={{@model.results}} as |visibleResults|>
+          <p class='result-count' data-test-search-entries-count>
+            {{this.countLabel}}{{if
+              @model.incomplete
+              ' (incomplete: a realm failed)'
+              ''
+            }}
+          </p>
+          <ol class='result-list' data-test-result-list>
+            {{#each visibleResults key='url' as |result|}}
+              <EntryResultRow
+                @url={{result.url}}
+                @kind={{result.kind}}
+                @format='atom'
+                @context={{@context}}
+                @fallbackLabel={{if
+                  result.cardTitle
+                  result.cardTitle
+                  result.name
+                }}
+              />
+            {{/each}}
+            {{#if (eq @model.results.length 0)}}
+              <li class='empty' data-test-search-entries-empty>No entries were
+                found.</li>
+            {{/if}}
+          </ol>
+        </SearchResultList>
       </div>
+      <style scoped>
+        .result-count {
+          margin: 0 0 var(--boxel-sp-xs);
+          font-weight: 500;
+          color: var(--muted-foreground);
+        }
+        .result-list {
+          list-style-type: none;
+          margin: 0;
+          padding: 0;
+        }
+        .empty {
+          font-weight: 500;
+        }
+      </style>
     </template>
   };
 }
