@@ -1,4 +1,9 @@
-import { click, fillIn, type RenderingTestContext } from '@ember/test-helpers';
+import {
+  click,
+  fillIn,
+  waitFor,
+  type RenderingTestContext,
+} from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
@@ -18,6 +23,7 @@ import type StoreService from '@cardstack/host/services/store';
 import {
   testRealmURL,
   provideConsumeContext,
+  realmConfigCardJSON,
   setupCardLogs,
   setupLocalIndexing,
   setupIntegrationTestRealm,
@@ -87,6 +93,45 @@ const educationPolicy = policyDocument([
         where: { bxl: rosterPredicate, snapshot: true },
       },
       { operation: 'listMySchedules', where: providerPredicate },
+    ],
+  },
+]);
+
+// A realm whose policy lets a teacher delete the classrooms they teach. The
+// grant that fails comes first, so the answer shows a predicate that did not
+// hold ahead of the one that admitted the delete.
+const TEACHER = '@teacher:localhost';
+const COLLEAGUE = '@colleague:localhost';
+const leadsPredicate = '.leadTeacherIds | any(. == actor())';
+const teachesPredicate = '.teacherIds | any(. == actor())';
+
+const classroomModule = `
+  import { containsMany, field, CardDef } from "@cardstack/base/card-api";
+  import StringField from "@cardstack/base/string";
+
+  export class Classroom extends CardDef {
+    @field teacherIds = containsMany(StringField);
+    @field leadTeacherIds = containsMany(StringField);
+  }
+`;
+
+function classroom(teacherIds: string[]) {
+  return {
+    data: {
+      type: 'card',
+      attributes: { teacherIds, leadTeacherIds: [] },
+      meta: { adoptsFrom: { module: '../classroom', name: 'Classroom' } },
+    },
+  };
+}
+
+const classroomPolicy = policyDocument([
+  {
+    targetType: { module: '../classroom', name: 'Classroom' },
+    grants: [
+      { operation: 'delete', where: leadsPredicate },
+      { operation: 'delete', where: teachesPredicate },
+      { operation: 'update' },
     ],
   },
 ]);
@@ -435,5 +480,139 @@ module('Integration | realm policy', function (hooks) {
       { bxl: providerPredicate, snapshot: true },
       'an in-memory predicate serializes to its document shape',
     );
+  });
+
+  // The in-browser realm serves the test's requests without vouching for a
+  // session, so an explain is asked by nobody, and nobody may ask one only in
+  // a realm anyone may read. The teacher reads it like anyone else and holds
+  // no write, so only the policy can let them delete a classroom.
+  async function renderClassroomPolicy() {
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      permissions: {
+        '*': ['read'],
+        '@testuser:localhost': ['read', 'write', 'realm-owner'],
+      },
+      contents: {
+        'realm.json': realmConfigCardJSON({
+          policy: `${testRealmURL}policies/classrooms`,
+        }),
+        'classroom.gts': classroomModule,
+        'classrooms/room-204.json': classroom([TEACHER]),
+        'classrooms/room-205.json': classroom([COLLEAGUE]),
+        'policies/classrooms.json': classroomPolicy,
+      },
+    });
+    await getService('realm').login(testRealmURL);
+    // Looking the service up arms the transport the card's own
+    // `operations()` call sends its explain through.
+    getService('operations');
+    let policy = await loadPolicy('policies/classrooms');
+    await renderCard(loader, policy, 'isolated');
+  }
+
+  async function ask(actor: string, target: string, operation: string) {
+    await fillIn('[data-test-explain-actor]', actor);
+    await fillIn('[data-test-explain-target]', target);
+    await fillIn('[data-test-explain-operation]', operation);
+    await click('[data-test-explain-submit]');
+    await waitFor('[data-test-explanation], [data-test-explain-refusal]', {
+      timeout: 10_000,
+    });
+  }
+
+  function grantsShown() {
+    return [...document.querySelectorAll('[data-test-explanation-grant]')].map(
+      (el) => [
+        el.querySelector('[data-test-explanation-grant-where]')?.textContent,
+        el.getAttribute('data-test-explanation-grant'),
+      ],
+    );
+  }
+
+  test('the policy explains what it decides for one caller, one card and one operation', async function (assert) {
+    await renderClassroomPolicy();
+
+    assert.dom('[data-test-realm-policy-explain]').exists();
+    assert.dom('[data-test-explain-submit]').isDisabled('nothing to ask yet');
+    await ask(TEACHER, `${testRealmURL}classrooms/room-204`, 'delete');
+
+    assert.strictEqual(
+      document
+        .querySelector('[data-test-explain-refusal]')
+        ?.textContent?.trim(),
+      undefined,
+      'the realm answers the question rather than refusing it',
+    );
+    assert.dom('[data-test-explanation-decision]').hasText('allowed');
+    assert
+      .dom('[data-test-explanation-reason]')
+      .hasText('A grant in this policy admits it.');
+    assert.dom('[data-test-explanation-actor]').hasText(TEACHER);
+    assert
+      .dom('[data-test-explanation-acl]')
+      .hasText('read', "the realm's own permissions let the teacher only read");
+    assert
+      .dom('[data-test-explanation-refusal]')
+      .doesNotExist('an allowed invocation has no refusal to report');
+    assert
+      .dom('[data-test-explanation-rule]')
+      .exists({ count: 1 }, 'the one rule governing a classroom');
+    assert.deepEqual(
+      grantsShown(),
+      [
+        [leadsPredicate, 'did-not-hold'],
+        [teachesPredicate, 'held'],
+      ],
+      'each delete grant is listed with its predicate and what it said, and the update grant is not',
+    );
+    assert
+      .dom(
+        '[data-test-explanation-grant="held"] [data-test-explanation-admitting]',
+      )
+      .exists('the grant that admitted the delete is marked');
+    assert
+      .dom('[data-test-explanation-admitting]')
+      .exists({ count: 1 }, 'and no other grant is');
+  });
+
+  test('the policy explains a refusal, and says when a question is refused', async function (assert) {
+    await renderClassroomPolicy();
+
+    await ask(TEACHER, `${testRealmURL}classrooms/room-205`, 'delete');
+    assert.dom('[data-test-explanation-decision]').hasText('denied');
+    assert
+      .dom('[data-test-explanation-reason]')
+      .hasText(
+        'Grants for this operation match the card, and none of their conditions holds.',
+      );
+    assert
+      .dom('[data-test-explanation-refusal]')
+      .hasText(
+        '403 operation-not-permitted',
+        'the teacher may read the realm, so they would be told the gate refused them',
+      );
+    assert.deepEqual(
+      grantsShown(),
+      [
+        [leadsPredicate, 'did-not-hold'],
+        [teachesPredicate, 'did-not-hold'],
+      ],
+      'neither delete grant holds for a classroom the teacher does not teach',
+    );
+    assert
+      .dom('[data-test-explanation-admitting]')
+      .doesNotExist('no grant admitted the delete');
+
+    await ask(TEACHER, `${testRealmURL}classrooms/room-999`, 'delete');
+    assert
+      .dom('[data-test-explain-refusal]')
+      .hasText(
+        'no such target',
+        'a card that is not there is refused the way the realm refuses one',
+      );
+    assert
+      .dom('[data-test-explanation]')
+      .doesNotExist('and the earlier answer is not left on the page');
   });
 });
