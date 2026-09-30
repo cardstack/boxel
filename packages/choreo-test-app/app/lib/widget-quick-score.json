@@ -1,0 +1,226 @@
+{
+  "duration": 49.737143,
+  "audio": "widget-tour/quick-george.mp3",
+  "provider": "ElevenLabs",
+  "narrator": "George",
+  "voiceSettings": {
+    "stability": 0.48,
+    "similarity_boost": 0.75,
+    "style": 0.28,
+    "use_speaker_boost": true,
+    "speed": 1.12
+  },
+  "chapters": [
+    {
+      "title": "Same elements. New possibilities.",
+      "category": "UX / Continuity",
+      "text": "Watch this. A profile becomes an editor. A thumbnail becomes the hero. These are the same live elements, keeping their identity as the interface changes around them.",
+      "at": 0.0
+    },
+    {
+      "title": "A whole interface, choreographed.",
+      "category": "UX / Orchestration",
+      "text": "Now coordinate the whole scene. Messages make room for each other. Change direction mid-flight, and the motion responds. Open a card, and everything else knows where to go.",
+      "at": 9.567
+    },
+    {
+      "title": "Time becomes a control.",
+      "category": "Interaction / Time",
+      "text": "Even time becomes interactive. Scrub the kiln backwards: the app reconstructs what happened. Then flick a puck, and watch the choreography follow the consequences of your gesture.",
+      "at": 18.75
+    },
+    {
+      "title": "The interface enters space.",
+      "category": "Spatial computing",
+      "text": "Now give the interface depth. Open a real app inside a spatial device. Fly into a photograph. The camera and the interface share the same choreography, so space becomes part of the interaction.",
+      "at": 28.004
+    },
+    {
+      "title": "Direct it. Scrub it. Build it.",
+      "category": "Filmmaking / Build Order",
+      "text": "And now, direct a film. One continuous camera move carries the story. Scrub an entire edit, then finish in Build Order: arrange the beats, retime the reveal, and play it again. That is Choreo.",
+      "at": 38.58
+    }
+  ],
+  "actions": [
+    {
+      "phrase": "profile becomes",
+      "demo": "inline-edit",
+      "selector": "[data-test-toggle]",
+      "at": 1.08,
+      "chapter": 0
+    },
+    {
+      "phrase": "thumbnail becomes",
+      "demo": "lightbox",
+      "selector": ".shot",
+      "at": 2.879,
+      "chapter": 0
+    },
+    {
+      "phrase": "keeping their identity",
+      "demo": "lightbox",
+      "selector": "[aria-label=\"Close\"]",
+      "at": 6.177,
+      "chapter": 0
+    },
+    {
+      "phrase": "interface changes",
+      "demo": "layout",
+      "selector": ".replay",
+      "at": 7.465,
+      "chapter": 0
+    },
+    {
+      "phrase": "Messages make room",
+      "demo": "inbox",
+      "selector": ".inbox-compose",
+      "at": 11.25,
+      "chapter": 1
+    },
+    {
+      "phrase": "each other",
+      "demo": "inbox",
+      "selector": ".inbox-compose",
+      "at": 12.307,
+      "chapter": 1
+    },
+    {
+      "phrase": "Change direction",
+      "demo": "interrupt",
+      "selector": ".slot",
+      "index": 3,
+      "at": 13.003,
+      "chapter": 1
+    },
+    {
+      "phrase": "mid-flight",
+      "demo": "interrupt",
+      "selector": ".slot",
+      "index": 0,
+      "at": 13.816,
+      "chapter": 1
+    },
+    {
+      "phrase": "motion responds",
+      "demo": "interrupt",
+      "selector": ".slot",
+      "index": 2,
+      "at": 14.664,
+      "chapter": 1
+    },
+    {
+      "phrase": "Open a card",
+      "demo": "sequence",
+      "selector": ".study-card",
+      "index": 1,
+      "at": 16.022,
+      "chapter": 1
+    },
+    {
+      "phrase": "time becomes interactive",
+      "demo": "fold",
+      "selector": "input[type=range]",
+      "kind": "range",
+      "value": 0.8,
+      "at": 19.029,
+      "chapter": 2
+    },
+    {
+      "phrase": "kiln backwards",
+      "demo": "fold",
+      "selector": "input[type=range]",
+      "kind": "range",
+      "value": 0.25,
+      "at": 20.991,
+      "chapter": 2
+    },
+    {
+      "phrase": "flick a puck",
+      "demo": "hang",
+      "selector": ".hang-lane",
+      "kind": "shot",
+      "at": 24.091,
+      "chapter": 2
+    },
+    {
+      "phrase": "consequences",
+      "demo": "hang",
+      "selector": ".hang-lane",
+      "kind": "shot",
+      "at": 26.274,
+      "chapter": 2
+    },
+    {
+      "phrase": "Open a real app",
+      "demo": "mockup",
+      "selector": ".mg-icon",
+      "at": 29.629,
+      "chapter": 3
+    },
+    {
+      "phrase": "spatial device",
+      "demo": "mockup",
+      "selector": "[aria-label^=\"Close \"]",
+      "at": 30.976,
+      "chapter": 3
+    },
+    {
+      "phrase": "Fly into a photograph",
+      "demo": "camera",
+      "selector": ".cam-frame",
+      "index": 1,
+      "at": 32.531,
+      "chapter": 3
+    },
+    {
+      "phrase": "share the same choreography",
+      "demo": "camera",
+      "selector": "[aria-label=\"Love this one\"]",
+      "at": 35.051,
+      "chapter": 3
+    },
+    {
+      "phrase": "direct a film",
+      "demo": "long-take",
+      "selector": ".lt-seg button",
+      "index": 1,
+      "at": 39.01,
+      "chapter": 4
+    },
+    {
+      "phrase": "Scrub an entire edit",
+      "demo": "playhead",
+      "selector": "input[type=range]",
+      "kind": "range",
+      "value": 0.75,
+      "at": 42.713,
+      "chapter": 4
+    },
+    {
+      "phrase": "finish in Build Order",
+      "demo": "build-order",
+      "selector": "input[type=range]",
+      "kind": "range",
+      "value": 0,
+      "at": 44.373,
+      "chapter": 4
+    },
+    {
+      "phrase": "arrange the beats",
+      "demo": "build-order",
+      "selector": "[aria-label=\"Play\"]",
+      "at": 45.476,
+      "chapter": 4
+    },
+    {
+      "phrase": "play it again",
+      "demo": "build-order",
+      "selector": "input[type=range]",
+      "kind": "range",
+      "value": 0.8,
+      "at": 47.404,
+      "chapter": 4
+    }
+  ]
+}

@@ -2,6 +2,7 @@ import Service, { service } from '@ember/service';
 
 import {
   CAPTURE_SERVING_PREFIX,
+  CAPTURE_SERVING_PREFIXES,
   CAPTURE_URL_TOKEN_TTL_MS,
   MAX_CAPTURE_URLS_PER_SIGNING_REQUEST,
   SupportedMimeType,
@@ -37,7 +38,7 @@ interface PendingBatch {
 }
 
 // Mints and caches signed capture URLs — the `?token=` variants that
-// authorize a `_screenshot/` GET without an Authorization header, for the
+// authorize a `_capture/` GET without an Authorization header, for the
 // fetches the auth service worker cannot reach (`<object>`/`<embed>` loads,
 // new-tab navigations). One memo per durable URL, re-minted when its token
 // nears expiry; concurrent requests against the same realm coalesce into a
@@ -142,11 +143,16 @@ export default class CaptureUrlSignerService extends Service {
 }
 
 // The realm root a capture URL serves from: everything up to its
-// `_screenshot/` segment. Throws on anything else, so a mistyped URL fails
-// at the call site rather than as a realm-server 400.
+// `_capture/` segment (or the legacy `_screenshot/` one). Throws on anything
+// else, so a mistyped URL fails at the call site rather than as a
+// realm-server 400.
 export function realmRootOfCaptureURL(durableUrl: string): string {
-  let marker = durableUrl.indexOf(CAPTURE_SERVING_PREFIX);
-  if (marker < 1) {
+  let marker = Math.min(
+    ...CAPTURE_SERVING_PREFIXES.map((prefix) =>
+      durableUrl.indexOf(prefix),
+    ).filter((index) => index >= 1),
+  );
+  if (!Number.isFinite(marker)) {
     throw new Error(
       `${durableUrl} is not a capture URL (expected a ${CAPTURE_SERVING_PREFIX} segment)`,
     );

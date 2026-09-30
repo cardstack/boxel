@@ -1,0 +1,17 @@
+{
+  "extends": "@ember/library-tsconfig",
+  "include": ["src/**/*"],
+  "compilerOptions": {
+    "allowJs": true,
+    "baseUrl": ".",
+    "declaration": false,
+    "declarationMap": false,
+    "emitDeclarationOnly": false,
+    "noEmit": true,
+    "paths": {
+      "choreo-gallery/*": ["src/*"]
+    },
+    "rootDir": "./src",
+    "types": ["ember-source/types"]
+  }
+}

@@ -272,7 +272,7 @@ module(basename(import.meta.filename), function () {
     });
 
     test('unattributedMs is absent when the visit recorded no step buckets', function (assert) {
-      // A screenshot capture's components are the `screenshot*` fields, not
+      // A capture's components are the `capture*` fields, not
       // step buckets — reporting its whole elapsed time as unattributed
       // would read as plumbing that isn't there.
       let response = buildFakeSuccessVisitResponse();
