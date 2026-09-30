@@ -625,7 +625,7 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
     isolatedLog.debug(`Fetching isolated HTML for ${cardURL.href}`);
     scopedCSSLog.debug(`Fetching scoped CSS for ${cardURL.href}`);
 
-    let [headHTML, isolatedHTML, scopedCSS] = await Promise.all([
+    let [headMarkup, isolatedMarkup, scopedCSS] = await Promise.all([
       retrieveHeadHTML({
         cardURL,
         dbAdapter,
@@ -645,21 +645,36 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
     // The page is a read rooted at the card, so a format its type's `read`
     // declares unshareable is served data-only here as on every other route:
     // no markup of it is injected, and the host renders the card from its
-    // data once it boots. Asked only of a card the index holds markup for, so
-    // a path naming no card costs no definition lookup.
-    if (headHTML != null || isolatedHTML != null) {
-      let unshareableFormats = await unshareableFormatsForPage(
-        cardURL,
-        routedRealm,
-        routingDeps,
-      );
-      if (unshareableFormats.includes('head')) {
-        headHTML = null;
+    // data once it boots. Each format is judged by the card its markup was
+    // read from, which the page URL can resolve to more than one of, and only
+    // where some markup was found, so a path naming no card costs no
+    // definition lookup.
+    let formatsFor = new Map<string, Promise<PrerenderedHtmlFormat[]>>();
+    let withheld = async (
+      markup: { html: string | null; cardURL: URL | null },
+      format: PrerenderedHtmlFormat,
+    ) => {
+      if (markup.html == null || !markup.cardURL) {
+        return false;
       }
-      if (unshareableFormats.includes('isolated')) {
-        isolatedHTML = null;
+      let key = markup.cardURL.href;
+      let formats = formatsFor.get(key);
+      if (!formats) {
+        formats = unshareableFormatsForPage(
+          markup.cardURL,
+          routedRealm,
+          routingDeps,
+        );
+        formatsFor.set(key, formats);
       }
-    }
+      return (await formats).includes(format);
+    };
+    let [headWithheld, isolatedWithheld] = await Promise.all([
+      withheld(headMarkup, 'head'),
+      withheld(isolatedMarkup, 'isolated'),
+    ]);
+    let headHTML = headWithheld ? null : headMarkup.html;
+    let isolatedHTML = isolatedWithheld ? null : isolatedMarkup.html;
 
     let doc = new JSDOM().window.document;
     if (headHTML != null) {

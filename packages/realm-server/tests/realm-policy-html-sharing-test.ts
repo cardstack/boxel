@@ -209,12 +209,12 @@ function roster(name: string, title: string, students: string[]) {
   });
 }
 
-function notice(name: string, subject: string) {
+function notice(name: string, subject: string, module = '../notice') {
   return JSON.stringify({
     data: {
       type: 'card',
       attributes: { subject },
-      meta: { adoptsFrom: { module: '../notice', name } },
+      meta: { adoptsFrom: { module, name } },
     },
   });
 }
@@ -301,6 +301,12 @@ module(basename(import.meta.filename), function (hooks) {
             'notice.gts': NOTICE_MODULE,
             'notices/open.json': notice('Notice', 'Open house'),
             'notices/sealed.json': notice('SealedNotice', 'Sealed ballot'),
+            // An index card, which its page is served at the bare path of.
+            'notices/board/index.json': notice(
+              'SealedNotice',
+              'Board minutes',
+              '../../notice',
+            ),
           },
           permissions: {
             '*': ['read'],
@@ -821,6 +827,26 @@ module(basename(import.meta.filename), function (hooks) {
       assert.true(
         sealed.text.includes('<title>Boxel</title>'),
         'the page carries the default title in its place',
+      );
+    });
+
+    test('an index card served at its bare path is judged by its own read', async function (assert) {
+      // The page URL names no card of its own: the markup is read from the
+      // index card beneath it, whose type is the one that withholds it.
+      let markup = await stored(`${NOTICES}notices/board/index`);
+      assert.true(
+        (markup?.isolated_html ?? '').includes('data-notice-body'),
+        'the realm stores the index card’s isolated markup',
+      );
+      let board = await page(`${NOTICES}notices/board`);
+      assert.strictEqual(board.status, 200, 'the page is served');
+      assert.false(
+        board.text.includes('data-notice-body'),
+        'no isolated markup is injected',
+      );
+      assert.false(
+        board.text.includes('Notice head: Board minutes'),
+        'and no head markup',
       );
     });
 
