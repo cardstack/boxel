@@ -871,6 +871,42 @@ those are module source, a data file or a card's whole document, and a verbatim
 replacement can change a card's type out from under the grant that admitted it.
 The administration routes do not act on a card at all.
 
+### Stored bytes, and code
+
+A `readSource` grant is honored on the routes that serve a path's bytes, the
+`card+source` read and the realm's file serve, as it is through `operations()`.
+It reaches a data file by the `FileDef` its extension names, and a card's `.json`
+by the card's own type. Grant it with care. A card's `.json` is its whole stored
+document, including every field a `read` projection omits, so a `readSource`
+grant beside a narrower `read` hands the caller everything the `read` was
+written to leave out.
+
+Code is never granted. A module's source, the transpiled module a browser's
+`import` loads, and a directory listing are served only to a caller the realm's
+own permissions let read it:
+
+- A rule whose `targetType` is module source (`TsFileDef`, `GtsFileDef`, or a
+  type descending from one) compiles to nothing and records
+  `grants-module-source`. The rest of the policy applies.
+- A rule on `FileDef` reaches every data file and no module.
+- A directory has no type, so no rule can name one.
+
+A caller who reaches the realm only through grants is told of each of these
+what they are told of a path that holds nothing, and a copy the realm cached
+for a reader is never served to them.
+
+So code mode, which edits a realm's modules and browses its file tree, needs
+the realm's own read permission. The host does not lead a caller without it
+there: the submode switcher, a card's error and an attached file offer no way
+in, and the assistant's tools that open code mode refuse. A caller who arrives
+anyway, by a shared link, finds the file tree and every module refused, and can
+open only a file a grant reaches.
+
+That is the one place the difference between a card's `.json` and its `read`
+could be seen side by side: with a `readSource` grant and no `read`, the editor
+shows the stored document beside a preview that is refused. The host keeps such
+a caller from being led there, but it is not a boundary. The endpoints are.
+
 ## Asking a policy what it decides
 
 A realm's policy widens what the realm's own permissions allow. A policy

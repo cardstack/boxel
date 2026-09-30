@@ -29,6 +29,7 @@
       "realm-policy-non-grantable-test",
       "realm-policy-query-filter-test",
       "realm-policy-query-reach-test",
+      "realm-policy-render-search-test",
       "realm-policy-row-reach-test",
       "realm-policy-source-read-test",
       "realm-policy-write-lock-test",

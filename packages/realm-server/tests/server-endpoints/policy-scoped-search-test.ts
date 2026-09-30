@@ -1396,7 +1396,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         let { query: resolved } = await resolveNamedQuery(
           realms[COARSE].operationCore,
           declared,
-          { actor: PROVIDER_A, realms: [COARSE] },
+          { principal: { kind: 'user', user: PROVIDER_A }, realms: [COARSE] },
         );
         let adHoc = await federatedSearch(resolved, PROVIDER_A);
         let again = await federatedSearch(resolved, PROVIDER_A);
@@ -1546,7 +1546,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           let { query: resolved } = await resolveNamedQuery(
             realms[COARSE].operationCore,
             body,
-            { actor: PROVIDER_A, realms: [COARSE] },
+            { principal: { kind: 'user', user: PROVIDER_A }, realms: [COARSE] },
           );
           let query = parseSearchEntryQueryFromPayload(resolved);
           query.itemQuery = applyServerSearchPageBound(query.itemQuery);

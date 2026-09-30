@@ -10,9 +10,11 @@ import type {
 } from '@cardstack/runtime-common';
 import {
   policyQueryScope,
+  RealmAuthorityPolicyScopeError,
   searchInvocation,
   type OperationCore,
   type OperationDefinition,
+  type SearchPrincipal,
 } from '@cardstack/runtime-common/card-operations';
 import type { Definition } from '@cardstack/runtime-common/definitions';
 
@@ -110,6 +112,8 @@ const OWN_FILTER = {
 // A grant as a test writes it. Its position in the policy is filled in.
 type Grant = Omit<CompiledOperationGrant, 'path'>;
 
+// `reads` counts how many times the compiled policy is read, and `ruleOn` is
+// the type the policy's one rule targets.
 function stubCore(
   grants: Grant[],
   {
@@ -167,7 +171,7 @@ function scope(
   return policyQueryScope(stubCore(grants), {
     operation,
     types,
-    actor: ACTOR,
+    principal: { kind: 'user', user: ACTOR },
   });
 }
 
@@ -184,6 +188,43 @@ module(basename(import.meta.filename), function () {
       result.kind === 'scoped' ? result.filters : undefined,
       [OWN],
       'the filter in the grammar the engine runs, with actor() filled in',
+    );
+  });
+
+  test('a realm-authority principal is refused before the policy is read, whatever the policy grants', async function (assert) {
+    let reads = { policy: 0 };
+    let core = stubCore(
+      [
+        { operation: 'listOpen', filter: OWN_FILTER },
+        { operation: 'listOpen', filter: { 'item.on': SCHEDULE } },
+      ],
+      { reads },
+    );
+    let principal: SearchPrincipal = { kind: 'realm-authority', user: ACTOR };
+
+    await assert.rejects(
+      policyQueryScope(core, {
+        operation: 'listOpen',
+        types: [SCHEDULE],
+        principal,
+      }),
+      (e: unknown) =>
+        e instanceof RealmAuthorityPolicyScopeError &&
+        e.message.includes(REALM) &&
+        e.message.includes('"listOpen"'),
+      'the lookup raises rather than answering with a scope, naming the realm and the query',
+    );
+    assert.strictEqual(reads.policy, 0, 'and the policy is never read');
+
+    let scoped = await policyQueryScope(core, {
+      operation: 'listOpen',
+      types: [SCHEDULE],
+      principal: { kind: 'user', user: ACTOR },
+    });
+    assert.strictEqual(
+      scoped.kind,
+      'scoped',
+      'the same identity as a user is scoped by the grants as usual',
     );
   });
 
@@ -204,7 +245,11 @@ module(basename(import.meta.filename), function () {
     let reads = { policy: 0 };
     let result = await policyQueryScope(
       stubCore([{ operation: 'query', filter: OWN_FILTER }], { reads }),
-      { operation: 'query', types: [], actor: ACTOR },
+      {
+        operation: 'query',
+        types: [],
+        principal: { kind: 'user', user: ACTOR },
+      },
     );
     assert.deepEqual(result, { kind: 'denied' });
     assert.strictEqual(reads.policy, 0, 'no rule could admit it');
@@ -245,7 +290,11 @@ module(basename(import.meta.filename), function () {
       stubCore([{ operation: 'query', filter: BASE_OWN_FILTER }], {
         ruleOn: BASE_SCHEDULE,
       }),
-      { operation: 'query', types: [SCHEDULE, ELSEWHERE], actor: ACTOR },
+      {
+        operation: 'query',
+        types: [SCHEDULE, ELSEWHERE],
+        principal: { kind: 'user', user: ACTOR },
+      },
     );
     assert.deepEqual(result, {
       kind: 'scoped',

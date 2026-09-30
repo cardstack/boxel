@@ -37,8 +37,8 @@ import {
   type ModuleDefinitionResult,
   type ModuleRenderResponse,
   type Prerenderer,
+  type CreatePrerenderAuth,
   type Realm,
-  type RealmPermissions,
   type ResolvedCodeRef,
   type Diagnostics,
   executableExtensions,
@@ -489,10 +489,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
   #fetch: typeof fetch;
   #virtualNetwork: VirtualNetwork;
   #realms: LocalRealm[] = [];
-  #createPrerenderAuth: (
-    userId: string,
-    permissions: RealmPermissions,
-  ) => string;
+  #createPrerenderAuth: CreatePrerenderAuth;
   // Dedupes concurrent loadDefinitionCacheEntry calls that would hit the same
   // cache row so a single prerenderer round-trip is shared by all waiters
   // instead of each caller racing to the prerenderer independently.
@@ -532,10 +529,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     dbAdapter: DBAdapter,
     prerenderer: Prerenderer,
     virtualNetwork: VirtualNetwork,
-    createPrerenderAuth: (
-      userId: string,
-      permissions: RealmPermissions,
-    ) => string,
+    createPrerenderAuth: CreatePrerenderAuth,
     populateCoordinator?: PopulateCoordinator,
   ) {
     this.#dbAdapter = dbAdapter;
@@ -1622,7 +1616,11 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     priority?: number,
   ): Promise<ModuleRenderResponse> {
     let permissions = await fetchUserPermissions(this.#dbAdapter, { userId });
-    let auth = this.#createPrerenderAuth(userId, permissions);
+    // A definition is cached and read by every realm that uses the module, so
+    // the render that produces one runs under realm authority.
+    let auth = this.#createPrerenderAuth(userId, permissions, {
+      realmAuthority: true,
+    });
     // A populate exists because no usable row was found, which on the write
     // path is precisely because the module's bytes just changed — so the tab
     // this render lands on is the one most likely to be holding the module it

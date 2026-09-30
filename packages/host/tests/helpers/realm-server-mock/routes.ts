@@ -28,6 +28,7 @@ import {
   policyQueryScope,
   resolveNamedQuery,
   searchInvocation,
+  searchPrincipal,
 } from '@cardstack/runtime-common/card-operations';
 import { makeCardTypeSummaryDoc } from '@cardstack/runtime-common/document-types';
 
@@ -211,13 +212,17 @@ function registerSearchRoutes() {
           payload = { ...namedQueryRendering(payload), realms: realmList };
         } else {
           try {
+            // A request a render is waiting on is a realm-authority principal,
+            // whatever session it holds, as it is on the realm server.
             let resolved = await resolveNamedQuery(
               resolvingRealm.operationCore,
               payload,
               {
-                actor: authenticatedUser(req),
+                principal: searchPrincipal(
+                  authenticatedUser(req),
+                  duringRender,
+                ),
                 realms: realmList,
-                duringRender,
               },
             );
             payload = resolved.query;
@@ -285,7 +290,7 @@ function registerSearchRoutes() {
             try {
               let scope = await policyQueryScope(inProcess.operationCore, {
                 ...invocation,
-                actor: user,
+                principal: { kind: 'user', user },
               });
               if (scope.kind === 'scoped') {
                 scopedQueries.set(

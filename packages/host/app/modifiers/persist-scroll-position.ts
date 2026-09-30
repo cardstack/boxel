@@ -56,8 +56,15 @@ interface Signature {
 // a cap, revealing at the clamped position rather than hiding forever.
 const RESTORE_PENDING_ATTRIBUTE = 'data-scroll-restore-pending';
 const RESTORE_REVEAL_CAP_MS = 1000;
-// A box-change gap this long means the container's size transition is over
-// (during one it changes every frame, ~8-16ms apart).
+// The container's size transition is over once its box has gone this many
+// consecutive rendered frames without changing *and* this long in wall-clock
+// time. During a transition the box changes on every rendered frame, so the
+// frame count is what tells "still moving" from "stopped": a wall-clock gap
+// alone can't, because one slow frame (a loaded machine, a GC pause, a long
+// task) can outlast the whole window while the box is still mid-transition.
+// The wall-clock floor keeps the window from collapsing on high-refresh
+// displays, where a few frames pass in very little time.
+const BOX_QUIET_FRAMES = 3;
 const BOX_QUIET_MS = 100;
 
 // Elements that already got their mount-time restore. Recording feeds the live
@@ -85,6 +92,9 @@ export default modifier<Signature>(
     let revealTimer: ReturnType<typeof setTimeout> | undefined;
     let revealed = target <= 0;
     let lastBoxChangeAt = performance.now();
+    // Rendered frames the restore has ticked through since the box last
+    // changed. The ResizeObserver resets it; each tick advances it.
+    let quietFrames = 0;
 
     let reveal = () => {
       revealed = true;
@@ -104,7 +114,10 @@ export default modifier<Signature>(
       // mid-transition the viewport is small enough that any offset sticks —
       // so until then keep ticking and re-checking.
       if (Math.abs(element.scrollTop - target) <= 1) {
-        if (performance.now() - lastBoxChangeAt >= BOX_QUIET_MS) {
+        if (
+          quietFrames >= BOX_QUIET_FRAMES &&
+          performance.now() - lastBoxChangeAt >= BOX_QUIET_MS
+        ) {
           reveal();
         } else {
           framesLeft = Math.max(framesLeft, 1);
@@ -117,6 +130,7 @@ export default modifier<Signature>(
       if (!restoring) {
         return;
       }
+      quietFrames += 1;
       if (target > 0) {
         applyTarget();
       }
@@ -173,9 +187,11 @@ export default modifier<Signature>(
       // The container's own box changes bump too — chiefly the sheet's open
       // transition, which grows this element's height (and shrinks its max
       // scroll offset) frame by frame while `restore` is running. Each one also
-      // stamps the quiet clock the reveal's stick-check gates on.
+      // restarts the quiet window (frame count and clock) the reveal's
+      // stick-check gates on.
       resizeObserver = new ResizeObserver(() => {
         lastBoxChangeAt = performance.now();
+        quietFrames = 0;
         bump();
       });
       resizeObserver.observe(element);

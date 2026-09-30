@@ -328,7 +328,9 @@ import {
 } from './card-operations/policy.ts';
 import {
   policyQueryScope,
+  searchPrincipal,
   type PolicyQueryScope,
+  type SearchPrincipal,
 } from './card-operations/policy-query.ts';
 import type {
   BatchCore,
@@ -358,7 +360,6 @@ import type {
   Method,
   Route,
   RouteDescription,
-  RouteTable,
 } from './router.ts';
 import {
   ArchivedRealmError,
@@ -370,7 +371,6 @@ import {
   Router,
   SupportedMimeType,
   isCoarseRefusal,
-  lookupRouteTable,
   routedPath,
 } from './router.ts';
 import { parseQuery } from './query.ts';
@@ -878,12 +878,11 @@ function renderHoldMaxMs(): number {
     ? override
     : DEFAULT_RENDER_HOLD_MAX_MS;
 }
-// Marks the realm's public operational endpoints, which keep working while
-// the realm is archived (see `RouteOptions.operationalEndpoint`): `_session`
-// authentication, and the `_readiness-check` health probe, both its `GET` and
-// its `HEAD` in every media type whose `HEAD` is the realm's discovery answer.
-// `#publicEndpoints` answers the `_session` `POST` and the probe's `GET`
-// without credentials, as a `HEAD` needs none: keep the two in step.
+// Marks the realm's public operational endpoints, which answer a caller
+// without credentials and keep working while the realm is archived (see
+// `RouteOptions.operationalEndpoint`): `_session` authentication, and the
+// `_readiness-check` health probe, both its `GET` and its `HEAD` in every
+// media type whose `HEAD` is the realm's discovery answer.
 const OPERATIONAL_ENDPOINT = { operationalEndpoint: true } as const;
 // The health probe's path as the router matches it, named here because the
 // probe's routes read it, and so does the probe that reaches no route because
@@ -1867,6 +1866,14 @@ export interface TokenClaims {
   // ['read'] even when the bound user has broader permissions, so request
   // authorization treats it specially (read-only, no exact-permissions match).
   delegated?: boolean;
+  // Set on the sessions a realm renders its own cards and modules under: the
+  // indexer's, the HTML render's, a module's definition render, a capture that
+  // persists. Such a session is a realm-authority principal rather than a
+  // person. What it produces is kept and served to every viewer, so its
+  // searches find what the realm ACL grants it and nothing more — no policy,
+  // which admits a caller by who is asking, scopes them. The `user` beside it
+  // is the identity the session reads as, not someone a grant was written for.
+  realmAuthority?: true;
 }
 
 export interface AdapterWriteResult {
@@ -2163,6 +2170,11 @@ export type RequestContext = {
   // other than the one the request was sent to, and has to know the caller
   // there as someone that realm would itself accept.
   principal?: string;
+  // Set when the request's token is a realm-authority session
+  // (`TokenClaims.realmAuthority`): a realm rendering its own cards, whose
+  // `authenticatedUser` is the identity it reads as rather than someone a
+  // policy grants to. Identity, not authority, like `authenticatedUser`.
+  realmAuthority?: true;
   // A token the public path verified without the checks above, which that
   // path skips because nothing it serves reads them. `#sessionPrincipal`
   // runs them, for a request that turns out to need a principal.
@@ -2194,6 +2206,12 @@ interface RequestDispatch {
   // off the dispatch that will answer, so nothing else a request for an
   // endpoint's path could be handed to passes with it.
   operationalEndpoint?: boolean;
+  // The answer is an operational endpoint's own route, which answers a caller
+  // without credentials (see `OPERATIONAL_ENDPOINT`). Only a route the router
+  // dispatches the request to is one: the health probe that reaches no route
+  // passes the seal as an operational endpoint, but meets the realm ACL like
+  // any other read.
+  answersWithoutCredentials?: boolean;
   handle: () => Promise<ResponseWithNodeStream>;
 }
 
@@ -2373,16 +2391,6 @@ export class Realm {
   #audioSizeLimitBytes: number;
   #videoSizeLimitBytes: number;
 
-  #publicEndpoints: RouteTable<true> = new Map([
-    [
-      SupportedMimeType.Session,
-      new Map([['POST' as Method, new Map([['/_session', true]])]]),
-    ],
-    [
-      SupportedMimeType.JSONAPI,
-      new Map([['GET' as Method, new Map([['/_readiness-check', true]])]]),
-    ],
-  ]);
   #dbAdapter: DBAdapter;
   #queue: QueuePublisher;
   #virtualNetwork: VirtualNetwork;
@@ -6714,22 +6722,46 @@ export class Realm {
   }
 
   // What this realm's policy contributes to one search, for a caller its ACL
-  // declined outright. Nothing, unless the request authenticated someone: a
+  // declined outright. Nothing, unless the request authenticated a user: a
   // policy grants by who is asking. A named query is granted by its own name,
   // and an ad-hoc search by the base name `query` on the type its filter
   // targets, so a grant on a saved search never admits the filter a caller
-  // writes by hand. Nor does a search a render is waiting on reach a grant,
-  // which the caller passes no invocation for: what a render produces is
-  // served to every viewer, so no one viewer's grants may shape it.
+  // writes by hand.
+  //
+  // Nor does a realm-authority principal reach a grant. It is a render, and
+  // what a render produces is served to every viewer, so it reads what the ACL
+  // grants it and nothing more: the ACL's refusal is its answer, and the
+  // policy is never asked — as a federated search never asks one about it
+  // either.
   async #policyQueryScope(
     invocation: SearchInvocation | undefined,
+    request: Request,
     requestContext: RequestContext,
   ): Promise<PolicyQueryScope> {
-    let actor = requestContext.authenticatedUser;
-    if (!invocation || !actor) {
+    let principal = this.#searchPrincipal(request, requestContext);
+    if (!invocation || principal?.kind !== 'user') {
       return { kind: 'denied' };
     }
-    return await policyQueryScope(this.operationCore, { ...invocation, actor });
+    return await policyQueryScope(this.operationCore, {
+      ...invocation,
+      principal,
+    });
+  }
+
+  // Who a search runs for. A realm-authority principal is a session a realm
+  // renders its own cards under, or any request a render tab sends: the tab
+  // marks every request, whatever session it holds — one minted before its
+  // minter carried the claim, or one a command runs under — and what such a
+  // request reads is a render's. A caller who sets the marker themselves only
+  // narrows their own search to what the ACL grants them.
+  #searchPrincipal(
+    request: Request,
+    requestContext: RequestContext,
+  ): SearchPrincipal | undefined {
+    return searchPrincipal(
+      requestContext.authenticatedUser,
+      requestContext.realmAuthority || isDuringPrerenderRequest(request),
+    );
   }
 
   // The same, for one read's operation request.
@@ -7116,6 +7148,7 @@ export class Realm {
             request,
             requestContext,
             requiredPermission,
+            dispatch,
           );
         }
         // An archived realm is sealed for everyone, owner included: once a
@@ -7341,6 +7374,7 @@ export class Realm {
         consumesCoarseOutcome: matched.consumesCoarseOutcome,
         coarseReadOnly: matched.coarseReadOnly,
         operationalEndpoint: matched.operationalEndpoint,
+        answersWithoutCredentials: matched.operationalEndpoint,
         handle: serve,
       };
     }
@@ -7445,14 +7479,19 @@ export class Realm {
   // The realm ACL's decision on an external request, recorded on the request
   // context. The decision is the one `checkPermission` makes; an ACL refusal
   // is kept to be answered after routing (see `internalHandle`), while a
-  // credential the realm cannot accept is still refused here.
+  // credential the realm cannot accept is still refused here. `dispatch` is
+  // what will answer the request, which decides whether it needs credentials
+  // at all.
   async #recordCoarsePermission(
     request: Request,
     requestContext: RequestContext,
     requiredPermission: 'read' | 'write' | 'realm-owner',
+    dispatch: RequestDispatch,
   ): Promise<void> {
     try {
-      await this.checkPermission(request, requestContext, requiredPermission);
+      await this.checkPermission(request, requestContext, requiredPermission, {
+        answersWithoutCredentials: dispatch.answersWithoutCredentials,
+      });
       requestContext.coarseAllowed = true;
     } catch (e) {
       if (!isCoarseRefusal(e)) {
@@ -9733,6 +9772,13 @@ export class Realm {
     return response;
   }
 
+  // `answersWithoutCredentials` says the request is dispatched to an
+  // operational endpoint's own route (see
+  // `RequestDispatch.answersWithoutCredentials`), which admits any caller. It
+  // is the dispatch's to say, not the request's: `_session` sent as a
+  // card-source write reaches that write, and needs the credentials every
+  // write does, whatever media type it carries.
+  //
   // `probe` asks whether a caller is permitted rather than enforcing it, which
   // changes two things. The realm-wide `HEAD` exemption does not apply — it
   // exists so a discovery probe reaches an answer without credentials, and a
@@ -9743,7 +9789,10 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
     requiredPermission: 'read' | 'write' | 'realm-owner',
-    { probe = false }: { probe?: boolean } = {},
+    {
+      probe = false,
+      answersWithoutCredentials = false,
+    }: { probe?: boolean; answersWithoutCredentials?: boolean } = {},
   ) {
     let realmPermissions = requestContext.permissions;
     // A refusal the caller asked for rather than ran into is not a failed
@@ -9756,7 +9805,7 @@ export class Realm {
     };
     if (
       requiredPermission !== 'realm-owner' &&
-      (lookupRouteTable(this.#publicEndpoints, this.paths, request) ||
+      (answersWithoutCredentials ||
         (request.method === 'HEAD' && !probe) ||
         // If the realm is public readable or writable, do not require a JWT
         (requiredPermission === 'read' &&
@@ -9787,6 +9836,9 @@ export class Realm {
             this.#realmSecretSeed,
           );
           requestContext.authenticatedUser = publicToken.user;
+          if (publicToken.realmAuthority) {
+            requestContext.realmAuthority = true;
+          }
           requestContext.unvouchedSession = {
             user: publicToken.user,
             iat: publicToken.iat,
@@ -9814,6 +9866,9 @@ export class Realm {
 
     try {
       token = this.#adapter.verifyJWT(tokenString, this.#realmSecretSeed);
+      if (token.realmAuthority) {
+        requestContext.realmAuthority = true;
+      }
 
       // Checked against the token's bearer before any assume-user indirection,
       // and ahead of the delegated branch below, so revoking a user also kills
@@ -13448,9 +13503,8 @@ export class Realm {
       // whole of the scope it may resolve to.
       try {
         let resolved = await resolveNamedQuery(this.operationCore, payload, {
-          actor: requestContext.authenticatedUser,
+          principal: this.#searchPrincipal(request, requestContext),
           realms: [this.url],
-          duringRender: isDuringPrerenderRequest(request),
         });
         payload = resolved.query;
         declaredLinks = resolved.links;
@@ -13483,10 +13537,7 @@ export class Realm {
       // nothing are the same answer, as they are for a card they may not read.
       let policyScope =
         this.#coarseDeclined(requestContext) === 'all'
-          ? await this.#policyQueryScope(
-              duringPrerender ? undefined : invocation,
-              requestContext,
-            )
+          ? await this.#policyQueryScope(invocation, request, requestContext)
           : undefined;
       // Marked policy-scoped, so a client holding this realm's cards adds none
       // the realm did not return: the caller's policy decided the rows, or the

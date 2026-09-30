@@ -62,14 +62,58 @@ export type PolicyQueryScope =
 
 const DENIED: PolicyQueryScope = { kind: 'denied' };
 
+// Who a search runs for. A realm-authority principal is a render: a session a
+// realm renders its own cards under (`TokenClaims.realmAuthority`), or any
+// request a render tab sends. Any other is the user its session names.
+export type SearchPrincipal =
+  | { kind: 'user'; user: string }
+  | { kind: 'realm-authority'; user: string };
+
+// The principal a request authenticated as, or none for a request that
+// authenticated nobody.
+export function searchPrincipal(
+  user: string | undefined,
+  realmAuthority: boolean | undefined,
+): SearchPrincipal | undefined {
+  if (user === undefined) {
+    return undefined;
+  }
+  return realmAuthority
+    ? { kind: 'realm-authority', user }
+    : { kind: 'user', user };
+}
+
+// Raised when a policy is asked what it grants a realm-authority principal.
+//
+// A render's search runs as a realm-authority principal, and what the render
+// produces is cached and served to every viewer. A policy fragment composed
+// into that search would make the render per-actor: rows missing, or rows
+// only one user may see, in HTML everyone receives. Nothing would fail, so
+// this is raised instead of answering, and it is never caught as a denial.
+// The routes keep a realm-authority principal away from every policy, so
+// raising it means that wiring broke.
+export class RealmAuthorityPolicyScopeError extends Error {
+  constructor(realmURL: string, operation: string) {
+    super(
+      `a policy fragment was about to be composed for a realm-authority ` +
+        `session: the search for "${operation}" in ${realmURL} runs under ` +
+        `the realm's own authority, which no policy scopes`,
+    );
+    this.name = 'RealmAuthorityPolicyScopeError';
+  }
+}
+
 // What this realm's policy contributes to `operation` invoked on `types` by
-// `actor`. The core is the realm's own, bound to its own authority, as the
+// `principal`. The core is the realm's own, bound to its own authority, as the
 // gate's is: a policy card commonly lives in a realm the caller cannot read.
 //
-// `actor` is required rather than optional. A policy grants by who is asking,
-// so a request that authenticated nobody has no grant to be judged by,
-// whatever the policy holds — the rule the realm already applies before it
-// hands a refused request to the gate at all.
+// `principal` is required rather than optional. A policy grants by who is
+// asking, so a request that authenticated nobody has no grant to be judged
+// by, whatever the policy holds — the rule the realm already applies before
+// it hands a refused request to the gate at all. A realm-authority principal
+// is not someone asking either, and is refused with
+// `RealmAuthorityPolicyScopeError` before any type is judged or the policy is
+// read.
 //
 // A search on no type at all has no rules to consult, so it is denied without
 // reading the policy. One on several types — an ad-hoc search whose filter
@@ -81,9 +125,17 @@ const DENIED: PolicyQueryScope = { kind: 'denied' };
 // own judgment refused them — a type the realm cannot resolve, say.
 export async function policyQueryScope(
   core: OperationCore,
-  invocation: { operation: string; types: readonly CodeRef[]; actor: string },
+  invocation: {
+    operation: string;
+    types: readonly CodeRef[];
+    principal: SearchPrincipal;
+  },
 ): Promise<PolicyQueryScope> {
-  let { operation, types, actor } = invocation;
+  let { operation, types, principal } = invocation;
+  if (principal.kind === 'realm-authority') {
+    throw new RealmAuthorityPolicyScopeError(core.realmURL, operation);
+  }
+  let actor = principal.user;
   let distinct = [
     ...new Map(types.map((type) => [JSON.stringify(type), type])).values(),
   ];

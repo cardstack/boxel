@@ -9,6 +9,10 @@ const { JsonWebTokenError, sign, TokenExpiredError, verify } = jsonwebtoken;
 export interface RealmServerTokenClaim {
   user: string;
   sessionRoom: string;
+  // Carried by a realm-authority session (`TokenClaims.realmAuthority`), which
+  // the federated endpoints accept for the `user` claim both token families
+  // share.
+  realmAuthority?: true;
 }
 
 export function createJWT(

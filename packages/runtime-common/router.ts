@@ -185,7 +185,7 @@ function matchParameterized(
   return plain;
 }
 
-export type RouteTable<T> = Map<SupportedMimeType, Map<Method, Map<string, T>>>;
+type RouteTable<T> = Map<SupportedMimeType, Map<Method, Map<string, T>>>;
 
 // The path a request is routed on: its path within the realm with a leading
 // slash, keeping the trailing slash that names a directory, so a route for a
@@ -199,7 +199,7 @@ export function routedPath(paths: RealmPaths, request: Request): string {
     : requestPath;
 }
 
-export function lookupRouteTable<T>(
+function lookupRouteTable<T>(
   routeTable: RouteTable<T>,
   paths: RealmPaths,
   request: Request,
@@ -283,12 +283,14 @@ export interface RouteOptions {
   // through the gate, `HEAD` included. Every other path the route serves stays
   // `coarseReadOnly`.
   grantableBytes?: true;
-  // The route is one of the realm's operational endpoints, which keep working
-  // while the realm is archived: its seal lets through a request the router
-  // dispatches here. The route is the exemption, rather than its path, so a
-  // request for that path which the router hands to another route (a
-  // directory of the same name, or a media type the endpoint does not answer)
-  // is sealed like any other.
+  // The route is one of the realm's operational endpoints, which answer a
+  // caller without credentials and keep working while the realm is archived:
+  // the realm's credential check and its seal both let through a request the
+  // router dispatches here. The route is the exemption, rather than its path
+  // or a media type the request carries, so a request for that path which the
+  // router hands to another route (a directory of the same name, or a media
+  // type the endpoint does not answer) needs the credentials that route needs
+  // and is sealed like any other.
   operationalEndpoint?: true;
 }
 

@@ -216,18 +216,19 @@ else
     # between vite and realm-server triggers CORS preflight failures
     # ("Redirect is not allowed for a preflight request").
     export HOST_URL="https://localhost:4200"
-    if command -v mkcert >/dev/null 2>&1; then
+    # `NODE_EXTRA_CA_CERTS` is tested first, and deliberately. It accepts a
+    # single PEM path rather than a list, so a value the developer set already
+    # is one to leave alone — they have mkcert's CA in it or know what they are
+    # doing. Testing that before running mkcert, rather than after, is what
+    # keeps the common case free: `mkcert -CAROOT` is a subprocess, and this
+    # file is re-sourced on every shell prompt, because mise reads the
+    # environment back through it and `.mise.toml` pre-exports it. A fork per
+    # prompt per shell is enough to exhaust the process table on a machine with
+    # many worktrees open. `command -v` is a builtin and costs nothing.
+    if [ -z "${NODE_EXTRA_CA_CERTS:-}" ] && command -v mkcert >/dev/null 2>&1; then
       _BOXEL_MKCERT_CAROOT="$(mkcert -CAROOT 2>/dev/null || true)"
       if [ -n "$_BOXEL_MKCERT_CAROOT" ] && [ -f "$_BOXEL_MKCERT_CAROOT/rootCA.pem" ]; then
-        # Node's NODE_EXTRA_CA_CERTS accepts a single PEM file path (not
-        # a colon-separated list). If the dev has already pointed it at
-        # something, leave their value in place — they presumably have
-        # mkcert's CA in there already, or know what they're doing.
-        # Otherwise point at mkcert's rootCA so realm-server fetches
-        # validate against the local cert without `mkcert -install`.
-        if [ -z "${NODE_EXTRA_CA_CERTS:-}" ]; then
-          export NODE_EXTRA_CA_CERTS="$_BOXEL_MKCERT_CAROOT/rootCA.pem"
-        fi
+        export NODE_EXTRA_CA_CERTS="$_BOXEL_MKCERT_CAROOT/rootCA.pem"
       fi
       unset _BOXEL_MKCERT_CAROOT
     fi
@@ -308,16 +309,13 @@ fi
 # realm-server's startup `getIndexHTML()` smoke-test fetch fails with
 # `TypeError: fetch failed` and `process.exit(-2)` — the visible
 # symptom is realm-server crash-looping and every public URL 502-ing.
-if command -v mkcert >/dev/null 2>&1; then
+# Tested before the subprocess, for the reason given at the other call site
+# above: a developer's own value is left alone, and this file is re-sourced per
+# prompt, so a fork here is a fork per prompt per shell.
+if [ -z "${NODE_EXTRA_CA_CERTS:-}" ] && command -v mkcert >/dev/null 2>&1; then
   _BOXEL_MKCERT_CAROOT="$(mkcert -CAROOT 2>/dev/null || true)"
   if [ -n "$_BOXEL_MKCERT_CAROOT" ] && [ -f "$_BOXEL_MKCERT_CAROOT/rootCA.pem" ]; then
-    # NODE_EXTRA_CA_CERTS accepts a single PEM file path (not a
-    # colon-separated list). If the dev has already pointed it at
-    # something, leave their value in place — they presumably have
-    # mkcert's CA bundled in already, or know what they're doing.
-    if [ -z "${NODE_EXTRA_CA_CERTS:-}" ]; then
-      export NODE_EXTRA_CA_CERTS="$_BOXEL_MKCERT_CAROOT/rootCA.pem"
-    fi
+    export NODE_EXTRA_CA_CERTS="$_BOXEL_MKCERT_CAROOT/rootCA.pem"
   fi
   unset _BOXEL_MKCERT_CAROOT
 fi

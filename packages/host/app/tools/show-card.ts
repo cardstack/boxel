@@ -10,6 +10,8 @@ import {
 
 import HostBaseTool from '../lib/host-base-tool';
 
+import { codeSubmodeUnavailable } from '../services/operator-mode-state-service';
+
 import type NetworkService from '../services/network';
 import type OperatorModeStateService from '../services/operator-mode-state-service';
 import type PlaygroundPanelService from '../services/playground-panel-service';
@@ -70,6 +72,9 @@ export default class ShowCardTool extends HostBaseTool<
         ) ||
         operatorModeStateService.state.codeSelection !== cardDefRef.name
       ) {
+        if (!operatorModeStateService.codeSubmodeOffered(cardDefRef.module)) {
+          throw new Error(codeSubmodeUnavailable(`${cardDefRef.module}.gts`));
+        }
         await operatorModeStateService.updateCodePath(
           rri(`${cardDefRef.module}.gts`),
           'preview',
