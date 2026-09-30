@@ -983,7 +983,8 @@ policy card carries it, a subtype's included. It takes no payload. Invoked on
 the policy card, it compiles the card exactly as a realm naming it compiles it,
 from what the card's latest index visit recorded, and answers with what that
 compile found. The policy card's isolated view asks it as soon as someone looks
-at the card, and again whenever the card reloads. It marks each grant in place
+at the card, and again whenever the card reloads with its rules changed. An
+index render never asks it. It marks each grant in place
 as inactive, or as live but admitting no search, lists the issues with the
 rule and the grant each is about, and says when the policy as a whole is not in
 force. Code asks it the same way:

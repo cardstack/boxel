@@ -110,10 +110,11 @@ const leadsPredicate = '.leadTeacherIds | any(. == actor())';
 const teachesPredicate = '.teacherIds | any(. == actor())';
 
 const classroomModule = `
-  import { containsMany, field, CardDef } from "@cardstack/base/card-api";
+  import { contains, containsMany, field, CardDef } from "@cardstack/base/card-api";
   import StringField from "@cardstack/base/string";
 
   export class Classroom extends CardDef {
+    @field title = contains(StringField);
     @field teacherIds = containsMany(StringField);
     @field leadTeacherIds = containsMany(StringField);
   }
@@ -619,10 +620,11 @@ module('Integration | realm policy', function (hooks) {
       .dom('[data-test-explanation]')
       .doesNotExist('and the earlier answer is not left on the page');
   });
-  // A policy on classrooms whose grants are, in order: a live read, a delete
-  // whose predicate does not parse, and a live update. A second rule governs a
-  // type that does not resolve.
+
+  // Does not parse: the comparison has nothing on its right.
   const MISTYPED = `${teachesPredicate} and .title ==`;
+  // Parses under the `policy` profile, and the `predicate` profile refuses it,
+  // so a grant on a query with it compiles no search filter.
   const UNFILTERABLE = '(.title | tonumber) > 0';
 
   async function renderPolicyNamed(
