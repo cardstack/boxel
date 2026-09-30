@@ -103,6 +103,14 @@ const SCHEDULE_MODULE = `
       },
     };
 
+    @operation static listOpenInGrants = {
+      base: 'query',
+      query: {
+        filter: { on: () => ServicePlanSchedule, eq: { status: 'open' } },
+        realms: ['${GRANTS}'],
+      },
+    };
+
     @operation static listAll = {
       base: 'query',
       query: {
@@ -360,7 +368,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       },
     });
 
-    function federatedSearch(body: Record<string, unknown>, user?: string) {
+    function federatedSearch(body: object, user?: string) {
       let req = request
         .post('/_federated-search')
         .set('Accept', SupportedMimeType.CardJson)
@@ -378,13 +386,23 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       return req.send(body);
     }
 
-    function realmSearch(realmURL: string, body: object, user: string) {
+    // `permissions` are the ones the caller holds in the realm, which the
+    // realm's token must claim.
+    function realmSearch(
+      realmURL: string,
+      body: object,
+      user: string,
+      permissions: RealmPermissions['user'] = [],
+    ) {
       return request
         .post(`${new URL(realmURL).pathname}_search`)
         .set('Accept', SupportedMimeType.CardJson)
         .set('Content-Type', 'application/json')
         .set('X-HTTP-Method-Override', 'QUERY')
-        .set('Authorization', `Bearer ${createJWT(realms[realmURL], user)}`)
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(realms[realmURL], user, permissions)}`,
+        )
         .send(body);
     }
 
@@ -636,12 +654,16 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         assert.strictEqual(matchesNothing.status, 200);
         assert.strictEqual(grantsNothing.status, 200);
         let withRealmsElided = (body: {
-          meta: { realmTotals?: Record<string, number> };
+          meta: {
+            realmTotals?: Record<string, number>;
+            policyScopedRealms?: string[];
+          };
         }) => ({
           ...body,
           meta: {
             ...body.meta,
             realmTotals: Object.values(body.meta.realmTotals ?? {}),
+            policyScopedRealms: body.meta.policyScopedRealms?.length,
           },
         });
         assert.deepEqual(
@@ -653,6 +675,14 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           grantsNothing.body.meta.realmTotals,
           { [DENIES]: 0 },
           'the realm is counted among those that answered, with nothing',
+        );
+        assert.deepEqual(
+          [
+            grantsNothing.body.meta.policyScopedRealms,
+            matchesNothing.body.meta.policyScopedRealms,
+          ],
+          [[DENIES], [GRANTS]],
+          'and each marks its realm policy-scoped alike',
         );
 
         let ownMatchesNothing = await realmSearch(
@@ -667,9 +697,9 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         );
         assert.strictEqual(ownMatchesNothing.status, 200);
         assert.strictEqual(
-          ownGrantsNothing.text,
-          ownMatchesNothing.text,
-          "a realm's own search answers the two byte for byte alike",
+          ownGrantsNothing.text.replaceAll(DENIES, '<realm>'),
+          ownMatchesNothing.text.replaceAll(GRANTS, '<realm>'),
+          "a realm's own search answers the two byte for byte alike, but for the realm each names",
         );
       });
 
@@ -731,6 +761,173 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         } finally {
           await unarchiveRealm(db, new URL(GRANTS));
         }
+      });
+    });
+
+    module('the policy-scoped mark', function () {
+      // An ad-hoc search, which no policy here grants: a realm the caller
+      // does not read contributes no rows to it.
+      const OPEN = { 'item.on': SCHEDULE, eq: { 'item.status': 'open' } };
+
+      function openSchedules(realmURLs: string[]) {
+        return { filter: OPEN, realms: realmURLs };
+      }
+
+      test('a search marks each realm the caller does not read, whatever it contributed, and no realm they read', async function (assert) {
+        let response = await federatedSearch(
+          openSchedules([COARSE, GRANTS, DENIES, PRIVATE]),
+          PROVIDER_A,
+        );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        assert.strictEqual(
+          inRealm(COARSE, response).length,
+          2,
+          'the realm the caller reads answers with its matching rows',
+        );
+        assert.deepEqual(
+          response.body.meta.policyScopedRealms,
+          [GRANTS, DENIES, PRIVATE],
+          'the realm with a grant, the realm with none and the realm with no policy are marked alike, in the order the search names them',
+        );
+      });
+
+      test('a search of realms the caller reads carries no mark', async function (assert) {
+        let response = await federatedSearch(
+          openSchedules([COARSE]),
+          PROVIDER_A,
+        );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        assert.strictEqual(inRealm(COARSE, response).length, 2);
+        assert.false(
+          'policyScopedRealms' in response.body.meta,
+          'the answer is the one it would be with no policy anywhere',
+        );
+      });
+
+      test('a declared query marks every realm the request named, the ones the caller reads included', async function (assert) {
+        let response = await federatedSearch(
+          listOpen([GRANTS, COARSE]),
+          PROVIDER_A,
+        );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        assert.deepEqual(
+          response.body.meta.policyScopedRealms,
+          [GRANTS, COARSE],
+          "the server resolved the declaration, so no realm's rows are the caller's filter to decide",
+        );
+      });
+
+      test('a declared query marks the realms the request named, not the ones its declaration searched', async function (assert) {
+        let response = await federatedSearch(
+          {
+            operation: 'listOpenInGrants',
+            on: SCHEDULE,
+            realms: [COARSE, GRANTS],
+          },
+          OWNER,
+        );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        assert.deepEqual(
+          Object.keys(response.body.meta.realmTotals),
+          [GRANTS],
+          'the declaration searched only the realm it scopes itself to',
+        );
+        assert.deepEqual(
+          response.body.meta.policyScopedRealms,
+          [COARSE, GRANTS],
+          'and the mark names both realms the request named',
+        );
+      });
+
+      test('a declared query is not served the answer to the ad-hoc query it resolves to', async function (assert) {
+        // A page no other test asks for, so neither answer is an earlier
+        // test's cache entry.
+        let declared = { ...listOpen([COARSE]), page: { number: 0, size: 3 } };
+        let { query: resolved } = await resolveNamedQuery(
+          realms[COARSE].operationCore,
+          declared,
+          { actor: PROVIDER_A, realms: [COARSE] },
+        );
+        let adHoc = await federatedSearch(resolved, PROVIDER_A);
+        let again = await federatedSearch(resolved, PROVIDER_A);
+        assert.strictEqual(
+          again.headers[LIVE_SEARCH_CACHE_HEADER],
+          'hit',
+          'the cache is holding the ad-hoc answer',
+        );
+        assert.false(
+          'policyScopedRealms' in adHoc.body.meta,
+          'which is not marked',
+        );
+
+        let response = await federatedSearch(declared, PROVIDER_A);
+        assert.deepEqual(
+          ids(response),
+          ids(adHoc),
+          'the declared query matches the same rows',
+        );
+        assert.deepEqual(
+          response.body.meta.policyScopedRealms,
+          [COARSE],
+          'and its answer is marked, not the cached one',
+        );
+      });
+
+      test('the mark names realms, and says nothing of why', async function (assert) {
+        let scoped = await federatedSearch(listOpen([GRANTS]), PROVIDER_A);
+        let unscoped = await federatedSearch(
+          openSchedules([COARSE]),
+          PROVIDER_A,
+        );
+
+        assert.deepEqual(ids(scoped), A_OPEN_IN_GRANTS, "the grant's rows");
+        assert.deepEqual(
+          Object.keys(scoped.body.meta).sort(),
+          [...Object.keys(unscoped.body.meta), 'policyScopedRealms'].sort(),
+          'the mark is the only thing a scoped answer says about itself that an unscoped one does not',
+        );
+        assert.deepEqual(scoped.body.meta.policyScopedRealms, [GRANTS]);
+        let meta = JSON.stringify(scoped.body.meta);
+        assert.false(
+          meta.includes('providerId'),
+          'no field the grant filters on',
+        );
+        assert.false(meta.includes(PROVIDER_A), 'and no value it binds');
+      });
+
+      test("a realm's own search marks itself as the federated one does", async function (assert) {
+        let declared = await realmSearch(
+          GRANTS,
+          { operation: 'listOpen', on: SCHEDULE },
+          PROVIDER_A,
+        );
+        let refused = await realmSearch(GRANTS, { filter: OPEN }, PROVIDER_A);
+        let read = await realmSearch(COARSE, { filter: OPEN }, PROVIDER_A, [
+          'read',
+        ]);
+
+        assert.deepEqual(
+          [declared.status, refused.status, read.status],
+          [200, 200, 200],
+        );
+        assert.deepEqual(
+          declared.body.meta.policyScopedRealms,
+          [GRANTS],
+          'a declared query, answered with the rows the grant admits',
+        );
+        assert.deepEqual(
+          refused.body.meta.policyScopedRealms,
+          [GRANTS],
+          'an ad-hoc search by a caller the realm does not let read',
+        );
+        assert.false(
+          'policyScopedRealms' in read.body.meta,
+          'and no mark on an ad-hoc search by a caller who reads the realm',
+        );
       });
     });
 
