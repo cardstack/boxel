@@ -216,6 +216,7 @@ interface Resource {
     string,
     { links?: { self?: string }; data?: unknown } | undefined
   >;
+  meta?: Record<string, unknown>;
 }
 
 // A search entry document, narrowed to what this suite reads off it.
@@ -536,6 +537,47 @@ module(basename(import.meta.filename), function (hooks) {
       assert.deepEqual(closure(doc), [], 'while the card links to nothing');
     });
 
+    test('each row’s card says its relationships were withheld, on both endpoints', async function (assert) {
+      // A card served with no relationships reads, to a consumer that keeps
+      // it as a live instance, as a card linking to nothing. The marker is
+      // what tells the two apart, so it rides on every narrowed row and on no
+      // row that still carries its links.
+      for (let [label, send] of [
+        ['the realm’s own search', realmSearch],
+        ['the federated search', federatedSearch],
+      ] as const) {
+        for (let strategy of STRATEGIES) {
+          let doc = await search('teacher', body(strategy), send);
+          let served = items(doc);
+          assert.deepEqual(
+            [...served.keys()],
+            [ALGEBRA, BIOLOGY],
+            `${label}, ${strategy}: every row carries its card`,
+          );
+          for (let [id, item] of served) {
+            assert.strictEqual(
+              item.meta?.relationshipsWithheld,
+              strategy === 'none' ? true : undefined,
+              `${label}, ${strategy}: ${id} ${
+                strategy === 'none' ? 'is' : 'is not'
+              } marked as withheld`,
+            );
+          }
+        }
+        let sparse = await search(
+          'teacher',
+          body('none', ['item.title', 'item.students']),
+          send,
+        );
+        for (let [id, item] of items(sparse)) {
+          assert.true(
+            item.meta?.relationshipsWithheld,
+            `${label}: a sparse row ${id} is marked too`,
+          );
+        }
+      }
+    });
+
     test('a sparse row asking for a link field is not told what it links to', async function (assert) {
       let doc = await search(
         'teacher',
@@ -685,6 +727,11 @@ module(basename(import.meta.filename), function (hooks) {
             namedTargets(item),
             LINKS[id],
             `${label}: ${id} still names its students`,
+          );
+          assert.strictEqual(
+            item.meta?.relationshipsWithheld,
+            undefined,
+            `${label}: ${id} is not marked as withheld`,
           );
         }
         assert.deepEqual(
