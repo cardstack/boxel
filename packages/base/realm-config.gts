@@ -47,10 +47,13 @@ import {
   FieldContainer,
   Header,
   IconButton,
+  Pill,
   RadioInput,
 } from '@cardstack/boxel-ui/components';
 import { eq, not } from '@cardstack/boxel-ui/helpers';
 import { IconPlus, IconTrash } from '@cardstack/boxel-ui/icons';
+import AlertTriangleIcon from '@cardstack/boxel-icons/alert-triangle';
+import CircleCheckIcon from '@cardstack/boxel-icons/circle-check';
 import FileSettingsIcon from '@cardstack/boxel-icons/file-settings';
 import LinkIcon from '@cardstack/boxel-icons/link';
 import SettingsIcon from '@cardstack/boxel-icons/settings';
@@ -1071,24 +1074,36 @@ class PolicyStanding extends GlimmerComponent<PolicyStandingSignature> {
       {{this.listen this.watched}}
     >
       {{#if this.inForce}}
-        <p class='standing in-force' data-test-realm-policy-status='in-force'>
-          In force.
+        <div class='standing'>
+          <Pill
+            class='standing-pill in-force'
+            data-test-realm-policy-status='in-force'
+          >
+            <:iconLeft><CircleCheckIcon class='pill-icon' /></:iconLeft>
+            <:default>In force</:default>
+          </Pill>
           {{#if this.issues.length}}
-            The policy card lists
-            {{this.issues.length}}
-            {{if (eq this.issues.length 1) 'issue' 'issues'}}
-            with its rules.
+            <span class='standing-note'>
+              The policy card lists
+              {{this.issues.length}}
+              {{if (eq this.issues.length 1) 'issue' 'issues'}}
+              with its rules.
+            </span>
           {{/if}}
-        </p>
+        </div>
       {{else if this.notInForce}}
-        <div
-          class='standing not-in-force'
-          role='status'
-          data-test-realm-policy-status='not-in-force'
-        >
-          <p class='standing-title'>
-            Not in force. The realm refuses every caller its permissions decline
-            until this is fixed.
+        <div class='standing callout' role='status'>
+          <Pill
+            @variant='destructive'
+            class='standing-pill'
+            data-test-realm-policy-status='not-in-force'
+          >
+            <:iconLeft><AlertTriangleIcon class='pill-icon' /></:iconLeft>
+            <:default>Not in force</:default>
+          </Pill>
+          <p class='standing-note'>
+            The realm refuses every caller its permissions decline until this is
+            fixed.
           </p>
           <ul class='issues'>
             {{#each this.issues as |issue|}}
@@ -1100,17 +1115,22 @@ class PolicyStanding extends GlimmerComponent<PolicyStandingSignature> {
           </ul>
         </div>
       {{else if this.unreadPointer}}
-        <p
-          class='standing not-in-force'
-          role='status'
-          data-test-realm-policy-status='unread-pointer'
-        >
-          The realm doesn't read this as a card's URL or realm-prefixed id, so
-          it names no policy. Its permissions alone decide who may do what.
-        </p>
+        <div class='standing callout' role='status'>
+          <Pill
+            class='standing-pill no-policy'
+            data-test-realm-policy-status='unread-pointer'
+          >
+            <:iconLeft><AlertTriangleIcon class='pill-icon' /></:iconLeft>
+            <:default>No policy</:default>
+          </Pill>
+          <p class='standing-note'>
+            The realm doesn't read this as a card's URL or realm-prefixed id, so
+            its permissions alone decide who may do what.
+          </p>
+        </div>
       {{else if this.unavailable}}
         <p
-          class='standing unavailable'
+          class='standing standing-note'
           data-test-realm-policy-status='unavailable'
         >
           The realm didn't report this policy's standing:
@@ -1123,34 +1143,62 @@ class PolicyStanding extends GlimmerComponent<PolicyStandingSignature> {
         display: contents;
       }
       .standing {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--boxel-sp-xs);
         margin: 0;
-        font-size: var(--boxel-font-size-sm);
       }
-      .in-force {
-        color: var(--boxel-450);
-      }
-      .not-in-force {
-        background: #fef3c7;
-        color: #78350f;
-        border: 1px solid #fcd34d;
-        border-radius: var(--boxel-border-radius-sm, 6px);
+      .callout {
+        display: grid;
+        justify-items: start;
+        gap: var(--boxel-sp-xs);
+        background: var(--muted, var(--boxel-100));
+        border: var(--boxel-border);
+        border-radius: var(--boxel-border-radius-sm);
         padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
       }
-      .standing-title {
+      .standing-pill {
+        flex-shrink: 0;
+      }
+      .pill-icon {
+        width: var(--boxel-icon-xs);
+        height: var(--boxel-icon-xs);
+      }
+      .in-force {
+        --boxel-pill-background-color: color-mix(
+          in oklch,
+          var(--boxel-success-100) 22%,
+          var(--background, var(--boxel-light))
+        );
+        --boxel-pill-font-color: var(--boxel-success-300);
+        --boxel-pill-border: 1px solid var(--boxel-success-300);
+      }
+      .no-policy {
+        --boxel-pill-background-color: color-mix(
+          in oklch,
+          var(--boxel-warning-100) 22%,
+          var(--background, var(--boxel-light))
+        );
+        --boxel-pill-font-color: var(--foreground, var(--boxel-dark));
+        --boxel-pill-border: 1px solid var(--boxel-warning-200);
+      }
+      .standing-note {
         margin: 0;
+        font-size: var(--boxel-font-size-xs);
+        color: var(--muted-foreground, var(--boxel-450));
       }
       .issues {
-        margin: var(--boxel-sp-xxs) 0 0;
+        margin: 0;
         padding-left: var(--boxel-sp);
+        font-size: var(--boxel-font-size-xs);
+        color: var(--foreground, var(--boxel-dark));
       }
       .issues code {
         font-family: var(--boxel-font-family-mono, monospace);
-        background: rgba(0, 0, 0, 0.05);
-        padding: 0 0.25rem;
-        border-radius: 0.1875rem;
-      }
-      .unavailable {
-        color: var(--boxel-450);
+        background: var(--background, var(--boxel-light));
+        padding: 0 var(--boxel-sp-5xs);
+        border-radius: var(--boxel-border-radius-xs);
       }
     </style>
   </template>
@@ -1318,11 +1366,16 @@ class PolicyCard extends GlimmerComponent<PolicyCardSignature> {
       }
       .pointer {
         font-family: var(--boxel-font-family-mono, monospace);
-        font-size: var(--boxel-font-size-sm);
+        font-size: var(--boxel-font-size-2xs);
+        color: var(--muted-foreground, var(--boxel-450));
+        opacity: 0.75;
         overflow-wrap: anywhere;
       }
       a.pointer {
-        color: inherit;
+        text-decoration: none;
+      }
+      a.pointer:hover {
+        text-decoration: underline;
       }
       .policy-card-fitted {
         width: 100%;
@@ -1332,7 +1385,7 @@ class PolicyCard extends GlimmerComponent<PolicyCardSignature> {
       }
       .policy-card-note {
         margin: 0;
-        color: var(--boxel-450);
+        color: var(--muted-foreground, var(--boxel-450));
         font-size: var(--boxel-font-size-sm);
       }
     </style>

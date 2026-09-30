@@ -162,7 +162,7 @@ module('Integration | realm config policy standing', function (hooks) {
       .hasText(POLICY, 'with the pointer beneath it');
     assert
       .dom('[data-test-realm-policy-status="in-force"]')
-      .hasText('In force.');
+      .hasText('In force');
     assert.deepEqual(issuesShown(), [], 'and no issue is listed');
 
     await click('[data-test-realm-config-policy-card-fitted]');
