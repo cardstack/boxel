@@ -798,7 +798,10 @@ module(basename(import.meta.filename), function () {
       );
     }
 
-    async function seedRealmConfigRow(allowArbitraryCaptures: boolean) {
+    async function seedRealmConfigRow(
+      allowArbitraryCaptures: boolean,
+      key = 'allowArbitraryCaptures',
+    ) {
       let { nameExpressions, valueExpressions } = asExpressions(
         {
           url: `${REALM_URL}realm.json`,
@@ -809,7 +812,7 @@ module(basename(import.meta.filename), function () {
           last_modified: Date.now(),
           resource_created_at: Date.now(),
           is_deleted: false,
-          pristine_doc: { attributes: { allowArbitraryCaptures } },
+          pristine_doc: { attributes: { [key]: allowArbitraryCaptures } },
         },
         { jsonFields: ['pristine_doc'] },
       );
@@ -912,6 +915,16 @@ module(basename(import.meta.filename), function () {
         `UPDATE boxel_index SET pristine_doc = '{"attributes":{"allowArbitraryCaptures":true}}'::jsonb
          WHERE url = '${REALM_URL}realm.json'`,
       ]);
+      await startWorker();
+
+      let response = await get('_capture/card-1');
+      assert.strictEqual(response.status, 200);
+      assert.strictEqual(captureCalls, 1);
+    });
+
+    test('the legacy allowArbitraryScreenshots key opens the gate too', async function (assert) {
+      await seedInstanceRow('card-1');
+      await seedRealmConfigRow(true, 'allowArbitraryScreenshots');
       await startWorker();
 
       let response = await get('_capture/card-1');

@@ -9474,7 +9474,8 @@ export class Realm {
   // indexed config card on every check — so a `realm.json` edit takes
   // effect with its own index update, with no restart and no cache to
   // invalidate. Absent, unindexed, or anything but `true` all read as
-  // gated.
+  // gated. The legacy `allowArbitraryScreenshots` key opens it too, so a
+  // config that opted in under that spelling stays open.
   private async allowsArbitraryCaptures(): Promise<boolean> {
     let realmConfigCardURL = new URL(
       this.paths.fileURL('realm.json').href.replace(/\.json$/, ''),
@@ -9483,7 +9484,11 @@ export class Realm {
     if (entry?.type !== 'instance') {
       return false;
     }
-    return entry.instance.attributes?.allowArbitraryCaptures === true;
+    let attributes = entry.instance.attributes;
+    return (
+      attributes?.allowArbitraryCaptures === true ||
+      attributes?.allowArbitraryScreenshots === true
+    );
   }
 
   // The stored bytes at `localPath`, read as the `readSource` operation. Every

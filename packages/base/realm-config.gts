@@ -1172,6 +1172,12 @@ export class RealmConfig extends CardDef {
   // request time, so editing this takes effect with the index update, no
   // restart.
   @field allowArbitraryCaptures = contains(BooleanField);
+  // The legacy spelling of `allowArbitraryCaptures`. A realm that opted in
+  // under this name keeps its gate open: either key set to `true` opens it.
+  @field allowArbitraryScreenshots = contains(BooleanField, {
+    description:
+      'Legacy spelling of allowArbitraryCaptures; either one set to true opens the capture gate',
+  });
 
   @field config = contains(RealmSettingsField, {
     description:
