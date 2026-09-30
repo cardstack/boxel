@@ -219,20 +219,54 @@ module('Integration | modifier | persist-scroll-position', function (hooks) {
 
     let scroller = document.querySelector('.scroller') as HTMLElement;
 
+    // Timing record for the failure message: the gap before each frame of the
+    // simulated transition, the step at which the tag came off (if it did),
+    // and the time since mount (past the modifier's reveal cap, the cap
+    // rather than the quiet check untagged it). A reveal here means the
+    // modifier judged the box quiet while it was still changing, and these
+    // say whether slow frames were in play.
+    let mountedAt = performance.now();
+    let frameGapsMs: number[] = [];
+    let untaggedAtStep: number | undefined;
+    let step = 0;
+    let untagObserver = new MutationObserver(() => {
+      if (
+        untaggedAtStep === undefined &&
+        !scroller.hasAttribute('data-scroll-restore-pending')
+      ) {
+        untaggedAtStep = step;
+      }
+    });
+    untagObserver.observe(scroller, {
+      attributes: true,
+      attributeFilter: ['data-scroll-restore-pending'],
+    });
+
     // Simulate the sheet's open transition: the container's own height changes
     // every frame. The offset sticks trivially against the small viewport, but
-    // that early stick must not reveal — the box is still moving.
+    // that early stick must not reveal — the box is still moving, however long
+    // any one frame takes.
+    let lastFrameAt = performance.now();
     for (let height = 20; height <= 200; height += 15) {
       scroller.style.height = `${height}px`;
       // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- test must emulate a per-frame size transition
       await new Promise((resolve) => requestAnimationFrame(resolve));
+      let now = performance.now();
+      frameGapsMs.push(Math.round(now - lastFrameAt));
+      lastFrameAt = now;
+      step++;
     }
+    untagObserver.disconnect();
     assert
       .dom(scroller)
       .hasAttribute(
         'data-scroll-restore-pending',
         '',
-        'still tagged while the box keeps changing',
+        `still tagged while the box keeps changing (untagged at step: ${
+          untaggedAtStep ?? 'never'
+        }; frame gaps ms: ${JSON.stringify(frameGapsMs)}; ms since mount: ${Math.round(
+          performance.now() - mountedAt,
+        )})`,
       );
 
     // The transition is over; once the box has been quiet long enough (and the
@@ -245,6 +279,68 @@ module('Integration | modifier | persist-scroll-position', function (hooks) {
       scroller.scrollTop,
       150,
       'revealed at the restored offset',
+    );
+  });
+
+  test('holds the restore-pending tag across a slow frame mid-transition', async function (assert) {
+    let onChange = () => {};
+
+    await render(
+      <template>
+        {{! template-lint-disable no-inline-styles }}
+        <div
+          class='scroller'
+          style='height: 200px; overflow-y: auto;'
+          {{persistScrollPosition scrollTop=150 onChange=onChange}}
+        >
+          <div class='content' style='height: 1200px;'></div>
+        </div>
+      </template>,
+    );
+
+    let scroller = document.querySelector('.scroller') as HTMLElement;
+
+    // A long task that lands right after one frame's layout, the way a loaded
+    // machine or a GC pause stalls the main thread. This observer is created
+    // after the modifier's, so its callback runs after the modifier has
+    // stamped the box change — the stall then sits between that change and
+    // the modifier's next frame, longer than the whole quiet window.
+    let stallAtHeight = 80;
+    let stalled = false;
+    let staller = new ResizeObserver(() => {
+      if (!stalled && scroller.offsetHeight === stallAtHeight) {
+        stalled = true;
+        let until = performance.now() + 150;
+        while (performance.now() < until) {
+          // busy-wait: block the main thread like a long task would
+        }
+      }
+    });
+    staller.observe(scroller);
+
+    for (let height = 20; height <= 200; height += 15) {
+      scroller.style.height = `${height}px`;
+      // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- test must emulate a per-frame size transition
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+    }
+    staller.disconnect();
+    assert.true(stalled, 'the slow frame was injected mid-transition');
+    assert
+      .dom(scroller)
+      .hasAttribute(
+        'data-scroll-restore-pending',
+        '',
+        'one slow frame does not make a still-changing box count as quiet',
+      );
+
+    await waitUntil(
+      () => !scroller.hasAttribute('data-scroll-restore-pending'),
+      { timeout: 3000 },
+    );
+    assert.strictEqual(
+      scroller.scrollTop,
+      150,
+      'revealed at the restored offset once the box is quiet',
     );
   });
 
