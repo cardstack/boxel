@@ -14,8 +14,8 @@ export interface RealmServerTokenClaim {
   // share.
   realmAuthority?: true;
   // Carried by a delegated session (`TokenClaims.delegated`): a read-only
-  // session on one realm, the `realm` beside it, minted for a user it reads
-  // on behalf of. It authenticates for that realm and no other.
+  // session minted for a user on the one realm named by `realm`, which it reads
+  // on that user's behalf.
   delegated?: boolean;
   realm?: string;
 }
