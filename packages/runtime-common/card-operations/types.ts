@@ -10,8 +10,14 @@ import type {
   SearchEntryWireQuery,
 } from '../search-entry.ts';
 import type { OperationDiagnostics } from './telemetry.ts';
+import {
+  PRERENDERED_HTML_FORMATS,
+  type PrerenderedHtmlFormat,
+} from '../prerendered-html-format.ts';
 import type {
   BaseOperationName,
+  HtmlDeclaration,
+  HtmlSharing,
   LinkStrategy,
 } from '@cardstack/base/operations';
 
@@ -165,6 +171,49 @@ export function effectiveLinkStrategy(
   );
 }
 
+// The two answers an `html` declaration gives a format, as a total map over the
+// union for the same reason `LINK_STRATEGY_REACH` is one.
+const HTML_SHARING: Record<HtmlSharing, true> = {
+  shareable: true,
+  unshareable: true,
+};
+
+// Whether a value is an `html` declaration the serving path can act on: an
+// object naming prerendered formats, each shareable or not.
+export function isHtmlDeclaration(value: unknown): value is HtmlDeclaration {
+  if (value == null || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+  return Object.entries(value).every(
+    ([format, sharing]) =>
+      PRERENDERED_HTML_FORMATS.includes(format as PrerenderedHtmlFormat) &&
+      typeof sharing === 'string' &&
+      Object.prototype.hasOwnProperty.call(HTML_SHARING, sharing),
+  );
+}
+
+// The formats a stored definition's `html` serves data-only, in the realm's
+// own format order. Absent, there are none: every format is shareable, which
+// is the default for every read and query.
+//
+// Anything else is JSON the realm reads back, so it is only as good as what
+// wrote it. Lowering records an unrecognized declaration rather than storing
+// one, which leaves the last branch unreachable through the path definitions
+// actually take — and reads as every format withheld if something ever gets
+// around it, because a withholding the realm cannot interpret is not a reason
+// to serve more.
+export function unshareableFormatsOf(value: unknown): PrerenderedHtmlFormat[] {
+  if (value === undefined) {
+    return [];
+  }
+  if (!isHtmlDeclaration(value)) {
+    return [...PRERENDERED_HTML_FORMATS];
+  }
+  return PRERENDERED_HTML_FORMATS.filter(
+    (format) => value[format] === 'unshareable',
+  );
+}
+
 export interface OperationDefinition {
   // The built-in behavior that carries this operation out. The name the
   // operation is invoked under is the key it is stored under, and the two are
@@ -227,6 +276,23 @@ export interface OperationDefinition {
   // own authority, and sits in the card's own attributes rather than in the
   // link closure.
   links?: LinkStrategy;
+  // Which prerendered formats this read, or every row of this query, serves
+  // data-only: by format, `unshareable` to withhold the format's prerendered
+  // HTML and `shareable` (the same as leaving it out) to serve it. Absent,
+  // every format is served. Only a `read` or a `query` carries one.
+  //
+  // On a read it governs reads rooted at the target — its single-card HTML
+  // read, the last-known-good markup an errored read carries, and the markup
+  // a host-mode page for it is served with. On a query it governs every row
+  // alike, whatever type the row is and whatever that type's own `read`
+  // declares, as `links` does.
+  //
+  // It applies to every caller alike, for the reason `links` does: prerendered
+  // HTML is rendered once per card and format, under the realm's own
+  // authority, and shared by every viewer — so a format is either served to
+  // everyone or to no one, and the response never depends on how its caller
+  // was authorized.
+  html?: HtmlDeclaration;
   // The author's override of the client's optimistic eligibility.
   optimistic?: boolean;
   // Whether every program this operation runs yields the same result for the
@@ -321,6 +387,14 @@ export type OperationLoweringIssueCode =
   // A `links` value that is not one of the strategies a read or a query can
   // apply.
   | 'invalid-link-strategy'
+  // An `html` declaration on a base other than `read` or `query`. It withholds
+  // prerendered HTML a read of the target or a query's rows are served with,
+  // and no other base serves any: a write answers with the card's data, and a
+  // `readSource` serves stored bytes.
+  | 'html-without-rendering'
+  // An `html` declaration that is not an object naming prerendered formats,
+  // each `shareable` or `unshareable`.
+  | 'invalid-html-declaration'
   // A raw BXL program that does not parse.
   | 'invalid-program'
   // A declared query the realm's own query grammar refuses.

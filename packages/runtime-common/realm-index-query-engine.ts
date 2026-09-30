@@ -36,6 +36,7 @@ import type { VirtualNetwork } from './virtual-network.ts';
 import { FILE_META_RESERVED_KEYS } from './realm.ts';
 import { RealmPaths } from './paths.ts';
 import type { RequestTimings } from './request-timings.ts';
+import type { PrerenderedHtmlFormat } from './prerendered-html-format.ts';
 import type {
   RealmResourceIdentifier,
   RealmIdentifier,
@@ -201,6 +202,15 @@ type Options = {
   // instances can tell one silent about its links from one that has none.
   // Read by `searchEntries` alone.
   omitRelationships?: boolean;
+  // Prerendered formats every entry is served data-only for: no `html`
+  // rendering of these formats is emitted, whatever the htmlQuery selects,
+  // and the entry answers as it would for a row with no rendering of them —
+  // its item where the fieldset falls back to one, an empty html branch where
+  // it pins html. An error row still reports its error for such a format, as a
+  // rendering carrying no markup. It narrows the renderings and never the item
+  // or the membership: the same rows come back, each with its data. Read by
+  // `searchEntries` alone.
+  unshareableFormats?: readonly PrerenderedHtmlFormat[];
   // Per-request wall-clock collector, threaded from `searchRealms` when a
   // request carries a correlation id. The post-SQL stages here — the SQL
   // query and the `loadLinks` relationship assembly — stamp their elapsed
@@ -457,6 +467,7 @@ export class RealmIndexQueryEngine {
       internalKeyFor(ref, undefined, this.#realm.virtualNetwork),
     );
     let nativeOnly = !htmlQueryHasRenderTypePredicate(htmlQuery);
+    let unshareable = new Set<string>(opts?.unshareableFormats ?? []);
 
     let data: EntryResource[] = [];
     let htmlResources: EntryIncludedResource[] = [];
@@ -494,7 +505,10 @@ export class RealmIndexQueryEngine {
           iconById,
         );
         if (fieldset.html) {
-          let matched = enumerateFileRenderings(file).filter((candidate) =>
+          let matched = shareableRenderings(
+            enumerateFileRenderings(file),
+            unshareable,
+          ).filter((candidate) =>
             htmlQueryMatches(resolvedHtmlQuery, candidate),
           );
           let cssIds: string[] = [];
@@ -590,7 +604,10 @@ export class RealmIndexQueryEngine {
       );
       if (fieldset.html) {
         let nativeKey = (row.types as string[] | null)?.[0];
-        let candidates = enumerateRowRenderings(row);
+        let candidates = shareableRenderings(
+          enumerateRowRenderings(row),
+          unshareable,
+        );
         if (nativeOnly) {
           candidates = candidates.filter(
             (candidate) =>
@@ -2698,6 +2715,18 @@ function enumerateRowRenderings(row: {
     });
   }
   return candidates;
+}
+
+// A row's renderings less those of the formats it is served data-only for.
+// Applied before the htmlQuery selects among them, so a withheld format is
+// indistinguishable from one the row has no rendering of.
+function shareableRenderings(
+  candidates: RowRendering[],
+  unshareable: ReadonlySet<string>,
+): RowRendering[] {
+  return unshareable.size === 0
+    ? candidates
+    : candidates.filter((candidate) => !unshareable.has(candidate.format));
 }
 
 // The file counterpart: a file renders natively, so its fitted/embedded

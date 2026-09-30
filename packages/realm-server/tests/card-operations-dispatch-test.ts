@@ -4,6 +4,7 @@ import { basename } from 'path';
 
 import {
   dischargePendingDecision,
+  erroredTargetRow,
   isDocumentResult,
   isHeadResult,
   isOperationFailure,
@@ -17,6 +18,7 @@ import {
   runOperation,
   scopeCallerFor,
   type OperationCore,
+  type OperationDefinition,
   type OperationError,
   type OperationScope,
   type OperationTarget,
@@ -52,7 +54,11 @@ const PERSON: CodeRef = {
 
 interface StubOptions {
   // What `cardDocument` answers. `undefined` is a missing row.
-  document?: 'ok' | 'missing' | { errorStatus: number };
+  // An errored row may carry the card's last-known-good isolated markup.
+  document?:
+    | 'ok'
+    | 'missing'
+    | { errorStatus: number; lastKnownGoodHtml?: string };
   // What the row peek answers. `undefined` is a missing row.
   row?: 'ok' | 'missing';
   // The operations the target's type declares.
@@ -206,7 +212,7 @@ function stub(opts: StubOptions = {}): Stub {
                 message: 'the card could not be built',
               },
               scopedCssUrls: [],
-              lastKnownGoodHtml: null,
+              lastKnownGoodHtml: document.lastKnownGoodHtml ?? null,
               cardTitle: null,
             },
           } as any;
@@ -721,6 +727,48 @@ module(basename(import.meta.filename), function () {
       );
       assert.strictEqual(nonHttp.status, 500);
     });
+    test('an errored read withholds its salvage markup when its isolated format is unshareable', async function (assert) {
+      // The salvage an errored read carries in place of the card is the card's
+      // last-known-good isolated markup, so a read declaring the isolated
+      // format unshareable carries none — while one declaring another format
+      // unshareable, or nothing, carries it.
+      let salvage = async (operations?: Definition['operations']) => {
+        try {
+          await runOperation(
+            stub({
+              document: { errorStatus: 500, lastKnownGoodHtml: '<p>Ada</p>' },
+              operations,
+            }).core,
+            invoke(CARD, 'read'),
+          );
+        } catch (err) {
+          if (isOperationFailure(err)) {
+            return erroredTargetRow(err)?.lastKnownGoodHtml;
+          }
+          throw err;
+        }
+        throw new Error('expected the read to be refused');
+      };
+      let read = (html: OperationDefinition['html']) => ({
+        read: { base: 'read' as const, deterministic: true, html },
+      });
+      assert.strictEqual(
+        await salvage(),
+        '<p>Ada</p>',
+        'a read declaring nothing carries the markup',
+      );
+      assert.strictEqual(
+        await salvage(read({ embedded: 'unshareable' })),
+        '<p>Ada</p>',
+        'so does one withholding a different format',
+      );
+      assert.strictEqual(
+        await salvage(read({ isolated: 'unshareable' })),
+        null,
+        'one withholding the isolated format carries none',
+      );
+    });
+
     test('a read tells a missing card from one still being indexed', async function (assert) {
       let gone = await refusalFrom(() =>
         runOperation(

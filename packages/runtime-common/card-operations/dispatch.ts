@@ -31,6 +31,7 @@ import {
   isDocumentResult,
   linkStrategyOf,
   isOperationFailure,
+  unshareableFormatsOf,
   isHeadResult,
   type BaseOperation,
   type OperationDefinition,
@@ -39,6 +40,10 @@ import {
   type OperationSourceBody,
   type OperationTarget,
 } from './types.ts';
+import {
+  PRERENDERED_HTML_FORMATS,
+  type PrerenderedHtmlFormat,
+} from '../prerendered-html-format.ts';
 import type { LinkStrategy } from '@cardstack/base/operations';
 import type { CodeRef, ResolvedCodeRef } from '../code-ref.ts';
 import type { Definition } from '../definitions.ts';
@@ -971,6 +976,12 @@ export interface ReadPlan {
   // strategy keeps the validator it had and a conditional request is answered
   // 304 with the wider body still in the client's cache.
   links: LinkStrategy;
+  // The prerendered formats the type's `read` serves data-only, none where it
+  // declares none. Reads rooted at the card that serve its prerendered HTML
+  // without running the read — the single-card HTML read and the host-mode
+  // page — withhold these, so the declaration holds on every route a card's
+  // markup leaves the realm by, and not only on the ones that run the read.
+  unshareableFormats: PrerenderedHtmlFormat[];
 }
 
 export async function readPlan(
@@ -1028,13 +1039,23 @@ async function resolveReadPlan(
     // would carry, so the widest strategy is reported — which is the one that
     // keeps the caller off every fast path it could take with a narrower
     // answer. The refusal this read has coming is what the request gets.
-    return { shape: 'unresolved', links: 'full' };
+    //
+    // Every format is reported data-only, for the opposite reason: the routes
+    // that read this serve markup without running the read, so no refusal
+    // follows to stand in for a declaration nobody could read, and a
+    // withholding the realm cannot interpret is not a reason to serve more.
+    return {
+      shape: 'unresolved',
+      links: 'full',
+      unshareableFormats: [...PRERENDERED_HTML_FORMATS],
+    };
   }
   return {
     shape: hasTransforms(definition) ? 'staged' : 'plain',
     // Read the same way the executor reads it, so the validator this answer
     // is folded into names the shape the body will actually take.
     links: linkStrategyOf(definition.links),
+    unshareableFormats: unshareableFormatsOf(definition.html),
   };
 }
 

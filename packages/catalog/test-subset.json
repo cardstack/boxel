@@ -27,6 +27,7 @@
       "realm-policy-create-lane-test",
       "realm-policy-explain-test",
       "realm-policy-gate-test",
+      "realm-policy-html-sharing-test",
       "realm-policy-non-grantable-test",
       "realm-policy-query-filter-test",
       "realm-policy-query-reach-test",

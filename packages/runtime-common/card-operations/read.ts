@@ -10,6 +10,7 @@ import {
 import {
   effectiveLinkStrategy,
   OperationFailure,
+  unshareableFormatsOf,
   type OperationDefinition,
   type OperationDocumentResult,
   type OperationHeadResult,
@@ -21,6 +22,7 @@ import type {
   OperationScope,
   RunOperationOptions,
 } from './dispatch.ts';
+import type { PrerenderedHtmlFormat } from '../prerendered-html-format.ts';
 import type { LinkStrategy } from '@cardstack/base/operations';
 import type { LocalPath } from '../paths.ts';
 import type { SingleFileMetaDocument } from '../document-types.ts';
@@ -91,7 +93,14 @@ export async function readOperation(
   if (opts.headersOnly) {
     return await readHeaders(core, url, localPath, links, scope);
   }
-  return await readDocument(core, url, localPath, links, opts);
+  return await readDocument(
+    core,
+    url,
+    localPath,
+    links,
+    unshareableFormatsOf(definition.html),
+    opts,
+  );
 }
 
 // A declaration may specialize `read` by running a `program` over the target,
@@ -129,6 +138,10 @@ async function readDocument(
   url: URL,
   localPath: LocalPath,
   links: LinkStrategy,
+  // The formats the read declares unshareable. A read serves no markup of its
+  // own, but an errored one carries the card's last-known-good isolated
+  // markup in place of the card, and that is withheld with the rest.
+  unshareableFormats: PrerenderedHtmlFormat[],
   opts: RunOperationOptions,
 ): Promise<OperationDocumentResult> {
   // The index decides first, and the bytes on disk are the fallback — not the
@@ -156,7 +169,9 @@ async function readDocument(
     throw await missingTarget(core, url, localPath);
   }
   if (result.type === 'error') {
-    throw errorRowFailure(url, result);
+    throw errorRowFailure(url, result, {
+      withholdMarkup: unshareableFormats.includes('isolated'),
+    });
   }
   let { doc } = result;
   doc.data.links = { self: url.href };
@@ -360,6 +375,9 @@ const ERRORED_ROW = 'erroredRow';
 function errorRowFailure(
   url: URL,
   result: SearchResultError,
+  // Whether the card's isolated format is served data-only, which is the
+  // format the salvage markup is.
+  { withholdMarkup = false }: { withholdMarkup?: boolean } = {},
 ): OperationFailure {
   let { errorDetail } = result.error;
   let status =
@@ -373,7 +391,7 @@ function errorRowFailure(
     title: errorDetail.title,
     message: errorDetail.message,
     stack: errorDetail.stack,
-    lastKnownGoodHtml: result.error.lastKnownGoodHtml,
+    lastKnownGoodHtml: withholdMarkup ? null : result.error.lastKnownGoodHtml,
     cardTitle: result.error.cardTitle,
     scopedCssUrls: result.error.scopedCssUrls,
   };

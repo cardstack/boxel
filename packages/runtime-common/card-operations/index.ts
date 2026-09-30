@@ -207,12 +207,14 @@ export {
   isHeadResult,
   isIdentityResult,
   effectiveLinkStrategy,
+  isHtmlDeclaration,
   isLinkStrategy,
   isOperationFailure,
   isSourceResult,
   isWrite,
   linkStrategyOf,
   refusalForNonReader,
+  unshareableFormatsOf,
 } from './types.ts';
 export type {
   BaseOperation,
