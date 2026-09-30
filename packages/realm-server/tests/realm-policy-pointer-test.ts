@@ -86,12 +86,32 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
-  test('a realm this process holds is asked directly, not read from disk', async function (assert) {
+  test('a realm this process holds answers from the pointer it read, not from disk', async function (assert) {
     // Nothing on disk and no registry row: only the mounted realm could answer.
-    let url = 'http://127.0.0.1:4444/held/';
-    reconciler.registerExistingMounts([{ url } as Realm]);
+    let held = (url: string, getRealmPolicy: Realm['getRealmPolicy']) =>
+      ({ url, getRealmPolicy }) as unknown as Realm;
+    let withPolicy = 'http://127.0.0.1:4444/held-with-policy/';
+    let withoutPolicy = 'http://127.0.0.1:4444/held-without-policy/';
+    let unreadable = 'http://127.0.0.1:4444/held-unreadable/';
+    reconciler.registerExistingMounts([
+      held(withPolicy, async () => ({
+        card: 'http://127.0.0.1:4444/lib/policy',
+      })),
+      held(withoutPolicy, async () => undefined),
+      held(unreadable, async () => {
+        throw new Error('the realm could not read its realm.json');
+      }),
+    ]);
 
-    assert.true(await mayName(url));
+    assert.true(await mayName(withPolicy), 'a realm with a policy');
+    assert.false(
+      await mayName(withoutPolicy),
+      'a realm with none says so, though holding it would make asking it cheap',
+    );
+    assert.true(
+      await mayName(unreadable),
+      'a realm whose pointer cannot be read is left to answer when asked',
+    );
   });
 
   test('a realm.json that cannot be read is left to the realm to answer', async function (assert) {

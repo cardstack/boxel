@@ -1185,6 +1185,43 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         }
       });
 
+      test('a named query naming only realms that name no policy is answered with no rows, and its declaration is not read', async function (assert) {
+        let response = await federatedSearch(listOpen([PRIVATE]), PROVIDER_A);
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        assert.deepEqual(ids(response), []);
+        assert.deepEqual(
+          response.body.meta.realmTotals,
+          { [PRIVATE]: 0 },
+          'answered as a realm that holds nothing for the caller',
+        );
+
+        let undeclared = await federatedSearch(
+          { operation: 'everything', on: SCHEDULE, realms: [PRIVATE] },
+          PROVIDER_A,
+        );
+        assert.strictEqual(
+          undeclared.status,
+          200,
+          'an operation the type does not declare is not refused, since no realm named could answer it a row either way',
+        );
+        assert.strictEqual(
+          undeclared.text,
+          response.text,
+          'and it is answered byte for byte as the declared one is',
+        );
+      });
+
+      test('a named query naming a realm whose policy could admit the caller is refused as its declaration refuses it', async function (assert) {
+        let response = await federatedSearch(
+          { operation: 'everything', on: SCHEDULE, realms: [PRIVATE, DENIES] },
+          PROVIDER_A,
+        );
+
+        assert.strictEqual(response.status, 404, 'HTTP 404 status');
+        assert.strictEqual(response.body.errors[0].code, 'unknown-operation');
+      });
+
       test('a request that authenticates nobody is still told to', async function (assert) {
         let response = await federatedSearch(listOpen([COARSE, GRANTS]));
 
@@ -1301,6 +1338,9 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       const UNMOUNTED_PRIVATE = 'http://127.0.0.1:4444/unmounted-private/';
       const UNMOUNTED_ENUMERABLE =
         'http://127.0.0.1:4444/unmounted-enumerable/';
+      // Its policy admits a provider's own schedules to the `listOpen` named
+      // query.
+      const UNMOUNTED_GRANTS = 'http://127.0.0.1:4444/unmounted-grants/';
       // Registered with a `disk_id` outside the realms root, so there is no
       // directory to read its `realm.json` from and none to mount it from.
       const UNRESOLVABLE = 'http://127.0.0.1:4444/unresolvable/';
@@ -1356,6 +1396,22 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
             rank: 2,
           }),
         });
+        await stage(UNMOUNTED_GRANTS, 'unmounted-grants', {
+          'realm.json': realmConfigCardJSON({
+            name: 'Unmounted grants',
+            policy: `${UNMOUNTED_GRANTS}policies/policy`,
+          }),
+          'policies/policy.json': policyCard([
+            { operation: 'listOpen', where: OWN },
+          ]),
+          ...aOpen(),
+          'schedules/b-open.json': schedule({
+            title: 'B open',
+            providerId: PROVIDER_B,
+            status: 'open',
+            rank: 2,
+          }),
+        });
         await stage(UNRESOLVABLE, '../unresolvable', {
           'realm.json': realmConfigCardJSON({ name: 'Unresolvable' }),
           ...aOpen(),
@@ -1367,9 +1423,9 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       });
 
       hooks.after(function () {
-        realmServer?.testingOnlyReconciler.mounted
-          .get(UNMOUNTED_ENUMERABLE)
-          ?.unsubscribe();
+        for (let url of [UNMOUNTED_ENUMERABLE, UNMOUNTED_GRANTS]) {
+          realmServer?.testingOnlyReconciler.mounted.get(url)?.unsubscribe();
+        }
       });
 
       test('one whose realm.json names no policy contributes no rows, and is not mounted to say so', async function (assert) {
@@ -1427,6 +1483,68 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         assert.true(
           isMounted(UNMOUNTED_ENUMERABLE),
           'the realm was mounted to ask its policy',
+        );
+      });
+
+      test('a named query naming only one whose realm.json names no policy is answered with no rows, and it is not mounted to read the declaration', async function (assert) {
+        assert.false(
+          isMounted(UNMOUNTED_PRIVATE),
+          'precondition: nothing on this process has mounted it',
+        );
+
+        let response = await federatedSearch(
+          listOpen([UNMOUNTED_PRIVATE]),
+          PROVIDER_A,
+        );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        assert.deepEqual(ids(response), []);
+        assert.deepEqual(
+          response.body.meta.realmTotals,
+          { [UNMOUNTED_PRIVATE]: 0 },
+          'it is counted among the realms that answered, with nothing',
+        );
+        assert.notStrictEqual(
+          response.body.meta.incomplete,
+          true,
+          'and not among the ones that failed to',
+        );
+        assert.false(
+          isMounted(UNMOUNTED_PRIVATE),
+          'and it is still not mounted',
+        );
+      });
+
+      test('a named query naming one with no policy and one with a policy reads the declaration through the one with a policy, and composes its grants', async function (assert) {
+        // Mounting the realm indexes it from scratch.
+        assert.timeout(180_000);
+        assert.false(
+          isMounted(UNMOUNTED_PRIVATE),
+          'precondition: nothing on this process has mounted the realm with no policy',
+        );
+        assert.false(
+          isMounted(UNMOUNTED_GRANTS),
+          'precondition: nor the realm with one',
+        );
+
+        let response = await federatedSearch(
+          listOpen([UNMOUNTED_PRIVATE, UNMOUNTED_GRANTS]),
+          PROVIDER_A,
+        );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        assert.deepEqual(
+          ids(response),
+          [`${UNMOUNTED_GRANTS}schedules/a-open`],
+          "provider A's own open schedule, which the grant admits, and not provider B's",
+        );
+        assert.true(
+          isMounted(UNMOUNTED_GRANTS),
+          'the realm with a policy was mounted to read the declaration and ask its policy',
+        );
+        assert.false(
+          isMounted(UNMOUNTED_PRIVATE),
+          'the realm with none, named first, was not',
         );
       });
 
