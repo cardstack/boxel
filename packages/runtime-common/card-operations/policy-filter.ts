@@ -1,3 +1,5 @@
+import stableStringify from 'safe-stable-stringify';
+
 import type { ResolvedCodeRef } from '../code-ref.ts';
 import { isResolvedCodeRef } from '../card-document-shape.ts';
 import type { Definition, FieldDefinition } from '../definitions.ts';
@@ -51,16 +53,25 @@ import type { OperationQueryFilterTemplate } from './types.ts';
 //   wrote a link would match the index, and never the URL the predicate
 //   reads.
 //
+// A filter is compiled against the rule's type, and `item.on` also admits a
+// card whose type descends from it. A descendant can declare a field the
+// predicate reads differently, computed where the rule's type stores it, and
+// the index then holds what that type makes of it. So the compiled policy
+// also records, for each grant, the descendants the governed realm holds
+// cards of that read one of the filter's fields differently
+// (`readsFieldsAlike`), and a search leaves their cards out of what the
+// grant admits.
+//
 // What the checks do not reach:
 //
-// - Other types. A filter is compiled against the rule's type and the types
-//   its path names for contained values. `item.on` also admits a card whose
-//   type descends from the rule's, and a contained value can be of a subtype
-//   of its field's type. Either can declare a field the predicate reads
-//   differently, computed where the rule's type stores it, and the index
-//   then holds what that type makes of it. The paths a filter reads are the
-//   keys of its `eq` and `range` members, so they can be checked against any
-//   other type's definition.
+// - A contained value of a subtype of its field's type. A card of the rule's
+//   type can store, in `.address`, a value whose type descends from the
+//   field's and computes `city`, and the index then holds what that value's
+//   type makes of it. The index records the type of a card, not of a value
+//   it contains, so no filter can tell such a card apart from one whose
+//   value reads `city` as stored. Only a writer of the card can store such a
+//   value, and a writer can already move a card into or out of a grant by
+//   writing the fields its predicate reads.
 // - A number field whose stored value is not a number. The index holds what
 //   the field makes of the stored value, so the string "150" is indexed as
 //   150, while BXL compares the string. Only a writer of the card can store
@@ -124,6 +135,75 @@ export async function compilePolicyFilter(
     }
     throw e;
   }
+}
+
+// The fields of the rule's type a compiled filter reads: the first name of
+// every path its field-keyed members compare, each once. A filter's other
+// members read no field: `item.on` names a type, and `any`, `every` and `not`
+// only combine what they hold.
+export function fieldsFilterReads(filter: Filter): string[] {
+  let names = new Set<string>();
+  let visit = (node: Filter) => {
+    for (let operator of FIELD_KEYED_OPERATORS) {
+      for (let path of Object.keys(node[operator] ?? {})) {
+        names.add(path.replace(/^item\./, '').split('.')[0]);
+      }
+    }
+    node.any?.forEach(visit);
+    node.every?.forEach(visit);
+    if (node.not) {
+      visit(node.not);
+    }
+  };
+  visit(filter);
+  return [...names].sort();
+}
+
+const FIELD_KEYED_OPERATORS = ['eq', 'contains', 'in', 'range'] as const;
+
+// Whether a card of the type `other` defines reads each of `fields` as a card
+// of the rule's type does, so the filter compiled against the rule's type
+// means for it what it means for the rule's own cards.
+//
+// Only a field's own declaration is compared. It names the type the rest of a
+// path resolves through, so two types declaring a field alike read every path
+// under it alike. Anything else in the declaration counts as a difference,
+// whether or not the compiler would have accepted it: being computed, being
+// filled by a query, having another type, being a list rather than a single
+// value, or being absent. Treating one as different only makes the filter
+// narrower.
+//
+// A predicate annotated `snapshot: true` reads what the index holds, as the
+// filter does, so for it a field computed in one type and stored in the other
+// is read alike.
+export function readsFieldsAlike(
+  ruleType: Definition,
+  other: Definition,
+  fields: string[],
+  snapshot: boolean,
+): boolean {
+  return fields.every((name) => {
+    let declared = fieldOf(ruleType, name);
+    let redeclared = fieldOf(other, name);
+    if (!declared || !redeclared) {
+      return false;
+    }
+    let reading = (field: FieldDefinition) =>
+      stableStringify(snapshot ? { ...field, isComputed: false } : field);
+    return reading(declared) === reading(redeclared);
+  });
+}
+
+function fieldOf(
+  definition: Definition,
+  name: string,
+): FieldDefinition | undefined {
+  let id = hasOwn(definition.fields, name)
+    ? definition.fields[name]
+    : undefined;
+  return id !== undefined && hasOwn(definition.fieldDefs, id)
+    ? definition.fieldDefs[id]
+    : undefined;
 }
 
 // Where the caller stands in a filter: the marker a declared query uses for

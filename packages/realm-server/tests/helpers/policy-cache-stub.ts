@@ -107,6 +107,8 @@ export function stubPolicyCache({
     toURL: (identifier) => new URL(identifier),
     isPolicyCard: (types) => types.includes(policyKey),
     typeKey,
+    realmURL: educationURL,
+    instanceTypesUnder: async () => [],
   });
   return { cache, state, card };
 }

@@ -225,7 +225,7 @@ function ownDeclaration(
 }
 
 // Every matching grant's filter, with the caller filled in, in the grammar the
-// engine runs.
+// engine runs, less the cards of any type the grant's filter would misread.
 //
 // A compiled filter stands the caller as the `{ $ref: 'actor' }` marker a
 // declared query uses, so filling one in is the substitution a named query
@@ -256,7 +256,20 @@ async function grantFilters(
         `a compiled query grant on "${operation}" lowered to no filter`,
       );
     }
-    filters.push(policyFilterFromWire(bound.filter));
+    filters.push(
+      excluding(
+        policyFilterFromWire(bound.filter),
+        (grant.excludedTypes ?? []).map((type) => ({ type })),
+      ),
+    );
   }
   return filters;
+}
+
+// `filter`, less every row any of `excluded` matches. With nothing to
+// exclude it is `filter` itself, unwrapped.
+export function excluding(filter: Filter, excluded: Filter[]): Filter {
+  return excluded.length === 0
+    ? filter
+    : { every: [filter, { not: { any: excluded } }] };
 }

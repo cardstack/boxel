@@ -42,6 +42,12 @@ const PERSON: ResolvedCodeRef = {
   module: rri(`${EDUCATION}person`),
   name: 'Person',
 };
+// The realm the policy governs, apart from the realms the policy card and the
+// types live in, so that only its move can tell the policy that the cards it
+// holds changed.
+const GOVERNED = 'http://policy-filter.test/governed/';
+// Types descending from `Classroom`.
+const SUBTYPES_MODULE = rri(`${EDUCATION}subtypes`);
 // Field types as a definition names them.
 const STRING_FIELD = {
   module: rri('@cardstack/base/card-api'),
@@ -62,6 +68,10 @@ const JSON_FIELD = {
 };
 // A string field of the realm's own, which can index what it likes.
 const SLUG_FIELD = { module: rri(`${EDUCATION}slug`), name: 'Slug' };
+const TEXT_AREA_FIELD = {
+  module: rri('@cardstack/base/card-api'),
+  name: 'TextAreaField',
+};
 
 async function until(done: () => boolean, what: string) {
   let started = Date.now();
@@ -154,6 +164,34 @@ function classroomDefinition(): Definition {
   );
 }
 
+function subtype(name: string): ResolvedCodeRef {
+  return { module: SUBTYPES_MODULE, name };
+}
+
+// A type descending from `Classroom` that declares every field `Classroom`
+// does, apart from those it redeclares here: in the way given, or not at all
+// where given `null`.
+function classroomSubtype(
+  name: string,
+  redeclared: Record<string, FieldDefinition | null> = {},
+): Definition {
+  let classroom = classroomDefinition();
+  let fields: Record<string, FieldDefinition> = {};
+  for (let [fieldName, id] of Object.entries(classroom.fields)) {
+    fields[fieldName] = classroom.fieldDefs[id];
+  }
+  for (let [fieldName, redeclaration] of Object.entries(redeclared)) {
+    if (redeclaration) {
+      fields[fieldName] = redeclaration;
+    } else {
+      delete fields[fieldName];
+    }
+  }
+  return definition(subtype(name), fields, {
+    operations: classroom.operations,
+  });
+}
+
 function addressDefinition(fields: string[] = ['city']): Definition {
   return {
     ...definition(
@@ -169,11 +207,16 @@ type Where = string | { bxl: string; snapshot: boolean };
 
 // A cache whose policy has one rule, on `Classroom`, holding `grants`. A test
 // swaps a definition through `definitions` and reads what the cache compiled.
+// The governed realm holds cards of `Classroom` and of each type in `held`,
+// which a test can change too; `asked` counts the times the cache asked what
+// the realm holds.
 function setup(grants: Grant[]) {
   let definitions = new Map<string, Definition>([
     [CLASSROOM.name, classroomDefinition()],
     [ADDRESS.name, addressDefinition()],
   ]);
+  let held: ResolvedCodeRef[] = [];
+  let state = { asked: 0 };
   let typeKey = (ref: ResolvedCodeRef) => `${ref.module}/${ref.name}`;
   let policyKey = typeKey(realmPolicyRef);
   let cache = new RealmPolicyCache({
@@ -200,7 +243,11 @@ function setup(grants: Grant[]) {
       },
     }),
     resolveCodeRef: (codeRef) =>
-      codeRef.module === CLASSROOM.module ? CLASSROOM : undefined,
+      codeRef.module === CLASSROOM.module
+        ? CLASSROOM
+        : codeRef.module === SUBTYPES_MODULE
+          ? subtype(codeRef.name)
+          : undefined,
     lookupDefinitionEntry: async (codeRef) => {
       let found = definitions.get(codeRef.name);
       if (!found) {
@@ -208,13 +255,24 @@ function setup(grants: Grant[]) {
           codeRef as ResolvedCodeRef,
         );
       }
-      return { definition: found, types: [typeKey(codeRef)] };
+      let chain =
+        codeRef.module === SUBTYPES_MODULE
+          ? [typeKey(codeRef), typeKey(CLASSROOM)]
+          : [typeKey(codeRef)];
+      return { definition: found, types: chain };
     },
     toURL: (identifier) => new URL(identifier),
     isPolicyCard: (types) => types.includes(policyKey),
     typeKey,
+    realmURL: GOVERNED,
+    instanceTypesUnder: async (codeRef) => {
+      state.asked++;
+      return typeKey(codeRef) === typeKey(CLASSROOM)
+        ? [CLASSROOM, ...held].map(typeKey).sort()
+        : [];
+    },
   });
-  return { cache, definitions };
+  return { cache, definitions, held, state };
 }
 
 async function compile(grants: Grant[]): Promise<CompiledRealmPolicy> {
@@ -610,5 +668,246 @@ module(basename(import.meta.filename), function () {
     noteRealmIndexMoved(SHARED);
     await until(() => cache.stats.compiles === 3, 'the next move recompiles');
     assert.deepEqual((await cache.get())?.issues, [], 'and it is back');
+  });
+
+  module('a type descending from the rule type', function () {
+    const COMPUTED = subtype('ComputedProviderClassroom');
+    const ELECTIVE = subtype('ElectiveClassroom');
+    const OWN = '.providerId == actor()';
+
+    // The policy `setup` compiles, once the governed realm holds cards of
+    // each of `held`, whose definitions are the ones given.
+    async function compileHolding(
+      grants: Grant[],
+      held: Record<string, Definition | undefined>,
+    ): Promise<CompiledRealmPolicy> {
+      let { cache, definitions, held: holding } = setup(grants);
+      for (let [name, found] of Object.entries(held)) {
+        holding.push(subtype(name));
+        if (found) {
+          definitions.set(name, found);
+        }
+      }
+      let policy = await cache.get();
+      if (!policy) {
+        throw new Error('the realm has no policy');
+      }
+      return policy;
+    }
+
+    test("a descendant the realm holds cards of that computes a field a grant's filter reads is left out of that grant, and out of no other", async function (assert) {
+      let policy = await compileHolding(
+        [
+          { operation: 'query', where: OWN },
+          { operation: 'query', where: '.roomNumber > 200' },
+        ],
+        {
+          [COMPUTED.name]: classroomSubtype(COMPUTED.name, {
+            providerId: field('contains', { isComputed: true }),
+          }),
+          [ELECTIVE.name]: classroomSubtype(ELECTIVE.name, {
+            elective: field('contains'),
+          }),
+        },
+      );
+      assert.deepEqual(policy.issues, []);
+      let [own, room] = grantsOf(policy);
+      assert.deepEqual(
+        own.excludedTypes,
+        [COMPUTED],
+        'the grant reading `providerId` leaves out the descendant that computes it, and not the one that declares it as `Classroom` does',
+      );
+      assert.strictEqual(
+        room.excludedTypes,
+        undefined,
+        'the grant reading `roomNumber` leaves out nothing: both descendants declare it as `Classroom` does',
+      );
+    });
+
+    test('a descendant that declares a field a filter reads in any way other than the rule type does is left out', async function (assert) {
+      let ways: [string, FieldDefinition | null][] = [
+        ['Computed', field('contains', { isComputed: true })],
+        [
+          'QueryBacked',
+          field('contains', { query: { filter: { type: PERSON } } }),
+        ],
+        ['Retyped', field('contains', { fieldOrCard: TEXT_AREA_FIELD })],
+        ['Listed', field('containsMany')],
+        ['Absent', null],
+      ];
+      let policy = await compileHolding(
+        [{ operation: 'query', where: OWN }],
+        Object.fromEntries(
+          ways.map(([name, redeclaration]) => [
+            name,
+            classroomSubtype(name, { providerId: redeclaration }),
+          ]),
+        ),
+      );
+      let [grant] = grantsOf(policy);
+      assert.deepEqual(
+        grant.excludedTypes?.map(({ name }) => name).sort(),
+        ways.map(([name]) => name).sort(),
+      );
+    });
+
+    test('a field of a contained value, or the id of a linked card, is compared by the declaration of the field holding it', async function (assert) {
+      let policy = await compileHolding(
+        [
+          { operation: 'query', where: '.address.city == "Springfield"' },
+          {
+            operation: 'query',
+            where: `.lead.id == "${EDUCATION}people/p1"`,
+          },
+        ],
+        {
+          ReaddressedClassroom: classroomSubtype('ReaddressedClassroom', {
+            address: field('contains', {
+              isPrimitive: false,
+              fieldOrCard: { module: ADDRESS.module, name: 'PostalAddress' },
+            }),
+          }),
+          RelinkedClassroom: classroomSubtype('RelinkedClassroom', {
+            lead: field('linksTo', {
+              isPrimitive: false,
+              fieldOrCard: CLASSROOM,
+            }),
+          }),
+        },
+      );
+      let [city, lead] = grantsOf(policy);
+      assert.deepEqual(city.excludedTypes, [subtype('ReaddressedClassroom')]);
+      assert.deepEqual(lead.excludedTypes, [subtype('RelinkedClassroom')]);
+    });
+
+    test('a grant annotated as reading a snapshot reads a field computed in one type and stored in the other alike, and any other difference still leaves a descendant out', async function (assert) {
+      let policy = await compileHolding(
+        [
+          { operation: 'query', where: { bxl: OWN, snapshot: true } },
+          {
+            operation: 'query',
+            where: { bxl: '.summary == "open"', snapshot: true },
+          },
+          { operation: 'query', where: OWN },
+        ],
+        {
+          [COMPUTED.name]: classroomSubtype(COMPUTED.name, {
+            providerId: field('contains', { isComputed: true }),
+          }),
+          StoredSummaryClassroom: classroomSubtype('StoredSummaryClassroom', {
+            summary: field('contains'),
+          }),
+          RetypedClassroom: classroomSubtype('RetypedClassroom', {
+            providerId: field('contains', { fieldOrCard: TEXT_AREA_FIELD }),
+          }),
+        },
+      );
+      assert.deepEqual(policy.issues, []);
+      let [snapshotOwn, snapshotSummary, own] = grantsOf(policy);
+      assert.deepEqual(
+        snapshotOwn.excludedTypes,
+        [subtype('RetypedClassroom')],
+        'the snapshot grant keeps the descendant that computes `providerId`, and leaves out the one that retypes it',
+      );
+      assert.strictEqual(
+        snapshotSummary.excludedTypes,
+        undefined,
+        'and a descendant that stores what `Classroom` computes is read alike too',
+      );
+      assert.deepEqual(
+        own.excludedTypes?.map(({ name }) => name).sort(),
+        [COMPUTED.name, 'RetypedClassroom'],
+        'while the same predicate unannotated leaves out both',
+      );
+    });
+
+    test('a descendant whose definition cannot be read is left out of every grant whose filter reads a field', async function (assert) {
+      let policy = await compileHolding(
+        [{ operation: 'query', where: OWN }, { operation: 'query' }],
+        { UnreadableClassroom: undefined },
+      );
+      let [own, unconditional] = grantsOf(policy);
+      assert.deepEqual(own.excludedTypes, [subtype('UnreadableClassroom')]);
+      assert.strictEqual(
+        unconditional.excludedTypes,
+        undefined,
+        'a filter reading no field reads nothing a descendant could declare differently',
+      );
+    });
+
+    test('a grant whose rule type has no descendant declaring its fields differently compiles as it would with no descendant at all, and a policy whose filters read no field never asks what the realm holds', async function (assert) {
+      let alone = await compile([{ operation: 'query', where: OWN }]);
+      let withElective = await compileHolding(
+        [{ operation: 'query', where: OWN }],
+        {
+          [ELECTIVE.name]: classroomSubtype(ELECTIVE.name, {
+            elective: field('contains'),
+          }),
+        },
+      );
+      assert.deepEqual(grantsOf(withElective), grantsOf(alone));
+      assert.false(
+        'excludedTypes' in grantsOf(withElective)[0],
+        'the grant carries no list of excluded types at all',
+      );
+
+      let { cache, state } = setup([
+        { operation: 'read', where: OWN },
+        { operation: 'query' },
+      ]);
+      await cache.get();
+      assert.strictEqual(state.asked, 0);
+    });
+
+    test("what a grant leaves out follows the governed realm's cards and its descendants' definitions", async function (assert) {
+      let { cache, definitions, held } = setup([
+        { operation: 'query', where: OWN },
+      ]);
+      definitions.set(COMPUTED.name, classroomSubtype(COMPUTED.name));
+      let [before] = grantsOf((await cache.get())!);
+      assert.strictEqual(
+        before.excludedTypes,
+        undefined,
+        'nothing to leave out',
+      );
+
+      // A card of a descendant appears in the governed realm. Only that
+      // realm's move reaches the policy: its card and its types live in other
+      // realms.
+      held.push(COMPUTED);
+      noteRealmIndexMoved(GOVERNED);
+      await until(() => cache.stats.compiles === 2, 'the move recompiles');
+      let [added] = grantsOf((await cache.get())!);
+      assert.strictEqual(
+        added.excludedTypes,
+        undefined,
+        'a descendant declaring `providerId` as `Classroom` does is not left out',
+      );
+
+      definitions.set(
+        COMPUTED.name,
+        classroomSubtype(COMPUTED.name, {
+          providerId: field('contains', { isComputed: true }),
+        }),
+      );
+      noteRealmIndexMoved(EDUCATION);
+      await until(() => cache.stats.compiles === 3, 'the next move recompiles');
+      let [redeclared] = grantsOf((await cache.get())!);
+      assert.deepEqual(
+        redeclared.excludedTypes,
+        [COMPUTED],
+        'once it computes `providerId`, it is',
+      );
+
+      held.length = 0;
+      noteRealmIndexMoved(GOVERNED);
+      await until(() => cache.stats.compiles === 4, 'the last move recompiles');
+      let [emptied] = grantsOf((await cache.get())!);
+      assert.strictEqual(
+        emptied.excludedTypes,
+        undefined,
+        'and once the realm holds none of its cards, nothing is left out',
+      );
+    });
   });
 });
