@@ -1851,7 +1851,10 @@ const CAPTURE_LOSSY_QUALITY = 90;
 // How long a capture-only component may hold its `data-capture-pending`
 // readiness signal before its slot's capture fails. Longer than the image
 // paint budget: this covers real media decode (a video seek, a PDF page
-// paint, a WebGL first frame) that image-paint waiting can't see.
+// paint, a WebGL first frame) that image-paint waiting can't see. Keep it
+// above runtime-common's `SHIM_RESOLVE_DEADLINE_MS`, so a component stalled
+// on a shimmed `import()` fails with the specifier named rather than with
+// this wait's own timeout.
 const CAPTURE_PENDING_WAIT_MS = 15_000;
 
 export async function runCapture(

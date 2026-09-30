@@ -324,10 +324,101 @@ export interface ShimRetryDeps {
   // `isRetryableShimResolveError`. Tests can force-retry every error
   // or force-skip every retry to exercise both branches.
   isRetryable?: (error: unknown) => boolean;
+  // Override the deadline `withResolveDeadline` holds a resolver to.
+  // Defaults to `SHIM_RESOLVE_DEADLINE_MS`.
+  resolveDeadlineMs?: number;
+  // Pluggable timer for the same, so a test can trip the deadline
+  // without waiting it out. Returns the cancel for the timer it armed.
+  scheduleTimeout?: (callback: () => void, ms: number) => () => void;
 }
 
 const defaultDelay = (ms: number) =>
   new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+// How long a shim resolver may take to answer before the handler gives up on
+// it. A resolver is caller-supplied and usually compiles to a lazy chunk
+// `import()`, so nothing here can promise it ever settles — and while it
+// hasn't, every import of the specifier it answers for is parked behind it,
+// static and dynamic alike. The loader awaits that promise with no clock of
+// its own, so without this deadline a resolver that hangs makes an import
+// that neither resolves nor rejects: inside a capture or prerender render the
+// whole readiness budget disappears and the failure surfaces as an
+// unrelated-looking timeout naming nothing.
+//
+// Generous against any real chunk fetch and the retry schedule above — a load
+// that legitimately takes this long has already lost the render it was for.
+// It has to fire before the tightest budget an import can sit under, so the
+// error names the specifier rather than being overtaken by that budget's own
+// timeout. The tightest is the prerender's `CAPTURE_PENDING_WAIT_MS`
+// (15s), which a capture-only component's `await import(...)` waits under
+// while it holds `data-capture-pending`; `cardRenderTimeout` is longer.
+export const SHIM_RESOLVE_DEADLINE_MS = 10_000;
+
+const defaultScheduleTimeout = (callback: () => void, ms: number) => {
+  let id = setTimeout(callback, ms);
+  return () => clearTimeout(id);
+};
+
+// The message a stalled resolver produces. It names the specifier (the one
+// thing a silent hang never tells you) and where the registration that owns
+// it lives, because the fix is always in the resolver rather than at the
+// import site.
+function shimResolveDeadlineError(
+  specifier: string,
+  deadlineMs: number,
+): Error {
+  let error = new Error(
+    `shimmed module \`${specifier}\` did not load within ${deadlineMs}ms: its resolver on the virtual network neither resolved nor rejected. ` +
+      `Every import of \`${specifier}\` waits on that one resolver, so \`import '${specifier}'\` and \`await import('${specifier}')\` are both stuck behind it. ` +
+      `Check the \`shimAsyncModule\` registration for \`${specifier}\` (the host's are in \`app/lib/externals.ts\`) — a resolver whose lazy chunk load never settles hangs exactly this way.`,
+  );
+  error.name = 'ShimResolveTimeout';
+  return error;
+}
+
+// Holds a shim resolver to `SHIM_RESOLVE_DEADLINE_MS`, turning one that never
+// settles into a rejection that names the specifier. Applied outside
+// `withResolveRetry` so the deadline bounds the whole retry sequence rather
+// than each attempt, and so `ShimResolveTimeout` is never itself retried.
+//
+// `specifier` may be derived from the call's arguments, so a prefix shim's
+// error names the module that was actually asked for rather than the prefix
+// that happens to answer for it.
+export function withResolveDeadline<TArgs extends unknown[], TResult>(
+  specifier: string | ((...args: TArgs) => string),
+  fn: (...args: TArgs) => Promise<TResult>,
+  deps: ShimRetryDeps = {},
+): (...args: TArgs) => Promise<TResult> {
+  let deadlineMs = deps.resolveDeadlineMs ?? SHIM_RESOLVE_DEADLINE_MS;
+  let scheduleTimeout = deps.scheduleTimeout ?? defaultScheduleTimeout;
+  return async (...args: TArgs): Promise<TResult> => {
+    let cancelTimer: (() => void) | undefined;
+    try {
+      return await Promise.race([
+        fn(...args),
+        new Promise<never>((_resolve, reject) => {
+          cancelTimer = scheduleTimeout(
+            () =>
+              reject(
+                shimResolveDeadlineError(
+                  typeof specifier === 'string'
+                    ? specifier
+                    : specifier(...args),
+                  deadlineMs,
+                ),
+              ),
+            deadlineMs,
+          );
+        }),
+      ]);
+    } finally {
+      // Whether the resolver resolved or rejected, the timer it was racing
+      // has nothing left to say — and an armed one would keep a Node process
+      // awake for the rest of the deadline.
+      cancelTimer?.();
+    }
+  };
+}
 
 // Render an unknown thrown value as one readable line for logs. Shim
 // resolvers compile to runtime `import()` calls whose chunk-fetch
@@ -576,13 +667,17 @@ export class PackageShimHandler {
     // Non-transient errors (SyntaxError from a bad module, missing
     // module, etc.) fail fast on the first attempt — see
     // `isRetryableShimResolveError`.
+    //
+    // Wrapped again, outside the retry, in a deadline: the retry bounds a
+    // resolver that FAILS, and this bounds one that never answers at all.
+    // Without it the loader has nothing to time the resolver out against and
+    // an import of the specifier neither resolves nor rejects.
     let deps = { ...this.retryDeps, ...retryDeps };
     if ('prefix' in descriptor) {
       let label = `prefix:${descriptor.prefix}`;
-      let resolver = withResolveRetry(
-        label,
-        this.log,
-        descriptor.resolve,
+      let resolver = withResolveDeadline(
+        (rest: string) => `${descriptor.prefix}${rest}`,
+        withResolveRetry(label, this.log, descriptor.resolve, deps),
         deps,
       );
       // A prefix is a URL prefix rather than a module identifier, so it keeps
@@ -596,10 +691,9 @@ export class PackageShimHandler {
       }
     } else {
       let label = `id:${descriptor.id}`;
-      let resolver = withResolveRetry(
-        label,
-        this.log,
-        descriptor.resolve,
+      let resolver = withResolveDeadline(
+        descriptor.id,
+        withResolveRetry(label, this.log, descriptor.resolve, deps),
         deps,
       );
       for (let key of this.registrationKeys(descriptor.id)) {
