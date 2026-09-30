@@ -7,6 +7,12 @@ import { module, test } from 'qunit';
 import { baseRealm, Loader, VirtualNetwork } from '@cardstack/runtime-common';
 
 import {
+  beginTimerBlock,
+  enableRenderTimerStub,
+  scheduleNativeTimeout,
+} from '@cardstack/host/utils/render-timer-stub';
+
+import {
   testRealmURL,
   setupCardLogs,
   setupLocalIndexing,
@@ -354,6 +360,53 @@ module('Unit | loader', function (hooks) {
       /test-async-shim-pkg/,
       'the rejection names the specifier whose resolver stalled',
     );
+  });
+
+  test('a stalled shim resolver still rejects while the prerender timer stub is blocking timers', async function (assert) {
+    // A prerender tab runs its render with the global setTimeout stubbed out,
+    // so a deadline armed on it would never fire. The network's own fetch
+    // timer is the one that still runs there. This registration passes no
+    // timer, so the deadline gets the network's.
+    getService('network').virtualNetwork.shimAsyncModule(
+      {
+        id: 'test-async-shim-pkg',
+        resolve: () => new Promise<never>(() => {}),
+      },
+      { delay: async () => {}, retryDelaysMs: [], resolveDeadlineMs: 50 },
+    );
+    let { viaAsyncShim } = await loader.import<{
+      viaAsyncShim: () => Promise<string>;
+    }>(`${testRealmURL}dynamic-shim-consumer`);
+    let restoreStub = enableRenderTimerStub();
+    let releaseBlock = beginTimerBlock();
+    let guard: ReturnType<typeof setTimeout> | undefined;
+    try {
+      // The guard runs on the native timer too: under the stub,
+      // `settleWithin`'s own setTimeout would be swallowed, and a regression
+      // would hang until QUnit's timeout instead of failing here.
+      await assert.rejects(
+        Promise.race([
+          viaAsyncShim(),
+          new Promise<never>((_resolve, reject) => {
+            guard = scheduleNativeTimeout(
+              () =>
+                reject(
+                  new Error(
+                    `import() of a stalled shim under the timer stub did not settle within ${SETTLE_DEADLINE_MS}ms`,
+                  ),
+                ),
+              SETTLE_DEADLINE_MS,
+            );
+          }),
+        ]),
+        /test-async-shim-pkg/,
+        'the rejection names the specifier whose resolver stalled',
+      );
+    } finally {
+      clearTimeout(guard);
+      releaseBlock();
+      restoreStub();
+    }
   });
 
   test('a runtime import() of a bare specifier nobody shimmed rejects rather than hanging', async function (assert) {

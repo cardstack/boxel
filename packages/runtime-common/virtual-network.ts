@@ -194,13 +194,21 @@ export class VirtualNetwork {
   // matters even though a retried `import()` of a chunk that failed to fetch
   // fails again in the same document: the prerender recognises that failure
   // and moves the render to a fresh tab, which it can only do once the render
-  // has failed. The scheduler is read when the sleep starts, since the
-  // constructor assigns it after this field.
+  // has failed. The resolver's deadline runs on the same timer for the same
+  // reason: on the stubbed setTimeout it would never fire, and a resolver that
+  // never settles would park the import until the render's own timeout instead
+  // of failing with the specifier named. `clearTimeout` isn't stubbed, so it
+  // cancels the fetch timer's handle. The scheduler is read when a timer
+  // starts, since the constructor assigns it after this field.
   private packageShimHandler = new PackageShimHandler(this.resolveImport, {
     delay: (ms) =>
       new Promise<void>((resolve) => {
         this.scheduleFetchTimer(resolve, ms);
       }),
+    scheduleTimeout: (callback, ms) => {
+      let handle = this.scheduleFetchTimer(callback, ms);
+      return () => clearTimeout(handle as ReturnType<typeof setTimeout>);
+    },
   });
 
   shimModule(moduleIdentifier: string, module: ModuleLike) {
