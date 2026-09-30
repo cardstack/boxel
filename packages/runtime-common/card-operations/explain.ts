@@ -62,11 +62,12 @@ import {
 // both realms: the policy card's, which the gate checks, since no grant ever
 // reaches an explain, and the target's, which this checks. A caller missing
 // either is told what a target that does not exist is told, the same bytes
-// either way. That also means there is no asking about yourself: a caller
-// refused an operation cannot ask why, since the answer would say what the
-// refusal did not. The caller is judged in the target's realm by a session
-// that realm would accept as theirs, so a revoked session, or one delegated to
-// the policy card's realm alone, asks as nobody.
+// either way. So a caller refused because they may not read the target's
+// realm cannot ask why, since the answer would say what the refusal did not.
+// A caller who reads both realms can ask about any actor, themselves
+// included. The caller is judged in the target's realm by a session that
+// realm would accept as theirs, so a revoked session, or one delegated to the
+// policy card's realm alone, asks as nobody.
 //
 // Read on both realms is the whole gate, not realm ownership. So a reader of
 // both learns, for any actor they name, what the target realm's ACL allows
