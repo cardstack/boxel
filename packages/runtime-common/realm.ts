@@ -925,6 +925,18 @@ const READINESS_CHECK_PATH = '/_readiness-check';
 // `readSource` grant reaches, and for nothing else they serve (see
 // `GRANTABLE_BYTES`).
 const CONSUMES_COARSE_OUTCOME = { consumesCoarseOutcome: true } as const;
+// Marks the consumers that apply an archived realm's seal themselves, where
+// they would run what a caller the ACL declined outright asked for (see
+// `RouteOptions.appliesArchivedSeal`): the card+json read once the gate admits
+// the read, the search once a grant would answer it with a row, the operations
+// envelope once every entry has resolved, and the capability check once it
+// would admit a pair. A consumer marked only `CONSUMES_COARSE_OUTCOME` seals a
+// caller as soon as it admits them. The card+json `HEAD` is one, and never
+// admits anyone: the ACL lets every `HEAD` through.
+const APPLIES_ARCHIVED_SEAL = {
+  consumesCoarseOutcome: true,
+  appliesArchivedSeal: true,
+} as const;
 // The capability check's path, named here because two places read it: the
 // route below, and the permission the realm derives from the request's method,
 // which this path is the one `POST` exception to.
@@ -2194,6 +2206,12 @@ export type RequestContext = {
   // the same caller to read. A batch that writes can also read, and those
   // reads are still the ACL's to answer.
   coarseReadAllowed?: boolean;
+  // The seal of an archived realm, held for a caller the ACL declined outright
+  // whom the realm handed to its policy, on a route that applies the seal
+  // itself (see `RouteOptions.appliesArchivedSeal`). The route answers with it
+  // in place of running what the caller asked for, and gives every refusal
+  // ahead of that as the realm gives it while active.
+  archivedSeal?: ArchivedRealmError;
 };
 
 // What answers a request once it is routed: the answer itself, not yet run,
@@ -2201,6 +2219,7 @@ export type RequestContext = {
 interface RequestDispatch {
   consumesCoarseOutcome: boolean;
   coarseReadOnly?: boolean;
+  appliesArchivedSeal?: boolean;
   // The answer is one of the realm's operational endpoints, which an archived
   // realm's seal lets through (see `OPERATIONAL_ENDPOINT`). The seal reads it
   // off the dispatch that will answer, so nothing else a request for an
@@ -2226,6 +2245,7 @@ export type DispatchDescription =
       path: '*';
       consumesCoarseOutcome: boolean;
       coarseReadOnly: boolean;
+      appliesArchivedSeal: boolean;
       grantableBytes: boolean;
       operationalEndpoint: boolean;
     };
@@ -2694,13 +2714,13 @@ export class Realm {
         '/_search',
         SupportedMimeType.CardJson,
         this.searchEntriesResponse.bind(this),
-        CONSUMES_COARSE_OUTCOME,
+        APPLIES_ARCHIVED_SEAL,
       )
       .query(
         '/_search',
         SupportedMimeType.CardJson,
         this.searchEntriesResponse.bind(this),
-        CONSUMES_COARSE_OUTCOME,
+        APPLIES_ARCHIVED_SEAL,
       )
       .get(
         '/_types',
@@ -2777,25 +2797,25 @@ export class Realm {
         '/_operations',
         SupportedMimeType.BoxelOperations,
         this.handleOperations.bind(this),
-        CONSUMES_COARSE_OUTCOME,
+        APPLIES_ARCHIVED_SEAL,
       )
       .query(
         '/_operations',
         SupportedMimeType.BoxelOperations,
         this.handleOperations.bind(this),
-        CONSUMES_COARSE_OUTCOME,
+        APPLIES_ARCHIVED_SEAL,
       )
       .post(
         '/_operations',
         SupportedMimeType.JSONAPI,
         this.handleOperations.bind(this),
-        CONSUMES_COARSE_OUTCOME,
+        APPLIES_ARCHIVED_SEAL,
       )
       .query(
         '/_operations',
         SupportedMimeType.JSONAPI,
         this.handleOperations.bind(this),
-        CONSUMES_COARSE_OUTCOME,
+        APPLIES_ARCHIVED_SEAL,
       )
       // What the policy gate would decide, asked ahead of the call, so a view
       // can hide a control its caller may not use rather than render every
@@ -2806,7 +2826,7 @@ export class Realm {
         '/_capabilities',
         SupportedMimeType.JSON,
         this.handleCapabilities.bind(this),
-        CONSUMES_COARSE_OUTCOME,
+        APPLIES_ARCHIVED_SEAL,
       )
       .post(
         '/_cancel-indexing-job',
@@ -2834,7 +2854,7 @@ export class Realm {
         '/.*',
         SupportedMimeType.CardJson,
         this.getCard.bind(this),
-        CONSUMES_COARSE_OUTCOME,
+        APPLIES_ARCHIVED_SEAL,
       )
       .get('/.*', SupportedMimeType.CardHtml, this.getCardHtml.bind(this))
       .get(
@@ -5749,6 +5769,20 @@ export class Realm {
         }
       }
 
+      // Every entry has resolved, so this is where the batch would start to
+      // run, and where an archived realm answers a caller its ACL declined
+      // outright with its seal instead. Each refusal ahead of here is the one
+      // the realm gives while active. So is the answer for a batch holding a
+      // write the lock would refuse: the seal is a failure ahead of the lock
+      // like any other, and the catch below answers it with that write's
+      // refusal, as it would any of them. Working that out may rehearse the
+      // batch, which stages it against the realm as stored and commits
+      // nothing. A batch with no entries runs nothing, and is answered as it
+      // is while active.
+      if (requestContext.archivedSeal && resolved.length > 0) {
+        throw requestContext.archivedSeal;
+      }
+
       // Reads run first and against the state the batch started from, which is
       // what "an entry sees pre-batch state" means for a mixed batch: a read
       // entry never observes what a write entry in the same batch stages, and
@@ -6242,10 +6276,25 @@ export class Realm {
       let { actor } = this.#callerOf(request, requestContext);
       let lanes = await this.#capabilityLanes(request, requestContext);
       let { coarseDeclined } = lanes;
-      let answers = await checkCapabilities(this.operationCore, checks, {
-        caller: scopeCallerFor(actor),
-        ...lanes,
-      });
+      let { answers, admitsAny } = await checkCapabilities(
+        this.operationCore,
+        checks,
+        {
+          caller: scopeCallerFor(actor),
+          ...lanes,
+        },
+      );
+      // An archived realm answers a caller it reaches only through its policy
+      // with its seal where the gate admits them to one of the pairs, and
+      // with the answers themselves where it admits them to none, as it does
+      // while active. A pair answered `true` on a predicate the check cannot
+      // run, a create against a type, is not one it admits: the predicate may
+      // never hold for this caller. A check runs nothing, so what the gate
+      // decided about its pairs is all there is to decide it by.
+      let seal = requestContext.archivedSeal;
+      if (seal && admitsAny) {
+        throw seal;
+      }
       emitCapabilityCheck({
         kind: 'capability-check',
         realmURL: this.url,
@@ -6764,11 +6813,19 @@ export class Realm {
     );
   }
 
-  // The same, for one read's operation request.
-  #readDeclined(requestContext: RequestContext): { coarseDeclined?: true } {
-    return this.#coarseDeclined(requestContext) === 'all'
-      ? { coarseDeclined: true }
-      : {};
+  // The same, for one read's operation request, which carries the archived
+  // seal where the realm holds one for this caller: the read is answered with
+  // it once the gate admits the read, and refused as it is while the realm is
+  // active where the gate does not.
+  #readDeclined(requestContext: RequestContext): {
+    coarseDeclined?: true;
+    seal?: ArchivedRealmError;
+  } {
+    if (this.#coarseDeclined(requestContext) !== 'all') {
+      return {};
+    }
+    let seal = requestContext.archivedSeal;
+    return { coarseDeclined: true, ...(seal ? { seal } : {}) };
   }
 
   // An operation's refusal as this request's caller is told it, so a caller
@@ -7158,7 +7215,8 @@ export class Realm {
         // 401/403 rather than being told the realm is archived — only callers
         // who could otherwise reach the content see the sealed response. In a
         // realm with a policy, a caller the policy judges is admitted after
-        // routing (below) and meets the seal there. A public realm's readers are
+        // routing (below), and meets the seal only once the realm would run
+        // something a grant admits them to. A public realm's readers are
         // allowed by the ACL, so they do see the seal (the realm's existence
         // is already public). The seal is method-agnostic, so reads and writes
         // are blocked by this one check. The realm's public operational
@@ -7216,7 +7274,23 @@ export class Realm {
             )
           );
         }
-        await this.#assertNotArchived(dispatch);
+        // An admitted caller meets the archived seal where the realm would
+        // run something a grant admits them to, and nowhere before, so one no
+        // grant admits gets the answer the realm gives them while it is
+        // active. Only the route knows where that point is, so a route that
+        // applies the seal itself (see `APPLIES_ARCHIVED_SEAL`) is handed it.
+        // Every other route seals the caller here, as does a caller the ACL
+        // lets read the realm, who can learn it is archived from any read.
+        if (await this.#isSealed(dispatch)) {
+          let seal = new ArchivedRealmError(`Realm ${this.url} is archived`);
+          if (
+            !dispatch.appliesArchivedSeal ||
+            requestContext.coarseReadAllowed
+          ) {
+            throw seal;
+          }
+          requestContext.archivedSeal = seal;
+        }
       }
       if (!isLocal && request.method === 'HEAD' && dispatch.coarseReadOnly) {
         let answer = await this.#headForNonReader(request, requestContext);
@@ -7373,6 +7447,7 @@ export class Realm {
       return {
         consumesCoarseOutcome: matched.consumesCoarseOutcome,
         coarseReadOnly: matched.coarseReadOnly,
+        appliesArchivedSeal: matched.appliesArchivedSeal,
         operationalEndpoint: matched.operationalEndpoint,
         answersWithoutCredentials: matched.operationalEndpoint,
         handle: serve,
@@ -7512,8 +7587,9 @@ export class Realm {
 
   // Whether a request the realm ACL refused is admitted anyway by a route
   // that consumes the ACL's outcome. This is the single point where a request
-  // the ACL declined could be admitted, and anything admitted here still meets
-  // the archived seal.
+  // the ACL declined could be admitted, and anything admitted here meets the
+  // archived seal where its route would run something a grant admits (see
+  // `APPLIES_ARCHIVED_SEAL`).
   //
   // The ACL lets every `HEAD` through, so a route that answers one with a read
   // asks the read question itself. The byte routes' `HEAD` then admits its
@@ -7671,12 +7747,6 @@ export class Realm {
     this.#testOnlyBeforeBatchLock = hook;
   }
 
-  async #assertNotArchived(dispatch: RequestDispatch): Promise<void> {
-    if (await this.#isSealed(dispatch)) {
-      throw new ArchivedRealmError(`Realm ${this.url} is archived`);
-    }
-  }
-
   // Whether the archived seal covers the request `dispatch` answers: the
   // realm is archived and the dispatch is not an operational endpoint. That
   // is read off the dispatch rather than the request's path, so a request
@@ -7716,6 +7786,7 @@ export class Realm {
         path: '*' as const,
         consumesCoarseOutcome: false,
         coarseReadOnly: method === 'GET' || method === 'HEAD',
+        appliesArchivedSeal: false,
         grantableBytes: method === 'GET' || method === 'HEAD',
         operationalEndpoint: false,
       })),
@@ -12834,6 +12905,7 @@ export class Realm {
       actor: string;
       clientRequestId: string;
       coarseDeclined?: true;
+      seal?: ArchivedRealmError;
     },
   ): Promise<CardJsonAssembly> {
     // The document itself is the `read` operation's — link expansion, the
@@ -12862,6 +12934,7 @@ export class Realm {
           actor: caller.actor,
           clientRequestId: caller.clientRequestId,
           ...(caller.coarseDeclined ? { coarseDeclined: true } : {}),
+          ...(caller.seal ? { seal: caller.seal } : {}),
         },
         { skipQueryBackedExpansion, resolveLinksOnly, skipLinkAssemblyBudget },
       );
@@ -13453,6 +13526,34 @@ export class Realm {
     );
   }
 
+  // Whether a search would answer with at least one row, asked of the index
+  // for a single row and none of what an answer carries: no rendering, no
+  // item and no links. Error rows count exactly where the search itself
+  // would return them, which is where it asks for renderings.
+  async #answersWithARow(searchEntryQuery: SearchEntryQuery): Promise<boolean> {
+    let probe = await this.#realmIndexQueryEngine.searchEntries(
+      {
+        ...searchEntryQuery,
+        itemQuery: {
+          ...searchEntryQuery.itemQuery,
+          page: { number: 0, size: 1 },
+        },
+        fieldset: {
+          html: false,
+          item: { kind: 'none' },
+          itemAsFallback: false,
+        },
+      },
+      {
+        omitIncluded: true,
+        ...(searchEntryQuery.fieldset.html
+          ? { includeErrors: true as const }
+          : {}),
+      },
+    );
+    return probe.data.length > 0;
+  }
+
   private async searchEntriesResponse(
     request: Request,
     requestContext: RequestContext,
@@ -13550,8 +13651,8 @@ export class Realm {
         readable: () => policyScope === undefined,
         resolvedByServer,
       });
-      if (policyScope?.kind === 'denied') {
-        return createResponse({
+      let noRows = () =>
+        createResponse({
           body: JSON.stringify(
             markPolicyScoped(
               emptySearchEntryDocument(searchEntryQuery),
@@ -13565,6 +13666,8 @@ export class Realm {
           },
           requestContext,
         });
+      if (policyScope?.kind === 'denied') {
+        return noRows();
       }
       if (policyScope) {
         // Composed before the page is applied below, so the page the engine
@@ -13574,6 +13677,20 @@ export class Realm {
           searchEntryQuery,
           policyScope.filters,
         );
+        // An archived realm answers a caller it reaches only through its
+        // policy with its seal where this search would answer them with a
+        // row, and with no rows where it would answer none, as it does while
+        // active. A grant whose predicate compiles to a filter scopes the
+        // search for every caller, whether or not the filter admits any row of
+        // theirs, so the scope alone does not say which of the two answers
+        // this caller gets.
+        let seal = requestContext.archivedSeal;
+        if (seal) {
+          if (await this.#answersWithARow(searchEntryQuery)) {
+            throw seal;
+          }
+          return noRows();
+        }
       }
       // Two bounds hold server-side on the live item leg (never during
       // prerender, never on the prerendered-HTML leg): a hard page-size ceiling

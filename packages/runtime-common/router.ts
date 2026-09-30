@@ -277,6 +277,14 @@ export interface RouteOptions {
   // when the ACL would not let its caller read the realm, whether or not the
   // realm has a policy.
   coarseReadOnly?: true;
+  // The route applies an archived realm's seal itself to a caller the realm
+  // ACL declined outright and its policy was handed, at the point where it
+  // would run what that caller asked for. Anything it refuses them before that
+  // point is refused as it is while the realm is active, so a caller no grant
+  // admits is not told the realm is archived. Only a route that consumes the
+  // ACL's outcome can take this. Every other route that does meets such a
+  // caller with the seal as soon as it admits them.
+  appliesArchivedSeal?: true;
   // The route serves a path's stored bytes, and for a path that names a data
   // file or a card's document those bytes are a `readSource` a policy grant
   // can reach. A request for one consumes the ACL's outcome and is resolved
@@ -298,6 +306,7 @@ export interface Route {
   handler: Handler;
   consumesCoarseOutcome: boolean;
   coarseReadOnly: boolean;
+  appliesArchivedSeal: boolean;
   grantableBytes: boolean;
   operationalEndpoint: boolean;
 }
@@ -308,6 +317,7 @@ export interface RouteDescription {
   path: string;
   consumesCoarseOutcome: boolean;
   coarseReadOnly: boolean;
+  appliesArchivedSeal: boolean;
   grantableBytes: boolean;
   operationalEndpoint: boolean;
 }
@@ -399,6 +409,7 @@ export class Router {
       handler,
       consumesCoarseOutcome: opts.consumesCoarseOutcome === true,
       coarseReadOnly: opts.coarseReadOnly === true,
+      appliesArchivedSeal: opts.appliesArchivedSeal === true,
       grantableBytes: opts.grantableBytes === true,
       operationalEndpoint: opts.operationalEndpoint === true,
     });
@@ -418,6 +429,7 @@ export class Router {
             path,
             consumesCoarseOutcome: route.consumesCoarseOutcome,
             coarseReadOnly: route.coarseReadOnly,
+            appliesArchivedSeal: route.appliesArchivedSeal,
             grantableBytes: route.grantableBytes,
             operationalEndpoint: route.operationalEndpoint,
           });
@@ -439,6 +451,13 @@ export class Router {
     try {
       return await route.handler(request, requestContext);
     } catch (err) {
+      // The archived seal is answered at the realm's request boundary, with
+      // the marker a client reads it by, wherever in a request it is raised.
+      // A handler raises it where the realm would run what a caller its
+      // policy admitted asked for.
+      if (err instanceof ArchivedRealmError) {
+        throw err;
+      }
       if (err instanceof CardError) {
         // Without this line a thrown CardError is indistinguishable in the
         // request log from a handler that returned the same status

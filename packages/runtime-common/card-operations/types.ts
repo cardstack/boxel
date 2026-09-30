@@ -545,6 +545,11 @@ export interface OperationRequest {
   // the ACL allowed the caller, or never judged the request, as with a
   // realm-internal dispatch.
   coarseDeclined?: true;
+  // The refusal an archived realm answers with, for a caller its ACL declined.
+  // An invocation the policy gate admits is refused with it instead of
+  // running. One the gate refuses is refused as it is in an active realm, so
+  // a caller no grant admits is not told the realm is archived.
+  seal?: Error;
 }
 
 // A read's answer: the assembled JSON:API document, exactly as the card+json
