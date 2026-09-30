@@ -4,9 +4,11 @@ This tutorial builds a small task board in a clean Ember application. You will a
 
 ## Start from a working installation
 
-For this checkout, use the local workspace packages. The package manifests are still version 0.0.0; this tutorial does not assume an npm release. You need this repository checked out and [mise](https://mise.jdx.dev/) installed, which provides the Node and pnpm versions pinned in the repository's .mise.toml. Run these commands from its root:
+For this checkout, use the local workspace packages. The package manifests are still version 0.0.0; this tutorial does not assume an npm release. You need this repository checked out and [mise](https://mise.jdx.dev/) installed, which provides the Node and pnpm versions pinned in the repository's .mise.toml. mise ignores a configuration file until it is trusted, so the first command trusts the repository's. Run these commands from its root:
 
 ```sh title="Terminal"
+mise trust
+mise install
 pnpm install
 node packages/choreo-gallery/tools/create-tutorial-app.mjs /tmp/my-choreo-app
 cd /tmp/my-choreo-app
