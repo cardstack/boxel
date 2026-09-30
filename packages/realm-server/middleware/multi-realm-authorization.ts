@@ -2,6 +2,7 @@ import type Koa from 'koa';
 import type { DBAdapter, Realm } from '@cardstack/runtime-common';
 import {
   archivedRealmURLs,
+  DURING_PRERENDER_HEADER,
   fetchUserPermissions,
   isSessionRevoked,
   param,
@@ -53,8 +54,10 @@ export type MultiRealmAuthorizationState = {
   // and for a realm-authority principal, which no policy admits.
   grantCandidates: string[];
   // Who the request's token was verified for: the user it names, or a
-  // realm-authority session. Absent on a request that carried no token, which
-  // reached here only because every realm it names is publicly readable.
+  // realm-authority principal — a session a realm renders its own cards under,
+  // or any request a render tab sends. Absent on a request that carried no
+  // token, which reached here only because every realm it names is publicly
+  // readable.
   principal?: SearchPrincipal;
 };
 
@@ -196,7 +199,16 @@ export function multiRealmAuthorization(
         throw e;
       }
 
-      principal = searchPrincipal(token.user, token.realmAuthority);
+      // A render tab marks every request it sends, whatever session it holds:
+      // a session minted before its minter carried the claim, or one a
+      // command or a request-only capture runs under. What such a request
+      // reads is a render's, so it is read as one. A caller who sets the
+      // marker themselves only narrows their own search to what the ACL
+      // grants them.
+      principal = searchPrincipal(
+        token.user,
+        token.realmAuthority || ctxt.get(DURING_PRERENDER_HEADER).length > 0,
+      );
       let permissionsForAllRealms = await fetchUserPermissions(dbAdapter, {
         userId: token.user,
         onlyOwnRealms: false,
@@ -231,12 +243,11 @@ export function multiRealmAuthorization(
     // and it stays sealed whatever its policy says: nothing is served from an
     // archived realm to anyone.
     //
-    // Nor is any realm a realm-authority session cannot read. That session is
-    // a realm rendering its own cards, and what the render produces is served
-    // to every viewer, so it reads what the realm ACL grants it and nothing
-    // more: no policy is asked about it, and a realm it cannot read
-    // contributes no rows to it, as an archived realm contributes none to
-    // anyone.
+    // Nor is any realm a realm-authority principal cannot read. That
+    // principal is a render, and what a render produces is served to every
+    // viewer, so it reads what the realm ACL grants it and nothing more: no
+    // policy is asked about it, and a realm it cannot read contributes no rows
+    // to it, as an archived realm contributes none to anyone.
     let readable = realmList.filter((realmURL) => readableRealms.has(realmURL));
     let unreadable = realmList.filter(
       (realmURL) => !readableRealms.has(realmURL),

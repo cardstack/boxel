@@ -28,9 +28,11 @@ type LoggerInstance = ReturnType<typeof import('../index.ts').logger>;
 
 export interface PrerenderAuthOptions {
   // Mints realm-authority sessions (see `TokenClaims.realmAuthority`). Set by
-  // the renders a realm produces its own index, HTML and definitions with, and
-  // by nothing that renders as a person — a command or a capture run as a
-  // user is that user.
+  // every render whose result is kept and served to others: the ones a realm
+  // produces its own index, HTML and definitions with, and a capture that
+  // persists. Not set for one whose result goes back only to whoever asked —
+  // a command, or a capture answered to its requester — which runs as that
+  // user.
   realmAuthority?: true;
 }
 

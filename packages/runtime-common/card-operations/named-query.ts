@@ -69,10 +69,10 @@ export interface NamedQueryContext {
   // `actor()` resolves to. Absent when the request authenticated nobody, which
   // refuses only a declaration that compares against the caller.
   //
-  // A realm-authority principal has no actor either. It is a realm rendering
-  // its own cards, and what a render produces is served to every viewer, so a
-  // declaration compared against the identity it reads as would put one
-  // user's rows into shared HTML. It is refused as a request that
+  // A realm-authority principal has no actor either. It is a render, and what
+  // a render produces is served to every viewer, so a declaration compared
+  // against the identity it reads as would put one user's rows into shared
+  // HTML. It is refused as a request that
   // authenticated nobody is — the rule the host applies to the same query
   // before it would send it from a render.
   principal: SearchPrincipal | undefined;

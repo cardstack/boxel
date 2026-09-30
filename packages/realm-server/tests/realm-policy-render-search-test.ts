@@ -405,7 +405,7 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
-  test('a realm-authority session is judged by the realm ACL alone, and the render marker decides nothing', async function (assert) {
+  test('a render is judged by the realm ACL alone, whether its session carries the claim or its request the render marker', async function (assert) {
     let session = realmAuthoritySession(BOARD, [
       'read',
       'write',
@@ -428,20 +428,24 @@ module(basename(import.meta.filename), function (hooks) {
     });
     assert.deepEqual(
       ids(userMarked),
-      [BOARD_SCHEDULE, OWNERS_GRANTED_SCHEDULE],
-      "a user's search carrying the render marker is still that user's, and the grant admits them",
+      [BOARD_SCHEDULE],
+      "a user's session on a request carrying the render marker is read as a render's too: a render tab marks every request it sends, whatever session it holds",
     );
   });
 
   test("a realm's own search answers a realm-authority session it declines with no rows", async function (assert) {
-    let search = (token: string) =>
-      request
+    let search = (token: string, opts?: { duringRender?: true }) => {
+      let req = request
         .post(`${new URL(GRANTS).pathname}_search`)
         .set('Accept', SupportedMimeType.CardJson)
         .set('Content-Type', 'application/json')
         .set('X-HTTP-Method-Override', 'QUERY')
-        .set('Authorization', `Bearer ${token}`)
-        .send({ ...LIST_OPEN, realms: [GRANTS] });
+        .set('Authorization', `Bearer ${token}`);
+      if (opts?.duringRender) {
+        req = req.set(DURING_PRERENDER_HEADER, '1');
+      }
+      return req.send({ ...LIST_OPEN, realms: [GRANTS] });
+    };
 
     let asAuthority = await search(realmAuthoritySession(GRANTS, []));
     assert.strictEqual(asAuthority.status, 200, 'HTTP 200 status');
@@ -456,6 +460,15 @@ module(basename(import.meta.filename), function (hooks) {
       ids(asUser),
       [OWNERS_GRANTED_SCHEDULE],
       'while the same identity as a user is admitted by the grant',
+    );
+
+    let asMarkedUser = await search(createJWT(realms[GRANTS], BOARD_OWNER), {
+      duringRender: true,
+    });
+    assert.deepEqual(
+      ids(asMarkedUser),
+      [],
+      'unless the request carries the render marker, which makes it a render here too',
     );
   });
 

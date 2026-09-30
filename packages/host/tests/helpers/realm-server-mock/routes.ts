@@ -197,9 +197,8 @@ function registerSearchRoutes() {
           );
         }
         try {
-          // Host tests render inside the app, under the test's own session,
-          // so a render here carries no realm-authority session the way a
-          // real one does. A request a render is waiting on stands for one.
+          // A request a render is waiting on is a realm-authority principal,
+          // whatever session it holds, as it is on the realm server.
           let resolved = await resolveNamedQuery(
             resolvingRealm.operationCore,
             payload,

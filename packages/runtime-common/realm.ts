@@ -1797,12 +1797,12 @@ export interface TokenClaims {
   // authorization treats it specially (read-only, no exact-permissions match).
   delegated?: boolean;
   // Set on the sessions a realm renders its own cards and modules under: the
-  // indexer's, the HTML render's, a module's definition render. Such a session
-  // is a realm-authority principal rather than a person. What it produces is
-  // kept in the index and served to every viewer, so it reads what the realm
-  // ACL grants it and nothing more — a policy, which admits a caller by who
-  // is asking, is never asked about it. The `user` beside it is the identity
-  // the session reads as, not someone a grant was written for.
+  // indexer's, the HTML render's, a module's definition render, a capture that
+  // persists. Such a session is a realm-authority principal rather than a
+  // person. What it produces is kept and served to every viewer, so its
+  // searches find what the realm ACL grants it and nothing more — no policy,
+  // which admits a caller by who is asking, scopes them. The `user` beside it
+  // is the identity the session reads as, not someone a grant was written for.
   realmAuthority?: true;
 }
 
@@ -6473,16 +6473,17 @@ export class Realm {
   // therefore reaches no grant, and a caller the ACL declined is answered with
   // no rows for one.
   //
-  // Nor does a realm-authority session reach a grant. It is a realm rendering
-  // its own cards, and what the render produces is served to every viewer, so
-  // it reads what the ACL grants it and nothing more: the ACL's refusal is its
-  // answer, and the policy is never asked — as a federated search never asks
-  // one about it either.
+  // Nor does a realm-authority principal reach a grant. It is a render, and
+  // what a render produces is served to every viewer, so it reads what the ACL
+  // grants it and nothing more: the ACL's refusal is its answer, and the
+  // policy is never asked — as a federated search never asks one about it
+  // either.
   async #policyQueryScope(
     invocation: { operation: string; on: CodeRef } | undefined,
+    request: Request,
     requestContext: RequestContext,
   ): Promise<PolicyQueryScope> {
-    let principal = this.#searchPrincipal(requestContext);
+    let principal = this.#searchPrincipal(request, requestContext);
     if (!invocation || principal?.kind !== 'user') {
       return { kind: 'denied' };
     }
@@ -6492,13 +6493,19 @@ export class Realm {
     });
   }
 
-  // Who a search runs for, as the request's session says.
+  // Who a search runs for. A realm-authority principal is a session a realm
+  // renders its own cards under, or any request a render tab sends: the tab
+  // marks every request, whatever session it holds — one minted before its
+  // minter carried the claim, or one a command runs under — and what such a
+  // request reads is a render's. A caller who sets the marker themselves only
+  // narrows their own search to what the ACL grants them.
   #searchPrincipal(
+    request: Request,
     requestContext: RequestContext,
   ): SearchPrincipal | undefined {
     return searchPrincipal(
       requestContext.authenticatedUser,
-      requestContext.realmAuthority,
+      requestContext.realmAuthority || isDuringPrerenderRequest(request),
     );
   }
 
@@ -12980,7 +12987,7 @@ export class Realm {
       // whole of the scope it may resolve to.
       try {
         let resolved = await resolveNamedQuery(this.operationCore, payload, {
-          principal: this.#searchPrincipal(requestContext),
+          principal: this.#searchPrincipal(request, requestContext),
           realms: [this.url],
         });
         payload = resolved.query;
@@ -13014,7 +13021,7 @@ export class Realm {
       // nothing are the same answer, as they are for a card they may not read.
       let policyScope =
         this.#coarseDeclined(requestContext) === 'all'
-          ? await this.#policyQueryScope(invocation, requestContext)
+          ? await this.#policyQueryScope(invocation, request, requestContext)
           : undefined;
       if (policyScope?.kind === 'denied') {
         return createResponse({

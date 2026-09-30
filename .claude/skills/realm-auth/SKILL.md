@@ -28,14 +28,19 @@ Boxel tokens are derived credentials with their own, weaker retirement story.
 | prerender service    | `buildCreatePrerenderAuth` (in-process)                | per-realm session shape, plus `realmAuthority: true` (see below) | `1d`                                                                       |
 | publish-realm        | `handle-publish-realm` (in-process)                    | per-realm session shape                                          | `1h`                                                                       |
 
-A prerender session carries `realmAuthority: true` when a realm renders its own
-content under it — indexing, the HTML render, a module's definition render,
-skill validation — and not when it renders as a person (a command or capture
-run as a user). That claim, not the `x-boxel-during-prerender` header, is how
-the search routes recognize a realm-authority principal: the realm ACL alone
-judges it, no policy is ever asked about it, and `policyQueryScope` throws
-`RealmAuthorityPolicyScopeError` if handed one. Both verification paths expose
-it — `RequestContext.realmAuthority` on a realm, the `principal` in
+A prerender session carries `realmAuthority: true` when what it renders is kept
+and served to others — indexing, the HTML render, a module's definition render,
+skill validation, a capture that persists — and not when the result goes back
+only to whoever asked (a command, a capture answered to its requester). The
+search routes read a request as a realm-authority principal when its session
+carries that claim **or** the request carries `x-boxel-during-prerender`: a
+render tab marks every request it sends, whatever session it holds, including
+one minted before its minter carried the claim. Such a principal's searches
+find what the realm ACL grants it and nothing more — no policy scopes them, and
+`policyQueryScope` throws `RealmAuthorityPolicyScopeError` if handed one. The
+claim is read on the search paths only: a single-card read is judged by the
+gate on its `user` like any other caller's. Both verification paths expose it —
+`RequestContext.realmAuthority` on a realm, the `principal` in
 `multiRealmAuthorization`'s state on the federated endpoints.
 
 The two lifetimes a browser holds live in `packages/runtime-common/session-token.ts`

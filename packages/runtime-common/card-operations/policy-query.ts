@@ -59,9 +59,9 @@ export type PolicyQueryScope =
 
 const DENIED: PolicyQueryScope = { kind: 'denied' };
 
-// Who a search runs for, as the session it authenticated with says. A
-// realm-authority session (`TokenClaims.realmAuthority`) is a realm rendering
-// its own cards, and any other session is the user it names.
+// Who a search runs for. A realm-authority principal is a render: a session a
+// realm renders its own cards under (`TokenClaims.realmAuthority`), or any
+// request a render tab sends. Any other is the user its session names.
 export type SearchPrincipal =
   | { kind: 'user'; user: string }
   | { kind: 'realm-authority'; user: string };

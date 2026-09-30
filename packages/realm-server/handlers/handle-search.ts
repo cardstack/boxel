@@ -137,7 +137,7 @@ export default function handleSearch(opts: {
     // realm the registry does not know, so each of these is one the caller
     // reads, one reached only through its policy, or one nothing is served
     // from — an archived realm, which contributes no rows to anyone, or one a
-    // realm-authority session cannot read.
+    // realm-authority principal cannot read.
     let named = parseRealmsFromPayload(payload);
     // What a policy fragment is looked up by: a query runs under the name it
     // was invoked with, on the type that declares it. An ad-hoc search names
@@ -187,7 +187,7 @@ export default function handleSearch(opts: {
     // admits this query is searched with the grants composed into it; every
     // other one answers as a realm holding no matching row does. Only these
     // realms are asked: a realm the caller reads outright never loads a
-    // policy, and a realm-authority session has none to ask.
+    // policy, and a realm-authority principal has none to ask.
     let readable = new Set(realmList);
     let candidates = new Set(grantCandidates);
     let access = await withSearchConnectionTenant(ctxt, named, () =>
