@@ -5,7 +5,7 @@ import type { MatrixEvent as DiscreteMatrixEvent } from '@cardstack/base/matrix-
 import { handleDebugCommands } from '../lib/debug.ts';
 import { FakeMatrixClient } from './helpers/fake-matrix-client.ts';
 
-module('handleDebugCommands - debug:eventlist', (hooks) => {
+module('handleDebugCommands - boxel-debug:eventlist', (hooks) => {
   let fakeMatrixClient: FakeMatrixClient;
   let uploadedContents: string[];
 
@@ -69,7 +69,7 @@ module('handleDebugCommands - debug:eventlist', (hooks) => {
 
   async function dumpedEventList(eventBody: string): Promise<any[]> {
     await handleDebugCommands(
-      {} as any, // openai is only used by debug:title:create
+      {} as any, // openai is only used by boxel-debug:title:create
       eventBody,
       fakeMatrixClient,
       'room1',
@@ -84,8 +84,8 @@ module('handleDebugCommands - debug:eventlist', (hooks) => {
     return JSON.parse(uploadedContents[0]);
   }
 
-  test('debug:eventlist dumps the final streamed content, not the placeholder', async (assert) => {
-    let events = await dumpedEventList('debug:eventlist');
+  test('boxel-debug:eventlist dumps the final streamed content, not the placeholder', async (assert) => {
+    let events = await dumpedEventList('boxel-debug:eventlist');
 
     assert.strictEqual(events.length, 1, 'dump contains the message event');
     let [event] = events;
@@ -105,13 +105,13 @@ module('handleDebugCommands - debug:eventlist', (hooks) => {
     );
   });
 
-  test('debug:eventlist leaves the input event list unmutated', async (assert) => {
+  test('boxel-debug:eventlist leaves the input event list unmutated', async (assert) => {
     let input = [streamedBotMessage()];
     let pristine = structuredClone(input);
 
     await handleDebugCommands(
       {} as any,
-      'debug:eventlist',
+      'boxel-debug:eventlist',
       fakeMatrixClient,
       'room1',
       '@aibot:localhost',
@@ -125,8 +125,8 @@ module('handleDebugCommands - debug:eventlist', (hooks) => {
     );
   });
 
-  test('debug:eventlist:raw dumps the unaggregated timeline', async (assert) => {
-    let events = await dumpedEventList('debug:eventlist:raw');
+  test('boxel-debug:eventlist:raw dumps the unaggregated timeline', async (assert) => {
+    let events = await dumpedEventList('boxel-debug:eventlist:raw');
 
     assert.strictEqual(events.length, 1, 'dump contains the message event');
     let [event] = events;
@@ -140,5 +140,61 @@ module('handleDebugCommands - debug:eventlist', (hooks) => {
       'The complete streamed answer',
       'the final edit is still available under unsigned',
     );
+  });
+});
+
+module('handleDebugCommands - help', (hooks) => {
+  let fakeMatrixClient: FakeMatrixClient;
+
+  hooks.beforeEach(() => {
+    fakeMatrixClient = new FakeMatrixClient();
+  });
+
+  hooks.afterEach(() => {
+    fakeMatrixClient.resetSentEvents();
+  });
+
+  async function reply(eventBody: string): Promise<string> {
+    await handleDebugCommands(
+      {} as any,
+      eventBody,
+      fakeMatrixClient,
+      'room1',
+      '@aibot:localhost',
+      [],
+    );
+    let sent = fakeMatrixClient.getSentEvents();
+    QUnit.assert.strictEqual(sent.length, 1, 'the bot sent one reply');
+    return sent[0].content.body;
+  }
+
+  test('boxel-debug on its own lists the commands', async (assert) => {
+    let body = await reply('boxel-debug');
+    assert.true(body.includes('boxel-debug:eventlist'));
+    assert.true(body.includes('boxel-debug:prompt'));
+    assert.true(body.includes('boxel-debug:feature:enable:'));
+  });
+
+  test('an unknown boxel-debug command lists the commands', async (assert) => {
+    let body = await reply('boxel-debug:nonsense');
+    assert.true(body.includes('boxel-debug:feature:enable:'));
+  });
+
+  test('the help lists the available features', async (assert) => {
+    let body = await reply('boxel-debug');
+    assert.true(body.includes('catalog-reuse — '));
+  });
+
+  test('an old debug: command points to boxel-debug', async (assert) => {
+    let body = await reply('debug:prompt');
+    assert.true(body.startsWith('Did you mean boxel-debug?'));
+    assert.true(body.includes('boxel-debug:prompt'));
+    assert.true(body.includes('boxel-debug:feature:enable:'));
+  });
+
+  test('enabling an unknown feature says so', async (assert) => {
+    let body = await reply('boxel-debug:feature:enable:no-such-feature');
+    assert.true(body.includes('There is no feature named no-such-feature.'));
+    assert.true(body.includes('Available features: catalog-reuse.'));
   });
 });

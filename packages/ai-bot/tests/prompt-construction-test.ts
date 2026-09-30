@@ -56,6 +56,7 @@ import {
   getTools,
   isMarkdownSkillFile,
   parseMarkdownSkill,
+  sessionSkillFeatures,
   skillCardsToMessages,
   SKILL_INSTRUCTIONS_MESSAGE,
 } from '@cardstack/runtime-common/ai';
@@ -9012,9 +9013,9 @@ module('skill feature sections', () => {
   const instructions = [
     'Before.',
     '',
-    '<!-- feature:catalog-search -->',
+    '<!-- feature:catalog-reuse -->',
     'Search the catalog first.',
-    '<!-- /feature:catalog-search -->',
+    '<!-- /feature:catalog-reuse -->',
     '',
     'After.',
   ].join('\n');
@@ -9023,7 +9024,7 @@ module('skill feature sections', () => {
     attributes: { title: 'Index', instructions },
   };
 
-  test('leaves out a feature section when its feature is off', () => {
+  test('leaves out a feature section when its feature is disabled', () => {
     let [message] = skillCardsToMessages([skill]);
     assert.false(message.includes('Search the catalog first.'));
     assert.false(message.includes('feature:'), 'the markers are removed too');
@@ -9031,9 +9032,46 @@ module('skill feature sections', () => {
     assert.true(message.includes('After.'));
   });
 
-  test('keeps a feature section, without its markers, when its feature is on', () => {
-    let [message] = skillCardsToMessages([skill], ['catalog-search']);
+  test('keeps a feature section, without its markers, when its feature is enabled', () => {
+    let [message] = skillCardsToMessages([skill], ['catalog-reuse']);
     assert.true(message.includes('Search the catalog first.'));
     assert.false(message.includes('feature:'), 'the markers are removed');
+  });
+
+  test('a room enables and disables a feature with boxel-debug:feature messages', () => {
+    const message = (sender: string, body: string) => ({
+      type: 'm.room.message',
+      sender,
+      content: { body },
+    });
+    const bot = '@aibot:localhost';
+    const user = '@user:localhost';
+    assert.deepEqual(sessionSkillFeatures([], bot), []);
+    assert.deepEqual(
+      sessionSkillFeatures(
+        [message(user, 'boxel-debug:feature:enable:catalog-reuse')],
+        bot,
+      ),
+      ['catalog-reuse'],
+    );
+    assert.deepEqual(
+      sessionSkillFeatures(
+        [
+          message(user, 'boxel-debug:feature:enable:catalog-reuse'),
+          message(user, 'boxel-debug:feature:disable:catalog-reuse'),
+        ],
+        bot,
+      ),
+      [],
+      'a later disable wins',
+    );
+    assert.deepEqual(
+      sessionSkillFeatures(
+        [message(bot, 'boxel-debug:feature:enable:catalog-reuse')],
+        bot,
+      ),
+      [],
+      'the bot cannot enable a feature',
+    );
   });
 });

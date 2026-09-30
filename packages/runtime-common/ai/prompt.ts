@@ -16,7 +16,7 @@ import {
   extractCodePatchBlocks,
   isToolOrCodePatchResult,
 } from './matrix-utils.ts';
-import { isRecognisedDebugCommand } from './debug.ts';
+import { isRecognisedDebugCommand, sessionSkillFeatures } from './debug.ts';
 import {
   isImageContentType,
   isPdfContentType,
@@ -221,7 +221,6 @@ export async function getPromptParts(
   eventList: DiscreteMatrixEvent[],
   aiBotUserId: string,
   client: MatrixClient,
-  enabledSkillFeatures: string[] = [],
 ): Promise<PromptParts> {
   let history: DiscreteMatrixEvent[] = await constructHistory(
     eventList,
@@ -256,7 +255,7 @@ export async function getPromptParts(
     disabledSkillIds,
     client,
     inputModalities,
-    enabledSkillFeatures,
+    sessionSkillFeatures(eventList, aiBotUserId),
   );
   return {
     shouldRespond,
@@ -1763,7 +1762,10 @@ export async function buildPromptForModel(
         });
       }
     }
-    if (event.sender !== aiBotUserId) {
+    if (
+      event.sender !== aiBotUserId &&
+      !(event.type === 'm.room.message' && isRecognisedDebugCommand(body))
+    ) {
       let attachmentText = await buildAttachmentsMessagePart(
         client,
         event as CardMessageEvent,
@@ -2656,9 +2658,9 @@ function isRelativeLink(target: string): boolean {
 // A skill body can mark a section as belonging to a feature that is off by
 // default:
 //
-//   <!-- feature:catalog-search -->
-//   ...text the model only sees when the feature is on...
-//   <!-- /feature:catalog-search -->
+//   <!-- feature:catalog-reuse -->
+//   ...text the model only sees when the feature is enabled...
+//   <!-- /feature:catalog-reuse -->
 //
 // The markers are HTML comments, so the same file renders unchanged anywhere
 // else (the coding harness reads it from disk and sees every section). Here, a

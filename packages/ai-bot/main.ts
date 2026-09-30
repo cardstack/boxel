@@ -67,7 +67,6 @@ import createDebug from 'debug';
 const { debug } = createDebug;
 import { profEnabled, profTime, profNote } from './lib/profiler.ts';
 import { publishCodePatchCorrectnessMessage } from './lib/code-patch-correctness.ts';
-import { enabledSkillFeatures } from './lib/skill-features.ts';
 import {
   waitForPendingCreditTracking,
   scheduleFallbackCostTracking,
@@ -505,13 +504,7 @@ Common issues are:
             promptParts = await profTime(
               eventId,
               'history:constructPromptParts',
-              async () =>
-                getPromptParts(
-                  eventList,
-                  aiBotUserId,
-                  client,
-                  enabledSkillFeatures(),
-                ),
+              async () => getPromptParts(eventList, aiBotUserId, client),
             );
             responder.responseState.setAllowedToolNames([
               ...(promptParts.tools?.map((tool) => tool.function.name) ?? []),
