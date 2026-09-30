@@ -114,6 +114,13 @@ export default defineConfig([
     languageOptions: { sourceType: 'module', parserOptions: esmParserOptions },
   },
   {
+    // The unit tests exercise the built package: they import from dist/,
+    // which the `test` script builds first and which lint runs without.
+    // Running the tests is what checks those imports resolve.
+    files: ['test/**/*.mjs'],
+    rules: { 'n/no-missing-import': 'off' },
+  },
+  {
     files: ['**/*.cjs'],
     languageOptions: { sourceType: 'commonjs', globals: { ...globals.node } },
     rules: { '@typescript-eslint/no-require-imports': 'off' },
