@@ -39,6 +39,7 @@ import { renderCard } from '../helpers/render-component';
 import { setupRenderingTest } from '../helpers/setup';
 
 import type { CardDef, FieldDef } from '@cardstack/base/card-api';
+import type * as OperationsModule from '@cardstack/base/operations';
 
 // The policy definitions live in the catalog realm and reach this suite
 // through the catalog test subset, so their shapes are described here rather
@@ -845,5 +846,84 @@ module('Integration | realm policy', function (hooks) {
     assert.dom('[data-test-policy-grant-not-searchable]').doesNotExist();
     assert.dom('[data-test-policy-rule-inactive]').doesNotExist();
     assert.dom('[data-test-realm-policy-validate-failure]').doesNotExist();
+  });
+
+  test('a view created in an index render never asks what the policy compiles to', async function (assert) {
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'classroom.gts': classroomModule,
+        'policies/mistyped.json': policyDocument([
+          {
+            targetType: { module: '../classroom', name: 'Classroom' },
+            grants: [
+              { operation: 'read' },
+              { operation: 'delete', where: MISTYPED },
+            ],
+          },
+        ]),
+      },
+    });
+    let { operations } = await loader.import<typeof OperationsModule>(
+      '@cardstack/base/operations',
+    );
+    // Looking the service up arms the transport both the card's validate
+    // and the test's own are sent through.
+    getService('operations');
+    let policy = await loadPolicy('policies/mistyped');
+
+    // Every validate the page sends on to the realm.
+    let validates = 0;
+    let network = getService('network');
+    let spy = async (request: Request) => {
+      if (
+        new URL(request.url).pathname.endsWith('/_operations') &&
+        (await request.clone().text()).includes('"validate"')
+      ) {
+        validates++;
+      }
+      return null;
+    };
+    network.virtualNetwork.mount(spy, { prepend: true });
+    let context = globalThis as Record<string, unknown>;
+    try {
+      // The render context is what marks an index render.
+      context.__boxelRenderContext = true;
+      try {
+        await renderCard(loader, policy, 'isolated');
+      } finally {
+        context.__boxelRenderContext = undefined;
+      }
+      assert
+        .dom('[data-test-policy-rule]')
+        .exists({ count: 1 }, 'the index render lists the rules');
+      assert
+        .dom('[data-test-policy-grant-status]')
+        .doesNotExist('with no grant marked');
+      assert
+        .dom('[data-test-realm-policy-issues]')
+        .doesNotExist('and no issues');
+
+      // The test asks once itself, through the same transport. Once that
+      // answer is back, an ask the view made while it rendered would have
+      // reached the realm too.
+      let validation = await (
+        operations(policy) as unknown as {
+          validate(): Promise<{ issues: { code: string }[] }>;
+        }
+      ).validate();
+      assert.deepEqual(
+        validation.issues.map(({ code }) => code),
+        ['invalid-predicate'],
+        'the realm answers a validate of this card',
+      );
+      assert.strictEqual(
+        validates,
+        1,
+        "the only validate sent is the test's own",
+      );
+    } finally {
+      network.virtualNetwork.unmount(spy);
+    }
   });
 });

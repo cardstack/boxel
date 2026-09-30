@@ -985,10 +985,10 @@ from what the card's latest index visit recorded, and answers with what that
 compile found. The policy card's isolated view asks it as soon as someone looks
 at the card, and again after each index pass of the card's realm, which is when
 an edit to the card, or to a type in that realm its rules name, takes effect.
-An index render never asks it. It marks each grant in place
-as inactive, or as live but admitting no search, lists the issues with the
-rule and the grant each is about, and says when the policy as a whole is not in
-force. Code asks it the same way:
+An index render never asks it. The view marks each grant in place as inactive,
+or as live but admitting no search, lists the issues with the rule and the
+grant each is about, and says when the policy as a whole is not in force. Code
+asks it the same way:
 
 ```ts
 let validation = await operations<typeof RealmPolicy>(policy).validate();
