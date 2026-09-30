@@ -625,8 +625,8 @@ export interface RenderTimeoutDiagnostics extends BuildModelDiagnostics {
   renderElapsedMs?: number;
   // Sum of launch + render elapsed (server-observed).
   totalElapsedMs?: number;
-  // Capture-capture renders only: the components of `renderElapsedMs`,
-  // measured inside `runCapture`. Navigation (route transition +
+  // Capture renders only: the components of `renderElapsedMs`, measured
+  // inside `runCapture`. Navigation (route transition +
   // path settle), the prerender settle wait, the image/font paint wait, and
   // the capture loop — the lone `page.screenshot` for a singular capture, or
   // each entry's viewport switch + capture for a batch. Their sum is
