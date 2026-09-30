@@ -53,6 +53,7 @@ import {
   getSearchRequestPayload,
 } from '../middleware/multi-realm-authorization.ts';
 import { resolveRealmsForFederatedRequest } from '../lib/realm-routing.ts';
+import { mayNameRealmPolicy } from '../lib/realm-policy-pointer.ts';
 import type { RealmRegistryReconciler } from '../lib/realm-registry-reconciler.ts';
 import type { JobScopedSearchCache } from '../job-scoped-search-cache.ts';
 import { LiveSearchCache } from '../live-search-cache.ts';
@@ -105,6 +106,9 @@ const log = logger('realm-server:search');
 // so two requests differing on any of them get distinct entries + ETags.
 export default function handleSearch(opts: {
   reconciler: RealmRegistryReconciler;
+  // Where the registry's `disk_id`s resolve, so a realm the caller cannot read
+  // can be told apart as one with no policy to ask without mounting it.
+  realmsRootPath: string;
   searchCache?: JobScopedSearchCache;
   // Reads each searched realm's generation fingerprints (the freshness signal
   // the live-search cache keys on). Required — every route wiring passes it.
@@ -126,7 +130,8 @@ export default function handleSearch(opts: {
   // independently drifting ladders.
   linkShapePolicy?: LinkShapePolicy;
 }): (ctxt: Koa.Context) => Promise<void> {
-  let { reconciler, searchCache, dbAdapter, virtualNetwork } = opts;
+  let { reconciler, realmsRootPath, searchCache, dbAdapter, virtualNetwork } =
+    opts;
   let linkShapePolicy = opts.linkShapePolicy ?? LinkShapePolicy.pinned('full');
   let liveSearchCache = opts.liveSearchCache ?? new LiveSearchCache();
   return async function (ctxt: Koa.Context) {
@@ -238,7 +243,10 @@ export default function handleSearch(opts: {
   // withheld, never served unscoped.
   //
   // Mounting a realm to ask is work a search of realms the caller reads never
-  // does, and neither does a search on no type, which no rule could admit.
+  // does, and neither does a search on no type, which no rule could admit. Nor
+  // is a realm mounted when its `realm.json` names no policy: with no policy
+  // there is nothing to ask, and it contributes nothing, as a realm whose
+  // policy grants nothing does.
   async function policyAccess(
     readable: Set<string>,
     grantCandidates: string[],
@@ -253,13 +261,19 @@ export default function handleSearch(opts: {
     if (grantCandidates.length === 0 || !invocation?.types.length || !user) {
       return access;
     }
-    let realms = await resolveRealmsForFederatedRequest(
-      reconciler,
-      grantCandidates,
-    );
+    let asked = (
+      await Promise.all(
+        grantCandidates.map(async (url) =>
+          (await mayNameRealmPolicy(url, { reconciler, realmsRootPath }))
+            ? url
+            : undefined,
+        ),
+      )
+    ).filter((url) => url !== undefined);
+    let realms = await resolveRealmsForFederatedRequest(reconciler, asked);
     await Promise.all(
       realms.map(async (realm, index) => {
-        let url = grantCandidates[index];
+        let url = asked[index];
         if (!realm) {
           access.failed.add(url);
           return;
