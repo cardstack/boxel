@@ -50,7 +50,7 @@ card.generatedImage = new ImageDef({
 });
 ```
 
-This is the same host-command family used by `packages/host/app/tools/screenshot-card.ts`: write a PNG file to the card's realm, then link the file. A data URL is acceptable only as a command input or temporary `@tracked` preview while the file write is in flight.
+This is the same host-command family used by `packages/host/app/tools/capture-card.ts`: write a PNG file to the card's realm, then link the file. A data URL is acceptable only as a command input or temporary `@tracked` preview while the file write is in flight.
 
 ## A Million Dreams Example
 
