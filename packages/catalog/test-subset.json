@@ -18,6 +18,7 @@
     ],
     "realmServer": [
       "catalog-test-subset-test",
+      "publish-unpublish-realm-test",
       "realm-policy-activation-test",
       "realm-policy-archived-seal-test",
       "realm-policy-batch-test",
