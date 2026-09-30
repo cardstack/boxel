@@ -872,7 +872,7 @@ interface PolicyStandingSignature {
   Args: { config: RealmConfig };
 }
 
-// Whether the policy this realm names is in force, as the realm holds it.
+// Whether the policy this realm names is in force, as the realm compiles it.
 //
 // The pointer is written on this card, and two of the problems that take a
 // realm's whole policy out of force are problems with the pointer rather than
@@ -1507,11 +1507,12 @@ export class RealmConfig extends CardDef {
       'The RealmPolicy card that governs this realm, by its URL or realm-prefixed id. Absent for a realm with no policy. Only the pointer lives here; the rules live on the card it names',
   });
 
-  // What the policy this realm names compiles to, as the realm holds it in
-  // force: the answer says when the policy is not in force at all, and why,
+  // What the policy this realm names compiles to, as the realm compiles it:
+  // the answer says when the policy is not in force at all, and why,
   // including a pointer to a card the index does not hold or to one that is
-  // not a RealmPolicy. The realm answers only a caller who can read both this
-  // realm and the realm holding the policy card, so no policy may grant it.
+  // not a RealmPolicy. The realm answers only a caller who can read this realm
+  // and every realm compiling reads, the policy card's first, so no policy may
+  // grant it.
   @operation static validatePolicy = {
     base: 'validate',
     nonGrantable: true,

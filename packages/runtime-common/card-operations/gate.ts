@@ -438,8 +438,8 @@ export async function gateOperation(
   // A query is planned and run on the search engine rather than against one
   // target, so nothing here can grant one. An explain and a validate are
   // granted nowhere: an explain answers what a refusal withholds, and a
-  // validate reads a policy card, or the realm's own compiled policy. So each
-  // is refused here even where its declaration left the flag off.
+  // validate reads a policy card, or the one the realm's pointer names. So
+  // each is refused here even where its declaration left the flag off.
   if (base === 'query' || base === 'explain' || base === 'validate') {
     trace?.refused('non-grantable');
     return GATE_REFUSED;

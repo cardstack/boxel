@@ -659,8 +659,8 @@ export interface ExplainOperationDeclaration extends OperationCommon {
 // realm naming the card puts in force. It invokes nothing and activates
 // nothing. It belongs on a policy card, where it lets the card show its author
 // which of its grants are live, and on the realm's config card, where it
-// reports the policy the realm's pointer names as the realm holds it in force,
-// including a pointer to a card that is missing or is not a policy.
+// reports what the card the realm's pointer names compiles to there, including
+// a pointer to a card that is missing or is not a policy.
 //
 // There is no clause and no payload: the card is the question. A policy card
 // is open only to a caller the realm's own permissions let read it, and what

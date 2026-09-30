@@ -892,7 +892,8 @@ export type ExplainedGrantOutcome =
   | 'not-evaluated';
 
 // A validate's answer: what the policy card it was invoked on compiles to, or,
-// invoked on a realm's config card, what the realm's own policy compiled to. It
+// invoked on a realm's config card, what the card its pointer names compiles
+// to there. It
 // is carried on the wire as it is here, so a card reading it back reads this
 // shape.
 export interface OperationValidateResult {

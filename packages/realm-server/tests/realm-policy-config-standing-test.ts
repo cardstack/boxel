@@ -27,9 +27,9 @@ import {
 import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
 
 // What a realm's config card reports of the policy its pointer names: whether
-// the realm holds it in force, and when it does not, the problem that takes it
-// out of force, including the two that are problems with the pointer rather
-// than with any policy card.
+// it is in force as the realm compiles it, and when it is not, the problem that
+// takes it out of force, including the two that are problems with the
+// pointer rather than with any policy card.
 //
 // The worked example's topology. The Education realm names a policy card that
 // lives in an Org realm. The Org admin reads both realms. An Education reader
