@@ -786,6 +786,54 @@ export function policyScopedQuery(
   };
 }
 
+// The realms of a search whose rows the result marks policy-scoped
+// (`meta.policyScopedRealms`). A realm the caller does not read outright is
+// scoped whatever it contributed. Its policy composed a grant, admitted
+// nothing, or could not be judged, and the mark reads the same in each case,
+// so it cannot tell a caller whether they hold a grant there. A declared query
+// the server resolved from its own definition scopes every realm the request
+// named, since what it matched is the server's resolution rather than the
+// caller's. That includes a realm its declaration leaves out, which contributes
+// no rows to it, so the mark never says which realms the declaration searched.
+// `realms` are the ones the request named, and they are marked in that order,
+// once each.
+export function policyScopedRealms({
+  realms,
+  readable,
+  resolvedByServer,
+}: {
+  realms: string[];
+  readable: (realm: string) => boolean;
+  resolvedByServer: boolean;
+}): string[] {
+  return [
+    ...new Set(
+      resolvedByServer ? realms : realms.filter((realm) => !readable(realm)),
+    ),
+  ];
+}
+
+// `doc` with `realms` marked policy-scoped, beside any it already marks. A
+// document with no realm to mark is returned as it is, so a search of realms
+// the caller reads outright carries no mark at all.
+export function markPolicyScoped(
+  doc: EntryCollectionDocument,
+  realms: string[],
+): EntryCollectionDocument {
+  if (realms.length === 0) {
+    return doc;
+  }
+  return {
+    ...doc,
+    meta: {
+      ...doc.meta,
+      policyScopedRealms: [
+        ...new Set([...(doc.meta.policyScopedRealms ?? []), ...realms]),
+      ],
+    },
+  };
+}
+
 // The document a realm answers with when it contributes no rows because the
 // caller may not see any: the one a search matching nothing produces, so a
 // realm that grants the caller nothing reads exactly as a realm holding
@@ -1266,6 +1314,16 @@ export function combineSearchEntryResults(
     // merge.
     if (doc.meta?.linkClosureTruncated) {
       combined.meta.linkClosureTruncated = true;
+    }
+    // A realm that scoped its own rows scopes them in the merge too: the mark
+    // is per realm, so merging only collects which realms carry it.
+    if (doc.meta?.policyScopedRealms?.length) {
+      combined.meta.policyScopedRealms = [
+        ...new Set([
+          ...(combined.meta.policyScopedRealms ?? []),
+          ...doc.meta.policyScopedRealms,
+        ]),
+      ];
     }
     for (let resource of doc.included ?? []) {
       if (resource.id) {
