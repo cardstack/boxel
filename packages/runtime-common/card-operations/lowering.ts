@@ -475,7 +475,13 @@ async function lowerOperation(
     }
   }
 
-  if (declaration.input) {
+  if (base === 'explain' && declaration.input) {
+    sink.add(
+      'unrunnable-program',
+      'input',
+      `an "explain" operation answers the question its payload asks, so an \`input\` that rewrote it would answer a question nobody asked`,
+    );
+  } else if (declaration.input) {
     let input = lowerExpression(
       declaration.input.$bxl,
       'input',

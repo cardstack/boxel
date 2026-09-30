@@ -1043,6 +1043,19 @@ module(basename(import.meta.filename), function (hooks) {
         unreadable.draft?.issues.map(({ code, path }) => ({ code, path })),
         [{ code: 'invalid-rule', path: 'rules' }],
       );
+      let unreadableSearch = await answer({
+        actor: TEACHER,
+        target: EDUCATION,
+        operation: 'listClassrooms',
+        search: { on: CLASSROOM },
+        draft: { rules: 'every classroom' },
+      });
+      assert.strictEqual(
+        unreadableSearch.decision,
+        'failed',
+        'and every search, rather than reading as a policy that grants nothing',
+      );
+      assert.strictEqual(unreadableSearch.reason, 'policy-unloadable');
 
       let notADocument = await ask(ASKER.itAdmin(), {
         actor: TEACHER,
@@ -1052,6 +1065,19 @@ module(basename(import.meta.filename), function (hooks) {
       });
       assert.strictEqual(notADocument.status, 400);
       assert.strictEqual(errorOf(notADocument)?.code, 'invalid-params');
+
+      let wholeCard = await ask(ASKER.itAdmin(), {
+        actor: TEACHER,
+        target: ROOM_204,
+        operation: 'read',
+        draft: { data: { type: 'card', attributes: WIDER_READ } },
+      });
+      assert.strictEqual(
+        wholeCard.status,
+        400,
+        'a draft with no rules of its own is refused rather than read as a policy granting nothing',
+      );
+      assert.strictEqual(errorOf(wholeCard)?.code, 'invalid-params');
     });
 
     test('a draft is refused to a caller missing read on either realm, as the live form is', async function (assert) {
@@ -1511,6 +1537,28 @@ module(basename(import.meta.filename), function (hooks) {
         'the next page holds the rest',
       );
       assert.deepEqual(second.page, { number: 1, size: 2, total: 3 });
+
+      let drafted = await answer<Listing & { draft?: unknown }>({
+        actor: TEACHER,
+        target: EDUCATION,
+        operation: 'read',
+        list: { on: CLASSROOM, page: { number: 0, size: 3 } },
+        draft: WIDER_READ,
+      });
+      assert.deepEqual(
+        drafted.explanations.map(({ decision }) => decision),
+        ['allowed', 'allowed', 'allowed'],
+        'a listing answers against a draft too',
+      );
+      assert.deepEqual(
+        drafted.draft,
+        { issues: [] },
+        'which it names once, on the listing',
+      );
+      assert.false(
+        drafted.explanations.some((explanation) => 'draft' in explanation),
+        'rather than on every card',
+      );
 
       let onCard = await ask(ASKER.itAdmin(), {
         actor: TEACHER,

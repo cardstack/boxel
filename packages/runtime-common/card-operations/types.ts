@@ -9,6 +9,7 @@ import type {
   SearchEntryWireFilter,
   SearchEntryWireQuery,
 } from '../search-entry.ts';
+import { CAPABILITY_CHECK_CAP } from './capability-wire.ts';
 import type { OperationDiagnostics } from './telemetry.ts';
 import type {
   BaseOperationName,
@@ -765,8 +766,12 @@ export interface PolicyExplanationListing {
   // One per card on the page, in the page's order.
   explanations: PolicyExplanation[];
   // The page this is, and how many cards the listing pages through. `size` is
-  // the size asked for, so a last page can hold fewer.
+  // the size asked for, so a last page can hold fewer, as can a page a card
+  // was removed from while it was explained.
   page: { number: number; size: number; total: number };
+  // Present where the listing was answered against a draft, as on a single
+  // explanation.
+  draft?: { issues: PolicyIssue[] };
 }
 
 // The most questions one request may have explained: one listing's page, or,
@@ -777,7 +782,7 @@ export interface PolicyExplanationListing {
 // whole above it, before anything is explained: who can read a card is every
 // actor, and what an actor can reach is every card, so an uncapped explain is
 // an enumeration.
-export const EXPLAIN_CAP = 100;
+export const EXPLAIN_CAP = CAPABILITY_CHECK_CAP;
 
 // ============================================================================
 // What an explain says.

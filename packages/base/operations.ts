@@ -1186,6 +1186,14 @@ function assertValidDeclaration(
   if (declaration.input !== undefined) {
     assertBxlProgram(label, 'input', declaration.input);
   }
+  // The question an explain answers is its payload as sent. An `input` stage
+  // would answer a question other than the one asked, and would change how
+  // many questions the request asks after they were counted against the cap.
+  if (base === 'explain' && declaration.input !== undefined) {
+    throw new Error(
+      `${label}: an "explain" operation answers the question its payload asks, so it carries no \`input\` to rewrite it`,
+    );
+  }
   let usedClauses = clauseKeys.filter(
     (clause) =>
       declaration[clause] !== undefined && !TYPE_NAMING_KEYS.includes(clause),

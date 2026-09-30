@@ -2,6 +2,7 @@ import { isCodeRef } from '../card-document-shape.ts';
 import type { CodeRef } from '../code-ref.ts';
 import { urlNamesFile } from '../file-def-code-ref.ts';
 import { ensureTrailingSlash } from '../paths.ts';
+import { runWithSearchTimeBudget, SearchBoundError } from '../search-bounds.ts';
 import {
   parseSearchEntryQueryFromPayload,
   wireFilterFromFilter,
@@ -108,10 +109,15 @@ import {
 // has something to explain is still the one the realm names, and the draft is
 // read on exactly the authority the live form is. It is compiled for this
 // answer alone: no cache holds it, and the policy in force is untouched. A
-// draft names its own types, and they resolve as the live policy's do, on the
-// target realm's authority. So what compiling one records can tell a reader
-// of both realms what that realm's definitions hold for a type they name,
-// which the live form tells only whoever may write the policy card.
+// draft names its own types, and they resolve as the live policy's do,
+// through the target realm's definition lookup, which reads a module in any
+// realm this server serves as that realm's owner. Which types exist there,
+// and which operations they declare, a named search already tells any caller
+// who names one. What a draft adds is what compiling a rule records about the
+// type it names: that an operation is non-grantable, that the type is module
+// source, or why a predicate does not compile to a search filter. The live
+// form tells that only to whoever may write the policy card, and a draft tells
+// it to a reader of both realms.
 //
 // A search. A search is not decided by the gate: the search engine composes
 // the grants that admit it into its filter, and it reads the index, so it is
@@ -263,8 +269,8 @@ export async function explainOperation(
     // judges, so a page costs its realm one gate at a time however large it
     // is.
     for (let url of cards) {
-      explanations.push(
-        answered(
+      try {
+        explanations.push(
           await explain(
             governing.core,
             { kind: 'instance', url },
@@ -272,13 +278,22 @@ export async function explainOperation(
             actor,
             acl,
           ),
-        ),
-      );
+        );
+      } catch (e: unknown) {
+        // A card removed since the page was read is no longer on it. It is
+        // left out rather than failing the page, as the page read a moment
+        // later would leave it out.
+        if (isOperationFailure(e) && e.error.code === 'target-not-found') {
+          continue;
+        }
+        throw e;
+      }
     }
     return {
       listing: {
         explanations,
         page: { ...question.list.page, total },
+        ...(draft ? { draft: { issues: draft.issues } } : {}),
       },
     };
   }
@@ -406,6 +421,17 @@ async function explainSearch(
       code: 'actor-required',
     });
   }
+  // A policy that did not compile as a whole cannot say what it grants. The
+  // gate refuses every caller it judges with a 500 for it, and this answers
+  // the search lane the same way rather than as a policy granting nothing.
+  if ((await core.policy?.compiledPolicy())?.uncompilable) {
+    return refused(
+      base,
+      'policy-unloadable',
+      { status: 500, code: 'internal-error' },
+      'failed',
+    );
+  }
   let scope: PolicyQueryScope;
   try {
     scope = await policyQueryScope(core, {
@@ -522,9 +548,25 @@ async function listedCards(
     sort: [{ by: 'item.cardURL' }],
     page: list.page,
   };
-  let doc = await core.indexQueryEngine.searchEntries(
-    parseSearchEntryQueryFromPayload(wire),
-  );
+  let query = parseSearchEntryQueryFromPayload(wire);
+  // Under the wall-clock budget every search runs under, whatever door it
+  // reaches the engine by.
+  let doc: Awaited<ReturnType<typeof core.indexQueryEngine.searchEntries>>;
+  try {
+    doc = await runWithSearchTimeBudget((signal) =>
+      core.indexQueryEngine.searchEntries(query, { signal }),
+    );
+  } catch (err: unknown) {
+    if (err instanceof SearchBoundError) {
+      throw new OperationFailure({
+        status: err.status,
+        code: 'invalid-params',
+        title: 'Listing not read',
+        detail: `the realm could not read the page of cards the listing asks for: ${err.message}`,
+      });
+    }
+    throw err;
+  }
   return {
     cards: doc.data.map((match) => match.id),
     total: doc.meta.page.total,
@@ -836,7 +878,15 @@ function questionIn(request: OperationRequest): Question {
       `operation "${request.name}" explains a decision about \`operation\`, the name an invocation would invoke`,
     );
   }
-  if (draft != null && !isPlainRecord(draft)) {
+  // A draft is read the way a policy card's attributes are, so one with no
+  // `rules` would compile to a policy granting nothing, and nothing would say
+  // it was the wrong shape: a card's whole document, say, whose rules sit
+  // under `data.attributes`.
+  if (
+    draft != null &&
+    (!isPlainRecord(draft) ||
+      !Object.prototype.hasOwnProperty.call(draft, 'rules'))
+  ) {
     throw invalid(
       `operation "${request.name}" answers against a \`draft\` that is a policy document: an object holding the \`rules\` a RealmPolicy card holds`,
     );

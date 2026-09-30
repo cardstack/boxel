@@ -969,6 +969,35 @@ Some things worth knowing before you read one:
   annotated as reading computed values or linked cards. Those lag the index,
   the gate never evaluates them, and such a grant admits nothing.
 
+### Asking about a draft, a search, or a page of cards
+
+An explain reads three more inputs beside the question itself: `draft`,
+`search` and `list`. It reads them by name, whatever the operation carrying
+them is called. A declaration's `params` are each required, and its typed
+payload takes exactly the params it declares. So each input rides a
+declaration of its own on the `explain` base, beside the one that asks the
+plain question:
+
+```ts
+class SchoolPolicy extends RealmPolicy {
+  @operation static explainDraft = {
+    base: 'explain',
+    params: {
+      actor: StringField,
+      target: StringField,
+      operation: StringField,
+      draft: JsonField,
+    },
+    nonGrantable: true,
+  } satisfies OperationDeclaration;
+  // explainSearch takes `search`, and explainReach takes `list`, the same
+  // way. A declaration whose params include `list` resolves to a listing.
+}
+```
+
+An explain carries no `input` stage: it answers the question its payload asks,
+and the cap below counts that payload.
+
 ### Asking about a draft
 
 An explain can answer against rules that are not live yet. Pass `draft`, a
@@ -976,7 +1005,7 @@ policy document holding the `rules` a `RealmPolicy` card holds, to the explain
 of the card the target's realm names:
 
 ```ts
-let explanation = await operations<typeof RealmPolicy>(policy).explain({
+let explanation = await operations<typeof SchoolPolicy>(policy).explainDraft({
   actor: '@teacher:example.org',
   target: 'https://example.org/education/classrooms/room-205',
   operation: 'read',
@@ -1001,8 +1030,10 @@ never cached and never activated, and the live policy answers exactly as it did
 before. A draft that doesn't compile reports its issues the way a policy card
 does. A draft whose `rules` can't be read at all fails every decision
 (`failed`, `policy-unloadable`), which is what the realm would do if its card
-held that document. Asking about a draft needs exactly what asking about the
-live policy needs: read on both realms.
+held that document, on the search lane as on the direct one. A `draft` with
+no `rules` member is refused, since it would compile to a policy granting
+nothing. Asking about a draft needs exactly what asking about the live policy
+needs: read on both realms.
 
 ### Asking about a search
 
@@ -1013,7 +1044,7 @@ the target: `{ on, params }` for a named query, or `{ filter }` for an ad-hoc
 one, asked as `query`:
 
 ```ts
-let explanation = await operations<typeof RealmPolicy>(policy).explain({
+let explanation = await operations<typeof SchoolPolicy>(policy).explainSearch({
   actor: '@teacher:example.org',
   target: 'https://example.org/education/',
   operation: 'listClassrooms',
@@ -1031,8 +1062,12 @@ the search answers with no rows, which refuses nobody, so no `refusal` comes
 with it. `search.index.pending` counts the passes that write the realm's index
 and haven't landed yet. Until they land, the search answers from the index as
 it was, while the direct lane already sees the card as stored. This is the
-freshness difference the explain makes visible: revoking access takes effect
-on the direct lane at the next request, and on search only at the next reindex.
+freshness difference the explain makes visible. When the data a predicate reads
+changes, the direct lane sees it at the next request, and search sees it at
+the next reindex of the rows it matches. When the policy card itself changes,
+both lanes see it once that card's own index pass lands. `search.index` counts
+the passes of the searched realm, so when the policy card lives in another
+realm, its pass isn't among them.
 
 ### Listing, and the cap
 
@@ -1040,8 +1075,10 @@ Who can read a card is every actor, and what an actor can reach is every card,
 so an explain is bounded. Pass `list: { on?, page?: { number?, size? } }` and
 name the realm as the target to explain one page of the realm's cards. Each
 card is explained as its own triple, and the answer is
-`{ explanations, page: { number, size, total } }`. A request explains at most
-100 triples, and that covers a listing's page and a batch's explain entries
+`{ explanations, page: { number, size, total } }`, with `draft` once on the
+listing where it answers against one. A card removed while the page is being
+explained is left out of it. A request explains at most 100 triples, the
+capability check's pair cap, and that covers a listing's page and a batch's explain entries
 together. A listing entry counts as the page it asks for. A request over the
 cap is refused whole with `invalid-params` before anything is explained.
 
