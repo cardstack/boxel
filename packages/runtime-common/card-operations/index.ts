@@ -246,6 +246,7 @@ export type {
   OperationValidateResult,
   PolicyValidation,
   ValidatedGrant,
+  ValidatedGrantInertia,
   ValidatedPolicyIssue,
   ValidatedRule,
 } from './types.ts';

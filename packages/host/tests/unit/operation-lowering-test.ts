@@ -724,6 +724,32 @@ module('Unit | operation lowering', function (hooks) {
       'a projection over the validation is recorded as never reached',
     );
     assert.true(projected.operations.validate.invalid);
+
+    let withPayload = await lowerOperationDeclarations(
+      {
+        validate: {
+          base: 'validate',
+          nonGrantable: true,
+          params: { realm: { type: 'string' } },
+          input: { $bxl: '{ strict: true }' },
+        },
+      } as unknown as Record<string, OperationsModule.OperationDeclaration>,
+      context,
+    );
+    assert.deepEqual(
+      withPayload.issues.map((issue) => [issue.code, issue.path]),
+      [
+        ['unrunnable-program', 'params'],
+        ['unrunnable-program', 'input'],
+      ],
+      'a payload stage on a validate is recorded as never read',
+    );
+    assert.strictEqual(
+      withPayload.operations.validate.params,
+      undefined,
+      'and no payload schema is stored for one',
+    );
+    assert.strictEqual(withPayload.operations.validate.input, undefined);
   });
 
   // -------------------------------------------------------------------------

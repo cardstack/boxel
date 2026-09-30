@@ -336,7 +336,9 @@ export type OperationLoweringIssueCode =
   | 'base-not-carried'
   // A raw program declared on a base that runs none. The two appends edit the
   // stored file and a file's content is replaced wholesale, so a program
-  // stored for one of them would never be reached.
+  // stored for one of them would never be reached. So is a payload stage, a
+  // `params` schema or an `input` program, declared on a base that takes no
+  // payload.
   | 'unrunnable-program'
   // An `appendContainsMany` that does not say what to append where: no field,
   // no item for a field it names, or both spellings at once with no rule for
@@ -929,6 +931,13 @@ export interface PolicyValidation {
   // read. Absent when what the index holds of the card is an earlier visit's.
   card: string;
   version?: string;
+  // The realms this server serves whose index compiling read: the card's own,
+  // and each one a type its rules name, or a type those descend from, is
+  // defined in. A change indexed in any of them can change what the card
+  // compiles to, so a view that shows a validation asks again when one of them
+  // is indexed. The caller may read every one of them, since a validate is
+  // refused to anyone who may not.
+  realms: string[];
   // Set when the policy as a whole did not compile. A realm that names it
   // grants nothing through it, and refuses every caller its ACL declines with
   // a 500. `issues` says why, and `rules` is empty.
@@ -939,7 +948,8 @@ export interface PolicyValidation {
   // The rules that compiled, in the order the card lists them, each with its
   // grants that compiled. This is what a realm naming the card puts in force.
   // A rule or grant the card holds that is not here is inactive, and an issue
-  // says why.
+  // says why. A grant here can still admit nothing, and says so with
+  // `admitsNothing`.
   rules: ValidatedRule[];
 }
 
@@ -960,7 +970,23 @@ export interface ValidatedRule {
 export interface ValidatedGrant {
   // Where the grant is in the policy card, as `rules[2].grants[1]`.
   path: string;
+  // Set on a grant that compiled and can admit nothing, with the reason. The
+  // policy keeps such a grant exactly as it compiled, so it is in force, and it
+  // has no invocation to admit.
+  admitsNothing?: ValidatedGrantInertia;
 }
+
+export type ValidatedGrantInertia =
+  // A grant on a query whose `where` compiled no search filter. A query is
+  // authorized only by composing a grant's filter into the search, and the
+  // gate refuses every invocation built on one, so the grant has nothing to
+  // compose. `policy-not-filterable` says why there is no filter.
+  | 'unfilterable'
+  // A grant whose `where` is annotated as reading a snapshot tier, on anything
+  // but a query. The gate reads a card's stored source alone and never
+  // evaluates such a predicate. On a query, the same annotation compiles into
+  // the search filter and admits what it matches.
+  | 'snapshot';
 
 // A `delete` answers with `null`: there is no state left to describe.
 export type OperationResult =

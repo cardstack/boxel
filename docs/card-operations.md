@@ -978,17 +978,18 @@ a grant is inactive, and the rest of the policy applies. Everyone the policy
 governs sees a policy without that grant, and nothing fails. A validate is how
 the card tells its author which of its grants are live.
 
-`RealmPolicy` declares one, named `validate`, on the `validate` base, so every
-policy card carries it, a subtype's included. It takes no payload. Invoked on
-the policy card, it compiles the card exactly as a realm naming it compiles it,
-from what the card's latest index visit recorded, and answers with what that
-compile found. The policy card's isolated view asks it as soon as someone looks
-at the card, and again after each index pass of the card's realm, which is when
-an edit to the card, or to a type in that realm its rules name, takes effect.
-An index render never asks it. The view marks each grant in place as inactive,
-or as live but admitting no search, lists the issues with the rule and the
-grant each is about, and says when the policy as a whole is not in force. Code
-asks it the same way:
+`RealmPolicy` declares one, named `validate`, on the `validate` base, with
+`nonGrantable: true` and nothing else, so every policy card carries it, a
+subtype's included. It takes no payload, so a declaration carrying `params` or
+`input` is refused. Invoked on the policy card, it compiles the card exactly as
+a realm naming it compiles it, from what the card's latest index visit
+recorded, and answers with what that compile found. The policy card's isolated
+view asks it as soon as someone looks at the card, and again after each index
+pass of a realm the answer's `realms` names, which is when an edit to the card,
+or to a type its rules name, takes effect. An index render never asks it. The
+view marks each grant in place as live or inactive, lists the issues with the
+rule and the grant each is about, and says when the policy as a whole is not in
+force. Code asks it the same way:
 
 ```ts
 let validation = await operations<typeof RealmPolicy>(policy).validate();
@@ -999,39 +1000,55 @@ let validation = await operations<typeof RealmPolicy>(policy).validate();
 // validation.rules         the rules that compiled, each with its grants that
 //                          compiled: what a realm naming the card puts in force
 // validation.uncompilable  set when the policy as a whole did not compile
+// validation.realms        the realms this server serves whose index compiling
+//                          read: the card's own, and the ones its rules' types
+//                          live in, so a view knows which to watch for a fix
 ```
 
 Some things worth knowing before you read one:
 
-- **A grant missing from `rules` is inactive.** An issue says why. The one
-  issue that leaves its grant live is `policy-not-filterable`: a grant on a
-  query whose predicate does not compile to a search filter admits no search.
+- **A grant missing from `rules` is inactive.** An issue says why.
+- **A grant in `rules` can still admit nothing, and says so with
+  `admitsNothing`.** `unfilterable` is a grant on a query whose predicate
+  compiled no search filter, which `policy-not-filterable` explains: a query is
+  authorized only by composing a grant's filter into the search, so such a
+  grant has nothing to compose. `snapshot` is a grant on anything but a query
+  whose predicate is annotated as reading a snapshot tier, which the gate never
+  evaluates. On a query, the same annotation compiles into the search filter
+  and admits what it matches.
 - **An uncompilable policy is different in kind.** A policy with one inactive
   grant denies that grant. A policy that did not compile at all denies
   everything it would have granted, and a realm naming it answers every
-  signed-in caller its ACL declines with a 500 until it is fixed. The card-level issue says why: most
-  often, the card's latest index visit failed and what the index holds is an
-  earlier visit's.
+  signed-in caller its ACL declines with a 500 until it is fixed. The
+  card-level issue says why: most often, the card's latest index visit failed
+  and what the index holds is an earlier visit's.
 - **It is the same answer for every realm that names the card.** Each of them
   compiles the card from the same row and the same type definitions. The one
   exception is a type in a realm the server has not mounted, such as one
   another realm server serves, whose definition each realm reads as its own
-  owner. A card no realm names answers the same way,
-  which is how a draft is checked before a realm is pointed at it.
+  owner. A card no realm names answers the same way, which is how a draft is
+  checked before a realm is pointed at it.
 - **It is live, and nothing is cached.** A fix shows on the next validate after
-  the card reindexes. A realm naming the card revalidates its own compiled
+  the card, or a realm in `realms`, reindexes. A realm naming the card revalidates its own compiled
   policy within five seconds of any change to the card or to a type its rules
   name, so what a validate shows is in force there within that bound.
-- **It is for readers of the card's realm.** No policy grant reaches a
-  validate, and none reaches a policy card at all, so only a caller the card's
-  own realm lets read it is answered.
-- **A problem with a realm's pointer is not on any policy card.** A realm whose
+- **It is for readers of every realm the policy reaches.** What a validate
+  reports describes the definitions of the types its rules name: whether each
+  is there, the operations it declares and which of them no policy may grant,
+  and the fields a search filter could read. Those are read on the realm
+  server's own authority, so a caller is answered only when they can read the
+  card's realm and every other realm this server serves that compiling read a
+  definition from, judged by a session of their own. Anyone else is refused
+  with a 403. No policy grant reaches a validate, and none reaches a policy card
+  at all.
+- **A problem with a realm's pointer is not on the policy card.** A realm whose
   `policy` names a card the index does not hold (`policy-card-missing`), or a
-  card that is not a `RealmPolicy` (`not-a-policy`), has no policy card for a
-  validate to be asked of. That realm refuses as an uncompilable policy does,
-  and records the issue on the `realm:policy` log channel. A policy card whose
-  latest index visit failed outright renders its index error, as any card
-  does.
+  card that is not a `RealmPolicy` (`not-a-policy`), refuses as an uncompilable
+  policy does, and records the issue on the `realm:policy` log channel. The
+  first has no card to ask. The second is a card of another type, which
+  carries a validate only if its own type declares one, and then answers
+  `uncompilable` with `not-a-policy`. A policy card whose latest index visit
+  failed outright renders its index error, as any card does.
 
 ## Where to look next
 

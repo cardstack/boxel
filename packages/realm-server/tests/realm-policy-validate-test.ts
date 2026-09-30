@@ -37,7 +37,8 @@ import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
 //
 // The worked example's topology. The Education realm holds the classrooms and
 // bulletins, and names a policy card that lives in an Org realm. An Org reader
-// may read the Org realm and nothing more. A teacher holds no permission on
+// may read the Org realm and nothing more, and an IT admin reads both realms.
+// A teacher holds no permission on
 // either, and reaches the Org realm's cards only through the Org realm's own
 // policy, which grants every card in that realm to every caller.
 const EDUCATION = 'http://127.0.0.1:4444/education/';
@@ -47,6 +48,7 @@ const DRAFT_CARD = `${ORG}policies/draft`;
 const ORG_POLICY_CARD = `${ORG}policies/org`;
 const ORG_ADMIN = '@org-admin:localhost';
 const ORG_READER = '@org-reader:localhost';
+const IT_ADMIN = '@it-admin:localhost';
 const EDUCATION_ADMIN = '@education-admin:localhost';
 const TEACHER = '@teacher:localhost';
 
@@ -181,6 +183,7 @@ module(basename(import.meta.filename), function (hooks) {
           },
           permissions: {
             [EDUCATION_ADMIN]: ['read', 'write', 'realm-owner'],
+            [IT_ADMIN]: ['read'],
           },
         },
         {
@@ -197,6 +200,7 @@ module(basename(import.meta.filename), function (hooks) {
           permissions: {
             [ORG_ADMIN]: ['read', 'write', 'realm-owner'],
             [ORG_READER]: ['read'],
+            [IT_ADMIN]: ['read'],
           },
         },
       ],
@@ -232,6 +236,7 @@ module(basename(import.meta.filename), function (hooks) {
   const ASKER = {
     orgAdmin: () => onOrg(ORG_ADMIN, ['read', 'write', 'realm-owner']),
     orgReader: () => onOrg(ORG_READER, ['read']),
+    itAdmin: () => onOrg(IT_ADMIN, ['read']),
     teacher: () => onOrg(TEACHER, []),
   };
 
@@ -251,7 +256,7 @@ module(basename(import.meta.filename), function (hooks) {
   }
 
   async function validate(policy = POLICY_CARD): Promise<PolicyValidation> {
-    let response = await ask(ASKER.orgReader(), policy);
+    let response = await ask(ASKER.itAdmin(), policy);
     if (response.status !== 200) {
       throw new Error(
         `validate(${policy}) answered ${response.status}: ${response.text}`,
@@ -273,6 +278,15 @@ module(basename(import.meta.filename), function (hooks) {
       rule.path,
       rule.grants.map((grant) => grant.path),
     ]);
+  }
+
+  // The grants a validation says are in force and admit nothing, with why.
+  function inert(validation: PolicyValidation) {
+    return validation.rules.flatMap((rule) =>
+      rule.grants.flatMap((grant) =>
+        grant.admitsNothing ? [[grant.path, grant.admitsNothing]] : [],
+      ),
+    );
   }
 
   // Each issue as the tests compare it: what it is, where it is, and the rule
@@ -305,6 +319,7 @@ module(basename(import.meta.filename), function (hooks) {
       assert.deepEqual(validation, {
         card: POLICY_CARD,
         version: validation.version,
+        realms: [ORG, EDUCATION],
         issues: [],
         rules: [
           {
@@ -321,6 +336,11 @@ module(basename(import.meta.filename), function (hooks) {
         typeof validation.version,
         'string',
         'the version of the card compiled is reported',
+      );
+      assert.deepEqual(
+        validation.realms,
+        [ORG, EDUCATION],
+        "the realms it compiled from are the card's own and the one its rules' types live in",
       );
     });
 
@@ -382,7 +402,7 @@ module(basename(import.meta.filename), function (hooks) {
       );
     });
 
-    test('a query grant whose predicate compiles no search filter is kept, and says it admits no search', async function (assert) {
+    test('a query grant whose predicate compiles no search filter is kept, and says it admits nothing', async function (assert) {
       await writeTo(
         org,
         'policies/education.json',
@@ -409,6 +429,41 @@ module(basename(import.meta.filename), function (hooks) {
         live(validation),
         [['rules[0]', ['rules[0].grants[0]', 'rules[0].grants[1]']]],
         'the grant is still in force',
+      );
+      assert.deepEqual(
+        inert(validation),
+        [['rules[0].grants[1]', 'unfilterable']],
+        'and admits nothing, since a query is authorized only through a filter',
+      );
+    });
+
+    test('a grant whose predicate reads a snapshot admits nothing, except on a query', async function (assert) {
+      await writeTo(
+        org,
+        'policies/education.json',
+        policyCard([
+          {
+            targetType: CLASSROOM,
+            grants: [
+              { operation: 'read', where: { bxl: TEACHES, snapshot: true } },
+              { operation: 'query', where: { bxl: TEACHES, snapshot: true } },
+              { operation: 'delete', where: TEACHES },
+            ],
+          },
+        ]),
+      );
+      let validation = await validate();
+      assert.deepEqual(issuesOf(validation), [], 'nothing is wrong with it');
+      assert.deepEqual(live(validation), [
+        [
+          'rules[0]',
+          ['rules[0].grants[0]', 'rules[0].grants[1]', 'rules[0].grants[2]'],
+        ],
+      ]);
+      assert.deepEqual(
+        inert(validation),
+        [['rules[0].grants[0]', 'snapshot']],
+        'the gate never evaluates the read, and the query composes its filter into a search',
       );
     });
 
@@ -536,16 +591,49 @@ module(basename(import.meta.filename), function (hooks) {
   });
 
   module('who may ask', function () {
-    test('a reader of the policy card’s realm is answered, and no grant reaches a validate', async function (assert) {
-      let answered = await ask(ASKER.orgReader());
-      assert.strictEqual(answered.status, 200, 'a reader of the realm asks');
+    test('a caller is answered only when they can read every realm the policy reaches', async function (assert) {
+      let answered = await ask(ASKER.itAdmin());
+      assert.strictEqual(
+        answered.status,
+        200,
+        'a reader of both the Org realm and the Education realm its rules name is answered',
+      );
 
+      let refused = await ask(ASKER.orgReader());
+      assert.strictEqual(
+        refused.status,
+        403,
+        'a reader of the Org realm alone is refused, since the answer describes Education definitions',
+      );
+      assert.strictEqual(errorOf(refused)?.code, 'operation-not-permitted');
+
+      await writeTo(
+        org,
+        'policies/draft.json',
+        policyCard([{ targetType: CARD_DEF, grants: [{ operation: 'read' }] }]),
+      );
+      let draft = await ask(ASKER.orgReader(), DRAFT_CARD);
+      assert.strictEqual(
+        draft.status,
+        200,
+        'and is answered about a policy that reaches only realms they can read',
+      );
+      assert.deepEqual(
+        (draft.body as { 'atomic:results': PolicyValidation[] })[
+          'atomic:results'
+        ][0].realms,
+        [ORG],
+        'a realm this server does not serve, such as the base realm, is not among them',
+      );
+    });
+
+    test('no grant reaches a validate', async function (assert) {
       let refused = await ask(ASKER.teacher());
       let missing = await ask(ASKER.teacher(), `${ORG}policies/no-such-card`);
       assert.strictEqual(
         refused.status,
         404,
-        'a caller the realm admits only through grants is refused, though its policy grants validate on every card',
+        'a caller the Org realm admits only through its policy is refused, as though the card were not there',
       );
       assert.strictEqual(errorOf(refused)?.code, 'target-not-found');
       assert.deepEqual(
