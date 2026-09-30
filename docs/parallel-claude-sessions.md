@@ -69,18 +69,28 @@ The environment variable `CLAUDE_REMOTE_CONTROL_SESSION_NAME_PREFIX` and the
 `--remote-control-session-name-prefix` flag do the same thing. Keep the label
 short — it is a prefix on every session name you will read in a listing.
 
-## Decide what you accept
+## Decide what you accept, and what you reach
 
 `crossSessionInbound` governs messages arriving from your other sessions:
-`accept` delivers them, `hold` parks each one for your approval, and `refuse`
-turns the inbox off. A repository that tightens this wins over a personal
-`accept`.
+`accept` delivers them, `hold` parks each one for your review without letting
+Claude act on it, and `refuse` opts the session out. An explicit value always
+wins, and a repository that tightens this beats a personal `accept`.
 
-Permission modes interact with it: a session that bypasses permission prompts
-holds messages from a peer that did not attest its own permission mode. So a
-permissive session and a default-mode session will not exchange messages
-freely, and a message can expire unread while waiting for an approval nobody
-is watching for.
+Left unset, delivery follows permission-mode parity: a message auto-delivers
+only when the sending session's mode class matches yours — bypass to bypass,
+or prompting to prompting. A mismatched sender is held for your approval, and
+a sender that asserts no class at all is held only while your session bypasses
+permission prompts. So a permissive session and a default-mode session do not
+exchange messages freely. A held message waits as long as `dialogExpiry`
+allows — five minutes by default, `never` to remove the deadline — and is then
+dropped, which is how a message goes unread while waiting for an approval
+nobody was watching for.
+
+`isolatePeerMachines` covers the other direction: it requires explicit
+approval before one of your sessions can reach a peer on another machine at
+all. Reachability and unattended traffic are separate decisions — turn Remote
+Control on so the coordination is possible, and set this if you want each
+cross-machine send to pass through you first.
 
 ## What to expect once it is on
 
