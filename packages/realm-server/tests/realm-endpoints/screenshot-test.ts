@@ -75,16 +75,42 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       // answered HEAD it would hand unauthenticated callers an existence /
       // size / content-hash oracle over a private realm's captures. The
       // dispatch is GET-only; a HEAD falls through to the generic handlers
-      // and never gets the route's briefly-cacheable miss shape.
-      let response = await request
+      // and never gets the route's briefly-cacheable miss shape. Those give a
+      // reader their ordinary 404, and a caller who may not read the realm
+      // the realm's discovery answer.
+      let reader = await request
+        .head('/_screenshot/some-card')
+        .set('Accept', 'image/png')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'mary', ['read'])}`,
+        );
+      assert.strictEqual(reader.status, 404, 'a reader gets the generic 404');
+
+      let anonymous = await request
         .head('/_screenshot/some-card')
         .set('Accept', 'image/png');
-      assert.strictEqual(response.status, 404, 'the generic handlers answer');
-      assert.notStrictEqual(
-        response.headers['cache-control'],
-        `private, max-age=${MEDIA_CACHE_MAX_AGE_SECONDS}`,
-        'the screenshot miss response did not answer',
+      assert.strictEqual(
+        anonymous.status,
+        200,
+        'an anonymous caller gets the discovery answer',
       );
+      assert.strictEqual(
+        anonymous.headers['x-boxel-realm-url'],
+        testRealm.url,
+        'which names the realm',
+      );
+
+      for (let [label, response] of [
+        ['reader', reader],
+        ['anonymous', anonymous],
+      ] as const) {
+        assert.notStrictEqual(
+          response.headers['cache-control'],
+          `private, max-age=${MEDIA_CACHE_MAX_AGE_SECONDS}`,
+          `${label}: the screenshot miss response did not answer`,
+        );
+      }
     });
 
     test('a declared-name request misses the same way', async function (assert) {

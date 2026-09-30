@@ -87,11 +87,23 @@ const OWN_FILTER = {
   eq: { 'item.providerId': { $ref: 'actor' } },
 } as CompiledOperationGrant['filter'];
 
-function stubCore(grants: CompiledOperationGrant[]): OperationCore {
+// A grant as a test writes it. Its position in the policy is filled in.
+type Grant = Omit<CompiledOperationGrant, 'path'>;
+
+function stubCore(grants: Grant[]): OperationCore {
   let policy: CompiledRealmPolicy = {
     card: `${REALM}policies/policy`,
     version: '1',
-    rules: [{ targetType: SCHEDULE, grants }],
+    rules: [
+      {
+        targetType: SCHEDULE,
+        path: 'rules[0]',
+        grants: grants.map((grant, index) => ({
+          ...grant,
+          path: `rules[0].grants[${index}]`,
+        })),
+      },
+    ],
     issues: [],
   };
   return {
@@ -118,7 +130,7 @@ function stubCore(grants: CompiledOperationGrant[]): OperationCore {
   } as unknown as OperationCore;
 }
 
-function scope(operation: string, grants: CompiledOperationGrant[]) {
+function scope(operation: string, grants: Grant[]) {
   return policyQueryScope(stubCore(grants), {
     operation,
     on: SCHEDULE,

@@ -58,7 +58,7 @@ EOF
 fi
 
 NODE_VERSION="$(sed -n 's/^node = "\(.*\)"$/\1/p' .mise.toml | head -1)"
-PNPM_VERSION="$(sed -n 's/^"npm:pnpm" = "\(.*\)"$/\1/p' .mise.toml | head -1)"
+PNPM_VERSION="$(sed -n 's/^pnpm = "\(.*\)"$/\1/p' .mise.toml | head -1)"
 NODE_PREFIX="/opt/node${NODE_VERSION%%.*}"
 PG_BIN=/usr/lib/postgresql/16/bin
 PGDATA_DIR=/var/lib/boxel-pgdata

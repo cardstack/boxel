@@ -326,7 +326,7 @@ function verdictArrayCoversRow(
 // distinct fields so the recorded reason survives for an operator to read and
 // so each cause can have its own reconcile cadence, but unified here because
 // the withholding decision is identical.
-function verdictCoversRow(
+export function verdictCoversRow(
   diagnostics: Diagnostics | undefined,
   type: 'instance' | 'file',
 ): boolean {
