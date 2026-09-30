@@ -93,11 +93,14 @@ once the deadline passes, and nothing tells the sender. `accept` is what makes
 the channel usable when nobody is watching it.
 
 Leaving it unset is cautious rather than wrong, and on a fleet where every
-session runs the same permission mode it behaves the same as `accept`. It
-turns awkward in a mixed fleet, or when a sender asserts no mode class at all
-— as a peer reached over Remote Control may not — because delivery into a
-bypassing session is then held, and a remote sender gets no receipt either
-way. Its message is dropped and your session reads as merely busy.
+session runs the same permission mode it behaves the same as `accept`. Where
+it bites is cross-machine. The mode attestation rides the local peer socket,
+so a peer reached over Remote Control or in the cloud asserts no mode class at
+all, and its message into a session that bypasses permission prompts is held
+for approval — the `no-mode-asserted` hold. No receipt reaches a remote sender
+either, so once the hold expires its message is simply gone and your session
+reads as merely busy. Unset therefore means cross-machine coordination works
+only while someone is present to approve it.
 
 `refuse` takes a session out of the protocol. It can still send, but no peer's
 announcement reaches it, so it cannot take part in any coordination that
