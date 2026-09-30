@@ -542,7 +542,8 @@ export interface DeleteOperationDeclaration extends OperationCommon {
   readonly base: 'delete';
 }
 
-// How much of the target's link graph a read carries.
+// How much of the target's link graph a read carries, or how much of each
+// result's link graph a query's results carry.
 //
 //   * `full` — the transitive closure of the card's links is assembled into
 //     `included[]`. The default.
@@ -550,10 +551,16 @@ export interface DeleteOperationDeclaration extends OperationCommon {
 //     assembled. A consumer fetches each target on its own request.
 //   * `none` — no relationship data is assembled or named.
 //
-// It governs reads of this card — the document a read rooted here serves. When
-// the card turns up inside another card's closure, that read's own strategy
-// decides what it carries, and a `full` one carries this card whole, with its
-// relationships and what they link to.
+// On a `read` it governs reads of this card — the document a read rooted here
+// serves. When the card turns up inside another card's closure, that read's
+// own strategy decides what it carries, and a `full` one carries this card
+// whole, with its relationships and what they link to.
+//
+// On a `query` it governs every row the query answers with, alike, whatever
+// type each row is and whatever that type's own `read` declares: the query's
+// results are its representation, as a read's document is the read's. It
+// narrows each row's card, never the entry the row is delivered in — a row
+// still names its card, and still carries the renderings it asked for.
 //
 // The narrowing is uniform: the same request answers a realm writer and a
 // caller reached by a policy grant with the same document, because the shape
@@ -586,6 +593,8 @@ export interface QueryOperationDeclaration extends OperationCommon {
   readonly base: 'query';
   // Required unless the declaration supplies a raw program instead.
   readonly query?: QueryDeclaration;
+  // How much of each result's link graph the results carry. Absent is `full`.
+  readonly links?: LinkStrategy;
 }
 
 // Appends one newline-terminated line to a text file. There is no clause: the
@@ -737,6 +746,7 @@ const CLAUSE_KEYS: Record<BaseOperationName, readonly string[]> = {
 // program.
 const MODIFIER_KEYS: Partial<Record<BaseOperationName, readonly string[]>> = {
   read: ['links'],
+  query: ['links'],
 };
 
 // Clauses without which an authored declaration names no work at all: a
@@ -1147,9 +1157,11 @@ function assertValidDeclaration(
     !LINK_STRATEGIES.includes(declaration.links as LinkStrategy)
   ) {
     throw new Error(
-      `${label}: \`links\` must name how much of the card's link graph this read carries — one of ${quoteList(
-        LINK_STRATEGIES,
-      )}`,
+      `${label}: \`links\` must name how much of the card's link graph ${
+        base === 'query'
+          ? "each of this query's results carries"
+          : 'this read carries'
+      } — one of ${quoteList(LINK_STRATEGIES)}`,
     );
   }
   if (declaration.input !== undefined) {

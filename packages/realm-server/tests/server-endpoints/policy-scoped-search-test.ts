@@ -770,7 +770,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         // The same search run straight through the realm, with no policy in
         // the path: the declaration resolved, the server's page bound applied,
         // and nothing else.
-        let resolved = await resolveNamedQuery(
+        let { query: resolved } = await resolveNamedQuery(
           realms[COARSE].operationCore,
           body,
           { actor: PROVIDER_A, realms: [COARSE] },

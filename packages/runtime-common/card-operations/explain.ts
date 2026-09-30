@@ -355,7 +355,9 @@ function withRules(
 ): PolicyExplanation {
   let rules: ExplainedRule[] = trace.rules.map(({ rule, grants }) => ({
     targetType: { module: rule.targetType.module, name: rule.targetType.name },
+    path: rule.path,
     grants: grants.map((grant) => ({
+      path: grant.path,
       ...(grant.where
         ? {
             where: grant.where.source,
