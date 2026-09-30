@@ -394,7 +394,10 @@ A declaration on `read` itself governs the card's plain `GET`, which is what
 the host loads a card with to render it live — in every mode, for every user.
 Under `ids` the host resolves the named links itself as it displays them. Under
 `none` it is never told what the card links to, so wherever the host renders the
-card live its link fields come up empty, including for the realm's own writers.
+card live from its `GET` its link fields come up empty, including for the realm's
+own writers. A card the host first holds from a search row that carried its
+links — an ad-hoc search's, or a `full` query's — keeps them: what a search
+carries is governed by the search, not by the card's `read`.
 Prerendered HTML is different: it is rendered from the card's stored source
 under the realm's own authority, so the card's prerendered formats still draw
 its links, and so does every view the host fills from them, such as search
@@ -471,12 +474,22 @@ what a query declares. The declaration is applied on a realm's own `_search` and
 on `_federated-search` alike, since the server re-lowers a named query from its
 own definition wherever it is served.
 
-`ids` is the narrowing to reach for here too. The host keeps the cards a search
-answers with as the live instances it renders and edits, so a row served under
-`none` becomes a live card with empty link fields — wherever that card is next
-shown or edited in the host, including where its own `read` would carry its
-links, until it is next reloaded. Under `ids` the host resolves each named link
-itself, as it does for an `ids` read.
+**A query's `none` never becomes the card's live representation.** The host
+keeps the cards a search answers with as the live instances it renders and
+edits, and adopts a `full` or `ids` row as one; under `ids` it resolves each
+named link itself, as it does for an `ids` read. A row served under `none` is
+silent about what its card links to rather than saying it links to nothing, so
+the realm marks the row's card `meta.relationshipsWithheld` and the host never
+adopts it. The row renders from its prerendered HTML, and wherever the card is
+opened, edited or rendered live, the host loads it through its own read, so a
+query's `none` never leaves a live card with empty link fields the query chose
+not to send. The cost is one request for each such card the host goes on to use
+live, where an adopted row would have needed none.
+
+The rule runs one way. A row that carries more than the card's own `read` — an
+ad-hoc search's or a `full` query's row of a type whose `read` narrows — is
+adopted as it came, since what a search carries is governed by the search, and
+the host then holds the card with the links that row carried.
 
 #### Where it is refused
 
