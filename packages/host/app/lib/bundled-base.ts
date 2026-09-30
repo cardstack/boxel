@@ -401,6 +401,7 @@ export const BUNDLED_BASE_MODULES: Record<
   ooxml: () => import('@cardstack/base/ooxml'),
   'pdf-file-def': () => import('@cardstack/base/pdf-file-def'),
   'pdf-meta-extractor': () => import('@cardstack/base/pdf-meta-extractor'),
+  'png-image-def': () => import('@cardstack/base/png-image-def'),
   'png-meta-extractor': () => import('@cardstack/base/png-meta-extractor'),
   'pptx-file-def': () => import('@cardstack/base/pptx-file-def'),
   'pptx-meta-extractor': () => import('@cardstack/base/pptx-meta-extractor'),
@@ -420,8 +421,6 @@ export const BUNDLED_BASE_MODULES: Record<
   'xlsx-file-def': () => import('@cardstack/base/xlsx-file-def'),
   'xlsx-meta-extractor': () => import('@cardstack/base/xlsx-meta-extractor'),
   'zip-file-def': () => import('@cardstack/base/zip-file-def'),
-  'image-file-def': () => import('@cardstack/base/image-file-def'),
-  'png-image-def': () => import('@cardstack/base/png-image-def'),
 };
 
 // Registers on the virtual network, so every loader that shares it serves the
