@@ -114,25 +114,10 @@ const SYLLABUS_MODULE = `
   }
 `;
 
-// A policy type that declares the explain. Both of the Org realm's policy
-// cards are one.
-const EXPLAINABLE_POLICY_MODULE = `
-  import StringField from "@cardstack/base/string";
-  import { operation } from "@cardstack/base/operations";
-  import { RealmPolicy } from "@cardstack/catalog/realm-policy/realm-policy";
-
-  export class ExplainablePolicy extends RealmPolicy {
-    @operation static explain = {
-      base: 'explain',
-      params: {
-        actor: StringField,
-        target: StringField,
-        operation: StringField,
-      },
-      nonGrantable: true,
-    };
-  }
-`;
+const REALM_POLICY = {
+  module: rri('@cardstack/catalog/realm-policy/realm-policy'),
+  name: 'RealmPolicy',
+};
 
 type Grant = { operation: string; where?: unknown };
 type Rule = { targetType: { module: string; name: string }; grants: Grant[] };
@@ -182,12 +167,7 @@ function policyCard(rules: Rule[]) {
     data: {
       type: 'card',
       attributes: { rules },
-      meta: {
-        adoptsFrom: {
-          module: '../explainable-policy',
-          name: 'ExplainablePolicy',
-        },
-      },
+      meta: { adoptsFrom: REALM_POLICY },
     },
   });
 }
@@ -298,7 +278,6 @@ module(basename(import.meta.filename), function (hooks) {
               name: 'Org',
               policy: ORG_POLICY_CARD,
             }),
-            'explainable-policy.gts': EXPLAINABLE_POLICY_MODULE,
             'policies/education.json': policyCard(EDUCATION_RULES),
             'policies/org.json': policyCard(ORG_RULES),
           },
@@ -571,10 +550,11 @@ module(basename(import.meta.filename), function (hooks) {
         throwing.rules[0].grants.map((grant) => grant.outcome),
         ['threw', 'not-evaluated'],
       );
-      assert.deepEqual(throwing.refusal, {
-        status: 500,
-        code: 'internal-error',
-      });
+      assert.deepEqual(
+        throwing.refusal,
+        { status: 404, code: 'target-not-found' },
+        'the teacher may not read the realm, so they are told the card is not there',
+      );
     });
 
     test('a write resting on a predicate is judged against the card as it is stored', async function (assert) {

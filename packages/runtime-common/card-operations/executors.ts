@@ -768,8 +768,10 @@ export async function stageUpdate(
   // stamped by the realm serving the card, `screenshots` is joined from the
   // prerendered manifest at serve time, `version` / `lastModified` /
   // `resourceCreatedAt` describe the stored file and are reported on a write
-  // response, and `type` is fixed by the document shape. A client echoing back
-  // what it was served must not persist any of them into the source file.
+  // response, `relationshipsWithheld` describes how a search row was served
+  // rather than the card, and `type` is fixed by the document shape. A client
+  // echoing back what it was served must not persist any of them into the
+  // source file.
   //
   // Dropped here and not only where the bytes are serialized, because these run
   // ahead of the unchanged-patch comparison below, and a key that survives the
@@ -792,6 +794,7 @@ export async function stageUpdate(
   delete patch.meta.version;
   delete patch.meta.lastModified;
   delete patch.meta.resourceCreatedAt;
+  delete patch.meta.relationshipsWithheld;
 
   promoteStagedLinks(patch, ctx);
 
