@@ -1884,11 +1884,12 @@ export interface TokenClaims {
   // Set on the sessions a realm renders its own cards and modules under: the
   // indexer's, the HTML render's, a module's definition render, the
   // skill-validation sweep's. Such a session is a realm-authority principal
-  // rather than a person. A render a user asks for — a capture, a command —
-  // carries that user's ordinary session instead. What it produces is kept and served to every viewer, so its
-  // searches find what the realm ACL grants it and nothing more — no policy,
-  // which admits a caller by who is asking, scopes them. The `user` beside it
-  // is the identity the session reads as, not someone a grant was written for.
+  // rather than a person. What it produces is kept and served to every viewer,
+  // so its searches find what the realm ACL grants it and nothing more — no
+  // policy, which admits a caller by who is asking, scopes them. The `user`
+  // beside it is the identity the session reads as, not someone a grant was
+  // written for. A render a user asks for — a capture, a command — carries that
+  // user's ordinary session instead.
   realmAuthority?: true;
 }
 
