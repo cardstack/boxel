@@ -80,11 +80,11 @@ const BuildOrderNotes: TOC<object> = <template>
           build above it.
           <b>With</b>
           is
-          <code>@at={{"{{at 'b3'}}"}}</code>
+          <code>@at=\{{at 'b3'}}</code>
           — start where build 3 started;
           <b>after</b>
           is
-          <code>@at={{"{{after 'b3'}}"}}</code>
+          <code>@at=\{{after 'b3'}}</code>
           — start where it ended. A delay, in either case, is added on top.
           Build 1 is the exception: with nothing above it, its Start is
           Keynote’s own “On Click” — the sequence’s natural flow, the run’s own

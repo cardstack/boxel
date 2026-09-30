@@ -13,6 +13,8 @@
     "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\" --prefixColors auto",
     "lint:fix": "concurrently \"pnpm:lint:*:fix\" --names \"fix:\" --prefixColors auto && pnpm run format",
     "lint:format": "prettier . --cache --check",
+    "lint:hbs": "ember-template-lint .",
+    "lint:hbs:fix": "ember-template-lint . --fix",
     "lint:js": "eslint . --cache",
     "lint:js:fix": "eslint . --fix"
   },
@@ -67,7 +69,7 @@
     "ember-route-template": "^1.0.3",
     "ember-source": "catalog:",
     "ember-template-imports": "^4.4.0",
-    "ember-template-lint": "^6.0.0",
+    "ember-template-lint": "catalog:",
     "eslint": "^9.39.4",
     "prettier": "catalog:",
     "prettier-plugin-ember-template-tag": "catalog:",

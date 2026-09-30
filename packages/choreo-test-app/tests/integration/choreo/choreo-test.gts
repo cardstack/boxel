@@ -589,6 +589,7 @@ module('Integration | choreo', function (hooks) {
           <div class="col-r" style="width:120px">
             {{#each this.right key="@identity" as |k|}}
               <div
+                {{! template-lint-disable no-duplicate-id }}
                 id="i-{{k}}"
                 style="height:20px"
                 {{motion id=k role="i"}}
@@ -964,6 +965,7 @@ module('Integration | choreo', function (hooks) {
           >
             {{#unless this.here}}
               <div
+                {{! template-lint-disable no-duplicate-id }}
                 id="tok"
                 style="width:40px;height:40px;background:#0af"
                 {{motion id="token" role="tok"}}

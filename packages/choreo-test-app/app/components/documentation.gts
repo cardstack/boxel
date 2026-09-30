@@ -187,6 +187,7 @@ export class Documentation extends Component<Signature> {
       >Browse the guides <span aria-hidden="true">☰</span></button>
       <aside
         id="guide-sidebar"
+        aria-label="Guides"
         class="guide-sidebar {{if this.menuOpen 'is-open'}}"
       >
         <LinkTo @route="docs.index" class="guide-home">Choreo Guides
@@ -206,7 +207,13 @@ export class Documentation extends Component<Signature> {
           @model="core-api-inventory"
           class="guide-inventory-link"
         >API &amp; concept inventory ↗</LinkTo>
-        <nav aria-label="Guide sections" {{on "click" this.closeMenu}}>
+        {{! a click on any link in the sections closes the phone menu; the links
+            themselves are the interactive elements }}
+        <nav
+          {{! template-lint-disable no-invalid-interactive }}
+          aria-label="Guide sections"
+          {{on "click" this.closeMenu}}
+        >
           {{#each this.sections as |section|}}
             {{#if section.pages.length}}
               <details class="guide-nav-section" open={{section.open}}>
@@ -315,7 +322,7 @@ export class Documentation extends Component<Signature> {
         {{/if}}
       </div>
       {{#if @guide}}
-        <aside class="guide-toc"><p>On this page</p>{{#each
+        <aside class="guide-toc" aria-label="On this page"><p>On this page</p>{{#each
             this.headings
             as |heading|
           }}<button

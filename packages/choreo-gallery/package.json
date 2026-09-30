@@ -45,6 +45,8 @@
     "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\" --prefixColors auto",
     "lint:fix": "concurrently \"pnpm:lint:*:fix\" --names \"fix:\" --prefixColors auto && pnpm run format",
     "lint:format": "prettier . --cache --check",
+    "lint:hbs": "ember-template-lint .",
+    "lint:hbs:fix": "ember-template-lint . --fix",
     "lint:js": "eslint . --cache",
     "lint:js:fix": "eslint . --fix"
   },
@@ -78,7 +80,7 @@
     "babel-plugin-ember-template-compilation": "catalog:",
     "concurrently": "catalog:",
     "ember-source": "catalog:",
-    "ember-template-lint": "^6.0.0",
+    "ember-template-lint": "catalog:",
     "esbuild": "^0.25.0",
     "eslint": "^9.39.4",
     "glimmer-scoped-css": "catalog:",
