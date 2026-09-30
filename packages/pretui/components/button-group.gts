@@ -64,8 +64,8 @@ export class ButtonGroup extends Component<ButtonGroupSignature> {
     <style scoped>
       /* above Button's layer, so the group's restyling wins by layer order;
          the order statement holds whichever stylesheet loads first */
-      @layer Component, Composite;
-      @layer Composite {
+      @layer PretComponent, PretComposite;
+      @layer PretComposite {
         .pretui-btngroup {
           display: inline-flex;
           position: relative;
@@ -206,6 +206,16 @@ export class ButtonGroup extends Component<ButtonGroupSignature> {
         .pretui-btngroup[data-appearance='link'] :deep(.pretui-btn[data-appearance]) {
           --pretui-btn-text: var(--pretui-button-fg, var(--pretui-tone-ink));
           text-underline-offset: 0.2em;
+        }
+        /* Button's link underline keys on the child's own appearance, which a
+           group-applied link look doesn't change, so it is restated here */
+        .pretui-btngroup[data-appearance='link'] :deep(.pretui-btn[data-appearance]:focus-visible) {
+          text-decoration-line: underline;
+        }
+        @media (hover: hover) {
+          .pretui-btngroup[data-appearance='link'] :deep(.pretui-btn[data-appearance]:hover:not(:disabled, [aria-disabled='true'])) {
+            text-decoration-line: underline;
+          }
         }
         /* a link-look Button sits flush with text on its own; in a group the
            labels would run together, so it keeps Button's normal padding */

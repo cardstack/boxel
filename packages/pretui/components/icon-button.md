@@ -18,7 +18,7 @@ Element: HTMLButtonElement
 
 The default variant is `secondary`, not `primary` — icon buttons are almost always secondary chrome, and defaulting the other way would fill toolbars with accent fills.
 
-Sizing is one rule: `padding: 0; width: var(--pretui-button-h, 2.24em)`, the same em-scaled metric Button uses for its height, so the result is a square at every `@size`; at `xs` the width takes the same 24px floor as Button's height. The rules sit in `@layer Composite`, above Button's `Component` layer, so they win by layer order rather than by stylesheet order. The rule targets `.pretui-iconbtn` directly: the class and this template's scope attribute both ride `...attributes` onto the composed Button's root element, so a plain compound selector is what matches it.
+Sizing is one rule: `padding: 0; width: var(--pretui-button-h, 2.24em)`, the same em-scaled metric Button uses for its height, so the result is a square at every `@size`; at `xs` the width takes the same 24px floor as Button's height. The rules sit in `@layer PretComposite`, above Button's `PretComponent` layer, so they win by layer order rather than by stylesheet order. The rule targets `.pretui-iconbtn` directly: the class and this template's scope attribute both ride `...attributes` onto the composed Button's root element, so a plain compound selector is what matches it.
 
 ## Prior art
 

@@ -75,6 +75,11 @@ module('Pretui | components/button', function (hooks) {
       </template>,
     );
     assert.dom('[data-test-pretui-button-busy-label]').hasText('Saving draft');
+    assert.strictEqual(
+      btn().textContent?.replace(/\s+/g, ' ').trim(),
+      'Save Saving draft',
+      'the accessible name starts with the visible label',
+    );
   });
 
   test('the busy text is empty at rest', async function (assert) {

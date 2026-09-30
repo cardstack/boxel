@@ -41,8 +41,8 @@ export class IconButton extends Component<IconButtonSignature> {
     >{{yield}}</Button>
     <style scoped>
       /* above Button's layer, so these win by layer order, not file order */
-      @layer Component, Composite;
-      @layer Composite {
+      @layer PretComponent, PretComposite;
+      @layer PretComposite {
         .pretui-iconbtn {
           padding: 0;
           width: var(--pretui-button-h, 2.24em);

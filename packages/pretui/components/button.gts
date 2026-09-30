@@ -59,7 +59,7 @@ const VARIANT_AXES: Record<string, [PretuiTone, PretuiAppearance]> =
 const fitBusyContent = modifier(
   (busyEl: HTMLElement, [busy, _busyLabel]: [boolean, string | undefined]) => {
     let button = busyEl.parentElement;
-    let label = busyEl.nextElementSibling as HTMLElement | null;
+    let label = busyEl.previousElementSibling as HTMLElement | null;
     let text = busyEl.lastElementChild as HTMLElement | null;
     if (!button || !label || !text) return;
     if (!busy) {
@@ -109,8 +109,8 @@ export interface ButtonSignature {
     appearance?: PretuiAppearance;
     size?: PretuiSizeArg;
     busy?: boolean;
-    /** added to the accessible name while busy, for when the visible label
-     *  doesn't say so itself (e.g. 'Save' → 'Save, saving') */
+    /** added after the visible label in the accessible name while busy, for
+     *  when the label doesn't say so itself (e.g. 'Save' → 'Save Saving') */
     busyLabel?: string;
     disabled?: boolean;
     /** renders an <a> that looks like this button; @busy does not apply */
@@ -216,6 +216,9 @@ export class Button extends Component<ButtonSignature> {
         data-test-pretui-button
         ...attributes
       >
+        <span class='pretui-btn-label'>{{yield}}</span>
+        {{! after the label, so the accessible name starts with the visible
+            label (WCAG 2.5.3); CSS order puts the spinner first visually }}
         <span class='pretui-btn-busy' {{fitBusyContent this.busy @busyLabel}}>
           {{#if this.busy}}<span
               class='pretui-spinner'
@@ -228,12 +231,11 @@ export class Button extends Component<ButtonSignature> {
             data-test-pretui-button-busy-label
           >{{if this.busy @busyLabel}}</span>
         </span>
-        <span class='pretui-btn-label'>{{yield}}</span>
       </button>
     {{/if}}
     <style scoped>
       /* layered, so a caller's plain CSS wins without fighting specificity */
-      @layer Component {
+      @layer PretComponent {
         /* Each appearance only sets --pretui-btn-surface/-text/-edge (plus
            their -hover twins); the rules below are the only ones that paint.
            One border carries the edge, so fill and edge change together. */
@@ -524,6 +526,7 @@ export class Button extends Component<ButtonSignature> {
         /* room for the spinner beside the label: both in the row */
         .pretui-btn[data-busy-layout='inline'] .pretui-btn-busy {
           position: static;
+          order: -1;
         }
         .pretui-btn[data-busy-layout='inline'] .pretui-btn-label {
           opacity: 0.6;
