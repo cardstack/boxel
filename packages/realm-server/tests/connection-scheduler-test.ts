@@ -6,6 +6,7 @@ import {
   currentConnectionTenant,
   markConnectionHeld,
   isSharedWork,
+  withConnectionOrdering,
   withConnectionTenant,
   withSharedWork,
 } from '@cardstack/postgres';
@@ -13,8 +14,8 @@ import {
 // The connection scheduler decides which of the database work waiting on a
 // replica's pool runs next. These tests pin the policy the realm-server's
 // search isolation rests on: lowest-held-first ordering, a per-tenant share
-// that applies only while another tenant has work open, untagged work that is
-// never held to it, and nested acquisitions that can never deadlock behind
+// that applies only while another tenant has work open, untagged and ordered
+// work that is never held to it, and nested acquisitions that can never deadlock behind
 // their own tenant's share.
 
 const REALM_A = 'https://example.test/a/';
@@ -551,6 +552,191 @@ module(basename(import.meta.filename), function () {
     a.close();
     await a.closed;
     assert.strictEqual(scheduler.inUse, 0);
+    scheduler.dispose();
+  });
+
+  test('a quiet realm’s ordered request is served ahead of the backlog a busy realm queued outside its searches', async function (assert) {
+    let scheduler = new ConnectionScheduler({ limit: 4, tenantShare: 2 });
+    let busy = openScope(REALM_A);
+
+    let busyHeld = await busy.run(() =>
+      Promise.all(Array.from({ length: 4 }, () => scheduler.acquire())),
+    );
+    let order: string[] = [];
+    let track = (label: string, acquisition: Promise<() => void>) =>
+      acquisition.then((release) => (order.push(label), release));
+    // The fetches a busy realm's indexing makes, and its writes: ordered as
+    // the busy realm, and queued before the quiet realm's page load arrives.
+    let busyOrdered = Array.from({ length: 6 }, (_unused, n) =>
+      track(
+        `busy-${n}`,
+        withConnectionOrdering(REALM_A, () => scheduler.acquire()),
+      ),
+    );
+    let quietPage = track(
+      'quiet',
+      withConnectionOrdering(REALM_B, () => scheduler.acquire()),
+    );
+
+    busyHeld.pop()!();
+    await settledWithin(quietPage, 50);
+    assert.deepEqual(
+      order,
+      ['quiet'],
+      'the freed connection goes to the realm holding none, not to the earlier arrivals',
+    );
+
+    await drain(busyHeld, [...busyOrdered, quietPage]);
+    busy.close();
+    await busy.closed;
+    scheduler.dispose();
+  });
+
+  test('an ordered request to another realm does not put the only open tenant at its share', async function (assert) {
+    let scheduler = new ConnectionScheduler({ limit: 4, tenantShare: 1 });
+    let searching = openScope(REALM_A);
+
+    // A request to another realm is in flight for the whole test, holding
+    // nothing between its queries.
+    let closeQuiet!: () => void;
+    let quietOpen = withConnectionOrdering(
+      REALM_B,
+      () => new Promise<void>((resolve) => (closeQuiet = resolve)),
+    );
+
+    let searchHeld = await searching.run(() =>
+      Promise.all(Array.from({ length: 4 }, () => scheduler.acquire())),
+    );
+    let searchBacklog = Array.from({ length: 8 }, () =>
+      searching.run(() => scheduler.acquire()),
+    );
+    searchHeld.pop()!();
+    let next = await settledWithin(searchBacklog[0], 50);
+    assert.true(
+      next.settled,
+      'past its share on an oversubscribed pool, because the other realm’s request opens no tenant',
+    );
+    assert.strictEqual(scheduler.waitingAtShare, 0);
+
+    closeQuiet();
+    await quietOpen;
+    await drain(
+      [...searchHeld, (next as { value: () => void }).value],
+      searchBacklog.slice(1),
+    );
+    searching.close();
+    await searching.closed;
+    scheduler.dispose();
+  });
+
+  test('ordered work is never held to the share', async function (assert) {
+    let scheduler = new ConnectionScheduler({ limit: 4, tenantShare: 1 });
+    let a = openScope(REALM_A);
+    let b = openScope(REALM_B);
+
+    let aHeld = await a.run(() =>
+      Promise.all(Array.from({ length: 4 }, () => scheduler.acquire())),
+    );
+    let aBacklog = Array.from({ length: 10 }, () =>
+      a.run(() => scheduler.acquire()),
+    );
+    aHeld.pop()!();
+    aHeld.pop()!();
+    assert.strictEqual(
+      scheduler.waitingAtShare,
+      10,
+      'two connections free while the tenant’s search backlog waits at its share',
+    );
+    let ordered = await settledWithin(
+      Promise.all([
+        withConnectionOrdering(REALM_A, () => scheduler.acquire()),
+        withConnectionOrdering(REALM_A, () => scheduler.acquire()),
+      ]),
+      50,
+    );
+    assert.true(
+      ordered.settled,
+      'the same realm’s ordered work takes the free connections',
+    );
+
+    (ordered as { value: (() => void)[] }).value.forEach((release) =>
+      release(),
+    );
+    b.close();
+    await b.closed;
+    await drain(aHeld, aBacklog);
+    a.close();
+    await a.closed;
+    scheduler.dispose();
+  });
+
+  test('a realm’s ordered connections do not use up its search share', async function (assert) {
+    let scheduler = new ConnectionScheduler({ limit: 8, tenantShare: 4 });
+    let other = openScope(REALM_B);
+
+    // The realm's page loads and indexing fetches hold the whole pool, with
+    // more queued behind its first search.
+    let orderedHeld = await withConnectionOrdering(REALM_A, () =>
+      Promise.all(Array.from({ length: 8 }, () => scheduler.acquire())),
+    );
+    let search = withConnectionOrdering(REALM_A, () =>
+      withConnectionTenant(REALM_A, () => scheduler.acquire()),
+    );
+    let orderedBacklog = Array.from({ length: 3 }, () =>
+      withConnectionOrdering(REALM_A, () => scheduler.acquire()),
+    );
+    assert.strictEqual(
+      scheduler.waitingAtShare,
+      0,
+      'the search waits for a free connection, not at its share',
+    );
+
+    orderedHeld.pop()!();
+    let granted = await settledWithin(search, 50);
+    assert.true(
+      granted.settled,
+      'the freed connection goes to the search, which holds none of its share',
+    );
+
+    await drain(
+      [...orderedHeld, (granted as { value: () => void }).value],
+      orderedBacklog,
+    );
+    other.close();
+    await other.closed;
+    scheduler.dispose();
+  });
+
+  test('a search reached inside an ordered request is still held to its share', async function (assert) {
+    let scheduler = new ConnectionScheduler({ limit: 4, tenantShare: 1 });
+    let other = openScope(REALM_B);
+
+    let held = await withConnectionOrdering(REALM_A, () =>
+      withConnectionTenant(REALM_A, async () => {
+        assert.strictEqual(currentConnectionTenant(), REALM_A);
+        return await Promise.all(
+          Array.from({ length: 4 }, () => scheduler.acquire()),
+        );
+      }),
+    );
+    let backlog = Array.from({ length: 6 }, () =>
+      withConnectionOrdering(REALM_A, () =>
+        withConnectionTenant(REALM_A, () => scheduler.acquire()),
+      ),
+    );
+    held.pop()!();
+    held.pop()!();
+    held.pop()!();
+    assert.strictEqual(scheduler.inUse, 1);
+    assert.strictEqual(
+      scheduler.waitingAtShare,
+      6,
+      'the search waits at its share while another tenant is open',
+    );
+
+    other.close();
+    await other.closed;
+    await drain(held, backlog);
     scheduler.dispose();
   });
 

@@ -9,7 +9,8 @@ import {
   type OperationCore,
 } from './dispatch.ts';
 import { lowerQueryOperation } from './query.ts';
-import { OperationFailure } from './types.ts';
+import { linkStrategyOf, OperationFailure } from './types.ts';
+import type { LinkStrategy } from '@cardstack/base/operations';
 
 // ============================================================================
 // A named query: a search request that names a declared query operation
@@ -80,8 +81,23 @@ export interface NamedQueryContext {
   duringRender?: boolean;
 }
 
-// The ad-hoc search request a named one resolves to, in the grammar the
-// search endpoints parse. Every refusal is an `OperationFailure` carrying the
+// What a named search request resolves to: the ad-hoc query it runs, and how
+// much of each result's link graph its results carry.
+export interface ResolvedNamedQuery {
+  // In the grammar the search endpoints parse.
+  query: SearchEntryWireQuery;
+  // The strategy the declaration names, `full` where it names none. It is the
+  // declaration's half of what a response carries; the endpoint serving it
+  // composes it with the request's half through `effectiveLinkStrategy`, so a
+  // declaration written to withhold links is never widened by a request, and
+  // it holds on every endpoint a named query is served from. It travels beside
+  // the query rather than in it because it shapes the answer rather than which
+  // rows match, and the search grammar has no member for it.
+  links: LinkStrategy;
+}
+
+// The ad-hoc search request a named one resolves to, and the link strategy its
+// results are served under. Every refusal is an `OperationFailure` carrying the
 // status it is answered with.
 //
 // Where the declaration names a member, the declaration's stands; where it
@@ -102,7 +118,7 @@ export async function resolveNamedQuery(
   core: OperationCore,
   payload: Record<string, unknown>,
   context: NamedQueryContext,
-): Promise<SearchEntryWireQuery> {
+): Promise<ResolvedNamedQuery> {
   let {
     operation,
     on,
@@ -150,17 +166,23 @@ export async function resolveNamedQuery(
   ) as SearchEntryWireQuery;
   let htmlQuery = htmlQueryBinding(callerFilter);
   return {
-    ...(callerMembers as SearchEntryWireQuery),
-    ...declared,
-    ...(htmlQuery === undefined
-      ? {}
-      : {
-          filter: {
-            ...declared.filter,
-            eq: { ...declared.filter?.eq, htmlQuery },
-          },
-        }),
-    realms,
+    query: {
+      ...(callerMembers as SearchEntryWireQuery),
+      ...declared,
+      ...(htmlQuery === undefined
+        ? {}
+        : {
+            filter: {
+              ...declared.filter,
+              eq: { ...declared.filter?.eq, htmlQuery },
+            },
+          }),
+      realms,
+    },
+    // Read the way the read executor reads a read's, so a value lowering would
+    // have refused to store serves as the narrowest strategy rather than as
+    // the widest.
+    links: linkStrategyOf(definition.links),
   };
 }
 

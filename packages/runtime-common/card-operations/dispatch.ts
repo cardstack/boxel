@@ -15,6 +15,7 @@ import {
   GATE_REFUSED,
   gateOperation,
   gateRefusal,
+  leavesToLock,
   loadPolicy,
   type GateSubject,
   notPermitted,
@@ -22,10 +23,13 @@ import {
   type LoadedPolicy,
   type OperationPolicyAccess,
 } from './gate.ts';
+import type { GateTrace } from './gate-trace.ts';
+import { explainOperation, type TargetRealm } from './explain.ts';
 import {
   DEFINITION_FREE_BASE_OPERATIONS,
   OperationFailure,
   isDocumentResult,
+  linkStrategyOf,
   isOperationFailure,
   isHeadResult,
   type BaseOperation,
@@ -35,6 +39,7 @@ import {
   type OperationSourceBody,
   type OperationTarget,
 } from './types.ts';
+import type { LinkStrategy } from '@cardstack/base/operations';
 import type { CodeRef, ResolvedCodeRef } from '../code-ref.ts';
 import type { Definition } from '../definitions.ts';
 import type { JsonValue } from '../json-validation.ts';
@@ -155,6 +160,13 @@ export interface OperationCore {
   // What the policy gate reads for a caller the realm ACL declined. A core
   // without it admits no such caller.
   policy?: OperationPolicyAccess;
+  // The realm that serves `href`, and the URL `href` resolves to there, for
+  // the explain operation, which runs that realm's policy gate. A target
+  // commonly lives in a realm other than the policy card's, so this reaches
+  // any realm the server serves, on the server's own authority: the explain
+  // judges for itself what its caller may be told. Undefined where no realm
+  // this server serves holds `href`. A core without it explains nothing.
+  targetRealm?(href: string): Promise<TargetRealm | undefined>;
 }
 
 // The realm's own `FileRef`, narrowed to what a stored-bytes read uses. Stated
@@ -302,10 +314,15 @@ export interface OperationScope {
   // Absent for every other invocation, and for a create until those two
   // stages have run.
   readonly proposed: Record<string, unknown> | undefined;
+  // Where the policy gate records how it reached its decision, for an explain
+  // to report. Absent on every invocation that is not being explained, which
+  // is every invocation a caller makes.
+  readonly trace: GateTrace | undefined;
   // A scope for another invocation in the same request, sharing this one's row
   // memo so the invocations of one request still cost one read of each row
   // between them. The caller and the ACL's verdict carry over unless named; a
-  // proposed document belongs to one invocation and never does.
+  // proposed document belongs to one invocation and never does, and neither
+  // does a trace.
   derive(invocation: ScopeInvocation): OperationScope;
 }
 
@@ -330,6 +347,7 @@ export interface ScopeInvocation {
   caller?: ScopeCaller;
   coarseDeclined?: CoarseDeclined;
   proposed?: Record<string, unknown>;
+  trace?: GateTrace;
 }
 
 // What the realm ACL declined for a request, judged per invocation rather than
@@ -368,22 +386,26 @@ export function newOperationScope(
     caller: ScopeCaller,
     coarseDeclined: CoarseDeclined,
     proposed: Record<string, unknown> | undefined,
+    trace: GateTrace | undefined,
   ): OperationScope => ({
     peekInstance,
     caller,
     coarseDeclined,
     proposed,
+    trace,
     derive: (next) =>
       scopeFor(
         next.caller ?? caller,
         next.coarseDeclined ?? coarseDeclined,
         next.proposed,
+        next.trace,
       ),
   });
   return scopeFor(
     invocation.caller ?? { kind: 'unattributed' },
     invocation.coarseDeclined ?? 'none',
     invocation.proposed,
+    invocation.trace,
   );
 }
 
@@ -425,6 +447,7 @@ const ALL_BASE_OPERATIONS: Readonly<Record<BaseOperation, true>> = {
   transform: true,
   appendContainsMany: true,
   appendLine: true,
+  explain: true,
 };
 
 // Keyed by kind for the lookup dispatch actually does, but built from a table
@@ -441,6 +464,22 @@ const CARRIED_BY: Readonly<Record<BaseOperation, readonly DefKind[]>> = {
   transform: ['card-def'],
   appendContainsMany: ['card-def'],
   appendLine: ['file-def'],
+  // Carried by nothing on its own. See `DECLARATION_ONLY`.
+  explain: [],
+};
+
+// The behaviors a target carries only under a name its type declares on
+// them. Nothing implies one, so a target whose type declares none has no
+// operation by that name, and asking for it is asking for an operation that
+// does not exist. An explain is the one: it answers only on a policy card, and
+// a policy card's type is what declares it.
+const DECLARATION_ONLY: Readonly<Partial<Record<BaseOperation, true>>> =
+  Object.assign(Object.create(null) as Partial<Record<BaseOperation, true>>, {
+    explain: true,
+  });
+
+const DECLARABLE_ON: Readonly<Partial<Record<BaseOperation, DefKind[]>>> = {
+  explain: ['card-def'],
 };
 
 function carriedBy(kind: DefKind): Partial<Record<BaseOperation, true>> {
@@ -501,8 +540,20 @@ function carries(
   if (own(ALLOWED_BASE_OPERATIONS[kind], base)) {
     return true;
   }
+  if (own(DECLARABLE_ON, base)?.includes(kind)) {
+    return true;
+  }
   return (
     target.kind === 'instance' && own(FILE_WRITES_ON_ANY_INSTANCE, base) != null
+  );
+}
+
+// Whether a type of this kind answers `name` with a built-in behavior when it
+// declares nothing under that name: the behavior an instance of the type runs
+// when a caller invokes the name on it.
+export function carriesBuiltIn(kind: DefKind, name: string): boolean {
+  return (
+    isBaseOperation(name) && own(ALLOWED_BASE_OPERATIONS[kind], name) != null
   );
 }
 
@@ -572,10 +623,11 @@ function own<T>(
 // is in the index, the built-in behavior does not consult its definition, and
 // refusing here would make a broken module's cards unreadable.
 //
-// A write the gate could only admit on a predicate is refused here. Its
-// predicate has to be evaluated under the write lock, and a caller resolving
-// through here holds no lock and carries no pending decision to one. A caller
-// that does takes the decision from `resolveGatedOperation` instead.
+// A write the gate left anything for the write lock to decide is refused
+// here: one it could only admit on a predicate, and one to a stored card,
+// whose type the lock judges again from its bytes. A caller resolving through
+// here holds no lock and carries no pending decision to one. A caller that
+// does takes the decision from `resolveGatedOperation` instead.
 export async function resolveOperation(
   core: OperationCore,
   target: OperationTarget,
@@ -588,7 +640,7 @@ export async function resolveOperation(
     name,
     scope,
   );
-  if (decision.kind === 'pending') {
+  if (leavesToLock(decision)) {
     throw notPermitted(target, name);
   }
   return definition;
@@ -622,6 +674,58 @@ export async function resolveGatedOperation(
   name: string,
   scope: OperationScope = newOperationScope(core),
 ): Promise<GatedOperation> {
+  return await resolveAndGate(core, target, name, scope);
+}
+
+// What the policy gate decides about a write one of the card verbs carries
+// out: a card+json `POST` creating a card, a `PATCH` updating one, or a
+// `DELETE` removing one.
+//
+// A verb performs the built-in behavior it is named for, on the document it
+// was sent, whatever the target's type declares under that name. A declaration
+// is how an author specializes the behavior: an `update` with an `input`
+// stage, a `delete` rebound onto `transform` as a soft delete. A grant on the
+// name admits what the declaration does, and the verb would do something else.
+// So a grant reaches a verb only where the name means the built-in behavior,
+// and a write to a type that declares the name is refused as one no grant
+// admits. The operations envelope runs the declaration, and is where such a
+// grant is used.
+//
+// That refusal is made before the gate judges anything, for every caller the
+// realm ACL declined. The gate judges an operation by the base its declaration
+// builds on, and the verb writes whatever that base is: a declared `update`
+// built on `read` would read to the gate as a read the ACL allowed a reader,
+// and the verb would then write for them with no grant at all.
+//
+// A caller the realm ACL allowed is answered as the gate answers them, without
+// the policy, and the verb performs the built-in behavior for them whatever the
+// type declares.
+export async function resolveFacadeWrite(
+  core: OperationCore,
+  target: OperationTarget,
+  base: 'create' | 'update' | 'delete',
+  scope: OperationScope,
+): Promise<GateDecision> {
+  let { decision } = await resolveAndGate(core, target, base, scope, {
+    builtInOnly: true,
+  });
+  // The verb writes, and a write the ACL declined is never the ACL's to allow,
+  // so for such a caller the gate's answer is a grant or a refusal.
+  if (decision.kind === 'coarse' && scope.coarseDeclined !== 'none') {
+    throw notPermitted(target, base);
+  }
+  return decision;
+}
+
+async function resolveAndGate(
+  core: OperationCore,
+  target: OperationTarget,
+  name: string,
+  scope: OperationScope,
+  // Refuse a name the target's type declares, for a caller the ACL declined,
+  // before the gate runs (see `resolveFacadeWrite`).
+  opts: { builtInOnly?: true } = {},
+): Promise<GatedOperation> {
   let refusal = (e: unknown): unknown =>
     scope.coarseDeclined === 'all' && isOperationFailure(e)
       ? notPermitted(target, name)
@@ -642,9 +746,15 @@ export async function resolveGatedOperation(
   try {
     resolved = await resolveUngated(core, target, name, scope);
   } catch (e: unknown) {
+    if (isOperationFailure(e)) {
+      scope.trace?.resolutionRefused(e);
+    }
     throw refusal(e);
   }
-  let { definition, typeDefinition, typeChain } = resolved;
+  let { definition, typeDefinition, typeChain, declared } = resolved;
+  if (opts.builtInOnly && declared && scope.coarseDeclined !== 'none') {
+    throw notPermitted(target, name);
+  }
   let decision = await gateOperation(
     core,
     gateSubject(target, typeChain),
@@ -700,6 +810,9 @@ async function resolveUngated(
   // the adoption chain recorded on it.
   typeDefinition?: Definition;
   typeChain?: string[];
+  // Whether the name resolved to a declaration on the target's type rather
+  // than to the built-in behavior of that name.
+  declared?: true;
 }> {
   assertInRealm(core, target);
   if (isDefinitionFreeOperation(name)) {
@@ -766,9 +879,14 @@ async function resolveUngated(
     if (!carries(target, kind, declared.base)) {
       throw notAllowed(target, name, kind, declared.base);
     }
-    return { definition: declared, typeDefinition: definition, typeChain };
+    return {
+      definition: declared,
+      typeDefinition: definition,
+      typeChain,
+      declared: true,
+    };
   }
-  if (!isBaseOperation(name)) {
+  if (!isBaseOperation(name) || own(DECLARATION_ONLY, name)) {
     throw new OperationFailure({
       id: targetId(target),
       status: 404,
@@ -789,8 +907,8 @@ async function resolveUngated(
   };
 }
 
-// Whether a `read` of this target may be answered without running it, asked
-// before anything is read.
+// What a `read` of this target would answer with, and whether it may be
+// answered without running it — both asked before anything is read.
 //
 // The card+json `GET` has to know this before it answers, because a projected
 // body is not the representation its validator describes: the ETag is built
@@ -824,35 +942,50 @@ async function resolveUngated(
 // the `output` stage decides that.
 export type ReadShape = 'plain' | 'staged' | 'unresolved';
 
-export async function readShape(
+// What a `read` of this target would answer with, settled from its definition
+// alone. Both members are facts about the type rather than about the request,
+// which is what lets one answer be remembered across requests.
+export interface ReadPlan {
+  shape: ReadShape;
+  // The link strategy the type's `read` declares, `full` where it declares
+  // none. The same hazard `shape` exists for applies to it: an ETag is built
+  // from the index row, and a row says nothing about how much of the link
+  // graph a type's declaration carries — so a caller building a validator
+  // ahead of the assembly folds this in, or a card whose type narrows its
+  // strategy keeps the validator it had and a conditional request is answered
+  // 304 with the wider body still in the client's cache.
+  links: LinkStrategy;
+}
+
+export async function readPlan(
   core: OperationCore,
   url: URL,
   scope: OperationScope = newOperationScope(core),
   // Answers already reached, held by the caller across requests. The
   // definition lookup behind this is a database read, and it lands on the two
   // paths that exist to answer without one — so a caller that can say when the
-  // answer may have changed should hand one in. See `#readShapeByURL`.
-  memo?: Map<string, ReadShape>,
-): Promise<ReadShape> {
+  // answer may have changed should hand one in. See `#readPlanByURL`.
+  memo?: Map<string, ReadPlan>,
+): Promise<ReadPlan> {
   let remembered = memo?.get(url.href);
   if (remembered) {
     return remembered;
   }
-  let shape = await resolveReadShape(core, url, scope);
+  let plan = await resolveReadPlan(core, url, scope);
   // An unresolved read is not remembered: it is a declaration with findings
   // against it, which the author is presumably mid-way through fixing, and
   // the answer costs the same to reach again.
-  if (shape !== 'unresolved') {
-    memo?.set(url.href, shape);
+  if (plan.shape !== 'unresolved') {
+    memo?.set(url.href, plan);
   }
-  return shape;
+  return plan;
 }
 
-async function resolveReadShape(
+async function resolveReadPlan(
   core: OperationCore,
   url: URL,
   scope: OperationScope,
-): Promise<ReadShape> {
+): Promise<ReadPlan> {
   let definition: OperationDefinition;
   try {
     definition = await resolveOperation(
@@ -865,7 +998,7 @@ async function resolveReadShape(
       // fast paths this answer opens — the conditional 304 and the shared
       // response cache — are served without that second resolution, so
       // nothing that judges the caller runs on them. The cross-request memo in
-      // `readShape` is keyed by URL alone, which is sound only while this
+      // `readPlan` is keyed by URL alone, which is sound only while this
       // question stays caller-less. For the same reason the policy gate never
       // runs here, and a caller the realm ACL declined is kept off both fast
       // paths by the handler.
@@ -875,9 +1008,18 @@ async function resolveReadShape(
       }),
     );
   } catch {
-    return 'unresolved';
+    // Nothing is known about the read, including how much of the link graph it
+    // would carry, so the widest strategy is reported — which is the one that
+    // keeps the caller off every fast path it could take with a narrower
+    // answer. The refusal this read has coming is what the request gets.
+    return { shape: 'unresolved', links: 'full' };
   }
-  return hasTransforms(definition) ? 'staged' : 'plain';
+  return {
+    shape: hasTransforms(definition) ? 'staged' : 'plain',
+    // Read the same way the executor reads it, so the validator this answer
+    // is folded into names the shape the body will actually take.
+    links: linkStrategyOf(definition.links),
+  };
 }
 
 export async function runOperation(
@@ -1054,6 +1196,8 @@ async function runBaseOperation(
       // and an executor that peeked a row would put back the index read
       // resolving it definition-free just took out.
       return await readSourceOperation(core, canonical, opts);
+    case 'explain':
+      return await explainOperation(core, canonical);
     case 'query':
       // A declared query is a saved search, invoked by naming it in a request
       // to `_search` or `_federated-search`. The realm resolves it there, from
