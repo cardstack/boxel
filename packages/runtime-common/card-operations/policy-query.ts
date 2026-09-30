@@ -3,8 +3,12 @@ import type { Definition } from '../definitions.ts';
 import type { Filter } from '../query.ts';
 import { policyFilterFromWire } from '../search-entry.ts';
 import type { OperationCore } from './dispatch.ts';
-import { matchingGrants, nonGrantableInChain } from './gate.ts';
-import type { CompiledRealmPolicy } from './policy.ts';
+import {
+  authorizationCardIds,
+  matchingGrants,
+  nonGrantableInChain,
+} from './gate.ts';
+import { realmPolicyRef, type CompiledRealmPolicy } from './policy.ts';
 import { lowerQueryOperation } from './query.ts';
 
 // ============================================================================
@@ -47,6 +51,18 @@ import { lowerQueryOperation } from './query.ts';
 // queried type's chain declares `nonGrantable` under the same name: a subclass
 // cannot make grantable what the type it extends kept out of a policy's
 // reach.
+//
+// Nor does any grant reach the cards that hold a realm's authorization. The
+// gate refuses a grant every operation on the realm's config card, on the card
+// its policy key names, and on any policy card. A search never passes the
+// gate, though, and a grant on a type those cards descend from, `CardDef` say,
+// compiles to a filter their rows match. So every filter a scope carries
+// leaves them out, whichever grant it came from: the two named cards by id,
+// and a policy card by the `RealmPolicy` its row's adoption chain holds. The
+// chain is what covers a draft no key names, and a policy card another realm's
+// key names that is stored in this one. A declaration can't do this: `query`
+// is a reserved name no type may mark `nonGrantable`, and a search on
+// `CardDef` never reads `RealmPolicy`'s declarations anyway.
 // ============================================================================
 
 // What a policy says about one caller's query. A realm the caller reads
@@ -143,7 +159,10 @@ export async function policyQueryScope(
     return DENIED;
   }
   if (distinct.length === 1) {
-    return await typeScope(core, operation, distinct[0], actor);
+    return await withoutAuthorization(
+      core,
+      await typeScope(core, operation, distinct[0], actor),
+    );
   }
   let scopes = await Promise.all(
     distinct.map((on) => typeScope(core, operation, on, actor)),
@@ -154,7 +173,37 @@ export async function policyQueryScope(
       filters.push({ on: distinct[index], any: scope.filters });
     }
   }
-  return filters.length > 0 ? { kind: 'scoped', filters } : DENIED;
+  return await withoutAuthorization(
+    core,
+    filters.length > 0 ? { kind: 'scoped', filters } : DENIED,
+  );
+}
+
+// `scope`, with every filter it carries leaving out the rows of the cards that
+// hold the realm's authorization. A scope with no filter to narrow reads no
+// pointer.
+async function withoutAuthorization(
+  core: OperationCore,
+  scope: PolicyQueryScope,
+): Promise<PolicyQueryScope> {
+  if (scope.kind !== 'scoped') {
+    return scope;
+  }
+  let infrastructure = [
+    ...(await authorizationCardIds(core)).map((id) => ({ eq: { id } })),
+    { type: realmPolicyRef },
+  ];
+  return {
+    kind: 'scoped',
+    filters: scope.filters.map((filter) => excluding(filter, infrastructure)),
+  };
+}
+
+// `filter`, less every row any of `excluded` matches.
+function excluding(filter: Filter, excluded: Filter[]): Filter {
+  return excluded.length === 0
+    ? filter
+    : { every: [filter, { not: { any: excluded } }] };
 }
 
 // What the policy contributes to `operation` on the one type `on`.
