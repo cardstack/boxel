@@ -319,14 +319,14 @@ export const CAPTURE_SERVING_PREFIX = '_capture/';
 
 // The legacy spelling of `CAPTURE_SERVING_PREFIX`. Still answered, because a
 // durable capture URL is meant to be stored: a card may hold one minted under
-// this spelling, and a browser keeps serving an auth service worker that
-// matches capture requests on this prefix to attach credentials until it next
-// updates. Reserved against
+// this spelling. Every surface that recognizes a capture URL — serving,
+// signing, the shell's document negotiation, the auth service worker's 503
+// absorption — matches it alongside the current spelling. Reserved against
 // writes for as long as it is served, so nothing can be stored where a GET
 // would never read it back.
 export const LEGACY_CAPTURE_SERVING_PREFIX = '_screenshot/';
 
-const CAPTURE_SERVING_PREFIXES = [
+export const CAPTURE_SERVING_PREFIXES = [
   CAPTURE_SERVING_PREFIX,
   LEGACY_CAPTURE_SERVING_PREFIX,
 ] as const;

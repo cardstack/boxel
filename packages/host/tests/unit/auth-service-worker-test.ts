@@ -172,6 +172,7 @@ function createServiceWorkerEnv(
 
   // Mirrors the CAPTURE_* constants and helpers in auth-service-worker.js.
   const CAPTURE_PATH_SEGMENT = '/_capture/';
+  const LEGACY_CAPTURE_PATH_SEGMENT = '/_screenshot/';
   const CAPTURE_RETRY_BUDGET_MS = 90000;
 
   function isCaptureRoute(request: Request): boolean {
@@ -179,7 +180,11 @@ function createServiceWorkerEnv(
       return false;
     }
     try {
-      return new URL(request.url).pathname.includes(CAPTURE_PATH_SEGMENT);
+      let { pathname } = new URL(request.url);
+      return (
+        pathname.includes(CAPTURE_PATH_SEGMENT) ||
+        pathname.includes(LEGACY_CAPTURE_PATH_SEGMENT)
+      );
     } catch {
       return false;
     }
@@ -1383,7 +1388,7 @@ module('Unit | auth-service-worker | shipped worker', function () {
     );
   });
 
-  test('shipped isCaptureRoute matches GET _capture/ requests only', async function (assert) {
+  test('shipped isCaptureRoute matches GET _capture/ and legacy _screenshot/ requests only', async function (assert) {
     let sw = await loadShippedWorker([]);
 
     assert.true(
@@ -1392,6 +1397,14 @@ module('Unit | auth-service-worker | shipped worker', function () {
           'http://localhost:4201/user/realm/_capture/Card/1.png?w=800',
         ),
       ),
+    );
+    assert.true(
+      sw.isCaptureRoute(
+        new Request(
+          'http://localhost:4201/user/realm/_screenshot/Card/1.png?w=800',
+        ),
+      ),
+      'the legacy prefix engages absorption too',
     );
     assert.false(
       sw.isCaptureRoute(

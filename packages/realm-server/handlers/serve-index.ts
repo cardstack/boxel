@@ -7,7 +7,7 @@ import type {
   Realm,
 } from '@cardstack/runtime-common';
 import {
-  CAPTURE_SERVING_PREFIX,
+  CAPTURE_SERVING_PREFIXES,
   PREFIX_REALMS,
   RealmPaths,
   SCOPED_CSS_SERVING_PREFIX,
@@ -85,7 +85,8 @@ function isDocumentEmbedRequest(ctxt: Koa.Context): boolean {
   return destination === 'embed' || destination === 'object';
 }
 
-// A capture URL — `{realm}_capture/…` — names bytes the realm serves (a
+// A capture URL — `{realm}_capture/…`, or the legacy `{realm}_screenshot/…`
+// a stored URL may still carry — names bytes the realm serves (a
 // PNG or a PDF), never a card the app could open. A tab navigation to one (a
 // "Download PDF" link opened in a new tab) advertises text/html like any
 // navigation, and the shell would boot the app against a URL that is not a
@@ -105,7 +106,9 @@ async function isCaptureServingRequest(
 ): Promise<boolean> {
   if (
     ctxt.method !== 'GET' ||
-    !requestURL.pathname.includes(`/${CAPTURE_SERVING_PREFIX}`)
+    !CAPTURE_SERVING_PREFIXES.some((prefix) =>
+      requestURL.pathname.includes(`/${prefix}`),
+    )
   ) {
     return false;
   }

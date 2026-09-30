@@ -1329,6 +1329,22 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           );
         });
 
+        test('an address-bar navigation to a legacy _screenshot/ capture URL is answered by the realm, not the app shell', async function (assert) {
+          let response = await request
+            .get('/test/_screenshot/person-1?type=pdf&media=print')
+            .set('Accept', FRAME_STYLE_ACCEPT)
+            .set('Sec-Fetch-Dest', 'document');
+
+          assert.notOk(
+            response.headers['content-type']?.includes('text/html'),
+            `the realm answers, not the shell (got ${response.status} ${response.headers['content-type']})`,
+          );
+          assert.notOk(
+            (response.text ?? '').includes('<title>'),
+            'the app shell is not served for a legacy capture URL',
+          );
+        });
+
         test('a nested path that merely contains a _capture/ segment still opens the app', async function (assert) {
           // The realm reserves `_capture/` at its root only; deeper in the
           // tree it is an ordinary directory name, so the card URL beneath it

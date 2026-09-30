@@ -37,7 +37,8 @@ const TOKEN_REQUEST_REFRESH_TIMEOUT_MS = 3000;
 // the server's suggested pace, so the fetch event resolves late instead of
 // failing and the image pops in when the capture lands.
 //
-// The match is deliberately tight (GET + a `_capture/` path segment on a
+// The match is deliberately tight (GET + a `_capture/` path segment — or the
+// legacy `_screenshot/` one a stored capture URL may still carry — on a
 // request already scoped to a realm — a realm-token prefix match on the token
 // branches, a known realm origin on the tokenless branch — + status exactly
 // 503 + a numeric Retry-After): a blanket SW 503-retry would mask real
@@ -47,6 +48,7 @@ const TOKEN_REQUEST_REFRESH_TIMEOUT_MS = 3000;
 // retry loops; the 404's short max-age already covers the brief uncaptured
 // window.
 const CAPTURE_PATH_SEGMENT = '/_capture/';
+const LEGACY_CAPTURE_PATH_SEGMENT = '/_screenshot/';
 // Bounds when re-fetches may start: retry sleeps are clamped to this window,
 // and a 503 arriving after it closes is let through so the <img> errors
 // visibly rather than hiding a permanently failing capture. The final
@@ -66,7 +68,11 @@ function isCaptureRoute(request) {
     return false;
   }
   try {
-    return new URL(request.url).pathname.includes(CAPTURE_PATH_SEGMENT);
+    let { pathname } = new URL(request.url);
+    return (
+      pathname.includes(CAPTURE_PATH_SEGMENT) ||
+      pathname.includes(LEGACY_CAPTURE_PATH_SEGMENT)
+    );
   } catch {
     return false;
   }

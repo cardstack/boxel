@@ -143,6 +143,11 @@ module('Unit | Service | capture-url-signer', function (hooks) {
       realmRootOfCaptureURL('https://my.realm/sub/_capture/card?type=pdf'),
       'https://my.realm/sub/',
     );
+    assert.strictEqual(
+      realmRootOfCaptureURL('https://my.realm/sub/_screenshot/card?type=pdf'),
+      'https://my.realm/sub/',
+      'the legacy prefix resolves to the same realm',
+    );
     assert.throws(
       () => realmRootOfCaptureURL('https://my.realm/just-a-card'),
       /not a capture URL/,
