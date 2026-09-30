@@ -14,7 +14,6 @@ import { carriesBuiltIn } from './dispatch.ts';
 import { compilePolicyFilter } from './policy-filter.ts';
 import {
   isDefinitionFreeBaseOperation,
-  isWrite,
   type BaseOperation,
   type OperationQueryFilterTemplate,
   type PolicyIssue,
@@ -659,8 +658,8 @@ async function compilePolicy(
       );
       continue;
     }
-    // A chain that cannot be judged counts as a policy type's, so its writes
-    // are refused rather than granted.
+    // A chain that cannot be judged counts as a policy type's, so its grants
+    // are recorded rather than kept.
     let isPolicyType = attempt(() => env.isPolicyCard(chain)) ?? true;
 
     let grants: CompiledOperationGrant[] = [];
@@ -694,8 +693,8 @@ async function compilePolicy(
       }
       // Authorization infrastructure is outside the grant model, and the gate
       // refuses it whatever a compiled policy holds: an operation flagged
-      // non-grantable, and any write to a policy card. So a grant of either is
-      // recorded rather than kept as though it admitted something.
+      // non-grantable, and any operation on a policy card. So a grant of either
+      // is recorded rather than kept as though it admitted something.
       let keptOutBy = granted.nonGrantable
         ? resolved.name
         : isDefinitionFreeBaseOperation(operation)
@@ -709,11 +708,14 @@ async function compilePolicy(
         );
         continue;
       }
-      if (isPolicyType && isWrite(granted.base)) {
+      // A query is authorized on the search engine rather than at the gate,
+      // and one left here would contribute a filter that lists policy cards,
+      // so a rule naming a policy type keeps none of its grants.
+      if (isPolicyType) {
         issue(
           'grants-authorization-infrastructure',
           `${grantPath}.operation`,
-          `\`${operation}\` writes a ${resolved.name}, which is a RealmPolicy, and a rule naming a policy type grants no write to it: whoever can edit a policy card decides what the policy grants`,
+          `\`${operation}\` reaches a ${resolved.name}, which is a RealmPolicy, and a rule naming a policy type grants nothing on it: whoever can edit a policy card decides what the policy grants, and whoever can read one reads every rule that judges them`,
         );
         continue;
       }
