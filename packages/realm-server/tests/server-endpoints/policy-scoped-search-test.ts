@@ -1618,6 +1618,9 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       // Its `realm.json` points at a policy with a relative reference, which
       // the realm drops as malformed, so it has no policy.
       const UNMOUNTED_MALFORMED = 'http://127.0.0.1:4444/unmounted-malformed/';
+      // Staged as `UNMOUNTED_GRANTS` is, apart from it, so a request can find
+      // it unmounted whichever of this module's tests have run.
+      const UNMOUNTED_FALLBACK = 'http://127.0.0.1:4444/unmounted-fallback/';
       // Registered with a `disk_id` outside the realms root, so there is no
       // directory to read its `realm.json` from and none to mount it from.
       const UNRESOLVABLE = 'http://127.0.0.1:4444/unresolvable/';
@@ -1689,6 +1692,22 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
             rank: 2,
           }),
         });
+        await stage(UNMOUNTED_FALLBACK, 'unmounted-fallback', {
+          'realm.json': realmConfigCardJSON({
+            name: 'Unmounted fallback',
+            policy: `${UNMOUNTED_FALLBACK}policies/policy`,
+          }),
+          'policies/policy.json': policyCard([
+            { operation: 'listOpen', where: OWN },
+          ]),
+          ...aOpen(),
+          'schedules/b-open.json': schedule({
+            title: 'B open',
+            providerId: PROVIDER_B,
+            status: 'open',
+            rank: 2,
+          }),
+        });
         await stage(UNMOUNTED_MALFORMED, 'unmounted-malformed', {
           'realm.json': realmConfigCardJSON({
             name: 'Unmounted malformed',
@@ -1710,7 +1729,11 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       });
 
       hooks.after(function () {
-        for (let url of [UNMOUNTED_ENUMERABLE, UNMOUNTED_GRANTS]) {
+        for (let url of [
+          UNMOUNTED_ENUMERABLE,
+          UNMOUNTED_GRANTS,
+          UNMOUNTED_FALLBACK,
+        ]) {
           realmServer?.testingOnlyReconciler.mounted.get(url)?.unsubscribe();
         }
       });
@@ -1859,6 +1882,77 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         assert.false(
           isMounted(UNMOUNTED_PRIVATE),
           'the realm with none, named first, was not',
+        );
+      });
+
+      test('a named query naming one that will not mount ahead of one with a policy reads the declaration through the second, and composes its grants', async function (assert) {
+        // Mounting the realm indexes it from scratch.
+        assert.timeout(180_000);
+        assert.false(
+          isMounted(UNMOUNTED_FALLBACK),
+          'precondition: nothing on this process has mounted the realm with a policy',
+        );
+
+        let response = await federatedSearch(
+          listOpen([UNRESOLVABLE, UNMOUNTED_FALLBACK]),
+          PROVIDER_A,
+        );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        assert.deepEqual(
+          ids(response),
+          [`${UNMOUNTED_FALLBACK}schedules/a-open`],
+          "provider A's own open schedule, which the grant admits, and not provider B's",
+        );
+        assert.true(
+          response.body.meta.incomplete,
+          'the realm that will not mount is counted among the realms that failed to answer',
+        );
+        assert.true(
+          isMounted(UNMOUNTED_FALLBACK),
+          'the realm with a policy was mounted to read the declaration and ask its policy',
+        );
+        assert.false(
+          isMounted(UNRESOLVABLE),
+          'the one named ahead of it could not be',
+        );
+      });
+
+      test('a named query no realm it may be read through will mount is answered with no rows and marked incomplete, not refused', async function (assert) {
+        let response = await federatedSearch(
+          listOpen([UNRESOLVABLE, UNMOUNTED_PRIVATE]),
+          PROVIDER_A,
+        );
+
+        assert.strictEqual(
+          response.status,
+          200,
+          'answered as an ad-hoc search naming a realm that will not mount is',
+        );
+        assert.deepEqual(ids(response), []);
+        assert.true(
+          response.body.meta.incomplete,
+          'the realm that will not mount is counted among the realms that failed to answer',
+        );
+        assert.deepEqual(
+          response.body.meta.realmTotals,
+          { [UNMOUNTED_PRIVATE]: 0 },
+          'and the one that names no policy among the ones that answered, with nothing',
+        );
+        assert.false(
+          isMounted(UNMOUNTED_PRIVATE),
+          'which is still not mounted',
+        );
+      });
+
+      test('a named query naming only a realm the caller reads that will not mount is answered with no rows and marked incomplete, not refused', async function (assert) {
+        let response = await federatedSearch(listOpen([UNRESOLVABLE]), OWNER);
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        assert.deepEqual(ids(response), []);
+        assert.true(
+          response.body.meta.incomplete,
+          'the realm is counted among the realms that failed to answer, not as one holding nothing',
         );
       });
 
