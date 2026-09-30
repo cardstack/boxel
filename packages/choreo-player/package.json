@@ -1,0 +1,65 @@
+{
+  "name": "choreo-player",
+  "version": "1.0.0",
+  "description": "A headless, externally clocked player for Choreo runs.",
+  "keywords": [
+    "animation",
+    "choreo",
+    "glimmer",
+    "hyperframes",
+    "motion",
+    "player"
+  ],
+  "repository": "https://github.com/cardstack/choreo",
+  "license": "MIT",
+  "author": "Cardstack",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./hyperframes": {
+      "types": "./dist/hyperframes.d.ts",
+      "default": "./dist/hyperframes.js"
+    }
+  },
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "ember-tsc --project tsconfig.json",
+    "lint:types": "ember-tsc --project tsconfig.json --noEmit",
+    "prepack": "pnpm run test",
+    "test": "pnpm run build && pnpm run test:unit",
+    "test:unit": "node --test test/*.test.mjs",
+    "format": "prettier . --cache --write",
+    "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\" --prefixColors auto",
+    "lint:fix": "concurrently \"pnpm:lint:*:fix\" --names \"fix:\" --prefixColors auto && pnpm run format",
+    "lint:format": "prettier . --cache --check",
+    "lint:js": "eslint . --cache",
+    "lint:js:fix": "eslint . --fix"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.4",
+    "@glint/ember-tsc": "catalog:",
+    "concurrently": "catalog:",
+    "eslint": "^9.39.4",
+    "eslint-config-prettier": "catalog:",
+    "eslint-plugin-ember": "catalog:",
+    "eslint-plugin-n": "catalog:",
+    "eslint-plugin-simple-import-sort": "^12.1.1",
+    "eslint-plugin-typescript-sort-keys": "catalog:",
+    "globals": "^15.15.0",
+    "prettier": "catalog:",
+    "prettier-plugin-ember-template-tag": "catalog:",
+    "typescript": "catalog:",
+    "typescript-eslint": "catalog:"
+  }
+}
