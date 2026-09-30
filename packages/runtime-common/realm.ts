@@ -6740,9 +6740,10 @@ export class Realm {
 
   // What a realm's ACL allows a caller, read from the same permissions a
   // request from them is checked against, so the realm need not be running to
-  // answer. The realm's own user is permitted everything, as it is on a
-  // request. A realm server builds every realm it serves with its one matrix
-  // client, so this realm's own user is each of theirs too.
+  // answer. A realm's own user is permitted everything, as it is on a
+  // request. Every realm a server serves signs in as the server's one matrix
+  // user, so this realm's own user is also the own user of any realm it asks
+  // about.
   async #aclFor(
     realmURL: URL,
     caller: ScopeCaller,
