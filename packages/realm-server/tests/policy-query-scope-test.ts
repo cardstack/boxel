@@ -6,6 +6,7 @@ import type {
   CodeRef,
   CompiledOperationGrant,
   CompiledRealmPolicy,
+  Filter,
   ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 import {
@@ -181,7 +182,7 @@ const OWN = { on: SCHEDULE, eq: { providerId: ACTOR } };
 
 // `filter` as a scope carries it: less the realm's config card, the card its
 // policy key names, and every policy card, whichever grant it came from.
-function scoped(filter: Record<string, unknown>) {
+function scoped(filter: Filter): Filter {
   return {
     every: [
       filter,
