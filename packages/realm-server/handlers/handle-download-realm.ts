@@ -3,15 +3,11 @@ import type { DBAdapter } from '@cardstack/runtime-common';
 import {
   ensureTrailingSlash,
   fetchUserPermissions,
-  isSessionRevoked,
   logger,
   param,
   query,
 } from '@cardstack/runtime-common';
-import {
-  AuthenticationError,
-  AuthenticationErrorMessages,
-} from '@cardstack/runtime-common/router';
+import { AuthenticationError } from '@cardstack/runtime-common/router';
 import { parseRealmsParam } from '@cardstack/runtime-common/search-utils';
 import { verifyURLSignature } from '@cardstack/runtime-common/url-signature-node';
 import archiver from 'archiver';
@@ -19,7 +15,7 @@ import fsExtra from 'fs-extra';
 const { existsSync, statSync } = fsExtra;
 import type { CreateRoutesArgs } from '../routes.ts';
 import { realmDiskPath } from '../lib/realm-disk-path.ts';
-import { retrieveTokenClaim } from '../utils/jwt.ts';
+import { retrieveUserSessionClaim } from '../utils/jwt.ts';
 import {
   buildReadableRealms,
   getPublishedRealmURLs,
@@ -145,22 +141,11 @@ export default function handleDownloadRealm({
       }
     } else {
       try {
-        let token = retrieveTokenClaim(authorization, realmSecretSeed);
-        // A delegated session reads one realm, read-only, through that realm's
-        // own endpoints, which hold it to that realm. This route judges a
-        // download by what its user reads anywhere, so it refuses the session
-        // as a token that does not belong, as every realm-server route that
-        // acts as the user does.
-        if (token.delegated) {
-          throw new AuthenticationError(
-            AuthenticationErrorMessages.TokenInvalid,
-          );
-        }
-        if (await isSessionRevoked(dbAdapter, token.user, token.iat)) {
-          throw new AuthenticationError(
-            AuthenticationErrorMessages.SessionRevoked,
-          );
-        }
+        let token = await retrieveUserSessionClaim(
+          authorization,
+          realmSecretSeed,
+          dbAdapter,
+        );
         let permissions = await fetchUserPermissions(dbAdapter, {
           userId: token.user,
           onlyOwnRealms: false,
