@@ -1159,12 +1159,25 @@ function sortKeys<T extends Record<string, unknown>>(obj: T): T {
   ) as T;
 }
 
-// The ledger key component for a spec: the hash of its canonical form (the
-// same sha256-hex the store uses for content addresses, though this one
-// keys intent rather than bytes).
+// Who every capture persisted under a spec's identity is drawn as. A
+// persisted capture is served to every reader of the card, so it is drawn as
+// the realm's owner — the identity the index renders under — never as the
+// reader who asked for it.
+const CAPTURE_IDENTITY_AUTHORITY = 'realm-owner';
+
+// The ledger key component for a spec: the hash of its canonical form and
+// the authority the capture is drawn under (the same sha256-hex the store
+// uses for content addresses, though this one keys intent rather than
+// bytes). Naming the authority in the key means a capture drawn under any
+// other authority can never answer a lookup for one drawn as the owner.
 export async function captureSpecHash(spec: CaptureSpec): Promise<string> {
   return await computeMediaCacheKey(
-    new TextEncoder().encode(canonicalCaptureSpecString(spec)),
+    new TextEncoder().encode(
+      JSON.stringify({
+        authority: CAPTURE_IDENTITY_AUTHORITY,
+        spec: canonicalCaptureSpecString(spec),
+      }),
+    ),
   );
 }
 

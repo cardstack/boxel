@@ -7,7 +7,9 @@ import { basename } from 'path';
 import {
   Deferred,
   asExpressions,
+  canonicalCaptureSpecString,
   captureSpecHash,
+  computeMediaCacheKey,
   insert,
   insertPermissions,
   param,
@@ -1239,6 +1241,98 @@ module(basename(import.meta.filename), function () {
       ]);
     });
 
+    test('a persisting job names the card as the GET lane does, so the two surfaces’ jobs are twins', async function (assert) {
+      await seedInstanceRow();
+      let { queue, published } = makePersistQueue('ready');
+
+      await post(persistApp(queue), {
+        realmURL: REALM_URL,
+        cardId: `${CARD_ID}.json`,
+        format: 'isolated',
+      }).expect(201);
+
+      let postArgs = published[0]?.args as Record<string, unknown>;
+      assert.strictEqual(
+        postArgs.cardId,
+        CARD_ID,
+        'the `.json` spelling is enqueued as the extensionless URL',
+      );
+
+      // The job the GET `_screenshot/` lane enqueues for the same capture.
+      let getArgs = {
+        ...postArgs,
+        surface: 'get-dsl',
+        loggingCorrelationId: null,
+      };
+      let decision = chooseScreenshotCardCoalesceDecision({
+        incoming: {
+          jobType: 'screenshot-card',
+          concurrencyGroup: `screenshot:${REALM_URL}`,
+          timeout: SCREENSHOT_CARD_JOB_TIMEOUT_SEC,
+          priority: 0,
+          args: postArgs as PgPrimitive,
+        },
+        candidates: [
+          {
+            jobType: 'screenshot-card',
+            concurrencyGroup: `screenshot:${REALM_URL}`,
+            timeout: SCREENSHOT_CARD_JOB_TIMEOUT_SEC,
+            priority: 0,
+            args: getArgs as PgPrimitive,
+            id: 7,
+          },
+        ],
+        inFlightCandidates: [],
+      });
+      assert.deepEqual(
+        decision,
+        { type: 'join', jobId: 7 },
+        'the POST job joins the GET twin rendering the same capture',
+      );
+    });
+
+    test('a ledger entry keyed by the spec alone, without the owner authority, never answers', async function (assert) {
+      await seedInstanceRow();
+      let spec = { format: 'isolated' as const };
+      let specOnlyHash = await computeMediaCacheKey(
+        new TextEncoder().encode(canonicalCaptureSpecString(spec)),
+      );
+      assert.notStrictEqual(
+        specOnlyHash,
+        await captureSpecHash(spec),
+        'the capture identity is more than the spec',
+      );
+      await putMedia(dbAdapter, adapter, {
+        realmURL: REALM_URL,
+        sourceURL: CARD_ID,
+        captureSpecHash: specOnlyHash,
+        sourceGeneration: 1,
+        bytes: new TextEncoder().encode('requester-drawn-bytes'),
+        contentType: 'image/png',
+        lane: 'on-demand',
+        width: 800,
+        height: 600,
+      });
+      let { queue, published } = makePersistQueue('ready');
+
+      let response = await post(persistApp(queue), {
+        realmURL: REALM_URL,
+        cardId: CARD_ID,
+        format: 'isolated',
+      }).expect(201);
+
+      assert.strictEqual(
+        published.length,
+        1,
+        'the capture renders as the owner instead of answering from that entry',
+      );
+      assert.strictEqual(
+        response.body.data.attributes.base64,
+        PNG_BASE64,
+        'and answers with the owner’s render',
+      );
+    });
+
     test('a capture answered only to its requester renders as the requester', async function (assert) {
       await seedInstanceRow();
       let { queue, published } = makePersistQueue('ready');
@@ -1807,6 +1901,11 @@ module(basename(import.meta.filename), function () {
         (published[0]?.args as any)?.persist,
         null,
         'no persist identity without realm read',
+      );
+      assert.strictEqual(
+        (published[0]?.args as any)?.runAs,
+        '@stranger:localhost',
+        'and the render is the caller’s own, never one with the owner’s reach',
       );
       let attrs = response.body.data.attributes;
       assert.notStrictEqual(

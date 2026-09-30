@@ -38,7 +38,8 @@ export const SCREENSHOT_CARD_JOB_TIMEOUT_SEC = 60;
 //
 // Only persist-carrying jobs coalesce — both surfaces publish them: the GET
 // `_screenshot/` lane always, `POST /_screenshot-card` whenever the instance
-// is indexed and the server has a store. A persist target pins the source
+// is indexed, the server has a store, the caller may read the realm and the
+// realm's permissions name an owner. A persist target pins the source
 // generation, so a joined caller can never be handed a capture of a
 // different revision. A `persist: null` job (unindexed card, or a server
 // with no MediaCache) is a render-now request whose identity carries no
@@ -50,8 +51,8 @@ export const SCREENSHOT_CARD_JOB_TIMEOUT_SEC = 60;
 // producer whose hash and spec disagree, since joining hands the incoming
 // caller the twin's render verbatim. The `runAs` equality keeps joins
 // within one render identity. Both surfaces render a persisting capture as
-// the realm owner, so a GET and a POST twin for the same persist target
-// join.
+// the realm owner and name the card by its extensionless URL, so a GET and
+// a POST twin for the same persist target join.
 export function chooseScreenshotCardCoalesceDecision(
   context: QueueCoalesceContext,
 ): QueueCoalesceDecision {

@@ -401,14 +401,17 @@ export default function handleScreenshotCard({
 
       // The canonical realm URL keys the per-realm serialization lane (the
       // job's default concurrency group) so this surface and the GET lane —
-      // which keys off the realm's own URL — share one lane per realm.
+      // which keys off the realm's own URL — share one lane per realm. A
+      // persisting job names the card by its extensionless URL, as the GET
+      // lane does, so the two surfaces' jobs for one capture are twins
+      // whichever spelling the caller sent.
       let enqueueStart = Date.now();
       let job = await enqueueScreenshotCardJob(
         {
           realmURL: normalizedRealmURL,
           realmUsername: renderAs,
           runAs: renderAs,
-          cardId: normalizedCardId,
+          cardId: entryKey ? sourceURL : normalizedCardId,
           format,
           captureSpec,
           persist: entryKey ? { ...entryKey, lane: 'on-demand' } : null,

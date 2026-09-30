@@ -35,21 +35,24 @@ import { createJWT as createRealmServerJWT } from '../utils/jwt.ts';
 // It renders as the realm's owner. A capture answered only to its requester
 // renders as the requester.
 //
-// Three realms on one server:
+// Four realms on one server:
 //
 // - Lib: public. Holds the swatch type, and the probe type, whose isolated
-//   template searches Private for swatches and draws a solid block of
-//   SWATCH_COLOR for every row it gets back.
-// - Private: the requester's. The captured realm's owner may not read it. It
-//   holds one swatch.
+//   template searches Requesters and Owners for swatches and draws a solid
+//   block for every row it gets back: REQUESTERS_COLOR for one from
+//   Requesters, OWNERS_COLOR for one from Owners.
+// - Requesters: only the requester may read it. It holds one swatch.
+// - Owners: only the captured realm's owner may read it. It holds one swatch.
 // - Captured: the owner's, which the requester may read. It holds the probe.
 //
-// So a probe drawn as the requester shows the swatch, and one drawn as the
-// owner shows nothing where it would be.
+// So a probe drawn as the requester shows the requester's swatch and not the
+// owner's, and one drawn as the owner shows the owner's and not the
+// requester's.
 // ============================================================================
 
 const LIB = 'http://127.0.0.1:4444/lib/';
-const PRIVATE = 'http://127.0.0.1:4444/private/';
+const REQUESTERS = 'http://127.0.0.1:4444/requesters/';
+const OWNERS = 'http://127.0.0.1:4444/owners/';
 const CAPTURED = 'http://127.0.0.1:4444/captured/';
 
 const OWNER = '@owner:localhost';
@@ -57,7 +60,8 @@ const REQUESTER = '@requester:localhost';
 
 const PROBE = `${CAPTURED}probes/probe`;
 
-const SWATCH_COLOR: [number, number, number] = [0, 170, 85];
+const REQUESTERS_COLOR: [number, number, number] = [0, 170, 85];
+const OWNERS_COLOR: [number, number, number] = [170, 0, 85];
 
 const SWATCH_MODULE = `
   import { CardDef } from "@cardstack/base/card-api";
@@ -70,7 +74,7 @@ const PROBE_MODULE = `
 
   export class Probe extends CardDef {
     static isolated = class extends Component<typeof this> {
-      get query() {
+      swatchesIn(realm) {
         return {
           filter: {
             'item.on': {
@@ -78,15 +82,28 @@ const PROBE_MODULE = `
               name: 'Swatch',
             },
           },
-          realms: ["${PRIVATE}"],
+          realms: [realm],
         };
+      }
+
+      get requestersQuery() {
+        return this.swatchesIn("${REQUESTERS}");
+      }
+
+      get ownersQuery() {
+        return this.swatchesIn("${OWNERS}");
       }
 
       <template>
         {{#if @context.searchResultsComponent}}
-          <@context.searchResultsComponent @query={{this.query}} @mode="none" as |results|>
+          <@context.searchResultsComponent @query={{this.requestersQuery}} @mode="none" as |results|>
             {{#each results.entries as |entry|}}
-              <div data-entry={{entry.id}} style="width: 200px; height: 200px; background: rgb(${SWATCH_COLOR.join(', ')});"></div>
+              <div data-entry={{entry.id}} style="width: 150px; height: 150px; background: rgb(${REQUESTERS_COLOR.join(', ')});"></div>
+            {{/each}}
+          </@context.searchResultsComponent>
+          <@context.searchResultsComponent @query={{this.ownersQuery}} @mode="none" as |results|>
+            {{#each results.entries as |entry|}}
+              <div data-entry={{entry.id}} style="width: 150px; height: 150px; background: rgb(${OWNERS_COLOR.join(', ')});"></div>
             {{/each}}
           </@context.searchResultsComponent>
         {{else}}
@@ -141,11 +158,18 @@ module(basename(import.meta.filename), function (hooks) {
           permissions: { [OWNER]: OWNER_PERMISSIONS, '*': ['read'] },
         },
         {
-          realmURL: new URL(PRIVATE),
+          realmURL: new URL(REQUESTERS),
           fileSystem: {
             'swatches/one.json': instanceOf(`${LIB}swatch`, 'Swatch'),
           },
           permissions: { [REQUESTER]: OWNER_PERMISSIONS },
+        },
+        {
+          realmURL: new URL(OWNERS),
+          fileSystem: {
+            'swatches/one.json': instanceOf(`${LIB}swatch`, 'Swatch'),
+          },
+          permissions: { [OWNER]: OWNER_PERMISSIONS },
         },
         {
           realmURL: new URL(CAPTURED),
@@ -168,7 +192,7 @@ module(basename(import.meta.filename), function (hooks) {
     }
   }
 
-  // Booting indexes three realms, which runs inside the first test's budget.
+  // Booting indexes four realms, which runs inside the first test's budget.
   hooks.before(function (assert) {
     assert.timeout(300_000);
   });
@@ -244,7 +268,11 @@ module(basename(import.meta.filename), function (hooks) {
   }
 
   function swatchPixels(base64: string) {
-    return countPixelsOfColor(decodePngRGBA(base64), SWATCH_COLOR);
+    let image = decodePngRGBA(base64);
+    return {
+      requesters: countPixelsOfColor(image, REQUESTERS_COLOR),
+      owners: countPixelsOfColor(image, OWNERS_COLOR),
+    };
   }
 
   test('a persisted capture draws what the realm owner can read, and one answered only to its requester draws what the requester can', async function (assert) {
@@ -255,9 +283,15 @@ module(basename(import.meta.filename), function (hooks) {
       captures: [{ name: 'probe' }],
     });
     assert.strictEqual(requestOnly.url, null, 'the batch is not persisted');
+    let asRequester = swatchPixels(requestOnly.base64);
     assert.true(
-      swatchPixels(requestOnly.base64) > 0,
-      'drawn as the requester, the probe shows the swatch it found in Private',
+      asRequester.requesters > 0,
+      'drawn as the requester, the probe shows the swatch the requester can read',
+    );
+    assert.strictEqual(
+      asRequester.owners,
+      0,
+      'and not the one only the owner can read',
     );
 
     let persisted = await capture(assert);
@@ -266,11 +300,13 @@ module(basename(import.meta.filename), function (hooks) {
       `${CAPTURED}_screenshot/probes/probe`,
       'the capture is persisted under its served URL',
     );
+    let asOwner = swatchPixels(persisted.base64);
     assert.strictEqual(
-      swatchPixels(persisted.base64),
+      asOwner.requesters,
       0,
-      'drawn as the owner, the probe shows no swatch: the owner cannot read Private',
+      'drawn as the owner, the probe shows nothing of what only the requester can read',
     );
+    assert.true(asOwner.owners > 0, 'and shows the swatch the owner can read');
 
     // What the served URL gives another reader is the persisted capture.
     let served = await request
