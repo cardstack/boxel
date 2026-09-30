@@ -1,7 +1,11 @@
 import { isCodeRef } from '../card-document-shape.ts';
 import type { CodeRef } from '../code-ref.ts';
 import { ensureTrailingSlash } from '../paths.ts';
-import type { SearchEntryWireQuery } from '../search-entry.ts';
+import {
+  wireFilterGrantTypes,
+  type SearchEntryWireFilter,
+  type SearchEntryWireQuery,
+} from '../search-entry.ts';
 import {
   newOperationScope,
   resolveOperation,
@@ -62,6 +66,60 @@ export function namedQueryInvocation(
   return typeof operation === 'string' && operation.length > 0 && isCodeRef(on)
     ? { operation, on }
     : undefined;
+}
+
+// What a search asks a realm's policy to grant: an operation, on the types
+// whose rules are consulted for it.
+export interface SearchInvocation {
+  // The name a grant must carry to contribute. A named query's own name, or
+  // the base name `query` for an ad-hoc search.
+  operation: string;
+  // The one type a named query is declared on, or each type an ad-hoc
+  // search's filter anchors to. Empty where the filter admits an entry of any
+  // type, since then there is no type whose rules to consult.
+  types: CodeRef[];
+}
+
+// The invocation a search request makes, read off the request before a named
+// query resolves.
+//
+// An ad-hoc search is a filter the caller wrote, and it is still an
+// invocation: of `query`, on the type it targets. Were it none, it would be
+// the hole in every named-query grant, since a caller granted a declared
+// search could write the same filter by hand and be served its rows. Granting
+// a named query grants that saved search, and not the freedom to enumerate
+// its type. No declaration may take the name, so the two never share a grant.
+//
+// The types are the filter's `item.on` anchors (see `wireFilterGrantTypes`):
+// every entry the filter matches adopts from at least one of them. That is
+// what makes judging the search by their rules sound. A match is always of a
+// type one of them names, so a rule consulted for that anchor is one whose
+// type the match descends from, as it would be were the gate judging the
+// match itself. And every anchor a match is known to adopt from is kept, so
+// two filters matching the same cards are judged alike however their branches
+// are ordered.
+//
+// A named request whose members are not what they must be is no invocation:
+// resolving it refuses it before anything consults a policy. An ad-hoc filter
+// that does not parse is refused by the parser, after this has read it, so an
+// anchor that is not a code ref is read as no anchor at all.
+export function searchInvocation(
+  payload: unknown,
+): SearchInvocation | undefined {
+  if (isNamedQueryPayload(payload)) {
+    let named = namedQueryInvocation(payload);
+    return named
+      ? { operation: named.operation, types: [named.on] }
+      : undefined;
+  }
+  let filter = isPlainRecord(payload) ? payload.filter : undefined;
+  let anchors = isPlainRecord(filter)
+    ? wireFilterGrantTypes(filter as SearchEntryWireFilter)
+    : undefined;
+  return {
+    operation: 'query',
+    types: anchors?.every((anchor) => isCodeRef(anchor)) ? anchors : [],
+  };
 }
 
 export interface NamedQueryContext {

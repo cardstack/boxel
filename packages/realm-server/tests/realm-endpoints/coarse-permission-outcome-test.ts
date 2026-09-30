@@ -81,14 +81,29 @@ const readProbes: Probe[] = [
     send: (r) =>
       r.get('/person.gts').set('Accept', SupportedMimeType.CardSource),
   },
+  // The card+source read and the raw file serve consume it for any path but
+  // module source: a data file's or a card's document's bytes are what a grant
+  // can reach, and a name with no extension is read exactly as named.
+  {
+    label: 'GET card+source of a data file',
+    consumes: true,
+    send: (r) =>
+      r.get('/sample.md').set('Accept', SupportedMimeType.CardSource),
+  },
+  {
+    label: "GET card+source of a card's document",
+    consumes: true,
+    send: (r) =>
+      r.get('/person-1.json').set('Accept', SupportedMimeType.CardSource),
+  },
   {
     label: 'GET raw file',
-    consumes: false,
+    consumes: true,
     send: (r) => r.get('/sample.md'),
   },
   {
     label: 'GET transpiled module',
-    consumes: false,
+    consumes: true,
     send: (r) => r.get('/person'),
   },
   {
@@ -474,6 +489,130 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           'HEAD * *',
         ].sort(),
         'the card+source read, the directory listing and the fallback file and module serve',
+      );
+    });
+
+    test('exactly the routes that serve stored bytes hand a data file’s read to the gate', async function (assert) {
+      assert.deepEqual(
+        testRealm
+          .routeDescriptions()
+          .filter((route) => route.grantableBytes)
+          .map((route) => `${route.method} ${route.mimeType} ${route.path}`)
+          .sort(),
+        [
+          `GET ${SupportedMimeType.CardSource} /.*`,
+          `HEAD ${SupportedMimeType.CardSource} /.*`,
+          'GET * *',
+          'HEAD * *',
+        ].sort(),
+        'the card+source read and the fallback file serve, and not the directory listing',
+      );
+      testRealm.__testOnlySetCoarseAdmission(() => true);
+      try {
+        // The caller is anonymous and the realm has no policy, so the gate
+        // refuses every read it is handed, as a not-found.
+        let reads: [string, Test][] = [
+          [
+            'card+source of a data file',
+            request
+              .get('/sample.md')
+              .set('Accept', SupportedMimeType.CardSource),
+          ],
+          [
+            "card+source of a card's document",
+            request
+              .get('/person-1.json')
+              .set('Accept', SupportedMimeType.CardSource),
+          ],
+          ['the file serve of a data file', request.get('/sample.md')],
+        ];
+        for (let [label, read] of reads) {
+          let before = testRealm.__testOnlyPolicyGateStats().policyLoads;
+          let response = await read;
+          assert.strictEqual(response.status, 404, `admitting: ${label}`);
+          assert.strictEqual(
+            testRealm.__testOnlyPolicyGateStats().policyLoads,
+            before + 1,
+            `admitting: ${label}: the refusal is the gate’s`,
+          );
+        }
+        // A name with no extension reaches the route too, which reads it
+        // exactly as named. Nothing is stored under these names, so there is
+        // nothing for the gate to judge, and no module or card the name would
+        // resolve to for a reader is reached.
+        for (let [label, read] of [
+          [
+            'card+source of a name with no extension',
+            request
+              .get('/person-1')
+              .set('Accept', SupportedMimeType.CardSource),
+          ],
+          [
+            'the file serve of a name with no extension',
+            request.get('/person'),
+          ],
+        ] as [string, Test][]) {
+          assert.strictEqual(
+            (await read).status,
+            404,
+            `admitting: ${label} is not there`,
+          );
+        }
+        let before = testRealm.__testOnlyPolicyGateStats().policyLoads;
+        for (let [label, read] of [
+          [
+            'module source',
+            request
+              .get('/person.gts')
+              .set('Accept', SupportedMimeType.CardSource),
+          ],
+          [
+            'a directory listing',
+            request.get('/').set('Accept', SupportedMimeType.DirectoryListing),
+          ],
+        ] as [string, Test][]) {
+          assertRefusal(
+            assert,
+            await read,
+            { status: 401, body: MISSING_AUTH },
+            `admitting: ${label} keeps the realm ACL’s refusal`,
+          );
+        }
+        assert.strictEqual(
+          testRealm.__testOnlyPolicyGateStats().policyLoads,
+          before,
+          'admitting: none of which reaches the gate',
+        );
+      } finally {
+        testRealm.__testOnlySetCoarseAdmission(undefined);
+      }
+    });
+
+    test('exactly the operational endpoints pass the archived seal', async function (assert) {
+      // The probe's `HEAD` is its own route in every media type whose `HEAD`
+      // is the realm's discovery answer, which is every one but card+source
+      // and card+json, whose `HEAD` reads what is stored at the path.
+      let probeHeads = [
+        ...new Set(
+          Object.values(SupportedMimeType).filter(
+            (mimeType) =>
+              mimeType !== SupportedMimeType.CardSource &&
+              mimeType !== SupportedMimeType.CardJson,
+          ),
+        ),
+      ].map((mimeType) => `HEAD ${mimeType} /_readiness-check`);
+      assert.deepEqual(
+        testRealm
+          .routeDescriptions()
+          .filter((route) => route.operationalEndpoint)
+          .map((route) => `${route.method} ${route.mimeType} ${route.path}`)
+          .sort(),
+        [
+          `POST ${SupportedMimeType.Session} /_session`,
+          `GET ${SupportedMimeType.RealmInfo} /_readiness-check`,
+          ...probeHeads,
+        ].sort(),
+        'the session sign-in and the health probe, and none of the routes that read or write what the realm stores',
       );
     });
 

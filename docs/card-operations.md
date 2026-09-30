@@ -676,6 +676,13 @@ case, so render an empty state for it.
 A search reads the index, which lags a write the realm has just committed. To
 read a card you just wrote, read the card.
 
+In a realm a caller reaches only through its policy, a saved search is granted
+by its own name, and a search the caller writes by hand is granted as `query`
+on the type its filter names with `on`. So granting `myPatients` grants that
+search and not the freedom to write any filter over `PatientRecord`, and a
+filter that names no type is granted by nothing. For the same reason no saved
+search may be named `query`: the name belongs to the search written by hand.
+
 ## Batches
 
 `operations(card).atomic(build)` sends one all-or-nothing batch in that card's
@@ -717,7 +724,11 @@ The builder:
   result.
 - `b.find(filter, { field, expect })` answers a target found by search rather
   than named by reference, usable wherever `b.on(…)` takes a card. `expect:
-'many'` fans the entry out over every match and answers an array.
+'many'` fans the entry out over every match and answers an array. For a
+  caller who reaches the realm only through its policy, the filter is a search
+  they wrote by hand, so it finds only the cards a `query` grant on its type
+  admits, and each card it finds still needs a grant for the entry's own
+  operation.
 
 A builder that returns nothing is answered positionally, with a group's results
 nested where the group sat. A builder that returns handles is answered with
@@ -743,8 +754,9 @@ the entries ahead of it have staged. Either way nothing is written, no index
 job is enqueued and no event is sent. The refusal names its entry in
 `meta.entry`, a path such as `[0].boxel:target[1]` for the second card an entry
 found. A caller who may not read the realm is told that entry and nothing
-else, in the same 404 a missing card gets, and may not describe a target with a
-query at all.
+else, in the same 404 a missing card gets, and never which card it was. Such a
+caller's `b.find(…)` finds only the cards a `query` grant on its type admits,
+and a query no grant admits answers as one that matched no card.
 
 ## Authoring errors
 
@@ -816,6 +828,19 @@ under the write lock, against the card as it stands when the write runs. A
 refusal follows the same rules on both: a caller who may read the realm gets a
 403, and one who may not gets the 404 a card that does not exist gets. The
 card+json body carries no `code`, so there the status is the whole answer.
+
+A caller who may not read the realm doesn't choose where a card they create
+lands. A create mints a card where nothing is stored and is refused where a card
+is, so a caller who chose the path would learn which paths hold a card. On
+either route the realm mints such a caller's new card's id. A `lid` still names
+the card within a batch: it is the key a later entry links the card by, and the
+one its result reports. But the card is stored under the realm's id, so a create
+sent again with the same `lid` mints a second card. Such a caller's `POST` is
+aimed at the realm's root. One aimed at a directory beneath it gets the 404,
+since the card would land beneath that directory, and whether the write succeeds
+would depend on what is stored along its path. A caller who may read the realm
+can list it anyway, so they name their own cards as any writer does, and are
+told when a `lid` is taken.
 
 For a caller the realm admits only through a grant, four things set the card
 routes apart from a batch:
