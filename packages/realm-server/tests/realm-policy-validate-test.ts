@@ -287,9 +287,15 @@ module(basename(import.meta.filename), function (hooks) {
     ]);
   }
 
-  // Each issue without its message, whose wording is the compiler's.
+  // Each issue as the tests compare it: what it is, where it is, and the rule
+  // and grant it falls under. The message's wording is the compiler's.
   function issuesOf(validation: PolicyValidation) {
-    return validation.issues.map(({ message: _message, ...issue }) => issue);
+    return validation.issues.map(({ code, path, rule, grant }) => ({
+      code,
+      path,
+      ...(rule !== undefined ? { rule } : {}),
+      ...(grant !== undefined ? { grant } : {}),
+    }));
   }
 
   // What the realm naming the card holds in force, in the same terms.
