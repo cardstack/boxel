@@ -497,6 +497,7 @@ const WRITES: Readonly<Record<BaseOperation, boolean>> = {
   appendContainsMany: true,
   appendLine: true,
   explain: false,
+  validate: false,
 };
 
 export function isWrite(base: BaseOperation): boolean {
@@ -831,7 +832,7 @@ export type PolicyExplanationReason =
   // The operation is kept out of every policy's reach: declared
   // `nonGrantable` on the target's type or a type it descends from, or a
   // behavior no grant reaches here at all — a query, which is authorized on
-  // the search engine's lane, and an explain.
+  // the search engine's lane, an explain, and a validate.
   | 'non-grantable'
   // Any operation on the realm's policy card or on its config card, or one
   // that reads, changes or mints any policy card, which no grant reaches
@@ -888,6 +889,78 @@ export type ExplainedGrantOutcome =
   // invocation, a refusal came first, or the predicate reads a snapshot tier.
   | 'not-evaluated';
 
+// A validate's answer: what the policy card it was invoked on compiles to. It
+// is carried on the wire as it is here, so a card reading it back reads this
+// shape.
+export interface OperationValidateResult {
+  validation: PolicyValidation;
+}
+
+// ============================================================================
+// What a validate says.
+//
+// A policy that compiles in part is in force in part: a grant that does not
+// compile is inactive, and the rest of the policy applies. That is exactly
+// what an author misreads when the only record of it is a log line the
+// operator reads. A validate is how the card tells its author instead. It
+// compiles the card as a realm that names it compiles it, and reports every
+// issue compiling recorded and every rule and grant that compiled.
+//
+// The card is compiled as it stands, from what its latest index visit
+// recorded, and from nothing earlier. Nothing is cached and nothing is
+// activated, so a realm's compiled policy is unaffected by one. A realm that
+// names the card holds its own compilation, revalidated within a few seconds
+// of any change to the card or to a type its rules name, so a fix the card
+// shows here is in force there within that bound.
+//
+// Every realm that names the card compiles it from what a validate reads: the
+// card's row, and the definitions of the types its rules name. So what a
+// validate reports is what each of them holds, however many there are, and a
+// card no realm names yet reports the same, which is how a draft is checked
+// before any realm is pointed at it. The one input that can differ is a type
+// served by another realm server. Each realm reads that type's definition as
+// its own owner, so a realm whose owner may not read it there holds the rule
+// as unresolved where a validate does not.
+// ============================================================================
+
+export interface PolicyValidation {
+  // The policy card, and the `meta.version` of the stored source compiling
+  // read. Absent when what the index holds of the card is an earlier visit's.
+  card: string;
+  version?: string;
+  // Set when the policy as a whole did not compile. A realm that names it
+  // grants nothing through it, and refuses every caller its ACL declines with
+  // a 500. `issues` says why, and `rules` is empty.
+  uncompilable?: true;
+  // Every issue compiling recorded, in the order it found them, each with the
+  // rule and grant its `path` falls under.
+  issues: ValidatedPolicyIssue[];
+  // The rules that compiled, in the order the card lists them, each with its
+  // grants that compiled. This is what a realm naming the card puts in force.
+  // A rule or grant the card holds that is not here is inactive, and an issue
+  // says why.
+  rules: ValidatedRule[];
+}
+
+export interface ValidatedPolicyIssue extends PolicyIssue {
+  // The position in the card's `rules` of the rule the issue is recorded
+  // against, and in that rule's `grants` of the grant. Absent where the issue
+  // is about the card as a whole, or, for `grant`, about a rule.
+  rule?: number;
+  grant?: number;
+}
+
+export interface ValidatedRule {
+  // Where the rule is in the policy card, as `rules[2]`.
+  path: string;
+  grants: ValidatedGrant[];
+}
+
+export interface ValidatedGrant {
+  // Where the grant is in the policy card, as `rules[2].grants[1]`.
+  path: string;
+}
+
 // A `delete` answers with `null`: there is no state left to describe.
 export type OperationResult =
   | OperationDocumentResult
@@ -895,6 +968,7 @@ export type OperationResult =
   | OperationIdentityResult
   | OperationSourceResult
   | OperationExplainResult
+  | OperationValidateResult
   | null;
 
 export function isDocumentResult(
@@ -928,6 +1002,12 @@ export function isExplainResult(
   result: OperationResult,
 ): result is OperationExplainResult {
   return result != null && 'explanation' in result;
+}
+
+export function isValidateResult(
+  result: OperationResult,
+): result is OperationValidateResult {
+  return result != null && 'validation' in result;
 }
 
 export type OperationErrorCode =

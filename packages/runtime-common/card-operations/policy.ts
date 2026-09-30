@@ -448,6 +448,18 @@ async function fingerprintedEntry(
   };
 }
 
+// The policy card at `card` compiled as it stands, the way a realm naming it
+// compiles it, for a caller that wants to know what the card puts in force
+// without putting it in force: the validate operation. Nothing is cached, and
+// no realm's compiled policy is touched.
+export async function compilePolicyCard(
+  card: string,
+  env: PolicyCompileEnvironment,
+): Promise<CompiledRealmPolicy> {
+  let row = await env.readCard(new URL(card));
+  return (await compilePolicy(card, row, env, () => undefined)).compiled;
+}
+
 async function compilePolicy(
   card: string,
   row: IndexedInstanceSource | undefined,

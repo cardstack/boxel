@@ -25,6 +25,8 @@ import {
 } from './gate.ts';
 import type { GateTrace } from './gate-trace.ts';
 import { explainOperation, type TargetRealm } from './explain.ts';
+import type { CompiledRealmPolicy } from './policy.ts';
+import { validateOperation } from './validate.ts';
 import {
   DEFINITION_FREE_BASE_OPERATIONS,
   OperationFailure,
@@ -167,6 +169,11 @@ export interface OperationCore {
   // judges for itself what its caller may be told. Undefined where no realm
   // this server serves holds `href`. A core without it explains nothing.
   targetRealm?(href: string): Promise<TargetRealm | undefined>;
+  // The policy card at `card` compiled as a realm that names it compiles it,
+  // on the server's own authority, for the validate operation. Compiled from
+  // what the card's latest index visit recorded, and neither cached nor put
+  // in force anywhere. A core without it validates nothing.
+  compilePolicyCard?(card: URL): Promise<CompiledRealmPolicy>;
 }
 
 // The realm's own `FileRef`, narrowed to what a stored-bytes read uses. Stated
@@ -457,6 +464,7 @@ const ALL_BASE_OPERATIONS: Readonly<Record<BaseOperation, true>> = {
   appendContainsMany: true,
   appendLine: true,
   explain: true,
+  validate: true,
 };
 
 // Keyed by kind for the lookup dispatch actually does, but built from a table
@@ -475,20 +483,23 @@ const CARRIED_BY: Readonly<Record<BaseOperation, readonly DefKind[]>> = {
   appendLine: ['file-def'],
   // Carried by nothing on its own. See `DECLARATION_ONLY`.
   explain: [],
+  validate: [],
 };
 
 // The behaviors a target carries only under a name its type declares on
 // them. Nothing implies one, so a target whose type declares none has no
 // operation by that name, and asking for it is asking for an operation that
-// does not exist. An explain is the one: it answers only on a policy card, and
-// a policy card's type is what declares it.
+// does not exist. An explain and a validate are the two: each answers only on
+// a policy card, and a policy card's type is what declares it.
 const DECLARATION_ONLY: Readonly<Partial<Record<BaseOperation, true>>> =
   Object.assign(Object.create(null) as Partial<Record<BaseOperation, true>>, {
     explain: true,
+    validate: true,
   });
 
 const DECLARABLE_ON: Readonly<Partial<Record<BaseOperation, DefKind[]>>> = {
   explain: ['card-def'],
+  validate: ['card-def'],
 };
 
 function carriedBy(kind: DefKind): Partial<Record<BaseOperation, true>> {
@@ -1215,6 +1226,8 @@ async function runBaseOperation(
       return await readSourceOperation(core, canonical, opts);
     case 'explain':
       return await explainOperation(core, canonical);
+    case 'validate':
+      return await validateOperation(core, canonical);
     case 'query':
       // A declared query is a saved search, invoked by naming it in a request
       // to `_search` or `_federated-search`. The realm resolves it there, from

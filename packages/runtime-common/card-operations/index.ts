@@ -204,6 +204,7 @@ export {
   isDefinitionFreeBaseOperation,
   isDocumentResult,
   isExplainResult,
+  isValidateResult,
   isHeadResult,
   isIdentityResult,
   effectiveLinkStrategy,
@@ -242,4 +243,9 @@ export type {
   PolicyExplanation,
   PolicyExplanationDecision,
   PolicyExplanationReason,
+  OperationValidateResult,
+  PolicyValidation,
+  ValidatedGrant,
+  ValidatedPolicyIssue,
+  ValidatedRule,
 } from './types.ts';

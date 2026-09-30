@@ -742,6 +742,83 @@ module('Integration | operations', function (hooks) {
     }
   });
 
+  test('a validate is carried only where a card declares one, and is never grantable', function (assert) {
+    class Plain extends CardDef {}
+    assert.false(
+      'validate' in getOperations(Plain),
+      'no card carries a validate it did not declare',
+    );
+    class Policy extends CardDef {
+      @operation static validate = {
+        base: 'validate',
+        nonGrantable: true,
+      } satisfies OperationsModule.OperationDeclaration;
+    }
+    assert.strictEqual(
+      getOperations(Policy).validate?.base,
+      'validate',
+      'a card that declares one carries it under the name it declared',
+    );
+    let rejected: [string, () => unknown, RegExp][] = [
+      [
+        'a validate that leaves the flag off',
+        () => {
+          class Open extends CardDef {
+            @operation static validate = {
+              base: 'validate',
+            } as unknown as OperationsModule.OperationDeclaration;
+          }
+          return Open;
+        },
+        /declare it with `nonGrantable: true`/,
+      ],
+      [
+        'a validate that carries a program',
+        () => {
+          class Scripted extends CardDef {
+            @operation static validate = {
+              base: 'validate',
+              nonGrantable: true,
+              transformations: bxl`.status = "x";`,
+            };
+          }
+          return Scripted;
+        },
+        /so it carries no `transformations`/,
+      ],
+      [
+        'a validate that reshapes its answer',
+        () => {
+          class Projected extends CardDef {
+            @operation static validate = {
+              base: 'validate',
+              nonGrantable: true,
+              output: { issues: bxl`.issues` },
+            };
+          }
+          return Projected;
+        },
+        /carries no `output` to reshape it/,
+      ],
+      [
+        'a validate on a file def',
+        () => {
+          class LogFile extends FileDef {
+            @operation static validate = {
+              base: 'validate',
+              nonGrantable: true,
+            };
+          }
+          return LogFile;
+        },
+        /cannot declare a "validate" operation/,
+      ],
+    ];
+    for (let [name, build, pattern] of rejected) {
+      assert.throws(build, pattern, `${name} is refused`);
+    }
+  });
+
   test('a declaration that runs no program carries no raw one', function (assert) {
     // A program stored where nothing runs it is worse than a refusal: it reads
     // as work the operation does.

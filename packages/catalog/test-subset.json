@@ -33,6 +33,7 @@
       "realm-policy-render-search-test",
       "realm-policy-row-reach-test",
       "realm-policy-source-read-test",
+      "realm-policy-validate-test",
       "realm-policy-write-lock-test",
       "server-endpoints/policy-scoped-search-test"
     ]
