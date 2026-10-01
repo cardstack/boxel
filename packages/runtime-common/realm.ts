@@ -328,7 +328,7 @@ import {
   type CompiledRealmPolicy,
 } from './card-operations/policy.ts';
 import {
-  policyQueryScope,
+  principalQueryScope,
   searchPrincipal,
   type PolicyQueryScope,
   type SearchPrincipal,
@@ -6291,6 +6291,7 @@ export class Realm {
         checks,
         {
           caller: scopeCallerFor(actor),
+          searchPrincipal: this.#searchPrincipal(request, requestContext),
           ...lanes,
         },
       );
@@ -6299,8 +6300,10 @@ export class Realm {
       // with the answers themselves where it admits them to none, as it does
       // while active. A pair answered `true` on a predicate the check cannot
       // run, a create against a type, is not one it admits: the predicate may
-      // never hold for this caller. A check runs nothing, so what the gate
-      // decided about its pairs is all there is to decide it by.
+      // never hold for this caller. Nor is a query answered `true`: a search
+      // meets the seal only where it would return a row, and the check runs
+      // no search. A check runs nothing, so what it decided about its pairs
+      // is all there is to decide it by.
       let seal = requestContext.archivedSeal;
       if (seal && admitsAny) {
         throw seal;
@@ -6349,7 +6352,7 @@ export class Realm {
   async #capabilityLanes(
     request: Request,
     requestContext: RequestContext,
-  ): Promise<Omit<CapabilityCaller, 'caller'>> {
+  ): Promise<Omit<CapabilityCaller, 'caller' | 'searchPrincipal'>> {
     if (requestContext.coarseAllowed === undefined) {
       // The realm never judged this request, which is the realm's own internal
       // dispatch. Nothing was declined, exactly as `#coarseDeclined` reads it.
@@ -6791,20 +6794,20 @@ export class Realm {
   // what a render produces is served to every viewer, so it reads what the ACL
   // grants it and nothing more: the ACL's refusal is its answer, and the
   // policy is never asked — as a federated search never asks one about it
-  // either.
+  // either. A capability check asks the same of a query it is asked about.
   async #policyQueryScope(
     invocation: SearchInvocation | undefined,
     request: Request,
     requestContext: RequestContext,
   ): Promise<PolicyQueryScope> {
-    let principal = this.#searchPrincipal(request, requestContext);
-    if (!invocation || principal?.kind !== 'user') {
+    if (!invocation) {
       return { kind: 'denied' };
     }
-    return await policyQueryScope(this.operationCore, {
-      ...invocation,
-      principal,
-    });
+    return await principalQueryScope(
+      this.operationCore,
+      invocation,
+      this.#searchPrincipal(request, requestContext),
+    );
   }
 
   // Who a search runs for. A realm-authority principal is a session a realm
