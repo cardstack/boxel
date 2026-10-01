@@ -14,7 +14,8 @@
   "tests": {
     "host": [
       "Integration | realm policy",
-      "Integration | policy-scoped search"
+      "Integration | policy-scoped search",
+      "Integration | a realm that checks permissions"
     ],
     "realmServer": [
       "catalog-test-subset-test",

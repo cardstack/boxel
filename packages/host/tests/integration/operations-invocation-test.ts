@@ -66,12 +66,11 @@ let operations: (typeof OperationsModule)['operations'];
 // lowered by the in-browser indexer, which is what puts real `@operation`
 // declarations in front of the endpoint.
 //
-// No declaration here reads the actor. A request from an integration test
-// reaches the in-browser realm unauthenticated, because the harness's own
-// `verifyJWT` (`tests/helpers/adapter.ts`) treats a token that has *not*
-// expired as expired — and an operation that reads the actor is refused
-// outright on such a request. What the actor resolves to is asserted against a
-// real realm in the realm server's endpoint suite instead.
+// No declaration here reads the actor. This suite's realm answers the host's
+// requests as its own internal dispatch, which reads no session, so an
+// operation that reads the actor is refused outright here. What the actor
+// resolves to is asserted against a real realm in the realm server's endpoint
+// suite instead.
 const REPORT_MODULE = `
   import {
     contains,

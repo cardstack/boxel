@@ -102,6 +102,25 @@ export class MockUtils {
       ) as RealmEvent[];
   };
 
+  get loggedInAs(): string | undefined {
+    return this.testState.opts?.loggedInAs;
+  }
+
+  // The permissions a session this homeserver mints for `realmURL` carries,
+  // set for that realm alone. Unlike `setRealmPermissions`, every other
+  // realm's sessions and the realm-server's `_realm-auth` answers are left as
+  // they are.
+  setRealmSessionPermissions = (
+    realmURL: string,
+    permissions: RealmAction[],
+  ) => {
+    let opts = this.testState.opts!;
+    opts.realmPermissions = {
+      ...(opts.realmPermissions ?? {}),
+      [realmURL]: permissions,
+    };
+  };
+
   setRealmPermissions = (permissions: Record<string, RealmAction[]>) => {
     this.testState.opts!.realmPermissions = permissions;
     (this.testState.owner!.lookup('service:realm') as RealmService).logout();
