@@ -122,7 +122,7 @@ class Edit extends Component<typeof DateRangeField> {
         <div class='dropdown-content'>
           <div>
             <DateRangePicker
-              @center={{this.today}}
+              @defaultCenter={{this.today}}
               @start={{this.range.start}}
               @end={{this.range.end}}
               @onSelect={{this.onSelect}}
