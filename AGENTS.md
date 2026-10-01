@@ -269,6 +269,12 @@ Symptom differs from triggers 1–2: the template body is silently dropped, so t
 - Load the `catalog-test-subset` skill for the procedure: paired branches, testing a catalog change against boxel's tests, pinning, and merge order.
 - Load `catalog-test-subset` before you move the pin in any way: editing `packages/catalog/test-subset.json`, running the sync (`catalog:test-subset`, with or without `--bump`), or setting `CATALOG_TEST_SUBSET_SOURCE`. The pin a local test needs, the pin a pushed commit needs, and the pin a merge needs are different, and the skill says which is which. A project `PreToolUse` hook (`.claude/hooks/require-skill.mjs`) refuses an edit to the manifest, and any shell command that names it, the sync or the variable, until the session or subagent making the call has loaded the skill.
 
+## Paired boxel / boxel-catalog pull requests
+
+- A boxel pull request and a boxel-catalog pull request that depend on each other declare the pair in **both** descriptions. Each has a line naming the other, keyed by its own merge order: the one that lands first says `Merges before:` and the other pull request, and the one that lands after it says `Merges after:` and the first. Which repository lands first depends on the change. For example, a boxel rename the catalog must follow puts `Merges before: cardstack/boxel-catalog#N` on the boxel pull request and `Merges after: cardstack/boxel#M` on the catalog one. The checks in both repositories read these lines, and a declaration the other side doesn't return fails.
+- A change needs a pair when catalog cards must follow a boxel change (a renamed or removed host tool, base export or type they import), or when boxel's tests need a catalog change first. boxel's Lint Catalog fails a change that would leave catalog `main` broken without a paired catalog pull request that is ready to follow it.
+- Load the `catalog-pairing` skill before opening or editing a pull request in either repository that depends on the other, and whenever Lint Catalog fails. The `PreToolUse` hook (`.claude/hooks/require-skill.mjs`) refuses a `gh pr create`/`edit` or GitHub MCP pull request call that opens or edits a boxel-catalog pull request, or writes a `Merges before:`/`Merges after:` line, until the session has loaded the skill.
+
 ## Linear Ticket Process (Reusable)
 
 This end-to-end workflow can be used as a template for future tickets.

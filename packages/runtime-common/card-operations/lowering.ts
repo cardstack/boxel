@@ -165,9 +165,10 @@ const DECLARABLE_BY: Record<BaseOperationName, readonly Definition['type'][]> =
     transform: ['card-def'],
     appendContainsMany: ['card-def'],
     appendLine: ['file-def'],
-    // Reached only through a declaration: nothing implies it, and it answers
-    // only on a policy card.
+    // Reached only through a declaration: nothing implies either, and each
+    // answers only on a policy card.
     explain: ['card-def'],
+    validate: ['card-def'],
   };
 
 function declarableBases(
@@ -197,6 +198,7 @@ function runsNoProgram(base: BaseOperationName, kind: Definition['type']) {
     base === 'appendLine' ||
     base === 'appendContainsMany' ||
     base === 'explain' ||
+    base === 'validate' ||
     (base === 'update' && kind === 'file-def')
   );
 }
@@ -315,13 +317,14 @@ export async function lowerOperationDeclarations(
   }
   // Carried onto every entry the declaration produced, an invalid one
   // included, so no finding against a declaration makes it grantable. An
-  // explain is never grantable whatever its declaration says: the decorator
-  // refuses one that leaves the flag off, and an entry reaching here without
-  // it is marked all the same.
+  // explain or a validate is never grantable whatever its declaration says:
+  // the decorator refuses one that leaves the flag off, and an entry reaching
+  // here without it is marked all the same.
   for (let name of Object.keys(operations)) {
     if (
       raw[name]?.nonGrantable === true ||
-      operations[name].base === 'explain'
+      operations[name].base === 'explain' ||
+      operations[name].base === 'validate'
     ) {
       operations[name].nonGrantable = true;
     }
@@ -387,9 +390,21 @@ async function lowerOperation(
 ): Promise<OperationDefinition> {
   let base: BaseOperationName = declaration.base;
   let operation: OperationDefinition = { base, deterministic: true };
-  let params = lowerParams(declaration.params, sink, context);
-  if (params) {
-    operation.params = params;
+  // A validate takes no payload: the card it is invoked on is the whole
+  // question. So a schema or an input program stored for one would never be
+  // read.
+  let takesNoPayload = base === 'validate';
+  if (takesNoPayload && declaration.params !== undefined) {
+    sink.add(
+      'unrunnable-program',
+      'params',
+      `a "validate" operation takes no payload, since the card it is invoked on is the whole question, so these params would never be read`,
+    );
+  } else {
+    let params = lowerParams(declaration.params, sink, context);
+    if (params) {
+      operation.params = params;
+    }
   }
   let paramNames = new Set(Object.keys(declaration.params ?? {}));
 
@@ -474,7 +489,9 @@ async function lowerOperation(
         ? `an "update" on a file replaces its content wholesale rather than transforming a document, so this program would never be reached`
         : base === 'explain'
           ? `an "explain" operation reports what the realm's policy decides rather than running a program over a document, so this program would never be reached`
-          : `an "${base}" operation appends to the stored file rather than running a program over a document, so this program would never be reached`,
+          : base === 'validate'
+            ? `a "validate" operation reports what the policy card compiles to rather than running a program over a document, so this program would never be reached`
+            : `an "${base}" operation appends to the stored file rather than running a program over a document, so this program would never be reached`,
     );
   } else if (rawProgram) {
     // An author's program is written in the readable spelling; canonicalizing
@@ -508,7 +525,13 @@ async function lowerOperation(
     }
   }
 
-  if (declaration.input) {
+  if (takesNoPayload && declaration.input) {
+    sink.add(
+      'unrunnable-program',
+      'input',
+      `a "validate" operation takes no payload, since the card it is invoked on is the whole question, so this input program would never be reached`,
+    );
+  } else if (declaration.input) {
     let input = lowerExpression(
       declaration.input.$bxl,
       'input',
@@ -524,6 +547,12 @@ async function lowerOperation(
       'unrunnable-program',
       'output',
       `an "explain" operation answers with the policy's explanation as the gate reports it, so this projection would never be reached`,
+    );
+  } else if (base === 'validate' && declaration.output !== undefined) {
+    sink.add(
+      'unrunnable-program',
+      'output',
+      `a "validate" operation answers with what the policy card compiles to, as compiling reports it, so this projection would never be reached`,
     );
   } else {
     let output = await lowerOutput(

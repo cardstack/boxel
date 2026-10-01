@@ -672,6 +672,86 @@ module('Unit | operation lowering', function (hooks) {
     assert.true(projected.operations.explain.invalid);
   });
 
+  test('a validate lowers with no payload, and is non-grantable whatever reaches lowering', async function (assert) {
+    let { CardDef } = api;
+    let { operation } = operations;
+    class Policy extends CardDef {
+      static displayName = 'Policy';
+      @operation static validate = {
+        base: 'validate',
+        nonGrantable: true,
+      } satisfies OperationsModule.OperationDeclaration;
+    }
+    shim({ Policy });
+
+    let { operations: lowered, issues } = await lower(Policy);
+    assert.deepEqual(issues, [], 'the declaration lowers clean');
+    assert.strictEqual(lowered.validate.base, 'validate');
+    assert.true(lowered.validate.nonGrantable, 'the flag reaches the realm');
+
+    // Lowering is exported over plain data, so an entry the decorator never
+    // saw can reach it. One that leaves the flag off is marked anyway, and one
+    // that reshapes the answer is recorded as unreachable.
+    let context: Parameters<typeof lowerOperationDeclarations>[1] = {
+      definition: buildDefinition(Policy),
+      lookupDefinition,
+      identifyCard: (target) => identifyCard(target),
+    };
+    let unmarked = await lowerOperationDeclarations(
+      { validate: { base: 'validate' } } as unknown as Record<
+        string,
+        OperationsModule.OperationDeclaration
+      >,
+      context,
+    );
+    assert.true(
+      unmarked.operations.validate.nonGrantable,
+      'a validate is never grantable, flag or no flag',
+    );
+    let projected = await lowerOperationDeclarations(
+      {
+        validate: {
+          base: 'validate',
+          nonGrantable: true,
+          output: { issues: { $bxl: '.issues' } },
+        },
+      } as unknown as Record<string, OperationsModule.OperationDeclaration>,
+      context,
+    );
+    assert.deepEqual(
+      codes(projected),
+      ['unrunnable-program'],
+      'a projection over the validation is recorded as never reached',
+    );
+    assert.true(projected.operations.validate.invalid);
+
+    let withPayload = await lowerOperationDeclarations(
+      {
+        validate: {
+          base: 'validate',
+          nonGrantable: true,
+          params: { realm: { type: 'string' } },
+          input: { $bxl: '{ strict: true }' },
+        },
+      } as unknown as Record<string, OperationsModule.OperationDeclaration>,
+      context,
+    );
+    assert.deepEqual(
+      withPayload.issues.map((issue) => [issue.code, issue.path]),
+      [
+        ['unrunnable-program', 'params'],
+        ['unrunnable-program', 'input'],
+      ],
+      'a payload stage on a validate is recorded as never read',
+    );
+    assert.strictEqual(
+      withPayload.operations.validate.params,
+      undefined,
+      'and no payload schema is stored for one',
+    );
+    assert.strictEqual(withPayload.operations.validate.input, undefined);
+  });
+
   // -------------------------------------------------------------------------
   // The source-level writes
   // -------------------------------------------------------------------------
