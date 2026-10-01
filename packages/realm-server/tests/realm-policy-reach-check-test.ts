@@ -207,6 +207,10 @@ module(basename(import.meta.filename), function (hooks) {
   let org: Realm;
   let request: SuperTest<Test>;
   let server: Server;
+  // The current test's boot. The teardown waits for it, so a test that timed
+  // out while its boot was still running still closes what that boot opens,
+  // rather than leaving the server holding its port for the next test.
+  let booting: Promise<void> | undefined;
 
   setupCatalogTestSubset(hooks);
 
@@ -269,16 +273,31 @@ module(basename(import.meta.filename), function (hooks) {
     org = result.realms.find((realm) => realm.url === ORG)!;
   }
 
+  // Every test boots both realms in its `beforeEach`, which indexes them and
+  // runs inside the test's own budget, so that budget is extended past the
+  // per-test timeout.
+  hooks.beforeEach(function (assert) {
+    assert.timeout(180_000);
+  });
+
   setupDB(hooks, {
     beforeEach: async (dbAdapter, publisher, runner) => {
-      await start({ dbAdapter, publisher, runner });
+      booting = start({ dbAdapter, publisher, runner });
+      await booting;
     },
     afterEach: async () => {
-      for (let realm of [education, org]) {
-        realm.__testOnlyClearCaches();
-        realm.unsubscribe();
+      let booted = await booting?.then(
+        () => true,
+        () => false,
+      );
+      booting = undefined;
+      if (booted) {
+        for (let realm of [education, org]) {
+          realm.__testOnlyClearCaches();
+          realm.unsubscribe();
+        }
+        await closeServer(server);
       }
-      await closeServer(server);
       resetCatalogRealms();
     },
   });
