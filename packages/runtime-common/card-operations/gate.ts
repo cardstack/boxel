@@ -1053,10 +1053,29 @@ function cardId(href: string): string {
   return href.endsWith('.json') ? href.slice(0, -'.json'.length) : href;
 }
 
-// Whether `url` is the realm's config card, the card stored at `realm.json`,
-// named either by its id or by that stored `.json`.
+// The id of the realm's config card, the card stored at `realm.json`.
+function realmConfigCardId(core: OperationCore): string {
+  return cardId(pathsFor(core).fileURL('realm.json').href);
+}
+
+// Whether `url` is the realm's config card, named either by its id or by that
+// stored `.json`.
 function namesRealmConfigCard(core: OperationCore, url: URL): boolean {
-  return cardId(pathsFor(core).fileURL('realm.json').href) === cardId(url.href);
+  return realmConfigCardId(core) === cardId(url.href);
+}
+
+// The ids of the cards that hold this realm's authorization by identity rather
+// than by type: its config card, and the card its policy key names when the
+// key names one. The gate refuses a grant every operation on either, and a
+// search a policy scopes leaves both out of the rows it finds.
+export async function authorizationCardIds(
+  core: OperationCore,
+): Promise<string[]> {
+  let pointer = await core.policy?.policyCard();
+  return [
+    realmConfigCardId(core),
+    ...(pointer === undefined ? [] : [cardId(pointer)]),
+  ];
 }
 
 // Whether any of these types, keys from an adoption chain, declares `name`

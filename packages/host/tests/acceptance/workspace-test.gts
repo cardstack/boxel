@@ -4,13 +4,14 @@ import {
   find,
   triggerKeyEvent,
   visit,
+  waitUntil,
   waitFor,
 } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { baseRealm } from '@cardstack/runtime-common';
+import { baseRealm, Deferred, type Realm } from '@cardstack/runtime-common';
 
 import {
   setupLocalIndexing,
@@ -319,5 +320,273 @@ module('Acceptance | workspace card', function (hooks) {
     assert
       .dom(`[data-test-stack-card="${testRealmURL}welcome-song.mp3"]`)
       .exists('the file opens as a file stack item');
+  });
+});
+
+module('Acceptance | workspace card | Library pages', function (hooks) {
+  setupApplicationTest(hooks);
+  setupLocalIndexing(hooks);
+
+  let mockMatrixUtils = setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:localhost',
+    activeRealms: [testRealmURL],
+  });
+
+  let { createAndJoinRoom } = mockMatrixUtils;
+  let realm: Realm;
+
+  // The Library pages this realm's index in steps of PAGE_SIZE, so a second,
+  // shorter page holds the notes past the first.
+  const PAGE_SIZE = 5;
+  const NOTE_COUNT = 7;
+  const LAST_NOTE = noteId(NOTE_COUNT);
+  const GRID_ITEM = `${STACK} [data-test-cards-grid-cards] [data-test-cards-grid-item]`;
+  const PAGINATION = `${STACK} [data-test-card-list-pagination]`;
+
+  hooks.beforeEach(async function () {
+    createAndJoinRoom({ sender: '@testuser:localhost', name: 'room-test' });
+    setupUserSubscription();
+    setupAuthEndpoints();
+
+    let loader = getService('loader-service').loader;
+    let { field, contains, CardDef } = await loader.import<
+      typeof import('@cardstack/base/card-api')
+    >('@cardstack/base/card-api');
+    let { default: StringField } = await loader.import<
+      typeof import('@cardstack/base/string')
+    >('@cardstack/base/string');
+    let { Workspace } = await loader.import<
+      typeof import('@cardstack/base/workspace')
+    >('@cardstack/base/workspace');
+
+    class Note extends CardDef {
+      static displayName = 'Note';
+      @field cardTitle = contains(StringField);
+    }
+    class Memo extends CardDef {
+      static displayName = 'Memo';
+      @field cardTitle = contains(StringField);
+    }
+    class PagedWorkspace extends Workspace {
+      static libraryPageSize = PAGE_SIZE;
+    }
+
+    let notes: Record<string, InstanceType<typeof Note>> = {};
+    for (let i = 1; i <= NOTE_COUNT; i++) {
+      let n = String(i).padStart(3, '0');
+      notes[`${noteId(i)}.json`] = new Note({ cardTitle: `Note ${n}` });
+    }
+
+    ({ realm } = await setupAcceptanceTestRealm({
+      mockMatrixUtils,
+      contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
+        'realm.json': realmConfigCardJSON({ name: WORKSPACE_NAME }),
+        'note.gts': { Note, Memo, PagedWorkspace },
+        'index.json': new PagedWorkspace(),
+        'Memo/1.json': new Memo({ cardTitle: 'Only Memo' }),
+        ...notes,
+      },
+    }));
+  });
+
+  async function openLibraryFilter(name: string) {
+    await visit('/');
+    await click(WORKSPACE_BUTTON);
+    await waitFor(`${STACK} nav.tabs`);
+    await click(`${STACK} [data-test-workspace-tab="library"]`);
+    await waitFor(`${STACK} [data-test-boxel-filter-list-button="${name}"]`);
+    await click(`${STACK} [data-test-boxel-filter-list-button="${name}"]`);
+  }
+
+  function noteId(i: number) {
+    return `Note/${String(i).padStart(3, '0')}`;
+  }
+
+  function gridItemCount() {
+    return document.querySelectorAll(GRID_ITEM).length;
+  }
+
+  async function waitForGridItems(count: number) {
+    await waitUntil(() => gridItemCount() === count, {
+      timeoutMessage: `expected ${count} grid items, saw ${gridItemCount()}`,
+    });
+  }
+
+  test('a filter with more rows than a page steps through them page by page', async function (assert) {
+    await openLibraryFilter('Note');
+    await waitForGridItems(PAGE_SIZE);
+
+    assert.dom(PAGINATION).exists('the Library offers page controls');
+    assert.dom(`${PAGINATION} [aria-current="page"]`).hasText('1');
+    assert
+      .dom(
+        `${GRID_ITEM}[data-test-cards-grid-item="${testRealmURL}${LAST_NOTE}"]`,
+      )
+      .doesNotExist('the last note is past the first page');
+
+    await click(`${PAGINATION} [aria-label="Next"]`);
+    await waitForGridItems(NOTE_COUNT - PAGE_SIZE);
+
+    assert.dom(`${PAGINATION} [aria-current="page"]`).hasText('2');
+    assert
+      .dom(
+        `${GRID_ITEM}[data-test-cards-grid-item="${testRealmURL}${LAST_NOTE}"]`,
+      )
+      .exists('the second page holds the rest');
+    assert
+      .dom(
+        `${GRID_ITEM}[data-test-cards-grid-item="${testRealmURL}${noteId(1)}"]`,
+      )
+      .doesNotExist('and not the first page again');
+  });
+
+  test('the next page shows a loading state, not the last page, until it arrives', async function (assert) {
+    // Hold the second page's search on the wire, so the page is caught
+    // between the click and its results.
+    let secondPageRequested = new Deferred<void>();
+    let releaseSecondPage = new Deferred<void>();
+    getService('network').virtualNetwork.mount(
+      async (request: Request) => {
+        if (
+          request.url.endsWith('/_federated-search') &&
+          (await request.clone().json())?.page?.number === 1
+        ) {
+          secondPageRequested.fulfill();
+          await releaseSecondPage.promise;
+        }
+        return null;
+      },
+      { prepend: true },
+    );
+
+    await openLibraryFilter('Note');
+    await waitForGridItems(PAGE_SIZE);
+
+    // Not awaited: it settles only once the held page is released.
+    let clicked = click(`${PAGINATION} [aria-label="Next"]`);
+    try {
+      await secondPageRequested.promise;
+      await waitFor(`${STACK} [data-test-card-list-loading]`);
+      assert
+        .dom(GRID_ITEM)
+        .doesNotExist('the first page is not left up as if it were the next');
+      assert
+        .dom(`${PAGINATION} [aria-current="page"]`)
+        .hasText('2', 'the controls already point at the page being loaded');
+    } finally {
+      releaseSecondPage.fulfill();
+    }
+    await clicked;
+    await waitForGridItems(NOTE_COUNT - PAGE_SIZE);
+    assert.dom(`${STACK} [data-test-card-list-loading]`).doesNotExist();
+  });
+
+  test('a page emptied by deletions moves back to the last page', async function (assert) {
+    await openLibraryFilter('Note');
+    await waitForGridItems(PAGE_SIZE);
+    await click(`${PAGINATION} [aria-label="Next"]`);
+    await waitForGridItems(NOTE_COUNT - PAGE_SIZE);
+
+    // Every row on page 2, so the notes left fit on one page.
+    for (let i = PAGE_SIZE + 1; i <= NOTE_COUNT; i++) {
+      await realm.delete(`${noteId(i)}.json`);
+    }
+
+    await waitForGridItems(PAGE_SIZE);
+    assert
+      .dom(
+        `${GRID_ITEM}[data-test-cards-grid-item="${testRealmURL}${noteId(1)}"]`,
+      )
+      .exists('the grid shows the one page left');
+    assert
+      .dom(PAGINATION)
+      .doesNotExist('and offers no controls for a single page');
+  });
+
+  test('changing the filter starts again at page 1', async function (assert) {
+    await openLibraryFilter('Note');
+    await waitForGridItems(PAGE_SIZE);
+    await click(`${PAGINATION} [aria-label="Next"]`);
+    await waitForGridItems(NOTE_COUNT - PAGE_SIZE);
+
+    await click(`${STACK} [data-test-boxel-filter-list-button="Memo"]`);
+    await waitForGridItems(1);
+    assert
+      .dom(PAGINATION)
+      .doesNotExist('a filter that fits on one page shows no page controls');
+
+    await click(`${STACK} [data-test-boxel-filter-list-button="Note"]`);
+    await waitForGridItems(PAGE_SIZE);
+    assert.dom(`${PAGINATION} [aria-current="page"]`).hasText('1');
+  });
+
+  test('a search term that still reaches the page starts again at page 1', async function (assert) {
+    await openLibraryFilter('Note');
+    await waitForGridItems(PAGE_SIZE);
+    await click(`${PAGINATION} [aria-label="Next"]`);
+    await waitForGridItems(NOTE_COUNT - PAGE_SIZE);
+
+    // Every note matches, so page 2 still exists under the new term.
+    await fillIn(`${STACK} [data-test-workspace-search]`, 'Note');
+    await waitForGridItems(PAGE_SIZE);
+    assert.dom(`${PAGINATION} [aria-current="page"]`).hasText('1');
+    assert
+      .dom(
+        `${GRID_ITEM}[data-test-cards-grid-item="${testRealmURL}${noteId(1)}"]`,
+      )
+      .exists('the grid shows the first page of the narrowed list');
+  });
+
+  test('a search term typed past page 1 keeps the rows up while it loads', async function (assert) {
+    // Hold the Library's search for the term, so the grid is caught between
+    // the keystroke and its results.
+    let termRequested = new Deferred<void>();
+    let releaseTerm = new Deferred<void>();
+    getService('network').virtualNetwork.mount(
+      async (request: Request) => {
+        if (request.url.endsWith('/_federated-search')) {
+          let body = await request.clone().json();
+          if (
+            body?.page?.size === PAGE_SIZE &&
+            JSON.stringify(body.filter).includes('Note 00')
+          ) {
+            termRequested.fulfill();
+            await releaseTerm.promise;
+          }
+        }
+        return null;
+      },
+      { prepend: true },
+    );
+
+    await openLibraryFilter('Note');
+    await waitForGridItems(PAGE_SIZE);
+    await click(`${PAGINATION} [aria-label="Next"]`);
+    await waitForGridItems(NOTE_COUNT - PAGE_SIZE);
+
+    // Not awaited: it settles only once the held search is released.
+    let typed = fillIn(`${STACK} [data-test-workspace-search]`, 'Note 00');
+    try {
+      await termRequested.promise;
+      // The controls drop to page 1 in the same render that starts the
+      // narrowed search, so the grid below has seen it load.
+      await waitUntil(
+        () =>
+          find(`${PAGINATION} [aria-current="page"]`)?.textContent?.trim() ===
+          '1',
+      );
+      assert
+        .dom(GRID_ITEM)
+        .exists(
+          { count: NOTE_COUNT - PAGE_SIZE },
+          'the rows on screen stay up until the narrowed list arrives',
+        );
+    } finally {
+      releaseTerm.fulfill();
+    }
+    await typed;
+    await waitForGridItems(PAGE_SIZE);
+    assert.dom(`${PAGINATION} [aria-current="page"]`).hasText('1');
   });
 });

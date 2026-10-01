@@ -2096,7 +2096,7 @@ module('Unit | index-writer', function (hooks) {
         types: null,
         indexedAt: null,
         deps: null,
-        screenshots: null,
+        captures: null,
         // An error row reports one too: it is carried forward from the last
         // good pass alongside the `pristine_doc` it describes, so the two
         // always name the same bytes. Null here because this row was seeded
@@ -2246,7 +2246,7 @@ module('Unit | index-writer', function (hooks) {
         fittedHtml: null,
         headHtml: null,
         markdown: null,
-        screenshots: null,
+        captures: null,
         sourceContentHash: null,
       });
     } else {
@@ -2351,7 +2351,7 @@ module('Unit | index-writer', function (hooks) {
         atomHtml: null,
         headHtml: null,
         markdown: null,
-        screenshots: null,
+        captures: null,
         sourceContentHash: 'abc123',
       });
     } else {

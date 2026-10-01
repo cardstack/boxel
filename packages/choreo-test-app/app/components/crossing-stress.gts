@@ -1,0 +1,532 @@
+import { fn } from '@ember/helper';
+import { on } from '@ember/modifier';
+import Component from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
+import { modifier } from 'ember-modifier';
+import {
+  Choreo,
+  type ChoreoContext,
+  createArming,
+  motion,
+  styles,
+  to,
+} from 'glimmer-motion';
+import config from 'test-app/config/environment';
+import { tuneMotion, tuneNumber } from 'test-app/lib/demo-tuning';
+import { factor } from 'test-app/lib/tempo';
+import { liveScroll, particles, playClip } from 'test-app/lib/xstress-live';
+
+const slides = [0, 1, 2] as const;
+type Slide = (typeof slides)[number];
+type Mode = 'manual' | 'auto' | 'stress';
+
+const labels = ['01  Tide', '02  Ember', '03  Violet'] as const;
+
+/**
+ * Same morph as the gallery ⇄ demo crossing in `application.gts`: one
+ * duration, one ease. A spring lands before you can read the skins swap.
+ */
+const BASE = 0.9;
+const EASE = [0.2, 0, 0, 1] as const;
+
+function t() {
+  const m =
+    tuneNumber('crossing', BASE, 'Crossing duration', 0.05, 3, 0.01) * factor();
+  return {
+    arrive: tuneNumber('crossing', 0.55, 'Arrival fraction', 0.05, 1, 0.01) * m,
+    leave:
+      tuneNumber('crossing', 0.42, 'Departure fraction', 0.05, 1, 0.01) * m,
+    move: m,
+  };
+}
+
+/** radius + shadow dissolve — Kiln's curve, not a skin swap */
+const plateTween = { duration: 0.42, ease: [0.22, 1, 0.36, 1] } as const;
+
+function radiusFor(slide: Slide) {
+  return ['28px', '36px', '0px'][slide]!;
+}
+
+const deck = [
+  {
+    chip: 'drift',
+    inset: 'flood',
+    kicker: 'flood line',
+    n: 0 as Slide,
+    orb: 'xstress-orb-0',
+    spark: 'xstress-spark-0',
+    title: 'Tide',
+    tone: 'tide',
+    wash: 'xstress-wash-0',
+  },
+  {
+    chip: 'heat',
+    inset: '1280°',
+    kicker: 'night kiln',
+    n: 1 as Slide,
+    orb: 'xstress-orb-1',
+    spark: 'xstress-spark-1',
+    title: 'Ember',
+    tone: 'ember',
+    wash: 'xstress-wash-1',
+  },
+  {
+    chip: 'arc',
+    inset: 'pass',
+    kicker: 'no horizon',
+    n: 2 as Slide,
+    orb: 'xstress-orb-2',
+    spark: 'xstress-spark-2',
+    title: 'Violet',
+    tone: 'violet',
+    wash: 'xstress-wash-2',
+  },
+] as const;
+
+const AUTO = 1.8;
+const STRESS = 0.72;
+
+const CLIP = `${config.rootURL}xstress-loop.mp4`;
+
+/** doubled so the overflow pane can wrap without a seam */
+const tape = [
+  'flood line',
+  'drift 04',
+  'kiln floor',
+  '1280°',
+  'no horizon',
+  'pass 7',
+  'heat soak',
+  'arc bay',
+  'flood line',
+  'drift 04',
+  'kiln floor',
+  '1280°',
+  'no horizon',
+  'pass 7',
+  'heat soak',
+  'arc bay',
+] as const;
+
+/**
+ * Magic Move stress — `/crossing-stress`.
+ *
+ * Three full-viewport slides. The beige plate is ONE element: `c.Move`
+ * tweens its real box; `animate` tweens radius (that has to live on the
+ * modifier, or a size tween smears the corners). Drop-shadows do not
+ * tween: Tide's tight teal, Ember's huge warm, Violet's small black
+ * are three different lights. Mixing the `box-shadow` string parses
+ * and rebuilds every frame (Gestures forbids this) and interpolates
+ * colour through mud. Each rest-state shadow is a dedicated caster
+ * with a static `box-shadow`; only opacity crossfades — the same
+ * grammar as Crossing skins. Live innards — a looping <video> where
+ * the particle box was, an overflow pane that auto-scrolls, a spinning
+ * mark, a meter, ticking dots — are NOT participants: they reflow with
+ * the box and keep running mid-flight (the case a view-transition
+ * snapshot would freeze). A three.js Points cloud drifts slowly over the
+ * slide ground, not in the plate — a hitch in the flight is a freeze in
+ * the field. CSS loops on the hero itself still freeze, because those fight the Move transform. An inset caption inside the
+ * plate IS a counterpart, so a skin
+ * crosses while its parent flies. Titles, kickers, and chips pair as
+ * counterparts (`pack="content"` on type). A kept hairline `c.Move`s
+ * with the plate. Unique washes fade.
+ *
+ * A cut can land at any phase of the intra-slide loops, and mid-flight.
+ * Loops are CSS transforms on the motion nodes themselves, so the pass
+ * snapshots the live box. `data-phase="crossing"` stills them for the run;
+ * they restart from rest on landing.
+ */
+export interface CrossingStressSignature {
+  Args: {
+    /**
+     * Rendered as a gallery tile rather than as the standalone page.
+     *
+     * The page is a fixed, full-viewport rig: it takes the shell out of
+     * layout, listens on `window`, and drifts a three.js field behind the
+     * slides. None of that survives being one of thirty cards — so an
+     * embedded stage stays in flow, keeps its keys local, drops the particle
+     * field, and does NOT run the conductor: thirty tiles cutting on their
+     * own clocks is a gallery that will not sit still to be read, and the
+     * crossing is a thing you ask for rather than something that happens at
+     * you. Press Next, Auto or Stress and it behaves exactly like the page.
+     */
+    embedded?: boolean;
+  };
+}
+
+export class CrossingStress extends Component<CrossingStressSignature> {
+  @tracked slide: Slide = 0;
+  @tracked mode: Mode =
+    config.environment === 'test' || this.args.embedded ? 'manual' : 'auto';
+
+  private arming = createArming();
+  private region: ChoreoContext | null = null;
+  private raf = 0;
+  private started = 0;
+
+  get label() {
+    return labels[this.slide];
+  }
+
+  get crossing() {
+    return this.arming.active();
+  }
+
+  get phase() {
+    return this.crossing ? 'crossing' : 'looping';
+  }
+
+  dotLabel = (slide: Slide) => labels[slide];
+
+  get pace() {
+    return this.mode === 'stress' ? STRESS : AUTO;
+  }
+
+  on = (slide: Slide) => slide === this.slide;
+
+  isMode = (mode: Mode) => this.mode === mode;
+
+  register = modifier((el: HTMLElement) => {
+    const embedded = this.args.embedded ?? false;
+    // The page owns the viewport; a tile is a guest in someone's grid.
+    const shell = embedded ? null : el.closest<HTMLElement>('.app-shell');
+    shell?.setAttribute('data-layout-ignore', '');
+    Object.defineProperty(el, 'choreoCrossingStress', {
+      configurable: true,
+      value: this,
+    });
+    if (!embedded) {
+      (
+        window as Window & { __choreoCrossingStress?: CrossingStress }
+      ).__choreoCrossingStress = this;
+      window.addEventListener('keydown', this.onKey);
+    }
+    if (this.mode !== 'manual') {
+      this.started = performance.now();
+      this.raf = requestAnimationFrame(this.tick);
+    }
+    return () => {
+      cancelAnimationFrame(this.raf);
+      if (!embedded) {
+        window.removeEventListener('keydown', this.onKey);
+        delete (window as Window & { __choreoCrossingStress?: CrossingStress })
+          .__choreoCrossingStress;
+      }
+      shell?.removeAttribute('data-layout-ignore');
+    };
+  });
+
+  wire = modifier((_el: Element, [c]: [ChoreoContext]) => {
+    this.region = c;
+    return () => {
+      this.region = null;
+    };
+  });
+
+  /**
+   * Conductor only. It assigns `slide`; Choreo `play()`s the Magic Move.
+   * Writing tracked state every frame is how a busy page stalls — cut only
+   * when the clock actually changes slides.
+   */
+  private tick = () => {
+    if (this.isDestroying || this.mode === 'manual') {
+      return;
+    }
+    const elapsed = (performance.now() - this.started) / 1000;
+    const next = (Math.floor(elapsed / this.pace) % slides.length) as Slide;
+    if (next !== this.slide) {
+      this.cutTo(next);
+    }
+    this.raf = requestAnimationFrame(this.tick);
+  };
+
+  /**
+   * `<` / `>` and the arrows step the deck; Space advances.
+   *
+   * The page binds this to `window` — it owns the screen, so it owns the
+   * keys. A TILE cannot: thirty cards each listening on `window` would all
+   * answer one keypress, and Space would scroll the gallery out from under
+   * you. So the embedded stage is focusable and hears the same handler
+   * locally, and declines Space, which belongs to the scroller.
+   */
+  private onKey = (event: KeyboardEvent) => {
+    // The page has BOTH bindings — this one on the stage, and `window` for
+    // when focus is elsewhere. The stage sits earlier in the bubble path, so
+    // when focus is inside it both would fire; the first to act marks the
+    // event and the second stands down.
+    if (event.defaultPrevented) {
+      return;
+    }
+    const embedded = this.args.embedded ?? false;
+    const key = event.key;
+    if (key === 'ArrowRight' || key === '>' || key === '.') {
+      event.preventDefault();
+      this.advance();
+    } else if (key === 'ArrowLeft' || key === '<' || key === ',') {
+      event.preventDefault();
+      this.back();
+    } else if (key === ' ' && !embedded) {
+      event.preventDefault();
+      this.advance();
+    }
+  };
+
+  private cutTo = (slide: Slide) => {
+    if (slide === this.slide) {
+      return;
+    }
+    if (this.region) {
+      this.arming.begin(this.region);
+    }
+    this.slide = slide;
+  };
+
+  /** Tests and the HUD step slides; live autoplay does not use this. */
+  go = (slide: Slide) => {
+    this.stopClock();
+    this.cutTo(slide);
+  };
+
+  advance = () => {
+    this.go(((this.slide + 1) % slides.length) as Slide);
+  };
+
+  back = () => {
+    this.go(((this.slide + slides.length - 1) % slides.length) as Slide);
+  };
+
+  playAuto = () => {
+    this.startClock('auto');
+  };
+
+  playStress = () => {
+    this.startClock('stress');
+  };
+
+  eat = (event: Event) => {
+    event.stopPropagation();
+  };
+
+  private startClock(mode: Mode) {
+    this.mode = mode;
+    cancelAnimationFrame(this.raf);
+    this.started = performance.now();
+    this.raf = requestAnimationFrame(this.tick);
+  }
+
+  private stopClock() {
+    this.mode = 'manual';
+    cancelAnimationFrame(this.raf);
+  }
+
+  <template>
+    <div
+      class="xstress-viewport {{if @embedded 'is-embedded'}}"
+      data-test-crossing-stress
+      data-slide={{this.slide}}
+      data-phase={{this.phase}}
+      tabindex={{if @embedded "0"}}
+      role={{if @embedded "group"}}
+      aria-label={{if @embedded "Crossing deck — < and > step the slides"}}
+      {{on "keydown" this.onKey}}
+      {{this.register}}
+    >
+      {{! the HUD only stops a click from reaching the deck's click-to-advance;
+          its buttons are the controls }}
+      <header
+        {{! template-lint-disable no-invalid-interactive }}
+        class="xstress-hud"
+        {{on "click" this.eat}}
+      >
+        <p class="xstress-index">
+          <span>{{this.label}}</span>
+          <span class="xstress-phase" data-test-phase>{{this.phase}}</span>
+        </p>
+        {{#unless @embedded}}
+          <p class="xstress-lede">
+            Cut at any time — the matching tile flies from wherever it is to the
+            next slide's start.
+          </p>
+        {{/unless}}
+        <div class="xstress-controls">
+          <button
+            type="button"
+            data-test-back
+            {{on "click" this.back}}
+          >Prev</button>
+          <button
+            type="button"
+            data-test-next
+            {{on "click" this.advance}}
+          >Next</button>
+          <button
+            type="button"
+            class={{if (this.isMode "auto") "is-on"}}
+            data-test-auto
+            {{on "click" this.playAuto}}
+          >Auto</button>
+          <button
+            type="button"
+            class={{if (this.isMode "stress") "is-on"}}
+            data-test-stress
+            {{on "click" this.playStress}}
+          >Stress</button>
+          {{#each slides as |slide|}}
+            <button
+              type="button"
+              class={{if (this.on slide) "is-on xstress-dot" "xstress-dot"}}
+              aria-label={{this.dotLabel slide}}
+              data-test-dot={{slide}}
+              {{on "click" (fn this.go slide)}}
+            ></button>
+          {{/each}}
+        </div>
+      </header>
+
+      <Choreo
+        class="xstress-stage"
+        data-slide={{this.slide}}
+        data-phase={{this.phase}}
+        {{on "click" this.advance}}
+        as |c|
+      >
+        <span hidden {{this.wire c}}></span>
+        {{! A perpetual rAF behind thirty mounted tiles is a tax on every
+            other demo, and at card size the drift does not read. The page
+            keeps it: there, a hitch in the flight IS a freeze in the field. }}
+        {{#unless @embedded}}
+          <canvas
+            class="xstress-bg-dust"
+            data-test-particles
+            {{particles}}
+          ></canvas>
+        {{/unless}}
+
+        {{#if this.crossing}}
+          {{#let (t) as |tt|}}
+            <c.Parallel>
+              {{! Type and pills: different content, so two skins in one
+                  flying box — the homepage crossing. }}
+              <c.Crossing
+                @duration={{tt.move}}
+                @ease={{EASE}}
+                @leave={{tt.leave}}
+                @arrive={{tt.arrive}}
+                @overlap={{0.18}}
+              />
+              {{! Kept identities (plate, hairline): real-box tween, never
+                  crop-cover (Violet's width would scale Tide into a square). }}
+              <c.Move @of={{c.moved}} @duration={{tt.move}} @ease={{EASE}} />
+            </c.Parallel>
+          {{/let}}
+        {{/if}}
+
+        <div
+          class="xstress-hero"
+          data-test-hero
+          {{motion
+            id="xstress-hero"
+            role="hero"
+            style=(styles borderRadius=(radiusFor this.slide))
+            animate=(to borderRadius=(radiusFor this.slide))
+            transition=(tuneMotion "crossing" plateTween "Plate radius")
+          }}
+        >
+          {{#each deck as |s|}}
+            <span
+              class="xstress-hero-cast {{s.tone}}"
+              data-test-cast={{s.n}}
+            ></span>
+          {{/each}}
+          <div class="xstress-hero-face">
+            <video
+              class="xstress-hero-shot"
+              data-test-shot
+              data-test-clip
+              src={{CLIP}}
+              muted
+              loop
+              autoplay
+              playsinline
+              {{playClip}}
+            ></video>
+            {{! scrolling the tape must not reach the stage's click-to-advance }}
+            <div
+              {{! template-lint-disable no-invalid-interactive }}
+              class="xstress-hero-scroll"
+              data-test-scroll
+              {{liveScroll}}
+              {{on "click" this.eat}}
+              {{on "pointerdown" this.eat}}
+            >
+              {{#each tape as |line|}}
+                <p>{{line}}</p>
+              {{/each}}
+            </div>
+            <span class="xstress-hero-mark" data-test-mark></span>
+            <span class="xstress-hero-meter" data-test-meter></span>
+            <span class="xstress-hero-ticks" aria-hidden="true">
+              <i></i>
+              <i></i>
+              <i></i>
+            </span>
+            {{#each deck as |s|}}
+              {{#if (this.on s.n)}}
+                <em
+                  class="xstress-inset {{s.tone}}"
+                  data-test-inset
+                  {{motion id="xstress-inset" role="inset" pack="content"}}
+                >{{s.inset}}</em>
+              {{/if}}
+            {{/each}}
+          </div>
+        </div>
+
+        <span
+          class="xstress-rule"
+          data-test-rule
+          {{motion id="xstress-rule" role="rule"}}
+        ></span>
+
+        {{#each deck as |s|}}
+          {{#if (this.on s.n)}}
+            <section class="xstress-slide" data-slide={{s.n}}>
+              <div
+                class="xstress-wash {{s.tone}}"
+                data-test-wash
+                {{motion id=s.wash role="ambient"}}
+              ></div>
+              <div
+                class="xstress-orb {{s.tone}}"
+                {{motion id=s.orb role="ambient"}}
+              ></div>
+              <div
+                class="xstress-spark {{s.tone}}"
+                {{motion id=s.spark role="ambient"}}
+              ></div>
+              <b
+                class="xstress-title {{s.tone}}"
+                data-test-title
+                {{motion id="xstress-title" role="type" pack="content"}}
+              >{{s.title}}</b>
+              <small
+                class="xstress-kicker {{s.tone}}"
+                data-test-kicker
+                {{motion id="xstress-kicker" role="type" pack="content"}}
+              >{{s.kicker}}</small>
+              <small
+                class="xstress-chip {{s.tone}}"
+                data-test-chip
+                {{motion
+                  id="xstress-chip"
+                  role="chip"
+                  style=(styles borderRadius="999px")
+                }}
+              >{{s.chip}}</small>
+            </section>
+          {{/if}}
+        {{/each}}
+      </Choreo>
+    </div>
+  </template>
+}

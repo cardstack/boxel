@@ -5,7 +5,7 @@ import type { BaseOperation, OperationErrorCode } from './types.ts';
 // Per-execution telemetry for an operation that runs a program.
 //
 // One JSON-object log line per execution on the `boxel:operations` channel —
-// the same emit convention as `boxel:client-perf` and `boxel:screenshot-perf`:
+// the same emit convention as `boxel:client-perf` and `boxel:capture-perf`:
 // the whole line is one JSON object carrying an explicit `channel` field, so
 // Loki's `| json` parse reads it, and the counts and the duration are flat
 // top-level fields so LogQL can `unwrap` any of them directly.
@@ -82,7 +82,7 @@ export interface OperationPerfEvent extends OperationDiagnostics {
 
 export const OPERATIONS_CHANNEL = 'boxel:operations';
 
-// Test seam, mirroring `emitScreenshotPerf`'s sink: when set, events go to the
+// Test seam, mirroring `emitCapturePerf`'s sink: when set, events go to the
 // sink instead of the logger, so a test asserts on records rather than
 // scraping stdout.
 let operationPerfSink: ((event: OperationPerfEvent) => void) | undefined;
@@ -95,7 +95,7 @@ export function setOperationPerfSink(
 
 // Created lazily: a module-scope `logger()` here can race the circular import
 // that installs the log-definitions factory, the same hazard
-// `emitScreenshotPerf` documents.
+// `emitCapturePerf` documents.
 let operationPerfLog: ReturnType<typeof logger> | undefined;
 
 export function emitOperationPerf(event: OperationPerfEvent): void {
