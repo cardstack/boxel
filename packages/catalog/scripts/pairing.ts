@@ -11,8 +11,9 @@
 // `Merges after:` the one it lands behind. The counterpart states the inverse
 // key naming this pull request, so a pair is declared from both sides and a
 // typo or a stale pointer cannot pair two unrelated changes. A description has
-// at most one line per key. A key line may sit in a list item or in backticks;
-// lines inside fenced code blocks don't count.
+// at most one line per key, and names a pull request under one key only. A key
+// line may sit in a list item or in backticks; lines inside fenced code blocks
+// or HTML comments don't count.
 //
 // Run with the pull request's description in $PR_BODY:
 //
@@ -44,6 +45,8 @@ export interface Pair {
   url: string;
   headSha: string;
   merged: boolean;
+  // A draft can't merge until it's marked ready, whatever its reviews say.
+  draft: boolean;
   // GitHub's own verdict for an open pull request: true or false, or null
   // when it could not be read (see approvalError). Always false once merged.
   approved: boolean | null;
@@ -94,13 +97,31 @@ export function readDeclarations(body: string) {
   let declarations: Declaration[] = [];
   let malformed: string[] = [];
   let inFence = false;
-  for (let line of body.split(/\r?\n/)) {
-    if (FENCE.test(line)) {
+  let inComment = false;
+  for (let rawLine of body.split(/\r?\n/)) {
+    let line = rawLine;
+    if (!inComment && FENCE.test(line)) {
       inFence = !inFence;
       continue;
     }
     if (inFence) {
       continue;
+    }
+    // HTML comments don't render, so nothing in one declares anything, even
+    // when the comment spans lines.
+    if (inComment) {
+      let end = line.indexOf('-->');
+      if (end === -1) {
+        continue;
+      }
+      line = line.slice(end + 3);
+      inComment = false;
+    }
+    line = line.replace(/<!--[\s\S]*?-->/g, '');
+    let open = line.indexOf('<!--');
+    if (open !== -1) {
+      line = line.slice(0, open);
+      inComment = true;
     }
     let match = KEY_LINE.exec(line);
     if (!match) {
@@ -139,6 +160,7 @@ interface RestPull {
   html_url: string;
   state: string;
   merged: boolean;
+  draft?: boolean;
   body: string | null;
   base: { ref: string };
   head: { sha: string; repo: { full_name: string } | null };
@@ -249,6 +271,21 @@ export async function resolvePairing(
       `after: owner/repo#N\`, or as the pull request's URL.`,
   );
   let pairs: Pair[] = [];
+  let before = declarations.find((d) => d.key === 'merges-before');
+  let after = declarations.find((d) => d.key === 'merges-after');
+  if (
+    before &&
+    after &&
+    sameRepository(before.repository, after.repository) &&
+    before.number === after.number
+  ) {
+    problems.push(
+      `${here}'s description names ${before.repository}#${before.number} ` +
+        `under both keys, but a pull request merges either before or after ` +
+        `another. Keep the line that says which.`,
+    );
+    return { resolution: { repository, number: n, pairs }, problems };
+  }
   for (let key of Object.keys(KEY_LABEL) as PairingKey[]) {
     let declared = declarations.filter((d) => d.key === key);
     if (declared.length > 1) {
@@ -316,13 +353,23 @@ export async function resolvePairing(
       continue;
     }
     let { declarations: theirs } = readDeclarations(pull.body ?? '');
-    let pointsBack = theirs.some(
-      (d) =>
-        d.key === INVERSE[key] &&
-        sameRepository(d.repository, repository) &&
-        d.number === n,
-    );
-    if (!pointsBack) {
+    let namesUs = (k: PairingKey) =>
+      theirs.some(
+        (d) =>
+          d.key === k &&
+          sameRepository(d.repository, repository) &&
+          d.number === n,
+      );
+    if (namesUs(key)) {
+      problems.push(
+        `${here} says \`${declaration.line}\`, and ${there} names ${here} ` +
+          `with \`${KEY_LABEL[key]}:\` too, but only one of them can merge ` +
+          `first. Agree which does, and give the other one ` +
+          `\`${KEY_LABEL[INVERSE[key]]}:\` instead.`,
+      );
+      continue;
+    }
+    if (!namesUs(INVERSE[key])) {
       problems.push(
         `${here} says \`${declaration.line}\`, but ${there} doesn't name ` +
           `${here} back. Add \`${backLine}\` to ${there}'s description.`,
@@ -346,6 +393,7 @@ export async function resolvePairing(
       url: pull.html_url,
       headSha: pull.head.sha,
       merged: pull.merged,
+      draft: Boolean(pull.draft),
       approved,
       ...(approvalError ? { approvalError } : {}),
     });
@@ -356,11 +404,13 @@ export async function resolvePairing(
 function describe(here: string, pair: Pair) {
   let state = pair.merged
     ? 'merged'
-    : pair.approved === null
-      ? `open, approval unknown: ${pair.approvalError}`
-      : pair.approved
-        ? 'open, approved'
-        : 'open, not approved';
+    : pair.draft
+      ? 'open, draft'
+      : pair.approved === null
+        ? `open, approval unknown: ${pair.approvalError}`
+        : pair.approved
+          ? 'open, approved'
+          : 'open, not approved';
   let order = pair.key === 'merges-before' ? 'merges before' : 'merges after';
   return `${here} ${order} ${pair.repository}#${pair.number} (${state}, head ${pair.headSha.slice(0, 12)})`;
 }

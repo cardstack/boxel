@@ -11,7 +11,7 @@ boxel-catalog's cards import boxel (host tools, `@cardstack/base`, runtime types
 
 - **A boxel change the catalog has to follow.** Renaming or removing a host tool or command (`@cardstack/boxel-host/tools/*`), a base export, a field or a type that catalog cards import, or tightening a type or lint rule they trip. The boxel pull request merges first, and the catalog pull request that adapts the cards merges right after it.
 - **A catalog change boxel's tests need.** A new or changed definition in the catalog test subset (the `catalog-test-subset` skill). The catalog pull request merges first, and the boxel pull request that re-pins and tests it merges after.
-- **Both at once: the three-PR flow.** A catalog definition that needs new platform code, and whose boxel tests need the new definition. Platform pull request A merges, then catalog pull request C, then boxel pull request B, which re-pins and tests. B is stacked on A and follows it until A merges, because C is tested against B's head, and that head needs A's platform code.
+- **Both at once: the three-PR flow.** A catalog definition that needs new platform code, and whose boxel tests need the new definition. Platform pull request A merges, then catalog pull request C, then boxel pull request B, which re-pins and tests. C is tested against B's head, and that head needs A's platform code. So B carries A by merging A's branch into it and following A until A merges. B still targets `main`, like every pull request in a pair.
 
 A change that keeps working against the other repository's `main` needs no pair. Lint Catalog checks exactly that, so an unneeded pair costs nothing and a missing one fails.
 
@@ -28,10 +28,10 @@ Merges after: https://github.com/cardstack/boxel/pull/456
 ```
 
 - **Both sides, inverse keys.** If boxel pull request A says `Merges before` naming catalog pull request C, then C says `Merges after` naming A. A declaration that the other side doesn't return fails, so a typo or a stale pointer can't pair two unrelated changes.
-- **The named pull request must be valid.** It exists, is open or already merged, targets `main`, and comes from a branch of its own repository, not a fork.
+- **The named pull request must be valid.** It exists, is open or already merged, targets `main`, and comes from a branch of its own repository, not a fork. Both sides name each other under inverse keys only: naming the same pull request under both keys, or both sides using the same key, fails.
 - **At most one line per key.** In the three-PR flow, C has one of each: `Merges after` naming A, and `Merges before` naming B.
-- **Line format.** The key is case-insensitive and starts its line; a list marker or wrapping backticks are fine. The value is `owner/repo#N` or the pull request's URL. Lines inside fenced code blocks are ignored, so put any example of the syntax in a code block, or mid-sentence, never at the start of a line of prose.
-- **Edits re-run the check.** Editing a boxel pull request's description re-runs Lint Catalog. When you change the catalog side's description, re-run the boxel pull request's Lint Catalog by hand, since an edit in the other repository doesn't trigger it.
+- **Line format.** The key is case-insensitive and starts its line; a list marker or wrapping backticks are fine. The value is `owner/repo#N` or the pull request's URL. Lines inside fenced code blocks or HTML comments are ignored, so put any example of the syntax in a code block, or mid-sentence, never at the start of a line of prose.
+- **Edits re-run the check, but only on its own side.** Editing a boxel pull request's description re-runs Lint Catalog. The boxel run lints the catalog head it read when it ran, and nothing in the other repository triggers it. So re-run the boxel pull request's Lint Catalog by hand after any change on the catalog side: its description, its approval, or a push. boxel-catalog keeps approvals across pushes, so a green boxel check can be judging an older catalog head.
 
 Edit a description with `gh pr edit <n> --repo <owner/repo> --body-file <file>` only after checking that the file isn't empty. A failed fetch that leaves the file empty blanks the description.
 
@@ -42,10 +42,10 @@ Edit a description with `gh pr edit <n> --repo <owner/repo> --body-file <file>` 
 1. It reads this pull request's declaration and checks it from both sides. A problem fails the job immediately, naming the line to add or fix and the pull request it belongs on.
 2. It lints the paired catalog pull request's head against the change, in place of catalog `main`. That is the `Merges before` pair if it's unmerged, otherwise the `Merges after` pair. Errors there are for the catalog pull request to fix.
 3. It also lints catalog `main` against the change, against the base branch too, so only errors this change adds count. If the change adds errors to catalog `main`:
-   - **`Merges before` pair open and approved** (GitHub's own review decision): passes, and says to merge the catalog pull request right after this one.
-   - **`Merges after` pair unmerged**: fails with `waiting on cardstack/boxel-catalog#N to merge`. Re-run after it merges.
-   - **`Merges before` pair not approved, or approval unreadable**: fails, saying which. Get it approved, then re-run.
-   - **No pair**: fails with the two exact lines to add. Alternatively, keep the change compatible with catalog `main`.
+   - **`Merges after` pair unmerged**: fails with `waiting on cardstack/boxel-catalog#N to merge`. Re-run after it merges. This comes first, because that pull request has to land before this one.
+   - **`Merges before` pair open, ready for review and approved** (GitHub's own review decision): passes, and says to merge the catalog pull request right after this one.
+   - **`Merges before` pair still a draft, not approved, or approval unreadable**: fails, saying which. Fix that, then re-run.
+   - **No pair**: fails with the two exact lines to add. If the declared `Merges before` pair has already merged, it says to replace that line. Alternatively, keep the change compatible with catalog `main`.
 
 **boxel-catalog's Boxel Test Subset** pairs by branch name: it tests a catalog pull request against the boxel branch with the same name, or against boxel `main` if there is none. So give the two branches the same name as well, and push the boxel branch first.
 

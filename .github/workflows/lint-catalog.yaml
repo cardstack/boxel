@@ -60,10 +60,11 @@ jobs:
             --number="$PR_NUMBER" \
             --counterpart=cardstack/boxel-catalog \
             --out="$RUNNER_TEMP/catalog-pairing.json"
-          # An open pair this change merges before is the catalog fix for it;
-          # otherwise an open pair it merges after is what it builds on.
+          # An open pair this change merges after is what it builds on, and
+          # lands first; otherwise an open pair it merges before is the
+          # catalog fix that follows it.
           sha=$(jq -r '[.pairs[] | select(.merged | not)]
-            | (map(select(.key == "merges-before")) + map(select(.key == "merges-after")))
+            | (map(select(.key == "merges-after")) + map(select(.key == "merges-before")))
             | .[0].headSha // empty' "$RUNNER_TEMP/catalog-pairing.json")
           if [ -n "$sha" ]; then
             echo "catalog_ref=$sha" >> "$GITHUB_OUTPUT"
