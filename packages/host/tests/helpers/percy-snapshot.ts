@@ -200,6 +200,14 @@ export default async function percySnapshot(
       }
     }
     let unstyled = [...scopes].filter((scope) => !cssText.includes(scope));
+    for (let scope of unstyled) {
+      let el = document.querySelector(`[${scope}]`);
+      console.log(
+        `[SCOPE-WHO] ${scope} tag=${el?.tagName ?? 'NONE'} ` +
+          `cls=${String(el?.className ?? '').slice(0, 70)} ` +
+          `parentCls=${String(el?.parentElement?.className ?? '').slice(0, 50)}`,
+      );
+    }
     console.log(
       `[SCOPE-AUDIT2] ${JSON.stringify(snapshotName)} scopes=${scopes.size} ` +
         `sheets=${document.styleSheets.length} unreadable=${unreadable} ` +
