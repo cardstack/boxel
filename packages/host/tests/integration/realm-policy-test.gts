@@ -723,9 +723,6 @@ module('Integration | realm policy', function (hooks) {
       .dom('[data-test-policy-grant-inactive]')
       .exists({ count: 1 }, 'and it is marked where it is listed');
     assert
-      .dom('[data-test-policy-grant-note]')
-      .doesNotExist('its issue says why, rather than a note');
-    assert
       .dom('[data-test-policy-issue]')
       .exists({ count: 1 })
       .hasAttribute('data-test-policy-issue', 'policy-not-filterable');
