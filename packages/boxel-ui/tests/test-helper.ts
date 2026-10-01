@@ -11,6 +11,7 @@ import {
   setupConsoleLogger,
 } from 'ember-a11y-testing/test-support';
 import { setConfig as setBasicDropdownConfig } from 'ember-basic-dropdown/config';
+import PowerCalendarService from 'ember-power-calendar/services/power-calendar';
 import { setupEmberOnerrorValidation, start as qunitStart } from 'ember-qunit';
 import EmberApp from 'ember-strict-application-resolver';
 import * as QUnit from 'qunit';
@@ -40,6 +41,9 @@ class TestApp extends EmberApp {
   modules = {
     './router': Router,
     './config/environment': { default: config },
+    // ember-power-calendar's day grid reads "today" from this service; an app
+    // gets it by merging the addon's app tree, which this harness does not.
+    './services/power-calendar': PowerCalendarService,
   };
 }
 
