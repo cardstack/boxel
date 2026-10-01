@@ -268,6 +268,12 @@ Symptom differs from triggers 1–2: the template body is silently dropped, so t
 - A change here that a catalog-owned definition must adopt (for example a new declaration option the definition should use) is not done until the boxel-catalog PR merges and the pin here is bumped. When that lands after the boxel PR, its ticket names both halves: the boxel-catalog change, and the re-pin here (`pnpm --dir packages/catalog catalog:test-subset --bump`) with the tests that assert the adopted behavior.
 - Load the `catalog-test-subset` skill for the procedure: paired branches, testing a catalog change against boxel's tests, pinning, and merge order.
 
+## Paired boxel / boxel-catalog pull requests
+
+- A boxel pull request and a boxel-catalog pull request that depend on each other declare the pair in **both** descriptions. Each has a line naming the other, keyed by its own merge order: `Merges before: cardstack/boxel-catalog#N` on the pull request that lands first, and `Merges after: cardstack/boxel#M` on the one that lands after it. The checks in both repositories read these lines, and a declaration the other side doesn't return fails.
+- A change needs a pair when catalog cards must follow a boxel change (a renamed or removed host tool, base export or type they import), or when boxel's tests need a catalog change first. boxel's Lint Catalog fails a change that would leave catalog `main` broken without a paired catalog pull request that is ready to follow it.
+- Load the `catalog-pairing` skill before opening or editing a pull request in either repository that depends on the other, and whenever Lint Catalog fails.
+
 ## Linear Ticket Process (Reusable)
 
 This end-to-end workflow can be used as a template for future tickets.

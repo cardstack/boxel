@@ -20,15 +20,15 @@
 //     that is already broken against boxel main does not fail every change.
 //     Writes a markdown summary to $GITHUB_STEP_SUMMARY when it is set.
 //
-//   node scripts/lint-sweep.ts --report=<file> [--baseline=<file>] --pair=<branch>
-//     Reports a recording of catalog main, linted against a change that is
-//     paired with the boxel-catalog branch <branch>. The change itself is
-//     linted with that branch, but catalog main fails with whatever errors the
-//     change adds to it from the moment the change merges until the branch's
-//     pull request does. So those errors fail the check unless that pull
-//     request is open into the catalog's main and approved, ready to merge
-//     right after the change. Reads the pull request from the GitHub GraphQL
-//     API, which needs $GH_TOKEN.
+//   node scripts/lint-sweep.ts --report=<file> [--baseline=<file>] --pairing=<file>
+//     Reports with the pull request's pairing as scripts/pairing.ts resolved
+//     it. A recording of a paired catalog pull request's head is reported as
+//     above. Any other recording is catalog main, and errors the change adds
+//     to it pass only while a catalog pull request this change merges before
+//     is open and approved, so it lands right after the change. A catalog
+//     pull request this change merges after has to land first, so until it
+//     does they fail, waiting on it. With no pairing they fail, saying how to
+//     declare one.
 //
 // Errors are matched by linter, file, rule, message and position first, then
 // the rest without position, so an error in a boxel file that the change only
@@ -46,6 +46,8 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { isAbsolute, join, relative, resolve } from 'node:path';
+
+import type { Pair, Resolution } from './pairing.ts';
 
 type Linter = 'lint:types' | 'lint:js' | 'lint:hbs';
 
@@ -406,169 +408,80 @@ function annotation(message: string) {
     .replace(/\n/g, '%0A');
 }
 
-async function githubGraphql(
-  query: string,
-  variables: Record<string, unknown>,
-): Promise<unknown> {
-  let token = process.env.GH_TOKEN;
-  if (!token) {
-    throw new Error('GH_TOKEN is not set, and the GitHub GraphQL API needs it');
-  }
-  let response = await fetch('https://api.github.com/graphql', {
-    method: 'POST',
-    headers: {
-      authorization: `Bearer ${token}`,
-      'content-type': 'application/json',
-    },
-    body: JSON.stringify({ query, variables }),
-  });
-  if (!response.ok) {
-    throw new Error(`the GitHub GraphQL API answered ${response.status}`);
-  }
-  let body = (await response.json()) as {
-    data?: unknown;
-    errors?: { message: string }[];
-  };
-  if (body.errors?.length) {
-    throw new Error(body.errors.map((e) => e.message).join('; '));
-  }
-  return body.data;
-}
-
-interface PairedPullRequest {
-  number: number;
-  approved: boolean;
-}
-
-const PAIRED_PULL_REQUEST_QUERY = `
-  query ($owner: String!, $name: String!, $branch: String!) {
-    repository(owner: $owner, name: $name) {
-      pullRequests(
-        headRefName: $branch
-        baseRefName: "main"
-        states: OPEN
-        first: 10
-      ) {
-        nodes {
-          number
-          headRepositoryOwner {
-            login
-          }
-          reviewDecision
-          latestOpinionatedReviews(first: 100, writersOnly: true) {
-            nodes {
-              state
-            }
-          }
-        }
-      }
-    }
-  }
-`;
-
-// The open pull request from the catalog repository's own `branch` into its
-// main, and whether it is approved. Approval is GitHub's own review decision,
-// which counts only reviewers with write access and applies the branch's
-// review rules. When no rule requires a review, GitHub reports no decision, so
-// the latest review from each writer stands instead: an approval counts while
-// no request for changes stands beside it.
-async function pairedPullRequest(
-  repository: string,
-  branch: string,
-): Promise<PairedPullRequest | undefined> {
-  let [owner, name] = repository.split('/');
-  let data = (await githubGraphql(PAIRED_PULL_REQUEST_QUERY, {
-    owner,
-    name,
-    branch,
-  })) as {
-    repository: {
-      pullRequests: {
-        nodes: {
-          number: number;
-          headRepositoryOwner: { login: string } | null;
-          reviewDecision: string | null;
-          latestOpinionatedReviews: { nodes: { state: string }[] } | null;
-        }[];
-      };
-    } | null;
-  };
-  let pull = data.repository?.pullRequests.nodes.find(
-    (node) => node.headRepositoryOwner?.login === owner,
+// The paired catalog pull request this change can lean on to fix catalog
+// main, if any, and whether catalog main may fail with the errors the change
+// adds to it. It may only while a catalog pull request this change merges
+// before is open and approved, so it can land right after this one. A pull
+// request this change merges after has to land first, so until it does the
+// verdict is to wait for it.
+function mainVerdict(resolution: Resolution) {
+  let here = `${resolution.repository}#${resolution.number}`;
+  let ref = (pair: Pair) => `${pair.repository}#${pair.number}`;
+  let before = resolution.pairs.find(
+    (p) => p.key === 'merges-before' && !p.merged,
   );
-  if (!pull) {
-    return undefined;
-  }
-  let approved: boolean;
-  if (pull.reviewDecision) {
-    approved = pull.reviewDecision === 'APPROVED';
-  } else {
-    let states = (pull.latestOpinionatedReviews?.nodes ?? []).map(
-      (review) => review.state,
-    );
-    approved =
-      states.includes('APPROVED') && !states.includes('CHANGES_REQUESTED');
-  }
-  return { number: pull.number, approved };
-}
-
-// Whether catalog main may fail with the errors a paired change adds to it:
-// only while the paired branch's pull request is approved, so it can merge
-// right after the change and catalog main is not left failing behind a pull
-// request nobody has signed off.
-async function pairVerdict(repository: string | undefined, branch: string) {
-  let context =
-    `This check lints boxel-catalog branch \`${branch}\` in place of main ` +
-    `for this change, so merging the change before that branch's pull ` +
-    `request leaves catalog main failing with these errors until it merges.`;
-  let pull: PairedPullRequest | undefined;
-  try {
-    if (!repository) {
-      throw new Error(`the catalog clone has no GitHub remote`);
-    }
-    pull = await pairedPullRequest(repository, branch);
-  } catch (error) {
-    let reason = error instanceof Error ? error.message : String(error);
-    return {
-      passes: false,
-      message:
-        `${context} Could not read that pull request (${reason}), so this ` +
-        `check cannot tell whether it is ready to merge right after this ` +
-        `change. Re-run this check.`,
-    };
-  }
-  if (!pull) {
-    return {
-      passes: false,
-      message:
-        `${context} Branch \`${branch}\` has no open pull request into ` +
-        `main in ${repository}. Open one and get it approved, then re-run ` +
-        `this check.`,
-    };
-  }
-  let ref = `${repository}#${pull.number}`;
-  if (pull.approved) {
+  let after = resolution.pairs.find(
+    (p) => p.key === 'merges-after' && !p.merged,
+  );
+  if (before?.approved === true) {
     return {
       passes: true,
-      message: `${context} ${ref} is approved: merge it right after this change.`,
+      message:
+        `${here} merges before ${ref(before)}, which is approved: merge ` +
+        `${ref(before)} right after this change, so catalog main fails with ` +
+        `these errors only in between.`,
     };
   }
+  if (after) {
+    return {
+      passes: false,
+      message:
+        `${here} merges after ${ref(after)}, so catalog main is linted ` +
+        `against this change once that has landed: waiting on ${ref(after)} ` +
+        `to merge. Re-run this check after it merges.`,
+    };
+  }
+  if (before?.approved === false) {
+    return {
+      passes: false,
+      message:
+        `${here} merges before ${ref(before)}, which is not approved yet, so ` +
+        `catalog main would fail with these errors until it is. Get it ` +
+        `approved, re-run this check, and merge ${ref(before)} right after ` +
+        `this change.`,
+    };
+  }
+  if (before) {
+    return {
+      passes: false,
+      message:
+        `${here} merges before ${ref(before)}, and whether that is approved ` +
+        `could not be read (${before.approvalError}). Re-run this check.`,
+    };
+  }
+  let catalogRepository = 'cardstack/boxel-catalog';
   return {
     passes: false,
     message:
-      `${context} ${ref} is not approved yet. Get it approved, re-run this ` +
-      `check, and merge ${ref} right after this change.`,
+      `Merging this change leaves catalog main failing with these errors. ` +
+      `Keep the change compatible with the catalog as it is, or fix the ` +
+      `catalog in a ${catalogRepository} pull request and pair the two: add ` +
+      `\`Merges before: ${catalogRepository}#<number>\` to ${here}'s ` +
+      `description, and \`Merges after: ${here}\` to that pull request's.`,
   };
 }
 
 async function report(
   headPath: string,
   baselinePath: string | undefined,
-  pairBranch: string | undefined,
+  pairingPath: string | undefined,
 ) {
   let head = JSON.parse(readFileSync(headPath, 'utf8')) as Recording;
   let baseline = baselinePath
     ? (JSON.parse(readFileSync(baselinePath, 'utf8')) as Recording)
+    : undefined;
+  let resolution = pairingPath
+    ? (JSON.parse(readFileSync(pairingPath, 'utf8')) as Resolution)
     : undefined;
   let { added, existing } = newErrors(
     head.diagnostics,
@@ -576,14 +489,28 @@ async function report(
   );
   let catalog = head.catalog;
   let revision = catalog.revision?.slice(0, 12) ?? 'unknown revision';
-  let subject = `${catalog.repository ?? 'the catalog'}@${revision}`;
-  if (pairBranch) {
-    subject = `catalog main (${subject})`;
-  }
+  let at = `${catalog.repository ?? 'the catalog'}@${revision}`;
+
+  // With a pairing, this recording is either a paired catalog pull request's
+  // head, which the change is linted with, or catalog main, which the change
+  // must not leave failing behind a pull request that isn't ready.
+  let pair = resolution?.pairs.find(
+    (p) => !p.merged && p.headSha === catalog.revision,
+  );
+  let gated = Boolean(resolution) && !pair;
+  let subject = pair
+    ? `${pair.repository}#${pair.number}'s head (${at})`
+    : gated
+      ? `catalog main (${at})`
+      : at;
   let linting = `Linting ${subject} against this change`;
 
   let summary = [
-    pairBranch ? `### Catalog lint: main` : `### Catalog lint`,
+    pair
+      ? `### Catalog lint: ${pair.repository}#${pair.number}`
+      : gated
+        ? `### Catalog lint: main`
+        : `### Catalog lint`,
     '',
   ];
   let passes = added.length === 0;
@@ -593,12 +520,12 @@ async function report(
       : `${added.length} lint error(s)`;
     printErrors(`${linting} finds ${introduced}:`, added);
     let advice: string;
-    if (pairBranch) {
-      let verdict = await pairVerdict(catalog.repository, pairBranch);
+    let verdict = gated && resolution ? mainVerdict(resolution) : undefined;
+    if (verdict && resolution!.pairs.length > 0) {
+      // What fails the check is the paired pull request not being ready,
+      // which the verdict states; the errors are what main would fail with.
       passes = verdict.passes;
       advice = verdict.message;
-      // What fails the check is the pull request not being ready, which the
-      // verdict states; the errors themselves are what main will fail with.
       for (let d of added) {
         console.log(
           `::warning title=catalog lint (main)::${annotation(`${location(d)} ${d.rule}: ${d.message}`)}`,
@@ -608,12 +535,14 @@ async function report(
         `::${passes ? 'notice' : 'error'} title=catalog lint (main)::${annotation(advice)}`,
       );
     } else {
-      advice =
-        `Keep the change compatible with the catalog as it is, or fix the ` +
-        `catalog on a boxel-catalog branch named the same as this change's ` +
-        `branch. This check then lints that branch in place of main, and if ` +
-        `catalog main still fails against the change, it also needs that ` +
-        `branch's pull request approved, to merge right after this one.`;
+      advice = pair
+        ? `Fix them in ${pair.repository}#${pair.number}, which this change ` +
+          `is paired with.`
+        : verdict
+          ? verdict.message
+          : `Keep the change compatible with the catalog as it is, or fix the ` +
+            `catalog in a boxel-catalog pull request and pair the two in ` +
+            `their descriptions, as packages/catalog/README.md describes.`;
       for (let d of added) {
         console.log(
           `::error title=catalog lint::${annotation(`${location(d)} ${d.rule}: ${d.message}`)}`,
@@ -630,9 +559,6 @@ async function report(
     let finding = baseline
       ? `${linting} finds no lint errors that the base branch does not`
       : `${linting} finds no lint errors`;
-    if (pairBranch) {
-      finding += `, so this change can merge ahead of boxel-catalog branch \`${pairBranch}\``;
-    }
     log(finding);
     summary.push(`${finding}.`, '');
   }
@@ -673,13 +599,14 @@ if (recordPath && !reportPath) {
   record(resolve(recordPath));
 } else if (reportPath && !recordPath) {
   let baselinePath = option('baseline');
+  let pairingPath = option('pairing');
   report(
     resolve(reportPath),
     baselinePath ? resolve(baselinePath) : undefined,
-    option('pair'),
+    pairingPath ? resolve(pairingPath) : undefined,
   ).catch((error) => fail(String(error)));
 } else {
   fail(
-    'pass either --record=<file> or --report=<file> [--baseline=<file>] [--pair=<branch>]',
+    'pass either --record=<file> or --report=<file> [--baseline=<file>] [--pairing=<file>]',
   );
 }
