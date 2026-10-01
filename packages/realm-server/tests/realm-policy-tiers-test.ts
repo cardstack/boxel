@@ -219,6 +219,11 @@ async function compile(grants: Grant[]): Promise<CompiledRealmPolicy> {
     toURL: (identifier) => new URL(identifier),
     isPolicyCard: (types) => types.includes(policyKey),
     typeKey,
+    // The governed realm holds no cards of a type descending from the rule's,
+    // which what a predicate reads does not depend on.
+    realmURL: EDUCATION,
+    instanceTypesUnder: async () => [],
+    instanceTypeKeys: async () => [],
   });
   let policy = await cache.get();
   if (!policy) {
