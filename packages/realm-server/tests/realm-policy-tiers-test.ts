@@ -382,8 +382,10 @@ module(basename(import.meta.filename), function () {
         assert.strictEqual(grant, undefined, `${source}: no grant compiles`);
         assert.true(reason.test(message), `${source}: ${message}`);
         assert.true(
-          /the search index's copy of the card doesn't have/.test(message),
-          `${source}: the message says the index's copy doesn't have it`,
+          /neither the saved card nor the search index's copy of it can answer/.test(
+            message,
+          ),
+          `${source}: the message says neither copy can answer it`,
         );
       }
     }

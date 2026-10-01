@@ -717,7 +717,7 @@ async function compilePolicy(
   if (row.failureWithheld) {
     return unreadable(
       'policy-card-unloadable',
-      `the realm's policy card ${card} couldn't be indexed this time, for a reason outside the card itself. The index still has an earlier copy, which may be out of date, so it isn't used. Editing the card or reindexing the realm tries again`,
+      `the realm's policy card ${card} couldn't be indexed this time, for a reason outside the card itself. The index still has an earlier copy, which may be out of date, so it isn't used. The realm tries again on its own, and editing the card or reindexing the realm tries again right away`,
     );
   }
   if (!row.instance) {
@@ -909,7 +909,7 @@ async function compileDocument(
       issue(
         'policy-not-filterable',
         `${grant.path}.where`,
-        `this grant is for searches (\`query\`), so its \`where\` condition has to work as a search filter, and it can't: ${outcome.problem}`,
+        `this grant is for a search, so its \`where\` condition has to work as a search filter, and it can't: ${outcome.problem}`,
       );
       return grant;
     }
@@ -1111,7 +1111,7 @@ async function compileDocument(
         issue(
           'unsnapshotted-policy-read',
           `${grantPath}.where`,
-          `\`where\` uses \`.${tiers.unheld.path}\`, which the search index's copy of the card doesn't have: ${tiers.unheld.reason}`,
+          `\`where\` uses \`.${tiers.unheld.path}\` in a way that neither the saved card nor the search index's copy of it can answer, so \`snapshot: true\` can't help: ${tiers.unheld.reason}`,
         );
         continue;
       }
@@ -1219,7 +1219,7 @@ async function compileDocument(
         issue(
           'policy-not-filterable',
           `${grant.path}.where`,
-          `this grant is for searches (\`query\`), and the realm has cards of ${unnamed.join(', ')}, which are based on ${rule.targetType.name} but can't be named in a search filter. The filter could read their fields wrongly, so this grant finds nothing`,
+          `this grant is for a search, and the realm has cards of ${unnamed.join(', ')}, which are based on ${rule.targetType.name} but can't be named in a search filter. The filter could read their fields wrongly, so this grant finds nothing`,
         );
         let { filter: _filter, ...unfiltered } = grant;
         grants.push(unfiltered);

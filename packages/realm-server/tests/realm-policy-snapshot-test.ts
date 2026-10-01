@@ -447,7 +447,9 @@ module(basename(import.meta.filename), function (hooks) {
       'the create grant judged against the snapshot is recorded, since the card a create mints has no index row',
     );
     assert.true(
-      /judged by the card it would mint/.test(issues[0]?.message ?? ''),
+      /a card being created isn't in the index until it's saved/.test(
+        issues[0]?.message ?? '',
+      ),
       `the issue says why: ${issues[0]?.message}`,
     );
     assert.deepEqual(

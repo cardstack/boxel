@@ -451,7 +451,7 @@ class FilterCompiler {
       }
       if (field.type === 'containsMany' || field.type === 'linksToMany') {
         return refuse(
-          `\`${dotted}\` is a list, and \`==\` compares a whole list; test one member with \`.${dotted} | any(${field.type === 'linksToMany' ? '.id' : '.'} == value)\``,
+          `\`${dotted}\` is a list, and \`==\` compares a whole list. To check one item of it, use \`.${dotted} | any(${field.type === 'linksToMany' ? '.id' : '.'} == value)\``,
         );
       }
       if (field.isPrimitive) {
@@ -515,7 +515,7 @@ class FilterCompiler {
       }
       if (field.type !== 'contains' || field.isPrimitive) {
         return refuse(
-          `\`${dotted}\` has no fields of its own, so nothing can come after it in the path`,
+          `\`${dotted}\` is a link, a list or a single value, and a membership test can only go through fields grouped directly on the card, so nothing can come after it in the path`,
         );
       }
       definition = await this.#compoundDefinition(field, dotted);
@@ -654,7 +654,7 @@ function assertComparable(
   let holds = field.kind === 'number' ? 'number' : 'string';
   if (constant.kind !== holds) {
     refuse(
-      `\`${field.path}\` holds a ${holds}, and is compared with ${describeConstant(constant)}`,
+      `\`${field.path}\` holds ${holds === 'number' ? 'a number' : 'text'}, and is compared with ${describeConstant(constant)}`,
     );
   }
 }
@@ -923,7 +923,7 @@ function notAPredicate(node: unknown): string {
 
 function describeNode(node: unknown): string {
   if (!isNode(node)) {
-    return 'the expression';
+    return 'that part of the condition';
   }
   let parts = asPath(node);
   if (parts) {
@@ -936,10 +936,16 @@ function describeNode(node: unknown): string {
     return `\`${String(node.name)}(…)\``;
   }
   if (node.type === 'literal') {
-    return `the ${String(node.valueType)} literal`;
+    return `the ${LITERAL_KINDS[String(node.valueType)] ?? String(node.valueType)} value`;
   }
-  return `the ${node.type} expression`;
+  return 'that part of the condition';
 }
+
+// How a written value's kind reads to someone who doesn't program.
+const LITERAL_KINDS: Record<string, string> = {
+  string: 'text',
+  boolean: 'yes/no',
+};
 
 function describeConstant(constant: Constant): string {
   switch (constant.kind) {
@@ -949,7 +955,7 @@ function describeConstant(constant: Constant): string {
       return '`null`';
     case 'string':
       return typeof constant.value === 'string'
-        ? `the string ${JSON.stringify(constant.value)}`
+        ? `the text ${JSON.stringify(constant.value)}`
         : '`actor()`';
   }
 }
