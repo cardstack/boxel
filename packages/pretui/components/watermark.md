@@ -45,6 +45,8 @@ No APG pattern.
 
 In print, the layer keeps its colour with `print-color-adjust: exact`, so a DRAFT mark survives printing.
 
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
+
 ## React ecosystem
 
 | Agent types                       | Give them                              |

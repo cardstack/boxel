@@ -111,27 +111,29 @@ export class Watermark extends Component<WatermarkSignature> {
       {{/if}}
     </div>
     <style scoped>
-      .pretui-watermark {
-        position: relative;
-        isolation: isolate;
-        min-inline-size: 0;
-      }
-      .pretui-watermark-layer {
-        position: absolute;
-        inset: 0;
-        z-index: 1;
-        pointer-events: none;
-        border-radius: inherit;
-        background-repeat: repeat;
-        mask-repeat: repeat;
-        -webkit-mask-repeat: repeat;
-      }
-      .pretui-watermark-layer[data-kind='text'] {
-        background-color: var(--pretui-watermark-ink, var(--foreground));
-      }
-      @media print {
+      @layer PretComponent {
+        .pretui-watermark {
+          position: relative;
+          isolation: isolate;
+          min-inline-size: 0;
+        }
         .pretui-watermark-layer {
-          print-color-adjust: exact;
+          position: absolute;
+          inset: 0;
+          z-index: 1;
+          pointer-events: none;
+          border-radius: inherit;
+          background-repeat: repeat;
+          mask-repeat: repeat;
+          -webkit-mask-repeat: repeat;
+        }
+        .pretui-watermark-layer[data-kind='text'] {
+          background-color: var(--pretui-watermark-ink, var(--foreground));
+        }
+        @media print {
+          .pretui-watermark-layer {
+            print-color-adjust: exact;
+          }
         }
       }
     </style>
