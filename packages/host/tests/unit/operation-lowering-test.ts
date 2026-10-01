@@ -1676,7 +1676,7 @@ module('Unit | operation lowering', function (hooks) {
     }
   });
 
-  test('a link strategy is carried onto a read and recorded on anything else', async function (assert) {
+  test('a link strategy is carried onto a read or a query and recorded on anything else', async function (assert) {
     let { field, contains, CardDef } = api;
     class Roster extends CardDef {
       static displayName = 'Roster';
@@ -1725,9 +1725,8 @@ module('Unit | operation lowering', function (hooks) {
       'and nothing is stored that a serving path would read as a narrowing',
     );
 
-    // A query answers through search, whose results carry their own closures,
-    // so a strategy on one would read as a narrowing of those that never
-    // happens.
+    // A query assembles a closure for each row it answers with, so it narrows
+    // those the way a read narrows its document.
     let query = await lowerOperationDeclarations(
       {
         roll: {
@@ -1742,10 +1741,11 @@ module('Unit | operation lowering', function (hooks) {
         identifyCard: (target) => identifyCard(target),
       },
     );
-    assert.deepEqual(
-      codes(query),
-      ['links-without-assembly'],
-      'a query answers with results this declaration does not govern',
+    assert.deepEqual(codes(query), [], 'a query may declare one');
+    assert.strictEqual(
+      query.operations.roll.links,
+      'ids',
+      'and the realm serves its results from the stored entry',
     );
 
     let unknown = await lowerOperationDeclarations(
@@ -1939,5 +1939,39 @@ module('Unit | operation lowering', function (hooks) {
         `${name} is marked invalid rather than dropped, so a consumer reading the entry sees the refusal`,
       );
     }
+  });
+
+  test('a stored saved search under the name `query` is refused rather than lowered', async function (assert) {
+    // The decorator refuses the name, so this is driven from a raw record: a
+    // stored entry outlives the code that built it. An ad-hoc search is
+    // invoked and granted under this name, so an entry lowered under it would
+    // share its grant with every filter a caller writes over the type.
+    let { field, contains, CardDef } = api;
+    class Listed extends CardDef {
+      static displayName = 'Listed';
+      @field title = contains(StringField);
+    }
+    shim({ Listed });
+
+    let result = await lowerOperationDeclarations(
+      {
+        query: {
+          base: 'transform',
+          set: { title: 'x' },
+        },
+      } as unknown as Record<string, OperationsModule.OperationDeclaration>,
+      {
+        definition: buildDefinition(Listed),
+        lookupDefinition,
+        identifyCard: (target) => identifyCard(target),
+      },
+    );
+    assert.deepEqual(codes(result), ['reserved-name']);
+    assert.true(result.operations.query?.invalid, 'stored invalid');
+    assert.strictEqual(
+      result.operations.query?.base,
+      'query',
+      'on the base the name means, whatever base the entry named',
+    );
   });
 });

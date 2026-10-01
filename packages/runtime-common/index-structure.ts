@@ -72,10 +72,9 @@ export interface BoxelIndexTable {
   // so operators can post-hoc investigate slow (but not failing) renders
   // and enumerate cards with broken links. See `Diagnostics` in `index.ts`.
   diagnostics: Record<string, unknown> | null;
-  // Originating worker job id. Only present on the staging tables
-  // (`boxel_index_pending`, and the unused `boxel_index_working`) —
-  // the production `boxel_index` does not carry this column, hence the field
-  // is optional.
+  // Originating worker job id. Only present on the staging table
+  // `boxel_index_pending` — the production `boxel_index` does not carry this
+  // column, hence the field is optional.
   job_id?: number | null;
   // Which pass's staging a `boxel_index_pending` row belongs to: `job:<id>`,
   // shared by every attempt of that job so a retry can find (and skip) URLs
@@ -120,18 +119,17 @@ export interface PrerenderedHtmlTable {
   // is mirrored onto `error_doc.diagnostics`, matching the `boxel_index`
   // pattern. See `Diagnostics` in `index.ts`.
   diagnostics: Record<string, unknown> | null;
-  // The declared-screenshot manifest: {name → {specHash, objectKey,
-  // contentType, dims, …}} for every `static screenshots` slot the
+  // The declared-capture manifest: {name → {specHash, objectKey,
+  // contentType, dims, …}} for every `static captures` slot the
   // prerender-html visit captured (or carried forward) for this row. Swaps
   // with the row on its existing generation counter like every other
   // artifact here. Null when captures weren't requested (no MediaCache
   // configured) or the card declares none; a slot whose capture failed is
-  // simply absent (see `diagnostics.screenshotErrors`).
-  screenshots: Record<string, unknown> | null;
-  // Originating worker job id. Only present on the staging tables
-  // (`prerendered_html_pending`, and the unused
-  // `prerendered_html_working`); the production `prerendered_html` does not carry this column,
-  // hence the field is optional.
+  // simply absent (see `diagnostics.captureErrors`).
+  captures: Record<string, unknown> | null;
+  // Originating worker job id. Only present on the staging table
+  // `prerendered_html_pending` — the production `prerendered_html` does not
+  // carry this column, hence the field is optional.
   job_id?: number | null;
   // See `BoxelIndexTable.staging_id`. Only present on
   // `prerendered_html_pending`.
@@ -290,5 +288,5 @@ export const coerceTypes = Object.freeze({
   rendered_at: 'VARCHAR',
   value: 'JSON',
   diagnostics: 'JSON',
-  screenshots: 'JSON',
+  captures: 'JSON',
 });

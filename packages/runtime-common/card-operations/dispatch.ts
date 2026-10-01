@@ -315,14 +315,18 @@ export interface OperationScope {
   // stages have run.
   readonly proposed: Record<string, unknown> | undefined;
   // Where the policy gate records how it reached its decision, for an explain
-  // to report. Absent on every invocation that is not being explained, which
-  // is every invocation a caller makes.
+  // to report, or for a capability check to read why the gate refused. Absent
+  // on every invocation a caller makes.
   readonly trace: GateTrace | undefined;
+  // The archived realm's refusal, where the realm holds one for this caller
+  // (see `OperationRequest.seal`). `resolveOperation` answers with it what the
+  // gate grants.
+  readonly seal: Error | undefined;
   // A scope for another invocation in the same request, sharing this one's row
   // memo so the invocations of one request still cost one read of each row
-  // between them. The caller and the ACL's verdict carry over unless named; a
-  // proposed document belongs to one invocation and never does, and neither
-  // does a trace.
+  // between them. The caller, the ACL's verdict and the seal carry over unless
+  // named; a proposed document belongs to one invocation and never does, and
+  // neither does a trace.
   derive(invocation: ScopeInvocation): OperationScope;
 }
 
@@ -348,6 +352,7 @@ export interface ScopeInvocation {
   coarseDeclined?: CoarseDeclined;
   proposed?: Record<string, unknown>;
   trace?: GateTrace;
+  seal?: Error;
 }
 
 // What the realm ACL declined for a request, judged per invocation rather than
@@ -387,18 +392,21 @@ export function newOperationScope(
     coarseDeclined: CoarseDeclined,
     proposed: Record<string, unknown> | undefined,
     trace: GateTrace | undefined,
+    seal: Error | undefined,
   ): OperationScope => ({
     peekInstance,
     caller,
     coarseDeclined,
     proposed,
     trace,
+    seal,
     derive: (next) =>
       scopeFor(
         next.caller ?? caller,
         next.coarseDeclined ?? coarseDeclined,
         next.proposed,
         next.trace,
+        next.seal ?? seal,
       ),
   });
   return scopeFor(
@@ -406,6 +414,7 @@ export function newOperationScope(
     invocation.coarseDeclined ?? 'none',
     invocation.proposed,
     invocation.trace,
+    invocation.seal,
   );
 }
 
@@ -548,6 +557,15 @@ function carries(
   );
 }
 
+// Whether a type of this kind answers `name` with a built-in behavior when it
+// declares nothing under that name: the behavior an instance of the type runs
+// when a caller invokes the name on it.
+export function carriesBuiltIn(kind: DefKind, name: string): boolean {
+  return (
+    isBaseOperation(name) && own(ALLOWED_BASE_OPERATIONS[kind], name) != null
+  );
+}
+
 // The base operations that resolve without consulting a definition.
 //
 // A definition is consulted for two reasons — to find a declaration of the
@@ -619,6 +637,10 @@ function own<T>(
 // whose type the lock judges again from its bytes. A caller resolving through
 // here holds no lock and carries no pending decision to one. A caller that
 // does takes the decision from `resolveGatedOperation` instead.
+//
+// An invocation the gate grants in a scope that carries an archived realm's
+// seal is refused with the seal, here and not before, so the invocation never
+// runs and a caller the gate refuses is refused in the gate's own words.
 export async function resolveOperation(
   core: OperationCore,
   target: OperationTarget,
@@ -633,6 +655,9 @@ export async function resolveOperation(
   );
   if (leavesToLock(decision)) {
     throw notPermitted(target, name);
+  }
+  if (decision.kind === 'granted' && scope.seal) {
+    throw scope.seal;
   }
   return definition;
 }
@@ -665,6 +690,58 @@ export async function resolveGatedOperation(
   name: string,
   scope: OperationScope = newOperationScope(core),
 ): Promise<GatedOperation> {
+  return await resolveAndGate(core, target, name, scope);
+}
+
+// What the policy gate decides about a write one of the card verbs carries
+// out: a card+json `POST` creating a card, a `PATCH` updating one, or a
+// `DELETE` removing one.
+//
+// A verb performs the built-in behavior it is named for, on the document it
+// was sent, whatever the target's type declares under that name. A declaration
+// is how an author specializes the behavior: an `update` with an `input`
+// stage, a `delete` rebound onto `transform` as a soft delete. A grant on the
+// name admits what the declaration does, and the verb would do something else.
+// So a grant reaches a verb only where the name means the built-in behavior,
+// and a write to a type that declares the name is refused as one no grant
+// admits. The operations envelope runs the declaration, and is where such a
+// grant is used.
+//
+// That refusal is made before the gate judges anything, for every caller the
+// realm ACL declined. The gate judges an operation by the base its declaration
+// builds on, and the verb writes whatever that base is: a declared `update`
+// built on `read` would read to the gate as a read the ACL allowed a reader,
+// and the verb would then write for them with no grant at all.
+//
+// A caller the realm ACL allowed is answered as the gate answers them, without
+// the policy, and the verb performs the built-in behavior for them whatever the
+// type declares.
+export async function resolveFacadeWrite(
+  core: OperationCore,
+  target: OperationTarget,
+  base: 'create' | 'update' | 'delete',
+  scope: OperationScope,
+): Promise<GateDecision> {
+  let { decision } = await resolveAndGate(core, target, base, scope, {
+    builtInOnly: true,
+  });
+  // The verb writes, and a write the ACL declined is never the ACL's to allow,
+  // so for such a caller the gate's answer is a grant or a refusal.
+  if (decision.kind === 'coarse' && scope.coarseDeclined !== 'none') {
+    throw notPermitted(target, base);
+  }
+  return decision;
+}
+
+async function resolveAndGate(
+  core: OperationCore,
+  target: OperationTarget,
+  name: string,
+  scope: OperationScope,
+  // Refuse a name the target's type declares, for a caller the ACL declined,
+  // before the gate runs (see `resolveFacadeWrite`).
+  opts: { builtInOnly?: true } = {},
+): Promise<GatedOperation> {
   let refusal = (e: unknown): unknown =>
     scope.coarseDeclined === 'all' && isOperationFailure(e)
       ? notPermitted(target, name)
@@ -690,7 +767,10 @@ export async function resolveGatedOperation(
     }
     throw refusal(e);
   }
-  let { definition, typeDefinition, typeChain } = resolved;
+  let { definition, typeDefinition, typeChain, declared } = resolved;
+  if (opts.builtInOnly && declared && scope.coarseDeclined !== 'none') {
+    throw notPermitted(target, name);
+  }
   let decision = await gateOperation(
     core,
     gateSubject(target, typeChain),
@@ -746,6 +826,9 @@ async function resolveUngated(
   // the adoption chain recorded on it.
   typeDefinition?: Definition;
   typeChain?: string[];
+  // Whether the name resolved to a declaration on the target's type rather
+  // than to the built-in behavior of that name.
+  declared?: true;
 }> {
   assertInRealm(core, target);
   if (isDefinitionFreeOperation(name)) {
@@ -812,7 +895,12 @@ async function resolveUngated(
     if (!carries(target, kind, declared.base)) {
       throw notAllowed(target, name, kind, declared.base);
     }
-    return { definition: declared, typeDefinition: definition, typeChain };
+    return {
+      definition: declared,
+      typeDefinition: definition,
+      typeChain,
+      declared: true,
+    };
   }
   if (!isBaseOperation(name) || own(DECLARATION_ONLY, name)) {
     throw new OperationFailure({
@@ -969,6 +1057,7 @@ export async function runOperation(
   let scope = newOperationScope(core, {
     caller: scopeCallerFor(canonical.actor),
     ...(canonical.coarseDeclined ? { coarseDeclined: 'all' as const } : {}),
+    ...(canonical.seal ? { seal: canonical.seal } : {}),
   });
   let definition = await resolveOperation(core, target, canonical.name, scope);
   // The four stages of an invocation, in the one order they run: the `input`

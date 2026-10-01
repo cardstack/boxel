@@ -80,6 +80,21 @@ const OPERATIONS: Record<string, OperationDefinition> = {
     deterministic: true,
     query: { filter: { ...ANCHOR, eq: { 'item.status': 'open' } }, realms: [] },
   },
+  // Its results carry their relationships and none of the cards behind them.
+  namesOnly: {
+    base: 'query',
+    deterministic: true,
+    links: 'ids',
+    query: { filter: { ...ANCHOR, eq: { 'item.status': 'open' } } },
+  },
+  // Not a strategy lowering would store, so it can only reach a stored
+  // definition some other way.
+  unreadable: {
+    base: 'query',
+    deterministic: true,
+    links: 'some' as never,
+    query: { filter: { ...ANCHOR, eq: { 'item.status': 'open' } } },
+  },
   retitle: { base: 'transform', deterministic: true },
 };
 
@@ -114,8 +129,13 @@ function stubCore() {
 }
 
 const CONTEXT: NamedQueryContext = {
-  actor: '@caller:localhost',
+  principal: { kind: 'user', user: '@caller:localhost' },
   realms: [REALM_A, REALM_B],
+};
+
+const RENDER: NamedQueryContext = {
+  ...CONTEXT,
+  principal: { kind: 'realm-authority', user: '@caller:localhost' },
 };
 
 async function refusal(promise: Promise<unknown>) {
@@ -142,7 +162,7 @@ module(basename(import.meta.filename), function () {
 
   test('the declaration’s filter replaces the one the request carries', async function (assert) {
     let { core } = stubCore();
-    let resolved = await resolveNamedQuery(
+    let { query: resolved } = await resolveNamedQuery(
       core,
       {
         operation: 'byStatus',
@@ -167,7 +187,7 @@ module(basename(import.meta.filename), function () {
 
   test('a declaration that writes no filter still drops the caller’s', async function (assert) {
     let { core } = stubCore();
-    let resolved = await resolveNamedQuery(
+    let { query: resolved } = await resolveNamedQuery(
       core,
       {
         operation: 'newestFirst',
@@ -196,7 +216,7 @@ module(basename(import.meta.filename), function () {
       eq: { 'item.status': 'closed', htmlQuery },
     };
 
-    let declared = await resolveNamedQuery(
+    let { query: declared } = await resolveNamedQuery(
       core,
       {
         operation: 'byStatus',
@@ -213,7 +233,7 @@ module(basename(import.meta.filename), function () {
       'the binding joins the declared filter, and nothing else of the caller’s does',
     );
 
-    let unfiltered = await resolveNamedQuery(
+    let { query: unfiltered } = await resolveNamedQuery(
       core,
       {
         operation: 'newestFirst',
@@ -244,7 +264,7 @@ module(basename(import.meta.filename), function () {
       realms: [REALM_A],
     };
 
-    let declared = await resolveNamedQuery(
+    let { query: declared } = await resolveNamedQuery(
       core,
       { operation: 'ranked', on: REPORT, ...callerMembers },
       CONTEXT,
@@ -267,7 +287,7 @@ module(basename(import.meta.filename), function () {
     );
     assert.strictEqual(declared.scope, 'cards', 'the caller’s scope');
 
-    let open = await resolveNamedQuery(
+    let { query: open } = await resolveNamedQuery(
       core,
       {
         operation: 'byStatus',
@@ -287,7 +307,7 @@ module(basename(import.meta.filename), function () {
 
   test('actor() is the context’s user, never anything the request carries', async function (assert) {
     let { core } = stubCore();
-    let resolved = await resolveNamedQuery(
+    let { query: resolved } = await resolveNamedQuery(
       core,
       {
         operation: 'mine',
@@ -305,7 +325,7 @@ module(basename(import.meta.filename), function () {
       resolveNamedQuery(
         core,
         { operation: 'mine', on: REPORT, realms: [REALM_A] },
-        { ...CONTEXT, actor: undefined },
+        { ...CONTEXT, principal: undefined },
       ),
     );
     assert.strictEqual(anonymous.code, 'actor-required');
@@ -313,7 +333,7 @@ module(basename(import.meta.filename), function () {
 
   test('a declaration that names no realms searches the request’s', async function (assert) {
     let { core } = stubCore();
-    let resolved = await resolveNamedQuery(
+    let { query: resolved } = await resolveNamedQuery(
       core,
       { operation: 'byStatus', on: REPORT, params: { status: 'open' } },
       CONTEXT,
@@ -323,7 +343,7 @@ module(basename(import.meta.filename), function () {
 
   test('a declaration’s own realms are narrowed to the ones the request may search', async function (assert) {
     let { core } = stubCore();
-    let both = await resolveNamedQuery(
+    let { query: both } = await resolveNamedQuery(
       core,
       { operation: 'inA', on: REPORT },
       CONTEXT,
@@ -371,12 +391,48 @@ module(basename(import.meta.filename), function () {
     assert.true(/neither does the request/.test(unnamed.detail));
   });
 
-  test('a render has no actor', async function (assert) {
+  test('the declaration’s link strategy travels beside the query it resolves to', async function (assert) {
     let { core } = stubCore();
-    let resolved = await resolveNamedQuery(
+    let narrowed = await resolveNamedQuery(
+      core,
+      { operation: 'namesOnly', on: REPORT },
+      CONTEXT,
+    );
+    assert.strictEqual(narrowed.links, 'ids', 'the declaration names it');
+    assert.false(
+      'links' in narrowed.query,
+      'and the query it resolves to carries no member the search grammar does not read',
+    );
+
+    let whole = await resolveNamedQuery(
       core,
       { operation: 'byStatus', on: REPORT, params: { status: 'open' } },
-      { ...CONTEXT, duringRender: true },
+      CONTEXT,
+    );
+    assert.strictEqual(
+      whole.links,
+      'full',
+      'a declaration naming none is served whole',
+    );
+
+    let unreadable = await resolveNamedQuery(
+      core,
+      { operation: 'unreadable', on: REPORT },
+      CONTEXT,
+    );
+    assert.strictEqual(
+      unreadable.links,
+      'none',
+      'a stored value that names no strategy is served as the narrowest, not the widest',
+    );
+  });
+
+  test('a realm-authority principal has no actor', async function (assert) {
+    let { core } = stubCore();
+    let { query: resolved } = await resolveNamedQuery(
+      core,
+      { operation: 'byStatus', on: REPORT, params: { status: 'open' } },
+      RENDER,
     );
     assert.deepEqual(
       resolved.filter?.eq,
@@ -385,11 +441,7 @@ module(basename(import.meta.filename), function () {
     );
 
     let noActor = await refusal(
-      resolveNamedQuery(
-        core,
-        { operation: 'mine', on: REPORT },
-        { ...CONTEXT, duringRender: true },
-      ),
+      resolveNamedQuery(core, { operation: 'mine', on: REPORT }, RENDER),
     );
     assert.strictEqual(
       noActor.code,

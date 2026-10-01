@@ -3,6 +3,8 @@ import type { Definition } from '../definitions.ts';
 import { codeRefFromInternalKey } from '../index.ts';
 import type { LocalPath } from '../paths.ts';
 import { isCardResource } from '../card-document-shape.ts';
+import { now } from '../clock.ts';
+import { logger } from '../log.ts';
 import type { CardResource } from '../resource-types.ts';
 import { extensionOfName } from '../file-def-code-ref.ts';
 import { policyFileDefCodeRef } from '../policy-file-def.ts';
@@ -24,7 +26,6 @@ import {
   type BaseOperation,
   type OperationDefinition,
   type OperationTarget,
-  type PolicyIssueCode,
 } from './types.ts';
 
 // ============================================================================
@@ -52,26 +53,30 @@ import {
 // for a policy load or a predicate evaluation.
 //
 // Authorization infrastructure is outside the grant model. Were any of it
-// grantable, one grant could be made into every grant. So these are refused to
-// every caller the ACL declined, however the compiled policy came to grant
-// them:
+// writable through a grant, one grant could be made into every grant. Were any
+// of it readable through one, a caller the realm admits only through grants
+// could read the whole policy that judges them: every rule, whom it grants,
+// and under which predicates. So an operation invoked on any of these is
+// refused to every caller the ACL declined, however the compiled policy came to
+// grant it:
 //
 // - An operation declared `nonGrantable` on the target's type, refused before
 //   any rule is matched, or on any type the target's type descends from,
 //   refused before a matching grant admits anything.
 // - An explain, which answers what a refusal withholds, whatever its
 //   declaration says.
-// - Any write to the card the realm's policy key names.
-// - Any write to the realm's config card, which holds that key and the
+// - Any operation on the card the realm's policy key names: a read of it, a
+//   read of its stored bytes, or a write.
+// - Any operation on the realm's config card, which holds that key and the
 //   settings a predicate reads through `realmConfig()`.
-// - Any write to a policy card, a card of `RealmPolicy` or a subtype of it,
-//   under whatever name it is invoked, and any create that mints one, refused
-//   before a matching grant admits anything. It does not matter whether a
-//   realm's policy key names the card. A key can come to name a card no key
-//   names today, and a card another realm's key names is that realm's
+// - Any operation on a policy card, a card of `RealmPolicy` or a subtype of
+//   it, under whatever name it is invoked, and any create that mints one,
+//   refused before a matching grant admits anything. It does not matter
+//   whether a realm's policy key names the card. A key can come to name a card
+//   no key names today, and a card another realm's key names is that realm's
 //   authorization wherever it is stored. The gate judges a stored card by its
-//   index row, and the write lock judges it again by its stored bytes (see
-//   `StoredCardCheck`).
+//   index row, and a read of its stored bytes by those bytes. The write lock
+//   judges a written card again by its stored bytes (see `StoredCardCheck`).
 //
 // Every way the gate can fail denies. A compiled policy with no rule for the
 // type, a predicate that answers anything but `true`, and a target whose type
@@ -81,18 +86,26 @@ import {
 //
 // What a refusal tells the caller follows from whether the realm ACL lets them
 // read the realm. One who may can list the realm anyway, and is told the gate
-// refused them. One who may not is told the target is not there, exactly as
-// they are told of a target that is not (see `refusalForNonReader`). Two things
-// still set those apart, and neither is closed here. Time: a refusal that
-// evaluated a predicate takes longer than one that found no card, so a caller
-// who measures carefully can tell the two apart. And the 500: a predicate that
-// throws is one only against a card whose type a rule names, either one that
-// is stored or, for a create against a type, the one the create would mint,
-// and whether it throws depends on that card's values. So a predicate that throws tells any
-// caller who reaches it that such a card or type is there, and something about
-// what a stored card holds: `(.title | tonumber) > 0` answers 500 for a card
-// whose title is not a number and 404 for one whose title is a number no
-// greater than zero.
+// refused them, or that a predicate threw. One who may not is told the target
+// is not there, exactly as they are told of a target that is not (see
+// `refusalForNonReader`).
+//
+// That holds for a predicate that throws, too. A predicate throws only against
+// a card whose type a rule names: one that is stored or, for a create against a
+// type, the one the create would mint. Whether it throws depends on that card's
+// values. So a 500 would tell a caller who may not read the realm that such a
+// card or type is there, and something about what a stored card holds:
+// `(.title | tonumber) > 0` throws for a card whose title is not a number and
+// is false for one whose title is a number no greater than zero. The fault is
+// logged where the predicate throws, and an explain reports it, so a policy's
+// author finds it there. A policy the realm cannot load is a 500 to every
+// caller. For one who may not read the realm it is answered before the target
+// resolves, and so says nothing about any target (see `loadPolicy`).
+//
+// One thing still sets a refusal apart from a target that is not there, and it
+// is not closed here: time. A refusal that evaluated a predicate takes longer
+// than one that found no card, so a caller who measures carefully can tell the
+// two apart.
 //
 // The gate never sees the target as the caller named it. It is handed the
 // target as the realm resolved it, so a type is judged by the definition the
@@ -106,9 +119,12 @@ import {
 // its link closure, whatever the linked cards' types, and the results of its
 // query-backed fields. So a grant on a type reaches every card that type's
 // representation carries, and granting `read` on a type asserts that all of it
-// is fit for every caller the grant admits. Nothing here narrows that reach. A
-// response's shape never depends on how its caller was authorized, so a
-// narrower one has to be declared on the operation, for every caller alike.
+// is fit for every caller the grant admits. Nothing here narrows that reach,
+// and that includes a policy card or the realm's config card that a granted
+// card links to: the rules above refuse an operation invoked on one, not a card
+// assembled into another's closure. A response's shape never depends on how
+// its caller was authorized, so a narrower one has to be declared on the
+// operation, for every caller alike.
 // ============================================================================
 
 // What the gate reads for a caller the realm ACL declined. The realm supplies
@@ -159,8 +175,8 @@ export type GateSubject =
 // What the gate reads of an invocation's scope: who the caller is, what the
 // realm ACL declined, and the index rows a card's chain comes from. A create's
 // proposed document is not among them, because it names the type the caller
-// claims. A scope an explain built also carries the trace the gate records
-// into.
+// claims. A scope an explain or a capability check built also carries the
+// trace the gate records into.
 export type GateScope = Pick<
   OperationScope,
   'caller' | 'coarseDeclined' | 'peekInstance' | 'trace'
@@ -343,7 +359,7 @@ export function gateRefusal(
       return new OperationFailure({
         ...id,
         status: 500,
-        code: 'internal-error',
+        code: 'policy-predicate-failed',
         title: 'Policy predicate failed',
         detail:
           `a predicate in the realm's policy failed while deciding whether ` +
@@ -360,16 +376,12 @@ export interface LoadedPolicy {
   policy: CompiledRealmPolicy | undefined;
 }
 
-// What a policy that recorded one of these can grant is unknown rather than
-// nothing: the realm names a policy and could not read it as one.
-const UNAVAILABLE_POLICY: ReadonlySet<PolicyIssueCode> = new Set([
-  'policy-card-missing',
-  'policy-card-unloadable',
-  'not-a-policy',
-]);
-
 // Load the realm's compiled policy for a caller the realm ACL declined, and
-// refuse with a 500 when the realm names a policy it cannot load.
+// refuse with a 500 when the realm names a policy that did not compile as a
+// whole. What such a policy grants is unknown rather than nothing: the realm
+// names a policy and could not read it as one. A card missing from the index,
+// a card that will not load, and a card whose rules cannot be read are the
+// same refusal.
 //
 // For a caller who may not read the realm, this runs before the target
 // resolves. That keeps the 500 independent of the target: answered only once a
@@ -380,19 +392,21 @@ export async function loadPolicy(core: OperationCore): Promise<LoadedPolicy> {
   }
   policyGateStats(core).policyLoads++;
   let policy = await core.policy.compiledPolicy();
-  if (
-    policy?.issues.some(
-      (issue) => issue.path === '' && UNAVAILABLE_POLICY.has(issue.code),
-    )
-  ) {
-    throw new OperationFailure({
-      status: 500,
-      code: 'internal-error',
-      title: 'Policy unavailable',
-      detail: `the realm's policy could not be loaded`,
-    });
+  if (policy?.uncompilable) {
+    throw policyUnavailable();
   }
   return { policy };
+}
+
+// The refusal `loadPolicy` gives for a policy that did not compile, for a
+// caller that has to give it before anything reaches the gate.
+export function policyUnavailable(): OperationFailure {
+  return new OperationFailure({
+    status: 500,
+    code: 'internal-error',
+    title: 'Policy unavailable',
+    detail: `the realm's policy could not be loaded`,
+  });
 }
 
 // Decide whether a caller the realm ACL declined may invoke `name`, which
@@ -422,10 +436,26 @@ export async function gateOperation(
     return GATE_REFUSED;
   }
   // A query is planned and run on the search engine rather than against one
-  // target, so nothing here can grant one. An explain is granted nowhere: what
-  // it answers is what a refusal withholds, so it is refused here even where
-  // its declaration left the flag off.
-  if (base === 'query' || base === 'explain') {
+  // target, so nothing here can grant one. Its grants are judged by the search
+  // that runs it, which composes their filters into the query
+  // (`policyQueryScope`). The search also refuses one a type up the target's
+  // chain declares `nonGrantable` where the target's own type redeclares it
+  // without the flag, so a trace records that query as kept out of reach.
+  // Only a traced decision asks, since the refusal is the same either way.
+  if (base === 'query') {
+    if (trace) {
+      trace.refused(
+        (await queryKeptOutOfReach(core, scope, subject, name))
+          ? 'non-grantable'
+          : 'query-lane',
+      );
+    }
+    return GATE_REFUSED;
+  }
+  // An explain is granted nowhere: what it answers is what a refusal
+  // withholds, so it is refused here even where its declaration left the flag
+  // off.
+  if (base === 'explain') {
     trace?.refused('non-grantable');
     return GATE_REFUSED;
   }
@@ -447,15 +477,16 @@ export async function gateOperation(
     return GATE_REFUSED;
   }
   // The realm's config card and the card its policy key names together
-  // decide every grant, so no grant writes either, whatever their types
-  // declare. This rule follows the cards' identities rather than their types
-  // because the gate judges a card's type by its index row, which can lag the
-  // stored bytes. A card a realm writer has just rewritten as a policy card
-  // reads as its old type here until its index pass lands, and only the write
-  // lock judges it by its bytes.
+  // decide every grant, so no grant reaches either, whatever their types
+  // declare: not a write, not a read, and not a read of their stored bytes,
+  // which a stored path names by the card's `.json`. This rule follows the
+  // cards' identities rather than their types because the gate judges a
+  // card's type by its index row, which can lag the stored bytes. A card a
+  // realm writer has just rewritten as a policy card reads as its old type
+  // here until its index pass lands, and only the write lock judges it by its
+  // bytes.
   if (
-    subject.kind === 'card' &&
-    isWrite(base) &&
+    subject.kind !== 'type' &&
     (namesRealmConfigCard(core, subject.url) ||
       (await namesPolicyCard(core.policy, subject.url)))
   ) {
@@ -517,10 +548,7 @@ export async function gateOperation(
     trace?.refused('non-grantable');
     return GATE_REFUSED;
   }
-  if (
-    isWrite(base) &&
-    (await writesPolicyCard(core, core.policy, types, definition))
-  ) {
+  if (await reachesPolicyCard(core, core.policy, types, definition)) {
     trace?.refused('authorization-infrastructure');
     return GATE_REFUSED;
   }
@@ -590,6 +618,26 @@ async function indexedSubject(
     return types;
   }
   return { kind: 'card', url: subject.url, types };
+}
+
+// Whether a type in the chain of the card or type a query is invoked on
+// declares the query `nonGrantable`. A subclass that redeclares the name
+// without the flag does not make grantable what the type it extends kept out
+// of a policy's reach, on the search engine as anywhere.
+async function queryKeptOutOfReach(
+  core: OperationCore,
+  scope: GateScope,
+  subject: GateSubject,
+  name: string,
+): Promise<boolean> {
+  if (subject.kind === 'unmatched') {
+    return false;
+  }
+  let indexed = await indexedSubject(scope, subject);
+  if (!indexed || indexed.kind === GATE_MISSING.kind) {
+    return false;
+  }
+  return await nonGrantableInChain(core, indexed.types, name);
 }
 
 // What the bytes a stored-bytes read will serve are, judged from those bytes.
@@ -813,10 +861,26 @@ export async function dischargePendingDecision(
   if (pending.decision.kind === 'pending') {
     policyGateStats(core).pendingDischarges++;
   }
-  let admission = await admits(core, pending, judged);
-  if (!('grant' in admission)) {
-    throw gateRefusal(core, admission, pending.target, pending.name);
+  let refusal = await pendingWriteRefusal(core, pending, judged);
+  if (refusal) {
+    throw refusal;
   }
+}
+
+// The refusal `dischargePendingDecision` would throw for a pending write
+// judged against `judged`, or undefined where it would admit the write. This
+// never admits anything and counts no discharge: it is for a caller that has
+// to know how the lock would decide a write that is not being decided under
+// it.
+export async function pendingWriteRefusal(
+  core: OperationCore,
+  pending: PendingWrite,
+  judged: AdmissionSubject | undefined,
+): Promise<OperationFailure | undefined> {
+  let admission = await admits(core, pending, judged);
+  return 'grant' in admission
+    ? undefined
+    : gateRefusal(core, admission, pending.target, pending.name);
 }
 
 // Whether a pending write would be admitted against its target card as stored
@@ -828,20 +892,30 @@ export async function pendingWriteHolds(
   core: OperationCore,
   pending: PendingWrite,
 ): Promise<boolean> {
+  return !(await storedWriteRefusal(core, pending));
+}
+
+// The refusal `pendingWriteHolds` finds, in the words the lock would refuse
+// the write in against the same card: a predicate that throws is the fault it
+// is under the lock, not a refusal. Undefined where the write would be
+// admitted.
+export async function storedWriteRefusal(
+  core: OperationCore,
+  pending: PendingWrite,
+): Promise<OperationFailure | undefined> {
   let { target } = pending;
   let url = target.kind === 'instance' ? parseURL(target.url) : undefined;
   if (!url) {
-    return false;
+    return notPermitted(target, pending.name);
   }
   let source = await core.readFileAsText(
     `${localPathFor(core, url)}.json` as LocalPath,
   );
-  let admission = await admits(
+  return await pendingWriteRefusal(
     core,
     pending,
     source === undefined ? undefined : { id: url.href, source },
   );
-  return 'grant' in admission;
 }
 
 // The grant that admits a pending write against `judged`, or the refusal.
@@ -915,7 +989,13 @@ async function firstHolding(
       continue;
     }
     stats.predicateEvaluations++;
-    let outcome = await evaluate(core, where, subject, actor);
+    let outcome = await evaluate(
+      core,
+      candidate.grant.operation,
+      where,
+      subject,
+      actor,
+    );
     scope.trace?.evaluated(
       candidate.grant,
       outcome === 'holds'
@@ -947,9 +1027,29 @@ function cardId(href: string): string {
   return href.endsWith('.json') ? href.slice(0, -'.json'.length) : href;
 }
 
-// Whether `url` is the realm's config card, the card stored at `realm.json`.
+// The id of the realm's config card, the card stored at `realm.json`.
+function realmConfigCardId(core: OperationCore): string {
+  return cardId(pathsFor(core).fileURL('realm.json').href);
+}
+
+// Whether `url` is the realm's config card, named either by its id or by that
+// stored `.json`.
 function namesRealmConfigCard(core: OperationCore, url: URL): boolean {
-  return cardId(pathsFor(core).fileURL('realm.json').href) === url.href;
+  return realmConfigCardId(core) === cardId(url.href);
+}
+
+// The ids of the cards that hold this realm's authorization by identity rather
+// than by type: its config card, and the card its policy key names when the
+// key names one. The gate refuses a grant every operation on either, and a
+// search a policy scopes leaves both out of the rows it finds.
+export async function authorizationCardIds(
+  core: OperationCore,
+): Promise<string[]> {
+  let pointer = await core.policy?.policyCard();
+  return [
+    realmConfigCardId(core),
+    ...(pointer === undefined ? [] : [cardId(pointer)]),
+  ];
 }
 
 // Whether any of these types, keys from an adoption chain, declares `name`
@@ -998,18 +1098,20 @@ export async function nonGrantableInChain(
   return answers.includes(true);
 }
 
-// Whether a write would change a policy card or mint one. `types` is the
-// target's adoption chain: a stored card's, or for a plain create the chain of
-// the type it mints. A named create mints the type its declaration names,
-// whatever type it is invoked on, so that type's chain is the one judged.
+// Whether an operation would reach a policy card: read one, read its stored
+// bytes, change one, or mint one. `types` is the target's adoption chain: a
+// stored card's, the one the bytes a stored-bytes read serves name, or for a
+// plain create the chain of the type it mints. A named create mints the type
+// its declaration names, whatever type it is invoked on, so that type's chain
+// is the one judged.
 //
 // A policy card's writes are marked non-grantable where its type declares
-// them. This covers what those marks cannot reach: a subtype's own named
-// writes, and a create, which a type cannot mark without naming what it
-// mints.
+// them. This covers what those marks cannot reach: its reads, a subtype's own
+// named operations, and a create, which a type cannot mark without naming
+// what it mints.
 //
 // A chain that cannot be read might be a policy card's, so it answers yes.
-async function writesPolicyCard(
+async function reachesPolicyCard(
   core: OperationCore,
   access: OperationPolicyAccess,
   types: string[],
@@ -1302,6 +1404,7 @@ async function projectedSource(
 // when the card's pass lands.
 async function evaluate(
   core: OperationCore,
+  operation: string,
   where: CompiledPolicyPredicate,
   subject: PredicateSubject,
   actor: string | undefined,
@@ -1322,10 +1425,69 @@ async function evaluate(
       { syntax: 'solidified' },
     );
     return answer === true ? 'holds' : 'fails';
-  } catch {
-    return subject.input === undefined ? 'fails' : 'threw';
+  } catch (e: unknown) {
+    if (subject.input === undefined) {
+      return 'fails';
+    }
+    let judged = subject.instance?.id;
+    logThrow(
+      core,
+      operation,
+      where,
+      typeof judged === 'string' ? judged : 'its target',
+      actor,
+      e,
+    );
+    return 'threw';
   }
 }
+
+// A caller who may not read the realm is told of a predicate's fault as a card
+// that is not there, so the log is where a policy's author finds it.
+//
+// It logs one line per predicate a minute at most. A capability check
+// evaluates a predicate once for each card it is asked about, and a view asks
+// again as it re-renders, so a line for every throw would put the whole view
+// into the log at the rate it renders. One line says what the author needs:
+// that the predicate throws, on what, and why, and an explain answers which
+// card it throws on. The error is cut short because BXL's quotes the value it
+// failed on, which can be a whole stored field.
+function logThrow(
+  core: OperationCore,
+  operation: string,
+  where: CompiledPolicyPredicate,
+  judged: string,
+  actor: string | undefined,
+  e: unknown,
+): void {
+  let at = now();
+  let last = lastLoggedThrow.get(where);
+  if (last !== undefined && at - last < THROW_LOG_INTERVAL_MS) {
+    return;
+  }
+  lastLoggedThrow.set(where, at);
+  let error = e instanceof Error ? e.message : String(e);
+  if (error.length > THROW_ERROR_LENGTH) {
+    error = `${error.slice(0, THROW_ERROR_LENGTH)}…`;
+  }
+  policyLog.warn(
+    `a predicate in the policy of realm ${core.realmURL} threw while ` +
+      `deciding whether ${actor ?? 'an anonymous caller'} may invoke ` +
+      `"${operation}" on ${judged}: ${where.source}: ${error}`,
+  );
+}
+
+const THROW_LOG_INTERVAL_MS = 60_000;
+const THROW_ERROR_LENGTH = 200;
+
+// When each compiled predicate last logged a throw. Keyed on the compiled
+// predicate, so a policy compiled again starts over.
+const lastLoggedThrow = new WeakMap<CompiledPolicyPredicate, number>();
+
+// The channel the policy compiler logs its issues on, so every fault in a
+// realm's policy is in one place. Created once: each `logger()` call applies
+// the configured level again, which would undo a level raised after it.
+const policyLog = logger('realm:policy');
 
 function parseURL(url: string): URL | undefined {
   try {

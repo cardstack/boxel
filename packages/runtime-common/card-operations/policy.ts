@@ -5,14 +5,19 @@ import type { ResolvedCodeRef } from '../code-ref.ts';
 import { computeContentHash } from '../content-hash.ts';
 import { isFilterRefersToNonexistentTypeError } from '../definition-lookup.ts';
 import type { Definition } from '../definitions.ts';
+import { codeRefFromInternalKey } from '../index.ts';
 import type { IndexedInstanceSource } from '../index-query-engine.ts';
 import { logger } from '../log.ts';
+import { MODULE_SOURCE_FILE_DEF_CODE_REFS } from '../policy-file-def.ts';
 import { rri } from '../realm-identifiers.ts';
+import { carriesBuiltIn } from './dispatch.ts';
 import { compilePolicyFilter } from './policy-filter.ts';
-import type {
-  OperationQueryFilterTemplate,
-  PolicyIssue,
-  PolicyIssueCode,
+import {
+  isDefinitionFreeBaseOperation,
+  type BaseOperation,
+  type OperationQueryFilterTemplate,
+  type PolicyIssue,
+  type PolicyIssueCode,
 } from './types.ts';
 
 // A realm's policy compiled for the gate: the RealmPolicy card that the realm's
@@ -21,8 +26,15 @@ import type {
 // predicate compiles to.
 //
 // Only what compiled is here. A rule or grant that did not compile is left out
-// and recorded in `issues`. So a grant whose predicate failed can never be
-// mistaken for a grant that has no condition. A card that could not be loaded
+// and recorded in `issues`, against the rule or grant that caused it, and the
+// rest of the policy applies. So a grant whose predicate failed can never be
+// mistaken for a grant that has no condition, and a grant that could only ever
+// be refused is not held as though it admitted something.
+//
+// A policy is only ever compiled from what its card holds now. Nothing falls
+// back to an earlier compilation, or to an earlier visit's record of the card,
+// when the current one does not compile: that would keep serving a grant an
+// administrator had just removed. A card that cannot be read as it stands
 // compiles to no rules at all, so it grants nothing.
 //
 // The compiled policy holds no decision. What a predicate says about one
@@ -32,20 +44,34 @@ export interface CompiledRealmPolicy {
   // The policy card, as the realm's pointer names it.
   card: string;
   // The card's `meta.version`: the fingerprint of the stored source this was
-  // compiled from. Absent when the card could not be read.
+  // compiled from. Absent when the card could not be read, or when what the
+  // index holds of it is an earlier visit's.
   version: string | undefined;
   rules: CompiledPolicyRule[];
   issues: PolicyIssue[];
+  // Set when the policy as a whole did not compile: its card is not in the
+  // index, did not load, is not a RealmPolicy, or holds its rules in no shape
+  // a rule can be read from, or the card's latest index visit failed with the
+  // failure kept off its row. Such a policy has no rules. The realm names a
+  // policy and cannot say what it grants, so the gate refuses every caller it
+  // judges exactly as it refuses one when the realm's policy card is missing.
+  uncompilable?: true;
 }
 
 export interface CompiledPolicyRule {
   // The card type the rule governs, resolved against the policy card's URL.
   targetType: ResolvedCodeRef;
+  // Where the rule is in the policy card, as a path into its attributes in
+  // the form `PolicyIssue.path` takes: `rules[2]`. The author's position, so a
+  // rule left out before it does not move it.
+  path: string;
   grants: CompiledOperationGrant[];
 }
 
 export interface CompiledOperationGrant {
   operation: string;
+  // Where the grant is in the policy card, as `rules[2].grants[1]`.
+  path: string;
   // Absent for a grant with no condition.
   where?: CompiledPolicyPredicate;
   // For a grant on a query, the search filter the grant admits: the cards of
@@ -91,14 +117,22 @@ export interface PolicyCompileEnvironment {
     codeRef: { module: string; name: string },
     relativeTo: URL,
   ): ResolvedCodeRef | undefined;
-  lookupDefinition(codeRef: ResolvedCodeRef): Promise<Definition>;
+  // A type's definition, with the adoption chain recorded beside it: the type
+  // itself and every type it descends from, each keyed as `typeKey` keys it.
+  lookupDefinitionEntry(
+    codeRef: ResolvedCodeRef,
+  ): Promise<{ definition: Definition; types: string[] }>;
   // The URL a module identifier names. A module in a prefix-mapped realm is
   // identified in prefix form, and this resolves it to the URL of the realm
   // that serves it.
   toURL(identifier: string): URL;
-  // Whether a card's adoption chain, as the index records it, makes it a
-  // RealmPolicy.
+  // Whether an adoption chain, as the index or the definition cache records
+  // one, makes a card or a type a RealmPolicy. The gate asks the same of every
+  // card a grant would reach, so the two agree on what a policy card is.
   isPolicyCard(types: string[]): boolean;
+  // The key a type is recorded under in an adoption chain, the index's and
+  // the definition cache's alike.
+  typeKey(codeRef: ResolvedCodeRef): string;
 }
 
 // The environment the cache needs beyond compiling: which card the realm's
@@ -322,8 +356,8 @@ interface Compilation {
   // What the card's row was when this was compiled, in the terms
   // `rowIdentity` states it.
   row: string;
-  // Fingerprints of the definitions that the rules' types resolved to, keyed
-  // by code ref. A missing fingerprint marks a type with no definition.
+  // Fingerprints of the definition entries compiling read, keyed by code ref.
+  // A missing fingerprint marks a type with no definition.
   definitions: Map<string, { codeRef: ResolvedCodeRef; fingerprint?: string }>;
   // URLs whose realm's index moving could change what this compiles to.
   inputs: string[];
@@ -346,7 +380,8 @@ function readsFrom(inputs: string[], realmURL: string): boolean {
 // The source fingerprint alone is not enough: a row reindexed from unchanged
 // bytes keeps its `meta.version`, yet a changed card definition can change the
 // adoption chain the row records and the attributes it serialized. Either one
-// changes what the policy compiles to.
+// changes what the policy compiles to. So does a visit whose failure the index
+// kept off the row, which leaves the rest of the row exactly as it was.
 function rowIdentity(row: IndexedInstanceSource | undefined): string {
   if (!row) {
     return 'missing';
@@ -355,6 +390,7 @@ function rowIdentity(row: IndexedInstanceSource | undefined): string {
     stableStringify({
       version: row.sourceContentHash,
       error: row.error?.message,
+      withheld: row.failureWithheld,
       types: row.types,
       rules: (row.instance?.attributes as { rules?: unknown } | undefined)
         ?.rules,
@@ -371,41 +407,44 @@ async function stillCurrent(
     return false;
   }
   for (let { codeRef, fingerprint } of compilation.definitions.values()) {
-    if ((await definitionFingerprint(codeRef, env)) !== fingerprint) {
+    if ((await fingerprintedEntry(codeRef, env))?.fingerprint !== fingerprint) {
       return false;
     }
   }
   return true;
 }
 
-// The definition's fingerprint, or undefined when the type has no definition.
-// Only the lookup's own "no such type" counts as that. Any other failure, a
-// database or network error, is thrown: the read fails and nothing is kept, so
-// the next read tries again. Kept as a missing type, it would drop the rule
-// until something next moved in that type's realm.
-async function definitionFingerprint(
+// A type's definition entry and its fingerprint, or undefined when the type
+// has no definition. The fingerprint covers the adoption chain as well as the
+// definition, since which types a rule's type descends from decides what the
+// rule may grant.
+//
+// Only the lookup's own "no such type" counts as having no definition. Any
+// other failure, a database or network error, is thrown: the read fails and
+// nothing is kept, so the next read tries again. Kept as a missing type, it
+// would drop the rule until something next moved in that type's realm.
+async function fingerprintedEntry(
   codeRef: ResolvedCodeRef,
   env: PolicyCompileEnvironment,
-): Promise<string | undefined> {
-  return (await fingerprintedDefinition(codeRef, env))?.fingerprint;
-}
-
-async function fingerprintedDefinition(
-  codeRef: ResolvedCodeRef,
-  env: PolicyCompileEnvironment,
-): Promise<{ definition: Definition; fingerprint: string } | undefined> {
-  let definition: Definition;
+): Promise<
+  { definition: Definition; types: string[]; fingerprint: string } | undefined
+> {
+  let entry: { definition: Definition; types: string[] };
   try {
-    definition = await env.lookupDefinition(codeRef);
+    entry = await env.lookupDefinitionEntry(codeRef);
   } catch (e: unknown) {
     if (isFilterRefersToNonexistentTypeError(e)) {
       return undefined;
     }
     throw e;
   }
+  let { definition, types } = entry;
   return {
     definition,
-    fingerprint: computeContentHash(stableStringify(definition) ?? ''),
+    types,
+    fingerprint: computeContentHash(
+      stableStringify({ definition, types }) ?? '',
+    ),
   };
 }
 
@@ -419,49 +458,79 @@ async function compilePolicy(
   let definitions: Compilation['definitions'] = new Map();
   let inputs = [card];
   let rules: CompiledPolicyRule[] = [];
+  let cardURL = new URL(card);
   let issue = (code: PolicyIssueCode, path: string, message: string) =>
     issues.push({ code, path, message });
+  // An error row carries the last good visit's fingerprint forward, as a row
+  // whose failure was withheld carries everything forward, so only a row that
+  // holds the card's current document says which bytes it describes.
+  let version =
+    row?.instance && !row.failureWithheld
+      ? (row.sourceContentHash ?? undefined)
+      : undefined;
   let compiled = (): Compilation => ({
-    compiled: {
-      card,
-      version: row?.sourceContentHash ?? undefined,
-      rules,
-      issues,
-    },
+    compiled: { card, version, rules, issues },
     row: rowIdentity(row),
     definitions,
     inputs,
   });
+  // The policy as a whole did not compile, for the reason recorded. It has no
+  // rules.
+  let uncompilable = (
+    code: PolicyIssueCode,
+    path: string,
+    message: string,
+  ): Compilation => {
+    issue(code, path, message);
+    return {
+      compiled: { card, version, rules: [], issues, uncompilable: true },
+      row: rowIdentity(row),
+      definitions,
+      inputs,
+    };
+  };
 
-  // A type's definition, recorded as an input of this compilation: a change to
-  // the definition, or to the realm whose module defines the type, is a change
-  // to what the policy compiles to. The types a rule names are read here, and
-  // so is every type a search filter's field path crosses into.
+  // A type's definition entry, recorded as an input of this compilation: a
+  // change to the entry, or to the realm whose module defines the type, is a
+  // change to what the policy compiles to. The types a rule names are read
+  // here, and the types they descend from, and every type a search filter's
+  // field path crosses into. Each is read once however many grants ask.
+  let entries = new Map<
+    string,
+    Promise<{ definition: Definition; types: string[] } | undefined>
+  >();
+  let readType = (
+    codeRef: ResolvedCodeRef,
+  ): Promise<{ definition: Definition; types: string[] } | undefined> => {
+    let key = `${codeRef.module}#${codeRef.name}`;
+    let read = entries.get(key);
+    if (!read) {
+      let moduleURL = safeURL(codeRef.module, env);
+      if (moduleURL && !inputs.includes(moduleURL)) {
+        inputs.push(moduleURL);
+        onInput(moduleURL);
+      }
+      read = fingerprintedEntry(codeRef, env).then((found) => {
+        definitions.set(key, { codeRef, fingerprint: found?.fingerprint });
+        return found;
+      });
+      entries.set(key, read);
+    }
+    return read;
+  };
   let readDefinition = async (
     codeRef: ResolvedCodeRef,
-  ): Promise<Definition | undefined> => {
-    let moduleURL = safeURL(codeRef.module, env);
-    if (moduleURL && !inputs.includes(moduleURL)) {
-      inputs.push(moduleURL);
-      onInput(moduleURL);
-    }
-    let found = await fingerprintedDefinition(codeRef, env);
-    definitions.set(`${codeRef.module}#${codeRef.name}`, {
-      codeRef,
-      fingerprint: found?.fingerprint,
-    });
-    return found?.definition;
-  };
+  ): Promise<Definition | undefined> => (await readType(codeRef))?.definition;
   // A grant on a query carries the search filter its predicate compiles to,
   // or has none and records why. No other grant carries one.
   let withFilter = async (
     grant: CompiledOperationGrant,
+    base: BaseOperation,
     predicate: { body: unknown; snapshot: boolean } | undefined,
     targetType: ResolvedCodeRef,
     definition: Definition,
-    grantPath: string,
   ): Promise<CompiledOperationGrant> => {
-    if (!isQueryGrant(grant.operation, definition)) {
+    if (base !== 'query') {
       return grant;
     }
     let parser = await loadBxl();
@@ -472,45 +541,83 @@ async function compilePolicy(
     if ('problem' in outcome) {
       issue(
         'policy-not-filterable',
-        `${grantPath}.where`,
+        `${grant.path}.where`,
         `the grant is on a query, and its \`where\` does not compile to a search filter: ${outcome.problem}`,
       );
       return grant;
     }
     return { ...grant, filter: outcome.filter };
   };
+  // The type in `chain` that keeps `name` out of every policy's reach, if one
+  // does. A declaration a subclass writes takes the place of the one it
+  // inherits, flag and all, so a type's own entry is not enough: the gate
+  // refuses a name any type in the chain flags, and compiling judges the grant
+  // by the same rule. A type whose entry cannot be read is not reported here.
+  // The gate refuses the operation all the same.
+  let keptOutOfReach = async (
+    chain: string[],
+    name: string,
+  ): Promise<string | undefined> => {
+    for (let key of chain) {
+      let codeRef = codeRefFromInternalKey(key);
+      let resolved = codeRef
+        ? attempt(() => env.resolveCodeRef(codeRef, cardURL))
+        : undefined;
+      if (!resolved) {
+        continue;
+      }
+      let entry = await readType(resolved);
+      if (entry && ownOperation(entry.definition, name)?.nonGrantable) {
+        return resolved.name;
+      }
+    }
+    return undefined;
+  };
 
   if (!row) {
-    issue(
+    return uncompilable(
       'policy-card-missing',
       '',
       `the realm's policy card ${card} is not in the index`,
     );
-    return compiled();
+  }
+  // Refused until a visit of the card succeeds. The row holds what an earlier
+  // visit read, and nothing on it says whether the card has changed since, so
+  // compiling it could serve a grant an administrator has just removed. The
+  // policy stays refused until something re-visits the card: an edit to it,
+  // a change to a module it depends on, or a reindex of its realm.
+  if (row.failureWithheld) {
+    return uncompilable(
+      'policy-card-unloadable',
+      '',
+      `the realm's policy card ${card} did not index: its latest index visit failed for a reason outside the card, and what the index holds for it is an earlier visit's, which may not be what the card holds now`,
+    );
   }
   if (!row.instance) {
-    issue(
+    return uncompilable(
       'policy-card-unloadable',
       '',
       `the realm's policy card ${card} did not load: ${row.error?.message}`,
     );
-    return compiled();
   }
   if (!attempt(() => env.isPolicyCard(row.types ?? []))) {
-    issue(
+    return uncompilable(
       'not-a-policy',
       '',
       `the realm's policy card ${card} is not a RealmPolicy`,
     );
-    return compiled();
   }
 
   let authored = row.instance.attributes?.rules;
   if (authored != null && !Array.isArray(authored)) {
-    issue('invalid-rule', 'rules', '`rules` is not a list');
-    return compiled();
+    return uncompilable('invalid-rule', 'rules', '`rules` is not a list');
   }
-  let cardURL = new URL(card);
+  let moduleSourceKeys = new Set(
+    MODULE_SOURCE_FILE_DEF_CODE_REFS.flatMap((ref) => {
+      let key = attempt(() => env.typeKey(ref));
+      return key ? [key] : [];
+    }),
+  );
   for (let [ruleIndex, rule] of (authored ?? []).entries()) {
     let rulePath = `rules[${ruleIndex}]`;
     let targetType = asCodeRef(rule?.targetType);
@@ -531,8 +638,8 @@ async function compilePolicy(
       );
       continue;
     }
-    let definition = await readDefinition(resolved);
-    if (!definition) {
+    let entry = await readType(resolved);
+    if (!entry) {
       issue(
         'unresolved-type',
         `${rulePath}.targetType`,
@@ -540,6 +647,20 @@ async function compilePolicy(
       );
       continue;
     }
+    let { definition, types: chain } = entry;
+    // Module source is readable only with the realm's own read permission,
+    // so a rule on a module-source type could grant nothing at all.
+    if (chain.some((key) => moduleSourceKeys.has(key))) {
+      issue(
+        'grants-module-source',
+        `${rulePath}.targetType`,
+        `${resolved.name} is module source, which no policy grants: reading a module needs the realm's own read permission`,
+      );
+      continue;
+    }
+    // A chain that cannot be judged counts as a policy type's, so its grants
+    // are recorded rather than kept.
+    let isPolicyType = attempt(() => env.isPolicyCard(chain)) ?? true;
 
     let grants: CompiledOperationGrant[] = [];
     let authoredGrants = rule?.grants ?? [];
@@ -558,6 +679,46 @@ async function compilePolicy(
         );
         continue;
       }
+      // A grant is matched on the name a caller invokes, so a name the type
+      // does not answer would match no invocation of it. Recorded, so a
+      // misspelled operation is not a grant that silently never admits.
+      let granted = grantedOperation(definition, operation);
+      if (!granted) {
+        issue(
+          'unknown-operation',
+          `${grantPath}.operation`,
+          `${resolved.name} neither declares \`${operation}\` nor carries it as a built-in behavior, so the grant matches no invocation`,
+        );
+        continue;
+      }
+      // Authorization infrastructure is outside the grant model, and the gate
+      // refuses it whatever a compiled policy holds: an operation flagged
+      // non-grantable, and any operation on a policy card. So a grant of either
+      // is recorded rather than kept as though it admitted something.
+      let keptOutBy = granted.nonGrantable
+        ? resolved.name
+        : isDefinitionFreeBaseOperation(operation)
+          ? undefined
+          : await keptOutOfReach(chain, operation);
+      if (keptOutBy) {
+        issue(
+          'grants-authorization-infrastructure',
+          `${grantPath}.operation`,
+          `\`${operation}\` is declared non-grantable on ${keptOutBy}, so only a caller the realm's own permissions allow may invoke it`,
+        );
+        continue;
+      }
+      // A query is authorized on the search engine rather than at the gate,
+      // and one left here would contribute a filter that lists policy cards,
+      // so a rule naming a policy type keeps none of its grants.
+      if (isPolicyType) {
+        issue(
+          'grants-authorization-infrastructure',
+          `${grantPath}.operation`,
+          `\`${operation}\` reaches a ${resolved.name}, which is a RealmPolicy, and a rule naming a policy type grants nothing on it: whoever can edit a policy card decides what the policy grants, and whoever can read one reads every rule that judges them`,
+        );
+        continue;
+      }
       let where = readPredicate(grant?.where);
       if (where === 'malformed') {
         issue(
@@ -570,52 +731,74 @@ async function compilePolicy(
       if (!where) {
         grants.push(
           await withFilter(
-            { operation },
+            { operation, path: grantPath },
+            granted.base,
             undefined,
             resolved,
             definition,
-            grantPath,
           ),
         );
         continue;
       }
       let outcome = await compilePredicate(where.source);
       if ('problem' in outcome) {
-        issue('invalid-predicate', `${grantPath}.where`, outcome.problem);
+        issue(outcome.code, `${grantPath}.where`, outcome.problem);
         continue;
       }
       grants.push(
         await withFilter(
           {
             operation,
+            path: grantPath,
             where: {
               source: where.source,
               canonical: outcome.canonical,
               snapshot: where.snapshot,
             },
           },
+          granted.base,
           { body: outcome.body, snapshot: where.snapshot },
           resolved,
           definition,
-          grantPath,
         ),
       );
     }
-    rules.push({ targetType: resolved, grants });
+    rules.push({ targetType: resolved, path: rulePath, grants });
   }
   return compiled();
 }
 
-// Whether a grant is on a query: the base `query`, which a search with a
-// filter of the caller's own is authorized under, or a named operation the
-// rule's type declares on it.
-function isQueryGrant(operation: string, definition: Definition): boolean {
-  let declared =
-    definition.operations &&
-    Object.prototype.hasOwnProperty.call(definition.operations, operation)
-      ? definition.operations[operation]
-      : undefined;
-  return (declared?.base ?? operation) === 'query';
+// What invoking `name` on an instance of a type reaches: the type's own
+// declaration under that name, which it may have inherited, or else the
+// built-in behavior its kind carries. Undefined when it reaches neither. A
+// stored-bytes read is never a declaration's, since the realm answers it
+// before reading any definition.
+function grantedOperation(
+  definition: Definition,
+  name: string,
+): { base: BaseOperation; nonGrantable: boolean } | undefined {
+  let declared = isDefinitionFreeBaseOperation(name)
+    ? undefined
+    : ownOperation(definition, name);
+  if (declared) {
+    return {
+      base: declared.base,
+      nonGrantable: declared.nonGrantable === true,
+    };
+  }
+  return carriesBuiltIn(definition.type, name)
+    ? { base: name as BaseOperation, nonGrantable: false }
+    : undefined;
+}
+
+// The declaration a definition entry holds under `name`. The entry has been
+// through JSON, so a name like `constructor` is looked up as the entry's own
+// key and never through its prototype.
+function ownOperation(definition: Definition, name: string) {
+  let { operations } = definition;
+  return operations && Object.prototype.hasOwnProperty.call(operations, name)
+    ? operations[name]
+    : undefined;
 }
 
 function asCodeRef(
@@ -687,15 +870,136 @@ function readPredicate(
 const ADMITTED_CALL_DENIAL =
   / does not allow call (?:actor|instance|realmConfig):/;
 
+// The builtins a predicate may not call, because each can hold for a value it
+// matches only in part. `.teacherIds | contains([actor()])` holds for the
+// caller `@bob:server` when the list holds `@bob:server.org`; a regex, a
+// wildcard pattern or a substring search does the same, and a lookup that
+// settles for the nearest value holds for whichever id sorts next to a listed
+// one. A grant written with one admits callers its author never named, and
+// nothing reports it. And a search filter matches whole values, so the query
+// lane could never scope a search the way the gate judges a single card.
+//
+// A name here is refused wherever it appears in a predicate, and not only
+// where it reads `actor()`: a partial match on any value that decides access
+// is one an author has to reason about for every value that value could hold.
+// Names are as BXL resolves them, across every library the gate can resolve,
+// the lazily loaded validators included. jq's `index` finds a substring, while
+// Excel's `INDEX` reads a position and is not here.
+//
+// A name that starts with `_` is refused too. Those are jq's internal helpers,
+// which the registry keeps out of its public names, and the builtins above are
+// built on them: `index` on `_strindices`, `test` on `_match_impl`. Parsing
+// never produces one, so only a predicate that names one meets the refusal.
+//
+// `startswith` and `endswith`, and `ltrimstr`, `rtrimstr` and `trimstr`, are
+// refused unless their argument is a fixed string. Anchored at a fixed string
+// they are how a namespace is written: a path under `"…/public/"`, an id on
+// `":example.org"`. Anchored at anything else, the free end is on a value the
+// author did not write: `.teacherIds | any(startswith(actor()))` holds for
+// `@bob:server` against `@bob:server.org` just as `contains` does.
+//
+// Deliberately admitted, though each can come close:
+//
+// - Splitting and rewriting a string (`split`, `splits`, `sub`, `gsub`,
+//   `SUBSTITUTE`, `LEFT` and the rest). They answer no match themselves, and
+//   what they produce is compared exactly. A substring test can be built from
+//   one, but not by an author reaching for a membership test.
+// - Case folding and trimming (`ascii_downcase`, `LOWER`, `TRIM`), which
+//   loosen an equality without making it partial.
+// - The validators that test the shape of one value (`isEmail`, `isUUID`,
+//   `isWhitelisted` and the rest) rather than match it against another.
+const PARTIAL_MATCH_BUILTINS: ReadonlyMap<string, string> = new Map([
+  ['contains', 'matches substrings'],
+  ['inside', 'is `contains` reversed, and matches substrings'],
+  ['index', 'finds a substring'],
+  ['rindex', 'finds a substring'],
+  ['indices', 'finds a substring'],
+  ['FIND', 'finds a substring'],
+  ['SEARCH', 'finds a substring or a wildcard pattern'],
+  ['isIn', 'finds a substring when its list is a string'],
+  ['test', 'matches a regex anywhere in a string'],
+  ['match', 'matches a regex anywhere in a string'],
+  ['capture', 'matches a regex anywhere in a string'],
+  ['scan', 'matches a regex anywhere in a string'],
+  ['matches', 'matches a regex anywhere in a string'],
+  ['like', 'matches a wildcard pattern'],
+  ['bsearch', 'answers a position for a value that is not there'],
+  ['MATCH', 'can settle for the nearest value or a wildcard pattern'],
+  ['LOOKUP', 'settles for the nearest value'],
+  ['LOOKUP_BY', 'settles for the nearest value'],
+  ['VLOOKUP', 'can settle for the nearest value'],
+  ['VLOOKUP_BY', 'can settle for the nearest value'],
+  ['HLOOKUP', 'can settle for the nearest value'],
+  ['XLOOKUP', 'can settle for the nearest value or a wildcard pattern'],
+]);
+
+// Admitted only when anchored at a fixed string; see above.
+const ANCHORED_BUILTINS = new Set([
+  'startswith',
+  'endswith',
+  'ltrimstr',
+  'rtrimstr',
+  'trimstr',
+]);
+
+function isFixedString(node: unknown): boolean {
+  let { type, valueType, interpolated } = node as {
+    type?: unknown;
+    valueType?: unknown;
+    interpolated?: unknown;
+  };
+  return type === 'literal' && valueType === 'string' && interpolated !== true;
+}
+
+// The partial-match builtins a predicate calls, each named once in the order
+// it first appears, with what makes it partial.
+function partialMatchCalls(
+  bxl: BxlPolicyParser,
+  body: unknown,
+): Map<string, string> {
+  let calls = new Map<string, string>();
+  bxl.visitBxlAst(body, (node) => {
+    let { type, name, args } = node as {
+      type?: unknown;
+      name?: unknown;
+      args?: unknown;
+    };
+    if (type !== 'call' || typeof name !== 'string' || calls.has(name)) {
+      return;
+    }
+    let reason = PARTIAL_MATCH_BUILTINS.get(name);
+    if (reason) {
+      calls.set(name, reason);
+    } else if (name.startsWith('_')) {
+      calls.set(
+        name,
+        "is one of jq's internal helpers, which the builtins that match in part are built on",
+      );
+    } else if (
+      ANCHORED_BUILTINS.has(name) &&
+      !(Array.isArray(args) && args.length === 1 && isFixedString(args[0]))
+    ) {
+      calls.set(name, 'is anchored at a value that is not a fixed string');
+    }
+  });
+  return calls;
+}
+
+type PredicateProblem = {
+  code: 'invalid-predicate' | 'partial-match';
+  problem: string;
+};
+
 async function compilePredicate(
   source: string,
-): Promise<{ canonical: string; body: unknown } | { problem: string }> {
+): Promise<{ canonical: string; body: unknown } | PredicateProblem> {
   let bxl = await loadBxl();
   let program;
   try {
     program = bxl.parseBxlAst(source, { profile: 'policy' });
   } catch (e: unknown) {
     return {
+      code: 'invalid-predicate',
       problem: `\`where\` does not parse: ${e instanceof Error ? e.message : String(e)}`,
     };
   }
@@ -714,14 +1018,26 @@ async function compilePredicate(
   // would widen access on a slip.
   if (program.body == null) {
     return {
+      code: 'invalid-predicate',
       problem: '`where` is empty; a grant with no condition leaves `where` out',
     };
   }
   if (refusals.length > 0) {
     return {
+      code: 'invalid-predicate',
       problem: `the \`policy\` profile refuses \`where\`: ${refusals
         .map((issue) => `${issue.code}: ${issue.message}`)
         .join('; ')}`,
+    };
+  }
+  let partial = partialMatchCalls(bxl, program.body);
+  if (partial.size > 0) {
+    let calls = [...partial]
+      .map(([name, reason]) => `\`${name}\` ${reason}`)
+      .join('; ');
+    return {
+      code: 'partial-match',
+      problem: `\`where\` matches a value only in part, so it can hold for a caller the grant does not name: ${calls}. Test membership with \`.list | any(. == actor())\`, and compare strings with \`==\`, or with \`startswith\` or \`endswith\` and a fixed prefix or suffix`,
     };
   }
   return { canonical: program.canonicalSource, body: program.body };
@@ -756,6 +1072,7 @@ export interface BxlPolicyParser {
     severity: 'error' | 'warning';
     message: string;
   }[];
+  visitBxlAst(node: unknown, visitor: (node: unknown) => void): void;
 }
 
 let bxl: Promise<BxlPolicyParser> | undefined;

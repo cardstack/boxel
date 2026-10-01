@@ -846,6 +846,22 @@ module('Integration | operations', function (hooks) {
     );
   });
 
+  test('a saved search may not be named `query`', function (assert) {
+    // A search the caller writes by hand is invoked, and granted by a realm's
+    // policy, under the name `query`. A saved search declared under it would
+    // share that grant with every filter a caller writes over the type, so the
+    // name is refused and the base, which every saved search builds on, is not.
+    assert.throws(() => {
+      class Listing extends CardDef {
+        @operation static query = {
+          base: 'query',
+          query: { filter: { type: () => Listing } },
+        };
+      }
+      return Listing;
+    }, /"query" is a reserved operation name/);
+  });
+
   test('the decorator refuses every name the realm answers definition-free', function (assert) {
     // The two lists are one decision with two homes: dispatch skips the
     // definition lookup for `DEFINITION_FREE_BASE_OPERATIONS`, and that is
@@ -1033,7 +1049,7 @@ module('Integration | operations', function (hooks) {
         return Report;
       },
       /"links" is not a valid key for a "create" operation/,
-      'only a read carries a link graph to narrow',
+      'only a read or a query carries a link graph to narrow',
     );
     assert.throws(
       () => {
@@ -1042,8 +1058,34 @@ module('Integration | operations', function (hooks) {
         }
         return Report;
       },
-      /`links` must name how much of the card's link graph/,
+      /`links` must name how much of the card's link graph this read carries/,
       'and it names one of the three strategies',
+    );
+    assert.throws(
+      () => {
+        class Report extends CardDef {
+          @operation static listAll = {
+            base: 'query',
+            query: { filter: { type: () => Report } },
+            links: 'some',
+          };
+        }
+        return Report;
+      },
+      /`links` must name how much of the card's link graph each of this query's results carries/,
+      'a query names one of the same three',
+    );
+    class Roster extends CardDef {
+      @operation static listAll = {
+        base: 'query',
+        query: { filter: { type: () => Roster } },
+        links: 'ids',
+      };
+    }
+    assert.strictEqual(
+      (getDeclaredOperations(Roster).listAll as { links?: unknown }).links,
+      'ids',
+      'and a query that names one is declared with it',
     );
     assert.throws(
       () => {

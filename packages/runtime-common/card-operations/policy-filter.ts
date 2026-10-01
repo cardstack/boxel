@@ -24,9 +24,8 @@ import type { OperationQueryFilterTemplate } from './types.ts';
 // evaluate. A policy predicate is written in the `policy` profile's spelling,
 // which differs from the `predicate` profile's in two places. The caller is
 // the call `actor()` there and a context value here, and membership in a list
-// is a pipe into `any(...)` or `contains([...])` there and into `IN(...)`
-// here. Those two are respelled, and what results is checked against the
-// profile as it stands.
+// is a pipe into `any(...)` there and into `IN(...)` here. Those two are
+// respelled, and what results is checked against the profile as it stands.
 //
 // The second is the filter itself. It says less than SQL does: it has no
 // arithmetic and no string functions, and it cannot address one element of a
@@ -42,10 +41,8 @@ import type { OperationQueryFilterTemplate } from './types.ts';
 // and a `not` turns every refusal into an admission. Two comparisons can
 // disagree in that direction, so neither is compiled inside a `not`:
 //
-// - Membership. BXL's `contains` matches substrings, and the filter matches
-//   whole values, so a filter can refuse a card that `contains` admits. And
-//   the index answers `not` element by element: a card is admitted by
-//   `not member` as soon as any one element differs.
+// - Membership. The index answers `not` element by element: a card is
+//   admitted by `not member` as soon as any one element differs.
 // - A card's id. The predicate reads every link as the URL it resolves to,
 //   and the index holds a link it could not follow as the stored source wrote
 //   it, so the index can find two ids unequal that the predicate finds equal.
@@ -642,14 +639,13 @@ function isPathTo(node: unknown, names: string[]): boolean {
   );
 }
 
-// A membership test, in either spelling BXL has for one:
+// A membership test:
 //
 //   .list | any(. == value)        .links | any(.id == value)
-//   .list | contains([value])      .links | contains([{ id: value }])
 //
-// The `any` spelling is exact. The `contains` one matches substrings: BXL's
-// `contains` holds for a list whose element merely contains the value. Its
-// filter matches whole values, so it is narrower than the predicate.
+// It is exact, and so is the filter it compiles to. BXL's other spelling,
+// `contains([value])`, matches substrings, and a policy that uses it does not
+// compile, so it never reaches here.
 function asMembership(node: unknown): Membership | undefined {
   let pipe = asBinary(node);
   if (pipe?.operator !== '|') {
@@ -657,57 +653,21 @@ function asMembership(node: unknown): Membership | undefined {
   }
   let [condition] = callArgs(pipe.right, 'any') ?? [];
   let comparison = asBinary(condition);
-  if (isCall(pipe.right, 'any', 1) && comparison?.operator === '==') {
-    for (let [element, member] of [
-      [comparison.left, comparison.right],
-      [comparison.right, comparison.left],
-    ]) {
-      if (isPathTo(element, [])) {
-        return { collection: pipe.left, member, through: 'value' };
-      }
-      if (isPathTo(element, ['id'])) {
-        return { collection: pipe.left, member, through: 'id' };
-      }
-    }
+  if (!isCall(pipe.right, 'any', 1) || comparison?.operator !== '==') {
     return undefined;
   }
-  let [array] = callArgs(pipe.right, 'contains') ?? [];
-  if (
-    isCall(pipe.right, 'contains', 1) &&
-    isNode(array) &&
-    array.type === 'array' &&
-    isNode(array.expr) &&
-    !(array.expr.type === 'binary' && array.expr.operator === ',')
-  ) {
-    let element = array.expr;
-    let id = idEntry(element);
-    if (id) {
-      return { collection: pipe.left, member: id, through: 'id' };
+  for (let [element, member] of [
+    [comparison.left, comparison.right],
+    [comparison.right, comparison.left],
+  ]) {
+    if (isPathTo(element, [])) {
+      return { collection: pipe.left, member, through: 'value' };
     }
-    return { collection: pipe.left, member: element, through: 'value' };
+    if (isPathTo(element, ['id'])) {
+      return { collection: pipe.left, member, through: 'id' };
+    }
   }
   return undefined;
-}
-
-// The value of `{ id: value }`, the only object a membership test in a list of
-// links looks for.
-function idEntry(node: AstNode): unknown {
-  if (
-    node.type !== 'object' ||
-    !Array.isArray(node.entries) ||
-    node.entries.length !== 1
-  ) {
-    return undefined;
-  }
-  let [entry] = node.entries as { key?: unknown; value?: unknown }[];
-  let key = entry?.key;
-  let named =
-    key === 'id' ||
-    (isNode(key) &&
-      key.type === 'literal' &&
-      key.valueType === 'string' &&
-      key.value === 'id');
-  return named ? entry.value : undefined;
 }
 
 function readConstant(node: unknown): Constant | undefined {

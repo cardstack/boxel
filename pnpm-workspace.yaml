@@ -205,6 +205,12 @@ catalog:
   mime-types: ^2.1.35
   moment: ^2.29.4
   monaco-editor: ^0.52.2
+  # Pinned together: glimmer-motion carries code copied from Motion at the
+  # release matching motion-dom 13.1.1 (see packages/glimmer-motion/VENDORED.md).
+  framer-motion: 13.1.1
+  motion: 13.1.1
+  motion-dom: 13.1.1
+  motion-utils: 13.0.0
   ms: ^2.1.3
   node-pg-migrate: ^6.2.2
   normalize.css: 8.0.1
@@ -265,13 +271,13 @@ catalog:
   yaml: ^2.5.1
   yargs: ^17.5.1
 
-# pnpm 11 defaults this to `install`, making every `pnpm run` first check
+# pnpm defaults this to `install`, making every `pnpm run` first check
 # node_modules freshness and silently run a full install when the check
 # fails. The check never passes in CI, so each of the ~9 services `run-p`
 # boots kicks off its own concurrent workspace-wide install into the same
 # node_modules; when they collide badly enough, start:matrix never reaches
-# `docker run` and the shard dies with "Failed to reach Synapse". Disabling
-# restores pnpm 10 behavior: scripts run against node_modules as-is.
+# `docker run` and the shard dies with "Failed to reach Synapse". Disabled
+# here so scripts run against node_modules as-is.
 verifyDepsBeforeRun: false
 
 minimumReleaseAge: 1440
@@ -281,6 +287,11 @@ minimumReleaseAgeExclude:
 allowedDeprecatedVersions:
   babel-eslint: 10.1.0
 overrides:
+  # One Motion engine: motion pulls framer-motion, which pulls motion-dom, both on
+  # caret ranges that would otherwise resolve past the pinned release.
+  framer-motion: "catalog:"
+  motion-dom: "catalog:"
+  motion-utils: "catalog:"
   "@types/eslint": 8.56.5
   "@embroider/util": 1.13.1
   "@glimmer/tracking>@glimmer/validator": 0.84.3

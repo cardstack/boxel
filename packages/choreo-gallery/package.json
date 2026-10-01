@@ -1,0 +1,108 @@
+{
+  "name": "choreo-gallery",
+  "version": "0.0.0",
+  "private": true,
+  "engines": {
+    "node": ">=22.16.0"
+  },
+  "description": "Generated Boxel adaptation of the canonical Choreo gallery.",
+  "license": "MIT",
+  "exports": {
+    ".": {
+      "types": "./declarations/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./*": {
+      "types": "./declarations/*.d.ts",
+      "default": "./dist/*.js"
+    },
+    "./addon-main.js": "./addon-main.cjs"
+  },
+  "typesVersions": {
+    "*": {
+      "*": [
+        "declarations/*",
+        "declarations/*/index"
+      ]
+    }
+  },
+  "files": [
+    "addon-main.cjs",
+    "declarations",
+    "dist",
+    "public",
+    "styles"
+  ],
+  "scripts": {
+    "build": "node scripts/sync-gallery.mjs && node scripts/scope-css.mjs && rollup --config",
+    "build:realm": "node scripts/build-boxel-realm.mjs",
+    "lint:types": "node scripts/sync-gallery.mjs && ember-tsc --noEmit",
+    "test:boxel": "node scripts/test-boxel-runtime.mjs",
+    "test:realm": "node --test tests/realm-output.test.mjs",
+    "test:theater-sizing": "node scripts/test-theater-sizing.mjs",
+    "start": "node scripts/scope-css.mjs && rollup --config --watch",
+    "format": "prettier . --cache --write",
+    "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\" --prefixColors auto",
+    "lint:fix": "concurrently \"pnpm:lint:*:fix\" --names \"fix:\" --prefixColors auto && pnpm run format",
+    "lint:format": "prettier . --cache --check",
+    "lint:hbs": "ember-template-lint .",
+    "lint:hbs:fix": "ember-template-lint . --fix",
+    "lint:js": "eslint . --cache",
+    "lint:js:fix": "eslint . --fix"
+  },
+  "dependencies": {
+    "@chenglou/pretext": "^0.0.8",
+    "choreo-player": "workspace:*",
+    "decorator-transforms": "catalog:",
+    "dialkit": "^2.0.0",
+    "ember-modifier": "^4.3.0",
+    "glimmer-motion": "workspace:*",
+    "marked": "^18.0.11",
+    "motion": "catalog:",
+    "motion-dom": "catalog:",
+    "three": "^0.185.1",
+    "three-149": "npm:three@0.149.0"
+  },
+  "devDependencies": {
+    "@babel/core": "catalog:",
+    "@babel/plugin-transform-typescript": "catalog:",
+    "@ember/library-tsconfig": "^1.1.3",
+    "@embroider/addon-dev": "^8.0.0",
+    "@embroider/addon-shim": "^1.8.9",
+    "@eslint/js": "^9.39.4",
+    "@glimmer/component": "catalog:",
+    "@glimmer/tracking": "^1.1.2",
+    "@glint/ember-tsc": "catalog:",
+    "@glint/template": "catalog:",
+    "@rollup/plugin-babel": "catalog:",
+    "@rollup/plugin-json": "6.1.0",
+    "@types/three": "^0.185.4",
+    "babel-plugin-ember-template-compilation": "catalog:",
+    "concurrently": "catalog:",
+    "ember-source": "catalog:",
+    "ember-template-lint": "catalog:",
+    "esbuild": "^0.25.0",
+    "eslint": "^9.39.4",
+    "eslint-config-prettier": "catalog:",
+    "eslint-plugin-ember": "catalog:",
+    "eslint-plugin-n": "catalog:",
+    "eslint-plugin-simple-import-sort": "^12.1.1",
+    "eslint-plugin-typescript-sort-keys": "catalog:",
+    "glimmer-scoped-css": "catalog:",
+    "globals": "^15.15.0",
+    "playwright": "1.61.0",
+    "postcss": "^8.5.6",
+    "postcss-selector-parser": "^7.1.0",
+    "prettier": "catalog:",
+    "prettier-plugin-ember-template-tag": "catalog:",
+    "rollup": "catalog:",
+    "typescript": "catalog:",
+    "typescript-eslint": "catalog:"
+  },
+  "ember-addon": {
+    "type": "addon",
+    "version": 2,
+    "main": "addon-main.cjs",
+    "app-js": {}
+  }
+}

@@ -19,14 +19,29 @@ Boxel tokens are derived credentials with their own, weaker retirement story.
 
 ## The token families
 
-| Token                | Minted by                                              | Claims                                                    | Lifetime                                                                   |
-| -------------------- | ------------------------------------------------------ | --------------------------------------------------------- | -------------------------------------------------------------------------- |
-| matrix access token  | Synapse                                                | n/a                                                       | no expiry by default                                                       |
-| realm-server session | `POST /_server-session`                                | `{user, sessionRoom}`                                     | `SESSION_TOKEN_TTL` (24h), or `EXTENDED_SESSION_TOKEN_TTL` (7d) on request |
-| per-realm session    | `POST /_realm-auth`, and the realm's own session route | `{user, realm, permissions, sessionRoom, realmServerURL}` | `SESSION_TOKEN_TTL`                                                        |
-| delegated            | `POST /_delegate-session`                              | same, plus `delegated: true`, `permissions: ['read']`     | `DELEGATED_TOKEN_TTL` (30m)                                                |
-| prerender service    | `buildCreatePrerenderAuth` (in-process)                | per-realm session shape                                   | `1d`                                                                       |
-| publish-realm        | `handle-publish-realm` (in-process)                    | per-realm session shape                                   | `1h`                                                                       |
+| Token                | Minted by                                              | Claims                                                           | Lifetime                                                                   |
+| -------------------- | ------------------------------------------------------ | ---------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| matrix access token  | Synapse                                                | n/a                                                              | no expiry by default                                                       |
+| realm-server session | `POST /_server-session`                                | `{user, sessionRoom}`                                            | `SESSION_TOKEN_TTL` (24h), or `EXTENDED_SESSION_TOKEN_TTL` (7d) on request |
+| per-realm session    | `POST /_realm-auth`, and the realm's own session route | `{user, realm, permissions, sessionRoom, realmServerURL}`        | `SESSION_TOKEN_TTL`                                                        |
+| delegated            | `POST /_delegate-session`                              | same, plus `delegated: true`, `permissions: ['read']`            | `DELEGATED_TOKEN_TTL` (30m)                                                |
+| prerender service    | `buildCreatePrerenderAuth` (in-process)                | per-realm session shape, plus `realmAuthority: true` (see below) | `1d`                                                                       |
+| publish-realm        | `handle-publish-realm` (in-process)                    | per-realm session shape                                          | `1h`                                                                       |
+
+A prerender session carries `realmAuthority: true` when what it renders is kept
+and served to others — indexing, the HTML render, a module's definition render,
+skill validation, a capture that persists — and not when the result goes back
+only to whoever asked (a command, a capture answered to its requester). The
+search routes read a request as a realm-authority principal when its session
+carries that claim **or** the request carries `x-boxel-during-prerender`: a
+render tab marks every request it sends, whatever session it holds, including
+one minted before its minter carried the claim. Such a principal's searches
+find what the realm ACL grants it and nothing more — no policy scopes them, and
+`policyQueryScope` throws `RealmAuthorityPolicyScopeError` if handed one. The
+claim is read on the search paths only: a single-card read is judged by the
+gate on its `user` like any other caller's. Both verification paths expose it —
+`RequestContext.realmAuthority` on a realm, the `principal` in
+`multiRealmAuthorization`'s state on the federated endpoints.
 
 The two lifetimes a browser holds live in `packages/runtime-common/session-token.ts`
 — a **leaf module with no imports**, so the CLI can read them without pulling the

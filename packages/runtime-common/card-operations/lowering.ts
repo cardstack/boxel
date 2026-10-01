@@ -197,6 +197,9 @@ function runsNoProgram(base: BaseOperationName, kind: Definition['type']) {
   );
 }
 
+// The name an ad-hoc search is invoked under, which no declaration may take.
+const AD_HOC_QUERY_NAME = 'query';
+
 // Lower every declared operation on one type.
 //
 // `raw` is the authored view — `getDeclaredOperations`, not `getOperations`.
@@ -228,6 +231,32 @@ export async function lowerOperationDeclarations(
             operation: name,
             path: name,
             message: `"${name}" is a reserved operation name — the realm serves it from the bytes stored at the target's URL and reads no definition to do so`,
+          },
+        ],
+      };
+      operations[name] = operation;
+      issues.push(...operation.issues!);
+      continue;
+    }
+    if (name === AD_HOC_QUERY_NAME) {
+      // An ad-hoc search is invoked and granted under this name, so a stored
+      // saved search under it would share that grant with every filter a
+      // caller writes over the type. The authoring decorator refuses the
+      // name, and this keeps a stored entry from carrying it past the code
+      // that did. It is stored invalid, so invoking it by name is refused
+      // rather than served. It is stored on the `query` base whatever base the
+      // declaration named, so whatever reads the entry, a policy compiling a
+      // grant on the name included, reads the name as the ad-hoc search.
+      let operation: OperationDefinition = {
+        base: 'query',
+        deterministic: true,
+        invalid: true,
+        issues: [
+          {
+            code: 'reserved-name',
+            operation: name,
+            path: name,
+            message: `"${name}" is a reserved operation name — it is the name a search the caller writes by hand is invoked and granted under, so a saved search needs a name of its own`,
           },
         ],
       };
@@ -364,20 +393,20 @@ async function lowerOperation(
     operation.optimistic = declaration.optimistic;
   }
 
-  // A link strategy narrows the document a read of the target serves, and no
-  // other base serves one — so on any other base the declaration would narrow
+  // A link strategy narrows the link closure an answer assembles: the document
+  // a read of the target serves, or the rows a query answers with. No other
+  // base assembles one — so on any other base the declaration would narrow
   // nothing, and a stored entry carrying one would read as a narrowing that was
-  // never applied. A `query` in particular answers through search, whose results
-  // carry their own closures that this declaration does not govern. The
-  // authoring decorator refuses both of these where they are written; this
-  // keeps them out of a type's entry, which outlives the code that built it.
+  // never applied. The authoring decorator refuses both of these where they are
+  // written; this keeps them out of a type's entry, which outlives the code
+  // that built it.
   let links = (declaration as { links?: unknown }).links;
   if (links !== undefined) {
-    if (base !== 'read') {
+    if (base !== 'read' && base !== 'query') {
       sink.add(
         'links-without-assembly',
         'links',
-        `a \`links\` strategy narrows the document a "read" serves, and a "${base}" operation serves no such document, so it would narrow nothing`,
+        `a \`links\` strategy narrows the link closure a "read" or a "query" assembles, and a "${base}" operation assembles none, so it would narrow nothing`,
       );
     } else if (!isLinkStrategy(links)) {
       // Not stored. The serving path reads an unrecognized strategy as the
@@ -387,7 +416,9 @@ async function lowerOperation(
       sink.add(
         'invalid-link-strategy',
         'links',
-        `"${String(links)}" does not name how much of the link graph a read carries — one of "full", "ids", "none"`,
+        `"${String(links)}" does not name how much of the link graph ${
+          base === 'query' ? "a query's results carry" : 'a read carries'
+        } — one of "full", "ids", "none"`,
       );
     } else {
       operation.links = links;

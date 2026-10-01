@@ -185,9 +185,21 @@ function matchParameterized(
   return plain;
 }
 
-export type RouteTable<T> = Map<SupportedMimeType, Map<Method, Map<string, T>>>;
+type RouteTable<T> = Map<SupportedMimeType, Map<Method, Map<string, T>>>;
 
-export function lookupRouteTable<T>(
+// The path a request is routed on: its path within the realm with a leading
+// slash, keeping the trailing slash that names a directory, so a route for a
+// path never matches the directory of the same name.
+export function routedPath(paths: RealmPaths, request: Request): string {
+  // we construct a new URL within RealmPath.local() param that strips off the query string
+  let requestPath = `/${paths.local(new URL(request.url))}`;
+  // add a leading and trailing slashes back so we can match on routing rules for directories.
+  return request.url.endsWith('/') && requestPath !== '/'
+    ? `${requestPath}/`
+    : requestPath;
+}
+
+function lookupRouteTable<T>(
   routeTable: RouteTable<T>,
   paths: RealmPaths,
   request: Request,
@@ -195,13 +207,7 @@ export function lookupRouteTable<T>(
   if (!isHTTPMethod(request.method)) {
     return;
   }
-  // we construct a new URL within RealmPath.local() param that strips off the query string
-  let requestPath = `/${paths.local(new URL(request.url))}`;
-  // add a leading and trailing slashes back so we can match on routing rules for directories.
-  requestPath =
-    request.url.endsWith('/') && requestPath !== '/'
-      ? `${requestPath}/`
-      : requestPath;
+  let requestPath = routedPath(paths, request);
 
   let acceptMimeType = extractSupportedMimeType(
     request.headers.get('Accept') as unknown as null | string | [string],
@@ -261,8 +267,9 @@ export interface RouteOptions {
   // which is the one place anything may admit it. Every other route is
   // refused with the ACL's own refusal before its handler runs.
   consumesCoarseOutcome?: true;
-  // No policy grant reaches what the route serves: module source, a file's
-  // stored bytes, the file tree. Only the realm ACL admits a caller to it. In
+  // No policy grant reaches what the route serves: module source, the file
+  // tree, and a file's stored bytes wherever `grantableBytes` does not hand
+  // them to the gate. Only the realm ACL admits a caller to it. In
   // a realm with a policy, a caller the ACL does not let read the realm is
   // told nothing is there, as they are told of every card no grant admits
   // them to, rather than that they may not look. A `HEAD`, which the ACL
@@ -270,12 +277,38 @@ export interface RouteOptions {
   // when the ACL would not let its caller read the realm, whether or not the
   // realm has a policy.
   coarseReadOnly?: true;
+  // The route applies an archived realm's seal itself to a caller the realm
+  // ACL declined outright and its policy was handed, at the point where it
+  // would run what that caller asked for. Anything it refuses them before that
+  // point is refused as it is while the realm is active, so a caller no grant
+  // admits is not told the realm is archived. Only a route that consumes the
+  // ACL's outcome can take this. Every other route that does meets such a
+  // caller with the seal as soon as it admits them.
+  appliesArchivedSeal?: true;
+  // The route serves a path's stored bytes, and for a path that names a data
+  // file or a card's document those bytes are a `readSource` a policy grant
+  // can reach. A request for one consumes the ACL's outcome and is resolved
+  // through the gate, `HEAD` included. Every other path the route serves stays
+  // `coarseReadOnly`.
+  grantableBytes?: true;
+  // The route is one of the realm's operational endpoints, which answer a
+  // caller without credentials and keep working while the realm is archived:
+  // the realm's credential check and its seal both let through a request the
+  // router dispatches here. The route is the exemption, rather than its path
+  // or a media type the request carries, so a request for that path which the
+  // router hands to another route (a directory of the same name, or a media
+  // type the endpoint does not answer) needs the credentials that route needs
+  // and is sealed like any other.
+  operationalEndpoint?: true;
 }
 
 export interface Route {
   handler: Handler;
   consumesCoarseOutcome: boolean;
   coarseReadOnly: boolean;
+  appliesArchivedSeal: boolean;
+  grantableBytes: boolean;
+  operationalEndpoint: boolean;
 }
 
 export interface RouteDescription {
@@ -284,6 +317,9 @@ export interface RouteDescription {
   path: string;
   consumesCoarseOutcome: boolean;
   coarseReadOnly: boolean;
+  appliesArchivedSeal: boolean;
+  grantableBytes: boolean;
+  operationalEndpoint: boolean;
 }
 
 export class Router {
@@ -373,6 +409,9 @@ export class Router {
       handler,
       consumesCoarseOutcome: opts.consumesCoarseOutcome === true,
       coarseReadOnly: opts.coarseReadOnly === true,
+      appliesArchivedSeal: opts.appliesArchivedSeal === true,
+      grantableBytes: opts.grantableBytes === true,
+      operationalEndpoint: opts.operationalEndpoint === true,
     });
   }
 
@@ -390,6 +429,9 @@ export class Router {
             path,
             consumesCoarseOutcome: route.consumesCoarseOutcome,
             coarseReadOnly: route.coarseReadOnly,
+            appliesArchivedSeal: route.appliesArchivedSeal,
+            grantableBytes: route.grantableBytes,
+            operationalEndpoint: route.operationalEndpoint,
           });
         }
       }
@@ -409,6 +451,13 @@ export class Router {
     try {
       return await route.handler(request, requestContext);
     } catch (err) {
+      // The archived seal is answered at the realm's request boundary, with
+      // the marker a client reads it by, wherever in a request it is raised.
+      // A handler raises it where the realm would run what a caller its
+      // policy admitted asked for.
+      if (err instanceof ArchivedRealmError) {
+        throw err;
+      }
       if (err instanceof CardError) {
         // Without this line a thrown CardError is indistinguishable in the
         // request log from a handler that returned the same status

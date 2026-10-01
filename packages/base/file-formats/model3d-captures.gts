@@ -1,4 +1,4 @@
-// The 3D families' declared-screenshot capture: a capture-only WebGL render
+// The 3D families' declared-capture: a capture-only WebGL render
 // of one still frame so the fitted cell (and the thumbnail fallback chain)
 // show the model instead of a cube glyph.
 //
@@ -24,7 +24,7 @@ import { fileResourceURL } from './file-image';
 
 import { loadThree } from '@cardstack/boxel-host/lib/three-loader';
 
-import type { ScreenshotSpec } from '../card-api';
+import type { CaptureSpec } from '../card-api';
 
 interface CaptureSignature {
   Args: {
@@ -39,7 +39,7 @@ function extensionOf(name: string): string {
 }
 
 export class Model3dStillCapture extends GlimmerComponent<CaptureSignature> {
-  // The capture engine waits (bounded) for no `data-screenshot-pending`
+  // The capture engine waits (bounded) for no `data-capture-pending`
   // attribute before shooting: the WebGL first frame isn't visible to the
   // engine's image-paint wait, so the component owns the readiness signal.
   //
@@ -54,7 +54,7 @@ export class Model3dStillCapture extends GlimmerComponent<CaptureSignature> {
     // Readiness resolves only on a rendered frame.
     let finish = () => {
       if (!cancelled) {
-        element.removeAttribute('data-screenshot-pending');
+        element.removeAttribute('data-capture-pending');
       }
     };
     // A model that cannot produce a still — a failed fetch, bytes no loader
@@ -71,8 +71,8 @@ export class Model3dStillCapture extends GlimmerComponent<CaptureSignature> {
     // attribute value carries the cause into the slot's failure diagnostics.
     let fail = (cause: unknown) => {
       if (!cancelled) {
-        element.removeAttribute('data-screenshot-pending');
-        element.setAttribute('data-screenshot-failed', String(cause));
+        element.removeAttribute('data-capture-pending');
+        element.setAttribute('data-capture-failed', String(cause));
       }
     };
     (async () => {
@@ -199,7 +199,7 @@ export class Model3dStillCapture extends GlimmerComponent<CaptureSignature> {
   <template>
     <div
       class='model3d-still-capture'
-      data-screenshot-pending='true'
+      data-capture-pending='true'
       {{this.renderStill}}
     >
     </div>
@@ -219,7 +219,7 @@ export class Model3dStillCapture extends GlimmerComponent<CaptureSignature> {
 // file content so a metadata-only edit never re-renders the scene, feeding
 // the thumbnail fallback chain and the fitted cell through the view model's
 // thumbnail seam.
-export const MODEL3D_FAMILY_SCREENSHOTS: Record<string, ScreenshotSpec> = {
+export const MODEL3D_FAMILY_CAPTURES: Record<string, CaptureSpec> = {
   poster: {
     render: Model3dStillCapture,
     width: 170,

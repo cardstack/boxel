@@ -58,6 +58,7 @@ module(basename(import.meta.filename), function () {
     assert.deepEqual(
       registered.sort(),
       [
+        'capture-card',
         'daily-credit-grant',
         'from-scratch-index',
         'full-reindex',

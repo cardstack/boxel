@@ -27,6 +27,7 @@ import {
   httpLogging,
   ecsMetadata,
   searchAdmission,
+  orderConnectionsByRealm,
   methodOverrideSupport,
   proxyAsset,
 } from './middleware/index.ts';
@@ -758,7 +759,7 @@ export class RealmServer {
     queue: QueuePublisher;
     definitionLookup: DefinitionLookup;
     // MediaCache object store shared with the realms this server mounts;
-    // absent means the POST screenshot endpoint captures without persisting.
+    // absent means the POST capture endpoint captures without persisting.
     mediaCacheAdapter?: MediaCacheAdapter;
     assetsURL: URL;
     getIndexHTML: () => Promise<string>;
@@ -927,6 +928,7 @@ export class RealmServer {
         }),
       )
       .use(searchAdmission)
+      .use(orderConnectionsByRealm({ reconciler: this.reconciler }))
       .use(async (ctx, next) => {
         // Disable browser cache for all data requests to the realm server. The condition captures our supported mime types but not others,
         // such as assets, which we probably want to cache.

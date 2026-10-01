@@ -135,7 +135,7 @@ module(basename(import.meta.filename), function (hooks) {
     await seedIndexRow({ url: sourceURL, realmURL, isDeleted: true });
   }
 
-  // A live production prerendered row whose `screenshots` manifest is the
+  // A live production prerendered row whose `captures` manifest is the
   // unreferenced arm's liveness set. `manifestSpecHashes` seeds one entry per
   // hash (names are irrelevant to the arm); null seeds a manifest-less row.
   async function seedPrerenderedRow({
@@ -153,7 +153,7 @@ module(basename(import.meta.filename), function (hooks) {
     manifestSpecHashes: string[] | null;
     renderedAt: number;
   }) {
-    let screenshots =
+    let captures =
       manifestSpecHashes === null
         ? null
         : Object.fromEntries(
@@ -178,9 +178,9 @@ module(basename(import.meta.filename), function (hooks) {
         generation: 1,
         is_deleted: false,
         rendered_at: renderedAt,
-        screenshots,
+        captures,
       },
-      { jsonFields: ['screenshots'] },
+      { jsonFields: ['captures'] },
     );
     await query(
       dbAdapter,
@@ -281,7 +281,7 @@ module(basename(import.meta.filename), function (hooks) {
   test('reclaims captures of a tombstoned source file', async function (assert) {
     let now = Date.now();
     // A file capture's ledger spelling keeps the extension
-    // (`screenshotLedgerSourceURL`), and a non-`.json` file has only a
+    // (`captureLedgerSourceURL`), and a non-`.json` file has only a
     // type-'file' index row — the tombstone arm must match it or these
     // captures leak forever.
     await seedLedgerRow({

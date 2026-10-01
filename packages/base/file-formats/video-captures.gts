@@ -1,4 +1,4 @@
-// The video family's declared-screenshot capture: a capture-only component
+// The video family's declared-capture: a capture-only component
 // that decodes one frame into a canvas so the fitted cell (and the thumbnail
 // fallback chain) show a real poster frame instead of the placeholder.
 //
@@ -12,7 +12,7 @@ import { modifier } from 'ember-modifier';
 
 import { fileResourceURL } from './file-image';
 
-import type { ScreenshotSpec } from '../card-api';
+import type { CaptureSpec } from '../card-api';
 
 // Where the poster frame comes from: one second in, clamped to the middle of
 // anything shorter. Early enough to be cheap to decode, late enough to skip
@@ -50,7 +50,7 @@ interface CaptureSignature {
 }
 
 export class VideoPosterCapture extends GlimmerComponent<CaptureSignature> {
-  // The capture engine waits (bounded) for no `data-screenshot-pending`
+  // The capture engine waits (bounded) for no `data-capture-pending`
   // attribute before shooting: a video seek's paint isn't visible to the
   // engine's image-paint wait, so the component owns the readiness signal.
   //
@@ -71,7 +71,7 @@ export class VideoPosterCapture extends GlimmerComponent<CaptureSignature> {
     // Readiness resolves only on a drawn frame.
     let finish = () => {
       if (!cancelled) {
-        container.removeAttribute('data-screenshot-pending');
+        container.removeAttribute('data-capture-pending');
       }
       release();
     };
@@ -89,8 +89,8 @@ export class VideoPosterCapture extends GlimmerComponent<CaptureSignature> {
     // distinguishable from a hung component.
     let fail = (cause: string) => {
       if (!cancelled) {
-        container.removeAttribute('data-screenshot-pending');
-        container.setAttribute('data-screenshot-failed', cause);
+        container.removeAttribute('data-capture-pending');
+        container.setAttribute('data-capture-failed', cause);
       }
       release();
     };
@@ -172,7 +172,7 @@ export class VideoPosterCapture extends GlimmerComponent<CaptureSignature> {
   });
 
   <template>
-    <div class='video-poster-capture' data-screenshot-pending='true'>
+    <div class='video-poster-capture' data-capture-pending='true'>
       <canvas {{this.drawPosterFrame}} />
     </div>
     <style scoped>
@@ -195,7 +195,7 @@ export class VideoPosterCapture extends GlimmerComponent<CaptureSignature> {
 // black ground, keyed on file content so a metadata-only edit never
 // re-decodes the video, feeding the thumbnail fallback chain and the fitted
 // cell through the view model's thumbnail seam.
-export const VIDEO_FAMILY_SCREENSHOTS: Record<string, ScreenshotSpec> = {
+export const VIDEO_FAMILY_CAPTURES: Record<string, CaptureSpec> = {
   poster: {
     render: VideoPosterCapture,
     width: 170,

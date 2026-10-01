@@ -2,70 +2,75 @@ import { computeMediaCacheKey } from './media-cache.ts';
 import { CAPTURE_SERVING_PREFIX } from './paths.ts';
 
 import type {
-  ScreenshotCaptureEntry,
-  ScreenshotCaptureOverrides,
-  ScreenshotCaptureSpec,
+  CaptureRequestEntry,
+  CaptureRequestOverrides,
+  CaptureRequestSpec,
 } from './index.ts';
 
-// Card formats a screenshot can be captured in. `isolated`/`embedded` fill
+// Card formats a capture can be captured in. `isolated`/`embedded` fill
 // the viewport; `fitted` renders into a parent-owned box and so requires an
-// `envelope`. Distinct from CAPTURE_FORMATS below, which is the canonical
+// `envelope`. Distinct from CANONICAL_CAPTURE_FORMATS below, which is the canonical
 // (ledger/GET-DSL) serving contract and stays viewport-filling only.
-export const SCREENSHOT_FORMATS = ['isolated', 'embedded', 'fitted'] as const;
-export type ScreenshotFormat = (typeof SCREENSHOT_FORMATS)[number];
+export const ON_DEMAND_CAPTURE_FORMATS = [
+  'isolated',
+  'embedded',
+  'fitted',
+] as const;
+export type OnDemandCaptureFormat = (typeof ON_DEMAND_CAPTURE_FORMATS)[number];
 
-export function isScreenshotFormat(value: unknown): value is ScreenshotFormat {
-  return (SCREENSHOT_FORMATS as readonly unknown[]).includes(value);
+export function isOnDemandCaptureFormat(
+  value: unknown,
+): value is OnDemandCaptureFormat {
+  return (ON_DEMAND_CAPTURE_FORMATS as readonly unknown[]).includes(value);
 }
 
 // Formats whose card fills a parent-owned box rather than the viewport, and
 // so require an `envelope` to lay out. `isolated`/`embedded` fill the
 // viewport and must NOT be given an envelope.
-const ENVELOPE_FORMATS: readonly ScreenshotFormat[] = ['fitted'];
+const ENVELOPE_FORMATS: readonly OnDemandCaptureFormat[] = ['fitted'];
 
 // ---------------------------------------------------------------------------
-// Declared screenshots (`static screenshots` on CardDef/FileDef) — the name
+// Declared captures (`static captures` on CardDef/FileDef) — the name
 // grammar and format roster shared by the declaration reader in
-// packages/base/card-api and the realm's `_screenshot/…?name=` route.
+// packages/base/card-api and the realm's `_capture/…?name=` route.
 // ---------------------------------------------------------------------------
 
-// A declared screenshot's name addresses the capture in a URL, so it is
+// A declared capture's name addresses the capture in a URL, so it is
 // constrained to a charset that survives a URL path segment with no
 // percent-encoding: a leading letter or digit, then letters, digits, `-`,
 // or `_`.
-export const SCREENSHOT_NAME_MAX_LENGTH = 64;
-export const SCREENSHOT_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
+export const CAPTURE_NAME_MAX_LENGTH = 64;
+export const CAPTURE_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
 
-export function isValidScreenshotName(value: unknown): value is string {
+export function isValidCaptureName(value: unknown): value is string {
   return (
     typeof value === 'string' &&
-    value.length <= SCREENSHOT_NAME_MAX_LENGTH &&
-    SCREENSHOT_NAME_PATTERN.test(value)
+    value.length <= CAPTURE_NAME_MAX_LENGTH &&
+    CAPTURE_NAME_PATTERN.test(value)
   );
 }
 
-// Display formats a declared screenshot may reuse via its `format` slot.
+// Display formats a declared capture may reuse via its `format` slot.
 // Distinct from the on-demand rosters above: a declared capture renders in
 // the indexing-time prerender pass, which can lay out any display format —
 // `atom` included — while `edit` and the non-visual formats are not
 // meaningful pixel sources.
-export const DECLARED_SCREENSHOT_FORMATS = [
+export const DECLARED_CAPTURE_FORMATS = [
   'isolated',
   'embedded',
   'fitted',
   'atom',
 ] as const;
-export type DeclaredScreenshotFormat =
-  (typeof DECLARED_SCREENSHOT_FORMATS)[number];
+export type DeclaredCaptureFormat = (typeof DECLARED_CAPTURE_FORMATS)[number];
 
-export function isDeclaredScreenshotFormat(
+export function isDeclaredCaptureFormat(
   value: unknown,
-): value is DeclaredScreenshotFormat {
-  return (DECLARED_SCREENSHOT_FORMATS as readonly unknown[]).includes(value);
+): value is DeclaredCaptureFormat {
+  return (DECLARED_CAPTURE_FORMATS as readonly unknown[]).includes(value);
 }
 
-// The capture spec: every way a screenshot capture can be parameterized,
-// shared by the POST /_screenshot-card body and the GET `_screenshot/` URL
+// The capture spec: every way a capture can be parameterized,
+// shared by the POST /_capture-card body and the GET `_capture/` URL
 // DSL so the two surfaces validate identically and one capture satisfies
 // both. The spec's canonical form is what keys the MediaCache ledger, so
 // everything here is deliberately strict: two requests that mean the same
@@ -73,30 +78,30 @@ export function isDeclaredScreenshotFormat(
 // cannot honor is refused by name rather than ignored (ignoring would fold
 // different intents onto one cache key and serve the wrong image).
 
-export const CAPTURE_FORMATS = ['isolated', 'embedded'] as const;
-export type CaptureFormat = (typeof CAPTURE_FORMATS)[number];
-export const DEFAULT_CAPTURE_FORMAT: CaptureFormat = 'isolated';
+export const CANONICAL_CAPTURE_FORMATS = ['isolated', 'embedded'] as const;
+export type CanonicalCaptureFormat = (typeof CANONICAL_CAPTURE_FORMATS)[number];
+export const DEFAULT_CAPTURE_FORMAT: CanonicalCaptureFormat = 'isolated';
 
-export function isCaptureFormat(value: unknown): value is CaptureFormat {
-  return (CAPTURE_FORMATS as readonly unknown[]).includes(value);
+export function isCanonicalCaptureFormat(
+  value: unknown,
+): value is CanonicalCaptureFormat {
+  return (CANONICAL_CAPTURE_FORMATS as readonly unknown[]).includes(value);
 }
 
-// Output encodings. The image types are the roster declared screenshots
-// (`static screenshots` entries) choose from; the wire spec's roster adds
+// Output encodings. The image types are the roster declared captures
+// (`static captures` entries) choose from; the wire spec's roster adds
 // `pdf` — a paged document of the settled render, laid out at the paper's
 // content width (the card's own `@page { size }` rule, or Chrome's default
 // paper) rather than at a capture viewport.
-export const SCREENSHOT_IMAGE_TYPES = ['png', 'jpeg', 'webp'] as const;
-export type ScreenshotImageType = (typeof SCREENSHOT_IMAGE_TYPES)[number];
-export const SCREENSHOT_DEFAULT_IMAGE_TYPE: ScreenshotImageType = 'png';
+export const RASTER_OUTPUT_TYPES = ['png', 'jpeg', 'webp'] as const;
+export type RasterOutputType = (typeof RASTER_OUTPUT_TYPES)[number];
+export const DEFAULT_RASTER_OUTPUT_TYPE: RasterOutputType = 'png';
 
-export function isScreenshotImageType(
-  value: unknown,
-): value is ScreenshotImageType {
-  return (SCREENSHOT_IMAGE_TYPES as readonly unknown[]).includes(value);
+export function isRasterOutputType(value: unknown): value is RasterOutputType {
+  return (RASTER_OUTPUT_TYPES as readonly unknown[]).includes(value);
 }
 
-export const CAPTURE_OUTPUT_TYPES = [...SCREENSHOT_IMAGE_TYPES, 'pdf'] as const;
+export const CAPTURE_OUTPUT_TYPES = [...RASTER_OUTPUT_TYPES, 'pdf'] as const;
 export type CaptureOutputType = (typeof CAPTURE_OUTPUT_TYPES)[number];
 export const DEFAULT_CAPTURE_OUTPUT_TYPE: CaptureOutputType = 'png';
 
@@ -115,9 +120,7 @@ export type CaptureContentType =
   | 'image/webp'
   | 'application/pdf';
 
-export function screenshotContentType(
-  type: ScreenshotImageType,
-): CaptureContentType {
+export function rasterContentType(type: RasterOutputType): CaptureContentType {
   switch (type) {
     case 'png':
       return 'image/png';
@@ -131,11 +134,11 @@ export function screenshotContentType(
 export function captureOutputContentType(
   type: CaptureOutputType,
 ): CaptureContentType {
-  return type === 'pdf' ? 'application/pdf' : screenshotContentType(type);
+  return type === 'pdf' ? 'application/pdf' : rasterContentType(type);
 }
 
 // The CSS media a capture's render settles under. `screen` is the rendering
-// every screenshot has always captured; `print` engages the card's print CSS
+// every capture has always captured; `print` engages the card's print CSS
 // (`@page`, break rules) before capture.
 export const CAPTURE_MEDIA = ['screen', 'print'] as const;
 export type CaptureMedia = (typeof CAPTURE_MEDIA)[number];
@@ -160,15 +163,15 @@ const UNSUPPORTED_CAPTURE_OUTPUT_TYPES: ReadonlySet<CaptureOutputType> =
 // capture path enforces both post-render, the same late-check pattern as a
 // fullPage capture's document extent. Over-bounds is a capture error naming
 // the cap, never a truncation.
-export const SCREENSHOT_PDF_MAX_PAGES = 20;
-export const SCREENSHOT_PDF_MAX_BYTES = 10 * 1024 * 1024;
+export const CAPTURE_PDF_MAX_PAGES = 20;
+export const CAPTURE_PDF_MAX_BYTES = 10 * 1024 * 1024;
 
 // Count a PDF's pages by scanning for its page-object dictionaries.
 // Chromium's PDF writer (Skia) emits each page's `/Type /Page` dictionary
 // uncompressed, so a byte scan is reliable for the engine's own output; the
 // page-tree `/Count` entries back it up in case some rewriter folds the page
 // objects into compressed streams. The capture path uses this to enforce
-// SCREENSHOT_PDF_MAX_PAGES post-render.
+// CAPTURE_PDF_MAX_PAGES post-render.
 export function countPdfPages(bytes: Uint8Array): number {
   let text = new TextDecoder('latin1').decode(bytes);
   let pageObjects = text.match(/\/Type\s*\/Page(?![a-zA-Z])/g)?.length ?? 0;
@@ -188,15 +191,15 @@ export function checkPdfCaptureBounds(
 ):
   | { error: string; pageCount?: undefined }
   | { error?: undefined; pageCount: number } {
-  if (bytes.byteLength > SCREENSHOT_PDF_MAX_BYTES) {
+  if (bytes.byteLength > CAPTURE_PDF_MAX_BYTES) {
     return {
-      error: `pdf capture "${name}" produced ${bytes.byteLength} bytes, over the ${SCREENSHOT_PDF_MAX_BYTES}-byte cap`,
+      error: `pdf capture "${name}" produced ${bytes.byteLength} bytes, over the ${CAPTURE_PDF_MAX_BYTES}-byte cap`,
     };
   }
   let pageCount = countPdfPages(bytes);
-  if (pageCount > SCREENSHOT_PDF_MAX_PAGES) {
+  if (pageCount > CAPTURE_PDF_MAX_PAGES) {
     return {
-      error: `pdf capture "${name}" produced ${pageCount} pages, over the ${SCREENSHOT_PDF_MAX_PAGES}-page cap`,
+      error: `pdf capture "${name}" produced ${pageCount} pages, over the ${CAPTURE_PDF_MAX_PAGES}-page cap`,
     };
   }
   return { pageCount };
@@ -216,91 +219,91 @@ export const DEFAULT_CAPTURE_VIEWPORT = {
 // The full capture identity: the render format plus the per-capture geometry
 // overrides. This is what canonicalizes into the MediaCache ledger key, so a
 // custom-geometry capture persists and serves exactly like a format-only one.
-// Built by inclusion (`Pick`), not by extending `ScreenshotCaptureSpec`
+// Built by inclusion (`Pick`), not by extending `CaptureRequestSpec`
 // wholesale: the canonical form serializes exactly these fields, so a field
 // outside the pick (`envelope`, `captures`, or anything the capture engine
 // grows later) cannot ride into the identity and silently hash two distinct
 // captures onto one ledger key. Widening the identity means changing this
-// pick, `canonicalCaptureSpecString` / `canonicalCaptureSpecQuery` below,
-// and `sameCaptureSpec` (jobs/screenshot-card.ts) together — and the
+// pick, `canonicalCaptureIdentityString` / `canonicalCaptureIdentityQuery` below,
+// and `sameCaptureIdentity` (jobs/capture-card.ts) together — and the
 // exhaustive destructure in `canonicalOverrides` refuses to compile until
 // the widened pick is actually handled there.
-export interface CaptureSpec extends Pick<
-  ScreenshotCaptureSpec,
+export interface CaptureIdentity extends Pick<
+  CaptureRequestSpec,
   'viewport' | 'deviceScaleFactor' | 'fullPage' | 'clip' | 'type' | 'media'
 > {
-  format: CaptureFormat;
+  format: CanonicalCaptureFormat;
 }
 
 // The geometry overrides a spec carries beyond the engine defaults — the
 // portion of the identity the prerenderer must be told about (`format` rides
 // separately on the job args). Null when the spec is all-defaults, matching
-// the `ScreenshotCardArgs.captureSpec: ... | null` contract.
-export function captureSpecOverrides(
-  spec: CaptureSpec,
-): ScreenshotCaptureSpec | null {
+// the `CaptureCardArgs.captureSpec: ... | null` contract.
+export function captureIdentityOverrides(
+  spec: CaptureIdentity,
+): CaptureRequestSpec | null {
   let overrides = canonicalOverrides(spec);
   return Object.keys(overrides).length > 0 ? overrides : null;
 }
 
 // ---------------------------------------------------------------------------
-// ScreenshotCaptureSpec bounds + strict parse — one enforcement point for
+// CaptureRequestSpec bounds + strict parse — one enforcement point for
 // every surface that accepts a spec off the wire (the realm-server's POST
-// /_screenshot-card body, the GET `_screenshot/` URL DSL via
-// `parseCaptureSpecParams`, and the prerender server's /prerender-screenshot
+// /_capture-card body, the GET `_capture/` URL DSL via
+// `parseCaptureSpecParams`, and the prerender server's /prerender-capture
 // route), and the home of the caps the capture path itself enforces for the
 // extents only it can know (a fullPage capture's document size).
 // ---------------------------------------------------------------------------
 
 // Chromium caps a single texture at 16384px; a viewport wider than 4096px is
 // well past any real card layout and mostly a way to force a huge capture.
-export const SCREENSHOT_MAX_VIEWPORT_WIDTH = 4096;
-export const SCREENSHOT_MAX_VIEWPORT_HEIGHT = 16384;
+export const CAPTURE_MAX_VIEWPORT_WIDTH = 4096;
+export const CAPTURE_MAX_VIEWPORT_HEIGHT = 16384;
 // A 3× scale already covers retina/hi-dpi; higher just multiplies pixel cost.
-export const SCREENSHOT_MAX_DEVICE_SCALE_FACTOR = 3;
-// The scale a *declared* screenshot (a `static screenshots` entry) captures
+export const CAPTURE_MAX_DEVICE_SCALE_FACTOR = 3;
+// The scale a *declared* capture (a `static captures` entry) captures
 // at when the author writes no deviceScaleFactor — retina-quality output by
 // default. Distinct from the wire-spec identity, where an absent
 // deviceScaleFactor means 1: declaration readers and the capture pass must
 // share this value so a declaration that validates clean cannot exceed the
 // physical-edge cap once the default is applied.
-export const SCREENSHOT_DEFAULT_DEVICE_SCALE_FACTOR = 2;
+export const DECLARED_CAPTURE_DEFAULT_DEVICE_SCALE_FACTOR = 2;
 // The Chromium single-texture cap the viewport bounds are derived from,
 // enforced on *physical* pixels: CSS dimension × deviceScaleFactor. The CSS
 // caps alone would admit e.g. a 16384-tall viewport at 3× (~49k physical px).
 // A fullPage capture's extent (the document's scroll size) is unknowable at
 // parse time, so the capture path checks it against this cap itself.
-export const SCREENSHOT_MAX_PHYSICAL_EDGE_PX = 16384;
+export const CAPTURE_MAX_PHYSICAL_EDGE_PX = 16384;
 
 // Cap on batch size. A batch is capture-only (persist: null), so it must finish
-// within the handler's sync-wait budget (`SCREENSHOT_SYNC_WAIT_BUDGET_MS`, 25s)
+// within the handler's sync-wait budget (`CAPTURE_SYNC_WAIT_BUDGET_MS`, 25s)
 // or it's discarded on the 503 and the retry re-renders from scratch — nothing
 // resumes. Viewport-filling entries share one settled render, so each costs only
 // a bounded viewport-switch paint wait (`VIEWPORT_SWITCH_PAINT_WAIT_MS`, 2s) +
-// screenshot. A fitted batch is costlier: each DISTINCT envelope re-lays-out the
+// capture. A fitted batch is costlier: each DISTINCT envelope re-lays-out the
 // hydrated card (route re-transition, settle, envelope-box and image-paint waits
 // — each individually bounded), so it eats the budget faster. 12 keeps the
 // viewport-filling case well inside the window and leaves headroom for fitted
 // re-layout; callers batching many image-heavy envelopes should split the batch
 // rather than raise this. The ceiling can rise once incremental persistence lets
 // a batch resume instead of discard.
-export const SCREENSHOT_MAX_CAPTURES = 12;
+export const CAPTURE_MAX_BATCH_ENTRIES = 12;
 
 // A per-card sub-cap on *pdf* declared captures, counted within (not on top
-// of) SCREENSHOT_MAX_CAPTURES. A pdf capture is far heavier than a raster
+// of) CAPTURE_MAX_BATCH_ENTRIES. A pdf capture is far heavier than a raster
 // tile — a full print-media re-layout plus pagination and a multi-page
-// document encode, bounded by SCREENSHOT_PDF_MAX_PAGES/BYTES — so a card that
+// document encode, bounded by CAPTURE_PDF_MAX_PAGES/BYTES — so a card that
 // declared a dozen of them could blow the visit's time budget on its own.
 // Pdf slots beyond this cap fail per-slot (the broken-links model: the
-// manifest omits the name, `screenshotErrors` records why), the same
+// manifest omits the name, `captureErrors` records why), the same
 // deterministic name-sorted overflow the batch cap uses.
-export const SCREENSHOT_MAX_PDF_CAPTURES = 3;
+export const CAPTURE_MAX_PDF_ENTRIES = 3;
 
 // A `target` is a CSS selector, not an arbitrary program: bound its length so a
 // pathological selector can't be smuggled through. It needs no XPath guard —
 // the capture path runs it through `document.querySelector`, which executes
 // only CSS.
-export const SCREENSHOT_MAX_TARGET_SELECTOR_LENGTH = 1024;
+export const CAPTURE_MAX_TARGET_SELECTOR_LENGTH = 1024;
 
 // Result of validating a raw `captureSpec` value. On success `captureSpec`
 // is the normalized spec — null when the value was absent or carried no
@@ -309,11 +312,11 @@ export const SCREENSHOT_MAX_TARGET_SELECTOR_LENGTH = 1024;
 // the singular batch-wide defaults folded into every entry, so the capture
 // path iterates self-contained specs. On failure `error` names the
 // offending field.
-export type ScreenshotCaptureSpecParse =
-  | { captureSpec: ScreenshotCaptureSpec | null; error?: undefined }
+export type CaptureRequestSpecParse =
+  | { captureSpec: CaptureRequestSpec | null; error?: undefined }
   | { captureSpec?: undefined; error: string };
 
-const CAPTURE_SPEC_FIELDS = new Set([
+const CAPTURE_REQUEST_SPEC_FIELDS = new Set([
   'viewport',
   'deviceScaleFactor',
   'fullPage',
@@ -324,7 +327,7 @@ const CAPTURE_SPEC_FIELDS = new Set([
   'media',
   'captures',
 ]);
-const CAPTURE_ENTRY_FIELDS = new Set([
+const CAPTURE_REQUEST_ENTRY_FIELDS = new Set([
   'name',
   'viewport',
   'deviceScaleFactor',
@@ -335,9 +338,9 @@ const CAPTURE_ENTRY_FIELDS = new Set([
   'type',
   'media',
 ]);
-const CAPTURE_SPEC_VIEWPORT_FIELDS = new Set(['width', 'height']);
-const CAPTURE_SPEC_ENVELOPE_FIELDS = new Set(['width', 'height']);
-const CAPTURE_SPEC_CLIP_FIELDS = new Set(['x', 'y', 'width', 'height']);
+const CAPTURE_REQUEST_VIEWPORT_FIELDS = new Set(['width', 'height']);
+const CAPTURE_REQUEST_ENVELOPE_FIELDS = new Set(['width', 'height']);
+const CAPTURE_REQUEST_CLIP_FIELDS = new Set(['x', 'y', 'width', 'height']);
 
 function isPositiveInteger(value: unknown): value is number {
   return typeof value === 'number' && Number.isInteger(value) && value > 0;
@@ -348,7 +351,7 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 }
 
 type OverrideFieldsParse =
-  | { overrides: ScreenshotCaptureOverrides; error?: undefined }
+  | { overrides: CaptureRequestOverrides; error?: undefined }
   | { overrides?: undefined; error: string };
 
 // Per-field shape + bounds validation for the override fields present on
@@ -362,7 +365,7 @@ function parseOverrideFields(
   raw: Record<string, unknown>,
   path: string,
 ): OverrideFieldsParse {
-  let overrides: ScreenshotCaptureOverrides = {};
+  let overrides: CaptureRequestOverrides = {};
 
   if (raw.viewport !== undefined) {
     let viewport = raw.viewport;
@@ -372,7 +375,7 @@ function parseOverrideFields(
       };
     }
     for (let key of Object.keys(viewport)) {
-      if (!CAPTURE_SPEC_VIEWPORT_FIELDS.has(key)) {
+      if (!CAPTURE_REQUEST_VIEWPORT_FIELDS.has(key)) {
         return {
           error: `${path}.viewport.${key} is not a supported field`,
         };
@@ -386,14 +389,14 @@ function parseOverrideFields(
         error: `${path}.viewport must have positive integer width and height`,
       };
     }
-    if (viewport.width > SCREENSHOT_MAX_VIEWPORT_WIDTH) {
+    if (viewport.width > CAPTURE_MAX_VIEWPORT_WIDTH) {
       return {
-        error: `${path}.viewport.width must be <= ${SCREENSHOT_MAX_VIEWPORT_WIDTH}`,
+        error: `${path}.viewport.width must be <= ${CAPTURE_MAX_VIEWPORT_WIDTH}`,
       };
     }
-    if (viewport.height > SCREENSHOT_MAX_VIEWPORT_HEIGHT) {
+    if (viewport.height > CAPTURE_MAX_VIEWPORT_HEIGHT) {
       return {
-        error: `${path}.viewport.height must be <= ${SCREENSHOT_MAX_VIEWPORT_HEIGHT}`,
+        error: `${path}.viewport.height must be <= ${CAPTURE_MAX_VIEWPORT_HEIGHT}`,
       };
     }
     overrides.viewport = { width: viewport.width, height: viewport.height };
@@ -406,9 +409,9 @@ function parseOverrideFields(
         error: `${path}.deviceScaleFactor must be a positive number`,
       };
     }
-    if (scale > SCREENSHOT_MAX_DEVICE_SCALE_FACTOR) {
+    if (scale > CAPTURE_MAX_DEVICE_SCALE_FACTOR) {
       return {
-        error: `${path}.deviceScaleFactor must be <= ${SCREENSHOT_MAX_DEVICE_SCALE_FACTOR}`,
+        error: `${path}.deviceScaleFactor must be <= ${CAPTURE_MAX_DEVICE_SCALE_FACTOR}`,
       };
     }
     overrides.deviceScaleFactor = scale;
@@ -435,7 +438,7 @@ function parseOverrideFields(
       };
     } else {
       for (let key of Object.keys(clip)) {
-        if (!CAPTURE_SPEC_CLIP_FIELDS.has(key)) {
+        if (!CAPTURE_REQUEST_CLIP_FIELDS.has(key)) {
           return { error: `${path}.clip.${key} is not a supported field` };
         }
       }
@@ -457,14 +460,14 @@ function parseOverrideFields(
       // or not one was sent: Puppeteer captures beyond the viewport by default
       // (`captureBeyondViewport`), so an unbounded clip would be a way around
       // the viewport cost caps.
-      if (clip.x + clip.width > SCREENSHOT_MAX_VIEWPORT_WIDTH) {
+      if (clip.x + clip.width > CAPTURE_MAX_VIEWPORT_WIDTH) {
         return {
-          error: `${path}.clip x + width must be <= ${SCREENSHOT_MAX_VIEWPORT_WIDTH}`,
+          error: `${path}.clip x + width must be <= ${CAPTURE_MAX_VIEWPORT_WIDTH}`,
         };
       }
-      if (clip.y + clip.height > SCREENSHOT_MAX_VIEWPORT_HEIGHT) {
+      if (clip.y + clip.height > CAPTURE_MAX_VIEWPORT_HEIGHT) {
         return {
-          error: `${path}.clip y + height must be <= ${SCREENSHOT_MAX_VIEWPORT_HEIGHT}`,
+          error: `${path}.clip y + height must be <= ${CAPTURE_MAX_VIEWPORT_HEIGHT}`,
         };
       }
       overrides.clip = {
@@ -485,9 +488,9 @@ function parseOverrideFields(
       overrides.target = null;
     } else if (typeof target !== 'string' || target.trim().length === 0) {
       return { error: `${path}.target must be a non-empty string` };
-    } else if (target.length > SCREENSHOT_MAX_TARGET_SELECTOR_LENGTH) {
+    } else if (target.length > CAPTURE_MAX_TARGET_SELECTOR_LENGTH) {
       return {
-        error: `${path}.target must be at most ${SCREENSHOT_MAX_TARGET_SELECTOR_LENGTH} characters`,
+        error: `${path}.target must be at most ${CAPTURE_MAX_TARGET_SELECTOR_LENGTH} characters`,
       };
     } else {
       // No XPath guard: the capture path passes `target` to `page.$`
@@ -507,7 +510,7 @@ function parseOverrideFields(
       };
     }
     for (let key of Object.keys(envelope)) {
-      if (!CAPTURE_SPEC_ENVELOPE_FIELDS.has(key)) {
+      if (!CAPTURE_REQUEST_ENVELOPE_FIELDS.has(key)) {
         return {
           error: `${path}.envelope.${key} is not a supported field`,
         };
@@ -521,14 +524,14 @@ function parseOverrideFields(
         error: `${path}.envelope must have positive integer width and height`,
       };
     }
-    if (envelope.width > SCREENSHOT_MAX_VIEWPORT_WIDTH) {
+    if (envelope.width > CAPTURE_MAX_VIEWPORT_WIDTH) {
       return {
-        error: `${path}.envelope.width must be <= ${SCREENSHOT_MAX_VIEWPORT_WIDTH}`,
+        error: `${path}.envelope.width must be <= ${CAPTURE_MAX_VIEWPORT_WIDTH}`,
       };
     }
-    if (envelope.height > SCREENSHOT_MAX_VIEWPORT_HEIGHT) {
+    if (envelope.height > CAPTURE_MAX_VIEWPORT_HEIGHT) {
       return {
-        error: `${path}.envelope.height must be <= ${SCREENSHOT_MAX_VIEWPORT_HEIGHT}`,
+        error: `${path}.envelope.height must be <= ${CAPTURE_MAX_VIEWPORT_HEIGHT}`,
       };
     }
     overrides.envelope = { width: envelope.width, height: envelope.height };
@@ -562,15 +565,15 @@ function parseOverrideFields(
 
 // Cross-field checks against a fully-merged effective spec.
 function checkMergedOverrides(
-  spec: ScreenshotCaptureOverrides,
+  spec: CaptureRequestOverrides,
   path: string,
-  format: ScreenshotFormat,
+  format: OnDemandCaptureFormat,
 ): string | undefined {
   if (spec.fullPage && spec.clip) {
     return `${path} cannot set both fullPage and clip`;
   }
 
-  // A `target` is an element-handle screenshot: it crops to one element and
+  // A `target` is an element-handle capture: it crops to one element and
   // honors neither a region clip nor a full-page capture, so combining them is
   // a contradiction rather than a composition.
   if (spec.target && spec.clip) {
@@ -581,7 +584,7 @@ function checkMergedOverrides(
   }
 
   // A pdf capture paginates the settled document onto paper; a region clip,
-  // an element crop, and Chromium's fullPage screenshot mode are raster
+  // an element crop, and Chromium's fullPage capture mode are raster
   // concepts it cannot honor — contradictions, not compositions.
   if (spec.type === 'pdf') {
     if (spec.fullPage) {
@@ -639,41 +642,29 @@ function checkMergedOverrides(
   // capture path enforces the same cap on it at capture time.
   let effectiveScale = spec.deviceScaleFactor ?? 1;
   if (spec.viewport) {
-    if (
-      spec.viewport.width * effectiveScale >
-      SCREENSHOT_MAX_PHYSICAL_EDGE_PX
-    ) {
-      return `${path}.viewport.width × deviceScaleFactor must be <= ${SCREENSHOT_MAX_PHYSICAL_EDGE_PX} physical pixels`;
+    if (spec.viewport.width * effectiveScale > CAPTURE_MAX_PHYSICAL_EDGE_PX) {
+      return `${path}.viewport.width × deviceScaleFactor must be <= ${CAPTURE_MAX_PHYSICAL_EDGE_PX} physical pixels`;
     }
-    if (
-      spec.viewport.height * effectiveScale >
-      SCREENSHOT_MAX_PHYSICAL_EDGE_PX
-    ) {
-      return `${path}.viewport.height × deviceScaleFactor must be <= ${SCREENSHOT_MAX_PHYSICAL_EDGE_PX} physical pixels`;
+    if (spec.viewport.height * effectiveScale > CAPTURE_MAX_PHYSICAL_EDGE_PX) {
+      return `${path}.viewport.height × deviceScaleFactor must be <= ${CAPTURE_MAX_PHYSICAL_EDGE_PX} physical pixels`;
     }
   }
   if (spec.clip) {
-    if (spec.clip.width * effectiveScale > SCREENSHOT_MAX_PHYSICAL_EDGE_PX) {
-      return `${path}.clip.width × deviceScaleFactor must be <= ${SCREENSHOT_MAX_PHYSICAL_EDGE_PX} physical pixels`;
+    if (spec.clip.width * effectiveScale > CAPTURE_MAX_PHYSICAL_EDGE_PX) {
+      return `${path}.clip.width × deviceScaleFactor must be <= ${CAPTURE_MAX_PHYSICAL_EDGE_PX} physical pixels`;
     }
-    if (spec.clip.height * effectiveScale > SCREENSHOT_MAX_PHYSICAL_EDGE_PX) {
-      return `${path}.clip.height × deviceScaleFactor must be <= ${SCREENSHOT_MAX_PHYSICAL_EDGE_PX} physical pixels`;
+    if (spec.clip.height * effectiveScale > CAPTURE_MAX_PHYSICAL_EDGE_PX) {
+      return `${path}.clip.height × deviceScaleFactor must be <= ${CAPTURE_MAX_PHYSICAL_EDGE_PX} physical pixels`;
     }
   }
   // The capture viewport IS the envelope for envelope formats, so the same
   // physical-pixel composition applies to it.
   if (spec.envelope) {
-    if (
-      spec.envelope.width * effectiveScale >
-      SCREENSHOT_MAX_PHYSICAL_EDGE_PX
-    ) {
-      return `${path}.envelope.width × deviceScaleFactor must be <= ${SCREENSHOT_MAX_PHYSICAL_EDGE_PX} physical pixels`;
+    if (spec.envelope.width * effectiveScale > CAPTURE_MAX_PHYSICAL_EDGE_PX) {
+      return `${path}.envelope.width × deviceScaleFactor must be <= ${CAPTURE_MAX_PHYSICAL_EDGE_PX} physical pixels`;
     }
-    if (
-      spec.envelope.height * effectiveScale >
-      SCREENSHOT_MAX_PHYSICAL_EDGE_PX
-    ) {
-      return `${path}.envelope.height × deviceScaleFactor must be <= ${SCREENSHOT_MAX_PHYSICAL_EDGE_PX} physical pixels`;
+    if (spec.envelope.height * effectiveScale > CAPTURE_MAX_PHYSICAL_EDGE_PX) {
+      return `${path}.envelope.height × deviceScaleFactor must be <= ${CAPTURE_MAX_PHYSICAL_EDGE_PX} physical pixels`;
     }
   }
   return undefined;
@@ -684,10 +675,8 @@ function checkMergedOverrides(
 // `DEFAULT_CAPTURE_VIEWPORT`-sized viewport mean the same capture as no spec
 // at all. Runs after the batch merge, so an entry that explicitly sets a
 // field back to its default wins over a batch-wide override first.
-function elideDefaults(
-  spec: ScreenshotCaptureOverrides,
-): ScreenshotCaptureOverrides {
-  let out: ScreenshotCaptureOverrides = {};
+function elideDefaults(spec: CaptureRequestOverrides): CaptureRequestOverrides {
+  let out: CaptureRequestOverrides = {};
   if (
     spec.viewport &&
     !(
@@ -726,10 +715,10 @@ function elideDefaults(
 
 // Merge an entry's overrides onto the singular batch-wide defaults, per field.
 function mergeOverrides(
-  base: ScreenshotCaptureOverrides,
-  entry: ScreenshotCaptureOverrides,
-): ScreenshotCaptureOverrides {
-  let merged: ScreenshotCaptureOverrides = {};
+  base: CaptureRequestOverrides,
+  entry: CaptureRequestOverrides,
+): CaptureRequestOverrides {
+  let merged: CaptureRequestOverrides = {};
   let viewport = entry.viewport ?? base.viewport;
   if (viewport) {
     merged.viewport = viewport;
@@ -772,10 +761,10 @@ function mergeOverrides(
   return merged;
 }
 
-export function parseScreenshotCaptureSpec(
+export function parseCaptureRequestSpec(
   raw: unknown,
-  format: ScreenshotFormat,
-): ScreenshotCaptureSpecParse {
+  format: OnDemandCaptureFormat,
+): CaptureRequestSpecParse {
   if (raw === undefined || raw === null) {
     // An envelope-format capture needs an envelope, which can only arrive
     // via the
@@ -796,7 +785,7 @@ export function parseScreenshotCaptureSpec(
   // would classify the request as canonical and serve (or persist) the wrong
   // image.
   for (let key of Object.keys(raw)) {
-    if (!CAPTURE_SPEC_FIELDS.has(key)) {
+    if (!CAPTURE_REQUEST_SPEC_FIELDS.has(key)) {
       return { error: `captureSpec.${key} is not a supported field` };
     }
   }
@@ -815,14 +804,14 @@ export function parseScreenshotCaptureSpec(
     if (crossError !== undefined) {
       return { error: crossError };
     }
-    let spec: ScreenshotCaptureSpec = elideDefaults(singular.overrides);
+    let spec: CaptureRequestSpec = elideDefaults(singular.overrides);
     // A spec whose every field matched an engine default normalizes to null:
     // it means the canonical capture, and null is what consumers key that
     // classification on.
     return { captureSpec: Object.keys(spec).length > 0 ? spec : null };
   }
 
-  // Batch: up to SCREENSHOT_MAX_CAPTURES named entries, each capturing the
+  // Batch: up to CAPTURE_MAX_BATCH_ENTRIES named entries, each capturing the
   // same settled render. The singular fields act as batch-wide defaults and
   // are folded into every entry, so the normalized spec's entries are
   // self-contained. A batch spec always has overrides (the `captures` key),
@@ -833,14 +822,14 @@ export function parseScreenshotCaptureSpec(
   if (raw.captures.length === 0) {
     return { error: 'captureSpec.captures must not be empty' };
   }
-  if (raw.captures.length > SCREENSHOT_MAX_CAPTURES) {
+  if (raw.captures.length > CAPTURE_MAX_BATCH_ENTRIES) {
     return {
-      error: `captureSpec.captures must have at most ${SCREENSHOT_MAX_CAPTURES} entries`,
+      error: `captureSpec.captures must have at most ${CAPTURE_MAX_BATCH_ENTRIES} entries`,
     };
   }
 
   let seenNames = new Set<string>();
-  let entries: ScreenshotCaptureEntry[] = [];
+  let entries: CaptureRequestEntry[] = [];
   for (let i = 0; i < raw.captures.length; i++) {
     let rawEntry: unknown = raw.captures[i];
     let path = `captureSpec.captures[${i}]`;
@@ -848,7 +837,7 @@ export function parseScreenshotCaptureSpec(
       return { error: `${path} must be an object` };
     }
     for (let key of Object.keys(rawEntry)) {
-      if (!CAPTURE_ENTRY_FIELDS.has(key)) {
+      if (!CAPTURE_REQUEST_ENTRY_FIELDS.has(key)) {
         return { error: `${path}.${key} is not a supported field` };
       }
     }
@@ -903,13 +892,13 @@ export function parseScreenshotCaptureSpec(
 // The identity's geometry fields, default-elided via the one shared rule
 // (`elideDefaults`), so the parse and the hash canonicalize identically. The
 // parameter is the identity type itself and the destructure is exhaustive
-// over it: widening the `CaptureSpec` pick fails to compile here — the one
+// over it: widening the `CaptureIdentity` pick fails to compile here — the one
 // function that has to learn a new identity field — instead of silently
 // dropping the field from the ledger key and hashing two distinct captures
 // onto one entry.
 function canonicalOverrides(
-  spec: Omit<CaptureSpec, 'format'>,
-): ScreenshotCaptureSpec {
+  spec: Omit<CaptureIdentity, 'format'>,
+): CaptureRequestSpec {
   let { viewport, deviceScaleFactor, fullPage, clip, type, media, ...rest } =
     spec;
   rest satisfies Record<string, never>;
@@ -937,8 +926,8 @@ const CAPTURE_PARAMS = new Set([
   'media',
 ]);
 
-export type CaptureSpecParseResult =
-  | { spec: CaptureSpec }
+export type CaptureIdentityParseResult =
+  | { spec: CaptureIdentity }
   | { error: { field: string; message: string } };
 
 // The URL grammar for the geometry params — each is the flat spelling of the
@@ -979,17 +968,17 @@ function captureParamForSpecError(message: string): string {
   return 'clip';
 }
 
-// Parses the flat, unprefixed query params of a `_screenshot/` request into
+// Parses the flat, unprefixed query params of a `_capture/` request into
 // a spec. Strict on principle (see the module comment): unknown and
 // reserved params, repeated params, and out-of-range values are each a 400
 // naming the offending field. Bounds validation is the same
-// `parseScreenshotCaptureSpec` the POST body runs, so the two surfaces
+// `parseCaptureRequestSpec` the POST body runs, so the two surfaces
 // accept and refuse identical geometry with identical wording. `name=`
-// addresses a declared screenshot, a different addressing form entirely —
+// addresses a declared capture, a different addressing form entirely —
 // the route splits it off before calling this.
 export function parseCaptureSpecParams(
   searchParams: URLSearchParams,
-): CaptureSpecParseResult {
+): CaptureIdentityParseResult {
   for (let key of new Set(searchParams.keys())) {
     if (CAPTURE_PARAMS.has(key)) {
       if (searchParams.getAll(key).length > 1) {
@@ -1005,9 +994,9 @@ export function parseCaptureSpecParams(
     return { error: { field: key, message } };
   }
   let format = searchParams.get('format') ?? DEFAULT_CAPTURE_FORMAT;
-  if (!isCaptureFormat(format)) {
-    // Deliberately narrower than the POST /_screenshot-card roster
-    // (SCREENSHOT_FORMATS): CAPTURE_FORMATS is the canonical ledger/GET-DSL
+  if (!isCanonicalCaptureFormat(format)) {
+    // Deliberately narrower than the POST /_capture-card roster
+    // (ON_DEMAND_CAPTURE_FORMATS): CANONICAL_CAPTURE_FORMATS is the canonical ledger/GET-DSL
     // serving contract and stays viewport-filling only, so this message
     // speaks its own roster.
     return {
@@ -1110,7 +1099,7 @@ export function parseCaptureSpecParams(
     raw.media = media;
   }
 
-  let parsed = parseScreenshotCaptureSpec(raw, format);
+  let parsed = parseCaptureRequestSpec(raw, format);
   if (parsed.error) {
     return {
       error: {
@@ -1126,7 +1115,7 @@ export function parseCaptureSpecParams(
 // default-valued fields elided — so the all-defaults spec is `{}` however it
 // was spelled, and any two requests meaning the same capture hash
 // identically.
-export function canonicalCaptureSpecString(spec: CaptureSpec): string {
+export function canonicalCaptureIdentityString(spec: CaptureIdentity): string {
   let canonical: Record<string, unknown> = {};
   if (spec.format !== DEFAULT_CAPTURE_FORMAT) {
     canonical.format = spec.format;
@@ -1162,9 +1151,9 @@ function sortKeys<T extends Record<string, unknown>>(obj: T): T {
 // The ledger key component for a spec: the hash of its canonical form (the
 // same sha256-hex the store uses for content addresses, though this one
 // keys intent rather than bytes).
-export async function captureSpecHash(spec: CaptureSpec): Promise<string> {
+export async function captureSpecHash(spec: CaptureIdentity): Promise<string> {
   return await computeMediaCacheKey(
-    new TextEncoder().encode(canonicalCaptureSpecString(spec)),
+    new TextEncoder().encode(canonicalCaptureIdentityString(spec)),
   );
 }
 
@@ -1178,7 +1167,7 @@ export async function captureSpecHash(spec: CaptureSpec): Promise<string> {
 // params document and the 400 messages teach. Safe without encoding because
 // every value comes from the closed grammar above: format, type, and media
 // are enums, the rest are digits, `x`, `,`, and a decimal point.
-export function canonicalCaptureSpecQuery(spec: CaptureSpec): string {
+export function canonicalCaptureIdentityQuery(spec: CaptureIdentity): string {
   let params: string[] = [];
   if (spec.format !== DEFAULT_CAPTURE_FORMAT) {
     params.push(`format=${spec.format}`);
@@ -1210,27 +1199,27 @@ export function canonicalCaptureSpecQuery(spec: CaptureSpec): string {
 }
 
 // ---------------------------------------------------------------------------
-// Declared-screenshot capture identity + manifest — the grammar shared by the
+// Declared-capture identity + manifest — the grammar shared by the
 // prerender pass (which captures and persists) and the realm's
-// `_screenshot/…?name=` route (which joins a manifest entry to the ledger).
+// `_capture/…?name=` route (which joins a manifest entry to the ledger).
 // ---------------------------------------------------------------------------
 
-// `SCREENSHOT_IMAGE_TYPES` and `screenshotContentType` — the declared-entry
+// `RASTER_OUTPUT_TYPES` and `rasterContentType` — the declared-entry
 // output roster — are defined with the wire spec's output encodings near the
 // top of this module, which derives its `CAPTURE_OUTPUT_TYPES` from them.
-export const SCREENSHOT_DEFAULT_BACKGROUND = 'white';
+export const CAPTURE_DEFAULT_BACKGROUND = 'white';
 
-// One merged `static screenshots` entry as it crosses the render-page
+// One merged `static captures` entry as it crosses the render-page
 // boundary: everything in the declaration except the capture-only component
 // itself, which cannot serialize — it is flagged `render: true` and
 // re-resolved in-page by slot name when the capture renders.
 //
 // `type: 'pdf'` entries are paged documents, not raster tiles: `width` /
 // `height` (and the raster-only `deviceScaleFactor` / `background`) are
-// refused at declaration (`assertValidScreenshotSpec`), so they are absent
+// refused at declaration (`assertValidCaptureSpec`), so they are absent
 // here. Paper comes from the card's own print CSS (`@page`), and the entry
 // renders under `media=print`.
-export interface DeclaredScreenshotSpecPayload {
+export interface DeclaredCaptureSpecPayload {
   width?: number;
   height?: number;
   deviceScaleFactor?: number;
@@ -1238,14 +1227,11 @@ export interface DeclaredScreenshotSpecPayload {
   useAsThumbnail?: boolean;
   keyBy?: 'generation' | 'file-content';
   type?: CaptureOutputType;
-  format?: DeclaredScreenshotFormat;
+  format?: DeclaredCaptureFormat;
   render?: true;
 }
 
-export type DeclaredScreenshotRoster = Record<
-  string,
-  DeclaredScreenshotSpecPayload
->;
+export type DeclaredCaptureRoster = Record<string, DeclaredCaptureSpecPayload>;
 
 // The canonical identity of one declared capture. Unlike the wire spec —
 // whose canonical form elides defaults so equivalent spellings collapse —
@@ -1259,10 +1245,10 @@ export type DeclaredScreenshotRoster = Record<
 // pixels, so they stay out.
 export function canonicalDeclaredCaptureString(
   name: string,
-  payload: DeclaredScreenshotSpecPayload,
+  payload: DeclaredCaptureSpecPayload,
 ): string {
   // Destructure the whole payload so a field added to
-  // `DeclaredScreenshotSpecPayload` later fails to compile here — the one
+  // `DeclaredCaptureSpecPayload` later fails to compile here — the one
   // function that turns a payload into a ledger key — instead of being
   // silently dropped from the identity and aliasing two distinct captures onto
   // one hash. `useAsThumbnail` and `keyBy` steer consumption and invalidation,
@@ -1295,13 +1281,13 @@ export function canonicalDeclaredCaptureString(
           type: 'pdf',
         }
       : {
-          background: background ?? SCREENSHOT_DEFAULT_BACKGROUND,
+          background: background ?? CAPTURE_DEFAULT_BACKGROUND,
           declared: name,
           deviceScaleFactor:
-            deviceScaleFactor ?? SCREENSHOT_DEFAULT_DEVICE_SCALE_FACTOR,
+            deviceScaleFactor ?? DECLARED_CAPTURE_DEFAULT_DEVICE_SCALE_FACTOR,
           height,
           source: render ? 'render' : format,
-          type: type ?? SCREENSHOT_DEFAULT_IMAGE_TYPE,
+          type: type ?? DEFAULT_RASTER_OUTPUT_TYPE,
           width,
         };
   return JSON.stringify(
@@ -1313,14 +1299,14 @@ export function canonicalDeclaredCaptureString(
 
 export async function declaredCaptureSpecHash(
   name: string,
-  payload: DeclaredScreenshotSpecPayload,
+  payload: DeclaredCaptureSpecPayload,
 ): Promise<string> {
   return await computeMediaCacheKey(
     new TextEncoder().encode(canonicalDeclaredCaptureString(name, payload)),
   );
 }
 
-// One name's entry in a `prerendered_html.screenshots` manifest — the
+// One name's entry in a `prerendered_html.captures` manifest — the
 // indexing-time artifact that joins a `?name=` request to its MediaCache
 // ledger row (`specHash`) and object (`objectKey`), and carries the
 // dimensions/consumption facts serve-time readers need without a ledger
@@ -1333,7 +1319,7 @@ export async function declaredCaptureSpecHash(
 // `byteSize` describe the paged document instead. A pdf can never be a
 // thumbnail (that fallback chain wants an image), so `useAsThumbnail` never
 // rides on one.
-export interface ScreenshotManifestEntry {
+export interface CaptureManifestEntry {
   specHash: string;
   objectKey: string;
   contentType: string;
@@ -1346,7 +1332,7 @@ export interface ScreenshotManifestEntry {
   sourceContentHash?: string;
 }
 
-export type ScreenshotManifest = Record<string, ScreenshotManifestEntry>;
+export type CaptureManifest = Record<string, CaptureManifestEntry>;
 
 // The engine-side carry-forward decision for one declared slot: a
 // `file-content`-keyed entry whose capture identity (spec hash) and source
@@ -1361,7 +1347,7 @@ export function shouldCarryForwardDeclaredEntry({
 }: {
   keyBy: 'generation' | 'file-content';
   specHash: string;
-  prior: ScreenshotManifestEntry | undefined;
+  prior: CaptureManifestEntry | undefined;
   contentHash: string | null | undefined;
 }): boolean {
   return (
@@ -1374,18 +1360,18 @@ export function shouldCarryForwardDeclaredEntry({
 }
 
 // The durable served URL for one capture of one instance: the platform's
-// only public screenshot URL form. A re-capture changes what this URL
+// only public capture URL form. A re-capture changes what this URL
 // serves, never the URL itself.
-export function screenshotURLFor({
+export function captureURLFor({
   realmURL,
   instanceLocalPath,
   spec,
 }: {
   realmURL: string;
   instanceLocalPath: string;
-  spec: CaptureSpec;
+  spec: CaptureIdentity;
 }): string {
-  return `${realmURL}${CAPTURE_SERVING_PREFIX}${instanceLocalPath}${canonicalCaptureSpecQuery(
+  return `${realmURL}${CAPTURE_SERVING_PREFIX}${instanceLocalPath}${canonicalCaptureIdentityQuery(
     spec,
   )}`;
 }
@@ -1395,18 +1381,18 @@ export function screenshotURLFor({
 // id (matching `boxel_index.file_alias`), a file's on the file's own URL,
 // extension intact. The one home for the rule — the persist, realm-copy,
 // and serving paths all key through it.
-export function screenshotLedgerSourceURL(
+export function captureLedgerSourceURL(
   url: string,
   kind: 'instance' | 'file',
 ): string {
   return kind === 'instance' ? url.replace(/\.json$/, '') : url;
 }
 
-// The durable served URL for one *declared* screenshot of one instance —
-// the name-addressed twin of `screenshotURLFor`. Names are pre-validated by
-// `SCREENSHOT_NAME_PATTERN` (URL-safe characters only), so no encoding is
+// The durable served URL for one *declared* capture of one instance —
+// the name-addressed twin of `captureURLFor`. Names are pre-validated by
+// `CAPTURE_NAME_PATTERN` (URL-safe characters only), so no encoding is
 // needed.
-export function screenshotNameURLFor({
+export function captureNameURLFor({
   realmURL,
   instanceLocalPath,
   name,
@@ -1418,19 +1404,19 @@ export function screenshotNameURLFor({
   return `${realmURL}${CAPTURE_SERVING_PREFIX}${instanceLocalPath}?name=${name}`;
 }
 
-// One name's entry in a card+json document's `meta.screenshots` — the public
-// projection of a `ScreenshotManifestEntry`. `url` is the durable served URL
+// One name's entry in a card+json document's `meta.captures` — the public
+// projection of a `CaptureManifestEntry`. `url` is the durable served URL
 // (pre-composed server-side, where the realm/local-path split is
 // authoritative, so clients never re-derive it from alias-form ids). `hash`
 // is the artifact's content hash — the serving ETag — so a consumer can tell
 // whether a capture changed; it is absent on a declaration-derived entry
-// (see `screenshotsMetaFromRoster`) where no capture is being asserted.
+// (see `capturesMetaFromRoster`) where no capture is being asserted.
 // `width`/`height` are CSS pixels with `deviceScaleFactor` multiplying the
 // physical pixels, matching the manifest — all three absent on a pdf entry,
 // which carries `pageCount`/`byteSize` instead. The internal manifest keys
 // (`specHash`, `objectKey`, `sourceContentHash`) deliberately do not appear:
 // they steer capture identity and carry-forward, not consumption.
-export interface ScreenshotMetaEntry {
+export interface CaptureMetaEntry {
   url: string;
   hash?: string;
   contentType: string;
@@ -1442,13 +1428,13 @@ export interface ScreenshotMetaEntry {
   useAsThumbnail?: true;
 }
 
-export type ScreenshotsMeta = Record<string, ScreenshotMetaEntry>;
+export type CapturesMeta = Record<string, CaptureMetaEntry>;
 
-// Projects a persisted manifest into the `meta.screenshots` wire shape for
+// Projects a persisted manifest into the `meta.captures` wire shape for
 // one instance. Serve-time only — never persisted back into the index or the
 // source file.
-export function screenshotsMetaFromManifest(
-  manifest: ScreenshotManifest,
+export function capturesMetaFromManifest(
+  manifest: CaptureManifest,
   {
     realmURL,
     instanceLocalPath,
@@ -1456,11 +1442,11 @@ export function screenshotsMetaFromManifest(
     realmURL: string;
     instanceLocalPath: string;
   },
-): ScreenshotsMeta {
-  let result: ScreenshotsMeta = {};
+): CapturesMeta {
+  let result: CapturesMeta = {};
   for (let [name, entry] of Object.entries(manifest)) {
     result[name] = {
-      url: screenshotNameURLFor({ realmURL, instanceLocalPath, name }),
+      url: captureNameURLFor({ realmURL, instanceLocalPath, name }),
       hash: entry.objectKey,
       contentType: entry.contentType,
       // Raster geometry and paged-document facts are mutually exclusive per
@@ -1478,7 +1464,7 @@ export function screenshotsMetaFromManifest(
   return result;
 }
 
-// Projects a card's *declared* roster into the `meta.screenshots` wire shape
+// Projects a card's *declared* roster into the `meta.captures` wire shape
 // — entries with no `hash`, asserting the durable URL and the declared
 // geometry but not that a capture exists. Used by the prerender render
 // context, where captures land in the same pass but after the display-format
@@ -1487,8 +1473,8 @@ export function screenshotsMetaFromManifest(
 // identity, only lag in freshness. Live loads instead join the real
 // manifest, so their absence signal (the thumbnail fallback chain) stays
 // intact.
-export function screenshotsMetaFromRoster(
-  roster: DeclaredScreenshotRoster,
+export function capturesMetaFromRoster(
+  roster: DeclaredCaptureRoster,
   {
     realmURL,
     instanceLocalPath,
@@ -1496,8 +1482,8 @@ export function screenshotsMetaFromRoster(
     realmURL: string;
     instanceLocalPath: string;
   },
-): ScreenshotsMeta {
-  let result: ScreenshotsMeta = {};
+): CapturesMeta {
+  let result: CapturesMeta = {};
   for (let [name, payload] of Object.entries(roster)) {
     // A pdf entry declares no capture box, and its page count / byte size
     // exist only once Chrome has paginated — so the declaration-derived form
@@ -1505,20 +1491,21 @@ export function screenshotsMetaFromRoster(
     // facts filled in by the real manifest join on a live load.
     if (payload.type === 'pdf') {
       result[name] = {
-        url: screenshotNameURLFor({ realmURL, instanceLocalPath, name }),
+        url: captureNameURLFor({ realmURL, instanceLocalPath, name }),
         contentType: captureOutputContentType('pdf'),
       };
       continue;
     }
     result[name] = {
-      url: screenshotNameURLFor({ realmURL, instanceLocalPath, name }),
-      contentType: screenshotContentType(
-        payload.type ?? SCREENSHOT_DEFAULT_IMAGE_TYPE,
+      url: captureNameURLFor({ realmURL, instanceLocalPath, name }),
+      contentType: rasterContentType(
+        payload.type ?? DEFAULT_RASTER_OUTPUT_TYPE,
       ),
       width: payload.width,
       height: payload.height,
       deviceScaleFactor:
-        payload.deviceScaleFactor ?? SCREENSHOT_DEFAULT_DEVICE_SCALE_FACTOR,
+        payload.deviceScaleFactor ??
+        DECLARED_CAPTURE_DEFAULT_DEVICE_SCALE_FACTOR,
       ...(payload.useAsThumbnail ? { useAsThumbnail: true as const } : {}),
     };
   }
