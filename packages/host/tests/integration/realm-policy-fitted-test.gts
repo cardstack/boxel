@@ -101,6 +101,63 @@ module('Integration | realm policy fitted view', function (hooks) {
     ].map((el) => el.textContent?.replace(/\s+/g, ' ').trim());
   }
 
+  // Whether the policy's title shows in full: rendered, with room for all of
+  // its text.
+  function titleShowsInFull(): boolean {
+    let title = document.querySelector(
+      '[data-test-realm-policy-fitted-title]',
+    ) as HTMLElement | null;
+    return Boolean(
+      title &&
+      title.getBoundingClientRect().width > 0 &&
+      title.scrollWidth <= title.clientWidth,
+    );
+  }
+
+  // How many rule lines show whole, and how many show only in part, within
+  // what the list leaves visible inside the card's padding.
+  function ruleLinesShown(): { whole: number; partial: number } {
+    let fit = document.querySelector(
+      '[data-test-realm-policy-fitted]',
+    ) as HTMLElement;
+    let card = fit.getBoundingClientRect();
+    // The test container may be scaled; the padding is in unscaled pixels.
+    let scale = card.width / fit.offsetWidth;
+    let style = getComputedStyle(fit);
+    let padding = (side: string) =>
+      parseFloat(style.getPropertyValue(`padding-${side}`)) * scale;
+    let list = document
+      .querySelector('[data-test-realm-policy-fitted-rules]')!
+      .getBoundingClientRect();
+    let top = Math.max(card.top + padding('top'), list.top);
+    let bottom = Math.min(card.bottom - padding('bottom'), list.bottom);
+    let left = Math.max(card.left + padding('left'), list.left);
+    let right = Math.min(card.right - padding('right'), list.right);
+    let whole = 0;
+    let partial = 0;
+    for (let li of document.querySelectorAll(
+      '[data-test-realm-policy-fitted-rules] li',
+    )) {
+      let line = li.getBoundingClientRect();
+      let inside =
+        line.top >= top - 0.5 &&
+        line.bottom <= bottom + 0.5 &&
+        line.left >= left - 0.5 &&
+        line.right <= right + 0.5;
+      let outside =
+        line.bottom <= top + 0.5 ||
+        line.top >= bottom - 0.5 ||
+        line.right <= left + 0.5 ||
+        line.left >= right - 0.5;
+      if (inside) {
+        whole++;
+      } else if (!outside) {
+        partial++;
+      }
+    }
+    return { whole, partial };
+  }
+
   const TWO_RULES = [
     {
       targetType: CLASSROOM,
@@ -114,7 +171,8 @@ module('Integration | realm policy fitted view', function (hooks) {
 
   test('it summarizes the rules and grants, and lists each rule where there is room', async function (assert) {
     await renderFitted(TWO_RULES, { width: 250, height: 170 });
-    assert.dom('[data-test-realm-policy-fitted]').containsText('Education');
+    assert.true(titleShowsInFull(), 'the title shows in full');
+    assert.dom('[data-test-realm-policy-fitted-title]').hasText('Education');
     assert
       .dom('[data-test-realm-policy-fitted-summary]')
       .hasText('2 rules · 4 grants');
@@ -130,6 +188,7 @@ module('Integration | realm policy fitted view', function (hooks) {
 
   test('as a strip, the rules give way to the summary beside the title', async function (assert) {
     await renderFitted(TWO_RULES, { width: 400, height: 65 });
+    assert.true(titleShowsInFull(), 'the title shows in full');
     assert
       .dom('[data-test-realm-policy-fitted-summary]')
       .isVisible()
@@ -139,11 +198,44 @@ module('Integration | realm policy fitted view', function (hooks) {
       .isNotVisible('a strip has no room for the rules');
   });
 
+  test('a strip three lines tall is still one row', async function (assert) {
+    await renderFitted(TWO_RULES, { width: 250, height: 105 });
+    assert.true(titleShowsInFull(), 'the title shows in full');
+    assert.dom('[data-test-realm-policy-fitted-summary]').isVisible();
+    assert.dom('[data-test-realm-policy-fitted-rules]').isNotVisible();
+  });
+
+  test('in a narrow strip, a long summary gives way to the title', async function (assert) {
+    // The narrowest strip a realm's config card renders the policy in, with
+    // the longest summary there is.
+    await renderFitted([], { width: 200, height: 65 });
+    assert.true(titleShowsInFull(), 'the title shows in full');
+    assert
+      .dom('[data-test-realm-policy-fitted-summary]')
+      .isVisible('the summary shows beside it, cut short where it must be');
+  });
+
   test('as a badge, only the title shows', async function (assert) {
     await renderFitted(TWO_RULES, { width: 150, height: 65 });
-    assert.dom('[data-test-realm-policy-fitted]').containsText('Education');
+    assert.true(titleShowsInFull(), 'the title shows in full');
     assert.dom('[data-test-realm-policy-fitted-summary]').isNotVisible();
     assert.dom('[data-test-realm-policy-fitted-rules]').isNotVisible();
+  });
+
+  test('where not every rule fits, the lines that show are whole', async function (assert) {
+    let rules = Array.from({ length: 9 }, (_, i) => ({
+      targetType: { module: '../classroom', name: `Type${i}` },
+      grants: [{ operation: 'read' }],
+    }));
+    await renderFitted(rules, { width: 250, height: 170 });
+    let { whole, partial } = ruleLinesShown();
+    assert.strictEqual(
+      partial,
+      0,
+      'no line is cut short or runs into the padding at the foot of the card',
+    );
+    assert.true(whole > 0, `some lines show: ${whole} of 9`);
+    assert.true(whole < 9, 'and the rest are left out');
   });
 
   test('an operation granted twice by one rule is listed once', async function (assert) {
@@ -163,6 +255,20 @@ module('Integration | realm policy fitted view', function (hooks) {
       .dom('[data-test-realm-policy-fitted-summary]')
       .hasText('1 rule · 2 grants');
     assert.deepEqual(ruleLines(), ['Classroom read']);
+  });
+
+  test('a grant that names no operation is neither counted nor listed, and a rule with no type says so', async function (assert) {
+    await renderFitted(
+      [
+        { targetType: CLASSROOM, grants: [{ operation: 'read' }, {}] },
+        { grants: [{ operation: 'update' }] },
+      ],
+      { width: 250, height: 170 },
+    );
+    assert
+      .dom('[data-test-realm-policy-fitted-summary]')
+      .hasText('2 rules · 2 grants');
+    assert.deepEqual(ruleLines(), ['Classroom read', 'No target type update']);
   });
 
   test('a policy with no rules says it grants nothing', async function (assert) {
