@@ -3,6 +3,7 @@ import { resolveRangeHeader } from './http-range.ts';
 import {
   awaitRealmIndexSettled,
   INDEX_WRITING_JOB_TYPES,
+  indexLag,
   readLaneHoldersBestEffort,
   indexingConcurrencyGroup,
   indexingWriterLane,
@@ -274,7 +275,10 @@ import type {
   OperationStoredFileMeta,
   ScopeCaller,
 } from './card-operations/dispatch.ts';
-import type { TargetRealm } from './card-operations/explain.ts';
+import {
+  assertWithinExplainCap,
+  type TargetRealm,
+} from './card-operations/explain.ts';
 import {
   assertTravelsInEnvelope,
   assertVersionableEntry,
@@ -326,6 +330,7 @@ import {
 import { erroredTargetRow } from './card-operations/read.ts';
 import { commitBatch, rehearseBatch } from './card-operations/coordinator.ts';
 import {
+  compileDraftPolicy,
   compilePolicyCard,
   noteRealmIndexMoved,
   RealmPolicyCache,
@@ -5835,6 +5840,15 @@ export class Realm {
         throw requestContext.archivedSeal;
       }
 
+      // Every explain in the batch is bounded together, before any of them is
+      // explained: each entry is within the cap alone, and enough of them
+      // would enumerate every actor or every card all the same.
+      assertWithinExplainCap(
+        resolved
+          .filter(({ definition }) => definition.base === 'explain')
+          .map(({ entry }) => ({ params: paramsFor(entry) })),
+      );
+
       // Reads run first and against the state the batch started from, which is
       // what "an entry sees pre-batch state" means for a mixed batch: a read
       // entry never observes what a write entry in the same batch stages, and
@@ -6714,6 +6728,12 @@ export class Realm {
             ),
           policyCard: async () => (await this.getRealmPolicy())?.card,
           isPolicyCard: (types) => this.#isPolicyCard(types),
+          compileDraft: (card, document) =>
+            compileDraftPolicy(
+              card,
+              document,
+              this.#policyCompileEnvironment(),
+            ),
         },
         targetRealm: (href) => this.#targetRealm(href),
         // Compiled as this realm's own policy cache compiles the card its
@@ -6744,6 +6764,9 @@ export class Realm {
         url,
         aclFor: (caller) => this.#aclFor(new URL(this.url), caller),
         core: async () => this.operationCore,
+        indexLag: async () =>
+          (await indexLag(this.#dbAdapter, this.url)) ??
+          this.#realmIndexUpdater.indexLag(),
       };
     }
     let served: ServedRealm | undefined;
@@ -6774,6 +6797,17 @@ export class Realm {
         } catch {
           return undefined;
         }
+      },
+      // Read from the queue, which every process shares, so the realm need not
+      // be mounted to answer. Only a realm with no queue to read is mounted,
+      // to ask its own bookkeeping.
+      indexLag: async () => {
+        let fromQueue = await indexLag(this.#dbAdapter, served.url);
+        if (fromQueue) {
+          return fromQueue;
+        }
+        let peer = await served.mount();
+        return peer ? peer.#realmIndexUpdater.indexLag() : { pending: 0 };
       },
     };
   }
@@ -15414,9 +15448,9 @@ export class Realm {
     });
   }
 
-  // What compiling a policy card reads, for the realm's own policy cache and
-  // for a validate of any policy card alike, so the two compile a card the
-  // same way.
+  // What compiling a policy reads, for the realm's own policy cache, for a
+  // validate of any policy card, and for an explain's draft alike, so all three
+  // compile rules the same way.
   #policyCompileEnvironment(): PolicyCompileEnvironment {
     return {
       readCard: (url) => this.#realmIndexQueryEngine.instanceSource(url),

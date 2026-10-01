@@ -61,7 +61,8 @@ export interface CompiledRealmPolicy {
   card: string;
   // The card's `meta.version`: the fingerprint of the stored source this was
   // compiled from. Absent when the card could not be read, or when what the
-  // index holds of it is an earlier visit's.
+  // index holds of it is an earlier visit's, and for a draft, which no card
+  // stores.
   version: string | undefined;
   rules: CompiledPolicyRule[];
   issues: PolicyIssue[];
@@ -677,6 +678,109 @@ async function compilePolicy(
   env: PolicyCompileEnvironment,
   onInput: (url: string) => void,
 ): Promise<Compilation> {
+  // An error row carries the last good visit's fingerprint forward, as a row
+  // whose failure was withheld carries everything forward, so only a row that
+  // holds the card's current document says which bytes it describes.
+  let version =
+    row?.instance && !row.failureWithheld
+      ? (row.sourceContentHash ?? undefined)
+      : undefined;
+  // The card holds no document a rule can be read from, for the reason
+  // recorded, so the policy as a whole did not compile. It has no rules.
+  let unreadable = (code: PolicyIssueCode, message: string): Compilation => ({
+    compiled: {
+      card,
+      version,
+      rules: [],
+      issues: [
+        { code, path: '', message, severity: policyIssueSeverity(code) },
+      ],
+      uncompilable: true,
+    },
+    row: rowIdentity(row),
+    definitions: new Map(),
+    inputs: [card],
+    subtypes: [],
+  });
+
+  if (!row) {
+    return unreadable(
+      'policy-card-missing',
+      `the realm's policy card ${card} is not in the index`,
+    );
+  }
+  // Refused until a visit of the card succeeds. The row holds what an earlier
+  // visit read, and nothing on it says whether the card has changed since, so
+  // compiling it could serve a grant an administrator has just removed. The
+  // cache that reads such a row asks for the card to be visited again, and
+  // the policy stays refused until a visit succeeds.
+  if (row.failureWithheld) {
+    return unreadable(
+      'policy-card-unloadable',
+      `the realm's policy card ${card} did not index: its latest index visit failed for a reason outside the card, and what the index holds for it is an earlier visit's, which may not be what the card holds now`,
+    );
+  }
+  if (!row.instance) {
+    return unreadable(
+      'policy-card-unloadable',
+      `the realm's policy card ${card} did not load: ${row.error?.message}`,
+    );
+  }
+  if (!attempt(() => env.isPolicyCard(row.types ?? []))) {
+    return unreadable(
+      'not-a-policy',
+      `the realm's policy card ${card} is not a RealmPolicy`,
+    );
+  }
+  let compiled = await compileDocument(
+    card,
+    row.instance.attributes,
+    env,
+    onInput,
+  );
+  return {
+    ...compiled,
+    compiled: { ...compiled.compiled, version },
+    row: rowIdentity(row),
+  };
+}
+
+// A draft of the policy the realm's key names: a document holding what a
+// RealmPolicy card's attributes hold, compiled as the realm would compile that
+// card were it to hold the document instead. So a relative `targetType` module
+// resolves against the card the draft stands in for, and a draft copied from
+// the card's own document means what it means there.
+//
+// Nothing is kept. The compile reads what compiling the card would, on the
+// realm's own authority, and the result goes to the caller alone: no cache
+// holds it, and no realm is told it exists. A document with no rule that can
+// be read compiles to a policy that is uncompilable as a whole, as the card
+// would.
+//
+// What it read is returned beside it: the card, and the module of every type
+// whose definition compiling looked up. What the result says describes those
+// definitions, so whoever reports it judges the caller by them.
+export async function compileDraftPolicy(
+  card: string,
+  document: Record<string, any>,
+  env: PolicyCompileEnvironment,
+): Promise<{ compiled: CompiledRealmPolicy; reads: string[] }> {
+  let { compiled, inputs } = await compileDocument(
+    card,
+    document,
+    env,
+    () => {},
+  );
+  return { compiled, reads: inputs };
+}
+
+// The rules a policy card's attributes hold, compiled.
+async function compileDocument(
+  card: string,
+  attributes: Record<string, any> | undefined,
+  env: PolicyCompileEnvironment,
+  onInput: (url: string) => void,
+): Promise<Omit<Compilation, 'row'>> {
   let issues: PolicyIssue[] = [];
   let definitions: Compilation['definitions'] = new Map();
   let inputs = [card];
@@ -686,16 +790,8 @@ async function compilePolicy(
   let cardURL = new URL(card);
   let issue = (code: PolicyIssueCode, path: string, message: string) =>
     issues.push({ code, path, message, severity: policyIssueSeverity(code) });
-  // An error row carries the last good visit's fingerprint forward, as a row
-  // whose failure was withheld carries everything forward, so only a row that
-  // holds the card's current document says which bytes it describes.
-  let version =
-    row?.instance && !row.failureWithheld
-      ? (row.sourceContentHash ?? undefined)
-      : undefined;
-  let compiled = (): Compilation => ({
-    compiled: { card, version, rules, issues },
-    row: rowIdentity(row),
+  let compiled = (): Omit<Compilation, 'row'> => ({
+    compiled: { card, version: undefined, rules, issues },
     definitions,
     inputs,
     subtypes,
@@ -707,11 +803,16 @@ async function compilePolicy(
     code: PolicyIssueCode,
     path: string,
     message: string,
-  ): Compilation => {
+  ): Omit<Compilation, 'row'> => {
     issue(code, path, message);
     return {
-      compiled: { card, version, rules: [], issues, uncompilable: true },
-      row: rowIdentity(row),
+      compiled: {
+        card,
+        version: undefined,
+        rules: [],
+        issues,
+        uncompilable: true,
+      },
       definitions,
       inputs,
       subtypes,
@@ -843,41 +944,7 @@ async function compilePolicy(
     return unreadable ? { unreadable } : undefined;
   };
 
-  if (!row) {
-    return uncompilable(
-      'policy-card-missing',
-      '',
-      `the realm's policy card ${card} is not in the index`,
-    );
-  }
-  // Refused until a visit of the card succeeds. The row holds what an earlier
-  // visit read, and nothing on it says whether the card has changed since, so
-  // compiling it could serve a grant an administrator has just removed. The
-  // cache that reads such a row asks for the card to be visited again, and
-  // the policy stays refused until a visit succeeds.
-  if (row.failureWithheld) {
-    return uncompilable(
-      'policy-card-unloadable',
-      '',
-      `the realm's policy card ${card} did not index: its latest index visit failed for a reason outside the card, and what the index holds for it is an earlier visit's, which may not be what the card holds now`,
-    );
-  }
-  if (!row.instance) {
-    return uncompilable(
-      'policy-card-unloadable',
-      '',
-      `the realm's policy card ${card} did not load: ${row.error?.message}`,
-    );
-  }
-  if (!attempt(() => env.isPolicyCard(row.types ?? []))) {
-    return uncompilable(
-      'not-a-policy',
-      '',
-      `the realm's policy card ${card} is not a RealmPolicy`,
-    );
-  }
-
-  let authored = row.instance.attributes?.rules;
+  let authored = attributes?.rules;
   if (authored != null && !Array.isArray(authored)) {
     return uncompilable('invalid-rule', 'rules', '`rules` is not a list');
   }
