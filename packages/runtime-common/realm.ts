@@ -322,10 +322,12 @@ import {
 import { erroredTargetRow } from './card-operations/read.ts';
 import { commitBatch, rehearseBatch } from './card-operations/coordinator.ts';
 import {
+  compilePolicyCard,
   noteRealmIndexMoved,
   RealmPolicyCache,
   realmPolicyRef,
   type CompiledRealmPolicy,
+  type PolicyCompileEnvironment,
 } from './card-operations/policy.ts';
 import {
   principalQueryScope,
@@ -2303,6 +2305,17 @@ const COARSE_CARD_WRITE: CardWriteAdmission = {
   sealed: async (seal) => seal,
 };
 
+// A realm a server serves, found without being mounted. Finding it answers
+// which realm a URL is in, so a caller can be judged against that realm's
+// permissions before the server pays to mount it.
+export interface ServedRealm {
+  // The realm's URL.
+  url: string;
+  // The realm, mounted if it is not. One found among the realms this process
+  // has already published may still be starting.
+  mount(): Promise<Realm | undefined>;
+}
+
 export class Realm {
   #startedUp = new Deferred<void>();
   #matrixClient: MatrixClient;
@@ -2424,7 +2437,7 @@ export class Realm {
   #dbAdapter: DBAdapter;
   #queue: QueuePublisher;
   #virtualNetwork: VirtualNetwork;
-  #realmFor: ((url: URL) => Promise<Realm | undefined>) | undefined;
+  #realmFor: ((url: URL) => Promise<ServedRealm | undefined>) | undefined;
   #mediaCacheAdapter: MediaCacheAdapter | undefined;
   // Shared with every realm the process serves — the cache keys on absolute
   // card URLs, and one byte cap for the process is the bound that matters.
@@ -2619,11 +2632,12 @@ export class Realm {
       // across every realm in the process. Optional — without one, each card
       // GET assembles its own body.
       cardDocumentCache?: CardDocumentCache;
-      // The realm this server serves at a URL, mounted if it is not yet. An
+      // The realm this server serves at a URL, found without mounting it. An
       // explain on this realm's policy card asks about a target in whichever
-      // realm that card governs, which is commonly another one. Without it,
-      // an explain reaches only this realm's own targets.
-      realmFor?: (url: URL) => Promise<Realm | undefined>;
+      // realm that card governs, which is commonly another one, and mounts
+      // that realm only for a caller who may read it. Without it, an explain
+      // reaches only this realm's own targets.
+      realmFor?: (url: URL) => Promise<ServedRealm | undefined>;
     },
     opts?: Options,
   ) {
@@ -5809,8 +5823,8 @@ export class Realm {
       // Keyed by position rather than by index, because a position is a path
       // through the tree for an entry inside a group and there is no array for
       // one to be an index into.
-      // Resolved once, and only for a batch that explains: it can cost a
-      // revocation read no other operation needs.
+      // Resolved once, and only for a batch that explains or validates: it can
+      // cost a revocation read no other operation needs.
       let principal: Promise<string | undefined> | undefined;
       for (let { entry, target, definition } of resolved) {
         if (isWrite(definition.base)) {
@@ -5819,7 +5833,7 @@ export class Realm {
         let result: OperationResult;
         try {
           let asker =
-            definition.base === 'explain'
+            definition.base === 'explain' || definition.base === 'validate'
               ? await (principal ??= this.#sessionPrincipal(requestContext))
               : undefined;
           result = await runOperation(this.operationCore, {
@@ -6674,6 +6688,11 @@ export class Realm {
           isPolicyCard: (types) => this.#isPolicyCard(types),
         },
         targetRealm: (href) => this.#targetRealm(href),
+        // Compiled as this realm's own policy cache compiles the card its
+        // pointer names, and kept by neither.
+        compilePolicyCard: (card) =>
+          compilePolicyCard(card.href, this.#policyCompileEnvironment()),
+        readsRealmOf: (href, caller) => this.#readsRealmOf(href, caller),
       };
     }
     return this.#operationCore;
@@ -6682,7 +6701,9 @@ export class Realm {
   // The realm an explain's target belongs to, reached on the realm server's
   // own authority: the explain decides for itself what its caller may be
   // told. A target in this realm is this realm's, and any other is the realm
-  // the server serves it from, mounted if it has to be.
+  // the server serves it from. That realm is found without being mounted, and
+  // whether it is archived and what its ACL allows are read from the database,
+  // so it is mounted only when the explain reaches for its core.
   async #targetRealm(href: string): Promise<TargetRealm | undefined> {
     let url: URL;
     try {
@@ -6691,44 +6712,97 @@ export class Realm {
       return undefined;
     }
     if (this.paths.inRealm(url)) {
-      return this.#asTargetRealm(url);
+      return {
+        url,
+        aclFor: (caller) => this.#aclFor(new URL(this.url), caller),
+        core: async () => this.operationCore,
+      };
     }
-    let peer: Realm | undefined;
+    let served: ServedRealm | undefined;
     try {
-      peer = await this.#realmFor?.(url);
+      served = await this.#realmFor?.(url);
     } catch {
       return undefined;
     }
-    if (!peer?.paths.inRealm(url)) {
+    if (!served) {
+      return undefined;
+    }
+    let realmURL = new URL(served.url);
+    if (!new RealmPaths(realmURL, this.#virtualNetwork).inRealm(url)) {
       return undefined;
     }
     // An archived realm answers every request with a refusal, so there is
     // nothing about its cards to explain. It is reached here without passing
     // its own seal, which only the realm a request is sent to applies.
-    if (await isRealmArchived(this.#dbAdapter, new URL(peer.url))) {
+    if (await isRealmArchived(this.#dbAdapter, realmURL)) {
       return undefined;
     }
-    return peer.#asTargetRealm(url);
-  }
-
-  #asTargetRealm(url: URL): TargetRealm {
     return {
       url,
-      core: this.operationCore,
-      aclFor: (caller) => this.#aclFor(caller),
+      aclFor: (caller) => this.#aclFor(realmURL, caller),
+      core: async () => {
+        try {
+          return (await served.mount())?.operationCore;
+        } catch {
+          return undefined;
+        }
+      },
     };
   }
 
-  // What this realm's ACL allows a caller, read from the same permissions a
-  // request from them is checked against. The realm's own user is permitted
-  // everything, as it is on a request.
+  // The realm this server serves `href` from, and whether a caller may read
+  // it, for a validate. Found the way an explain finds a target's realm, and
+  // judged from the database, so no realm is mounted to answer. Undefined
+  // where no realm here holds `href`.
+  async #readsRealmOf(
+    href: string,
+    caller: ScopeCaller,
+  ): Promise<{ realm: string; read: boolean } | undefined> {
+    let url: URL;
+    try {
+      url = new URL(this.#resolveAtomicHref(href), this.paths.url);
+    } catch {
+      return undefined;
+    }
+    if (this.paths.inRealm(url)) {
+      return {
+        realm: this.url,
+        read: (await this.#aclFor(new URL(this.url), caller)).read,
+      };
+    }
+    let served: ServedRealm | undefined;
+    try {
+      served = await this.#realmFor?.(url);
+    } catch {
+      return undefined;
+    }
+    if (!served) {
+      return undefined;
+    }
+    let realmURL = new URL(served.url);
+    if (!new RealmPaths(realmURL, this.#virtualNetwork).inRealm(url)) {
+      return undefined;
+    }
+    if (await isRealmArchived(this.#dbAdapter, realmURL)) {
+      return { realm: served.url, read: false };
+    }
+    return {
+      realm: served.url,
+      read: (await this.#aclFor(realmURL, caller)).read,
+    };
+  }
+
+  // What a realm's ACL allows a caller, read from the same permissions a
+  // request from them is checked against, so the realm need not be running to
+  // answer. A realm's own user is permitted everything, as it is on a
+  // request. Every realm a server serves signs in as the server's one matrix
+  // user, so this realm's own user is also the own user of any realm it asks
+  // about.
   async #aclFor(
+    realmURL: URL,
     caller: ScopeCaller,
   ): Promise<{ read: boolean; write: boolean }> {
-    let permissions = await fetchRealmPermissions(
-      this.#dbAdapter,
-      new URL(this.url),
-    );
+    let permissions = await fetchRealmPermissions(this.#dbAdapter, realmURL);
     let may: (action: RealmAction) => Promise<boolean>;
     if (caller.kind === 'user') {
       if (caller.actor === this.#matrixClientUserId) {
@@ -15188,7 +15262,16 @@ export class Realm {
   // definition lookup, as an operation's do.
   #makePolicyCache(): RealmPolicyCache {
     return new RealmPolicyCache({
+      ...this.#policyCompileEnvironment(),
       policyCard: async () => (await this.getRealmPolicy())?.card,
+    });
+  }
+
+  // What compiling a policy card reads, for the realm's own policy cache and
+  // for a validate of any policy card alike, so the two compile a card the
+  // same way.
+  #policyCompileEnvironment(): PolicyCompileEnvironment {
+    return {
       readCard: (url) => this.#realmIndexQueryEngine.instanceSource(url),
       resolveCodeRef: (codeRef, relativeTo) => {
         let absolute = codeRefWithAbsoluteIdentifier(
@@ -15207,7 +15290,14 @@ export class Realm {
       // spelling, so a key computed the same way is found in either.
       typeKey: (codeRef) =>
         internalKeyFor(codeRef, undefined, this.#virtualNetwork),
-    });
+      realmURL: this.url,
+      instanceTypesUnder: (codeRef) =>
+        this.#realmIndexQueryEngine.instanceTypesUnder(codeRef),
+      instanceTypeKeys: async () =>
+        (await this.#realmIndexQueryEngine.fetchCardTypeSummary()).instances
+          .map((summary) => summary.code_ref)
+          .sort(),
+    };
   }
 
   // Whether an adoption chain, as the index records one, is a policy card's.

@@ -27,6 +27,7 @@ export type { CapabilityAnswer, CapabilityCheck } from './capability-wire.ts';
 export {
   policyQueryScope,
   principalQueryScope,
+  withoutMisreadings,
   RealmAuthorityPolicyScopeError,
   searchPrincipal,
 } from './policy-query.ts';
@@ -205,6 +206,7 @@ export {
   isDefinitionFreeBaseOperation,
   isDocumentResult,
   isExplainResult,
+  isValidateResult,
   isHeadResult,
   isIdentityResult,
   effectiveLinkStrategy,
@@ -243,4 +245,10 @@ export type {
   PolicyExplanation,
   PolicyExplanationDecision,
   PolicyExplanationReason,
+  OperationValidateResult,
+  PolicyValidation,
+  ValidatedGrant,
+  ValidatedGrantInertia,
+  ValidatedPolicyIssue,
+  ValidatedRule,
 } from './types.ts';

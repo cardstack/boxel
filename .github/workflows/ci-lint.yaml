@@ -158,27 +158,24 @@ jobs:
         if: ${{ !cancelled() }}
         run: pnpm run lint
         working-directory: packages/choreo-player
-      - name: Build Glimmer Motion and Choreo Player
-        # The Choreo gallery and test app type-check against these packages'
-        # built output (package.json#exports maps types into declarations/).
-        if: ${{ !cancelled() }}
-        run: |
-          (cd packages/glimmer-motion && pnpm run build)
-          (cd packages/choreo-player && pnpm run build)
       - name: Lint Choreo Test App
         if: ${{ !cancelled() }}
         run: pnpm run lint
         working-directory: packages/choreo-test-app
-      - name: Build Choreo Gallery
-        # The gallery's build copies its demos in from the test app; lint and
-        # type-check run against those copies.
-        if: ${{ !cancelled() }}
-        run: pnpm run build
-        working-directory: packages/choreo-gallery
       - name: Lint Choreo Gallery
         if: ${{ !cancelled() }}
         run: pnpm run lint
         working-directory: packages/choreo-gallery
+      - name: Build Glimmer Motion, Choreo Player and Choreo Gallery
+        # Build coverage, not a lint prerequisite: lint type-checks these
+        # packages from source. The builds catch what only rollup sees, such
+        # as the gallery's `?raw` guide imports, fix-declarations and
+        # scope-css.
+        if: ${{ !cancelled() }}
+        run: |
+          (cd packages/glimmer-motion && pnpm run build)
+          (cd packages/choreo-player && pnpm run build)
+          (cd packages/choreo-gallery && pnpm run build)
 
   catalog:
     # The catalog (cardstack/boxel-catalog) type-checks and lints its cards

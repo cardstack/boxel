@@ -81,16 +81,22 @@ import {
 // the way `pendingWriteHolds` does: against the card as it is stored now.
 // ============================================================================
 
-// The realm a target belongs to, as an explain reaches it.
+// The realm a target belongs to, as an explain reaches it. It is found without
+// being mounted, so what the explain asks of it first, whether its caller may
+// read it, is answered before the server pays to mount a realm the caller may
+// be told nothing about.
 export interface TargetRealm {
   // Where the target the explain was asked about resolves, in this realm.
   url: URL;
-  // The realm's operation core, whose policy gate the explain runs.
-  core: OperationCore;
   // What the realm's ACL allows this caller, read from the permissions a
   // request from them is checked against. Read and write are kept apart
   // because a request is judged on one of them: the one its method needs.
   aclFor(caller: ScopeCaller): Promise<Acl>;
+  // The realm's operation core, whose policy gate the explain runs. Reaching
+  // it mounts the realm if it is not mounted. A realm this process has already
+  // published may still be starting, and until it has indexed, a target there
+  // is told of as a missing one. Undefined for a realm that will not mount.
+  core(): Promise<OperationCore | undefined>;
 }
 
 interface Acl {
@@ -120,21 +126,27 @@ export async function explainOperation(
   let realm = await core.targetRealm?.(question.target);
   // Whether the target's realm is served here, whether the caller may read
   // it, and whether the target is there are all answered as a missing target
-  // is, before anything else about the target is read.
+  // is, before anything else about the target is read. The first two are
+  // answered before the realm is mounted, so a caller cannot make the server
+  // mount a realm by asking about it unless they may read it.
   if (!realm || !(await realm.aclFor(asker)).read) {
     throw noSuchTarget();
   }
+  let targetCore = await realm.core();
+  if (!targetCore) {
+    throw noSuchTarget();
+  }
   let target: OperationTarget = canonicalizeTarget(
-    realm.core,
+    targetCore,
     { kind: 'instance', url: realm.url.href },
     { rootNamesIndexCard: !isDefinitionFreeBaseOperation(question.operation) },
   );
-  if (target.kind !== 'instance' || !(await exists(realm.core, target))) {
+  if (target.kind !== 'instance' || !(await exists(targetCore, target))) {
     throw noSuchTarget();
   }
   if (
-    !realm.core.policy ||
-    !(await namesPolicyCard(realm.core.policy, policyCard))
+    !targetCore.policy ||
+    !(await namesPolicyCard(targetCore.policy, policyCard))
   ) {
     throw new OperationFailure({
       id: policyCard.href,
@@ -148,7 +160,7 @@ export async function explainOperation(
   }
   let actor = scopeCallerFor(question.actor);
   let acl = await realm.aclFor(actor);
-  let explanation = await explain(realm.core, target, question, actor, acl);
+  let explanation = await explain(targetCore, target, question, actor, acl);
   return { explanation };
 }
 
