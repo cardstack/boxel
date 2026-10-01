@@ -182,19 +182,19 @@ module('handleDebugCommands - help', (hooks) => {
 
   test('the help lists the available features', async (assert) => {
     let body = await reply('boxel-debug');
-    assert.true(body.includes('catalog-reuse — '));
+    assert.true(body.includes('`catalog-reuse` — '));
   });
 
   test('an old debug: command points to boxel-debug', async (assert) => {
     let body = await reply('debug:prompt');
-    assert.true(body.startsWith('Did you mean boxel-debug?'));
+    assert.true(body.startsWith('**Did you mean `boxel-debug`?**'));
     assert.true(body.includes('boxel-debug:prompt'));
     assert.true(body.includes('boxel-debug:feature:enable:'));
   });
 
   test('enabling an unknown feature says so', async (assert) => {
     let body = await reply('boxel-debug:feature:enable:no-such-feature');
-    assert.true(body.includes('There is no feature named no-such-feature.'));
-    assert.true(body.includes('Available features: catalog-reuse.'));
+    assert.true(body.includes('There is no feature named `no-such-feature`.'));
+    assert.true(body.includes('Available features: `catalog-reuse`.'));
   });
 });

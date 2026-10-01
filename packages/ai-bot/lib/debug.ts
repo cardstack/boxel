@@ -21,31 +21,36 @@ import type { MatrixClient } from 'matrix-js-sdk';
 
 function helpMessage() {
   let features = Object.entries(SKILL_FEATURES)
-    .map(([name, description]) => `  ${name} — ${description}`)
+    .map(([name, description]) => `- \`${name}\` — ${description}`)
     .join('\n');
-  return `Debug commands. Send one as its own message; the assistant does not see it.
+  return `**Debug commands.** Send one as its own message. The assistant does not see it.
 
-Dumps (each reply attaches a JSON file)
-  boxel-debug:eventlist — every event in this room, as the model sees it: streamed messages show their final text, with edits applied and split messages joined
-  boxel-debug:eventlist:raw — every event in this room as Matrix stores it: streamed messages show their first placeholder, with the edits nested under it
-  boxel-debug:prompt — the full request the bot would send to the model for the last user message: the system prompt, skills, tools, and message history
-  boxel-debug:prompt:(number) — the same request, built as if the last (number) events had not happened
+### Dumps
+Each reply attaches a JSON file.
 
-Features (for this room only, from the next message)
-  boxel-debug:feature — list the features enabled in this room
-  boxel-debug:feature:enable:(name) — enable a feature
-  boxel-debug:feature:disable:(name) — disable a feature
+- \`boxel-debug:eventlist\` — every event in this room, as the model sees it: streamed messages show their final text, with edits applied and split messages joined.
+- \`boxel-debug:eventlist:raw\` — every event in this room as Matrix stores it: streamed messages show their first placeholder, with the edits nested under it.
+- \`boxel-debug:prompt\` — the full request the bot would send to the model for the last user message: the system prompt, skills, tools, and message history.
+- \`boxel-debug:prompt:(number)\` — the same request, built as if the last (number) events had not happened.
 
-Available features
+### Features
+For this room only, from the next message.
+
+- \`boxel-debug:feature\` — list the features enabled in this room.
+- \`boxel-debug:feature:enable:(name)\` — enable a feature.
+- \`boxel-debug:feature:disable:(name)\` — disable a feature.
+
+**Available features**
+
 ${features}
 
-Room title
-  boxel-debug:title:set:(title) — set the room name
-  boxel-debug:title:create — let the AI name the room
+### Room title
+- \`boxel-debug:title:set:(title)\` — set the room name.
+- \`boxel-debug:title:create\` — let the AI name the room.
 
-Testing
-  boxel-debug:patch:(json) — return a patchCardInstance tool call with this patch
-  boxel-debug:boom — throw an unhandled error
+### Testing
+- \`boxel-debug:patch:(json)\` — return a patchCardInstance tool call with this patch.
+- \`boxel-debug:boom\` — throw an unhandled error.
 `;
 }
 
@@ -74,7 +79,7 @@ export async function handleDebugCommands(
     await sendDebugMessage(
       client,
       roomId,
-      `Did you mean boxel-debug? The debug commands now start with boxel-debug: — for example boxel-debug:${command.slice('debug:'.length) || 'help'}.\n\n${helpMessage()}`,
+      `**Did you mean \`boxel-debug\`?** The debug commands now start with \`boxel-debug:\`, for example \`boxel-debug:${command.slice('debug:'.length) || 'help'}\`.\n\n${helpMessage()}`,
     );
     return;
   }
@@ -134,22 +139,19 @@ export async function handleDebugCommands(
   if (eventBody.startsWith('boxel-debug:feature')) {
     let command = parseFeatureCommand(eventBody);
     let features = sessionSkillFeatures(eventList, userId);
-    let available = Object.keys(SKILL_FEATURES).join(', ');
+    let code = (name: string) => `\`${name}\``;
+    let available = Object.keys(SKILL_FEATURES).map(code).join(', ');
     let status =
       (features.length
-        ? `Skill features enabled in this room: ${features.join(', ')}.`
-        : 'No skill features are enabled in this room.') +
-      ` Available features: ${available}.`;
+        ? `Features enabled in this room: ${features.map(code).join(', ')}.`
+        : 'No features are enabled in this room.') +
+      `\n\nAvailable features: ${available}.`;
     if (command && !(command.feature in SKILL_FEATURES)) {
-      status = `There is no feature named ${command.feature}. ` + status;
+      status = `There is no feature named ${code(command.feature)}.\n\n${status}`;
     } else if (command) {
-      status =
-        `${command.feature} is now ${command.enable ? 'enabled' : 'disabled'} for this room, from your next message. ` +
-        status;
+      status = `**${code(command.feature)} is now ${command.enable ? 'enabled' : 'disabled'}** for this room, from your next message.\n\n${status}`;
     } else if (eventBody.trim() !== 'boxel-debug:feature') {
-      status =
-        'Use boxel-debug:feature:enable:(feature name) or boxel-debug:feature:disable:(feature name). ' +
-        status;
+      status = `Use ${code('boxel-debug:feature:enable:(name)')} or ${code('boxel-debug:feature:disable:(name)')}.\n\n${status}`;
     }
     await sendDebugMessage(client, roomId, status);
   }
