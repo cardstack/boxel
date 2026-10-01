@@ -261,6 +261,9 @@ module(basename(import.meta.filename), function (hooks) {
       toURL: (identifier) => new URL(identifier),
       isPolicyCard: (types) => types.includes(typeKey(realmPolicyRef)),
       typeKey,
+      realmURL: EDUCATION,
+      instanceTypesUnder: async () => [],
+      instanceTypeKeys: async () => [],
     });
     return { cache, state };
   }
