@@ -64,7 +64,8 @@
   },
   "dependencies": {
     "@embroider/addon-shim": "^1.8.9",
-    "decorator-transforms": "catalog:"
+    "decorator-transforms": "catalog:",
+    "framer-motion": "catalog:"
   },
   "devDependencies": {
     "@babel/core": "catalog:",

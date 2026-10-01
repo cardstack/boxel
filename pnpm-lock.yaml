@@ -2615,6 +2615,9 @@ importers:
       decorator-transforms:
         specifier: 'catalog:'
         version: 2.4.0(@babel/core@7.29.7(supports-color@8.1.1))
+      framer-motion:
+        specifier: 13.1.1
+        version: 13.1.1
     devDependencies:
       '@babel/core':
         specifier: 'catalog:'

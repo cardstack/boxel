@@ -11,7 +11,6 @@ export default defineConfig([
     // verbatim copies of Motion's source (see VENDORED.md): type-checked upstream
     files: [
       'src/gestures/**',
-      'src/dom/**',
       'src/reorder/{check-reorder,detect-axis,auto-scroll}.ts',
     ],
     rules: {

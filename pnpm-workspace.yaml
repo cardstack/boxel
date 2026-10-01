@@ -287,8 +287,9 @@ minimumReleaseAgeExclude:
 allowedDeprecatedVersions:
   babel-eslint: 10.1.0
 overrides:
-  # One Motion engine: motion pulls framer-motion, which pulls motion-dom, both on
-  # caret ranges that would otherwise resolve past the pinned release.
+  # One Motion engine: motion and glimmer-motion pull framer-motion, which pulls
+  # motion-dom and motion-utils on caret ranges that would otherwise resolve past
+  # the pinned release and away from the copy glimmer-motion takes as a peer.
   framer-motion: "catalog:"
   motion-dom: "catalog:"
   motion-utils: "catalog:"

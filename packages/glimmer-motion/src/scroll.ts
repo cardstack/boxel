@@ -1,6 +1,6 @@
 /**
- * scrollProgress / InView for Glimmer — Motion's value/use-scroll.ts and utils/use-in-view.ts over the
- * vendored scroll() / inView() (src/dom). React refs become modifiers placed on the elements:
+ * scrollProgress / InView for Glimmer — Motion's value/use-scroll.ts and utils/use-in-view.ts over
+ * framer-motion/dom's scroll() / inView(). React refs become modifiers placed on the elements:
  *
  *   s = scrollProgress({ offset: ['start end', 'end start'] })
  *   <div {{s.container}}> <section {{s.target}}> … </section> </div>   → s.scrollYProgress is a MotionValue
@@ -15,11 +15,18 @@
  */
 import { tracked } from '@glimmer/tracking';
 import { type FunctionBasedModifier, modifier } from 'ember-modifier';
+import { inView, scroll, scrollInfo } from 'framer-motion/dom';
 import { type MotionValue, motionValue } from 'motion-dom';
 
-import { scroll } from './dom/scroll/index.ts';
-import type { ScrollInfo, ScrollInfoOptions } from './dom/scroll/types.ts';
-import { inView, type InViewOptions } from './dom/viewport.ts';
+export { inView, scroll, scrollInfo };
+
+// framer-motion/dom exports scroll(), scrollInfo() and inView() but not their option and
+// callback types, so these are read off the signatures.
+export type ScrollOptions = NonNullable<Parameters<typeof scroll>[1]>;
+type ScrollInfoOptions = NonNullable<Parameters<typeof scrollInfo>[1]>;
+export type ScrollOffset = NonNullable<ScrollInfoOptions['offset']>;
+export type ScrollInfo = Parameters<Parameters<typeof scrollInfo>[0]>[0];
+export type InViewOptions = NonNullable<Parameters<typeof inView>[2]>;
 
 export type UseScrollOptions = Omit<ScrollInfoOptions, 'container' | 'target'>;
 
