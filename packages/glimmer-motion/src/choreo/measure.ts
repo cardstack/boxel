@@ -9,7 +9,29 @@
  * offset produce a flight that lands next to its target, which is the kind of
  * bug that looks like a spring problem for a day.
  */
+import { defineParticipantArg } from '../participant.ts';
 import type { Bounds, Rect } from './types.ts';
+
+declare module '../participant.ts' {
+  interface ParticipantArgs {
+    /**
+     * How Choreo measures this element for a shape-matched flight.
+     * `'box'` (default) is the layout border box — right for plates, cards,
+     * stages. `'content'` is the shrink-wrap (the ink): a full-bleed title
+     * still matches as a word. Written as `data-choreo-pack`; an explicit
+     * `[data-choreo-substance]` descendant still wins.
+     */
+    pack?: 'box' | 'content';
+  }
+}
+
+defineParticipantArg('pack', (el, pack) => {
+  if (pack === 'content') {
+    el.setAttribute('data-choreo-pack', 'content');
+  } else {
+    el.removeAttribute('data-choreo-pack');
+  }
+});
 
 /** a box in page space */
 export const rect = (r: DOMRect): Rect => ({

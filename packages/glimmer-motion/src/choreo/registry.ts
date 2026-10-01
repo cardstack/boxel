@@ -1,9 +1,11 @@
 /**
- * How a participant finds its region: the nearest `[data-choreo]` ancestor, by
- * DOM — the same discovery <LayoutGroup> and <MotionConfig> use, so nothing
- * has to be threaded through the tree. No imports from node.ts here: node.ts
- * imports this.
+ * A region is a participant host (glimmer-motion/participant): its root
+ * renders `data-motion-host` beside `data-choreo`, and registering a region
+ * here registers it as that element's participant host too, so the {{motion}}
+ * elements inside join it. The lookups below are Choreo's own, for code that
+ * already speaks in regions.
  */
+import { type ParticipantHost, setParticipantHost } from '../participant.ts';
 import type { ChoreoRun } from './run.ts';
 import type { ChoreoNode, TimelineNode } from './types.ts';
 
@@ -12,7 +14,7 @@ export interface ChoreoProvider {
   node(): TimelineNode;
 }
 
-export interface ChoreoHost {
+export interface ChoreoHost extends ParticipantHost {
   /** a destroyed participant asks whether the region still needs its element; true → the region unmounts it later */
   claim(node: ChoreoNode): boolean;
   /**
@@ -34,6 +36,7 @@ export function setChoreoHost(el: Element, host: ChoreoHost | undefined) {
   const id = el.getAttribute('data-choreo');
   if (host) {
     hosts.set(el, host);
+    setParticipantHost(el, host);
     if (id) {
       hostsById.set(id, host);
     }
@@ -42,6 +45,7 @@ export function setChoreoHost(el: Element, host: ChoreoHost | undefined) {
     // successor: only the entry that is THIS host's comes off
     const mine = hosts.get(el);
     hosts.delete(el);
+    setParticipantHost(el, undefined);
     if (id && mine && hostsById.get(id) === mine) {
       hostsById.delete(id);
     }
