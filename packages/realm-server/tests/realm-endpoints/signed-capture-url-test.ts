@@ -24,7 +24,7 @@ import { FakeMediaCacheAdapter } from '../helpers/fake-media-cache-adapter.ts';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
 // The signed-capture-URL surface: the `_sign-capture-urls` mint endpoint
-// (QUERY, realm-read gated) and the `?token=` acceptance on `_screenshot/`
+// (QUERY, realm-read gated) and the `?token=` acceptance on `_capture/`
 // GETs. Nothing in these realms has been captured, so an authorized request
 // lands on the uncaptured-miss shape (404 with the route's private, briefly
 // cacheable cache-control) — which is exactly what separates "the token
@@ -97,7 +97,7 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
     });
 
     function captureURL(path: string): string {
-      return `${testRealm.url}_screenshot/${path}`;
+      return `${testRealm.url}_capture/${path}`;
     }
 
     async function mintOne(path: string, user = 'mary'): Promise<string> {
@@ -148,7 +148,7 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
 
     test('a signed URL authorizes its own GET with no Authorization header', async function (assert) {
       let bare = await request
-        .get('/_screenshot/some-card?type=pdf')
+        .get('/_capture/some-card?type=pdf')
         .set('Accept', 'image/png');
       assert.strictEqual(bare.status, 401, 'the bare URL still 401s');
 
@@ -164,7 +164,7 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       assert.strictEqual(
         response.headers['cache-control'],
         `private, max-age=${MEDIA_CACHE_MAX_AGE_SECONDS}`,
-        'the response is the screenshot miss, not a generic 404 — the token also never reached the capture-spec parse',
+        'the response is the capture miss, not a generic 404 — the token also never reached the capture-spec parse',
       );
     });
 
@@ -173,7 +173,7 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       let token = tokenFrom(signedUrl);
       let response = await request
         .get(
-          `/_screenshot/some-card?media=print&${CAPTURE_URL_TOKEN_PARAM}=${encodeURIComponent(
+          `/_capture/some-card?media=print&${CAPTURE_URL_TOKEN_PARAM}=${encodeURIComponent(
             token,
           )}&type=pdf`,
         )
@@ -186,13 +186,13 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       let token = tokenFrom(signedUrl);
       let otherPath = await request
         .get(
-          `/_screenshot/other-card?type=pdf&${CAPTURE_URL_TOKEN_PARAM}=${encodeURIComponent(token)}`,
+          `/_capture/other-card?type=pdf&${CAPTURE_URL_TOKEN_PARAM}=${encodeURIComponent(token)}`,
         )
         .set('Accept', 'image/png');
       assert.strictEqual(otherPath.status, 401, 'another path is refused');
       let otherSpec = await request
         .get(
-          `/_screenshot/some-card?type=pdf&media=print&${CAPTURE_URL_TOKEN_PARAM}=${encodeURIComponent(
+          `/_capture/some-card?type=pdf&media=print&${CAPTURE_URL_TOKEN_PARAM}=${encodeURIComponent(
             token,
           )}`,
         )
@@ -206,7 +206,7 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       let sessionToken = createJWT(testRealm, 'mary', ['read']);
       let response = await request
         .get(
-          `/_screenshot/some-card?${CAPTURE_URL_TOKEN_PARAM}=${encodeURIComponent(
+          `/_capture/some-card?${CAPTURE_URL_TOKEN_PARAM}=${encodeURIComponent(
             sessionToken,
           )}`,
         )
@@ -216,7 +216,7 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
 
     test('a token minted for another realm is refused', async function (assert) {
       let binding = captureURLTokenBinding(
-        '_screenshot/some-card',
+        '_capture/some-card',
         new URLSearchParams(),
       );
       let token = craftToken({
@@ -227,7 +227,7 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       });
       let response = await request
         .get(
-          `/_screenshot/some-card?${CAPTURE_URL_TOKEN_PARAM}=${encodeURIComponent(token)}`,
+          `/_capture/some-card?${CAPTURE_URL_TOKEN_PARAM}=${encodeURIComponent(token)}`,
         )
         .set('Accept', 'image/png');
       assert.strictEqual(response.status, 401);
@@ -235,7 +235,7 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
 
     test('an expired token is refused', async function (assert) {
       let binding = captureURLTokenBinding(
-        '_screenshot/some-card',
+        '_capture/some-card',
         new URLSearchParams(),
       );
       let token = craftToken(
@@ -249,7 +249,7 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       );
       let response = await request
         .get(
-          `/_screenshot/some-card?${CAPTURE_URL_TOKEN_PARAM}=${encodeURIComponent(token)}`,
+          `/_capture/some-card?${CAPTURE_URL_TOKEN_PARAM}=${encodeURIComponent(token)}`,
         )
         .set('Accept', 'image/png');
       assert.strictEqual(response.status, 401);
@@ -257,7 +257,7 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
 
     test('a revoked user’s token is refused', async function (assert) {
       let binding = captureURLTokenBinding(
-        '_screenshot/some-card',
+        '_capture/some-card',
         new URLSearchParams(),
       );
       // Backdated iat, so the revocation recorded now strictly postdates it.
@@ -270,7 +270,7 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       await revokeUserSessions(dbAdapter, 'revoked-mary');
       let response = await request
         .get(
-          `/_screenshot/some-card?${CAPTURE_URL_TOKEN_PARAM}=${encodeURIComponent(token)}`,
+          `/_capture/some-card?${CAPTURE_URL_TOKEN_PARAM}=${encodeURIComponent(token)}`,
         )
         .set('Accept', 'image/png');
       assert.strictEqual(response.status, 401);
@@ -369,11 +369,11 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       assert.strictEqual(
         nonCapture.status,
         400,
-        'a non-_screenshot URL is refused',
+        'a non-_capture URL is refused',
       );
       let otherRealm = await mint(
         request,
-        ['http://some-other-realm/_screenshot/card'],
+        ['http://some-other-realm/_capture/card'],
         auth,
       );
       assert.strictEqual(
@@ -415,7 +415,7 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
     test('an anonymous caller gets the URLs echoed back unsigned', async function (assert) {
       // There is no user to bind a token to, and none is needed where
       // anonymous read already serves.
-      let url = `${testRealm.url}_screenshot/some-card`;
+      let url = `${testRealm.url}_capture/some-card`;
       let response = await mint(request, [url]);
       assert.strictEqual(response.status, 200);
       assert.deepEqual(response.body.signed[0], {
@@ -426,7 +426,7 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
     });
 
     test('an authenticated caller still gets a signed variant', async function (assert) {
-      let url = `${testRealm.url}_screenshot/some-card`;
+      let url = `${testRealm.url}_capture/some-card`;
       let response = await mint(
         request,
         [url],
@@ -442,7 +442,7 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
 
     test('an invalid token never breaks a request public read already authorizes', async function (assert) {
       let response = await request
-        .get(`/_screenshot/some-card?${CAPTURE_URL_TOKEN_PARAM}=garbage`)
+        .get(`/_capture/some-card?${CAPTURE_URL_TOKEN_PARAM}=garbage`)
         .set('Accept', 'image/png');
       assert.strictEqual(
         response.status,

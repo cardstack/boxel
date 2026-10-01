@@ -1,0 +1,632 @@
+[
+  {
+    "id": "gestures",
+    "phone": false,
+    "width": 360,
+    "height": 360,
+    "scale": 2
+  },
+  {
+    "id": "enter",
+    "phone": false,
+    "width": 480,
+    "height": 300,
+    "scale": 2
+  },
+  {
+    "id": "presence",
+    "phone": false,
+    "width": 480,
+    "height": 320,
+    "scale": 2
+  },
+  {
+    "id": "keyframes",
+    "phone": false,
+    "width": 360,
+    "height": 360,
+    "scale": 2
+  },
+  {
+    "id": "path",
+    "phone": false,
+    "width": 360,
+    "height": 360,
+    "scale": 2
+  },
+  {
+    "id": "pointer",
+    "phone": false,
+    "width": 360,
+    "height": 360,
+    "scale": 2
+  },
+  {
+    "id": "stagger",
+    "phone": false,
+    "width": 480,
+    "height": 320,
+    "scale": 2
+  },
+  {
+    "id": "trail",
+    "phone": false,
+    "width": 360,
+    "height": 360,
+    "scale": 2
+  },
+  {
+    "id": "tabs",
+    "phone": false,
+    "width": 720,
+    "height": 180,
+    "scale": 2
+  },
+  {
+    "id": "layout",
+    "phone": false,
+    "width": 420,
+    "height": 600,
+    "scale": 2
+  },
+  {
+    "id": "lists",
+    "phone": false,
+    "width": 480,
+    "height": 420,
+    "scale": 2
+  },
+  {
+    "id": "reorder",
+    "phone": false,
+    "width": 420,
+    "height": 480,
+    "scale": 2
+  },
+  {
+    "id": "grid",
+    "phone": false,
+    "width": 480,
+    "height": 440,
+    "scale": 2
+  },
+  {
+    "id": "inline-edit",
+    "phone": false,
+    "width": 480,
+    "height": 520,
+    "scale": 2
+  },
+  {
+    "id": "lightbox",
+    "phone": false,
+    "width": 480,
+    "height": 520,
+    "scale": 2
+  },
+  {
+    "id": "split",
+    "phone": false,
+    "width": 720,
+    "height": 380,
+    "scale": 2
+  },
+  {
+    "id": "inbox",
+    "phone": false,
+    "width": 480,
+    "height": 560,
+    "scale": 2
+  },
+  {
+    "id": "far",
+    "phone": false,
+    "width": 720,
+    "height": 360,
+    "scale": 2
+  },
+  {
+    "id": "crossing",
+    "phone": false,
+    "width": 720,
+    "height": 420,
+    "scale": 2
+  },
+  {
+    "id": "escort",
+    "phone": false,
+    "width": 480,
+    "height": 300,
+    "scale": 2
+  },
+  {
+    "id": "interrupt",
+    "phone": false,
+    "width": 720,
+    "height": 260,
+    "scale": 2
+  },
+  {
+    "id": "sequence",
+    "phone": false,
+    "width": 720,
+    "height": 420,
+    "scale": 2
+  },
+  {
+    "id": "wires",
+    "phone": false,
+    "width": 720,
+    "height": 560,
+    "scale": 2
+  },
+  {
+    "id": "jump",
+    "phone": false,
+    "width": 480,
+    "height": 420,
+    "scale": 2
+  },
+  {
+    "id": "parallax",
+    "phone": false,
+    "width": 480,
+    "height": 560,
+    "scale": 2
+  },
+  {
+    "id": "reveal",
+    "phone": false,
+    "width": 480,
+    "height": 560,
+    "scale": 2
+  },
+  {
+    "id": "drift",
+    "phone": false,
+    "width": 480,
+    "height": 480,
+    "scale": 2
+  },
+  {
+    "id": "hang",
+    "phone": false,
+    "width": 480,
+    "height": 560,
+    "scale": 2
+  },
+  {
+    "id": "header",
+    "phone": false,
+    "width": 480,
+    "height": 500,
+    "scale": 2
+  },
+  {
+    "id": "fold",
+    "phone": false,
+    "width": 480,
+    "height": 520,
+    "scale": 2
+  },
+  {
+    "id": "sheet",
+    "phone": false,
+    "width": 360,
+    "height": 560,
+    "scale": 2
+  },
+  {
+    "id": "mockup",
+    "phone": false,
+    "width": 360,
+    "height": 640,
+    "scale": 2
+  },
+  {
+    "id": "camera",
+    "phone": false,
+    "width": 720,
+    "height": 480,
+    "scale": 2
+  },
+  {
+    "id": "long-take",
+    "phone": false,
+    "width": 840,
+    "height": 540,
+    "scale": 2
+  },
+  {
+    "id": "sylva",
+    "phone": false,
+    "width": 840,
+    "height": 480,
+    "scale": 2
+  },
+  {
+    "id": "subdivision",
+    "phone": false,
+    "width": 480,
+    "height": 480,
+    "scale": 2
+  },
+  {
+    "id": "rack",
+    "phone": false,
+    "width": 420,
+    "height": 620,
+    "scale": 2
+  },
+  {
+    "id": "grip",
+    "phone": false,
+    "width": 720,
+    "height": 440,
+    "scale": 2
+  },
+  {
+    "id": "drag",
+    "phone": false,
+    "width": 360,
+    "height": 360,
+    "scale": 2
+  },
+  {
+    "id": "slides",
+    "phone": false,
+    "width": 480,
+    "height": 420,
+    "scale": 2
+  },
+  {
+    "id": "presentation",
+    "phone": false,
+    "width": 840,
+    "height": 540,
+    "scale": 2
+  },
+  {
+    "id": "towers",
+    "phone": false,
+    "width": 840,
+    "height": 480,
+    "scale": 2
+  },
+  {
+    "id": "sagrada",
+    "phone": false,
+    "width": 840,
+    "height": 540,
+    "scale": 2
+  },
+  {
+    "id": "playhead",
+    "phone": false,
+    "width": 480,
+    "height": 480,
+    "scale": 2
+  },
+  {
+    "id": "build-order",
+    "phone": false,
+    "width": 720,
+    "height": 540,
+    "scale": 2
+  },
+  {
+    "id": "gestures",
+    "phone": true,
+    "width": 342,
+    "height": 360,
+    "scale": 2
+  },
+  {
+    "id": "enter",
+    "phone": true,
+    "width": 342,
+    "height": 300,
+    "scale": 2
+  },
+  {
+    "id": "presence",
+    "phone": true,
+    "width": 342,
+    "height": 320,
+    "scale": 2
+  },
+  {
+    "id": "keyframes",
+    "phone": true,
+    "width": 342,
+    "height": 360,
+    "scale": 2
+  },
+  {
+    "id": "path",
+    "phone": true,
+    "width": 342,
+    "height": 360,
+    "scale": 2
+  },
+  {
+    "id": "pointer",
+    "phone": true,
+    "width": 342,
+    "height": 360,
+    "scale": 2
+  },
+  {
+    "id": "stagger",
+    "phone": true,
+    "width": 342,
+    "height": 320,
+    "scale": 2
+  },
+  {
+    "id": "trail",
+    "phone": true,
+    "width": 342,
+    "height": 360,
+    "scale": 2
+  },
+  {
+    "id": "tabs",
+    "phone": true,
+    "width": 342,
+    "height": 180,
+    "scale": 2
+  },
+  {
+    "id": "layout",
+    "phone": true,
+    "width": 342,
+    "height": 600,
+    "scale": 2
+  },
+  {
+    "id": "lists",
+    "phone": true,
+    "width": 342,
+    "height": 420,
+    "scale": 2
+  },
+  {
+    "id": "reorder",
+    "phone": true,
+    "width": 342,
+    "height": 480,
+    "scale": 2
+  },
+  {
+    "id": "grid",
+    "phone": true,
+    "width": 342,
+    "height": 440,
+    "scale": 2
+  },
+  {
+    "id": "inline-edit",
+    "phone": true,
+    "width": 342,
+    "height": 520,
+    "scale": 2
+  },
+  {
+    "id": "lightbox",
+    "phone": true,
+    "width": 342,
+    "height": 520,
+    "scale": 2
+  },
+  {
+    "id": "split",
+    "phone": true,
+    "width": 342,
+    "height": 380,
+    "scale": 2
+  },
+  {
+    "id": "inbox",
+    "phone": true,
+    "width": 342,
+    "height": 560,
+    "scale": 2
+  },
+  {
+    "id": "far",
+    "phone": true,
+    "width": 342,
+    "height": 360,
+    "scale": 2
+  },
+  {
+    "id": "crossing",
+    "phone": true,
+    "width": 342,
+    "height": 420,
+    "scale": 2
+  },
+  {
+    "id": "escort",
+    "phone": true,
+    "width": 342,
+    "height": 300,
+    "scale": 2
+  },
+  {
+    "id": "interrupt",
+    "phone": true,
+    "width": 342,
+    "height": 260,
+    "scale": 2
+  },
+  {
+    "id": "sequence",
+    "phone": true,
+    "width": 342,
+    "height": 420,
+    "scale": 2
+  },
+  {
+    "id": "wires",
+    "phone": true,
+    "width": 342,
+    "height": 560,
+    "scale": 2
+  },
+  {
+    "id": "jump",
+    "phone": true,
+    "width": 342,
+    "height": 420,
+    "scale": 2
+  },
+  {
+    "id": "parallax",
+    "phone": true,
+    "width": 342,
+    "height": 560,
+    "scale": 2
+  },
+  {
+    "id": "reveal",
+    "phone": true,
+    "width": 342,
+    "height": 560,
+    "scale": 2
+  },
+  {
+    "id": "drift",
+    "phone": true,
+    "width": 342,
+    "height": 480,
+    "scale": 2
+  },
+  {
+    "id": "hang",
+    "phone": true,
+    "width": 342,
+    "height": 560,
+    "scale": 2
+  },
+  {
+    "id": "header",
+    "phone": true,
+    "width": 342,
+    "height": 500,
+    "scale": 2
+  },
+  {
+    "id": "fold",
+    "phone": true,
+    "width": 342,
+    "height": 520,
+    "scale": 2
+  },
+  {
+    "id": "sheet",
+    "phone": true,
+    "width": 342,
+    "height": 560,
+    "scale": 2
+  },
+  {
+    "id": "mockup",
+    "phone": true,
+    "width": 342,
+    "height": 640,
+    "scale": 2
+  },
+  {
+    "id": "camera",
+    "phone": true,
+    "width": 342,
+    "height": 480,
+    "scale": 2
+  },
+  {
+    "id": "long-take",
+    "phone": true,
+    "width": 342,
+    "height": 540,
+    "scale": 2
+  },
+  {
+    "id": "sylva",
+    "phone": true,
+    "width": 342,
+    "height": 480,
+    "scale": 2
+  },
+  {
+    "id": "subdivision",
+    "phone": true,
+    "width": 342,
+    "height": 480,
+    "scale": 2
+  },
+  {
+    "id": "rack",
+    "phone": true,
+    "width": 342,
+    "height": 620,
+    "scale": 2
+  },
+  {
+    "id": "grip",
+    "phone": true,
+    "width": 342,
+    "height": 440,
+    "scale": 2
+  },
+  {
+    "id": "drag",
+    "phone": true,
+    "width": 342,
+    "height": 360,
+    "scale": 2
+  },
+  {
+    "id": "slides",
+    "phone": true,
+    "width": 342,
+    "height": 420,
+    "scale": 2
+  },
+  {
+    "id": "presentation",
+    "phone": true,
+    "width": 342,
+    "height": 540,
+    "scale": 2
+  },
+  {
+    "id": "towers",
+    "phone": true,
+    "width": 342,
+    "height": 480,
+    "scale": 2
+  },
+  {
+    "id": "sagrada",
+    "phone": true,
+    "width": 342,
+    "height": 540,
+    "scale": 2
+  },
+  {
+    "id": "playhead",
+    "phone": true,
+    "width": 342,
+    "height": 480,
+    "scale": 2
+  },
+  {
+    "id": "build-order",
+    "phone": true,
+    "width": 342,
+    "height": 540,
+    "scale": 2
+  }
+]

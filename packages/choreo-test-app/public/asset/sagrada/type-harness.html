@@ -1,0 +1,2896 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Sagrada — type harness</title>
+    <style>
+      /* THE COMPONENT'S OWN STYLE BLOCK, re-extracted from
+   packages/glimmer-motion/src/film/film.gts (the construct's chrome),
+   plus the film's font import. Refresh after any CSS edit there. */
+      @import url("https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=Cormorant+Garamond:ital,wght@0,400;0,500;1,400&display=swap");
+      /* THE FLAG, as an accent system. Two colours and nothing else:
+         the red of the hinomaru for the one thing that is happening NOW
+         — the playhead, the current chapter, the seal, the point a line
+         is drawn to — and a full white for type that has to win over a
+         picture. Everything else stays in the scene's own inks, so the
+         red never becomes decoration; it only ever means "here". */
+      .cf-page {
+        --cf-red: #bc002d;
+        --cf-white: #fffdf8;
+      }
+
+      .cf-page {
+        /* the film's ink, replaced per chapter from the scene's own
+           time-of-day palette by wear — these are the morning values,
+           which is also what the page opens on. --cf-shx/y is the cast
+           shadow's offset, written every frame from where the scene's key
+           light actually is (see follow). */
+        --cf-paper: #ecdcbc;
+        --cf-paper-a: rgba(236, 220, 188, 0.94);
+        --cf-paper-b: rgba(236, 220, 188, 0.76);
+        --cf-paper-c: rgba(236, 220, 188, 0);
+        --cf-ink: #2e2515;
+        --cf-ink2: #8b7c5c;
+        --cf-ink3: #3f3520;
+        --cf-accent: #a8621f;
+        /* THE ANNOTATION RED, and it is a different colour from the
+           editorial accent on purpose. The accent is ink — it belongs to
+           the page and takes the page's palette. This is a marker: it is
+           not in the scene, it never was, and it should look like
+           somebody drew on the photograph. Muted burnt orange over ochre
+           moss reads as part of the picture, which is exactly what an
+           annotation must not do. */
+        --cf-mark: #ff2412;
+        --cf-rule: #c2b18c;
+        /* The sun, in two numbers: cf-rake is the angle its light makes
+           across the frame, cf-shx/cf-shy the direction away from it.
+           They dress the things that are PHYSICALLY on the frame — the
+           photograph's own plate, the rake of a rule — and deliberately
+           not the type. An offset shadow behind a headline is a sticker
+           effect: it claims the letters are objects lying on the picture,
+           which they are not, and getting the angle right does not rescue
+           it. Type here earns its contrast from the scrim. */
+        /* TYPE. The display face is a serif on purpose. This film is set
+           beside mincho kanji and stands in front of a building, and a
+           wide-tracked geometric sans fights both — it is also the first
+           thing every deck reaches for, which is reason enough to leave
+           it alone. A warm old-style serif sits with the kanji instead of
+           arguing with it. The sans is kept for small mechanical labels
+           only, and its tracking is pulled well back from the point where
+           letterspaced caps start reading as a logo. */
+        /* THE INFORMATION LAYER IS SET IN THE BASILICA'S OWN VOICE.
+           The 2026 centenary identity is heavy grotesque capitals in flat
+           colour on stone paper — the programme, the plates, the timeline
+           of momentums are all cut that way, and a film about the same
+           building in the same year has no business inventing a second
+           typography for the same facts. Archivo is the closest open face
+           to it: a grotesque with real weight at 800 and none of the
+           geometric-sans blandness. The old-style serif stays for the
+           quote and the caption band, where a sentence is being spoken
+           rather than displayed. */
+        --cf-display: Archivo, "Helvetica Neue", Helvetica, Arial, sans-serif;
+        --cf-caps: Archivo, "Helvetica Neue", Helvetica, Arial, sans-serif;
+        --cf-serif:
+          "Cormorant Garamond", "Iowan Old Style", "Palatino Linotype",
+          Palatino, Georgia, serif;
+        --cf-ui: Archivo, "Helvetica Neue", Helvetica, Arial, sans-serif;
+        /* the identity's four colours, and the chapter's own (set by wear) */
+        --cf-c-red: #d8232a;
+        --cf-c-blue: #1268c3;
+        --cf-c-green: #0f7b62;
+        --cf-c-pink: #e5308a;
+        --cf-chap: #d8232a;
+        --cf-shx: 2px;
+        --cf-shy: 2px;
+        --cf-rake: 35deg;
+
+        position: relative;
+        min-height: 100svh;
+        background: var(--cf-paper);
+        display: flex;
+        flex-direction: column;
+        transition: background 900ms ease;
+      }
+
+      .cf-stage {
+        position: relative;
+        height: 100svh;
+        flex: none;
+        overflow: hidden;
+      }
+
+      .cf-live {
+        position: absolute;
+        inset: 0;
+      }
+
+      /* THE SCENE DOES NOT TAKE THE POINTER. It is a picture: it has no
+         controls of its own in film mode, and while it swallowed events
+         the wheel went to the iframe's document instead of this page —
+         so the film filled the viewport and the wall plate underneath
+         could not be reached. */
+      .cf-frame {
+        pointer-events: none;
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        border: 0;
+        display: block;
+        /* the primary: contrast, saturation and lift, per grade */
+      }
+
+      /* ---- the grade ------------------------------------------------- *
+         Two passes, the way a colourist works: a primary on the picture
+         itself (above), then a split tone laid over it — warmth into the
+         highlights on one diagonal, coolness into the shadows on the
+         other. Soft-light rather than overlay, because overlay crushes this scene's
+         mid-tones and the whole point is to keep the moss and the plaster
+         legible while moving the mood underneath them.
+         ---------------------------------------------------------------- */
+
+      /* the five moods. CONTEXT opens warm and open; HISTORY is archival —
+         desaturated, cool, contrastier, the look of a document rather than
+         a day; CONSTRUCTION goes clean and bright, nearly a blueprint;
+         DETAIL is rich and close; COMPARISON is a museum plate, flat and
+         even, because a comparison that flatters one subject is not one. */
+      .is-grade-amber {
+        --cf-lut: saturate(0.9) contrast(0.94) brightness(1.2);
+        --cf-warm: #ffd9a8;
+        --cf-cool: #b9c8e6;
+        --cf-grade-a: 0.3;
+        --cf-vig-a: 0.5;
+      }
+
+      .is-grade-iron {
+        --cf-lut: saturate(0.72) contrast(0.98) brightness(1.12) sepia(0.1);
+        --cf-warm: #e8d9c2;
+        --cf-cool: #9fb0c8;
+        --cf-grade-a: 0.4;
+        --cf-vig-a: 0.65;
+      }
+
+      /* MIDDAY, and it is meant to be the brightest thing in the film.
+         The construction chapter is the one that has to read as
+         information — you are watching a building get assembled — so it
+         is pushed up and opened out until it is nearly a working
+         drawing, and it earns its brightness by sitting between two
+         chapters that are deliberately heavier. Contrast between
+         chapters is a bigger effect than contrast inside one. */
+      .is-grade-chalk {
+        --cf-lut: saturate(0.88) contrast(0.96) brightness(1.34);
+        --cf-warm: #fffdf6;
+        --cf-cool: #cfdde8;
+        --cf-grade-a: 0.2;
+        --cf-vig-a: 0.22;
+      }
+
+      .is-grade-ink {
+        --cf-lut: saturate(0.98) contrast(1) brightness(1.16);
+        --cf-warm: #ffc9a1;
+        --cf-cool: #8fa0c9;
+        --cf-grade-a: 0.32;
+        --cf-vig-a: 0.68;
+      }
+
+      /* WET. Rain is not simply the clear grade with drops in it: the
+         light comes from a lid rather than a source, so the picture
+         loses its warmth and most of its contrast, and the corners
+         close in. */
+      .is-grade-wet {
+        --cf-lut: saturate(0.72) contrast(0.92) brightness(0.94)
+          hue-rotate(-4deg);
+        --cf-warm: #cfd6dd;
+        --cf-cool: #7d8b9e;
+        --cf-grade-a: 0.44;
+        --cf-vig-a: 0.8;
+      }
+
+      .is-grade-plate {
+        --cf-lut: saturate(0.86) contrast(0.95) brightness(1.2);
+        --cf-warm: #f6e8d2;
+        --cf-cool: #c3c8bd;
+        --cf-grade-a: 0.18;
+        --cf-vig-a: 0.36;
+      }
+
+      /* SIX COUNTRIES, SIX LIGHTS. The comparison holds the framing and
+         the lens still so the BUILDING is the variable — but six towers
+         under one identical sky read as six models on one lawn, which
+         is a diorama, not a comparison. Each gets the tone its own
+         country is remembered in, at a strength you feel and cannot
+         quite name: the plate grade, bent a few degrees. */
+      .is-grade-c-jp {
+        --cf-lut: saturate(0.84) contrast(0.95) brightness(1.22);
+        --cf-warm: #f6e8d2;
+        --cf-cool: #bcc6bb;
+        --cf-grade-a: 0.2;
+        --cf-vig-a: 0.36;
+      }
+
+      .is-grade-c-cn {
+        --cf-lut: saturate(0.95) contrast(0.97) brightness(1.16) sepia(0.06);
+        --cf-warm: #ffd9a0;
+        --cf-cool: #c0a68e;
+        --cf-grade-a: 0.28;
+        --cf-vig-a: 0.44;
+      }
+
+      .is-grade-c-vn {
+        --cf-lut: saturate(0.92) contrast(0.94) brightness(1.18)
+          hue-rotate(-6deg);
+        --cf-warm: #eef0cd;
+        --cf-cool: #a7bda8;
+        --cf-grade-a: 0.26;
+        --cf-vig-a: 0.4;
+      }
+
+      .is-grade-c-th {
+        --cf-lut: saturate(1.02) contrast(0.93) brightness(1.3);
+        --cf-warm: #ffe9ad;
+        --cf-cool: #d3c6a0;
+        --cf-grade-a: 0.24;
+        --cf-vig-a: 0.3;
+      }
+
+      .is-grade-c-kh {
+        --cf-lut: saturate(0.9) contrast(0.99) brightness(1.14) sepia(0.12);
+        --cf-warm: #f2cfa4;
+        --cf-cool: #b9a184;
+        --cf-grade-a: 0.3;
+        --cf-vig-a: 0.5;
+      }
+
+      .is-grade-c-tr {
+        --cf-lut: saturate(0.8) contrast(0.96) brightness(1.26);
+        --cf-warm: #fdf3e2;
+        --cf-cool: #a9bacd;
+        --cf-grade-a: 0.22;
+        --cf-vig-a: 0.34;
+      }
+
+      /* the outgoing frame, swept off along the sun's diagonal behind a
+         FEATHERED edge — a mask, not a clip, because a wipe with a hard
+         edge is a screen transition and a wipe with a soft one is film */
+      .cf-swipe {
+        position: absolute;
+        inset: 0;
+        z-index: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        pointer-events: none;
+        mask-image: linear-gradient(
+          calc(var(--cf-rake, 35deg) + 72deg),
+          #000 44%,
+          transparent 56%
+        );
+        mask-size: 300% 300%;
+        mask-repeat: no-repeat;
+        -webkit-mask-image: linear-gradient(
+          calc(var(--cf-rake, 35deg) + 72deg),
+          #000 44%,
+          transparent 56%
+        );
+        -webkit-mask-size: 300% 300%;
+        -webkit-mask-repeat: no-repeat;
+        /* Star Wars speed: a wipe is a STATEMENT, and at two-thirds of a
+           second it reads as a glitch rather than a decision */
+        animation: cf-swipe 1150ms cubic-bezier(0.42, 0, 0.28, 1) forwards;
+      }
+
+      /* the sweep is the mask; the last breath of opacity is a SEAL. A
+         mask that ends up not covering what you assumed leaves the
+         still on screen forever, and a wipe that fails should fail to
+         nothing rather than to a photograph of the last shot. */
+      @keyframes cf-swipe {
+        0% {
+          mask-position: 0% 0%;
+          -webkit-mask-position: 0% 0%;
+          opacity: 1;
+        }
+
+        88% {
+          opacity: 1;
+        }
+
+        100% {
+          mask-position: 100% 100%;
+          -webkit-mask-position: 100% 100%;
+          opacity: 0;
+        }
+      }
+
+      .cf-melt {
+        position: absolute;
+        inset: 0;
+        z-index: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        pointer-events: none;
+        animation: cf-melt 1900ms cubic-bezier(0.4, 0, 0.5, 1) forwards;
+      }
+
+      @keyframes cf-melt {
+        0% {
+          opacity: 1;
+        }
+
+        22% {
+          opacity: 0.92;
+        }
+
+        100% {
+          opacity: 0;
+        }
+      }
+
+      .cf-blend {
+        position: absolute;
+        inset: 0;
+        z-index: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        pointer-events: none;
+        /* the still wears the same primary as the live frame under it,
+           so the dissolve is between two graded pictures — and it is a
+           PUSH dissolve: the old frame travels gently forward as it
+           thins, so the transition has a direction, not just a mix */
+        animation: cf-blend 520ms ease-out forwards;
+      }
+
+      @keyframes cf-blend {
+        0% {
+          opacity: 1;
+          transform: scale(1);
+        }
+
+        100% {
+          opacity: 0;
+          transform: scale(1.055);
+        }
+      }
+
+      /* the blur dissolve — and the freeze half of the rack-defocus */
+      .cf-blurout {
+        position: absolute;
+        inset: 0;
+        z-index: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        pointer-events: none;
+        animation: cf-blurout 640ms ease-out forwards;
+      }
+
+      @keyframes cf-blurout {
+        0% {
+          opacity: 1;
+          filter: blur(0);
+        }
+
+        100% {
+          opacity: 0;
+          filter: blur(13px);
+        }
+      }
+
+      /* the optical dissolve: lighten blend, so highlights linger */
+      .cf-luma {
+        position: absolute;
+        inset: 0;
+        z-index: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        pointer-events: none;
+        mix-blend-mode: lighten;
+        animation: cf-blend 700ms ease-in forwards;
+      }
+
+      /* two breaths of white, no freeze — the gun-crack */
+      .cf-flash {
+        position: absolute;
+        inset: 0;
+        z-index: 4;
+        pointer-events: none;
+        background: #fff8ec;
+        animation: cf-flash 300ms ease-out forwards;
+      }
+
+      @keyframes cf-flash {
+        0%,
+        22% {
+          opacity: 0.92;
+        }
+
+        100% {
+          opacity: 0;
+        }
+      }
+
+      /* the old shot closes in a circle onto the new shot's subject */
+      .cf-iris {
+        position: absolute;
+        inset: 0;
+        z-index: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        pointer-events: none;
+        clip-path: circle(150% at var(--ix, 50%) var(--iy, 50%));
+        animation: cf-iris 680ms cubic-bezier(0.45, 0, 0.3, 1) forwards;
+      }
+
+      @keyframes cf-iris {
+        0% {
+          clip-path: circle(150% at var(--ix, 50%) var(--iy, 50%));
+          opacity: 1;
+        }
+
+        92% {
+          opacity: 1;
+        }
+
+        100% {
+          clip-path: circle(0% at var(--ix, 50%) var(--iy, 50%));
+          opacity: 0;
+        }
+      }
+
+      .cf-dip {
+        position: absolute;
+        inset: 0;
+        z-index: 0;
+        pointer-events: none;
+      }
+
+      .cf-dip img {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        animation: cf-dip-frame 760ms linear forwards;
+      }
+
+      /* the freeze holds until the veil has fully closed, then drops
+         under cover — the incoming shot is never seen before the dip */
+      @keyframes cf-dip-frame {
+        0%,
+        38% {
+          opacity: 1;
+        }
+
+        42%,
+        100% {
+          opacity: 0;
+        }
+      }
+
+      .cf-dip i {
+        position: absolute;
+        inset: 0;
+        opacity: 0;
+        animation: cf-dip-veil 760ms ease-in-out forwards;
+      }
+
+      @keyframes cf-dip-veil {
+        0% {
+          opacity: 0;
+        }
+
+        32%,
+        48% {
+          opacity: 1;
+        }
+
+        100% {
+          opacity: 0;
+        }
+      }
+
+      /* ---- the lens ------------------------------------------------- */
+      /* THE CLOUD IS A CAST SHADOW, not a filter over the lens. A band
+         swept across the whole frame reads as somebody dimming the
+         picture; what a cloud actually does is drop a soft, uneven
+         shape onto the land and the building, keep its edges out of
+         focus, and move. Two overlapping blobs on a wide plate,
+         multiplied over the scene and travelling with the sun's rake. */
+      .cf-cloud {
+        position: absolute;
+        /* -35%/-45% was a plate 1.7x the viewport each way, blurred at 26px
+           on every frame the sun moved. The gradients are soft already; the
+           blur added nothing you could see and a full-screen filter you could
+           feel. Smaller, unblurred, and hidden outright when there is no
+           cloud — an opacity of zero still costs a composited layer. */
+        inset: -12% -16%;
+        z-index: 1;
+        pointer-events: none;
+        /* IT WAS BLUE, AND BARCELONA IS NOT. A cloud passing over a warm
+           stone site takes the warmth out of the light; it does not tip the
+           whole frame to slate. These are a warm grey now, and at half the
+           strength — a shadow crossing the picture rather than a filter
+           laid over it. */
+        opacity: calc(var(--cf-cloud, 0) * 0.32);
+        background:
+          radial-gradient(
+            62% 40% at 32% 44%,
+            rgba(112, 100, 80, 0.4) 0%,
+            rgba(120, 108, 88, 0.24) 46%,
+            rgba(128, 118, 100, 0) 84%
+          ),
+          radial-gradient(
+            48% 32% at 68% 58%,
+            rgba(106, 96, 78, 0.3) 0%,
+            rgba(122, 110, 90, 0.16) 52%,
+            rgba(128, 118, 100, 0) 90%
+          );
+        mix-blend-mode: multiply;
+        transform: rotate(calc(var(--cf-rake, 35deg) * 0.4))
+          translate3d(
+            calc(var(--cf-cloud, 0) * -16%),
+            calc(var(--cf-cloud, 0) * 7%),
+            0
+          );
+      }
+
+      .is-cloudless .cf-cloud {
+        visibility: hidden;
+      }
+
+      /* ---- scrims: anchored to the caption, never banded across the
+         frame. A band wide enough to carry a lower third also washes out
+         whatever is standing in the middle of the shot — which on this
+         route is the building. ------------------------------------------ */
+      .cf-scrim {
+        position: absolute;
+        inset: 0;
+        z-index: 1;
+        pointer-events: none;
+        transition: background 700ms ease;
+      }
+
+      /* a bare beat: no scrim at all — under a walk through the hours the
+         scrim's paper colour snaps with each theme, and a dish of colour
+         snapping behind the type is worse than no dish */
+      .cf-scrim.is-bare {
+        display: none;
+      }
+
+      .cf-scrim-lower {
+        background: radial-gradient(
+          128% 82% at 0% 112%,
+          var(--cf-paper-a) 0%,
+          var(--cf-paper-b) 36%,
+          var(--cf-paper-c) 72%
+        );
+      }
+
+      .cf-scrim-title {
+        background: radial-gradient(
+          112% 108% at 112% 116%,
+          var(--cf-paper-a) 0%,
+          var(--cf-paper-b) 34%,
+          var(--cf-paper-c) 70%
+        );
+      }
+
+      .cf-scrim-plate {
+        background: radial-gradient(
+          84% 104% at 110% 50%,
+          var(--cf-paper-a) 0%,
+          var(--cf-paper-b) 34%,
+          var(--cf-paper-c) 72%
+        );
+      }
+
+      .cf-scrim-point {
+        background: radial-gradient(
+          88% 92% at -10% 26%,
+          var(--cf-paper-a) 0%,
+          var(--cf-paper-b) 38%,
+          var(--cf-paper-c) 74%
+        );
+      }
+
+      .cf-dim {
+        position: absolute;
+        inset: 0;
+        z-index: 2;
+        pointer-events: none;
+        opacity: 0;
+        background: radial-gradient(
+          76% 66% at 50% 48%,
+          rgba(24, 18, 8, 0.16) 0%,
+          rgba(24, 18, 8, 0.34) 100%
+        );
+      }
+
+      /* ---- traces and callouts -------------------------------------- */
+      .cf-track {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+        z-index: 2;
+      }
+
+      /* the marker glows, and the glow is doing real work: a thin line
+         over moss competes with the moss at exactly its own frequency,
+         and a soft bloom gives the eye a low-frequency edge to catch
+         first. (The traces on the building carry their own glow shell in
+         the scene now; this dresses only what is still on the glass.) */
+      /* THE GLOW COSTS A FRAME IN SAFARI. These two elements move every
+         frame — the leader is re-pointed at the building on each one — and
+         a stacked pair of drop-shadow filters is re-rasterised each time,
+         which WebKit charges far more for than Blink does. One tight
+         shadow gives the eye the same low-frequency edge to catch; the
+         wide one was doing very little over a dimmed plate anyway. */
+      .cf-leader,
+      .cf-track circle {
+        filter: drop-shadow(0 0 3px rgba(255, 36, 18, 0.9));
+      }
+
+      .cf-tether {
+        stroke: var(--cf-accent);
+        stroke-width: 1.4;
+        stroke-dasharray: 3 5;
+        opacity: 0;
+        transition: opacity 500ms ease;
+      }
+
+      .cf-leader {
+        stroke: var(--cf-mark);
+        stroke-width: 1.8;
+        stroke-dasharray: 5 4;
+        stroke-linecap: round;
+        opacity: 0;
+      }
+
+      .cf-track circle {
+        fill: none;
+        stroke: var(--cf-mark);
+        stroke-width: 2.6;
+        stroke-linecap: round;
+        opacity: 0;
+      }
+
+      /* ================================================================
+         RESPONSIVE. The film had not one media query in it: every size was
+         a viewport fraction, which keeps type in proportion but does not
+         change a LAYOUT. Two columns of an editorial plate do not become
+         a phone layout by getting smaller — they have to become one
+         column, the ghost numeral has to go, and the settings have to
+         stop being a corner of the frame and become its foot.
+         ================================================================ */
+
+      /* a laptop, or a window shared with something else */
+      @media (max-width: 1180px) {
+        .cf-block {
+          max-width: min(38ch, 56vw);
+        }
+
+        .cf-block.is-plate {
+          max-width: min(46ch, 62vw);
+        }
+
+        .is-plate .cf-kanji.is-latin {
+          --cf-fit: 28vw;
+          max-width: 30vw;
+        }
+
+        .cf-say {
+          max-width: min(28ch, 42vw);
+        }
+      }
+
+      /* a tablet, or a phone held the long way */
+      @media (max-width: 860px) {
+        /* the plate stops being two columns: the word goes over the cues,
+           and the rule that separated them becomes the rule under it */
+        .cf-block.is-plate {
+          top: auto;
+          bottom: 12%;
+          right: 5.5%;
+          left: 5.5%;
+          display: block;
+          transform: none;
+          max-width: none;
+        }
+
+        .is-plate .cf-plane.is-glyph {
+          border-right: 0;
+          border-bottom: 2px solid var(--cf-chap);
+          padding-right: 0;
+          padding-bottom: 8px;
+          margin-bottom: 14px;
+        }
+
+        .is-plate .cf-kanji.is-latin {
+          --cf-fit: 84vw;
+          max-width: none;
+        }
+
+        .cf-block.is-title,
+        .cf-block.is-lower,
+        .cf-block.is-point {
+          left: 5.5%;
+          right: 5.5%;
+          top: auto;
+          bottom: 13%;
+          max-width: none;
+          text-align: left;
+        }
+
+        .is-title .cf-read {
+          justify-content: flex-start;
+        }
+
+        .is-title .cf-kicker {
+          flex-direction: row;
+        }
+
+        .cf-kanji.is-latin,
+        .is-title .cf-kanji.is-latin,
+        .is-point .cf-kanji.is-latin {
+          --cf-fit: 84vw;
+        }
+
+        .cf-say {
+          max-width: min(32ch, 84vw);
+        }
+
+        /* a numeral three-quarters of the screen wide behind two columns
+           of type is a texture; behind one column it is a mess */
+        .cf-ghost,
+        .cf-plate .cf-ghost {
+          display: none;
+        }
+
+        .cf-photo figure {
+          width: min(46vw, 260px);
+        }
+
+        .cf-years {
+          width: clamp(200px, 56vw, 420px);
+          margin-left: 0;
+        }
+
+        .cf-subs {
+          font-size: 15px;
+          max-width: 88vw;
+        }
+      }
+
+      /* a phone */
+      @media (max-width: 560px) {
+        .cf-kicker {
+          font-size: 10px;
+          letter-spacing: 0.09em;
+        }
+
+        .cf-say {
+          font-size: 15px;
+          margin-bottom: 8px;
+        }
+
+        .cf-read {
+          margin-bottom: 12px;
+        }
+
+        .cf-kanji {
+          margin-bottom: 12px;
+        }
+
+        .cf-gate-index,
+        .cf-rail {
+          display: none;
+        }
+
+        .cf-gate-in.cf-matter {
+          margin-right: 0;
+          padding-inline: 20px;
+        }
+
+        .cf-gate-vert {
+          display: none;
+        }
+
+        .cf-mg-seal {
+          position: static;
+          margin: 14px auto 0;
+        }
+
+        .cf-photo {
+          display: none;
+        }
+
+        .cf-subs {
+          font-size: 14px;
+          bottom: 10%;
+        }
+      }
+
+      /* a short window: the film is 16:9 in a letterbox and the vertical
+         rhythm, not the width, is what runs out */
+      @media (max-height: 620px) {
+        .cf-kanji.is-latin {
+          font-size: min(
+            clamp(30px, 8vh, 64px),
+            calc(var(--cf-fit, 42vw) / (var(--cf-glyphs, 4) * 0.56))
+          );
+        }
+
+        .cf-say {
+          font-size: clamp(13px, 2.4vh, 18px);
+          margin-bottom: 7px;
+        }
+
+        .cf-block.is-lower,
+        .cf-block.is-title {
+          bottom: 8%;
+        }
+
+        .has-subs .cf-block.is-lower,
+        .has-subs .cf-block.is-title {
+          bottom: 17%;
+        }
+      }
+
+      /* someone who has asked for less movement gets the film without the
+         drift, the sway and the entrances — and still gets the film */
+      @media (prefers-reduced-motion: reduce) {
+        .cf-mg-mark,
+        .cf-mg-glyph,
+        .cf-gate-ghost,
+        .cf-mg-seal,
+        .cf-kicker::after {
+          animation-duration: 1ms !important;
+        }
+      }
+
+      /* ---- the front layer ------------------------------------------ */
+      /* THE WALL TEXT LEAVES BEFORE THE SEAM. Its own exit animation
+         runs when the next beat replaces it, which means the outgoing
+         setting is still on screen at the instant of the cut — so the
+         edit lands on a frame with two things happening in it. Half a
+         second of fade ahead of the change empties the corner first,
+         and the cut is then only ever about the picture. */
+      /* the ink follows the hour: the palette is swapped per theme by wear,
+         and under a walk through the day the type must not snap from black
+         to white — it turns with the light */
+      .cf-type,
+      .cf-type p,
+      .cf-type span {
+        transition: color 2400ms ease;
+      }
+
+      .cf-type {
+        position: absolute;
+        inset: 0;
+        z-index: 3;
+        opacity: var(--cf-type-a, 1);
+        pointer-events: none;
+        color: var(--cf-ink);
+        font-family: var(--cf-display);
+      }
+
+      .cf-block {
+        position: absolute;
+        max-width: min(46vw, 660px);
+      }
+
+      /* a kicker rides a rule that draws itself out of the type — the
+         diagonal is the sun's, so the graphic furniture rakes the same
+         way the shadows do */
+      /* the eyebrow never wraps: 'THE TALLEST CHURCH ON EARTH' at this
+         tracking is wider than the block, and a wrapped kicker changes
+         the height of a bottom-anchored plate */
+      .cf-kicker > span {
+        white-space: nowrap;
+      }
+
+      .cf-kicker {
+        font-family: var(--cf-ui);
+        font-size: clamp(11px, 0.9vw, 14px);
+        font-weight: 700;
+        letter-spacing: 0.11em;
+        color: var(--cf-chap);
+        margin: 0 0 14px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+
+      /* the rule draws itself out of the kicker. It is a pseudo-element,
+         so Motion cannot own it — but the whole block is rebuilt on every
+         beat, which means a plain CSS animation runs from its first frame
+         each time and needs no retriggering. */
+      .cf-kicker::after {
+        content: "";
+        /* the rule takes the chapter's colour: on the centenary timeline
+           the rule, the dot and the heading are one colour, and that is
+           what makes it read as a system rather than as decoration */
+        background: var(--cf-chap);
+        /* the rule gives way to the words but never vanishes: a rule that
+           collapses to nothing on a long kicker is furniture that blinks
+           in and out with the string length */
+        flex: 1 1 26px;
+        min-width: 26px;
+        height: 2px;
+        transform-origin: left center;
+        animation: cf-rule 760ms 300ms cubic-bezier(0.22, 1, 0.36, 1) both;
+      }
+
+      .is-title .cf-kicker::after {
+        transform-origin: right center;
+      }
+
+      @keyframes cf-rule {
+        from {
+          transform: scaleX(0);
+        }
+
+        to {
+          transform: scaleX(1);
+        }
+      }
+
+      .is-point .cf-kicker::after,
+      .is-lower .cf-kicker::after {
+        max-width: 120px;
+      }
+
+      .cf-kanji {
+        font-family:
+          "Hiragino Mincho ProN", "Yu Mincho", YuMincho, "Noto Serif JP",
+          "Songti SC", serif;
+        font-size: clamp(56px, 8.4vw, 132px);
+        line-height: 0.94;
+        letter-spacing: 0.04em;
+        margin: 0 0 18px;
+      }
+
+      .cf-read {
+        margin: 0 0 20px;
+        display: flex;
+        gap: 6px 16px;
+        align-items: baseline;
+        flex-wrap: wrap;
+      }
+
+      /* a flex child cannot shrink past its own content without this */
+      .cf-romaji,
+      .cf-gloss {
+        min-width: 0;
+      }
+
+      /* on a marked beat the reading is the largest thing in the block,
+         because the term itself is out in the scene */
+      .cf-block:not(:has(.is-glyph)) .cf-romaji {
+        font-size: clamp(17px, 1.5vw, 24px);
+        letter-spacing: 0.2em;
+      }
+
+      .cf-block:not(:has(.is-glyph)) .cf-gloss {
+        font-size: clamp(15px, 1.2vw, 19px);
+      }
+
+      .cf-romaji {
+        font-family: var(--cf-ui);
+        font-size: clamp(11px, 0.94vw, 14px);
+        font-weight: 700;
+        letter-spacing: 0.11em;
+        color: var(--cf-chap);
+      }
+
+      .cf-gloss {
+        font-family: var(--cf-ui);
+        font-size: clamp(12px, 0.98vw, 15px);
+        font-weight: 400;
+        letter-spacing: 0.01em;
+        color: var(--cf-ink3);
+      }
+
+      /* the planes are the host's to move; the type on them is Motion's */
+      .cf-plane {
+        will-change: transform;
+      }
+
+      /* a phrase is a HEADLINE, not body copy: it is on screen for two
+         seconds and read at a glance, so it is set at the size a glance
+         needs and it never runs past two lines */
+      .cf-say {
+        margin: 0 0 12px;
+        font-family: var(--cf-display);
+        /* set in the identity's capitals, but a cue is still a caption:
+           at 30px in heavy caps three of them fill a frame and the
+           picture becomes the background to a poster */
+        font-size: clamp(14px, 1.28vw, 22px);
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.012em;
+        line-height: 1.16;
+        color: var(--cf-ink);
+        /* a cue is a phrase: wide enough that most set on ONE line.
+           26ch was a CJK measure and these run to 34 characters, so the
+           measure comes from the longest of them — and the break is left
+           to pretty, because balance moves the break around as the
+           string changes, which is the flicker between a one-line and a
+           two-line setting. */
+        max-width: min(38ch, 34vw);
+        text-wrap: pretty;
+      }
+
+      .cf-say:last-child {
+        margin-bottom: 0;
+      }
+
+      /* tall scripts (Thai, Khmer) at kanji size collide with their
+         neighbours; scale the whole set box and give the marks headroom */
+      .cf-kanji.is-tall {
+        zoom: 0.58;
+        line-height: 1.5;
+      }
+
+      /* ---- lines that DO what they SAY ------------------------------ *
+         Behavior animations on the inner span, addressed per line by the
+         film (`.sx-<beat>-<n>`). They run the length of the beat, so
+         whenever the delivery reveals a line it is already mid-behavior —
+         never waiting, never done. Two gestures ship here: a plumb drop
+         and a heavy settle. */
+      .cf-sayx {
+        display: inline-block;
+      }
+
+      @keyframes cf-plumb {
+        0% {
+          transform: translateY(-16px) scaleY(1.18);
+        }
+
+        100% {
+          transform: translateY(0) scaleY(1);
+        }
+      }
+
+      /* "Flaring at the foot" — the line itself flares, tracking wide
+         from its left foot for the whole shot, the batter's own curve */
+      /* (the old per-line behaviours are gone: one of them animated
+         letter-spacing on an inline-block, which re-wrapped the line it
+         was in halfway through a shot) */
+
+      @keyframes cf-sink {
+        0% {
+          transform: translateY(-14px);
+        }
+
+        34% {
+          transform: translateY(2px);
+        }
+
+        100% {
+          transform: translateY(0);
+        }
+      }
+
+      /* the four ways a beat is set. A title is ranged right against the
+         frame's edge with the tower in the other half; a lower third sits
+         bottom-left; a plate is a slab in the right third; a point is a
+         caption with a leader running out of it. */
+      .cf-block.is-title {
+        right: 6%;
+        bottom: 15%;
+        text-align: right;
+        max-width: min(48vw, 700px);
+      }
+
+      .is-title .cf-read {
+        justify-content: flex-end;
+      }
+
+      .is-title .cf-kicker {
+        flex-direction: row-reverse;
+      }
+
+      .is-title .cf-line {
+        margin-left: auto;
+      }
+
+      .is-title .cf-kanji {
+        font-size: clamp(72px, 11vw, 190px);
+      }
+
+      .cf-block.is-lower {
+        left: 5.5%;
+        bottom: 11%;
+      }
+
+      /* captions take the foot of the frame, so the settings that live
+         down there move up out of their way rather than sit under them */
+      .has-subs .cf-block.is-lower {
+        bottom: 21%;
+      }
+
+      /* the plate steps out of the caption band's way — and stepping is
+         what it should not do, so it moves over a beat, not a frame */
+      .cf-block {
+        transition: bottom 420ms cubic-bezier(0.22, 1, 0.36, 1);
+      }
+
+      .has-subs .cf-block.is-title {
+        bottom: 24%;
+      }
+
+      /* the plate is centred on the frame, so a caption band eats its last
+         cue rather than sitting under it */
+      .has-subs .cf-block.is-plate {
+        top: 44%;
+      }
+
+      /* THE PLATE, which is the one setting that is a designed object
+         rather than a caption. Two columns: the term set VERTICALLY down
+         the right edge, the way it would be on a museum label or a
+         hanging scroll, and the reading and the phrases in a column
+         beside it. A rule between them draws itself down as the plate
+         lands. Ranged type in a corner was never wrong exactly — it was
+         just nothing, and this chapter's beats are the ones that hold
+         longest, so they are the ones that can least afford nothing. */
+      .cf-block.is-plate {
+        right: 5.5%;
+        top: 50%;
+        transform: translateY(-50%);
+        display: grid;
+        /* minmax(0,…) or the cue column cannot shrink and the word wins */
+        grid-template-columns: minmax(0, 1fr) auto;
+        column-gap: clamp(16px, 1.8vw, 30px);
+        align-items: start;
+        /* the word takes a column of its own, so the block has to be wide
+           enough for both it and a cue line that is not two words per row */
+        max-width: min(64vw, 920px);
+      }
+
+      .is-plate .cf-plane {
+        grid-column: 1;
+      }
+
+      .is-plate .cf-plane.is-glyph {
+        grid-column: 2;
+        grid-row: 1 / -1;
+        border-right: 2px solid var(--cf-accent);
+        padding-right: clamp(14px, 1.5vw, 26px);
+        transform-origin: top center;
+        animation: cf-rule-down 820ms 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
+      }
+
+      @keyframes cf-rule-down {
+        from {
+          clip-path: inset(0 0 100% 0);
+        }
+
+        to {
+          clip-path: inset(0 0 -4% 0);
+        }
+      }
+
+      .is-plate .cf-kanji {
+        writing-mode: vertical-rl;
+        margin: 0;
+        /* the column never grows past the frame: whichever is smaller,
+           the designed size or the height each glyph can have and still
+           leave the set inside the picture */
+        font-size: min(
+          clamp(44px, 5.4vw, 88px),
+          calc(62svh / var(--cf-glyphs, 3))
+        );
+        letter-spacing: 0.1em;
+        line-height: 1;
+      }
+
+      .is-plate .cf-kicker {
+        margin-bottom: 18px;
+      }
+
+      /* the ghost is only ever behind a plate — everywhere else the frame
+         is already carrying the building */
+      .cf-ghost {
+        display: none;
+      }
+
+      /* THE PLANES LEAN. Each layer takes the pointer at its own depth —
+         the ghost furthest, the big glyph next, the reading lines least
+         — so the type stack has air in it rather than being one sheet
+         of glass in front of a picture. */
+      .cf-block {
+        transform: translate3d(
+          calc(var(--cf-lx, 0) * -9px),
+          calc(var(--cf-ly, 0) * -5px),
+          0
+        );
+      }
+
+      .cf-plate .cf-ghost {
+        transform: translateY(-50%)
+          translate3d(
+            calc(var(--cf-lx, 0) * -26px),
+            calc(var(--cf-ly, 0) * -14px),
+            0
+          );
+      }
+
+      .cf-kanji {
+        transform: translate3d(
+          calc(var(--cf-lx, 0) * -15px),
+          calc(var(--cf-ly, 0) * -8px),
+          0
+        );
+      }
+
+      /* the ghost NUMERAL keeps its old treatment: a filled slab of ink
+         at a whisper of opacity, behind the plate. It is a page
+         furniture mark, not type in the world — the hollow treatment
+         belongs to the glyphs that share air with the building. */
+      .cf-plate .cf-ghost {
+        display: block;
+        position: absolute;
+        right: 3%;
+        top: 50%;
+        transform: translateY(-50%);
+        font-family: var(--cf-ui);
+        font-size: clamp(180px, 30vw, 460px);
+        font-weight: 700;
+        line-height: 0.8;
+        letter-spacing: -0.04em;
+        color: var(--cf-ink);
+        opacity: calc(0.045 * var(--cf-ghost-a, 1));
+        pointer-events: none;
+        z-index: -1;
+      }
+
+      .cf-block.is-point {
+        left: 5.5%;
+        top: 18%;
+        max-width: min(36vw, 520px);
+      }
+
+      .is-point .cf-kanji {
+        font-size: clamp(48px, 6.6vw, 104px);
+      }
+
+      /* ---- the photograph -------------------------------------------- */
+      .cf-photo {
+        position: absolute;
+        z-index: 4;
+        pointer-events: none;
+      }
+
+      .cf-photo figure.is-lower,
+      .cf-photo figure.is-title,
+      .cf-photo figure.is-point {
+        position: absolute;
+        right: 5.5%;
+        top: 12%;
+      }
+
+      .cf-photo figure.is-plate {
+        position: absolute;
+        left: 5.5%;
+        top: 12%;
+      }
+
+      .cf-photo figure {
+        margin: 0;
+        width: min(30vw, 340px);
+        background: var(--cf-paper);
+        padding: 10px 10px 8px;
+        border: 1px solid var(--cf-rule);
+        box-shadow: calc(var(--cf-shx) * 4) calc(var(--cf-shy) * 4) 26px
+          rgba(38, 28, 10, 0.26);
+      }
+
+      .cf-photo img {
+        display: block;
+        width: 100%;
+        height: auto;
+        filter: saturate(0.86) contrast(1.04);
+      }
+
+      .cf-photo figcaption {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        padding-top: 8px;
+        font-family: var(--cf-ui);
+      }
+
+      .cf-photo-cap {
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        color: var(--cf-ink);
+      }
+
+      .cf-photo-cr {
+        font-size: 10px;
+        letter-spacing: 0.06em;
+        color: var(--cf-ink2);
+      }
+
+      .is-dark .cf-subs {
+        color: #1a1408;
+        background: rgba(238, 228, 204, 0.82);
+      }
+
+      .cf-subs {
+        position: absolute;
+        left: 50%;
+        bottom: 3%;
+        transform: translateX(-50%);
+        z-index: 5;
+        margin: 0;
+        max-width: 60ch;
+        text-align: center;
+        font-family: var(--cf-serif);
+        font-size: 17px;
+        line-height: 1.5;
+        color: #f7efdd;
+        background: rgba(20, 15, 6, 0.66);
+        padding: 9px 18px;
+      }
+
+      /* ---- the rail -------------------------------------------------- */
+      .cf-rail {
+        flex-wrap: wrap;
+        position: absolute;
+        left: 5.5%;
+        top: 6%;
+        z-index: 3;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.17em;
+        color: var(--cf-ink3);
+        font-family: var(--cf-ui);
+      }
+
+      .cf-rail-n {
+        font-size: 22px;
+        font-weight: 800;
+        letter-spacing: 0.02em;
+        color: var(--cf-chap);
+      }
+
+      .cf-rail-segs {
+        display: flex;
+        gap: 5px;
+        width: 240px;
+      }
+
+      /* ---- the year's own timeline ----------------------------------
+         A rule the width of the chapter strip, the run so far filled in
+         the chapter's colour, a dot on the head and the year riding above
+         it. Tabular figures so the numeral does not jitter as it counts,
+         and the whole thing is one row under the chapter line so the
+         corner stays a single object. */
+      /* THE RULE IS THE FILM'S LENGTH, so it should read as a long
+         distance: 240px made a century and a half look like a widget.
+         It runs to nearly half the frame now, and the chapter dots have
+         room to sit at their own years without touching. */
+      .cf-years {
+        position: relative;
+        flex-basis: 100%;
+        height: 34px;
+        margin-top: 10px;
+        margin-left: 62px;
+        width: clamp(260px, 42vw, 620px);
+      }
+
+      .cf-years-rule,
+      .cf-years-fill {
+        position: absolute;
+        left: 0;
+        top: 14px;
+        height: 2px;
+        background: var(--cf-rule);
+      }
+
+      .cf-years-rule {
+        right: 0;
+      }
+
+      .cf-years-fill {
+        width: calc(5px + var(--cf-head, 0) * (100% - 10px));
+        background: var(--cf-chap);
+        transition: width 220ms linear;
+      }
+
+      .cf-years-tick {
+        position: absolute;
+        top: 11px;
+        width: 1px;
+        height: 8px;
+        background: var(--cf-rule);
+      }
+
+      /* the chapters, as dots at the years they open. Unbuilt they are the
+         rule's own colour; passed, they take the chapter's. */
+      .cf-years-ch {
+        position: absolute;
+        top: 10px;
+        z-index: 2;
+        appearance: none;
+        border: 0;
+        padding: 0;
+        width: 10px;
+        height: 10px;
+        margin-left: -5px;
+        border-radius: 50%;
+        background: var(--cf-rule);
+        cursor: pointer;
+        pointer-events: auto;
+        transition:
+          background 300ms ease,
+          transform 200ms ease;
+      }
+
+      .cf-years-ch.is-done {
+        background: var(--cf-chap);
+      }
+
+      .cf-years-ch.is-here {
+        background: var(--cf-chap);
+        transform: scale(1.34);
+      }
+
+      .cf-years-ch:hover {
+        transform: scale(1.5);
+      }
+
+      .cf-years-now {
+        position: absolute;
+        top: 20px;
+        left: calc(5px + var(--cf-head, 0) * (100% - 10px));
+        transform: translateX(-50%);
+        font-family: var(--cf-ui);
+        font-weight: 800;
+        font-size: 15px;
+        letter-spacing: 0.01em;
+        font-variant-numeric: tabular-nums;
+        color: var(--cf-chap);
+        white-space: nowrap;
+        transition: left 220ms linear;
+      }
+
+      .cf-years-now::after {
+        content: "";
+        position: absolute;
+        left: 50%;
+        /* rule top 14px, rule 2px, dot 10px → -10 puts the dot's centre
+           on the rule's centre exactly */
+        top: -10px;
+        width: 10px;
+        height: 10px;
+        margin-left: -5px;
+        border-radius: 50%;
+        background: var(--cf-chap);
+      }
+
+      .cf-years-a,
+      .cf-years-b {
+        position: absolute;
+        top: 0;
+        font-family: var(--cf-ui);
+        font-style: normal;
+        font-size: 9px;
+        font-weight: 600;
+        letter-spacing: 0.14em;
+        color: var(--cf-ink2);
+      }
+
+      .cf-years-a {
+        left: 0;
+      }
+
+      .cf-years-b {
+        right: 0;
+      }
+
+      /* each segment is a 13px-tall click target drawing a hairline
+         track with its fill on top; the current chapter's bar thickens */
+      .cf-rail-seg {
+        appearance: none;
+        position: relative;
+        border: 0;
+        height: 13px;
+        padding: 0;
+        background: transparent;
+        cursor: pointer;
+        pointer-events: auto;
+      }
+
+      .cf-rail-seg::after {
+        content: "";
+        position: absolute;
+        inset: 5px 0 auto;
+        height: 3px;
+        background: var(--cf-rule);
+      }
+
+      .cf-rail-seg i {
+        position: absolute;
+        left: 0;
+        top: 5px;
+        height: 3px;
+        z-index: 1;
+        background: var(--cf-chap);
+        transition: width 600ms cubic-bezier(0.22, 1, 0.36, 1);
+      }
+
+      .cf-rail-seg.is-here i {
+        top: 4px;
+        height: 5px;
+      }
+
+      /* THE DOT ON THE RULE. The centenary programme draws its timeline as
+         a line with a filled dot at each momentum; the film's chapter
+         strip is the same object, so it is drawn the same way. */
+      .cf-rail-seg::before {
+        content: "";
+        position: absolute;
+        left: -1px;
+        top: 2px;
+        z-index: 2;
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        background: var(--cf-rule);
+        transition: background 300ms ease;
+      }
+
+      .cf-rail-seg.is-here::before {
+        background: var(--cf-chap);
+      }
+
+      .cf-rail-seg:hover::after {
+        background: var(--cf-ink2);
+      }
+
+      .cf-fault {
+        position: absolute;
+        left: 5.5%;
+        bottom: 4%;
+        z-index: 9;
+        margin: 0;
+        padding: 8px 12px;
+        background: #2a0a06;
+        color: #ffb4a0;
+        font:
+          12px/1.4 ui-monospace,
+          monospace;
+        border-radius: 8px;
+        max-width: 80%;
+      }
+
+      .cf-rig {
+        position: absolute;
+        width: 0;
+        height: 0;
+      }
+
+      /* ---- the disc menu --------------------------------------------- */
+      /* the sheet belongs to the picture: it scrims the scene and its
+         transport, and leaves the wall plate below the film alone —
+         a menu that dims an article is a modal, not a disc menu */
+      .cf-menu {
+        position: absolute;
+        inset: 0 0 auto 0;
+        height: 100svh;
+        z-index: 6;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(28, 22, 10, 0.52);
+        backdrop-filter: blur(2px);
+      }
+
+      .cf-menu-in {
+        background: var(--cf-paper);
+        border: 1px solid var(--cf-rule);
+        padding: 34px 40px 26px;
+        min-width: min(460px, 84vw);
+        max-width: min(640px, 92vw);
+        box-shadow: 0 30px 70px rgba(30, 22, 8, 0.34);
+        font-family: var(--cf-ui);
+      }
+
+      .cf-menu-head {
+        margin: 0;
+        font-size: 13px;
+        font-weight: 800;
+        letter-spacing: 0.42em;
+        color: var(--cf-ink);
+      }
+
+      .cf-menu-sub {
+        margin: 4px 0 22px;
+        font-size: 12px;
+        color: var(--cf-ink2);
+        letter-spacing: 0.06em;
+      }
+
+      .cf-menu-list {
+        list-style: none;
+        margin: 0 0 18px;
+        padding: 0;
+      }
+
+      .cf-menu-item {
+        appearance: none;
+        background: transparent;
+        border: 0;
+        border-top: 1px solid var(--cf-rule);
+        width: 100%;
+        display: flex;
+        align-items: baseline;
+        gap: 16px;
+        padding: 13px 4px;
+        font: inherit;
+        color: var(--cf-ink);
+        cursor: pointer;
+        text-align: left;
+      }
+
+      .cf-menu-item:hover {
+        color: var(--cf-accent);
+      }
+
+      .cf-menu-item.is-here {
+        color: var(--cf-accent);
+        font-weight: 700;
+      }
+
+      .cf-menu-n {
+        font-size: 12px;
+        letter-spacing: 0.16em;
+        color: var(--cf-accent);
+        min-width: 2.4em;
+      }
+
+      .cf-menu-t {
+        font-size: 17px;
+        letter-spacing: 0.1em;
+        font-weight: 600;
+        flex: 1;
+        min-width: 0;
+      }
+
+      .cf-menu-d {
+        font-size: 11px;
+        letter-spacing: 0.1em;
+        color: var(--cf-ink2);
+      }
+
+      .cf-menu-keys {
+        margin: 0;
+        font-size: 11px;
+        letter-spacing: 0.1em;
+        color: var(--cf-ink2);
+      }
+
+      /* ---- controls -------------------------------------------------- */
+      /* ---- the player ------------------------------------------------ *
+       * A chaptered playhead in the film's own materials: gaps between
+       * the chapters, seal red for what has played, and a head you can
+       * take hold of. It sits ON the picture, above the transport, and
+       * both stand down when the hand goes away.
+       * ------------------------------------------------------------- */
+      /* THE PLAYER FLOATS ON THE PICTURE, the way every player does —
+         a paper bar under the frame costs fifty pixels of film and
+         announces that this is a document with a video in it. */
+      /* THE BAR IS UNDER THE PICTURE, not on it. A player floating over
+         the frame is right for a video in a page and wrong for a film
+         that fills the window: it takes the bottom of every composition
+         and it disappears exactly when you reach for it. Below the
+         picture it costs seventy-six pixels once and is always there. */
+      /* THE TRANSPORT SITS ON THE PICTURE, not under it. The source page
+         runs its track as a hairline over the scene; here the strip was a
+         solid band of paper that took 76px off every frame. It is a fade
+         of the chapter's own paper now, so the film owns the whole
+         viewport and the controls read as a ledge on the glass. */
+      /* ---- the player ------------------------------------------------ */
+      /* fixed, not absolute: the page runs on below the stage, so the
+         page's bottom is not the frame's bottom. A dark scrim, not paper:
+         white type on a gradient into black is the one thing that reads
+         over every grade the film wears, and it is what the eye expects
+         at the bottom of a picture that plays. */
+      .cf-player {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 5;
+        padding: 26px 14px 8px;
+        color: #fff;
+        font-family: var(--cf-ui);
+        background: linear-gradient(
+          to top,
+          rgba(12, 9, 4, 0.72),
+          rgba(12, 9, 4, 0.38) 45%,
+          rgba(12, 9, 4, 0)
+        );
+        transition: opacity 360ms ease;
+      }
+
+      /* nobody is touching it: the apparatus leaves the picture, the way
+         every player made since 2010 does; a hand on the frame brings it
+         back (wake) */
+      .cf-player.is-idle {
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      /* the transport waits outside while the front door is open */
+      .cf-player.is-away {
+        visibility: hidden;
+      }
+
+      .cf-scrub {
+        position: relative;
+        height: 22px;
+        display: flex;
+        align-items: center;
+        cursor: pointer;
+        touch-action: none;
+        outline: none;
+      }
+
+      .cf-scrub-track {
+        position: relative;
+        display: flex;
+        gap: 2px;
+        width: 100%;
+        height: 3px;
+        transition: height 120ms ease;
+      }
+
+      .cf-scrub:hover .cf-scrub-track,
+      .cf-scrub:focus-visible .cf-scrub-track {
+        height: 5px;
+      }
+
+      .cf-scrub-ch {
+        position: relative;
+        overflow: hidden;
+        background: rgba(255, 255, 255, 0.28);
+      }
+
+      /* each chapter fills with the part of the whole-film playhead that
+         falls inside it — one custom property, updated per frame, and no
+         re-render anywhere */
+      .cf-scrub-ch i {
+        position: absolute;
+        inset: 0 auto 0 0;
+        display: block;
+        background: var(--cf-red);
+        width: calc(
+          clamp(0, (var(--cf-prog, 0) - var(--s0)) / var(--sl), 1) * 100%
+        );
+      }
+
+      /* the knob sits on the fill's end: --cf-hpx is that end in pixels,
+         from the same fractions and the measured track (see frame) */
+      .cf-scrub-head {
+        position: absolute;
+        top: 50%;
+        left: calc(var(--cf-hpx, 0) * 1px);
+        width: 13px;
+        height: 13px;
+        margin: -6.5px 0 0 -6.5px;
+        border-radius: 50%;
+        background: var(--cf-red);
+        transform: scale(0);
+        transition: transform 120ms ease;
+      }
+
+      .cf-scrub:hover .cf-scrub-head,
+      .cf-scrub:focus-visible .cf-scrub-head,
+      .cf-scrub.is-live .cf-scrub-head {
+        transform: scale(1);
+      }
+
+      .cf-scrub-tip {
+        position: absolute;
+        bottom: 18px;
+        left: calc(var(--cf-hpx, 0) * 1px);
+        transform: translateX(-50%);
+        white-space: nowrap;
+        background: rgba(12, 9, 4, 0.92);
+        color: #fff;
+        font-size: 11px;
+        letter-spacing: 0.08em;
+        padding: 6px 10px;
+        border-radius: 4px;
+      }
+
+      .cf-controls {
+        display: flex;
+        align-items: center;
+        gap: 2px;
+        height: 40px;
+      }
+
+      /* the round ghost button: a 40px target, the glyph 22px inside it,
+         a hover that is a wash rather than an outline */
+      .cf-ic {
+        appearance: none;
+        border: 0;
+        background: transparent;
+        color: #fff;
+        width: 40px;
+        height: 40px;
+        padding: 0;
+        border-radius: 50%;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex: none;
+        opacity: 0.92;
+        transition:
+          background 120ms ease,
+          opacity 120ms ease;
+      }
+
+      .cf-ic svg {
+        width: 22px;
+        height: 22px;
+        fill: currentColor;
+        display: block;
+      }
+
+      .cf-ic:hover,
+      .cf-ic:focus-visible {
+        background: rgba(255, 255, 255, 0.14);
+        opacity: 1;
+        outline: none;
+      }
+
+      /* CC is a word, set as a badge; on, it is underlined in the film's
+         red the way every captions button on earth is */
+      .cf-ic-cc {
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        position: relative;
+      }
+
+      .cf-ic-cc.is-on::after,
+      .cf-ic.is-on::after {
+        content: "";
+        position: absolute;
+        left: 13px;
+        right: 13px;
+        bottom: 7px;
+        height: 2px;
+        background: var(--cf-red);
+        border-radius: 1px;
+      }
+
+      .cf-ic.is-on {
+        position: relative;
+      }
+
+      .cf-time {
+        margin-left: 8px;
+        font-size: 12.5px;
+        letter-spacing: 0.02em;
+        font-variant-numeric: tabular-nums;
+        color: rgba(255, 255, 255, 0.82);
+        white-space: nowrap;
+      }
+
+      .cf-time b {
+        font-weight: 500;
+        color: #fff;
+      }
+
+      .cf-time i {
+        font-style: normal;
+        padding: 0 4px;
+        opacity: 0.6;
+      }
+
+      /* the chapter title cannot be allowed to widen the control row */
+      .cf-time em {
+        display: inline-block;
+        max-width: min(28ch, 22vw);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        vertical-align: bottom;
+        font-style: normal;
+        margin-left: 6px;
+        color: rgba(255, 255, 255, 0.72);
+      }
+
+      .cf-spacer {
+        flex: 1 1 auto;
+      }
+
+      .cf-link {
+        color: rgba(255, 255, 255, 0.82);
+        text-decoration: none;
+        font-size: 11px;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        padding: 0 12px;
+        white-space: nowrap;
+      }
+
+      .cf-link:hover {
+        color: #fff;
+        text-decoration: underline;
+        text-underline-offset: 3px;
+      }
+
+      /* only ever under ?debug: which cut of the film the browser has */
+      .cf-build {
+        color: rgba(255, 255, 255, 0.55);
+        font:
+          10px/1 ui-monospace,
+          monospace;
+        letter-spacing: 0.04em;
+        padding: 0 12px;
+        white-space: nowrap;
+      }
+
+      /* embedded, the iframe wraps the film AND its transport directly;
+         the app's own chrome inside the iframe stands down instead */
+      body.cf-embedded .topbar,
+      body.cf-embedded .footer {
+        display: none;
+      }
+
+      /* THE FILM ESCAPES THE APP'S PAGE CONTAINER. .page centres a
+         measured column with gutters and a top offset — right for every
+         demo page, and a pink-tinted mat around a film that owns its
+         frame. Both film bodies flatten it; the film's own layout is the
+         page. (This mattered only once cf-page left position: fixed —
+         fixed elements never felt the container.) */
+      body.cf-film .page,
+      body.cf-embedded .page {
+        width: 100%;
+        margin: 0;
+        padding: 0;
+      }
+
+      /* a clear beat owns nothing on the glass, the numeral included */
+      .cf-clear .cf-ghost {
+        display: none;
+      }
+
+      /* ---- the gate --------------------------------------------------- */
+      /* the card stands BESIDE the tower, never over it: the boot pose
+         seats the building left of centre, so the door takes the right
+         third — the same real estate the title beat's type owns — and
+         its wash leans that way too instead of dimming the whole frame */
+      /* THE DOOR DOES NOT BLUR THE BUILDING. A poster's job is to make
+         the subject look like the reason to press play; a blur makes it
+         look like a placeholder. The scene stays sharp and keeps
+         turning (see the poster orbit) — the only thing over it is a
+         ground for the type, raked away from the tower. */
+      .cf-gate {
+        position: absolute;
+        inset: 0;
+        z-index: 7;
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        background: linear-gradient(
+          100deg,
+          rgba(24, 18, 8, 0) 26%,
+          rgba(24, 18, 8, 0.28) 52%,
+          rgba(22, 16, 7, 0.72) 82%
+        );
+      }
+
+      .cf-gate-in {
+        position: relative;
+        text-align: center;
+        font-family: var(--cf-ui);
+        color: #f7f0e0;
+        /* hard right: the poster is a two-column composition — building
+           in one half, wordmark in the other — and the wordmark drifting
+           toward the middle closes the gap that makes it one */
+        margin-right: clamp(34px, 7vw, 132px);
+      }
+
+      /* the museum frame: hairline, inset like a mat, above the scene
+         and under the type */
+      .cf-gate-frame {
+        position: absolute;
+        inset: clamp(14px, 2.4vw, 30px);
+        border: 1px solid rgba(247, 240, 224, 0.34);
+        pointer-events: none;
+        animation: cf-mg-fade 1200ms ease-out both;
+      }
+
+      /* the spine: vertical Japanese down the inside of the frame */
+      .cf-gate-vert {
+        position: absolute;
+        top: 50%;
+        left: clamp(30px, 4.6vw, 58px);
+        transform: translateY(-50%);
+        writing-mode: vertical-rl;
+        white-space: nowrap;
+        font-family: var(--cf-ui);
+        font-weight: 600;
+        font-size: clamp(10px, 0.95vw, 13px);
+        letter-spacing: 0.3em;
+        color: rgba(247, 240, 224, 0.66);
+        animation: cf-mg-fade 900ms ease-out both;
+        animation-delay: 2050ms;
+      }
+
+      .cf-gate-k {
+        position: relative;
+        margin: 0;
+        font-family: var(--cf-display);
+        font-weight: 800;
+        font-size: clamp(64px, min(20vh, 15vw), 260px);
+        letter-spacing: -0.03em;
+        white-space: nowrap;
+        line-height: 1.02;
+        text-shadow: 0 8px 70px rgba(20, 14, 4, 0.55);
+      }
+
+      /* the ghost: the title again, enormous and hollow, standing behind
+         itself — the poster's depth comes from one word at two weights */
+      .cf-gate-ghost {
+        position: absolute;
+        left: 50%;
+        top: 44%;
+        transform: translate(-50%, -50%) scale(1.9);
+        font-size: 1em;
+        line-height: 1;
+        color: transparent;
+        -webkit-text-stroke: 1px rgba(247, 240, 224, 0.2);
+        white-space: nowrap;
+        pointer-events: none;
+        animation: cf-mg-ghost 2400ms ease-out both;
+        animation-delay: 700ms;
+      }
+
+      @keyframes cf-mg-ghost {
+        0% {
+          opacity: 0;
+          transform: translate(-50%, -50%) scale(2.05);
+        }
+
+        100% {
+          opacity: 1;
+          transform: translate(-50%, -50%) scale(1.9);
+        }
+      }
+
+      /* the index strip along the foot of the frame */
+      .cf-gate-index {
+        position: absolute;
+        left: clamp(40px, 7vw, 90px);
+        right: clamp(40px, 7vw, 90px);
+        bottom: clamp(30px, 5.4vh, 56px);
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 6px clamp(12px, 2.2vw, 36px);
+        margin: 0;
+        font-family: var(--cf-ui);
+        font-size: clamp(9px, 0.8vw, 11px);
+        font-weight: 700;
+        letter-spacing: 0.22em;
+        color: rgba(247, 240, 224, 0.62);
+        animation: cf-mg-fade 900ms ease-out both;
+        animation-delay: 2500ms;
+      }
+
+      .cf-gate-index span {
+        white-space: nowrap;
+      }
+
+      .cf-gate-t {
+        margin: 10px 0 0;
+        font-size: 15px;
+        font-weight: 800;
+        letter-spacing: 0.5em;
+        text-indent: 0.5em;
+      }
+
+      .cf-gate-s {
+        margin: 6px 0 30px;
+        font-size: 12px;
+        letter-spacing: 0.14em;
+        color: rgba(247, 240, 224, 0.72);
+      }
+
+      .cf-gate-row {
+        display: flex;
+        gap: 12px;
+        justify-content: center;
+      }
+
+      .cf-go {
+        appearance: none;
+        font: inherit;
+        font-family: var(--cf-ui);
+        font-size: 13px;
+        font-weight: 600;
+        letter-spacing: 0.14em;
+        cursor: pointer;
+        padding: 14px 30px;
+        border-radius: 999px;
+        border: 1px solid #f2e9d2;
+        background: #f2e9d2;
+        color: #2e2515;
+        box-shadow: 0 10px 34px rgba(20, 14, 4, 0.35);
+        transition:
+          transform 220ms cubic-bezier(0.22, 1, 0.36, 1),
+          box-shadow 220ms ease;
+      }
+
+      .cf-go:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 16px 44px rgba(20, 14, 4, 0.42);
+      }
+
+      .cf-go:disabled {
+        opacity: 0.45;
+        cursor: default;
+      }
+
+      .cf-go.is-quiet {
+        background: transparent;
+        color: #f2e9d2;
+        border-color: rgba(242, 233, 210, 0.5);
+      }
+
+      .cf-go.is-quiet:hover {
+        border-color: #f2e9d2;
+      }
+
+      /* ---- the title package ---------------------------------------- *
+         One motion system for front and back matter, staged like a
+         broadcast title: rule, glyphs, mark, sub, seal, controls. All
+         CSS — these screens live outside the score on purpose, since
+         both exist precisely when the film is not running. */
+      .cf-matter {
+        position: relative;
+      }
+
+      .cf-mg-rule {
+        display: block;
+        width: 1px;
+        height: 56px;
+        margin: 0 auto 18px;
+        background: rgba(247, 240, 224, 0.65);
+        transform-origin: 50% 0;
+        animation: cf-mg-rule 900ms cubic-bezier(0.22, 1, 0.36, 1) both;
+      }
+
+      @keyframes cf-mg-rule {
+        0% {
+          transform: scaleY(0);
+        }
+
+        100% {
+          transform: scaleY(1);
+        }
+      }
+
+      .cf-mg-g1,
+      .cf-mg-g2 {
+        display: inline-block;
+        animation: cf-mg-glyph 1300ms cubic-bezier(0.22, 1, 0.36, 1) both;
+        animation-delay: 350ms;
+      }
+
+      .cf-mg-g2 {
+        animation-delay: 650ms;
+      }
+
+      @keyframes cf-mg-glyph {
+        0% {
+          opacity: 0;
+          filter: blur(16px);
+          transform: translateY(10px);
+        }
+
+        100% {
+          opacity: 1;
+          filter: blur(0);
+          transform: translateY(0);
+        }
+      }
+
+      /* the wordmark tracks IN — from letterspaced air to its set width,
+         the oldest move in broadcast titles because nothing else says
+         "this is the name" as quietly */
+      .cf-mg-mark {
+        white-space: nowrap;
+        transform-origin: center;
+        animation: cf-mg-track 1400ms cubic-bezier(0.22, 1, 0.36, 1) both;
+        animation-delay: 1050ms;
+      }
+
+      /* THE WORDMARK NO LONGER RE-MEASURES ITSELF.
+         Tracking in from 1.1em added about 250px of laid-out width at the
+         first frame — so on anything but a wide screen the mark started
+         wrapped onto two lines and un-wrapped partway through its own
+         animation, taking the card under it with it. The same gesture
+         reads identically as a scale on the X axis, which is a composited
+         transform and reflows nothing. */
+      @keyframes cf-mg-track {
+        0% {
+          opacity: 0;
+          transform: scaleX(1.16);
+        }
+
+        100% {
+          opacity: 1;
+          transform: scaleX(1);
+        }
+      }
+
+      .cf-mg-sub {
+        animation: cf-mg-fade 800ms ease-out both;
+        animation-delay: 1650ms;
+      }
+
+      .cf-mg-row {
+        animation: cf-mg-fade 800ms ease-out both;
+        animation-delay: 2250ms;
+      }
+
+      .cf-mg-credits {
+        display: flex;
+        flex-direction: column;
+        white-space: nowrap;
+        max-width: min(46ch, 88vw);
+        margin-inline: auto;
+        gap: 4px;
+        margin: 0 0 22px;
+        font-size: 11px;
+        letter-spacing: 0.14em;
+        color: rgba(247, 240, 224, 0.6);
+        animation: cf-mg-fade 900ms ease-out both;
+        animation-delay: 2050ms;
+      }
+
+      @keyframes cf-mg-fade {
+        0% {
+          opacity: 0;
+          transform: translateY(6px);
+        }
+
+        100% {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      /* the seal: the lineup's stamp, miniature — it lands hard and
+         late, canted the way a hand cants it */
+      /* on the end card the seal belongs IN the card: hung off the right
+         edge it floated in the corner of the frame with nothing to sit on */
+      .cf-end-in .cf-mg-seal {
+        position: static;
+        margin: 0 auto 16px;
+      }
+
+      /* the open end of the date. A dash at the numeral's own weight is a
+         slab as wide as a digit and reads as a fifth figure. */
+      .cf-end-dash {
+        font-style: normal;
+        font-size: 0.4em;
+        font-weight: 600;
+        vertical-align: 0.5em;
+        margin-left: 0.08em;
+        opacity: 0.7;
+      }
+
+      /* THE SEAL IS A DISC AND THE WORD SITS ON ITS CENTRE.
+         It was a vertical badge with letterspaced Latin running down it,
+         and letter-spacing adds its space AFTER the last letter — so the
+         word was always sitting one space above the middle of its own
+         box, which is exactly the kind of thing you cannot stop seeing.
+         Horizontal, tracked from the centre (text-indent pays the
+         trailing space back), on a round stamp. */
+      .cf-mg-seal {
+        position: absolute;
+        top: 4px;
+        right: -76px;
+        display: grid;
+        place-items: center;
+        width: 64px;
+        height: 64px;
+        font-family: var(--cf-ui);
+        font-weight: 700;
+        font-size: 15px;
+        letter-spacing: 0.12em;
+        text-indent: 0.12em;
+        text-transform: uppercase;
+        color: #f7f0e0;
+        background: var(--cf-mark);
+        border-radius: 50%;
+        animation: cf-mg-seal 500ms cubic-bezier(0.16, 1.2, 0.3, 1) both;
+        animation-delay: 1900ms;
+      }
+
+      @keyframes cf-mg-seal {
+        0% {
+          opacity: 0;
+          transform: rotate(-4deg) scale(1.6);
+        }
+
+        30% {
+          opacity: 1;
+          transform: rotate(-4deg) scale(0.97);
+        }
+
+        100% {
+          opacity: 0.94;
+          transform: rotate(-4deg) scale(1);
+        }
+      }
+
+      /* ---- the end card ---------------------------------------------- */
+      .cf-end {
+        position: absolute;
+        inset: 0;
+        z-index: 6;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(28, 22, 10, 0.58);
+        backdrop-filter: blur(1.5px);
+      }
+
+      .cf-end-in {
+        text-align: center;
+        font-family: var(--cf-ui);
+        color: #f7f0e0;
+      }
+
+      .cf-end-k {
+        margin: 0;
+        font-family: var(--cf-display);
+        font-weight: 800;
+        /* '1882 —' is six characters, not four: at 19vw it was six times
+           the viewport wide and it set the width of the whole card */
+        font-size: clamp(44px, min(15vh, 9vw), 150px);
+        letter-spacing: -0.03em;
+        white-space: nowrap;
+        line-height: 1;
+        text-shadow: 0 6px 60px rgba(20, 14, 4, 0.55);
+      }
+
+      .cf-end-t {
+        margin: 12px 0 0;
+        font-size: 14px;
+        font-weight: 800;
+        letter-spacing: 0.5em;
+        text-indent: 0.5em;
+      }
+
+      .cf-end-s {
+        margin: 6px 0 26px;
+        font-size: 12px;
+        letter-spacing: 0.14em;
+        color: rgba(247, 240, 224, 0.7);
+      }
+
+      /* ---- the stamp -------------------------------------------------- *
+         A hanko, not a title: it strikes, settles at once, and is simply
+         replaced by the next. Seal-red on purpose — it shares the
+         annotation's ink because it IS an annotation, pressed over each
+         tower as the lineup calls the roll. */
+      .cf-stamp {
+        position: absolute;
+        inset: 0;
+        z-index: 3;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0;
+        pointer-events: none;
+        font-family: var(--cf-display);
+        font-weight: 700;
+        font-size: min(24vh, 16vw);
+        letter-spacing: 0.04em;
+        color: var(--cf-mark);
+        mix-blend-mode: multiply;
+        animation: cf-stamp 700ms cubic-bezier(0.16, 1.3, 0.3, 1) both;
+      }
+
+      @keyframes cf-stamp {
+        0% {
+          opacity: 0;
+          transform: rotate(-2.5deg) scale(1.5);
+        }
+
+        16% {
+          opacity: 0.92;
+          transform: rotate(-2.5deg) scale(0.99);
+        }
+
+        100% {
+          opacity: 0.88;
+          transform: rotate(-2.5deg) scale(1);
+        }
+      }
+
+      /* the app's own chrome, gone: this route is a frame, not a page */
+      body.cf-film .topbar,
+      body.cf-film .footer {
+        display: none;
+      }
+
+      /* A ROMAN WORD IS NOT TWO GLYPHS.
+         The block was cut for a two-character CJK setting, where the type
+         size and the column width have nothing to do with each other. A
+         Latin word's width IS its letter count, so 'Evangelistes' set at
+         the size that suited 'Obra' runs off the frame — and a word that
+         wraps to two lines lands the whole plate at a different height.
+         So: never wrap, and take the size from the count the plane
+         already carries (--cf-glyphs), capped by the design size. 0.56em
+         is about the average advance of this face. */
+      .cf-kanji.is-latin {
+        font-family: var(--cf-display);
+        font-weight: 800;
+        text-transform: uppercase;
+        color: var(--cf-chap);
+        writing-mode: horizontal-tb;
+        white-space: nowrap;
+        font-size: min(
+          clamp(40px, 6.2vw, 104px),
+          calc(var(--cf-fit, 42vw) / (var(--cf-glyphs, 4) * 0.56))
+        );
+        letter-spacing: -0.02em;
+        line-height: 0.92;
+      }
+      .is-title .cf-kanji.is-latin {
+        --cf-fit: 46vw;
+        font-size: min(
+          clamp(52px, 8.6vw, 142px),
+          calc(var(--cf-fit) / (var(--cf-glyphs, 4) * 0.56))
+        );
+      }
+      .is-plate .cf-kanji.is-latin {
+        --cf-fit: 24vw;
+        writing-mode: horizontal-tb;
+        font-size: min(
+          clamp(34px, 4.8vw, 76px),
+          calc(var(--cf-fit) / (var(--cf-glyphs, 4) * 0.56))
+        );
+        letter-spacing: -0.01em;
+        max-width: 26vw;
+      }
+      .is-point .cf-kanji.is-latin {
+        --cf-fit: 32vw;
+        font-size: min(
+          clamp(36px, 5.2vw, 82px),
+          calc(var(--cf-fit) / (var(--cf-glyphs, 4) * 0.56))
+        );
+      }
+    </style>
+  </head>
+  <body>
+    <section class="cf-page" style="--cf-yearp: 0; --cf-chap: #d8232a">
+      <div class="cf-stage">
+        <div class="cf-frame-fake"></div>
+        <div class="cf-scrim cf-scrim-plate"></div>
+        <div class="cf-rail">
+          <span class="cf-rail-n">02</span>
+          <span class="cf-rail-t">SILENCE</span>
+          <span class="cf-rail-segs">
+            <button class="cf-rail-seg" style="flex: 5">
+              <i style="width: 100%"></i>
+            </button>
+            <button class="cf-rail-seg is-here" style="flex: 4">
+              <i style="width: 40%"></i>
+            </button>
+            <button class="cf-rail-seg" style="flex: 6">
+              <i style="width: 0%"></i>
+            </button>
+            <button class="cf-rail-seg" style="flex: 7">
+              <i style="width: 0%"></i>
+            </button>
+            <button class="cf-rail-seg" style="flex: 3">
+              <i style="width: 0%"></i>
+            </button>
+          </span>
+          <span class="cf-years">
+            <i class="cf-years-rule"></i><i class="cf-years-fill"></i>
+            <i class="cf-years-tick" style="left: 28.9%"></i>
+            <i class="cf-years-tick" style="left: 61.8%"></i>
+            <i class="cf-years-tick" style="left: 94.7%"></i>
+            <b class="cf-years-now">1882</b>
+            <em class="cf-years-a">1882</em><em class="cf-years-b">2034</em>
+          </span>
+        </div>
+        <p class="cf-stampyear" style="--cf-stamp-a: 1">1954</p>
+        <div class="cf-type cf-plate">
+          <span class="cf-ghost">02</span>
+          <div class="cf-block is-plate">
+            <div class="cf-plane">
+              <p class="cf-kicker"><span>PIECED BACK TOGETHER</span></p>
+            </div>
+            <div class="cf-plane is-glyph" style="--cf-glyphs: 6">
+              <p class="cf-kanji is-latin">Models</p>
+            </div>
+            <div class="cf-plane">
+              <p class="cf-read">
+                <span class="cf-romaji">THE PLASTER MODELS</span
+                ><span class="cf-gloss">1940–1952</span>
+              </p>
+            </div>
+            <div class="cf-plane">
+              <p class="cf-say">
+                <span class="cf-sayx">From the fragments</span>
+              </p>
+            </div>
+            <div class="cf-plane">
+              <p class="cf-say">
+                <span class="cf-sayx">From published photographs</span>
+              </p>
+            </div>
+            <div class="cf-plane">
+              <p class="cf-say">
+                <span class="cf-sayx">The plan survives the man</span>
+              </p>
+            </div>
+          </div>
+        </div>
+        <p class="cf-subs">
+          Nineteen fifty-four. Concrete, and the first tower crane. The Passion
+          front, bare as bone, and four more towers by seventy-six.
+        </p>
+      </div>
+    </section>
+
+    <section class="cf-page is-night" style="--cf-yearp: 0; --cf-chap: #ff6b5e">
+      <div class="cf-stage">
+        <div class="cf-frame-fake"></div>
+        <div class="cf-scrim cf-scrim-lower"></div>
+        <div class="cf-rail">
+          <span class="cf-rail-n">04</span>
+          <span class="cf-rail-t">THE TOWERS</span>
+          <span class="cf-rail-segs">
+            <button class="cf-rail-seg" style="flex: 5">
+              <i style="width: 100%"></i>
+            </button>
+            <button class="cf-rail-seg is-here" style="flex: 4">
+              <i style="width: 40%"></i>
+            </button>
+            <button class="cf-rail-seg" style="flex: 6">
+              <i style="width: 0%"></i>
+            </button>
+            <button class="cf-rail-seg" style="flex: 7">
+              <i style="width: 0%"></i>
+            </button>
+            <button class="cf-rail-seg" style="flex: 3">
+              <i style="width: 0%"></i>
+            </button>
+          </span>
+          <span class="cf-years">
+            <i class="cf-years-rule"></i><i class="cf-years-fill"></i>
+            <i class="cf-years-tick" style="left: 28.9%"></i>
+            <i class="cf-years-tick" style="left: 61.8%"></i>
+            <i class="cf-years-tick" style="left: 94.7%"></i>
+            <b class="cf-years-now">1882</b>
+            <em class="cf-years-a">1882</em><em class="cf-years-b">2034</em>
+          </span>
+        </div>
+        <p class="cf-stampyear" style="--cf-stamp-a: 1">1954</p>
+        <div class="cf-type cf-lower">
+          <span class="cf-ghost">04</span>
+          <div class="cf-block is-lower">
+            <div class="cf-plane">
+              <p class="cf-kicker"><span>THE TALLEST CHURCH ON EARTH</span></p>
+            </div>
+            <div class="cf-plane is-glyph" style="--cf-glyphs: 9">
+              <p class="cf-kanji is-latin">Jesucrist</p>
+            </div>
+            <div class="cf-plane">
+              <p class="cf-read">
+                <span class="cf-romaji">THE TOWER OF JESUS</span
+                ><span class="cf-gloss">172.5 m, 2016–2026</span>
+              </p>
+            </div>
+            <div class="cf-plane">
+              <p class="cf-say">
+                <span class="cf-sayx"
+                  >One hundred and seventy-two and a half metres</span
+                >
+              </p>
+            </div>
+            <div class="cf-plane">
+              <p class="cf-say">
+                <span class="cf-sayx">17 m of white ceramic and glass</span>
+              </p>
+            </div>
+            <div class="cf-plane">
+              <p class="cf-say">
+                <span class="cf-sayx">Lit from the towers round it</span>
+              </p>
+            </div>
+          </div>
+        </div>
+        <p class="cf-subs">
+          Nineteen fifty-four. Concrete, and the first tower crane. The Passion
+          front, bare as bone, and four more towers by seventy-six.
+        </p>
+      </div>
+    </section>
+
+    <section class="cf-page" style="--cf-yearp: 0; --cf-chap: #ff6b5e">
+      <div class="cf-stage">
+        <div class="cf-frame-fake"></div>
+        <div class="cf-scrim cf-scrim-point"></div>
+        <div class="cf-rail">
+          <span class="cf-rail-n">04</span>
+          <span class="cf-rail-t">THE TOWERS</span>
+          <span class="cf-rail-segs">
+            <button class="cf-rail-seg" style="flex: 5">
+              <i style="width: 100%"></i>
+            </button>
+            <button class="cf-rail-seg is-here" style="flex: 4">
+              <i style="width: 40%"></i>
+            </button>
+            <button class="cf-rail-seg" style="flex: 6">
+              <i style="width: 0%"></i>
+            </button>
+            <button class="cf-rail-seg" style="flex: 7">
+              <i style="width: 0%"></i>
+            </button>
+            <button class="cf-rail-seg" style="flex: 3">
+              <i style="width: 0%"></i>
+            </button>
+          </span>
+          <span class="cf-years">
+            <i class="cf-years-rule"></i><i class="cf-years-fill"></i>
+            <i class="cf-years-tick" style="left: 28.9%"></i>
+            <i class="cf-years-tick" style="left: 61.8%"></i>
+            <i class="cf-years-tick" style="left: 94.7%"></i>
+            <b class="cf-years-now">1882</b>
+            <em class="cf-years-a">1882</em><em class="cf-years-b">2034</em>
+          </span>
+        </div>
+        <p class="cf-stampyear" style="--cf-stamp-a: 1">1954</p>
+        <div class="cf-type cf-point">
+          <span class="cf-ghost">04</span>
+          <div class="cf-block is-point">
+            <div class="cf-plane">
+              <p class="cf-kicker"><span>LOOK UP</span></p>
+            </div>
+            <div class="cf-plane is-glyph" style="--cf-glyphs: 5">
+              <p class="cf-kanji is-latin">Amunt</p>
+            </div>
+            <div class="cf-plane">
+              <p class="cf-read">
+                <span class="cf-romaji">UP</span
+                ><span class="cf-gloss"
+                  >up the street, then the head goes back</span
+                >
+              </p>
+            </div>
+            <div class="cf-plane">
+              <p class="cf-say">
+                <span class="cf-sayx">A hundred and seventy-two metres</span>
+              </p>
+            </div>
+            <div class="cf-plane">
+              <p class="cf-say">
+                <span class="cf-sayx">From the pavement</span>
+              </p>
+            </div>
+          </div>
+        </div>
+        <p class="cf-subs">
+          Nineteen fifty-four. Concrete, and the first tower crane. The Passion
+          front, bare as bone, and four more towers by seventy-six.
+        </p>
+      </div>
+    </section>
+
+    <section class="cf-page" style="--cf-yearp: 0; --cf-chap: #d8232a">
+      <div class="cf-stage">
+        <div class="cf-frame-fake"></div>
+        <div class="cf-scrim cf-scrim-title"></div>
+        <div class="cf-rail">
+          <span class="cf-rail-n">01</span>
+          <span class="cf-rail-t">THE SITE</span>
+          <span class="cf-rail-segs">
+            <button class="cf-rail-seg" style="flex: 5">
+              <i style="width: 100%"></i>
+            </button>
+            <button class="cf-rail-seg is-here" style="flex: 4">
+              <i style="width: 40%"></i>
+            </button>
+            <button class="cf-rail-seg" style="flex: 6">
+              <i style="width: 0%"></i>
+            </button>
+            <button class="cf-rail-seg" style="flex: 7">
+              <i style="width: 0%"></i>
+            </button>
+            <button class="cf-rail-seg" style="flex: 3">
+              <i style="width: 0%"></i>
+            </button>
+          </span>
+          <span class="cf-years">
+            <i class="cf-years-rule"></i><i class="cf-years-fill"></i>
+            <i class="cf-years-tick" style="left: 28.9%"></i>
+            <i class="cf-years-tick" style="left: 61.8%"></i>
+            <i class="cf-years-tick" style="left: 94.7%"></i>
+            <b class="cf-years-now">1882</b>
+            <em class="cf-years-a">1882</em><em class="cf-years-b">2034</em>
+          </span>
+        </div>
+        <p class="cf-stampyear" style="--cf-stamp-a: 1">1954</p>
+        <div class="cf-type cf-title">
+          <span class="cf-ghost">01</span>
+          <div class="cf-block is-title">
+            <div class="cf-plane">
+              <p class="cf-kicker"><span>A CONSTRUCTION STUDY</span></p>
+            </div>
+            <div class="cf-plane is-glyph" style="--cf-glyphs: 4">
+              <p class="cf-kanji is-latin">Obra</p>
+            </div>
+            <div class="cf-plane">
+              <p class="cf-read">
+                <span class="cf-romaji">THE WORKS</span
+                ><span class="cf-gloss">Barcelona, 19 March 1882</span>
+              </p>
+            </div>
+            <div class="cf-plane">
+              <p class="cf-say">
+                <span class="cf-sayx">A field at the edge of the grid</span>
+              </p>
+            </div>
+            <div class="cf-plane">
+              <p class="cf-say"><span class="cf-sayx">A cornerstone</span></p>
+            </div>
+            <div class="cf-plane">
+              <p class="cf-say">
+                <span class="cf-sayx">A plan nobody alive would finish</span>
+              </p>
+            </div>
+          </div>
+        </div>
+        <p class="cf-subs">
+          Nineteen fifty-four. Concrete, and the first tower crane. The Passion
+          front, bare as bone, and four more towers by seventy-six.
+        </p>
+      </div>
+    </section>
+
+    <section class="cf-page is-night" style="--cf-yearp: 0; --cf-chap: #ff6b5e">
+      <div class="cf-stage">
+        <div class="cf-frame-fake"></div>
+        <div class="cf-scrim cf-scrim-lower"></div>
+        <div class="cf-rail">
+          <span class="cf-rail-n">04</span>
+          <span class="cf-rail-t">THE TOWERS</span>
+          <span class="cf-rail-segs">
+            <button class="cf-rail-seg" style="flex: 5">
+              <i style="width: 100%"></i>
+            </button>
+            <button class="cf-rail-seg is-here" style="flex: 4">
+              <i style="width: 40%"></i>
+            </button>
+            <button class="cf-rail-seg" style="flex: 6">
+              <i style="width: 0%"></i>
+            </button>
+            <button class="cf-rail-seg" style="flex: 7">
+              <i style="width: 0%"></i>
+            </button>
+            <button class="cf-rail-seg" style="flex: 3">
+              <i style="width: 0%"></i>
+            </button>
+          </span>
+          <span class="cf-years">
+            <i class="cf-years-rule"></i><i class="cf-years-fill"></i>
+            <i class="cf-years-tick" style="left: 28.9%"></i>
+            <i class="cf-years-tick" style="left: 61.8%"></i>
+            <i class="cf-years-tick" style="left: 94.7%"></i>
+            <b class="cf-years-now">1882</b>
+            <em class="cf-years-a">1882</em><em class="cf-years-b">2034</em>
+          </span>
+        </div>
+        <p class="cf-stampyear" style="--cf-stamp-a: 1">1954</p>
+        <div class="cf-type cf-lower">
+          <span class="cf-ghost">04</span>
+          <div class="cf-block is-lower">
+            <div class="cf-plane">
+              <p class="cf-kicker">
+                <span>THE COLLECTIVE WORK OF AN ENTIRE PEOPLE</span>
+              </p>
+            </div>
+            <div class="cf-plane is-glyph" style="--cf-glyphs: 12">
+              <p class="cf-kanji is-latin">Evangelistes</p>
+            </div>
+            <div class="cf-plane">
+              <p class="cf-read">
+                <span class="cf-romaji">THE FOUR EVANGELISTS</span
+                ><span class="cf-gloss">2022–2023</span>
+              </p>
+            </div>
+            <div class="cf-plane">
+              <p class="cf-say">
+                <span class="cf-sayx">Luke and Mark in twenty twenty-two</span>
+              </p>
+            </div>
+            <div class="cf-plane">
+              <p class="cf-say">
+                <span class="cf-sayx">Matthew and John the year after</span>
+              </p>
+            </div>
+            <div class="cf-plane">
+              <p class="cf-say">
+                <span class="cf-sayx">Each crowned with its own figure</span>
+              </p>
+            </div>
+          </div>
+        </div>
+        <p class="cf-subs">
+          Nineteen fifty-four. Concrete, and the first tower crane. The Passion
+          front, bare as bone, and four more towers by seventy-six.
+        </p>
+      </div>
+    </section>
+
+    <section class="cf-page is-night" style="--cf-yearp: 1; --cf-chap: #ff6b5e">
+      <div class="cf-stage">
+        <div class="cf-frame-fake"></div>
+        <div class="cf-end">
+          <div class="cf-end-in cf-matter">
+            <i class="cf-mg-rule"></i>
+            <span class="cf-mg-seal">Obra</span>
+            <p class="cf-end-k">
+              <span class="cf-mg-g1">1882<i class="cf-end-dash">—</i></span>
+            </p>
+            <p class="cf-end-t cf-mg-mark">SAGRADA FAMÍLIA</p>
+            <p class="cf-end-s cf-mg-sub">A construction study</p>
+            <p class="cf-mg-credits">
+              <span>Model built from the published plans</span>
+              <span>Record · sagradafamilia.org</span>
+              <span>Cut by a score · Choreo</span>
+            </p>
+            <div class="cf-gate-row cf-mg-row">
+              <button class="cf-go">↺ Watch again</button>
+              <button class="cf-go is-quiet">☰ Chapters</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+    <script>
+      /* one sample per view: ?s=0..4 — the pane's screenshot lags a programmatic
+   scroll, so the harness is paged rather than scrolled */
+      (function () {
+        var n = parseInt(
+          new URLSearchParams(location.search).get("s") || "0",
+          10,
+        );
+        var all = document.querySelectorAll(".cf-page");
+        all.forEach(function (p, i) {
+          if (i !== n) p.remove();
+        });
+      })();
+    </script>
+  </body>
+</html>

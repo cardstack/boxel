@@ -76,6 +76,11 @@ export interface RenderableSearchEntryLike {
 export interface SearchResultsYield {
   entries: RenderableSearchEntryLike[];
   isLoading: boolean;
+  // The query `entries` answers, absent until a search has succeeded. While
+  // a changed query loads, `entries` still holds the previous query's rows;
+  // comparing this with the query passed in tells a consumer which of the
+  // query's members (say, the page) the rows on screen are behind on.
+  entriesQuery?: SearchEntryWireQuery;
   meta: EntryCollectionDocument['meta'];
   errors: ErrorEntry[] | undefined;
 }

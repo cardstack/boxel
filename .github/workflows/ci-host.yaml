@@ -46,9 +46,19 @@ on:
         type: boolean
         default: false
 
+# Pull requests: a new push cancels the run in progress for the same branch.
+# Pushes to main share one group but never cancel a run in progress: GitHub
+# keeps at most one running and one pending run per group, and a newer pending
+# run replaces the older one. A burst of merges therefore runs the commit in
+# progress and then the newest, rather than every commit in between. Every run
+# that starts still finishes, so Percy finalisation and the host baseline update
+# always read complete main runs. Hand-run builds keep a group of their own.
+# The main group is `push:main` because `:` cannot appear in a branch name, so
+# no pull request's head_ref (a fork's `main`, say) can land in it and cancel a
+# main run.
 concurrency:
-  group: ci-host-${{ github.head_ref || github.run_id }}
-  cancel-in-progress: true
+  group: ci-host-${{ github.head_ref || (github.event_name == 'push' && github.ref == 'refs/heads/main' && 'push:main') || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
