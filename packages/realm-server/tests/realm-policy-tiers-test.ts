@@ -233,6 +233,16 @@ async function compile(grants: Grant[]): Promise<CompiledRealmPolicy> {
 }
 
 // What one `read` grant with `where` compiles to.
+// The fixtures link to types no rule here grants, and the reach that records
+// against each grant is a warning that keeps it, so these tests set it aside.
+function tierIssues(policy: { issues: CompiledRealmPolicy['issues'] }) {
+  return policy.issues.filter(
+    ({ code }) =>
+      code !== 'grant-reaches-ungranted-type' &&
+      code !== 'render-reaches-ungranted-type',
+  );
+}
+
 async function compiled(where: Where) {
   let policy = await compile([{ operation: 'read', where }]);
   let [grant] = policy.rules.flatMap((rule) => rule.grants) as (
@@ -241,8 +251,8 @@ async function compiled(where: Where) {
   )[];
   return {
     grant,
-    issues: policy.issues.map(({ code, path }) => ({ code, path })),
-    message: policy.issues[0]?.message ?? '',
+    issues: tierIssues(policy).map(({ code, path }) => ({ code, path })),
+    message: tierIssues(policy)[0]?.message ?? '',
   };
 }
 
@@ -381,7 +391,7 @@ module(basename(import.meta.filename), function () {
       { operation: 'readSource' },
     ]);
     assert.deepEqual(
-      policy.issues.map(({ code, path }) => ({ code, path })),
+      tierIssues(policy).map(({ code, path }) => ({ code, path })),
       [{ code: 'unsnapshotted-policy-read', path: 'rules[0].grants[1].where' }],
     );
     assert.deepEqual(
@@ -411,12 +421,14 @@ module(basename(import.meta.filename), function () {
       { operation: 'create', where: '.status == "open"' },
     ]);
     assert.deepEqual(
-      policy.issues.map(({ code, path }) => ({ code, path })),
+      tierIssues(policy).map(({ code, path }) => ({ code, path })),
       [{ code: 'unsnapshotted-policy-read', path: 'rules[0].grants[0].where' }],
     );
     assert.true(
-      /judged by the card it would mint/.test(policy.issues[0]?.message ?? ''),
-      policy.issues[0]?.message,
+      /judged by the card it would mint/.test(
+        tierIssues(policy)[0]?.message ?? '',
+      ),
+      tierIssues(policy)[0]?.message,
     );
     assert.deepEqual(
       policy.rules[0].grants.map(({ path }) => path),
@@ -429,7 +441,7 @@ module(basename(import.meta.filename), function () {
     for (let source of ['.summary == actor()', '.lead.name == "Ada"']) {
       let policy = await compile([{ operation: 'query', where: source }]);
       assert.deepEqual(
-        policy.issues.map(({ code }) => code),
+        tierIssues(policy).map(({ code }) => code),
         ['unsnapshotted-policy-read'],
         source,
       );
@@ -442,7 +454,7 @@ module(basename(import.meta.filename), function () {
       },
     ]);
     assert.deepEqual(
-      annotated.issues.map(({ code }) => code),
+      tierIssues(annotated).map(({ code }) => code),
       ['policy-not-filterable'],
       'annotated, a read the filter cannot say is `policy-not-filterable`, as ever',
     );

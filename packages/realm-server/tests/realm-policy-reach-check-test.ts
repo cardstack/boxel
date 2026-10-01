@@ -71,6 +71,7 @@ const GUARDIAN = type('student', 'Guardian');
 const SCHOOL_STUDENT = type('school', 'Student');
 
 const TEACHES = '.teacherIds | any(. == actor())';
+const HEADS = '.headTeacher == actor()';
 
 function studentModule({ withGuardian }: { withGuardian: boolean }) {
   return `
@@ -109,6 +110,11 @@ const CLASSROOM_MODULE = `
   export class Classroom extends CardDef {
     @field title = contains(StringField);
     @field teacherIds = containsMany(StringField);
+    @field headTeacher = contains(StringField, {
+      computeVia: function (this: Classroom) {
+        return this.teacherIds?.[0];
+      },
+    });
     @field students = linksToMany(() => Student);
 
     @operation static listFull = { base: 'query', query: allClassrooms() };
@@ -428,31 +434,22 @@ module(basename(import.meta.filename), function (hooks) {
     ]);
   });
 
-  test('a grant that admits nothing neither reaches nor grants', async function (assert) {
-    // The gate reads a card's stored source alone, so it never evaluates a
-    // predicate annotated as reading a snapshot tier, and a read whose
-    // predicate is one admits nothing.
-    let snapshotRead = (targetType: Rule['targetType']): Rule => ({
+  test('a read annotated as reading a snapshot reaches and grants like any read', async function (assert) {
+    // The gate evaluates an annotated predicate, against the snapshot when it
+    // reads computed or linked values and against the stored source when it
+    // does not, so an annotated read hands its rows over like any other.
+    let snapshotRead = (
+      targetType: Rule['targetType'],
+      bxl = TEACHES,
+    ): Rule => ({
       targetType,
-      grants: [{ operation: 'read', where: { bxl: TEACHES, snapshot: true } }],
+      grants: [{ operation: 'read', where: { bxl, snapshot: true } }],
     });
-    let policy = await compile([snapshotRead(CLASSROOM)]);
-    assert.deepEqual(
-      policy.rules[0]?.grants.map((grant) => grant.operation),
-      ['read'],
-      'the grant compiles',
+    let policy = await compile([snapshotRead(CLASSROOM, HEADS)]);
+    assert.true(
+      policy.rules[0]?.grants[0]?.where?.snapshot,
+      'the grant reads a computed value, so it is judged against the snapshot',
     );
-    assert.deepEqual(
-      reached(policy),
-      [],
-      'and hands nothing over, so nothing is walked',
-    );
-
-    policy = await compile([
-      rule(CLASSROOM, 'read'),
-      snapshotRead(STUDENT),
-      rule(GUARDIAN, 'read'),
-    ]);
     assert.deepEqual(
       reached(policy),
       [
@@ -461,9 +458,21 @@ module(basename(import.meta.filename), function (hooks) {
           path: 'rules[0].grants[0]',
           via: 'students',
         },
+        {
+          code: 'grant-reaches-ungranted-type',
+          path: 'rules[0].grants[0]',
+          via: 'students.guardian',
+        },
       ],
-      'nor does it make its type readable',
+      'it is walked like any read',
     );
+
+    policy = await compile([
+      rule(CLASSROOM, 'read'),
+      snapshotRead(STUDENT),
+      rule(GUARDIAN, 'read'),
+    ]);
+    assert.deepEqual(reached(policy), [], 'and it makes its type readable');
   });
 
   test('a link typed as a card of any type is not answered by granting that type', async function (assert) {

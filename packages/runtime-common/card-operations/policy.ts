@@ -1201,9 +1201,7 @@ function letsCallerRead(
 
 // The base a kept grant runs on, where the grant can admit anything at all.
 // A query grant admits only through the filter it compiled to, since the gate
-// grants no query. Any other grant whose predicate is annotated as reading a
-// snapshot tier admits nothing: the gate reads the stored source alone, so it
-// never evaluates that predicate.
+// grants no query.
 function admittingBase(
   definition: Definition,
   grant: CompiledOperationGrant,
@@ -1215,7 +1213,7 @@ function admittingBase(
   if (granted.base === 'query') {
     return grant.filter ? granted.base : undefined;
   }
-  return grant.where?.snapshot ? undefined : granted.base;
+  return granted.base;
 }
 
 // A type the governed realm holds cards of under a rule's type: the key the
