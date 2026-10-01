@@ -1404,6 +1404,14 @@ export async function setupIntegrationTestRealm({
   // test sends while such a render is under way is too, so a test that writes
   // calls `settleRealmRenders` before asking the realm anything its ACL
   // decides (see there).
+  //
+  // A 401 or 403 the host is answered with raises its auth-error signal, which
+  // the in-browser renderer reads too, and the renderer then fails the next
+  // render it runs. The realm renders to read the definitions its policy names,
+  // so a refusal of that kind can make the realm refuse what its policy grants.
+  // Setup signs the host in with the session its permissions call for, so none
+  // of the host's own requests is refused that way; a test that provokes such
+  // a refusal on purpose has to allow for it.
   enforcePermissions?: true;
   startMatrix?: boolean;
   fileSizeLimitBytes?: number;
@@ -1693,6 +1701,17 @@ async function setupTestRealm({
   }
   if (startMatrix) {
     await mockMatrixUtils.start();
+    if (enforcePermissions) {
+      // The host signs in to this realm now, with the session its permissions
+      // call for, rather than on its first request. A session it holds from
+      // before the realm was set up carries the default realm's permissions,
+      // and without one its first request is anonymous; the realm refuses
+      // either with a 401. The host recovers from that by signing in, but the
+      // in-browser renderer shares the host's auth-error signal and fails its
+      // next render on it, and the realm renders to read the definitions its
+      // policy names.
+      await getService('realm').reauthenticate(realmURL);
+    }
   }
 
   let realmServer = getService('realm-server');
@@ -1757,14 +1776,13 @@ function permissionCheckingHandler(
 // index pass as a job of its own, so a render can still be under way after
 // setup returns or a write has been answered.
 //
-// A suite that sets `enforcePermissions` needs every realm settled before it
-// asks the realm anything its ACL decides. A request sent during a render is
-// answered as the realm's own (see `permissionCheckingHandler`). And the realm
-// reads type definitions while it decides, which the in-browser renderer
-// produces, so a render of any realm under way at the same time can leave a
-// definition unread and refuse what the policy grants. Setting up a realm
-// that checks permissions settles every realm set up before it; a test that
-// writes, or sets up another realm afterwards, calls this before it asks.
+// A suite that sets `enforcePermissions` needs that before it asks the realm
+// anything its ACL decides, since a request sent while any realm's render is
+// under way is answered as the realm's own (see `permissionCheckingHandler`):
+// the render context that marks a render's requests is the app's, not one
+// realm's. Setting up a realm that checks permissions settles every realm set
+// up before it; a test that writes, or sets up another realm afterwards,
+// calls this before it asks.
 export async function settleRealmRenders(): Promise<void> {
   let dbAdapter = await getDbAdapter();
   for (let { realm } of getTestRealmRegistry().values()) {
