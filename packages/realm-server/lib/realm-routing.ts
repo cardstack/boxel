@@ -5,6 +5,7 @@ import type {
   DBAdapter,
   HostRoutingRule,
   Realm,
+  ServedRealm,
 } from '@cardstack/runtime-common';
 import {
   executableExtensions,
@@ -33,6 +34,16 @@ export type RealmRoutingDeps = {
 // reconciler if the request is the first hit on a non-pinned realm
 // (Phase 3 lazy-mount semantics). Returns undefined when no realm in the
 // registry matches the request — caller should respond 404.
+export async function findOrMountRealm(
+  requestURL: URL,
+  deps: RealmRoutingDeps,
+): Promise<Realm | undefined> {
+  return await (await findRealm(requestURL, deps))?.mount();
+}
+
+// The realm the request URL is in, found without mounting it, so a caller can
+// decide whether the realm is worth mounting before paying for the mount.
+// Returns undefined when no realm in the registry matches the request.
 //
 // Lookup order:
 //   1. realms[] — covers (a) realms whose mountFromRow has already
@@ -46,26 +57,31 @@ export type RealmRoutingDeps = {
 //      observed them via NOTIFY/reconcile yet). Phase 3 PR 2 collapses
 //      (b) onto the reconciler.
 //   2. reconciler.knownByUrl — the Phase 3 source of truth for never-
-//      mounted realms. Iterates registry rows, finds the one whose URL
-//      prefix contains the request, delegates to lookupOrMount() which
-//      constructs+mounts via mountFromRow on the cold first request.
-export async function findOrMountRealm(
+//      mounted realms. Iterates registry rows and finds the one whose URL
+//      prefix contains the request. Mounting it delegates to
+//      lookupOrMount(), which constructs+mounts via mountFromRow on the
+//      cold first request.
+export async function findRealm(
   requestURL: URL,
   { realms, reconciler, dbAdapter }: RealmRoutingDeps,
-): Promise<Realm | undefined> {
+): Promise<ServedRealm | undefined> {
   let legacy = realms.find((candidate) => {
     let realmURL = new URL(candidate.url);
     realmURL.protocol = requestURL.protocol;
     return new RealmPaths(realmURL).inRealm(requestURL);
   });
   if (legacy) {
-    return legacy;
+    return { url: legacy.url, mount: async () => legacy };
   }
+  let registered = (url: string): ServedRealm => ({
+    url,
+    mount: () => reconciler.lookupOrMount(url),
+  });
   for (const url of reconciler.knownByUrl.keys()) {
     let realmURL = new URL(url);
     realmURL.protocol = requestURL.protocol;
     if (new RealmPaths(realmURL).inRealm(requestURL)) {
-      return await reconciler.lookupOrMount(url);
+      return registered(url);
     }
   }
   // Phase 3: knownByUrl is populated by reconciler.reconcile() on
@@ -94,7 +110,7 @@ export async function findOrMountRealm(
   if (rows.length === 0) {
     return undefined;
   }
-  return await reconciler.lookupOrMount(rows[0].url);
+  return registered(rows[0].url);
 }
 
 // The URL of the realm this process already knows that contains the request

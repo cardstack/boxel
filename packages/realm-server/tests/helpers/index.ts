@@ -23,6 +23,7 @@ import type {
   FileMetaResource,
   QueryResultsMeta,
   LinkShapePolicy,
+  ServedRealm,
 } from '@cardstack/runtime-common';
 import {
   Realm,
@@ -66,6 +67,7 @@ import {
   type RealmRegistryRow,
 } from '../../lib/realm-registry-reconciler.ts';
 import { realmDiskPath } from '../../lib/realm-disk-path.ts';
+import { findRealm } from '../../lib/realm-routing.ts';
 import { upsertPublishedRealmInRegistry } from '../../lib/realm-registry-writes.ts';
 
 import {
@@ -1397,7 +1399,7 @@ export async function createRealm({
   cardDocumentCache?: CardDocumentCache;
   // The other realms the realm can reach, for an explain on its policy card
   // that asks about a target in one of them.
-  realmFor?: (url: URL) => Promise<Realm | undefined>;
+  realmFor?: (url: URL) => Promise<ServedRealm | undefined>;
 }): Promise<{ realm: Realm; adapter: RealmAdapter }> {
   await insertPermissions(dbAdapter, new URL(realmURL), permissions);
 
@@ -1760,6 +1762,8 @@ export async function runTestRealmServerWithRealms({
   let createdRealms: Realm[] = [];
   let realmAdapters: RealmAdapter[] = [];
   let matrixUsers = ['test_realm', 'node-test_realm'];
+  // Built once every realm is, which is before any of them reaches another.
+  let reconciler: RealmRegistryReconciler | undefined;
 
   for (let [index, realmConfig] of realms.entries()) {
     let realmDir = join(realmsRootPath, `realm_${index}`);
@@ -1779,10 +1783,16 @@ export async function runTestRealmServerWithRealms({
       enableFileWatcher,
       definitionLookup,
       mediaCacheAdapter,
-      // Every realm this server holds, as the production server reaches the
-      // realms it serves.
+      // Every realm this server serves, reached as the production server
+      // reaches them: found without being mounted.
       realmFor: async (url) =>
-        createdRealms.find((candidate) => candidate.paths.inRealm(url)),
+        reconciler
+          ? await findRealm(url, {
+              realms: createdRealms,
+              reconciler,
+              dbAdapter,
+            })
+          : undefined,
     });
     await realm.logInToMatrix();
     virtualNetwork.mount(realm.handle);
@@ -1797,7 +1807,7 @@ export async function runTestRealmServerWithRealms({
   });
 
   let serverURL = new URL(realms[0].realmURL.origin);
-  let reconciler = makeTestReconciler(dbAdapter, createdRealms, {
+  reconciler = makeTestReconciler(dbAdapter, createdRealms, {
     realmsRootPath,
     virtualNetwork,
     queue: publisher,
