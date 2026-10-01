@@ -162,7 +162,8 @@ const DECLARABLE_BY: Record<BaseOperationName, readonly Definition['type'][]> =
     appendContainsMany: ['card-def'],
     appendLine: ['file-def'],
     // Reached only through a declaration: nothing implies either, and each
-    // answers only on a policy card.
+    // answers only on a policy card, or for a validate the realm's config
+    // card.
     explain: ['card-def'],
     validate: ['card-def'],
   };

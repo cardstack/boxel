@@ -1064,14 +1064,31 @@ Some things worth knowing before you read one:
   definition from, judged by a session of their own. Anyone else is refused
   with a 403. No policy grant reaches a validate, and none reaches a policy card
   at all.
-- **A problem with a realm's pointer is not on the policy card.** A realm whose
-  `policy` names a card the index does not hold (`policy-card-missing`), or a
-  card that is not a `RealmPolicy` (`not-a-policy`), refuses as an uncompilable
-  policy does, and records the issue on the `realm:policy` log channel. The
-  first has no card to ask. The second is a card of another type, which
-  carries a validate only if its own type declares one, and then answers
-  `uncompilable` with `not-a-policy`. A policy card whose latest index visit
-  failed outright renders its index error, as any card does.
+- **A problem with a realm's pointer shows on the realm's config card.** A
+  realm whose `policy` names a card the index does not hold
+  (`policy-card-missing`), or a card that is not a `RealmPolicy`
+  (`not-a-policy`), refuses as an uncompilable policy does, and has no policy
+  card for the problem to land on. So the config card, the `RealmConfig` card
+  at `realm.json`, declares a validate of its own, `validatePolicy`. Invoked on
+  the realm's own config card, it compiles the card the realm's pointer names
+  as the realm compiles it, with the realm's own compile environment, and
+  answers in the same shape. So neither of the two inputs above differs: it
+  reports exactly what that realm holds, including a `policy-not-filterable`
+  that a validate of the policy card, compiled in the card's own realm, can
+  miss. A realm that names
+  no policy, or whose pointer it could not read as a card's id and dropped,
+  answers with no `card` and nothing in `realms`, `issues` or `rules`. The
+  card shows the answer beside its `policy` field: in force, or not in force
+  with the issue that takes it out of force, and asks again when its own realm
+  or any realm in `realms` is indexed.
+- **The config card tells only a reader of the realm the pointer names.** The
+  pointer can name a card in any realm, so whether a card is there is what the
+  answer would disclose. The realm holding the named card is judged before
+  anything about the card is read: a caller who cannot read it, or a pointer
+  into an archived realm or one no realm here serves, gets the same 403
+  whatever is or is not there. The other realms compiling read are judged as
+  a validate of the policy card judges them. A policy card whose latest index
+  visit failed outright renders its index error, as any card does.
 
 ## Where to look next
 

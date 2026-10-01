@@ -537,8 +537,8 @@ export interface OperationRequest {
   // The invoking user as a session the realm vouched for end to end: not
   // revoked, not delegated to one realm, not an assumed identity. Absent for
   // anything less. `actor` is an identity to record and compare. This is the
-  // one to judge a caller by in another realm, which is what an explain does,
-  // and nothing else reads it.
+  // one to judge a caller by in another realm, which is what an explain and a
+  // validate do, and nothing else reads it.
   principal?: string;
   // The caller's own id for this request. Echoed on the realm's index event so
   // a client can tell its own write's event from anyone else's, which is what
@@ -899,7 +899,9 @@ export type ExplainedGrantOutcome =
   // invocation, a refusal came first, or the predicate reads a snapshot tier.
   | 'not-evaluated';
 
-// A validate's answer: what the policy card it was invoked on compiles to. It
+// A validate's answer: what the policy card it was invoked on compiles to, or,
+// invoked on a realm's config card, what the card its pointer names compiles
+// to there. It
 // is carried on the wire as it is here, so a card reading it back reads this
 // shape.
 export interface OperationValidateResult {
@@ -936,12 +938,29 @@ export interface OperationValidateResult {
 // A validate compiles in the card's own realm and checks against that realm's
 // cards, so a realm naming the card that holds a descendant the card's realm
 // does not can record `policy-not-filterable` where a validate does not.
+//
+// Invoked on a realm's config card, a validate answers for the card that
+// realm's pointer names instead, compiled as that realm compiles it: with the
+// realm's own compile environment, which its policy cache compiles with too.
+// So neither input above differs, and what it reports is what that realm
+// holds. That is also where the problems with the pointer show, which have no
+// policy card to land on: a pointer naming a card the index does not hold, or
+// one that is not a RealmPolicy. The pointer can name a card in any realm, and
+// whether a card is there is what a refusal withholds from a caller who cannot
+// read its realm. So the realm holding the card must be one the caller reads,
+// judged before anything about the card is read, as well as every other realm
+// compiling read.
 // ============================================================================
 
 export interface PolicyValidation {
   // The policy card, and the `meta.version` of the stored source compiling
   // read. Absent when what the index holds of the card is an earlier visit's.
-  card: string;
+  //
+  // `card` is absent only on a validate of a realm's config card, for a realm
+  // that names no policy, including one whose pointer the realm could not
+  // read as a card's id. Such a realm is governed by its permissions alone,
+  // and `realms`, `issues` and `rules` are empty.
+  card?: string;
   version?: string;
   // The realms this server serves whose index compiling read: the card's own,
   // and each one a type its rules name, or a type those descend from, is
