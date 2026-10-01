@@ -82,24 +82,32 @@ The changeset is what makes the declarative form possible. Because the region me
 
 ## Install
 
-The verified setup for this checkout uses built local packages. Start with the
+The verified setup for this checkout packs the local packages into a generated
+app. Start with the
 [complete first-app tutorial](test-app/app/content/guides/core-first-app.md): it
 generates a clean Ember/Vite consumer and walks through installation, a working
 scene, and verification. Current package manifests are version `0.0.0`; this
-workflow does not depend on an npm release.
+workflow does not depend on an npm release. [mise](https://mise.jdx.dev/)
+provides the pinned Node and pnpm versions, and it ignores a configuration file
+until it is trusted:
 
 ```sh
+mise trust
+mise install
 pnpm install
-pnpm build
 node scripts/create-tutorial-app.mjs /tmp/my-choreo-app
 cd /tmp/my-choreo-app
+mise trust
 pnpm install
+pnpm build
 pnpm start
 ```
 
-The generated app uses local file dependencies and the declared Motion peers.
-Keep the checkout in place while using it. The addon is a v2 addon with Glint
-signatures and TypeScript declarations; `choreo-player` remains a separate package.
+The generator builds `glimmer-motion` and `choreo-player` and packs them into the
+app's `vendor/` directory, alongside the declared Motion peers. The app does not
+depend on the repository after it is generated; generate a new one to pick up
+library changes. The addon is a v2 addon with Glint signatures and TypeScript
+declarations; `choreo-player` remains a separate package.
 
 ## At a glance: the design decisions
 
