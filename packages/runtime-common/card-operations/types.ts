@@ -377,12 +377,13 @@ export interface LowerOperationDeclarationsResult {
   issues: OperationLoweringIssue[];
 }
 
-// What compiling a realm's policy found wrong with it. Each is recorded
-// against the part of the policy that caused it, and that part is inactive:
-// a problem with the card as a whole leaves the policy with no rules, one
-// with a rule leaves that rule out, and one with a grant leaves that grant
-// out. The rest of the policy applies. `policy-not-filterable` alone keeps
-// its grant, for everything but a search.
+// What compiling a realm's policy found wrong with it, or found worth telling
+// its author. Each is recorded against the part of the policy that caused it,
+// and its `severity` says what became of that part. Most leave it inactive: a
+// problem with the card as a whole leaves the policy with no rules, one with a
+// rule leaves that rule out, and one with a grant leaves that grant out, or,
+// for `policy-not-filterable`, keeps it with nothing it can admit. The rest of
+// the policy applies. The codes in `KEEPS_ITS_PART` leave their part live.
 export type PolicyIssueCode =
   // The realm's `policy` pointer names a card the index does not hold.
   | 'policy-card-missing'
@@ -429,15 +430,39 @@ export type PolicyIssueCode =
   // a listed one, so such a grant would admit callers it does not name.
   | 'partial-match'
   // A grant on a query whose `where` does not compile to a search filter. The
-  // grant is kept, and admits no search.
+  // grant is kept without one, and so admits nothing: the gate grants no
+  // query, and a search reaches a query grant only through its filter.
   | 'policy-not-filterable'
   // A `where` that reads a computed value or a linked card's field without
   // the `snapshot` annotation. Reserved: compiling does not record it.
   | 'unsnapshotted-policy-read'
-  // A grant on a type whose representation links to cards of types the
-  // policy grants nothing on, so the grant reaches those cards too. Reserved:
-  // compiling does not record it.
-  | 'grant-reaches-ungranted-type';
+  // A `read` or `query` grant whose document, under the link strategy that
+  // governs it, carries cards of a type no rule lets a caller read, so the
+  // grant hands those cards to every caller it admits. A type that is
+  // authorization infrastructure counts as unreadable whatever the rules say.
+  // The grant is kept: the reach is often deliberate, and this tells the
+  // author it is there.
+  | 'grant-reaches-ungranted-type'
+  // A `query` grant whose rows' prerendered HTML can draw cards of a type no
+  // rule lets a caller read. Search rows carry their renderings, and a render
+  // draws the card's links whatever strategy the grant's document is served
+  // under, so this is recorded independently of
+  // `grant-reaches-ungranted-type`. The grant is kept, for the same reason.
+  | 'render-reaches-ungranted-type';
+
+// The codes that leave the part of the policy they are recorded against live.
+export const KEEPS_ITS_PART: ReadonlySet<PolicyIssueCode> = new Set([
+  'grant-reaches-ungranted-type',
+  'render-reaches-ungranted-type',
+]);
+
+export type PolicyIssueSeverity = 'inactive' | 'warning';
+
+export function policyIssueSeverity(
+  code: PolicyIssueCode,
+): PolicyIssueSeverity {
+  return KEEPS_ITS_PART.has(code) ? 'warning' : 'inactive';
+}
 
 // A problem found while compiling a realm's policy. Recorded, never thrown,
 // for the reason lowering records rather than throws: the edit that caused it
@@ -449,6 +474,14 @@ export interface PolicyIssue {
   // for a problem with the card as a whole.
   path: string;
   message: string;
+  // What became of the part of the policy the issue is recorded against. That
+  // part is the rule or grant `path` falls under rather than the leaf it
+  // names: `rules[0].grants[1].where` is the grant `rules[0].grants[1]`,
+  // `rules[0].targetType` is the rule `rules[0]`, and the empty path is the
+  // whole policy. `inactive` means that part admits nothing: it was left out,
+  // or kept with nothing it can admit. `warning` means it is live, and the
+  // issue says something the author should know about what it grants.
+  severity: PolicyIssueSeverity;
 }
 
 // ============================================================================

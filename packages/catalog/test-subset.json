@@ -34,6 +34,7 @@
       "realm-policy-publish-test",
       "realm-policy-query-filter-test",
       "realm-policy-query-reach-test",
+      "realm-policy-reach-check-test",
       "realm-policy-render-search-test",
       "realm-policy-row-reach-test",
       "realm-policy-search-infrastructure-test",
