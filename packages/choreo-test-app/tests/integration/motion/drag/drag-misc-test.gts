@@ -3,7 +3,7 @@
  * drag-input-propagation, drag-momentum, drag-framer-page, drag-rotated-parent, drag-scaled-parent,
  * drag-scroll-while-drag, drag-ref-constraints-{absolute-scrolled,element-resize,resize-handle},
  * drag-snap-animate-presence-exit, drag-snap-layout-id-swap, drag-layout-reorder-strict,
- * drag-snap-to-cursor-initial (motion@v13.4.6).
+ * drag-snap-to-cursor-initial and drag-release-before-frame (motion@v13.4.6).
  * React refs → {current} refs filled by {{captureEl}}; MotionConfig transformPagePoint → the arg on the
  * draggable; window.expandFolder/hoverFolder → a module-level handle the fixture component fills.
  */
@@ -19,7 +19,7 @@ import { layoutChange } from 'glimmer-motion/layout';
 import LayoutGroup from 'glimmer-motion/layout-group';
 import motion from 'glimmer-motion/motion';
 import Presence from 'glimmer-motion/presence';
-import { motionValue, transformValue } from 'motion-dom';
+import { motionValue, type PanInfo, transformValue } from 'motion-dom';
 import { module, test } from 'qunit';
 
 import {
@@ -30,6 +30,7 @@ import {
 import {
   $,
   expectBbox,
+  pointerAt,
   setupFixtureViewport,
   should,
   trigger,
@@ -1373,6 +1374,84 @@ module(
       await snapAndDrag(assert);
       await should(assert, (a) => a.strictEqual(dragCount(), '2'));
       await snapAndDrag(assert);
+    });
+  }
+);
+
+/* ---------- drag-release-before-frame.tsx ---------- */
+const RELEASE_BOX = { width: 50, height: 50, background: 'red' };
+class ReleaseBeforeFrame extends Component {
+  @tracked offset = '';
+  // React re-renders the motion.div on setOffset, and every commit re-measures its projection: layoutChange is that commit
+  onDragEnd = (_: PointerEvent, info: PanInfo) =>
+    layoutChange(() => (this.offset = `${info.offset.x},${info.offset.y}`));
+  <template>
+    <div style="padding:100px">
+      <div
+        data-testid="draggable"
+        {{motion
+          drag=true
+          dragElastic=0
+          dragMomentum=false
+          onDragEnd=this.onDragEnd
+          style=RELEASE_BOX
+        }}
+      ></div>
+      <div id="drag-end-offset">{{this.offset}}</div>
+    </div>
+  </template>
+}
+
+module(
+  'Integration | motion | cypress | Drag release before the next frame',
+  function (hooks) {
+    setupRenderingTest(hooks);
+    setupFixtureViewport(hooks);
+
+    async function startDrag(assert: Assert) {
+      await render(<template><ReleaseBeforeFrame /></template>);
+      await nextFrame();
+      await nextFrame();
+      const start = rect();
+      pointerAt($(D), 'pointerdown', start.left + 5, start.top + 5);
+      pointerAt($(D), 'pointermove', start.left + 15, start.top + 15);
+      await nextFrame();
+      await nextFrame();
+      const { left, top } = rect();
+      assert.strictEqual(left - start.left, 10, 'x offset after first move');
+      assert.strictEqual(top - start.top, 10, 'y offset after first move');
+      return start;
+    }
+
+    async function expectRestingAt(
+      assert: Assert,
+      start: DOMRect,
+      x: number,
+      y: number
+    ) {
+      await nextFrame();
+      await nextFrame();
+      await should(assert, (a) =>
+        a.strictEqual($('#drag-end-offset').textContent, `${x},${y}`)
+      );
+      const { left, top } = rect();
+      assert.strictEqual(left - start.left, x, 'x offset at rest');
+      assert.strictEqual(top - start.top, y, 'y offset at rest');
+    }
+
+    test('Applies a pointermove followed by pointerup within the same frame', async function (assert) {
+      const start = await startDrag(assert);
+      pointerAt($(D), 'pointermove', start.left + 105, start.top + 105);
+      pointerAt($(D), 'pointerup', start.left + 105, start.top + 105);
+      await expectRestingAt(assert, start, 100, 100);
+    });
+
+    test('Applies a pointermove when a frame runs before pointerup', async function (assert) {
+      const start = await startDrag(assert);
+      pointerAt($(D), 'pointermove', start.left + 105, start.top + 105);
+      await nextFrame();
+      pointerAt($(D), 'pointerup', start.left + 105, start.top + 105);
+      await expectRestingAt(assert, start, 100, 100);
     });
   }
 );
