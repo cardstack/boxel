@@ -21,6 +21,7 @@ import {
   CachingDefinitionLookup,
   cardDefComputedFields,
   ensureTrailingSlash,
+  fetchEffectiveRealmPermissions,
   getCreatedTime,
   IndexWriter,
   insertPermissions,
@@ -52,7 +53,6 @@ import {
   type RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
 import { awaitPublishedHtmlReady } from '@cardstack/runtime-common/jobs/prerender-html';
-import { effectiveRealmPermissions } from '@cardstack/runtime-common/realm-permission-checker';
 
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import ENV from '@cardstack/host/config/environment';
@@ -1419,11 +1419,11 @@ export async function setupIntegrationTestRealm({
   videoSizeLimitBytes?: number;
 }) {
   let resolvedRealmURL = ensureTrailingSlash(realmURL ?? testRealmURL);
-  setupAuthEndpoints({
-    [resolvedRealmURL]: enforcePermissions
-      ? await sessionPermissions(permissions, TEST_MATRIX_USER)
-      : deriveTestUserPermissions(permissions),
-  });
+  if (!enforcePermissions) {
+    setupAuthEndpoints({
+      [resolvedRealmURL]: deriveTestUserPermissions(permissions),
+    });
+  }
   let result = await setupTestRealm({
     contents,
     realmURL: resolvedRealmURL,
@@ -1513,7 +1513,7 @@ async function setupTestRealm({
   contents,
   realmURL,
   isAcceptanceTest,
-  permissions = DEFAULT_TEST_REALM_PERMISSIONS,
+  permissions = { '*': ['read', 'write'] },
   mockMatrixUtils,
   skipBootIndex,
   linkShapePolicy,
@@ -1595,6 +1595,25 @@ async function setupTestRealm({
   await dbAdapter.execute(
     `CREATE TABLE IF NOT EXISTS users (matrix_user_id TEXT PRIMARY KEY, sessions_revoked_at INTEGER)`,
   );
+  if (enforcePermissions) {
+    // The sessions the signed-in user is handed for this realm carry what the
+    // realm will compute for them, read back from where the realm reads it,
+    // since it refuses a session whose permissions differ from its own.
+    let sessionFor = async (user: string) =>
+      await fetchEffectiveRealmPermissions(
+        dbAdapter,
+        new URL(realmURL),
+        user,
+        baseTestMatrix.url.href,
+      );
+    setupAuthEndpoints({ [realmURL]: await sessionFor(TEST_MATRIX_USER) });
+    if (mockMatrixUtils.loggedInAs) {
+      mockMatrixUtils.setRealmSessionPermissions(
+        realmURL,
+        await sessionFor(mockMatrixUtils.loggedInAs),
+      );
+    }
+  }
   let worker = new Worker({
     indexWriter: new IndexWriter(dbAdapter),
     queue,
@@ -1666,16 +1685,6 @@ async function setupTestRealm({
     }),
   );
 
-  // The session the signed-in user is handed for this realm carries what the
-  // realm grants them, since the realm refuses a session whose permissions
-  // differ from its own record of them.
-  if (enforcePermissions && mockMatrixUtils.loggedInAs) {
-    mockMatrixUtils.setRealmSessionPermissions(
-      realmURL,
-      await sessionPermissions(permissions, mockMatrixUtils.loggedInAs),
-    );
-  }
-
   // TODO this is the only use of Realm.maybeHandle left--can we get rid of it?
   let handler = enforcePermissions
     ? permissionCheckingHandler(realm)
@@ -1724,24 +1733,6 @@ async function setupTestRealm({
 
 const TEST_MATRIX_USER = '@testuser:localhost';
 
-const DEFAULT_TEST_REALM_PERMISSIONS: RealmPermissions = {
-  '*': ['read', 'write'],
-};
-
-// The permissions a session for `user` carries in a realm with
-// `permissions`: exactly what the realm grants them, since it compares the
-// two and refuses a session whose permissions differ.
-async function sessionPermissions(
-  permissions: RealmPermissions | undefined,
-  user: string,
-): Promise<RealmAction[]> {
-  return await effectiveRealmPermissions(
-    permissions ?? DEFAULT_TEST_REALM_PERMISSIONS,
-    user,
-    async () => true,
-  );
-}
-
 // The realm's request surface for a test that has it judge the host's
 // requests by its ACL (see `enforcePermissions`).
 //
@@ -1755,8 +1746,13 @@ async function sessionPermissions(
 // In a deployed realm the render runs in a tab of its own. Here it shares the
 // app with the test, and the render context is the only thing that marks its
 // requests, so a request the test sends while a render is under way is taken
-// for the realm's as well. `settleRealmRenders` is how a test makes sure none
-// is.
+// for the realm's as well. `settleRealmRenders` waits out the renders the
+// realm queues after indexing. It cannot wait out one the realm runs while it
+// answers a request, to read a definition it has not cached, so a request the
+// test sends while another is still being answered can be taken for the
+// realm's too. A test sends the requests whose answers it asserts one at a
+// time, and pairs each admission it asserts with a refusal under the same
+// session, which a request taken for the realm's own would not get.
 function permissionCheckingHandler(
   realm: Realm,
 ): (request: Request) => Promise<ResponseWithNodeStream | null> {
