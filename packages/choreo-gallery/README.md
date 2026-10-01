@@ -17,6 +17,8 @@ pnpm --filter choreo-gallery test:boxel
 ```
 
 `sync-gallery.mjs` copies the current demos and applies the host adapters.
+It also copies the test app's `public/` media unless given `--skip-media`,
+which `lint:types` passes because type-checking reads only the sources.
 `scope-css.mjs` constrains gallery CSS and plain component style blocks to
 `.choreo-site`, preserving cross-component selectors without leaking into Boxel.
 `build-boxel-realm.mjs` emits `dist-realm/`, including a content-addressed
