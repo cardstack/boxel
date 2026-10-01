@@ -151,9 +151,10 @@ const CARRIED_BY: Record<BaseOperationName, readonly DefFamily[]> = {
 // a name nothing declared is not an operation at all.
 //
 // `explain` reports what a realm's policy decides for a caller, a target and
-// an operation, and `validate` reports what a policy card compiles to. Each
-// only means something on a policy card. Implied on every card, either would
-// be a member on every card whose every invocation is refused.
+// an operation, and `validate` reports what a policy compiles to. Each only
+// means something on a policy card, or for `validate` on the realm's config
+// card that names one. Implied on every card, either would be a member on
+// every card whose every invocation is refused.
 const DECLARATION_ONLY: Partial<
   Record<BaseOperationName, readonly DefFamily[]>
 > = {
@@ -658,7 +659,9 @@ export interface ExplainOperationDeclaration extends OperationCommon {
 // compiling records, and the rules and grants that compile, which are what a
 // realm naming the card puts in force. It invokes nothing and activates
 // nothing. It belongs on a policy card, where it lets the card show its author
-// which of its grants are live.
+// which of its grants are live, and on the realm's config card, where it
+// reports what the card the realm's pointer names compiles to there, including
+// a pointer to a card that is missing or is not a policy.
 //
 // There is no clause and no payload: the card is the question. A policy card
 // is open only to a caller the realm's own permissions let read it, and what
@@ -2129,7 +2132,7 @@ type PayloadArgs<Declaration> = Declaration extends {
 // there is nothing left to describe, a read reports its document, an explain
 // reports what the policy decided and why — or, for one whose params ask for a
 // `list`, one page of explanations — and a validate reports what the policy
-// card compiles to.
+// compiles to.
 type ResultOf<Declaration> = Declaration extends { base: 'delete' }
   ? null
   : Declaration extends { base: 'read' }
