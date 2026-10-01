@@ -4879,7 +4879,12 @@ export class Film extends Component<FilmSignature> {
         {{if this.embed "is-embed"}}
         {{if this.idle "is-idle"}}'
     >
+      {{! The stage is the film's glass: a click plays or pauses and a double
+          click goes full screen, as on any video. It holds the player's
+          buttons, so it can't be a button itself; the keyboard has the same
+          actions (Space or K, and F) and the player has a button for each. }}
       <div
+        {{! template-lint-disable no-invalid-interactive }}
         class='cf-stage is-grade-{{this.grade}} {{if this.subsOn "has-subs"}}'
         {{this.mount}}
         {{on 'click' this.tap}}
@@ -7093,7 +7098,7 @@ export class Film extends Component<FilmSignature> {
 
       /* the ghost: a pale fill to wherever the pointer is resting, so
          the eye reads the cut it would make before the hand makes it */
-      .cf-scrub-ch em {
+      .cf-scrub-ghost {
         position: absolute;
         inset: 0 auto 0 0;
         display: block;
@@ -7106,7 +7111,7 @@ export class Film extends Component<FilmSignature> {
       /* each chapter fills with the part of the whole-film playhead that
          falls inside it — one custom property, updated per frame, and no
          re-render anywhere */
-      .cf-scrub-ch i {
+      .cf-scrub-fill {
         position: absolute;
         inset: 0 auto 0 0;
         display: block;
@@ -7154,13 +7159,13 @@ export class Film extends Component<FilmSignature> {
         pointer-events: none;
       }
 
-      .cf-scrub-tip small {
+      .cf-scrub-tip-ch {
         font-size: 10px;
         letter-spacing: 0.12em;
         color: rgba(255, 255, 255, 0.72);
       }
 
-      .cf-scrub-tip b {
+      .cf-scrub-tip-t {
         font-size: 13px;
         font-weight: 600;
         font-variant-numeric: tabular-nums;

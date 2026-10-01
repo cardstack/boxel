@@ -159,6 +159,8 @@ export class Subdivision extends Component {
             grid — they are positioned over it — so dragging one never moves
             the thing being measured. }}
         <span
+          {{! a double click evens the split, a pointer shortcut beside the drag }}
+          {{! template-lint-disable no-invalid-interactive }}
           class="sub-seam is-col {{if (this.isLive 'col') 'is-live'}}"
           data-test-seam="col"
           style={{this.colSeam}}
@@ -170,6 +172,8 @@ export class Subdivision extends Component {
           {{on "dblclick" (fn this.even "col")}}
         ></span>
         <span
+          {{! a double click evens the split, a pointer shortcut beside the drag }}
+          {{! template-lint-disable no-invalid-interactive }}
           class="sub-seam is-row {{if (this.isLive 'row') 'is-live'}}"
           data-test-seam="row"
           style={{this.rowSeam}}

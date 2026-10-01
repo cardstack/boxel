@@ -105,7 +105,7 @@ export class SiteFrame extends Component<Signature> {
               <a
                 href='https://github.com/cardstack/choreo'
                 target='_blank'
-                rel='noopener'
+                rel='noopener noreferrer'
               >GitHub</a>
             </nav>
           </header>
@@ -183,7 +183,7 @@ export class SiteFrame extends Component<Signature> {
             <a
               href='https://github.com/cardstack/choreo/blob/main/LICENSE'
               target='_blank'
-              rel='noopener'
+              rel='noopener noreferrer'
             >
               MIT License
             </a>

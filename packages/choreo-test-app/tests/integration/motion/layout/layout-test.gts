@@ -233,6 +233,7 @@ class Items extends Component {
     <article>
       <button type="button" id="jump-1" {{on "click" this.pick1}}>Jump here</button>
       {{#if (eq this.selected 1)}}<div
+          {{! template-lint-disable no-duplicate-id }}
           id="box"
           {{motion
             layoutId="box"

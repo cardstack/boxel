@@ -114,7 +114,7 @@ const LongTakeNotes: TOC<object> = <template>
         </p>
         <p>
           And a hold is not a freeze.
-          <code>c.SlowZoom @by={{"{{1.05}}"}}</code>
+          <code>c.SlowZoom @by=\{{1.05}}</code>
           multiplies the zoom in force, so the beat where nothing happens still
           breathes. It is one step rather than a second track to keep in step
           with the first.
@@ -134,7 +134,7 @@ const LongTakeNotes: TOC<object> = <template>
             / box.h)</code></pre>
         <p>
           So
-          <code>@padding={{"{{0}}"}}</code>
+          <code>@padding=\{{0}}</code>
           is not a tight crop with no margin. It is a camera zoomed to nothing:
           the region collapses to a point, and every measurement after it is
           taken through its own zero scale, so there is no way back. It presents

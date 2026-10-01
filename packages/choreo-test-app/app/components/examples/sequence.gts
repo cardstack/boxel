@@ -142,12 +142,12 @@ export class Sequence extends Component {
             />
           </c.Parallel>
 
-          {{! The geometry is projection's ({{motion layout=true}}): it moves
+          {{!-- The geometry is projection's ({{motion layout=true}}): it moves
           and resizes with transforms alone, so a card in flight never distorts
           the grid its siblings are laid out in. Choreo owns the ordering and
           the layers around it. The Wait holds the sequence open for the length
           of that move; the new details fade in partway THROUGH it rather than
-          after it, so the card arrives already carrying its content. }}
+          after it, so the card arrives already carrying its content. --}}
           <c.Parallel>
             <c.Wait
               @of={{c.all}}

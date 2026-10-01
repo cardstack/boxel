@@ -1,5 +1,6 @@
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
+import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { modifier } from 'ember-modifier';
@@ -99,6 +100,10 @@ const APPS = [
   y: ROW[Math.floor(i / 3)]!,
 }));
 type App = (typeof APPS)[number];
+
+function iconStyle(app: App) {
+  return htmlSafe(`--hue:${app.hue};left:${app.x}px;top:${app.y}px`);
+}
 
 /**
  * Quick out, long settle, no overshoot to wobble the type — and opacity
@@ -1006,6 +1011,18 @@ export class Mockup extends Component {
 
   get shown() {
     return this.open ?? this.parked;
+  }
+
+  get glowStyle() {
+    return htmlSafe(`--glow:${this.shown.hue}`);
+  }
+
+  get hueStyle() {
+    return htmlSafe(`--hue:${this.shown.hue}`);
+  }
+
+  get clockStyle() {
+    return htmlSafe(`width:${this.take}px`);
   }
 
   stage = modifier((host: HTMLElement) => {
@@ -1980,7 +1997,7 @@ export class Mockup extends Component {
         class="mg-stage"
         data-mode={{this.mode}}
         data-ready={{if this.drawn "yes" ""}}
-        style="--glow:{{this.shown.hue}}"
+        style={{this.glowStyle}}
         @onCamera3D={{this.shot}}
         @onPerform={{this.dispatch}}
         @onPerformReset={{this.reset}}
@@ -2018,7 +2035,7 @@ export class Mockup extends Component {
                     type="button"
                     class="mg-icon"
                     data-app={{app.id}}
-                    style="--hue:{{app.hue}};left:{{app.x}}px;top:{{app.y}}px"
+                    style={{iconStyle app}}
                     {{on "click" (fn this.choose app)}}
                   >
                     <span class="mg-tile" {{beacon app.id}}></span>
@@ -2033,7 +2050,7 @@ export class Mockup extends Component {
                 <div
                   class="mg-app"
                   data-open={{if this.open "yes" ""}}
-                  style="--hue:{{this.shown.hue}}"
+                  style={{this.hueStyle}}
                   {{motion
                     animate=this.panel
                     transition=(tuneMotion "mockup" this.swell "swell")
@@ -2088,7 +2105,7 @@ export class Mockup extends Component {
           <div
             class="mg-clock"
             data-take={{this.take}}
-            style="width:{{this.take}}px"
+            style={{this.clockStyle}}
             aria-hidden="true"
             {{motion id="clock"}}
             {{this.wire c this.take}}

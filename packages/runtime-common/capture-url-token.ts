@@ -1,6 +1,6 @@
 /**
  * The capture-URL token: a short-lived JWT carried in a `?token=` query param
- * that authorizes exactly one `_screenshot/` GET without an Authorization
+ * that authorizes exactly one `_capture/` GET without an Authorization
  * header. It exists for the fetches the host's auth service worker cannot
  * reach — `<object>`/`<embed>` loads (which bypass service workers per spec)
  * and top-level navigations to the realm origin (a "Download PDF" anchor, a

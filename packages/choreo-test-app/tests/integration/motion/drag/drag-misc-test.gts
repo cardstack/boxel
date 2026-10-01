@@ -57,11 +57,13 @@ const InputPropagation = <template>
     >
       <input
         type="text"
+        aria-label="input"
         data-testid="input"
         value="Select me"
         style="width:80px;height:30px;padding:5px"
       />
       <textarea
+        aria-label="textarea"
         data-testid="textarea"
         style="width:60px;height:30px;padding:5px"
       >Text</textarea>
@@ -75,9 +77,11 @@ const InputPropagation = <template>
         data-testid="link"
         style="display:inline-block;width:60px;height:30px;padding:5px;background:white"
       >Link</a>
-      <select data-testid="select" style="width:80px;height:30px"><option
-          value="1"
-        >Option 1</option><option value="2">Option 2</option><option
+      <select
+        aria-label="select"
+        data-testid="select"
+        style="width:80px;height:30px"
+      ><option value="1">Option 1</option><option value="2">Option 2</option><option
           value="3"
         >Option 3</option></select>
       <label
