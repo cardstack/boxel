@@ -18,6 +18,7 @@ import {
   logger,
   mediaCacheGc,
   putMedia,
+  REALM_AUTHORITY_RENDER,
   query,
   touchMediaCacheEntry,
 } from '@cardstack/runtime-common';
@@ -651,6 +652,7 @@ module(basename(import.meta.filename), function (hooks) {
       sourceURL: 'http://test-realm/a/card-1',
       captureSpecHash: 'spec-1',
       sourceGeneration: 1,
+      renderedAs: REALM_AUTHORITY_RENDER,
     };
 
     test('stores the object under its content address and records the ledger row', async function (assert) {
