@@ -10,6 +10,7 @@ import type {
   ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 import {
+  isOperationFailure,
   policyQueryScope,
   RealmAuthorityPolicyScopeError,
   realmPolicyRef,
@@ -171,16 +172,20 @@ const OWN_FILTER = {
 type Grant = Omit<CompiledOperationGrant, 'path'>;
 
 // `reads` counts how many times the compiled policy is read, and `ruleOn` is
-// the type the policy's one rule targets.
+// the type the policy's one rule targets. An `uncompilable` policy is one that
+// did not compile as a whole, which has no rules whatever it was written with.
+// `lookups` records each type whose definition is looked up.
 function stubCore(
   grants: Grant[],
   {
     reads = { policy: 0 },
     ruleOn = SCHEDULE,
+    uncompilable,
     lookups = [],
   }: {
     reads?: { policy: number };
     ruleOn?: ResolvedCodeRef;
+    uncompilable?: true;
     lookups?: string[];
   } = {},
 ): OperationCore {
@@ -198,6 +203,7 @@ function stubCore(
       },
     ],
     issues: [],
+    ...(uncompilable ? { rules: [], uncompilable } : {}),
   };
   return {
     realmURL: REALM,
@@ -323,6 +329,31 @@ module(basename(import.meta.filename), function () {
       { kind: 'scoped', filters: [scoped(OWN)] },
       'a grant on `query` is',
     );
+  });
+
+  test('a policy that did not compile refuses the query as the gate refuses, before any type is judged', async function (assert) {
+    let core = stubCore([{ operation: 'query', filter: OWN_FILTER }], {
+      uncompilable: true,
+    });
+    let refusedAsTheGateRefuses = (e: unknown) =>
+      isOperationFailure(e) &&
+      e.error.status === 500 &&
+      e.error.title === 'Policy unavailable';
+    for (let [types, what] of [
+      [[SCHEDULE], 'a type the realm resolves'],
+      [[ELSEWHERE], 'a type it cannot, which would otherwise be denied'],
+      [[SCHEDULE, NOTICE], 'several types'],
+    ] as [CodeRef[], string][]) {
+      await assert.rejects(
+        policyQueryScope(core, {
+          operation: 'query',
+          types,
+          principal: { kind: 'user', user: ACTOR },
+        }),
+        refusedAsTheGateRefuses,
+        `refused with the gate's 500 for ${what}`,
+      );
+    }
   });
 
   test('a search on no type is denied, and reads no policy to decide it', async function (assert) {

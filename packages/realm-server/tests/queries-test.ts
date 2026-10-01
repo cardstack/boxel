@@ -8,6 +8,7 @@ import {
   archiveRealm,
   fetchAllRealmsWithOwners,
   fetchArchivedRealmsForOwner,
+  fetchRealmOwnerUsername,
   fetchUserPermissions,
   insertPermissions,
   isRealmArchived,
@@ -365,6 +366,55 @@ module(basename(import.meta.filename), function () {
         ownerByRealm.get(publishedRealmURL),
         'realm/published-only',
         'uses published realm owner when source owner is missing',
+      );
+    });
+
+    test("one realm's owner is the one the listing of every realm gives it", async function (assert) {
+      const ownedRealmURL = 'http://example.com/owned/';
+      const sourceRealmURL = 'http://example.com/source/';
+      const publishedRealmURL = 'http://example.com/published/';
+      const publishedOnlyRealmURL = 'http://example.com/published-only/';
+
+      await insertPermissions(dbAdapter, new URL(ownedRealmURL), {
+        '@realm/owned': ['read', 'realm-owner'],
+        '@owner:localhost': ['read', 'realm-owner'],
+      });
+      await insertPermissions(dbAdapter, new URL(sourceRealmURL), {
+        '@owner:localhost': ['read', 'realm-owner'],
+      });
+      await insertPublishedRealm({ sourceRealmURL, publishedRealmURL });
+      await insertPublishedRealm({
+        sourceRealmURL: 'http://example.com/missing-source/',
+        publishedRealmURL: publishedOnlyRealmURL,
+        ownerUsername: '@realm/published-only',
+      });
+
+      let listed = new Map(
+        (await fetchAllRealmsWithOwners(dbAdapter)).map((owner) => [
+          owner.realm_url,
+          owner.owner_username,
+        ]),
+      );
+      for (let [realmURL, expected, why] of [
+        [ownedRealmURL, 'owner', 'its human owner, not its bot'],
+        [publishedRealmURL, 'owner', "a published realm's source owner"],
+        [
+          publishedOnlyRealmURL,
+          'realm/published-only',
+          'the owner its registry row records',
+        ],
+      ]) {
+        assert.strictEqual(listed.get(realmURL), expected, `listed: ${why}`);
+        assert.strictEqual(
+          await fetchRealmOwnerUsername(dbAdapter, realmURL),
+          expected,
+          `alone: ${why}`,
+        );
+      }
+      assert.strictEqual(
+        await fetchRealmOwnerUsername(dbAdapter, 'http://example.com/nobody/'),
+        undefined,
+        'and a realm neither names an owner for has none',
       );
     });
   });

@@ -10,6 +10,7 @@ import { codeRefFromInternalKey } from '../index.ts';
 import type { IndexedInstanceSource } from '../index-query-engine.ts';
 import { logger } from '../log.ts';
 import { MODULE_SOURCE_FILE_DEF_CODE_REFS } from '../policy-file-def.ts';
+import { PRERENDERED_HTML_FORMATS } from '../prerendered-html-format.ts';
 import { rri } from '../realm-identifiers.ts';
 import { chainType } from './adoption-chain.ts';
 import { carriesBuiltIn } from './dispatch.ts';
@@ -28,6 +29,7 @@ import {
   isDefinitionFreeBaseOperation,
   linkStrategyOf,
   policyIssueSeverity,
+  unshareableFormatsOf,
   type BaseOperation,
   type OperationQueryFilterTemplate,
   type PolicyIssue,
@@ -188,9 +190,15 @@ export interface PolicyCompileEnvironment {
 }
 
 // The environment the cache needs beyond compiling: which card the realm's
-// pointer names right now.
+// pointer names right now, and a way to have that card indexed again.
 export interface RealmPolicyCacheEnvironment extends PolicyCompileEnvironment {
   policyCard(): Promise<string | undefined>;
+  // Runs the card's index visit again: an index of `file`, the file the card
+  // is stored in, in the realm at `realmURL` that holds it, which need not be
+  // the realm the policy governs. Resolves once that visit has settled,
+  // whether or not it succeeded. Asked only of a card whose latest visit was
+  // withheld.
+  revisitCard(file: string, realmURL: string): Promise<void>;
 }
 
 // The per-realm compiled-policy cache.
@@ -219,6 +227,15 @@ export interface RealmPolicyCacheEnvironment extends PolicyCompileEnvironment {
 // mounted. A policy card or a type's module usually lives in a realm other than
 // the one it governs, so this is what reaches an entry when that realm's index
 // moves.
+//
+// A card whose latest index visit was withheld compiles to no rules, and
+// nothing else would visit it again. Its row reads as healthy, so no error on
+// it asks for a reindex, and it stays as it is until the card, a module it
+// depends on, or its realm is next indexed. So the cache asks for that visit
+// itself, whenever it reads such a row (see `#revisitWithheld`). The visit's
+// commit moves the index of the realm holding the card, which reaches the
+// cache as any move does, and the refresh that follows compiles what the card
+// holds now.
 export class RealmPolicyCache {
   #env: RealmPolicyCacheEnvironment;
   #current: Compilation | undefined;
@@ -237,9 +254,12 @@ export class RealmPolicyCache {
   // When `#current` was last known to match the index: the moment the read
   // that built or revalidated it began.
   #validatedAt = 0;
-  // How often compiling and revalidating actually happen, for tests that
-  // assert on it rather than on the result alone.
-  readonly stats = { compiles: 0, revalidations: 0 };
+  // The latest visit this cache asked for of a card whose visit was withheld.
+  // `settledAt` is unset while the visit runs.
+  #revisit: { card: string; settledAt?: number } | undefined;
+  // How often compiling, revalidating and asking for a card's visit actually
+  // happen, for tests that assert on it rather than on the result alone.
+  readonly stats = { compiles: 0, revalidations: 0, revisits: 0 };
 
   constructor(env: RealmPolicyCacheEnvironment) {
     this.#env = env;
@@ -292,8 +312,10 @@ export class RealmPolicyCache {
     this.#current = undefined;
     this.#stale = false;
     this.#joinable = undefined;
+    this.#revisit = undefined;
     this.stats.compiles = 0;
     this.stats.revalidations = 0;
+    this.stats.revisits = 0;
   }
 
   #refresh(card: string): Promise<CompiledRealmPolicy> {
@@ -341,6 +363,9 @@ export class RealmPolicyCache {
       );
       logIssues(card, compilation.compiled.issues);
     }
+    if (row?.failureWithheld) {
+      this.#revisitWithheld(card, row);
+    }
     // Kept only when no move landed under one of its inputs while this ran. A
     // kept entry is answered from memory until the next move, so keeping one
     // built from a read that a later move superseded would keep serving what
@@ -354,7 +379,56 @@ export class RealmPolicyCache {
     }
     return compilation.compiled;
   }
+
+  // Asks for a visit of `card`, whose latest index visit was withheld. Not
+  // awaited: the read that found the row is answered with the refusal it
+  // compiled to, and the visit's outcome reaches the cache as an index move.
+  //
+  // One visit at a time, so a read landing while one runs asks for none. And
+  // once one settles, none is asked for again until
+  // `WITHHELD_REVISIT_COOLDOWN_MS` has passed. A visit that is withheld again
+  // moves the index too, and the refresh that move starts would otherwise ask
+  // for the next visit at once, and so on for as long as the cause lasts.
+  #revisitWithheld(card: string, row: IndexedInstanceSource): void {
+    let last = this.#revisit;
+    if (
+      last?.card === card &&
+      (last.settledAt === undefined ||
+        now() - last.settledAt < WITHHELD_REVISIT_COOLDOWN_MS)
+    ) {
+      return;
+    }
+    let revisit: { card: string; settledAt?: number } = { card };
+    this.#revisit = revisit;
+    this.stats.revisits++;
+    this.#env
+      .revisitCard(row.url, row.realmURL)
+      .catch((e: unknown) => {
+        log.warn(
+          `the policy card ${card} could not be indexed again after its latest visit was withheld: ${e}`,
+        );
+      })
+      .finally(() => {
+        revisit.settledAt = now();
+      });
+  }
 }
+
+// How long after a visit the cache asked for settles before it asks for
+// another, while the card's visit is still withheld.
+//
+// The first is asked for as soon as the row is read: a gateway failure has
+// usually passed by the time its row is written, so a visit made then usually
+// succeeds. A visit that is withheld again met a cause that outlasted it, such
+// as a stale host shell, which lasts as long as a deploy overlap. Asking at the
+// rate the cache revalidates would spend a visit every few seconds for every
+// realm the card governs, in every process, for as long as that lasts. This
+// asks about once a minute while the cache is read or its inputs move, so once
+// the cause clears the policy is back within about a minute, plus however long
+// the visit waits in the queue and runs. An ask that joins a pass which had
+// already visited the card settles having visited nothing, and waits the same
+// minute (see `Realm#revisitPolicyCard`).
+const WITHHELD_REVISIT_COOLDOWN_MS = 60_000;
 
 // One line per compile for the issues that left part of the policy admitting
 // nothing, which is an operator's problem as much as an author's, and a
@@ -638,8 +712,8 @@ async function compilePolicy(
   // Refused until a visit of the card succeeds. The row holds what an earlier
   // visit read, and nothing on it says whether the card has changed since, so
   // compiling it could serve a grant an administrator has just removed. The
-  // policy stays refused until something re-visits the card: an edit to it,
-  // a change to a module it depends on, or a reindex of its realm.
+  // cache that reads such a row asks for the card to be visited again, and
+  // the policy stays refused until a visit succeeds.
   if (row.failureWithheld) {
     return unreadable(
       'policy-card-unloadable',
@@ -953,6 +1027,17 @@ async function compileDocument(
         );
         continue;
       }
+      // An operation that failed to lower is refused for every caller who
+      // invokes it, so a grant of one would admit nothing. Recorded, so the
+      // author learns it here and not only from the type's definition.
+      if (granted.invalid) {
+        issue(
+          'grants-invalid-operation',
+          `${grantPath}.operation`,
+          `${resolved.name} declares \`${operation}\`, but the declaration failed to lower, so invoking it is refused and the grant admits nothing. The declaration's issues are on ${resolved.name}'s definition`,
+        );
+        continue;
+      }
       // Authorization infrastructure is outside the grant model, and the gate
       // refuses it whatever a compiled policy holds: an operation flagged
       // non-grantable, and any operation on a policy card. So a grant of either
@@ -1224,6 +1309,10 @@ async function compileDocument(
 // `read` grant's strategy is the declaration it invokes, the granted type's
 // own `read` or a named operation built on it. A named query's is the query's.
 // An ad-hoc `query` has no declaration, so nothing narrows what it serves.
+// A named query whose `html` declares every format unshareable serves its
+// rows data-only, so it serves no rendering. A query's `html` cannot say
+// which of the formats it shares draw a linked card, so sharing any format
+// counts as serving a rendering.
 //
 // Undefined for a grant that serves no rows' closure: one on any other base,
 // since a write's echo is the card and a stored-bytes read serves bytes, and a
@@ -1248,7 +1337,9 @@ function reachLane(
       ? {
           governedBy: 'named-query',
           links: linkStrategyOf(declared.links),
-          rendered: true,
+          rendered:
+            unshareableFormatsOf(declared.html).length <
+            PRERENDERED_HTML_FORMATS.length,
         }
       : { governedBy: 'ad-hoc-query', links: 'full', rendered: true };
   }
@@ -1328,7 +1419,9 @@ function splitTypeKey(key: string): ResolvedCodeRef | undefined {
 function grantedOperation(
   definition: Definition,
   name: string,
-): { base: BaseOperation; nonGrantable: boolean } | undefined {
+):
+  | { base: BaseOperation; nonGrantable: boolean; invalid: boolean }
+  | undefined {
   let declared = isDefinitionFreeBaseOperation(name)
     ? undefined
     : ownOperation(definition, name);
@@ -1336,10 +1429,11 @@ function grantedOperation(
     return {
       base: declared.base,
       nonGrantable: declared.nonGrantable === true,
+      invalid: declared.invalid === true,
     };
   }
   return carriesBuiltIn(definition.type, name)
-    ? { base: name as BaseOperation, nonGrantable: false }
+    ? { base: name as BaseOperation, nonGrantable: false, invalid: false }
     : undefined;
 }
 

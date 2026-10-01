@@ -285,17 +285,7 @@ export async function fetchAllRealmsWithOwners(
 
   let ownerByRealm = new Map<string, string>();
   for (const [realmUrl, owners] of realmOwners) {
-    let finalOwner = owners[0];
-
-    // If multiple owners, prefer non-bot owner
-    if (owners.length > 1) {
-      const nonBotOwner = owners.find((owner) => !owner.startsWith('@realm/'));
-      if (nonBotOwner) {
-        finalOwner = nonBotOwner;
-      }
-    }
-
-    ownerByRealm.set(realmUrl, getMatrixUsername(finalOwner));
+    ownerByRealm.set(realmUrl, getMatrixUsername(preferredOwner(owners)!));
   }
 
   // Published realms may not have realm_user_permissions entries in older data.
@@ -325,4 +315,55 @@ export async function fetchAllRealmsWithOwners(
     realm_url,
     owner_username,
   }));
+}
+
+// The username the realm at `realmURL` is indexed as, by the rule
+// `fetchAllRealmsWithOwners` applies to every realm: the owner its permissions
+// name, and for a published realm whose permissions name none, its source
+// realm's owner, or failing that the owner its registry row records.
+// Undefined for a realm with no owner either way.
+export async function fetchRealmOwnerUsername(
+  dbAdapter: DBAdapter,
+  realmURL: string,
+): Promise<string | undefined> {
+  let owner = await ownerByPermissions(dbAdapter, realmURL);
+  if (owner) {
+    return getMatrixUsername(owner);
+  }
+  let [published] = (await query(dbAdapter, [
+    `SELECT source_url, owner_username FROM realm_registry WHERE kind = 'published' AND url =`,
+    param(realmURL),
+  ])) as { source_url: string | null; owner_username: string | null }[];
+  if (!published) {
+    return undefined;
+  }
+  let sourceOwner = published.source_url
+    ? await ownerByPermissions(dbAdapter, published.source_url)
+    : undefined;
+  if (sourceOwner) {
+    return getMatrixUsername(sourceOwner);
+  }
+  return published.owner_username
+    ? getMatrixUsername(published.owner_username)
+    : undefined;
+}
+
+async function ownerByPermissions(
+  dbAdapter: DBAdapter,
+  realmURL: string,
+): Promise<string | undefined> {
+  let rows = (await query(dbAdapter, [
+    `SELECT username FROM realm_user_permissions WHERE realm_owner = true AND realm_url =`,
+    param(realmURL),
+  ])) as { username: string }[];
+  return preferredOwner(rows.map(({ username }) => username));
+}
+
+// Of the users a realm's permissions name as its owner, the one it is indexed
+// as: its human owner, where the realm's bot owns it too.
+function preferredOwner(owners: string[]): string | undefined {
+  if (owners.length > 1) {
+    return owners.find((owner) => !owner.startsWith('@realm/')) ?? owners[0];
+  }
+  return owners[0];
 }

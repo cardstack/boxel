@@ -61,6 +61,7 @@ const type = (module: string, name: string) => ({
 });
 const CLASSROOM = type('classroom', 'Classroom');
 const IDS_CLASSROOM = type('classroom', 'IdsClassroom');
+const BROKEN_CLASSROOM = type('classroom', 'BrokenClassroom');
 const HONORS_BOARD = type('classroom', 'HonorsBoard');
 const EXCURSION = type('classroom', 'Excursion');
 const LEDGER = type('classroom', 'Ledger');
@@ -89,7 +90,8 @@ function studentModule({ withGuardian }: { withGuardian: boolean }) {
 
 // `Classroom` links to its students, who link to their guardians. Its two
 // named queries differ only in what their `links` declares. `IdsClassroom`
-// has the same links, and narrows its own `read`.
+// has the same links, and narrows its own `read`. `BrokenClassroom` has them
+// too, and declares a query that fails to lower.
 //
 // `HonorsBoard` reaches students only through a query-backed field, and
 // `Excursion` reaches guardians only through a field it contains. `Ledger`
@@ -123,10 +125,39 @@ const CLASSROOM_MODULE = `
       query: allClassrooms(),
       links: 'ids',
     };
+    @operation static listDataOnly = {
+      base: 'query',
+      query: allClassrooms(),
+      links: 'ids',
+      html: {
+        embedded: 'unshareable',
+        fitted: 'unshareable',
+        atom: 'unshareable',
+        head: 'unshareable',
+        isolated: 'unshareable',
+      },
+    };
+    @operation static listFittedShared = {
+      base: 'query',
+      query: allClassrooms(),
+      links: 'ids',
+      html: { isolated: 'unshareable', embedded: 'unshareable' },
+    };
   }
 
   export class IdsClassroom extends Classroom {
     @operation static read = { base: 'read', links: 'ids' };
+  }
+
+  // Exported by no module, so a query naming it has no code ref to store and
+  // fails to lower.
+  class Unlisted extends CardDef {}
+
+  export class BrokenClassroom extends Classroom {
+    @operation static listUnlisted = {
+      base: 'query',
+      query: { filter: { type: () => Unlisted } },
+    };
   }
 
   export class HonorsBoard extends CardDef {
@@ -609,6 +640,79 @@ module(basename(import.meta.filename), function (hooks) {
       ),
       [],
       'a read serves no rendering, so it records none',
+    );
+  });
+
+  test('a named query whose html withholds every format serves no rendering, and one withholding some is told to withhold them all', async function (assert) {
+    let policy = await compile([rule(CLASSROOM, 'listDataOnly')]);
+    assert.deepEqual(
+      reached(policy),
+      [],
+      'its rows are served data-only and with ids, so neither lane reaches the students',
+    );
+
+    policy = await compile([rule(CLASSROOM, 'listFittedShared')]);
+    assert.deepEqual(
+      reached(policy).map(({ code, via }) => ({ code, via })),
+      [
+        { code: 'render-reaches-ungranted-type', via: 'students' },
+        { code: 'render-reaches-ungranted-type', via: 'students.guardian' },
+      ],
+      'a format it still shares can be rendered with its links drawn',
+    );
+    let [message] = reachIssues(policy).map((issue) => issue.message);
+    assert.true(
+      message.includes(
+        "mark every page format `unshareable` in the `listFittedShared` query's `html`",
+      ),
+      `it names the query's html as the place to withhold them: ${message}`,
+    );
+
+    policy = await compile([rule(CLASSROOM, 'query')]);
+    let adHoc = reachIssues(policy).find(
+      ({ code }) => code === 'render-reaches-ungranted-type',
+    );
+    assert.true(
+      adHoc?.message.includes(
+        'grant a named query whose `html` marks every page format `unshareable`, instead of the general `query`',
+      ),
+      `an ad-hoc query's fix is a named query, since nothing narrows it: ${adHoc?.message}`,
+    );
+  });
+
+  test('a grant of an operation that failed to lower is recorded and left out, so it records no reach', async function (assert) {
+    let policy = await compile([rule(BROKEN_CLASSROOM, 'listFull')]);
+    assert.deepEqual(
+      reached(policy).map(({ code }) => code),
+      [
+        'grant-reaches-ungranted-type',
+        'grant-reaches-ungranted-type',
+        'render-reaches-ungranted-type',
+        'render-reaches-ungranted-type',
+      ],
+      'a query the type serves reaches the students on both lanes',
+    );
+
+    policy = await compile([rule(BROKEN_CLASSROOM, 'listUnlisted')]);
+    assert.deepEqual(
+      policy.issues.map(({ code, path, severity }) => ({
+        code,
+        path,
+        severity,
+      })),
+      [
+        {
+          code: 'grants-invalid-operation',
+          path: 'rules[0].grants[0].operation',
+          severity: 'inactive',
+        },
+      ],
+      'invoking the query is refused for every caller, so the grant is recorded as admitting nothing and hands nothing over',
+    );
+    assert.deepEqual(
+      policy.rules.flatMap((compiled) => compiled.grants),
+      [],
+      'the grant is left out of the compiled rules',
     );
   });
 

@@ -42,8 +42,9 @@ import type { LinkStrategy } from '@cardstack/base/operations';
 // - The rendering. A search row carries its prerendered HTML, and a render
 //   draws the card's links whatever strategy the document is served under,
 //   and answers a query-backed field wherever a template reads one. So a
-//   `query` grant is walked a second time over its whole closure. A `read`
-//   serves a document and no rendering.
+//   `query` grant is walked a second time over its whole closure, unless it
+//   is a named query whose `html` declares every format unshareable, which
+//   serves its rows data-only. A `read` serves a document and no rendering.
 //
 // A reached type counts as granted when a rule on it, or on a type it
 // descends from, keeps a grant that lets a caller read one: a `read`, a
@@ -396,7 +397,14 @@ function renderingMessage(
   let { operation } = reach.grant;
   let from = reach.rule.targetType.name;
   let to = reached.codeRef.name;
-  return `the pages \`${operation}\` shows for ${from} cards can display the ${to} cards linked through \`${reached.via.join('.')}\`, but ${ungrantedClause(to, kind, anyType)}. A card's page displays its linked cards whatever \`links\` is set to, so changing \`links\` won't keep them off the page. To keep them off, change ${from}'s templates so they don't display them${deliberately(to, kind, anyType)}`;
+  return `the pages \`${operation}\` shows for ${from} cards can display the ${to} cards linked through \`${reached.via.join('.')}\`, but ${ungrantedClause(to, kind, anyType)}. A card's page displays its linked cards whatever \`links\` is set to, so changing \`links\` won't keep them off the page. To keep them off, ${withholdingFix(reach)}, or change ${from}'s templates so they don't display them${deliberately(to, kind, anyType)}`;
+}
+
+function withholdingFix(reach: ReachingGrant): string {
+  let { operation } = reach.grant;
+  return reach.governedBy === 'named-query'
+    ? `mark every page format \`unshareable\` in the \`${operation}\` query's \`html\` (this check can't tell which formats display them, so any format left shareable keeps this warning)`
+    : `grant a named query whose \`html\` marks every page format \`unshareable\`, instead of the general \`query\`, which can't be limited this way`;
 }
 
 function ungrantedClause(
