@@ -1,0 +1,185 @@
+name: Lint Catalog
+
+# The catalog (cardstack/boxel-catalog) type-checks and lints its cards against
+# boxel, so a platform change can break the catalog's lint while everything in
+# boxel passes. This lints the catalog against each change, the way the
+# catalog's own CI Lint does, and fails on the errors the change introduces,
+# including the ones it would leave catalog main with behind a paired catalog
+# pull request that isn't ready to follow it. See packages/catalog/README.md.
+#
+# A pull request declares its catalog pair in its description, so editing the
+# description re-runs this.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+    # Observability-only changes skip linting, as they do in CI Lint.
+    paths-ignore:
+      - "packages/observability/**"
+
+# Pull requests: a new push or description edit cancels the run in progress
+# for the same branch. Pushes to main share one group and never cancel a run in
+# progress, so a burst of merges runs the commit in progress and then the
+# newest. The main group is `push:main` because `:` cannot appear in a branch
+# name, so no pull request's head_ref can land in it.
+concurrency:
+  group: lint-catalog-${{ github.head_ref || (github.event_name == 'push' && github.ref == 'refs/heads/main' && 'push:main') || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  catalog:
+    name: Lint Catalog
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          # A pull request checks out its merge commit, whose first parent is
+          # the base branch the catalog may also be linted against below.
+          fetch-depth: 2
+
+      - uses: ./.github/actions/init
+
+      # The catalog change a pull request depends on, or that follows it, is
+      # the one its description pairs it with (scripts/pairing.ts). Lint that
+      # pull request's head in place of main, and catalog main as well below.
+      - name: Read the catalog pairing
+        id: pairing
+        if: github.event_name == 'pull_request'
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node packages/catalog/scripts/pairing.ts \
+            --repository="$GITHUB_REPOSITORY" \
+            --number="$PR_NUMBER" \
+            --counterpart=cardstack/boxel-catalog \
+            --out="$RUNNER_TEMP/catalog-pairing.json"
+          # An open pair this change merges after is what it builds on, and
+          # lands first; otherwise an open pair it merges before is the
+          # catalog fix that follows it.
+          sha=$(jq -r '[.pairs[] | select(.merged | not)]
+            | (map(select(.key == "merges-after")) + map(select(.key == "merges-before")))
+            | .[0].headSha // empty' "$RUNNER_TEMP/catalog-pairing.json")
+          if [ -n "$sha" ]; then
+            echo "catalog_ref=$sha" >> "$GITHUB_OUTPUT"
+            echo "paired=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "catalog_ref=main" >> "$GITHUB_OUTPUT"
+            echo "paired=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: cardstack/boxel-catalog
+          ref: ${{ steps.pairing.outputs.catalog_ref || 'main' }}
+          path: packages/catalog/contents
+
+      # Restore only: the base-branch step below can rebuild boxel-icons from
+      # the base tree, which must not be saved under this change's key.
+      - name: Restore boxel-icons build cache
+        id: icons-cache
+        uses: ./.github/actions/restore-icons-cache
+        with:
+          save: "false"
+      - name: Build Boxel Icons
+        if: steps.icons-cache.outputs.cache-hit != 'true'
+        run: pnpm run build
+        working-directory: packages/boxel-icons
+      # The catalog's CI Lint builds Boxel UI before linting, so its type check
+      # reads Boxel UI's declarations; build it here to check the same thing.
+      - name: Build Boxel UI
+        run: pnpm run build
+        working-directory: packages/boxel-ui
+
+      - name: Lint the catalog against this change
+        id: head
+        working-directory: packages/catalog
+        run: |
+          node scripts/lint-sweep.ts --record="$RUNNER_TEMP/catalog-lint-head.json"
+          echo "errors=$(jq '.diagnostics | length' "$RUNNER_TEMP/catalog-lint-head.json")" >> "$GITHUB_OUTPUT"
+          # The base branch's tree may not have this script.
+          cp scripts/lint-sweep.ts "$RUNNER_TEMP/lint-sweep.ts"
+
+      # A paired change is linted with its catalog pull request's head, but
+      # catalog main is what gets linted against it from its merge until the
+      # catalog pull request's. So lint catalog main against the change too,
+      # then put the paired head back for the base-branch step.
+      - name: Lint catalog main against this change
+        id: main
+        if: steps.pairing.outputs.paired == 'true'
+        working-directory: packages/catalog
+        run: |
+          paired=$(git -C contents rev-parse HEAD)
+          git -C contents fetch --quiet --depth=1 origin main
+          git -C contents checkout --quiet --detach FETCH_HEAD
+          echo "revision=$(git -C contents rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          node scripts/lint-sweep.ts --record="$RUNNER_TEMP/catalog-main-lint-head.json"
+          echo "errors=$(jq '.diagnostics | length' "$RUNNER_TEMP/catalog-main-lint-head.json")" >> "$GITHUB_OUTPUT"
+          git -C contents checkout --quiet --detach "$paired"
+
+      # Errors the catalog also has against the base branch are not this
+      # change's doing: the catalog may already be broken against boxel main.
+      # So when this change's lint finds errors, lint the same catalog revision
+      # against the base branch, and the report counts only the difference.
+      # Catalog main, when it was linted above, gets the same comparison.
+      # A push to main has no base to compare with, so every error counts.
+      - name: Lint the catalog against the base branch
+        id: base
+        if: github.event_name == 'pull_request' && (steps.head.outputs.errors != '0' || (steps.main.outputs.errors || '0') != '0')
+        env:
+          HEAD_ERRORS: ${{ steps.head.outputs.errors }}
+          MAIN_ERRORS: ${{ steps.main.outputs.errors || '0' }}
+          MAIN_REVISION: ${{ steps.main.outputs.revision }}
+        run: |
+          head=$(git rev-parse HEAD)
+          git checkout --detach HEAD^1
+          pnpm install --frozen-lockfile
+          # This change's builds stay in place when the base builds the same.
+          if ! git diff --quiet HEAD "$head" -- packages/boxel-icons packages/boxel-ui pnpm-lock.yaml; then
+            (cd packages/boxel-icons && pnpm run build)
+            (cd packages/boxel-ui && pnpm run build)
+          fi
+          cd packages/catalog
+          if [ "$HEAD_ERRORS" != 0 ]; then
+            node "$RUNNER_TEMP/lint-sweep.ts" --record="$RUNNER_TEMP/catalog-lint-base.json"
+          fi
+          if [ "$MAIN_ERRORS" != 0 ]; then
+            git -C contents checkout --quiet --detach "$MAIN_REVISION"
+            node "$RUNNER_TEMP/lint-sweep.ts" --record="$RUNNER_TEMP/catalog-main-lint-base.json"
+          fi
+
+      # Unpaired, this is catalog main, and errors the change adds to it fail
+      # with how to declare a pair. Paired, this is the catalog pull request's
+      # head, and its errors are for that pull request to fix. A failed catalog
+      # main lint skips the base step, and without its baseline this report
+      # would count errors the catalog already has as new ones.
+      - name: Report catalog lint errors
+        if: ${{ !cancelled() && steps.head.outcome == 'success' && steps.main.outcome != 'failure' && steps.base.outcome != 'failure' }}
+        run: |
+          args=(--report="$RUNNER_TEMP/catalog-lint-head.json")
+          if [ -f "$RUNNER_TEMP/catalog-lint-base.json" ]; then
+            args+=(--baseline="$RUNNER_TEMP/catalog-lint-base.json")
+          fi
+          if [ -f "$RUNNER_TEMP/catalog-pairing.json" ]; then
+            args+=(--pairing="$RUNNER_TEMP/catalog-pairing.json")
+          fi
+          node "$RUNNER_TEMP/lint-sweep.ts" "${args[@]}"
+
+      # Errors a paired change adds to catalog main stay there from its merge
+      # until the catalog pull request's, so they pass only while a catalog
+      # pull request this change merges before is approved, to merge right
+      # after it.
+      - name: Report what this change does to catalog main
+        if: ${{ !cancelled() && steps.main.outcome == 'success' && steps.base.outcome != 'failure' }}
+        run: |
+          args=(--report="$RUNNER_TEMP/catalog-main-lint-head.json" --pairing="$RUNNER_TEMP/catalog-pairing.json")
+          if [ -f "$RUNNER_TEMP/catalog-main-lint-base.json" ]; then
+            args+=(--baseline="$RUNNER_TEMP/catalog-main-lint-base.json")
+          fi
+          node "$RUNNER_TEMP/lint-sweep.ts" "${args[@]}"

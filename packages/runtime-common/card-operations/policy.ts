@@ -1,5 +1,6 @@
 import stableStringify from 'safe-stable-stringify';
 
+import { isResolvedCodeRef } from '../card-document-shape.ts';
 import { now } from '../clock.ts';
 import type { CodeRef, ResolvedCodeRef } from '../code-ref.ts';
 import { computeContentHash } from '../content-hash.ts';
@@ -18,7 +19,14 @@ import {
   readsPathAlike,
 } from './policy-filter.ts';
 import {
+  reachIssues,
+  type ReachingGrant,
+  type ReadableType,
+} from './policy-reach.ts';
+import {
   isDefinitionFreeBaseOperation,
+  linkStrategyOf,
+  policyIssueSeverity,
   type BaseOperation,
   type OperationQueryFilterTemplate,
   type PolicyIssue,
@@ -344,13 +352,7 @@ export class RealmPolicyCache {
       compilation = await compilePolicy(card, row, this.#env, (url) =>
         refresh.inputs.push(url),
       );
-      if (compilation.compiled.issues.length > 0) {
-        log.warn(
-          `the policy ${card} compiled with issues: ${compilation.compiled.issues
-            .map((issue) => `${issue.path || '(card)'}: ${issue.message}`)
-            .join('; ')}`,
-        );
-      }
+      logIssues(card, compilation.compiled.issues);
     }
     if (row?.failureWithheld) {
       this.#revisitWithheld(card, row);
@@ -419,6 +421,32 @@ export class RealmPolicyCache {
 // minute (see `Realm#revisitPolicyCard`).
 const WITHHELD_REVISIT_COOLDOWN_MS = 60_000;
 
+// One line per compile for the issues that left part of the policy admitting
+// nothing, which is an operator's problem as much as an author's, and a
+// quieter line for the warnings on grants that stay live. A policy with
+// deliberate reach records those on every compile, and at `warn` they would
+// read as a policy that is broken.
+function logIssues(card: string, issues: PolicyIssue[]): void {
+  let describe = (issue: PolicyIssue) =>
+    `${issue.path || '(card)'}: ${issue.code}: ${issue.message}`;
+  let inactive = issues.filter((issue) => issue.severity === 'inactive');
+  let warnings = issues.filter((issue) => issue.severity === 'warning');
+  if (inactive.length > 0) {
+    log.warn(
+      `the policy ${card} compiled with issues that leave part of it inactive: ${inactive
+        .map(describe)
+        .join('; ')}`,
+    );
+  }
+  if (warnings.length > 0) {
+    log.info(
+      `the policy ${card} compiled with warnings on grants that stay live: ${warnings
+        .map(describe)
+        .join('; ')}`,
+    );
+  }
+}
+
 // How long an entry is answered from memory without a revalidation, however
 // quiet the signals are. It is the same five seconds the live search cache
 // allows a result whose dependency it cannot see, for the same reason: it is
@@ -471,7 +499,7 @@ interface Compilation {
   row: string;
   // Fingerprints of the definition entries compiling read, keyed by code ref.
   // A missing fingerprint marks a type with no definition.
-  definitions: Map<string, { codeRef: ResolvedCodeRef; fingerprint?: string }>;
+  definitions: Map<string, DefinitionInput>;
   // URLs whose realm's index moving could change what this compiles to.
   inputs: string[];
   // What the governed realm held under each rule type whose grants' filters
@@ -483,6 +511,20 @@ interface Compilation {
   // read.
   heldTypes?: string;
 }
+
+interface DefinitionInput {
+  codeRef: ResolvedCodeRef;
+  fingerprint?: string;
+  // Set for a type only the reach check read. Such a type decides no grant, so
+  // a lookup of it that fails is recorded as `UNREADABLE` rather than failing
+  // the read.
+  diagnostic?: true;
+}
+
+// The fingerprint of a diagnostic type whose lookup failed. It matches no
+// entry, so the revalidation after the type can be read again recompiles, and
+// it matches itself, so revalidating while the lookup still fails does not.
+const UNREADABLE = 'unreadable';
 
 interface Refresh {
   card: string;
@@ -527,8 +569,18 @@ async function stillCurrent(
   if (rowIdentity(row) !== compilation.row) {
     return false;
   }
-  for (let { codeRef, fingerprint } of compilation.definitions.values()) {
-    if ((await fingerprintedEntry(codeRef, env))?.fingerprint !== fingerprint) {
+  for (let {
+    codeRef,
+    fingerprint,
+    diagnostic,
+  } of compilation.definitions.values()) {
+    let current = diagnostic
+      ? await fingerprintedEntry(codeRef, env).then(
+          (found) => found?.fingerprint,
+          () => UNREADABLE,
+        )
+      : (await fingerprintedEntry(codeRef, env))?.fingerprint;
+    if (current !== fingerprint) {
       return false;
     }
   }
@@ -584,6 +636,33 @@ async function fingerprintedEntry(
   };
 }
 
+// The policy card at `card` compiled as it stands, the way a realm naming it
+// compiles it, for a caller that wants to know what the card puts in force
+// without putting it in force: the validate operation. Nothing is cached, and
+// no realm's compiled policy is touched.
+//
+// Answered with every URL compiling read: the card itself, and the module of
+// every type whose definition it looked up. What compiling reports turns on
+// each of them.
+export async function compilePolicyCard(
+  card: string,
+  env: PolicyCompileEnvironment,
+): Promise<CompiledPolicyCard> {
+  let row = await env.readCard(new URL(card));
+  let { compiled, inputs } = await compilePolicy(
+    card,
+    row,
+    env,
+    () => undefined,
+  );
+  return { compiled, reads: inputs };
+}
+
+export interface CompiledPolicyCard {
+  compiled: CompiledRealmPolicy;
+  reads: string[];
+}
+
 async function compilePolicy(
   card: string,
   row: IndexedInstanceSource | undefined,
@@ -598,7 +677,7 @@ async function compilePolicy(
   let rules: CompiledPolicyRule[] = [];
   let cardURL = new URL(card);
   let issue = (code: PolicyIssueCode, path: string, message: string) =>
-    issues.push({ code, path, message });
+    issues.push({ code, path, message, severity: policyIssueSeverity(code) });
   // An error row carries the last good visit's fingerprint forward, as a row
   // whose failure was withheld carries everything forward, so only a row that
   // holds the card's current document says which bytes it describes.
@@ -662,6 +741,44 @@ async function compilePolicy(
   let readDefinition = async (
     codeRef: ResolvedCodeRef,
   ): Promise<Definition | undefined> => (await readType(codeRef))?.definition;
+  // A type the reach check reads, recorded as an input like every other. The
+  // types a closure crosses decide no grant, so one that cannot be read leaves
+  // its branch of the closure unwalked rather than failing the whole policy.
+  // Only a type nothing else read is recorded as diagnostic: one a rule or a
+  // filter read already decides a grant, and fails the read as it would have.
+  let readReachedType = (
+    codeRef: ResolvedCodeRef,
+  ): Promise<{ definition: Definition; types: string[] } | undefined> => {
+    let key = `${codeRef.module}#${codeRef.name}`;
+    if (entries.has(key)) {
+      return readType(codeRef);
+    }
+    let moduleURL = safeURL(codeRef.module, env);
+    if (moduleURL && !inputs.includes(moduleURL)) {
+      inputs.push(moduleURL);
+      onInput(moduleURL);
+    }
+    let read = fingerprintedEntry(codeRef, env).then(
+      (found) => {
+        definitions.set(key, {
+          codeRef,
+          fingerprint: found?.fingerprint,
+          diagnostic: true,
+        });
+        return found;
+      },
+      () => {
+        definitions.set(key, {
+          codeRef,
+          fingerprint: UNREADABLE,
+          diagnostic: true,
+        });
+        return undefined;
+      },
+    );
+    entries.set(key, read);
+    return read;
+  };
   // A grant on a query carries the search filter its predicate compiles to,
   // or has none and records why. No other grant carries one.
   let withFilter = async (
@@ -1028,7 +1145,108 @@ async function compilePolicy(
     }
     rule.grants = grants;
   }
+
+  // What each live grant hands over beyond the cards it names. Read once every
+  // rule has compiled and every filter is settled, since whether a reached
+  // type is granted is a question about the whole policy, and a query grant
+  // left with no filter above admits nothing.
+  let reaching: ReachingGrant[] = [];
+  let readable: ReadableType[] = [];
+  for (let rule of rules) {
+    let entry = await readType(rule.targetType);
+    if (!entry) {
+      continue;
+    }
+    let { definition } = entry;
+    for (let grant of rule.grants) {
+      let lane = reachLane(definition, grant);
+      if (lane) {
+        reaching.push({ rule, grant, definition, ...lane });
+      }
+    }
+    if (rule.grants.some((grant) => letsCallerRead(definition, grant))) {
+      readable.push({
+        codeRef: rule.targetType,
+        definedAs: isResolvedCodeRef(definition.codeRef)
+          ? definition.codeRef
+          : undefined,
+      });
+    }
+  }
+  for (let found of await reachIssues(reaching, readable, {
+    readType: readReachedType,
+    typeKey: (codeRef) => env.typeKey(codeRef),
+    isPolicyCard: (types) => env.isPolicyCard(types),
+  })) {
+    issue(found.code, found.path, found.message);
+  }
   return compiled();
+}
+
+// How a grant hands its rows over: the document it serves under the link
+// strategy that governs it, and whether it serves their prerendered HTML. A
+// `read` grant's strategy is the declaration it invokes, the granted type's
+// own `read` or a named operation built on it. A named query's is the query's.
+// An ad-hoc `query` has no declaration, so nothing narrows what it serves.
+//
+// Undefined for a grant that serves no rows' closure: one on any other base,
+// since a write's echo is the card and a stored-bytes read serves bytes, and a
+// grant that admits nothing.
+function reachLane(
+  definition: Definition,
+  grant: CompiledOperationGrant,
+): Pick<ReachingGrant, 'governedBy' | 'links' | 'rendered'> | undefined {
+  let base = admittingBase(definition, grant);
+  let declared = isDefinitionFreeBaseOperation(grant.operation)
+    ? undefined
+    : ownOperation(definition, grant.operation);
+  if (base === 'read') {
+    return {
+      governedBy: 'read',
+      links: linkStrategyOf(declared?.links),
+      rendered: false,
+    };
+  }
+  if (base === 'query') {
+    return declared
+      ? {
+          governedBy: 'named-query',
+          links: linkStrategyOf(declared.links),
+          rendered: true,
+        }
+      : { governedBy: 'ad-hoc-query', links: 'full', rendered: true };
+  }
+  return undefined;
+}
+
+// Whether a grant lets a caller read the cards it admits: a read of the
+// card's document, a read of its stored source, or a search. A write or a
+// delete hands the caller no card to read.
+function letsCallerRead(
+  definition: Definition,
+  grant: CompiledOperationGrant,
+): boolean {
+  let base = admittingBase(definition, grant);
+  return base === 'read' || base === 'readSource' || base === 'query';
+}
+
+// The base a kept grant runs on, where the grant can admit anything at all.
+// A query grant admits only through the filter it compiled to, since the gate
+// grants no query. Any other grant whose predicate is annotated as reading a
+// snapshot tier admits nothing: the gate reads the stored source alone, so it
+// never evaluates that predicate.
+function admittingBase(
+  definition: Definition,
+  grant: CompiledOperationGrant,
+): BaseOperation | undefined {
+  let granted = grantedOperation(definition, grant.operation);
+  if (!granted) {
+    return undefined;
+  }
+  if (granted.base === 'query') {
+    return grant.filter ? granted.base : undefined;
+  }
+  return grant.where?.snapshot ? undefined : granted.base;
 }
 
 // A type the governed realm holds cards of under a rule's type: the key the
