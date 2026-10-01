@@ -1,13 +1,18 @@
-// Enforces the two rules `BUNDLED_BASE_MODULES` rests on. Both describe what
-// the loader is asked for, which nothing else in the build can see: the bundler
-// resolves a bundled module's imports inside its chunk, so the loader is never
-// asked for them and never learns they exist.
+// Enforces the one rule `BUNDLED_BASE_MODULES` rests on: the set is closed
+// under imports. Nothing else in the build can see this, because the bundler
+// resolves a bundled module's imports inside its chunk and the loader is never
+// asked for them.
 //
-// Neither rule fails loudly when broken. A closure break leaves two copies of a
-// class, which disagree only where something compares them. An attribution
-// break leaves a class the loader does not name, and a code ref for it then
-// names the field it is held as instead of the module that declares it — which
-// still resolves, so only a caller that reads the ref as data is wrong.
+// It does not fail loudly when broken. A module reachable from a bundled one
+// but missing from the table is compiled into that chunk AND served by the
+// realm, leaving two copies of each class it declares, which disagree only
+// where something compares them.
+//
+// Attribution used to need rules here too — which module a class's code ref
+// names depended on what the loader happened to be asked for first. It does
+// not any more: a bundled module publishes the classes it declares as it is
+// evaluated, and the loader reads that before its own record, so a class is
+// named by its declarer whatever the serving order.
 import { readdirSync, readFileSync, existsSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -16,18 +21,6 @@ const hostDir = join(dirname(fileURLToPath(import.meta.url)), '..');
 const baseDir = join(hostDir, '..', 'base');
 const tablePath = join(hostDir, 'app', 'lib', 'bundled-base.ts');
 const SKIP_DIRS = new Set(['node_modules', 'scripts', 'types', 'tests']);
-
-// Base modules a card author imports by identifier. The loader is asked for
-// these, so the classes they declare are named however they are reached.
-//
-// This is a claim about the public surface, not something the repo can prove: a
-// card in any realm may import any base module, and nothing here sees those
-// realms. Widen it deliberately — an entry added to quiet this check asserts
-// that card code names the module, and is wrong if it does not.
-//
-// It holds only for a loader some card has already made import the module, so
-// it is the weakest of the exemptions and the last one to reach for.
-const NAMED_BY_CARD_CODE = new Set(['card-api', 'skill']);
 
 // Read source with comments blanked, so prose that looks like a specifier is
 // not taken for one. A comment is not a regular language — `/*` appears inside
@@ -141,12 +134,7 @@ function readTable() {
     ...body.matchAll(/^ {2}(?:'([^']+)'|([A-Za-z_$][\w$-]*)): \(\) =>/gm),
   ].map((m) => m[1] ?? m[2]);
 
-  let exceptionsBlock = src.slice(src.indexOf('FETCHED_RE_EXPORTS'));
-  exceptionsBlock = exceptionsBlock.slice(0, exceptionsBlock.indexOf(']'));
-  let exceptions = new Set(
-    [...exceptionsBlock.matchAll(/'([^']+)'/g)].map((m) => m[1]),
-  );
-  return { table: new Set(names), exceptions };
+  return new Set(names);
 }
 
 // `import { A, B as C } from './x'` and `import D from './x'`, mapping each
@@ -156,25 +144,6 @@ const IMPORT_STATEMENT =
   /(?:^|\n)\s*import\s+(?!type\s)([^;'"]*?)\s*from\s*['"]([^'"]+)['"]/g;
 const RUNTIME_IMPORT =
   /(?:^|\n)\s*(?:import|export)\s+(?!type\s)(?:[^;'"]*?\sfrom\s*)?['"]([^'"]+)['"]/g;
-// A class held as a link. `linksTo(() => Foo)` defers the reference; both
-// spellings name the same class.
-//
-// Only links. A contained value is built from the field that holds it, so the
-// field itself names the class, and the value deserializes, renders and round
-// trips whatever the loader knows. A link's type is read as data instead: it is
-// the filter a chooser searches by, so a ref that names the holding field
-// rather than the declaring module asks for the wrong type.
-const FIELD_USE =
-  /\b(?:linksTo|linksToMany)\s*\(\s*(?:\(\)\s*=>\s*)?([A-Za-z_$][\w$]*)/g;
-
-// `identifyCard(Foo)` asks for a class's code ref by name, which is the same
-// question a link's type asks and has the same answer: the module the loader
-// was asked for. A bundled module calling it on a class another bundled module
-// declares gets undefined, since the import between them never reaches the
-// loader. Reading a class's own identity — `identifyCard(this.card)`,
-// `identifyCard(model.constructor)` — asks about a value, not an import, so
-// only a bare imported name counts here.
-const IDENTIFY_USE = /\bidentifyCard\s*\(\s*([A-Za-z_$][\w$]*)\s*[,)]/g;
 
 // Which base module each imported name comes from, keyed by the local name and
 // carrying the name the declaring module exports it under — `import { X as Y }`
@@ -216,9 +185,8 @@ function importOrigins(code, file) {
 }
 
 function main() {
-  let { table, exceptions } = readTable();
+  let table = readTable();
   let closureViolations = [];
-  let identityHazards = [];
 
   for (let name of table) {
     let file = fileFor(name);
@@ -230,41 +198,18 @@ function main() {
 
     for (let match of code.matchAll(RUNTIME_IMPORT)) {
       let target = baseTargetOf(match[1], file);
-      if (!target || table.has(target) || exceptions.has(target)) {
+      if (!target || table.has(target)) {
         continue;
       }
       closureViolations.push(`${name} imports ${target}`);
     }
-
-    let origin = importOrigins(code, file);
-
-    let uses = [
-      ...[...code.matchAll(FIELD_USE)].map((m) => ({ referenced: m[1] })),
-      ...[...code.matchAll(IDENTIFY_USE)].map((m) => ({ referenced: m[1] })),
-    ];
-    for (let use of uses) {
-      let declaredIn = origin.get(use.referenced)?.module;
-      if (
-        !declaredIn ||
-        declaredIn === name ||
-        !table.has(declaredIn) ||
-        NAMED_BY_CARD_CODE.has(declaredIn)
-      ) {
-        continue;
-      }
-      identityHazards.push(
-        `${name} names ${use.referenced} from ${declaredIn}`,
-      );
-    }
   }
 
   let closure = [...new Set(closureViolations)].sort();
-  let identity = [...new Set(identityHazards)].sort();
 
-  if (closure.length === 0 && identity.length === 0) {
+  if (closure.length === 0) {
     console.log(
-      `ok: ${table.size} bundled base modules are closed under imports, ` +
-        `and name no class the loader is never asked for`,
+      `ok: ${table.size} bundled base modules are closed under imports`,
     );
     return;
   }
@@ -275,29 +220,9 @@ function main() {
         `The bundler compiles it into the chunk anyway, and the realm still serves ` +
         `it, so card code importing it by identifier gets a second copy whose ` +
         `classes do not match.\n` +
-        `Add it to the table, or — if its whole content is a re-export — to ` +
-        `FETCHED_RE_EXPORTS.\n`,
+        `Add it to the table.\n`,
     );
     for (let line of closure) {
-      console.error(`  ${line}`);
-    }
-  }
-
-  if (identity.length > 0) {
-    console.error(
-      `\n${identity.length} bundled module(s) name a class another bundled ` +
-        `module declares.\n` +
-        `A class is named only when the loader is asked for the module ` +
-        `declaring it, and one bundled module asking for another is resolved ` +
-        `inside the chunk unless the module publishes what it declares. A ` +
-        `link's type and an identifyCard call both read that name as data, ` +
-        `and a chooser filters on it.\n` +
-        `Leave the holder out of the table — a fetched holder imports the ` +
-        `declarer through the loader, which is what names it — or, if card ` +
-        `code names the declarer by identifier, add it to NAMED_BY_CARD_CODE ` +
-        `in this script.\n`,
-    );
-    for (let line of identity) {
       console.error(`  ${line}`);
     }
   }

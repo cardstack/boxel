@@ -160,11 +160,11 @@ module('Integration | serialization | RRI form audit', function (hooks) {
       'FieldDef module is RRI form',
     );
 
-    // `packages/base/string.ts` is a re-export — `export default StringField`
-    // pointing at the class defined in card-api.gts. The Loader's identity
-    // capture sees card-api first (CardDef et al. are imported together),
-    // so StringField's recorded identity is the card-api named export,
-    // not the string-module default.
+    // `packages/base/string.gts` is a re-export — `export default StringField`
+    // pointing at the class defined in card-api.gts. A class is identified by
+    // the module that declares it, not by one that re-exports it, so
+    // StringField's identity is the card-api named export rather than the
+    // string-module default.
     let stringFieldRef = Loader.identify(StringField)!;
     assert.strictEqual(stringFieldRef.name, 'StringField', 'StringField name');
     assert.strictEqual(

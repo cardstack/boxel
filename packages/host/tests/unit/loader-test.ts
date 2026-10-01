@@ -716,7 +716,7 @@ module('Unit | loader', function (hooks) {
       StringField,
     });
 
-    throwIfFetch.shimModule(`${baseRealm.url}string.ts`, {
+    throwIfFetch.shimModule(`${baseRealm.url}string.gts`, {
       default: StringField,
     });
 
