@@ -26,9 +26,7 @@ const SKIP_DIRS = new Set(['node_modules', 'scripts', 'types', 'tests']);
 // that card code names the module, and is wrong if it does not.
 //
 // It holds only for a loader some card has already made import the module, so
-// it is the weakest of the exemptions and the last one to reach for. A
-// superclass does not need it at all: that case is decided by what the
-// subclass is, not by who imports the parent. See `isFieldClass`.
+// it is the weakest of the exemptions and the last one to reach for.
 const NAMED_BY_CARD_CODE = new Set(['card-api', 'skill']);
 
 // Read source with comments blanked, so prose that looks like a specifier is
@@ -178,16 +176,6 @@ const FIELD_USE =
 // only a bare imported name counts here.
 const IDENTIFY_USE = /\bidentifyCard\s*\(\s*([A-Za-z_$][\w$]*)\s*[,)]/g;
 
-// `class X extends Y`. An adoption-chain walk asks each level of the prototype
-// chain for its code ref and stops at the first it cannot name, so a class is
-// only as reachable as its least-named ancestor. Serving the subclass does not
-// help: the loader is asked for the module a value adopts from, and that
-// module's own import of its superclass is resolved inside the chunk. A
-// fetched module never has this problem, because evaluating it loads what it
-// extends first — which is exactly what bundling removes.
-const EXTENDS_USE =
-  /\bclass\s+([A-Za-z_$][\w$]*)\s+extends\s+([A-Za-z_$][\w$]*)/g;
-
 // Which base module each imported name comes from, keyed by the local name and
 // carrying the name the declaring module exports it under — `import { X as Y }`
 // is looked up in the declarer as X, not Y.
@@ -227,82 +215,10 @@ function importOrigins(code, file) {
   return origin;
 }
 
-// Every base module's classes as `module#class -> what it extends`. Built over
-// all of base, not only the table: a chain can pass through a module that is
-// not bundled.
-function classIndex() {
-  let index = new Map();
-  let defaultAliases = new Map();
-  for (let name of baseModules()) {
-    let file = fileFor(name);
-    if (!file) {
-      continue;
-    }
-    let code = withoutComments(readFileSync(file, 'utf8'));
-    let origin = importOrigins(code, file);
-    let defaultExport = code.match(
-      /\bexport\s+default\s+(?:abstract\s+)?class\s+([A-Za-z_$][\w$]*)/,
-    );
-    if (defaultExport) {
-      defaultAliases.set(`${name}#default`, `${name}#${defaultExport[1]}`);
-    }
-    for (let match of code.matchAll(EXTENDS_USE)) {
-      let from = origin.get(match[2]);
-      index.set(`${name}#${match[1]}`, {
-        parent: from ? from.name : match[2],
-        module: from ? from.module : name,
-      });
-    }
-  }
-  for (let [alias, real] of defaultAliases) {
-    let entry = index.get(real);
-    if (entry) {
-      index.set(alias, entry);
-    }
-  }
-  return index;
-}
-
-// Whether a class is a FieldDef. Plenty of things walk a field's ancestry —
-// code mode does, through `CardTypeService.toType` and
-// `CodeSemanticsService` — but those go through `getAncestor`, which registers
-// an `ancestorOf` local identity as it climbs, so the level above a bundled
-// field answers with a ref relative to it rather than with undefined.
-//
-// The walks that truncate are the ones that climb with a raw prototype hop and
-// stop at the first level `identifyCard` cannot name: `routes/render/meta.ts`,
-// the file-def extractor, and the definition indexing in `routes/module.ts`.
-// All three start from a card or a file def. So only a card or file def has to
-// answer for its chain, and a field's unnamed ancestor is never reached by
-// anything that would truncate on it.
-//
-// An unresolvable chain answers false, so the rule fires rather than goes
-// quiet on something it could not read.
-function isFieldClass(index, moduleName, className) {
-  let key = `${moduleName}#${className}`;
-  let seen = new Set();
-  while (!seen.has(key)) {
-    seen.add(key);
-    let entry = index.get(key);
-    if (!entry) {
-      return false;
-    }
-    if (entry.parent === 'FieldDef') {
-      return true;
-    }
-    if (entry.parent === 'CardDef' || entry.parent === 'FileDef') {
-      return false;
-    }
-    key = `${entry.module}#${entry.parent}`;
-  }
-  return false;
-}
-
 function main() {
   let { table, exceptions } = readTable();
   let closureViolations = [];
   let identityHazards = [];
-  let classes = classIndex();
 
   for (let name of table) {
     let file = fileFor(name);
@@ -325,10 +241,6 @@ function main() {
     let uses = [
       ...[...code.matchAll(FIELD_USE)].map((m) => ({ referenced: m[1] })),
       ...[...code.matchAll(IDENTIFY_USE)].map((m) => ({ referenced: m[1] })),
-      ...[...code.matchAll(EXTENDS_USE)].map((m) => ({
-        referenced: m[2],
-        subclass: m[1],
-      })),
     ];
     for (let use of uses) {
       let declaredIn = origin.get(use.referenced)?.module;
@@ -338,9 +250,6 @@ function main() {
         !table.has(declaredIn) ||
         NAMED_BY_CARD_CODE.has(declaredIn)
       ) {
-        continue;
-      }
-      if (use.subclass && isFieldClass(classes, name, use.subclass)) {
         continue;
       }
       identityHazards.push(
@@ -380,10 +289,9 @@ function main() {
         `module declares.\n` +
         `A class is named only when the loader is asked for the module ` +
         `declaring it, and one bundled module asking for another is resolved ` +
-        `inside the chunk. A link's type, an identifyCard call and a ` +
-        `superclass all read that name as data — a chooser filters on it, and ` +
-        `an adoption-chain walk stops at the first level it cannot name, ` +
-        `truncating the types a file or card is indexed under.\n` +
+        `inside the chunk unless the module publishes what it declares. A ` +
+        `link's type and an identifyCard call both read that name as data, ` +
+        `and a chooser filters on it.\n` +
         `Leave the holder out of the table — a fetched holder imports the ` +
         `declarer through the loader, which is what names it — or, if card ` +
         `code names the declarer by identifier, add it to NAMED_BY_CARD_CODE ` +
