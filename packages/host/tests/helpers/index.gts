@@ -1394,16 +1394,16 @@ export async function setupIntegrationTestRealm({
   // check runs, and so no policy gate, no refusal, and no capability check
   // or explain that turns on who is asking. With this set, a request the host
   // sends is judged against the session it carries, and that session is the
-  // signed-in user's, with the permissions `permissions` gives them. A user
-  // `permissions` gives nothing is a signed-in caller the ACL declines, which
-  // is who a realm's policy exists for.
+  // signed-in user's, carrying what the realm computes for them from the
+  // permissions it stores. A user `permissions` gives nothing is a signed-in
+  // caller the ACL declines, which is who a realm's policy exists for.
   //
   // The realm's own work is still its own: the indexer's requests and the
   // in-browser render that indexes a card are dispatched as the realm's,
   // which is the authority they run under in a deployed realm. A request the
-  // test sends while such a render is under way is too, so a test that writes
-  // calls `settleRealmRenders` before asking the realm anything its ACL
-  // decides (see there).
+  // test sends while a render is under way is taken for the realm's too; see
+  // `permissionCheckingHandler` for which renders those are and how a test
+  // keeps its assertions clear of them.
   //
   // A 401 or 403 the host is answered with raises its auth-error signal, which
   // the in-browser renderer reads too, and the renderer then fails the next
