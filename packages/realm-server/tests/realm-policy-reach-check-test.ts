@@ -388,23 +388,23 @@ module(basename(import.meta.filename), function (hooks) {
     );
     let [student, guardian] = reachIssues(policy).map((issue) => issue.message);
     assert.true(
-      /`read` on Classroom .* the Student cards linked through `students`, and no rule grants a read of Student/.test(
+      /`read` on Classroom .* the Student cards linked through `students`, but no rule lets anyone read Student cards/.test(
         student,
       ),
       `the message names the granted type, the reached type and the path: ${student}`,
     );
     assert.true(
-      /the Guardian cards linked through `students\.guardian`, and no rule grants a read of Guardian/.test(
+      /the Guardian cards linked through `students\.guardian`, but no rule lets anyone read Guardian cards/.test(
         guardian,
       ),
       `a type two links away is named with the whole path: ${guardian}`,
     );
     assert.true(
-      student.includes("declare `links: 'ids'` on Classroom's `read`"),
+      student.includes("add `links: 'ids'` to Classroom's `read`"),
       `the fix is named on the granted type: ${student}`,
     );
     assert.true(
-      student.includes('A declaration on Student does not narrow this'),
+      student.includes("Changing how Student is declared won't help"),
       `and it says a declaration on the reached type is no fix: ${student}`,
     );
   });
@@ -517,11 +517,11 @@ module(basename(import.meta.filename), function (hooks) {
     ]);
     let [message] = reachIssues(policy).map((issue) => issue.message);
     assert.true(
-      message.includes('a link typed as CardDef can hold a card of any type'),
+      message.includes('a link to a CardDef can point to a card of any type'),
       message,
     );
     assert.false(
-      message.includes('grant a read of CardDef'),
+      message.includes('lets people read CardDef'),
       `it does not suggest granting every card: ${message}`,
     );
   });
@@ -580,7 +580,7 @@ module(basename(import.meta.filename), function (hooks) {
     let adHoc = reachIssues(policy)[0]?.message ?? '';
     assert.true(
       adHoc.includes(
-        "grant a named query that declares `links: 'ids'` in place of the ad-hoc `query`",
+        "grant a named query that sets `links: 'ids'` instead of the general `query`",
       ),
       `an ad-hoc query's fix is a named query, since nothing narrows it: ${adHoc}`,
     );
@@ -597,7 +597,7 @@ module(basename(import.meta.filename), function (hooks) {
     );
     assert.true(
       documentReach[0].message.includes(
-        "declare `links: 'ids'` on the `listFull` query",
+        "add `links: 'ids'` to the `listFull` query",
       ),
       documentReach[0].message,
     );
@@ -623,13 +623,13 @@ module(basename(import.meta.filename), function (hooks) {
     );
     let [message] = reachIssues(policy).map((issue) => issue.message);
     assert.true(
-      /the prerendered HTML of the Classroom rows `listIds` serves can draw the Student cards linked through `students`/.test(
+      /the pages `listIds` shows for Classroom cards can display the Student cards linked through `students`/.test(
         message,
       ),
       message,
     );
     assert.true(
-      message.includes('narrowing `links` does not keep them out of the HTML'),
+      message.includes("changing `links` won't keep them off the page"),
       `it says why the declared ids is no fix: ${message}`,
     );
 
@@ -663,7 +663,7 @@ module(basename(import.meta.filename), function (hooks) {
     let [message] = reachIssues(policy).map((issue) => issue.message);
     assert.true(
       message.includes(
-        "declare every prerendered format `unshareable` in the `listFittedShared` query's `html`",
+        "mark every page format `unshareable` in the `listFittedShared` query's `html`",
       ),
       `it names the query's html as the place to withhold them: ${message}`,
     );
@@ -674,7 +674,7 @@ module(basename(import.meta.filename), function (hooks) {
     );
     assert.true(
       adHoc?.message.includes(
-        'in place of the ad-hoc `query`, which no declaration narrows, grant a named query whose `html` declares every prerendered format `unshareable`',
+        'grant a named query whose `html` marks every page format `unshareable`, instead of the general `query`',
       ),
       `an ad-hoc query's fix is a named query, since nothing narrows it: ${adHoc?.message}`,
     );
@@ -767,12 +767,12 @@ module(basename(import.meta.filename), function (hooks) {
     );
     assert.true(
       policyCardIssue.includes(
-        "RealmPolicy is a policy card type: a policy card's attributes are its whole rule list",
+        'RealmPolicy is a policy card, which no rule can share',
       ),
       `the message names the reached card as a policy card: ${policyCardIssue}`,
     );
     assert.true(
-      configIssue.includes('RealmConfig is the realm config card type'),
+      configIssue.includes("RealmConfig is the realm's settings card"),
       `and the config card as a config card: ${configIssue}`,
     );
   });

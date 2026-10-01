@@ -429,7 +429,7 @@ module(basename(import.meta.filename), function () {
   test('a field the stored source does not hold records `unsnapshotted-policy-read` rather than `policy-not-filterable`, and compiles no grant', async function (assert) {
     for (let [where, reason] of [
       ['.summary == actor()', /computed.*snapshot: true/],
-      ['.roster | any(.id == actor())', /filled by a query/],
+      ['.roster | any(.id == actor())', /filled in by a search/],
     ] as [string, RegExp][]) {
       let { grant, issues, messages } = await filterFor(where);
       assert.deepEqual(
@@ -592,7 +592,7 @@ module(basename(import.meta.filename), function () {
         where,
       );
       assert.true(
-        messages[0].includes('the `predicate` profile refuses it'),
+        messages[0].includes("it uses something a search filter can't use"),
         `${where}: ${messages[0]}`,
       );
     }
@@ -608,25 +608,31 @@ module(basename(import.meta.filename), function () {
       // list matches any one element.
       ['.teacherIds == actor()', /compares a whole list/],
       // Membership inside a `not`, which the index answers element by element.
-      ['.teacherIds | any(. == actor()) | not', /inside a `not`/],
+      [
+        '.teacherIds | any(. == actor()) | not',
+        /does not include something \(inside `not`\)/,
+      ],
       // An id inside a `not`, which the index can spell differently.
-      [`.lead.id != "${EDUCATION}people/1"`, /can spell one id two ways/],
+      [
+        `.lead.id != "${EDUCATION}people/1"`,
+        /can write the same id two different ways/,
+      ],
       // An id compared with anything but an absolute URL: the index can hold
       // an unfollowed reference as written, and the predicate reads the URL.
-      [
-        '.lead.id == "@cardstack/catalog/people/1"',
-        /only with an absolute URL/,
-      ],
-      ['.lead.id == "../people/1"', /only with an absolute URL/],
-      ['.lead.id == actor()', /only with an absolute URL/],
-      ['.teachers | any(.id == actor())', /only with an absolute URL/],
-      ['.id == "@cardstack/catalog/classrooms/1"', /only with an absolute URL/],
+      ['.lead.id == "@cardstack/catalog/people/1"', /only with a full URL/],
+      ['.lead.id == "../people/1"', /only with a full URL/],
+      ['.lead.id == actor()', /only with a full URL/],
+      ['.teachers | any(.id == actor())', /only with a full URL/],
+      ['.id == "@cardstack/catalog/classrooms/1"', /only with a full URL/],
       // A field the index holds in a form the stored source does not.
-      ['.published == true', /boolean field holds its unset value/],
-      ['.published == null', /compares only the base string and number/],
-      ['.startsOn == "2026-09-01"', /compares only the base string and number/],
+      ['.published == true', /stores an empty yes\/no field as `false`/],
+      ['.published == null', /compare only plain text and number fields/],
+      [
+        '.startsOn == "2026-09-01"',
+        /compare only plain text and number fields/,
+      ],
       // `JsonField` indexes nothing, so every card would satisfy `== null`.
-      ['.payload == null', /compares only the base string and number/],
+      ['.payload == null', /compare only plain text and number fields/],
       // A field type of the realm's own can index anything.
       ['.slug == actor()', /Slug field/],
       // A link compared as a whole.

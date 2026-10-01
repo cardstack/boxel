@@ -384,7 +384,7 @@ module(basename(import.meta.filename), function (hooks) {
       'the flag the `fields/` type declares, and the class with no definition',
     );
     assert.true(
-      compiled?.issues[0].message.includes('declared non-grantable on Rated,'),
+      compiled?.issues[0].message.includes('marked non-grantable on Rated,'),
       `the flag is reported on the type that declares it: ${compiled?.issues[0].message}`,
     );
     assert.true(

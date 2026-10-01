@@ -301,31 +301,37 @@ const SNAPSHOT: [string, RegExp][] = [
   ['{ s: .summary } | .s == actor()', /`\.summary` is computed/],
   ['has("summary")', /`\.summary` is computed/],
   // Read whole, a value is read with everything beneath it.
-  ['.address == {}', /`\.address` is read whole/],
-  ['.lead | tostring | length > 0', /`\.lead` is read whole/],
-  ['tostring | length > 0', /`\.` is read whole/],
-  ['[.[]] | length > 0', /`\.` is read whole/],
-  ['with_entries(select(.value == 1)) | length > 0', /`\.` is read whole/],
+  ['.address == {}', /`\.address` is used as a whole/],
+  ['.lead | tostring | length > 0', /`\.lead` is used as a whole/],
+  ['tostring | length > 0', /`\.` is used as a whole/],
+  ['[.[]] | length > 0', /`\.` is used as a whole/],
+  ['with_entries(select(.value == 1)) | length > 0', /`\.` is used as a whole/],
   // A predicate holds where its output is `true`, so its output is read.
-  ['first(.flags[])', /`\.flags` is read whole/],
-  ['.flags | first(.[])', /`\.flags` is read whole/],
-  ['[.flags[]][0]', /`\.flags` is read whole/],
+  ['first(.flags[])', /`\.flags` is used as a whole/],
+  ['.flags | first(.[])', /`\.flags` is used as a whole/],
+  ['[.flags[]][0]', /`\.flags` is used as a whole/],
   ['.flags.verified', /`\.flags\.verified` is computed/],
   // `IN` compares its input whole with each value it is given.
-  ['.flags | IN({ verified: null, note: null })', /`\.flags` is read whole/],
-  ['.lead | IN({ id: "x" })', /`\.lead` is read whole/],
+  [
+    '.flags | IN({ verified: null, note: null })',
+    /`\.flags` is used as a whole/,
+  ],
+  ['.lead | IN({ id: "x" })', /`\.lead` is used as a whole/],
 ];
 
 // Predicates that read a value outside the stored source that no snapshot
 // holds, so the annotation cannot supply it.
 const UNHELD: [string, RegExp][] = [
-  ['.mentor.name == "Ada"', /`\.mentor` is not marked `searchable`/],
-  ['.coach.name == "Ada"', /`\.coach` is not marked `searchable`/],
+  ['.mentor.name == "Ada"', /`\.mentor` isn't marked `searchable`/],
+  ['.coach.name == "Ada"', /`\.coach` isn't marked `searchable`/],
   ['.teachers | any(.name == "Ada")', /`\.teachers` is a list of links/],
   ['.activities | any(.label == "trip")', /computed inside a list/],
-  ['.honorRoll | length > 0', /`\.honorRoll` is filled by a query/],
-  ['.lead.school.name == "x"', /`\.lead\.school` is a link of a linked card/],
-  ['instance().summary == actor()', /`instance\(\)` holds the card's stored/],
+  ['.honorRoll | length > 0', /`\.honorRoll` is filled in by a search/],
+  ['.lead.school.name == "x"', /`\.lead\.school` is a link on a linked card/],
+  [
+    'instance().summary == actor()',
+    /`instance\(\)` holds only the card's saved values/,
+  ],
 ];
 
 module(basename(import.meta.filename), function () {
@@ -376,8 +382,10 @@ module(basename(import.meta.filename), function () {
         assert.strictEqual(grant, undefined, `${source}: no grant compiles`);
         assert.true(reason.test(message), `${source}: ${message}`);
         assert.true(
-          /no snapshot holds/.test(message),
-          `${source}: the message says no snapshot holds it`,
+          /neither the saved card nor the search index's copy of it can answer/.test(
+            message,
+          ),
+          `${source}: the message says neither copy can answer it`,
         );
       }
     }
@@ -428,7 +436,7 @@ module(basename(import.meta.filename), function () {
       [{ code: 'unsnapshotted-policy-read', path: 'rules[0].grants[0].where' }],
     );
     assert.true(
-      /judged by the card it would mint/.test(
+      /a card being created isn't in the index until it's saved/.test(
         tierIssues(policy)[0]?.message ?? '',
       ),
       tierIssues(policy)[0]?.message,

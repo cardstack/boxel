@@ -374,7 +374,7 @@ module(basename(import.meta.filename), function (hooks) {
         'the issue is recorded against the rule and grant that caused it',
       );
       assert.true(
-        validation.issues[0].message.includes('does not parse'),
+        validation.issues[0].message.includes('has a syntax error'),
         `the message says what is wrong: ${validation.issues[0].message}`,
       );
       assert.deepEqual(
