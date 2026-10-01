@@ -209,8 +209,9 @@ jobs:
         run: |
           ref=main
           paired=false
-          # A bare name would also match any ref ending in /<name>.
-          if [ -n "$BRANCH" ] &&
+          # A bare name would also match any ref ending in /<name>. A fork's
+          # main is not a catalog change of its own, so it lints main as is.
+          if [ -n "$BRANCH" ] && [ "$BRANCH" != main ] &&
             git ls-remote --exit-code https://github.com/cardstack/boxel-catalog.git "refs/heads/$BRANCH" >/dev/null; then
             ref="$BRANCH"
             paired=true
@@ -302,8 +303,10 @@ jobs:
             node "$RUNNER_TEMP/lint-sweep.ts" --record="$RUNNER_TEMP/catalog-main-lint-base.json"
           fi
 
+      # A failed catalog main lint skips the base step, and without its baseline
+      # this report would count errors the catalog already has as new ones.
       - name: Report catalog lint errors
-        if: ${{ !cancelled() && steps.head.outcome == 'success' && steps.base.outcome != 'failure' }}
+        if: ${{ !cancelled() && steps.head.outcome == 'success' && steps.main.outcome != 'failure' && steps.base.outcome != 'failure' }}
         run: |
           baseline=()
           if [ -f "$RUNNER_TEMP/catalog-lint-base.json" ]; then

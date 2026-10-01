@@ -26,8 +26,9 @@
 //     linted with that branch, but catalog main fails with whatever errors the
 //     change adds to it from the moment the change merges until the branch's
 //     pull request does. So those errors fail the check unless that pull
-//     request is open and approved, ready to merge right after the change.
-//     Reads the pull request from the GitHub API, with $GH_TOKEN when set.
+//     request is open into the catalog's main and approved, ready to merge
+//     right after the change. Reads the pull request from the GitHub GraphQL
+//     API, which needs $GH_TOKEN.
 //
 // Errors are matched by linter, file, rule, message and position first, then
 // the rest without position, so an error in a boxel file that the change only
@@ -405,19 +406,33 @@ function annotation(message: string) {
     .replace(/\n/g, '%0A');
 }
 
-async function githubApi(path: string): Promise<unknown> {
+async function githubGraphql(
+  query: string,
+  variables: Record<string, unknown>,
+): Promise<unknown> {
   let token = process.env.GH_TOKEN;
-  let response = await fetch(`https://api.github.com/${path}`, {
+  if (!token) {
+    throw new Error('GH_TOKEN is not set, and the GitHub GraphQL API needs it');
+  }
+  let response = await fetch('https://api.github.com/graphql', {
+    method: 'POST',
     headers: {
-      accept: 'application/vnd.github+json',
-      'x-github-api-version': '2022-11-28',
-      ...(token ? { authorization: `Bearer ${token}` } : {}),
+      authorization: `Bearer ${token}`,
+      'content-type': 'application/json',
     },
+    body: JSON.stringify({ query, variables }),
   });
   if (!response.ok) {
-    throw new Error(`GET ${path} answered ${response.status}`);
+    throw new Error(`the GitHub GraphQL API answered ${response.status}`);
   }
-  return response.json();
+  let body = (await response.json()) as {
+    data?: unknown;
+    errors?: { message: string }[];
+  };
+  if (body.errors?.length) {
+    throw new Error(body.errors.map((e) => e.message).join('; '));
+  }
+  return body.data;
 }
 
 interface PairedPullRequest {
@@ -425,48 +440,76 @@ interface PairedPullRequest {
   approved: boolean;
 }
 
-// The open pull request for `branch` in the catalog repository, and whether it
-// is approved. Each reviewer's latest approval, request for changes or
-// dismissed review is what stands for them, a comment changes nothing, and an
-// approval counts only when no request for changes stands beside it.
+const PAIRED_PULL_REQUEST_QUERY = `
+  query ($owner: String!, $name: String!, $branch: String!) {
+    repository(owner: $owner, name: $name) {
+      pullRequests(
+        headRefName: $branch
+        baseRefName: "main"
+        states: OPEN
+        first: 10
+      ) {
+        nodes {
+          number
+          headRepositoryOwner {
+            login
+          }
+          reviewDecision
+          latestOpinionatedReviews(first: 100, writersOnly: true) {
+            nodes {
+              state
+            }
+          }
+        }
+      }
+    }
+  }
+`;
+
+// The open pull request from the catalog repository's own `branch` into its
+// main, and whether it is approved. Approval is GitHub's own review decision,
+// which counts only reviewers with write access and applies the branch's
+// review rules. When no rule requires a review, GitHub reports no decision, so
+// the latest review from each writer stands instead: an approval counts while
+// no request for changes stands beside it.
 async function pairedPullRequest(
   repository: string,
   branch: string,
 ): Promise<PairedPullRequest | undefined> {
-  let owner = repository.split('/')[0];
-  let head = encodeURIComponent(`${owner}:${branch}`);
-  let pulls = (await githubApi(
-    `repos/${repository}/pulls?state=open&head=${head}`,
-  )) as { number: number }[];
-  let pull = pulls[0];
+  let [owner, name] = repository.split('/');
+  let data = (await githubGraphql(PAIRED_PULL_REQUEST_QUERY, {
+    owner,
+    name,
+    branch,
+  })) as {
+    repository: {
+      pullRequests: {
+        nodes: {
+          number: number;
+          headRepositoryOwner: { login: string } | null;
+          reviewDecision: string | null;
+          latestOpinionatedReviews: { nodes: { state: string }[] } | null;
+        }[];
+      };
+    } | null;
+  };
+  let pull = data.repository?.pullRequests.nodes.find(
+    (node) => node.headRepositoryOwner?.login === owner,
+  );
   if (!pull) {
     return undefined;
   }
-  let reviews: { user: { login: string } | null; state: string }[] = [];
-  for (let page = 1; ; page++) {
-    let batch = (await githubApi(
-      `repos/${repository}/pulls/${pull.number}/reviews?per_page=100&page=${page}`,
-    )) as typeof reviews;
-    reviews.push(...batch);
-    if (batch.length < 100) {
-      break;
-    }
+  let approved: boolean;
+  if (pull.reviewDecision) {
+    approved = pull.reviewDecision === 'APPROVED';
+  } else {
+    let states = (pull.latestOpinionatedReviews?.nodes ?? []).map(
+      (review) => review.state,
+    );
+    approved =
+      states.includes('APPROVED') && !states.includes('CHANGES_REQUESTED');
   }
-  let standing = new Map<string, string>();
-  for (let review of reviews) {
-    if (
-      review.user &&
-      ['APPROVED', 'CHANGES_REQUESTED', 'DISMISSED'].includes(review.state)
-    ) {
-      standing.set(review.user.login, review.state);
-    }
-  }
-  let states = [...standing.values()];
-  return {
-    number: pull.number,
-    approved:
-      states.includes('APPROVED') && !states.includes('CHANGES_REQUESTED'),
-  };
+  return { number: pull.number, approved };
 }
 
 // Whether catalog main may fail with the errors a paired change adds to it:
@@ -498,8 +541,9 @@ async function pairVerdict(repository: string | undefined, branch: string) {
     return {
       passes: false,
       message:
-        `${context} Branch \`${branch}\` has no open pull request in ` +
-        `${repository}. Open one and get it approved, then re-run this check.`,
+        `${context} Branch \`${branch}\` has no open pull request into ` +
+        `main in ${repository}. Open one and get it approved, then re-run ` +
+        `this check.`,
     };
   }
   let ref = `${repository}#${pull.number}`;
