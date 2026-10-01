@@ -37,6 +37,7 @@
       "realm-policy-search-infrastructure-test",
       "realm-policy-snapshot-test",
       "realm-policy-source-read-test",
+      "realm-policy-validate-test",
       "realm-policy-write-lock-test",
       "server-endpoints/delegated-session-federated-endpoints-test",
       "server-endpoints/policy-scoped-search-test"

@@ -67,8 +67,8 @@ import {
 // - An operation declared `nonGrantable` on the target's type, refused before
 //   any rule is matched, or on any type the target's type descends from,
 //   refused before a matching grant admits anything.
-// - An explain, which answers what a refusal withholds, whatever its
-//   declaration says.
+// - An explain, which answers what a refusal withholds, and a validate, which
+//   reports what a policy card compiles to, whatever their declarations say.
 // - Any operation on the card the realm's policy key names: a read of it, a
 //   read of its stored bytes, or a write.
 // - Any operation on the realm's config card, which holds that key and the
@@ -472,10 +472,10 @@ export async function gateOperation(
     }
     return GATE_REFUSED;
   }
-  // An explain is granted nowhere: what it answers is what a refusal
-  // withholds, so it is refused here even where its declaration left the flag
-  // off.
-  if (base === 'explain') {
+  // An explain and a validate are granted nowhere: an explain answers what a
+  // refusal withholds, and a validate reads a policy card. So each is refused
+  // here even where its declaration left the flag off.
+  if (base === 'explain' || base === 'validate') {
     trace?.refused('non-grantable');
     return GATE_REFUSED;
   }
