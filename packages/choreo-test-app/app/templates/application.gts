@@ -83,7 +83,7 @@ const wire = modifier((_el: Element, [c]: [ChoreoContext]) => {
           <a
             href="https://github.com/cardstack/choreo"
             target="_blank"
-            rel="noopener"
+            rel="noopener noreferrer"
           >GitHub</a>
         </nav>
       </header>
@@ -167,7 +167,7 @@ const wire = modifier((_el: Element, [c]: [ChoreoContext]) => {
         <a
           href="https://github.com/cardstack/choreo/blob/main/LICENSE"
           target="_blank"
-          rel="noopener"
+          rel="noopener noreferrer"
         >
           MIT License
         </a>

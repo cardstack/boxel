@@ -171,7 +171,10 @@ export class DialPanel extends Component<Signature> {
               {{/each}}
 
               {{#each @dial.presets key="id" as |preset|}}
+                {{! dialkit's markup, verbatim: the forget control rides inside
+                    the preset chip, so the shared theme.css styles it }}
                 <button
+                  {{! template-lint-disable no-nested-interactive }}
                   type="button"
                   class={{this.presetClass preset}}
                   {{on "click" (fn this.load preset)}}
@@ -190,6 +193,7 @@ export class DialPanel extends Component<Signature> {
                 <form class="dial-tune-form" {{on "submit" this.commitName}}>
                   <input
                     class="dial-tune-input"
+                    aria-label="Preset name"
                     placeholder="name it"
                     value={{this.draft}}
                     {{on "input" this.onDraft}}

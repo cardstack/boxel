@@ -27,6 +27,7 @@ module('Integration | motion | focus', function (hooks) {
       <template>
         <a
           data-testid="myAnchorElement"
+          aria-label="focus target"
           href="#"
           {{motion whileFocus=F transition=OFF style=style}}
         ></a>
@@ -46,6 +47,7 @@ module('Integration | motion | focus', function (hooks) {
       <template>
         <a
           data-testid="myAnchorElement"
+          aria-label="focus target"
           href="#"
           {{motion whileFocus=F transition=OFF style=style}}
         ></a>
@@ -64,6 +66,7 @@ module('Integration | motion | focus', function (hooks) {
       <template>
         <a
           data-testid="myAnchorElement"
+          aria-label="focus target"
           href="#"
           {{motion whileFocus=F transition=OFF style=style}}
         ></a>
@@ -86,6 +89,7 @@ module('Integration | motion | focus', function (hooks) {
       <template>
         <a
           data-testid="myAnchorElement"
+          aria-label="focus target"
           href="#"
           {{motion
             whileFocus="hidden"
@@ -121,6 +125,7 @@ module('Integration | motion | focus', function (hooks) {
         <template>
           <a
             data-testid="myAnchorElement"
+            aria-label="focus target"
             href="#"
             {{motion
               whileFocus="hidden"

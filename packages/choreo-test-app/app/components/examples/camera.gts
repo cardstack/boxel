@@ -219,6 +219,15 @@ export class Camera extends Component {
     const next = this.isVerdict(shot, verdict) ? 'neutral' : verdict;
     this.verdicts = { ...this.verdicts, [shot.id]: next };
     this.focus = null;
+    // the verdict closes the dock, and the control holding focus goes with
+    // it — hand focus back to the print that was graded
+    const control = event.currentTarget as HTMLElement;
+    if (document.activeElement === control) {
+      control
+        .closest('.cam')
+        ?.querySelector<HTMLElement>(`[data-shot="${shot.id}"]`)
+        ?.focus({ preventScroll: true });
+    }
   };
 
   isFocus = (id: string) => this.focus === id;
@@ -241,16 +250,24 @@ export class Camera extends Component {
   passClass = (shot: (typeof shots)[number]) =>
     this.isVerdict(shot, 'passed') ? 'cam-pass is-active' : 'cam-pass';
 
-  get dockHeartClass() {
+  get dockLoved() {
     const shot = this.focusedShot;
-    return shot && this.isVerdict(shot, 'loved')
+    return !!shot && this.isVerdict(shot, 'loved');
+  }
+
+  get dockPassed() {
+    const shot = this.focusedShot;
+    return !!shot && this.isVerdict(shot, 'passed');
+  }
+
+  get dockHeartClass() {
+    return this.dockLoved
       ? 'cam-heart is-control is-active'
       : 'cam-heart is-control';
   }
 
   get dockPassClass() {
-    const shot = this.focusedShot;
-    return shot && this.isVerdict(shot, 'passed')
+    return this.dockPassed
       ? 'cam-pass is-control is-active'
       : 'cam-pass is-control';
   }
@@ -302,6 +319,7 @@ export class Camera extends Component {
               <button
                 type="button"
                 class={{this.frameClass shot}}
+                data-shot={{shot.id}}
                 {{motion id=shot.id role="frame"}}
                 {{on "click" (fn this.loupe shot.id)}}
                 {{on "mousedown" this.quellFocus}}
@@ -393,10 +411,11 @@ export class Camera extends Component {
                 {{this.focusedShot.stamp}}</span>
             </div>
             <div class="cam-grade-tools">
-              <span
+              <button
+                type="button"
                 class={{this.dockHeartClass}}
-                role="button"
                 aria-label="Love this one"
+                aria-pressed={{if this.dockLoved "true" "false"}}
                 {{on "click" (fn this.setVerdict this.focusedShot "loved")}}
               >
                 <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -405,11 +424,12 @@ export class Camera extends Component {
                     d="M12 21s-7.2-4.6-9.6-8.8C.4 8.8 1.5 4.6 5.2 3.4 7.8 2.5 10.2 3.6 12 6.2c1.8-2.6 4.2-3.7 6.8-2.8 3.7 1.2 4.8 5.4 2.8 8.8C19.2 16.4 12 21 12 21z"
                   />
                 </svg>
-              </span>
-              <span
+              </button>
+              <button
+                type="button"
                 class={{this.dockPassClass}}
-                role="button"
                 aria-label="Pass"
+                aria-pressed={{if this.dockPassed "true" "false"}}
                 {{on "click" (fn this.setVerdict this.focusedShot "passed")}}
               >
                 <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -421,7 +441,7 @@ export class Camera extends Component {
                     d="M7 7l10 10M17 7L7 17"
                   />
                 </svg>
-              </span>
+              </button>
             </div>
           {{/if}}
         </div>
