@@ -487,6 +487,11 @@ export type PolicyIssueCode =
   // as a built-in behavior. A grant matches the name a caller invokes, so such
   // a grant would match nothing.
   | 'unknown-operation'
+  // A grant naming an operation its rule's type declares but that failed to
+  // lower. Invoking it is refused for every caller, so the grant would admit
+  // nothing. The declaration's own issues are on the type's definition; this
+  // says so where the author wrote the grant.
+  | 'grants-invalid-operation'
   // A grant of authorization infrastructure: an operation declared
   // `nonGrantable` on its rule's type or on any type that type descends from,
   // or any grant on a rule whose type is a `RealmPolicy`. The gate refuses

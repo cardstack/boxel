@@ -671,7 +671,7 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
-  test('a grant of an operation that failed to lower serves nothing, so it records no reach', async function (assert) {
+  test('a grant of an operation that failed to lower is recorded and left out, so it records no reach', async function (assert) {
     let policy = await compile([rule(BROKEN_CLASSROOM, 'listFull')]);
     assert.deepEqual(
       reached(policy).map(({ code }) => code),
@@ -686,9 +686,24 @@ module(basename(import.meta.filename), function (hooks) {
 
     policy = await compile([rule(BROKEN_CLASSROOM, 'listUnlisted')]);
     assert.deepEqual(
-      reached(policy),
+      policy.issues.map(({ code, path, severity }) => ({
+        code,
+        path,
+        severity,
+      })),
+      [
+        {
+          code: 'grants-invalid-operation',
+          path: 'rules[0].grants[0].operation',
+          severity: 'inactive',
+        },
+      ],
+      'invoking the query is refused for every caller, so the grant is recorded as admitting nothing and hands nothing over',
+    );
+    assert.deepEqual(
+      policy.rules.flatMap((compiled) => compiled.grants),
       [],
-      'invoking the query is refused for every caller, so its grant hands nothing over',
+      'the grant is left out of the compiled rules',
     );
   });
 

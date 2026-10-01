@@ -882,6 +882,17 @@ async function compilePolicy(
         );
         continue;
       }
+      // An operation that failed to lower is refused for every caller who
+      // invokes it, so a grant of one would admit nothing. Recorded, so the
+      // author learns it here and not only from the type's definition.
+      if (granted.invalid) {
+        issue(
+          'grants-invalid-operation',
+          `${grantPath}.operation`,
+          `${resolved.name} declares \`${operation}\`, but the declaration failed to lower, so invoking it is refused and the grant admits nothing. The declaration's issues are on ${resolved.name}'s definition`,
+        );
+        continue;
+      }
       // Authorization infrastructure is outside the grant model, and the gate
       // refuses it whatever a compiled policy holds: an operation flagged
       // non-grantable, and any operation on a policy card. So a grant of either
@@ -1167,17 +1178,16 @@ function letsCallerRead(
 }
 
 // The base a kept grant runs on, where the grant can admit anything at all.
-// A grant of an operation that failed to lower admits nothing, since invoking
-// it is refused for every caller. A query grant admits only through the
-// filter it compiled to, since the gate grants no query. Any other grant whose
-// predicate is annotated as reading a snapshot tier admits nothing: the gate
-// reads the stored source alone, so it never evaluates that predicate.
+// A query grant admits only through the filter it compiled to, since the gate
+// grants no query. Any other grant whose predicate is annotated as reading a
+// snapshot tier admits nothing: the gate reads the stored source alone, so it
+// never evaluates that predicate.
 function admittingBase(
   definition: Definition,
   grant: CompiledOperationGrant,
 ): BaseOperation | undefined {
   let granted = grantedOperation(definition, grant.operation);
-  if (!granted || granted.invalid) {
+  if (!granted) {
     return undefined;
   }
   if (granted.base === 'query') {
