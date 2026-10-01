@@ -446,7 +446,7 @@ export async function gateOperation(
   if (base === 'query') {
     if (trace) {
       trace.refused(
-        (await queryKeptOutOfReach(core, scope, subject, name))
+        (await queryKeptOutOfReach(core, scope, subject, name, typeDefinition))
           ? 'non-grantable'
           : 'query-lane',
       );
@@ -624,12 +624,15 @@ async function indexedSubject(
 // Whether a type in the chain of the card or type a query is invoked on
 // declares the query `nonGrantable`. A subclass that redeclares the name
 // without the flag does not make grantable what the type it extends kept out
-// of a policy's reach, on the search engine as anywhere.
+// of a policy's reach, on the search engine as anywhere. The chain starts at
+// the target's own type, which is left out where its entry was read, as the
+// gate's own check leaves it out: its declaration was judged from that entry.
 async function queryKeptOutOfReach(
   core: OperationCore,
   scope: GateScope,
   subject: GateSubject,
   name: string,
+  typeDefinition: Definition | undefined,
 ): Promise<boolean> {
   if (subject.kind === 'unmatched') {
     return false;
@@ -638,7 +641,12 @@ async function queryKeptOutOfReach(
   if (!indexed || indexed.kind === GATE_MISSING.kind) {
     return false;
   }
-  return await nonGrantableInChain(core, indexed.types, name);
+  return await nonGrantableInChain(
+    core,
+    indexed.types,
+    name,
+    typeDefinition ? 1 : 0,
+  );
 }
 
 // What the bytes a stored-bytes read will serve are, judged from those bytes.
