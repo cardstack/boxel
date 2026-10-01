@@ -999,6 +999,7 @@ module(basename(import.meta.filename), function (hooks) {
           predicateEvaluations: 0,
           pendingDischarges: 0,
           definitionLookups: 0,
+          snapshotReads: 0,
         },
         'the gate did nothing for any of them',
       );
