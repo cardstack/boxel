@@ -202,9 +202,7 @@ function validation(
 
 // Why a grant that compiled can admit nothing, if it can't. A grant that
 // carries a search filter is on a query, and admits what the filter matches.
-// Without one, a grant on a query is recorded as not filterable, and a grant
-// on anything else whose predicate reads a snapshot tier is one the gate never
-// evaluates.
+// Without one, a grant on a query is recorded as not filterable.
 function inertiaOf(
   grant: CompiledOperationGrant,
   issues: PolicyIssue[],
@@ -221,7 +219,7 @@ function inertiaOf(
   ) {
     return 'unfilterable';
   }
-  return grant.where?.snapshot ? 'snapshot' : undefined;
+  return undefined;
 }
 
 // A path names the rule it falls under as `rules[i]`, and the grant as

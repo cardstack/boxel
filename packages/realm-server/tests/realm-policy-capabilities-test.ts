@@ -527,6 +527,7 @@ module(basename(import.meta.filename), function (hooks) {
           predicateEvaluations: 0,
           pendingDischarges: 0,
           definitionLookups: 0,
+          snapshotReads: 0,
         },
         'the gate did nothing for any of them',
       );
@@ -563,6 +564,7 @@ module(basename(import.meta.filename), function (hooks) {
           predicateEvaluations: 0,
           pendingDischarges: 0,
           definitionLookups: 0,
+          snapshotReads: 0,
         },
         'each write reached the policy once and the read never did',
       );
@@ -767,6 +769,7 @@ module(basename(import.meta.filename), function (hooks) {
           predicateEvaluations: 2,
           pendingDischarges: 0,
           definitionLookups: 0,
+          snapshotReads: 0,
         },
         'each predicate was evaluated once, and neither by the path that holds the write lock',
       );
@@ -1010,6 +1013,7 @@ module(basename(import.meta.filename), function (hooks) {
           predicateEvaluations: 0,
           pendingDischarges: 0,
           definitionLookups: 0,
+          snapshotReads: 0,
         },
         'the gate did nothing for any of them',
       );

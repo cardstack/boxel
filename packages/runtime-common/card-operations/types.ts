@@ -508,7 +508,12 @@ export type PolicyIssueCode =
   // query, and a search reaches a query grant only through its filter.
   | 'policy-not-filterable'
   // A `where` that reads a computed value or a linked card's field without
-  // the `snapshot` annotation. Reserved: compiling does not record it.
+  // the `snapshot` annotation, or that reads one no snapshot holds: a linked
+  // card's field behind a list of links, a link not marked `searchable`, or a
+  // link inside a contained value, a computed value inside a list, or a
+  // relationship a query fills. Also a `create` grant whose `where` is judged
+  // against the snapshot, since the card a create mints has no index row. The
+  // grant is left out in both lanes.
   | 'unsnapshotted-policy-read'
   // A `read` or `query` grant whose document, under the link strategy that
   // governs it, carries cards of a type no rule lets a caller read, so the
@@ -989,9 +994,10 @@ export interface ExplainedGrant {
   // What the predicate reads. `stored` is the target's own stored source
   // (tier 0): its scalars, contained values and relationship links, as fresh
   // as the last write. `snapshot` is a predicate annotated as reading computed
-  // values or linked cards (tiers 1 and 2), which lag the index. The gate
-  // reads the stored source alone, so it never evaluates a `snapshot`
-  // predicate, and such a grant admits nothing.
+  // values or linked cards (tiers 1 and 2), judged against the stored source
+  // with the index's values for those laid under it. The index lags the
+  // stored source, so such a grant decides on what the card held when it was
+  // last indexed.
   tier?: 'stored' | 'snapshot';
   outcome: ExplainedGrantOutcome;
 }
@@ -1003,7 +1009,7 @@ export type ExplainedGrantOutcome =
   | 'did-not-hold'
   | 'threw'
   // The gate decided without evaluating it: an earlier grant admitted the
-  // invocation, a refusal came first, or the predicate reads a snapshot tier.
+  // invocation, or a refusal came first.
   | 'not-evaluated';
 
 // A validate's answer: what the policy card it was invoked on compiles to, or,
@@ -1119,12 +1125,7 @@ export type ValidatedGrantInertia =
   // authorized only by composing a grant's filter into the search, and the
   // gate refuses every invocation built on one, so the grant has nothing to
   // compose. `policy-not-filterable` says why there is no filter.
-  | 'unfilterable'
-  // A grant whose `where` is annotated as reading a snapshot tier, on anything
-  // but a query. The gate reads a card's stored source alone and never
-  // evaluates such a predicate. On a query, the same annotation compiles into
-  // the search filter and admits what it matches.
-  | 'snapshot';
+  'unfilterable';
 
 // A `delete` answers with `null`: there is no state left to describe.
 export type OperationResult =

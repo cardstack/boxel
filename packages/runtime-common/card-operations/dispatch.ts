@@ -348,15 +348,18 @@ export interface OperationScope {
   // to report, or for a capability check to read why the gate refused. Absent
   // on every invocation a caller makes.
   readonly trace: GateTrace | undefined;
+  // Set for a capability check, which asks what the gate would decide and
+  // invokes nothing, so nothing it evaluates is recorded as a decision.
+  readonly advisory: boolean;
   // The archived realm's refusal, where the realm holds one for this caller
   // (see `OperationRequest.seal`). `resolveOperation` answers with it what the
   // gate grants.
   readonly seal: Error | undefined;
   // A scope for another invocation in the same request, sharing this one's row
   // memo so the invocations of one request still cost one read of each row
-  // between them. The caller, the ACL's verdict and the seal carry over unless
-  // named; a proposed document belongs to one invocation and never does, and
-  // neither does a trace.
+  // between them. The caller, the ACL's verdict, the seal and whether the
+  // request is advisory carry over unless named; a proposed document belongs
+  // to one invocation and never does, and neither does a trace.
   derive(invocation: ScopeInvocation): OperationScope;
 }
 
@@ -383,6 +386,7 @@ export interface ScopeInvocation {
   proposed?: Record<string, unknown>;
   trace?: GateTrace;
   seal?: Error;
+  advisory?: boolean;
 }
 
 // What the realm ACL declined for a request, judged per invocation rather than
@@ -423,6 +427,7 @@ export function newOperationScope(
     proposed: Record<string, unknown> | undefined,
     trace: GateTrace | undefined,
     seal: Error | undefined,
+    advisory: boolean,
   ): OperationScope => ({
     peekInstance,
     caller,
@@ -430,6 +435,7 @@ export function newOperationScope(
     proposed,
     trace,
     seal,
+    advisory,
     derive: (next) =>
       scopeFor(
         next.caller ?? caller,
@@ -437,6 +443,7 @@ export function newOperationScope(
         next.proposed,
         next.trace,
         next.seal ?? seal,
+        next.advisory ?? advisory,
       ),
   });
   return scopeFor(
@@ -445,6 +452,7 @@ export function newOperationScope(
     invocation.proposed,
     invocation.trace,
     invocation.seal,
+    invocation.advisory ?? false,
   );
 }
 
