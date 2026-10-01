@@ -15,6 +15,7 @@ import { tracked } from '@glimmer/tracking';
 import { setupRenderingTest } from 'ember-qunit';
 import { createDragControls } from 'glimmer-motion/gestures/drag-controls';
 import { correctParentTransform } from 'glimmer-motion/gestures/transform-page-point';
+import { layoutChange } from 'glimmer-motion/layout';
 import LayoutGroup from 'glimmer-motion/layout-group';
 import motion from 'glimmer-motion/motion';
 import Presence from 'glimmer-motion/presence';
@@ -1284,9 +1285,8 @@ class SnapToCursorInitial extends Component<{ Args: { rerender?: boolean } }> {
   @tracked dragCount = 0;
   startDrag = (e: PointerEvent) =>
     this.controls.start(e, { snapToCursor: true });
-  countDrag = () => {
-    this.dragCount++;
-  };
+  // React re-renders the motion.div, and every commit re-measures its projection: layoutChange is that commit
+  countDrag = () => layoutChange(() => this.dragCount++);
   get onDragEnd() {
     return this.args.rerender ? this.countDrag : undefined;
   }
