@@ -10,6 +10,7 @@ import { codeRefFromInternalKey } from '../index.ts';
 import type { IndexedInstanceSource } from '../index-query-engine.ts';
 import { logger } from '../log.ts';
 import { MODULE_SOURCE_FILE_DEF_CODE_REFS } from '../policy-file-def.ts';
+import { PRERENDERED_HTML_FORMATS } from '../prerendered-html-format.ts';
 import { rri } from '../realm-identifiers.ts';
 import { chainType } from './adoption-chain.ts';
 import { carriesBuiltIn } from './dispatch.ts';
@@ -28,6 +29,7 @@ import {
   isDefinitionFreeBaseOperation,
   linkStrategyOf,
   policyIssueSeverity,
+  unshareableFormatsOf,
   type BaseOperation,
   type OperationQueryFilterTemplate,
   type PolicyIssue,
@@ -886,6 +888,17 @@ async function compilePolicy(
         );
         continue;
       }
+      // An operation that failed to lower is refused for every caller who
+      // invokes it, so a grant of one would admit nothing. Recorded, so the
+      // author learns it here and not only from the type's definition.
+      if (granted.invalid) {
+        issue(
+          'grants-invalid-operation',
+          `${grantPath}.operation`,
+          `${resolved.name} declares \`${operation}\`, but the declaration failed to lower, so invoking it is refused and the grant admits nothing. The declaration's issues are on ${resolved.name}'s definition`,
+        );
+        continue;
+      }
       // Authorization infrastructure is outside the grant model, and the gate
       // refuses it whatever a compiled policy holds: an operation flagged
       // non-grantable, and any operation on a policy card. So a grant of either
@@ -1157,6 +1170,10 @@ async function compilePolicy(
 // `read` grant's strategy is the declaration it invokes, the granted type's
 // own `read` or a named operation built on it. A named query's is the query's.
 // An ad-hoc `query` has no declaration, so nothing narrows what it serves.
+// A named query whose `html` declares every format unshareable serves its
+// rows data-only, so it serves no rendering. A query's `html` cannot say
+// which of the formats it shares draw a linked card, so sharing any format
+// counts as serving a rendering.
 //
 // Undefined for a grant that serves no rows' closure: one on any other base,
 // since a write's echo is the card and a stored-bytes read serves bytes, and a
@@ -1181,7 +1198,9 @@ function reachLane(
       ? {
           governedBy: 'named-query',
           links: linkStrategyOf(declared.links),
-          rendered: true,
+          rendered:
+            unshareableFormatsOf(declared.html).length <
+            PRERENDERED_HTML_FORMATS.length,
         }
       : { governedBy: 'ad-hoc-query', links: 'full', rendered: true };
   }
@@ -1261,7 +1280,9 @@ function splitTypeKey(key: string): ResolvedCodeRef | undefined {
 function grantedOperation(
   definition: Definition,
   name: string,
-): { base: BaseOperation; nonGrantable: boolean } | undefined {
+):
+  | { base: BaseOperation; nonGrantable: boolean; invalid: boolean }
+  | undefined {
   let declared = isDefinitionFreeBaseOperation(name)
     ? undefined
     : ownOperation(definition, name);
@@ -1269,10 +1290,11 @@ function grantedOperation(
     return {
       base: declared.base,
       nonGrantable: declared.nonGrantable === true,
+      invalid: declared.invalid === true,
     };
   }
   return carriesBuiltIn(definition.type, name)
-    ? { base: name as BaseOperation, nonGrantable: false }
+    ? { base: name as BaseOperation, nonGrantable: false, invalid: false }
     : undefined;
 }
 

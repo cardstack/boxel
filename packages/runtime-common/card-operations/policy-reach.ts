@@ -42,8 +42,9 @@ import type { LinkStrategy } from '@cardstack/base/operations';
 // - The rendering. A search row carries its prerendered HTML, and a render
 //   draws the card's links whatever strategy the document is served under,
 //   and answers a query-backed field wherever a template reads one. So a
-//   `query` grant is walked a second time over its whole closure. A `read`
-//   serves a document and no rendering.
+//   `query` grant is walked a second time over its whole closure, unless it
+//   is a named query whose `html` declares every format unshareable, which
+//   serves its rows data-only. A `read` serves a document and no rendering.
 //
 // A reached type counts as granted when a rule on it, or on a type it
 // descends from, keeps a grant that lets a caller read one: a `read`, a
@@ -396,7 +397,14 @@ function renderingMessage(
   let { operation } = reach.grant;
   let from = reach.rule.targetType.name;
   let to = reached.codeRef.name;
-  return `the prerendered HTML of the ${from} rows \`${operation}\` serves can draw the ${to} cards linked through \`${reached.via.join('.')}\`, and ${ungrantedClause(to, kind, anyType)}. A render draws a card's links whatever strategy its document is served under, so narrowing \`links\` does not keep them out of the HTML. To keep them out, keep ${from}'s templates from embedding them${deliberately(to, kind, anyType)}`;
+  return `the prerendered HTML of the ${from} rows \`${operation}\` serves can draw the ${to} cards linked through \`${reached.via.join('.')}\`, and ${ungrantedClause(to, kind, anyType)}. A render draws a card's links whatever strategy its document is served under, so narrowing \`links\` does not keep them out of the HTML. To keep them out, ${withholdingFix(reach)}, or keep ${from}'s templates from embedding them${deliberately(to, kind, anyType)}`;
+}
+
+function withholdingFix(reach: ReachingGrant): string {
+  let { operation } = reach.grant;
+  return reach.governedBy === 'named-query'
+    ? `declare every prerendered format \`unshareable\` in the \`${operation}\` query's \`html\` (this check cannot tell which formats draw them, so a format left shared keeps the warning)`
+    : `in place of the ad-hoc \`query\`, which no declaration narrows, grant a named query whose \`html\` declares every prerendered format \`unshareable\``;
 }
 
 function ungrantedClause(
