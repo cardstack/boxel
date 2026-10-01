@@ -205,8 +205,9 @@ catalog:
   mime-types: ^2.1.35
   moment: ^2.29.4
   monaco-editor: ^0.52.2
-  # Pinned together: glimmer-motion carries code copied from Motion at the
-  # release matching motion-dom 13.1.1 (see packages/glimmer-motion/VENDORED.md).
+  # Pinned together: glimmer-motion inlines framer-motion's gesture and feature
+  # modules into its build, with hand-written declarations for them that match
+  # this release, alongside motion-dom 13.1.1 (see packages/glimmer-motion/VENDORED.md).
   framer-motion: 13.1.1
   motion: 13.1.1
   motion-dom: 13.1.1

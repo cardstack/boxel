@@ -407,7 +407,7 @@ Everything below this line is **`glimmer-motion`** proper: Motion's own implemen
 
 **Presence** — `<Presence>` = AnimatePresence: `sync` / `wait` / `popLayout`, `@initial={{false}}`, `@custom`, `@onExitComplete`, nested presence with `@propagate`; `h.isPresent` (tracked); exit-then-enter of the same key; a leaving item keeps its last props; interaction with `layout` / `layoutId`.
 
-**Drag** (Motion's pan/drag session, vendored verbatim) — `drag` / axis locks / `dragPropagation` / `dragListener`; constraints as object, element or ref, `dragElastic`, `dragMomentum`, `dragTransition`, `dragSnapToOrigin`, re-measure on resize; `createDragControls()` with `snapToCursor`; `whileDrag` and the full handler set; pan handlers; drag inside `layout` / `layoutId`, nested draggables, drag under scroll; `transformPagePoint` with `correctParentTransform()` and `transformViewBoxPoint()`.
+**Drag** (Motion's own pan/drag session, inlined from framer-motion's build) — `drag` / axis locks / `dragPropagation` / `dragListener`; constraints as object, element or ref, `dragElastic`, `dragMomentum`, `dragTransition`, `dragSnapToOrigin`, re-measure on resize; `createDragControls()` with `snapToCursor`; `whileDrag` and the full handler set; pan handlers; drag inside `layout` / `layoutId`, nested draggables, drag under scroll; `transformPagePoint` with `correctParentTransform()` and `transformViewBoxPoint()`.
 
 **Gestures** — `whileHover` / `whileTap` / `whileFocus` / `whileInView` with their handlers, keyboard tap activation, `globalTapTarget`, viewport options, gesture priority; `<MotionConfig @transition @reducedMotion @transformPagePoint @skipAnimations @nonce>` — and `@reducedMotion` defaults to **`"user"`** here, not React's `"never"`: honouring a platform setting is not a feature. `scrollProgress()` and `InView` over Motion's `scroll()` / `inView()`.
 
@@ -564,8 +564,10 @@ features.ts    animation / exit / layout / drag / pan registrations, and the sca
 scheduler.ts   postRender(fn): the single host hook — "after this render pass has committed"
 activity.ts    who is still moving, and why — what animationsSettled() waits on
 helpers.ts     to / styles / from / spring / tween / inertia / perValue / stagger / ease
-gestures/      Motion's pan + drag session, vendored verbatim (VENDORED.md)
-reorder/       Reorder's checkReorder / detectAxis / auto-scroll, vendored verbatim
+framer-motion-internals.ts
+               Motion's pan/drag session, gesture and animation features, and Reorder's
+               checkReorder / detectAxis / auto-scroll, inlined from framer-motion's build (VENDORED.md)
+gestures/      drag-gesture.ts (glimmer-motion's two drag deviations), drag controls, transformPagePoint helpers
 choreo/        the choreography layer: changeset, compile, run, anchors, beacons, arming,
                far-match barrier, measure — the region model in ~a dozen modules
 test-support/  animationsSettled, bounds, live, orphanCount, … — a published entrypoint
@@ -664,7 +666,7 @@ Agents can use the shared [choreo-create skill](.claude/skills/choreo-create/SKI
 from Claude Code or [Codex](.agents/skills/choreo-create/SKILL.md). It routes to
 real demo sources, motion patterns, composition recipes, tuning, and verification.
 
-`packages/glimmer-motion/VENDORED.md` lists every file copied verbatim from Motion and the upstream commit (`motion@bbabb00`); re-diff them when bumping `motion-dom`. The Cypress-port harness lives in `test-app/tests/helpers/layout-fixture.ts`.
+`packages/glimmer-motion/VENDORED.md` lists the Motion modules glimmer-motion inlines from framer-motion's build, the two deliberate deviations, and the one adapted file; when bumping Motion, re-check the declarations in `src/framer-motion-internals.ts` against upstream. The Cypress-port harness lives in `test-app/tests/helpers/layout-fixture.ts`.
 
 ## Roadmap
 
