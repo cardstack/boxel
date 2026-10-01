@@ -4,21 +4,23 @@ This tutorial builds a small task board in a clean Ember application. You will a
 
 ## Start from a working installation
 
-For this checkout, use the local workspace packages. The package manifests are still version 0.0.0; this tutorial does not assume an npm release. You need Node 22, the pnpm version pinned in the root package.json, and this repository checked out. Run these commands from its root:
+For this checkout, use the local workspace packages. The package manifests are still version 0.0.0; this tutorial does not assume an npm release. You need this repository checked out and [mise](https://mise.jdx.dev/) installed, which provides the Node and pnpm versions pinned in the repository's .mise.toml. mise ignores a configuration file until it is trusted, so the first command trusts the repository's. Run these commands from its root:
 
 ```sh title="Terminal"
+mise trust
+mise install
 pnpm install
-pnpm build
-node scripts/create-tutorial-app.mjs /tmp/my-choreo-app
+node packages/choreo-gallery/tools/create-tutorial-app.mjs /tmp/my-choreo-app
 cd /tmp/my-choreo-app
+mise trust
 pnpm install
 pnpm build
 pnpm start
 ```
 
-Open http://localhost:4600/. The generator refuses an existing destination, so it cannot overwrite your application. It creates a separate Ember/Vite application with three routes and ordinary component source. Its package.json uses local file dependencies pointing at the built glimmer-motion and choreo-player packages. Keep the repository in place while using this starter. After changing library source, rebuild the library and reinstall the local dependencies in the generated app. Do not copy only src/ into node_modules: the addon needs its built entry points and declarations.
+Open http://localhost:4600/. The generator refuses an existing destination, so it cannot overwrite your application. It creates a separate Ember/Vite application with three routes and ordinary component source, and pins the same Node and pnpm versions in its own .mise.toml, which mise trust approves. The generator builds glimmer-motion and choreo-player and packs them into the application's vendor/ directory, and its package.json depends on those tarballs. The application does not depend on the repository after it is generated. After changing library source, generate a new application to pick up the rebuilt packages. Do not copy only src/ into node_modules: the addon needs its built entry points and declarations.
 
-The generated app deliberately reuses the Ember, Vite, and template-tag toolchain versions used by the repository. It is a working consumer rather than a claim that every Ember version in the peer range has been tested. For your own existing app, compare its template-tag configuration and peer dependencies with the generated package.json before transplanting a component.
+The generated app deliberately reuses the version ranges the repository declares for Ember, Vite, and the template-tag toolchain. It has no lockfile, so pnpm install resolves the newest versions within those ranges. It is a working consumer rather than a claim that every Ember version in the peer range has been tested. For your own existing app, compare its template-tag configuration and peer dependencies with the generated package.json before transplanting a component.
 
 ## Begin with application state
 
