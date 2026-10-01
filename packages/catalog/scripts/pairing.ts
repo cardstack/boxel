@@ -197,6 +197,7 @@ interface RestPull {
   html_url: string;
   state: string;
   merged: boolean;
+  merged_at: string | null;
   draft?: boolean;
   body: string | null;
   base: { ref: string };
@@ -229,15 +230,21 @@ function fetchPull(repository: string, n: number) {
 // branch it is, not one pushed from a fork. An open parent makes this one
 // stacked on it. A merged parent hands on to the branch it merged into, which
 // is main once the whole stack has landed. `who` names the pull request in
-// what this says.
+// what this says, and `mergedAt` is when it merged, if it has. A change that
+// merged into a branch reaches the branch below only through a merge of that
+// branch's pull request after it, so a parent that had merged before it
+// carried nothing of it: a branch is kept after its pull request merges, and
+// can be merged into again or reused by a new pull request.
 export async function landing(
   repository: string,
   who: string,
   base: string,
+  mergedAt?: string,
 ): Promise<Landing> {
   let [owner] = repository.split('/');
   let branch = base;
   let mergedVia: string | undefined;
+  let since = mergedAt;
   for (let depth = 0; depth < MAX_STACK_DEPTH; depth++) {
     if (branch === 'main') {
       return mergedVia ? { kind: 'landed', mergedVia } : { kind: 'main' };
@@ -269,7 +276,22 @@ export async function landing(
         ...(mergedVia ? { mergedVia } : {}),
       };
     }
-    let merged = parents.find((pull) => pull.merged_at != null);
+    let mergedParents = parents
+      .filter((pull) => pull.merged_at != null)
+      .sort((a, b) => a.merged_at!.localeCompare(b.merged_at!));
+    let merged = since
+      ? mergedParents.find((pull) => pull.merged_at! >= since!)
+      : mergedParents[mergedParents.length - 1];
+    if (!merged && mergedParents.length > 0) {
+      let last = mergedParents[mergedParents.length - 1];
+      return {
+        kind: 'problem',
+        problem:
+          `${who} merged into \`${branch}\` after ${repository}#${last.number}, ` +
+          `that branch's pull request, had already merged, so it never ` +
+          `reached the branch below. Land it on main in a new pull request.`,
+      };
+    }
     if (!merged) {
       return {
         kind: 'problem',
@@ -283,6 +305,7 @@ export async function landing(
     }
     mergedVia ??= `${repository}#${merged.number}`;
     branch = merged.base.ref;
+    since = merged.merged_at!;
   }
   return {
     kind: 'problem',
@@ -497,6 +520,7 @@ export async function resolvePairing(
       counterpartRepository,
       there,
       pull.base.ref,
+      pull.merged_at ?? undefined,
     );
     let counterpartStackedOn: string | undefined;
     if (pull.merged) {

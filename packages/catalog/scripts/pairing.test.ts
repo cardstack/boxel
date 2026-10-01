@@ -15,6 +15,8 @@ interface StubPull {
   number: number;
   state?: 'open' | 'closed';
   merged?: boolean;
+  // When it merged, for a merged one; a fixed time unless a test orders them.
+  mergedAt?: string;
   base?: string;
   head: string;
   // The repository the head branch was pushed to, when it isn't `repository`.
@@ -33,7 +35,7 @@ function listedPull(pull: StubPull) {
     number: pull.number,
     html_url: `https://github.com/${pull.repository}/pull/${pull.number}`,
     state: pull.state ?? 'open',
-    merged_at: pull.merged ? '2026-10-01T12:00:00Z' : null,
+    merged_at: pull.merged ? (pull.mergedAt ?? '2026-10-01T12:00:00Z') : null,
     draft: false,
     body: pull.body ?? '',
     base: { ref: pull.base ?? 'main' },
@@ -301,6 +303,65 @@ test('a counterpart that merged into a parent that has itself merged to main has
   let { resolution, problems, notices } = await resolveBoxel();
   assert.deepEqual(problems, []);
   assert.deepEqual(notices, []);
+  assert.equal(resolution.pairs[0]?.merged, true);
+});
+
+test("a counterpart that merged into a parent's branch after the parent had merged never reached main", async () => {
+  pair(
+    {},
+    {
+      base: 'catalog-parent',
+      state: 'closed',
+      merged: true,
+      mergedAt: '2026-10-02T09:00:00Z',
+    },
+  );
+  pulls.push({
+    repository: CATALOG,
+    number: 780,
+    head: 'catalog-parent',
+    state: 'closed',
+    merged: true,
+    mergedAt: '2026-10-01T09:00:00Z',
+  });
+  let { problems } = await resolveBoxel();
+  assert.equal(problems.length, 1);
+  assert.match(
+    problems[0],
+    /cardstack\/boxel-catalog#791 merged into `catalog-parent` after cardstack\/boxel-catalog#780, that branch's pull request, had already merged/,
+  );
+});
+
+test('a reused branch name carries a later merge through the pull request that merged after it', async () => {
+  pair(
+    {},
+    {
+      base: 'catalog-parent',
+      state: 'closed',
+      merged: true,
+      mergedAt: '2026-10-02T09:00:00Z',
+    },
+  );
+  pulls.push(
+    {
+      repository: CATALOG,
+      number: 700,
+      head: 'catalog-parent',
+      state: 'closed',
+      merged: true,
+      mergedAt: '2026-09-01T09:00:00Z',
+    },
+    {
+      repository: CATALOG,
+      number: 780,
+      head: 'catalog-parent',
+      state: 'closed',
+      merged: true,
+      mergedAt: '2026-10-03T09:00:00Z',
+    },
+  );
+  let { problems, resolution } = await resolveBoxel();
+  assert.deepEqual(problems, []);
   assert.equal(resolution.pairs[0]?.merged, true);
 });
 
