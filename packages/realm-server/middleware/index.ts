@@ -5,7 +5,6 @@ import type {
   ResponseWithNodeStream,
 } from '@cardstack/runtime-common';
 import {
-  isSessionRevoked,
   logger as getLogger,
   webStreamToText,
   sanitizeLoggingCorrelationId,
@@ -18,7 +17,7 @@ import {
   withConnectionTenant,
 } from '@cardstack/postgres';
 import { nodeStreamToText, nodeStreamToBuffer } from '../stream.ts';
-import { retrieveTokenClaim } from '../utils/jwt.ts';
+import { retrieveUserSessionClaim } from '../utils/jwt.ts';
 import { knownRealmURL, type RealmRoutingDeps } from '../lib/realm-routing.ts';
 import {
   AuthenticationError,
@@ -584,13 +583,11 @@ export function jwtMiddleware(
       // the server. If we introduce another type of realm-server permission,
       // then we will need to compare the token with what is configured on the
       // server.
-      let token = retrieveTokenClaim(authorization, secretSeed);
-      if (await isSessionRevoked(dbAdapter, token.user, token.iat)) {
-        throw new AuthenticationError(
-          AuthenticationErrorMessages.SessionRevoked,
-        );
-      }
-      ctxt.state.token = token;
+      ctxt.state.token = await retrieveUserSessionClaim(
+        authorization,
+        secretSeed,
+        dbAdapter,
+      );
     } catch (e) {
       if (e instanceof AuthenticationError) {
         await sendResponseForUnauthorizedRequest(ctxt, e.message);
