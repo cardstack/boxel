@@ -123,92 +123,94 @@ export class BottomNav extends Component<BottomNavSignature> {
       </ul>
     </nav>
     <style scoped>
-      .pretui-bottomnav {
-        inset-block-end: 0;
-        z-index: var(--pretui-z-sticky, 10);
-        background: var(--pretui-bottomnav-bg, var(--card));
-        box-shadow: 0 -1px 0 var(--border);
-        padding-block-end: env(safe-area-inset-bottom, 0px);
-        font-family: var(--font-sans);
-      }
-      .pretui-bottomnav[data-position='sticky'] {
-        position: sticky;
-      }
-      .pretui-bottomnav-list {
-        display: flex;
-        margin: 0;
-        padding: 0;
-        list-style: none;
-      }
-      .pretui-bottomnav-cell {
-        flex: 1 1 0;
-        min-inline-size: 0;
-      }
-      .pretui-bottomnav-item {
-        position: relative;
-        display: grid;
-        justify-items: center;
-        gap: 0.125rem;
-        inline-size: 100%;
-        min-block-size: 3.5rem;
-        padding: var(--space-2, 0.375rem) var(--space-1, 0.25rem);
-        box-sizing: border-box;
-        border: 0;
-        background: transparent;
-        color: var(--muted-foreground);
-        font: inherit;
-        font-size: var(--text-ui-xs, 0.66rem);
-        text-decoration: none;
-        cursor: pointer;
-      }
-      .pretui-bottomnav-item[data-current='true'] {
-        color: var(--pretui-bottomnav-current, var(--primary));
-        font-weight: 600;
-      }
-      .pretui-bottomnav-item[data-current='true']::before {
-        content: '';
-        position: absolute;
-        inset-block-start: 0;
-        inset-inline: 30%;
-        block-size: 2px;
-        border-radius: 0 0 2px 2px;
-        background: currentColor;
-      }
-      .pretui-bottomnav-item[aria-disabled='true'] {
-        opacity: 0.45;
-        cursor: not-allowed;
-      }
-      .pretui-bottomnav-item:hover {
-        color: var(--foreground);
-      }
-      .pretui-bottomnav-item:focus-visible {
-        outline: 2px solid var(--ring);
-        outline-offset: -2px;
-      }
-      .pretui-bottomnav-icon {
-        display: grid;
-        place-items: center;
-        block-size: 1.375rem;
-      }
-      .pretui-bottomnav-label {
-        max-inline-size: 100%;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-      .pretui-bottomnav-badge {
-        position: absolute;
-        inset-block-start: 0.25rem;
-        inset-inline-start: calc(50% + 0.5rem);
-        min-inline-size: 1rem;
-        padding-inline: 0.25rem;
-        border-radius: 999px;
-        background: var(--destructive);
-        color: var(--card);
-        font-size: 0.6rem;
-        font-weight: 600;
-        line-height: 1rem;
-        text-align: center;
+      @layer PretComponent {
+        .pretui-bottomnav {
+          inset-block-end: 0;
+          z-index: var(--pretui-z-sticky, 10);
+          background: var(--pretui-bottomnav-bg, var(--card));
+          box-shadow: 0 -1px 0 var(--border);
+          padding-block-end: env(safe-area-inset-bottom, 0px);
+          font-family: var(--font-sans);
+        }
+        .pretui-bottomnav[data-position='sticky'] {
+          position: sticky;
+        }
+        .pretui-bottomnav-list {
+          display: flex;
+          margin: 0;
+          padding: 0;
+          list-style: none;
+        }
+        .pretui-bottomnav-cell {
+          flex: 1 1 0;
+          min-inline-size: 0;
+        }
+        .pretui-bottomnav-item {
+          position: relative;
+          display: grid;
+          justify-items: center;
+          gap: 0.125rem;
+          inline-size: 100%;
+          min-block-size: 3.5rem;
+          padding: var(--space-2, 0.375rem) var(--space-1, 0.25rem);
+          box-sizing: border-box;
+          border: 0;
+          background: transparent;
+          color: var(--muted-foreground);
+          font: inherit;
+          font-size: var(--text-ui-xs, 0.66rem);
+          text-decoration: none;
+          cursor: pointer;
+        }
+        .pretui-bottomnav-item[data-current='true'] {
+          color: var(--pretui-bottomnav-current, var(--primary));
+          font-weight: 600;
+        }
+        .pretui-bottomnav-item[data-current='true']::before {
+          content: '';
+          position: absolute;
+          inset-block-start: 0;
+          inset-inline: 30%;
+          block-size: 2px;
+          border-radius: 0 0 2px 2px;
+          background: currentColor;
+        }
+        .pretui-bottomnav-item[aria-disabled='true'] {
+          opacity: 0.45;
+          cursor: not-allowed;
+        }
+        .pretui-bottomnav-item:hover {
+          color: var(--foreground);
+        }
+        .pretui-bottomnav-item:focus-visible {
+          outline: 2px solid var(--ring);
+          outline-offset: -2px;
+        }
+        .pretui-bottomnav-icon {
+          display: grid;
+          place-items: center;
+          block-size: 1.375rem;
+        }
+        .pretui-bottomnav-label {
+          max-inline-size: 100%;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .pretui-bottomnav-badge {
+          position: absolute;
+          inset-block-start: 0.25rem;
+          inset-inline-start: calc(50% + 0.5rem);
+          min-inline-size: 1rem;
+          padding-inline: 0.25rem;
+          border-radius: 999px;
+          background: var(--destructive);
+          color: var(--card);
+          font-size: 0.6rem;
+          font-weight: 600;
+          line-height: 1rem;
+          text-align: center;
+        }
       }
     </style>
   </template>

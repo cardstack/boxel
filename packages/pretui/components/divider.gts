@@ -36,38 +36,40 @@ export const Divider: TemplateOnlyComponent<DividerSignature> = <template>
     {{/if}}
   </div>
   <style scoped>
-    .pretui-divider {
-      --pretui-divider-spacing: var(--space-4, 11px);
-    }
-    .pretui-divider[data-orientation='horizontal'] {
-      display: flex;
-      align-items: center;
-      margin: var(--pretui-divider-spacing) 0;
-    }
-    .pretui-divider[data-orientation='horizontal']::before,
-    .pretui-divider[data-orientation='horizontal']::after {
-      content: '';
-      flex: 1;
-      height: 1px;
-      background: var(--border);
-    }
-    .pretui-divider-label {
-      padding: 0 8px;
-      font-size: var(--text-ui-sm, 11.5px);
-      letter-spacing: var(--track-ui, 0.01em);
-      color: var(--muted-foreground);
-      white-space: nowrap;
-    }
-    .pretui-divider[data-orientation='vertical'] {
-      display: inline-block;
-      width: 1px;
-      align-self: stretch;
-      min-height: 1lh;
-      background: var(--border);
-      margin: 0 var(--pretui-divider-spacing);
-    }
-    .pretui-divider[data-orientation='vertical'] .pretui-divider-label {
-      display: none;
+    @layer PretComponent {
+      .pretui-divider {
+        --pretui-divider-spacing: var(--space-4, 11px);
+      }
+      .pretui-divider[data-orientation='horizontal'] {
+        display: flex;
+        align-items: center;
+        margin: var(--pretui-divider-spacing) 0;
+      }
+      .pretui-divider[data-orientation='horizontal']::before,
+      .pretui-divider[data-orientation='horizontal']::after {
+        content: '';
+        flex: 1;
+        height: 1px;
+        background: var(--border);
+      }
+      .pretui-divider-label {
+        padding: 0 8px;
+        font-size: var(--text-ui-sm, 11.5px);
+        letter-spacing: var(--track-ui, 0.01em);
+        color: var(--muted-foreground);
+        white-space: nowrap;
+      }
+      .pretui-divider[data-orientation='vertical'] {
+        display: inline-block;
+        width: 1px;
+        align-self: stretch;
+        min-height: 1lh;
+        background: var(--border);
+        margin: 0 var(--pretui-divider-spacing);
+      }
+      .pretui-divider[data-orientation='vertical'] .pretui-divider-label {
+        display: none;
+      }
     }
   </style>
 </template>;

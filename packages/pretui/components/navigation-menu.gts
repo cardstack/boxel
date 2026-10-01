@@ -233,115 +233,117 @@ export class NavigationMenu extends Component<NavigationMenuSignature> {
       </ul>
     </nav>
     <style scoped>
-      .pretui-navmenu {
-        position: relative;
-        font-family: var(--font-sans);
-        font-size: var(--text-ui-md, 0.78rem);
-      }
-      .pretui-navmenu-list {
-        display: flex;
-        flex-wrap: wrap;
-        gap: var(--space-1, 0.25rem);
-        margin: 0;
-        padding: 0;
-        list-style: none;
-      }
-      .pretui-navmenu-trigger {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.35rem;
-        min-block-size: var(--pretui-control-h, 2.25rem);
-        padding-inline: var(--space-3, 0.5rem);
-        border: 0;
-        border-radius: var(--radius-control, 6px);
-        background: transparent;
-        color: var(--foreground);
-        font: inherit;
-        font-weight: 500;
-        text-decoration: none;
-        cursor: pointer;
-      }
-      .pretui-navmenu-trigger:hover,
-      .pretui-navmenu-trigger[aria-expanded='true'] {
-        background: var(--hover, color-mix(in oklch, var(--foreground) 8%, transparent));
-      }
-      .pretui-navmenu-trigger[data-current='true'] {
-        color: var(--primary);
-      }
-      .pretui-navmenu-trigger:focus-visible,
-      .pretui-navmenu-link:focus-visible {
-        outline: 2px solid var(--ring);
-        outline-offset: 1px;
-      }
-      .pretui-navmenu-caret {
-        inline-size: 0.35rem;
-        block-size: 0.35rem;
-        border-inline-end: 1.5px solid currentColor;
-        border-block-end: 1.5px solid currentColor;
-        rotate: 45deg;
-        translate: 0 -0.1rem;
-        transition: rotate var(--pretui-dur-snap, 160ms) var(--pretui-ease-snap, ease-out);
-      }
-      .pretui-navmenu-caret[data-open='true'] {
-        rotate: 225deg;
-        translate: 0 0.1rem;
-      }
-      .pretui-navmenu-panel {
-        position: absolute;
-        inset-inline: 0;
-        inset-block-start: calc(100% + 0.25rem);
-        z-index: var(--pretui-z-dropdown, 60);
-        padding: var(--space-4, 0.6875rem);
-        border-radius: var(--radius-surface, 10px);
-        background: var(--popover);
-        color: var(--popover-foreground);
-        box-shadow: var(--pretui-shadow-raised, 0 0 0 1px var(--border), 0 6px 20px rgb(16 24 40 / 0.12));
-      }
-      .pretui-navmenu-panel[hidden] {
-        display: none;
-      }
-      /* A transparent bridge over the gap above the panel, so a pointer
-         moving down from a trigger never leaves the navigation on the way. */
-      .pretui-navmenu-panel::before {
-        content: '';
-        position: absolute;
-        inset-inline: 0;
-        inset-block-end: 100%;
-        block-size: 0.375rem;
-      }
-      .pretui-navmenu-links {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
-        gap: var(--space-2, 0.375rem);
-        margin: 0;
-        padding: 0;
-        list-style: none;
-      }
-      .pretui-navmenu-link {
-        display: grid;
-        gap: 0.125rem;
-        padding: var(--space-2, 0.375rem) var(--space-3, 0.5rem);
-        border-radius: var(--radius-control, 6px);
-        color: inherit;
-        text-decoration: none;
-      }
-      .pretui-navmenu-link:hover {
-        background: var(--hover, color-mix(in oklch, var(--foreground) 8%, transparent));
-      }
-      .pretui-navmenu-link[aria-current='page'] .pretui-navmenu-link-label {
-        color: var(--primary);
-      }
-      .pretui-navmenu-link-label {
-        font-weight: 600;
-      }
-      .pretui-navmenu-link-desc {
-        color: var(--muted-foreground);
-        font-size: var(--text-ui-sm, 0.72rem);
-        line-height: 1.4;
-      }
-      @media (prefers-reduced-motion: reduce) {
+      @layer PretComponent {
+        .pretui-navmenu {
+          position: relative;
+          font-family: var(--font-sans);
+          font-size: var(--text-ui-md, 0.78rem);
+        }
+        .pretui-navmenu-list {
+          display: flex;
+          flex-wrap: wrap;
+          gap: var(--space-1, 0.25rem);
+          margin: 0;
+          padding: 0;
+          list-style: none;
+        }
+        .pretui-navmenu-trigger {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.35rem;
+          min-block-size: var(--pretui-control-h, 2.25rem);
+          padding-inline: var(--space-3, 0.5rem);
+          border: 0;
+          border-radius: var(--radius-control, 6px);
+          background: transparent;
+          color: var(--foreground);
+          font: inherit;
+          font-weight: 500;
+          text-decoration: none;
+          cursor: pointer;
+        }
+        .pretui-navmenu-trigger:hover,
+        .pretui-navmenu-trigger[aria-expanded='true'] {
+          background: var(--hover, color-mix(in oklch, var(--foreground) 8%, transparent));
+        }
+        .pretui-navmenu-trigger[data-current='true'] {
+          color: var(--primary);
+        }
+        .pretui-navmenu-trigger:focus-visible,
+        .pretui-navmenu-link:focus-visible {
+          outline: 2px solid var(--ring);
+          outline-offset: 1px;
+        }
         .pretui-navmenu-caret {
-          transition: none;
+          inline-size: 0.35rem;
+          block-size: 0.35rem;
+          border-inline-end: 1.5px solid currentColor;
+          border-block-end: 1.5px solid currentColor;
+          rotate: 45deg;
+          translate: 0 -0.1rem;
+          transition: rotate var(--pretui-dur-snap, 160ms) var(--pretui-ease-snap, ease-out);
+        }
+        .pretui-navmenu-caret[data-open='true'] {
+          rotate: 225deg;
+          translate: 0 0.1rem;
+        }
+        .pretui-navmenu-panel {
+          position: absolute;
+          inset-inline: 0;
+          inset-block-start: calc(100% + 0.25rem);
+          z-index: var(--pretui-z-dropdown, 60);
+          padding: var(--space-4, 0.6875rem);
+          border-radius: var(--radius-surface, 10px);
+          background: var(--popover);
+          color: var(--popover-foreground);
+          box-shadow: var(--pretui-shadow-raised, 0 0 0 1px var(--border), 0 6px 20px rgb(16 24 40 / 0.12));
+        }
+        .pretui-navmenu-panel[hidden] {
+          display: none;
+        }
+        /* A transparent bridge over the gap above the panel, so a pointer
+           moving down from a trigger never leaves the navigation on the way. */
+        .pretui-navmenu-panel::before {
+          content: '';
+          position: absolute;
+          inset-inline: 0;
+          inset-block-end: 100%;
+          block-size: 0.375rem;
+        }
+        .pretui-navmenu-links {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
+          gap: var(--space-2, 0.375rem);
+          margin: 0;
+          padding: 0;
+          list-style: none;
+        }
+        .pretui-navmenu-link {
+          display: grid;
+          gap: 0.125rem;
+          padding: var(--space-2, 0.375rem) var(--space-3, 0.5rem);
+          border-radius: var(--radius-control, 6px);
+          color: inherit;
+          text-decoration: none;
+        }
+        .pretui-navmenu-link:hover {
+          background: var(--hover, color-mix(in oklch, var(--foreground) 8%, transparent));
+        }
+        .pretui-navmenu-link[aria-current='page'] .pretui-navmenu-link-label {
+          color: var(--primary);
+        }
+        .pretui-navmenu-link-label {
+          font-weight: 600;
+        }
+        .pretui-navmenu-link-desc {
+          color: var(--muted-foreground);
+          font-size: var(--text-ui-sm, 0.72rem);
+          line-height: 1.4;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .pretui-navmenu-caret {
+            transition: none;
+          }
         }
       }
     </style>

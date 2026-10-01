@@ -46,6 +46,8 @@ Forwarded into boxel-ui: `--boxel-form-control-height`, `--boxel-input-height`, 
 
 A season must keep `--field` and `--card` visually distinct or inputs vanish into panels; and must not set `--input` equal to `--border` if it wants controls to read as inset rather than as bordered boxes. Note that this component _narrows_ `--muted-foreground` to `--ink-3` inside its wrapper — a season redefining `--ink-3` is changing placeholder colour kit-wide.
 
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
+
 ## React ecosystem
 
 | React / Aria / MUI / Ant                           | Pretui Input                          |

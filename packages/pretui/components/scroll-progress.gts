@@ -157,64 +157,66 @@ export class ScrollProgress extends Component<ScrollProgressSignature> {
       <span class='pretui-scrollprogress-fill'></span>
     </div>
     <style scoped>
-      .pretui-scrollprogress {
-        position: relative;
-        overflow: hidden;
-        height: var(--pretui-scrollprogress-thickness, 3px);
-        border-radius: var(--pretui-scrollprogress-radius, 999px);
-      }
-      .pretui-scrollprogress[data-track='true'] {
-        background: var(
-          --pretui-scrollprogress-track,
-          color-mix(in oklch, var(--foreground) 10%, transparent)
-        );
-      }
-      .pretui-scrollprogress[data-affix='top'] {
-        position: sticky;
-        inset-block-start: 0;
-        z-index: 2;
-      }
-      .pretui-scrollprogress[data-affix='bottom'] {
-        position: sticky;
-        inset-block-end: 0;
-        z-index: 2;
-      }
-      .pretui-scrollprogress-fill {
-        position: absolute;
-        inset: 0;
-        transform-origin: left center;
-        transform: scaleX(var(--pretui-scroll-progress, 0));
-        border-radius: inherit;
-        background: var(--pretui-scrollprogress-fill, var(--primary));
-      }
-      @keyframes pretui-scrollprogress-grow {
-        from {
-          transform: scaleX(0);
+      @layer PretComponent {
+        .pretui-scrollprogress {
+          position: relative;
+          overflow: hidden;
+          height: var(--pretui-scrollprogress-thickness, 3px);
+          border-radius: var(--pretui-scrollprogress-radius, 999px);
         }
-        to {
-          transform: scaleX(1);
+        .pretui-scrollprogress[data-track='true'] {
+          background: var(
+            --pretui-scrollprogress-track,
+            color-mix(in oklch, var(--foreground) 10%, transparent)
+          );
         }
+        .pretui-scrollprogress[data-affix='top'] {
+          position: sticky;
+          inset-block-start: 0;
+          z-index: 2;
+        }
+        .pretui-scrollprogress[data-affix='bottom'] {
+          position: sticky;
+          inset-block-end: 0;
+          z-index: 2;
+        }
+        .pretui-scrollprogress-fill {
+          position: absolute;
+          inset: 0;
+          transform-origin: left center;
+          transform: scaleX(var(--pretui-scroll-progress, 0));
+          border-radius: inherit;
+          background: var(--pretui-scrollprogress-fill, var(--primary));
+        }
+        @keyframes pretui-scrollprogress-grow {
+          from {
+            transform: scaleX(0);
+          }
+          to {
+            transform: scaleX(1);
+          }
+        }
+        /* The preferred path: the compositor drives this off the scroll
+           timeline, so it never touches the main thread. [data-js] is written
+           by the modifier only when it has taken over. Order matters — the
+           `animation` shorthand resets animation-timeline, so the timeline
+           longhand has to come after it. */
+        @supports (animation-timeline: scroll()) {
+          .pretui-scrollprogress[data-source='page']:not([data-js])
+            .pretui-scrollprogress-fill {
+            animation: pretui-scrollprogress-grow linear both;
+            animation-timeline: scroll(root block);
+          }
+          .pretui-scrollprogress[data-source='nearest']:not([data-js])
+            .pretui-scrollprogress-fill {
+            animation: pretui-scrollprogress-grow linear both;
+            animation-timeline: scroll(nearest block);
+          }
+        }
+        /* No reduced-motion branch by design: the ribbon is a 1:1 readout of
+           scroll position with no easing, no lag and no independent movement,
+           so there is nothing for prefers-reduced-motion to reduce. */
       }
-      /* The preferred path: the compositor drives this off the scroll
-         timeline, so it never touches the main thread. [data-js] is written
-         by the modifier only when it has taken over. Order matters — the
-         `animation` shorthand resets animation-timeline, so the timeline
-         longhand has to come after it. */
-      @supports (animation-timeline: scroll()) {
-        .pretui-scrollprogress[data-source='page']:not([data-js])
-          .pretui-scrollprogress-fill {
-          animation: pretui-scrollprogress-grow linear both;
-          animation-timeline: scroll(root block);
-        }
-        .pretui-scrollprogress[data-source='nearest']:not([data-js])
-          .pretui-scrollprogress-fill {
-          animation: pretui-scrollprogress-grow linear both;
-          animation-timeline: scroll(nearest block);
-        }
-      }
-      /* No reduced-motion branch by design: the ribbon is a 1:1 readout of
-         scroll position with no easing, no lag and no independent movement,
-         so there is nothing for prefers-reduced-motion to reduce. */
     </style>
   </template>
 }

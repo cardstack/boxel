@@ -44,3 +44,5 @@ Where it is thinner: no undo affordance after a bulk action, no per-action confi
 The bar takes the kit's surface, elevation and control tokens.
 
 It usually floats over content, so it uses the shared raised elevation — the same one every other floating surface uses, which is what stops a selection bar looking like a different application's toolbar.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

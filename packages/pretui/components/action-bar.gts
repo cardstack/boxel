@@ -339,65 +339,67 @@ export class ActionBar extends Component<ActionBarSignature> {
       </div>
     {{/if}}
     <style scoped>
-      .pretui-actionbar {
-        display: flex;
-        align-items: center;
-        gap: var(--space-4, 11px);
-        padding: var(--space-2, 6px) var(--space-3, 8px);
-        border-radius: var(--radius-surface, 12px);
-        background: var(--popover);
-        box-shadow: var(
-          --pretui-shadow-overlay,
-          0 0 0 1px var(--border),
-          0 8px 28px rgb(0 0 0 / 0.34)
-        );
-        /* Law 5: the bar arriving IS the state transition — the selection
-           just became actionable. The slide is short and it travels from the
-           edge it is pinned to, so it also says WHERE the bar lives. */
-        transition:
-          opacity var(--pretui-actionbar-enter, 140ms) ease,
-          translate var(--pretui-actionbar-enter, 140ms) ease;
-      }
-      @starting-style {
+      @layer PretComponent {
         .pretui-actionbar {
-          opacity: 0;
-          translate: 0 8px;
+          display: flex;
+          align-items: center;
+          gap: var(--space-4, 11px);
+          padding: var(--space-2, 6px) var(--space-3, 8px);
+          border-radius: var(--radius-surface, 12px);
+          background: var(--popover);
+          box-shadow: var(
+            --pretui-shadow-overlay,
+            0 0 0 1px var(--border),
+            0 8px 28px rgb(0 0 0 / 0.34)
+          );
+          /* Law 5: the bar arriving IS the state transition — the selection
+             just became actionable. The slide is short and it travels from the
+             edge it is pinned to, so it also says WHERE the bar lives. */
+          transition:
+            opacity var(--pretui-actionbar-enter, 140ms) ease,
+            translate var(--pretui-actionbar-enter, 140ms) ease;
         }
-      }
-      .pretui-actionbar[data-position='floating'] {
-        position: sticky;
-        bottom: var(--space-4, 11px);
-        z-index: var(--pretui-z-sticky, 10);
-      }
-      .pretui-actionbar-count {
-        flex: none;
-        font-size: var(--text-ui-sm, 11.5px);
-        font-weight: var(--weight-medium, 500);
-        font-variant-numeric: tabular-nums;
-        color: var(--muted-foreground);
-        white-space: nowrap;
-      }
-      .pretui-actionbar-actions {
-        display: flex;
-        align-items: center;
-        gap: var(--space-2, 6px);
-        flex: 1;
-        min-width: 0;
-        flex-wrap: wrap;
-      }
-      /* Reduced motion lands on the END state — the bar is simply there,
-         at full opacity and in place. Never a frozen midpoint. */
-      @media (prefers-reduced-motion: reduce) {
-        .pretui-actionbar {
-          transition: none;
+        @starting-style {
+          .pretui-actionbar {
+            opacity: 0;
+            translate: 0 8px;
+          }
         }
-      }
-      /* A card does not know the viewport; it knows its pane. Below the
-         count and the actions stop competing for one line. */
-      @container (max-width: 380px) {
-        .pretui-actionbar {
-          flex-wrap: wrap;
+        .pretui-actionbar[data-position='floating'] {
+          position: sticky;
+          bottom: var(--space-4, 11px);
+          z-index: var(--pretui-z-sticky, 10);
+        }
+        .pretui-actionbar-count {
+          flex: none;
+          font-size: var(--text-ui-sm, 11.5px);
+          font-weight: var(--weight-medium, 500);
+          font-variant-numeric: tabular-nums;
+          color: var(--muted-foreground);
+          white-space: nowrap;
+        }
+        .pretui-actionbar-actions {
+          display: flex;
+          align-items: center;
           gap: var(--space-2, 6px);
+          flex: 1;
+          min-width: 0;
+          flex-wrap: wrap;
+        }
+        /* Reduced motion lands on the END state — the bar is simply there,
+           at full opacity and in place. Never a frozen midpoint. */
+        @media (prefers-reduced-motion: reduce) {
+          .pretui-actionbar {
+            transition: none;
+          }
+        }
+        /* A card does not know the viewport; it knows its pane. Below the
+           count and the actions stop competing for one line. */
+        @container (max-width: 380px) {
+          .pretui-actionbar {
+            flex-wrap: wrap;
+            gap: var(--space-2, 6px);
+          }
         }
       }
     </style>

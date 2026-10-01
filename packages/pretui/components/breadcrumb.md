@@ -47,3 +47,5 @@ Further gaps:
 `--muted-foreground` (trail ink and links), `--foreground` (current item), `--ink-3` (separators), `--text-ui` (12px). The 6px gap, `500` weight on the current item and the 2px underline offset are fixed.
 
 There is no surface, no border and no padding — a Breadcrumb inherits whatever it sits on, which is why it composes above a **Toolbar** without a seam. A season must keep `--muted-foreground` and `--foreground` separable, since the current item is distinguished from its ancestors by ink and weight alone.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

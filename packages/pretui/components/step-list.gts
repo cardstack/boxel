@@ -319,230 +319,232 @@ export class StepList extends Component<StepListSignature> {
       {{/if}}
     </div>
     <style scoped>
-      /* the root is the query container for both presentations — unnamed,
-         so the rules below resolve against THIS box and not the viewport */
-      .pretui-steplist-wrap {
-        container-type: inline-size;
-        display: grid;
-        gap: var(--pretui-step-summary-gap, 7px);
-        min-width: 0;
-      }
-      .pretui-steplist-summary {
-        justify-self: end;
-        margin: 0;
-        font-size: var(--text-ui, 12px);
-        font-variant-numeric: tabular-nums;
-        color: var(--pretui-step-summary-color, var(--muted-foreground));
-      }
-      .pretui-steplist {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        margin: 0;
-        padding: 0;
-        list-style: none;
-        min-width: 0;
-      }
-      .pretui-step {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        min-width: 0;
-        font-size: var(--text-ui, 12px);
-        font-weight: 500;
-        letter-spacing: var(--track-ui, 0.01em);
-      }
-      .pretui-step:not(:last-child) {
-        flex: 1;
-      }
-      /* per-state treatment: each state only re-points the tone props, and
-         each of those reads a per-state consumer knob first — set
-         --pretui-step-error-marker-bg (etc.) on any ancestor to re-tone one
-         state without touching the rest */
-      .pretui-step[data-state='upcoming'] {
-        --pretui-step-tone: var(--pretui-step-upcoming-tone, var(--muted-foreground));
-        --pretui-step-marker-bg: var(--pretui-step-upcoming-marker-bg, var(--inset, var(--boxel-100)));
-        --pretui-step-marker-fg: var(--pretui-step-upcoming-marker-fg, var(--muted-foreground));
-        --pretui-step-ring: var(--pretui-step-upcoming-ring, var(--border));
-        --pretui-step-bar-fill: var(--pretui-step-upcoming-bar, var(--border));
-      }
-      .pretui-step[data-state='current'] {
-        --pretui-step-tone: var(--pretui-step-current-tone, var(--foreground));
-        --pretui-step-marker-bg: var(--pretui-step-current-marker-bg, var(--primary));
-        --pretui-step-marker-fg: var(--pretui-step-current-marker-fg, var(--primary-foreground));
-        --pretui-step-ring: var(--pretui-step-current-ring, color-mix(in oklch, var(--primary) 70%, var(--border)));
-        --pretui-step-bar-fill: var(--pretui-step-current-bar, var(--primary));
-      }
-      .pretui-step[data-state='complete'] {
-        --pretui-step-tone: var(--pretui-step-complete-tone, var(--muted-foreground));
-        --pretui-step-marker-bg: var(--pretui-step-complete-marker-bg, color-mix(in oklch, var(--success, var(--boxel-success)) 15%, var(--card)));
-        --pretui-step-marker-fg: var(--pretui-step-complete-marker-fg, var(--success, var(--boxel-success)));
-        --pretui-step-ring: var(--pretui-step-complete-ring, color-mix(in oklch, var(--success, var(--boxel-success)) 40%, var(--border)));
-        --pretui-step-bar-fill: var(--pretui-step-complete-bar, var(--success, var(--boxel-success)));
-      }
-      .pretui-step[data-state='error'] {
-        --pretui-step-tone: var(--pretui-step-error-tone, var(--destructive));
-        --pretui-step-marker-bg: var(--pretui-step-error-marker-bg, color-mix(in oklch, var(--destructive) 12%, var(--card)));
-        --pretui-step-marker-fg: var(--pretui-step-error-marker-fg, var(--destructive));
-        --pretui-step-ring: var(--pretui-step-error-ring, color-mix(in oklch, var(--destructive) 45%, var(--border)));
-        --pretui-step-bar-fill: var(--pretui-step-error-bar, var(--destructive));
-      }
-      /* running now: the primary hue filled solid, like 'current', but the
-         glyph is a play triangle rather than a number so the two never read
-         the same at a glance */
-      .pretui-step[data-state='in-progress'] {
-        --pretui-step-tone: var(--pretui-step-in-progress-tone, var(--foreground));
-        --pretui-step-marker-bg: var(--pretui-step-in-progress-marker-bg, color-mix(in oklch, var(--pretui-info, var(--primary)) 16%, var(--card)));
-        --pretui-step-marker-fg: var(--pretui-step-in-progress-marker-fg, var(--pretui-info, var(--primary)));
-        --pretui-step-ring: var(--pretui-step-in-progress-ring, color-mix(in oklch, var(--pretui-info, var(--primary)) 55%, var(--border)));
-        --pretui-step-bar-fill: var(--pretui-step-in-progress-bar, var(--pretui-info, var(--primary)));
-      }
-      /* cannot proceed: warning tone, not destructive — nothing has failed */
-      .pretui-step[data-state='blocked'] {
-        --pretui-step-tone: var(--pretui-step-blocked-tone, var(--foreground));
-        --pretui-step-marker-bg: var(--pretui-step-blocked-marker-bg, color-mix(in oklch, var(--warning, var(--boxel-warning)) 14%, var(--card)));
-        --pretui-step-marker-fg: var(--pretui-step-blocked-marker-fg, var(--warning, var(--boxel-warning)));
-        --pretui-step-ring: var(--pretui-step-blocked-ring, color-mix(in oklch, var(--warning, var(--boxel-warning)) 50%, var(--border)));
-        --pretui-step-bar-fill: var(--pretui-step-blocked-bar, var(--warning, var(--boxel-warning)));
-      }
-      .pretui-step-marker {
-        display: inline-grid;
-        place-items: center;
-        width: 18px;
-        height: 18px;
-        border-radius: 50%;
-        flex: none;
-        font-size: 10px;
-        font-variant-numeric: tabular-nums;
-        background: var(--pretui-step-marker-bg);
-        color: var(--pretui-step-marker-fg);
-        box-shadow: 0 0 0 1px var(--pretui-step-ring);
-      }
-      .pretui-step-label {
-        position: relative; /* containing block for the sr-only state text */
-        display: grid;
-        min-width: 0;
-        color: var(--pretui-step-tone);
-      }
-      .pretui-step-name {
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-      /* The detail slot is rendered on every step as soon as ONE step
-         declares a detail, and reserves a line's height, so a message
-         arriving mid-run does not shove the whole rail down. */
-      .pretui-step-detail {
-        min-height: 1.35em;
-        font-size: var(--text-ui-xs, 11px);
-        font-weight: 400;
-        white-space: normal;
-        overflow-wrap: break-word;
-        color: var(--pretui-step-detail-color, var(--muted-foreground));
-      }
-      .pretui-step[data-state='blocked'] .pretui-step-detail,
-      .pretui-step[data-state='error'] .pretui-step-detail {
-        color: var(--pretui-step-marker-fg);
-      }
-      .pretui-step-connector {
-        flex: 1;
-        min-width: 12px;
-        height: 1px;
-        background: var(--border);
-      }
-      .pretui-step[data-state='complete'] .pretui-step-connector {
-        background: color-mix(in oklch, var(--success, var(--boxel-success)) 45%, var(--border));
-      }
-      /* ── track variant ── equal-width bars, caption beneath each. The
-         caption keeps the marker glyph, so 'complete' is carried by shape
-         (✓) and by the visually hidden state text, not by the bar fill
-         alone. */
-      .pretui-steplist[data-variant='track'] {
-        display: grid;
-        grid-auto-flow: column;
-        grid-auto-columns: minmax(0, 1fr);
-        align-items: start;
-        gap: var(--pretui-step-track-gap, 4px);
-      }
-      .pretui-steplist[data-variant='track'] .pretui-step {
-        display: grid;
-        grid-template-columns: auto minmax(0, 1fr);
-        grid-template-areas:
-          'bar bar'
-          'marker label';
-        align-items: center;
-        gap: 7px 5px;
-      }
-      .pretui-steplist[data-variant='track'] .pretui-step-bar {
-        grid-area: bar;
-        height: var(--pretui-step-bar-height, 3px);
-        border-radius: 2px;
-        background: var(--pretui-step-bar-fill);
-      }
-      .pretui-steplist[data-variant='track'] .pretui-step-marker {
-        grid-area: marker;
-        width: auto;
-        height: auto;
-        min-width: 9px;
-        border-radius: 0;
-        background: none;
-        box-shadow: none;
-        font-size: var(--text-ui-xs, 11px);
-      }
-      .pretui-steplist[data-variant='track'] .pretui-step-label {
-        grid-area: label;
-      }
-      .pretui-steplist[data-variant='track'] .pretui-step-name {
-        white-space: normal;
-        overflow: visible;
-        overflow-wrap: break-word;
-      }
-      /* ── narrow container: the steps rail stacks. Its labels are nowrap
-         and its connectors want horizontal slack, so below this width the
-         row becomes a column rather than clipping. */
-      @container (max-width: 26rem) {
-        .pretui-steplist[data-variant='steps'] {
-          flex-direction: column;
-          align-items: stretch;
-          gap: 7px;
+      @layer PretComponent {
+        /* the root is the query container for both presentations — unnamed,
+           so the rules below resolve against THIS box and not the viewport */
+        .pretui-steplist-wrap {
+          container-type: inline-size;
+          display: grid;
+          gap: var(--pretui-step-summary-gap, 7px);
+          min-width: 0;
         }
-        .pretui-steplist[data-variant='steps'] .pretui-step {
-          flex: none;
+        .pretui-steplist-summary {
+          justify-self: end;
+          margin: 0;
+          font-size: var(--text-ui, 12px);
+          font-variant-numeric: tabular-nums;
+          color: var(--pretui-step-summary-color, var(--muted-foreground));
         }
-        .pretui-steplist[data-variant='steps'] .pretui-step-connector {
-          display: none;
+        .pretui-steplist {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          margin: 0;
+          padding: 0;
+          list-style: none;
+          min-width: 0;
         }
-        .pretui-steplist[data-variant='steps'] .pretui-step-name {
-          white-space: normal;
-          overflow: visible;
-        }
-      }
-      /* ── narrow container: five captions no longer sit side by side, so
-         the track folds into a legend list — one stage per row, each
-         keeping its own bar as a leading dash. */
-      @container (max-width: 24rem) {
-        .pretui-steplist[data-variant='track'] {
-          grid-auto-flow: row;
-          grid-auto-columns: auto;
+        .pretui-step {
+          display: flex;
+          align-items: center;
           gap: 6px;
+          min-width: 0;
+          font-size: var(--text-ui, 12px);
+          font-weight: 500;
+          letter-spacing: var(--track-ui, 0.01em);
+        }
+        .pretui-step:not(:last-child) {
+          flex: 1;
+        }
+        /* per-state treatment: each state only re-points the tone props, and
+           each of those reads a per-state consumer knob first — set
+           --pretui-step-error-marker-bg (etc.) on any ancestor to re-tone one
+           state without touching the rest */
+        .pretui-step[data-state='upcoming'] {
+          --pretui-step-tone: var(--pretui-step-upcoming-tone, var(--muted-foreground));
+          --pretui-step-marker-bg: var(--pretui-step-upcoming-marker-bg, var(--inset, var(--boxel-100)));
+          --pretui-step-marker-fg: var(--pretui-step-upcoming-marker-fg, var(--muted-foreground));
+          --pretui-step-ring: var(--pretui-step-upcoming-ring, var(--border));
+          --pretui-step-bar-fill: var(--pretui-step-upcoming-bar, var(--border));
+        }
+        .pretui-step[data-state='current'] {
+          --pretui-step-tone: var(--pretui-step-current-tone, var(--foreground));
+          --pretui-step-marker-bg: var(--pretui-step-current-marker-bg, var(--primary));
+          --pretui-step-marker-fg: var(--pretui-step-current-marker-fg, var(--primary-foreground));
+          --pretui-step-ring: var(--pretui-step-current-ring, color-mix(in oklch, var(--primary) 70%, var(--border)));
+          --pretui-step-bar-fill: var(--pretui-step-current-bar, var(--primary));
+        }
+        .pretui-step[data-state='complete'] {
+          --pretui-step-tone: var(--pretui-step-complete-tone, var(--muted-foreground));
+          --pretui-step-marker-bg: var(--pretui-step-complete-marker-bg, color-mix(in oklch, var(--success, var(--boxel-success)) 15%, var(--card)));
+          --pretui-step-marker-fg: var(--pretui-step-complete-marker-fg, var(--success, var(--boxel-success)));
+          --pretui-step-ring: var(--pretui-step-complete-ring, color-mix(in oklch, var(--success, var(--boxel-success)) 40%, var(--border)));
+          --pretui-step-bar-fill: var(--pretui-step-complete-bar, var(--success, var(--boxel-success)));
+        }
+        .pretui-step[data-state='error'] {
+          --pretui-step-tone: var(--pretui-step-error-tone, var(--destructive));
+          --pretui-step-marker-bg: var(--pretui-step-error-marker-bg, color-mix(in oklch, var(--destructive) 12%, var(--card)));
+          --pretui-step-marker-fg: var(--pretui-step-error-marker-fg, var(--destructive));
+          --pretui-step-ring: var(--pretui-step-error-ring, color-mix(in oklch, var(--destructive) 45%, var(--border)));
+          --pretui-step-bar-fill: var(--pretui-step-error-bar, var(--destructive));
+        }
+        /* running now: the primary hue filled solid, like 'current', but the
+           glyph is a play triangle rather than a number so the two never read
+           the same at a glance */
+        .pretui-step[data-state='in-progress'] {
+          --pretui-step-tone: var(--pretui-step-in-progress-tone, var(--foreground));
+          --pretui-step-marker-bg: var(--pretui-step-in-progress-marker-bg, color-mix(in oklch, var(--pretui-info, var(--primary)) 16%, var(--card)));
+          --pretui-step-marker-fg: var(--pretui-step-in-progress-marker-fg, var(--pretui-info, var(--primary)));
+          --pretui-step-ring: var(--pretui-step-in-progress-ring, color-mix(in oklch, var(--pretui-info, var(--primary)) 55%, var(--border)));
+          --pretui-step-bar-fill: var(--pretui-step-in-progress-bar, var(--pretui-info, var(--primary)));
+        }
+        /* cannot proceed: warning tone, not destructive — nothing has failed */
+        .pretui-step[data-state='blocked'] {
+          --pretui-step-tone: var(--pretui-step-blocked-tone, var(--foreground));
+          --pretui-step-marker-bg: var(--pretui-step-blocked-marker-bg, color-mix(in oklch, var(--warning, var(--boxel-warning)) 14%, var(--card)));
+          --pretui-step-marker-fg: var(--pretui-step-blocked-marker-fg, var(--warning, var(--boxel-warning)));
+          --pretui-step-ring: var(--pretui-step-blocked-ring, color-mix(in oklch, var(--warning, var(--boxel-warning)) 50%, var(--border)));
+          --pretui-step-bar-fill: var(--pretui-step-blocked-bar, var(--warning, var(--boxel-warning)));
+        }
+        .pretui-step-marker {
+          display: inline-grid;
+          place-items: center;
+          width: 18px;
+          height: 18px;
+          border-radius: 50%;
+          flex: none;
+          font-size: 10px;
+          font-variant-numeric: tabular-nums;
+          background: var(--pretui-step-marker-bg);
+          color: var(--pretui-step-marker-fg);
+          box-shadow: 0 0 0 1px var(--pretui-step-ring);
+        }
+        .pretui-step-label {
+          position: relative; /* containing block for the sr-only state text */
+          display: grid;
+          min-width: 0;
+          color: var(--pretui-step-tone);
+        }
+        .pretui-step-name {
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        /* The detail slot is rendered on every step as soon as ONE step
+           declares a detail, and reserves a line's height, so a message
+           arriving mid-run does not shove the whole rail down. */
+        .pretui-step-detail {
+          min-height: 1.35em;
+          font-size: var(--text-ui-xs, 11px);
+          font-weight: 400;
+          white-space: normal;
+          overflow-wrap: break-word;
+          color: var(--pretui-step-detail-color, var(--muted-foreground));
+        }
+        .pretui-step[data-state='blocked'] .pretui-step-detail,
+        .pretui-step[data-state='error'] .pretui-step-detail {
+          color: var(--pretui-step-marker-fg);
+        }
+        .pretui-step-connector {
+          flex: 1;
+          min-width: 12px;
+          height: 1px;
+          background: var(--border);
+        }
+        .pretui-step[data-state='complete'] .pretui-step-connector {
+          background: color-mix(in oklch, var(--success, var(--boxel-success)) 45%, var(--border));
+        }
+        /* ── track variant ── equal-width bars, caption beneath each. The
+           caption keeps the marker glyph, so 'complete' is carried by shape
+           (✓) and by the visually hidden state text, not by the bar fill
+           alone. */
+        .pretui-steplist[data-variant='track'] {
+          display: grid;
+          grid-auto-flow: column;
+          grid-auto-columns: minmax(0, 1fr);
+          align-items: start;
+          gap: var(--pretui-step-track-gap, 4px);
         }
         .pretui-steplist[data-variant='track'] .pretui-step {
-          grid-template-columns: 14px auto minmax(0, 1fr);
-          grid-template-areas: 'bar marker label';
-          gap: 7px;
+          display: grid;
+          grid-template-columns: auto minmax(0, 1fr);
+          grid-template-areas:
+            'bar bar'
+            'marker label';
+          align-items: center;
+          gap: 7px 5px;
         }
-      }
-      .pretui-vh {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        margin: -1px;
-        padding: 0;
-        overflow: hidden;
-        clip: rect(0 0 0 0);
-        clip-path: inset(50%);
-        white-space: nowrap;
-        border: 0;
+        .pretui-steplist[data-variant='track'] .pretui-step-bar {
+          grid-area: bar;
+          height: var(--pretui-step-bar-height, 3px);
+          border-radius: 2px;
+          background: var(--pretui-step-bar-fill);
+        }
+        .pretui-steplist[data-variant='track'] .pretui-step-marker {
+          grid-area: marker;
+          width: auto;
+          height: auto;
+          min-width: 9px;
+          border-radius: 0;
+          background: none;
+          box-shadow: none;
+          font-size: var(--text-ui-xs, 11px);
+        }
+        .pretui-steplist[data-variant='track'] .pretui-step-label {
+          grid-area: label;
+        }
+        .pretui-steplist[data-variant='track'] .pretui-step-name {
+          white-space: normal;
+          overflow: visible;
+          overflow-wrap: break-word;
+        }
+        /* ── narrow container: the steps rail stacks. Its labels are nowrap
+           and its connectors want horizontal slack, so below this width the
+           row becomes a column rather than clipping. */
+        @container (max-width: 26rem) {
+          .pretui-steplist[data-variant='steps'] {
+            flex-direction: column;
+            align-items: stretch;
+            gap: 7px;
+          }
+          .pretui-steplist[data-variant='steps'] .pretui-step {
+            flex: none;
+          }
+          .pretui-steplist[data-variant='steps'] .pretui-step-connector {
+            display: none;
+          }
+          .pretui-steplist[data-variant='steps'] .pretui-step-name {
+            white-space: normal;
+            overflow: visible;
+          }
+        }
+        /* ── narrow container: five captions no longer sit side by side, so
+           the track folds into a legend list — one stage per row, each
+           keeping its own bar as a leading dash. */
+        @container (max-width: 24rem) {
+          .pretui-steplist[data-variant='track'] {
+            grid-auto-flow: row;
+            grid-auto-columns: auto;
+            gap: 6px;
+          }
+          .pretui-steplist[data-variant='track'] .pretui-step {
+            grid-template-columns: 14px auto minmax(0, 1fr);
+            grid-template-areas: 'bar marker label';
+            gap: 7px;
+          }
+        }
+        .pretui-vh {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          margin: -1px;
+          padding: 0;
+          overflow: hidden;
+          clip: rect(0 0 0 0);
+          clip-path: inset(50%);
+          white-space: nowrap;
+          border: 0;
+        }
       }
     </style>
   </template>

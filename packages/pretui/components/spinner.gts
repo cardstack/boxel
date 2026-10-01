@@ -32,22 +32,24 @@ export class Spinner extends Component<SpinnerSignature> {
   <template>
     <span class='pretui-spinner' role='status' aria-label='Loading' style={{this.style}} data-test-pretui-spinner ...attributes></span>
     <style scoped>
-      @keyframes pretui-spin {
-        to {
-          transform: rotate(360deg);
+      @layer PretComponent {
+        @keyframes pretui-spin {
+          to {
+            transform: rotate(360deg);
+          }
         }
-      }
-      .pretui-spinner {
-        display: inline-block;
-        border-radius: 50%;
-        border: 1.5px solid color-mix(in oklch, currentColor 25%, transparent);
-        border-top-color: currentColor;
-        animation: pretui-spin 0.7s linear infinite;
-        flex: none;
-      }
-      @media (prefers-reduced-motion: reduce) {
         .pretui-spinner {
-          animation-duration: 2.8s;
+          display: inline-block;
+          border-radius: 50%;
+          border: 1.5px solid color-mix(in oklch, currentColor 25%, transparent);
+          border-top-color: currentColor;
+          animation: pretui-spin 0.7s linear infinite;
+          flex: none;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .pretui-spinner {
+            animation-duration: 2.8s;
+          }
         }
       }
     </style>

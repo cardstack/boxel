@@ -45,3 +45,5 @@ Where it is thinner: no checkable top-level items, no dynamic enable/disable con
 The panel stylesheet, shortcut faces and row model are **Menu**'s; the bar adds only its own strip.
 
 Sharing the panel is the visible half of the shared-tree design — a command looks identical whether it was reached from the bar, a context menu or the palette.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

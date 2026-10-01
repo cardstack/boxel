@@ -635,15 +635,17 @@ export class Menu extends Component<MenuSignature> {
     </span>
 
     <style scoped>
-      .pretui-menuwrap {
-        position: relative;
-        display: inline-flex;
-      }
-      .pretui-menu-trigger {
-        display: inline-flex;
-      }
-      .pretui-menu-watch {
-        display: none;
+      @layer PretComponent {
+        .pretui-menuwrap {
+          position: relative;
+          display: inline-flex;
+        }
+        .pretui-menu-trigger {
+          display: inline-flex;
+        }
+        .pretui-menu-watch {
+          display: none;
+        }
       }
     </style>
   </template>

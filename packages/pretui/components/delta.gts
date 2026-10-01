@@ -23,20 +23,22 @@ export class Delta extends Component<DeltaSignature> {
   <template>
     <span class='pretui-delta' data-sign={{this.sign}} data-test-pretui-delta ...attributes>{{this.text}}</span>
     <style scoped>
-      .pretui-delta {
-        font-family: var(--font-mono);
-        font-size: var(--text-ui-sm, 11.5px);
-        font-variant-numeric: tabular-nums;
-        font-weight: 500;
-      }
-      .pretui-delta[data-sign='up'] {
-        color: var(--success, var(--boxel-success));
-      }
-      .pretui-delta[data-sign='down'] {
-        color: var(--pretui-destructive-ink, var(--boxel-danger));
-      }
-      .pretui-delta[data-sign='flat'] {
-        color: var(--muted-foreground);
+      @layer PretComponent {
+        .pretui-delta {
+          font-family: var(--font-mono);
+          font-size: var(--text-ui-sm, 11.5px);
+          font-variant-numeric: tabular-nums;
+          font-weight: 500;
+        }
+        .pretui-delta[data-sign='up'] {
+          color: var(--success, var(--boxel-success));
+        }
+        .pretui-delta[data-sign='down'] {
+          color: var(--pretui-destructive-ink, var(--boxel-danger));
+        }
+        .pretui-delta[data-sign='flat'] {
+          color: var(--muted-foreground);
+        }
       }
     </style>
   </template>

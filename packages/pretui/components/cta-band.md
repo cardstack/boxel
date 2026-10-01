@@ -46,3 +46,5 @@ Where it is thinner: no background media, no split arrangement, and no dismissal
 `@tone` and `@appearance` resolve through the kit's shared recipe system; alignment and heading level are structural.
 
 Because the band is a recipe rather than a colour, a season that expresses `accent` through a border rather than a fill gets a bordered CTA automatically — which is the behaviour a hardcoded background would prevent.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

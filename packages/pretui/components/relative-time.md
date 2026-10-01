@@ -54,3 +54,5 @@ Gaps:
 Effectively none: `white-space: nowrap` and `font-variant-numeric: tabular-nums`. Ink, size and family are inherited from context — which is correct for something that appears inside **Timeline** rows, **Feed** articles and table cells, and should look like the text around it in each.
 
 The tabular figures are the one deliberate typographic choice: in a column of timestamps, "11 days ago" and "3 days ago" align on the same grid rather than jittering. A season needs a font whose tabular figures actually differ from its proportional ones for that to have any effect.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

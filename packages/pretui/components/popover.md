@@ -48,6 +48,8 @@ Gaps, plainly:
 
 `--popover`, `--popover-foreground` (falling back to `--foreground`), `--pretui-shadow-overlay`, `--space-4`, plus the three `--pretui-popover-*` sizing knobs. Radius is hard-coded at 10px rather than reading `--radius-surface` — a genuine inconsistency with Dialog and Panel that a season cannot currently override. Entry motion is `@starting-style` (opacity + 4px rise, 180ms) with a `prefers-reduced-motion` opt-out.
 
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
+
 ## React ecosystem
 
 Click-to-open rich surface. Hover preview is **HoverCard**. String

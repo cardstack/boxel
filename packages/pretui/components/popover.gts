@@ -143,52 +143,54 @@ export class Popover extends Component<PopoverSignature> {
       </Popup>
     </span>
     <style scoped>
-      .pretui-popover {
-        display: inline-block;
-      }
-      .pretui-popover-backdrop {
-        /* wave-0 backdrop-close: viewport-covering close target instead of a
-           document listener; fixed is intentional (lint warns, accepted) */
-        position: fixed;
-        inset: 0;
-        background: transparent;
-        border: 0;
-        padding: 0;
-        cursor: default;
-      }
-      .pretui-popover-panel {
-        position: relative;
-        background: var(--popover);
-        color: var(--popover-foreground);
-        border-radius: 10px;
-        box-shadow: var(--pretui-shadow-overlay, 0 0 0 1px var(--border), 0 8px 28px rgb(0 0 0 / 0.16));
-        padding: var(--space-4, 11px);
-        /* component-owned knobs: consumers size the panel by setting these
-           custom properties on any ancestor — no :deep() required */
-        width: var(--pretui-popover-width, auto);
-        min-width: var(--pretui-popover-min-width, 200px);
-        max-width: var(--pretui-popover-max-width, min(360px, calc(100vw - 16px)));
-        /* The documented exception to "never remove an outline without a
-           :focus-visible replacement": the panel is tabindex='-1' and is only
-           ever focused programmatically on open, so :focus-visible never
-           matches it and a ring here would only be a stray box around a
-           region the user did not tab to. Every focusable thing INSIDE the
-           panel keeps its own ring. */
-        outline: none;
-        opacity: 1;
-        transform: none;
-        transition: opacity 180ms cubic-bezier(0.23, 1, 0.32, 1),
-          transform 180ms cubic-bezier(0.23, 1, 0.32, 1);
-      }
-      @starting-style {
-        .pretui-popover-panel {
-          opacity: 0;
-          transform: translateY(4px);
+      @layer PretComponent {
+        .pretui-popover {
+          display: inline-block;
         }
-      }
-      @media (prefers-reduced-motion: reduce) {
+        .pretui-popover-backdrop {
+          /* wave-0 backdrop-close: viewport-covering close target instead of a
+             document listener; fixed is intentional (lint warns, accepted) */
+          position: fixed;
+          inset: 0;
+          background: transparent;
+          border: 0;
+          padding: 0;
+          cursor: default;
+        }
         .pretui-popover-panel {
-          transition: none;
+          position: relative;
+          background: var(--popover);
+          color: var(--popover-foreground);
+          border-radius: 10px;
+          box-shadow: var(--pretui-shadow-overlay, 0 0 0 1px var(--border), 0 8px 28px rgb(0 0 0 / 0.16));
+          padding: var(--space-4, 11px);
+          /* component-owned knobs: consumers size the panel by setting these
+             custom properties on any ancestor — no :deep() required */
+          width: var(--pretui-popover-width, auto);
+          min-width: var(--pretui-popover-min-width, 200px);
+          max-width: var(--pretui-popover-max-width, min(360px, calc(100vw - 16px)));
+          /* The documented exception to "never remove an outline without a
+             :focus-visible replacement": the panel is tabindex='-1' and is only
+             ever focused programmatically on open, so :focus-visible never
+             matches it and a ring here would only be a stray box around a
+             region the user did not tab to. Every focusable thing INSIDE the
+             panel keeps its own ring. */
+          outline: none;
+          opacity: 1;
+          transform: none;
+          transition: opacity 180ms cubic-bezier(0.23, 1, 0.32, 1),
+            transform 180ms cubic-bezier(0.23, 1, 0.32, 1);
+        }
+        @starting-style {
+          .pretui-popover-panel {
+            opacity: 0;
+            transform: translateY(4px);
+          }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .pretui-popover-panel {
+            transition: none;
+          }
         }
       }
     </style>

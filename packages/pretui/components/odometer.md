@@ -51,3 +51,5 @@ Where it is thinner: no per-digit colour or emphasis, no roll on mount (the firs
 `--pretui-odo-cell` (digit cell height, from `@cellHeight`), `--pretui-odo-duration` and `--pretui-odo-ease` (the roll), `--pretui-odo-stagger` and `--pretui-odo-i` (the cascade and each digit's index), `--pretui-odo-start` and `--pretui-odo-rest` (the roll's endpoints).
 
 Everything is derived from args rather than being seasonal, because a roll's timing belongs to the moment rather than to the theme — and the digits inherit their face and colour from context, so an odometer inside a **Stat** looks like that headline rather than like a widget.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

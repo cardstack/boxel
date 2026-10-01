@@ -98,66 +98,68 @@ export class SegmentedControl extends Component<SegmentedControlSignature> {
       {{/each}}
     </div>
     <style scoped>
-      .pretui-seg {
-        position: relative;
-        display: inline-flex;
-        gap: 2px;
-        padding: 2px;
-        background: var(--inset, var(--boxel-100));
-        border-radius: calc(var(--radius) + 2px);
-        box-shadow: var(--pretui-shadow-hairline, 0 0 0 1px var(--border));
-      }
-      .pretui-seg-item {
-        /* positioned + z-index so the label paints above the travelling
-           highlight, which is a sibling rather than this button's own
-           background. `raised` is the kit scale's in-component tier
-           (pretui-css.gts) — it never competes outside this box. */
-        position: relative;
-        z-index: var(--pretui-z-raised, 1);
-        display: inline-flex;
-        align-items: center;
-        height: 24px;
-        padding: 0 11px;
-        border: 0;
-        background: none;
-        border-radius: var(--radius);
-        font-family: inherit;
-        font-size: var(--text-ui, 12px);
-        font-weight: 500;
-        letter-spacing: inherit;
-        color: var(--muted-foreground);
-        cursor: pointer;
-        white-space: nowrap;
-        /* the label crosses to ink over the same beat the pill travels, so
-           the two halves of the state change read as one move */
-        transition: color 150ms var(--pretui-ease-snap, ease);
-      }
-      /* the radio carries the semantics and the keyboard; the label carries
-         the look. Kept 1px and in flow rather than display:none so it stays
-         focusable and so the focus ring below has something to sit on. */
-      .pretui-seg-input {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        margin: 0;
-        opacity: 0;
-        pointer-events: none;
-      }
-      .pretui-seg-item:has(.pretui-seg-input:focus-visible) {
-        outline: 2px solid var(--ring);
-        outline-offset: 1px;
-      }
-      .pretui-seg-item[data-state='active'] {
-        /* the card face and control shadow now belong to the shared
-           SlidingHighlight in its pill cut — identical treatment, one
-           element, and it travels */
-        color: var(--foreground);
-      }
-      /* coarse pointers get a real hit target without moving the fine one */
-      @media (any-pointer: coarse) {
+      @layer PretComponent {
+        .pretui-seg {
+          position: relative;
+          display: inline-flex;
+          gap: 2px;
+          padding: 2px;
+          background: var(--inset, var(--boxel-100));
+          border-radius: calc(var(--radius) + 2px);
+          box-shadow: var(--pretui-shadow-hairline, 0 0 0 1px var(--border));
+        }
         .pretui-seg-item {
-          min-height: 34px;
-          padding: 0 14px;
+          /* positioned + z-index so the label paints above the travelling
+             highlight, which is a sibling rather than this button's own
+             background. `raised` is the kit scale's in-component tier
+             (pretui-css.gts) — it never competes outside this box. */
+          position: relative;
+          z-index: var(--pretui-z-raised, 1);
+          display: inline-flex;
+          align-items: center;
+          height: 24px;
+          padding: 0 11px;
+          border: 0;
+          background: none;
+          border-radius: var(--radius);
+          font-family: inherit;
+          font-size: var(--text-ui, 12px);
+          font-weight: 500;
+          letter-spacing: inherit;
+          color: var(--muted-foreground);
+          cursor: pointer;
+          white-space: nowrap;
+          /* the label crosses to ink over the same beat the pill travels, so
+             the two halves of the state change read as one move */
+          transition: color 150ms var(--pretui-ease-snap, ease);
+        }
+        /* the radio carries the semantics and the keyboard; the label carries
+           the look. Kept 1px and in flow rather than display:none so it stays
+           focusable and so the focus ring below has something to sit on. */
+        .pretui-seg-input {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          margin: 0;
+          opacity: 0;
+          pointer-events: none;
+        }
+        .pretui-seg-item:has(.pretui-seg-input:focus-visible) {
+          outline: 2px solid var(--ring);
+          outline-offset: 1px;
+        }
+        .pretui-seg-item[data-state='active'] {
+          /* the card face and control shadow now belong to the shared
+             SlidingHighlight in its pill cut — identical treatment, one
+             element, and it travels */
+          color: var(--foreground);
+        }
+        /* coarse pointers get a real hit target without moving the fine one */
+        @media (any-pointer: coarse) {
+          .pretui-seg-item {
+            min-height: 34px;
+            padding: 0 14px;
+          }
         }
       }
     </style>

@@ -58,3 +58,5 @@ Gaps:
 `--muted-foreground` (resting links), `--foreground` (active link), the marker's fill (the accent bar — a season's `--primary` or the SlidingHighlight tokens), `--border`, `--text-ui-sm`/`--text-ui-md`, and `--_level` (the per-item indent step, set inline from `@level`).
 
 Because the marker is absolutely positioned and measured, a season that changes link line-height or padding gets a correctly-resized marker for free — the `ResizeObserver` handles reflow. A season that hides the marker entirely, however, leaves `aria-current` as the only active signal and ink weight as the only visual one; keep at least one strong visual channel.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

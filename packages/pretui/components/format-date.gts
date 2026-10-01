@@ -238,9 +238,11 @@ export class FormatDate extends Component<FormatDateSignature> {
       />
     </time>
     <style scoped>
-      .pretui-format-date {
-        white-space: nowrap;
-        font-variant-numeric: tabular-nums;
+      @layer PretComponent {
+        .pretui-format-date {
+          white-space: nowrap;
+          font-variant-numeric: tabular-nums;
+        }
       }
     </style>
   </template>
