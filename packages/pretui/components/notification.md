@@ -56,6 +56,8 @@ No APG pattern. A notification is text, one or two buttons and an optional live 
 
 These are the tokens a **Toaster** item reads, so a season that retunes toasts retunes notifications the same way. The 3px stripe and the 1.25rem dismiss button are fixed.
 
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
+
 ## React ecosystem
 
 | Agent types                                       | Give them                                                |

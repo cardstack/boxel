@@ -35,6 +35,8 @@ No APG pattern. This is the primitive the patterns use.
 
 No tokens. The span carries no colour or type of its own, and with `@focusable` it inherits both from where it sits once revealed.
 
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
+
 ## React ecosystem
 
 | Agent types                                 | Give them                          |
