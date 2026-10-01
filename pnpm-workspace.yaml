@@ -207,7 +207,9 @@ catalog:
   monaco-editor: ^0.52.2
   # Pinned together: glimmer-motion inlines framer-motion's gesture and feature
   # modules into its build, with hand-written declarations for them that match
-  # this release, alongside motion-dom 13.4.5 (see packages/glimmer-motion/VENDORED.md).
+  # this release, and motion-dom / motion-utils are the versions it was released
+  # against. The Motion Bump workflow moves all four (see
+  # packages/glimmer-motion/VENDORED.md).
   framer-motion: 13.4.6
   motion: 13.4.6
   motion-dom: 13.4.5
