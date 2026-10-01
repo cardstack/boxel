@@ -326,6 +326,10 @@ export async function touchMediaCacheEntry(
 // `ANONYMOUS_RENDER`), who is answered with the capture drawn as them and,
 // failing that, the realm's own. Without one, only the realm's own captures
 // answer. A capture drawn as one reader never answers another.
+//
+// The realm's own captures are its declared ones. An on-demand capture is
+// always one a reader asked for, so an on-demand row that names no reader
+// says nothing about whose view it drew, and answers no one.
 export async function findMediaCacheEntry(
   dbAdapter: DBAdapter,
   {
@@ -341,10 +345,10 @@ export async function findMediaCacheEntry(
     servedTo?: string;
   },
 ): Promise<MediaCacheEntry | undefined> {
-  let renderedAs =
+  let reader =
     servedTo === undefined || servedTo === REALM_AUTHORITY_RENDER
-      ? [REALM_AUTHORITY_RENDER]
-      : [servedTo, REALM_AUTHORITY_RENDER];
+      ? undefined
+      : servedTo;
   // Explicit columns — exactly `MediaCacheEntry`'s shape — rather than
   // `SELECT *`: this read answers every ledger-served `<img>` request, and
   // `*` would also drag the row's `diagnostics` breakdown (~30 keys nothing
@@ -359,10 +363,13 @@ export async function findMediaCacheEntry(
     param(sourceURL),
     `AND capture_spec_hash =`,
     param(captureSpecHash),
-    `AND rendered_as IN`,
-    ...addExplicitParens(
-      separatedByCommas(renderedAs.map((identity) => [param(identity)])),
-    ),
+    `AND (`,
+    ...(reader !== undefined
+      ? ([`rendered_as =`, param(reader), `OR`] as Expression)
+      : []),
+    `(rendered_as =`,
+    param(REALM_AUTHORITY_RENDER),
+    `AND lane = 'declared'))`,
     ...(sourceGeneration != null
       ? ([`AND source_generation =`, param(sourceGeneration)] as Expression)
       : []),
@@ -372,7 +379,7 @@ export async function findMediaCacheEntry(
     // The reader's own capture ahead of the realm's.
     `ORDER BY source_generation DESC,
        CASE WHEN rendered_as =`,
-    param(renderedAs[0]),
+    param(reader ?? REALM_AUTHORITY_RENDER),
     `THEN 0 ELSE 1 END
      LIMIT 1`,
   ] as Expression)) as {

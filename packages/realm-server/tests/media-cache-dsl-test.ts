@@ -1,6 +1,7 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
+import jwt from 'jsonwebtoken';
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -40,6 +41,7 @@ import {
   parseCaptureRequestSpec,
   putMedia,
   REALM_AUTHORITY_RENDER,
+  revokeUserSessions,
   query,
   captureCard,
   setCapturePerfSink,
@@ -838,6 +840,35 @@ module(basename(import.meta.filename), function () {
       );
     }
 
+    // A realm session issued a minute ago, so a revocation recorded now
+    // postdates it.
+    function craftSession(claims: Record<string, unknown>) {
+      let iat = Math.floor(Date.now() / 1000) - 60;
+      return jwt.sign(
+        {
+          sessionRoom: 'session-room',
+          realmServerURL: realm.realmServerURL,
+          ...claims,
+          iat,
+          exp: iat + 900,
+        },
+        realmSecretSeed,
+      );
+    }
+
+    async function seedCaptureDrawnAs(renderedAs: string) {
+      await putMedia(dbAdapter, adapter, {
+        renderedAs,
+        realmURL: REALM_URL,
+        sourceURL: `${REALM_URL}card-1`,
+        captureSpecHash: await captureSpecHash({ format: 'isolated' }),
+        sourceGeneration: 1,
+        bytes: PNG_BYTES,
+        contentType: 'image/png',
+        lane: 'on-demand',
+      });
+    }
+
     async function get(
       pathAndQuery: string,
       method = 'GET',
@@ -947,6 +978,73 @@ module(basename(import.meta.filename), function () {
       let response = await get('_capture/card-1');
       assert.strictEqual(response.status, 200);
       assert.strictEqual(captureCalls, 1);
+    });
+
+    // This realm is world-readable, so its read path takes a session without
+    // checking it. A capture is drawn as, and served to, only a reader the
+    // realm vouches for, so the checks it skipped run before one is.
+    test('a revoked session is served as a reader who authenticated nobody', async function (assert) {
+      await seedInstanceRow('card-1');
+      await seedCaptureDrawnAs('@revoked-reader:localhost');
+      let session = craftSession({
+        user: '@revoked-reader:localhost',
+        realm: REALM_URL,
+        permissions: [],
+      });
+
+      let before = await get('_capture/card-1', 'GET', {
+        Authorization: `Bearer ${session}`,
+      });
+      assert.strictEqual(
+        before.status,
+        200,
+        'the session is served the capture drawn as its user',
+      );
+
+      await revokeUserSessions(dbAdapter, '@revoked-reader:localhost');
+      let after = await get('_capture/card-1', 'GET', {
+        Authorization: `Bearer ${session}`,
+      });
+      assert.strictEqual(
+        after.status,
+        403,
+        "once revoked it isn't, and the closed gate renders nothing for a reader who authenticated nobody",
+      );
+      assert.strictEqual(captureCalls, 0, 'nothing renders');
+    });
+
+    test('a session delegated to another realm is served as a reader who authenticated nobody', async function (assert) {
+      await seedInstanceRow('card-1');
+      await seedCaptureDrawnAs('@delegated-reader:localhost');
+
+      let elsewhere = await get('_capture/card-1', 'GET', {
+        Authorization: `Bearer ${craftSession({
+          user: '@delegated-reader:localhost',
+          realm: 'http://another-realm.example/',
+          permissions: ['read'],
+          delegated: true,
+        })}`,
+      });
+      assert.strictEqual(
+        elsewhere.status,
+        403,
+        'a session bound to another realm reads nothing here as its user',
+      );
+
+      let here = await get('_capture/card-1', 'GET', {
+        Authorization: `Bearer ${craftSession({
+          user: '@delegated-reader:localhost',
+          realm: REALM_URL,
+          permissions: ['read'],
+          delegated: true,
+        })}`,
+      });
+      assert.strictEqual(
+        here.status,
+        200,
+        'while one delegated to this realm reads it as the user it acts for',
+      );
+      assert.strictEqual(captureCalls, 0, 'nothing renders');
     });
 
     test('an open realm captures on demand, persists, and then serves hits', async function (assert) {

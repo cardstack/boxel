@@ -11,7 +11,11 @@ exports.shorthands = undefined;
 //
 // The primary key is rebuilt under its own name, so an upsert that names the
 // constraint keeps resolving, and a writer that never sets the column keeps
-// the realm-authority key it always had.
+// the empty value. Readers that know the column serve an empty-valued row
+// only from the declared lane, so an on-demand row with no reader serves no
+// one. While a deploy rolls out, a reader that doesn't know the column can
+// still serve a capture drawn as one user to another; that window lasts only
+// as long as the previous revision keeps serving.
 
 exports.up = (pgm) => {
   pgm.addColumns('media_cache_ledger', {

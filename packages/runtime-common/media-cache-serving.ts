@@ -97,19 +97,27 @@ export function mediaCacheMissResponse({
 // request's ledger read and its stream open) is served as an uncaptured
 // miss, not an error: the ledger row is the GC's cleanup path and a
 // re-capture heals the URL.
+//
+// `variesByReader` marks a URL that answers each reader with the capture
+// drawn as them: the response varies on `Authorization`, so a cache keyed
+// by URL alone (a browser's, across an account switch) never hands one
+// reader's capture to another.
 export async function serveMediaCacheEntry({
   request,
   requestContext,
   entry,
   mediaCacheAdapter,
   dbAdapter,
+  variesByReader = false,
 }: {
   request: Request;
   requestContext: RequestContext;
   entry: MediaCacheEntry;
   mediaCacheAdapter: MediaCacheAdapter;
   dbAdapter: DBAdapter;
+  variesByReader?: boolean;
 }): Promise<ResponseWithNodeStream> {
+  let varyOn = variesByReader ? ['Authorization'] : undefined;
   let etag = `"${entry.objectKey}"`;
   let headers: Record<string, string> = {
     'content-type': entry.contentType,
@@ -132,6 +140,7 @@ export async function serveMediaCacheEntry({
       body: null,
       init: { status: 304, headers },
       requestContext,
+      varyOn,
     });
   }
 
@@ -154,6 +163,7 @@ export async function serveMediaCacheEntry({
       headers: { ...headers, 'content-length': String(entry.sizeBytes) },
     },
     requestContext,
+    varyOn,
   });
   response.nodeStream = toNodeStream(stream) as Readable;
   return response;

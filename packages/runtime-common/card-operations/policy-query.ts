@@ -113,8 +113,8 @@ export function searchPrincipal(
 
 // Raised when a policy is asked what it grants a realm-authority principal.
 //
-// A render's search runs as a realm-authority principal, and what the render
-// produces is cached and served to every viewer. A policy fragment composed
+// The search a realm's own render sends runs as a realm-authority principal,
+// and what that render produces is cached and served to every viewer. A policy fragment composed
 // into that search would make the render per-actor: rows missing, or rows
 // only one user may see, in HTML everyone receives. Nothing would fail, so
 // this is raised instead of answering, and it is never caught as a denial.
