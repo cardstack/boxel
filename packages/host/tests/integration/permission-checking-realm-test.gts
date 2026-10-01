@@ -9,6 +9,7 @@ import {
   rri,
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
+import { isCardErrorJSONAPI } from '@cardstack/runtime-common/error';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import type CapabilitiesService from '@cardstack/host/services/capabilities';
@@ -28,7 +29,7 @@ import { setupRenderingTest } from '../helpers/setup';
 
 import type { TestRealmAdapter } from '../helpers/adapter';
 
-import type { CardDef } from '@cardstack/base/card-api';
+import type { CardContext, CardDef } from '@cardstack/base/card-api';
 import type * as OperationsModule from '@cardstack/base/operations';
 
 // A realm that judges the host's requests by its ACL, as a deployed realm
@@ -210,15 +211,16 @@ module('Integration | a realm that checks permissions', function (hooks) {
     let capabilities = getService(
       'capabilities',
     ) as unknown as CapabilitiesService;
+    // The one member of a card's context the classroom reads.
     provideConsumeContext(CardContextName, {
       canInvoke: capabilities.canInvoke,
-    });
+    } as unknown as CardContext);
     return adapter;
   }
 
   async function classroomAt(id: string): Promise<CardDef> {
     let card = await getService('store').get(id);
-    if (!card || !('title' in card)) {
+    if (!card || isCardErrorJSONAPI(card)) {
       throw new Error(`expected ${id} to load, got ${JSON.stringify(card)}`);
     }
     return card as CardDef;
