@@ -11,6 +11,7 @@ import type { IndexedInstanceSource } from '../index-query-engine.ts';
 import { logger } from '../log.ts';
 import { MODULE_SOURCE_FILE_DEF_CODE_REFS } from '../policy-file-def.ts';
 import { rri } from '../realm-identifiers.ts';
+import { chainType } from './adoption-chain.ts';
 import { carriesBuiltIn } from './dispatch.ts';
 import {
   compilePolicyFilter,
@@ -733,30 +734,33 @@ async function compilePolicy(
     }
     return { ...grant, filter: outcome.filter };
   };
-  // The type in `chain` that keeps `name` out of every policy's reach, if one
-  // does. A declaration a subclass writes takes the place of the one it
+  // What in `chain`, a rule's type and the types it descends from, keeps
+  // `name` out of every policy's reach, if anything does, judged as the gate
+  // judges it. A declaration a subclass writes takes the place of the one it
   // inherits, flag and all, so a type's own entry is not enough: the gate
-  // refuses a name any type in the chain flags, and compiling judges the grant
-  // by the same rule. A type whose entry cannot be read is not reported here.
-  // The gate refuses the operation all the same.
+  // refuses a name any type in the chain flags. It refuses one as well where a
+  // type in the chain has no definition it can read, since that type might be
+  // the one holding the flag. The rule's own type was read from its entry
+  // already. A flag is the more exact reason, so it is the one reported when
+  // the chain holds both.
+  let readChainDefinition = async (codeRef: ResolvedCodeRef) => {
+    let resolved = attempt(() => env.resolveCodeRef(codeRef, cardURL));
+    return resolved ? await readDefinition(resolved) : undefined;
+  };
   let keptOutOfReach = async (
     chain: string[],
     name: string,
-  ): Promise<string | undefined> => {
-    for (let key of chain) {
-      let codeRef = codeRefFromInternalKey(key);
-      let resolved = codeRef
-        ? attempt(() => env.resolveCodeRef(codeRef, cardURL))
-        : undefined;
-      if (!resolved) {
-        continue;
-      }
-      let entry = await readType(resolved);
-      if (entry && ownOperation(entry.definition, name)?.nonGrantable) {
-        return resolved.name;
+  ): Promise<{ declaredOn: string } | { unreadable: string } | undefined> => {
+    let unreadable: string | undefined;
+    for (let index = 1; index < chain.length; index++) {
+      let type = await chainType(chain, index, readChainDefinition);
+      if (!type) {
+        unreadable ??= chain[index];
+      } else if (ownOperation(type.definition, name)?.nonGrantable) {
+        return { declaredOn: type.codeRef.name };
       }
     }
-    return undefined;
+    return unreadable ? { unreadable } : undefined;
   };
 
   if (!row) {
@@ -880,16 +884,24 @@ async function compilePolicy(
       // refuses it whatever a compiled policy holds: an operation flagged
       // non-grantable, and any operation on a policy card. So a grant of either
       // is recorded rather than kept as though it admitted something.
-      let keptOutBy = granted.nonGrantable
-        ? resolved.name
+      let keptOut = granted.nonGrantable
+        ? { declaredOn: resolved.name }
         : isDefinitionFreeBaseOperation(operation)
           ? undefined
           : await keptOutOfReach(chain, operation);
-      if (keptOutBy) {
+      if (keptOut && 'declaredOn' in keptOut) {
         issue(
           'grants-authorization-infrastructure',
           `${grantPath}.operation`,
-          `\`${operation}\` is declared non-grantable on ${keptOutBy}, so only a caller the realm's own permissions allow may invoke it`,
+          `\`${operation}\` is declared non-grantable on ${keptOut.declaredOn}, so only a caller the realm's own permissions allow may invoke it`,
+        );
+        continue;
+      }
+      if (keptOut) {
+        issue(
+          'unresolved-type',
+          `${grantPath}.operation`,
+          `${resolved.name} descends from ${keptOut.unreadable}, which names no type the realm has a definition of, and that type might declare \`${operation}\` non-grantable, so the gate refuses it whatever a policy grants. A class its module does not export has no definition`,
         );
         continue;
       }
