@@ -29,12 +29,18 @@ const PIN_IN_COMMAND =
 
 const EDIT_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit']);
 
-// A pull request created or edited from the shell. Its description pairs it
-// with a pull request in the other repository when it has a `Merges before:`
-// or `Merges after:` line, inline or in a --body-file; and any boxel-catalog
-// pull request may need a pair, so creating one counts too.
+// A pull request created or edited from the shell or the GitHub MCP tools.
+// Its description pairs it with a pull request in the other repository when it
+// has a `Merges before:` or `Merges after:` line, inline or in a --body-file;
+// and any boxel-catalog pull request may need a pair, so creating one counts
+// too.
 const GH_PR = /\bgh\s+pr\s+(create|edit)\b/;
 const GH_PR_CREATE = /\bgh\s+pr\s+create\b/;
+// The same, through the GitHub MCP server's pull request tools.
+const MCP_PR_TOOLS = new Set([
+  'mcp__github__create_pull_request',
+  'mcp__github__update_pull_request',
+]);
 const PAIRING_KEY = /merges\s+(before|after)\s*:/i;
 const BODY_FILE = /(?:--body-file[=\s]+|-F\s+)(?:"([^"]+)"|'([^']+)'|(\S+))/;
 const CATALOG_REPO_FLAG =
@@ -97,6 +103,16 @@ const rules = [
     skill: 'catalog-pairing',
     why: 'It says when a boxel and a boxel-catalog pull request must be paired, how to declare the pair in both descriptions, and which merges first.',
     matches({ tool_name, tool_input, cwd }) {
+      if (MCP_PR_TOOLS.has(tool_name)) {
+        if (PAIRING_KEY.test(tool_input?.body ?? '')) {
+          return 'a pull request description with a pairing line';
+        }
+        return (
+          tool_name === 'mcp__github__create_pull_request' &&
+          /^boxel-catalog$/i.test(tool_input?.repo ?? '') &&
+          'opening a boxel-catalog pull request'
+        );
+      }
       if (tool_name !== 'Bash') {
         return false;
       }
