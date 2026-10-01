@@ -160,6 +160,10 @@ export interface RangeFilter extends TypedFilter {
 }
 
 export interface InFilter extends TypedFilter {
+  // A string value is a `$this.<fieldPath>` interpolation (query-backed
+  // fields), a placeholder standing in for the whole list that resolves to an
+  // array before the query is executed; `assertQuery` accepts only the
+  // resolved array form.
   in: { [fieldName: string]: JSONValue[] | string };
 }
 
@@ -469,16 +473,31 @@ function assertPage(
   }
 }
 
-const FILTER_OPERATORS = [
-  'any',
-  'every',
-  'not',
-  'eq',
-  'in',
-  'contains',
-  'range',
-  'matches',
-] as const;
+// Maps each filter operator to its validator. `assertFilter` derives both
+// the operator list and its dispatch from this one map, so an operator cannot
+// be recognized by one without the other.
+const FILTER_OPERATOR_ASSERTS: Record<
+  string,
+  (filter: any, pointer: string[]) => void
+> = {
+  any: assertAnyFilter,
+  every: assertEveryFilter,
+  not: assertNotFilter,
+  eq: assertEqFilter,
+  in: assertInFilter,
+  contains: assertContainsFilter,
+  range: assertRangeFilter,
+  matches: assertMatchesFilter,
+};
+
+const FILTER_OPERATORS = Object.keys(FILTER_OPERATOR_ASSERTS);
+
+// The operator keys present on a filter node, in the canonical operator
+// order. Exactly one is legal; the client-side matcher consults this too
+// (`isClientEvaluable`), so both sides read the same list.
+export function filterOperators(filter: object): string[] {
+  return FILTER_OPERATORS.filter((key) => key in filter);
+}
 
 // The operator validators below report a failure by throwing and return
 // nothing on success, so a collection of them is walked with `forEach`.
@@ -508,7 +527,7 @@ function assertFilter(
   // The engine and the client-side matcher each pick an operator from a node
   // in their own order, so a node carrying several would be validated on one
   // operator and executed on another. Only `type`/`on` may sit beside one.
-  let operators = FILTER_OPERATORS.filter((key) => key in filter);
+  let operators = filterOperators(filter);
   if (operators.length > 1) {
     throw new InvalidQueryError(
       `${pointer.join('/') || '/'}: a filter may use only one operator, but found ${operators
@@ -517,27 +536,13 @@ function assertFilter(
     );
   }
 
-  if ('any' in filter) {
-    assertAnyFilter(filter, pointer);
-  } else if ('every' in filter) {
-    assertEveryFilter(filter, pointer);
-  } else if ('not' in filter) {
-    assertNotFilter(filter, pointer);
-  } else if ('eq' in filter) {
-    assertEqFilter(filter, pointer);
-  } else if ('in' in filter) {
-    assertInFilter(filter, pointer);
-  } else if ('contains' in filter) {
-    assertContainsFilter(filter, pointer);
-  } else if ('range' in filter) {
-    assertRangeFilter(filter, pointer);
-  } else if ('matches' in filter) {
-    assertMatchesFilter(filter, pointer);
-  } else {
+  let operator = operators[0];
+  if (!operator) {
     throw new InvalidQueryError(
       `${pointer.join('/') || '/'}: cannot determine the type of filter`,
     );
   }
+  FILTER_OPERATOR_ASSERTS[operator](filter, pointer);
 }
 
 function assertCardType(type: any, pointer: string[]) {
