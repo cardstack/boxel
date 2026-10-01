@@ -877,6 +877,15 @@ export class RealmIndexQueryEngine {
     return await this.#indexQueryEngine.typeKeysFor(ref);
   }
 
+  // The types this realm holds cards of that descend from `ref`, as the
+  // first key of each row's adoption chain.
+  async instanceTypesUnder(ref: ResolvedCodeRef): Promise<string[]> {
+    return await this.#indexQueryEngine.instanceTypesUnder(
+      new URL(this.#realm.url),
+      ref,
+    );
+  }
+
   async fetchCardTypeSummary() {
     let results = await this.#indexQueryEngine.fetchCardTypeSummary(
       new URL(this.#realm.url),
