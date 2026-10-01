@@ -185,7 +185,8 @@ jobs:
     # against boxel, so a platform change can break the catalog's lint while
     # everything here passes. This lints the catalog against this change, the
     # way the catalog's own CI Lint does, and fails on the errors the change
-    # introduces. See packages/catalog/README.md.
+    # introduces, including the ones a paired change leaves catalog main with
+    # until its catalog pull request merges. See packages/catalog/README.md.
     name: Lint Catalog
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -207,14 +208,17 @@ jobs:
           BRANCH: ${{ github.head_ref }}
         run: |
           ref=main
+          paired=false
           # A bare name would also match any ref ending in /<name>.
           if [ -n "$BRANCH" ] &&
             git ls-remote --exit-code https://github.com/cardstack/boxel-catalog.git "refs/heads/$BRANCH" >/dev/null; then
             ref="$BRANCH"
-            echo "::notice title=catalog lint::Linting boxel-catalog branch $ref, which matches this branch's name, in place of main. Merge its catalog pull request before or alongside this one."
+            paired=true
+            echo "::notice title=catalog lint::Linting boxel-catalog branch $ref, which matches this branch's name, in place of main. Catalog main is linted against this change too: if this change breaks it, that branch's catalog pull request must be approved, to merge right after this one."
           fi
           echo "Linting boxel-catalog@$ref"
           echo "catalog_ref=$ref" >> "$GITHUB_OUTPUT"
+          echo "paired=$paired" >> "$GITHUB_OUTPUT"
 
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -250,14 +254,36 @@ jobs:
           # The base branch's tree may not have this script.
           cp scripts/lint-sweep.ts "$RUNNER_TEMP/lint-sweep.ts"
 
+      # A paired change is linted with its catalog branch, but if it merges
+      # before that branch's pull request, catalog main is what gets linted
+      # against it until then. So lint catalog main against the change too,
+      # then put the paired branch back for the base-branch step.
+      - name: Lint catalog main against this change
+        id: main
+        if: steps.ref.outputs.paired == 'true'
+        working-directory: packages/catalog
+        run: |
+          paired=$(git -C contents rev-parse HEAD)
+          git -C contents fetch --quiet --depth=1 origin main
+          git -C contents checkout --quiet --detach FETCH_HEAD
+          echo "revision=$(git -C contents rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          node scripts/lint-sweep.ts --record="$RUNNER_TEMP/catalog-main-lint-head.json"
+          echo "errors=$(jq '.diagnostics | length' "$RUNNER_TEMP/catalog-main-lint-head.json")" >> "$GITHUB_OUTPUT"
+          git -C contents checkout --quiet --detach "$paired"
+
       # Errors the catalog also has against the base branch are not this
       # change's doing: the catalog may already be broken against boxel main.
       # So when this change's lint finds errors, lint the same catalog revision
       # against the base branch, and the report counts only the difference.
+      # Catalog main, when it was linted above, gets the same comparison.
       # A push to main has no base to compare with, so every error counts.
       - name: Lint the catalog against the base branch
         id: base
-        if: github.event_name == 'pull_request' && steps.head.outputs.errors != '0'
+        if: github.event_name == 'pull_request' && (steps.head.outputs.errors != '0' || (steps.main.outputs.errors || '0') != '0')
+        env:
+          HEAD_ERRORS: ${{ steps.head.outputs.errors }}
+          MAIN_ERRORS: ${{ steps.main.outputs.errors || '0' }}
+          MAIN_REVISION: ${{ steps.main.outputs.revision }}
         run: |
           head=$(git rev-parse HEAD)
           git checkout --detach HEAD^1
@@ -268,7 +294,13 @@ jobs:
             (cd packages/boxel-ui && pnpm run build)
           fi
           cd packages/catalog
-          node "$RUNNER_TEMP/lint-sweep.ts" --record="$RUNNER_TEMP/catalog-lint-base.json"
+          if [ "$HEAD_ERRORS" != 0 ]; then
+            node "$RUNNER_TEMP/lint-sweep.ts" --record="$RUNNER_TEMP/catalog-lint-base.json"
+          fi
+          if [ "$MAIN_ERRORS" != 0 ]; then
+            git -C contents checkout --quiet --detach "$MAIN_REVISION"
+            node "$RUNNER_TEMP/lint-sweep.ts" --record="$RUNNER_TEMP/catalog-main-lint-base.json"
+          fi
 
       - name: Report catalog lint errors
         if: ${{ !cancelled() && steps.head.outcome == 'success' && steps.base.outcome != 'failure' }}
@@ -278,3 +310,18 @@ jobs:
             baseline=(--baseline="$RUNNER_TEMP/catalog-lint-base.json")
           fi
           node "$RUNNER_TEMP/lint-sweep.ts" --report="$RUNNER_TEMP/catalog-lint-head.json" "${baseline[@]}"
+
+      # Errors this change adds to catalog main stay there from this change's
+      # merge until the paired branch's pull request merges, so they pass only
+      # while that pull request is approved, to merge right after this one.
+      - name: Report what this change does to catalog main
+        if: ${{ !cancelled() && steps.main.outcome == 'success' && steps.base.outcome != 'failure' }}
+        env:
+          BRANCH: ${{ github.head_ref }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          baseline=()
+          if [ -f "$RUNNER_TEMP/catalog-main-lint-base.json" ]; then
+            baseline=(--baseline="$RUNNER_TEMP/catalog-main-lint-base.json")
+          fi
+          node "$RUNNER_TEMP/lint-sweep.ts" --report="$RUNNER_TEMP/catalog-main-lint-head.json" "${baseline[@]}" --pair="$BRANCH"
