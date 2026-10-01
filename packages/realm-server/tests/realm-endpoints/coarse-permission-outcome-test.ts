@@ -1,7 +1,8 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
 import type { Test, SuperTest, Response } from 'supertest';
-import { basename } from 'path';
+import { existsSync } from 'fs';
+import { basename, join } from 'path';
 import type { PgAdapter } from '@cardstack/postgres';
 import type { Realm } from '@cardstack/runtime-common';
 import {
@@ -10,7 +11,13 @@ import {
   baseCardRef,
   unarchiveRealm,
 } from '@cardstack/runtime-common';
-import { setupPermissionedRealmCached, createJWT } from '../helpers/index.ts';
+import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
+import {
+  setupPermissionedRealmCached,
+  createJWT,
+  realmServerTestMatrix,
+  realmSecretSeed,
+} from '../helpers/index.ts';
 
 // The realm ACL's decision is recorded on the request and answered after
 // routing, so every route — those that consume the recorded outcome and those
@@ -44,9 +51,9 @@ const readProbes: Probe[] = [
     send: (r) => r.get('/_mtimes').set('Accept', SupportedMimeType.Mtimes),
   },
   {
-    label: 'GET /_screenshot/',
+    label: 'GET /_capture/',
     consumes: false,
-    send: (r) => r.get('/_screenshot/person-1').set('Accept', 'image/png'),
+    send: (r) => r.get('/_capture/person-1').set('Accept', 'image/png'),
   },
   {
     label: 'GET a directory listing',
@@ -81,14 +88,29 @@ const readProbes: Probe[] = [
     send: (r) =>
       r.get('/person.gts').set('Accept', SupportedMimeType.CardSource),
   },
+  // The card+source read and the raw file serve consume it for any path but
+  // module source: a data file's or a card's document's bytes are what a grant
+  // can reach, and a name with no extension is read exactly as named.
+  {
+    label: 'GET card+source of a data file',
+    consumes: true,
+    send: (r) =>
+      r.get('/sample.md').set('Accept', SupportedMimeType.CardSource),
+  },
+  {
+    label: "GET card+source of a card's document",
+    consumes: true,
+    send: (r) =>
+      r.get('/person-1.json').set('Accept', SupportedMimeType.CardSource),
+  },
   {
     label: 'GET raw file',
-    consumes: false,
+    consumes: true,
     send: (r) => r.get('/sample.md'),
   },
   {
     label: 'GET transpiled module',
-    consumes: false,
+    consumes: true,
     send: (r) => r.get('/person'),
   },
   {
@@ -135,11 +157,11 @@ const writeProbes: Probe[] = [
       r.post('/_atomic').set('Accept', SupportedMimeType.JSONAPI).send('{}'),
   },
   {
-    label: 'POST into the reserved _screenshot/ subtree',
+    label: 'POST into the reserved _capture/ subtree',
     consumes: false,
     send: (r) =>
       r
-        .post('/_screenshot/foo.gts')
+        .post('/_capture/foo.gts')
         .set('Accept', SupportedMimeType.CardSource)
         .send('export const x = 1;'),
   },
@@ -289,6 +311,24 @@ const gatedProbes: GatedProbe[] = [
   ),
 ];
 
+// The realm's operational endpoints, each by the method, path and media type
+// its own route is registered under. A request for one of these paths whose
+// `Accept` names another route is handed to that route, so the media type the
+// endpoint's route is registered under, carried as the request's
+// `Content-Type`, must change nothing about the credentials it needs.
+const operationalEndpoints: {
+  method: 'GET' | 'POST';
+  path: string;
+  mimeType: SupportedMimeType;
+}[] = [
+  { method: 'POST', path: '/_session', mimeType: SupportedMimeType.Session },
+  {
+    method: 'GET',
+    path: '/_readiness-check',
+    mimeType: SupportedMimeType.RealmInfo,
+  },
+];
+
 function assertRefusal(
   assert: Assert,
   response: Response,
@@ -302,6 +342,7 @@ function assertRefusal(
 module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
   module('on a private realm', function (hooks) {
     let testRealm: Realm;
+    let testRealmPath: string;
     let request: SuperTest<Test>;
     let dbAdapter: PgAdapter;
 
@@ -314,6 +355,7 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       },
       onRealmSetup(args) {
         testRealm = args.testRealm;
+        testRealmPath = args.testRealmPath;
         request = args.request;
         dbAdapter = args.dbAdapter;
       },
@@ -459,6 +501,40 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       );
     });
 
+    test('exactly the consuming routes that run what an admitted caller asks for apply the archived seal themselves', async function (assert) {
+      assert.deepEqual(
+        testRealm
+          .routeDescriptions()
+          .filter((route) => route.appliesArchivedSeal)
+          .map((route) => `${route.method} ${route.mimeType} ${route.path}`)
+          .sort(),
+        [
+          `GET ${SupportedMimeType.CardJson} /.*`,
+          `POST ${SupportedMimeType.CardJson} (/|/.+/)`,
+          `PATCH ${SupportedMimeType.CardJson} /.+(?<!.json)`,
+          `DELETE ${SupportedMimeType.CardJson} /|/.+(?<!.json)`,
+          `GET ${SupportedMimeType.CardJson} /_search`,
+          `QUERY ${SupportedMimeType.CardJson} /_search`,
+          `POST ${SupportedMimeType.BoxelOperations} /_operations`,
+          `POST ${SupportedMimeType.JSONAPI} /_operations`,
+          `POST ${SupportedMimeType.JSON} /_capabilities`,
+          `QUERY ${SupportedMimeType.BoxelOperations} /_operations`,
+          `QUERY ${SupportedMimeType.JSONAPI} /_operations`,
+        ].sort(),
+        'the card+json read and writes, the search, the operations envelope and the capability check',
+      );
+      assert.deepEqual(
+        testRealm
+          .routeDescriptions()
+          .filter(
+            (route) =>
+              route.appliesArchivedSeal && !route.consumesCoarseOutcome,
+          ),
+        [],
+        'each of them consumes the ACL’s outcome',
+      );
+    });
+
     test('exactly the routes that serve code and the file tree are coarse-read-only', async function (assert) {
       assert.deepEqual(
         testRealm
@@ -477,7 +553,103 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       );
     });
 
-    test('exactly the operational endpoints pass the archived seal', async function (assert) {
+    test('exactly the routes that serve stored bytes hand a data file’s read to the gate', async function (assert) {
+      assert.deepEqual(
+        testRealm
+          .routeDescriptions()
+          .filter((route) => route.grantableBytes)
+          .map((route) => `${route.method} ${route.mimeType} ${route.path}`)
+          .sort(),
+        [
+          `GET ${SupportedMimeType.CardSource} /.*`,
+          `HEAD ${SupportedMimeType.CardSource} /.*`,
+          'GET * *',
+          'HEAD * *',
+        ].sort(),
+        'the card+source read and the fallback file serve, and not the directory listing',
+      );
+      testRealm.__testOnlySetCoarseAdmission(() => true);
+      try {
+        // The caller is anonymous and the realm has no policy, so the gate
+        // refuses every read it is handed, as a not-found.
+        let reads: [string, Test][] = [
+          [
+            'card+source of a data file',
+            request
+              .get('/sample.md')
+              .set('Accept', SupportedMimeType.CardSource),
+          ],
+          [
+            "card+source of a card's document",
+            request
+              .get('/person-1.json')
+              .set('Accept', SupportedMimeType.CardSource),
+          ],
+          ['the file serve of a data file', request.get('/sample.md')],
+        ];
+        for (let [label, read] of reads) {
+          let before = testRealm.__testOnlyPolicyGateStats().policyLoads;
+          let response = await read;
+          assert.strictEqual(response.status, 404, `admitting: ${label}`);
+          assert.strictEqual(
+            testRealm.__testOnlyPolicyGateStats().policyLoads,
+            before + 1,
+            `admitting: ${label}: the refusal is the gate’s`,
+          );
+        }
+        // A name with no extension reaches the route too, which reads it
+        // exactly as named. Nothing is stored under these names, so there is
+        // nothing for the gate to judge, and no module or card the name would
+        // resolve to for a reader is reached.
+        for (let [label, read] of [
+          [
+            'card+source of a name with no extension',
+            request
+              .get('/person-1')
+              .set('Accept', SupportedMimeType.CardSource),
+          ],
+          [
+            'the file serve of a name with no extension',
+            request.get('/person'),
+          ],
+        ] as [string, Test][]) {
+          assert.strictEqual(
+            (await read).status,
+            404,
+            `admitting: ${label} is not there`,
+          );
+        }
+        let before = testRealm.__testOnlyPolicyGateStats().policyLoads;
+        for (let [label, read] of [
+          [
+            'module source',
+            request
+              .get('/person.gts')
+              .set('Accept', SupportedMimeType.CardSource),
+          ],
+          [
+            'a directory listing',
+            request.get('/').set('Accept', SupportedMimeType.DirectoryListing),
+          ],
+        ] as [string, Test][]) {
+          assertRefusal(
+            assert,
+            await read,
+            { status: 401, body: MISSING_AUTH },
+            `admitting: ${label} keeps the realm ACL’s refusal`,
+          );
+        }
+        assert.strictEqual(
+          testRealm.__testOnlyPolicyGateStats().policyLoads,
+          before,
+          'admitting: none of which reaches the gate',
+        );
+      } finally {
+        testRealm.__testOnlySetCoarseAdmission(undefined);
+      }
+    });
+
+    test('exactly the operational endpoints answer a caller without credentials and pass the archived seal', async function (assert) {
       // The probe's `HEAD` is its own route in every media type whose `HEAD`
       // is the realm's discovery answer, which is every one but card+source
       // and card+json, whose `HEAD` reads what is stored at the path.
@@ -502,6 +674,123 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           ...probeHeads,
         ].sort(),
         'the session sign-in and the health probe, and none of the routes that read or write what the realm stores',
+      );
+    });
+
+    test('the sign-in and the readiness check answer an anonymous caller', async function (assert) {
+      let matrixClient = new MatrixClient({
+        matrixURL: realmServerTestMatrix.url,
+        username: realmServerTestMatrix.username,
+        seed: realmSecretSeed,
+      });
+      await matrixClient.login();
+      let openIdToken = await matrixClient.getOpenIdToken();
+      let session = await request
+        .post('/_session')
+        .set('Accept', SupportedMimeType.Session)
+        .set('Content-Type', SupportedMimeType.Session)
+        .send(JSON.stringify(openIdToken));
+      assert.strictEqual(session.status, 201, '_session authenticates');
+      assert.ok(
+        session.get('Authorization'),
+        '_session issues a session token',
+      );
+
+      let readiness = await request
+        .get('/_readiness-check')
+        .set('Accept', SupportedMimeType.RealmInfo);
+      assert.strictEqual(readiness.status, 200, '_readiness-check answers');
+    });
+
+    test('a readiness probe that reaches none of its routes asks an anonymous caller for credentials', async function (assert) {
+      // Sent with no `Accept`, the probe passes an archived realm's seal as an
+      // operational endpoint, but no route of the endpoint answers it, so it
+      // meets the realm ACL as any other read does.
+      assertRefusal(
+        assert,
+        await request.get('/_readiness-check'),
+        { status: 401, body: MISSING_AUTH },
+        'GET _readiness-check with no Accept',
+      );
+    });
+
+    test('a request for an operational endpoint’s path that the router hands to another route needs that route’s credentials, whatever its Content-Type', async function (assert) {
+      // Something for the card+source read of `_readiness-check` to find.
+      let stored = await request
+        .post('/_readiness-check')
+        .set('Accept', SupportedMimeType.CardSource)
+        .set('Content-Type', 'text/plain')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'owner', ['read', 'write', 'realm-owner'])}`,
+        )
+        .send('stored at the probe path');
+      assert.strictEqual(stored.status, 204, 'the owner stores the file');
+
+      // Every other route the router can hand an endpoint's path to: one
+      // registered for the endpoint's method whose path, which the router
+      // matches as an anchored regular expression, matches the endpoint's.
+      let lookalikes = operationalEndpoints.flatMap((endpoint) =>
+        testRealm
+          .routeDescriptions()
+          .filter(
+            (route) =>
+              route.method === endpoint.method &&
+              route.mimeType !== '*' &&
+              !route.operationalEndpoint &&
+              new RegExp(`^${route.path}$`).test(endpoint.path),
+          )
+          .map((route) => ({ endpoint, accept: String(route.mimeType) })),
+      );
+      let reached = lookalikes.map(
+        ({ endpoint, accept }) =>
+          `${endpoint.method} ${accept} ${endpoint.path}`,
+      );
+      for (let route of [
+        `POST ${SupportedMimeType.CardSource} /_session`,
+        `POST ${SupportedMimeType.OctetStream} /_session`,
+        `GET ${SupportedMimeType.CardSource} /_readiness-check`,
+      ]) {
+        assert.true(
+          reached.includes(route),
+          `${route} is among the routes the endpoints' paths reach`,
+        );
+      }
+
+      for (let { endpoint, accept } of lookalikes) {
+        for (let contentType of [endpoint.mimeType, 'text/plain']) {
+          let send = () => {
+            let sent = (
+              endpoint.method === 'POST'
+                ? request.post(endpoint.path)
+                : request.get(endpoint.path)
+            )
+              .set('Accept', accept)
+              .set('Content-Type', contentType);
+            return endpoint.method === 'POST'
+              ? sent.send('written without credentials')
+              : sent;
+          };
+          let label = `${endpoint.method} ${endpoint.path} (Accept: ${accept}, Content-Type: ${contentType})`;
+          assertRefusal(
+            assert,
+            await send(),
+            { status: 401, body: MISSING_AUTH },
+            `anonymous ${label}`,
+          );
+          if (endpoint.method === 'POST') {
+            assertRefusal(
+              assert,
+              await send().set('Authorization', readerAuth()),
+              { status: 403, body: INSUFFICIENT },
+              `reader ${label}`,
+            );
+          }
+        }
+      }
+      assert.false(
+        existsSync(join(testRealmPath, '_session')),
+        'nothing is written at _session',
       );
     });
 
@@ -554,15 +843,17 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
     });
 
     test('the search hands an admitted caller to the query lane, which a realm with no policy answers with no rows', async function (assert) {
-      testRealm.__testOnlySetCoarseAdmission(() => true);
-      try {
-        let response = await request
+      let search = () =>
+        request
           .post('/_search')
           .set('X-HTTP-Method-Override', 'QUERY')
           .set('Accept', SupportedMimeType.CardJson)
           .set('Content-Type', 'application/json')
           .set('Authorization', `Bearer ${createJWT(testRealm, 'stranger')}`)
           .send(JSON.stringify({ filter: { 'item.on': baseCardRef } }));
+      testRealm.__testOnlySetCoarseAdmission(() => true);
+      try {
+        let response = await search();
         assert.strictEqual(response.status, 200, 'admitting: status');
         assert.deepEqual(
           response.body.data,
@@ -573,17 +864,20 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
 
         await archiveRealm(dbAdapter, new URL(testRealm.url));
         try {
-          let sealed = await request
-            .post('/_search')
-            .set('X-HTTP-Method-Override', 'QUERY')
-            .set('Accept', SupportedMimeType.CardJson)
-            .set('Content-Type', 'application/json')
-            .set('Authorization', `Bearer ${createJWT(testRealm, 'stranger')}`)
-            .send('{}');
+          let archived = await search();
           assert.strictEqual(
-            sealed.get('X-Boxel-Realm-Archived'),
-            'true',
-            'admitting: an admitted search of an archived realm meets the seal',
+            archived.status,
+            response.status,
+            'admitting: an archived realm answers with the same status',
+          );
+          assert.strictEqual(
+            archived.text,
+            response.text,
+            'admitting: and the same body, since no grant admits the caller to a row',
+          );
+          assert.notOk(
+            archived.get('X-Boxel-Realm-Archived'),
+            'admitting: and nothing says the realm is archived',
           );
         } finally {
           await unarchiveRealm(dbAdapter, new URL(testRealm.url));
@@ -656,18 +950,22 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
 
         await archiveRealm(dbAdapter, new URL(testRealm.url));
         try {
-          let sealed = await request
+          let archived = await request
             .get('/person-1')
             .set('Accept', SupportedMimeType.CardJson);
           assert.strictEqual(
-            sealed.status,
-            403,
-            'admitting: an admitted read of an archived realm is refused',
+            archived.status,
+            card.status,
+            'admitting: an admitted read the gate refuses is refused in an archived realm as in an active one',
           );
           assert.strictEqual(
-            sealed.get('X-Boxel-Realm-Archived'),
-            'true',
-            'admitting: the refusal is the archived seal',
+            archived.text,
+            card.text,
+            'admitting: with the same body',
+          );
+          assert.notOk(
+            archived.get('X-Boxel-Realm-Archived'),
+            'admitting: and nothing says the realm is archived',
           );
         } finally {
           await unarchiveRealm(dbAdapter, new URL(testRealm.url));

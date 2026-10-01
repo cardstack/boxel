@@ -9,7 +9,7 @@ const env: Record<string, string | undefined> =
 export type ResponseCacheOutcome = 'hit' | 'join' | 'miss';
 
 // One JSON-object log line per summary, on the owning cache's channel — the
-// same emit convention as `boxel:screenshot-perf` / `boxel:client-perf`: the
+// same emit convention as `boxel:capture-perf` / `boxel:client-perf`: the
 // whole line is one JSON object with an explicit `channel` field so Loki's
 // `| json` parse reads it, every field flat and top-level so LogQL can
 // `unwrap` any of them directly.

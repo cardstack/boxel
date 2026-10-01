@@ -10,6 +10,8 @@ import {
 
 import HostBaseTool from '../lib/host-base-tool';
 
+import { codeSubmodeUnavailable } from '../services/operator-mode-state-service';
+
 import type NetworkService from '../services/network';
 import type OperatorModeStateService from '../services/operator-mode-state-service';
 import type PlaygroundPanelService from '../services/playground-panel-service';
@@ -70,6 +72,9 @@ export default class ShowCardTool extends HostBaseTool<
         ) ||
         operatorModeStateService.state.codeSelection !== cardDefRef.name
       ) {
+        if (!operatorModeStateService.codeSubmodeOffered(cardDefRef.module)) {
+          throw new Error(codeSubmodeUnavailable(`${cardDefRef.module}.gts`));
+        }
         await operatorModeStateService.updateCodePath(
           rri(`${cardDefRef.module}.gts`),
           'preview',
@@ -92,7 +97,7 @@ export default class ShowCardTool extends HostBaseTool<
   }
 
   private async loadCard(cardId: string): Promise<CardDef> {
-    let maybeCard = await this.store.get<CardDef>(cardId);
+    let maybeCard = await this.store.get(cardId);
     if (isCardErrorJSONAPI(maybeCard)) {
       throw new Error(maybeCard.message);
     }

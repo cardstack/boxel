@@ -22,9 +22,27 @@ export * from './scoped-css-gc.ts';
 export * from './prerender-html.ts';
 export * from './prerender-html-reconcile.ts';
 export * from './run-command.ts';
-export * from './screenshot-card.ts';
+export * from './capture-card.ts';
 
 type LoggerInstance = ReturnType<typeof import('../index.ts').logger>;
+
+export interface PrerenderAuthOptions {
+  // Mints realm-authority sessions (see `TokenClaims.realmAuthority`). Set by
+  // every render whose result is kept and served to others: the ones a realm
+  // produces its own index, HTML and definitions with, and a capture that
+  // persists. Not set for one whose result goes back only to whoever asked —
+  // a command, or a capture answered to its requester — which runs as that
+  // user.
+  realmAuthority?: true;
+}
+
+// The session a prerender tab authenticates as, one token per realm
+// `permissions` names, serialized the way the tab reads it.
+export type CreatePrerenderAuth = (
+  userId: string,
+  permissions: RealmPermissions,
+  opts?: PrerenderAuthOptions,
+) => string;
 
 export interface TaskArgs {
   dbAdapter: DBAdapter;
@@ -44,7 +62,7 @@ export interface TaskArgs {
   skipPrerenderHtmlRealms?: string[];
   getReader(fetch: typeof global.fetch, realmURL: string): Reader;
   getAuthedFetch(args: WorkerArgs): Promise<typeof globalThis.fetch>;
-  createPrerenderAuth(userId: string, permissions: RealmPermissions): string;
+  createPrerenderAuth: CreatePrerenderAuth;
   reportStatus(jobInfo: JobInfo | undefined, status: 'start' | 'finish'): void;
   reportProgress?(event: IndexingProgressEvent): void;
   // Request that a realm event be broadcast to subscribed hosts. A task runs

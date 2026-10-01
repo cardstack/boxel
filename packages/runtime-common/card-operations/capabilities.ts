@@ -1,4 +1,4 @@
-import type { ResolvedCodeRef } from '../code-ref.ts';
+import type { CodeRef, ResolvedCodeRef } from '../code-ref.ts';
 import { rri } from '../realm-identifiers.ts';
 import {
   CAPABILITY_CHECK_CAP,
@@ -11,11 +11,14 @@ import {
   newOperationScope,
   resolveGatedOperation,
   type CoarseDeclined,
+  type GatedOperation,
   type OperationCore,
   type OperationScope,
   type ScopeCaller,
 } from './dispatch.ts';
-import { pendingWriteHolds } from './gate.ts';
+import { GateTrace } from './gate-trace.ts';
+import { storedWriteRefusal } from './gate.ts';
+import { principalQueryScope, type SearchPrincipal } from './policy-query.ts';
 import {
   OperationFailure,
   isOperationFailure,
@@ -57,6 +60,30 @@ import {
 // is not there — the rule the refusal table already holds, so a check cannot
 // be turned into an oracle for which cards exist. A caller who may read the
 // realm can list it anyway, so they are told why.
+//
+// A query is the one operation the gate does not decide. It is not invoked on
+// a card: a search names it with the type that declares it, and the search
+// authorizes it by composing into the query it runs the filter of each grant
+// the caller holds on it (`policyQueryScope`). The gate refuses every query
+// for that reason, and a check that stopped at the gate would call a query
+// refused that the search serves. So a query pair is answered by the search's
+// own judgment, the same call the search makes (`principalQueryScope`), and
+// the check still has no reading of the policy of its own.
+//
+// That judgment is a weaker one than the gate's. A query grant does not admit
+// or refuse a target, and it names no caller: its predicate narrows the rows
+// the search returns by who is asking. So `true` for a query says the policy
+// holds a grant on it for this type that compiled a search filter, and it is
+// the same answer for every signed-in caller the ACL declines. It does not say
+// any row will match for this one: a caller the filter matches nothing for is
+// told `true` too, and their search returns no rows. Only a caller the ACL
+// would not let read the realm is judged this way, since one who may read it
+// runs the query unscoped. They are told a bare `true`, which reveals what a
+// create's bare `true` does: that the policy grants this operation on this
+// type. It says nothing about which cards exist.
+//
+// A query pair's target is that type. A card target names no search a query
+// could run in, and is refused the way invoking the query on the card is.
 // ============================================================================
 
 // What the realm supplies about the caller for a whole request: who they are,
@@ -65,6 +92,11 @@ import {
 // which is exactly what a request carrying both kinds of question needs.
 export interface CapabilityCaller {
   caller: ScopeCaller;
+  // Who a search this caller sent would run for. A query pair is judged as
+  // that search is, so it is judged for the same principal: a request a
+  // render sends runs under a realm's own authority, which no policy grants
+  // anything.
+  searchPrincipal: SearchPrincipal | undefined;
   coarseDeclined: CoarseDeclined;
   // Set where the realm ACL refuses this caller's writes in a way no policy
   // may judge: nobody signed in, a session that may only read, a realm that
@@ -90,7 +122,7 @@ export async function checkCapabilities(
   core: OperationCore,
   checks: readonly CapabilityCheck[],
   who: CapabilityCaller,
-): Promise<CapabilityAnswer[]> {
+): Promise<CapabilityOutcome> {
   let scope = newOperationScope(core, {
     caller: who.caller,
     // A caller who may read the realm and whose writes are refused outright
@@ -114,72 +146,115 @@ export async function checkCapabilities(
   let outcomes = await settledWithin(STAGING_WIDTH, asked, ([, check]) =>
     decide(core, check, who, scope),
   );
-  let answers = new Map<string, CapabilityDecision>();
+  let decided = new Map<string, PairDecision>();
   asked.forEach(([key], index) => {
     let outcome = outcomes[index];
-    answers.set(
+    decided.set(
       key,
       outcome.status === 'fulfilled'
         ? outcome.value
         : // `decide` answers its own faults, so a rejection here is the check
           // itself failing rather than the gate refusing. Denied, like every
           // other way a decision cannot be reached.
-          { allowed: false },
+          { answer: { allowed: false }, admitted: false },
     );
   });
-  // The echo comes from the question this position asked, so two spellings of
-  // one target each answer in their own terms.
-  return checks.map((check, index) => ({
-    ...answers.get(keys[index])!,
-    operation: check.operation,
-    target: check.target,
-  }));
+  return {
+    // The echo comes from the question this position asked, so two spellings
+    // of one target each answer in their own terms.
+    answers: checks.map((check, index) => ({
+      ...decided.get(keys[index])!.answer,
+      operation: check.operation,
+      target: check.target,
+    })),
+    admitsAny: [...decided.values()].some(({ admitted }) => admitted),
+  };
+}
+
+// What a check answers, and whether the gate admitted any of its pairs
+// outright. A pair answered `true` on a predicate the check could not run is
+// not one it admitted: whether that grant would admit the caller is not known
+// until the call.
+export interface CapabilityOutcome {
+  answers: CapabilityAnswer[];
+  admitsAny: boolean;
 }
 
 // One answer without the question echoed back onto it, which is what the
 // positions do.
 type CapabilityDecision = Omit<CapabilityAnswer, 'operation' | 'target'>;
 
+// One pair's answer, and whether the gate admitted the pair outright rather
+// than leaving it to a predicate the check cannot run.
+interface PairDecision {
+  answer: CapabilityDecision;
+  admitted: boolean;
+}
+
 async function decide(
   core: OperationCore,
   check: CapabilityCheck,
   who: CapabilityCaller,
   scope: OperationScope,
-): Promise<CapabilityDecision> {
+): Promise<PairDecision> {
   // A non-reader is told one thing however the answer was reached, so the
   // reason is dropped rather than computed and discarded — and `conditional`
   // with it, since that would say a grant names the target's type.
   let bare = who.coarseDeclined === 'all';
-  let refused = (reason: OperationErrorCode): CapabilityDecision =>
-    bare ? { allowed: false } : { allowed: false, reason };
+  let refused = (reason: OperationErrorCode): PairDecision => ({
+    answer: bare ? { allowed: false } : { allowed: false, reason },
+    admitted: false,
+  });
+  let admitted: PairDecision = { answer: { allowed: true }, admitted: true };
   try {
     let target = targetFor(core, check.target);
-    let { definition, decision } = await resolveGatedOperation(
-      core,
-      target,
-      check.operation,
-      scope,
-    );
+    // A caller the ACL lets read the realm runs a query unscoped, and the gate
+    // answers them from the ACL. Anyone else's query the gate refuses, and
+    // records why in the trace a scope carries, so the pair is asked of the
+    // search instead. That is the gate's own word for why it refused, read
+    // off the resolution the pair makes anyway.
+    let trace = bare ? new GateTrace() : undefined;
+    let gated: GatedOperation;
+    try {
+      gated = await resolveGatedOperation(
+        core,
+        target,
+        check.operation,
+        trace ? scope.derive({ trace }) : scope,
+      );
+    } catch (e: unknown) {
+      if (trace?.refusal !== 'query-lane') {
+        throw e;
+      }
+      return target.kind === 'type'
+        ? await searchDecision(core, target.codeRef, check.operation, who)
+        : refused('wrong-entry-point');
+    }
+    let { definition, decision } = gated;
+    if (definition.base === 'query' && target.kind === 'instance') {
+      return refused('wrong-entry-point');
+    }
     if (who.writesRefused && isWrite(definition.base)) {
       return refused(who.writesRefused);
     }
     if (decision.kind !== 'pending') {
-      return { allowed: true };
+      return admitted;
     }
     // A write the gate matched a grant for and left to its predicate. The
     // write lock decides it against the card as the lock holds it, and a
     // check holds no lock, so it asks the same question of the card as it is
     // stored now: the answer the lock would give if nothing changes before the
-    // call takes it.
+    // call takes it. A refusal is reported in the lock's own words, so a
+    // reader is told a predicate that threw as the fault the invocation
+    // answers, not as a refusal.
     if (target.kind === 'instance') {
-      return (await pendingWriteHolds(core, {
+      let refusal = await storedWriteRefusal(core, {
         target,
         name: check.operation,
         decision,
         scope,
-      }))
-        ? { allowed: true }
-        : refused('operation-not-permitted');
+      });
+      return refusal ? refused(refusal.error.code) : admitted;
     }
     // A create against a type is judged by the card it would mint, which does
     // not exist while the control that would mint it is being rendered. So
@@ -188,13 +263,38 @@ async function decide(
     // showing, and what it reveals — that the realm's policy grants creates
     // of this type — is what the create itself would reveal, and is no answer
     // about which cards exist.
-    return bare ? { allowed: true } : { allowed: true, conditional: true };
+    return {
+      answer: bare ? { allowed: true } : { allowed: true, conditional: true },
+      admitted: false,
+    };
   } catch (e: unknown) {
     // Anything that is not a refusal is a fault rather than an answer, and the
     // check fails closed on it — one pair the realm could not decide, reported
     // as itself, rather than a request the caller cannot read at all.
     return refused(isOperationFailure(e) ? e.error.code : 'internal-error');
   }
+}
+
+// A query pair, answered as the search that runs the query would authorize it:
+// `true` where the realm's policy composes a grant into it, `false` where the
+// realm contributes no rows. It is never counted as admitted. Whether an
+// archived realm answers such a search with its seal turns on whether the
+// search would return a row, and a check runs no search to know.
+async function searchDecision(
+  core: OperationCore,
+  on: CodeRef,
+  operation: string,
+  who: CapabilityCaller,
+): Promise<PairDecision> {
+  let scope = await principalQueryScope(
+    core,
+    { operation, types: [on] },
+    who.searchPrincipal,
+  );
+  return {
+    answer: { allowed: scope.kind === 'scoped' },
+    admitted: false,
+  };
 }
 
 // The target as resolution reads it. An instance is canonicalized first, the

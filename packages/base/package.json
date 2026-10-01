@@ -10,6 +10,7 @@
     "@cardstack/boxel-ui": "workspace:*",
     "@cardstack/eslint-plugin-boxel": "workspace:*",
     "@cardstack/local-types": "workspace:*",
+    "@cardstack/pretui": "workspace:*",
     "@cardstack/runtime-common": "workspace:*",
     "@glimmer/component": "catalog:",
     "@glimmer/tracking": "^1.0.4",

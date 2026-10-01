@@ -92,4 +92,34 @@ module(basename(import.meta.filename), function () {
     let sessions = JSON.parse(auth) as Record<string, string>;
     assert.deepEqual(Object.keys(sessions), ['http://localhost:4202/test/']);
   });
+
+  test('a realm-authority session carries the claim on every token, and an ordinary one on none', function (assert) {
+    let createPrerenderAuth = buildCreatePrerenderAuth(
+      secretSeed,
+      'http://realm-server.example',
+    );
+    let permissions = {
+      'http://localhost:4202/test/': ['read' as const, 'realm-owner' as const],
+      'http://localhost:4202/other/': ['read' as const],
+    };
+
+    let authority = createPrerenderAuth(userId, permissions, {
+      realmAuthority: true,
+    });
+    for (let realm of Object.keys(permissions)) {
+      assert.true(
+        claimsFor(authority, realm).realmAuthority,
+        `the token for ${realm} says it is a realm-authority session`,
+      );
+    }
+
+    let ordinary = createPrerenderAuth(userId, permissions);
+    for (let realm of Object.keys(permissions)) {
+      assert.strictEqual(
+        claimsFor(ordinary, realm).realmAuthority,
+        undefined,
+        `the token for ${realm} carries no claim`,
+      );
+    }
+  });
 });

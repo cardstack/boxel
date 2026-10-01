@@ -19,7 +19,7 @@ Treat any of the following as user data that must be redacted before it touches 
 - **User-authored content.** Card titles, descriptions, body text, field values quoted from a card document.
 - **Matrix handles, room IDs that map to user DMs, and email addresses.**
 - **Account IDs that map to a specific person**, including Matrix user IDs (`@handle:matrix.boxel.ai`).
-- **Screenshots that incidentally show any of the above** in the address bar, breadcrumbs, sidebar, or card body.
+- **Captures that incidentally show any of the above** in the address bar, breadcrumbs, sidebar, or card body.
 
 ## What is OK to keep verbatim
 
@@ -31,11 +31,11 @@ Treat any of the following as user data that must be redacted before it touches 
 
 ## How to redact
 
-Preserve the *shape* of the data so the reviewer can still reason about it, drop the identifying parts:
+Preserve the _shape_ of the data so the reviewer can still reason about it, drop the identifying parts:
 
 - Replace path segments with placeholders that describe the role: `<username>/<realm>/<card-type>/<card>.json`.
 - Replace lists of concrete examples with a count plus opaque IDs: instead of three full URLs, write "3 affected cards across 3 user realms (job IDs 209668, 209743, 209962)".
-- Crop or blur screenshots before attaching them. Check the browser address bar, breadcrumb trail, sidebar realm list, and any visible card titles.
+- Crop or blur captures before attaching them. Check the browser address bar, breadcrumb trail, sidebar realm list, and any visible card titles.
 - For log excerpts, replace user realm URLs with `<user-realm>` and keep the structural fields (timestamps, request IDs, status codes, durations).
 
 If a reviewer genuinely needs the concrete identifiers to reproduce a bug, write "see <Linear-ticket-id> for affected realm slugs" in the PR and put the unredacted list in the Linear ticket. Linear is staff-only and is the right place for that detail.
@@ -74,7 +74,7 @@ Apply this check at **two** moments — not just when calling a GitHub tool:
 In both cases, ask:
 
 1. Does this contain a path of the form `<word>/<word>/...` where the first word could be a real username?
-2. Does this quote a log line, DB row, card document, or screenshot taken from staging or prod?
+2. Does this quote a log line, DB row, card document, or capture taken from staging or prod?
 3. Is this a hardcoded test value, fixture, or comment derived from something a real user actually has in their realm?
 4. Would a search engine indexing this give someone outside Cardstack information about a specific user's data?
 
@@ -82,4 +82,4 @@ If yes to any: redact to the placeholder form above, or move the concrete detail
 
 ## Why this skill exists
 
-PR comments are indexed by search engines, archived by third parties, and remain public forever. Pasting CloudWatch output, DB query results, or screenshots that include real user realm slugs into a PR comment ships that information out of Cardstack permanently — even if the comment is later edited or the PR is closed.
+PR comments are indexed by search engines, archived by third parties, and remain public forever. Pasting CloudWatch output, DB query results, or captures that include real user realm slugs into a PR comment ships that information out of Cardstack permanently — even if the comment is later edited or the PR is closed.

@@ -392,7 +392,9 @@ const prerenderHtml: Task<PrerenderHtmlArgs, PrerenderHtmlResult> = ({
       permissions,
       realmURL,
     );
-    let auth = createPrerenderAuth(userId, prerenderPermissions);
+    let auth = createPrerenderAuth(userId, prerenderPermissions, {
+      realmAuthority: true,
+    });
 
     let _fetch = await getAuthedFetch(args);
     let reader = getReader(_fetch, realmURL);
@@ -428,7 +430,7 @@ const prerenderHtml: Task<PrerenderHtmlArgs, PrerenderHtmlResult> = ({
       },
       jobPriority: jobInfo?.priority,
       onProgress: reportProgress,
-      // Declared-screenshot persistence. Optional: a worker without a
+      // Declared-capture persistence. Optional: a worker without a
       // MediaCache configured still renders HTML, it just captures nothing.
       dbAdapter,
       mediaCacheAdapter,

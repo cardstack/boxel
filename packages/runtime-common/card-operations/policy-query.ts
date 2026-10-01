@@ -3,8 +3,12 @@ import type { Definition } from '../definitions.ts';
 import type { Filter } from '../query.ts';
 import { policyFilterFromWire } from '../search-entry.ts';
 import type { OperationCore } from './dispatch.ts';
-import { matchingGrants, nonGrantableInChain } from './gate.ts';
-import type { CompiledRealmPolicy } from './policy.ts';
+import {
+  authorizationCardIds,
+  matchingGrants,
+  nonGrantableInChain,
+} from './gate.ts';
+import { realmPolicyRef, type CompiledRealmPolicy } from './policy.ts';
 import { lowerQueryOperation } from './query.ts';
 
 // ============================================================================
@@ -29,7 +33,10 @@ import { lowerQueryOperation } from './query.ts';
 //   query runs under the name it was invoked with, so a grant on `read` never
 //   contributes. Reading a card whose id you were given and enumerating every
 //   card of a type are different powers, and a type meant to be both carries
-//   two grants whose predicates may well differ.
+//   two grants whose predicates may well differ. An ad-hoc search runs under
+//   the base name `query`, so a grant on a named query never contributes to
+//   one either: granting a saved search is not granting the freedom to write
+//   any filter over its type.
 // - Only a grant that compiled a filter. A grant whose predicate has none is
 //   recorded as `policy-not-filterable` when the policy compiles, and it
 //   contributes nothing here rather than widening the search to rows it cannot
@@ -44,6 +51,30 @@ import { lowerQueryOperation } from './query.ts';
 // queried type's chain declares `nonGrantable` under the same name: a subclass
 // cannot make grantable what the type it extends kept out of a policy's
 // reach.
+//
+// Nor does any grant find the cards that hold a realm's authorization. The
+// gate refuses a grant every operation on the realm's config card, on the card
+// its policy key names, and on any policy card. A search never passes the
+// gate, though, and a grant on a type those cards descend from, `CardDef` say,
+// compiles to a filter their rows match. So every filter a scope carries
+// leaves their rows out, whichever grant it came from: the two named cards by
+// id, and a policy card by the `RealmPolicy` its row's adoption chain holds.
+// The chain is what covers a draft no key names, and a policy card another
+// realm's key names that is stored in this one. A declaration can't do this:
+// `query` is a reserved name no type may mark `nonGrantable`, and a search on
+// `CardDef` never reads `RealmPolicy`'s declarations anyway.
+//
+// A card's `.json` is indexed a second time as a file row, whose id ends in
+// `.json` and whose chain is a file type's, so neither arm matches it. No
+// grant reaches one: only a card type carries `query`, so every compiled
+// filter is anchored on a card type, and a file row's chain holds none.
+//
+// What this excludes is rows a filter matches. A row the filter admits is
+// served with its whole link closure, as a granted read is, and that closure
+// carries a policy card or the config card the row links to. Nothing here
+// narrows it. How far a grant reaches past its rows is an authoring
+// constraint rather than an enforced boundary: a named query may declare a
+// narrower `links`, and an ad-hoc search serves the full closure.
 // ============================================================================
 
 // What a policy says about one caller's query. A realm the caller reads
@@ -59,38 +90,170 @@ export type PolicyQueryScope =
 
 const DENIED: PolicyQueryScope = { kind: 'denied' };
 
-// What this realm's policy contributes to `operation` invoked on `on` by
-// `actor`. The core is the realm's own, bound to its own authority, as the
+// Who a search runs for. A realm-authority principal is a render: a session a
+// realm renders its own cards under (`TokenClaims.realmAuthority`), or any
+// request a render tab sends. Any other is the user its session names.
+export type SearchPrincipal =
+  | { kind: 'user'; user: string }
+  | { kind: 'realm-authority'; user: string };
+
+// The principal a request authenticated as, or none for a request that
+// authenticated nobody.
+export function searchPrincipal(
+  user: string | undefined,
+  realmAuthority: boolean | undefined,
+): SearchPrincipal | undefined {
+  if (user === undefined) {
+    return undefined;
+  }
+  return realmAuthority
+    ? { kind: 'realm-authority', user }
+    : { kind: 'user', user };
+}
+
+// Raised when a policy is asked what it grants a realm-authority principal.
+//
+// A render's search runs as a realm-authority principal, and what the render
+// produces is cached and served to every viewer. A policy fragment composed
+// into that search would make the render per-actor: rows missing, or rows
+// only one user may see, in HTML everyone receives. Nothing would fail, so
+// this is raised instead of answering, and it is never caught as a denial.
+// The routes keep a realm-authority principal away from every policy, so
+// raising it means that wiring broke.
+export class RealmAuthorityPolicyScopeError extends Error {
+  constructor(realmURL: string, operation: string) {
+    super(
+      `a policy fragment was about to be composed for a realm-authority ` +
+        `session: the search for "${operation}" in ${realmURL} runs under ` +
+        `the realm's own authority, which no policy scopes`,
+    );
+    this.name = 'RealmAuthorityPolicyScopeError';
+  }
+}
+
+// What this realm's policy contributes to `operation` invoked on `types` by
+// `principal`. The core is the realm's own, bound to its own authority, as the
 // gate's is: a policy card commonly lives in a realm the caller cannot read.
 //
-// `actor` is required rather than optional. A policy grants by who is asking,
-// so a request that authenticated nobody has no grant to be judged by,
-// whatever the policy holds — the rule the realm already applies before it
-// hands a refused request to the gate at all.
+// `principal` is required rather than optional. A policy grants by who is
+// asking, so a request that authenticated nobody has no grant to be judged
+// by, whatever the policy holds — the rule the realm already applies before
+// it hands a refused request to the gate at all. A realm-authority principal
+// is not someone asking either, and is refused with
+// `RealmAuthorityPolicyScopeError` before any type is judged or the policy is
+// read.
+//
+// A search on no type at all has no rules to consult, so it is denied without
+// reading the policy. One on several types — an ad-hoc search whose filter
+// takes any of several anchored branches — is judged type by type, and what
+// each type's grants admit is confined to that type's cards, so each type
+// contributes exactly what a search on it alone would. A grant compiled on a
+// type the several share is anchored on that shared type, and unconfined it
+// would reach, through the type it was matched for, the cards of one whose
+// own judgment refused them — a type the realm cannot resolve, say.
 export async function policyQueryScope(
   core: OperationCore,
-  invocation: { operation: string; on: CodeRef; actor: string },
+  invocation: {
+    operation: string;
+    types: readonly CodeRef[];
+    principal: SearchPrincipal;
+  },
+): Promise<PolicyQueryScope> {
+  let { operation, types, principal } = invocation;
+  if (principal.kind === 'realm-authority') {
+    throw new RealmAuthorityPolicyScopeError(core.realmURL, operation);
+  }
+  let actor = principal.user;
+  let distinct = [
+    ...new Map(types.map((type) => [JSON.stringify(type), type])).values(),
+  ];
+  if (distinct.length === 0) {
+    return DENIED;
+  }
+  if (distinct.length === 1) {
+    return await withoutAuthorization(
+      core,
+      await typeScope(core, operation, distinct[0], actor),
+    );
+  }
+  let scopes = await Promise.all(
+    distinct.map((on) => typeScope(core, operation, on, actor)),
+  );
+  let filters: Filter[] = [];
+  for (let [index, scope] of scopes.entries()) {
+    if (scope.kind === 'scoped') {
+      filters.push({ on: distinct[index], any: scope.filters });
+    }
+  }
+  return await withoutAuthorization(
+    core,
+    filters.length > 0 ? { kind: 'scoped', filters } : DENIED,
+  );
+}
+
+// `scope`, with every filter it carries leaving out the rows of the cards that
+// hold the realm's authorization. A scope with no filter to narrow reads no
+// pointer.
+async function withoutAuthorization(
+  core: OperationCore,
+  scope: PolicyQueryScope,
+): Promise<PolicyQueryScope> {
+  if (scope.kind !== 'scoped') {
+    return scope;
+  }
+  let infrastructure = [
+    ...(await authorizationCardIds(core)).map((id) => ({ eq: { id } })),
+    { type: realmPolicyRef },
+  ];
+  return {
+    kind: 'scoped',
+    filters: scope.filters.map((filter) => excluding(filter, infrastructure)),
+  };
+}
+
+// `filter`, less every row any of `excluded` matches.
+function excluding(filter: Filter, excluded: Filter[]): Filter {
+  return excluded.length === 0
+    ? filter
+    : { every: [filter, { not: { any: excluded } }] };
+}
+
+// What this realm's policy contributes to a search `principal` sends, where
+// the request may have authenticated nobody. Only a user is granted anything.
+// A request that authenticated nobody has no grant to be judged by. A
+// realm-authority principal is a render, and what a render produces is served
+// to every viewer, so it reads what the ACL grants it and the policy is never
+// asked about it.
+export async function principalQueryScope(
+  core: OperationCore,
+  invocation: { operation: string; types: readonly CodeRef[] },
+  principal: SearchPrincipal | undefined,
+): Promise<PolicyQueryScope> {
+  return principal?.kind === 'user'
+    ? await policyQueryScope(core, { ...invocation, principal })
+    : DENIED;
+}
+
+// What the policy contributes to `operation` on the one type `on`.
+async function typeScope(
+  core: OperationCore,
+  operation: string,
+  on: CodeRef,
+  actor: string,
 ): Promise<PolicyQueryScope> {
   let policy = await core.policy?.compiledPolicy();
   if (!policy) {
     return DENIED;
   }
-  let entry = await targetTypeEntry(core, invocation.on);
+  let entry = await targetTypeEntry(core, on);
   if (!entry?.types) {
     return DENIED;
   }
-  let { operation } = invocation;
   // Refused before any rule is matched, as the gate refuses it.
   if (ownDeclaration(entry.definition, operation)?.nonGrantable) {
     return DENIED;
   }
-  let filters = await grantFilters(
-    policy,
-    entry.types,
-    operation,
-    invocation.actor,
-    core,
-  );
+  let filters = await grantFilters(policy, entry.types, operation, actor, core);
   if (filters.length === 0) {
     return DENIED;
   }

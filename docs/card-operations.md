@@ -590,7 +590,11 @@ to ask for (a prerender, a freestyle), so guard on it.
 The target is a saved card, or a card class for a "New" button:
 `canInvoke('create', Classroom, { realm })` asks whether this session may create
 a `Classroom`, in `realm` or, when you leave it out, in the realm a class-scoped
-create lands in when it names none.
+create lands in when it names none. A [saved search](#saved-searches) takes its
+class too, since a search names a query with the type that declares it:
+`canInvoke('myPatients', PatientRecord, { realm })` asks whether this session
+may run it over `realm`'s cards. Name the realm, since the realm a create would
+land in is seldom the one the search reads.
 
 An answer is refreshed when the realm reindexes the card it is about, and every
 answer in a realm is refreshed when the realm's own config changes. The realm's
@@ -607,8 +611,9 @@ succeed. Hide a control on `false`; never skip or trust the call because of a
 
 Under it is `POST {realm}/_capabilities`, which takes up to 100
 `{ target, operation }` pairs and answers each one. A target is a card's URL, or
-a type's `{ module, name }` for a create. Each answer comes from the realm's own
-permission decision and goes no further, so asking changes nothing in the realm:
+a type's `{ module, name }` for a create or a query. Each answer comes from the
+realm's own permission decision and goes no further, so asking changes nothing
+in the realm:
 
 - A grant whose predicate reads a stored card is judged against the card as it
   is stored now. When the operation is invoked, the realm judges the same card
@@ -625,6 +630,20 @@ permission decision and goes no further, so asking changes nothing in the realm:
   caller who is not signed in, or a session that may only read.
 - A caller who can read the realm also gets a `reason` on a refusal: the error
   code the invocation itself would return.
+- A query is answered as the search it is named in authorizes it. A caller who
+  can read the realm runs every query unscoped, so they get `true`. Anyone else
+  gets `true` when the realm's policy holds a grant on that query, for the
+  query's type, whose predicate compiles to a search filter, and `false`
+  otherwise. A query grant names no caller: its predicate narrows the rows the
+  search returns by who is asking. So every signed-in caller the realm's ACL
+  declines gets the same answer for a given query, and `true` doesn't mean
+  this caller will see any rows. A control shown on it can lead to an empty
+  result. It tells a caller who cannot read the realm only what a create's
+  `true` does, that the policy grants this operation on this type, and nothing
+  about which cards exist.
+- A query asked about a card rather than its type gets `false`, with the reason
+  `wrong-entry-point` for a caller who can read the realm, because a query is
+  not invoked on a card.
 
 ## Saved searches
 
@@ -676,6 +695,13 @@ case, so render an empty state for it.
 A search reads the index, which lags a write the realm has just committed. To
 read a card you just wrote, read the card.
 
+In a realm a caller reaches only through its policy, a saved search is granted
+by its own name, and a search the caller writes by hand is granted as `query`
+on the type its filter names with `on`. So granting `myPatients` grants that
+search and not the freedom to write any filter over `PatientRecord`, and a
+filter that names no type is granted by nothing. For the same reason no saved
+search may be named `query`: the name belongs to the search written by hand.
+
 ## Batches
 
 `operations(card).atomic(build)` sends one all-or-nothing batch in that card's
@@ -717,7 +743,11 @@ The builder:
   result.
 - `b.find(filter, { field, expect })` answers a target found by search rather
   than named by reference, usable wherever `b.on(…)` takes a card. `expect:
-'many'` fans the entry out over every match and answers an array.
+'many'` fans the entry out over every match and answers an array. For a
+  caller who reaches the realm only through its policy, the filter is a search
+  they wrote by hand, so it finds only the cards a `query` grant on its type
+  admits, and each card it finds still needs a grant for the entry's own
+  operation.
 
 A builder that returns nothing is answered positionally, with a group's results
 nested where the group sat. A builder that returns handles is answered with
@@ -743,8 +773,9 @@ the entries ahead of it have staged. Either way nothing is written, no index
 job is enqueued and no event is sent. The refusal names its entry in
 `meta.entry`, a path such as `[0].boxel:target[1]` for the second card an entry
 found. A caller who may not read the realm is told that entry and nothing
-else, in the same 404 a missing card gets, and may not describe a target with a
-query at all.
+else, in the same 404 a missing card gets, and never which card it was. Such a
+caller's `b.find(…)` finds only the cards a `query` grant on its type admits,
+and a query no grant admits answers as one that matched no card.
 
 ## Authoring errors
 
@@ -817,6 +848,19 @@ refusal follows the same rules on both: a caller who may read the realm gets a
 403, and one who may not gets the 404 a card that does not exist gets. The
 card+json body carries no `code`, so there the status is the whole answer.
 
+A caller who may not read the realm doesn't choose where a card they create
+lands. A create mints a card where nothing is stored and is refused where a card
+is, so a caller who chose the path would learn which paths hold a card. On
+either route the realm mints such a caller's new card's id. A `lid` still names
+the card within a batch: it is the key a later entry links the card by, and the
+one its result reports. But the card is stored under the realm's id, so a create
+sent again with the same `lid` mints a second card. Such a caller's `POST` is
+aimed at the realm's root. One aimed at a directory beneath it gets the 404,
+since the card would land beneath that directory, and whether the write succeeds
+would depend on what is stored along its path. A caller who may read the realm
+can list it anyway, so they name their own cards as any writer does, and are
+told when a `lid` is taken.
+
 For a caller the realm admits only through a grant, four things set the card
 routes apart from a batch:
 
@@ -845,6 +889,42 @@ and `_permissions`. The first two write or remove stored bytes verbatim, whether
 those are module source, a data file or a card's whole document, and a verbatim
 replacement can change a card's type out from under the grant that admitted it.
 The administration routes do not act on a card at all.
+
+### Stored bytes, and code
+
+A `readSource` grant is honored on the routes that serve a path's bytes, the
+`card+source` read and the realm's file serve, as it is through `operations()`.
+It reaches a data file by the `FileDef` its extension names, and a card's `.json`
+by the card's own type. Grant it with care. A card's `.json` is its whole stored
+document, including every field a `read` projection omits, so a `readSource`
+grant beside a narrower `read` hands the caller everything the `read` was
+written to leave out.
+
+Code is never granted. A module's source, the transpiled module a browser's
+`import` loads, and a directory listing are served only to a caller the realm's
+own permissions let read it:
+
+- A rule whose `targetType` is module source (`TsFileDef`, `GtsFileDef`, or a
+  type descending from one) compiles to nothing and records
+  `grants-module-source`. The rest of the policy applies.
+- A rule on `FileDef` reaches every data file and no module.
+- A directory has no type, so no rule can name one.
+
+A caller who reaches the realm only through grants is told of each of these
+what they are told of a path that holds nothing, and a copy the realm cached
+for a reader is never served to them.
+
+So code mode, which edits a realm's modules and browses its file tree, needs
+the realm's own read permission. The host does not lead a caller without it
+there: the submode switcher, a card's error and an attached file offer no way
+in, and the assistant's tools that open code mode refuse. A caller who arrives
+anyway, by a shared link, finds the file tree and every module refused, and can
+open only a file a grant reaches.
+
+That is the one place the difference between a card's `.json` and its `read`
+could be seen side by side: with a `readSource` grant and no `read`, the editor
+shows the stored document beside a preview that is refused. The host keeps such
+a caller from being led there, but it is not a boundary. The endpoints are.
 
 ## Asking a policy what it decides
 

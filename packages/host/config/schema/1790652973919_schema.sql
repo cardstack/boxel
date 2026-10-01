@@ -143,7 +143,7 @@
    error_doc BLOB,
    rendered_at,
    diagnostics BLOB,
-   screenshots BLOB,
+   captures BLOB,
    PRIMARY KEY ( url, realm_url, type ) 
 );
 
@@ -165,7 +165,7 @@
    error_doc BLOB,
    rendered_at,
    diagnostics BLOB,
-   screenshots BLOB,
+   captures BLOB,
    job_id INTEGER,
    staging_id TEXT NOT NULL,
    PRIMARY KEY ( realm_url, staging_id, url, type ) 

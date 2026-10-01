@@ -1,11 +1,11 @@
-// The Office families' declared-screenshot capture: a capture-only component
+// The Office families' declared-capture: a capture-only component
 // that renders the first unit of the extracted structure — a document's
 // opening text flow, a deck's title slide, a workbook's first sheet — as a
 // page-shaped poster for the fitted cell and the thumbnail fallback chain.
 //
-// Rasterization goes through the screenshot engine by design: the browser
+// Rasterization goes through the capture engine by design: the browser
 // has no decode path for OOXML, so the extracted-structure rendering IS the
-// office viewer, and screenshotting it is the pattern rather than an
+// office viewer, and capturing it is the pattern rather than an
 // exception. The render is synchronous DOM over already-extracted fields, so
 // every poster captures on the engine's settle with no readiness signal. A
 // file whose extraction yielded no renderable first unit — an oversize
@@ -26,7 +26,7 @@ import { eq } from '@cardstack/boxel-ui/helpers';
 import { ensureFileViewModel, type FileViewModel } from './file-view-model';
 import { OfficePlaceholder } from './office-preview';
 
-import type { ScreenshotSpec } from '../card-api';
+import type { CaptureSpec } from '../card-api';
 
 // How much of the opening text flow a document poster shows. The capture box
 // crops overflow anyway; the cap just keeps the capture render from laying
@@ -326,7 +326,7 @@ export class OfficePosterCapture extends GlimmerComponent<CaptureSignature> {
 // seam. Every office file captures — a real first unit when the extraction
 // carried one, the typed-placeholder rendering when it didn't — so the
 // live placeholder only stands in while a capture is still outstanding.
-export const OFFICE_FAMILY_SCREENSHOTS: Record<string, ScreenshotSpec> = {
+export const OFFICE_FAMILY_CAPTURES: Record<string, CaptureSpec> = {
   poster: {
     render: OfficePosterCapture,
     width: 170,

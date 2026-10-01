@@ -439,7 +439,7 @@ export class FileIsolatedShell extends GlimmerComponent<FileIsolatedShellSignatu
                 the first time a path is indexed, and pinned by nothing, so two
                 runs on different days disagree and Percy reports a diff.
                 Hidden rather than normalised: it is a database column rather
-                than a file attribute, and a screenshot is the wrong place to
+                than a file attribute, and a capture is the wrong place to
                 verify a timestamp. The label stays visible, so the row and the
                 layout around it are still compared.
 

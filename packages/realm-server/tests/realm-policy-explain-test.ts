@@ -43,6 +43,7 @@ const EDUCATION = 'http://127.0.0.1:4444/education/';
 const ORG = 'http://127.0.0.1:4444/org/';
 const POLICY_CARD = `${ORG}policies/education`;
 const ORG_POLICY_CARD = `${ORG}policies/org`;
+const ORG_NOTE = `${ORG}notes/n1`;
 const EDUCATION_ADMIN = '@education-admin:localhost';
 const IT_ADMIN = '@it-admin:localhost';
 const ORG_ADMIN = '@org-admin:localhost';
@@ -95,6 +96,26 @@ const CLASSROOM_MODULE = `
       params: { note: StringField },
       fill: { note: params('note'), author: actor() },
     };
+
+    @operation static listMine = {
+      base: 'query',
+      query: { filter: { type: () => Classroom } },
+    };
+
+    @operation static listAudited = {
+      base: 'query',
+      nonGrantable: true,
+      query: { filter: { type: () => Classroom } },
+    };
+  }
+
+  // Redeclares the query its parent keeps out of every policy's reach, without
+  // the flag.
+  export class Seminar extends Classroom {
+    @operation static listAudited = {
+      base: 'query',
+      query: { filter: { type: () => Seminar } },
+    };
   }
 `;
 
@@ -123,8 +144,8 @@ type Grant = { operation: string; where?: unknown };
 type Rule = { targetType: { module: string; name: string }; grants: Grant[] };
 
 // Two rules govern `Classroom`, so a read is admitted by either one's grant.
-// `rename` and `appendActivity` are granted outright, and a `delete` rests on
-// the same predicate a read does. `Bulletin` takes its reads and updates
+// `rename` and `appendActivity` are granted outright, and a `delete` and the
+// `listMine` query rest on the same predicate a read does. `Bulletin` takes its reads and updates
 // outright. A `Syllabus` read rests on a predicate that throws for any title
 // that is not a number, or on one annotated as reading a snapshot tier, which
 // the gate never evaluates.
@@ -136,6 +157,7 @@ const EDUCATION_RULES: Rule[] = [
       { operation: 'rename' },
       { operation: 'appendActivity' },
       { operation: 'delete', where: TEACHES },
+      { operation: 'listMine', where: TEACHES },
     ],
   },
   { targetType: CLASSROOM, grants: [{ operation: 'read', where: LEADS }] },
@@ -207,6 +229,7 @@ const ROOM_204 = `${EDUCATION}classrooms/room-204`;
 const ROOM_205 = `${EDUCATION}classrooms/room-205`;
 const ROOM_206 = `${EDUCATION}classrooms/room-206`;
 const ROOM_999 = `${EDUCATION}classrooms/room-999`;
+const SEMINAR_1 = `${EDUCATION}classrooms/seminar-1`;
 const BULLETIN_1 = `${EDUCATION}bulletins/b1`;
 const ALGEBRA = `${EDUCATION}syllabi/algebra`;
 const COURSE_42 = `${EDUCATION}syllabi/course-42`;
@@ -245,6 +268,10 @@ module(basename(import.meta.filename), function (hooks) {
             'bulletin.gts': BULLETIN_MODULE,
             'syllabus.gts': SYLLABUS_MODULE,
             'classrooms/room-204.json': classroom('Room 204', [TEACHER]),
+            'classrooms/seminar-1.json': card(
+              { module: '../classroom', name: 'Seminar' },
+              { title: 'Seminar 1', teacherIds: [TEACHER] },
+            ),
             'classrooms/room-205.json': classroom('Room 205', [COLLEAGUE]),
             'classrooms/room-206.json': classroom(
               'Room 206',
@@ -280,6 +307,7 @@ module(basename(import.meta.filename), function (hooks) {
             }),
             'policies/education.json': policyCard(EDUCATION_RULES),
             'policies/org.json': policyCard(ORG_RULES),
+            'notes/n1.json': card(CARD_DEF, { cardInfo: { name: 'A note' } }),
           },
           permissions: {
             [ORG_ADMIN]: ['read', 'write', 'realm-owner'],
@@ -598,7 +626,7 @@ module(basename(import.meta.filename), function (hooks) {
       assert.deepEqual(read.refusal, { status: 404, code: 'target-not-found' });
     });
 
-    test('an operation the card does not carry, a write to authorization infrastructure, and a caller with no credentials', async function (assert) {
+    test('an operation the card does not carry, an operation on authorization infrastructure, and a caller with no credentials', async function (assert) {
       let bogusForTeacher = await explain(TEACHER, ROOM_204, 'bogus');
       assert.strictEqual(bogusForTeacher.reason, 'not-resolved');
       assert.deepEqual(
@@ -616,6 +644,17 @@ module(basename(import.meta.filename), function (hooks) {
       let config = await explain(READER, EDUCATION_CONFIG, 'update');
       assert.strictEqual(config.decision, 'denied');
       assert.strictEqual(config.reason, 'authorization-infrastructure');
+      let configRead = await explain(TEACHER, EDUCATION_CONFIG, 'read');
+      assert.strictEqual(configRead.decision, 'denied');
+      assert.strictEqual(
+        configRead.reason,
+        'authorization-infrastructure',
+        'a read of it is refused as a write is',
+      );
+      assert.deepEqual(configRead.refusal, {
+        status: 404,
+        code: 'target-not-found',
+      });
 
       let anonymous = await explain('', ROOM_204, 'read');
       assert.strictEqual(anonymous.actor, null);
@@ -624,6 +663,55 @@ module(basename(import.meta.filename), function (hooks) {
         status: 401,
         code: 'actor-required',
       });
+    });
+
+    test("a query is left to the search it is named in, unless it is kept out of every policy's reach", async function (assert) {
+      let granted = await explain(TEACHER, ROOM_204, 'listMine');
+      assert.deepEqual(
+        {
+          decision: granted.decision,
+          reason: granted.reason,
+          refusal: granted.refusal,
+          rules: granted.rules,
+        },
+        {
+          decision: 'denied',
+          reason: 'query-lane',
+          refusal: { status: 404, code: 'target-not-found' },
+          rules: [],
+        },
+        'a query the teacher holds a grant on is not called non-grantable: invoking it on the card is refused as it is, and no rule is judged here',
+      );
+      let adHoc = await explain(TEACHER, ROOM_204, 'query');
+      assert.strictEqual(
+        adHoc.reason,
+        'query-lane',
+        'and so is the ad-hoc query, which a search runs under the base name',
+      );
+      let audited = await explain(TEACHER, ROOM_204, 'listAudited');
+      assert.strictEqual(
+        audited.reason,
+        'non-grantable',
+        'a query declared non-grantable is one no grant reaches, on the search engine as anywhere',
+      );
+      let redeclared = await explain(TEACHER, SEMINAR_1, 'listAudited');
+      assert.strictEqual(
+        redeclared.reason,
+        'non-grantable',
+        'and so is one a subclass redeclares without the flag, since the type it extends kept it out of reach',
+      );
+      let seminarsOwn = await explain(TEACHER, SEMINAR_1, 'listMine');
+      assert.strictEqual(
+        seminarsOwn.reason,
+        'query-lane',
+        'while a query nothing in its chain flags is still left to the search',
+      );
+      let reader = await explain(READER, ROOM_204, 'listMine');
+      assert.deepEqual(
+        { decision: reader.decision, reason: reader.reason },
+        { decision: 'allowed', reason: 'acl' },
+        "a reader runs the query unscoped, on the realm's own permissions",
+      );
     });
   });
 
@@ -817,14 +905,20 @@ module(basename(import.meta.filename), function (hooks) {
     });
 
     test('a caller reaching the policy’s realm only through a grant is refused', async function (assert) {
-      let read = await request
-        .get(path(POLICY_CARD))
-        .set('Accept', SupportedMimeType.CardJson)
-        .set('Authorization', ASKER.teacher());
+      let readAsTeacher = (url: string) =>
+        request
+          .get(path(url))
+          .set('Accept', SupportedMimeType.CardJson)
+          .set('Authorization', ASKER.teacher());
       assert.strictEqual(
-        read.status,
+        (await readAsTeacher(ORG_NOTE)).status,
         200,
-        'the Org policy grants the teacher a read of the policy card',
+        'the Org policy grants the teacher a read of a card there',
+      );
+      assert.strictEqual(
+        (await readAsTeacher(POLICY_CARD)).status,
+        404,
+        'though not of the policy card, which no grant reads',
       );
       let explained = await ask(ASKER.teacher(), {
         actor: TEACHER,

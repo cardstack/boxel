@@ -2,6 +2,8 @@ import { RealmPaths } from '../paths.ts';
 import { getImmediateFieldDef, type Definition } from '../definitions.ts';
 import {
   parseSearchEntryQueryFromPayload,
+  policyScopedQuery,
+  type SearchEntryQuery,
   type SearchEntryWireQuery,
 } from '../search-entry.ts';
 import {
@@ -14,6 +16,9 @@ import type { CardResource, Relationship } from '../resource-types.ts';
 import { OperationFailure, type EntryPosition } from './types.ts';
 import { settledWithin, STAGING_WIDTH } from './coordinator.ts';
 import type { OperationCore, OperationScope } from './dispatch.ts';
+import { loadPolicy } from './gate.ts';
+import { searchInvocation } from './named-query.ts';
+import { policyQueryScope } from './policy-query.ts';
 import {
   invocationsIn,
   isGroup,
@@ -45,6 +50,16 @@ import {
 // an earlier entry in the same batch creates is not findable — it has not been
 // written, let alone indexed. The zero-match refusal says so when the batch is
 // one that mints cards, because that is the mistake the shape invites.
+//
+// **A caller the realm ACL declined finds only what a query grant admits.**
+// The filter is the caller's own, so running it is an ad-hoc search, and it
+// is authorized as one: as `query` on the type it targets, with the grants
+// that admit it composed into it, exactly as `_search` composes them. A found
+// target is then an entry like any other, and the gate judges the entry's own
+// operation on it. A batch that finds its targets by query asks two questions,
+// and both must be answered yes. Where no grant admits the query, it finds
+// nothing, which is the answer a query matching nothing gets, so a caller is
+// never told whether the realm holds a card the policy does not show them.
 //
 // **An entry that matched nothing is gone by the time the definition gates
 // run.** Those gates — whether a `QUERY` batch holds a write, whether an
@@ -309,7 +324,7 @@ function heldToOneMatch(
 async function runFilter(
   entry: EnvelopeEntry,
   find: QueryTarget,
-  { core }: Resolution,
+  { core, scope }: Resolution,
 ): Promise<{ urls: string[]; total: number }> {
   // Both shapes are paged, and neither page is the caller's to choose.
   //
@@ -350,15 +365,22 @@ async function runFilter(
       entry.position,
     );
   }
-  let query;
+  let parsed: SearchEntryQuery;
   try {
-    query = parseSearchEntryQueryFromPayload(wire);
+    parsed = parseSearchEntryQueryFromPayload(wire);
   } catch (err: any) {
     throw refuse(
       `entry ${entry.position} describes the card it runs against with a ` +
         `query the realm does not accept — ${err?.message ?? String(err)}`,
       entry.position,
     );
+  }
+  let query =
+    scope.coarseDeclined === 'all'
+      ? await grantedQuery(core, scope, parsed, find.query)
+      : parsed;
+  if (!query) {
+    return { urls: [], total: 0 };
   }
   // Under the same wall-clock budget the search route runs its item leg
   // under, with the signal threaded in so the work stops rather than being
@@ -402,6 +424,35 @@ async function runFilter(
     );
   }
   return { urls, total: doc.meta.page.total };
+}
+
+// The query a caller the realm ACL declined outright may run: theirs, with
+// the grants that admit it as an ad-hoc search composed into its filter, or
+// nothing where no grant does. Composed before the query runs, so the rows it
+// pages over are rows a grant admits, and the count the one-match rule reports
+// counts only those.
+//
+// A policy the realm names and cannot load refuses the batch with the 500 the
+// gate gives every entry it would judge, rather than reading as a policy that
+// grants nothing. It is loaded before anything about the query is judged, so
+// the refusal is the same whatever the query would have matched.
+async function grantedQuery(
+  core: OperationCore,
+  scope: OperationScope,
+  query: SearchEntryQuery,
+  filter: QueryTarget['query'],
+): Promise<SearchEntryQuery | undefined> {
+  await loadPolicy(core);
+  if (scope.caller.kind !== 'user') {
+    return undefined;
+  }
+  let granted = await policyQueryScope(core, {
+    ...searchInvocation({ filter })!,
+    principal: { kind: 'user', user: scope.caller.actor },
+  });
+  return granted.kind === 'scoped'
+    ? policyScopedQuery(query, granted.filters)
+    : undefined;
 }
 
 // How many cards one entry may expand into.

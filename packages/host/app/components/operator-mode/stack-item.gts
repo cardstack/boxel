@@ -192,6 +192,12 @@ export default class OperatorModeStackItem extends Component<Signature> {
     return this.card?.id ?? this.cardError?.id;
   }
 
+  private get codeSubmodeOffered() {
+    return this.operatorModeStateService.codeSubmodeOffered(
+      this.url ?? this.args.item.id,
+    );
+  }
+
   private get renderedCardsForOverlayActions(): StackItemRenderedCardForOverlayActions[] {
     return this.cardTracker
       .filter(
@@ -993,7 +999,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
             {{else}}
               <CardError
                 @error={{this.cardError}}
-                @viewInCodeMode={{true}}
+                @viewInCodeMode={{this.codeSubmodeOffered}}
                 @headerOptions={{this.cardErrorHeaderOptions}}
                 class='stack-item-header'
                 style={{cssVar

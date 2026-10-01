@@ -20,8 +20,8 @@ import {
   type RenderVisitResponse,
   type RunCommandArgs,
   type RunCommandResponse,
-  type ScreenshotPrerenderArgs,
-  type ScreenshotPrerenderResponse,
+  type CapturePrerenderArgs,
+  type CapturePrerenderResponse,
   type VirtualNetwork,
 } from '@cardstack/runtime-common';
 import { prerenderHtmlWriterLane } from '@cardstack/runtime-common/jobs/prerender-html';
@@ -228,14 +228,14 @@ class RecordingPrerenderer implements Prerenderer {
     await (await this.#prerenderer()).releaseBatch?.(args);
   }
 
-  async prerenderScreenshot(
-    args: ScreenshotPrerenderArgs,
-  ): Promise<ScreenshotPrerenderResponse> {
+  async prerenderCapture(
+    args: CapturePrerenderArgs,
+  ): Promise<CapturePrerenderResponse> {
     let prerenderer = await this.#prerenderer();
-    if (!prerenderer.prerenderScreenshot) {
-      throw new Error('the test prerenderer does not capture screenshots');
+    if (!prerenderer.prerenderCapture) {
+      throw new Error('the test prerenderer does not take captures');
     }
-    return await prerenderer.prerenderScreenshot(args);
+    return await prerenderer.prerenderCapture(args);
   }
 
   // The scopes the visits of one queue job carried, in order.

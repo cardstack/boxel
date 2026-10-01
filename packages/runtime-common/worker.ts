@@ -22,7 +22,7 @@ import {
   type IndexWriter,
   type QueuePublisher,
   type DBAdapter,
-  type RealmPermissions,
+  type CreatePrerenderAuth,
   CachingDefinitionLookup,
 } from './index.ts';
 import { MatrixClient } from './matrix-client.ts';
@@ -216,10 +216,7 @@ export class Worker {
   #indexJobsOnly: boolean;
   #skipPrerenderHtmlRealms: string[];
   #mediaCacheAdapter: MediaCacheAdapter | undefined;
-  #createPrerenderAuth: (
-    userId: string,
-    permissions: RealmPermissions,
-  ) => string;
+  #createPrerenderAuth: CreatePrerenderAuth;
 
   constructor({
     indexWriter,
@@ -258,10 +255,7 @@ export class Worker {
     // The MediaCache object store, absent when the process has none
     // configured (media-cache tasks then no-op).
     mediaCacheAdapter?: MediaCacheAdapter;
-    createPrerenderAuth: (
-      userId: string,
-      permissions: RealmPermissions,
-    ) => string;
+    createPrerenderAuth: CreatePrerenderAuth;
   }) {
     this.#queue = queue;
     this.#indexWriter = indexWriter;
@@ -343,11 +337,13 @@ export class Worker {
         ),
       'run-command': () =>
         this.#queue.register(`run-command`, Tasks['runCommand'](taskArgs)),
+      'capture-card': () =>
+        this.#queue.register(`capture-card`, Tasks['captureCard'](taskArgs)),
+      // The job type's legacy name. Workers roll before realm servers, and a
+      // realm server still on the previous revision publishes captures under
+      // it; the args are wire-identical, so the same task claims them.
       'screenshot-card': () =>
-        this.#queue.register(
-          `screenshot-card`,
-          Tasks['screenshotCard'](taskArgs),
-        ),
+        this.#queue.register(`screenshot-card`, Tasks['captureCard'](taskArgs)),
     };
     let jobTypes = this.#indexJobsOnly
       ? (INDEX_JOB_TYPES as readonly string[])
