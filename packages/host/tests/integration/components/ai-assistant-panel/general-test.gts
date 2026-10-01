@@ -86,7 +86,7 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
     activeRealms: [testRealmURL],
     autostart: true,
     now: (() => {
-      // deterministic clock so that, for example, screenshots
+      // deterministic clock so that, for example, captures
       // have consistent content
       let clock = new Date(2024, 8, 19).getTime();
       return () => (clock += 10);

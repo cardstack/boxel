@@ -53,26 +53,30 @@ import {
 // for a policy load or a predicate evaluation.
 //
 // Authorization infrastructure is outside the grant model. Were any of it
-// grantable, one grant could be made into every grant. So these are refused to
-// every caller the ACL declined, however the compiled policy came to grant
-// them:
+// writable through a grant, one grant could be made into every grant. Were any
+// of it readable through one, a caller the realm admits only through grants
+// could read the whole policy that judges them: every rule, whom it grants,
+// and under which predicates. So an operation invoked on any of these is
+// refused to every caller the ACL declined, however the compiled policy came to
+// grant it:
 //
 // - An operation declared `nonGrantable` on the target's type, refused before
 //   any rule is matched, or on any type the target's type descends from,
 //   refused before a matching grant admits anything.
 // - An explain, which answers what a refusal withholds, whatever its
 //   declaration says.
-// - Any write to the card the realm's policy key names.
-// - Any write to the realm's config card, which holds that key and the
+// - Any operation on the card the realm's policy key names: a read of it, a
+//   read of its stored bytes, or a write.
+// - Any operation on the realm's config card, which holds that key and the
 //   settings a predicate reads through `realmConfig()`.
-// - Any write to a policy card, a card of `RealmPolicy` or a subtype of it,
-//   under whatever name it is invoked, and any create that mints one, refused
-//   before a matching grant admits anything. It does not matter whether a
-//   realm's policy key names the card. A key can come to name a card no key
-//   names today, and a card another realm's key names is that realm's
+// - Any operation on a policy card, a card of `RealmPolicy` or a subtype of
+//   it, under whatever name it is invoked, and any create that mints one,
+//   refused before a matching grant admits anything. It does not matter
+//   whether a realm's policy key names the card. A key can come to name a card
+//   no key names today, and a card another realm's key names is that realm's
 //   authorization wherever it is stored. The gate judges a stored card by its
-//   index row, and the write lock judges it again by its stored bytes (see
-//   `StoredCardCheck`).
+//   index row, and a read of its stored bytes by those bytes. The write lock
+//   judges a written card again by its stored bytes (see `StoredCardCheck`).
 //
 // Every way the gate can fail denies. A compiled policy with no rule for the
 // type, a predicate that answers anything but `true`, and a target whose type
@@ -115,9 +119,12 @@ import {
 // its link closure, whatever the linked cards' types, and the results of its
 // query-backed fields. So a grant on a type reaches every card that type's
 // representation carries, and granting `read` on a type asserts that all of it
-// is fit for every caller the grant admits. Nothing here narrows that reach. A
-// response's shape never depends on how its caller was authorized, so a
-// narrower one has to be declared on the operation, for every caller alike.
+// is fit for every caller the grant admits. Nothing here narrows that reach,
+// and that includes a policy card or the realm's config card that a granted
+// card links to: the rules above refuse an operation invoked on one, not a card
+// assembled into another's closure. A response's shape never depends on how
+// its caller was authorized, so a narrower one has to be declared on the
+// operation, for every caller alike.
 // ============================================================================
 
 // What the gate reads for a caller the realm ACL declined. The realm supplies
@@ -168,8 +175,8 @@ export type GateSubject =
 // What the gate reads of an invocation's scope: who the caller is, what the
 // realm ACL declined, and the index rows a card's chain comes from. A create's
 // proposed document is not among them, because it names the type the caller
-// claims. A scope an explain built also carries the trace the gate records
-// into.
+// claims. A scope an explain or a capability check built also carries the
+// trace the gate records into.
 export type GateScope = Pick<
   OperationScope,
   'caller' | 'coarseDeclined' | 'peekInstance' | 'trace'
@@ -429,10 +436,26 @@ export async function gateOperation(
     return GATE_REFUSED;
   }
   // A query is planned and run on the search engine rather than against one
-  // target, so nothing here can grant one. An explain is granted nowhere: what
-  // it answers is what a refusal withholds, so it is refused here even where
-  // its declaration left the flag off.
-  if (base === 'query' || base === 'explain') {
+  // target, so nothing here can grant one. Its grants are judged by the search
+  // that runs it, which composes their filters into the query
+  // (`policyQueryScope`). The search also refuses one a type up the target's
+  // chain declares `nonGrantable` where the target's own type redeclares it
+  // without the flag, so a trace records that query as kept out of reach.
+  // Only a traced decision asks, since the refusal is the same either way.
+  if (base === 'query') {
+    if (trace) {
+      trace.refused(
+        (await queryKeptOutOfReach(core, scope, subject, name))
+          ? 'non-grantable'
+          : 'query-lane',
+      );
+    }
+    return GATE_REFUSED;
+  }
+  // An explain is granted nowhere: what it answers is what a refusal
+  // withholds, so it is refused here even where its declaration left the flag
+  // off.
+  if (base === 'explain') {
     trace?.refused('non-grantable');
     return GATE_REFUSED;
   }
@@ -454,15 +477,16 @@ export async function gateOperation(
     return GATE_REFUSED;
   }
   // The realm's config card and the card its policy key names together
-  // decide every grant, so no grant writes either, whatever their types
-  // declare. This rule follows the cards' identities rather than their types
-  // because the gate judges a card's type by its index row, which can lag the
-  // stored bytes. A card a realm writer has just rewritten as a policy card
-  // reads as its old type here until its index pass lands, and only the write
-  // lock judges it by its bytes.
+  // decide every grant, so no grant reaches either, whatever their types
+  // declare: not a write, not a read, and not a read of their stored bytes,
+  // which a stored path names by the card's `.json`. This rule follows the
+  // cards' identities rather than their types because the gate judges a
+  // card's type by its index row, which can lag the stored bytes. A card a
+  // realm writer has just rewritten as a policy card reads as its old type
+  // here until its index pass lands, and only the write lock judges it by its
+  // bytes.
   if (
-    subject.kind === 'card' &&
-    isWrite(base) &&
+    subject.kind !== 'type' &&
     (namesRealmConfigCard(core, subject.url) ||
       (await namesPolicyCard(core.policy, subject.url)))
   ) {
@@ -524,10 +548,7 @@ export async function gateOperation(
     trace?.refused('non-grantable');
     return GATE_REFUSED;
   }
-  if (
-    isWrite(base) &&
-    (await writesPolicyCard(core, core.policy, types, definition))
-  ) {
+  if (await reachesPolicyCard(core, core.policy, types, definition)) {
     trace?.refused('authorization-infrastructure');
     return GATE_REFUSED;
   }
@@ -597,6 +618,26 @@ async function indexedSubject(
     return types;
   }
   return { kind: 'card', url: subject.url, types };
+}
+
+// Whether a type in the chain of the card or type a query is invoked on
+// declares the query `nonGrantable`. A subclass that redeclares the name
+// without the flag does not make grantable what the type it extends kept out
+// of a policy's reach, on the search engine as anywhere.
+async function queryKeptOutOfReach(
+  core: OperationCore,
+  scope: GateScope,
+  subject: GateSubject,
+  name: string,
+): Promise<boolean> {
+  if (subject.kind === 'unmatched') {
+    return false;
+  }
+  let indexed = await indexedSubject(scope, subject);
+  if (!indexed || indexed.kind === GATE_MISSING.kind) {
+    return false;
+  }
+  return await nonGrantableInChain(core, indexed.types, name);
 }
 
 // What the bytes a stored-bytes read will serve are, judged from those bytes.
@@ -986,9 +1027,29 @@ function cardId(href: string): string {
   return href.endsWith('.json') ? href.slice(0, -'.json'.length) : href;
 }
 
-// Whether `url` is the realm's config card, the card stored at `realm.json`.
+// The id of the realm's config card, the card stored at `realm.json`.
+function realmConfigCardId(core: OperationCore): string {
+  return cardId(pathsFor(core).fileURL('realm.json').href);
+}
+
+// Whether `url` is the realm's config card, named either by its id or by that
+// stored `.json`.
 function namesRealmConfigCard(core: OperationCore, url: URL): boolean {
-  return cardId(pathsFor(core).fileURL('realm.json').href) === url.href;
+  return realmConfigCardId(core) === cardId(url.href);
+}
+
+// The ids of the cards that hold this realm's authorization by identity rather
+// than by type: its config card, and the card its policy key names when the
+// key names one. The gate refuses a grant every operation on either, and a
+// search a policy scopes leaves both out of the rows it finds.
+export async function authorizationCardIds(
+  core: OperationCore,
+): Promise<string[]> {
+  let pointer = await core.policy?.policyCard();
+  return [
+    realmConfigCardId(core),
+    ...(pointer === undefined ? [] : [cardId(pointer)]),
+  ];
 }
 
 // Whether any of these types, keys from an adoption chain, declares `name`
@@ -1037,18 +1098,20 @@ export async function nonGrantableInChain(
   return answers.includes(true);
 }
 
-// Whether a write would change a policy card or mint one. `types` is the
-// target's adoption chain: a stored card's, or for a plain create the chain of
-// the type it mints. A named create mints the type its declaration names,
-// whatever type it is invoked on, so that type's chain is the one judged.
+// Whether an operation would reach a policy card: read one, read its stored
+// bytes, change one, or mint one. `types` is the target's adoption chain: a
+// stored card's, the one the bytes a stored-bytes read serves name, or for a
+// plain create the chain of the type it mints. A named create mints the type
+// its declaration names, whatever type it is invoked on, so that type's chain
+// is the one judged.
 //
 // A policy card's writes are marked non-grantable where its type declares
-// them. This covers what those marks cannot reach: a subtype's own named
-// writes, and a create, which a type cannot mark without naming what it
-// mints.
+// them. This covers what those marks cannot reach: its reads, a subtype's own
+// named operations, and a create, which a type cannot mark without naming
+// what it mints.
 //
 // A chain that cannot be read might be a policy card's, so it answers yes.
-async function writesPolicyCard(
+async function reachesPolicyCard(
   core: OperationCore,
   access: OperationPolicyAccess,
   types: string[],

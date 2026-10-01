@@ -28,12 +28,15 @@
       "realm-policy-explain-test",
       "realm-policy-gate-test",
       "realm-policy-non-grantable-test",
+      "realm-policy-publish-test",
       "realm-policy-query-filter-test",
       "realm-policy-query-reach-test",
       "realm-policy-render-search-test",
       "realm-policy-row-reach-test",
+      "realm-policy-search-infrastructure-test",
       "realm-policy-source-read-test",
       "realm-policy-write-lock-test",
+      "server-endpoints/delegated-session-federated-endpoints-test",
       "server-endpoints/policy-scoped-search-test"
     ]
   }

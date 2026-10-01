@@ -3,6 +3,8 @@ import type { DBAdapter, Realm } from '@cardstack/runtime-common';
 import {
   archivedRealmURLs,
   DURING_PRERENDER_HEADER,
+  ensureTrailingSlash,
+  fetchRealmPermissions,
   fetchUserPermissions,
   isSessionRevoked,
   param,
@@ -21,6 +23,8 @@ import {
   searchPrincipal,
   type SearchPrincipal,
 } from '@cardstack/runtime-common/card-operations';
+import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
+import RealmPermissionChecker from '@cardstack/runtime-common/realm-permission-checker';
 import type { RealmRegistryReconciler } from '../lib/realm-registry-reconciler.ts';
 import {
   retrieveTokenClaim,
@@ -51,7 +55,8 @@ export type MultiRealmAuthorizationState = {
   // federated search asks several realms a question, and a realm that has no
   // answer for this caller is a realm with no rows, exactly as a realm
   // holding no matching card is. Always empty on an endpoint that refuses,
-  // and for a realm-authority principal, which no policy admits.
+  // and for a realm-authority principal or a delegated session, neither of
+  // which any policy admits.
   grantCandidates: string[];
   // Who the request's token was verified for: the user it names, or a
   // realm-authority principal — a session a realm renders its own cards under,
@@ -67,11 +72,13 @@ const SEARCH_REQUEST_PAYLOAD_STATE = 'searchRequestPayload';
 export function multiRealmAuthorization(
   {
     dbAdapter,
+    matrixClient,
     realmSecretSeed,
     realms,
     reconciler,
   }: {
     dbAdapter: DBAdapter;
+    matrixClient: MatrixClient;
     realmSecretSeed: string;
     realms: Realm[];
     reconciler: RealmRegistryReconciler;
@@ -199,6 +206,24 @@ export function multiRealmAuthorization(
         throw e;
       }
 
+      // A delegated session reads one realm on its user's behalf, and
+      // authenticates here for that realm alone: naming any other realm refuses
+      // the request as a token that does not belong there, whatever the user
+      // may read in it. The realm refuses such a token the same way wherever
+      // it asks for one. A realm anyone may read answers the request without
+      // asking for a token, and this refuses it all the same, since a
+      // delegated session has no business outside its realm.
+      if (token.delegated) {
+        let boundRealm = token.realm ? ensureTrailingSlash(token.realm) : '';
+        if (realmList.some((realmURL) => realmURL !== boundRealm)) {
+          await sendResponseForUnauthorizedRequest(
+            ctxt,
+            AuthenticationErrorMessages.TokenInvalid,
+          );
+          return;
+        }
+      }
+
       // A render tab marks every request it sends, whatever session it holds:
       // a session minted before its minter carried the claim, or one a
       // command or a request-only capture runs under. What such a request
@@ -221,6 +246,32 @@ export function multiRealmAuthorization(
       let unauthorizedRealms = realmList.filter(
         (realmURL) => !readableRealms.has(realmURL),
       );
+      // A delegated session is never a policy's to admit. Its user reads the
+      // realm it is bound to outright, or the session is refused, as the realm
+      // refuses a delegated session whose user no longer reads it, so no realm
+      // is ever carried as a grant candidate for it. Whether the user reads it
+      // is the realm's own judgment, the one `/_delegate-session` made when it
+      // minted the session: it counts the realm's `users` grant, which the
+      // readability above leaves out.
+      if (token.delegated && unauthorizedRealms.length > 0) {
+        let [boundRealm] = unauthorizedRealms;
+        if (
+          !(await realmReadsFor(
+            dbAdapter,
+            matrixClient,
+            boundRealm,
+            token.user,
+          ))
+        ) {
+          await sendResponseForUnauthorizedRequest(
+            ctxt,
+            AuthenticationErrorMessages.PermissionMismatch,
+          );
+          return;
+        }
+        readableRealms.add(boundRealm);
+        unauthorizedRealms = [];
+      }
       if (unreadableRealms === 'refuse' && unauthorizedRealms.length > 0) {
         await sendResponseForForbiddenRequest(
           ctxt,
@@ -268,6 +319,25 @@ export function multiRealmAuthorization(
 
     await next();
   };
+}
+
+// Whether a realm lets a user read it, judged as the realm judges a session
+// that carries only `read`. An archived realm is sealed, and lets no one read
+// it.
+async function realmReadsFor(
+  dbAdapter: DBAdapter,
+  matrixClient: MatrixClient,
+  realmURL: string,
+  user: string,
+): Promise<boolean> {
+  if ((await archivedRealmURLs(dbAdapter, [realmURL])).has(realmURL)) {
+    return false;
+  }
+  let checker = new RealmPermissionChecker(
+    await fetchRealmPermissions(dbAdapter, new URL(realmURL)),
+    matrixClient,
+  );
+  return await checker.can(user, 'read');
 }
 
 export function getMultiRealmAuthorization(

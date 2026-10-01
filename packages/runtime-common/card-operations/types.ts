@@ -1,6 +1,6 @@
 import type { Readable } from 'stream';
 import type { CodeRef } from '../code-ref.ts';
-import type { ScreenshotManifest } from '../capture-spec.ts';
+import type { CaptureManifest } from '../capture-spec.ts';
 import type {
   SingleCardDocument,
   SingleFileMetaDocument,
@@ -409,9 +409,11 @@ export type PolicyIssueCode =
   | 'unknown-operation'
   // A grant of authorization infrastructure: an operation declared
   // `nonGrantable` on its rule's type or on any type that type descends from,
-  // or a write on a rule whose type is a `RealmPolicy`. The gate refuses both
-  // whatever a compiled policy holds, so the grant could admit nothing, and
-  // recording it says so where the author wrote it.
+  // or any grant on a rule whose type is a `RealmPolicy`. The gate refuses
+  // both whatever a compiled policy holds, so the grant could admit nothing,
+  // and recording it says so where the author wrote it. A query grant on a
+  // policy type is recorded too, since it would contribute a filter that
+  // lists policy cards.
   | 'grants-authorization-infrastructure'
   // A `where` that does not parse, or that the `policy` profile refuses.
   | 'invalid-predicate'
@@ -593,7 +595,7 @@ export interface OperationDocumentResult {
 
 // What the index row behind a read says about itself: the values the card+json
 // response headers are computed from — the validator, the modification time,
-// and the index-data generation and screenshot manifest that go into it.
+// and the index-data generation and capture manifest that go into it.
 // Carried by both read modes, since the document mode reports the row its body
 // came from alongside the body.
 export interface OperationRowHeaders {
@@ -606,7 +608,7 @@ export interface OperationRowHeaders {
   indexedAt: number | null;
   lastModified: number | null;
   generation: number | null;
-  screenshots: ScreenshotManifest | null;
+  captures: CaptureManifest | null;
   // The target's index-row dependencies. Carried because a validator is only
   // safe when none of them live in another realm: cross-realm invalidation
   // does not cascade `indexed_at`, so a stable local one does not mean the
@@ -827,13 +829,18 @@ export type PolicyExplanationReason =
   // other matching grant held.
   | 'predicate-threw'
   // The operation is kept out of every policy's reach: declared
-  // `nonGrantable` on the target's type or a type it descends from, or a
-  // behavior no grant reaches here at all — a query, which is authorized on
-  // the search engine's lane, and an explain.
+  // `nonGrantable` on the target's type or a type it descends from, or an
+  // explain, which no grant reaches.
   | 'non-grantable'
-  // A write to the realm's policy card or to its config card, or a write that
-  // changes or mints any policy card, which no grant reaches whatever the
-  // card's type declares.
+  // The operation is a query. A query is not invoked on a card: it is named,
+  // with the type that declares it, in a search, and the search decides what
+  // it returns by composing into it the filter of each grant the actor holds
+  // on it. So invoking it on the card is refused whatever the policy grants,
+  // and this explanation reports no rule for it.
+  | 'query-lane'
+  // Any operation on the realm's policy card or on its config card, or one
+  // that reads, changes or mints any policy card, which no grant reaches
+  // whatever the card's type declares.
   | 'authorization-infrastructure'
   // The target is nothing a rule can be matched against for this operation:
   // a card whose index row records an error, so its type is unknown; a file,

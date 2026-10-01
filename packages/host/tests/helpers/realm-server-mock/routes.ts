@@ -24,6 +24,7 @@ import {
   errorsDocument,
   isNamedQueryPayload,
   isOperationFailure,
+  namedQueryRendering,
   policyQueryScope,
   resolveNamedQuery,
   searchInvocation,
@@ -184,49 +185,58 @@ function registerSearchRoutes() {
 
       // Mirror the realm-server's `handle-search`: a request naming a
       // declared query is answered with the realm's own resolution of it,
-      // read through the first realm the request names, and its results carry
-      // what the declaration's link strategy lets them. A render's search is
-      // the exception, as it is there: it keeps each row's stored links
-      // whatever the query declares, because the render resolves the cards
-      // those links name itself.
+      // read through the first realm the request names that is in process,
+      // and its results carry what the declaration's link strategy lets them.
+      // A render's search is the exception, as it is there: it keeps each
+      // row's stored links whatever the query declares, because the render
+      // resolves the cards those links name itself.
       let duringRender =
         (req.headers.get(DURING_PRERENDER_HEADER) ?? '').length > 0;
       let links: LinkStrategy = 'full';
       let invocation = searchInvocation(payload);
       let resolvedByServer = isNamedQueryPayload(payload);
       let requested = realmList;
+      let unresolved = false;
       if (isNamedQueryPayload(payload)) {
-        let resolvingRealm = getTestRealmRegistry().get(
-          ensureTrailingSlash(realmList[0]),
-        )?.realm;
+        let resolvingRealm = realmList
+          .map(
+            (realmURL) =>
+              getTestRealmRegistry().get(ensureTrailingSlash(realmURL))?.realm,
+          )
+          .find(Boolean);
         if (!resolvingRealm) {
-          return buildSearchErrorResponse(
-            `Realm not available to resolve a named query: ${realmList[0]}`,
-            404,
-          );
-        }
-        try {
-          // A request a render is waiting on is a realm-authority principal,
-          // whatever session it holds, as it is on the realm server.
-          let resolved = await resolveNamedQuery(
-            resolvingRealm.operationCore,
-            payload,
-            {
-              principal: searchPrincipal(authenticatedUser(req), duringRender),
-              realms: realmList,
-            },
-          );
-          payload = resolved.query;
-          realmList = resolved.query.realms!;
-          links = duringRender ? 'full' : resolved.links;
-        } catch (e) {
-          if (isOperationFailure(e)) {
-            return new Response(JSON.stringify(errorsDocument(e.error)), {
-              status: e.error.status,
-              headers: { 'content-type': SupportedMimeType.CardJson },
-            });
+          // As there, a declaration no realm can be read through searches no
+          // realm, and the result is empty and marked incomplete rather than
+          // refused.
+          unresolved = true;
+          payload = { ...namedQueryRendering(payload), realms: realmList };
+        } else {
+          try {
+            // A request a render is waiting on is a realm-authority principal,
+            // whatever session it holds, as it is on the realm server.
+            let resolved = await resolveNamedQuery(
+              resolvingRealm.operationCore,
+              payload,
+              {
+                principal: searchPrincipal(
+                  authenticatedUser(req),
+                  duringRender,
+                ),
+                realms: realmList,
+              },
+            );
+            payload = resolved.query;
+            realmList = resolved.query.realms!;
+            links = duringRender ? 'full' : resolved.links;
+          } catch (e) {
+            if (isOperationFailure(e)) {
+              return new Response(JSON.stringify(errorsDocument(e.error)), {
+                status: e.error.status,
+                headers: { 'content-type': SupportedMimeType.CardJson },
+              });
+            }
+            throw e;
           }
-          throw e;
         }
       }
 
@@ -262,6 +272,13 @@ function registerSearchRoutes() {
       let scopedQueries = new Map<object, SearchEntryQuery>();
       let realms = await Promise.all(
         realmList.map(async (realmURL) => {
+          // A realm the caller reads is one the declaration would have
+          // searched, so it counts as one that did not answer. Every other
+          // realm answers with no rows below: none is in process, so none has
+          // a policy to ask.
+          if (unresolved && readable(realmURL)) {
+            return undefined;
+          }
           let realm = getSearchEntrySearchableRealmForURL(realmURL, payload);
           if (readable(realmURL)) {
             return realm;

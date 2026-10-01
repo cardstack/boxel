@@ -3,12 +3,12 @@ import {
   Component,
   contains,
   field,
-  type ScreenshotSpec,
+  type CaptureSpec,
 } from '@cardstack/base/card-api';
 import StringField from '@cardstack/base/string';
 
 // Pattern example for declared PDFs. One card, both authoring paths for a
-// `type: 'pdf'` declared screenshot:
+// `type: 'pdf'` declared capture:
 //
 //   - `statement` sources the card's own `isolated` format. Reach for this
 //     when the isolated template already reads like the document.
@@ -18,12 +18,12 @@ import StringField from '@cardstack/base/string';
 // A declared PDF has no capture box — no width/height — and paginates under
 // print media (`@media print`, `@page`, and `break-*` rules). Both PDFs are
 // captured eagerly at index time and served at durable `?name=` URLs, which
-// `@model.screenshotURLs` exposes.
+// `@model.captureURLs` exposes.
 
 // The custom-component path: a capture-only component that renders the full
-// document flow itself. It is referenced only from the `static screenshots`
+// document flow itself. It is referenced only from the `static captures`
 // declaration — never a display format — so it renders solely on the
-// prerender screenshot route at index time, under emulated print media.
+// prerender capture route at index time, under emulated print media.
 class CoverLetterDocument extends Component<typeof StatementPdfDemo> {
   <template>
     <article class='cover-letter'>
@@ -60,7 +60,7 @@ export class StatementPdfDemo extends CardDef {
 
   // Two declared PDFs, one per authoring path. Both are geometry-free
   // (`type: 'pdf'` refuses width/height) and paginate under print media.
-  static screenshots: Record<string, ScreenshotSpec> = {
+  static captures: Record<string, CaptureSpec> = {
     statement: { format: 'isolated', type: 'pdf' },
     letter: { render: CoverLetterDocument, type: 'pdf' },
   };
@@ -70,18 +70,18 @@ export class StatementPdfDemo extends CardDef {
       {{! Interactive affordances — hidden from the captured statement PDF by
           the `@media print` rule below, so the printed document is clean. }}
       <nav class='downloads'>
-        {{#if @model.screenshotURLs.statement}}
+        {{#if @model.captureURLs.statement}}
           <a
-            href={{@model.screenshotURLs.statement}}
+            href={{@model.captureURLs.statement}}
             target='_blank'
             rel='noopener noreferrer'
           >
             Statement PDF (isolated-template path)
           </a>
         {{/if}}
-        {{#if @model.screenshotURLs.letter}}
+        {{#if @model.captureURLs.letter}}
           <a
-            href={{@model.screenshotURLs.letter}}
+            href={{@model.captureURLs.letter}}
             target='_blank'
             rel='noopener noreferrer'
           >

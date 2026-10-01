@@ -20,8 +20,8 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "paths": {
-      "test-app/tests/*": ["tests/*"],
-      "test-app/*": ["app/*"],
+      "boxel-ui-docs-app/tests/*": ["tests/*"],
+      "boxel-ui-docs-app/*": ["app/*"],
       "*": ["types/*"]
     },
     "skipLibCheck": true,
