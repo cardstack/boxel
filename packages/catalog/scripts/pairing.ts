@@ -59,22 +59,42 @@ export interface Pair {
   // when it could not be read (see approvalError). Always false once merged.
   approved: boolean | null;
   approvalError?: string;
+  // The open pull request this one is stacked on, while it targets that
+  // pull request's branch rather than main.
+  stackedOn?: string;
 }
 
 export interface Resolution {
   repository: string;
   number: number;
   pairs: Pair[];
+  // The open pull request this one is stacked on, when it is.
+  stackedOn?: string;
 }
 
-// What a pull request's base says about where it lands: on main; stacked on
-// an open pull request of its own repository, to be retargeted to main once
-// that one merges; or on the branch of a parent that has already merged.
+// Where a pull request's base leads. `main` is main itself. `stacked` is the
+// branch of an open pull request, `parent`, reached directly or through the
+// branches of parents that have merged since (`mergedVia`, the first of them).
+// `landed` is a chain of merged parents that ends on main.
 export type Landing =
   | { kind: 'main' }
-  | { kind: 'stacked'; parent: string }
-  | { kind: 'parent-merged'; parent: string; base: string }
+  | { kind: 'stacked'; parent: string; branch: string; mergedVia?: string }
+  | { kind: 'landed'; mergedVia: string }
   | { kind: 'problem'; problem: string };
+
+// A pull request as the list endpoint returns it, which has `merged_at` but
+// no `merged`.
+interface ListedPull {
+  number: number;
+  state: string;
+  merged_at: string | null;
+  base: { ref: string };
+  head: { repo: { full_name: string } | null };
+}
+
+// Deep enough for any stack a person builds, and a bound on a cycle of
+// retargeted branches.
+const MAX_STACK_DEPTH = 10;
 
 interface Declaration {
   key: PairingKey;
@@ -204,73 +224,111 @@ function fetchPull(repository: string, n: number) {
   return getJson<RestPull>(`repos/${repository}/pulls/${n}`);
 }
 
-// Where a pull request of `repository` that targets `base` lands. A base
-// other than main is a stack when it is the branch of an open pull request of
-// the same repository, which is the parent this one is retargeted from once it
-// merges. `who` names the pull request in what this says.
+// Where a pull request of `repository` that targets `base` leads. A base other
+// than main belongs to a parent: the pull request of the same repository whose
+// branch it is, not one pushed from a fork. An open parent makes this one
+// stacked on it. A merged parent hands on to the branch it merged into, which
+// is main once the whole stack has landed. `who` names the pull request in
+// what this says.
 export async function landing(
   repository: string,
   who: string,
   base: string,
 ): Promise<Landing> {
-  if (base === 'main') {
-    return { kind: 'main' };
-  }
   let [owner] = repository.split('/');
-  let candidates: RestPull[] | undefined;
-  try {
-    candidates = await getJson<RestPull[]>(
-      `repos/${repository}/pulls?state=all&per_page=100&head=${encodeURIComponent(`${owner}:${base}`)}`,
+  let branch = base;
+  let mergedVia: string | undefined;
+  for (let depth = 0; depth < MAX_STACK_DEPTH; depth++) {
+    if (branch === 'main') {
+      return mergedVia ? { kind: 'landed', mergedVia } : { kind: 'main' };
+    }
+    let listed: ListedPull[] | undefined;
+    try {
+      listed = await getJson<ListedPull[]>(
+        `repos/${repository}/pulls?state=all&per_page=100&head=${encodeURIComponent(`${owner}:${branch}`)}`,
+      );
+    } catch (error) {
+      return {
+        kind: 'problem',
+        problem:
+          `Could not read which pull request owns \`${branch}\`, which ` +
+          `${who}'s base leads to (${error instanceof Error ? error.message : String(error)}). ` +
+          `Re-run this check.`,
+      };
+    }
+    let parents = (listed ?? []).filter(
+      (pull) =>
+        pull.head.repo && sameRepository(pull.head.repo.full_name, repository),
     );
-  } catch (error) {
-    return {
-      kind: 'problem',
-      problem:
-        `Could not read which pull request ${who}'s base \`${base}\` belongs ` +
-        `to (${error instanceof Error ? error.message : String(error)}). ` +
-        `Re-run this check.`,
-    };
-  }
-  let parents = (candidates ?? []).filter(
-    (pull) =>
-      pull.head.repo && sameRepository(pull.head.repo.full_name, repository),
-  );
-  let open = parents.find((pull) => pull.state === 'open');
-  if (open) {
-    return { kind: 'stacked', parent: `${repository}#${open.number}` };
-  }
-  let merged = parents.find((pull) => pull.merged);
-  if (merged) {
-    return {
-      kind: 'parent-merged',
-      parent: `${repository}#${merged.number}`,
-      base,
-    };
+    let open = parents.find((pull) => pull.state === 'open');
+    if (open) {
+      return {
+        kind: 'stacked',
+        parent: `${repository}#${open.number}`,
+        branch,
+        ...(mergedVia ? { mergedVia } : {}),
+      };
+    }
+    let merged = parents.find((pull) => pull.merged_at != null);
+    if (!merged) {
+      return {
+        kind: 'problem',
+        problem:
+          `${who} targets \`${base}\`` +
+          (branch === base ? '' : `, which leads to \`${branch}\``) +
+          `, and that is not the branch of an open pull request. A pair's ` +
+          `pull requests target main, or are stacked on an open pull ` +
+          `request and retargeted to main once it merges.`,
+      };
+    }
+    mergedVia ??= `${repository}#${merged.number}`;
+    branch = merged.base.ref;
   }
   return {
     kind: 'problem',
     problem:
-      `${who} targets \`${base}\`, which is not the branch of an open pull ` +
-      `request. A pair's pull requests target main, or are stacked on an ` +
-      `open pull request and retargeted to main once it merges.`,
+      `${who} targets \`${base}\`, which leads through more than ` +
+      `${MAX_STACK_DEPTH} merged pull requests without reaching main or an ` +
+      `open pull request. Retarget ${who} to main.`,
   };
 }
 
-function retargetProblem(
+// What an open pull request whose base leads to `landed` is told, and the
+// parent it is stacked on, if any.
+function openSide(
   who: string,
-  landed: { parent: string; base: string },
-) {
-  return (
-    `${who} targets \`${landed.base}\`, the branch of ${landed.parent}, ` +
-    `which has merged. Retarget ${who} to main.`
-  );
-}
-
-function stackedNotice(who: string, parent: string) {
-  return (
-    `${who} is stacked on ${parent}. Retarget ${who} to main once ${parent} ` +
-    `merges: the pair's merge order is between pull requests that land on main.`
-  );
+  base: string,
+  landed: Landing,
+): { problem?: string; notice?: string; stackedOn?: string } {
+  switch (landed.kind) {
+    case 'main':
+      return {};
+    case 'problem':
+      return { problem: landed.problem };
+    case 'landed':
+      return {
+        problem:
+          `${who} targets \`${base}\`, the branch of ${landed.mergedVia}, ` +
+          `which has merged, and so has every parent after it. Retarget ` +
+          `${who} to main.`,
+      };
+    case 'stacked':
+      if (landed.mergedVia) {
+        return {
+          problem:
+            `${who} targets \`${base}\`, the branch of ${landed.mergedVia}, ` +
+            `which has merged into the stack below it. Retarget ${who} to ` +
+            `\`${landed.branch}\`, the branch of ${landed.parent}.`,
+        };
+      }
+      return {
+        stackedOn: landed.parent,
+        notice:
+          `${who} is stacked on ${landed.parent}. Retarget ${who} to main ` +
+          `once ${landed.parent} merges: the pair's merge order is between ` +
+          `pull requests that land on main.`,
+      };
+  }
 }
 
 const APPROVAL_QUERY = `
@@ -374,15 +432,16 @@ export async function resolvePairing(
     );
     return { resolution: { repository, number: n, pairs }, problems, notices };
   }
+  let stackedOn: string | undefined;
   if (declarations.length > 0) {
-    let own = await landing(repository, here, base);
-    if (own.kind === 'stacked') {
-      notices.push(stackedNotice(here, own.parent));
-    } else if (own.kind === 'parent-merged') {
-      problems.push(retargetProblem(here, own));
-    } else if (own.kind === 'problem') {
+    let own = openSide(here, base, await landing(repository, here, base));
+    if (own.problem) {
       problems.push(own.problem);
     }
+    if (own.notice) {
+      notices.push(own.notice);
+    }
+    stackedOn = own.stackedOn;
   }
   for (let key of Object.keys(KEY_LABEL) as PairingKey[]) {
     let declared = declarations.filter((d) => d.key === key);
@@ -432,31 +491,37 @@ export async function resolvePairing(
       );
       continue;
     }
-    // An open stacked pull request is retargeted to main once its parent
-    // merges. One that merged into its parent's branch has landed on main
-    // only once the parent has merged too, and until then the pair waits.
+    // A merged pull request has reached main once every parent below it has
+    // merged too. Until then the pair waits.
     let counterpartLanding = await landing(
       counterpartRepository,
       there,
       pull.base.ref,
     );
-    if (counterpartLanding.kind === 'problem') {
-      problems.push(counterpartLanding.problem);
-      continue;
-    }
-    if (pull.merged && counterpartLanding.kind === 'stacked') {
-      problems.push(
-        `${there} merged into the branch of ${counterpartLanding.parent}, so it reaches ` +
-          `main only when ${counterpartLanding.parent} merges. Re-run this check then.`,
-      );
-      continue;
-    }
-    if (!pull.merged && counterpartLanding.kind === 'parent-merged') {
-      problems.push(retargetProblem(there, counterpartLanding));
-      continue;
-    }
-    if (counterpartLanding.kind === 'stacked') {
-      notices.push(stackedNotice(there, counterpartLanding.parent));
+    let counterpartStackedOn: string | undefined;
+    if (pull.merged) {
+      if (counterpartLanding.kind === 'problem') {
+        problems.push(counterpartLanding.problem);
+        continue;
+      }
+      if (counterpartLanding.kind === 'stacked') {
+        problems.push(
+          `${there} merged into \`${pull.base.ref}\`, which reaches main ` +
+            `only when ${counterpartLanding.parent} merges. Re-run this ` +
+            `check then.`,
+        );
+        continue;
+      }
+    } else {
+      let theirs = openSide(there, pull.base.ref, counterpartLanding);
+      if (theirs.problem) {
+        problems.push(theirs.problem);
+        continue;
+      }
+      if (theirs.notice) {
+        notices.push(theirs.notice);
+      }
+      counterpartStackedOn = theirs.stackedOn;
     }
     if (
       !pull.head.repo ||
@@ -513,9 +578,127 @@ export async function resolvePairing(
       draft: Boolean(pull.draft),
       approved,
       ...(approvalError ? { approvalError } : {}),
+      ...(counterpartStackedOn ? { stackedOn: counterpartStackedOn } : {}),
     });
   }
-  return { resolution: { repository, number: n, pairs }, problems, notices };
+  return {
+    resolution: {
+      repository,
+      number: n,
+      pairs,
+      ...(stackedOn ? { stackedOn } : {}),
+    },
+    problems,
+    notices,
+  };
+}
+
+// Whether catalog main may fail with the errors the change adds to it. A
+// catalog pull request this change merges after has to land first, so while it
+// is open the verdict is to wait for it. Otherwise they may only while a
+// catalog pull request this change merges before is open, ready for review and
+// approved, so it can land right after this one.
+export function mainVerdict(resolution: Resolution) {
+  let here = `${resolution.repository}#${resolution.number}`;
+  let ref = (pair: Pair) => `${pair.repository}#${pair.number}`;
+  let before = resolution.pairs.find(
+    (p) => p.key === 'merges-before' && !p.merged,
+  );
+  let after = resolution.pairs.find(
+    (p) => p.key === 'merges-after' && !p.merged,
+  );
+  if (after) {
+    return {
+      passes: false,
+      message:
+        `${here} merges after ${ref(after)}, so catalog main is linted ` +
+        `against this change once that has landed: waiting on ${ref(after)} ` +
+        `to merge. Re-run this check after it merges.`,
+    };
+  }
+  // A stacked side lands on its parent's branch, not main, so merging it is
+  // not the merge the other side can follow right after.
+  if (before && resolution.stackedOn) {
+    return {
+      passes: false,
+      message:
+        `${here} merges before ${ref(before)}, but ${here} is stacked on ` +
+        `${resolution.stackedOn}, so merging it doesn't put it on main and ` +
+        `${ref(before)} can't follow right after. Retarget ${here} to main ` +
+        `once ${resolution.stackedOn} merges, and re-run this check.`,
+    };
+  }
+  if (before?.stackedOn) {
+    return {
+      passes: false,
+      message:
+        `${here} merges before ${ref(before)}, but ${ref(before)} is stacked ` +
+        `on ${before.stackedOn}, so it can't land on catalog main right after ` +
+        `this change. Retarget it to main once ${before.stackedOn} merges, ` +
+        `and re-run this check.`,
+    };
+  }
+  if (before?.draft) {
+    return {
+      passes: false,
+      message:
+        `${here} merges before ${ref(before)}, which is still a draft, so it ` +
+        `can't merge right after this change. Mark it ready for review, get ` +
+        `it approved, and re-run this check.`,
+    };
+  }
+  if (before?.approved === true) {
+    return {
+      passes: true,
+      message:
+        `${here} merges before ${ref(before)}, which is approved: merge ` +
+        `${ref(before)} right after this change, so catalog main fails with ` +
+        `these errors only in between.`,
+    };
+  }
+  if (before?.approved === false) {
+    return {
+      passes: false,
+      message:
+        `${here} merges before ${ref(before)}, which is not approved yet, so ` +
+        `catalog main would fail with these errors until it is. Get it ` +
+        `approved, re-run this check, and merge ${ref(before)} right after ` +
+        `this change.`,
+    };
+  }
+  if (before) {
+    return {
+      passes: false,
+      message:
+        `${here} merges before ${ref(before)}, and whether that is approved ` +
+        `could not be read (${before.approvalError}). Re-run this check.`,
+    };
+  }
+  let catalogRepository = 'cardstack/boxel-catalog';
+  let pairing =
+    `\`Merges before: ${catalogRepository}#<number>\` in ${here}'s ` +
+    `description, and \`Merges after: ${here}\` in that pull request's`;
+  let mergedBefore = resolution.pairs.find((p) => p.key === 'merges-before');
+  if (mergedBefore) {
+    return {
+      passes: false,
+      message:
+        `Merging this change leaves catalog main failing with these errors, ` +
+        `and ${ref(mergedBefore)}, which it merges before, has already ` +
+        `merged, so it can't fix them. Keep the change compatible with the ` +
+        `catalog as it is, or fix the catalog in a new ${catalogRepository} ` +
+        `pull request and pair the two: replace the \`Merges before:\` line ` +
+        `so there is ${pairing}.`,
+    };
+  }
+  return {
+    passes: false,
+    message:
+      `Merging this change leaves catalog main failing with these errors. ` +
+      `Keep the change compatible with the catalog as it is, or fix the ` +
+      `catalog in a ${catalogRepository} pull request and pair the two, ` +
+      `with ${pairing}.`,
+  };
 }
 
 function describe(here: string, pair: Pair) {
