@@ -977,6 +977,9 @@ module('Integration | realm policy', function (hooks) {
       .dom('[data-test-policy-issue-operation]')
       .hasText('read', 'and its grant');
     assert
+      .dom('[data-test-policy-issue] [data-test-policy-issue-warning]')
+      .exists('and is marked there as a warning');
+    assert
       .dom('[data-test-policy-issue-message]')
       .includesText('no rule grants a read of Student');
   });
@@ -1006,6 +1009,9 @@ module('Integration | realm policy', function (hooks) {
     assert
       .dom('[data-test-policy-grant-warning]')
       .doesNotExist('no grant is marked with a warning');
+    assert
+      .dom('[data-test-policy-issue-warning]')
+      .doesNotExist('and no listed issue is marked as one');
   });
 
   test('a view created in an index render never asks what the policy compiles to', async function (assert) {
