@@ -267,6 +267,7 @@ Symptom differs from triggers 1–2: the template body is silently dropped, so t
 - To change one, change it in boxel-catalog, then pin the new revision here. Never add a copy to `packages/base`, and never edit `packages/catalog/test-subset/` (generated from the pin) or `packages/catalog/contents/` (a clone of catalog `main`). Guards fail on each of these.
 - A change here that a catalog-owned definition must adopt (for example a new declaration option the definition should use) is not done until the boxel-catalog PR merges and the pin here is bumped. When that lands after the boxel PR, its ticket names both halves: the boxel-catalog change, and the re-pin here (`pnpm --dir packages/catalog catalog:test-subset --bump`) with the tests that assert the adopted behavior.
 - Load the `catalog-test-subset` skill for the procedure: paired branches, testing a catalog change against boxel's tests, pinning, and merge order.
+- Load `catalog-test-subset` before you move the pin in any way: editing `packages/catalog/test-subset.json`, running the sync (`catalog:test-subset`, with or without `--bump`), or setting `CATALOG_TEST_SUBSET_SOURCE`. The pin a local test needs, the pin a pushed commit needs, and the pin a merge needs are different, and the skill says which is which. A project `PreToolUse` hook (`.claude/hooks/require-skill.mjs`) refuses an edit to the manifest, and any shell command that names it, the sync or the variable, until the session or subagent making the call has loaded the skill.
 
 ## Linear Ticket Process (Reusable)
 
