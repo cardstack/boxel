@@ -1015,7 +1015,7 @@ module('Pretui | colour | render', function (hooks) {
     let preview = document.querySelector('.pretui-gradient-preview') as HTMLElement;
     // NOTE: `boxel test` does NOT apply `<style scoped>` — the scoped-css
     // attribute is stamped on the element but no stylesheet is delivered
-    // (verified against `controls.gts`'s long-shipped rules too). So a
+    // (true of every component's rules, not just this one). So a
     // computed-style assertion here would be testing the harness, not the
     // component. Assert the custom property the CSS consumes instead, and
     // let the parser-validity module above cover the syntax.
@@ -1089,7 +1089,7 @@ module('Pretui | colour | render', function (hooks) {
 //   09-copy, 10-theme, 14-no-alpha, 20-initial-colorspace
 //     — these test a custom element's attribute/property reflection, its
 //       popover and its anchoring. None of it exists here: reflection is
-//       Glimmer args, the popover is `overlay.gts` (already tested), and
+//       Glimmer args, the popover is `Popup` (already tested), and
 //       theming is the Theme card's job (Appendix F). The behaviours they
 //       cover that DO exist (space switching preserving the colour, alpha
 //       suppression, the popover) are covered by the render module and by
@@ -1119,7 +1119,7 @@ module('Pretui | colour | render', function (hooks) {
 //       round-trip tolerance assertion IS ported, into "conversion".
 //   unit/positioning, unit/template
 //     — upstream's own popover placement and shadow-DOM template. Both are
-//       replaced wholesale by `overlay.gts` and Glimmer.
+//       replaced wholesale by `Popup` and Glimmer.
 //
 // figui3 has exactly one fill-picker spec (a reorder drag), and its own
 // comments explain that it has to write component internals directly

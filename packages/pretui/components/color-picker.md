@@ -21,7 +21,7 @@ That last part is what separates it from every picker that just gives you a swat
 @onValueChange?, @onSpaceChange?
 ```
 
-**Space and gamut are different things, and keeping them apart is the design.** OKLCH is a *space*; sRGB is also a *gamut*. Conflating the two is why most pickers cannot tell you that a colour is unshowable — they only ever work in coordinates the display can render, so the question never arises.
+**Space and gamut are different things, and keeping them apart is the design.** OKLCH is a _space_; sRGB is also a _gamut_. Conflating the two is why most pickers cannot tell you that a colour is unshowable — they only ever work in coordinates the display can render, so the question never arises.
 
 **`@lockGamut` hides the switcher but never the readout.** You can stop someone changing the target gamut; you cannot stop them being told their colour falls outside it.
 
@@ -39,7 +39,7 @@ Seven spaces including two perceptual ones is also well beyond either upstream's
 
 Where it is thinner: no palette or recent-colours memory, no eyedropper on browsers without the API, no contrast checking against a second colour — which is the obvious next thing for a design-system picker — and no named-colour input beyond what the engine parses.
 
-**The catalog row and spec disagree with this file.** Both describe the component as *"Wrapped boxel-ui ColorPicker: native input + hex · runtime reuse"*, with `buildsOn: boxel-ui ColorPicker`. Nothing here wraps boxel-ui's picker: the colour engine, the gamut model and the seven channel models are this component's own, so the row and the spec want correcting.
+**The catalog row and spec disagree with this file.** Both describe the component as _"Wrapped boxel-ui ColorPicker: native input + hex · runtime reuse"_, with `buildsOn: boxel-ui ColorPicker`. Nothing here wraps boxel-ui's picker: the colour engine, the gamut model and the seven channel models are this component's own, so the row and the spec want correcting.
 
 ## Accessibility
 
@@ -52,7 +52,7 @@ Where it is thinner: no palette or recent-colours memory, no eyedropper on brows
 
 ## Theming
 
-`--pretui-picker-width`, `--pretui-picker-preview` (the readout's current colour), `--pretui-picker-clamped` (the nearest-showable colour in the gamut warning), plus the shared control tokens this module defines: `--pretui-slider-track`, `--pretui-slider-thumb`, `--pretui-slider-h` for the channel sliders, `--pretui-area-x` / `--pretui-area-y` / `--pretui-area-thumb-size` / `--pretui-area-thumb-color` / `--pretui-area-thumb-ink` / `--pretui-area-ratio` for the gradient area, `--pretui-swatch-color` and `--pretui-checker` for the previews, and `--pretui-destructive-ink` for the invalid state.
+`--pretui-picker-width`, `--pretui-picker-preview` (the readout's current colour), `--pretui-picker-clamped` (the nearest-showable colour in the gamut warning), plus the control tokens it reaches through its parts: `--pretui-slider-track`, `--pretui-slider-thumb`, `--pretui-slider-h` for the channel sliders (defined in `channel-slider.gts`), `--pretui-area-x` / `--pretui-area-y` / `--pretui-area-thumb-size` / `--pretui-area-thumb-color` / `--pretui-area-thumb-ink` / `--pretui-area-ratio` for the gradient area (defined in `color-area.gts`), `--pretui-swatch-color` and `--pretui-checker` for the previews, and `--pretui-destructive-ink` for the invalid state.
 
 Sharing the slider and area tokens with **ChannelSlider**, **ColorArea** and **GradientEditor** is what keeps the colour tools reading as one family: a season that retunes a thumb retunes every colour control at once, rather than leaving the picker and the gradient editor visibly different.
 

@@ -48,7 +48,7 @@ Trigger: `--field`, `--input`, `--primary` (the open/focus ring), `--ink-3` (pla
 
 **That 28px is load-bearing**: the traveling highlight is positioned by index × row height rather than measured, so a season that changes option row height without changing the highlight's step will desynchronise them. It is the one metric here that cannot safely be retuned in CSS alone.
 
-The styles sit in `@layer PretComposite`, above Popup's `PretComponent` layer, so what this component sets on Popup wins by layer order. A caller's unlayered CSS overrides both without a more specific selector.
+The component's own styles sit in `@layer PretComposite`, so a caller's unlayered CSS overrides them without a more specific selector. The rule it sets on Popup's anchor stays unlayered, because Popup styles its anchor unlayered and unlayered CSS beats any layer.
 
 ## React ecosystem
 

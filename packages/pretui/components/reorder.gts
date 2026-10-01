@@ -1,15 +1,8 @@
-// Pretui — CONTROLS territory: operating on a collection.
+// Pretui — Reorder: rearrange a list by dragging a handle, and, with exactly
+// equal capability, from the keyboard. It decorates a list rather than
+// owning one.
 //
-//   Reorder    rearrange a list — by dragging a handle, and, with exactly
-//              equal capability, from the keyboard.
-//   ActionBar  the bar that appears when a selection exists, carrying the
-//              actions that apply to it.
-//
-// They ship together because they are the two halves of "the reader is now
-// doing something TO a collection": one changes its order, the other acts on
-// a subset of it. Neither owns a list; both decorate one.
-//
-// ── Reorder: the drag foundation is CONSUMED, not re-invented ───────────
+// ── The drag foundation is CONSUMED, not re-invented ────────────────────
 //
 // An audit of five comparable drag implementations found four were
 // pointer-only. Rather than add a third drag engine to this kit, Reorder
@@ -625,7 +618,3 @@ export class Reorder<T = unknown> extends Component<ReorderSignature<T>> {
     </style>
   </template>
 }
-
-// ActionBar lives in its own module; re-exported so existing imports keep working.
-export { ActionBar, selectionSummary } from './action-bar';
-export type { ActionBarAction, ActionBarSignature } from './action-bar';

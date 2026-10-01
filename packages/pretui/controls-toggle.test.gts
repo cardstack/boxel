@@ -410,6 +410,21 @@ module('Pretui | ToggleMatrix', function (hooks) {
     assert.strictEqual(all.checked, before, 'the select-all checkbox did not drift');
   });
 
+  test('a controlled mixed bulk checkbox stays mixed when the owner ignores the click', async function (assert) {
+    let state = new MatrixState();
+    let ignore = () => {};
+    await render(
+      <template>
+        <ToggleMatrix @rows={{state.rows}} @columns={{state.columns}} @label='Role permissions' @value={{state.value}} @onValueChange={{ignore}} />
+      </template>,
+    );
+    let all = one('[data-test-pretui-toggle-matrix-all]') as HTMLInputElement;
+    assert.true(all.indeterminate, 'one granted cell makes the select-all box mixed');
+    await click(all);
+    assert.true(all.indeterminate, 'it is still drawn mixed');
+    assert.false(all.checked);
+  });
+
   test('every cell is named and carries its own pressed state', async function (assert) {
     let state = new MatrixState();
     await render(

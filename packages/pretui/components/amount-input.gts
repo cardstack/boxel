@@ -311,6 +311,11 @@ export class AmountInput extends Component<AmountInputSignature> {
    */
   onAmountCommit = () => {
     let parsed = this.amount;
+    // An unparseable draft stays in the box with its reason, so the reader
+    // can correct it rather than lose it.
+    if (parsed === undefined && this.draft !== undefined && this.draft.trim().length > 0) {
+      return;
+    }
     if (parsed !== undefined) {
       if (this.args.min !== undefined && parsed < this.args.min) {
         parsed = this.args.min;
@@ -468,7 +473,6 @@ export class AmountInput extends Component<AmountInputSignature> {
       {{/unless}}
     </div>
     <style scoped>
-      /* above Select's and SegmentedControl's layer, so these win by layer order */
       @layer PretComponent, PretComposite;
       @layer PretComposite {
         .pretui-amount {
@@ -567,14 +571,6 @@ export class AmountInput extends Component<AmountInputSignature> {
           font-weight: var(--weight-medium, 500);
           color: var(--muted-foreground);
         }
-        .pretui-amount-segments,
-        .pretui-amount-select {
-          flex: 0 0 auto;
-          margin-inline-start: auto;
-        }
-        .pretui-amount-select {
-          min-width: var(--pretui-amount-select-width, 7.5rem);
-        }
         /* Reserved space (Appendix O.7): the readout appears and disappears as
            the box fills, and a row that changes height while you type is the
            defect this rule exists to prevent. */
@@ -597,16 +593,29 @@ export class AmountInput extends Component<AmountInputSignature> {
             flex-wrap: wrap;
             padding-block: var(--space-2, 6px);
           }
-          .pretui-amount-segments,
-          .pretui-amount-select {
-            margin-inline-start: 0;
-            width: 100%;
-          }
         }
         @media (pointer: coarse) {
           .pretui-amount-shell {
             min-height: 44px;
           }
+        }
+      }
+      /* Unlayered: Select and SegmentedControl style their roots unlayered,
+         and unlayered CSS beats any layer. The shell ancestor lifts these
+         above the child's single-class root rule. */
+      .pretui-amount-shell .pretui-amount-segments,
+      .pretui-amount-shell .pretui-amount-select {
+        flex: 0 0 auto;
+        margin-inline-start: auto;
+      }
+      .pretui-amount-shell .pretui-amount-select {
+        min-width: var(--pretui-amount-select-width, 7.5rem);
+      }
+      @container (max-width: 260px) {
+        .pretui-amount-shell .pretui-amount-segments,
+        .pretui-amount-shell .pretui-amount-select {
+          margin-inline-start: 0;
+          width: 100%;
         }
       }
     </style>

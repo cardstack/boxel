@@ -1106,39 +1106,5 @@ export class Autocomplete extends Component<AutocompleteSignature> {
   </template>
 }
 
-// ═════════════════════════════════════════════════════════════════════════
-// TagsInput — the verdict, recorded here so the next agent does not rebuild it
-// ═════════════════════════════════════════════════════════════════════════
-//
-// `TagsInput` is an ALIAS of `TokenInput`. Nothing is
-// exported from this file for it, and nothing should be: Mantine's TagsInput,
-// Ant's `Select mode='tags'` and Chakra's TagsInput are all "free strings as
-// removable chips", which TokenInput already is — including the four things
-// most hand-rolled tag fields get wrong (blur commits, comma/paste splitting,
-// a rejected duplicate says why in a live region, and focus returns to the
-// entry field after a removal).
-//
-//   import { TokenInput } from './token-input';
-//
-//   Mantine / Ant / Chakra   →  TokenInput
-//   ──────────────────────────────────────────────────────────
-//   value                    →  @value          (readonly string[])
-//   defaultValue             →  @defaultValue
-//   onChange / onValueChange →  @onChange
-//   maxTags                  →  @max
-//   allowDuplicates          →  @allowDuplicates
-//   placeholder              →  @placeholder
-//   label                    →  @label   (or @controlId from a Field wrapper)
-//   disabled / isDisabled    →  @disabled
-//   description              →  @describedBy (id of the description element)
-//   splitChars               →  built in: comma, tab and newline always split
-//   acceptValueOnBlur        →  built in and not optional: blur commits
-//   onRemove                 →  @onChange fires with the whole next list
-//   data (suggestion list)   →  compose Autocomplete above it; see below
-//
-// The one Mantine capability TokenInput does not have is `data` — a suggestion
-// dropdown over the entry field. That is not a second tags component; it is
-// this file's `Autocomplete` feeding `TokenInput`'s list, which is the
-// "suggest + free text" composition. TokenInput does not take Mantine's other
-// names (`@maxTags`, `@onValueChange`, `@isDisabled`, `@readonly`); map them
-// with the table above.
+// Free-string chips with suggestions: compose Autocomplete over TagsInput
+// (tags-input.gts), which maps the Mantine/Ant/Chakra tag-field arguments.

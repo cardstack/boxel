@@ -1,6 +1,4 @@
-// Pretui — FormField unit tests, stand-alone (no Form). The Form-driven
-// behaviour (errors held until submit, path registration) is asserted in
-// form.test.gts.
+// Pretui — FormField unit tests, stand-alone (no Form).
 //
 // Run with `boxel test`; deployment leaves `*.test.gts` off the realm.
 // No assertion touches a computed style: the component's own `<style scoped>`

@@ -6,22 +6,20 @@ import { PoweredValuePicker, SelectedValue } from '../internal/forms-picker';
 import type { PickerSelectApi } from '../internal/forms-picker';
 
 // ── Combobox ─────────────────────────────────────────────────────────────
-// The plain-value sibling of Lookup, on the same engine: a free-text input
-// over a filtering listbox, for closed sets that are too long to scroll and
+// A free-text input over a filtering listbox, on power-select's engine, for closed sets that are too long to scroll and
 // too short to need a server. Where `Select` puts the search
 // box INSIDE the dropdown — power-select resolves `searchFieldPosition` to
 // 'before-options' for single selects — a combobox must have the text field
 // BE the control, which is what the multiple trigger gives. So Combobox
 // rides the same multiple engine and caps the selection at one.
 //
-// ARIA pattern: identical to Lookup's (editable combobox + listbox +
-// aria-activedescendant), supplied by power-select. Same documented delta:
-// `aria-multiselectable='true'` rides along on the listbox.
+// ARIA pattern: editable combobox + listbox + aria-activedescendant,
+// supplied by power-select. Documented delta: `aria-multiselectable='true'`
+// rides along on the listbox.
 //
 // Not supported, deliberately: accepting a value that is NOT in @options
 // ("create on the fly"). That is power-select-with-create, a separate addon
-// the realm cannot import. Use Lookup with a caller-supplied "create" record
-// if you need it.
+// the realm cannot import.
 export interface ComboboxOption {
   /** Stable value emitted through @onValueChange. */
   value: string;
@@ -148,8 +146,6 @@ export class Combobox extends Component<ComboboxSignature> {
     </div>
     <style scoped>
       @layer PretComponent {
-        /* Same engine, same :deep() channel and the same tokens as Lookup —
-           the two dropdowns are one visual system on purpose. */
         .pretui-combobox {
           position: relative;
           display: block;
@@ -194,8 +190,8 @@ export class Combobox extends Component<ComboboxSignature> {
         color: var(--foreground);
         width: 100%;
       }
-      /* Transparent outline doubles the ring for forced-colors — see the
-         identical note on .pretui-lookup's trigger above. */
+      /* Transparent outline doubles the ring for forced-colors, where a
+         box-shadow is not painted. */
       .pretui-combobox
         :deep(.pretui-pickertrigger.ember-power-select-trigger[aria-expanded='true']),
       .pretui-combobox

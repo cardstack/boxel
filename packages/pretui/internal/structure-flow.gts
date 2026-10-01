@@ -1,35 +1,3 @@
-// Pretui — STRUCTURE / FLOW. Three components that answer the same question
-// from three directions: *when* does a reader get to see this, and how do
-// they move through it.
-//
-//   Wizard        a gated multi-step flow — step model, validity gating,
-//                 footer navigation, a labelled panel, and a progress rail
-//                 that is StepList, not a second copy of it.
-//   Defer         a render gate — hold a subtree until it is worth paying
-//                 for (in view / idle / on intent / on a caller flag), with
-//                 a placeholder that reserves the final layout's space.
-//   EditInPlace   a display value that becomes an editable field on
-//                 activation and commits or cancels.
-//
-// Sourced from the boxel-catalog sweep §3 (Wizard), §8 (Defer) and §6
-// (EditInPlace). What each upstream got wrong, and what is done instead, is
-// recorded per component below.
-//
-// Three kit rules govern this file and are worth stating once:
-//   * **Compose.** The rail is `StepList`, the placeholder is `Skeleton`,
-//     the editor is `Input`, the buttons are `Button`, the delegated
-//     listeners are `focus.gts`'s `listen`. Nothing here re-derives a
-//     primitive the kit already owns.
-//   * **Timers are one-shot and modifier-owned.** `revealsWhenIdle` holds
-//     its own handle and clears it in its destructor; nothing re-arms.
-//   * **`aria-disabled`, never `disabled`,** anywhere a control must stay
-//     focusable so it can explain why it refused.
-//
-// Every component here lives in its own module under components/; this
-// module re-exports them so existing imports keep working.
-//
-// (the structure-flow group)
-
 // Pretui — focus-on-token modifiers shared by the flow components.
 import { modifier } from 'ember-modifier';
 

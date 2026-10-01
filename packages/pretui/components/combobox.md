@@ -30,7 +30,7 @@ The difference from **Autocomplete** is what counts as a value. A combobox's val
 
 **React Spectrum's Combobox.**
 
-Where Pretui is better: the explicit split from Autocomplete. Most kits ship one component with a `freeSolo` or `allowsCustomValue` flag, which means the value's *type* changes with a boolean — a caller has to handle both shapes everywhere. Two components with two contracts is the clearer answer.
+Where Pretui is better: the explicit split from Autocomplete. Most kits ship one component with a `freeSolo` or `allowsCustomValue` flag, which means the value's _type_ changes with a boolean — a caller has to handle both shapes everywhere. Two components with two contracts is the clearer answer.
 
 Where it is thinner: no async loading, no grouped or sectioned options, no multi-select, and no virtualisation — a very long option list renders in full. There is also no "create this" affordance, which is what a `freeSolo` flag usually buys.
 
@@ -44,8 +44,6 @@ Where it is thinner: no async loading, no grouped or sectioned options, no multi
 
 ## Theming
 
-`--pretui-combobox-max-height` and `--pretui-lookup-max-height` bound the dropdown, over the kit's shared overlay tokens — `--pretui-shadow-overlay` for the layer, `--pretui-shadow-control` and `--pretui-shadow-inset` for the field, `--pretui-destructive-ink` for the invalid state, and `--pretui-dur-snap` / `--pretui-ease-snap` for the open transition.
-
-Two max-height tokens rather than one lets a season bound a combobox and a lookup differently — a combobox over twelve options and a lookup over a thousand want different ceilings, and collapsing them forces one to be wrong.
+`--pretui-combobox-max-height` bounds the dropdown, over the kit's shared overlay tokens — `--pretui-shadow-overlay` for the layer, `--pretui-shadow-control` and `--pretui-shadow-inset` for the field, `--pretui-destructive-ink` for the invalid state, and `--pretui-dur-snap` / `--pretui-ease-snap` for the open transition.
 
 The rules for the combobox's own elements sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector. The `:deep()` rules that restyle BoxelMultiSelect's power-select markup stay unlayered, because its own rules are unlayered and would beat them from inside a layer.

@@ -153,14 +153,18 @@ export class Mentions extends Component<MentionsSignature> {
     }
   }
 
-  onInput = (event: Event) => {
-    let el = event.target as HTMLTextAreaElement;
-    this.textarea = el;
+  private commitFrom(el: HTMLTextAreaElement) {
     this.setValue(el.value);
     // controlled: the owner decides what shows, so put back what it didn't take
     if (this.args.value !== undefined && el.value !== this.args.value) {
       el.value = this.args.value;
     }
+  }
+
+  onInput = (event: Event) => {
+    let el = event.target as HTMLTextAreaElement;
+    this.textarea = el;
+    this.commitFrom(el);
     if (this.dismissedAt !== undefined && this.readQuery(el.value, el.selectionStart ?? 0)?.start !== this.dismissedAt) {
       this.dismissedAt = undefined;
     }
@@ -236,7 +240,7 @@ export class Mentions extends Component<MentionsSignature> {
       let done = document.execCommand?.('insertText', false, inserted) ?? false;
       if (!done) {
         el.setRangeText(inserted, query.start, query.end, 'end');
-        this.setValue(el.value);
+        this.commitFrom(el);
       }
     } else {
       this.setValue(text.slice(0, query.start) + inserted + after);

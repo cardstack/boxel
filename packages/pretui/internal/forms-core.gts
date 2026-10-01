@@ -1,60 +1,3 @@
-// Pretui — forms territory, core wave. Five components that between them are
-// the enterprise form host: Form, FormLayout, FormField, FieldError,
-// ErrorSummary.
-//
-// Two references, split by concern (the brief's division):
-//   • React Spectrum / React Aria → SEMANTICS. The validationBehavior switch
-//     (native vs aria), FieldError, focus-the-first-invalid-field on submit,
-//     description/error aria-describedby wiring, required marking.
-//   • Salesforce Lightning Design System → LAYOUT + ENTERPRISE PATTERNS.
-//     `form-element` (_stacked / _horizontal / _readonly / __static / __help /
-//     __icon / __undo), `form-layout`, `docked-form-footer`, `record-detail`.
-//
-// THE ARCHITECTURAL RULE OF THIS TERRITORY: components never validate.
-// Validation lives in BXL guide rules authored as data and evaluated
-// elsewhere (fail-closed); Pretui accepts the already-computed FormIssue[]
-// and renders it. Nothing in this file compiles, evaluates, splits, or
-// regex-matches anything — targetPath is compared as a WHOLE STRING because
-// predicate paths legitimately contain '.', '[', ']', quotes and spaces.
-//
-// What we do better than both inspirations (each also noted at its component):
-//   1. SLDS's field-level help tooltip hardcodes id="help" and only renders
-//      the bubble while shown — every field on a page points at the same id,
-//      and the reference dangles whenever the tooltip is hidden. Ours are
-//      guid-unique and the described text is always in the DOM.
-//   2. SLDS computes an errorId but never wires aria-describedby itself; its
-//      own examples routinely omit it. FormField computes the whole chain
-//      (description, then errors) and YIELDS it to the control slot, so the
-//      wiring cannot be forgotten.
-//   3. SLDS's required marker is an aria-hidden abbr, so required-ness only
-//      reaches AT if the caller remembered `required` on the input. We add a
-//      visually-hidden "(required)" INSIDE the label, so the accessible name
-//      always carries it — belt and braces, one authoring step.
-//   4. Neither library has severity tiers on a field message: SLDS has one
-//      flat error style, React Spectrum's FieldError is errors-only. Ours is
-//      severity-aware and FAILS CLOSED (an unrecognised severity is an error).
-//   5. Neither ships an error summary that can prove nothing was dropped.
-//      ErrorSummary lists every issue and marks the ones whose targetPath
-//      matched no rendered field, instead of silently swallowing them.
-//   6. SLDS's docked form footer is `position: fixed; width: 100%` against the
-//      VIEWPORT — inside a card pane it escapes its pane and lands over the
-//      host chrome. Ours is `position: sticky` inside the form.
-//   7. SLDS's form layout breaks columns on `@media (min-width: 48em)` — the
-//      viewport, not the pane. Ours uses (unnamed) container queries, so a
-//      form in a narrow side panel collapses correctly.
-//
-// Realm laws honored: no timers (the one deferred write is a MICROTASK, see
-// FormContext.scheduleFlush), only unnamed container queries, no dark
-// branches, no :deep()/:global()/!important — the invalid and readonly
-// dresses reach caller-supplied controls through the inherited token channel
-// (--field / --input), which is also why they work on Input, Textarea,
-// Select and anything else that reads the Pretui control tokens.
-//
-// Every component here lives in its own module under components/; this
-// module re-exports them so existing imports keep working.
-//
-// (the forms-core group)
-
 // Pretui — the form contract and FormContext registry shared by Form and its parts.
 import { tracked } from '@glimmer/tracking';
 
@@ -276,7 +219,9 @@ export class FormContext {
     if (!this.settled) {
       return [];
     }
-    return this.issues.filter((issue) => !this.claimedPaths.has(issue.targetPath));
+    return this.issues.filter(
+      (issue) => !this.claimedPaths.has(issue.targetPath),
+    );
   }
 
   issuesFor = (path: string | undefined): FormIssue[] =>
@@ -329,7 +274,8 @@ export class FormContext {
     }
     let preferred =
       this.focusOnInvalid === 'summary' ? null : this.firstInvalidElement();
-    let target = preferred ?? this.summaryElement() ?? this.firstInvalidElement();
+    let target =
+      preferred ?? this.summaryElement() ?? this.firstInvalidElement();
     this.reveal(target);
   };
 
@@ -368,8 +314,9 @@ export class FormContext {
         body.hidden = false;
       }
       node =
-        node.parentElement?.closest<HTMLElement>('[data-pretui-form-section]') ??
-        null;
+        node.parentElement?.closest<HTMLElement>(
+          '[data-pretui-form-section]',
+        ) ?? null;
     }
     el.focus();
   }
@@ -385,7 +332,9 @@ export class FormContext {
   }
 
   private firstInvalidElement(): HTMLElement | null {
-    let blocking = new Set(this.blockingIssues.map((issue) => issue.targetPath));
+    let blocking = new Set(
+      this.blockingIssues.map((issue) => issue.targetPath),
+    );
     let found: HTMLElement[] = [];
     for (let handle of this.claims.entries.values()) {
       if (!blocking.has(handle.path)) {

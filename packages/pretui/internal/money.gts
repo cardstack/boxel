@@ -1,62 +1,3 @@
-// Pretui — CONTROLS territory: AmountInput and MoneyInput.
-//
-// A number that is meaningless without the thing it counts. £42 and 42 kg and
-// 42% are three different facts and none of them is the number 42, so the
-// amount and its unit are ONE control with one accessible name, not a number
-// field sitting next to an unrelated dropdown.
-//
-// `AmountInput` is the general control: an amount, a unit chosen from a list,
-// and formatting derived from whichever unit is current. `MoneyInput` is the
-// currency curry of it (the Tag-wraps-Pill idiom) — same component, the ISO
-// 4217 list pre-loaded and currency semantics switched on.
-//
-// ── What this is NOT ────────────────────────────────────────────────────
-//
-// Not a second `NumberInput` and not a second `Stepper`.
-// Reach for those when the number stands alone. Not a `FieldDef` either: this
-// is the component layer a field wrapper consumes — `@value` in, `@onChange`
-// out, no card model anywhere.
-//
-// ── Better than the inspiration ─────────────────────────────────────────
-//
-// The source this was distilled from (a vibe-coded `amount-with-currency`
-// field over a `currency` field) got the SHAPE right — one input group, symbol
-// affix, searchable currency picker — and then:
-//
-//  1. **Rebuilt the composite on every keystroke without copying the
-//     currency**, so typing an amount silently reset the currency to USD.
-//     Here the amount and the unit are separate tracked values that never
-//     touch each other, and `@onChange` reports both together so a caller
-//     cannot half-apply an edit.
-//  2. **Fetched the entire currency table from a CDN at edit time**
-//     (`esm.run/currency-code-symbol-map`). Law 9 forbids that outright, and
-//     it is unnecessary: `Intl` already knows every symbol, every fraction
-//     digit and — the part nobody uses — WHICH SIDE OF THE NUMBER the symbol
-//     goes on in the reader's locale. `$1,234.50` in `en-US`, `1.234,50 €` in
-//     `de-DE`, from the same data, with no table.
-//  3. **Hard-locked the thousands separator to `en-US`** and rendered an
-//     empty amount as `0`, so a field could never be blanked and a European
-//     reader was shown American punctuation for euros.
-//  4. **Only ever accepted the exact digits it printed.** Here a paste of
-//     `$1,234.50`, `1 234,50 €`, `(1,234.50)` (accounting negative), `1.234,50`
-//     or Arabic-indic digits all parse, because a reader who pasted a number
-//     from a spreadsheet has communicated it perfectly well.
-//  5. **Never showed the number back.** Two currencies share `$`; a bare `$`
-//     affix is genuinely ambiguous. The confirmation line spells the unit out
-//     in words (`1,234.50 US dollars`), which is the one readout that removes
-//     the ambiguity, and it is reserved space so nothing jitters.
-//
-// ── Determinism ─────────────────────────────────────────────────────────
-//
-// Nothing here reads the clock or `Math.random()`. `Intl` is queried with
-// fixed probe numbers so the same locale asks the same question on every
-// render and in every index pass.
-//
-// Every component here lives in its own module under components/; this
-// module re-exports them so existing imports keep working.
-//
-// (the money group)
-
 // Pretui — the amount engine shared by AmountInput and MoneyInput: parsing, formatting and units.
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -236,8 +177,7 @@ export function parseAmount(
     }
   }
 
-  let integerPart =
-    decimalAt >= 0 ? body.slice(0, decimalAt) : body;
+  let integerPart = decimalAt >= 0 ? body.slice(0, decimalAt) : body;
   let fractionPart = decimalAt >= 0 ? body.slice(decimalAt + 1) : '';
   let digits = integerPart.replace(/[^0-9]/g, '');
   let fraction = fractionPart.replace(/[^0-9]/g, '');

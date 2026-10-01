@@ -1,54 +1,3 @@
-// Pretui — CONTROLS territory: the file-intake foundation.
-//
-// Two components, one of which is the other's keyboard path:
-//
-//   FileTrigger  a button that opens the platform file picker, with the
-//                `<input type='file'>` encapsulated so no caller ever has to
-//                hide one themselves.
-//   Dropzone     a drag-and-drop target that CONTAINS a FileTrigger, screens
-//                what lands on it, and says out loud what it took and what
-//                it refused.
-//
-// Both are foundations: anything in the kit that ingests a file (media
-// assets, JSON import, an avatar picker) should reach for these rather than
-// writing another hidden input.
-//
-// ── Better than the inspiration (react-spectrum Dropzone / FileTrigger) ──
-//
-//  1. **Upstream's Dropzone has no keyboard path of its own.** react-
-//     spectrum documents "use a FileTrigger inside the Dropzone" — which
-//     means a Dropzone built without reading that sentence is pointer-only,
-//     and most in the wild are. Here the browse button is *part of* the
-//     Dropzone and cannot be omitted; drag is the enhancement, never the
-//     only route.
-//  2. **Upstream does no screening.** `getDropOperation` decides yes/no for
-//     the whole drop, so per-file type and size rules are the caller's
-//     problem and are, in practice, either skipped or written five times.
-//     `screenFiles` is a pure, exported, unit-tested function that every
-//     consumer shares.
-//  3. **Nothing upstream announces a rejection.** A file silently vanishing
-//     is the single worst failure mode of a drop target. Every accept and
-//     every refusal — with its reason — lands in a `role='status'` region.
-//  4. **`accept` is honoured on the drop path, not only in the picker.**
-//     The native picker filters by `accept`; a DROP does not, so a Dropzone
-//     that trusts the attribute accepts anything dragged onto it. The same
-//     matcher runs on both paths.
-//  5. **Zero dark branches, zero fixed pixels.** Upstream ships a dark
-//     utility fork and hard-coded spacing; every value here is a token.
-//
-// Realm-law notes: no timers anywhere (the drag state is a depth counter, a
-// dragleave is not debounced), all drag listeners live inside an
-// `ember-modifier` that removes them on teardown, boolean attributes are
-// bound `true | undefined` (Glimmer assigns dynamic attributes through the
-// element PROPERTY, so `multiple={{''}}` would silently do nothing), and the
-// drag handlers are in a modifier rather than `{{on 'dragover'}}` so the
-// non-interactive root never trips `no-invalid-interactive`.
-//
-// Every component here lives in its own module under components/; this
-// module re-exports them so existing imports keep working.
-//
-// (the file-intake group)
-
 // Pretui — file screening shared by FileTrigger and Dropzone.
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -111,8 +60,14 @@ function extensionOf(name: string): string {
  * mapping for), so a MIME-only matcher rejects files the user can plainly
  * see are the right kind.
  */
-export function matchesAccept(candidate: ScreenableFile, accept?: string): boolean {
-  let list = (accept ?? '').split(',').map((t) => t.trim().toLowerCase()).filter(Boolean);
+export function matchesAccept(
+  candidate: ScreenableFile,
+  accept?: string,
+): boolean {
+  let list = (accept ?? '')
+    .split(',')
+    .map((t) => t.trim().toLowerCase())
+    .filter(Boolean);
   if (list.length === 0) {
     return true;
   }
@@ -149,7 +104,8 @@ function humanBytes(bytes: number): string {
     value = value / 1024;
     index++;
   }
-  let rounded = index === 0 ? String(Math.round(value)) : value.toFixed(value < 10 ? 1 : 0);
+  let rounded =
+    index === 0 ? String(Math.round(value)) : value.toFixed(value < 10 ? 1 : 0);
   return rounded + ' ' + UNITS[index];
 }
 
@@ -170,7 +126,8 @@ export function screenFiles<T extends ScreenableFile>(
   let accepted: T[] = [];
   let rejected: FileRejection[] = [];
   let cap = options.multiple === false ? 1 : options.maxFiles;
-  let limit = cap !== undefined && Number.isFinite(cap) && cap >= 0 ? cap : Infinity;
+  let limit =
+    cap !== undefined && Number.isFinite(cap) && cap >= 0 ? cap : Infinity;
 
   for (let candidate of files) {
     if (!matchesAccept(candidate, options.accept)) {
@@ -197,7 +154,10 @@ export function screenFiles<T extends ScreenableFile>(
       rejected.push({
         name: candidate.name,
         reason: 'count',
-        detail: limit === 1 ? 'only one file at a time' : 'over the ' + limit + '-file limit',
+        detail:
+          limit === 1
+            ? 'only one file at a time'
+            : 'over the ' + limit + '-file limit',
       });
       continue;
     }
@@ -219,7 +179,9 @@ export function screeningMessage(result: FileScreening): string {
   let taken = result.accepted.length;
   if (taken > 0) {
     let names = result.accepted.map((f) => f.name).join(', ');
-    parts.push((taken === 1 ? '1 file added' : taken + ' files added') + ': ' + names);
+    parts.push(
+      (taken === 1 ? '1 file added' : taken + ' files added') + ': ' + names,
+    );
   }
   for (let refusal of result.rejected) {
     parts.push(refusal.name + ' was not added — ' + refusal.detail);

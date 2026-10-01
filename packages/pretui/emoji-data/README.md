@@ -1,24 +1,23 @@
 # emoji-data/ — the emoji dataset and the ported search engine
 
 This directory is Pretui's vendoring of [emoji-picker-element][epe]. It is
-**not** the usual shape: every other vendored directory in this realm
-(`media-chrome/`, `plot/`, `qrcode/`, `zxcvbn/`, `sigpad/`) holds an esbuild
-bundle of somebody else's runtime. This one holds **data plus a port**, and no
+**not** the usual shape: every other vendored directory in this package
+(`zxcvbn/`, `sigpad/`) holds an esbuild bundle of somebody else's runtime. This one holds **data plus a port**, and no
 upstream executable code at all. The reason is measured, not stylistic, and it
 is recorded below because the next person to reach for a Web Component library
 needs the number, not the conclusion.
 
-| | |
-|---|---|
-| Upstream | [emoji-picker-element][epe] by Nolan Lawson |
-| Version | **1.29.1** |
-| Source | **local checkout** at `~/Projects/emoji-picker-element`, not npm |
-| Commit | **`5d1c8bfc21e737c03a3cb14e06b4e472e2275ff1`** (`git describe --tags` → `v1.29.1-4-g5d1c8bf`) |
-| Working tree | clean at build time |
-| Licence | **Apache-2.0** — `SPDX-License-Identifier: Apache-2.0` |
-| Copyright | Copyright 2020 Nolan Lawson |
-| NOTICE | **none exists upstream** — see "Licence and NOTICE" |
-| Vendored | 2026-08-13 |
+|              |                                                                                               |
+| ------------ | --------------------------------------------------------------------------------------------- |
+| Upstream     | [emoji-picker-element][epe] by Nolan Lawson                                                   |
+| Version      | **1.29.1**                                                                                    |
+| Source       | **local checkout** at `~/Projects/emoji-picker-element`, not npm                              |
+| Commit       | **`5d1c8bfc21e737c03a3cb14e06b4e472e2275ff1`** (`git describe --tags` → `v1.29.1-4-g5d1c8bf`) |
+| Working tree | clean at build time                                                                           |
+| Licence      | **Apache-2.0** — `SPDX-License-Identifier: Apache-2.0`                                        |
+| Copyright    | Copyright 2020 Nolan Lawson                                                                   |
+| NOTICE       | **none exists upstream** — see "Licence and NOTICE"                                           |
+| Vendored     | 2026-08-13                                                                                    |
 
 A bundle built from an untagged commit no longer corresponds to a published
 release, so **the SHA is what makes this reproducible**, not the version
@@ -27,14 +26,14 @@ but that is a fact that had to be checked, not assumed.
 
 ## Contents
 
-| File | What it is |
-|---|---|
-| `data.ts` | The emoji dataset, trimmed and repacked. Vendored data, do not hand-edit. |
-| `engine.ts` | Search, tokenisation, skin tones and emoji-support detection, **ported** from upstream source. Our code, derived from theirs. |
-| `LICENSE` | Apache-2.0, verbatim from the emoji-picker-element checkout. |
-| `LICENSE.data` | Apache-2.0, verbatim from the emoji-picker-element-data package. |
+| File           | What it is                                                                                                                    |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `data.ts`      | The emoji dataset, trimmed and repacked. Vendored data, do not hand-edit.                                                     |
+| `engine.ts`    | Search, tokenisation, skin tones and emoji-support detection, **ported** from upstream source. Our code, derived from theirs. |
+| `LICENSE`      | Apache-2.0, verbatim from the emoji-picker-element checkout.                                                                  |
+| `LICENSE.data` | Apache-2.0, verbatim from the emoji-picker-element-data package.                                                              |
 
-The component that consumes them is `../emoji-picker.gts`.
+The component that consumes them is `../components/emoji-picker.gts`.
 
 ## Why this is a port and not a bundle
 
@@ -72,8 +71,8 @@ Under Node the constructor returns and then `ready()` rejects:
 
 IndexedDB does not exist during indexing or prerender, so any use of it would
 have had to be deferred into a modifier and torn down there. **It was removed
-instead.** Upstream keeps the dataset in IndexedDB *because it fetches that
-dataset over the network* — the database is a cache for a download. With the
+instead.** Upstream keeps the dataset in IndexedDB _because it fetches that
+dataset over the network_ — the database is a cache for a download. With the
 data local there is nothing to cache: `engine.ts` builds an in-memory index in
 one pass over 1,923 emoji, which is faster than the round trip it replaces and
 has no lifecycle to get wrong. Hazard 2 is not mitigated, it is deleted.
@@ -147,16 +146,16 @@ goes further than that tool did.
 
 **1,923 emoji.** Sizes, measured:
 
-| | raw | gzip |
-|---|---|---|
-| upstream `data.json`, as the CDN serves it | 439,662 B | 72,049 B |
-| trimmed, tokens precomputed (what we ship) | 267,022 B | **59,224 B** |
-| `data.ts` as written, incl. the JS string escaping | 330,040 B | 61,936 B |
+|                                                    | raw       | gzip         |
+| -------------------------------------------------- | --------- | ------------ |
+| upstream `data.json`, as the CDN serves it         | 439,662 B | 72,049 B     |
+| trimmed, tokens precomputed (what we ship)         | 267,022 B | **59,224 B** |
+| `data.ts` as written, incl. the JS string escaping | 330,040 B | 61,936 B     |
 
 Two denser encodings were built and rejected on measurement: a shared token
 dictionary with integer references (252,620 B raw but **70,037 B gzip**) and a
 columnar delimiter-packed form (232,621 B raw, 66,486 B gzip). Both shrink the
-raw bytes and *inflate* the compressed bytes, because gzip already exploits the
+raw bytes and _inflate_ the compressed bytes, because gzip already exploits the
 repetition that the dictionary was replacing — and both cost a decode step. The
 simplest encoding is also the smallest on the wire.
 
@@ -166,7 +165,7 @@ a picker is actually opened — the same rule, for the same reason, as
 `loadPasswordEstimator` in `password-strength.gts`. Keep it that way or the
 dataset joins the static graph and the laziness evaporates.
 
-Worth being precise about *why* it is lazy: not for safety. `data.ts` is pure
+Worth being precise about _why_ it is lazy: not for safety. `data.ts` is pure
 JSON and touches no DOM, so it would survive the indexer even as a static
 import. Laziness here is purely a payload decision.
 
@@ -199,45 +198,106 @@ Reproduces `data.ts` byte-for-byte from the two inputs above.
 
 ```js
 // gen.mjs — run with: node gen.mjs
-import { readFileSync, writeFileSync } from 'node:fs'
+import { readFileSync, writeFileSync } from 'node:fs';
 
 // npm pack emoji-picker-element-data@1.8.0 && tar xzf *.tgz
-const raw = JSON.parse(readFileSync('./package/en/emojibase/data.json', 'utf8'))
+const raw = JSON.parse(
+  readFileSync('./package/en/emojibase/data.json', 'utf8'),
+);
 
 // ── verbatim from emoji-picker-element src/database/utils/extractTokens.js
 const irregularEmoticons = new Set([
-  ':D', 'XD', ":'D", 'O:)', ':X', ':P', ';P', 'XP', ':L', ':Z', ':j', '8D',
-  'XO', '8)', ':B', ':O', ':S', ":'o", 'Dx', 'X(', 'D:', ':C', '>0)', ':3',
-  '</3', '<3', '\\M/', ':E', '8#'
-])
-const extractTokens = (str) => str.split(/[\s_]+/).map(word => {
-  if (!word.match(/\w/) || irregularEmoticons.has(word)) return word.toLowerCase()
-  return word.replace(/[)(:,]/g, '').replace(/\u2019/g, "'").toLowerCase()
-}).filter(Boolean)
+  ':D',
+  'XD',
+  ":'D",
+  'O:)',
+  ':X',
+  ':P',
+  ';P',
+  'XP',
+  ':L',
+  ':Z',
+  ':j',
+  '8D',
+  'XO',
+  '8)',
+  ':B',
+  ':O',
+  ':S',
+  ":'o",
+  'Dx',
+  'X(',
+  'D:',
+  ':C',
+  '>0)',
+  ':3',
+  '</3',
+  '<3',
+  '\\M/',
+  ':E',
+  '8#',
+]);
+const extractTokens = (str) =>
+  str
+    .split(/[\s_]+/)
+    .map((word) => {
+      if (!word.match(/\w/) || irregularEmoticons.has(word))
+        return word.toLowerCase();
+      return word
+        .replace(/[)(:,]/g, '')
+        .replace(/\u2019/g, "'")
+        .toLowerCase();
+    })
+    .filter(Boolean);
 const normalizeTokens = (arr) =>
-  arr.filter(Boolean).map(_ => _.toLowerCase()).filter(_ => _.length >= 2)
+  arr
+    .filter(Boolean)
+    .map((_) => _.toLowerCase())
+    .filter((_) => _.length >= 2);
 
-const trimmed = raw.map(({ annotation, emoticon, group, order,
-                          shortcodes, skins, tags, emoji, version }) => {
-  const t = [...new Set(normalizeTokens([
-    ...(shortcodes || []).map(extractTokens).flat(),
-    ...(tags || []).map(extractTokens).flat(),
-    ...extractTokens(annotation),
-    emoticon
-  ]))].sort()
-  const o = { u: emoji, a: annotation, g: group, o: order, v: version, t }
-  if (skins) {
-    const s = {}
-    for (const sk of skins) if (typeof sk.tone === 'number') s[sk.tone] = [sk.emoji, sk.version]
-    if (Object.keys(s).length) o.s = s
-  }
-  return o
-})
+const trimmed = raw.map(
+  ({
+    annotation,
+    emoticon,
+    group,
+    order,
+    shortcodes,
+    skins,
+    tags,
+    emoji,
+    version,
+  }) => {
+    const t = [
+      ...new Set(
+        normalizeTokens([
+          ...(shortcodes || []).map(extractTokens).flat(),
+          ...(tags || []).map(extractTokens).flat(),
+          ...extractTokens(annotation),
+          emoticon,
+        ]),
+      ),
+    ].sort();
+    const o = { u: emoji, a: annotation, g: group, o: order, v: version, t };
+    if (skins) {
+      const s = {};
+      for (const sk of skins)
+        if (typeof sk.tone === 'number') s[sk.tone] = [sk.emoji, sk.version];
+      if (Object.keys(s).length) o.s = s;
+    }
+    return o;
+  },
+);
 
 // JSON.stringify twice: once for the payload, once to make it a valid,
 // fully escaped JS string literal.
-writeFileSync('./data.ts',
-  HEADER + '\nconst PACKED =\n  ' + JSON.stringify(JSON.stringify(trimmed)) + ';\n' + FOOTER)
+writeFileSync(
+  './data.ts',
+  HEADER +
+    '\nconst PACKED =\n  ' +
+    JSON.stringify(JSON.stringify(trimmed)) +
+    ';\n' +
+    FOOTER,
+);
 ```
 
 `HEADER` / `FOOTER` are the doc comment, the `PackedEmoji` interface and the
@@ -246,17 +306,17 @@ current `data.ts`.
 
 ## What was ported into `engine.ts`, and what changed
 
-| Ported | From | Changed |
-|---|---|---|
-| `extractTokens` | `src/database/utils/extractTokens.js` | nothing — must match the generator |
-| `normalizeTokens` | `src/database/utils/normalizeTokens.js` | nothing |
-| `applySkinTone` | `src/picker/utils/applySkinTone.js` | nothing |
-| search + ranking | `src/database/idbInterface.js` `getEmojiBySearchQuery` | IDB key ranges → a `Map` plus a sorted-token binary search; ranking rules unchanged |
-| result intersection | `src/database/utils/findCommonMembers.js` | `Set` membership instead of `findIndex`, i.e. O(n) not O(n·m) |
-| version gating | `src/picker/utils/summarizeEmojisForUI.js` | unchanged, incl. gating each skin variant separately |
+| Ported               | From                                                                            | Changed                                                                                                                                                                                      |
+| -------------------- | ------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `extractTokens`      | `src/database/utils/extractTokens.js`                                           | nothing — must match the generator                                                                                                                                                           |
+| `normalizeTokens`    | `src/database/utils/normalizeTokens.js`                                         | nothing                                                                                                                                                                                      |
+| `applySkinTone`      | `src/picker/utils/applySkinTone.js`                                             | nothing                                                                                                                                                                                      |
+| search + ranking     | `src/database/idbInterface.js` `getEmojiBySearchQuery`                          | IDB key ranges → a `Map` plus a sorted-token binary search; ranking rules unchanged                                                                                                          |
+| result intersection  | `src/database/utils/findCommonMembers.js`                                       | `Set` membership instead of `findIndex`, i.e. O(n) not O(n·m)                                                                                                                                |
+| version gating       | `src/picker/utils/summarizeEmojisForUI.js`                                      | unchanged, incl. gating each skin variant separately                                                                                                                                         |
 | `detectSupportLevel` | `src/picker/utils/determineEmojiSupportLevel.js` + `testColorEmojiSupported.js` | runs synchronously in a modifier instead of behind `requestIdleCallback`; there is no longer an IndexedDB population to stay off the critical path for, and the realm forbids unowned timers |
-| version test table | `bin/versionsAndTestEmoji.js` | unchanged |
-| category list | `src/picker/groups.js` | custom-emoji group dropped; a recents pseudo-group added |
+| version test table   | `bin/versionsAndTestEmoji.js`                                                   | unchanged                                                                                                                                                                                    |
+| category list        | `src/picker/groups.js`                                                          | custom-emoji group dropped; a recents pseudo-group added                                                                                                                                     |
 
 The ranking rules that were kept deliberately, because they are the part that
 took real work and are easy to get wrong: every query token but the last must
@@ -287,8 +347,7 @@ it only measures what is on screen.
 - **`engine.ts` must never import `./data` for a value.** `import type` only.
   A value import puts 330 KB in the static graph.
 - **`detectSupportLevel` is browser-only.** It needs a canvas. Call it from a
-  modifier, never from a getter the indexer might evaluate — the rule
-  `plot/README.md` states for `plot()`.
+  modifier, never from a getter the indexer might evaluate.
 - **Do not "fix" the tokeniser without regenerating `data.ts`.** The tokens in
   the dataset were produced by the same code; drift silently breaks search.
 - **Do not add a `dataSource` arg.** It would reintroduce the runtime fetch

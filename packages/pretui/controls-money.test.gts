@@ -382,6 +382,18 @@ module('Pretui | controls-money | AmountInput', function (hooks) {
     assert.true(readout().indexOf('not a number') !== -1, readout());
   });
 
+  test('blur keeps an unparseable draft and its reason in the box', async function (assert) {
+    await render(
+      <template>
+        <AmountInput @units={{CURRENCIES}} @defaultUnit='USD' @defaultValue={{5}} />
+      </template>,
+    );
+    await fillIn(box(), 'lots');
+    await blur(box());
+    assert.strictEqual(box().value, 'lots', 'the rejected text is still there to correct');
+    assert.true(readout().indexOf('not a number') !== -1, readout());
+  });
+
   test('arrow keys step by the unit and ⇧ takes ten', async function (assert) {
     let seen: Array<number | undefined> = [];
     const capture = (value: number | undefined) => seen.push(value);

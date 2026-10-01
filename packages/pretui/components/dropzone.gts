@@ -60,14 +60,16 @@ const dropTarget = modifier(
     };
     let over = (event: Event) => {
       let drag = event as DragEvent;
-      if (disabled || !dragCarriesFiles(drag)) {
+      if (!dragCarriesFiles(drag)) {
         return;
       }
       // preventDefault on dragover is what makes the element a drop target
-      // at all; without it the browser navigates to the dropped file.
+      // at all; without it the browser navigates to the dropped file. A
+      // disabled zone still takes the drag, with dropEffect 'none', so the
+      // drop is refused instead of opening the file over the app.
       drag.preventDefault();
       if (drag.dataTransfer) {
-        drag.dataTransfer.dropEffect = 'copy';
+        drag.dataTransfer.dropEffect = disabled ? 'none' : 'copy';
       }
     };
     let leave = (event: Event) => {
@@ -82,10 +84,10 @@ const dropTarget = modifier(
     };
     let drop = (event: Event) => {
       let drag = event as DragEvent;
+      drag.preventDefault();
       if (disabled) {
         return;
       }
-      drag.preventDefault();
       depth = 0;
       onOver(false);
       onFiles(Array.from(drag.dataTransfer?.files ?? []));

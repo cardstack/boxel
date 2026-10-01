@@ -472,7 +472,7 @@ export class ToggleMatrix extends Component<ToggleMatrixSignature> {
       return;
     }
     this.paint(view.r, 0, view.r, this.columns.length - 1, view.state !== 'all');
-    this.resync(event, this.body[view.r]?.checked);
+    this.resync(event, this.body[view.r]);
   };
 
   toggleColumn = (head: HeadView, event: Event) => {
@@ -484,7 +484,7 @@ export class ToggleMatrix extends Component<ToggleMatrixSignature> {
       return;
     }
     this.paint(0, head.c, this.rows.length - 1, head.c, head.state !== 'all');
-    this.resync(event, this.heads[head.c]?.checked);
+    this.resync(event, this.heads[head.c]);
   };
 
   toggleAll = (event: Event) => {
@@ -503,15 +503,21 @@ export class ToggleMatrix extends Component<ToggleMatrixSignature> {
       this.columns.length - 1,
       corner.state !== 'all',
     );
-    this.resync(event, this.corner.checked);
+    this.resync(event, this.corner);
   };
 
   // The browser has already flipped the bulk checkbox; with a controlled
   // @value the owner may not take the change, so set it from the state.
-  private resync(event: Event, checked: boolean | undefined) {
-    if (checked !== undefined) {
-      (event.target as HTMLInputElement).checked = checked;
+  private resync(
+    event: Event,
+    view: { checked: boolean; mixed: boolean } | undefined,
+  ) {
+    if (view === undefined) {
+      return;
     }
+    let box = event.target as HTMLInputElement;
+    box.checked = view.checked;
+    box.indeterminate = view.mixed;
   }
 
   // ── keyboard ───────────────────────────────────────────────────────────
