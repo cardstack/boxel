@@ -69,10 +69,11 @@ export interface VisualElementDragControls {
   endPanSession(): void;
   isDragging: boolean;
   /**
-   * Private upstream. Set by `start()` and cleared by `endPanSession()`; the
-   * session it holds reports its start synchronously from its constructor.
+   * Private upstream. Set by `start()` to the session it opens and cleared by
+   * `endPanSession()`. The session's `end()` removes its listeners, and runs
+   * on every pointerup.
    */
-  panSession?: unknown;
+  panSession?: { end(): void };
   start(originEvent: PointerEvent, options?: DragControlOptions): void;
   stop(event?: PointerEvent): void;
 }

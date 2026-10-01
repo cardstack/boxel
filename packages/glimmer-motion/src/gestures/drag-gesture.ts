@@ -12,40 +12,49 @@ import {
 } from '../framer-motion-internals.ts';
 import { lockTextSelect, unlockTextSelect } from './lock-select.ts';
 
+type PanSession = NonNullable<VisualElementDragControls['panSession']>;
+
 /**
  * Upstream's drag controls, holding the document's text-selection lock for as
  * long as a pan session is open.
+ *
+ * The lock follows the session rather than the drag: `PanSession.end()` runs
+ * on every pointerup, including a press that never moved, where upstream
+ * skips `onSessionEnd` (and with it `endPanSession()`).
  */
 class TextLockingDragControls extends VisualElementDragControls {
-  private selectLocked = false;
+  /** the open pan session that holds the lock */
+  private lockedSession: PanSession | undefined;
 
   override start(originEvent: PointerEvent, options?: DragControlOptions) {
+    const previous = this.panSession;
     super.start(originEvent, options);
-    // A pan session starts only for a primary pointer, and `start()` returns
-    // without one while the element is exiting.
-    if (this.panSession && isPrimaryPointer(originEvent)) {
-      this.lockSelect();
-    }
-  }
-
-  override endPanSession() {
-    super.endPanSession();
-    this.unlockSelect();
-  }
-
-  private lockSelect() {
-    if (this.selectLocked) {
+    const session = this.panSession;
+    // `start()` opens no session while the element is exiting, and a session
+    // only starts for a primary pointer.
+    if (!session || session === previous || !isPrimaryPointer(originEvent)) {
       return;
     }
-    this.selectLocked = true;
-    lockTextSelect();
+    this.holdLockFor(session);
   }
 
-  private unlockSelect() {
-    if (!this.selectLocked) {
+  private holdLockFor(session: PanSession) {
+    if (!this.lockedSession) {
+      lockTextSelect();
+    }
+    this.lockedSession = session;
+    const end = session.end;
+    session.end = () => {
+      end.call(session);
+      this.releaseLockFor(session);
+    };
+  }
+
+  private releaseLockFor(session: PanSession) {
+    if (this.lockedSession !== session) {
       return;
     }
-    this.selectLocked = false;
+    this.lockedSession = undefined;
     unlockTextSelect();
   }
 }
