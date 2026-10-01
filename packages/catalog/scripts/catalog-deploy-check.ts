@@ -53,12 +53,13 @@ import { readDeclarations } from './pairing.ts';
 export const CATALOG_REPOSITORY = 'cardstack/boxel-catalog';
 export const BOXEL_REPOSITORY = 'cardstack/boxel';
 
-// The catalog workflow that syncs staging on every merge. Its "Sync to
+// The catalog workflow that deploys staging on every merge. Its "Sync to
 // Production" job deployed production before deployments were recorded, and
-// its last success is where the first recorded deploy starts from.
+// its last success is where the first recorded deploy starts from. Its staging
+// job is "Deploy to staging", and "Sync to Staging" in its older runs.
 const SYNC_WORKFLOW = 'sync-to-workspace.yml';
-const LEGACY_SYNC_JOB = 'Sync to Production';
-const STAGING_SYNC_JOB = 'Sync to Staging';
+const LEGACY_SYNC_JOBS = ['Sync to Production'];
+const STAGING_SYNC_JOBS = ['Deploy to staging', 'Sync to Staging'];
 
 export interface PullSummary {
   number: number;
@@ -415,8 +416,9 @@ async function deployedRevision(repository: string, environment: string) {
   return undefined;
 }
 
-// The head of the newest push to catalog main whose sync job succeeded.
-async function lastSuccessfulSync(jobName: string) {
+// The head of the newest push to catalog main whose sync job, under any of
+// its names, succeeded.
+async function lastSuccessfulSync(jobNames: string[]) {
   for (let page = 1; page <= 10; page++) {
     let { workflow_runs: runs } = await get<{
       workflow_runs: { id: number; head_sha: string }[];
@@ -428,7 +430,9 @@ async function lastSuccessfulSync(jobName: string) {
         jobs: { name: string; conclusion: string | null }[];
       }>(`repos/${CATALOG_REPOSITORY}/actions/runs/${run.id}/jobs`);
       if (
-        jobs.some((job) => job.name === jobName && job.conclusion === 'success')
+        jobs.some(
+          (job) => jobNames.includes(job.name) && job.conclusion === 'success',
+        )
       ) {
         return run.head_sha;
       }
@@ -444,9 +448,9 @@ async function lastSuccessfulSync(jobName: string) {
 // staging sync pushes the whole tree, so a successful one at the target or a
 // later commit means staging has served it. Not finding one only warns.
 async function stagingWarning(to: string) {
-  let staged = await lastSuccessfulSync(STAGING_SYNC_JOB);
+  let staged = await lastSuccessfulSync(STAGING_SYNC_JOBS);
   if (!staged) {
-    return `No successful "${STAGING_SYNC_JOB}" run was found, so staging may never have served ${to.slice(0, 12)}.`;
+    return `No successful "${STAGING_SYNC_JOBS[0]}" run was found, so staging may never have served ${to.slice(0, 12)}.`;
   }
   let { status } = await get<{ status: string }>(
     `repos/${CATALOG_REPOSITORY}/compare/${to}...${staged}?per_page=1`,
@@ -456,7 +460,7 @@ async function stagingWarning(to: string) {
   }
   return (
     `Staging hasn't served ${to.slice(0, 12)} yet: its last successful ` +
-    `"${STAGING_SYNC_JOB}" was at ${staged.slice(0, 12)}. Check ` +
+    `"${STAGING_SYNC_JOBS[0]}" was at ${staged.slice(0, 12)}. Check ` +
     `https://github.com/${CATALOG_REPOSITORY}/actions/workflows/${SYNC_WORKFLOW} ` +
     `before relying on this deploy.`
   );
@@ -610,7 +614,7 @@ async function main() {
     option('catalog-from') ??
     (await deployedRevision(CATALOG_REPOSITORY, environment)) ??
     (environment === 'production'
-      ? await lastSuccessfulSync(LEGACY_SYNC_JOB)
+      ? await lastSuccessfulSync(LEGACY_SYNC_JOBS)
       : undefined);
   if (!from) {
     console.log(

@@ -33,7 +33,7 @@ Both go through the same check, and neither moves production's catalog backwards
 3. **Stacked pull requests.** A catalog pull request merged into another branch (a stack parent) still counts once its parent reaches `main`. A boxel pull request merged into a branch other than `main` hasn't landed, so it holds like an open one.
 4. **Pull requests closed without merging don't count.** A closed catalog pull request never reached `main`. A `Merges after:` line naming a boxel pull request that was closed without merging holds nothing back. The check reports it as a warning naming both pull requests.
 
-It also warns, without refusing, when staging hasn't served the target yet: no successful "Sync to Staging" run at the target or a later commit. Check the staging sync before relying on that deploy.
+It also warns, without refusing, when staging hasn't served the target yet: no successful "Deploy to staging" run at the target or a later commit. Check the staging sync before relying on that deploy.
 
 Changes that only touch files the realm push skips don't count: any path with a dot segment (`.github/`, `.claude/`), and what the catalog's root `.gitignore` and `.boxelignore` list (`README.md`, `AGENTS.md`, `scripts`, `tests`, …).
 
