@@ -1,9 +1,28 @@
-import type { VisualElement } from 'motion-dom';
+import type {
+  AnimationPlaybackControlsWithThen,
+  MotionValueAnimation,
+  VisualElement,
+} from 'motion-dom';
 import { animateVisualElement, frame, visualElementStore } from 'motion-dom';
 
 interface MotionSnapshot {
   phases: Map<string, number>;
   timing: string;
+}
+
+/**
+ * Whether a value's running animation has a finite timeline. Values that
+ * follow a target (`springValue`, `followValue`) run an animation with no
+ * `time` or `duration`, so they have no phase to keep.
+ */
+function hasTimeline(
+  animation: MotionValueAnimation | undefined
+): animation is AnimationPlaybackControlsWithThen {
+  if (!animation || !('duration' in animation)) {
+    return false;
+  }
+  const { duration } = animation as AnimationPlaybackControlsWithThen;
+  return duration > 0 && Number.isFinite(duration);
 }
 
 /** Motion retargets changed destinations; an editor must also apply timing-only edits. */
@@ -16,11 +35,7 @@ export function captureDemoMotion(stage: Element | null) {
       if (visual.getProps().transition?.repeat === Infinity) {
         visual.values.forEach((value, key) => {
           const animation = value.animation;
-          if (
-            animation &&
-            animation.duration > 0 &&
-            Number.isFinite(animation.duration)
-          ) {
+          if (hasTimeline(animation)) {
             phases.set(key, (animation.time / animation.duration) % 1);
           }
         });
@@ -83,11 +98,7 @@ export function refreshDemoMotion(
         }
         for (const [key, phase] of previous.phases) {
           const animation = visual.values.get(key)?.animation;
-          if (
-            animation &&
-            animation.duration > 0 &&
-            Number.isFinite(animation.duration)
-          ) {
+          if (hasTimeline(animation)) {
             animation.time = phase * animation.duration;
           }
         }

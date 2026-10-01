@@ -112,7 +112,7 @@
     "@glimmer/tracking": "^1.1.2",
     "ember-modifier": "^4.3.0",
     "ember-source": ">=5.4.0",
-    "motion-dom": "^13.1.1",
-    "motion-utils": "^13.0.0"
+    "motion-dom": "^13.4.5",
+    "motion-utils": "^13.3.0"
   }
 }
