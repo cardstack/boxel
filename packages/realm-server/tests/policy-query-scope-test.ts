@@ -485,7 +485,7 @@ module(basename(import.meta.filename), function () {
         [RATED],
         { ruleOn: RATED },
       ),
-      { kind: 'scoped', filters: [OWN] },
+      { kind: 'scoped', filters: [scoped(OWN)] },
       'a grant on the subclass contributes its filter',
     );
     assert.deepEqual(
@@ -508,7 +508,7 @@ module(basename(import.meta.filename), function () {
         [TIER],
         { ruleOn: TIER },
       ),
-      { kind: 'scoped', filters: [OWN] },
+      { kind: 'scoped', filters: [scoped(OWN)] },
       'its key is spelled as a field type’s, and it is read as the type it is',
     );
   });
