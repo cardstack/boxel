@@ -322,10 +322,12 @@ import {
 import { erroredTargetRow } from './card-operations/read.ts';
 import { commitBatch, rehearseBatch } from './card-operations/coordinator.ts';
 import {
+  compilePolicyCard,
   noteRealmIndexMoved,
   RealmPolicyCache,
   realmPolicyRef,
   type CompiledRealmPolicy,
+  type PolicyCompileEnvironment,
 } from './card-operations/policy.ts';
 import {
   principalQueryScope,
@@ -5821,8 +5823,8 @@ export class Realm {
       // Keyed by position rather than by index, because a position is a path
       // through the tree for an entry inside a group and there is no array for
       // one to be an index into.
-      // Resolved once, and only for a batch that explains: it can cost a
-      // revocation read no other operation needs.
+      // Resolved once, and only for a batch that explains or validates: it can
+      // cost a revocation read no other operation needs.
       let principal: Promise<string | undefined> | undefined;
       for (let { entry, target, definition } of resolved) {
         if (isWrite(definition.base)) {
@@ -5831,7 +5833,7 @@ export class Realm {
         let result: OperationResult;
         try {
           let asker =
-            definition.base === 'explain'
+            definition.base === 'explain' || definition.base === 'validate'
               ? await (principal ??= this.#sessionPrincipal(requestContext))
               : undefined;
           result = await runOperation(this.operationCore, {
@@ -6686,6 +6688,11 @@ export class Realm {
           isPolicyCard: (types) => this.#isPolicyCard(types),
         },
         targetRealm: (href) => this.#targetRealm(href),
+        // Compiled as this realm's own policy cache compiles the card its
+        // pointer names, and kept by neither.
+        compilePolicyCard: (card) =>
+          compilePolicyCard(card.href, this.#policyCompileEnvironment()),
+        readsRealmOf: (href, caller) => this.#readsRealmOf(href, caller),
       };
     }
     return this.#operationCore;
@@ -6740,6 +6747,48 @@ export class Realm {
           return undefined;
         }
       },
+    };
+  }
+
+  // The realm this server serves `href` from, and whether a caller may read
+  // it, for a validate. Found the way an explain finds a target's realm, and
+  // judged from the database, so no realm is mounted to answer. Undefined
+  // where no realm here holds `href`.
+  async #readsRealmOf(
+    href: string,
+    caller: ScopeCaller,
+  ): Promise<{ realm: string; read: boolean } | undefined> {
+    let url: URL;
+    try {
+      url = new URL(this.#resolveAtomicHref(href), this.paths.url);
+    } catch {
+      return undefined;
+    }
+    if (this.paths.inRealm(url)) {
+      return {
+        realm: this.url,
+        read: (await this.#aclFor(new URL(this.url), caller)).read,
+      };
+    }
+    let served: ServedRealm | undefined;
+    try {
+      served = await this.#realmFor?.(url);
+    } catch {
+      return undefined;
+    }
+    if (!served) {
+      return undefined;
+    }
+    let realmURL = new URL(served.url);
+    if (!new RealmPaths(realmURL, this.#virtualNetwork).inRealm(url)) {
+      return undefined;
+    }
+    if (await isRealmArchived(this.#dbAdapter, realmURL)) {
+      return { realm: served.url, read: false };
+    }
+    return {
+      realm: served.url,
+      read: (await this.#aclFor(realmURL, caller)).read,
     };
   }
 
@@ -15213,7 +15262,16 @@ export class Realm {
   // definition lookup, as an operation's do.
   #makePolicyCache(): RealmPolicyCache {
     return new RealmPolicyCache({
+      ...this.#policyCompileEnvironment(),
       policyCard: async () => (await this.getRealmPolicy())?.card,
+    });
+  }
+
+  // What compiling a policy card reads, for the realm's own policy cache and
+  // for a validate of any policy card alike, so the two compile a card the
+  // same way.
+  #policyCompileEnvironment(): PolicyCompileEnvironment {
+    return {
       readCard: (url) => this.#realmIndexQueryEngine.instanceSource(url),
       resolveCodeRef: (codeRef, relativeTo) => {
         let absolute = codeRefWithAbsoluteIdentifier(
@@ -15239,7 +15297,7 @@ export class Realm {
         (await this.#realmIndexQueryEngine.fetchCardTypeSummary()).instances
           .map((summary) => summary.code_ref)
           .sort(),
-    });
+    };
   }
 
   // Whether an adoption chain, as the index records one, is a policy card's.
