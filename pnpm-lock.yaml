@@ -568,8 +568,8 @@ catalogs:
       specifier: ^0.52.2
       version: 0.52.2
     motion:
-      specifier: 13.1.1
-      version: 13.1.1
+      specifier: 13.4.6
+      version: 13.4.6
     ms:
       specifier: ^2.1.3
       version: 2.1.3
@@ -716,9 +716,9 @@ catalogs:
       version: 17.7.2
 
 overrides:
-  framer-motion: 13.1.1
-  motion-dom: 13.1.1
-  motion-utils: 13.0.0
+  framer-motion: 13.4.6
+  motion-dom: 13.4.5
+  motion-utils: 13.3.0
   '@types/eslint': 8.56.5
   '@embroider/util': 1.13.1
   '@glimmer/tracking>@glimmer/validator': 0.84.3
@@ -1314,7 +1314,7 @@ importers:
         version: 3.8.4
       semver:
         specifier: ^7.7.0
-        version: 7.8.4
+        version: 7.8.5
       vite:
         specifier: 'catalog:'
         version: 6.4.3(@types/node@24.13.2)(lightningcss@1.32.0)(terser@5.49.0)(yaml@2.9.0)
@@ -2153,7 +2153,7 @@ importers:
         version: 2.4.0(@babel/core@7.29.7(supports-color@8.1.1))
       dialkit:
         specifier: ^2.0.0
-        version: 2.0.2(motion@13.1.1)
+        version: 2.0.2(motion@13.4.6)
       ember-modifier:
         specifier: ^4.1.0
         version: 4.3.0(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1)
@@ -2165,10 +2165,10 @@ importers:
         version: 18.0.14
       motion:
         specifier: 'catalog:'
-        version: 13.1.1
+        version: 13.4.6
       motion-dom:
-        specifier: 13.1.1
-        version: 13.1.1
+        specifier: 13.4.5
+        version: 13.4.5
       three:
         specifier: ^0.185.1
         version: 0.185.1
@@ -2295,7 +2295,7 @@ importers:
         version: link:../choreo-player
       dialkit:
         specifier: ^2.0.0
-        version: 2.0.2(motion@13.1.1)
+        version: 2.0.2(motion@13.4.6)
       glimmer-motion:
         specifier: workspace:*
         version: link:../glimmer-motion
@@ -2304,13 +2304,13 @@ importers:
         version: 18.0.14
       motion:
         specifier: 'catalog:'
-        version: 13.1.1
+        version: 13.4.6
       motion-dom:
-        specifier: 13.1.1
-        version: 13.1.1
+        specifier: 13.4.5
+        version: 13.4.5
       motion-utils:
-        specifier: 13.0.0
-        version: 13.0.0
+        specifier: 13.3.0
+        version: 13.3.0
       three:
         specifier: ^0.185.1
         version: 0.185.1
@@ -2616,8 +2616,8 @@ importers:
         specifier: 'catalog:'
         version: 2.4.0(@babel/core@7.29.7(supports-color@8.1.1))
       framer-motion:
-        specifier: 13.1.1
-        version: 13.1.1
+        specifier: 13.4.6
+        version: 13.4.6
     devDependencies:
       '@babel/core':
         specifier: 'catalog:'
@@ -2680,11 +2680,11 @@ importers:
         specifier: ^9.39.4
         version: 9.39.5(supports-color@8.1.1)
       motion-dom:
-        specifier: 13.1.1
-        version: 13.1.1
+        specifier: 13.4.5
+        version: 13.4.5
       motion-utils:
-        specifier: 13.0.0
-        version: 13.0.0
+        specifier: 13.3.0
+        version: 13.3.0
       prettier:
         specifier: 'catalog:'
         version: 3.8.4
@@ -11635,8 +11635,8 @@ packages:
     resolution: {integrity: sha512-GMBAbW9antB8iZRHLoGw0b3HANt57diZYFO/HL1JGIC1MjKrdmhxvrJbupnVvpys0zsz7yBApXdQyfepKly2kA==}
     engines: {node: '>=0.10.0'}
 
-  framer-motion@13.1.1:
-    resolution: {integrity: sha512-B/xn2TPS4f61cEBLFjiYlQFnBZUW1YVj/LM+C+N4OP8Rs95VLEI2ot/RlfBg111la/EiyECFaJJi/A3FWA8MUA==}
+  framer-motion@13.4.6:
+    resolution: {integrity: sha512-TwKWt2CC8rjhARzwV00TZIh04ipumSAqyKM/JZmS+urdncSHg6wTF/mfj/Fd6Oi2W01TZSWsiA3uxXDrXZtKyw==}
     peerDependencies:
       react: ^18.0.0 || ^19.0.0
       react-dom: ^18.0.0 || ^19.0.0
@@ -13476,14 +13476,14 @@ packages:
   morphdom@2.7.8:
     resolution: {integrity: sha512-D/fR4xgGUyVRbdMGU6Nejea1RFzYxYtyurG4Fbv2Fi/daKlWKuXGLOdXtl+3eIwL110cI2hz1ZojGICjjFLgTg==}
 
-  motion-dom@13.1.1:
-    resolution: {integrity: sha512-XSf8VYWSB6G/0IY3rWVbyLcxWXtAVHkN1PQE2agTaCv3u8RGvbwu56TyyR/MNzBqqNavEBTZzErcxI1TxBrjcA==}
+  motion-dom@13.4.5:
+    resolution: {integrity: sha512-p63p2Doq+US/O5wADauIPUVx0/eONHMLPzsudBM9XMWRuBQLXogdxH0vwIA8WYQZw864pyzoV723xoDqakwWTg==}
 
-  motion-utils@13.0.0:
-    resolution: {integrity: sha512-7DnN7TmbLcYXcG4RVadXIihWlyuM9afoUww8Y5Agg431kGKiuL2/OMyP4mJ5wLz+pvN3t5ySClLOaVXJ+wekRQ==}
+  motion-utils@13.3.0:
+    resolution: {integrity: sha512-sgSschQp7EseHInIlR7hBbMuvet3RA0bs28KPZAXJcGKGdxHGvh1ogpYDilY3bOMtl73EqPNmp75sAKHYPU5sg==}
 
-  motion@13.1.1:
-    resolution: {integrity: sha512-WNZoK6xiF+kkTqkZ5K7FDDh6A8BG4i5Hc7KXtW8gtTxkpJFds+hIOrDaQGKjQj/AE/i4hJqAaUHEqp/Qo02y6Q==}
+  motion@13.4.6:
+    resolution: {integrity: sha512-zDXi6lIdyhda6wZlTsv9QgT2ed6UExAfRegtl/akQmZb5iaeLlArXr9Gmo/hx3iTx2y4R7tmdb9k9koFQmV+NQ==}
     peerDependencies:
       react: ^18.0.0 || ^19.0.0
       react-dom: ^18.0.0 || ^19.0.0
@@ -23899,9 +23899,9 @@ snapshots:
       asap: 2.0.6
       wrappy: 1.0.2
 
-  dialkit@2.0.2(motion@13.1.1):
+  dialkit@2.0.2(motion@13.4.6):
     optionalDependencies:
-      motion: 13.1.1
+      motion: 13.4.6
 
   diff-sequences@29.6.3: {}
 
@@ -26810,10 +26810,10 @@ snapshots:
     dependencies:
       map-cache: 0.2.2
 
-  framer-motion@13.1.1:
+  framer-motion@13.4.6:
     dependencies:
-      motion-dom: 13.1.1
-      motion-utils: 13.0.0
+      motion-dom: 13.4.5
+      motion-utils: 13.3.0
       tslib: 2.8.1
 
   fresh@0.5.2: {}
@@ -28861,15 +28861,15 @@ snapshots:
 
   morphdom@2.7.8: {}
 
-  motion-dom@13.1.1:
+  motion-dom@13.4.5:
     dependencies:
-      motion-utils: 13.0.0
+      motion-utils: 13.3.0
 
-  motion-utils@13.0.0: {}
+  motion-utils@13.3.0: {}
 
-  motion@13.1.1:
+  motion@13.4.6:
     dependencies:
-      framer-motion: 13.1.1
+      framer-motion: 13.4.6
       tslib: 2.8.1
 
   mri@1.2.0: {}

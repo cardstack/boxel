@@ -207,11 +207,11 @@ catalog:
   monaco-editor: ^0.52.2
   # Pinned together: glimmer-motion inlines framer-motion's gesture and feature
   # modules into its build, with hand-written declarations for them that match
-  # this release, alongside motion-dom 13.1.1 (see packages/glimmer-motion/VENDORED.md).
-  framer-motion: 13.1.1
-  motion: 13.1.1
-  motion-dom: 13.1.1
-  motion-utils: 13.0.0
+  # this release, alongside motion-dom 13.4.5 (see packages/glimmer-motion/VENDORED.md).
+  framer-motion: 13.4.6
+  motion: 13.4.6
+  motion-dom: 13.4.5
+  motion-utils: 13.3.0
   ms: ^2.1.3
   node-pg-migrate: ^6.2.2
   normalize.css: 8.0.1
