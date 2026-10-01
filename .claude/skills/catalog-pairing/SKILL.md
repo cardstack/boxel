@@ -33,6 +33,16 @@ Merges after: https://github.com/cardstack/boxel/pull/456
 - **The named pull request must be valid.** It exists, is open or already merged, targets `main`, and comes from a branch of its own repository, not a fork. Both sides name each other under inverse keys only: naming the same pull request under both keys, or both sides using the same key, fails.
 - **At most one line per key.** In the three-PR flow, C has one of each: `Merges after` naming A, and `Merges before` naming B.
 - **Line format.** The key is case-insensitive and starts its line; a list marker or wrapping backticks are fine. The value is `owner/repo#N` or the pull request's URL. Lines inside fenced code blocks or HTML comments are ignored, so put any example of the syntax in a code block, or mid-sentence, never at the start of a line of prose.
+- **Make the merge order prominent for the people merging.** Open each description of the pair with a GitHub `> [!IMPORTANT]` callout giving the merge and landing order: which pull request merges first, what follows, and any step after merging, such as a re-pin or a deploy. Then put the pairing line directly below the callout, not inside it: a line that starts with `>` isn't a declaration, so the check wouldn't read it. The check finds the line anywhere in the description, but the people merging read the top.
+
+  ```markdown
+  > [!IMPORTANT]
+  > **Merge order: cardstack/boxel#456, then cardstack/boxel-catalog#123.**
+  > Merge this first, then cardstack/boxel-catalog#123 right after.
+
+  Merges before: cardstack/boxel-catalog#123
+  ```
+
 - **Edits re-run the check, but only on its own side.** Editing a boxel pull request's description re-runs Lint Catalog. The boxel run lints the catalog head it read when it ran, and nothing in the other repository triggers it. So re-run the boxel pull request's Lint Catalog by hand after any change on the catalog side: its description, its approval, or a push. boxel-catalog keeps approvals across pushes, so a green boxel check can be judging an older catalog head.
 
 Edit a description with `gh pr edit <n> --repo <owner/repo> --body-file <file>` only after checking that the file isn't empty. A failed fetch that leaves the file empty blanks the description.
