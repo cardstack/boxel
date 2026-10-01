@@ -5,6 +5,8 @@ description: How a boxel pull request and a boxel-catalog pull request that depe
 
 # Pairing boxel and boxel-catalog pull requests
 
+This repo's `PreToolUse` hook (`.claude/hooks/require-skill.mjs`) refuses to open or edit a boxel-catalog pull request, or to write a `Merges before:` / `Merges after:` line into any pull request's description, through `gh pr` or the GitHub MCP tools, until the session or subagent has loaded this skill.
+
 boxel-catalog's cards import boxel (host tools, `@cardstack/base`, runtime types), and boxel's tests use some catalog definitions. So a change in one repository can need a change in the other, and the two pull requests have to be checked together and merged in the right order. Each pull request says which pull request it pairs with in its description, and the checks in both repositories read that.
 
 ## When a change needs a pair

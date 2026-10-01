@@ -16,7 +16,7 @@
 // read, allows the call rather than wedging the session.
 
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join } from 'node:path';
 
 const MANIFEST = /(^|\/)packages\/catalog\/test-subset\.json$/;
@@ -32,10 +32,13 @@ const EDIT_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit']);
 // A pull request created or edited from the shell or the GitHub MCP tools.
 // Its description pairs it with a pull request in the other repository when it
 // has a `Merges before:` or `Merges after:` line, inline or in a --body-file;
-// and any boxel-catalog pull request may need a pair, so creating one counts
-// too.
-const GH_PR = /\bgh\s+pr\s+(create|edit)\b/;
-const GH_PR_CREATE = /\bgh\s+pr\s+create\b/;
+// and any boxel-catalog pull request may need a pair, so creating or editing
+// one counts too. gh takes its repository flag before or after `pr`, and
+// `new` is an alias of `create`.
+const GH_REPO_FLAG = String.raw`(?:\s+(?:-R|--repo)(?:=|\s+)\S+)*`;
+const GH_PR = new RegExp(
+  String.raw`\bgh${GH_REPO_FLAG}\s+pr${GH_REPO_FLAG}\s+(?:create|new|edit)\b`,
+);
 // The same, through the GitHub MCP server's pull request tools.
 const MCP_PR_TOOLS = new Set([
   'mcp__github__create_pull_request',
@@ -43,8 +46,9 @@ const MCP_PR_TOOLS = new Set([
 ]);
 const PAIRING_KEY = /merges\s+(before|after)\s*:/i;
 const BODY_FILE = /(?:--body-file[=\s]+|-F\s+)(?:"([^"]+)"|'([^']+)'|(\S+))/;
-const CATALOG_REPO_FLAG =
-  /(?:--repo[=\s]+|-R\s*)['"]?(?:https:\/\/github\.com\/)?cardstack\/boxel-catalog\b/;
+// The command names the catalog repository: a repository flag in any form, a
+// GH_REPO, or a cd into a checkout of it.
+const NAMES_CATALOG = /\bboxel-catalog\b/;
 
 function bodyFileText(command, cwd) {
   let match = BODY_FILE.exec(command);
@@ -54,7 +58,9 @@ function bodyFileText(command, cwd) {
   }
   let path = isAbsolute(file) || !cwd ? file : join(cwd, file);
   try {
-    return existsSync(path) ? readFileSync(path, 'utf8') : '';
+    // Only a regular file: a FIFO would block the read until the hook times
+    // out.
+    return statSync(path).isFile() ? readFileSync(path, 'utf8') : '';
   } catch {
     return '';
   }
@@ -108,9 +114,8 @@ const rules = [
           return 'a pull request description with a pairing line';
         }
         return (
-          tool_name === 'mcp__github__create_pull_request' &&
           /^boxel-catalog$/i.test(tool_input?.repo ?? '') &&
-          'opening a boxel-catalog pull request'
+          'opening or editing a boxel-catalog pull request'
         );
       }
       if (tool_name !== 'Bash') {
@@ -126,11 +131,8 @@ const rules = [
       ) {
         return 'a pull request description with a pairing line';
       }
-      if (
-        GH_PR_CREATE.test(command) &&
-        (CATALOG_REPO_FLAG.test(command) || inCatalogCheckout(cwd))
-      ) {
-        return 'opening a boxel-catalog pull request';
+      if (NAMES_CATALOG.test(command) || inCatalogCheckout(cwd)) {
+        return 'opening or editing a boxel-catalog pull request';
       }
       return false;
     },
