@@ -15,8 +15,9 @@
 // The hook fails open: input it can't parse, or a transcript it can't find or
 // read, allows the call rather than wedging the session.
 
-import { readFileSync, readdirSync } from 'node:fs';
-import { basename, dirname, join } from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { basename, dirname, isAbsolute, join } from 'node:path';
 
 const MANIFEST = /(^|\/)packages\/catalog\/test-subset\.json$/;
 // Any shell command that names the manifest, the sync that writes from it, or
@@ -27,6 +28,50 @@ const PIN_IN_COMMAND =
   /test-subset\.json|catalog:test-subset|sync-test-subset|CATALOG_TEST_SUBSET_SOURCE/;
 
 const EDIT_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit']);
+
+// A pull request created or edited from the shell. Its description pairs it
+// with a pull request in the other repository when it has a `Merges before:`
+// or `Merges after:` line, inline or in a --body-file; and any boxel-catalog
+// pull request may need a pair, so creating one counts too.
+const GH_PR = /\bgh\s+pr\s+(create|edit)\b/;
+const GH_PR_CREATE = /\bgh\s+pr\s+create\b/;
+const PAIRING_KEY = /merges\s+(before|after)\s*:/i;
+const BODY_FILE = /(?:--body-file[=\s]+|-F\s+)(?:"([^"]+)"|'([^']+)'|(\S+))/;
+const CATALOG_REPO_FLAG =
+  /(?:--repo[=\s]+|-R\s*)['"]?(?:https:\/\/github\.com\/)?cardstack\/boxel-catalog\b/;
+
+function bodyFileText(command, cwd) {
+  let match = BODY_FILE.exec(command);
+  let file = match?.[1] ?? match?.[2] ?? match?.[3];
+  if (!file || file === '-') {
+    return '';
+  }
+  let path = isAbsolute(file) || !cwd ? file : join(cwd, file);
+  try {
+    return existsSync(path) ? readFileSync(path, 'utf8') : '';
+  } catch {
+    return '';
+  }
+}
+
+function inCatalogCheckout(cwd) {
+  if (!cwd) {
+    return false;
+  }
+  try {
+    let remote = execFileSync(
+      'git',
+      ['-C', cwd, 'remote', 'get-url', 'origin'],
+      {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+      },
+    );
+    return /cardstack\/boxel-catalog(\.git)?\s*$/.test(remote);
+  } catch {
+    return false;
+  }
+}
 
 const rules = [
   {
@@ -44,6 +89,32 @@ const rules = [
           PIN_IN_COMMAND.test(tool_input?.command ?? '') &&
           'a shell command on the catalog test subset pin'
         );
+      }
+      return false;
+    },
+  },
+  {
+    skill: 'catalog-pairing',
+    why: 'It says when a boxel and a boxel-catalog pull request must be paired, how to declare the pair in both descriptions, and which merges first.',
+    matches({ tool_name, tool_input, cwd }) {
+      if (tool_name !== 'Bash') {
+        return false;
+      }
+      let command = tool_input?.command ?? '';
+      if (!GH_PR.test(command)) {
+        return false;
+      }
+      if (
+        PAIRING_KEY.test(command) ||
+        PAIRING_KEY.test(bodyFileText(command, cwd))
+      ) {
+        return 'a pull request description with a pairing line';
+      }
+      if (
+        GH_PR_CREATE.test(command) &&
+        (CATALOG_REPO_FLAG.test(command) || inCatalogCheckout(cwd))
+      ) {
+        return 'opening a boxel-catalog pull request';
       }
       return false;
     },
