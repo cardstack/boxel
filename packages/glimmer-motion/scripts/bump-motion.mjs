@@ -98,12 +98,12 @@ async function packument(name) {
   return response.json();
 }
 
-// The lower bound of a `^x.y.z` range.
-function floorOf(range, name, version) {
+// The lower bound of a `^x.y.z` range that `dependent` declares on `name`.
+function floorOf(range, name, dependent) {
   const m = range?.match(/^\^(\d+\.\d+\.\d+)$/);
   if (!m) {
     throw new Error(
-      `framer-motion@${version} declares ${name} ${range ?? '(nothing)'}; expected a ^x.y.z range`,
+      `${dependent} declares ${name} ${range ?? '(nothing)'}; expected a ^x.y.z range`,
     );
   }
   return m[1];
@@ -120,16 +120,44 @@ async function pickRelease(current, minimumReleaseAgeMinutes) {
     Date.parse(doc.time[v]) <= cutoff;
   const describe = (version) => {
     const { dependencies = {} } = framerMotion.versions[version];
-    return {
+    const dependent = `framer-motion@${version}`;
+    const release = {
       'framer-motion': version,
       motion: version,
-      'motion-dom': floorOf(dependencies['motion-dom'], 'motion-dom', version),
+      'motion-dom': floorOf(
+        dependencies['motion-dom'],
+        'motion-dom',
+        dependent,
+      ),
       'motion-utils': floorOf(
         dependencies['motion-utils'],
         'motion-utils',
-        version,
+        dependent,
       ),
     };
+    // The root overrides give motion-dom the catalog's motion-utils, whatever
+    // motion-dom declares, so the two picks have to agree.
+    const dom = motionDom.versions[release['motion-dom']];
+    if (!dom) {
+      throw new Error(`motion-dom@${release['motion-dom']} is not on npm`);
+    }
+    const domNeeds = dom.dependencies?.['motion-utils'];
+    if (
+      domNeeds &&
+      compare(
+        floorOf(
+          domNeeds,
+          'motion-utils',
+          `motion-dom@${release['motion-dom']}`,
+        ),
+        release['motion-utils'],
+      ) > 0
+    ) {
+      throw new Error(
+        `motion-dom@${release['motion-dom']} declares motion-utils ${domNeeds}, newer than the motion-utils@${release['motion-utils']} ${dependent} declares`,
+      );
+    }
+    return release;
   };
 
   if (args.to) {
