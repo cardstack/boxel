@@ -3,12 +3,17 @@ import type { Definition } from '../definitions.ts';
 import type { Filter } from '../query.ts';
 import { policyFilterFromWire } from '../search-entry.ts';
 import type { OperationCore } from './dispatch.ts';
-import { matchingGrants, nonGrantableInChain } from './gate.ts';
+import {
+  authorizationCardIds,
+  matchingGrants,
+  nonGrantableInChain,
+} from './gate.ts';
 import { FIELD_KEYED_OPERATORS } from './policy-filter.ts';
-import type {
-  CompiledOperationGrant,
-  CompiledRealmPolicy,
-  MisreadingType,
+import {
+  realmPolicyRef,
+  type CompiledOperationGrant,
+  type CompiledRealmPolicy,
+  type MisreadingType,
 } from './policy.ts';
 import { lowerQueryOperation } from './query.ts';
 
@@ -52,6 +57,30 @@ import { lowerQueryOperation } from './query.ts';
 // queried type's chain declares `nonGrantable` under the same name: a subclass
 // cannot make grantable what the type it extends kept out of a policy's
 // reach.
+//
+// Nor does any grant find the cards that hold a realm's authorization. The
+// gate refuses a grant every operation on the realm's config card, on the card
+// its policy key names, and on any policy card. A search never passes the
+// gate, though, and a grant on a type those cards descend from, `CardDef` say,
+// compiles to a filter their rows match. So every filter a scope carries
+// leaves their rows out, whichever grant it came from: the two named cards by
+// id, and a policy card by the `RealmPolicy` its row's adoption chain holds.
+// The chain is what covers a draft no key names, and a policy card another
+// realm's key names that is stored in this one. A declaration can't do this:
+// `query` is a reserved name no type may mark `nonGrantable`, and a search on
+// `CardDef` never reads `RealmPolicy`'s declarations anyway.
+//
+// A card's `.json` is indexed a second time as a file row, whose id ends in
+// `.json` and whose chain is a file type's, so neither arm matches it. No
+// grant reaches one: only a card type carries `query`, so every compiled
+// filter is anchored on a card type, and a file row's chain holds none.
+//
+// What this excludes is rows a filter matches. A row the filter admits is
+// served with its whole link closure, as a granted read is, and that closure
+// carries a policy card or the config card the row links to. Nothing here
+// narrows it. How far a grant reaches past its rows is an authoring
+// constraint rather than an enforced boundary: a named query may declare a
+// narrower `links`, and an ad-hoc search serves the full closure.
 // ============================================================================
 
 // What a policy says about one caller's query. A realm the caller reads
@@ -148,7 +177,10 @@ export async function policyQueryScope(
     return DENIED;
   }
   if (distinct.length === 1) {
-    return await typeScope(core, operation, distinct[0], actor);
+    return await withoutAuthorization(
+      core,
+      await typeScope(core, operation, distinct[0], actor),
+    );
   }
   let scopes = await Promise.all(
     distinct.map((on) => typeScope(core, operation, on, actor)),
@@ -159,7 +191,37 @@ export async function policyQueryScope(
       filters.push({ on: distinct[index], any: scope.filters });
     }
   }
-  return filters.length > 0 ? { kind: 'scoped', filters } : DENIED;
+  return await withoutAuthorization(
+    core,
+    filters.length > 0 ? { kind: 'scoped', filters } : DENIED,
+  );
+}
+
+// `scope`, with every filter it carries leaving out the rows of the cards that
+// hold the realm's authorization. A scope with no filter to narrow reads no
+// pointer.
+async function withoutAuthorization(
+  core: OperationCore,
+  scope: PolicyQueryScope,
+): Promise<PolicyQueryScope> {
+  if (scope.kind !== 'scoped') {
+    return scope;
+  }
+  let infrastructure = [
+    ...(await authorizationCardIds(core)).map((id) => ({ eq: { id } })),
+    { type: realmPolicyRef },
+  ];
+  return {
+    kind: 'scoped',
+    filters: scope.filters.map((filter) => excluding(filter, infrastructure)),
+  };
+}
+
+// `filter`, less every row any of `excluded` matches.
+function excluding(filter: Filter, excluded: Filter[]): Filter {
+  return excluded.length === 0
+    ? filter
+    : { every: [filter, { not: { any: excluded } }] };
 }
 
 // What the policy contributes to `operation` on the one type `on`.
