@@ -106,6 +106,7 @@ for (const key of [
 ]) {
   delete dev[key];
 }
+const devDependencies = resolveCatalog(dev);
 write(
   'package.json',
   JSON.stringify(
@@ -123,7 +124,7 @@ write(
         'choreo-player': pack('choreo-player'),
         ...dependencies,
       },
-      devDependencies: resolveCatalog(dev),
+      devDependencies,
       ember: source.ember,
       'ember-addon': source['ember-addon'],
       exports: { './*': './app/*' },
