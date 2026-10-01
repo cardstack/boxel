@@ -832,10 +832,15 @@ export type PolicyExplanationReason =
   // other matching grant held.
   | 'predicate-threw'
   // The operation is kept out of every policy's reach: declared
-  // `nonGrantable` on the target's type or a type it descends from, or a
-  // behavior no grant reaches here at all — a query, which is authorized on
-  // the search engine's lane, an explain, and a validate.
+  // `nonGrantable` on the target's type or a type it descends from, or an
+  // explain or a validate, which no grant reaches.
   | 'non-grantable'
+  // The operation is a query. A query is not invoked on a card: it is named,
+  // with the type that declares it, in a search, and the search decides what
+  // it returns by composing into it the filter of each grant the actor holds
+  // on it. So invoking it on the card is refused whatever the policy grants,
+  // and this explanation reports no rule for it.
+  | 'query-lane'
   // Any operation on the realm's policy card or on its config card, or one
   // that reads, changes or mints any policy card, which no grant reaches
   // whatever the card's type declares.

@@ -285,6 +285,7 @@ module(basename(import.meta.filename), function (hooks) {
               { target: ROOM_204, operation: 'read' },
               { target: ROOM_204, operation: 'rename' },
               { target: CLASSROOM, operation: 'create' },
+              { target: CLASSROOM, operation: 'listMine' },
             ],
           }),
         ),
@@ -462,8 +463,8 @@ module(basename(import.meta.filename), function (hooks) {
       JSON.parse(active['a capability check'].text).checks.map(
         (answer: { allowed: boolean }) => answer.allowed,
       ),
-      [false, false, true],
-      'while active, a create against the type answers true, since its predicate is still to run',
+      [false, false, true, true],
+      'while active, a create against the type answers true, since its predicate is still to run, and so does the named query, since a grant on it applies to them whether or not it matches a row',
     );
 
     await archiveRealm(db, new URL(EDUCATION));
