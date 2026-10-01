@@ -316,6 +316,21 @@ module(basename(import.meta.filename), function (hooks) {
       (response.headers.get('vary') ?? '').includes('Authorization'),
       `and a cache keyed by URL alone keeps it to that reader: ${response.headers.get('vary')}`,
     );
+
+    await adapter.delete(readers.objectKey);
+    let reclaimed = await serveMediaCacheEntry({
+      request: new Request(`${REALM_URL}_capture/card-1`),
+      requestContext: requestContext({ '*': ['read'] }),
+      entry: readers,
+      mediaCacheAdapter: adapter,
+      dbAdapter,
+      variesByReader: true,
+    });
+    assert.strictEqual(reclaimed.status, 404);
+    assert.true(
+      (reclaimed.headers.get('vary') ?? '').includes('Authorization'),
+      `a miss for that reader once its object is reclaimed never stands in for another reader's capture: ${reclaimed.headers.get('vary')}`,
+    );
   });
 
   test('a capture drawn as one reader answers no other, and an on-demand capture that names no reader answers no one', async function (assert) {

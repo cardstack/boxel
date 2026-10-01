@@ -371,8 +371,9 @@ export default function handleCaptureCard({
             emitRequestPerf('hit', {
               serveMs: Date.now() - serveStart,
               // The row's own lane, not this surface's: the GET surface
-              // reports hits the same way, and `findMediaCacheEntry` doesn't
-              // filter on lane, so a `declared`-lane row must read as
+              // reports hits the same way, and `findMediaCacheEntry` answers
+              // with the realm's own declared capture as well as the
+              // requester's row, so a `declared`-lane row must read as
               // `declared` from both.
               lane: entry.lane,
             });

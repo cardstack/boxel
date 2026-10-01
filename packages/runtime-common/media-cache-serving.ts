@@ -66,11 +66,14 @@ function hitCacheControl(
 // short freshness window as a hit rather than being uncacheable: an `<img>`
 // pointing at a not-yet-captured name picks the image up on a later
 // revalidation, and an image load is never made to wait synchronously on
-// capture work.
+// capture work. `varyOn` carries the vary of a URL whose answer depends on
+// the reader, so a miss for one reader never stands in for another's hit.
 export function mediaCacheMissResponse({
   requestContext,
+  varyOn,
 }: {
   requestContext: RequestContext;
+  varyOn?: string[];
 }): Response {
   return createResponse({
     body: null,
@@ -81,6 +84,7 @@ export function mediaCacheMissResponse({
       },
     },
     requestContext,
+    varyOn,
   });
 }
 
@@ -146,7 +150,7 @@ export async function serveMediaCacheEntry({
 
   let stream = await mediaCacheAdapter.getStream(entry.objectKey);
   if (!stream) {
-    return mediaCacheMissResponse({ requestContext });
+    return mediaCacheMissResponse({ requestContext, varyOn });
   }
   await touch(dbAdapter, entry);
 
