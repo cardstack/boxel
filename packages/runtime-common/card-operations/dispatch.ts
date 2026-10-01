@@ -326,8 +326,8 @@ export interface OperationScope {
   // stages have run.
   readonly proposed: Record<string, unknown> | undefined;
   // Where the policy gate records how it reached its decision, for an explain
-  // to report. Absent on every invocation that is not being explained, which
-  // is every invocation a caller makes.
+  // to report, or for a capability check to read why the gate refused. Absent
+  // on every invocation a caller makes.
   readonly trace: GateTrace | undefined;
   // The archived realm's refusal, where the realm holds one for this caller
   // (see `OperationRequest.seal`). `resolveOperation` answers with it what the
