@@ -5,6 +5,20 @@ import {
   indexCandidateExpressions,
 } from './index-url-utils.ts';
 
+// Prerendered markup read for a page, with the card it was read from: the
+// candidates a page URL expands to can name more than one card (`foo.json` and
+// `foo/index.json`), and whatever governs the markup is that card's.
+export interface RetrievedMarkup {
+  html: string | null;
+  // The card whose row the markup came from, as a card URL; null when no row
+  // held any.
+  cardURL: URL | null;
+}
+
+function matchedCardURL(rowURL: string | null | undefined): URL | null {
+  return rowURL ? new URL(rowURL.replace(/\.json$/, '')) : null;
+}
+
 export async function retrieveHeadHTML({
   cardURL,
   dbAdapter,
@@ -15,7 +29,7 @@ export async function retrieveHeadHTML({
   log?: {
     debug: (...args: unknown[]) => void;
   };
-}): Promise<string | null> {
+}): Promise<RetrievedMarkup> {
   let candidates = indexURLCandidates(cardURL);
 
   log?.debug(
@@ -24,14 +38,14 @@ export async function retrieveHeadHTML({
 
   if (candidates.length === 0) {
     log?.debug(`No head candidates for ${cardURL.href}`);
-    return null;
+    return { html: null, cardURL: null };
   }
 
   // The head HTML lives on prerendered_html; the boxel_index join scopes the
   // lookup to a live instance row and supplies the generation for logging.
   let rows = await query(dbAdapter, [
     `
-      SELECT ph.head_html AS head_html, i.generation
+      SELECT ph.head_html AS head_html, i.url AS url, i.generation
       FROM boxel_index AS i
       JOIN prerendered_html AS ph
         ON ph.url = i.url AND ph.realm_url = i.realm_url AND ph.type = i.type
@@ -50,7 +64,7 @@ export async function retrieveHeadHTML({
   log?.debug('Head query result for %s', cardURL.href, rows);
 
   let headRow = rows[0] as
-    | { head_html?: string | null; generation?: string | number }
+    | { head_html?: string | null; url?: string; generation?: string | number }
     | undefined;
 
   if (headRow?.head_html != null) {
@@ -60,7 +74,10 @@ export async function retrieveHeadHTML({
   } else {
     log?.debug(`No head HTML returned from database for ${cardURL.href}`);
   }
-  return headRow?.head_html ?? null;
+  return {
+    html: headRow?.head_html ?? null,
+    cardURL: matchedCardURL(headRow?.url),
+  };
 }
 
 export async function retrieveIsolatedHTML({
@@ -73,7 +90,7 @@ export async function retrieveIsolatedHTML({
   log?: {
     debug: (...args: unknown[]) => void;
   };
-}): Promise<string | null> {
+}): Promise<RetrievedMarkup> {
   let candidates = indexURLCandidates(cardURL);
 
   log?.debug(
@@ -82,14 +99,14 @@ export async function retrieveIsolatedHTML({
 
   if (candidates.length === 0) {
     log?.debug(`No isolated candidates for ${cardURL.href}`);
-    return null;
+    return { html: null, cardURL: null };
   }
 
   // The isolated HTML lives on prerendered_html; the boxel_index join scopes
   // the lookup to a live instance row and supplies the generation for logging.
   let rows = await query(dbAdapter, [
     `
-      SELECT ph.isolated_html AS isolated_html, i.generation
+      SELECT ph.isolated_html AS isolated_html, i.url AS url, i.generation
       FROM boxel_index AS i
       JOIN prerendered_html AS ph
         ON ph.url = i.url AND ph.realm_url = i.realm_url AND ph.type = i.type
@@ -108,7 +125,11 @@ export async function retrieveIsolatedHTML({
   log?.debug('Isolated query result for %s', cardURL.href, rows);
 
   let isolatedRow = rows[0] as
-    | { isolated_html?: string | null; generation?: string | number }
+    | {
+        isolated_html?: string | null;
+        url?: string;
+        generation?: string | number;
+      }
     | undefined;
 
   if (isolatedRow?.isolated_html != null) {
@@ -119,7 +140,10 @@ export async function retrieveIsolatedHTML({
     log?.debug(`No isolated HTML returned from database for ${cardURL.href}`);
   }
 
-  return isolatedRow?.isolated_html ?? null;
+  return {
+    html: isolatedRow?.isolated_html ?? null,
+    cardURL: matchedCardURL(isolatedRow?.url),
+  };
 }
 
 export function injectHeadHTML(indexHTML: string, headHTML: string): string {

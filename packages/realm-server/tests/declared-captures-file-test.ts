@@ -7,6 +7,7 @@ import { fileURLToPath } from 'url';
 import {
   declaredCaptureSpecHash,
   putMedia,
+  REALM_AUTHORITY_RENDER,
   captureLedgerSourceURL,
   type CaptureManifest,
 } from '@cardstack/runtime-common';
@@ -666,6 +667,7 @@ module(basename(import.meta.filename), function (hooks) {
       'a file capture keys on the extension-intact URL',
     );
     let { objectKey } = await putMedia(testDbAdapter, mediaCacheAdapter, {
+      renderedAs: REALM_AUTHORITY_RENDER,
       realmURL: testRealm.href,
       sourceURL: ledgerSourceURL,
       captureSpecHash: specHash,
