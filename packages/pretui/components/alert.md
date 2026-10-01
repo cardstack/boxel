@@ -46,6 +46,8 @@ Gaps, and one is significant:
 
 A season retunes the entire component by retuning those four hues plus `--pretui-chip-mix`. Because every derived colour is a mix against `--card`, a dark season gets correct dark treatments automatically — but it **must** define the four hues at a luminance that survives a 20% mix against a dark `--card`, or all four alerts converge on the same near-black rectangle.
 
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
+
 ## React ecosystem
 
 Tremor/WA `Callout` is this component under that name (**Callout**). shadcn Alert is too

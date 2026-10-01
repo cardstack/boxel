@@ -44,6 +44,10 @@ jobs:
 
       - uses: ./.github/actions/init
 
+      # boxel-catalog's production deploy runs this script from boxel main.
+      - name: Test the catalog deploy check
+        run: pnpm --dir packages/catalog test:deploy-check
+
       # The catalog change a pull request depends on, or that follows it, is
       # the one its description pairs it with (scripts/pairing.ts). Lint that
       # pull request's head in place of main, and catalog main as well below.
@@ -53,11 +57,13 @@ jobs:
         env:
           PR_BODY: ${{ github.event.pull_request.body }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_BASE: ${{ github.event.pull_request.base.ref }}
           GH_TOKEN: ${{ github.token }}
         run: |
           node packages/catalog/scripts/pairing.ts \
             --repository="$GITHUB_REPOSITORY" \
             --number="$PR_NUMBER" \
+            --base="$PR_BASE" \
             --counterpart=cardstack/boxel-catalog \
             --out="$RUNNER_TEMP/catalog-pairing.json"
           # An open pair this change merges after is what it builds on, and
@@ -74,6 +80,9 @@ jobs:
             echo "paired=false" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Test the pairing check
+        if: always()
+        run: pnpm --dir packages/catalog test:pairing
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           repository: cardstack/boxel-catalog
@@ -103,8 +112,9 @@ jobs:
         run: |
           node scripts/lint-sweep.ts --record="$RUNNER_TEMP/catalog-lint-head.json"
           echo "errors=$(jq '.diagnostics | length' "$RUNNER_TEMP/catalog-lint-head.json")" >> "$GITHUB_OUTPUT"
-          # The base branch's tree may not have this script.
-          cp scripts/lint-sweep.ts "$RUNNER_TEMP/lint-sweep.ts"
+          # The base branch's tree may not have these scripts. lint-sweep.ts
+          # imports pairing.ts, so the two go together.
+          cp scripts/lint-sweep.ts scripts/pairing.ts "$RUNNER_TEMP/"
 
       # A paired change is linted with its catalog pull request's head, but
       # catalog main is what gets linted against it from its merge until the

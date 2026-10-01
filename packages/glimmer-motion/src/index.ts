@@ -47,15 +47,6 @@ export type {
   Step,
   TimelineNode,
 } from './choreo/types.ts';
-export { scroll } from './dom/scroll/index.ts';
-export { scrollInfo } from './dom/scroll/track.ts';
-export type {
-  ScrollInfo,
-  ScrollOffset,
-  ScrollOptions,
-} from './dom/scroll/types.ts';
-export type { InViewOptions } from './dom/viewport.ts';
-export { inView } from './dom/viewport.ts';
 export { Film } from './film.ts';
 export type {
   Beat as FilmBeat,
@@ -109,11 +100,23 @@ export { ReorderItem } from './reorder/item.gts';
 export type { ReorderAxis, ReorderContextProps } from './reorder/types.ts';
 export { postRender, setPostRender } from './scheduler.ts';
 export type {
+  InViewOptions,
+  ScrollInfo,
+  ScrollOffset,
+  ScrollOptions,
   ScrollValues,
   UseInViewOptions,
   UseScrollOptions,
 } from './scroll.ts';
-export { InView, scrollProgress, useInView, useScroll } from './scroll.ts';
+export {
+  InView,
+  inView,
+  scroll,
+  scrollInfo,
+  scrollProgress,
+  useInView,
+  useScroll,
+} from './scroll.ts';
 export {
   motionSpeed,
   onMotionSpeed,

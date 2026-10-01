@@ -46,3 +46,5 @@ Gaps:
 `--muted-foreground` (eyebrow and meta ink), `--foreground` (title, inherited), `--font-mono` + `--text-ui-xs` + `--track-eyebrow` (eyebrow voice), `--text-heading` + `--weight-heading` + `--track-heading` (title), `--text-ui-sm` (meta), `--space-3` (action gap), `--space-4` (column gap).
 
 The component paints no background and casts no shadow — it inherits whatever it sits on. That is why it composes above a **Panel** without a seam, and it also means a season cannot give headers their own band without wrapping them. The 44px minimum height is fixed and is the one metric a dense season would want to retune.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

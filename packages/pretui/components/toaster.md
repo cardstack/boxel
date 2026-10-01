@@ -63,6 +63,8 @@ The host's own knobs: `--pretui-z-toast` (stacking, default 100), `--pretui-toas
 
 Fixed: the 3px stripe, the 2px life bar at 0.55 opacity, the 20px dismiss control (28px on coarse pointers), and the 12px entrance offset.
 
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
+
 ## React ecosystem
 
 | Sonner / Mantine / Ant / MUI | Pretui |

@@ -22,26 +22,28 @@ export const VisuallyHidden: TemplateOnlyComponent<VisuallyHiddenSignature> = <t
     ...attributes
   >{{yield}}</span>
   <style scoped>
-    .pretui-visually-hidden {
-      position: absolute;
-      inline-size: 1px;
-      block-size: 1px;
-      margin: -1px;
-      padding: 0;
-      border: 0;
-      overflow: hidden;
-      clip-path: inset(50%);
-      white-space: nowrap;
-    }
-    .pretui-visually-hidden[data-focusable='true']:focus-within,
-    .pretui-visually-hidden[data-focusable='true']:focus {
-      position: static;
-      inline-size: auto;
-      block-size: auto;
-      margin: 0;
-      overflow: visible;
-      clip-path: none;
-      white-space: normal;
+    @layer PretComponent {
+      .pretui-visually-hidden {
+        position: absolute;
+        inline-size: 1px;
+        block-size: 1px;
+        margin: -1px;
+        padding: 0;
+        border: 0;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+      }
+      .pretui-visually-hidden[data-focusable='true']:focus-within,
+      .pretui-visually-hidden[data-focusable='true']:focus {
+        position: static;
+        inline-size: auto;
+        block-size: auto;
+        margin: 0;
+        overflow: visible;
+        clip-path: none;
+        white-space: normal;
+      }
     }
   </style>
 </template>;

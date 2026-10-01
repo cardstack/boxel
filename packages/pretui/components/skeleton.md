@@ -48,6 +48,8 @@ Gaps — all of them at the composition level, which is where they belong:
 
 The 6px radius, 1.6s duration, `linear` easing and 200% gradient width are fixed. A season cannot slow the shimmer or change its shape; retuning `--inset` and `--hover` closer together or further apart is the only available adjustment, and a season that makes them very different will produce a distractingly strobing page. If a season needs circular skeletons for avatars, pass `style="border-radius: 50%"` through `...attributes` at the call site.
 
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
+
 ## React ecosystem
 
 Accept `width` / `height` / `radius` / `count`. Law 8: the skeleton

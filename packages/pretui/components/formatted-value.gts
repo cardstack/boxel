@@ -42,21 +42,23 @@ export class FormattedValue extends Component<FormattedValueSignature> {
       {{#if @spoken}}<span class='pretui-fv-sr'>{{@spoken}}</span>{{/if}}
     </span>
     <style scoped>
-      .pretui-fv {
-        font-variant-numeric: tabular-nums;
-      }
-      .pretui-fv[data-empty='true'] {
-        color: var(--muted-foreground);
-      }
-      .pretui-fv-vis {
-        white-space: nowrap;
-      }
-      .pretui-fv-sr {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        overflow: hidden;
-        clip: rect(0 0 0 0);
+      @layer PretComponent {
+        .pretui-fv {
+          font-variant-numeric: tabular-nums;
+        }
+        .pretui-fv[data-empty='true'] {
+          color: var(--muted-foreground);
+        }
+        .pretui-fv-vis {
+          white-space: nowrap;
+        }
+        .pretui-fv-sr {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          overflow: hidden;
+          clip: rect(0 0 0 0);
+        }
       }
     </style>
   </template>

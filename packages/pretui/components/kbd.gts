@@ -33,25 +33,27 @@ export class Kbd extends Component<KbdSignature> {
       ...attributes
     >{{this.face}}</kbd>
     <style scoped>
-      .pretui-kbd {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        min-width: 1.5em;
-        padding-block: 1px;
-        padding-inline: 5px;
-        border-radius: var(--radius-chip, 4px);
-        background: var(--pretui-kbd-background, var(--inset, var(--boxel-100)));
-        box-shadow: var(
-          --pretui-shadow-hairline,
-          0 0 0 1px var(--border)
-        );
-        color: var(--pretui-kbd-foreground, var(--muted-foreground));
-        font-family: var(--font-mono);
-        font-size: var(--text-ui-xs, 11px);
-        font-variant-numeric: tabular-nums;
-        line-height: 1.5;
-        white-space: nowrap;
+      @layer PretComponent {
+        .pretui-kbd {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          min-width: 1.5em;
+          padding-block: 1px;
+          padding-inline: 5px;
+          border-radius: var(--radius-chip, 4px);
+          background: var(--pretui-kbd-background, var(--inset, var(--boxel-100)));
+          box-shadow: var(
+            --pretui-shadow-hairline,
+            0 0 0 1px var(--border)
+          );
+          color: var(--pretui-kbd-foreground, var(--muted-foreground));
+          font-family: var(--font-mono);
+          font-size: var(--text-ui-xs, 11px);
+          font-variant-numeric: tabular-nums;
+          line-height: 1.5;
+          white-space: nowrap;
+        }
       }
     </style>
   </template>

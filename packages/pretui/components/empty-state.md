@@ -48,6 +48,8 @@ Gaps, and the first two are the real ones:
 
 A season **must** define `--font-serif`; it is used almost nowhere else, so a season that omits it falls back to Georgia and the one moment of typographic voice in the kit lands on a system font. A season must also keep `--canvas` distinguishable from `--card`, or the empty state stops reading as a recess and the whole effect flattens.
 
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
+
 ## React ecosystem
 
 shadcn/Ant `Empty` is this component under that name (**Empty**). Page-level 404/success

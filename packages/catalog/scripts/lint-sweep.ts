@@ -47,7 +47,7 @@ import {
 import { tmpdir } from 'node:os';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 
-import type { Pair, Resolution } from './pairing.ts';
+import { mainVerdict, type Resolution } from './pairing.ts';
 
 type Linter = 'lint:types' | 'lint:js' | 'lint:hbs';
 
@@ -406,92 +406,6 @@ function annotation(message: string) {
     .replace(/%/g, '%25')
     .replace(/\r/g, '%0D')
     .replace(/\n/g, '%0A');
-}
-
-// Whether catalog main may fail with the errors the change adds to it. A
-// catalog pull request this change merges after has to land first, so while it
-// is open the verdict is to wait for it. Otherwise they may only while a
-// catalog pull request this change merges before is open, ready for review and
-// approved, so it can land right after this one.
-function mainVerdict(resolution: Resolution) {
-  let here = `${resolution.repository}#${resolution.number}`;
-  let ref = (pair: Pair) => `${pair.repository}#${pair.number}`;
-  let before = resolution.pairs.find(
-    (p) => p.key === 'merges-before' && !p.merged,
-  );
-  let after = resolution.pairs.find(
-    (p) => p.key === 'merges-after' && !p.merged,
-  );
-  if (after) {
-    return {
-      passes: false,
-      message:
-        `${here} merges after ${ref(after)}, so catalog main is linted ` +
-        `against this change once that has landed: waiting on ${ref(after)} ` +
-        `to merge. Re-run this check after it merges.`,
-    };
-  }
-  if (before?.draft) {
-    return {
-      passes: false,
-      message:
-        `${here} merges before ${ref(before)}, which is still a draft, so it ` +
-        `can't merge right after this change. Mark it ready for review, get ` +
-        `it approved, and re-run this check.`,
-    };
-  }
-  if (before?.approved === true) {
-    return {
-      passes: true,
-      message:
-        `${here} merges before ${ref(before)}, which is approved: merge ` +
-        `${ref(before)} right after this change, so catalog main fails with ` +
-        `these errors only in between.`,
-    };
-  }
-  if (before?.approved === false) {
-    return {
-      passes: false,
-      message:
-        `${here} merges before ${ref(before)}, which is not approved yet, so ` +
-        `catalog main would fail with these errors until it is. Get it ` +
-        `approved, re-run this check, and merge ${ref(before)} right after ` +
-        `this change.`,
-    };
-  }
-  if (before) {
-    return {
-      passes: false,
-      message:
-        `${here} merges before ${ref(before)}, and whether that is approved ` +
-        `could not be read (${before.approvalError}). Re-run this check.`,
-    };
-  }
-  let catalogRepository = 'cardstack/boxel-catalog';
-  let pairing =
-    `\`Merges before: ${catalogRepository}#<number>\` in ${here}'s ` +
-    `description, and \`Merges after: ${here}\` in that pull request's`;
-  let mergedBefore = resolution.pairs.find((p) => p.key === 'merges-before');
-  if (mergedBefore) {
-    return {
-      passes: false,
-      message:
-        `Merging this change leaves catalog main failing with these errors, ` +
-        `and ${ref(mergedBefore)}, which it merges before, has already ` +
-        `merged, so it can't fix them. Keep the change compatible with the ` +
-        `catalog as it is, or fix the catalog in a new ${catalogRepository} ` +
-        `pull request and pair the two: replace the \`Merges before:\` line ` +
-        `so there is ${pairing}.`,
-    };
-  }
-  return {
-    passes: false,
-    message:
-      `Merging this change leaves catalog main failing with these errors. ` +
-      `Keep the change compatible with the catalog as it is, or fix the ` +
-      `catalog in a ${catalogRepository} pull request and pair the two, ` +
-      `with ${pairing}.`,
-  };
 }
 
 async function report(

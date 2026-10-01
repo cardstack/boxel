@@ -1,5 +1,6 @@
 import stableStringify from 'safe-stable-stringify';
 
+import { isResolvedCodeRef } from '../card-document-shape.ts';
 import { now } from '../clock.ts';
 import type { CodeRef, ResolvedCodeRef } from '../code-ref.ts';
 import { computeContentHash } from '../content-hash.ts';
@@ -9,6 +10,7 @@ import { codeRefFromInternalKey } from '../index.ts';
 import type { IndexedInstanceSource } from '../index-query-engine.ts';
 import { logger } from '../log.ts';
 import { MODULE_SOURCE_FILE_DEF_CODE_REFS } from '../policy-file-def.ts';
+import { PRERENDERED_HTML_FORMATS } from '../prerendered-html-format.ts';
 import { rri } from '../realm-identifiers.ts';
 import { chainType } from './adoption-chain.ts';
 import { carriesBuiltIn } from './dispatch.ts';
@@ -17,8 +19,17 @@ import {
   pathsFilterReads,
   readsPathAlike,
 } from './policy-filter.ts';
+import { classifyPredicateTiers } from './policy-tiers.ts';
+import {
+  reachIssues,
+  type ReachingGrant,
+  type ReadableType,
+} from './policy-reach.ts';
 import {
   isDefinitionFreeBaseOperation,
+  linkStrategyOf,
+  policyIssueSeverity,
+  unshareableFormatsOf,
   type BaseOperation,
   type OperationQueryFilterTemplate,
   type PolicyIssue,
@@ -50,7 +61,8 @@ export interface CompiledRealmPolicy {
   card: string;
   // The card's `meta.version`: the fingerprint of the stored source this was
   // compiled from. Absent when the card could not be read, or when what the
-  // index holds of it is an earlier visit's.
+  // index holds of it is an earlier visit's, and for a draft, which no card
+  // stores.
   version: string | undefined;
   rules: CompiledPolicyRule[];
   issues: PolicyIssue[];
@@ -117,7 +129,12 @@ export interface CompiledPolicyPredicate {
   source: string;
   // The canonical BXL that the `policy` profile accepted.
   canonical: string;
-  // Whether the author annotated the predicate as reading a snapshot tier.
+  // Whether the gate judges the predicate against the snapshot: the target's
+  // stored source with its indexed computed values and linked cards' values
+  // laid under it. Set where the author annotated the predicate
+  // `snapshot: true` and it reads one of those. An annotated predicate that
+  // reads the stored source alone is judged against the stored source, and
+  // pays no index read.
   snapshot: boolean;
 }
 
@@ -173,9 +190,15 @@ export interface PolicyCompileEnvironment {
 }
 
 // The environment the cache needs beyond compiling: which card the realm's
-// pointer names right now.
+// pointer names right now, and a way to have that card indexed again.
 export interface RealmPolicyCacheEnvironment extends PolicyCompileEnvironment {
   policyCard(): Promise<string | undefined>;
+  // Runs the card's index visit again: an index of `file`, the file the card
+  // is stored in, in the realm at `realmURL` that holds it, which need not be
+  // the realm the policy governs. Resolves once that visit has settled,
+  // whether or not it succeeded. Asked only of a card whose latest visit was
+  // withheld.
+  revisitCard(file: string, realmURL: string): Promise<void>;
 }
 
 // The per-realm compiled-policy cache.
@@ -204,6 +227,15 @@ export interface RealmPolicyCacheEnvironment extends PolicyCompileEnvironment {
 // mounted. A policy card or a type's module usually lives in a realm other than
 // the one it governs, so this is what reaches an entry when that realm's index
 // moves.
+//
+// A card whose latest index visit was withheld compiles to no rules, and
+// nothing else would visit it again. Its row reads as healthy, so no error on
+// it asks for a reindex, and it stays as it is until the card, a module it
+// depends on, or its realm is next indexed. So the cache asks for that visit
+// itself, whenever it reads such a row (see `#revisitWithheld`). The visit's
+// commit moves the index of the realm holding the card, which reaches the
+// cache as any move does, and the refresh that follows compiles what the card
+// holds now.
 export class RealmPolicyCache {
   #env: RealmPolicyCacheEnvironment;
   #current: Compilation | undefined;
@@ -222,9 +254,12 @@ export class RealmPolicyCache {
   // When `#current` was last known to match the index: the moment the read
   // that built or revalidated it began.
   #validatedAt = 0;
-  // How often compiling and revalidating actually happen, for tests that
-  // assert on it rather than on the result alone.
-  readonly stats = { compiles: 0, revalidations: 0 };
+  // The latest visit this cache asked for of a card whose visit was withheld.
+  // `settledAt` is unset while the visit runs.
+  #revisit: { card: string; settledAt?: number } | undefined;
+  // How often compiling, revalidating and asking for a card's visit actually
+  // happen, for tests that assert on it rather than on the result alone.
+  readonly stats = { compiles: 0, revalidations: 0, revisits: 0 };
 
   constructor(env: RealmPolicyCacheEnvironment) {
     this.#env = env;
@@ -277,8 +312,10 @@ export class RealmPolicyCache {
     this.#current = undefined;
     this.#stale = false;
     this.#joinable = undefined;
+    this.#revisit = undefined;
     this.stats.compiles = 0;
     this.stats.revalidations = 0;
+    this.stats.revisits = 0;
   }
 
   #refresh(card: string): Promise<CompiledRealmPolicy> {
@@ -324,13 +361,10 @@ export class RealmPolicyCache {
       compilation = await compilePolicy(card, row, this.#env, (url) =>
         refresh.inputs.push(url),
       );
-      if (compilation.compiled.issues.length > 0) {
-        log.warn(
-          `the policy ${card} compiled with issues: ${compilation.compiled.issues
-            .map((issue) => `${issue.path || '(card)'}: ${issue.message}`)
-            .join('; ')}`,
-        );
-      }
+      logIssues(card, compilation.compiled.issues);
+    }
+    if (row?.failureWithheld) {
+      this.#revisitWithheld(card, row);
     }
     // Kept only when no move landed under one of its inputs while this ran. A
     // kept entry is answered from memory until the next move, so keeping one
@@ -344,6 +378,81 @@ export class RealmPolicyCache {
       this.#validatedAt = startedAt;
     }
     return compilation.compiled;
+  }
+
+  // Asks for a visit of `card`, whose latest index visit was withheld. Not
+  // awaited: the read that found the row is answered with the refusal it
+  // compiled to, and the visit's outcome reaches the cache as an index move.
+  //
+  // One visit at a time, so a read landing while one runs asks for none. And
+  // once one settles, none is asked for again until
+  // `WITHHELD_REVISIT_COOLDOWN_MS` has passed. A visit that is withheld again
+  // moves the index too, and the refresh that move starts would otherwise ask
+  // for the next visit at once, and so on for as long as the cause lasts.
+  #revisitWithheld(card: string, row: IndexedInstanceSource): void {
+    let last = this.#revisit;
+    if (
+      last?.card === card &&
+      (last.settledAt === undefined ||
+        now() - last.settledAt < WITHHELD_REVISIT_COOLDOWN_MS)
+    ) {
+      return;
+    }
+    let revisit: { card: string; settledAt?: number } = { card };
+    this.#revisit = revisit;
+    this.stats.revisits++;
+    this.#env
+      .revisitCard(row.url, row.realmURL)
+      .catch((e: unknown) => {
+        log.warn(
+          `the policy card ${card} could not be indexed again after its latest visit was withheld: ${e}`,
+        );
+      })
+      .finally(() => {
+        revisit.settledAt = now();
+      });
+  }
+}
+
+// How long after a visit the cache asked for settles before it asks for
+// another, while the card's visit is still withheld.
+//
+// The first is asked for as soon as the row is read: a gateway failure has
+// usually passed by the time its row is written, so a visit made then usually
+// succeeds. A visit that is withheld again met a cause that outlasted it, such
+// as a stale host shell, which lasts as long as a deploy overlap. Asking at the
+// rate the cache revalidates would spend a visit every few seconds for every
+// realm the card governs, in every process, for as long as that lasts. This
+// asks about once a minute while the cache is read or its inputs move, so once
+// the cause clears the policy is back within about a minute, plus however long
+// the visit waits in the queue and runs. An ask that joins a pass which had
+// already visited the card settles having visited nothing, and waits the same
+// minute (see `Realm#revisitPolicyCard`).
+const WITHHELD_REVISIT_COOLDOWN_MS = 60_000;
+
+// One line per compile for the issues that left part of the policy admitting
+// nothing, which is an operator's problem as much as an author's, and a
+// quieter line for the warnings on grants that stay live. A policy with
+// deliberate reach records those on every compile, and at `warn` they would
+// read as a policy that is broken.
+function logIssues(card: string, issues: PolicyIssue[]): void {
+  let describe = (issue: PolicyIssue) =>
+    `${issue.path || '(card)'}: ${issue.code}: ${issue.message}`;
+  let inactive = issues.filter((issue) => issue.severity === 'inactive');
+  let warnings = issues.filter((issue) => issue.severity === 'warning');
+  if (inactive.length > 0) {
+    log.warn(
+      `the policy ${card} compiled with issues that leave part of it inactive: ${inactive
+        .map(describe)
+        .join('; ')}`,
+    );
+  }
+  if (warnings.length > 0) {
+    log.info(
+      `the policy ${card} compiled with warnings on grants that stay live: ${warnings
+        .map(describe)
+        .join('; ')}`,
+    );
   }
 }
 
@@ -399,7 +508,7 @@ interface Compilation {
   row: string;
   // Fingerprints of the definition entries compiling read, keyed by code ref.
   // A missing fingerprint marks a type with no definition.
-  definitions: Map<string, { codeRef: ResolvedCodeRef; fingerprint?: string }>;
+  definitions: Map<string, DefinitionInput>;
   // URLs whose realm's index moving could change what this compiles to.
   inputs: string[];
   // What the governed realm held under each rule type whose grants' filters
@@ -411,6 +520,20 @@ interface Compilation {
   // read.
   heldTypes?: string;
 }
+
+interface DefinitionInput {
+  codeRef: ResolvedCodeRef;
+  fingerprint?: string;
+  // Set for a type only the reach check read. Such a type decides no grant, so
+  // a lookup of it that fails is recorded as `UNREADABLE` rather than failing
+  // the read.
+  diagnostic?: true;
+}
+
+// The fingerprint of a diagnostic type whose lookup failed. It matches no
+// entry, so the revalidation after the type can be read again recompiles, and
+// it matches itself, so revalidating while the lookup still fails does not.
+const UNREADABLE = 'unreadable';
 
 interface Refresh {
   card: string;
@@ -455,8 +578,18 @@ async function stillCurrent(
   if (rowIdentity(row) !== compilation.row) {
     return false;
   }
-  for (let { codeRef, fingerprint } of compilation.definitions.values()) {
-    if ((await fingerprintedEntry(codeRef, env))?.fingerprint !== fingerprint) {
+  for (let {
+    codeRef,
+    fingerprint,
+    diagnostic,
+  } of compilation.definitions.values()) {
+    let current = diagnostic
+      ? await fingerprintedEntry(codeRef, env).then(
+          (found) => found?.fingerprint,
+          () => UNREADABLE,
+        )
+      : (await fingerprintedEntry(codeRef, env))?.fingerprint;
+    if (current !== fingerprint) {
       return false;
     }
   }
@@ -545,6 +678,109 @@ async function compilePolicy(
   env: PolicyCompileEnvironment,
   onInput: (url: string) => void,
 ): Promise<Compilation> {
+  // An error row carries the last good visit's fingerprint forward, as a row
+  // whose failure was withheld carries everything forward, so only a row that
+  // holds the card's current document says which bytes it describes.
+  let version =
+    row?.instance && !row.failureWithheld
+      ? (row.sourceContentHash ?? undefined)
+      : undefined;
+  // The card holds no document a rule can be read from, for the reason
+  // recorded, so the policy as a whole did not compile. It has no rules.
+  let unreadable = (code: PolicyIssueCode, message: string): Compilation => ({
+    compiled: {
+      card,
+      version,
+      rules: [],
+      issues: [
+        { code, path: '', message, severity: policyIssueSeverity(code) },
+      ],
+      uncompilable: true,
+    },
+    row: rowIdentity(row),
+    definitions: new Map(),
+    inputs: [card],
+    subtypes: [],
+  });
+
+  if (!row) {
+    return unreadable(
+      'policy-card-missing',
+      `the realm's policy card ${card} is not in the index`,
+    );
+  }
+  // Refused until a visit of the card succeeds. The row holds what an earlier
+  // visit read, and nothing on it says whether the card has changed since, so
+  // compiling it could serve a grant an administrator has just removed. The
+  // cache that reads such a row asks for the card to be visited again, and
+  // the policy stays refused until a visit succeeds.
+  if (row.failureWithheld) {
+    return unreadable(
+      'policy-card-unloadable',
+      `the realm's policy card ${card} did not index: its latest index visit failed for a reason outside the card, and what the index holds for it is an earlier visit's, which may not be what the card holds now`,
+    );
+  }
+  if (!row.instance) {
+    return unreadable(
+      'policy-card-unloadable',
+      `the realm's policy card ${card} did not load: ${row.error?.message}`,
+    );
+  }
+  if (!attempt(() => env.isPolicyCard(row.types ?? []))) {
+    return unreadable(
+      'not-a-policy',
+      `the realm's policy card ${card} is not a RealmPolicy`,
+    );
+  }
+  let compiled = await compileDocument(
+    card,
+    row.instance.attributes,
+    env,
+    onInput,
+  );
+  return {
+    ...compiled,
+    compiled: { ...compiled.compiled, version },
+    row: rowIdentity(row),
+  };
+}
+
+// A draft of the policy the realm's key names: a document holding what a
+// RealmPolicy card's attributes hold, compiled as the realm would compile that
+// card were it to hold the document instead. So a relative `targetType` module
+// resolves against the card the draft stands in for, and a draft copied from
+// the card's own document means what it means there.
+//
+// Nothing is kept. The compile reads what compiling the card would, on the
+// realm's own authority, and the result goes to the caller alone: no cache
+// holds it, and no realm is told it exists. A document with no rule that can
+// be read compiles to a policy that is uncompilable as a whole, as the card
+// would.
+//
+// What it read is returned beside it: the card, and the module of every type
+// whose definition compiling looked up. What the result says describes those
+// definitions, so whoever reports it judges the caller by them.
+export async function compileDraftPolicy(
+  card: string,
+  document: Record<string, any>,
+  env: PolicyCompileEnvironment,
+): Promise<{ compiled: CompiledRealmPolicy; reads: string[] }> {
+  let { compiled, inputs } = await compileDocument(
+    card,
+    document,
+    env,
+    () => {},
+  );
+  return { compiled, reads: inputs };
+}
+
+// The rules a policy card's attributes hold, compiled.
+async function compileDocument(
+  card: string,
+  attributes: Record<string, any> | undefined,
+  env: PolicyCompileEnvironment,
+  onInput: (url: string) => void,
+): Promise<Omit<Compilation, 'row'>> {
   let issues: PolicyIssue[] = [];
   let definitions: Compilation['definitions'] = new Map();
   let inputs = [card];
@@ -553,17 +789,9 @@ async function compilePolicy(
   let rules: CompiledPolicyRule[] = [];
   let cardURL = new URL(card);
   let issue = (code: PolicyIssueCode, path: string, message: string) =>
-    issues.push({ code, path, message });
-  // An error row carries the last good visit's fingerprint forward, as a row
-  // whose failure was withheld carries everything forward, so only a row that
-  // holds the card's current document says which bytes it describes.
-  let version =
-    row?.instance && !row.failureWithheld
-      ? (row.sourceContentHash ?? undefined)
-      : undefined;
-  let compiled = (): Compilation => ({
-    compiled: { card, version, rules, issues },
-    row: rowIdentity(row),
+    issues.push({ code, path, message, severity: policyIssueSeverity(code) });
+  let compiled = (): Omit<Compilation, 'row'> => ({
+    compiled: { card, version: undefined, rules, issues },
     definitions,
     inputs,
     subtypes,
@@ -575,11 +803,16 @@ async function compilePolicy(
     code: PolicyIssueCode,
     path: string,
     message: string,
-  ): Compilation => {
+  ): Omit<Compilation, 'row'> => {
     issue(code, path, message);
     return {
-      compiled: { card, version, rules: [], issues, uncompilable: true },
-      row: rowIdentity(row),
+      compiled: {
+        card,
+        version: undefined,
+        rules: [],
+        issues,
+        uncompilable: true,
+      },
       definitions,
       inputs,
       subtypes,
@@ -617,6 +850,44 @@ async function compilePolicy(
   let readDefinition = async (
     codeRef: ResolvedCodeRef,
   ): Promise<Definition | undefined> => (await readType(codeRef))?.definition;
+  // A type the reach check reads, recorded as an input like every other. The
+  // types a closure crosses decide no grant, so one that cannot be read leaves
+  // its branch of the closure unwalked rather than failing the whole policy.
+  // Only a type nothing else read is recorded as diagnostic: one a rule or a
+  // filter read already decides a grant, and fails the read as it would have.
+  let readReachedType = (
+    codeRef: ResolvedCodeRef,
+  ): Promise<{ definition: Definition; types: string[] } | undefined> => {
+    let key = `${codeRef.module}#${codeRef.name}`;
+    if (entries.has(key)) {
+      return readType(codeRef);
+    }
+    let moduleURL = safeURL(codeRef.module, env);
+    if (moduleURL && !inputs.includes(moduleURL)) {
+      inputs.push(moduleURL);
+      onInput(moduleURL);
+    }
+    let read = fingerprintedEntry(codeRef, env).then(
+      (found) => {
+        definitions.set(key, {
+          codeRef,
+          fingerprint: found?.fingerprint,
+          diagnostic: true,
+        });
+        return found;
+      },
+      () => {
+        definitions.set(key, {
+          codeRef,
+          fingerprint: UNREADABLE,
+          diagnostic: true,
+        });
+        return undefined;
+      },
+    );
+    entries.set(key, read);
+    return read;
+  };
   // A grant on a query carries the search filter its predicate compiles to,
   // or has none and records why. No other grant carries one.
   let withFilter = async (
@@ -673,41 +944,7 @@ async function compilePolicy(
     return unreadable ? { unreadable } : undefined;
   };
 
-  if (!row) {
-    return uncompilable(
-      'policy-card-missing',
-      '',
-      `the realm's policy card ${card} is not in the index`,
-    );
-  }
-  // Refused until a visit of the card succeeds. The row holds what an earlier
-  // visit read, and nothing on it says whether the card has changed since, so
-  // compiling it could serve a grant an administrator has just removed. The
-  // policy stays refused until something re-visits the card: an edit to it,
-  // a change to a module it depends on, or a reindex of its realm.
-  if (row.failureWithheld) {
-    return uncompilable(
-      'policy-card-unloadable',
-      '',
-      `the realm's policy card ${card} did not index: its latest index visit failed for a reason outside the card, and what the index holds for it is an earlier visit's, which may not be what the card holds now`,
-    );
-  }
-  if (!row.instance) {
-    return uncompilable(
-      'policy-card-unloadable',
-      '',
-      `the realm's policy card ${card} did not load: ${row.error?.message}`,
-    );
-  }
-  if (!attempt(() => env.isPolicyCard(row.types ?? []))) {
-    return uncompilable(
-      'not-a-policy',
-      '',
-      `the realm's policy card ${card} is not a RealmPolicy`,
-    );
-  }
-
-  let authored = row.instance.attributes?.rules;
+  let authored = attributes?.rules;
   if (authored != null && !Array.isArray(authored)) {
     return uncompilable('invalid-rule', 'rules', '`rules` is not a list');
   }
@@ -790,6 +1027,17 @@ async function compilePolicy(
         );
         continue;
       }
+      // An operation that failed to lower is refused for every caller who
+      // invokes it, so a grant of one would admit nothing. Recorded, so the
+      // author learns it here and not only from the type's definition.
+      if (granted.invalid) {
+        issue(
+          'grants-invalid-operation',
+          `${grantPath}.operation`,
+          `${resolved.name} declares \`${operation}\`, but the declaration failed to lower, so invoking it is refused and the grant admits nothing. The declaration's issues are on ${resolved.name}'s definition`,
+        );
+        continue;
+      }
       // Authorization infrastructure is outside the grant model, and the gate
       // refuses it whatever a compiled policy holds: an operation flagged
       // non-grantable, and any operation on a policy card. So a grant of either
@@ -852,6 +1100,41 @@ async function compilePolicy(
         issue(outcome.code, `${grantPath}.where`, outcome.problem);
         continue;
       }
+      // Which tier the predicate reads is settled here, from the rule's type,
+      // and ahead of the search filter: a predicate that reads the index
+      // without saying so is inactive in both lanes, not a query grant that
+      // happens to have no filter.
+      let tiers = await classifyPredicateTiers(outcome.body, definition, {
+        lookupDefinition: readDefinition,
+      });
+      if (tiers.unheld) {
+        issue(
+          'unsnapshotted-policy-read',
+          `${grantPath}.where`,
+          `\`where\` reads \`.${tiers.unheld.path}\`, which no snapshot holds: ${tiers.unheld.reason}`,
+        );
+        continue;
+      }
+      if (tiers.snapshot && !where.snapshot) {
+        issue(
+          'unsnapshotted-policy-read',
+          `${grantPath}.where`,
+          `\`where\` reads \`.${tiers.snapshot.path}\`, and ${tiers.snapshot.reason}, which only the index holds. A predicate reads the card's stored source unless it is written as \`{ bxl, snapshot: true }\`, which judges it against the index and keeps deciding on the indexed value until the card is indexed again; a grant that has to stop admitting as soon as the card changes reads the stored source instead`,
+        );
+        continue;
+      }
+      let snapshot = where.snapshot && tiers.snapshot !== undefined;
+      // A plain create is judged by the card it would mint, which has no
+      // index row until it is written, so a grant judged against the
+      // snapshot would never admit one.
+      if (snapshot && tiers.snapshot && operation === 'create') {
+        issue(
+          'unsnapshotted-policy-read',
+          `${grantPath}.where`,
+          `\`where\` reads \`.${tiers.snapshot.path}\`, which no snapshot holds for a create: \`create\` is judged by the card it would mint, which the index holds nothing of until it is written`,
+        );
+        continue;
+      }
       grants.push(
         await withFilter(
           {
@@ -860,11 +1143,11 @@ async function compilePolicy(
             where: {
               source: where.source,
               canonical: outcome.canonical,
-              snapshot: where.snapshot,
+              snapshot,
             },
           },
           granted.base,
-          { body: outcome.body, snapshot: where.snapshot },
+          { body: outcome.body, snapshot },
           resolved,
           definition,
         ),
@@ -983,7 +1266,112 @@ async function compilePolicy(
     }
     rule.grants = grants;
   }
+
+  // What each live grant hands over beyond the cards it names. Read once every
+  // rule has compiled and every filter is settled, since whether a reached
+  // type is granted is a question about the whole policy, and a query grant
+  // left with no filter above admits nothing.
+  let reaching: ReachingGrant[] = [];
+  let readable: ReadableType[] = [];
+  for (let rule of rules) {
+    let entry = await readType(rule.targetType);
+    if (!entry) {
+      continue;
+    }
+    let { definition } = entry;
+    for (let grant of rule.grants) {
+      let lane = reachLane(definition, grant);
+      if (lane) {
+        reaching.push({ rule, grant, definition, ...lane });
+      }
+    }
+    if (rule.grants.some((grant) => letsCallerRead(definition, grant))) {
+      readable.push({
+        codeRef: rule.targetType,
+        definedAs: isResolvedCodeRef(definition.codeRef)
+          ? definition.codeRef
+          : undefined,
+      });
+    }
+  }
+  for (let found of await reachIssues(reaching, readable, {
+    readType: readReachedType,
+    typeKey: (codeRef) => env.typeKey(codeRef),
+    isPolicyCard: (types) => env.isPolicyCard(types),
+  })) {
+    issue(found.code, found.path, found.message);
+  }
   return compiled();
+}
+
+// How a grant hands its rows over: the document it serves under the link
+// strategy that governs it, and whether it serves their prerendered HTML. A
+// `read` grant's strategy is the declaration it invokes, the granted type's
+// own `read` or a named operation built on it. A named query's is the query's.
+// An ad-hoc `query` has no declaration, so nothing narrows what it serves.
+// A named query whose `html` declares every format unshareable serves its
+// rows data-only, so it serves no rendering. A query's `html` cannot say
+// which of the formats it shares draw a linked card, so sharing any format
+// counts as serving a rendering.
+//
+// Undefined for a grant that serves no rows' closure: one on any other base,
+// since a write's echo is the card and a stored-bytes read serves bytes, and a
+// grant that admits nothing.
+function reachLane(
+  definition: Definition,
+  grant: CompiledOperationGrant,
+): Pick<ReachingGrant, 'governedBy' | 'links' | 'rendered'> | undefined {
+  let base = admittingBase(definition, grant);
+  let declared = isDefinitionFreeBaseOperation(grant.operation)
+    ? undefined
+    : ownOperation(definition, grant.operation);
+  if (base === 'read') {
+    return {
+      governedBy: 'read',
+      links: linkStrategyOf(declared?.links),
+      rendered: false,
+    };
+  }
+  if (base === 'query') {
+    return declared
+      ? {
+          governedBy: 'named-query',
+          links: linkStrategyOf(declared.links),
+          rendered:
+            unshareableFormatsOf(declared.html).length <
+            PRERENDERED_HTML_FORMATS.length,
+        }
+      : { governedBy: 'ad-hoc-query', links: 'full', rendered: true };
+  }
+  return undefined;
+}
+
+// Whether a grant lets a caller read the cards it admits: a read of the
+// card's document, a read of its stored source, or a search. A write or a
+// delete hands the caller no card to read.
+function letsCallerRead(
+  definition: Definition,
+  grant: CompiledOperationGrant,
+): boolean {
+  let base = admittingBase(definition, grant);
+  return base === 'read' || base === 'readSource' || base === 'query';
+}
+
+// The base a kept grant runs on, where the grant can admit anything at all.
+// A query grant admits only through the filter it compiled to, since the gate
+// grants no query.
+function admittingBase(
+  definition: Definition,
+  grant: CompiledOperationGrant,
+): BaseOperation | undefined {
+  let granted = grantedOperation(definition, grant.operation);
+  if (!granted) {
+    return undefined;
+  }
+  if (granted.base === 'query') {
+    return grant.filter ? granted.base : undefined;
+  }
+  return granted.base;
 }
 
 // A type the governed realm holds cards of under a rule's type: the key the
@@ -1031,7 +1419,9 @@ function splitTypeKey(key: string): ResolvedCodeRef | undefined {
 function grantedOperation(
   definition: Definition,
   name: string,
-): { base: BaseOperation; nonGrantable: boolean } | undefined {
+):
+  | { base: BaseOperation; nonGrantable: boolean; invalid: boolean }
+  | undefined {
   let declared = isDefinitionFreeBaseOperation(name)
     ? undefined
     : ownOperation(definition, name);
@@ -1039,10 +1429,11 @@ function grantedOperation(
     return {
       base: declared.base,
       nonGrantable: declared.nonGrantable === true,
+      invalid: declared.invalid === true,
     };
   }
   return carriesBuiltIn(definition.type, name)
-    ? { base: name as BaseOperation, nonGrantable: false }
+    ? { base: name as BaseOperation, nonGrantable: false, invalid: false }
     : undefined;
 }
 

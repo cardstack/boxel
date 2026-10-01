@@ -39,7 +39,8 @@ import { installRealmServerAssertOwnRealmServerBypassPatch } from './helpers/pre
 import { createJWT as createRealmServerJWT } from '../utils/jwt.ts';
 
 // ============================================================================
-// A search fired inside a render is never scoped by a policy.
+// A search fired inside a render a realm makes of its own cards is never
+// scoped by a policy.
 //
 // A realm renders its own cards once, under its own authority, and serves the
 // HTML to every viewer. The render authenticates as a realm-authority
@@ -405,7 +406,7 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
-  test('a render is judged by the realm ACL alone, whether its session carries the claim or its request the render marker', async function (assert) {
+  test("a render is judged by the realm ACL alone by its session's claim, and the render marker makes nobody a render", async function (assert) {
     let session = realmAuthoritySession(BOARD, [
       'read',
       'write',
@@ -428,8 +429,8 @@ module(basename(import.meta.filename), function (hooks) {
     });
     assert.deepEqual(
       ids(userMarked),
-      [BOARD_SCHEDULE],
-      "a user's session on a request carrying the render marker is read as a render's too: a render tab marks every request it sends, whatever session it holds",
+      [BOARD_SCHEDULE, OWNERS_GRANTED_SCHEDULE],
+      "a user's session on a request carrying the render marker is still that user's: a render a user asks for is scoped as them",
     );
   });
 
@@ -467,8 +468,8 @@ module(basename(import.meta.filename), function (hooks) {
     });
     assert.deepEqual(
       ids(asMarkedUser),
-      [],
-      'unless the request carries the render marker, which makes it a render here too',
+      [OWNERS_GRANTED_SCHEDULE],
+      'and so is it when the request carries the render marker',
     );
   });
 

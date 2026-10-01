@@ -43,3 +43,5 @@ Where it is thinner: no paste distribution across slots as a documented behaviou
 `--pretui-otp-size` (slot dimensions) and `--pretui-otp-gap` (the spacing between them), over the kit's shared `--pretui-shadow-control` and `--pretui-shadow-inset` for the slot surfaces.
 
 Keeping slot size and gap as separate tokens is what lets a season tighten a code field without shrinking the characters — the two read very differently, and a six-slot field at a comfortable size with a tight gap is the arrangement that scans as one value rather than six.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

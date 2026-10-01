@@ -7,6 +7,7 @@ import {
   authorizationCardIds,
   matchingGrants,
   nonGrantableInChain,
+  policyUnavailable,
 } from './gate.ts';
 import { FIELD_KEYED_OPERATORS } from './policy-filter.ts';
 import {
@@ -50,6 +51,12 @@ import { lowerQueryOperation } from './query.ts';
 //
 // A caller with nothing to contribute is scoped to nothing rather than to
 // everything: an absent grant is a refusal here, as it is at the gate.
+//
+// A policy that did not compile as a whole grants nothing, and yet is not a
+// refusal. What it would grant is unknown: the realm names a policy and cannot
+// read it as one. So the query is refused with the gate's own 500, rather than
+// answered as though the policy granted nothing, and a federated search counts
+// the realm as one that did not answer.
 //
 // Authorization infrastructure is outside the grant model here as it is at
 // the gate. A query declared `nonGrantable` contributes nothing, however the
@@ -96,9 +103,9 @@ export type PolicyQueryScope =
 
 const DENIED: PolicyQueryScope = { kind: 'denied' };
 
-// Who a search runs for. A realm-authority principal is a render: a session a
-// realm renders its own cards under (`TokenClaims.realmAuthority`), or any
-// request a render tab sends. Any other is the user its session names.
+// Who a search runs for. A realm-authority principal is a session a realm
+// renders its own cards under (`TokenClaims.realmAuthority`). Any other is the
+// user its session names, including a render a user asked for.
 export type SearchPrincipal =
   | { kind: 'user'; user: string }
   | { kind: 'realm-authority'; user: string };
@@ -119,8 +126,8 @@ export function searchPrincipal(
 
 // Raised when a policy is asked what it grants a realm-authority principal.
 //
-// A render's search runs as a realm-authority principal, and what the render
-// produces is cached and served to every viewer. A policy fragment composed
+// The search a realm's own render sends runs as a realm-authority principal,
+// and what that render produces is cached and served to every viewer. A policy fragment composed
 // into that search would make the render per-actor: rows missing, or rows
 // only one user may see, in HTML everyone receives. Nothing would fail, so
 // this is raised instead of answering, and it is never caught as a denial.
@@ -250,6 +257,11 @@ async function typeScope(
   let policy = await core.policy?.compiledPolicy();
   if (!policy) {
     return DENIED;
+  }
+  // Before the type is resolved, as the gate refuses before its target
+  // resolves, so the refusal says nothing about the type.
+  if (policy.uncompilable) {
+    throw policyUnavailable();
   }
   let entry = await targetTypeEntry(core, on);
   if (!entry?.types) {

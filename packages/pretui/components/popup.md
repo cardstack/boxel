@@ -38,3 +38,5 @@ One structural note: because the panel is a descendant of the anchor wrapper rat
 ## Theming
 
 Almost nothing: `z-index: 60` and layout only. Every visual token belongs to the consumer's panel. Seasons that need to re-layer overlays should note the kit's convention — 49/50 for Menu's backdrop and panel, 60 for `Popup` and `Tooltip`, and the native top layer (above everything) for `Dialog` and `Drawer`.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

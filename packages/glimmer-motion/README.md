@@ -108,6 +108,10 @@ the commit, freeze a leaving element's props. `src/node.ts` (the per-element lif
 (the settle pipeline) and `src/scheduler.ts` (one `postRender` host hook) have no Ember imports;
 `src/motion.ts` and the components are the Ember host adapter.
 
+`scroll()`, `scrollInfo()` and `inView()` are Motion's own, re-exported from `framer-motion/dom`, the
+React-free entry point of Motion's React package. `framer-motion` is a regular dependency; its React peers
+are optional and that entry never imports them.
+
 `VENDORED.md` lists the files copied verbatim from Motion (pan/drag session, Reorder utilities) with the
 upstream commit.
 

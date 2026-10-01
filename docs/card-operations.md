@@ -501,6 +501,107 @@ without assembling the card's closure, and a `readSource` serves stored bytes. A
 definition carrying one records a `links-without-assembly` issue; a value that
 is not one of the three records `invalid-link-strategy`.
 
+### `html` — which prerendered formats a read or a query serves
+
+A card's prerendered HTML is rendered once per format, under the realm's own
+authority, and shared by every viewer. A format whose template draws linked
+cards bakes their content into that one markup: a `Classroom` whose `embedded`
+format lists its students by name hands those names to everyone who receives the
+classroom's embedded markup, whatever they could fetch on their own. A `read` or
+a `query` declaration may say which formats' markup it serves.
+
+```ts
+@operation static read = {
+  base: 'read',
+  html: { embedded: 'unshareable' },
+} satisfies OperationDeclaration;
+```
+
+The declaration is a record by format — `isolated`, `embedded`, `fitted`,
+`atom` or `head`, the formats the realm prerenders — each `shareable` (the
+default, the same as leaving the format out) or `unshareable`. An unshareable
+format is served **data-only**: no caller receives its markup, and a consumer
+renders the card from its data instead. Nothing is rendered a second time or
+per caller; the realm keeps its one rendering and withholds it. Leaving `html`
+out serves every format's markup.
+
+**It is a claim about what a format draws, not a mechanism.** Declaring a
+format unshareable says its markup reaches further than the card's
+representation should. A later edit that starts embedding a linked card in a
+format left shareable falsifies the claim silently, so declare it on the formats
+whose templates draw other cards, and revisit it when a template changes.
+
+**On a `read` it governs reads rooted at this card:**
+
+- the card's single-card HTML read (the `card+html` `GET`, and its `file-meta`
+  counterpart for a file def), which answers an unshareable format with the
+  card's data in place of its rendering;
+- the last-known-good isolated markup an errored read carries in place of the
+  card, which is withheld when `isolated` is unshareable;
+- the host-mode page for the card, which injects no `isolated` or `head` markup
+  for a format declared unshareable, so the host renders the card from its data
+  once it boots.
+
+**On a `query` it governs every row alike, under the query's declaration** — the
+same rule `links` follows. Each row the query answers with is served without its
+markup for the formats the query declares unshareable, whatever type the row is
+and whatever that type's own `read` declares. A row served data-only for the
+format asked for answers the way a row with no rendering of it does: with its
+card where the request falls back to one, and with an empty `html` branch where
+it pins one. The declaration is applied on a realm's own `_search` and on
+`_federated-search` alike.
+
+```ts
+@operation static listClassrooms = {
+  base: 'query',
+  query: { filter: { type: () => Classroom } },
+  html: { embedded: 'unshareable', fitted: 'unshareable' },
+} satisfies OperationDeclaration;
+```
+
+**An ad-hoc search declares nothing, so it serves every format's markup** — and
+so does a policy's ad-hoc `query` grant, which authorizes exactly that search.
+A policy author who wants a grant-reached caller to receive a format data-only
+grants a named query that declares it unshareable, not the ad-hoc `query`.
+Search is the main route by which a caller reached through a grant receives
+prerendered HTML, which is why the declaration that governs it is the one on the
+query the caller was granted.
+
+**A search a render runs keeps every format's markup**, whatever the query
+declares. What a render draws becomes part of the embedding card's own
+prerendered HTML, and that markup is governed by the embedding card's own
+declarations: a card whose format draws the rows of a query that withholds their
+markup draws their content all the same — served data-only, the render would
+draw each row from its data, under the realm's authority, with the same result.
+Declare the embedding card's format unshareable if what it embeds should not be
+shared.
+
+**It applies to every caller alike.** A format is served to everyone or to no
+one: the declaration belongs to the operation, so a realm reader and a caller
+reached by a policy grant receive the same document from the same request.
+
+**Disclosure is a union.** A caller who can invoke a wider operation receives
+what it serves, so withholding a format on one query achieves nothing for a
+caller who is also granted another query, or the ad-hoc `query`, that serves it.
+
+A query's `html` composes with its `links`. A row served under `none` usually
+renders from its prerendered HTML; one also served data-only for the format asked
+for has neither markup nor a card the host may adopt, so the host renders it from
+the card's own read. That read is gated like any other, so a caller reached only
+through a `query` grant, with no `read` grant on the row's type, is refused it and
+cannot render such a row. A query meant for such callers declares `ids` rather
+than `none` — its rows then carry cards the host renders from — or leaves the
+format shareable, or the policy grants `read` on the row's type as well.
+
+#### Where it is refused
+
+`html` is a `read` and `query` key: it withholds prerendered HTML a read of the
+card or a query's rows are served with, and no other base serves any. An `html`
+on any other base is refused where it is written, and a stored definition
+carrying one records an `html-without-rendering` issue. A declaration that is
+not a record of prerendered formats, each `shareable` or `unshareable`, records
+`invalid-html-declaration`.
+
 ### `optimistic`
 
 The client applies an eligible write to its local copy before the realm
@@ -927,6 +1028,66 @@ could be seen side by side: with a `readSource` grant and no `read`, the editor
 shows the stored document beside a preview that is refused. The host keeps such
 a caller from being led there, but it is not a boundary. The endpoints are.
 
+### What a predicate reads
+
+A grant's `where` reads the card's stored source by default: its own values,
+its contained values, and the ids its links hold. That is as fresh as the last
+write, so a grant written against it stops admitting a caller the moment a
+write takes them off the card. `.teachers | any(.id == actor())` and
+`.teacherIds | any(. == actor())` both read the stored source.
+
+A computed value and a linked card's fields are not in the stored source. Only
+the index holds them, and the index lags the stored source. A `where` that
+reads one has to say so:
+
+```json
+{
+  "operation": "read",
+  "where": { "bxl": ".headTeacher == actor()", "snapshot": true }
+}
+```
+
+An annotated predicate is judged against the snapshot: the stored source with
+the card's index row laid under it. The stored source still answers wherever it
+holds a value, so only the computed values and linked cards' fields come from
+the row, and a computed value always comes from the row. **This is a window, and the annotation is how you accept it.** If
+`headTeacher` is computed from the roster, taking someone off the roster does
+not stop the grant admitting them until the classroom is indexed again. That
+holds at the gate and under the write lock alike: a write's predicate reads the
+row as it stands when the lock is taken, not the state the write changes. A
+realm that needs a grant to stop admitting as soon as a card changes writes its
+predicate against the stored source.
+
+The snapshot holds a computed value on the card itself or inside one of its
+single contained values, and the fields of the card a single link on the card
+points to, for a link marked `searchable`. It holds nothing inside a list: not
+a computed value on each item, and not the fields behind a list of links. It
+does not hold a linked card's own links beyond their ids, a link inside a
+contained value, or a relationship a `query` fills. A card with no index row
+yet, or whose row records an error, has no snapshot, and an annotated
+predicate does not hold for it. So a snapshot grant never admits a create
+against a type: the card it would mint has no row.
+
+The policy records which tier each `where` reads when it compiles, as
+`unsnapshotted-policy-read` against the grant, and leaves the grant out:
+
+- A `where` that reads a computed value or a linked card's field without the
+  annotation.
+- A `where` that reads a value no snapshot holds, annotated or not.
+- An annotated `where` on `create` that reads a computed value or a linked
+  card's field, which could never admit.
+
+An annotated `where` that reads only the stored source is judged against the
+stored source and pays no index read. Where a `where` reads a value whole
+(`tostring`, a comparison of a whole contained value or link, `to_entries`),
+it reads everything beneath that value, and that counts as reading any
+computed value or linked card beneath it.
+
+Each time a snapshot predicate decides an invocation, the realm logs a
+`policy-snapshot-read` line on its `boxel:operations` channel, naming the grant
+and the rule's type, so an operator can count the windows a realm has
+accepted.
+
 ## Asking a policy what it decides
 
 A realm's policy widens what the realm's own permissions allow. A policy
@@ -986,8 +1147,128 @@ Some things worth knowing before you read one:
   can change the answer.
 - **The tier says what a predicate reads.** `stored` is the card's own stored
   source, which is as fresh as the last write. `snapshot` is a predicate
-  annotated as reading computed values or linked cards. Those lag the index,
-  the gate never evaluates them, and such a grant admits nothing.
+  annotated as reading computed values or linked cards, judged against the
+  card's index row as it stands, which lags the stored source (see
+  [What a predicate reads](#what-a-predicate-reads)).
+
+### Asking about a draft, a search, or a page of cards
+
+An explain reads three more inputs beside the question itself: `draft`,
+`search` and `list`. It reads them by name, whatever the operation carrying
+them is called. A declaration's `params` are each required, and its typed
+payload takes exactly the params it declares. So each input rides a
+declaration of its own on the `explain` base, beside the one that asks the
+plain question:
+
+```ts
+class SchoolPolicy extends RealmPolicy {
+  @operation static explainDraft = {
+    base: 'explain',
+    params: {
+      actor: StringField,
+      target: StringField,
+      operation: StringField,
+      draft: JsonField,
+    },
+    nonGrantable: true,
+  } satisfies OperationDeclaration;
+  // explainSearch takes `search`, and explainReach takes `list`, the same
+  // way. A declaration whose params include `list` resolves to a listing.
+}
+```
+
+An explain carries no `input` stage: it answers the question its payload asks,
+and the cap below counts that payload.
+
+### Asking about a draft
+
+An explain can answer against rules that are not live yet. Pass `draft`, a
+policy document holding the `rules` a `RealmPolicy` card holds, to the explain
+of the card the target's realm names:
+
+```ts
+let explanation = await operations<typeof SchoolPolicy>(policy).explainDraft({
+  actor: '@teacher:example.org',
+  target: 'https://example.org/education/classrooms/room-205',
+  operation: 'read',
+  draft: {
+    rules: [
+      {
+        targetType: { module: '../../education/classroom', name: 'Classroom' },
+        grants: [{ operation: 'read' }],
+      },
+    ],
+  },
+});
+// explanation.draft.issues  what compiling the draft recorded, as a policy's
+//                           own issues read
+```
+
+The target's realm compiles the draft as it would compile the card its key
+names if that card held the document. So a relative `targetType` module
+resolves against that card, and a draft copied from the card's own document
+means what it means there. The draft is compiled for this answer alone. It is
+never cached and never activated, and the live policy answers exactly as it did
+before. A draft that doesn't compile reports its issues the way a policy card
+does. A draft whose `rules` can't be read at all fails every decision
+(`failed`, `policy-unloadable`), which is what the realm would do if its card
+held that document, on the search lane as on the direct one. A `draft` with
+no `rules` member is refused, since it would compile to a policy granting
+nothing.
+
+Asking about a draft needs what asking about the live policy needs, read on
+both realms, and one thing more. A draft names its own types, and compiling it
+looks them up in whatever realm this server serves them from. What it records
+about them, down to which of their fields a search filter can read, is answered
+only to a caller who can read every such realm. Anyone else is refused with
+`403 operation-not-permitted`, and nothing about the draft is explained.
+
+### Asking about a search
+
+A search is not decided by the gate. The search engine composes the grants
+that admit it into its filter, and it reads the index. So an explain of a
+search is answered from the search lane. Pass `search` and name the realm as
+the target: `{ on, params }` for a named query, or `{ filter }` for an ad-hoc
+one, asked as `query`:
+
+```ts
+let explanation = await operations<typeof SchoolPolicy>(policy).explainSearch({
+  actor: '@teacher:example.org',
+  target: 'https://example.org/education/',
+  operation: 'listClassrooms',
+  search: { on: { module: '…/classroom', name: 'Classroom' } },
+});
+// explanation.search.filter    the search's own filter, as the realm runs it
+// explanation.search.fragment  what the policy composes into it; the search
+//                              runs { every: [filter, fragment] }
+// explanation.search.index     how far behind its source the index is
+```
+
+`allowed` with `acl` means the actor reads the realm and searches it unscoped.
+`allowed` with `granted` means the fragment scopes the search. `denied` means
+the search answers with no rows, which refuses nobody, so no `refusal` comes
+with it. `search.index.pending` counts the passes that write the realm's index
+and haven't landed yet. Until they land, the search answers from the index as
+it was, while the direct lane already sees the card as stored. This is the
+freshness difference the explain makes visible. When the data a predicate reads
+changes, the direct lane sees it at the next request, and search sees it at
+the next reindex of the rows it matches. When the policy card itself changes,
+both lanes see it once that card's own index pass lands. `search.index` counts
+the passes of the searched realm, so when the policy card lives in another
+realm, its pass isn't among them.
+
+### Listing, and the cap
+
+Who can read a card is every actor, and what an actor can reach is every card,
+so an explain is bounded. Pass `list: { on?, page?: { number?, size? } }` and
+name the realm as the target to explain one page of the realm's cards. Each
+card is explained as its own triple, and the answer is
+`{ explanations, page: { number, size, total } }`, with `draft` once on the
+listing where it answers against one. A card removed while the page is being
+explained is left out of it. A request explains at most 100 triples, the
+capability check's pair cap, and that covers a listing's page and a batch's explain entries
+together. A listing entry counts as the page it asks for. A request over the
+cap is refused whole with `invalid-params` before anything is explained.
 
 ## Checking what a policy puts in force
 
@@ -1031,10 +1312,7 @@ Some things worth knowing before you read one:
   `admitsNothing`.** `unfilterable` is a grant on a query whose predicate
   compiled no search filter, which `policy-not-filterable` explains: a query is
   authorized only by composing a grant's filter into the search, so such a
-  grant has nothing to compose. `snapshot` is a grant on anything but a query
-  whose predicate is annotated as reading a snapshot tier, which the gate never
-  evaluates. On a query, the same annotation compiles into the search filter
-  and admits what it matches.
+  grant has nothing to compose.
 - **An uncompilable policy is different in kind.** A policy with one inactive
   grant denies that grant. A policy that did not compile at all denies
   everything it would have granted, and a realm naming it answers every
@@ -1064,14 +1342,31 @@ Some things worth knowing before you read one:
   definition from, judged by a session of their own. Anyone else is refused
   with a 403. No policy grant reaches a validate, and none reaches a policy card
   at all.
-- **A problem with a realm's pointer is not on the policy card.** A realm whose
-  `policy` names a card the index does not hold (`policy-card-missing`), or a
-  card that is not a `RealmPolicy` (`not-a-policy`), refuses as an uncompilable
-  policy does, and records the issue on the `realm:policy` log channel. The
-  first has no card to ask. The second is a card of another type, which
-  carries a validate only if its own type declares one, and then answers
-  `uncompilable` with `not-a-policy`. A policy card whose latest index visit
-  failed outright renders its index error, as any card does.
+- **A problem with a realm's pointer shows on the realm's config card.** A
+  realm whose `policy` names a card the index does not hold
+  (`policy-card-missing`), or a card that is not a `RealmPolicy`
+  (`not-a-policy`), refuses as an uncompilable policy does, and has no policy
+  card for the problem to land on. So the config card, the `RealmConfig` card
+  at `realm.json`, declares a validate of its own, `validatePolicy`. Invoked on
+  the realm's own config card, it compiles the card the realm's pointer names
+  as the realm compiles it, with the realm's own compile environment, and
+  answers in the same shape. So neither of the two inputs above differs: it
+  reports exactly what that realm holds, including a `policy-not-filterable`
+  that a validate of the policy card, compiled in the card's own realm, can
+  miss. A realm that names
+  no policy, or whose pointer it could not read as a card's id and dropped,
+  answers with no `card` and nothing in `realms`, `issues` or `rules`. The
+  card shows the answer beside its `policy` field: in force, or not in force
+  with the issue that takes it out of force, and asks again when its own realm
+  or any realm in `realms` is indexed.
+- **The config card tells only a reader of the realm the pointer names.** The
+  pointer can name a card in any realm, so whether a card is there is what the
+  answer would disclose. The realm holding the named card is judged before
+  anything about the card is read: a caller who cannot read it, or a pointer
+  into an archived realm or one no realm here serves, gets the same 403
+  whatever is or is not there. The other realms compiling read are judged as
+  a validate of the policy card judges them. A policy card whose latest index
+  visit failed outright renders its index error, as any card does.
 
 ## Where to look next
 

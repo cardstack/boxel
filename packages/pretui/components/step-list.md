@@ -46,3 +46,5 @@ Where it is thinner: no branching, no per-step actions, and no vertical variant 
 The state palette is the kit's semantic scale, shared across both variants; the rail geometry is the only thing that changes between them.
 
 Sharing the palette is what keeps a track rail and a numbered rail legible as the same information — which matters because a product often uses both, on different screens, for the same process.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

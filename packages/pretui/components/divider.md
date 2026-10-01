@@ -45,3 +45,5 @@ Where it is thinner, and these are real: **there is no `decorative` escape hatch
 The 1px thickness, the 8px padding either side of the label and the vertical rule's `1lh` minimum height are fixed.
 
 A season changes the density of every divider in the product through `--pretui-divider-spacing` alone, and its colour through `--border` — which is shared, so dividers cannot drift away from the hairlines on cards, inputs and tables. That sharing is the deliberate trade: the kit gives up a per-divider colour knob to guarantee that every hairline in a season matches.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

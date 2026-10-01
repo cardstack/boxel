@@ -724,6 +724,20 @@ module('Integration | operations', function (hooks) {
         /carries no `output` to reshape it/,
       ],
       [
+        'an explain that rewrites its question',
+        () => {
+          class Rewritten extends CardDef {
+            @operation static explain = {
+              base: 'explain',
+              nonGrantable: true,
+              input: bxl`.`,
+            };
+          }
+          return Rewritten;
+        },
+        /carries no `input` to rewrite it/,
+      ],
+      [
         'an explain on a file def',
         () => {
           class LogFile extends FileDef {
@@ -1191,6 +1205,81 @@ module('Integration | operations', function (hooks) {
       (getDeclaredOperations(Roster).listAll as { links?: unknown }).links,
       'ids',
       'and a query that names one is declared with it',
+    );
+    assert.throws(
+      () => {
+        class Report extends CardDef {
+          @operation static rename = {
+            base: 'transform',
+            set: { title: 'Renamed' },
+            html: { embedded: 'unshareable' },
+          };
+        }
+        return Report;
+      },
+      /"html" is not a valid key for a "transform" operation/,
+      'only a read or a query serves prerendered HTML to withhold',
+    );
+    assert.throws(
+      () => {
+        class Report extends CardDef {
+          @operation static summary = {
+            base: 'read',
+            html: { edit: 'unshareable' },
+          };
+        }
+        return Report;
+      },
+      /`html` names "edit", which is not a prerendered format/,
+      'it names prerendered formats',
+    );
+    assert.throws(
+      () => {
+        class Report extends CardDef {
+          @operation static summary = {
+            base: 'read',
+            html: { embedded: 'hidden' },
+          };
+        }
+        return Report;
+      },
+      /`html.embedded` must say whether the format's prerendered HTML is served/,
+      'each shareable or unshareable',
+    );
+    assert.throws(
+      () => {
+        class Report extends CardDef {
+          @operation static listAll = {
+            base: 'query',
+            query: { filter: { type: () => Report } },
+            html: ['embedded'],
+          };
+        }
+        return Report;
+      },
+      /`html` must be an object naming which prerendered formats this query's results are served data-only for/,
+      'by format',
+    );
+    class Classroom extends CardDef {
+      @operation static read = {
+        base: 'read',
+        html: { embedded: 'unshareable' },
+      };
+      @operation static listAll = {
+        base: 'query',
+        query: { filter: { type: () => Classroom } },
+        html: { fitted: 'unshareable', isolated: 'shareable' },
+      };
+    }
+    assert.deepEqual(
+      (getDeclaredOperations(Classroom).read as { html?: unknown }).html,
+      { embedded: 'unshareable' },
+      'a read that names formats is declared with them',
+    );
+    assert.deepEqual(
+      (getDeclaredOperations(Classroom).listAll as { html?: unknown }).html,
+      { fitted: 'unshareable', isolated: 'shareable' },
+      'and so is a query',
     );
     assert.throws(
       () => {

@@ -49,3 +49,5 @@ Gaps, and the first is the real one:
 `--success-ink` (up), `--destructive` (down), `--muted-foreground` (flat), `--font-mono`, `--text-ui-sm`. The 500 weight and tabular figures are fixed.
 
 Three tokens and nothing else — which makes this the cheapest component in the kit to season, and also means a season that wants a different sign convention (or a colour-blind-safe blue/orange pair instead of green/red) can get it entirely by repointing `--success` and `--destructive` _for this component's context_, without touching the code. That is worth knowing: the sign→token mapping is fixed, but the token→colour mapping is not.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

@@ -12,7 +12,11 @@ import {
   usesVolatileCall,
 } from './bxl-emit.ts';
 import { isBxl, isMarker, lowerQueryTemplate } from './query.ts';
-import { isDefinitionFreeBaseOperation, isLinkStrategy } from './types.ts';
+import {
+  isDefinitionFreeBaseOperation,
+  isHtmlDeclaration,
+  isLinkStrategy,
+} from './types.ts';
 import type {
   LowerOperationDeclarationsResult,
   OperationDefinition,
@@ -162,7 +166,8 @@ const DECLARABLE_BY: Record<BaseOperationName, readonly Definition['type'][]> =
     appendContainsMany: ['card-def'],
     appendLine: ['file-def'],
     // Reached only through a declaration: nothing implies either, and each
-    // answers only on a policy card.
+    // answers only on a policy card, or for a validate the realm's config
+    // card.
     explain: ['card-def'],
     validate: ['card-def'],
   };
@@ -440,6 +445,35 @@ async function lowerOperation(
     }
   }
 
+  // An `html` declaration withholds prerendered HTML: the markup a read of the
+  // target is served with, or the markup a query's rows carry. No other base
+  // serves any, so on another base it would withhold nothing, and a stored
+  // entry carrying one would read as a withholding that was never applied. The
+  // authoring decorator refuses both of these where they are written; this
+  // keeps them out of a type's entry, which outlives the code that built it.
+  let html = (declaration as { html?: unknown }).html;
+  if (html !== undefined) {
+    if (base !== 'read' && base !== 'query') {
+      sink.add(
+        'html-without-rendering',
+        'html',
+        `an \`html\` declaration withholds the prerendered HTML a "read" or a "query" serves, and a "${base}" operation serves none, so it would withhold nothing`,
+      );
+    } else if (!isHtmlDeclaration(html)) {
+      // Not stored. The serving path reads an unrecognized declaration as
+      // withholding every format, so storing this would serve data-only
+      // formats the author did not name; recording it instead refuses the
+      // operation and says why.
+      sink.add(
+        'invalid-html-declaration',
+        'html',
+        `\`html\` must name prerendered formats ("embedded", "fitted", "atom", "head", "isolated"), each "shareable" or "unshareable"`,
+      );
+    } else {
+      operation.html = html;
+    }
+  }
+
   let { statements, snapshot } = await lowerClauses(
     declaration,
     paramNames,
@@ -492,7 +526,13 @@ async function lowerOperation(
     }
   }
 
-  if (takesNoPayload && declaration.input) {
+  if (base === 'explain' && declaration.input) {
+    sink.add(
+      'unrunnable-program',
+      'input',
+      `an "explain" operation answers the question its payload asks, so an \`input\` that rewrote it would answer a question nobody asked`,
+    );
+  } else if (takesNoPayload && declaration.input) {
     sink.add(
       'unrunnable-program',
       'input',

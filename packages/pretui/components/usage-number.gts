@@ -90,20 +90,22 @@ export class UsageNumber extends Component<UsageNumberSignature> {
       />
     {{/if}}
     <style scoped>
-      .numrange {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-      }
-      .numrange > :first-child {
-        flex: 1;
-      }
-      .numrange-readout {
-        font-family: var(--font-mono);
-        font-size: var(--text-ui-sm, 11.5px);
-        min-width: 30px;
-        text-align: right;
-        font-variant-numeric: tabular-nums;
+      @layer PretComponent {
+        .numrange {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+        .numrange > :first-child {
+          flex: 1;
+        }
+        .numrange-readout {
+          font-family: var(--font-mono);
+          font-size: var(--text-ui-sm, 11.5px);
+          min-width: 30px;
+          text-align: right;
+          font-variant-numeric: tabular-nums;
+        }
       }
     </style>
   </template>

@@ -33,41 +33,43 @@ export class StreamingText extends Component<StreamingTextSignature> {
       {{#if @cursor}}<span class='pretui-stream-cursor' aria-hidden='true'></span>{{/if}}
     </span>
     <style scoped>
-      @keyframes pretui-stream-in {
-        from {
-          opacity: 0;
-          filter: blur(4px);
+      @layer PretComponent {
+        @keyframes pretui-stream-in {
+          from {
+            opacity: 0;
+            filter: blur(4px);
+          }
+          to {
+            opacity: 1;
+            filter: blur(0);
+          }
         }
-        to {
-          opacity: 1;
-          filter: blur(0);
-        }
-      }
-      .pretui-stream-word {
-        display: inline;
-        opacity: 0;
-        animation: pretui-stream-in 420ms cubic-bezier(0.22, 0.61, 0.25, 1) both;
-      }
-      .pretui-stream-cursor {
-        display: inline-block;
-        width: 2px;
-        height: 0.9em;
-        vertical-align: -0.1em;
-        border-radius: 1px;
-        background: currentColor;
-        margin-left: 1px;
-      }
-      .pretui-sr {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        overflow: hidden;
-        clip: rect(0 0 0 0);
-      }
-      @media (prefers-reduced-motion: reduce) {
         .pretui-stream-word {
-          animation: none;
-          opacity: 1;
+          display: inline;
+          opacity: 0;
+          animation: pretui-stream-in 420ms cubic-bezier(0.22, 0.61, 0.25, 1) both;
+        }
+        .pretui-stream-cursor {
+          display: inline-block;
+          width: 2px;
+          height: 0.9em;
+          vertical-align: -0.1em;
+          border-radius: 1px;
+          background: currentColor;
+          margin-left: 1px;
+        }
+        .pretui-sr {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          overflow: hidden;
+          clip: rect(0 0 0 0);
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .pretui-stream-word {
+            animation: none;
+            opacity: 1;
+          }
         }
       }
     </style>

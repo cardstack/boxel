@@ -388,93 +388,97 @@ export class PasswordStrength extends Component<PasswordStrengthSignature> {
       </div>
     {{/unless}}
     <style scoped>
-      .pretui-pwstrength {
-        display: grid;
-        gap: var(--space-2, 5px);
-        width: 100%;
-        font-size: var(--text-ui-sm, 11.5px);
-        letter-spacing: var(--track-ui, 0.01em);
-        /* Score → hue lives entirely in CSS, keyed off a clamped numeric
-           attribute: no string is ever interpolated into a style. The bars
-           inherit `--pretui-meter-hue` from here, so `Meter` re-dresses
-           itself through the token channel and nothing reaches into its
-           markup. Each band is a documented knob, so a season re-tints
-           without a fork. */
-        --pretui-meter-hue: var(
-          --pretui-password-strength-unscored,
-          var(--line-strong, var(--boxel-400))
-        );
-      }
-      .pretui-pwstrength[data-scored][data-score='0'],
-      .pretui-pwstrength[data-scored][data-score='1'] {
-        --pretui-meter-hue: var(
-          --pretui-password-strength-weak,
-          var(--destructive)
-        );
-      }
-      .pretui-pwstrength[data-scored][data-score='2'] {
-        --pretui-meter-hue: var(
-          --pretui-password-strength-fair,
-          var(--warning, var(--boxel-warning))
-        );
-      }
-      .pretui-pwstrength[data-scored][data-score='3'] {
-        --pretui-meter-hue: var(
-          --pretui-password-strength-strong,
-          color-mix(
-            in oklch,
-            var(--success, var(--boxel-success)) 70%,
+      /* above Meter's layer, so these win by layer order, not file order */
+      @layer PretComponent, PretComposite;
+      @layer PretComposite {
+        .pretui-pwstrength {
+          display: grid;
+          gap: var(--space-2, 5px);
+          width: 100%;
+          font-size: var(--text-ui-sm, 11.5px);
+          letter-spacing: var(--track-ui, 0.01em);
+          /* Score → hue lives entirely in CSS, keyed off a clamped numeric
+             attribute: no string is ever interpolated into a style. The bars
+             inherit `--pretui-meter-hue` from here, so `Meter` re-dresses
+             itself through the token channel and nothing reaches into its
+             markup. Each band is a documented knob, so a season re-tints
+             without a fork. */
+          --pretui-meter-hue: var(
+            --pretui-password-strength-unscored,
+            var(--line-strong, var(--boxel-400))
+          );
+        }
+        .pretui-pwstrength[data-scored][data-score='0'],
+        .pretui-pwstrength[data-scored][data-score='1'] {
+          --pretui-meter-hue: var(
+            --pretui-password-strength-weak,
+            var(--destructive)
+          );
+        }
+        .pretui-pwstrength[data-scored][data-score='2'] {
+          --pretui-meter-hue: var(
+            --pretui-password-strength-fair,
             var(--warning, var(--boxel-warning))
-          )
-        );
-      }
-      .pretui-pwstrength[data-scored][data-score='4'] {
-        --pretui-meter-hue: var(
-          --pretui-password-strength-best,
-          var(--success, var(--boxel-success))
-        );
-      }
-      .pretui-pwstrength[data-busy] {
-        opacity: 0.55;
-      }
-      .pretui-pwstrength-row {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: var(--space-3, 8px);
-      }
-      /* Law 8: judged in a still frame — the bars carry a label and the
-         label carries weight, so the treatment survives greyscale. */
-      .pretui-pwstrength-meter {
-        font-weight: 500;
-      }
-      .pretui-pwstrength-time {
-        color: var(--ink-3, var(--boxel-400));
-        font-variant-numeric: tabular-nums;
-      }
-      .pretui-pwstrength-warning {
-        margin: 0;
-        color: var(--foreground);
-      }
-      .pretui-pwstrength-tips {
-        margin: 0;
-        padding-inline-start: var(--space-5, 15px);
-        display: grid;
-        gap: 2px;
-        color: var(--muted-foreground);
-      }
-      /* sr-only: the composed announcement, and the only thing a screen
-         reader reads in this component. */
-      .pretui-pwstrength-sr {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        margin: -1px;
-        padding: 0;
-        overflow: hidden;
-        clip-path: inset(50%);
-        white-space: nowrap;
-        border: 0;
+          );
+        }
+        .pretui-pwstrength[data-scored][data-score='3'] {
+          --pretui-meter-hue: var(
+            --pretui-password-strength-strong,
+            color-mix(
+              in oklch,
+              var(--success, var(--boxel-success)) 70%,
+              var(--warning, var(--boxel-warning))
+            )
+          );
+        }
+        .pretui-pwstrength[data-scored][data-score='4'] {
+          --pretui-meter-hue: var(
+            --pretui-password-strength-best,
+            var(--success, var(--boxel-success))
+          );
+        }
+        .pretui-pwstrength[data-busy] {
+          opacity: 0.55;
+        }
+        .pretui-pwstrength-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: var(--space-3, 8px);
+        }
+        /* Law 8: judged in a still frame — the bars carry a label and the
+           label carries weight, so the treatment survives greyscale. */
+        .pretui-pwstrength-meter {
+          font-weight: 500;
+        }
+        .pretui-pwstrength-time {
+          color: var(--ink-3, var(--boxel-400));
+          font-variant-numeric: tabular-nums;
+        }
+        .pretui-pwstrength-warning {
+          margin: 0;
+          color: var(--foreground);
+        }
+        .pretui-pwstrength-tips {
+          margin: 0;
+          padding-inline-start: var(--space-5, 15px);
+          display: grid;
+          gap: 2px;
+          color: var(--muted-foreground);
+        }
+        /* sr-only: the composed announcement, and the only thing a screen
+           reader reads in this component. */
+        .pretui-pwstrength-sr {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          margin: -1px;
+          padding: 0;
+          overflow: hidden;
+          clip-path: inset(50%);
+          white-space: nowrap;
+          border: 0;
+        }
       }
     </style>
   </template>

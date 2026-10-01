@@ -20,6 +20,8 @@ import {
   findMediaCacheEntry,
   mediaCacheMissResponse,
   putMedia,
+  ANONYMOUS_RENDER,
+  REALM_AUTHORITY_RENDER,
   serveMediaCacheEntry,
 } from '@cardstack/runtime-common';
 
@@ -52,6 +54,7 @@ module(basename(import.meta.filename), function (hooks) {
       dbAdapter = _dbAdapter;
       adapter = new FakeMediaCacheAdapter();
       await putMedia(dbAdapter, adapter, {
+        renderedAs: ANONYMOUS_RENDER,
         realmURL: REALM_URL,
         sourceURL: `${REALM_URL}card-1`,
         captureSpecHash: 'spec-1',
@@ -64,6 +67,7 @@ module(basename(import.meta.filename), function (hooks) {
         realmURL: REALM_URL,
         sourceURL: `${REALM_URL}card-1`,
         captureSpecHash: 'spec-1',
+        servedTo: ANONYMOUS_RENDER,
       }))!;
     },
   });
@@ -86,6 +90,7 @@ module(basename(import.meta.filename), function (hooks) {
       realmURL: REALM_URL,
       sourceURL: `${REALM_URL}card-1`,
       captureSpecHash: 'spec-1',
+      servedTo: ANONYMOUS_RENDER,
     });
     return row!.lastAccessedAt;
   }
@@ -242,6 +247,7 @@ module(basename(import.meta.filename), function (hooks) {
     // captures age out on generation — so serving one skips the write even
     // past the throttle window
     await putMedia(dbAdapter, adapter, {
+      renderedAs: REALM_AUTHORITY_RENDER,
       realmURL: REALM_URL,
       sourceURL: `${REALM_URL}card-2`,
       captureSpecHash: 'spec-declared',
@@ -270,6 +276,131 @@ module(basename(import.meta.filename), function (hooks) {
     let after = (await findMediaCacheEntry(dbAdapter, declaredKey))!
       .lastAccessedAt;
     assert.strictEqual(after, before, 'last_accessed_at is untouched');
+  });
+
+  test('a capture drawn as a user is private to every cache, whatever the realm allows', async function (assert) {
+    await putMedia(dbAdapter, adapter, {
+      renderedAs: '@reader:localhost',
+      realmURL: REALM_URL,
+      sourceURL: `${REALM_URL}card-1`,
+      captureSpecHash: 'spec-1',
+      sourceGeneration: 1,
+      bytes: BYTES,
+      contentType: 'image/png',
+      lane: 'on-demand',
+    });
+    let readers = (await findMediaCacheEntry(dbAdapter, {
+      realmURL: REALM_URL,
+      sourceURL: `${REALM_URL}card-1`,
+      captureSpecHash: 'spec-1',
+      servedTo: '@reader:localhost',
+    }))!;
+    assert.strictEqual(
+      readers.renderedAs,
+      '@reader:localhost',
+      "the reader is answered with the capture drawn as them, not anyone else's",
+    );
+    let response = await serveMediaCacheEntry({
+      request: new Request(`${REALM_URL}_capture/card-1`),
+      requestContext: requestContext({ '*': ['read'] }),
+      entry: readers,
+      mediaCacheAdapter: adapter,
+      dbAdapter,
+      variesByReader: true,
+    });
+    assert.true(
+      response.headers.get('cache-control')!.startsWith('private, '),
+      `a world-readable realm's capture drawn as a user stays private: ${response.headers.get('cache-control')}`,
+    );
+    assert.true(
+      (response.headers.get('vary') ?? '').includes('Authorization'),
+      `and a cache keyed by URL alone keeps it to that reader: ${response.headers.get('vary')}`,
+    );
+
+    await adapter.delete(readers.objectKey);
+    let reclaimed = await serveMediaCacheEntry({
+      request: new Request(`${REALM_URL}_capture/card-1`),
+      requestContext: requestContext({ '*': ['read'] }),
+      entry: readers,
+      mediaCacheAdapter: adapter,
+      dbAdapter,
+      variesByReader: true,
+    });
+    assert.strictEqual(reclaimed.status, 404);
+    assert.true(
+      (reclaimed.headers.get('vary') ?? '').includes('Authorization'),
+      `a miss for that reader once its object is reclaimed never stands in for another reader's capture: ${reclaimed.headers.get('vary')}`,
+    );
+  });
+
+  test('a capture drawn as one reader answers no other, and an on-demand capture that names no reader answers no one', async function (assert) {
+    await putMedia(dbAdapter, adapter, {
+      renderedAs: '@reader:localhost',
+      realmURL: REALM_URL,
+      sourceURL: `${REALM_URL}card-3`,
+      captureSpecHash: 'spec-3',
+      sourceGeneration: 1,
+      bytes: BYTES,
+      contentType: 'image/png',
+      lane: 'on-demand',
+    });
+    await putMedia(dbAdapter, adapter, {
+      renderedAs: REALM_AUTHORITY_RENDER,
+      realmURL: REALM_URL,
+      sourceURL: `${REALM_URL}card-4`,
+      captureSpecHash: 'spec-4',
+      sourceGeneration: 1,
+      bytes: BYTES,
+      contentType: 'image/png',
+      lane: 'on-demand',
+    });
+    await putMedia(dbAdapter, adapter, {
+      renderedAs: REALM_AUTHORITY_RENDER,
+      realmURL: REALM_URL,
+      sourceURL: `${REALM_URL}card-4`,
+      captureSpecHash: 'spec-5',
+      sourceGeneration: 1,
+      bytes: BYTES,
+      contentType: 'image/png',
+      lane: 'declared',
+    });
+    let lookup = (
+      sourceURL: string,
+      captureSpecHash: string,
+      servedTo?: string,
+    ) =>
+      findMediaCacheEntry(dbAdapter, {
+        realmURL: REALM_URL,
+        sourceURL,
+        captureSpecHash,
+        ...(servedTo ? { servedTo } : {}),
+      });
+
+    assert.strictEqual(
+      await lookup(`${REALM_URL}card-3`, 'spec-3', '@other:localhost'),
+      undefined,
+      "another reader isn't served a capture drawn as someone else",
+    );
+    assert.strictEqual(
+      await lookup(`${REALM_URL}card-3`, 'spec-3', ANONYMOUS_RENDER),
+      undefined,
+      'nor is a reader who authenticated nobody',
+    );
+    assert.strictEqual(
+      await lookup(`${REALM_URL}card-4`, 'spec-4', '@other:localhost'),
+      undefined,
+      'an on-demand capture that names no reader answers no reader',
+    );
+    assert.strictEqual(
+      await lookup(`${REALM_URL}card-4`, 'spec-4'),
+      undefined,
+      "and isn't the realm's own either",
+    );
+    assert.strictEqual(
+      (await lookup(`${REALM_URL}card-4`, 'spec-5', '@other:localhost'))?.lane,
+      'declared',
+      "while the realm's own declared capture answers every reader",
+    );
   });
 
   test('the miss response carries realm visibility', async function (assert) {

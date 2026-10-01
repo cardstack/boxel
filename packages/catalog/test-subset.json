@@ -1,6 +1,6 @@
 {
   "repository": "cardstack/boxel-catalog",
-  "revision": "5af17c66c6fcc194b34997f108cb6e5b01ea0a57",
+  "revision": "4162deb032f45bf1d980085724df6737592806c7",
   "files": [
     {
       "path": "realm-policy/realm-policy.gts",
@@ -14,7 +14,9 @@
   "tests": {
     "host": [
       "Integration | realm policy",
-      "Integration | policy-scoped search"
+      "Integration | realm config policy standing",
+      "Integration | policy-scoped search",
+      "Integration | a realm that checks permissions"
     ],
     "realmServer": [
       "catalog-test-subset-test",
@@ -22,19 +24,24 @@
       "realm-policy-archived-seal-test",
       "realm-policy-batch-test",
       "realm-policy-capabilities-test",
+      "realm-policy-capture-authority-test",
       "realm-policy-card-write-test",
       "realm-policy-chain-types-test",
       "realm-policy-compile-test",
+      "realm-policy-config-standing-test",
       "realm-policy-create-lane-test",
       "realm-policy-explain-test",
       "realm-policy-gate-test",
+      "realm-policy-html-sharing-test",
       "realm-policy-non-grantable-test",
       "realm-policy-publish-test",
       "realm-policy-query-filter-test",
       "realm-policy-query-reach-test",
+      "realm-policy-reach-check-test",
       "realm-policy-render-search-test",
       "realm-policy-row-reach-test",
       "realm-policy-search-infrastructure-test",
+      "realm-policy-snapshot-test",
       "realm-policy-source-read-test",
       "realm-policy-validate-test",
       "realm-policy-write-lock-test",

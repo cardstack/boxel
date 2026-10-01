@@ -12,15 +12,19 @@ export const AvatarGroup: TemplateOnlyComponent<AvatarGroupSignature> = <templat
     {{yield}}
   </span>
   <style scoped>
-    .pretui-avatar-group {
-      display: inline-flex;
-    }
-    .pretui-avatar-group > :deep(.pretui-avatar) {
-      margin-left: -6px;
-      box-shadow: 0 0 0 2px var(--card);
-    }
-    .pretui-avatar-group > :deep(.pretui-avatar:first-child) {
-      margin-left: 0;
+    /* above Avatar's layer, so these win by layer order, not file order */
+    @layer PretComponent, PretComposite;
+    @layer PretComposite {
+      .pretui-avatar-group {
+        display: inline-flex;
+      }
+      .pretui-avatar-group > :deep(.pretui-avatar) {
+        margin-left: -6px;
+        box-shadow: 0 0 0 2px var(--card);
+      }
+      .pretui-avatar-group > :deep(.pretui-avatar:first-child) {
+        margin-left: 0;
+      }
     }
   </style>
 </template>;

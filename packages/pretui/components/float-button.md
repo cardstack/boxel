@@ -55,6 +55,8 @@ APG **Disclosure** pattern for the dial. A lone FloatButton is a plain button.
 
 The round shape and the plus turning to a cross when open are fixed. Both motions are dropped under `prefers-reduced-motion`.
 
+The styles sit in `@layer PretComposite`, above Button's `PretComponent` layer, so what this component sets on Button wins by layer order. A caller's unlayered CSS overrides both without a more specific selector.
+
 ## React ecosystem
 
 | Agent types                                         | Give them                                     |

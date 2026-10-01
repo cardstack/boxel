@@ -243,15 +243,19 @@ module('Integration | realm-config | settings', function (hooks) {
   });
 
   // The realm's policy pointer sits beside the settings as the id of the card
-  // that holds the policy, and is edited as that text.
-  test('the policy pointer is edited as text', async function (assert) {
+  // that holds the policy. It is chosen from the card chooser, and shows the
+  // id it stores beside a control to remove it.
+  test('the policy pointer shows the id it stores, and can be removed', async function (assert) {
     let card = 'https://realms.example.test/org/policies/education';
     await renderRealmConfig({ approver: '@mae:localhost' }, 'edit', {
       policy: card,
     });
 
     assert
-      .dom('[data-test-field="policy"] input')
-      .hasValue(card, 'the pointer is an editable id');
+      .dom('[data-test-field="policy"] [data-test-realm-config-policy-pointer]')
+      .hasText(card, 'the pointer shows the id it stores');
+    assert
+      .dom('[data-test-field="policy"] [data-test-realm-config-policy-remove]')
+      .exists('and can be removed, so that another can be chosen');
   });
 });

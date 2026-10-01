@@ -1,6 +1,7 @@
 import type { CodeRef, ResolvedCodeRef } from '../code-ref.ts';
 import { isFilterRefersToNonexistentTypeError } from '../definition-lookup.ts';
-import type { Definition } from '../definitions.ts';
+import type { Definition, FieldDefinition } from '../definitions.ts';
+import type { InstanceOrError } from '../index-query-engine.ts';
 import type { LocalPath } from '../paths.ts';
 import { isCardResource } from '../card-document-shape.ts';
 import { now } from '../clock.ts';
@@ -8,11 +9,13 @@ import { logger } from '../log.ts';
 import type { CardResource } from '../resource-types.ts';
 import { extensionOfName } from '../file-def-code-ref.ts';
 import { policyFileDefCodeRef } from '../policy-file-def.ts';
+import { routesForField } from '../searchable-routes.ts';
 import { chainType } from './adoption-chain.ts';
 import { localPathFor, pathsFor } from './dispatch.ts';
 import type { OperationCore, OperationScope } from './dispatch.ts';
 import type { AdmissionSubject, BxlMutationModule } from './executors.ts';
-import type { GateTrace } from './gate-trace.ts';
+import type { GateTrace, GateTraceOutcome } from './gate-trace.ts';
+import { emitPolicySnapshotRead } from './telemetry.ts';
 import type {
   CompiledOperationGrant,
   CompiledPolicyPredicate,
@@ -65,7 +68,7 @@ import {
 //   any rule is matched, or on any type the target's type descends from,
 //   refused before a matching grant admits anything.
 // - An explain, which answers what a refusal withholds, and a validate, which
-//   reports what a policy card compiles to, whatever their declarations say.
+//   reports what a policy compiles to, whatever their declarations say.
 // - Any operation on the card the realm's policy key names: a read of it, a
 //   read of its stored bytes, or a write.
 // - Any operation on the realm's config card, which holds that key and the
@@ -102,6 +105,17 @@ import {
 // author finds it there. A policy the realm cannot load is a 500 to every
 // caller. For one who may not read the realm it is answered before the target
 // resolves, and so says nothing about any target (see `loadPolicy`).
+//
+// A predicate reads the target's stored source, which is as fresh as the last
+// write. One annotated `snapshot: true` that reads a computed value or a
+// linked card's field is judged against the snapshot instead: the stored
+// source with the target's index row laid under it (see `snapshotInput`).
+// The row lags the stored source, so such a grant keeps deciding on what the
+// card held when it was last indexed. Take someone off a roster a computed
+// value reads, and they are admitted until the card is indexed again. That
+// window is what the annotation accepts, at the gate and under the write lock
+// alike, and a realm that needs a grant to stop admitting as soon as a card
+// changes writes its predicate against the stored source.
 //
 // One thing still sets a refusal apart from a target that is not there, and it
 // is not closed here: time. A refusal that evaluated a predicate takes longer
@@ -150,6 +164,14 @@ export interface OperationPolicyAccess {
   // a `RealmPolicy`'s or a subtype's. It is the answer the policy compiler
   // gets when it asks whether the card a key names is one.
   isPolicyCard(types: string[]): boolean;
+  // A draft of the policy card `card`, compiled as this realm would compile
+  // the card were it to hold `document` (see `compileDraftPolicy`), with the
+  // URLs compiling read. Compiled afresh on every call and held by nothing,
+  // so the realm's own policy is untouched by it.
+  compileDraft(
+    card: string,
+    document: Record<string, unknown>,
+  ): Promise<{ compiled: CompiledRealmPolicy; reads: string[] }>;
 }
 
 // The target as the gate judges it. It holds what the realm resolved, and
@@ -180,7 +202,7 @@ export type GateSubject =
 // trace the gate records into.
 export type GateScope = Pick<
   OperationScope,
-  'caller' | 'coarseDeclined' | 'peekInstance' | 'trace'
+  'caller' | 'coarseDeclined' | 'peekInstance' | 'trace' | 'advisory'
 >;
 
 // The gate's refusal. It carries nothing, since what a refusal says is the
@@ -291,11 +313,15 @@ export interface StoredCardCheck {
 // It counts nothing else the gate reads — not the type of a card a pending
 // create would mint, and not the field lookups a predicate's projection makes
 // through the definition callback.
+//
+// `snapshotReads` counts the index rows read to judge a predicate against the
+// snapshot. A predicate that reads the stored source alone reads none.
 export interface PolicyGateStats {
   policyLoads: number;
   predicateEvaluations: number;
   pendingDischarges: number;
   definitionLookups: number;
+  snapshotReads: number;
 }
 
 const statsByCore = new WeakMap<OperationCore, PolicyGateStats>();
@@ -308,6 +334,7 @@ export function policyGateStats(core: OperationCore): PolicyGateStats {
       predicateEvaluations: 0,
       pendingDischarges: 0,
       definitionLookups: 0,
+      snapshotReads: 0,
     };
     statsByCore.set(core, stats);
   }
@@ -454,8 +481,9 @@ export async function gateOperation(
     return GATE_REFUSED;
   }
   // An explain and a validate are granted nowhere: an explain answers what a
-  // refusal withholds, and a validate reads a policy card. So each is refused
-  // here even where its declaration left the flag off.
+  // refusal withholds, and a validate reads a policy card, or the one the
+  // realm's pointer names. So each is refused here even where its declaration
+  // left the flag off.
   if (base === 'explain' || base === 'validate') {
     trace?.refused('non-grantable');
     return GATE_REFUSED;
@@ -564,6 +592,17 @@ export async function gateOperation(
           },
         }
       : undefined;
+  // A create against a type is judged by the card it would mint, which has no
+  // index row until it is written, so a grant judged against the snapshot
+  // never admits one. Left out here, so a capability check, which stops at
+  // this decision, answers what the lock would.
+  if (subject.kind === 'type') {
+    matched = matched.filter(({ grant }) => !grant.where?.snapshot);
+    if (matched.length === 0) {
+      trace?.refused('no-grant');
+      return GATE_REFUSED;
+    }
+  }
   let unconditional = matched.find(({ grant }) => !grant.where);
   if (unconditional) {
     return { kind: 'granted', grant: unconditional, ...lockCheck };
@@ -572,10 +611,11 @@ export async function gateOperation(
     return { kind: 'pending', grants: matched, typeDefinition, ...lockCheck };
   }
   // A read has one state to judge, and nothing to wait for, so its predicate
-  // is evaluated here, against the target as it is stored now.
-  let stored = await readSubject(core, matchOn, typeDefinition);
+  // is evaluated here, against the target as it is stored now, or, for one
+  // judged against the snapshot, as its index row holds it now.
+  let stored = await readSubject(core, matchOn, typeDefinition, scope);
   let admission = stored
-    ? await firstHolding(core, matched, stored, scope)
+    ? await firstHolding(core, matched, stored, scope, 'gate')
     : GATE_REFUSED;
   return 'grant' in admission
     ? { kind: 'granted', grant: admission }
@@ -761,14 +801,16 @@ async function fileAdoptionChain(
 // What a read's predicate is evaluated against.
 //
 // A card is read as its stored source, the same projection a mutation program
-// sees. A data file has no document to interrogate at all: a predicate on one
-// reads the path it names through `instance()` and the caller through
+// sees, and its snapshot lays the index row the gate matched it on under that
+// source. A data file has no document to interrogate at all: a predicate on
+// one reads the path it names through `instance()` and the caller through
 // `actor()`, and anything else it reaches for finds nothing and so does not
-// hold.
+// hold. It has no snapshot either.
 async function readSubject(
   core: OperationCore,
   matched: MatchedSubject,
   typeDefinition: Definition | undefined,
+  scope: GateScope,
 ): Promise<PredicateSubject | undefined> {
   if (matched.kind === 'file') {
     return { input: undefined, instance: { id: matched.url.href } };
@@ -776,12 +818,14 @@ async function readSubject(
   if (matched.kind !== 'card') {
     return undefined;
   }
+  let row = () => scope.peekInstance(matched.url);
   if (matched.source) {
     return await storedSubject(
       core,
       matched.url,
       matched.source.definition,
       matched.source.resource,
+      row,
     );
   }
   let content = await core.readFileAsText(
@@ -789,7 +833,7 @@ async function readSubject(
   );
   let resource = content === undefined ? undefined : cardResourceIn(content);
   return resource
-    ? await storedSubject(core, matched.url, typeDefinition, resource)
+    ? await storedSubject(core, matched.url, typeDefinition, resource, row)
     : undefined;
 }
 
@@ -870,9 +914,9 @@ export async function dischargePendingDecision(
   if (pending.decision.kind === 'pending') {
     policyGateStats(core).pendingDischarges++;
   }
-  let refusal = await pendingWriteRefusal(core, pending, judged);
-  if (refusal) {
-    throw refusal;
+  let admission = await admits(core, pending, judged, 'lock');
+  if (!('grant' in admission)) {
+    throw gateRefusal(core, admission, pending.target, pending.name);
   }
 }
 
@@ -886,7 +930,7 @@ export async function pendingWriteRefusal(
   pending: PendingWrite,
   judged: AdmissionSubject | undefined,
 ): Promise<OperationFailure | undefined> {
-  let admission = await admits(core, pending, judged);
+  let admission = await admits(core, pending, judged, 'rehearsal');
   return 'grant' in admission
     ? undefined
     : gateRefusal(core, admission, pending.target, pending.name);
@@ -928,20 +972,29 @@ export async function storedWriteRefusal(
 }
 
 // The grant that admits a pending write against `judged`, or the refusal.
+//
+// The stored bytes the lock hands in stay authoritative for what a predicate
+// reads of the stored source and for the type the write is judged as. A
+// predicate judged against the snapshot reads the target's index row as it
+// stands when this runs: under the lock, that is the row as the lock found it,
+// which is weaker than judging the write against the state it changes. It is
+// the window the annotation accepts.
 async function admits(
   core: OperationCore,
   { target, decision, scope }: PendingWrite,
   judged: AdmissionSubject | undefined,
+  lane: Lane,
 ): Promise<Admission> {
   if (target.kind !== 'instance') {
     // A create against a type, which only a decision resting on predicates
-    // leaves to the lock.
+    // leaves to the lock. The card it would mint has no index row, so it has
+    // no snapshot to judge.
     if (decision.kind !== 'pending') {
       return GATE_REFUSED;
     }
     let minted = await mintedSubject(core, judged);
     return minted
-      ? await firstHolding(core, decision.grants, minted, scope)
+      ? await firstHolding(core, decision.grants, minted, scope, lane)
       : GATE_REFUSED;
   }
   let card = await lockedCard(
@@ -961,16 +1014,23 @@ async function admits(
   if (judged?.beneathAppend) {
     return GATE_REFUSED;
   }
+  let url = card.url;
   let subject = await storedSubject(
     core,
-    card.url,
+    url,
     decision.typeDefinition,
     card.resource,
+    () => core.indexQueryEngine.instance(url, { includeErrors: true }),
   );
   return subject
-    ? await firstHolding(core, decision.grants, subject, scope)
+    ? await firstHolding(core, decision.grants, subject, scope, lane)
     : GATE_REFUSED;
 }
+
+// Where a predicate is being judged: at the gate, which decides a read; under
+// the write lock, which decides a write; or outside the lock, answering what
+// the lock would decide for a caller who has to be told before it runs.
+type Lane = 'gate' | 'lock' | 'rehearsal';
 
 // The first grant whose predicate holds for this caller against `subject`, or
 // the refusal where none does.
@@ -979,6 +1039,7 @@ async function firstHolding(
   grants: MatchedGrant[],
   subject: PredicateSubject,
   scope: GateScope,
+  lane: Lane,
 ): Promise<Admission> {
   let stats = policyGateStats(core);
   let actor = scope.caller.kind === 'user' ? scope.caller.actor : undefined;
@@ -991,28 +1052,38 @@ async function firstHolding(
     if (!where) {
       return candidate;
     }
-    // A predicate annotated as reading a snapshot tier asks for computed or
-    // linked values, and the gate reads the stored source alone. So it is
-    // never evaluated, and its grant admits nothing.
-    if (where.snapshot) {
-      continue;
-    }
     stats.predicateEvaluations++;
-    let outcome = await evaluate(
-      core,
-      candidate.grant.operation,
-      where,
-      subject,
-      actor,
-    );
-    scope.trace?.evaluated(
-      candidate.grant,
+    // A predicate judged against the snapshot does not hold for a target with
+    // no index row to read: nothing says what its computed or linked values
+    // are.
+    let judged = where.snapshot ? await subject.snapshot?.() : subject;
+    let outcome = judged
+      ? await evaluate(core, candidate.grant.operation, where, judged, actor)
+      : 'fails';
+    let said: GateTraceOutcome =
       outcome === 'holds'
         ? 'held'
         : outcome === 'threw'
           ? 'threw'
-          : 'did-not-hold',
-    );
+          : 'did-not-hold';
+    scope.trace?.evaluated(candidate.grant, said);
+    if (where.snapshot && lane !== 'rehearsal' && !scope.advisory) {
+      emitPolicySnapshotRead({
+        kind: 'policy-snapshot-read',
+        realmURL: core.realmURL,
+        actor: actor ?? null,
+        operation: candidate.grant.operation,
+        targetType: {
+          module: candidate.rule.targetType.module,
+          name: candidate.rule.targetType.name,
+        },
+        grant: candidate.grant.path,
+        decidedAt: lane,
+        outcome: said,
+        indexed: judged !== undefined,
+        hypothetical: scope.trace !== undefined,
+      });
+    }
     if (outcome === 'holds') {
       return candidate;
     }
@@ -1043,7 +1114,7 @@ function realmConfigCardId(core: OperationCore): string {
 
 // Whether `url` is the realm's config card, named either by its id or by that
 // stored `.json`.
-function namesRealmConfigCard(core: OperationCore, url: URL): boolean {
+export function namesRealmConfigCard(core: OperationCore, url: URL): boolean {
   return realmConfigCardId(core) === cardId(url.href);
 }
 
@@ -1257,34 +1328,314 @@ async function ruleTypeKeys(
 // mutation program sees it, so a path means the same thing in a predicate as
 // in the operation's own program. That is the target's own scalars, contained
 // values and relationship links. A computed value and a linked card's fields
-// are not there, since those come from the index and lag the stored source.
+// are not there, since those come from the index and lag the stored source. A
+// predicate annotated as reading them is judged against `snapshot` instead.
 interface PredicateSubject {
   // Undefined for a data file, which has no document to read.
   input: unknown;
   // What `instance()` answers. Absent where there is no card for it to name.
   instance?: Record<string, unknown>;
+  // The target as the snapshot holds it, read the first time a predicate asks
+  // and undefined where the target has no clean index row. Absent where there
+  // is no row to read at all: a data file, or the card a create against a
+  // type would mint.
+  snapshot?: () => Promise<PredicateSubject | undefined>;
 }
 
-// A card's stored source as a predicate reads it.
+// A card's stored source as a predicate reads it. `row` reads the card's
+// index row, for a predicate judged against the snapshot.
 async function storedSubject(
   core: OperationCore,
   url: URL,
   typeDefinition: Definition | undefined,
   resource: CardResource,
+  row?: () => Promise<InstanceOrError | undefined>,
 ): Promise<PredicateSubject | undefined> {
   let sourcePath = `${localPathFor(core, url)}.json` as LocalPath;
-  let input = await projectedSource(core, typeDefinition, resource, {
+  let at = {
     relativeTo: url,
     linksRelativeTo: pathsFor(core).fileURL(sourcePath),
     targetId: url.href,
-  });
-  return input === undefined
-    ? undefined
-    : {
-        input,
-        // What `instance()` answers, as it does for a mutation program.
-        instance: { id: url.href, ...(resource.attributes ?? {}) },
-      };
+  };
+  let project = await projector(core, typeDefinition, at);
+  let input = project ? attempt(() => project(resource)) : undefined;
+  if (input === undefined) {
+    return undefined;
+  }
+  let subject: PredicateSubject = {
+    input,
+    // What `instance()` answers, as it does for a mutation program.
+    instance: { id: url.href, ...(resource.attributes ?? {}) },
+  };
+  if (row && project && typeDefinition) {
+    let snapshot: Promise<PredicateSubject | undefined> | undefined;
+    subject.snapshot = () => {
+      snapshot ??= (async () => {
+        policyGateStats(core).snapshotReads++;
+        let indexed = await row();
+        let root = await snapshotInput(
+          core,
+          typeDefinition,
+          input,
+          indexed,
+          project,
+          at.relativeTo,
+        );
+        return root === undefined ? undefined : { ...subject, input: root };
+      })();
+      return snapshot;
+    };
+  }
+  return subject;
+}
+
+// The snapshot a predicate annotated `snapshot: true` is judged against: the
+// target's stored source, `stored`, with values from its index row laid under
+// it. Laid under, so the stored source answers wherever it holds a value, and
+// what a predicate reads of the stored source reads the same as it would
+// without the annotation. A computed value is the exception: it is the row's
+// to answer, whatever the stored source holds under its key.
+//
+// Two kinds of value are laid, and nothing else from the row:
+//
+// - Computed values, from the row's `pristine_doc`: those on the card itself,
+//   and those inside a single contained value the stored source holds.
+//   Nothing is laid inside a list. A position is an identity only while
+//   nothing moves, and the row's copy of a list cannot say which of the
+//   card's items it describes.
+// - The fields of the card a single link on the card itself points to, from
+//   the row's `search_doc`, for a link marked `searchable`. Only where the
+//   stored link names the card the row expanded: a row that expanded the card
+//   the link used to name says nothing about the one it names now.
+//
+// The policy compile records a predicate that reads anything else outside the
+// stored source (see `policy-tiers.ts`), so no compiled predicate reads a
+// value this leaves out.
+//
+// Undefined where the card has no clean row: it is not indexed yet, or its
+// latest visit failed and left an error row.
+async function snapshotInput(
+  core: OperationCore,
+  definition: Definition,
+  stored: unknown,
+  row: InstanceOrError | undefined,
+  project: (resource: CardResource) => unknown,
+  relativeTo: URL,
+): Promise<unknown> {
+  if (!row || row.type !== 'instance') {
+    return undefined;
+  }
+  let pristine = row.instance
+    ? attempt(() => project(row.instance as CardResource))
+    : undefined;
+  // A computed value is the index's to answer. The stored source holds one
+  // only where something wrote the card's bytes by hand, since the serializer
+  // drops them, and a value it held would otherwise stand in front of the
+  // row's however often the card was indexed.
+  let source = await withoutComputedValues(
+    core,
+    definition,
+    stored,
+    relativeTo,
+    new Set(),
+  );
+  let computeds = await computedValues(
+    core,
+    definition,
+    pristine,
+    source,
+    relativeTo,
+    new Set(),
+  );
+  let linked = linkedValues(definition, source, row.searchDoc ?? undefined);
+  try {
+    let bxl = await loadBxlMutation();
+    return bxl.mergeBxlMutationOverlays(source, {
+      ...(computeds ? { computeds } : {}),
+      ...(linked ? { linked } : {}),
+      unavailable: [],
+    }).root;
+  } catch {
+    return undefined;
+  }
+}
+
+// `stored`, a value of `definition`, with every computed value on it and
+// inside its single contained values emptied, copying only what changes.
+async function withoutComputedValues(
+  core: OperationCore,
+  definition: Definition,
+  stored: unknown,
+  relativeTo: URL,
+  within: Set<Definition>,
+): Promise<unknown> {
+  if (!isRecord(stored) || within.has(definition)) {
+    return stored;
+  }
+  let nested = new Set(within).add(definition);
+  let copy: Record<string, unknown> | undefined;
+  for (let name of Object.keys(definition.fields)) {
+    let field = ownField(definition, name);
+    if (!field || !hasOwn(stored, name)) {
+      continue;
+    }
+    let value: unknown = stored[name];
+    if (field.isComputed) {
+      value = null;
+    } else if (
+      field.type === 'contains' &&
+      !field.isPrimitive &&
+      isRecord(stored[name])
+    ) {
+      let contained = await containedDefinition(core, field, relativeTo);
+      value = contained
+        ? await withoutComputedValues(
+            core,
+            contained,
+            stored[name],
+            relativeTo,
+            nested,
+          )
+        : stored[name];
+    }
+    if (value !== stored[name]) {
+      copy ??= { ...stored };
+      copy[name] = value;
+    }
+  }
+  return copy ?? stored;
+}
+
+// The computed values `pristine` holds for a value of `definition`, beneath a
+// value `stored` the stored source holds, keyed as the value's fields are.
+async function computedValues(
+  core: OperationCore,
+  definition: Definition,
+  pristine: unknown,
+  stored: unknown,
+  relativeTo: URL,
+  // The types of the values this one is contained in, which a type that
+  // contains itself would otherwise walk forever.
+  within: Set<Definition>,
+): Promise<Record<string, unknown> | undefined> {
+  if (!isRecord(pristine) || within.has(definition)) {
+    return undefined;
+  }
+  let nested = new Set(within).add(definition);
+  let values: Record<string, unknown> = {};
+  for (let name of Object.keys(definition.fields)) {
+    let field = ownField(definition, name);
+    if (!field || field.query || !hasOwn(pristine, name)) {
+      continue;
+    }
+    if (field.isComputed) {
+      values[name] = pristine[name];
+    } else if (
+      field.type === 'contains' &&
+      !field.isPrimitive &&
+      isRecord(stored) &&
+      isRecord(stored[name])
+    ) {
+      let contained = await containedDefinition(core, field, relativeTo);
+      let beneath = contained
+        ? await computedValues(
+            core,
+            contained,
+            pristine[name],
+            stored[name],
+            relativeTo,
+            nested,
+          )
+        : undefined;
+      if (beneath && Object.keys(beneath).length > 0) {
+        values[name] = beneath;
+      }
+    }
+  }
+  return Object.keys(values).length > 0 ? values : undefined;
+}
+
+// The fields of each linked card `searchDoc` expands, keyed by the link that
+// points to it, for the single `searchable` links on the card whose stored
+// link names that same card.
+function linkedValues(
+  definition: Definition,
+  stored: unknown,
+  searchDoc: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined {
+  if (!searchDoc || !isRecord(stored)) {
+    return undefined;
+  }
+  let values: Record<string, unknown> = {};
+  for (let name of Object.keys(definition.fields)) {
+    let field = ownField(definition, name);
+    // Only a link the search doc expands, by the rule it is generated by.
+    if (
+      !field ||
+      field.type !== 'linksTo' ||
+      field.isComputed ||
+      field.query ||
+      routesForField(name, field.searchable).length === 0
+    ) {
+      continue;
+    }
+    let link = stored[name];
+    let expanded = hasOwn(searchDoc, name) ? searchDoc[name] : undefined;
+    if (
+      isRecord(link) &&
+      typeof link.id === 'string' &&
+      isRecord(expanded) &&
+      expanded.id === link.id
+    ) {
+      values[name] = expanded;
+    }
+  }
+  return Object.keys(values).length > 0 ? values : undefined;
+}
+
+async function containedDefinition(
+  core: OperationCore,
+  field: FieldDefinition,
+  relativeTo: URL,
+): Promise<Definition | undefined> {
+  let resolved = core.resolveCodeRef(field.fieldOrCard, relativeTo);
+  if (!resolved) {
+    return undefined;
+  }
+  try {
+    return await core.definitionLookup.lookupDefinition(resolved);
+  } catch {
+    return undefined;
+  }
+}
+
+function ownField(
+  definition: Definition,
+  name: string,
+): FieldDefinition | undefined {
+  let id = hasOwn(definition.fields, name)
+    ? definition.fields[name]
+    : undefined;
+  return id !== undefined && hasOwn(definition.fieldDefs, id)
+    ? definition.fieldDefs[id]
+    : undefined;
+}
+
+function hasOwn(record: object, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(record, key);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+// What `fn` answers, or undefined when it throws.
+function attempt<T>(fn: () => T): T | undefined {
+  try {
+    return fn();
+  } catch {
+    return undefined;
+  }
 }
 
 // A pending write's target card as the lock holds it, or undefined where it is
@@ -1357,22 +1708,25 @@ async function mintedSubject(
   } catch {
     return undefined;
   }
-  let input = await projectedSource(core, definition, resource, {
+  let project = await projector(core, definition, {
     relativeTo: url,
     linksRelativeTo: new URL(`${url.href}.json`),
     targetId: url.href,
   });
+  let input = project ? attempt(() => project(resource)) : undefined;
   return input === undefined
     ? undefined
     : { input, instance: { id: url.href, ...(resource.attributes ?? {}) } };
 }
 
-// A card resource projected the way a mutation program sees it. Undefined
-// where the type's definition is not in hand or the resource does not fit it.
-async function projectedSource(
+// What projects a card resource of a type the way a mutation program sees
+// it: the stored source, or the row's `pristine_doc`, which describes the same
+// card and so goes through the same projection. A projection throws for a
+// resource that does not fit the type. Undefined where the type's definition
+// is not in hand.
+async function projector(
   core: OperationCore,
   typeDefinition: Definition | undefined,
-  resource: CardResource,
   at: {
     // What the type's own code refs resolve against.
     relativeTo: URL;
@@ -1381,7 +1735,7 @@ async function projectedSource(
     // The card the resource is, where there is one yet.
     targetId?: string;
   },
-): Promise<unknown> {
+): Promise<((resource: CardResource) => unknown) | undefined> {
   if (!typeDefinition || !core.policy) {
     return undefined;
   }
@@ -1396,11 +1750,12 @@ async function projectedSource(
           : undefined;
       },
     });
-    return bxl.snapshotBxlCardSource({ data: resource }, schema, {
-      ...(at.targetId ? { targetId: at.targetId } : {}),
-      resolveReference: (reference) =>
-        policy.resolvedLink(reference, at.linksRelativeTo),
-    });
+    return (resource) =>
+      bxl.snapshotBxlCardSource({ data: resource }, schema, {
+        ...(at.targetId ? { targetId: at.targetId } : {}),
+        resolveReference: (reference) =>
+          policy.resolvedLink(reference, at.linksRelativeTo),
+      });
   } catch {
     return undefined;
   }
