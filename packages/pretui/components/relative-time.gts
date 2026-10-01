@@ -77,9 +77,11 @@ export class RelativeTime extends Component<RelativeTimeSignature> {
       ...attributes
     >{{this.phrase}}</time>
     <style scoped>
-      .pretui-relative-time {
-        white-space: nowrap;
-        font-variant-numeric: tabular-nums;
+      @layer PretComponent {
+        .pretui-relative-time {
+          white-space: nowrap;
+          font-variant-numeric: tabular-nums;
+        }
       }
     </style>
   </template>

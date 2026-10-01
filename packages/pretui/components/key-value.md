@@ -53,3 +53,5 @@ Gaps:
 Only four tokens, and the layout is entirely `max-content 1fr` — so a season's control over this component is limited to ink and the column gap. There is no way to switch to a stacked layout, set a fixed key column, or right-align keys through tokens.
 
 Because keys use `--muted-foreground` and values inherit `--foreground`, the key/value distinction is carried by ink weight and size alone. A season that compresses its grey ramp will make the two columns read as one; keep at least a step between them.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

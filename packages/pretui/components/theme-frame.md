@@ -44,3 +44,5 @@ Where it is thinner: no persistence, no per-component theme override, and no way
 The frame applies a theme rather than being themed by one — it is the component that establishes the token scope its subtree renders in, using boxel-ui's own theme helpers rather than hand-rolling the scoping.
 
 Its own chrome takes the kit's control and overlay tokens, which means the switcher itself is dressed by whichever season is active. That is deliberate and occasionally disorienting: switching to a low-contrast season restyles the control you switched with.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

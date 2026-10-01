@@ -52,69 +52,71 @@ export class LoadingState extends Component<LoadingStateSignature> {
       {{#if @elapsed}}<span class='pretui-elapsed'>{{@elapsed}}</span>{{/if}}
     </span>
     <style scoped>
-      @keyframes pretui-pixel-on {
-        0%,
-        100% {
+      @layer PretComponent {
+        @keyframes pretui-pixel-on {
+          0%,
+          100% {
+            opacity: 0.15;
+          }
+          50% {
+            opacity: 1;
+          }
+        }
+        @keyframes pretui-shimmer-text {
+          from {
+            background-position: 200% 0;
+          }
+          to {
+            background-position: -200% 0;
+          }
+        }
+        .pretui-loading {
+          display: inline-flex;
+          align-items: center;
+          gap: 10px;
+        }
+        .pretui-pixelgrid {
+          display: grid;
+          grid-template-columns: repeat(3, 4px);
+          gap: 1.5px;
+        }
+        .pretui-pixel {
+          width: 4px;
+          height: 4px;
+          background: var(--foreground);
+          border-radius: 1px;
           opacity: 0.15;
         }
-        50% {
-          opacity: 1;
-        }
-      }
-      @keyframes pretui-shimmer-text {
-        from {
-          background-position: 200% 0;
-        }
-        to {
-          background-position: -200% 0;
-        }
-      }
-      .pretui-loading {
-        display: inline-flex;
-        align-items: center;
-        gap: 10px;
-      }
-      .pretui-pixelgrid {
-        display: grid;
-        grid-template-columns: repeat(3, 4px);
-        gap: 1.5px;
-      }
-      .pretui-pixel {
-        width: 4px;
-        height: 4px;
-        background: var(--foreground);
-        border-radius: 1px;
-        opacity: 0.15;
-      }
-      .pretui-pixel[data-round] {
-        border-radius: 50%;
-      }
-      .pretui-shimmer-label {
-        font-size: var(--text-ui-md, 12.5px);
-        font-weight: 500;
-        background-image: linear-gradient(90deg, var(--ink-3, var(--boxel-400)) 35%, var(--foreground) 50%, var(--ink-3, var(--boxel-400)) 65%);
-        background-size: 200% 100%;
-        -webkit-background-clip: text;
-        background-clip: text;
-        color: transparent;
-        animation: pretui-shimmer-text 1.4s linear infinite;
-        white-space: nowrap;
-      }
-      .pretui-elapsed {
-        font-family: var(--font-mono);
-        font-size: 12px;
-        color: var(--ink-3, var(--boxel-400));
-        font-variant-numeric: tabular-nums;
-      }
-      @media (prefers-reduced-motion: reduce) {
-        .pretui-pixel {
-          animation: none !important;
-          opacity: 0.6;
+        .pretui-pixel[data-round] {
+          border-radius: 50%;
         }
         .pretui-shimmer-label {
-          animation: none;
-          color: var(--muted-foreground);
-          background: none;
+          font-size: var(--text-ui-md, 12.5px);
+          font-weight: 500;
+          background-image: linear-gradient(90deg, var(--ink-3, var(--boxel-400)) 35%, var(--foreground) 50%, var(--ink-3, var(--boxel-400)) 65%);
+          background-size: 200% 100%;
+          -webkit-background-clip: text;
+          background-clip: text;
+          color: transparent;
+          animation: pretui-shimmer-text 1.4s linear infinite;
+          white-space: nowrap;
+        }
+        .pretui-elapsed {
+          font-family: var(--font-mono);
+          font-size: 12px;
+          color: var(--ink-3, var(--boxel-400));
+          font-variant-numeric: tabular-nums;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .pretui-pixel {
+            animation: none !important;
+            opacity: 0.6;
+          }
+          .pretui-shimmer-label {
+            animation: none;
+            color: var(--muted-foreground);
+            background: none;
+          }
         }
       }
     </style>

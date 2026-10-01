@@ -46,3 +46,5 @@ Where it is thinner: no estimator bundled — deliberately, since zxcvbn is larg
 The five steps take the kit's semantic hues, and the meter's geometry the shared control tokens.
 
 Using the semantic scale rather than a bespoke red-to-green means a season's danger and success colours govern the ends — and a season that has chosen accessible versions of those gets an accessible meter for free.
+
+The styles sit in `@layer PretComposite`, above Meter's `PretComponent` layer, so what this component sets on Meter wins by layer order. A caller's unlayered CSS overrides both without a more specific selector.

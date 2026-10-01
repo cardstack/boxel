@@ -61,54 +61,56 @@ export class Switch extends Component<SwitchSignature> {
       ...attributes
     ><span class='pretui-switch-thumb'></span></button>
     <style scoped>
-      .pretui-switch {
-        position: relative;
-        width: 30px;
-        height: 18px;
-        border-radius: 9px;
-        background: var(
-          --pretui-control-border,
-          var(--line-strong, var(--boxel-400))
-        );
-        cursor: pointer;
-        border: 0;
-        padding: 0;
-        transition: background var(--pretui-dur-snap, 180ms)
-          var(--pretui-ease-snap, ease);
-        flex: none;
-      }
-      .pretui-switch:active:not(:disabled) {
-        box-shadow: var(
-          --pretui-shadow-inset,
-          inset 0 1px 2px rgb(0 0 0 / 0.16)
-        );
-      }
-      .pretui-switch[data-state='checked'] {
-        background: var(--primary);
-      }
-      .pretui-switch:disabled {
-        opacity: 0.45;
-        cursor: default;
-      }
-      .pretui-switch-thumb {
-        position: absolute;
-        top: 2px;
-        left: 2px;
-        width: 14px;
-        height: 14px;
-        border-radius: 50%;
-        background: var(--card);
-        box-shadow: 0 1px 2px var(--shadow-ink-mid, rgb(0 0 0 / 0.08));
-        transition: transform var(--pretui-dur-snap, 180ms)
-          var(--pretui-ease-snap, ease);
-      }
-      .pretui-switch[data-state='checked'] .pretui-switch-thumb {
-        transform: translateX(12px);
-      }
-      @media (prefers-reduced-motion: reduce) {
-        .pretui-switch,
+      @layer PretComponent {
+        .pretui-switch {
+          position: relative;
+          width: 30px;
+          height: 18px;
+          border-radius: 9px;
+          background: var(
+            --pretui-control-border,
+            var(--line-strong, var(--boxel-400))
+          );
+          cursor: pointer;
+          border: 0;
+          padding: 0;
+          transition: background var(--pretui-dur-snap, 180ms)
+            var(--pretui-ease-snap, ease);
+          flex: none;
+        }
+        .pretui-switch:active:not(:disabled) {
+          box-shadow: var(
+            --pretui-shadow-inset,
+            inset 0 1px 2px rgb(0 0 0 / 0.16)
+          );
+        }
+        .pretui-switch[data-state='checked'] {
+          background: var(--primary);
+        }
+        .pretui-switch:disabled {
+          opacity: 0.45;
+          cursor: default;
+        }
         .pretui-switch-thumb {
-          transition: none;
+          position: absolute;
+          top: 2px;
+          left: 2px;
+          width: 14px;
+          height: 14px;
+          border-radius: 50%;
+          background: var(--card);
+          box-shadow: 0 1px 2px var(--shadow-ink-mid, rgb(0 0 0 / 0.08));
+          transition: transform var(--pretui-dur-snap, 180ms)
+            var(--pretui-ease-snap, ease);
+        }
+        .pretui-switch[data-state='checked'] .pretui-switch-thumb {
+          transform: translateX(12px);
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .pretui-switch,
+          .pretui-switch-thumb {
+            transition: none;
+          }
         }
       }
     </style>

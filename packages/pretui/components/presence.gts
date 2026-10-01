@@ -105,48 +105,50 @@ export class Presence extends Component<PresenceSignature> {
       ...attributes
     >{{yield}}</div>
     <style scoped>
-      /* Hidden IS the base rule, so its declarations are also the exit
-         destination — and because CSS transitions read the after-change
-         style, the exit timing lives here and the enter timing lives on the
-         shown rule. One mechanism, two independently tuned halves. */
-      .pretui-presence {
-        display: none;
-        opacity: 0;
-        transform: var(--pretui-presence-exit, none);
-        transition-property: opacity, transform, display;
-        transition-duration: var(--pretui-presence-exit-duration, 150ms);
-        transition-timing-function: var(
-          --pretui-ease-snap,
-          cubic-bezier(0.23, 1, 0.32, 1)
-        );
-        transition-behavior: allow-discrete;
-      }
-      .pretui-presence[data-show='true'] {
-        display: var(--pretui-presence-display, block);
-        opacity: 1;
-        transform: none;
-        transition-property: opacity, transform, display;
-        transition-duration: var(--pretui-presence-enter-duration, 220ms);
-        transition-delay: var(--pretui-presence-delay, 0s);
-        transition-timing-function: var(
-          --pretui-ease-snap,
-          cubic-bezier(0.23, 1, 0.32, 1)
-        );
-        transition-behavior: allow-discrete;
-      }
-      /* Leaving display:none counts as a first render, so this supplies the
-         enter from-state on every appearance, not just the first. */
-      @starting-style {
-        .pretui-presence[data-show='true'] {
+      @layer PretComponent {
+        /* Hidden IS the base rule, so its declarations are also the exit
+           destination — and because CSS transitions read the after-change
+           style, the exit timing lives here and the enter timing lives on the
+           shown rule. One mechanism, two independently tuned halves. */
+        .pretui-presence {
+          display: none;
           opacity: 0;
-          transform: var(--pretui-presence-enter, none);
+          transform: var(--pretui-presence-exit, none);
+          transition-property: opacity, transform, display;
+          transition-duration: var(--pretui-presence-exit-duration, 150ms);
+          transition-timing-function: var(
+            --pretui-ease-snap,
+            cubic-bezier(0.23, 1, 0.32, 1)
+          );
+          transition-behavior: allow-discrete;
         }
-      }
-      @media (prefers-reduced-motion: reduce) {
-        .pretui-presence,
         .pretui-presence[data-show='true'] {
-          transition-property: none;
+          display: var(--pretui-presence-display, block);
+          opacity: 1;
           transform: none;
+          transition-property: opacity, transform, display;
+          transition-duration: var(--pretui-presence-enter-duration, 220ms);
+          transition-delay: var(--pretui-presence-delay, 0s);
+          transition-timing-function: var(
+            --pretui-ease-snap,
+            cubic-bezier(0.23, 1, 0.32, 1)
+          );
+          transition-behavior: allow-discrete;
+        }
+        /* Leaving display:none counts as a first render, so this supplies the
+           enter from-state on every appearance, not just the first. */
+        @starting-style {
+          .pretui-presence[data-show='true'] {
+            opacity: 0;
+            transform: var(--pretui-presence-enter, none);
+          }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .pretui-presence,
+          .pretui-presence[data-show='true'] {
+            transition-property: none;
+            transform: none;
+          }
         }
       }
     </style>

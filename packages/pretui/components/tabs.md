@@ -44,6 +44,8 @@ Practically: it is clickable and Tab-reachable, and it is not a conformant tab l
 
 A season must keep `--muted-foreground` and `--foreground` separable, since inactive-versus-active is carried entirely by ink weight plus the underline — there is no background change to fall back on.
 
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
+
 ## React ecosystem
 
 | React                        | Pretui               |

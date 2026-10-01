@@ -46,3 +46,5 @@ The tree is where the accessibility questions are, and they are worth checking r
 `JsonTree`'s tokens for the tree (mono voice, key and value inks, the disclosure affordance), **Table**'s for the doc row, plus the property rail's label voice and **Token**'s treatment for the default value.
 
 Nothing of its own. The key/value ink distinction is the thing to check per season: a JSON tree is read by scanning for keys, and if `--foreground` and `--muted-foreground` converge, the structure flattens into an undifferentiated block of mono text.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

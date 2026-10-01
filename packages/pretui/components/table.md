@@ -50,6 +50,8 @@ Component-level gaps:
 
 Identical to **DataGrid**'s set by design — if a season retunes one, both move together. The 10px uppercase mono header and the 8px/10px cell padding are hard-coded. As with DataGrid, `--stripe` must be distinguishable from both `--card` and `--hover`, or zebra and hover collapse into each other.
 
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
+
 ## React ecosystem
 
 Four listing surfaces — do not collapse them:

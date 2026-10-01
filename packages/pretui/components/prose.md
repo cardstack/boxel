@@ -53,3 +53,5 @@ Gaps:
 The `62ch` measure is fixed and is the one thing a season most often wants to change — a display-face season with a wide font may want 58ch, a condensed one 68ch. There is no token for it, so changing the measure means changing the component.
 
 Because everything else inside is unstyled, **a season's control over prose is limited to the type scale tokens**; heading, list and link appearance inside a Prose are the browser's, whatever the season says.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

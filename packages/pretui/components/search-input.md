@@ -52,3 +52,5 @@ Consumed: `--field`, `--input`, `--primary` (focus ring via `--ring`), `--ink-3`
 Forwarded into boxel-ui through the `--boxel-*` channel, matching **Input**'s metrics exactly.
 
 `data-filled` is reflected on the wrapper when the clear button is showing, so a season can dress the filled state — a stronger hairline, a changed placeholder treatment — which is the only hook available for signalling "this search is active" without adding markup. Worth using, since the clear button alone is a small signal at 28px.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

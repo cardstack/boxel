@@ -73,6 +73,8 @@ APG **Disclosure** for the toggle, on a named navigation landmark.
 
 Widths are args as well as tokens. The slide is dropped under reduced motion.
 
+Sidebar, SidebarTrigger and SidebarGroup sit in `@layer PretComponent`. SidebarItem sits in `@layer PretComposite`, above Tooltip's `PretComponent` layer, so what it sets on Tooltip wins by layer order. A caller's unlayered CSS overrides all of them without a more specific selector.
+
 ## React ecosystem
 
 | Agent types                                 | Give them                                    |

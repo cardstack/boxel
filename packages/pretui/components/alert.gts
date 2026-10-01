@@ -71,40 +71,42 @@ export class Alert extends Component<AlertSignature> {
       </div>
     </div>
     <style scoped>
-      .pretui-alert {
-        display: flex;
-        gap: 9px;
-        padding: 8px 10px;
-        border-radius: 10px;
-        background: color-mix(in oklch, var(--pretui-alert-hue, var(--chart-1)) var(--pretui-chip-mix, 20%), var(--card));
-        color: color-mix(in oklch, var(--foreground) 40%, var(--pretui-alert-hue, var(--chart-1)));
-        box-shadow: 0 0 0 1px color-mix(in oklch, var(--pretui-alert-hue, var(--chart-1)) 25%, var(--border));
-        font-size: var(--text-ui-md, 12.5px);
-      }
-      .pretui-alert-glyph {
-        width: 16px;
-        height: 16px;
-        border-radius: 50%;
-        flex: none;
-        display: grid;
-        place-items: center;
-        font-size: 9px;
-        font-weight: 700;
-        background: var(--pretui-alert-hue, var(--chart-1));
-        color: var(--pretui-on-neutral, var(--boxel-light));
-        margin-top: 1px;
-      }
-      .pretui-alert-body {
-        display: grid;
-        gap: 2px;
-        min-width: 0;
-      }
-      .pretui-alert-title {
-        font-weight: 600;
-        color: color-mix(in oklch, var(--foreground) 55%, var(--pretui-alert-hue, var(--chart-1)));
-      }
-      .pretui-alert-action {
-        margin-top: 4px;
+      @layer PretComponent {
+        .pretui-alert {
+          display: flex;
+          gap: 9px;
+          padding: 8px 10px;
+          border-radius: 10px;
+          background: color-mix(in oklch, var(--pretui-alert-hue, var(--chart-1)) var(--pretui-chip-mix, 20%), var(--card));
+          color: color-mix(in oklch, var(--foreground) 40%, var(--pretui-alert-hue, var(--chart-1)));
+          box-shadow: 0 0 0 1px color-mix(in oklch, var(--pretui-alert-hue, var(--chart-1)) 25%, var(--border));
+          font-size: var(--text-ui-md, 12.5px);
+        }
+        .pretui-alert-glyph {
+          width: 16px;
+          height: 16px;
+          border-radius: 50%;
+          flex: none;
+          display: grid;
+          place-items: center;
+          font-size: 9px;
+          font-weight: 700;
+          background: var(--pretui-alert-hue, var(--chart-1));
+          color: var(--pretui-on-neutral, var(--boxel-light));
+          margin-top: 1px;
+        }
+        .pretui-alert-body {
+          display: grid;
+          gap: 2px;
+          min-width: 0;
+        }
+        .pretui-alert-title {
+          font-weight: 600;
+          color: color-mix(in oklch, var(--foreground) 55%, var(--pretui-alert-hue, var(--chart-1)));
+        }
+        .pretui-alert-action {
+          margin-top: 4px;
+        }
       }
     </style>
   </template>

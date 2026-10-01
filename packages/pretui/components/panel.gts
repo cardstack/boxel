@@ -66,91 +66,93 @@ export const Panel: TemplateOnlyComponent<PanelSignature> = <template>
     {{/if}}
   </section>
   <style scoped>
-    .pretui-panel {
-      background: var(--card);
-      border-radius: var(--radius-surface, 10px);
-      box-shadow: var(--pretui-shadow-card, 0 0 0 1px var(--border));
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-    }
-    .pretui-panel-header {
-      padding: var(--space-4, 11px) var(--space-5, 14px) 0;
-      display: grid;
-      gap: 2px;
-    }
-    .pretui-panel-header h2 {
-      margin: 0;
-      font-size: var(--text-body, 15px);
-      font-weight: 600;
-      letter-spacing: var(--track-heading, -0.02em);
-    }
-    .pretui-eyebrow {
-      font-family: var(--font-mono);
-      font-size: var(--text-ui-xs, 11px);
-      font-weight: 500;
-      letter-spacing: var(--track-eyebrow, 0.08em);
-      text-transform: uppercase;
-      color: var(--muted-foreground);
-    }
-    .pretui-panel-body {
-      padding: var(--space-5, 14px);
-    }
-    .pretui-panel-footer {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: var(--space-3, 8px);
-      padding: var(--space-3, 8px) var(--space-5, 14px);
-      box-shadow: 0 -1px 0 var(--border);
-    }
-    .pretui-panel-status {
-      font-size: var(--text-ui, 12px);
-      color: var(--muted-foreground);
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-    .pretui-panel-actions {
-      display: flex;
-      align-items: center;
-      gap: var(--space-3, 8px);
-    }
-    /* ── inspector variant (design-tools shell) ───────────────────────── */
-    .pretui-panel[data-variant='inspector'] {
-      /* An inspector's rows fold against the PANEL width, never the
-         viewport. Unnamed container only — a named one silently deletes
-         every rule after it in the transpiled sheet. */
-      container-type: inline-size;
-    }
-    .pretui-panel[data-variant='inspector'] .pretui-panel-header {
-      padding: var(--space-3, 8px) var(--space-4, 11px);
-      box-shadow: 0 1px 0 var(--border);
-    }
-    .pretui-panel[data-variant='inspector'] .pretui-panel-header h2 {
-      font-size: var(--text-ui-md, 12.5px);
-    }
-    /* Flush, so PanelSection hairlines run edge to edge. */
-    .pretui-panel[data-variant='inspector'] .pretui-panel-body {
-      padding: 0;
-    }
-    .pretui-panel[data-variant='inspector'] .pretui-panel-footer {
-      padding: var(--space-2, 6px) var(--space-4, 11px);
-    }
-    /* ── scrolling body ───────────────────────────────────────────────── */
-    .pretui-panel[data-scroll='true'] {
-      min-height: 0;
-    }
-    .pretui-panel[data-scroll='true'] .pretui-panel-header,
-    .pretui-panel[data-scroll='true'] .pretui-panel-footer {
-      flex: none;
-    }
-    .pretui-panel[data-scroll='true'] .pretui-panel-body {
-      flex: 1 1 auto;
-      min-height: 0;
-      overflow-y: auto;
-      overscroll-behavior: contain;
-      scrollbar-gutter: stable;
+    @layer PretComponent {
+      .pretui-panel {
+        background: var(--card);
+        border-radius: var(--radius-surface, 10px);
+        box-shadow: var(--pretui-shadow-card, 0 0 0 1px var(--border));
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+      .pretui-panel-header {
+        padding: var(--space-4, 11px) var(--space-5, 14px) 0;
+        display: grid;
+        gap: 2px;
+      }
+      .pretui-panel-header h2 {
+        margin: 0;
+        font-size: var(--text-body, 15px);
+        font-weight: 600;
+        letter-spacing: var(--track-heading, -0.02em);
+      }
+      .pretui-eyebrow {
+        font-family: var(--font-mono);
+        font-size: var(--text-ui-xs, 11px);
+        font-weight: 500;
+        letter-spacing: var(--track-eyebrow, 0.08em);
+        text-transform: uppercase;
+        color: var(--muted-foreground);
+      }
+      .pretui-panel-body {
+        padding: var(--space-5, 14px);
+      }
+      .pretui-panel-footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-3, 8px);
+        padding: var(--space-3, 8px) var(--space-5, 14px);
+        box-shadow: 0 -1px 0 var(--border);
+      }
+      .pretui-panel-status {
+        font-size: var(--text-ui, 12px);
+        color: var(--muted-foreground);
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .pretui-panel-actions {
+        display: flex;
+        align-items: center;
+        gap: var(--space-3, 8px);
+      }
+      /* ── inspector variant (design-tools shell) ───────────────────────── */
+      .pretui-panel[data-variant='inspector'] {
+        /* An inspector's rows fold against the PANEL width, never the
+           viewport. Unnamed container only — a named one silently deletes
+           every rule after it in the transpiled sheet. */
+        container-type: inline-size;
+      }
+      .pretui-panel[data-variant='inspector'] .pretui-panel-header {
+        padding: var(--space-3, 8px) var(--space-4, 11px);
+        box-shadow: 0 1px 0 var(--border);
+      }
+      .pretui-panel[data-variant='inspector'] .pretui-panel-header h2 {
+        font-size: var(--text-ui-md, 12.5px);
+      }
+      /* Flush, so PanelSection hairlines run edge to edge. */
+      .pretui-panel[data-variant='inspector'] .pretui-panel-body {
+        padding: 0;
+      }
+      .pretui-panel[data-variant='inspector'] .pretui-panel-footer {
+        padding: var(--space-2, 6px) var(--space-4, 11px);
+      }
+      /* ── scrolling body ───────────────────────────────────────────────── */
+      .pretui-panel[data-scroll='true'] {
+        min-height: 0;
+      }
+      .pretui-panel[data-scroll='true'] .pretui-panel-header,
+      .pretui-panel[data-scroll='true'] .pretui-panel-footer {
+        flex: none;
+      }
+      .pretui-panel[data-scroll='true'] .pretui-panel-body {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        scrollbar-gutter: stable;
+      }
     }
   </style>
 </template>;
