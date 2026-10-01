@@ -18,6 +18,7 @@ import {
   type OperationsSubject,
   type PolicyExplanation,
   type PolicyExplanationListing,
+  type PolicyValidation,
   type QueryTargetHandle,
   type SearchEntries,
   type SearchEntryWireQuery,
@@ -107,6 +108,7 @@ export const BASE_OPERATIONS = [
   'appendContainsMany',
   'appendLine',
   'explain',
+  'validate',
 ] as const;
 
 export type BaseOperationName = (typeof BASE_OPERATIONS)[number];
@@ -141,6 +143,7 @@ const CARRIED_BY: Record<BaseOperationName, readonly DefFamily[]> = {
   appendLine: ['file'],
   // Carried by nothing on its own. See `DECLARATION_ONLY`.
   explain: [],
+  validate: [],
 };
 
 // The behaviors a def reaches only by declaring an operation built on them.
@@ -148,12 +151,14 @@ const CARRIED_BY: Record<BaseOperationName, readonly DefFamily[]> = {
 // a name nothing declared is not an operation at all.
 //
 // `explain` reports what a realm's policy decides for a caller, a target and
-// an operation, which only means something on a policy card. Implied on every
-// card, it would be a member on every card whose every invocation is refused.
+// an operation, and `validate` reports what a policy card compiles to. Each
+// only means something on a policy card. Implied on every card, either would
+// be a member on every card whose every invocation is refused.
 const DECLARATION_ONLY: Partial<
   Record<BaseOperationName, readonly DefFamily[]>
 > = {
   explain: ['card'],
+  validate: ['card'],
 };
 
 function operationsCarriedBy(family: DefFamily): readonly BaseOperationName[] {
@@ -649,6 +654,22 @@ export interface ExplainOperationDeclaration extends OperationCommon {
   readonly nonGrantable: true;
 }
 
+// Reports what the policy card it is invoked on compiles to: every issue
+// compiling records, and the rules and grants that compile, which are what a
+// realm naming the card puts in force. It invokes nothing and activates
+// nothing. It belongs on a policy card, where it lets the card show its author
+// which of its grants are live.
+//
+// There is no clause and no payload: the card is the question. A policy card
+// is open only to a caller the realm's own permissions let read it, and what
+// compiling it reports also turns on the definitions of the types its rules
+// name, wherever those live. So no policy may grant it, and the declaration
+// says so with `nonGrantable: true`.
+export interface ValidateOperationDeclaration extends OperationCommon {
+  readonly base: 'validate';
+  readonly nonGrantable: true;
+}
+
 export type OperationDeclaration =
   | TransformOperationDeclaration
   | CreateOperationDeclaration
@@ -658,7 +679,8 @@ export type OperationDeclaration =
   | QueryOperationDeclaration
   | AppendLineOperationDeclaration
   | AppendContainsManyOperationDeclaration
-  | ExplainOperationDeclaration;
+  | ExplainOperationDeclaration
+  | ValidateOperationDeclaration;
 
 // A base operation a def carries with nothing declared on it. It is not a
 // declaration and the union above deliberately cannot express one: an author
@@ -750,6 +772,8 @@ const CLAUSE_KEYS: Record<BaseOperationName, readonly string[]> = {
   appendLine: [],
   // Neither does an explain: the question it answers is the payload.
   explain: [],
+  // Nor a validate: the card it is invoked on is the whole question.
+  validate: [],
 };
 
 // Keys that shape how a base operation answers rather than describing work for
@@ -1068,6 +1092,9 @@ function noProgramReason(
   if (base === 'explain') {
     return `an "explain" operation reports what the realm's policy decides rather than running a program over a document`;
   }
+  if (base === 'validate') {
+    return `a "validate" operation reports what the policy card compiles to rather than running a program over a document`;
+  }
   return undefined;
 }
 
@@ -1142,6 +1169,20 @@ function assertValidDeclaration(
     throw new Error(
       `${label}: an "explain" operation reports what the realm's policy decides, which is what a refusal withholds, so no policy may grant it; declare it with \`nonGrantable: true\``,
     );
+  }
+  if (base === 'validate' && declaration.nonGrantable !== true) {
+    throw new Error(
+      `${label}: a "validate" operation reports what a policy card compiles to, which only a caller the realm's own permissions let read the card may learn, so no policy may grant it; declare it with \`nonGrantable: true\``,
+    );
+  }
+  if (base === 'validate') {
+    for (let key of ['params', 'input'] as const) {
+      if (declaration[key] !== undefined) {
+        throw new Error(
+          `${label}: a "validate" operation takes no payload, since the card it is invoked on is the whole question, so it carries no \`${key}\``,
+        );
+      }
+    }
   }
   let clauseKeys = CLAUSE_KEYS[base];
   let legalKeys = new Set<string>([
@@ -1240,6 +1281,11 @@ function assertValidDeclaration(
   if (base === 'explain' && declaration.output !== undefined) {
     throw new Error(
       `${label}: an "explain" operation answers with the policy's explanation as the gate reports it, so it carries no \`output\` to reshape it`,
+    );
+  }
+  if (base === 'validate' && declaration.output !== undefined) {
+    throw new Error(
+      `${label}: a "validate" operation answers with what the policy card compiles to, as compiling reports it, so it carries no \`output\` to reshape it`,
     );
   }
   assertReferencesResolve(label, declaration, paramNames);
@@ -2062,6 +2108,7 @@ export type {
   OperationWriteResult,
   PolicyExplanation,
   PolicyExplanationListing,
+  PolicyValidation,
   SearchEntries,
   SearchInvokeOptions,
 } from '@cardstack/runtime-common';
@@ -2079,9 +2126,10 @@ type PayloadArgs<Declaration> = Declaration extends {
 
 // What an operation resolves to, by the behavior it is built on: a write
 // reports the identity and version of what it wrote, a delete reports that
-// there is nothing left to describe, a read reports its document, and an
-// explain reports what the policy decided and why — or, for one whose params
-// ask for a `list`, one page of explanations.
+// there is nothing left to describe, a read reports its document, an explain
+// reports what the policy decided and why — or, for one whose params ask for a
+// `list`, one page of explanations — and a validate reports what the policy
+// card compiles to.
 type ResultOf<Declaration> = Declaration extends { base: 'delete' }
   ? null
   : Declaration extends { base: 'read' }
@@ -2090,7 +2138,9 @@ type ResultOf<Declaration> = Declaration extends { base: 'delete' }
       ? PolicyExplanationListing
       : Declaration extends { base: 'explain' }
         ? PolicyExplanation
-        : OperationWriteResult;
+        : Declaration extends { base: 'validate' }
+          ? PolicyValidation
+          : OperationWriteResult;
 
 // The behaviors invocable on an instance, and the one invocable on a class.
 // A declared `create` appears in both: invoked on the class it mints a card
@@ -2104,6 +2154,7 @@ type InstanceScopedBase =
   | 'appendLine'
   | 'appendContainsMany'
   | 'explain'
+  | 'validate'
   | 'create';
 type TypeScopedBase = 'create' | 'query';
 

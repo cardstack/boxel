@@ -15,8 +15,9 @@
 // The hook fails open: input it can't parse, or a transcript it can't find or
 // read, allows the call rather than wedging the session.
 
-import { readFileSync, readdirSync } from 'node:fs';
-import { basename, dirname, join } from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { basename, dirname, isAbsolute, join } from 'node:path';
 
 const MANIFEST = /(^|\/)packages\/catalog\/test-subset\.json$/;
 // Any shell command that names the manifest, the sync that writes from it, or
@@ -27,6 +28,62 @@ const PIN_IN_COMMAND =
   /test-subset\.json|catalog:test-subset|sync-test-subset|CATALOG_TEST_SUBSET_SOURCE/;
 
 const EDIT_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit']);
+
+// A pull request created or edited from the shell or the GitHub MCP tools.
+// Its description pairs it with a pull request in the other repository when it
+// has a `Merges before:` or `Merges after:` line, inline or in a --body-file;
+// and any boxel-catalog pull request may need a pair, so creating or editing
+// one counts too. gh takes its repository flag before or after `pr`, and
+// `new` is an alias of `create`.
+const GH_REPO_FLAG = String.raw`(?:\s+(?:-R|--repo)(?:=|\s+)\S+)*`;
+const GH_PR = new RegExp(
+  String.raw`\bgh${GH_REPO_FLAG}\s+pr${GH_REPO_FLAG}\s+(?:create|new|edit)\b`,
+);
+// The same, through the GitHub MCP server's pull request tools.
+const MCP_PR_TOOLS = new Set([
+  'mcp__github__create_pull_request',
+  'mcp__github__update_pull_request',
+]);
+const PAIRING_KEY = /merges\s+(before|after)\s*:/i;
+const BODY_FILE = /(?:--body-file[=\s]+|-F\s+)(?:"([^"]+)"|'([^']+)'|(\S+))/;
+// The command names the catalog repository: a repository flag in any form, a
+// GH_REPO, or a cd into a checkout of it.
+const NAMES_CATALOG = /\bboxel-catalog\b/;
+
+function bodyFileText(command, cwd) {
+  let match = BODY_FILE.exec(command);
+  let file = match?.[1] ?? match?.[2] ?? match?.[3];
+  if (!file || file === '-') {
+    return '';
+  }
+  let path = isAbsolute(file) || !cwd ? file : join(cwd, file);
+  try {
+    // Only a regular file: a FIFO would block the read until the hook times
+    // out.
+    return statSync(path).isFile() ? readFileSync(path, 'utf8') : '';
+  } catch {
+    return '';
+  }
+}
+
+function inCatalogCheckout(cwd) {
+  if (!cwd) {
+    return false;
+  }
+  try {
+    let remote = execFileSync(
+      'git',
+      ['-C', cwd, 'remote', 'get-url', 'origin'],
+      {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+      },
+    );
+    return /cardstack\/boxel-catalog(\.git)?\s*$/.test(remote);
+  } catch {
+    return false;
+  }
+}
 
 const rules = [
   {
@@ -44,6 +101,38 @@ const rules = [
           PIN_IN_COMMAND.test(tool_input?.command ?? '') &&
           'a shell command on the catalog test subset pin'
         );
+      }
+      return false;
+    },
+  },
+  {
+    skill: 'catalog-pairing',
+    why: 'It says when a boxel and a boxel-catalog pull request must be paired, how to declare the pair in both descriptions, and which merges first.',
+    matches({ tool_name, tool_input, cwd }) {
+      if (MCP_PR_TOOLS.has(tool_name)) {
+        if (PAIRING_KEY.test(tool_input?.body ?? '')) {
+          return 'a pull request description with a pairing line';
+        }
+        return (
+          /^boxel-catalog$/i.test(tool_input?.repo ?? '') &&
+          'opening or editing a boxel-catalog pull request'
+        );
+      }
+      if (tool_name !== 'Bash') {
+        return false;
+      }
+      let command = tool_input?.command ?? '';
+      if (!GH_PR.test(command)) {
+        return false;
+      }
+      if (
+        PAIRING_KEY.test(command) ||
+        PAIRING_KEY.test(bodyFileText(command, cwd))
+      ) {
+        return 'a pull request description with a pairing line';
+      }
+      if (NAMES_CATALOG.test(command) || inCatalogCheckout(cwd)) {
+        return 'opening or editing a boxel-catalog pull request';
       }
       return false;
     },

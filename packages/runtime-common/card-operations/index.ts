@@ -208,6 +208,7 @@ export {
   isDocumentResult,
   isExplainListingResult,
   isExplainResult,
+  isValidateResult,
   isHeadResult,
   isIdentityResult,
   effectiveLinkStrategy,
@@ -250,4 +251,10 @@ export type {
   PolicyExplanationDecision,
   PolicyExplanationListing,
   PolicyExplanationReason,
+  OperationValidateResult,
+  PolicyValidation,
+  ValidatedGrant,
+  ValidatedGrantInertia,
+  ValidatedPolicyIssue,
+  ValidatedRule,
 } from './types.ts';
