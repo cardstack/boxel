@@ -334,3 +334,43 @@ jobs:
                   ? 'Deployment finished'
                   : 'Deployment finished with errors',
             });
+
+  # A production deploy carries the catalog with it: boxel-catalog's "Deploy
+  # catalog to production" deploys the catalog revision this commit pins in
+  # packages/catalog/test-subset.json, which boxel is tested against. It does
+  # nothing when production's catalog is already at or past the pin, and it
+  # refuses when a catalog pull request in the range needs a boxel pull
+  # request production still doesn't run. It runs after finalize-deployment
+  # so the deployment it checks against is already recorded as successful.
+  deploy-catalog:
+    name: Deploy the pinned catalog
+    needs: [release, finalize-deployment]
+    if: >-
+      github.event_name == 'workflow_dispatch'
+      && inputs.environment == 'production'
+      && needs.release.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          sparse-checkout: packages/catalog/test-subset.json
+          sparse-checkout-cone-mode: false
+      - name: Start the catalog deploy
+        env:
+          # A fine-grained token with Actions read and write on
+          # cardstack/boxel-catalog; this repository's token can't start
+          # another repository's workflow.
+          GH_TOKEN: ${{ secrets.CATALOG_DEPLOY_DISPATCH_TOKEN }}
+        run: |
+          pin=$(jq -r .revision packages/catalog/test-subset.json)
+          runs=https://github.com/cardstack/boxel-catalog/actions/workflows/deploy-production.yml
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::warning title=catalog deploy::CATALOG_DEPLOY_DISPATCH_TOKEN is not set, so the catalog wasn't deployed. Run \"Deploy catalog to production\" with revision $pin by hand: $runs"
+            exit 0
+          fi
+          gh workflow run deploy-production.yml \
+            --repo cardstack/boxel-catalog \
+            --ref main \
+            -f revision="$pin" \
+            -f reason="lockstep with cardstack/boxel@${GITHUB_SHA}"
+          echo "Started the catalog deploy to $pin: $runs" | tee -a "$GITHUB_STEP_SUMMARY"
