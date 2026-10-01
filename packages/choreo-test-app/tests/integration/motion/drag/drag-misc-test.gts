@@ -1,8 +1,9 @@
 /**
- * Ports of the remaining Motion drag Cypress specs (motion@bbabb00):
+ * Ports of the remaining Motion drag Cypress specs (motion@bbabb00 unless noted):
  * drag-input-propagation, drag-momentum, drag-framer-page, drag-rotated-parent, drag-scaled-parent,
  * drag-scroll-while-drag, drag-ref-constraints-{absolute-scrolled,element-resize,resize-handle},
- * drag-snap-animate-presence-exit, drag-snap-layout-id-swap, drag-layout-reorder-strict.
+ * drag-snap-animate-presence-exit, drag-snap-layout-id-swap, drag-layout-reorder-strict,
+ * drag-snap-to-cursor-initial (motion@v13.4.6).
  * React refs → {current} refs filled by {{captureEl}}; MotionConfig transformPagePoint → the arg on the
  * draggable; window.expandFolder/hoverFolder → a module-level handle the fixture component fills.
  */
@@ -12,7 +13,9 @@ import { click, render } from '@ember/test-helpers';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { setupRenderingTest } from 'ember-qunit';
+import { createDragControls } from 'glimmer-motion/gestures/drag-controls';
 import { correctParentTransform } from 'glimmer-motion/gestures/transform-page-point';
+import { layoutChange } from 'glimmer-motion/layout';
 import LayoutGroup from 'glimmer-motion/layout-group';
 import motion from 'glimmer-motion/motion';
 import Presence from 'glimmer-motion/presence';
@@ -32,6 +35,7 @@ import {
   trigger,
   wait,
 } from '../../../helpers/layout-fixture';
+import { nextFrame } from '../../../helpers/motion';
 
 const D = "[data-testid='draggable']";
 const rect = (sel = D) => $(sel).getBoundingClientRect();
@@ -1262,6 +1266,113 @@ module(
         );
       });
       trigger(F, 'pointerup');
+    });
+  }
+);
+
+/* ---------- drag-snap-to-cursor-initial.tsx ---------- */
+const SNAP_INITIAL = { x: 100, y: 40 };
+const SNAP_BOX = {
+  position: 'absolute',
+  top: 0,
+  left: 500,
+  width: 100,
+  height: 100,
+  background: 'red',
+};
+class SnapToCursorInitial extends Component<{ Args: { rerender?: boolean } }> {
+  controls = createDragControls();
+  @tracked dragCount = 0;
+  startDrag = (e: PointerEvent) =>
+    this.controls.start(e, { snapToCursor: true });
+  // React re-renders the motion.div, and every commit re-measures its projection: layoutChange is that commit
+  countDrag = () => layoutChange(() => this.dragCount++);
+  get onDragEnd() {
+    return this.args.rerender ? this.countDrag : undefined;
+  }
+  <template>
+    <div
+      id="trigger"
+      data-drag-count={{this.dragCount}}
+      style="position:absolute;top:0;left:0;width:400px;height:400px;background:#eee"
+      {{on "pointerdown" this.startDrag}}
+    ></div>
+    <div
+      id="box"
+      {{motion
+        drag=true
+        dragControls=this.controls
+        dragListener=false
+        dragMomentum=false
+        initial=SNAP_INITIAL
+        onDragEnd=this.onDragEnd
+        style=SNAP_BOX
+      }}
+    ></div>
+  </template>
+}
+
+module(
+  'Integration | motion | cypress | snapToCursor with initial coordinates',
+  function (hooks) {
+    setupRenderingTest(hooks);
+    setupFixtureViewport(hooks);
+
+    // cy.get().then(): measured once, no retry
+    const expectBoxCenteredAt = (assert: Assert, x: number, y: number) => {
+      const { left, top, width, height } = rect('#box');
+      const cx = left + width / 2,
+        cy = top + height / 2;
+      assert.true(Math.abs(cx - x) <= 1, `centre x ${cx} within 1 of ${x}`);
+      assert.true(Math.abs(cy - y) <= 1, `centre y ${cy} within 1 of ${y}`);
+    };
+
+    const snapAndDrag = async (assert: Assert) => {
+      trigger('#trigger', 'pointerdown', 50, 50);
+      await nextFrame();
+      await wait(50);
+      expectBoxCenteredAt(assert, 50, 50);
+
+      trigger('#trigger', 'pointermove', 60, 60);
+      await nextFrame();
+      await wait(50);
+      trigger('#trigger', 'pointermove', 200, 100);
+      await nextFrame();
+      await wait(50);
+      expectBoxCenteredAt(assert, 200, 100);
+
+      trigger('#trigger', 'pointerup', 200, 100);
+      await wait(50);
+      expectBoxCenteredAt(assert, 200, 100);
+    };
+
+    test('centres the element under the pointer on every drag start', async function (assert) {
+      await render(<template><SnapToCursorInitial /></template>);
+      await wait(200);
+      await nextFrame();
+      await nextFrame();
+      expectBoxCenteredAt(assert, 650, 90);
+
+      await snapAndDrag(assert);
+      await snapAndDrag(assert);
+      await snapAndDrag(assert);
+    });
+
+    test('centres the element under the pointer after re-renders', async function (assert) {
+      await render(
+        <template><SnapToCursorInitial @rerender={{true}} /></template>
+      );
+      await wait(200);
+      await nextFrame();
+      await nextFrame();
+      expectBoxCenteredAt(assert, 650, 90);
+
+      const dragCount = () => $('#trigger').getAttribute('data-drag-count');
+      await snapAndDrag(assert);
+      await should(assert, (a) => a.strictEqual(dragCount(), '1'));
+      await snapAndDrag(assert);
+      await should(assert, (a) => a.strictEqual(dragCount(), '2'));
+      await snapAndDrag(assert);
     });
   }
 );
