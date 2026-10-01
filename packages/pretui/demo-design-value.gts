@@ -1,7 +1,4 @@
-// The usage pages this module used to hold now live in
-// components/<slug>.usage.gts; what remains here is the fixtures they
-// share. The header below describes those pages, not this file.
-// Pretui — demo-design-value: ValueInput and PropertySheet.
+// Pretui — demo-design-value: the blend-mode options the ValueInput and PropertySheet usage pages share.
 
 export const BLEND_OPTIONS = [
   { value: 'normal', label: 'Normal' },
