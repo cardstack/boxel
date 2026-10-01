@@ -8,6 +8,8 @@ import { CardHeader, LoadingIndicator } from '@cardstack/boxel-ui/components';
 import type { MenuItem } from '@cardstack/boxel-ui/helpers';
 import { FileAlert, ExclamationCircle } from '@cardstack/boxel-ui/icons';
 
+import { stringifyErrorForLog } from '@cardstack/runtime-common';
+
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type { CardErrorJSONAPI } from '@cardstack/host/services/store';
 
@@ -262,8 +264,8 @@ export default class CardErrorComponent extends Component<Signature> {
       for (let [i, result] of results.entries()) {
         if (result.status === 'rejected') {
           console.warn(
-            `could not load scoped stylesheet ${scopedCssUrls[i]}; last known good HTML renders unstyled`,
-            result.reason,
+            `could not load scoped stylesheet ${scopedCssUrls[i]}; last known ` +
+              `good HTML renders unstyled: ${stringifyErrorForLog(result.reason)}`,
           );
         }
       }
