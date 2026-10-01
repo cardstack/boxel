@@ -29,6 +29,12 @@ const framerMotionNotice = () => {
     .join('\n')}\n */`;
 };
 
+const isReact = (id) =>
+  id === 'react' ||
+  id.startsWith('react/') ||
+  id === 'react-dom' ||
+  id.startsWith('react-dom/');
+
 /**
  * src/framer-motion-internals.ts imports modules from framer-motion's
  * `dist/es` that its exports map doesn't expose. Resolve them on disk, past
@@ -63,7 +69,7 @@ function inlineFramerMotionInternals() {
           moduleSideEffects: false,
         };
       }
-      if (id === 'react') {
+      if (isReact(id)) {
         return { id, external: true, moduleSideEffects: false };
       }
       return null;
@@ -76,8 +82,7 @@ function inlineFramerMotionInternals() {
         const stray = chunk.imports.filter(
           (spec) =>
             !(spec in bundle) &&
-            (spec === 'react' ||
-              spec === 'react-dom' ||
+            (isReact(spec) ||
               (spec.startsWith('framer-motion') &&
                 spec !== 'framer-motion/dom')),
         );
