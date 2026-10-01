@@ -44,6 +44,10 @@ jobs:
 
       - uses: ./.github/actions/init
 
+      # boxel-catalog's production deploy runs this script from boxel main.
+      - name: Test the catalog deploy check
+        run: pnpm --dir packages/catalog test:deploy-check
+
       # The catalog change a pull request depends on, or that follows it, is
       # the one its description pairs it with (scripts/pairing.ts). Lint that
       # pull request's head in place of main, and catalog main as well below.
