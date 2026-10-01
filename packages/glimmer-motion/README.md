@@ -112,8 +112,9 @@ the commit, freeze a leaving element's props. `src/node.ts` (the per-element lif
 React-free entry point of Motion's React package. `framer-motion` is a regular dependency; its React peers
 are optional and that entry never imports them.
 
-`VENDORED.md` lists the files copied verbatim from Motion (pan/drag session, Reorder utilities) with the
-upstream commit.
+The pan/drag session, the gesture and animation features and the Reorder utilities are Motion's own
+modules too, inlined at build time from framer-motion's build. `VENDORED.md` lists them and the two places
+glimmer-motion's drag deliberately differs.
 
 The full story — why the engine is untouched, how the binding was built by porting Motion's test suites and
 what that surfaced — is in the

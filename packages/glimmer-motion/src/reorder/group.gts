@@ -12,12 +12,11 @@ import { consumeTag, VOLATILE_TAG } from '@glimmer/validator';
 import type { Transition } from 'motion-dom';
 import type { Box, Point } from 'motion-utils';
 
+import { checkReorder, detectAxis } from '../framer-motion-internals.ts';
 import { snapshotOnRender } from '../layout-group.gts';
 import motion from '../motion.ts';
 import { postRender } from '../scheduler.ts';
 import { captureGroup } from './capture.ts';
-import { checkReorder } from './check-reorder.ts';
-import { detectAxis } from './detect-axis.ts';
 import type { ItemData, ReorderAxis, ReorderContextProps } from './types.ts';
 
 interface Signature<V> {
