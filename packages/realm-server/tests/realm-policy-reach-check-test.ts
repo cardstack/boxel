@@ -400,11 +400,11 @@ module(basename(import.meta.filename), function (hooks) {
       `a type two links away is named with the whole path: ${guardian}`,
     );
     assert.true(
-      student.includes("declare `links: 'ids'` on Classroom's `read`"),
+      student.includes("add `links: 'ids'` to Classroom's `read`"),
       `the fix is named on the granted type: ${student}`,
     );
     assert.true(
-      student.includes('A declaration on Student does not narrow this'),
+      student.includes("Changing how Student is declared won't help"),
       `and it says a declaration on the reached type is no fix: ${student}`,
     );
   });

@@ -385,7 +385,7 @@ function documentMessage(
     reach.governedBy === 'read'
       ? `\`${operation}\` on ${from} sends each card along with the cards it links to`
       : `\`${operation}\` on ${from} sends its results along with the cards they link to`;
-  return `${sends}, so everyone this grant lets in also gets the ${to} cards linked through \`${reached.via.join('.')}\`, but ${ungrantedClause(to, kind, anyType)}. To send only the links and not those cards, ${narrowingFix(reach)}${deliberately(to, kind, anyType)}. Changing ${to}'s own settings won't help: a card sent along through a link is sent without checking them`;
+  return `${sends}, so everyone this grant lets in also gets the ${to} cards linked through \`${reached.via.join('.')}\`, but ${ungrantedClause(to, kind, anyType)}. To send only the links and not those cards, ${narrowingFix(reach)}${deliberately(to, kind, anyType)}. Changing how ${to} is declared won't help: a card sent along through a link is sent whatever ${to} declares`;
 }
 
 function renderingMessage(
