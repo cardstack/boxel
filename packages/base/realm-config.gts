@@ -2019,17 +2019,23 @@ export class RealmConfig extends CardDef {
   // automatically in that case) or when an operator otherwise needs
   // the full isolated render present in the index.
   @field includePrerenderedDefaultRealmIndex = contains(BooleanField);
-  // Opt-in for the realm's GET `_screenshot/` route to trigger NEW captures
+  // Opt-in for the realm's GET `_capture/` route to trigger NEW captures
   // for arbitrary capture specs. Full captureSpec power on a GET is an
   // unbounded spec space reachable with only realm read, so it is off
   // unless the realm turns it on; the gate blocks Chrome work only, never
   // serving — any capture whose canonical spec already has a MediaCache
   // ledger entry streams regardless, including one a write-holder published
-  // via POST /_screenshot-card (which persists under the same canonical
+  // via POST /_capture-card (which persists under the same canonical
   // identity the GET resolves). Read from the realm's indexed config at
   // request time, so editing this takes effect with the index update, no
   // restart.
-  @field allowArbitraryScreenshots = contains(BooleanField);
+  @field allowArbitraryCaptures = contains(BooleanField);
+  // The legacy spelling of `allowArbitraryCaptures`. A realm that opted in
+  // under this name keeps its gate open: either key set to `true` opens it.
+  @field allowArbitraryScreenshots = contains(BooleanField, {
+    description:
+      'Legacy spelling of allowArbitraryCaptures; either one set to true opens the capture gate',
+  });
 
   @field config = contains(RealmSettingsField, {
     description:

@@ -230,7 +230,7 @@ export class ReadBinaryFileResult extends CardDef {
 export class DownloadFileToRealmInput extends CardDef {
   @field sourceUrl = contains(StringField); // the URL to download
   @field realm = contains(StringField); // target realm (defaults to the writable realm)
-  @field path = contains(StringField); // destination path within the realm, e.g. "Screenshots/card.png"
+  @field path = contains(StringField); // destination path within the realm, e.g. "Captures/card.png"
   @field useNonConflictingFilename = contains(BooleanField);
 }
 
@@ -252,7 +252,7 @@ export class GenerateThumbnailOutput extends CardDef {
   @field imageDefIdentifier = contains(StringField);
 }
 
-export class ScreenshotCardInput extends CardDef {
+export class CaptureCardInput extends CardDef {
   @field card = linksTo(CardDef);
   @field format = contains(StringField); // 'isolated' | 'embedded'
   // The capture surface, exposed one JSON-primitive field per parameter.
@@ -278,23 +278,21 @@ export class ScreenshotCardInput extends CardDef {
 // One captured image. `url` is the durable served MediaCache URL the capture
 // persisted under — the only reference the tool returns; a re-capture rotates
 // its bytes, never the URL.
-export class ScreenshotCapture extends FieldDef {
+export class Capture extends FieldDef {
   @field name = contains(StringField);
   @field url = contains(StringField);
   @field width = contains(NumberField);
   @field height = contains(NumberField);
 }
 
-export class ScreenshotCardOutput extends CardDef {
-  static displayName = 'Screenshot Result';
+export class CaptureCardOutput extends CardDef {
+  static displayName = 'Capture Result';
 
-  @field captures = containsMany(ScreenshotCapture);
+  @field captures = containsMany(Capture);
 
-  static embedded = class Embedded extends Component<
-    typeof ScreenshotCardOutput
-  > {
+  static embedded = class Embedded extends Component<typeof CaptureCardOutput> {
     <template>
-      <div class='screenshot-result'>
+      <div class='capture-result'>
         {{#each @model.captures as |capture|}}
           <figure class='capture'>
             {{#if capture.url}}
@@ -307,7 +305,7 @@ export class ScreenshotCardOutput extends CardDef {
         {{/each}}
       </div>
       <style scoped>
-        .screenshot-result {
+        .capture-result {
           display: flex;
           flex-direction: column;
           gap: var(--boxel-sp-sm);

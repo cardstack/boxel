@@ -10,7 +10,7 @@ const REALM = 'https://my.realm/';
 const OTHER_REALM = 'https://other.realm/';
 
 function captureURL(realm: string, path: string) {
-  return `${realm}_screenshot/${path}`;
+  return `${realm}_capture/${path}`;
 }
 
 // A fake `_sign-capture-urls` endpoint: records each request body and answers
@@ -140,8 +140,13 @@ module('Unit | Service | capture-url-signer', function (hooks) {
 
   test('realmRootOfCaptureURL extracts the realm and refuses non-capture URLs', function (assert) {
     assert.strictEqual(
+      realmRootOfCaptureURL('https://my.realm/sub/_capture/card?type=pdf'),
+      'https://my.realm/sub/',
+    );
+    assert.strictEqual(
       realmRootOfCaptureURL('https://my.realm/sub/_screenshot/card?type=pdf'),
       'https://my.realm/sub/',
+      'the legacy prefix resolves to the same realm',
     );
     assert.throws(
       () => realmRootOfCaptureURL('https://my.realm/just-a-card'),

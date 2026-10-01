@@ -15,7 +15,7 @@ const log = logger('media-cache');
 
 // The HTTP face of a MediaCache capture, shared by every route that serves
 // one. The URL is the durable reference — what rendered HTML and
-// `meta.screenshots` embed — and the content hash surfaces only as the
+// `meta.captures` embed — and the content hash surfaces only as the
 // validator: a re-capture changes what the URL serves (the ETag rotates),
 // never the URL itself. The cache policy is a short freshness window with
 // cheap revalidation (an unchanged capture answers as a bodyless 304) plus
@@ -31,7 +31,7 @@ export const MEDIA_CACHE_MAX_AGE_SECONDS = 60;
 export const MEDIA_CACHE_STALE_WHILE_REVALIDATE_SECONDS = 3600;
 
 // `public` exactly when the realm is world-readable — the same derivation as
-// `serveLocalFile` — so a shared cache can hold a public realm's screenshots
+// `serveLocalFile` — so a shared cache can hold a public realm's captures
 // (og:image fetches, crawlers) while a private realm's stay per-client.
 export function mediaCacheVisibility(
   requestContext: RequestContext,
@@ -174,7 +174,7 @@ export const MEDIA_CACHE_TOUCH_THROTTLE_MS = 60 * 60 * 1000;
 // on-demand capture looking idle to the GC one sweep early, and a later
 // serve re-marks it. Exported (as `touchMediaCacheEntryOnHit`) so every
 // surface that answers from the ledger — this route and the POST
-// `_screenshot-card` fast path — marks use through the one guard.
+// `_capture-card` fast path — marks use through the one guard.
 async function touch(dbAdapter: DBAdapter, entry: MediaCacheEntry) {
   if (entry.lane !== 'on-demand') {
     return;
