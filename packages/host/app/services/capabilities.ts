@@ -139,9 +139,9 @@ export default class CapabilitiesService
   // `target` is a saved card, its URL, or a card class. A card with no URL yet
   // is not something the realm can be asked about — there is no stored state
   // for a predicate to read — so it answers `undefined` and enrols nothing. A
-  // class asks whether a card of that type may be created, in `opts.realm`, or
-  // where a create names no realm, in the realm a class-scoped create lands
-  // in when it names none.
+  // class asks whether a card of that type may be created, or a query that
+  // type declares run, in `opts.realm`, or where the call names no realm, in
+  // the realm a class-scoped create lands in when it names none.
   canInvoke = (
     operation: string,
     target: Target,

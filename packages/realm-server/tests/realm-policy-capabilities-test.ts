@@ -4,7 +4,11 @@ import supertest from 'supertest';
 import type { Test, SuperTest } from 'supertest';
 import { basename, join } from 'path';
 import { dirSync } from 'tmp';
-import { rri, SupportedMimeType } from '@cardstack/runtime-common';
+import {
+  DURING_PRERENDER_HEADER,
+  rri,
+  SupportedMimeType,
+} from '@cardstack/runtime-common';
 import type {
   QueuePublisher,
   QueueRunner,
@@ -28,10 +32,12 @@ import {
   createVirtualNetwork,
   matrixURL,
   realmConfigCardJSON,
+  realmSecretSeed,
   runTestRealmServerWithRealms,
   setupDB,
 } from './helpers/index.ts';
 import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
+import { createJWT as createRealmServerJWT } from '../utils/jwt.ts';
 
 // The capability check: `POST {realm}/_capabilities`, which answers what the
 // policy gate would decide for a bounded list of `{ target, operation }` pairs
@@ -111,6 +117,27 @@ const CLASSROOM_MODULE = `
       params: { note: StringField },
       fill: { note: params('note'), author: actor() },
     };
+
+    @operation static listMine = {
+      base: 'query',
+      query: { filter: { type: () => Classroom } },
+    };
+
+    @operation static listByLead = {
+      base: 'query',
+      query: { filter: { type: () => Classroom } },
+    };
+
+    @operation static listAll = {
+      base: 'query',
+      query: { filter: { type: () => Classroom } },
+    };
+
+    @operation static listAudited = {
+      base: 'query',
+      nonGrantable: true,
+      query: { filter: { type: () => Classroom } },
+    };
   }
 
   export class Homeroom extends Classroom {}
@@ -133,6 +160,11 @@ type Rule = { targetType: { module: string; name: string }; grants: Grant[] };
 // title that is not a number, which no classroom's is. `Bulletin` takes its
 // writes and its creates outright, so a type target for one is decided
 // outright too.
+//
+// Of the classroom queries, `listMine` and the ad-hoc `query` are granted on a
+// predicate that compiles to a search filter. `listByLead`'s predicate reads a
+// list by position, which a filter cannot say, and `listAudited` is declared
+// non-grantable. `listAll` is granted by no rule.
 const RULES: Rule[] = [
   {
     targetType: CLASSROOM,
@@ -143,6 +175,10 @@ const RULES: Rule[] = [
       { operation: 'delete', where: TEACHES },
       { operation: 'create', where: TEACHES },
       { operation: 'archive', where: '(.title | tonumber) > 0' },
+      { operation: 'listMine', where: TEACHES },
+      { operation: 'query', where: TEACHES },
+      { operation: 'listByLead', where: '.teacherIds[0] == actor()' },
+      { operation: 'listAudited', where: TEACHES },
     ],
   },
   {
@@ -849,6 +885,206 @@ module(basename(import.meta.filename), function (hooks) {
         },
       ]);
       assert.false(given.allowed, 'no rule names CardDef');
+    });
+  });
+
+  module('a query', function () {
+    // A query is not decided by the gate, which refuses every one: the search
+    // that runs it authorizes it, by composing the caller's grants on it into
+    // the query. So a query pair is compared with that search rather than with
+    // an invocation, and "the check says true" is set beside "the search
+    // composed a grant", which a search shows here as the classrooms the
+    // teacher teaches and nothing else.
+    const MINE = [HOMEROOM, ROOM_204];
+
+    function federatedSearch(user: string, payload: object) {
+      return request
+        .post('/_federated-search')
+        .set('Accept', SupportedMimeType.CardJson)
+        .set('Content-Type', 'application/json')
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set(
+          'Authorization',
+          `Bearer ${createRealmServerJWT(
+            { user, sessionRoom: `session-room-${user}` },
+            realmSecretSeed,
+          )}`,
+        )
+        .send({ ...payload, realms: [EDUCATION] });
+    }
+
+    function realmSearch(auth: string, payload: object) {
+      return request
+        .post(`${path(EDUCATION)}_search`)
+        .set('Accept', SupportedMimeType.CardJson)
+        .set('Content-Type', 'application/json')
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Authorization', auth)
+        .send(payload);
+    }
+
+    // The search a pair asks about: a named query by its name and type, and
+    // the ad-hoc `query` as a filter on the type.
+    function searchFor(pair: Pair) {
+      let on = pair.target as { module: string; name: string };
+      return pair.operation === 'query'
+        ? { filter: { 'item.on': on } }
+        : { operation: pair.operation, on };
+    }
+
+    function ids(response: { status: number; text: string; body: unknown }) {
+      if (response.status !== 200) {
+        throw new Error(`search answered ${response.status}: ${response.text}`);
+      }
+      return (response.body as { data: { id: string }[] }).data
+        .map((entry) => new URL(entry.id, EDUCATION).href)
+        .sort();
+    }
+
+    test('a caller who may not read the realm is answered as the search would authorize them', async function (assert) {
+      let pairs: Pair[] = [
+        { target: CLASSROOM, operation: 'listMine' },
+        { target: CLASSROOM, operation: 'query' },
+        { target: CLASSROOM, operation: 'listAll' },
+        { target: CLASSROOM, operation: 'listByLead' },
+        { target: CLASSROOM, operation: 'listAudited' },
+        { target: BULLETIN, operation: 'query' },
+      ];
+      let given = await answers(AUTH.teacher(), pairs);
+      assert.deepEqual<unknown[]>(
+        given,
+        [
+          { ...pairs[0], allowed: true },
+          { ...pairs[1], allowed: true },
+          { ...pairs[2], allowed: false },
+          { ...pairs[3], allowed: false },
+          { ...pairs[4], allowed: false },
+          { ...pairs[5], allowed: false },
+        ],
+        'a query granted on a filter is allowed, and one no rule grants, one whose grant compiled no filter, one declared non-grantable and one on a type granted only a read are not, each as a bare boolean',
+      );
+
+      let searched: { pair: string; rows: string[] }[] = [];
+      for (let pair of pairs) {
+        searched.push({
+          pair: label(pair),
+          rows: ids(await federatedSearch(TEACHER, searchFor(pair))),
+        });
+      }
+      assert.deepEqual(
+        searched,
+        pairs.map((pair, index) => ({
+          pair: label(pair),
+          rows: given[index].allowed ? MINE : [],
+        })),
+        "the federated search composes the teacher's grant exactly where the check says true, and contributes no rows where it says false",
+      );
+    });
+
+    test('a caller who may read the realm is answered from the ACL, without the policy', async function (assert) {
+      let given = await answers(AUTH.reader(), [
+        { target: CLASSROOM, operation: 'listMine' },
+        { target: CLASSROOM, operation: 'listAll' },
+        { target: CLASSROOM, operation: 'query' },
+      ]);
+      assert.deepEqual(
+        given.map((answer) => answer.allowed),
+        [true, true, true],
+        'the reader runs every query unscoped',
+      );
+      assert.deepEqual(
+        gateStats(),
+        {
+          policyLoads: 0,
+          predicateEvaluations: 0,
+          pendingDischarges: 0,
+          definitionLookups: 0,
+        },
+        'the gate did nothing for any of them',
+      );
+      assert.strictEqual(
+        education.__testOnlyPolicyCacheStats().compiles,
+        0,
+        'and the policy was never compiled',
+      );
+      assert.true(
+        ids(
+          await federatedSearch(READER, {
+            operation: 'listAll',
+            on: CLASSROOM,
+          }),
+        ).includes(ROOM_205),
+        'as their search returns a classroom they do not teach',
+      );
+    });
+
+    test('a card target is refused as invoking the query on the card is', async function (assert) {
+      let pair = { target: ROOM_204, operation: 'listMine' };
+      let [reader] = await answers(AUTH.reader(), [pair]);
+      assert.deepEqual(
+        reader,
+        { ...pair, allowed: false, reason: 'wrong-entry-point' },
+        'a reader is told a query is not invoked on a card',
+      );
+      let response = await invocation(AUTH.reader(), pair);
+      let [error] = (response.body as { errors: { code: string }[] }).errors;
+      assert.deepEqual(
+        { status: response.status, code: error.code },
+        { status: 400, code: 'wrong-entry-point' },
+        'which is what invoking it on the card answers',
+      );
+
+      let [teacher, absent] = await answers(AUTH.teacher(), [
+        pair,
+        { target: ABSENT, operation: 'listMine' },
+      ]);
+      assert.deepEqual(
+        teacher,
+        { ...pair, allowed: false },
+        'a caller who may not read the realm is told a bare false, though a grant on the query applies to them',
+      );
+      assert.deepEqual(
+        { ...teacher, target: '<target>' },
+        { ...absent, target: '<target>' },
+        'the same one they are told for a card that is not there',
+      );
+      assert.false(
+        await invoke(AUTH.teacher(), pair),
+        'as invoking it on the card is refused',
+      );
+    });
+
+    test('a request a render sends is judged as the search it sends is', async function (assert) {
+      let pair = { target: CLASSROOM, operation: 'listMine' };
+      let rendering = await check(AUTH.teacher(), [pair]).set(
+        DURING_PRERENDER_HEADER,
+        'true',
+      );
+      assert.deepEqual<unknown[]>(
+        (rendering.body as { checks: CapabilityAnswer[] }).checks,
+        [{ ...pair, allowed: false }],
+        "a render runs under the realm's own authority, which no policy grants anything",
+      );
+      assert.deepEqual(
+        ids(
+          await realmSearch(AUTH.teacher(), searchFor(pair)).set(
+            DURING_PRERENDER_HEADER,
+            'true',
+          ),
+        ),
+        [],
+        'as the search it sends is served no rows',
+      );
+      assert.deepEqual(
+        (await answers(AUTH.teacher(), [pair])).map((a) => a.allowed),
+        [true],
+        'while the same session outside a render is allowed',
+      );
+      assert.deepEqual(
+        ids(await realmSearch(AUTH.teacher(), searchFor(pair))),
+        MINE,
+        'and its search is served the classrooms it teaches',
+      );
     });
   });
 

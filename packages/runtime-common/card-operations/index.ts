@@ -26,6 +26,7 @@ export { CAPABILITY_CHECK_CAP } from './capability-wire.ts';
 export type { CapabilityAnswer, CapabilityCheck } from './capability-wire.ts';
 export {
   policyQueryScope,
+  principalQueryScope,
   RealmAuthorityPolicyScopeError,
   searchPrincipal,
 } from './policy-query.ts';
