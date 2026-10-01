@@ -1220,17 +1220,11 @@ class PolicyStanding extends GlimmerComponent<PolicyStandingSignature> {
   </template>
 }
 
-// How long the pointer must hold still before the card it names is looked
-// up, so that typing a URL into the field asks about the URL rather than
-// about each of its prefixes.
-const POLICY_CARD_SETTLE_MS = 400;
-
 interface PolicyCardSignature {
   Args: {
     pointer: string | null | undefined;
     context: CardContext | undefined;
-    // Show the pointer itself beneath the card, as the isolated view does.
-    // The edit view has the pointer in its field already.
+    // Show the pointer itself beneath the card.
     showPointer?: boolean;
     // The card the pointer names is being created, and is not there to load
     // until its realm has saved and indexed it.
@@ -1306,14 +1300,9 @@ class PolicyCard extends GlimmerComponent<PolicyCardSignature> {
     }
   });
 
-  // Always after the render that asked, which may not write what it read.
-  // The first pointer is taken at once, and each later one once it holds
-  // still. What decides the wait is kept untracked, so the modifier that
-  // performs this is not run again by what this writes.
-  #hasSettled = false;
+  // After the render that asked, which may not write what it read.
   private settle = restartableTask(async (pointer: string) => {
-    await timeout(this.#hasSettled ? POLICY_CARD_SETTLE_MS : 0);
-    this.#hasSettled = true;
+    await timeout(0);
     let settled = pointer || undefined;
     if (this.settled !== settled) {
       this.settled = settled;
