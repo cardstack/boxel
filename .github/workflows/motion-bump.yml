@@ -16,10 +16,11 @@ name: Motion Bump
 #
 # The PR is opened with the job's GITHUB_TOKEN, and events that token causes
 # don't start pull_request workflows. workflow_dispatch is the exception, so the
-# job dispatches the workflows that cover Motion on the branch: ci.yaml (the
-# choreo suites) and ci-lint.yaml (choreo lint and ember-tsc). Their checks land
-# on the PR's head commit. A push to the branch by a person runs the usual
-# pull_request workflows.
+# job dispatches the workflows that cover Motion on the branch: ci.yaml and
+# ci-lint.yaml. A lockfile change matches ci.yaml's shared paths, so every
+# suite it gates runs, the choreo suites among them; ci-lint.yaml runs choreo
+# lint and ember-tsc. Their checks land on the PR's head commit. A push to the
+# branch by a person runs the usual pull_request workflows.
 
 on:
   schedule:
