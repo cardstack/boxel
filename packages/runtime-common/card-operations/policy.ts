@@ -530,12 +530,22 @@ async function compilePolicy(
 // holds it, and no realm is told it exists. A document with no rule that can
 // be read compiles to a policy that is uncompilable as a whole, as the card
 // would.
+//
+// What it read is returned beside it: the card, and the module of every type
+// whose definition compiling looked up. What the result says describes those
+// definitions, so whoever reports it judges the caller by them.
 export async function compileDraftPolicy(
   card: string,
   document: Record<string, any>,
   env: PolicyCompileEnvironment,
-): Promise<CompiledRealmPolicy> {
-  return (await compileDocument(card, document, env, () => {})).compiled;
+): Promise<{ compiled: CompiledRealmPolicy; reads: string[] }> {
+  let { compiled, inputs } = await compileDocument(
+    card,
+    document,
+    env,
+    () => {},
+  );
+  return { compiled, reads: inputs };
 }
 
 // The rules a policy card's attributes hold, compiled.

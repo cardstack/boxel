@@ -111,13 +111,10 @@ import {
 // answer alone: no cache holds it, and the policy in force is untouched. A
 // draft names its own types, and they resolve as the live policy's do,
 // through the target realm's definition lookup, which reads a module in any
-// realm this server serves as that realm's owner. Which types exist there,
-// and which operations they declare, a named search already tells any caller
-// who names one. What a draft adds is what compiling a rule records about the
-// type it names: that an operation is non-grantable, that the type is module
-// source, or why a predicate does not compile to a search filter. The live
-// form tells that only to whoever may write the policy card, and a draft tells
-// it to a reader of both realms.
+// realm this server serves as that realm's owner. What compiling records
+// describes those types, down to which of their fields a search filter can
+// read, so a draft is answered only to a caller who may read every such realm
+// compiling read from.
 //
 // A search. A search is not decided by the gate: the search engine composes
 // the grants that admit it into its filter, and it reads the index, so it is
@@ -243,6 +240,24 @@ export async function explainOperation(
   let governing = question.draft
     ? await draftGoverned(realm.core, policyCard, question.draft)
     : { core: realm.core };
+  // What compiling a draft records describes the definitions it read, and a
+  // draft names its own types, in any realm this server serves. So a draft is
+  // answered only to a caller who may read every such realm compiling read
+  // from, and is refused whole otherwise.
+  if (
+    'reads' in governing &&
+    (await readsUnreadable(core, asker, governing.reads))
+  ) {
+    throw new OperationFailure({
+      id: policyCard.href,
+      status: 403,
+      code: 'operation-not-permitted',
+      title: 'Operation not permitted',
+      detail:
+        `compiling the draft reads definitions in a realm you cannot read, ` +
+        `so what it compiles to is not reported to you`,
+    });
+  }
   let actor = scopeCallerFor(question.actor);
   let acl = await realm.aclFor(actor);
   let draft = 'draft' in governing ? governing.draft : undefined;
@@ -319,17 +334,51 @@ async function draftGoverned(
   core: OperationCore,
   policyCard: URL,
   document: Record<string, unknown>,
-): Promise<{ core: OperationCore; draft: CompiledRealmPolicy }> {
+): Promise<{
+  core: OperationCore;
+  draft: CompiledRealmPolicy;
+  reads: string[];
+}> {
   let access = core.policy!;
   let card = (await access.policyCard()) ?? policyCard.href;
-  let draft = await access.compileDraft(card, document);
+  let { compiled: draft, reads } = await access.compileDraft(card, document);
   return {
     core: {
       ...core,
       policy: { ...access, compiledPolicy: async () => draft },
     },
     draft,
+    reads,
   };
+}
+
+// Whether any of these URLs is in a realm this server serves that the asker
+// may not read, judged as the target's realm is: by a session vouched for as
+// their own. A URL no realm here serves is read as the owner of the realm that
+// looked it up, as every card in that realm reads it, so it discloses nothing
+// that realm does not already disclose to its readers.
+async function readsUnreadable(
+  core: OperationCore,
+  asker: ScopeCaller,
+  urls: string[],
+): Promise<boolean> {
+  let judged = new Map<string, boolean>();
+  for (let url of urls) {
+    let served = await core.targetRealm?.(url);
+    if (!served) {
+      continue;
+    }
+    let realmURL = served.core.realmURL;
+    let read = judged.get(realmURL);
+    if (read === undefined) {
+      read = (await served.aclFor(asker)).read;
+      judged.set(realmURL, read);
+    }
+    if (!read) {
+      return true;
+    }
+  }
+  return false;
 }
 
 // What a search asked of the target's realm would compose, for the actor, and

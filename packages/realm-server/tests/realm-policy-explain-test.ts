@@ -41,11 +41,14 @@ import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
 // realm's cards only through the Org realm's own policy.
 const EDUCATION = 'http://127.0.0.1:4444/education/';
 const ORG = 'http://127.0.0.1:4444/org/';
+// A realm no asker in these tests reads, holding a type a draft can name.
+const HR = 'http://127.0.0.1:4444/hr/';
 const POLICY_CARD = `${ORG}policies/education`;
 const ORG_POLICY_CARD = `${ORG}policies/org`;
 const ORG_NOTE = `${ORG}notes/n1`;
 const EDUCATION_ADMIN = '@education-admin:localhost';
 const IT_ADMIN = '@it-admin:localhost';
+const HR_ADMIN = '@hr-admin:localhost';
 const ORG_ADMIN = '@org-admin:localhost';
 const ORG_READER = '@org-reader:localhost';
 const READER = '@reader:localhost';
@@ -129,6 +132,14 @@ const CLASSROOM_MODULE = `
       query: { filter: { type: () => SealedClassroom } },
       nonGrantable: true,
     };
+  }
+`;
+
+const SALARY_MODULE = `
+  import { contains, field, CardDef } from "@cardstack/base/card-api";
+  import StringField from "@cardstack/base/string";
+  export class Salary extends CardDef {
+    @field band = contains(StringField);
   }
 `;
 
@@ -259,6 +270,7 @@ const EDUCATION_CONFIG = `${EDUCATION}realm`;
 module(basename(import.meta.filename), function (hooks) {
   let education: Realm;
   let org: Realm;
+  let hr: Realm;
   let db: PgAdapter;
   let request: SuperTest<Test>;
   let server: Server;
@@ -340,6 +352,16 @@ module(basename(import.meta.filename), function (hooks) {
             [ORG_READER]: ['read'],
           },
         },
+        {
+          realmURL: new URL(HR),
+          fileSystem: {
+            'realm.json': realmConfigCardJSON({ name: 'HR' }),
+            'salary.gts': SALARY_MODULE,
+          },
+          permissions: {
+            [HR_ADMIN]: ['read', 'write', 'realm-owner'],
+          },
+        },
       ],
       dbAdapter,
       publisher,
@@ -350,6 +372,7 @@ module(basename(import.meta.filename), function (hooks) {
     request = supertest(server);
     education = result.realms.find((realm) => realm.url === EDUCATION)!;
     org = result.realms.find((realm) => realm.url === ORG)!;
+    hr = result.realms.find((realm) => realm.url === HR)!;
   }
 
   // Every test boots both realms in its `beforeEach`, which indexes them and
@@ -372,7 +395,7 @@ module(basename(import.meta.filename), function (hooks) {
       );
       booting = undefined;
       if (booted) {
-        for (let realm of [education, org]) {
+        for (let realm of [education, org, hr]) {
           realm.__testOnlyClearCaches();
           realm.unsubscribe();
         }
@@ -1166,6 +1189,40 @@ module(basename(import.meta.filename), function (hooks) {
         'a draft with no rules of its own is refused rather than read as a policy granting nothing',
       );
       assert.strictEqual(errorOf(wholeCard)?.code, 'invalid-params');
+    });
+
+    test('a draft naming a type in a realm the asker cannot read is refused whole', async function (assert) {
+      let question = {
+        actor: TEACHER,
+        target: ROOM_204,
+        operation: 'read',
+        draft: {
+          rules: [
+            {
+              targetType: { module: `${HR}salary`, name: 'Salary' },
+              grants: [{ operation: 'query', where: '.band == actor()' }],
+            },
+          ],
+        },
+      };
+      let refused = await ask(ASKER.itAdmin(), question);
+      assert.strictEqual(
+        refused.status,
+        403,
+        'the IT admin reads both the policy’s realm and the target’s, and not the realm the draft’s type is in',
+      );
+      assert.strictEqual(errorOf(refused)?.code, 'operation-not-permitted');
+      assert.false(
+        refused.text.includes('band'),
+        'nothing compiling recorded about the type reaches them',
+      );
+
+      await insertPermissions(db, new URL(HR), { [IT_ADMIN]: ['read'] });
+      let answered = await answer(question);
+      assert.ok(
+        answered.draft,
+        'a caller who reads that realm too is answered against the draft',
+      );
     });
 
     test('a draft is refused to a caller missing read on either realm, as the live form is', async function (assert) {
