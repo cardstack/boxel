@@ -706,7 +706,7 @@ async function compilePolicy(
   if (!row) {
     return unreadable(
       'policy-card-missing',
-      `the realm's policy card ${card} isn't in the realm's search index yet`,
+      `the realm's policy card ${card} can't be found in the realm's search index`,
     );
   }
   // Refused until a visit of the card succeeds. The row holds what an earlier
