@@ -1051,8 +1051,14 @@ does. A draft whose `rules` can't be read at all fails every decision
 (`failed`, `policy-unloadable`), which is what the realm would do if its card
 held that document, on the search lane as on the direct one. A `draft` with
 no `rules` member is refused, since it would compile to a policy granting
-nothing. Asking about a draft needs exactly what asking about the live policy
-needs: read on both realms.
+nothing.
+
+Asking about a draft needs what asking about the live policy needs, read on
+both realms, and one thing more. A draft names its own types, and compiling it
+looks them up in whatever realm this server serves them from. What it records
+about them, down to which of their fields a search filter can read, is answered
+only to a caller who can read every such realm. Anyone else is refused with
+`403 operation-not-permitted`, and nothing about the draft is explained.
 
 ### Asking about a search
 
