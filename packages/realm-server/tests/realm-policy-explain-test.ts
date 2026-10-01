@@ -44,8 +44,6 @@ import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
 // realm's cards only through the Org realm's own policy.
 const EDUCATION = 'http://127.0.0.1:4444/education/';
 const ORG = 'http://127.0.0.1:4444/org/';
-// A realm no asker in these tests reads, holding a type a draft can name.
-const HR = 'http://127.0.0.1:4444/hr/';
 const POLICY_CARD = `${ORG}policies/education`;
 const ORG_POLICY_CARD = `${ORG}policies/org`;
 const ORG_NOTE = `${ORG}notes/n1`;
@@ -273,7 +271,6 @@ const EDUCATION_CONFIG = `${EDUCATION}realm`;
 module(basename(import.meta.filename), function (hooks) {
   let education: Realm;
   let org: Realm;
-  let hr: Realm;
   let db: PgAdapter;
   let request: SuperTest<Test>;
   let server: Server;
@@ -356,16 +353,6 @@ module(basename(import.meta.filename), function (hooks) {
             [ORG_READER]: ['read'],
           },
         },
-        {
-          realmURL: new URL(HR),
-          fileSystem: {
-            'realm.json': realmConfigCardJSON({ name: 'HR' }),
-            'salary.gts': SALARY_MODULE,
-          },
-          permissions: {
-            [HR_ADMIN]: ['read', 'write', 'realm-owner'],
-          },
-        },
       ],
       dbAdapter,
       publisher,
@@ -377,7 +364,6 @@ module(basename(import.meta.filename), function (hooks) {
     request = supertest(server);
     education = result.realms.find((realm) => realm.url === EDUCATION)!;
     org = result.realms.find((realm) => realm.url === ORG)!;
-    hr = result.realms.find((realm) => realm.url === HR)!;
   }
 
   // Every test boots both realms in its `beforeEach`, which indexes them and
@@ -400,7 +386,7 @@ module(basename(import.meta.filename), function (hooks) {
       );
       booting = undefined;
       if (booted) {
-        for (let realm of [education, org, hr]) {
+        for (let realm of [education, org]) {
           realm.__testOnlyClearCaches();
           realm.unsubscribe();
         }
@@ -1161,7 +1147,36 @@ module(basename(import.meta.filename), function (hooks) {
     ],
   };
 
-  module('against a draft', function () {
+  module('against a draft', function (hooks) {
+    // A realm no asker in these tests reads, holding a type a draft can name.
+    // Staged by the one test that needs it, so no other test boots it.
+    const HR = 'http://127.0.0.1:4444/hr/';
+
+    async function stageHR() {
+      let diskId = 'hr';
+      let dir = join(realmServer.testingOnlyRealmsRootPath, diskId);
+      for (let [path, content] of Object.entries({
+        'realm.json': realmConfigCardJSON({ name: 'HR' }),
+        'salary.gts': SALARY_MODULE,
+      })) {
+        mkdirSync(dirname(join(dir, path)), { recursive: true });
+        writeFileSync(join(dir, path), content);
+      }
+      await insertSourceRealmInRegistry(db, {
+        url: HR,
+        diskId,
+        ownerUsername: HR_ADMIN,
+      });
+      await insertPermissions(db, new URL(HR), {
+        [HR_ADMIN]: ['read', 'write', 'realm-owner'],
+      });
+      await realmServer.testingOnlyReconcile();
+    }
+
+    hooks.afterEach(function () {
+      realmServer?.testingOnlyReconciler.mounted.get(HR)?.unsubscribe();
+    });
+
     test('a draft answers what the policy would decide, and the policy in force is untouched', async function (assert) {
       let live = await explain(TEACHER, ROOM_205, 'read');
       assert.strictEqual(live.decision, 'denied', 'the policy in force');
@@ -1312,6 +1327,7 @@ module(basename(import.meta.filename), function (hooks) {
     });
 
     test('a draft naming a type in a realm the asker cannot read is refused whole', async function (assert) {
+      await stageHR();
       let question = {
         actor: TEACHER,
         target: ROOM_204,
