@@ -10,15 +10,20 @@ import type { OperationFailure } from './types.ts';
 // itself would be a second implementation of the gate that could drift from
 // the first. So the gate records into a trace when the operation scope it is
 // handed carries one, at the points where it decides, and an explain reads the
-// trace back. Only an explain makes a scope that carries one, so every other
-// invocation records nothing and pays nothing for it.
+// trace back. A capability check reads one back too, for the one thing it
+// needs to know of a refusal: whether the gate refused a query, which the
+// search that runs it decides instead. Nothing else makes a scope that
+// carries one, so an invocation records nothing and pays nothing for it.
 // ============================================================================
 
 // Why the gate refused, where it refused before any predicate said so.
 export type GateTraceRefusal =
   // An operation no policy may grant: declared `nonGrantable` on the target's
-  // type or one it descends from, or a behavior no grant reaches here.
+  // type or one it descends from, or an explain, which no grant reaches.
   | 'non-grantable'
+  // A query, which the gate never grants because the search that runs it is
+  // where its grants are judged.
+  | 'query-lane'
   // Any operation on the realm's policy card or on its config card, or one
   // that reads, changes or mints any policy card.
   | 'authorization-infrastructure'
