@@ -1,7 +1,8 @@
 /**
  * Ports of Motion's packages/framer-motion/cypress/integration/drag-tabs.ts (fixture drag-tabs) and drag-to-reorder.ts
- * (fixture drag-to-reorder), motion@bbabb00. The fixtures' `body` styles apply to the fixture viewport
- * (#ember-testing) here; MotionConfig's transition is passed to the elements it reached.
+ * (fixture drag-to-reorder), motion@bbabb00, and reorder-release-before-frame.ts (fixture drag-to-reorder), motion@v13.4.6.
+ * The fixtures' `body` styles apply to the fixture viewport (#ember-testing) here; MotionConfig's transition is passed
+ * to the elements it reached.
  */
 import { registerDestructor } from '@ember/destroyable';
 import { on } from '@ember/modifier';
@@ -21,11 +22,13 @@ import { module, test } from 'qunit';
 import {
   $,
   cyClick,
+  pointerAt,
   setupFixtureViewport,
   should,
   trigger,
   wait,
 } from '../../../helpers/layout-fixture';
+import { nextFrame } from '../../../helpers/motion';
 
 /* ---------- drag-tabs.tsx ---------- */
 interface Ingredient {
@@ -728,3 +731,46 @@ module('Integration | motion | cypress | Drag to reorder', function (hooks) {
     await box();
   });
 });
+
+module(
+  'Integration | motion | cypress | Reorder release before the next frame',
+  function (hooks) {
+    setupRenderingTest(hooks);
+    setupFixtureViewport(hooks);
+
+    test('Reorders when the final move arrives in the same frame as pointerup', async function (assert) {
+      await render(<template><ReorderList /></template>);
+      const cucumber = $('#Cucumber').getBoundingClientRect();
+      await nextFrame();
+      await nextFrame();
+      const tomato = $('#Tomato').getBoundingClientRect();
+      const x = tomato.left + 10;
+      pointerAt($('#Tomato'), 'pointerdown', x, tomato.top + 10);
+      pointerAt($('#Tomato'), 'pointermove', x, tomato.top + 15);
+      await nextFrame();
+      pointerAt($('#Tomato'), 'pointermove', x, tomato.top + 35);
+      await nextFrame();
+      // 55px down: past Cucumber's centre, released within the frame
+      const y = tomato.top + 65;
+      pointerAt($('#Tomato'), 'pointermove', x, y);
+      pointerAt($('#Tomato'), 'pointerup', x, y);
+
+      await should(assert, (a) => {
+        const el = $('#Tomato');
+        const ids = [...el.parentElement!.children]
+          .map((child) => child.id)
+          .filter(Boolean);
+        a.strictEqual(ids.slice(0, 2).join(), 'Cucumber,Tomato', 'order');
+        a.closeTo(el.getBoundingClientRect().top, cucumber.top, 2, 'Tomato');
+      });
+      await should(assert, (a) =>
+        a.closeTo(
+          $('#Cucumber').getBoundingClientRect().top,
+          tomato.top,
+          2,
+          'Cucumber'
+        )
+      );
+    });
+  }
+);
