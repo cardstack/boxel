@@ -47,8 +47,9 @@ const adaptedFrom = {
   ],
 };
 
-// GitHub rejects a PR body over 65,536 characters.
-const reportBudget = 60_000;
+// GitHub rejects a PR body over 65,536 characters. A report printed to stdout
+// (`--report -`) has no budget and carries every diff.
+const prBodyBudget = 60_000;
 
 const { values: args } = parseArgs({
   options: {
@@ -347,7 +348,7 @@ async function compareSources(from, to, tarballs) {
   }
 }
 
-function report(pins, release, sources) {
+function report(pins, release, sources, budget) {
   const from = pins['framer-motion'];
   const to = release['framer-motion'];
   const repo = 'https://github.com/motiondivision/motion';
@@ -407,7 +408,7 @@ ${list(sources.imported)}
     const omitted = [];
     for (const change of diffs) {
       const section = `\n<details><summary><code>${change.path}</code></summary>\n\n\`\`\`\`diff\n${change.diff}\`\`\`\`\n\n</details>\n`;
-      if (body.length + section.length > reportBudget) {
+      if (body.length + section.length > budget) {
         omitted.push(change.path);
       } else {
         body += section;
@@ -435,6 +436,7 @@ async function bump(pins, { release, tarballs }) {
         release['framer-motion'],
         tarballs,
       ),
+      args.report === '-' ? Infinity : prBodyBudget,
     );
     if (args.report === '-') {
       console.log(`\n${body}`);
