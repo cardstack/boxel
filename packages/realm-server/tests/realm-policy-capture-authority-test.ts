@@ -366,6 +366,19 @@ module(basename(import.meta.filename), function (hooks) {
       );
   }
 
+  // A GET that renders answers 503 + Retry-After when the render outruns
+  // its inline wait, and the capture lands anyway, so the reader retries as
+  // a browser would until it is served.
+  async function getCaptureOnceDrawn(user: string, url: string) {
+    let response = await getCapture(user, url);
+    for (let attempt = 0; response.status === 503 && attempt < 30; attempt++) {
+      let retryAfter = Number(response.headers['retry-after']) || 1;
+      await new Promise((resolve) => setTimeout(resolve, retryAfter * 1000));
+      response = await getCapture(user, url);
+    }
+    return response;
+  }
+
   test('a capture its requester POSTs draws what they may see, and serves back to them alone', async function (assert) {
     // Shorter than any reader's rows, so a full-page capture's height is the
     // board's own.
@@ -429,17 +442,19 @@ module(basename(import.meta.filename), function (hooks) {
   });
 
   test('a capture a reader asks for on the GET route renders as them', async function (assert) {
+    // Each reader's render can outrun the GET's inline wait and be retried.
+    assert.timeout(240_000);
     // A spec of its own, so nothing the POST test persisted answers it, and
     // shorter than any reader's rows, as there.
     let url = `${BOARD}_capture/boards/board?viewport=300x50&fullPage=true`;
 
-    let requesters = await getCapture(REQUESTER, url);
+    let requesters = await getCaptureOnceDrawn(REQUESTER, url);
     assert.strictEqual(
       requesters.status,
       200,
       `the requester's capture: ${requesters.text}`,
     );
-    let others = await getCapture(OTHER_READER, url);
+    let others = await getCaptureOnceDrawn(OTHER_READER, url);
     assert.strictEqual(
       others.status,
       200,
@@ -454,7 +469,7 @@ module(basename(import.meta.filename), function (hooks) {
       `the requester's capture drew the row their grant admits them to in Grants and the row they may read in Private, which the other reader's did not (${requesterHeight}px against ${otherHeight}px)`,
     );
 
-    let again = await getCapture(REQUESTER, url);
+    let again = await getCaptureOnceDrawn(REQUESTER, url);
     assert.strictEqual(
       pngHeight(again.body as Buffer),
       requesterHeight,
