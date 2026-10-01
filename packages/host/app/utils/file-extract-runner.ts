@@ -93,6 +93,14 @@ export async function runFileExtract({
     toolContext,
   });
   let fileApiURL = `${baseRealm.url}file-api`;
+  // The loader tracks a module under the form the index names its realm by
+  // (`@cardstack/base/file-api` for base), so that is the entry an import of
+  // `file-api` during the extract would record. Stamping it here makes it
+  // present whether or not anything imports `file-api` in this session:
+  // matrix-service's file-api resource does on a tab that hasn't loaded it
+  // yet, and a reused tab does not, so leaving it to that import makes the
+  // same file's deps differ between a fresh tab and a reused one.
+  let fileApiKey = network.virtualNetwork.unresolveURL(fileApiURL);
   let result: FileDefExtractResult;
   try {
     result = await withRuntimeDependencyTrackingContext(
@@ -120,6 +128,7 @@ export async function runFileExtract({
         // tracker directly here is one synchronous call with no
         // moving parts.
         trackRuntimeModuleDependency(fileApiURL);
+        trackRuntimeModuleDependency(fileApiKey);
         return extractor.extract();
       },
     );
@@ -138,7 +147,9 @@ export async function runFileExtract({
   // The indexer's invalidation contract requires this URL to be
   // present for file extracts; missing it produces silent
   // never-invalidated rows.
-  let mergedDeps = [...new Set([...(result.deps ?? []), ...deps, fileApiURL])];
+  let mergedDeps = [
+    ...new Set([...(result.deps ?? []), ...deps, fileApiURL, fileApiKey]),
+  ];
   return {
     ...result,
     deps: mergedDeps,

@@ -9920,10 +9920,16 @@ module(basename(import.meta.filename), function () {
           fusedRest,
           'file extract matches the fused visit',
         );
+        let indexSet = new Set(indexDeps);
+        let fusedSet = new Set(fusedDeps);
+        // Named on failure, since each set is mostly scoped-CSS module ids
+        // too long to compare by eye.
+        let onlyIndex = [...indexSet].filter((dep) => !fusedSet.has(dep));
+        let onlyFused = [...fusedSet].filter((dep) => !indexSet.has(dep));
         assert.deepEqual(
-          [...new Set(indexDeps)].sort(),
-          [...new Set(fusedDeps)].sort(),
-          'file extract deps match the fused visit as a set',
+          { onlyIndex, onlyFused },
+          { onlyIndex: [], onlyFused: [] },
+          `file extract deps match the fused visit as a set: only in the index visit ${JSON.stringify(onlyIndex)}, only in the fused visit ${JSON.stringify(onlyFused)}`,
         );
       }
       assert.deepEqual(
