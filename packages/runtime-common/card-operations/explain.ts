@@ -341,6 +341,8 @@ function refusalReason(
   switch (trace.refusal) {
     case 'non-grantable':
       return 'non-grantable';
+    case 'query-lane':
+      return 'query-lane';
     case 'authorization-infrastructure':
       return 'authorization-infrastructure';
     case 'unmatchable-target':
