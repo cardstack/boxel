@@ -230,6 +230,7 @@ function setup(grants: Grant[]) {
   let cache = new RealmPolicyCache({
     policyCard: async () => POLICY_CARD,
     readCard: async (): Promise<IndexedInstanceSource> => ({
+      url: `${POLICY_CARD}.json`,
       realmURL: ORG,
       generation: 1,
       sourceContentHash: 'v1',
@@ -273,6 +274,7 @@ function setup(grants: Grant[]) {
     toURL: (identifier) => new URL(identifier),
     isPolicyCard: (types) => types.includes(policyKey),
     typeKey,
+    revisitCard: async () => {},
     realmURL: GOVERNED,
     instanceTypesUnder: async (codeRef) => {
       state.asked++;

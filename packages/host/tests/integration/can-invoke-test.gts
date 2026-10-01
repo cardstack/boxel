@@ -530,9 +530,10 @@ module('Integration | canInvoke | a type target', function (hooks) {
 });
 
 // The whole way a card reaches an answer: the operator-mode context providers,
-// the service, the realm's own `_capabilities` route. The in-browser realm a
-// host test runs dispatches the host's requests as its own, so no ACL judges
-// them and permission is not what this pins: the realm-server suite does. What
+// the service, the realm's own `_capabilities` route. This realm dispatches the
+// host's requests as its own, so no ACL judges them and permission is not what
+// this pins: `permission-checking-realm-test` pins it against a realm that
+// judges them, and the realm-server suite against a deployed one. What
 // it pins is that the template reads the realm's answer. So the card asks one
 // question the realm admits and one it refuses whoever asks — an operation its
 // type does not carry — and shows each as one of three states, so a `false`

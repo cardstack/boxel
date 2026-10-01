@@ -189,9 +189,15 @@ export interface PolicyCompileEnvironment {
 }
 
 // The environment the cache needs beyond compiling: which card the realm's
-// pointer names right now.
+// pointer names right now, and a way to have that card indexed again.
 export interface RealmPolicyCacheEnvironment extends PolicyCompileEnvironment {
   policyCard(): Promise<string | undefined>;
+  // Runs the card's index visit again: an index of `file`, the file the card
+  // is stored in, in the realm at `realmURL` that holds it, which need not be
+  // the realm the policy governs. Resolves once that visit has settled,
+  // whether or not it succeeded. Asked only of a card whose latest visit was
+  // withheld.
+  revisitCard(file: string, realmURL: string): Promise<void>;
 }
 
 // The per-realm compiled-policy cache.
@@ -220,6 +226,15 @@ export interface RealmPolicyCacheEnvironment extends PolicyCompileEnvironment {
 // mounted. A policy card or a type's module usually lives in a realm other than
 // the one it governs, so this is what reaches an entry when that realm's index
 // moves.
+//
+// A card whose latest index visit was withheld compiles to no rules, and
+// nothing else would visit it again. Its row reads as healthy, so no error on
+// it asks for a reindex, and it stays as it is until the card, a module it
+// depends on, or its realm is next indexed. So the cache asks for that visit
+// itself, whenever it reads such a row (see `#revisitWithheld`). The visit's
+// commit moves the index of the realm holding the card, which reaches the
+// cache as any move does, and the refresh that follows compiles what the card
+// holds now.
 export class RealmPolicyCache {
   #env: RealmPolicyCacheEnvironment;
   #current: Compilation | undefined;
@@ -238,9 +253,12 @@ export class RealmPolicyCache {
   // When `#current` was last known to match the index: the moment the read
   // that built or revalidated it began.
   #validatedAt = 0;
-  // How often compiling and revalidating actually happen, for tests that
-  // assert on it rather than on the result alone.
-  readonly stats = { compiles: 0, revalidations: 0 };
+  // The latest visit this cache asked for of a card whose visit was withheld.
+  // `settledAt` is unset while the visit runs.
+  #revisit: { card: string; settledAt?: number } | undefined;
+  // How often compiling, revalidating and asking for a card's visit actually
+  // happen, for tests that assert on it rather than on the result alone.
+  readonly stats = { compiles: 0, revalidations: 0, revisits: 0 };
 
   constructor(env: RealmPolicyCacheEnvironment) {
     this.#env = env;
@@ -293,8 +311,10 @@ export class RealmPolicyCache {
     this.#current = undefined;
     this.#stale = false;
     this.#joinable = undefined;
+    this.#revisit = undefined;
     this.stats.compiles = 0;
     this.stats.revalidations = 0;
+    this.stats.revisits = 0;
   }
 
   #refresh(card: string): Promise<CompiledRealmPolicy> {
@@ -342,6 +362,9 @@ export class RealmPolicyCache {
       );
       logIssues(card, compilation.compiled.issues);
     }
+    if (row?.failureWithheld) {
+      this.#revisitWithheld(card, row);
+    }
     // Kept only when no move landed under one of its inputs while this ran. A
     // kept entry is answered from memory until the next move, so keeping one
     // built from a read that a later move superseded would keep serving what
@@ -355,7 +378,56 @@ export class RealmPolicyCache {
     }
     return compilation.compiled;
   }
+
+  // Asks for a visit of `card`, whose latest index visit was withheld. Not
+  // awaited: the read that found the row is answered with the refusal it
+  // compiled to, and the visit's outcome reaches the cache as an index move.
+  //
+  // One visit at a time, so a read landing while one runs asks for none. And
+  // once one settles, none is asked for again until
+  // `WITHHELD_REVISIT_COOLDOWN_MS` has passed. A visit that is withheld again
+  // moves the index too, and the refresh that move starts would otherwise ask
+  // for the next visit at once, and so on for as long as the cause lasts.
+  #revisitWithheld(card: string, row: IndexedInstanceSource): void {
+    let last = this.#revisit;
+    if (
+      last?.card === card &&
+      (last.settledAt === undefined ||
+        now() - last.settledAt < WITHHELD_REVISIT_COOLDOWN_MS)
+    ) {
+      return;
+    }
+    let revisit: { card: string; settledAt?: number } = { card };
+    this.#revisit = revisit;
+    this.stats.revisits++;
+    this.#env
+      .revisitCard(row.url, row.realmURL)
+      .catch((e: unknown) => {
+        log.warn(
+          `the policy card ${card} could not be indexed again after its latest visit was withheld: ${e}`,
+        );
+      })
+      .finally(() => {
+        revisit.settledAt = now();
+      });
+  }
 }
+
+// How long after a visit the cache asked for settles before it asks for
+// another, while the card's visit is still withheld.
+//
+// The first is asked for as soon as the row is read: a gateway failure has
+// usually passed by the time its row is written, so a visit made then usually
+// succeeds. A visit that is withheld again met a cause that outlasted it, such
+// as a stale host shell, which lasts as long as a deploy overlap. Asking at the
+// rate the cache revalidates would spend a visit every few seconds for every
+// realm the card governs, in every process, for as long as that lasts. This
+// asks about once a minute while the cache is read or its inputs move, so once
+// the cause clears the policy is back within about a minute, plus however long
+// the visit waits in the queue and runs. An ask that joins a pass which had
+// already visited the card settles having visited nothing, and waits the same
+// minute (see `Realm#revisitPolicyCard`).
+const WITHHELD_REVISIT_COOLDOWN_MS = 60_000;
 
 // One line per compile for the issues that left part of the policy admitting
 // nothing, which is an operator's problem as much as an author's, and a
@@ -781,8 +853,8 @@ async function compilePolicy(
   // Refused until a visit of the card succeeds. The row holds what an earlier
   // visit read, and nothing on it says whether the card has changed since, so
   // compiling it could serve a grant an administrator has just removed. The
-  // policy stays refused until something re-visits the card: an edit to it,
-  // a change to a module it depends on, or a reindex of its realm.
+  // cache that reads such a row asks for the card to be visited again, and
+  // the policy stays refused until a visit succeeds.
   if (row.failureWithheld) {
     return uncompilable(
       'policy-card-unloadable',

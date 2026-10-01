@@ -171,6 +171,93 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
+  // Nothing else visits a card whose visit was withheld: its row reads as
+  // healthy, so no error on it asks for a reindex.
+  test('a card whose latest visit was withheld is visited again, once per cooldown, and compiles once a visit succeeds', async function (assert) {
+    let { cache, state, card } = setup();
+    setNow(1_000_000);
+    state.failureWithheld = true;
+    let withheld = await cache.get();
+    assert.true(withheld?.uncompilable, 'the policy does not compile');
+    assert.deepEqual(
+      state.revisits,
+      [{ file: `${card}.json`, realmURL: ORG }],
+      'one visit is asked for, of the file the card is stored in, in the realm that holds it',
+    );
+
+    // The visit is withheld too. Once it settles its commit moves the Org
+    // index, and the refresh that starts reads the row still withheld.
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    noteRealmIndexMoved(ORG);
+    await until(
+      () => cache.stats.revalidations === 1,
+      'the refresh after the move lands',
+    );
+    setNow(1_006_000);
+    assert.true(
+      (await cache.get())?.uncompilable,
+      'a read past the revalidation bound still refuses',
+    );
+    assert.strictEqual(cache.stats.revalidations, 2);
+    assert.strictEqual(
+      state.revisits.length,
+      1,
+      'and neither read inside the cooldown asks for another visit',
+    );
+
+    // Past the cooldown the next read asks again, and this visit succeeds.
+    // Its commit leaves the card as it was, less the withholding.
+    state.onRevisit = () => {
+      state.failureWithheld = false;
+      noteRealmIndexMoved(ORG);
+    };
+    setNow(1_070_000);
+    assert.true(
+      (await cache.get())?.uncompilable,
+      'the read that asks is answered with the refusal it read',
+    );
+    assert.strictEqual(state.revisits.length, 2, 'a second visit is asked for');
+    await until(() => cache.stats.compiles === 2, 'the successful visit lands');
+    let healed = await cache.get();
+    assert.notOk(healed?.uncompilable, 'the policy compiles');
+    assert.strictEqual(healed?.version, 'v1', 'from the card as it stood');
+    assert.strictEqual(
+      healed?.rules[0]?.grants.length,
+      1,
+      'and it grants again',
+    );
+    assert.strictEqual(state.revisits.length, 2, 'and nothing asks again');
+  });
+
+  // A pass nobody waits on announces itself before it returns, so the refresh
+  // its announcement starts runs while the visit is still running.
+  test('no read asks for another visit while the one it asked for is still running', async function (assert) {
+    let { cache, state } = setup();
+    setNow(1_000_000);
+    state.failureWithheld = true;
+    let release!: () => void;
+    state.revisitGate = new Promise((resolve) => (release = resolve));
+    await cache.get();
+    assert.strictEqual(state.revisits.length, 1, 'a visit is asked for');
+
+    noteRealmIndexMoved(ORG);
+    await until(
+      () => cache.stats.revalidations === 1,
+      'the refresh after the move lands',
+    );
+    // Past the revalidation bound, and past the cooldown too, had the visit
+    // settled when it was asked for.
+    setNow(1_070_000);
+    assert.true((await cache.get())?.uncompilable, 'the policy still refuses');
+    assert.strictEqual(cache.stats.revalidations, 2);
+    assert.strictEqual(
+      state.revisits.length,
+      1,
+      'and neither the refresh nor the read asks for another visit',
+    );
+    release();
+  });
+
   test('reads of a cold cache share one compile', async function (assert) {
     let { cache, state } = setup();
     let [a, b, c] = await Promise.all([cache.get(), cache.get(), cache.get()]);
@@ -226,6 +313,7 @@ module(basename(import.meta.filename), function (hooks) {
     let cache = new RealmPolicyCache({
       policyCard: async () => card,
       readCard: async (): Promise<IndexedInstanceSource> => ({
+        url: `${card}.json`,
         realmURL: ORG,
         generation: 1,
         sourceContentHash: 'v1',
@@ -264,6 +352,7 @@ module(basename(import.meta.filename), function (hooks) {
       realmURL: EDUCATION,
       instanceTypesUnder: async () => [],
       instanceTypeKeys: async () => [],
+      revisitCard: async () => {},
     });
     return { cache, state };
   }
