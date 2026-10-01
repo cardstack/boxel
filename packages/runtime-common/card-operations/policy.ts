@@ -1,7 +1,7 @@
 import stableStringify from 'safe-stable-stringify';
 
 import { now } from '../clock.ts';
-import type { ResolvedCodeRef } from '../code-ref.ts';
+import type { CodeRef, ResolvedCodeRef } from '../code-ref.ts';
 import { computeContentHash } from '../content-hash.ts';
 import { isFilterRefersToNonexistentTypeError } from '../definition-lookup.ts';
 import type { Definition } from '../definitions.ts';
@@ -11,7 +11,11 @@ import { logger } from '../log.ts';
 import { MODULE_SOURCE_FILE_DEF_CODE_REFS } from '../policy-file-def.ts';
 import { rri } from '../realm-identifiers.ts';
 import { carriesBuiltIn } from './dispatch.ts';
-import { compilePolicyFilter } from './policy-filter.ts';
+import {
+  compilePolicyFilter,
+  pathsFilterReads,
+  readsPathAlike,
+} from './policy-filter.ts';
 import {
   isDefinitionFreeBaseOperation,
   type BaseOperation,
@@ -86,6 +90,25 @@ export interface CompiledOperationGrant {
   // filter, which is recorded as a `policy-not-filterable` issue. That grant
   // admits no search, and its predicate is kept as it is.
   filter?: OperationQueryFilterTemplate;
+  // For a grant carrying a filter, each path it compares that some card of
+  // the governed realm reads differently from the rule's type, with the types
+  // of those cards: descendants of the rule's type whose own declarations
+  // read the path otherwise. `item.on` admits a descendant's cards, and for
+  // such a card the index holds what its own type makes of the path, which
+  // the predicate never reads. So a search keeps each comparison of the path
+  // from judging those cards, and leaves the rest of the filter to. Absent
+  // when no card of the realm reads a path differently.
+  misreadingTypes?: { path: string; types: MisreadingType[] }[];
+}
+
+// A type whose cards read a path differently from the rule's type.
+export interface MisreadingType {
+  type: CodeRef;
+  // The types descending from it that the governed realm holds cards of and
+  // that read the path as the rule's type does, having redeclared it back. A
+  // type filter matches a type's descendants too, so these are named for the
+  // search to keep. Absent when there are none.
+  except?: CodeRef[];
 }
 
 export interface CompiledPolicyPredicate {
@@ -133,6 +156,19 @@ export interface PolicyCompileEnvironment {
   // The key a type is recorded under in an adoption chain, the index's and
   // the definition cache's alike.
   typeKey(codeRef: ResolvedCodeRef): string;
+  // The realm the policy governs, whose cards a search it scopes runs over.
+  realmURL: string;
+  // The types the governed realm holds cards of that descend from `codeRef`,
+  // as the first key of each row's adoption chain, sorted. Read on the
+  // realm's own authority, like everything here. It reads every card of the
+  // type, so it is asked again only once `instanceTypeKeys` changes.
+  instanceTypesUnder(codeRef: ResolvedCodeRef): Promise<string[]>;
+  // The types the governed realm holds cards of, as the first key of each
+  // row's adoption chain, sorted: the realm's own summary of its cards, one
+  // small read. Which of them descend from a type changes only when this
+  // does, so while it reads the same, `instanceTypesUnder` would answer as it
+  // did. An edit to a card leaves it as it was.
+  instanceTypeKeys(): Promise<string[]>;
 }
 
 // The environment the cache needs beyond compiling: which card the realm's
@@ -314,8 +350,12 @@ export class RealmPolicyCache {
 // quiet the signals are. It is the same five seconds the live search cache
 // allows a result whose dependency it cannot see, for the same reason: it is
 // the staleness bound for what the signals miss. A revalidation is one narrow
-// index read plus the definition lookups, and a steady stream of reads pays it
-// once per interval rather than once per read.
+// index read plus the definition lookups, and, for a policy whose query
+// grants' filters read a field, a read of the governed realm's summary of the
+// types it holds cards of. Only when that has changed does it also read the
+// types the realm holds under each such rule's type, which reads every card
+// of the type. A steady stream of reads pays a revalidation once per interval
+// rather than once per read.
 const MAX_UNVALIDATED_MS = 5_000;
 
 // Every realm's policy cache in this process. A move in one realm has to
@@ -361,6 +401,14 @@ interface Compilation {
   definitions: Map<string, { codeRef: ResolvedCodeRef; fingerprint?: string }>;
   // URLs whose realm's index moving could change what this compiles to.
   inputs: string[];
+  // What the governed realm held under each rule type whose grants' filters
+  // read a field: the types a grant's `misreadingTypes` were chosen from.
+  subtypes: { targetType: ResolvedCodeRef; keys: string[] }[];
+  // The realm's `instanceTypeKeys`, read before `subtypes` was. A
+  // revalidation that finds them unchanged skips reading `subtypes` again,
+  // and one that reads it again and finds it unchanged records the keys it
+  // read.
+  heldTypes?: string;
 }
 
 interface Refresh {
@@ -411,6 +459,21 @@ async function stillCurrent(
       return false;
     }
   }
+  if (compilation.subtypes.length > 0) {
+    // Read before the types under each rule, so a card of a new type landing
+    // between the reads leaves the recorded keys behind, and the next
+    // revalidation reads the types again.
+    let heldTypes = (await env.instanceTypeKeys()).join('\n');
+    if (heldTypes !== compilation.heldTypes) {
+      for (let { targetType, keys } of compilation.subtypes) {
+        let held = await env.instanceTypesUnder(targetType);
+        if (held.join('\n') !== keys.join('\n')) {
+          return false;
+        }
+      }
+      compilation.heldTypes = heldTypes;
+    }
+  }
   return true;
 }
 
@@ -457,6 +520,8 @@ async function compilePolicy(
   let issues: PolicyIssue[] = [];
   let definitions: Compilation['definitions'] = new Map();
   let inputs = [card];
+  let subtypes: Compilation['subtypes'] = [];
+  let heldTypes: string | undefined;
   let rules: CompiledPolicyRule[] = [];
   let cardURL = new URL(card);
   let issue = (code: PolicyIssueCode, path: string, message: string) =>
@@ -473,6 +538,8 @@ async function compilePolicy(
     row: rowIdentity(row),
     definitions,
     inputs,
+    subtypes,
+    heldTypes,
   });
   // The policy as a whole did not compile, for the reason recorded. It has no
   // rules.
@@ -487,6 +554,7 @@ async function compilePolicy(
       row: rowIdentity(row),
       definitions,
       inputs,
+      subtypes,
     };
   };
 
@@ -765,7 +833,155 @@ async function compilePolicy(
     }
     rules.push({ targetType: resolved, path: rulePath, grants });
   }
+
+  // A filter is compiled against its rule's type, and `item.on` admits every
+  // type descending from it as well. For each path a grant's filter compares,
+  // the grant records the descendants the governed realm holds cards of that
+  // read the path differently. The realm's rows are an input from here on,
+  // since a card of a new descendant can change what a grant records.
+  for (let rule of rules) {
+    let reading = new Map<CompiledOperationGrant, string[]>();
+    for (let grant of rule.grants) {
+      let paths = grant.filter ? pathsFilterReads(grant.filter) : [];
+      if (paths.length > 0) {
+        reading.set(grant, paths);
+      }
+    }
+    if (reading.size === 0) {
+      continue;
+    }
+    let ruleEntry = await readType(rule.targetType);
+    if (!ruleEntry) {
+      continue;
+    }
+    if (!inputs.includes(env.realmURL)) {
+      inputs.push(env.realmURL);
+      onInput(env.realmURL);
+    }
+    // Read before the types under any rule, as a revalidation reads them.
+    heldTypes ??= (await env.instanceTypeKeys()).join('\n');
+    let keys = await env.instanceTypesUnder(rule.targetType);
+    subtypes.push({ targetType: rule.targetType, keys });
+    let own = new Set([env.typeKey(rule.targetType), ruleEntry.types[0]]);
+    let held: HeldType[] = [];
+    let unnamed: string[] = [];
+    for (let key of keys) {
+      if (own.has(key)) {
+        continue;
+      }
+      let named = codeRefFromInternalKey(key);
+      let ref = named ?? heldTypeRef(key);
+      if (!ref) {
+        unnamed.push(key);
+        continue;
+      }
+      // A type whose key names it only in a shape `codeRefFromInternalKey`
+      // refuses has no definition read here, and one whose definition cannot
+      // be read has none either. Neither can be shown to read a path alike.
+      let resolved = named
+        ? attempt(() => env.resolveCodeRef(named, cardURL))
+        : undefined;
+      let entry = resolved ? await readType(resolved) : undefined;
+      held.push({ key, ref: resolved ?? ref, entry });
+    }
+    let grants: CompiledOperationGrant[] = [];
+    for (let grant of rule.grants) {
+      let paths = reading.get(grant);
+      if (!paths) {
+        grants.push(grant);
+        continue;
+      }
+      // A type no filter can name cannot be kept from a comparison, so a
+      // grant whose filter compares a field scopes no search at all.
+      if (unnamed.length > 0) {
+        issue(
+          'policy-not-filterable',
+          `${grant.path}.where`,
+          `the grant is on a query, and the realm holds cards of ${unnamed.join(', ')}, which descend from ${rule.targetType.name} and which no search filter can name, so its filter could not be kept from misreading them`,
+        );
+        let { filter: _filter, ...unfiltered } = grant;
+        grants.push(unfiltered);
+        continue;
+      }
+      let snapshot = grant.where?.snapshot ?? false;
+      let misreadingTypes: { path: string; types: MisreadingType[] }[] = [];
+      for (let path of paths) {
+        let misreading: HeldType[] = [];
+        for (let type of held) {
+          if (
+            !type.entry ||
+            !(await readsPathAlike(
+              ruleEntry.definition,
+              type.entry.definition,
+              path,
+              snapshot,
+              readDefinition,
+            ))
+          ) {
+            misreading.push(type);
+          }
+        }
+        if (misreading.length === 0) {
+          continue;
+        }
+        let misreads = new Set(misreading.map(({ key }) => key));
+        misreadingTypes.push({
+          path,
+          types: misreading.map(({ key, ref }) => {
+            let except = held
+              .filter(
+                (other) =>
+                  !misreads.has(other.key) && other.entry?.types.includes(key),
+              )
+              .map((other) => other.ref);
+            return except.length > 0 ? { type: ref, except } : { type: ref };
+          }),
+        });
+      }
+      grants.push(
+        misreadingTypes.length > 0 ? { ...grant, misreadingTypes } : grant,
+      );
+    }
+    rule.grants = grants;
+  }
   return compiled();
+}
+
+// A type the governed realm holds cards of under a rule's type: the key the
+// index records it by, the ref a type filter names it by, and its definition
+// entry where one could be read.
+interface HeldType {
+  key: string;
+  ref: CodeRef;
+  entry?: { definition: Definition; types: string[] };
+}
+
+// The type a held key names, for a key `codeRefFromInternalKey` refuses: one
+// with a `fields/` segment, which it cannot tell from a field's key, and one
+// ending `/ancestor`, which names an unexported class through the type it
+// adopts from. Each is read from the key's shape so that `internalKeyFor`
+// turns it back into the key itself, which is what a type filter matches a
+// row's adoption chain on: a module and a name split at the last `/`, and an
+// `ancestorOf` of the type the rest of the key names. Undefined for a key
+// with nothing to split.
+function heldTypeRef(key: string): CodeRef | undefined {
+  let ancestor = '/ancestor';
+  if (key.endsWith(ancestor)) {
+    let card = splitTypeKey(key.slice(0, -ancestor.length));
+    return card ? { type: 'ancestorOf', card } : undefined;
+  }
+  return splitTypeKey(key);
+}
+
+function splitTypeKey(key: string): ResolvedCodeRef | undefined {
+  let lastSlash = key.lastIndexOf('/');
+  if (lastSlash <= 0 || lastSlash === key.length - 1) {
+    return undefined;
+  }
+  return {
+    module: key.slice(0, lastSlash) as ResolvedCodeRef['module'],
+    name: key.slice(lastSlash + 1),
+  };
 }
 
 // What invoking `name` on an instance of a type reaches: the type's own
