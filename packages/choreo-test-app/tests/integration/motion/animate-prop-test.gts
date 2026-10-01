@@ -1,5 +1,5 @@
 /**
- * Port of Motion's packages/framer-motion/src/motion/__tests__/animate-prop.test.tsx (motion@bbabb00)
+ * Port of Motion's packages/framer-motion/src/motion/__tests__/animate-prop.test.tsx (motion@v13.4.6)
  * to the Glimmer binding. Same cases, same assertions; only the render glue differs:
  *   render(<motion.div …/>) + rerender   →  render(<template>…{{motion …}}…</template>)
  *   rerender with new props              →  set a @tracked value, await settled()
@@ -17,6 +17,13 @@ import { nextFrame, sleep, spy } from '../../helpers/motion';
 
 const el = () => find('#m') as HTMLElement;
 const NO = { type: false } as const;
+
+/**
+ * The first change subscriber is stored on the value directly and only a
+ * second creates a SubscriptionManager, so count both. Private API.
+ */
+const countChangeSubscribers = (value: any): number =>
+  (value.changeSubscriber ? 1 : 0) + (value.events.change?.getSize() ?? 0);
 
 /** the "props" a React test would pass; tracked so a change re-runs the modifier like a rerender */
 class Props {
@@ -800,7 +807,7 @@ module('Integration | motion | animate prop as object', function (hooks) {
         new Props({
           animate: { x: 100 },
           transition: { duration: 0.01 },
-          onAnimationStart: () => resolve((x as any).events.change.getSize()),
+          onAnimationStart: () => resolve(countChangeSubscribers(x)),
           style: { x },
         })
       );
@@ -824,3 +831,5 @@ module('Integration | motion | animate prop as object', function (hooks) {
 
   // Not ported: "Resets motion values to initial after Suspense remount" — React Suspense has no Glimmer analogue.
 });
+
+// Not ported: "Suspense boundary re-suspends and reveals memoized content" — React Suspense has no Glimmer analogue.
