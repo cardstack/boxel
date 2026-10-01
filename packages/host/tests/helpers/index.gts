@@ -1403,7 +1403,7 @@ export async function setupIntegrationTestRealm({
   // which is the authority they run under in a deployed realm. A request the
   // test sends while such a render is under way is too, so a test that writes
   // calls `settleRealmRenders` before asking the realm anything its ACL
-  // decides.
+  // decides (see there).
   enforcePermissions?: true;
   startMatrix?: boolean;
   fileSizeLimitBytes?: number;
@@ -1688,7 +1688,7 @@ async function setupTestRealm({
   await worker.run();
   await realm.start();
   if (enforcePermissions) {
-    await settleRealmRenders(realm);
+    await settleRealmRenders();
   }
   if (startMatrix) {
     await mockMatrixUtils.start();
@@ -1751,25 +1751,33 @@ function permissionCheckingHandler(
   };
 }
 
-// Waits until the realm owes no render: its indexing has finished and every
-// card it indexed has its HTML rendered. The realm renders after an index pass
-// as a job of its own, so a render can still be under way after a write has
-// been answered. A suite that sets `enforcePermissions` calls this after a
-// write and before asking the realm anything its ACL decides, since a request
-// sent during a render is answered as the realm's own (see
-// `permissionCheckingHandler`). Setting up such a realm already waits.
-export async function settleRealmRenders(realm: Realm): Promise<void> {
-  await realm.incrementalIndexing();
-  await realm.indexing();
-  let rendered = await awaitPublishedHtmlReady(
-    await getDbAdapter(),
-    realm.url,
-    { timeoutMs: 30_000, pollIntervalMs: 25 },
-  );
-  if (!rendered) {
-    throw new Error(
-      `${realm.url} still owes renders of what it indexed after 30 seconds`,
-    );
+// Waits until no test realm owes a render: each one's indexing has finished
+// and every card it indexed has its HTML rendered. A realm renders after an
+// index pass as a job of its own, so a render can still be under way after
+// setup returns or a write has been answered.
+//
+// A suite that sets `enforcePermissions` needs every realm settled before it
+// asks the realm anything its ACL decides. A request sent during a render is
+// answered as the realm's own (see `permissionCheckingHandler`). And the realm
+// reads type definitions while it decides, which the in-browser renderer
+// produces, so a render of any realm under way at the same time can leave a
+// definition unread and refuse what the policy grants. Setting up a realm
+// that checks permissions settles every realm set up before it; a test that
+// writes, or sets up another realm afterwards, calls this before it asks.
+export async function settleRealmRenders(): Promise<void> {
+  let dbAdapter = await getDbAdapter();
+  for (let { realm } of getTestRealmRegistry().values()) {
+    await realm.incrementalIndexing();
+    await realm.indexing();
+    let rendered = await awaitPublishedHtmlReady(dbAdapter, realm.url, {
+      timeoutMs: 30_000,
+      pollIntervalMs: 25,
+    });
+    if (!rendered) {
+      throw new Error(
+        `${realm.url} still owes renders of what it indexed after 30 seconds`,
+      );
+    }
   }
 }
 
