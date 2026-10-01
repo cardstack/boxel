@@ -93,62 +93,64 @@ export class Magnetic extends Component<MagneticSignature> {
       <span class='pretui-magnetic-lean'>{{yield}}</span>
     </div>
     <style scoped>
-      .pretui-magnetic {
-        position: relative;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        padding: var(--pretui-magnetic-range, 56px);
-      }
-      .pretui-magnetic-halo {
-        position: absolute;
-        inset: 0;
-        pointer-events: none;
-        border-radius: var(--pretui-magnetic-halo-radius, 999px);
-        background: radial-gradient(
-          circle at center,
-          color-mix(
-              in oklch,
-              var(--pretui-magnetic-hue, var(--primary)) 16%,
-              transparent
-            )
-            0%,
-          color-mix(
-              in oklch,
-              var(--pretui-magnetic-hue, var(--primary)) 5%,
-              transparent
-            )
-            48%,
-          transparent 72%
-        );
-        box-shadow: 0 0 0 1px
-          color-mix(in oklch, var(--border) 70%, transparent);
-        opacity: calc(0.34 + 0.66 * var(--pretui-pd, 0));
-        transition: opacity 180ms ease-out;
-      }
-      .pretui-magnetic-lean {
-        display: inline-flex;
-        translate: calc(
-            var(--pretui-dx, 0px) * var(--pretui-magnetic-intensity, 0.35)
-          )
-          calc(var(--pretui-dy, 0px) * var(--pretui-magnetic-intensity, 0.35));
-        transition: translate 260ms cubic-bezier(0.22, 1, 0.36, 1);
-        will-change: translate;
-      }
-      /* a finger is already ON the target — never pull the control out
-         from under it; the halo still reports the reach */
-      .pretui-magnetic[data-pretui-pointer='coarse'] .pretui-magnetic-lean {
-        translate: 0 0;
-      }
-      /* end state under reduced motion: control centred, halo still
-         reporting affinity — the information survives, the travel does not */
-      @media (prefers-reduced-motion: reduce) {
-        .pretui-magnetic-lean {
-          translate: 0 0;
-          transition: none;
+      @layer PretComponent {
+        .pretui-magnetic {
+          position: relative;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          padding: var(--pretui-magnetic-range, 56px);
         }
         .pretui-magnetic-halo {
-          transition: none;
+          position: absolute;
+          inset: 0;
+          pointer-events: none;
+          border-radius: var(--pretui-magnetic-halo-radius, 999px);
+          background: radial-gradient(
+            circle at center,
+            color-mix(
+                in oklch,
+                var(--pretui-magnetic-hue, var(--primary)) 16%,
+                transparent
+              )
+              0%,
+            color-mix(
+                in oklch,
+                var(--pretui-magnetic-hue, var(--primary)) 5%,
+                transparent
+              )
+              48%,
+            transparent 72%
+          );
+          box-shadow: 0 0 0 1px
+            color-mix(in oklch, var(--border) 70%, transparent);
+          opacity: calc(0.34 + 0.66 * var(--pretui-pd, 0));
+          transition: opacity 180ms ease-out;
+        }
+        .pretui-magnetic-lean {
+          display: inline-flex;
+          translate: calc(
+              var(--pretui-dx, 0px) * var(--pretui-magnetic-intensity, 0.35)
+            )
+            calc(var(--pretui-dy, 0px) * var(--pretui-magnetic-intensity, 0.35));
+          transition: translate 260ms cubic-bezier(0.22, 1, 0.36, 1);
+          will-change: translate;
+        }
+        /* a finger is already ON the target — never pull the control out
+           from under it; the halo still reports the reach */
+        .pretui-magnetic[data-pretui-pointer='coarse'] .pretui-magnetic-lean {
+          translate: 0 0;
+        }
+        /* end state under reduced motion: control centred, halo still
+           reporting affinity — the information survives, the travel does not */
+        @media (prefers-reduced-motion: reduce) {
+          .pretui-magnetic-lean {
+            translate: 0 0;
+            transition: none;
+          }
+          .pretui-magnetic-halo {
+            transition: none;
+          }
         }
       }
     </style>

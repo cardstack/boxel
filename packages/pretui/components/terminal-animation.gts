@@ -197,155 +197,157 @@ export class TerminalAnimation extends Component<TerminalAnimationSignature> {
     </div>
 
     <style scoped>
-      .pretui-term {
-        border-radius: var(--radius-surface, 12px);
-        overflow: hidden;
-        background: var(--pretui-term-bg, var(--boxel-700));
-        box-shadow: var(
-          --pretui-shadow-card,
-          0 0 0 1px var(--border),
-          0 1px 2px rgb(0 0 0 / 0.2)
-        );
-      }
-      .pretui-term-bar {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        height: 30px;
-        padding: 0 10px;
-        background: color-mix(
-          in oklch,
-          var(--pretui-term-bg, var(--boxel-700)) 85%,
-          #ffffff
-        );
-      }
-      .pretui-term-dots {
-        display: inline-flex;
-        gap: 5px;
-      }
-      .pretui-term-dots i {
-        width: 9px;
-        height: 9px;
-        border-radius: 50%;
-        background: color-mix(
-          in oklch,
-          var(--pretui-term-bg, var(--boxel-700)) 55%,
-          #ffffff
-        );
-      }
-      .pretui-term-title {
-        font-family: var(--font-mono);
-        font-size: 11px;
-        color: color-mix(
-          in oklch,
-          var(--pretui-term-bg, var(--boxel-700)) 30%,
-          #ffffff
-        );
-      }
-      .pretui-term-screen {
-        position: relative;
-        margin: 0;
-        padding: 12px 14px;
-        min-height: var(--pretui-term-min, 8rem);
-      }
-      .pretui-term-visual {
-        margin: 0;
-        font-family: var(--font-mono);
-        font-size: var(--pretui-term-size, 12px);
-        line-height: 1.65;
-        overflow-x: auto;
-        color: color-mix(in oklch, var(--pretui-term-bg, var(--boxel-700)) 18%, var(--boxel-light));
-      }
-      .pretui-term-line {
-        display: block;
-        white-space: pre;
-        opacity: 0;
-        animation: pretui-term-show 140ms linear var(--pretui-term-at, 0s) both;
-      }
-      @keyframes pretui-term-show {
-        from {
-          opacity: 0;
+      @layer PretComponent {
+        .pretui-term {
+          border-radius: var(--radius-surface, 12px);
+          overflow: hidden;
+          background: var(--pretui-term-bg, var(--boxel-700));
+          box-shadow: var(
+            --pretui-shadow-card,
+            0 0 0 1px var(--border),
+            0 1px 2px rgb(0 0 0 / 0.2)
+          );
         }
-        to {
-          opacity: 1;
+        .pretui-term-bar {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          height: 30px;
+          padding: 0 10px;
+          background: color-mix(
+            in oklch,
+            var(--pretui-term-bg, var(--boxel-700)) 85%,
+            #ffffff
+          );
         }
-      }
-      .pretui-term-line[data-kind='error'] {
-        color: color-mix(in oklch, var(--destructive) 70%, var(--boxel-light));
-      }
-      .pretui-term-line[data-kind='comment'] {
-        color: color-mix(in oklch, var(--pretui-term-bg, var(--boxel-700)) 48%, var(--boxel-light));
-      }
-      .pretui-term-line[data-kind='command'] {
-        color: var(--boxel-light);
-      }
-      .pretui-term-prompt {
-        display: inline-block;
-        margin-right: 0.6ch;
-        color: color-mix(in oklch, var(--primary) 45%, var(--boxel-light));
-      }
-      /* the typewriter: a width sweep whose step count is this line's own
-         character count, set inline as an authored declaration */
-      .pretui-term-type {
-        display: inline-block;
-        overflow: hidden;
-        white-space: pre;
-        vertical-align: bottom;
-        width: 0;
-        animation-name: pretui-term-type;
-        animation-duration: var(--pretui-term-dur, 0.6s);
-        animation-delay: var(--pretui-term-at, 0s);
-        animation-fill-mode: both;
-      }
-      @keyframes pretui-term-type {
-        from {
-          width: 0;
+        .pretui-term-dots {
+          display: inline-flex;
+          gap: 5px;
         }
-        to {
-          width: var(--pretui-term-ch, 100%);
+        .pretui-term-dots i {
+          width: 9px;
+          height: 9px;
+          border-radius: 50%;
+          background: color-mix(
+            in oklch,
+            var(--pretui-term-bg, var(--boxel-700)) 55%,
+            #ffffff
+          );
         }
-      }
-      .pretui-term-caret {
-        display: inline-block;
-        width: 0.6ch;
-        height: 1em;
-        margin-left: 0.2ch;
-        vertical-align: text-bottom;
-        background: currentColor;
-        animation: pretui-term-blink 1.1s steps(1, end) infinite;
-      }
-      @keyframes pretui-term-blink {
-        0%,
-        50% {
-          opacity: 1;
+        .pretui-term-title {
+          font-family: var(--font-mono);
+          font-size: 11px;
+          color: color-mix(
+            in oklch,
+            var(--pretui-term-bg, var(--boxel-700)) 30%,
+            #ffffff
+          );
         }
-        50.01%,
-        100% {
-          opacity: 0;
+        .pretui-term-screen {
+          position: relative;
+          margin: 0;
+          padding: 12px 14px;
+          min-height: var(--pretui-term-min, 8rem);
         }
-      }
-      .pretui-sr {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        overflow: hidden;
-        clip-path: inset(50%);
-        white-space: pre;
-        margin: 0;
-      }
-      /* the end state, not a frozen midpoint: the whole session, at rest */
-      @media (prefers-reduced-motion: reduce) {
+        .pretui-term-visual {
+          margin: 0;
+          font-family: var(--font-mono);
+          font-size: var(--pretui-term-size, 12px);
+          line-height: 1.65;
+          overflow-x: auto;
+          color: color-mix(in oklch, var(--pretui-term-bg, var(--boxel-700)) 18%, var(--boxel-light));
+        }
         .pretui-term-line {
-          animation: none;
-          opacity: 1;
+          display: block;
+          white-space: pre;
+          opacity: 0;
+          animation: pretui-term-show 140ms linear var(--pretui-term-at, 0s) both;
         }
+        @keyframes pretui-term-show {
+          from {
+            opacity: 0;
+          }
+          to {
+            opacity: 1;
+          }
+        }
+        .pretui-term-line[data-kind='error'] {
+          color: color-mix(in oklch, var(--destructive) 70%, var(--boxel-light));
+        }
+        .pretui-term-line[data-kind='comment'] {
+          color: color-mix(in oklch, var(--pretui-term-bg, var(--boxel-700)) 48%, var(--boxel-light));
+        }
+        .pretui-term-line[data-kind='command'] {
+          color: var(--boxel-light);
+        }
+        .pretui-term-prompt {
+          display: inline-block;
+          margin-right: 0.6ch;
+          color: color-mix(in oklch, var(--primary) 45%, var(--boxel-light));
+        }
+        /* the typewriter: a width sweep whose step count is this line's own
+           character count, set inline as an authored declaration */
         .pretui-term-type {
-          animation: none;
-          width: auto;
+          display: inline-block;
+          overflow: hidden;
+          white-space: pre;
+          vertical-align: bottom;
+          width: 0;
+          animation-name: pretui-term-type;
+          animation-duration: var(--pretui-term-dur, 0.6s);
+          animation-delay: var(--pretui-term-at, 0s);
+          animation-fill-mode: both;
+        }
+        @keyframes pretui-term-type {
+          from {
+            width: 0;
+          }
+          to {
+            width: var(--pretui-term-ch, 100%);
+          }
         }
         .pretui-term-caret {
-          animation: none;
-          opacity: 1;
+          display: inline-block;
+          width: 0.6ch;
+          height: 1em;
+          margin-left: 0.2ch;
+          vertical-align: text-bottom;
+          background: currentColor;
+          animation: pretui-term-blink 1.1s steps(1, end) infinite;
+        }
+        @keyframes pretui-term-blink {
+          0%,
+          50% {
+            opacity: 1;
+          }
+          50.01%,
+          100% {
+            opacity: 0;
+          }
+        }
+        .pretui-sr {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          overflow: hidden;
+          clip-path: inset(50%);
+          white-space: pre;
+          margin: 0;
+        }
+        /* the end state, not a frozen midpoint: the whole session, at rest */
+        @media (prefers-reduced-motion: reduce) {
+          .pretui-term-line {
+            animation: none;
+            opacity: 1;
+          }
+          .pretui-term-type {
+            animation: none;
+            width: auto;
+          }
+          .pretui-term-caret {
+            animation: none;
+            opacity: 1;
+          }
         }
       }
     </style>

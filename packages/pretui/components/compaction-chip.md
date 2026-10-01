@@ -41,3 +41,5 @@ Where it is thinner: no way to reach the original messages — the summary is wh
 The chip takes the agentic set's shared tier tokens and the kit's disclosure treatment; the running state uses **TextShimmer**, the same as **Thinking**'s working label.
 
 Sharing the shimmer is deliberate — "the agent is doing something" should look the same everywhere in a transcript, whether it is thinking or compacting.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

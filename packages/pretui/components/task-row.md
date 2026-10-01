@@ -44,3 +44,5 @@ Where it is thinner: no retry or cancel affordance — a row reports, it does no
 The row takes the agentic set's shared state and tier tokens; `@flat` drops the capsule shadow and radius rather than switching to a different treatment.
 
 That is what lets the same component serve a spaced summary and a dense queue without a second implementation — and keeps the state colours identical between them, which matters when a reader moves from one view to the other.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

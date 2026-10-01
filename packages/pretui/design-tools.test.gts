@@ -3,7 +3,8 @@
 // functions, so "given a pointer delta and these modifier keys, this value
 // results" is a unit test, not a claim.
 //
-// Local-only; run with `boxel test` from the realm mirror — never pushed.
+// Run with `boxel test` from this directory; deployment leaves `*.test.gts`
+// off the realm.
 import { module, test } from 'qunit';
 import { render, blur, click, fillIn, focus, triggerKeyEvent } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';

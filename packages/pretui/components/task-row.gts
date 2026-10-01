@@ -124,99 +124,101 @@ class TaskFace extends Component<TaskFaceSignature> {
       <span class='pill' data-state={{@state}}>{{@statusText}}</span>
     </span>
     <style scoped>
-      .face {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        flex: 1;
-        min-width: 0;
-      }
-      .badge {
-        position: relative;
-        display: inline-grid;
-        place-items: center;
-        width: 24px;
-        height: 24px;
-        flex: none;
-      }
-      .ring {
-        position: absolute;
-        inset: 0;
-        width: 24px;
-        height: 24px;
-        color: var(--ink-3, var(--boxel-400));
-      }
-      .ring-arc {
-        color: var(--muted-foreground);
-      }
-      .face[data-state='running'] .ring {
-        animation: pretui-taskrow-spin 1.1s linear infinite;
-      }
-      @keyframes pretui-taskrow-spin {
-        to {
-          transform: rotate(360deg);
+      @layer PretComponent {
+        .face {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          flex: 1;
+          min-width: 0;
         }
-      }
-      .index {
-        position: relative;
-        font-size: 10.5px;
-        font-weight: 600;
-        font-variant-numeric: tabular-nums;
-      }
-      .disc {
-        display: inline-grid;
-        place-items: center;
-        width: 22px;
-        height: 22px;
-        border-radius: 50%;
-        color: var(--pretui-on-neutral, var(--boxel-light));
-      }
-      .disc[data-tone='ok'] {
-        background: var(--success, var(--boxel-success));
-      }
-      .disc[data-tone='bad'] {
-        background: var(--destructive);
-      }
-      .disc svg {
-        width: 12px;
-        height: 12px;
-      }
-      .label {
-        min-width: 0;
-        flex: 1;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        font-weight: 500;
-      }
-      .amount {
-        flex: none;
-        color: var(--muted-foreground);
-        font-variant-numeric: tabular-nums;
-      }
-      .pill {
-        display: inline-flex;
-        align-items: center;
-        flex: none;
-        min-height: 22px;
-        padding: 0 9px;
-        border-radius: 11px;
-        font-size: var(--text-ui-sm, 11.5px);
-        font-weight: 500;
-        background: var(--inset, var(--boxel-100));
-        color: var(--muted-foreground);
-      }
-      .pill[data-state='completed'] {
-        background: color-mix(in oklch, var(--success, var(--boxel-success)) 15%, var(--card));
-        color: color-mix(in oklch, var(--foreground) 16%, var(--success, var(--boxel-success)));
-      }
-      .pill[data-state='failed'] {
-        background: color-mix(in oklch, var(--destructive) 15%, var(--card));
-        color: color-mix(in oklch, var(--foreground) 16%, var(--destructive));
-      }
-      @media (prefers-reduced-motion: reduce) {
+        .badge {
+          position: relative;
+          display: inline-grid;
+          place-items: center;
+          width: 24px;
+          height: 24px;
+          flex: none;
+        }
+        .ring {
+          position: absolute;
+          inset: 0;
+          width: 24px;
+          height: 24px;
+          color: var(--ink-3, var(--boxel-400));
+        }
+        .ring-arc {
+          color: var(--muted-foreground);
+        }
         .face[data-state='running'] .ring {
-          animation: none;
+          animation: pretui-taskrow-spin 1.1s linear infinite;
+        }
+        @keyframes pretui-taskrow-spin {
+          to {
+            transform: rotate(360deg);
+          }
+        }
+        .index {
+          position: relative;
+          font-size: 10.5px;
+          font-weight: 600;
+          font-variant-numeric: tabular-nums;
+        }
+        .disc {
+          display: inline-grid;
+          place-items: center;
+          width: 22px;
+          height: 22px;
+          border-radius: 50%;
+          color: var(--pretui-on-neutral, var(--boxel-light));
+        }
+        .disc[data-tone='ok'] {
+          background: var(--success, var(--boxel-success));
+        }
+        .disc[data-tone='bad'] {
+          background: var(--destructive);
+        }
+        .disc svg {
+          width: 12px;
+          height: 12px;
+        }
+        .label {
+          min-width: 0;
+          flex: 1;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          font-weight: 500;
+        }
+        .amount {
+          flex: none;
+          color: var(--muted-foreground);
+          font-variant-numeric: tabular-nums;
+        }
+        .pill {
+          display: inline-flex;
+          align-items: center;
+          flex: none;
+          min-height: 22px;
+          padding: 0 9px;
+          border-radius: 11px;
+          font-size: var(--text-ui-sm, 11.5px);
+          font-weight: 500;
+          background: var(--inset, var(--boxel-100));
+          color: var(--muted-foreground);
+        }
+        .pill[data-state='completed'] {
+          background: color-mix(in oklch, var(--success, var(--boxel-success)) 15%, var(--card));
+          color: color-mix(in oklch, var(--foreground) 16%, var(--success, var(--boxel-success)));
+        }
+        .pill[data-state='failed'] {
+          background: color-mix(in oklch, var(--destructive) 15%, var(--card));
+          color: color-mix(in oklch, var(--foreground) 16%, var(--destructive));
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .face[data-state='running'] .ring {
+            animation: none;
+          }
         }
       }
     </style>
@@ -347,131 +349,133 @@ export class TaskRow extends Component<TaskRowSignature> {
     </div>
 
     <style scoped>
-      .pretui-taskrow {
-        background: var(--card);
-        font-size: var(--text-ui-md, 12.5px);
-        border-radius: 22px;
-        box-shadow: var(
-          --pretui-shadow-card,
-          0 0 0 1px var(--border),
-          0 1px 2px rgb(0 0 0 / 0.08)
-        );
-        overflow: hidden;
-        transition: border-radius 300ms
-          var(--pretui-ease-enter, cubic-bezier(0.22, 0.61, 0.25, 1));
-        container-type: inline-size;
-      }
-      .pretui-taskrow[data-open] {
-        border-radius: 14px;
-      }
-      .pretui-taskrow[data-flat] {
-        border-radius: 0;
-        box-shadow: 0 1px 0 var(--border);
-      }
-      .pretui-taskrow[data-state='failed'] {
-        box-shadow: 0 0 0 1px
-          color-mix(
-            in oklch,
-            var(--destructive) 45%,
-            var(--border)
+      @layer PretComponent {
+        .pretui-taskrow {
+          background: var(--card);
+          font-size: var(--text-ui-md, 12.5px);
+          border-radius: 22px;
+          box-shadow: var(
+            --pretui-shadow-card,
+            0 0 0 1px var(--border),
+            0 1px 2px rgb(0 0 0 / 0.08)
           );
-      }
-      .pretui-taskrow-head {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        width: 100%;
-        min-height: 44px;
-        padding: 0 10px;
-        border: 0;
-        background: none;
-        font: inherit;
-        font-size: var(--text-ui-md, 12.5px);
-        color: var(--foreground);
-        text-align: left;
-        cursor: pointer;
-      }
-      .pretui-taskrow-head[data-static] {
-        cursor: default;
-      }
-      button.pretui-taskrow-head:hover {
-        background: var(--inset, var(--boxel-100));
-      }
-      button.pretui-taskrow-head:focus-visible {
-        outline: 2px solid var(--ring);
-        outline-offset: -3px;
-      }
-      .pretui-taskrow-chev {
-        width: 15px;
-        height: 15px;
-        flex: none;
-        color: var(--ink-3, var(--boxel-400));
-        transition: transform 300ms
-          var(--pretui-ease-enter, cubic-bezier(0.22, 0.61, 0.25, 1));
-      }
-      .pretui-taskrow-head[aria-expanded='true'] .pretui-taskrow-chev {
-        transform: rotate(180deg);
-      }
-      .pretui-taskrow-body {
-        display: grid;
-        grid-template-columns: 24px 1fr;
-        gap: 10px;
-        padding: 0 10px 10px;
-      }
-      .pretui-taskrow-body::before {
-        content: '';
-        justify-self: center;
-        width: 1px;
-        height: 100%;
-        background: var(--border);
-      }
-      .pretui-taskrow-details {
-        display: flex;
-        flex-direction: column;
-        gap: 6px;
-        margin: 0;
-      }
-      .pretui-taskrow-detail {
-        display: flex;
-        align-items: baseline;
-        justify-content: space-between;
-        gap: 10px;
-      }
-      .pretui-taskrow-detail dt {
-        color: var(--muted-foreground);
-        font-size: var(--text-ui-md, 12.5px);
-        min-width: 0;
-      }
-      .pretui-taskrow-detail dd {
-        margin: 0;
-        flex: none;
-        font-family: var(--font-mono);
-        font-size: var(--text-ui-sm, 11.5px);
-        color: var(--ink-3, var(--boxel-400));
-        font-variant-numeric: tabular-nums;
-      }
-      .pretui-taskrow-body[data-open] .pretui-taskrow-detail {
-        animation: pretui-taskrow-in 300ms
-          var(--pretui-ease-enter, cubic-bezier(0.22, 0.61, 0.25, 1))
-          var(--pretui-task-delay, 0ms) both;
-      }
-      @keyframes pretui-taskrow-in {
-        from {
-          opacity: 0;
-          transform: translateY(4px);
+          overflow: hidden;
+          transition: border-radius 300ms
+            var(--pretui-ease-enter, cubic-bezier(0.22, 0.61, 0.25, 1));
+          container-type: inline-size;
         }
-        to {
-          opacity: 1;
-          transform: none;
+        .pretui-taskrow[data-open] {
+          border-radius: 14px;
         }
-      }
-      @media (prefers-reduced-motion: reduce) {
-        .pretui-taskrow,
+        .pretui-taskrow[data-flat] {
+          border-radius: 0;
+          box-shadow: 0 1px 0 var(--border);
+        }
+        .pretui-taskrow[data-state='failed'] {
+          box-shadow: 0 0 0 1px
+            color-mix(
+              in oklch,
+              var(--destructive) 45%,
+              var(--border)
+            );
+        }
+        .pretui-taskrow-head {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          width: 100%;
+          min-height: 44px;
+          padding: 0 10px;
+          border: 0;
+          background: none;
+          font: inherit;
+          font-size: var(--text-ui-md, 12.5px);
+          color: var(--foreground);
+          text-align: left;
+          cursor: pointer;
+        }
+        .pretui-taskrow-head[data-static] {
+          cursor: default;
+        }
+        button.pretui-taskrow-head:hover {
+          background: var(--inset, var(--boxel-100));
+        }
+        button.pretui-taskrow-head:focus-visible {
+          outline: 2px solid var(--ring);
+          outline-offset: -3px;
+        }
         .pretui-taskrow-chev {
-          transition: none;
+          width: 15px;
+          height: 15px;
+          flex: none;
+          color: var(--ink-3, var(--boxel-400));
+          transition: transform 300ms
+            var(--pretui-ease-enter, cubic-bezier(0.22, 0.61, 0.25, 1));
+        }
+        .pretui-taskrow-head[aria-expanded='true'] .pretui-taskrow-chev {
+          transform: rotate(180deg);
+        }
+        .pretui-taskrow-body {
+          display: grid;
+          grid-template-columns: 24px 1fr;
+          gap: 10px;
+          padding: 0 10px 10px;
+        }
+        .pretui-taskrow-body::before {
+          content: '';
+          justify-self: center;
+          width: 1px;
+          height: 100%;
+          background: var(--border);
+        }
+        .pretui-taskrow-details {
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+          margin: 0;
+        }
+        .pretui-taskrow-detail {
+          display: flex;
+          align-items: baseline;
+          justify-content: space-between;
+          gap: 10px;
+        }
+        .pretui-taskrow-detail dt {
+          color: var(--muted-foreground);
+          font-size: var(--text-ui-md, 12.5px);
+          min-width: 0;
+        }
+        .pretui-taskrow-detail dd {
+          margin: 0;
+          flex: none;
+          font-family: var(--font-mono);
+          font-size: var(--text-ui-sm, 11.5px);
+          color: var(--ink-3, var(--boxel-400));
+          font-variant-numeric: tabular-nums;
         }
         .pretui-taskrow-body[data-open] .pretui-taskrow-detail {
-          animation: none;
+          animation: pretui-taskrow-in 300ms
+            var(--pretui-ease-enter, cubic-bezier(0.22, 0.61, 0.25, 1))
+            var(--pretui-task-delay, 0ms) both;
+        }
+        @keyframes pretui-taskrow-in {
+          from {
+            opacity: 0;
+            transform: translateY(4px);
+          }
+          to {
+            opacity: 1;
+            transform: none;
+          }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .pretui-taskrow,
+          .pretui-taskrow-chev {
+            transition: none;
+          }
+          .pretui-taskrow-body[data-open] .pretui-taskrow-detail {
+            animation: none;
+          }
         }
       }
     </style>

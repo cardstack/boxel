@@ -55,3 +55,5 @@ Where it is thinner: no multi-select drag, no cross-panel drag, no layer thumbna
 `--pretui-lm-indent` (per-level indent, from `@indent`), with `@density` switching row height between two presets; everything else comes from the kit's control, surface and elevation tokens.
 
 Indent as a token means a deeply nested tree can be tightened for space without touching the component — and because depth is also carried by `aria-level`, tightening it never costs a reader the structure.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

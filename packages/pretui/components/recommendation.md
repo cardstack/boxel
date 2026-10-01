@@ -45,3 +45,5 @@ Where it is thinner: no comparison view across options, no per-option reasoning 
 The block uses the agentic set's attention and tier tokens, the kit's disclosure for the drawer, and **Button** for accept.
 
 A recommendation is one of the few places in an agent UI where the kit's accent genuinely carries meaning — the active option wears it — so it follows the season's primary rather than a local colour.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

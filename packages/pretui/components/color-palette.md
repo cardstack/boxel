@@ -44,3 +44,5 @@ None of this makes the component unusable — every swatch is reachable and oper
 **Swatch**'s tokens throughout: `--card` (the ring gap and hairline backdrop), `--border` (hairline), `--primary` or `--pretui-selected` (selection ring), plus the grid's own gap.
 
 The grid columns and gap are fixed. Because Swatch's selection ring gap is `--card`, a palette placed on `--canvas` or `--inset` shows ring gaps in the wrong colour — the same placement assumption **Swatch** and **AvatarGroup** both make. Keep palettes on card surfaces, or expect to override.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

@@ -40,3 +40,5 @@ Where it is thinner: no per-word timing — every word holds for the same `@inte
 `--pretui-rotate-count` (the number of words, which sets the keyframe stepping) and `--pretui-rotate-line` (the slot's line height, which is what the window clips to).
 
 Both are derived rather than seasonal — the rotation's geometry follows its content. Colour and typeface come entirely from context, so the slot matches the heading it sits in without a token of its own.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

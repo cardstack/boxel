@@ -38,3 +38,5 @@ Where it is thinner: one sweep direction, no pause, no finite repeat count, and 
 `--pretui-shimmer-duration` (seconds per sweep, from `@duration`) and `--pretui-shimmer-spread` (the sheen half-width, from `@spread`), over `--muted-foreground` and `--foreground` for the two gradient stops.
 
 Because both colours are theme tokens rather than literals, a season retunes every shimmer in the product by retuning its foreground pair — and the sheen is always the brighter of the two, so the effect reads the same way in light and dark without a second definition.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

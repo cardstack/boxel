@@ -1,10 +1,9 @@
-// Pretui — ValueInput unit tests. Imports from ../design-value; when ValueInput moves to its
-// own file only the import path changes.
+// Pretui — ValueInput unit tests.
 //
-// Local-only test file, kept off the realm by `.boxelignore` (`*.test.gts`);
-// run with `boxel test`. No assertion touches a computed style: the
-// component's own `<style scoped>` is inert in this harness (the scoped-css
-// attribute is stamped, the rules are not applied).
+// Run with `boxel test`; deployment leaves `*.test.gts` off the realm.
+// No assertion touches a computed style: the component's own `<style scoped>`
+// is inert in this harness (the scoped-css attribute is stamped, the rules
+// are not applied).
 import { module, test } from 'qunit';
 import { render, click, fillIn } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
@@ -87,6 +86,17 @@ module('Pretui | components/value-input', function (hooks) {
       </template>,
     );
     assert.strictEqual(root().querySelector('[data-test-custom]')?.textContent, 'custom=#c00');
+  });
+
+  test('the custom block receives the disabled state', async function (assert) {
+    await render(
+      <template>
+        <ValueInput @kind='custom' @value='#c00' @disabled={{true}}>
+          <:custom as |_kind _value disabled|><input aria-label='Colour' disabled={{disabled}} data-test-custom /></:custom>
+        </ValueInput>
+      </template>,
+    );
+    assert.true((root().querySelector('[data-test-custom]') as HTMLInputElement).disabled);
   });
 
   test('disabled comes from the arg or the spec', async function (assert) {

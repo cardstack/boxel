@@ -112,12 +112,14 @@ export interface ComposerSignature {
     rows?: number;
     /** Enter submits, Shift+Enter inserts a newline (default true) */
     submitOnEnter?: boolean;
-    /** the whole surface is unavailable */
+    /** the whole surface is unavailable: the field, every action, and the
+     * mode switch; `<:tools>` receives it to follow */
     disabled?: boolean;
   };
   Blocks: {
-    /** extra controls in the action bar, left of the send button */
-    tools: [];
+    /** extra controls in the action bar, left of the send button; yields
+     * whether the surface is disabled */
+    tools: [disabled: boolean];
   };
   Element: HTMLDivElement;
 }
@@ -209,7 +211,12 @@ export class Composer extends Component<ComposerSignature> {
   };
 
   input = (event: Event) => {
-    this.setValue((event.target as HTMLTextAreaElement).value);
+    let field = event.target as HTMLTextAreaElement;
+    this.setValue(field.value);
+    // controlled: the owner decides what shows, so put back what it didn't take
+    if (this.args.value !== undefined && field.value !== this.args.value) {
+      field.value = this.args.value;
+    }
   };
 
   setMode = (next: string) => {
@@ -227,7 +234,15 @@ export class Composer extends Component<ComposerSignature> {
     this.setValue('');
   };
 
-  stop = () => this.args.onStop?.();
+  get disabled(): boolean {
+    return this.args.disabled === true;
+  }
+
+  stop = () => {
+    if (!this.disabled) {
+      this.args.onStop?.();
+    }
+  };
 
   keydown = (event: Event) => {
     let ev = event as KeyboardEvent;
@@ -243,8 +258,16 @@ export class Composer extends Component<ComposerSignature> {
     }
   };
 
-  pin = (attachment: ComposerAttachment) => this.args.onPin?.(attachment);
-  remove = (attachment: ComposerAttachment) => this.args.onRemove?.(attachment);
+  pin = (attachment: ComposerAttachment) => {
+    if (!this.disabled) {
+      this.args.onPin?.(attachment);
+    }
+  };
+  remove = (attachment: ComposerAttachment) => {
+    if (!this.disabled) {
+      this.args.onRemove?.(attachment);
+    }
+  };
 
   <template>
     <div
@@ -269,6 +292,7 @@ export class Composer extends Component<ComposerSignature> {
                     type='button'
                     class='pretui-attach-act'
                     aria-label={{concat 'Pin ' attachment.label}}
+                    disabled={{@disabled}}
                     {{on 'click' (fn this.pin attachment)}}
                   >
                     <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false'>
@@ -287,6 +311,7 @@ export class Composer extends Component<ComposerSignature> {
                   type='button'
                   class='pretui-attach-act'
                   aria-label={{concat 'Remove ' attachment.label}}
+                  disabled={{@disabled}}
                   {{on 'click' (fn this.remove attachment)}}
                 >
                   <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false'>
@@ -339,6 +364,7 @@ export class Composer extends Component<ComposerSignature> {
             @options={{this.segments}}
             @value={{this.mode}}
             @onValueChange={{this.setMode}}
+            @disabled={{@disabled}}
             data-test-pretui-composer-modes
           />
         {{/if}}
@@ -350,12 +376,13 @@ export class Composer extends Component<ComposerSignature> {
           >{{this.note}}</span>
         {{/if}}
         <span class='pretui-composer-spacer'></span>
-        {{yield to='tools'}}
+        {{yield this.disabled to='tools'}}
         {{#if @busy}}
           <Button
             @tone='neutral'
             @appearance='outlined'
             @size='s'
+            @disabled={{@disabled}}
             {{on 'click' this.stop}}
             data-test-pretui-composer-stop
           >{{if @stopLabel @stopLabel 'Stop'}}</Button>
@@ -371,165 +398,167 @@ export class Composer extends Component<ComposerSignature> {
     </div>
 
     <style scoped>
-      .pretui-composer {
-        display: flex;
-        flex-direction: column;
-        gap: var(--space-3, 7px);
-        padding: var(--space-3, 9px) var(--space-4, 11px);
-        background: var(--card);
-        border-radius: var(--radius-surface, 14px);
-        box-shadow: var(
-          --pretui-shadow-raised,
-          0 0 0 1px var(--border),
-          0 2px 10px rgb(0 0 0 / 0.1)
-        );
-        container-type: inline-size;
-      }
-      .pretui-composer:focus-within {
-        box-shadow:
-          0 0 0 1px
-            color-mix(in oklch, var(--ring) 55%, var(--border)),
-          0 2px 10px rgb(0 0 0 / 0.1);
-      }
-      .pretui-composer-attachments {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 5px;
-        margin: 0;
-        padding: 0;
-        list-style: none;
-      }
-      .pretui-attach {
-        display: inline-flex;
-        align-items: center;
-        gap: 5px;
-        min-height: 22px;
-        padding: 0 4px 0 8px;
-        border-radius: 6px;
-        background: var(--inset, var(--boxel-100));
-        box-shadow: var(
-          --pretui-shadow-hairline,
-          0 0 0 1px var(--border)
-        );
-        font-size: var(--text-ui-xs, 11px);
-        color: var(--muted-foreground);
-        max-width: 100%;
-      }
-      .pretui-attach-tag {
-        font-family: var(--font-mono);
-        font-size: 10px;
-        font-weight: 600;
-        letter-spacing: 0.05em;
-        text-transform: uppercase;
-        color: var(--ink-3, var(--boxel-400));
-        flex: none;
-      }
-      .pretui-attach[data-auto] .pretui-attach-tag {
-        color: color-mix(
-          in oklch,
-          var(--foreground) 20%,
-          var(--primary)
-        );
-      }
-      .pretui-attach-label {
-        min-width: 0;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-      .pretui-attach-act {
-        display: inline-grid;
-        place-items: center;
-        width: 20px;
-        height: 20px;
-        flex: none;
-        padding: 0;
-        border: 0;
-        border-radius: 5px;
-        background: none;
-        color: var(--ink-3, var(--boxel-400));
-        cursor: pointer;
-      }
-      .pretui-attach-act svg {
-        width: 11px;
-        height: 11px;
-      }
-      .pretui-attach-act:hover {
-        background: var(--hover, var(--boxel-100));
-        color: var(--foreground);
-      }
-      .pretui-attach-act:focus-visible {
-        outline: 2px solid var(--ring);
-        outline-offset: 1px;
-      }
+      @layer PretComponent {
+        .pretui-composer {
+          display: flex;
+          flex-direction: column;
+          gap: var(--space-3, 7px);
+          padding: var(--space-3, 9px) var(--space-4, 11px);
+          background: var(--card);
+          border-radius: var(--radius-surface, 14px);
+          box-shadow: var(
+            --pretui-shadow-raised,
+            0 0 0 1px var(--border),
+            0 2px 10px rgb(0 0 0 / 0.1)
+          );
+          container-type: inline-size;
+        }
+        .pretui-composer:focus-within {
+          box-shadow:
+            0 0 0 1px
+              color-mix(in oklch, var(--ring) 55%, var(--border)),
+            0 2px 10px rgb(0 0 0 / 0.1);
+        }
+        .pretui-composer-attachments {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 5px;
+          margin: 0;
+          padding: 0;
+          list-style: none;
+        }
+        .pretui-attach {
+          display: inline-flex;
+          align-items: center;
+          gap: 5px;
+          min-height: 22px;
+          padding: 0 4px 0 8px;
+          border-radius: 6px;
+          background: var(--inset, var(--boxel-100));
+          box-shadow: var(
+            --pretui-shadow-hairline,
+            0 0 0 1px var(--border)
+          );
+          font-size: var(--text-ui-xs, 11px);
+          color: var(--muted-foreground);
+          max-width: 100%;
+        }
+        .pretui-attach-tag {
+          font-family: var(--font-mono);
+          font-size: 10px;
+          font-weight: 600;
+          letter-spacing: 0.05em;
+          text-transform: uppercase;
+          color: var(--ink-3, var(--boxel-400));
+          flex: none;
+        }
+        .pretui-attach[data-auto] .pretui-attach-tag {
+          color: color-mix(
+            in oklch,
+            var(--foreground) 20%,
+            var(--primary)
+          );
+        }
+        .pretui-attach-label {
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .pretui-attach-act {
+          display: inline-grid;
+          place-items: center;
+          width: 20px;
+          height: 20px;
+          flex: none;
+          padding: 0;
+          border: 0;
+          border-radius: 5px;
+          background: none;
+          color: var(--ink-3, var(--boxel-400));
+          cursor: pointer;
+        }
+        .pretui-attach-act svg {
+          width: 11px;
+          height: 11px;
+        }
+        .pretui-attach-act:hover {
+          background: var(--hover, var(--boxel-100));
+          color: var(--foreground);
+        }
+        .pretui-attach-act:focus-visible {
+          outline: 2px solid var(--ring);
+          outline-offset: 1px;
+        }
 
-      /* The auto-grow field: an invisible ::after replica sizes the grid cell
-         the textarea shares with it, so the field grows with its content and
-         nothing is ever measured in JavaScript. */
-      .pretui-composer-grow {
-        display: grid;
-      }
-      .pretui-composer-grow::after,
-      .pretui-composer-hint,
-      .pretui-composer-field {
-        grid-area: 1 / 1 / 2 / 2;
-        font: inherit;
-        font-size: var(--text-ui-md, 12.5px);
-        line-height: 1.55;
-        letter-spacing: var(--track-ui, 0.01em);
-        padding: 2px 0;
-        min-height: calc(var(--pretui-composer-rows, 2) * 1.55em + 4px);
-        white-space: pre-wrap;
-        overflow-wrap: anywhere;
-      }
-      .pretui-composer-grow::after {
-        content: attr(data-value);
-        visibility: hidden;
-        max-height: var(--pretui-composer-max, 14em);
-      }
-      .pretui-composer-field {
-        border: 0;
-        background: none;
-        color: var(--foreground);
-        resize: none;
-        outline: none;
-        overflow-y: auto;
-        max-height: var(--pretui-composer-max, 14em);
-      }
-      .pretui-composer-hint {
-        color: var(--ink-3, var(--boxel-400));
-        pointer-events: none;
-        user-select: none;
-        opacity: 0;
-        overflow: hidden;
-        max-height: var(--pretui-composer-max, 14em);
-      }
-      .pretui-composer-grow[data-empty] .pretui-composer-hint {
-        opacity: 1;
-      }
-      .pretui-composer-field:disabled {
-        cursor: not-allowed;
-        opacity: 0.55;
-      }
-      .pretui-composer-bar {
-        display: flex;
-        align-items: center;
-        gap: var(--space-3, 7px);
-        flex-wrap: wrap;
-      }
-      .pretui-composer-spacer {
-        margin-left: auto;
-      }
-      .pretui-composer-note {
-        font-size: var(--text-ui-xs, 11px);
-        color: var(--ink-3, var(--boxel-400));
-        min-width: 0;
-      }
-      /* unnamed container query — resolves against .pretui-composer */
-      @container (max-width: 26rem) {
+        /* The auto-grow field: an invisible ::after replica sizes the grid cell
+           the textarea shares with it, so the field grows with its content and
+           nothing is ever measured in JavaScript. */
+        .pretui-composer-grow {
+          display: grid;
+        }
+        .pretui-composer-grow::after,
+        .pretui-composer-hint,
+        .pretui-composer-field {
+          grid-area: 1 / 1 / 2 / 2;
+          font: inherit;
+          font-size: var(--text-ui-md, 12.5px);
+          line-height: 1.55;
+          letter-spacing: var(--track-ui, 0.01em);
+          padding: 2px 0;
+          min-height: calc(var(--pretui-composer-rows, 2) * 1.55em + 4px);
+          white-space: pre-wrap;
+          overflow-wrap: anywhere;
+        }
+        .pretui-composer-grow::after {
+          content: attr(data-value);
+          visibility: hidden;
+          max-height: var(--pretui-composer-max, 14em);
+        }
+        .pretui-composer-field {
+          border: 0;
+          background: none;
+          color: var(--foreground);
+          resize: none;
+          outline: none;
+          overflow-y: auto;
+          max-height: var(--pretui-composer-max, 14em);
+        }
+        .pretui-composer-hint {
+          color: var(--ink-3, var(--boxel-400));
+          pointer-events: none;
+          user-select: none;
+          opacity: 0;
+          overflow: hidden;
+          max-height: var(--pretui-composer-max, 14em);
+        }
+        .pretui-composer-grow[data-empty] .pretui-composer-hint {
+          opacity: 1;
+        }
+        .pretui-composer-field:disabled {
+          cursor: not-allowed;
+          opacity: 0.55;
+        }
+        .pretui-composer-bar {
+          display: flex;
+          align-items: center;
+          gap: var(--space-3, 7px);
+          flex-wrap: wrap;
+        }
+        .pretui-composer-spacer {
+          margin-left: auto;
+        }
         .pretui-composer-note {
-          order: 3;
-          flex-basis: 100%;
+          font-size: var(--text-ui-xs, 11px);
+          color: var(--ink-3, var(--boxel-400));
+          min-width: 0;
+        }
+        /* unnamed container query — resolves against .pretui-composer */
+        @container (max-width: 26rem) {
+          .pretui-composer-note {
+            order: 3;
+            flex-basis: 100%;
+          }
         }
       }
     </style>

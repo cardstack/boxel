@@ -236,192 +236,194 @@ export class Thinking extends Component<ThinkingSignature> {
     </div>
 
     <style scoped>
-      .pretui-trace {
-        font-size: var(--text-ui-md, 12.5px);
-      }
-      .pretui-sr {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        overflow: hidden;
-        clip-path: inset(50%);
-        white-space: nowrap;
-      }
-      .pretui-trace-head {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        min-height: 28px;
-        padding: 4px 6px;
-        margin: -4px -6px;
-        border: 0;
-        border-radius: 8px;
-        background: none;
-        font: inherit;
-        color: var(--muted-foreground);
-        cursor: pointer;
-      }
-      .pretui-trace-head:hover {
-        background: var(--hover, var(--boxel-100));
-      }
-      .pretui-trace-head:focus-visible {
-        outline: 2px solid var(--ring);
-        outline-offset: 1px;
-      }
-      .pretui-trace-spark {
-        width: 15px;
-        height: 15px;
-        flex: none;
-        fill: var(--ink-3, var(--boxel-400));
-      }
-      .pretui-trace-head[data-working] .pretui-trace-spark {
-        fill: var(--muted-foreground);
-      }
-      .pretui-trace-label {
-        font-weight: 500;
-      }
-      /* Law 5: the sweep says "still going" and nothing else animates */
-      .pretui-trace-label[data-shimmer] {
-        background: linear-gradient(
-          100deg,
-          var(--muted-foreground) 30%,
-          var(--foreground) 48%,
-          var(--muted-foreground) 66%
-        );
-        background-size: 300% 100%;
-        -webkit-background-clip: text;
-        background-clip: text;
-        color: transparent;
-        animation: pretui-trace-shimmer 2.2s linear infinite;
-      }
-      @keyframes pretui-trace-shimmer {
-        from {
-          background-position: 150% 0;
+      @layer PretComponent {
+        .pretui-trace {
+          font-size: var(--text-ui-md, 12.5px);
         }
-        to {
-          background-position: -150% 0;
+        .pretui-sr {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          overflow: hidden;
+          clip-path: inset(50%);
+          white-space: nowrap;
         }
-      }
-      .pretui-trace-chev {
-        width: 14px;
-        height: 14px;
-        flex: none;
-        color: var(--ink-3, var(--boxel-400));
-        transition: transform 300ms
-          var(--pretui-ease-enter, cubic-bezier(0.22, 0.61, 0.25, 1));
-      }
-      .pretui-trace-head[aria-expanded='true'] .pretui-trace-chev {
-        transform: rotate(180deg);
-      }
-      .pretui-trace-rail {
-        position: relative;
-        margin: 6px 0 0 5px;
-        padding-left: 16px;
-        display: flex;
-        flex-direction: column;
-        gap: 2px;
-      }
-      .pretui-trace-rail::before {
-        content: '';
-        position: absolute;
-        left: 3px;
-        top: 4px;
-        bottom: 6px;
-        width: 1px;
-        background: var(--border);
-      }
-      .pretui-trace-row {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        min-height: 26px;
-        padding: 2px 6px;
-        border-radius: 6px;
-        color: var(--foreground);
-      }
-      .pretui-trace-row:hover {
-        background: var(--hover, var(--boxel-100));
-      }
-      .pretui-trace-row[data-kind='query'] {
-        color: var(--muted-foreground);
-      }
-      .pretui-trace-row > svg {
-        width: 13px;
-        height: 13px;
-        flex: none;
-      }
-      .pretui-trace-check {
-        color: var(--ink-3, var(--boxel-400));
-      }
-      .pretui-trace-primary {
-        min-width: 0;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        font-weight: 500;
-      }
-      .pretui-trace-primary[data-wrap] {
-        white-space: normal;
-        font-weight: 400;
-        line-height: 1.55;
-        color: var(--muted-foreground);
-      }
-      .pretui-trace-sec {
-        margin-left: auto;
-        flex: none;
-        font-size: var(--text-ui-sm, 11.5px);
-        color: var(--ink-3, var(--boxel-400));
-      }
-      .pretui-trace-sec[data-mono] {
-        font-family: var(--font-mono);
-      }
-      .pretui-trace-diff {
-        flex: none;
-        display: inline-flex;
-        gap: 6px;
-        font-family: var(--font-mono);
-        font-size: 11px;
-        font-variant-numeric: tabular-nums;
-      }
-      .pretui-trace-add {
-        color: var(--success, var(--boxel-success));
-      }
-      .pretui-trace-del {
-        color: var(--pretui-destructive-ink, var(--boxel-danger));
-      }
-      /* the stagger is a precomputed delay, retriggered by the open flip.
-         The flag lives on the rail, not on Collapse's own element: a
-         scoped stylesheet may only address elements authored in ITS template,
-         so reaching into a child component's markup would silently match
-         nothing (and `:deep()` is not allowed in the kit). */
-      .pretui-trace-rail[data-open] .pretui-trace-row {
-        animation: pretui-trace-in 320ms
-          var(--pretui-ease-enter, cubic-bezier(0.22, 0.61, 0.25, 1))
-          var(--pretui-trace-delay, 0ms) both;
-      }
-      @keyframes pretui-trace-in {
-        from {
-          opacity: 0;
-          transform: translateY(4px);
-        }
-        to {
-          opacity: 1;
-          transform: none;
-        }
-      }
-      @media (prefers-reduced-motion: reduce) {
-        .pretui-trace-label[data-shimmer] {
-          animation: none;
+        .pretui-trace-head {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          min-height: 28px;
+          padding: 4px 6px;
+          margin: -4px -6px;
+          border: 0;
+          border-radius: 8px;
           background: none;
-          -webkit-background-clip: border-box;
-          background-clip: border-box;
-          color: var(--foreground);
+          font: inherit;
+          color: var(--muted-foreground);
+          cursor: pointer;
+        }
+        .pretui-trace-head:hover {
+          background: var(--hover, var(--boxel-100));
+        }
+        .pretui-trace-head:focus-visible {
+          outline: 2px solid var(--ring);
+          outline-offset: 1px;
+        }
+        .pretui-trace-spark {
+          width: 15px;
+          height: 15px;
+          flex: none;
+          fill: var(--ink-3, var(--boxel-400));
+        }
+        .pretui-trace-head[data-working] .pretui-trace-spark {
+          fill: var(--muted-foreground);
+        }
+        .pretui-trace-label {
+          font-weight: 500;
+        }
+        /* Law 5: the sweep says "still going" and nothing else animates */
+        .pretui-trace-label[data-shimmer] {
+          background: linear-gradient(
+            100deg,
+            var(--muted-foreground) 30%,
+            var(--foreground) 48%,
+            var(--muted-foreground) 66%
+          );
+          background-size: 300% 100%;
+          -webkit-background-clip: text;
+          background-clip: text;
+          color: transparent;
+          animation: pretui-trace-shimmer 2.2s linear infinite;
+        }
+        @keyframes pretui-trace-shimmer {
+          from {
+            background-position: 150% 0;
+          }
+          to {
+            background-position: -150% 0;
+          }
         }
         .pretui-trace-chev {
-          transition: none;
+          width: 14px;
+          height: 14px;
+          flex: none;
+          color: var(--ink-3, var(--boxel-400));
+          transition: transform 300ms
+            var(--pretui-ease-enter, cubic-bezier(0.22, 0.61, 0.25, 1));
         }
+        .pretui-trace-head[aria-expanded='true'] .pretui-trace-chev {
+          transform: rotate(180deg);
+        }
+        .pretui-trace-rail {
+          position: relative;
+          margin: 6px 0 0 5px;
+          padding-left: 16px;
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+        }
+        .pretui-trace-rail::before {
+          content: '';
+          position: absolute;
+          left: 3px;
+          top: 4px;
+          bottom: 6px;
+          width: 1px;
+          background: var(--border);
+        }
+        .pretui-trace-row {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          min-height: 26px;
+          padding: 2px 6px;
+          border-radius: 6px;
+          color: var(--foreground);
+        }
+        .pretui-trace-row:hover {
+          background: var(--hover, var(--boxel-100));
+        }
+        .pretui-trace-row[data-kind='query'] {
+          color: var(--muted-foreground);
+        }
+        .pretui-trace-row > svg {
+          width: 13px;
+          height: 13px;
+          flex: none;
+        }
+        .pretui-trace-check {
+          color: var(--ink-3, var(--boxel-400));
+        }
+        .pretui-trace-primary {
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          font-weight: 500;
+        }
+        .pretui-trace-primary[data-wrap] {
+          white-space: normal;
+          font-weight: 400;
+          line-height: 1.55;
+          color: var(--muted-foreground);
+        }
+        .pretui-trace-sec {
+          margin-left: auto;
+          flex: none;
+          font-size: var(--text-ui-sm, 11.5px);
+          color: var(--ink-3, var(--boxel-400));
+        }
+        .pretui-trace-sec[data-mono] {
+          font-family: var(--font-mono);
+        }
+        .pretui-trace-diff {
+          flex: none;
+          display: inline-flex;
+          gap: 6px;
+          font-family: var(--font-mono);
+          font-size: 11px;
+          font-variant-numeric: tabular-nums;
+        }
+        .pretui-trace-add {
+          color: var(--success, var(--boxel-success));
+        }
+        .pretui-trace-del {
+          color: var(--pretui-destructive-ink, var(--boxel-danger));
+        }
+        /* the stagger is a precomputed delay, retriggered by the open flip.
+           The flag lives on the rail, not on Collapse's own element: a
+           scoped stylesheet may only address elements authored in ITS template,
+           so reaching into a child component's markup would silently match
+           nothing (and `:deep()` is not allowed in the kit). */
         .pretui-trace-rail[data-open] .pretui-trace-row {
-          animation: none;
+          animation: pretui-trace-in 320ms
+            var(--pretui-ease-enter, cubic-bezier(0.22, 0.61, 0.25, 1))
+            var(--pretui-trace-delay, 0ms) both;
+        }
+        @keyframes pretui-trace-in {
+          from {
+            opacity: 0;
+            transform: translateY(4px);
+          }
+          to {
+            opacity: 1;
+            transform: none;
+          }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .pretui-trace-label[data-shimmer] {
+            animation: none;
+            background: none;
+            -webkit-background-clip: border-box;
+            background-clip: border-box;
+            color: var(--foreground);
+          }
+          .pretui-trace-chev {
+            transition: none;
+          }
+          .pretui-trace-rail[data-open] .pretui-trace-row {
+            animation: none;
+          }
         }
       }
     </style>

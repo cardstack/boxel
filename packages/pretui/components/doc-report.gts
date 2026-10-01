@@ -166,137 +166,139 @@ export class DocReport extends Component<DocReportSignature> {
     </article>
 
     <style scoped>
-      .pretui-doc {
-        display: flex;
-        flex-direction: column;
-        gap: var(--space-3, 9px);
-        padding: var(--space-4, 13px);
-        border-radius: var(--radius-surface, 14px);
-        background: var(--card);
-        box-shadow: var(
-          --pretui-shadow-card,
-          0 0 0 1px var(--border),
-          0 1px 2px rgb(0 0 0 / 0.08)
-        );
-      }
-      .pretui-doc-head {
-        display: flex;
-        align-items: flex-start;
-        gap: 10px;
-      }
-      .pretui-doc-titles {
-        flex: 1;
-        min-width: 0;
-      }
-      .pretui-doc-eyebrow {
-        display: block;
-        font-family: var(--font-mono);
-        font-size: 10px;
-        font-weight: 600;
-        letter-spacing: 0.06em;
-        text-transform: uppercase;
-        color: var(--ink-3, var(--boxel-400));
-      }
-      .pretui-doc-title {
-        margin: 2px 0 0;
-        font-size: 15px;
-        font-weight: 600;
-        letter-spacing: -0.02em;
-      }
-      .pretui-doc-meta {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 6px;
-        margin: 0;
-        padding: 0;
-        list-style: none;
-      }
-      .pretui-doc-meta code {
-        font-family: var(--font-mono);
-        font-size: 11px;
-        padding: 1px 6px;
-        border-radius: 5px;
-        background: var(--inset, var(--boxel-100));
-        box-shadow: var(
-          --pretui-shadow-hairline,
-          0 0 0 1px var(--border)
-        );
-        color: var(--muted-foreground);
-        font-variant-numeric: tabular-nums;
-      }
-      /* the cap: content beyond it is clipped and faded out, so the reader
-         can see that there IS more rather than guessing */
-      .pretui-doc-clip {
-        font-size: var(--text-ui-md, 12.5px);
-        max-height: var(--pretui-doc-cap, 16rem);
-        overflow: hidden;
-        mask-image: linear-gradient(
-          to bottom,
-          #000 0,
-          #000 calc(100% - 3rem),
-          transparent 100%
-        );
-        transition: mask-image 200ms linear;
-      }
-      .pretui-doc[data-expanded] .pretui-doc-clip {
-        max-height: none;
-        overflow: visible;
-        mask-image: none;
-      }
-      .pretui-doc-foot {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        flex-wrap: wrap;
-      }
-      .pretui-doc-pills {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 5px;
-        margin: 0;
-        padding: 0;
-        list-style: none;
-      }
-      .pretui-doc-pill {
-        display: inline-flex;
-        align-items: center;
-        gap: 5px;
-        min-height: 24px;
-        padding: 0 9px;
-        border: 0;
-        border-radius: 999px;
-        background: var(--inset, var(--boxel-100));
-        box-shadow: var(
-          --pretui-shadow-hairline,
-          0 0 0 1px var(--border)
-        );
-        font: inherit;
-        font-size: var(--text-ui-sm, 11.5px);
-        color: var(--muted-foreground);
-        cursor: pointer;
-      }
-      .pretui-doc-pill:hover {
-        background: var(--hover, var(--boxel-100));
-        color: var(--foreground);
-      }
-      .pretui-doc-pill:focus-visible {
-        outline: 2px solid var(--ring);
-        outline-offset: 2px;
-      }
-      .pretui-doc-pill-icon {
-        width: 12px;
-        height: 12px;
-        flex: none;
-      }
-      @media (any-pointer: coarse) {
-        .pretui-doc-pill {
-          min-height: 44px;
-          padding: 0 14px;
+      @layer PretComponent {
+        .pretui-doc {
+          display: flex;
+          flex-direction: column;
+          gap: var(--space-3, 9px);
+          padding: var(--space-4, 13px);
+          border-radius: var(--radius-surface, 14px);
+          background: var(--card);
+          box-shadow: var(
+            --pretui-shadow-card,
+            0 0 0 1px var(--border),
+            0 1px 2px rgb(0 0 0 / 0.08)
+          );
         }
-      }
-      @media (prefers-reduced-motion: reduce) {
+        .pretui-doc-head {
+          display: flex;
+          align-items: flex-start;
+          gap: 10px;
+        }
+        .pretui-doc-titles {
+          flex: 1;
+          min-width: 0;
+        }
+        .pretui-doc-eyebrow {
+          display: block;
+          font-family: var(--font-mono);
+          font-size: 10px;
+          font-weight: 600;
+          letter-spacing: 0.06em;
+          text-transform: uppercase;
+          color: var(--ink-3, var(--boxel-400));
+        }
+        .pretui-doc-title {
+          margin: 2px 0 0;
+          font-size: 15px;
+          font-weight: 600;
+          letter-spacing: -0.02em;
+        }
+        .pretui-doc-meta {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 6px;
+          margin: 0;
+          padding: 0;
+          list-style: none;
+        }
+        .pretui-doc-meta code {
+          font-family: var(--font-mono);
+          font-size: 11px;
+          padding: 1px 6px;
+          border-radius: 5px;
+          background: var(--inset, var(--boxel-100));
+          box-shadow: var(
+            --pretui-shadow-hairline,
+            0 0 0 1px var(--border)
+          );
+          color: var(--muted-foreground);
+          font-variant-numeric: tabular-nums;
+        }
+        /* the cap: content beyond it is clipped and faded out, so the reader
+           can see that there IS more rather than guessing */
         .pretui-doc-clip {
-          transition: none;
+          font-size: var(--text-ui-md, 12.5px);
+          max-height: var(--pretui-doc-cap, 16rem);
+          overflow: hidden;
+          mask-image: linear-gradient(
+            to bottom,
+            #000 0,
+            #000 calc(100% - 3rem),
+            transparent 100%
+          );
+          transition: mask-image 200ms linear;
+        }
+        .pretui-doc[data-expanded] .pretui-doc-clip {
+          max-height: none;
+          overflow: visible;
+          mask-image: none;
+        }
+        .pretui-doc-foot {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          flex-wrap: wrap;
+        }
+        .pretui-doc-pills {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 5px;
+          margin: 0;
+          padding: 0;
+          list-style: none;
+        }
+        .pretui-doc-pill {
+          display: inline-flex;
+          align-items: center;
+          gap: 5px;
+          min-height: 24px;
+          padding: 0 9px;
+          border: 0;
+          border-radius: 999px;
+          background: var(--inset, var(--boxel-100));
+          box-shadow: var(
+            --pretui-shadow-hairline,
+            0 0 0 1px var(--border)
+          );
+          font: inherit;
+          font-size: var(--text-ui-sm, 11.5px);
+          color: var(--muted-foreground);
+          cursor: pointer;
+        }
+        .pretui-doc-pill:hover {
+          background: var(--hover, var(--boxel-100));
+          color: var(--foreground);
+        }
+        .pretui-doc-pill:focus-visible {
+          outline: 2px solid var(--ring);
+          outline-offset: 2px;
+        }
+        .pretui-doc-pill-icon {
+          width: 12px;
+          height: 12px;
+          flex: none;
+        }
+        @media (any-pointer: coarse) {
+          .pretui-doc-pill {
+            min-height: 44px;
+            padding: 0 14px;
+          }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .pretui-doc-clip {
+            transition: none;
+          }
         }
       }
     </style>

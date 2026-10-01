@@ -54,3 +54,5 @@ Where it is thinner: four shapes plus an allowlisted custom path, no per-glyph e
 `--pretui-pathtext-fill` (from `@fill`, through the CSS guard) and `--pretui-pathtext-revolution` (from `@revolution`).
 
 Everything else is geometry expressed in viewBox units and passed as args, because a ring's proportions belong to the composition rather than to the season. The fill defaults to `currentColor`'s context, so a ring inherits the ink of whatever it sits in and a season needs to do nothing.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

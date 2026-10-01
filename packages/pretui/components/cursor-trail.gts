@@ -148,70 +148,72 @@ export class CursorTrail extends Component<CursorTrailSignature> {
       </div>
     </div>
     <style scoped>
-      .pretui-trail {
-        position: relative;
-        border-radius: var(--pretui-trail-radius, var(--radius));
-      }
-      .pretui-trail-layer {
-        position: absolute;
-        inset: 0;
-        overflow: hidden;
-        border-radius: inherit;
-        pointer-events: none;
-      }
-      .pretui-trail-mark {
-        position: absolute;
-        top: 0;
-        left: 0;
-        display: block;
-        width: var(--pretui-trail-size, 14px);
-        height: var(--pretui-trail-size, 14px);
-        margin-top: calc(var(--pretui-trail-size, 14px) / -2);
-        margin-left: calc(var(--pretui-trail-size, 14px) / -2);
-        opacity: var(--pretui-trail-opacity, 1);
-        translate: var(--pretui-px, 0px) var(--pretui-py, 0px);
-        scale: var(--pretui-trail-scale, 1);
-        transition: translate var(--pretui-trail-dur, 0.2s)
-          cubic-bezier(0.22, 1, 0.36, 1);
-        will-change: translate;
-      }
-      .pretui-trail-mark[data-shape='dot'] {
-        border-radius: 999px;
-        background: color-mix(
-          in oklch,
-          var(--pretui-trail-hue, var(--primary)) 72%,
-          transparent
-        );
-        box-shadow: 0 0 0 1px
-          color-mix(
-            in oklch,
-            var(--pretui-trail-hue, var(--primary)) 26%,
-            transparent
-          );
-      }
-      .pretui-trail-mark[data-shape='ring'] {
-        border-radius: 999px;
-        background: transparent;
-        box-shadow: inset 0 0 0 2px
-          color-mix(
-            in oklch,
-            var(--pretui-trail-hue, var(--primary)) 78%,
-            transparent
-          );
-      }
-      .pretui-trail-mark[data-shape='square'] {
-        border-radius: 2px;
-        background: color-mix(
-          in oklch,
-          var(--pretui-trail-hue, var(--primary)) 68%,
-          transparent
-        );
-      }
-      /* end state under reduced motion: the marks track the pointer with
-         no lag, i.e. the resting bullseye, never a frozen midpoint */
-      @media (prefers-reduced-motion: reduce) {
+      @layer PretComponent {
+        .pretui-trail {
+          position: relative;
+          border-radius: var(--pretui-trail-radius, var(--radius));
+        }
+        .pretui-trail-layer {
+          position: absolute;
+          inset: 0;
+          overflow: hidden;
+          border-radius: inherit;
+          pointer-events: none;
+        }
         .pretui-trail-mark {
-          transition: none;
+          position: absolute;
+          top: 0;
+          left: 0;
+          display: block;
+          width: var(--pretui-trail-size, 14px);
+          height: var(--pretui-trail-size, 14px);
+          margin-top: calc(var(--pretui-trail-size, 14px) / -2);
+          margin-left: calc(var(--pretui-trail-size, 14px) / -2);
+          opacity: var(--pretui-trail-opacity, 1);
+          translate: var(--pretui-px, 0px) var(--pretui-py, 0px);
+          scale: var(--pretui-trail-scale, 1);
+          transition: translate var(--pretui-trail-dur, 0.2s)
+            cubic-bezier(0.22, 1, 0.36, 1);
+          will-change: translate;
+        }
+        .pretui-trail-mark[data-shape='dot'] {
+          border-radius: 999px;
+          background: color-mix(
+            in oklch,
+            var(--pretui-trail-hue, var(--primary)) 72%,
+            transparent
+          );
+          box-shadow: 0 0 0 1px
+            color-mix(
+              in oklch,
+              var(--pretui-trail-hue, var(--primary)) 26%,
+              transparent
+            );
+        }
+        .pretui-trail-mark[data-shape='ring'] {
+          border-radius: 999px;
+          background: transparent;
+          box-shadow: inset 0 0 0 2px
+            color-mix(
+              in oklch,
+              var(--pretui-trail-hue, var(--primary)) 78%,
+              transparent
+            );
+        }
+        .pretui-trail-mark[data-shape='square'] {
+          border-radius: 2px;
+          background: color-mix(
+            in oklch,
+            var(--pretui-trail-hue, var(--primary)) 68%,
+            transparent
+          );
+        }
+        /* end state under reduced motion: the marks track the pointer with
+           no lag, i.e. the resting bullseye, never a frozen midpoint */
+        @media (prefers-reduced-motion: reduce) {
+          .pretui-trail-mark {
+            transition: none;
+          }
         }
       }
     </style>

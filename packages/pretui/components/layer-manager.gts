@@ -1585,296 +1585,298 @@ export class LayerManager
     </div>
 
     <style scoped>
-      .pretui-lm {
-        --pretui-lm-indent: 14px;
-        --pretui-lm-row-h: 26px;
-        display: grid;
-        gap: var(--space-2, 6px);
-        min-width: 0;
-      }
-      .pretui-lm[data-density='compact'] {
-        --pretui-lm-row-h: 22px;
-      }
-      .pretui-lm[data-disabled='true'] {
-        opacity: 0.55;
-      }
-
-      .pretui-lm-grid {
-        display: grid;
-        min-width: 0;
-      }
-      .pretui-lm-row {
-        --pretui-lm-level: 0;
-        display: flex;
-        align-items: center;
-        gap: 2px;
-        min-width: 0;
-        height: var(--pretui-lm-row-h);
-        border-radius: var(--radius-sm, 6px);
-      }
-      .pretui-lm-row:hover {
-        background: var(
-          --hover,
-          color-mix(in oklch, var(--foreground) 5%, transparent)
-        );
-      }
-      .pretui-lm-row[data-selected='true'] {
-        background: color-mix(
-          in oklch,
-          var(--primary) 14%,
-          var(--card)
-        );
-      }
-      /* Law 5: the raised state encodes "this is the layer you are
-         carrying" — a fact the reader would otherwise infer from rows
-         shuffling. It rests in a still frame, so nothing depends on motion
-         to be legible (Law 8). */
-      .pretui-lm-row[data-grabbed='true'] {
-        background: var(--card);
-        box-shadow: var(
-          --pretui-shadow-raised,
-          0 0 0 1px var(--border),
-          0 2px 10px rgb(0 0 0 / 0.22)
-        );
-      }
-
-      .pretui-lm-cell {
-        display: flex;
-        align-items: center;
-        min-width: 0;
-      }
-      .pretui-lm-cell:focus-visible,
-      .pretui-lm-handle:focus-visible,
-      .pretui-lm-toggle:focus-visible {
-        outline: 2px solid var(--ring);
-        outline-offset: -1px;
-        border-radius: var(--radius-sm, 6px);
-      }
-      .pretui-lm-cellName {
-        flex: 1 1 auto;
-        gap: 4px;
-        /* min-width: 0 with the ellipsis below is the fix for the flex
-           overflow that otherwise blows the row out on a long name
-           (Appendix O.8). */
-        min-width: 0;
-        padding-inline-start: calc(
-          var(--pretui-lm-indent, 14px) * var(--pretui-lm-level, 0)
-        );
-      }
-      .pretui-lm-cellGrab,
-      .pretui-lm-cellFlag {
-        flex: 0 0 auto;
-      }
-
-      .pretui-lm-handle,
-      .pretui-lm-toggle {
-        display: grid;
-        place-items: center;
-        width: var(--pretui-lm-row-h);
-        height: var(--pretui-lm-row-h);
-        padding: 0;
-        border: 0;
-        background: none;
-        color: var(--muted-foreground);
-        cursor: pointer;
-      }
-      .pretui-lm-handle {
-        cursor: grab;
-        width: 16px;
-      }
-      .pretui-lm-row[data-grabbed='true'] .pretui-lm-handle {
-        cursor: grabbing;
-      }
-      .pretui-lm-grip {
-        width: 6px;
-        height: 10px;
-        background-image: radial-gradient(currentColor 40%, transparent 42%);
-        background-size: 3px 3px;
-        opacity: 0.75;
-      }
-
-      /* The twisty is a CSS triangle rather than a glyph, so it rotates
-         rather than swapping — one element, two states, no reflow
-         (Appendix O.11). */
-      .pretui-lm-twisty {
-        flex: 0 0 auto;
-        width: 10px;
-        height: 10px;
-        border-inline-start: 4px solid currentColor;
-        border-block-start: 4px solid transparent;
-        border-block-end: 4px solid transparent;
-        color: var(--muted-foreground);
-        cursor: pointer;
-        transition: transform var(--pretui-lm-transition, 140ms) ease;
-      }
-      .pretui-lm-twisty[data-open='true'] {
-        transform: rotate(90deg);
-      }
-      .pretui-lm-twisty[data-leaf='true'] {
-        border-inline-start-color: transparent;
-        cursor: default;
-      }
-
-      .pretui-lm-glyph {
-        flex: 0 0 auto;
-        width: 13px;
-        text-align: center;
-        font-size: 10px;
-        line-height: 1;
-        color: var(--muted-foreground);
-      }
-      .pretui-lm-text {
-        min-width: 0;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        font-size: var(--text-ui-md, 12.5px);
-        color: var(--foreground);
-      }
-      .pretui-lm-badge {
-        flex: 0 0 auto;
-        font-size: var(--text-ui-xs, 10px);
-        letter-spacing: 0.04em;
-        text-transform: uppercase;
-        color: var(--muted-foreground);
-      }
-      .pretui-lm-trailing {
-        flex: 0 0 auto;
-        display: flex;
-        align-items: center;
-        gap: 4px;
-      }
-      /* Hidden and locked read in greyscale: the name loses weight and the
-         word beside it says which. Never the tint alone. */
-      .pretui-lm-row[data-hidden='true'] .pretui-lm-text,
-      .pretui-lm-row[data-hidden='true'] .pretui-lm-glyph {
-        opacity: 0.5;
-      }
-      .pretui-lm-row[data-locked='true'] .pretui-lm-text {
-        font-style: italic;
-      }
-
-      /* ── the eye ── a shape, drawn, so the state is legible without a
-         colour and without an icon font. */
-      .pretui-lm-eye {
-        position: relative;
-        display: block;
-        width: 13px;
-        height: 8px;
-        border: 1.25px solid currentColor;
-        border-radius: 100% / 62%;
-      }
-      .pretui-lm-eye::before {
-        content: '';
-        position: absolute;
-        inset-block-start: 1px;
-        inset-inline-start: 4px;
-        width: 3.5px;
-        height: 3.5px;
-        border-radius: 50%;
-        background: currentColor;
-      }
-      /* Pressed means "this layer is hidden", so the slash appears — the
-         shape carries the state and aria-pressed carries it again. */
-      .pretui-lm-toggle[aria-pressed='true'] .pretui-lm-eye::after {
-        content: '';
-        position: absolute;
-        inset-block-start: 3px;
-        inset-inline-start: -2px;
-        width: 17px;
-        height: 1.25px;
-        background: currentColor;
-        transform: rotate(-32deg);
-      }
-      /* An ancestor is doing the hiding: the button is drawn quietly and its
-         accessible name names the group responsible, rather than reporting a
-         flag that has no effect. */
-      .pretui-lm-toggle[data-inherited='true'] {
-        opacity: 0.45;
-      }
-
-      /* ── the padlock ── body plus shackle; unlocked tilts the shackle
-         open rather than changing colour. */
-      .pretui-lm-lock {
-        position: relative;
-        display: block;
-        width: 9px;
-        height: 7px;
-        margin-block-start: 4px;
-        border: 1.25px solid currentColor;
-        border-radius: 1.5px;
-      }
-      .pretui-lm-lock::before {
-        content: '';
-        position: absolute;
-        inset-block-start: -5px;
-        inset-inline-start: 1px;
-        width: 5px;
-        height: 5px;
-        border: 1.25px solid currentColor;
-        border-block-end: 0;
-        border-radius: 3px 3px 0 0;
-        transform-origin: 100% 100%;
-        transition: transform var(--pretui-lm-transition, 140ms) ease;
-      }
-      .pretui-lm-toggle[aria-pressed='false'] .pretui-lm-lock::before {
-        transform: rotate(-28deg) translateY(-1px);
-      }
-      .pretui-lm-toggle[aria-pressed='true'] .pretui-lm-lock {
-        background: color-mix(in oklch, currentColor 22%, transparent);
-      }
-
-      /* The flag controls are quiet at rest and full strength the moment the
-         row is engaged — but they are never absent and never invisible. A
-         focusable control at opacity 0 is worse than no control at all. */
-      .pretui-lm-toggle {
-        opacity: 0.55;
-      }
-      .pretui-lm-row:hover .pretui-lm-toggle,
-      .pretui-lm-row:focus-within .pretui-lm-toggle,
-      .pretui-lm-row[data-hidden='true'] .pretui-lm-toggle,
-      .pretui-lm-row[data-locked='true'] .pretui-lm-toggle {
-        opacity: 1;
-      }
-
-      .pretui-lm-hint {
-        margin: 0;
-        font-size: var(--text-ui-sm, 11.5px);
-        color: var(--muted-foreground);
-      }
-      /* Text for assistive technology only. Not display:none — that removes
-         it from the accessibility tree along with everything it would say. */
-      .pretui-lm-live {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        margin: -1px;
-        padding: 0;
-        overflow: hidden;
-        clip-path: inset(50%);
-        white-space: nowrap;
-        border: 0;
-      }
-
-      @media (prefers-reduced-motion: reduce) {
-        .pretui-lm-twisty,
-        .pretui-lm-lock::before {
-          transition: none;
-        }
-      }
-      /* A 26px row is not a 44px touch target, so on a coarse pointer the
-         controls grow into the row rather than the row growing into the
-         page — and the hover-quietened toggles stop being quiet, because
-         there is no hover to reveal them. */
-      @media (any-pointer: coarse) {
+      @layer PretComponent {
         .pretui-lm {
-          --pretui-lm-row-h: 36px;
+          --pretui-lm-indent: 14px;
+          --pretui-lm-row-h: 26px;
+          display: grid;
+          gap: var(--space-2, 6px);
+          min-width: 0;
+        }
+        .pretui-lm[data-density='compact'] {
+          --pretui-lm-row-h: 22px;
+        }
+        .pretui-lm[data-disabled='true'] {
+          opacity: 0.55;
+        }
+
+        .pretui-lm-grid {
+          display: grid;
+          min-width: 0;
+        }
+        .pretui-lm-row {
+          --pretui-lm-level: 0;
+          display: flex;
+          align-items: center;
+          gap: 2px;
+          min-width: 0;
+          height: var(--pretui-lm-row-h);
+          border-radius: var(--radius-sm, 6px);
+        }
+        .pretui-lm-row:hover {
+          background: var(
+            --hover,
+            color-mix(in oklch, var(--foreground) 5%, transparent)
+          );
+        }
+        .pretui-lm-row[data-selected='true'] {
+          background: color-mix(
+            in oklch,
+            var(--primary) 14%,
+            var(--card)
+          );
+        }
+        /* Law 5: the raised state encodes "this is the layer you are
+           carrying" — a fact the reader would otherwise infer from rows
+           shuffling. It rests in a still frame, so nothing depends on motion
+           to be legible (Law 8). */
+        .pretui-lm-row[data-grabbed='true'] {
+          background: var(--card);
+          box-shadow: var(
+            --pretui-shadow-raised,
+            0 0 0 1px var(--border),
+            0 2px 10px rgb(0 0 0 / 0.22)
+          );
+        }
+
+        .pretui-lm-cell {
+          display: flex;
+          align-items: center;
+          min-width: 0;
+        }
+        .pretui-lm-cell:focus-visible,
+        .pretui-lm-handle:focus-visible,
+        .pretui-lm-toggle:focus-visible {
+          outline: 2px solid var(--ring);
+          outline-offset: -1px;
+          border-radius: var(--radius-sm, 6px);
+        }
+        .pretui-lm-cellName {
+          flex: 1 1 auto;
+          gap: 4px;
+          /* min-width: 0 with the ellipsis below is the fix for the flex
+             overflow that otherwise blows the row out on a long name
+             (Appendix O.8). */
+          min-width: 0;
+          padding-inline-start: calc(
+            var(--pretui-lm-indent, 14px) * var(--pretui-lm-level, 0)
+          );
+        }
+        .pretui-lm-cellGrab,
+        .pretui-lm-cellFlag {
+          flex: 0 0 auto;
+        }
+
+        .pretui-lm-handle,
+        .pretui-lm-toggle {
+          display: grid;
+          place-items: center;
+          width: var(--pretui-lm-row-h);
+          height: var(--pretui-lm-row-h);
+          padding: 0;
+          border: 0;
+          background: none;
+          color: var(--muted-foreground);
+          cursor: pointer;
         }
         .pretui-lm-handle {
-          width: 28px;
+          cursor: grab;
+          width: 16px;
         }
+        .pretui-lm-row[data-grabbed='true'] .pretui-lm-handle {
+          cursor: grabbing;
+        }
+        .pretui-lm-grip {
+          width: 6px;
+          height: 10px;
+          background-image: radial-gradient(currentColor 40%, transparent 42%);
+          background-size: 3px 3px;
+          opacity: 0.75;
+        }
+
+        /* The twisty is a CSS triangle rather than a glyph, so it rotates
+           rather than swapping — one element, two states, no reflow
+           (Appendix O.11). */
+        .pretui-lm-twisty {
+          flex: 0 0 auto;
+          width: 10px;
+          height: 10px;
+          border-inline-start: 4px solid currentColor;
+          border-block-start: 4px solid transparent;
+          border-block-end: 4px solid transparent;
+          color: var(--muted-foreground);
+          cursor: pointer;
+          transition: transform var(--pretui-lm-transition, 140ms) ease;
+        }
+        .pretui-lm-twisty[data-open='true'] {
+          transform: rotate(90deg);
+        }
+        .pretui-lm-twisty[data-leaf='true'] {
+          border-inline-start-color: transparent;
+          cursor: default;
+        }
+
+        .pretui-lm-glyph {
+          flex: 0 0 auto;
+          width: 13px;
+          text-align: center;
+          font-size: 10px;
+          line-height: 1;
+          color: var(--muted-foreground);
+        }
+        .pretui-lm-text {
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          font-size: var(--text-ui-md, 12.5px);
+          color: var(--foreground);
+        }
+        .pretui-lm-badge {
+          flex: 0 0 auto;
+          font-size: var(--text-ui-xs, 10px);
+          letter-spacing: 0.04em;
+          text-transform: uppercase;
+          color: var(--muted-foreground);
+        }
+        .pretui-lm-trailing {
+          flex: 0 0 auto;
+          display: flex;
+          align-items: center;
+          gap: 4px;
+        }
+        /* Hidden and locked read in greyscale: the name loses weight and the
+           word beside it says which. Never the tint alone. */
+        .pretui-lm-row[data-hidden='true'] .pretui-lm-text,
+        .pretui-lm-row[data-hidden='true'] .pretui-lm-glyph {
+          opacity: 0.5;
+        }
+        .pretui-lm-row[data-locked='true'] .pretui-lm-text {
+          font-style: italic;
+        }
+
+        /* ── the eye ── a shape, drawn, so the state is legible without a
+           colour and without an icon font. */
+        .pretui-lm-eye {
+          position: relative;
+          display: block;
+          width: 13px;
+          height: 8px;
+          border: 1.25px solid currentColor;
+          border-radius: 100% / 62%;
+        }
+        .pretui-lm-eye::before {
+          content: '';
+          position: absolute;
+          inset-block-start: 1px;
+          inset-inline-start: 4px;
+          width: 3.5px;
+          height: 3.5px;
+          border-radius: 50%;
+          background: currentColor;
+        }
+        /* Pressed means "this layer is hidden", so the slash appears — the
+           shape carries the state and aria-pressed carries it again. */
+        .pretui-lm-toggle[aria-pressed='true'] .pretui-lm-eye::after {
+          content: '';
+          position: absolute;
+          inset-block-start: 3px;
+          inset-inline-start: -2px;
+          width: 17px;
+          height: 1.25px;
+          background: currentColor;
+          transform: rotate(-32deg);
+        }
+        /* An ancestor is doing the hiding: the button is drawn quietly and its
+           accessible name names the group responsible, rather than reporting a
+           flag that has no effect. */
+        .pretui-lm-toggle[data-inherited='true'] {
+          opacity: 0.45;
+        }
+
+        /* ── the padlock ── body plus shackle; unlocked tilts the shackle
+           open rather than changing colour. */
+        .pretui-lm-lock {
+          position: relative;
+          display: block;
+          width: 9px;
+          height: 7px;
+          margin-block-start: 4px;
+          border: 1.25px solid currentColor;
+          border-radius: 1.5px;
+        }
+        .pretui-lm-lock::before {
+          content: '';
+          position: absolute;
+          inset-block-start: -5px;
+          inset-inline-start: 1px;
+          width: 5px;
+          height: 5px;
+          border: 1.25px solid currentColor;
+          border-block-end: 0;
+          border-radius: 3px 3px 0 0;
+          transform-origin: 100% 100%;
+          transition: transform var(--pretui-lm-transition, 140ms) ease;
+        }
+        .pretui-lm-toggle[aria-pressed='false'] .pretui-lm-lock::before {
+          transform: rotate(-28deg) translateY(-1px);
+        }
+        .pretui-lm-toggle[aria-pressed='true'] .pretui-lm-lock {
+          background: color-mix(in oklch, currentColor 22%, transparent);
+        }
+
+        /* The flag controls are quiet at rest and full strength the moment the
+           row is engaged — but they are never absent and never invisible. A
+           focusable control at opacity 0 is worse than no control at all. */
         .pretui-lm-toggle {
+          opacity: 0.55;
+        }
+        .pretui-lm-row:hover .pretui-lm-toggle,
+        .pretui-lm-row:focus-within .pretui-lm-toggle,
+        .pretui-lm-row[data-hidden='true'] .pretui-lm-toggle,
+        .pretui-lm-row[data-locked='true'] .pretui-lm-toggle {
           opacity: 1;
+        }
+
+        .pretui-lm-hint {
+          margin: 0;
+          font-size: var(--text-ui-sm, 11.5px);
+          color: var(--muted-foreground);
+        }
+        /* Text for assistive technology only. Not display:none — that removes
+           it from the accessibility tree along with everything it would say. */
+        .pretui-lm-live {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          margin: -1px;
+          padding: 0;
+          overflow: hidden;
+          clip-path: inset(50%);
+          white-space: nowrap;
+          border: 0;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .pretui-lm-twisty,
+          .pretui-lm-lock::before {
+            transition: none;
+          }
+        }
+        /* A 26px row is not a 44px touch target, so on a coarse pointer the
+           controls grow into the row rather than the row growing into the
+           page — and the hover-quietened toggles stop being quiet, because
+           there is no hover to reveal them. */
+        @media (any-pointer: coarse) {
+          .pretui-lm {
+            --pretui-lm-row-h: 36px;
+          }
+          .pretui-lm-handle {
+            width: 28px;
+          }
+          .pretui-lm-toggle {
+            opacity: 1;
+          }
         }
       }
     </style>

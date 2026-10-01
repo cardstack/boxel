@@ -516,110 +516,112 @@ export class EasingCurve extends Component<EasingCurveSignature> {
       <p class='pretui-curve-css' data-test-pretui-curve-css>{{this.cssValue}}</p>
     </div>
     <style scoped>
-      .pretui-curve {
-        display: grid;
-        gap: var(--space-2, 6px);
-        min-width: 0;
-      }
-      .pretui-curve[data-disabled='true'] {
-        opacity: 0.5;
-      }
-      .pretui-curve-plot {
-        position: relative;
-        width: 100%;
-        aspect-ratio: 1 / 1;
-        border-radius: var(--radius);
-        background: var(--field, var(--boxel-light));
-        box-shadow: inset 0 0 0 1px var(--input);
-        touch-action: none;
-      }
-      .pretui-curve-svg {
-        position: absolute;
-        inset: 0;
-        width: 100%;
-        height: 100%;
-        overflow: visible;
-      }
-      /* The two rules at y=0 and y=1: the plot spans −0.5…1.5, so these are
-         what tell a reader that the space above and below is overshoot. */
-      .pretui-curve-base {
-        stroke: var(--border);
-        stroke-width: 1;
-        vector-effect: non-scaling-stroke;
-      }
-      .pretui-curve-line {
-        fill: none;
-        stroke: var(--primary);
-        stroke-width: 2;
-        stroke-linecap: round;
-        stroke-linejoin: round;
-        vector-effect: non-scaling-stroke;
-      }
-      /* The legs from each anchor to its control point — drawn in the SVG,
-         because a straight line between two arbitrary points is geometry,
-         not something CSS custom properties can express without trig. */
-      .pretui-curve-leg {
-        stroke: color-mix(in oklch, var(--primary) 45%, transparent);
-        stroke-width: 1;
-        stroke-dasharray: 3 3;
-        vector-effect: non-scaling-stroke;
-      }
-      /* The preview: a dot that travels the curve. Motion that ENCODES the
-         value — Law 5 — never decoration. */
-      .pretui-curve-track {
-        position: absolute;
-        left: 0;
-        right: 0;
-        bottom: -14px;
-        height: 8px;
-        border-radius: 4px;
-        background: color-mix(in oklch, var(--foreground) 6%, transparent);
-        overflow: visible;
-      }
-      .pretui-curve-dot {
-        position: absolute;
-        top: 50%;
-        left: 0;
-        width: 8px;
-        height: 8px;
-        translate: -50% -50%;
-        border-radius: 50%;
-        background: var(--primary);
-        animation: pretui-curve-run var(--pretui-curve-dur, 1200ms)
-          var(--pretui-curve-ease, ease) infinite alternate;
-      }
-      @keyframes pretui-curve-run {
-        from {
+      @layer PretComponent {
+        .pretui-curve {
+          display: grid;
+          gap: var(--space-2, 6px);
+          min-width: 0;
+        }
+        .pretui-curve[data-disabled='true'] {
+          opacity: 0.5;
+        }
+        .pretui-curve-plot {
+          position: relative;
+          width: 100%;
+          aspect-ratio: 1 / 1;
+          border-radius: var(--radius);
+          background: var(--field, var(--boxel-light));
+          box-shadow: inset 0 0 0 1px var(--input);
+          touch-action: none;
+        }
+        .pretui-curve-svg {
+          position: absolute;
+          inset: 0;
+          width: 100%;
+          height: 100%;
+          overflow: visible;
+        }
+        /* The two rules at y=0 and y=1: the plot spans −0.5…1.5, so these are
+           what tell a reader that the space above and below is overshoot. */
+        .pretui-curve-base {
+          stroke: var(--border);
+          stroke-width: 1;
+          vector-effect: non-scaling-stroke;
+        }
+        .pretui-curve-line {
+          fill: none;
+          stroke: var(--primary);
+          stroke-width: 2;
+          stroke-linecap: round;
+          stroke-linejoin: round;
+          vector-effect: non-scaling-stroke;
+        }
+        /* The legs from each anchor to its control point — drawn in the SVG,
+           because a straight line between two arbitrary points is geometry,
+           not something CSS custom properties can express without trig. */
+        .pretui-curve-leg {
+          stroke: color-mix(in oklch, var(--primary) 45%, transparent);
+          stroke-width: 1;
+          stroke-dasharray: 3 3;
+          vector-effect: non-scaling-stroke;
+        }
+        /* The preview: a dot that travels the curve. Motion that ENCODES the
+           value — Law 5 — never decoration. */
+        .pretui-curve-track {
+          position: absolute;
           left: 0;
+          right: 0;
+          bottom: -14px;
+          height: 8px;
+          border-radius: 4px;
+          background: color-mix(in oklch, var(--foreground) 6%, transparent);
+          overflow: visible;
         }
-        to {
-          left: 100%;
-        }
-      }
-      .pretui-curve-fields {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: var(--space-2, 6px);
-      }
-      .pretui-curve-css {
-        margin: 0;
-        font-family: var(--font-mono);
-        font-size: var(--text-ui-xs, 11px);
-        color: var(--muted-foreground);
-        overflow-x: auto;
-        white-space: nowrap;
-      }
-      /* Reduced motion: the dot rests at the END state, never a frozen
-         midpoint, and the plot carries the whole message in a still frame. */
-      @media (prefers-reduced-motion: reduce) {
         .pretui-curve-dot {
-          animation: none;
-          left: 100%;
+          position: absolute;
+          top: 50%;
+          left: 0;
+          width: 8px;
+          height: 8px;
+          translate: -50% -50%;
+          border-radius: 50%;
+          background: var(--primary);
+          animation: pretui-curve-run var(--pretui-curve-dur, 1200ms)
+            var(--pretui-curve-ease, ease) infinite alternate;
         }
-      }
-      @container (max-width: 220px) {
+        @keyframes pretui-curve-run {
+          from {
+            left: 0;
+          }
+          to {
+            left: 100%;
+          }
+        }
         .pretui-curve-fields {
-          grid-template-columns: minmax(0, 1fr);
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: var(--space-2, 6px);
+        }
+        .pretui-curve-css {
+          margin: 0;
+          font-family: var(--font-mono);
+          font-size: var(--text-ui-xs, 11px);
+          color: var(--muted-foreground);
+          overflow-x: auto;
+          white-space: nowrap;
+        }
+        /* Reduced motion: the dot rests at the END state, never a frozen
+           midpoint, and the plot carries the whole message in a still frame. */
+        @media (prefers-reduced-motion: reduce) {
+          .pretui-curve-dot {
+            animation: none;
+            left: 100%;
+          }
+        }
+        @container (max-width: 220px) {
+          .pretui-curve-fields {
+            grid-template-columns: minmax(0, 1fr);
+          }
         }
       }
     </style>

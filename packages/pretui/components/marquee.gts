@@ -71,67 +71,69 @@ export class Marquee extends Component<MarqueeSignature> {
       </div>
     </div>
     <style scoped>
-      .pretui-marquee {
-        overflow: hidden;
-        -webkit-mask-image: linear-gradient(
-          to right,
-          transparent,
-          #000 8%,
-          #000 92%,
-          transparent
-        );
-        mask-image: linear-gradient(
-          to right,
-          transparent,
-          #000 8%,
-          #000 92%,
-          transparent
-        );
-      }
-      .pretui-marquee-track {
-        display: flex;
-        width: max-content;
-        min-width: 100%;
-        animation: pretui-marquee-drift
-          var(--pretui-marquee-duration, 20s)
-          linear
-          infinite;
-      }
-      .pretui-marquee[data-direction='right'] .pretui-marquee-track {
-        animation-direction: reverse;
-      }
-      .pretui-marquee[data-pause-on-hover='true']:hover
-        .pretui-marquee-track {
-        animation-play-state: paused;
-      }
-      /* Each copy carries the inter-item gap AND a matching trailing gap,
-         so copy width includes its seam spacing and -50% lands exactly on
-         the second copy's start. */
-      .pretui-marquee-copy {
-        display: flex;
-        flex: none;
-        min-width: 50%;
-        align-items: center;
-        gap: var(--pretui-marquee-gap, var(--space-5, 16px));
-        padding-inline-end: var(--pretui-marquee-gap, var(--space-5, 16px));
-      }
-      @keyframes pretui-marquee-drift {
-        from {
-          transform: translateX(0);
-        }
-        to {
-          transform: translateX(-50%);
-        }
-      }
-      /* Static overflow row: no loop, honest scroll edges (mask lifted). */
-      @media (prefers-reduced-motion: reduce) {
+      @layer PretComponent {
         .pretui-marquee {
-          overflow-x: auto;
-          -webkit-mask-image: none;
-          mask-image: none;
+          overflow: hidden;
+          -webkit-mask-image: linear-gradient(
+            to right,
+            transparent,
+            #000 8%,
+            #000 92%,
+            transparent
+          );
+          mask-image: linear-gradient(
+            to right,
+            transparent,
+            #000 8%,
+            #000 92%,
+            transparent
+          );
         }
         .pretui-marquee-track {
-          animation: none;
+          display: flex;
+          width: max-content;
+          min-width: 100%;
+          animation: pretui-marquee-drift
+            var(--pretui-marquee-duration, 20s)
+            linear
+            infinite;
+        }
+        .pretui-marquee[data-direction='right'] .pretui-marquee-track {
+          animation-direction: reverse;
+        }
+        .pretui-marquee[data-pause-on-hover='true']:hover
+          .pretui-marquee-track {
+          animation-play-state: paused;
+        }
+        /* Each copy carries the inter-item gap AND a matching trailing gap,
+           so copy width includes its seam spacing and -50% lands exactly on
+           the second copy's start. */
+        .pretui-marquee-copy {
+          display: flex;
+          flex: none;
+          min-width: 50%;
+          align-items: center;
+          gap: var(--pretui-marquee-gap, var(--space-5, 16px));
+          padding-inline-end: var(--pretui-marquee-gap, var(--space-5, 16px));
+        }
+        @keyframes pretui-marquee-drift {
+          from {
+            transform: translateX(0);
+          }
+          to {
+            transform: translateX(-50%);
+          }
+        }
+        /* Static overflow row: no loop, honest scroll edges (mask lifted). */
+        @media (prefers-reduced-motion: reduce) {
+          .pretui-marquee {
+            overflow-x: auto;
+            -webkit-mask-image: none;
+            mask-image: none;
+          }
+          .pretui-marquee-track {
+            animation: none;
+          }
         }
       }
     </style>

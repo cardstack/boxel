@@ -64,54 +64,56 @@ export class TextRotate extends Component<TextRotateSignature> {
       {{/if}}
     </span>
     <style scoped>
-      .pretui-rotate {
-        display: inline-block;
-      }
-      .pretui-rotate-mask {
-        display: inline-block;
-        overflow: hidden;
-        height: var(--pretui-rotate-line, 1.4em);
-        /* overflow != visible turns the inline-block baseline into its
-           bottom edge; -0.4em reseats the inner baseline (0.2em
-           half-leading + ~0.2em descender) on the surrounding line —
-           empirical, override --pretui-rotate-line to retune */
-        vertical-align: -0.4em;
-      }
-      .pretui-rotate-reel {
-        display: flex;
-        flex-direction: column;
-        animation-name: pretui-rotate-step;
-        animation-iteration-count: infinite;
-        /* duration + steps(N, end) arrive via inline style */
-      }
-      .pretui-rotate-word {
-        height: var(--pretui-rotate-line, 1.4em);
-        line-height: var(--pretui-rotate-line, 1.4em);
-        white-space: nowrap;
-      }
-      @keyframes pretui-rotate-step {
-        from {
-          transform: translateY(0);
+      @layer PretComponent {
+        .pretui-rotate {
+          display: inline-block;
         }
-        to {
-          transform: translateY(
-            calc(
-              var(--pretui-rotate-count, 1) * -1 *
-                var(--pretui-rotate-line, 1.4em)
-            )
-          );
+        .pretui-rotate-mask {
+          display: inline-block;
+          overflow: hidden;
+          height: var(--pretui-rotate-line, 1.4em);
+          /* overflow != visible turns the inline-block baseline into its
+             bottom edge; -0.4em reseats the inner baseline (0.2em
+             half-leading + ~0.2em descender) on the surrounding line —
+             empirical, override --pretui-rotate-line to retune */
+          vertical-align: -0.4em;
         }
-      }
-      .pretui-sr {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        overflow: hidden;
-        clip: rect(0 0 0 0);
-      }
-      @media (prefers-reduced-motion: reduce) {
         .pretui-rotate-reel {
-          animation: none;
+          display: flex;
+          flex-direction: column;
+          animation-name: pretui-rotate-step;
+          animation-iteration-count: infinite;
+          /* duration + steps(N, end) arrive via inline style */
+        }
+        .pretui-rotate-word {
+          height: var(--pretui-rotate-line, 1.4em);
+          line-height: var(--pretui-rotate-line, 1.4em);
+          white-space: nowrap;
+        }
+        @keyframes pretui-rotate-step {
+          from {
+            transform: translateY(0);
+          }
+          to {
+            transform: translateY(
+              calc(
+                var(--pretui-rotate-count, 1) * -1 *
+                  var(--pretui-rotate-line, 1.4em)
+              )
+            );
+          }
+        }
+        .pretui-sr {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          overflow: hidden;
+          clip: rect(0 0 0 0);
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .pretui-rotate-reel {
+            animation: none;
+          }
         }
       }
     </style>

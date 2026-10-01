@@ -47,3 +47,5 @@ Where it is thinner: one light per surface, no multiple or coloured-per-child li
 `--pretui-spotlight-size` (from `@size`), `--pretui-spotlight-hue` (from `@hue`, defaulting to `--primary`), `--pretui-spotlight-strength` (from `@intensity`), `--pretui-spotlight-rest` (the floor), `--pretui-spotlight-radius` and `--pretui-spotlight-surface`, plus the shared pointer channel `--pretui-px` / `--pretui-py` this module's components all write.
 
 Because the hue defaults to `--primary`, a season's accent lights every spotlight in the product without anyone restating it — and because the light composites against the surface rather than replacing it, a dark season gets a correct dark wash from the same token.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

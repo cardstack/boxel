@@ -214,159 +214,163 @@ export class AiInstructions extends Component<AiInstructionsSignature> {
     </section>
 
     <style scoped>
-      .pretui-instr {
-        display: flex;
-        flex-direction: column;
-        gap: var(--space-3, 9px);
-        padding: var(--space-4, 13px);
-        border-radius: var(--radius-surface, 14px);
-        background: var(--card);
-        box-shadow: var(
-          --pretui-shadow-card,
-          0 0 0 1px var(--border),
-          0 1px 2px rgb(0 0 0 / 0.08)
-        );
-        font-size: var(--text-ui-md, 12.5px);
-        container-type: inline-size;
-      }
-      .pretui-instr-head {
-        display: flex;
-        align-items: baseline;
-        gap: 10px;
-      }
-      .pretui-instr-title {
-        margin: 0;
-        flex: 1;
-        min-width: 0;
-        font-size: 13px;
-        font-weight: 600;
-        letter-spacing: -0.01em;
-      }
-      .pretui-instr-count {
-        flex: none;
-        font-size: var(--text-ui-sm, 11.5px);
-        color: var(--ink-3, var(--boxel-400));
-        font-variant-numeric: tabular-nums;
-      }
-      .pretui-instr-desc {
-        margin: 0;
-        max-width: 62ch;
-        font-size: var(--text-ui-sm, 11.5px);
-        line-height: 1.6;
-        color: var(--muted-foreground);
-      }
-      .pretui-instr-list {
-        display: flex;
-        flex-direction: column;
-        gap: 2px;
-        margin: 0;
-        padding: 0;
-        list-style: none;
-      }
-      .pretui-instr-row {
-        display: flex;
-        align-items: flex-start;
-        gap: 10px;
-        min-height: 34px;
-        padding: 7px 8px;
-        border-radius: 8px;
-      }
-      .pretui-instr-row:hover {
-        background: var(--inset, var(--boxel-100));
-      }
-      .pretui-instr-body {
-        flex: 1;
-        min-width: 0;
-        display: flex;
-        flex-direction: column;
-        gap: 2px;
-      }
-      .pretui-instr-text {
-        line-height: 1.5;
-      }
-      .pretui-instr-row[data-off] .pretui-instr-text {
-        color: var(--muted-foreground);
-        text-decoration: line-through;
-        text-decoration-color: var(--ink-3, var(--boxel-400));
-      }
-      .pretui-instr-note {
-        font-size: var(--text-ui-xs, 11px);
-        color: var(--ink-3, var(--boxel-400));
-      }
-      .pretui-instr-off {
-        align-self: flex-start;
-        font-family: var(--font-mono);
-        font-size: 10px;
-        font-weight: 600;
-        letter-spacing: 0.06em;
-        text-transform: uppercase;
-        color: var(--ink-3, var(--boxel-400));
-      }
-      /* a hover-revealed control must also appear on focus-within */
-      .pretui-instr-remove {
-        display: inline-grid;
-        place-items: center;
-        width: 26px;
-        height: 26px;
-        flex: none;
-        padding: 0;
-        border: 0;
-        border-radius: 6px;
-        background: none;
-        color: var(--ink-3, var(--boxel-400));
-        cursor: pointer;
-        opacity: 0;
-        transition: opacity 140ms linear;
-      }
-      .pretui-instr-row:hover .pretui-instr-remove,
-      .pretui-instr-row:focus-within .pretui-instr-remove {
-        opacity: 1;
-      }
-      .pretui-instr-remove:hover {
-        background: var(--hover, var(--boxel-100));
-        color: var(--pretui-destructive-ink, var(--boxel-danger));
-      }
-      .pretui-instr-remove:focus-visible {
-        opacity: 1;
-        outline: 2px solid var(--ring);
-        outline-offset: 1px;
-      }
-      .pretui-instr-remove svg {
-        width: 13px;
-        height: 13px;
-      }
-      .pretui-instr-add {
-        display: flex;
-        align-items: flex-start;
-        gap: 8px;
-      }
-      .pretui-instr-field {
-        flex: 1;
-        min-width: 0;
-      }
-      .pretui-sr {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        overflow: hidden;
-        clip-path: inset(50%);
-        white-space: nowrap;
-      }
-      /* touch never has hover, so the control is simply always there */
-      @media (any-pointer: coarse) {
-        .pretui-instr-remove {
-          opacity: 1;
-          width: 44px;
-          height: 44px;
+      /* above Input's layer, so these win by layer order, not file order */
+      @layer PretComponent, PretComposite;
+      @layer PretComposite {
+        .pretui-instr {
+          display: flex;
+          flex-direction: column;
+          gap: var(--space-3, 9px);
+          padding: var(--space-4, 13px);
+          border-radius: var(--radius-surface, 14px);
+          background: var(--card);
+          box-shadow: var(
+            --pretui-shadow-card,
+            0 0 0 1px var(--border),
+            0 1px 2px rgb(0 0 0 / 0.08)
+          );
+          font-size: var(--text-ui-md, 12.5px);
+          container-type: inline-size;
         }
-      }
-      /* unnamed container query — resolves against .pretui-instr */
-      @container (max-width: 24rem) {
+        .pretui-instr-head {
+          display: flex;
+          align-items: baseline;
+          gap: 10px;
+        }
+        .pretui-instr-title {
+          margin: 0;
+          flex: 1;
+          min-width: 0;
+          font-size: 13px;
+          font-weight: 600;
+          letter-spacing: -0.01em;
+        }
+        .pretui-instr-count {
+          flex: none;
+          font-size: var(--text-ui-sm, 11.5px);
+          color: var(--ink-3, var(--boxel-400));
+          font-variant-numeric: tabular-nums;
+        }
+        .pretui-instr-desc {
+          margin: 0;
+          max-width: 62ch;
+          font-size: var(--text-ui-sm, 11.5px);
+          line-height: 1.6;
+          color: var(--muted-foreground);
+        }
+        .pretui-instr-list {
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+          margin: 0;
+          padding: 0;
+          list-style: none;
+        }
+        .pretui-instr-row {
+          display: flex;
+          align-items: flex-start;
+          gap: 10px;
+          min-height: 34px;
+          padding: 7px 8px;
+          border-radius: 8px;
+        }
+        .pretui-instr-row:hover {
+          background: var(--inset, var(--boxel-100));
+        }
+        .pretui-instr-body {
+          flex: 1;
+          min-width: 0;
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+        }
+        .pretui-instr-text {
+          line-height: 1.5;
+        }
+        .pretui-instr-row[data-off] .pretui-instr-text {
+          color: var(--muted-foreground);
+          text-decoration: line-through;
+          text-decoration-color: var(--ink-3, var(--boxel-400));
+        }
+        .pretui-instr-note {
+          font-size: var(--text-ui-xs, 11px);
+          color: var(--ink-3, var(--boxel-400));
+        }
+        .pretui-instr-off {
+          align-self: flex-start;
+          font-family: var(--font-mono);
+          font-size: 10px;
+          font-weight: 600;
+          letter-spacing: 0.06em;
+          text-transform: uppercase;
+          color: var(--ink-3, var(--boxel-400));
+        }
+        /* a hover-revealed control must also appear on focus-within */
+        .pretui-instr-remove {
+          display: inline-grid;
+          place-items: center;
+          width: 26px;
+          height: 26px;
+          flex: none;
+          padding: 0;
+          border: 0;
+          border-radius: 6px;
+          background: none;
+          color: var(--ink-3, var(--boxel-400));
+          cursor: pointer;
+          opacity: 0;
+          transition: opacity 140ms linear;
+        }
+        .pretui-instr-row:hover .pretui-instr-remove,
+        .pretui-instr-row:focus-within .pretui-instr-remove {
+          opacity: 1;
+        }
+        .pretui-instr-remove:hover {
+          background: var(--hover, var(--boxel-100));
+          color: var(--pretui-destructive-ink, var(--boxel-danger));
+        }
+        .pretui-instr-remove:focus-visible {
+          opacity: 1;
+          outline: 2px solid var(--ring);
+          outline-offset: 1px;
+        }
+        .pretui-instr-remove svg {
+          width: 13px;
+          height: 13px;
+        }
         .pretui-instr-add {
-          flex-wrap: wrap;
+          display: flex;
+          align-items: flex-start;
+          gap: 8px;
         }
         .pretui-instr-field {
-          flex-basis: 100%;
+          flex: 1;
+          min-width: 0;
+        }
+        .pretui-sr {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          overflow: hidden;
+          clip-path: inset(50%);
+          white-space: nowrap;
+        }
+        /* touch never has hover, so the control is simply always there */
+        @media (any-pointer: coarse) {
+          .pretui-instr-remove {
+            opacity: 1;
+            width: 44px;
+            height: 44px;
+          }
+        }
+        /* unnamed container query — resolves against .pretui-instr */
+        @container (max-width: 24rem) {
+          .pretui-instr-add {
+            flex-wrap: wrap;
+          }
+          .pretui-instr-field {
+            flex-basis: 100%;
+          }
         }
       }
     </style>

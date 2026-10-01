@@ -47,6 +47,8 @@ export interface ColorPaletteSignature {
 
 export class ColorPalette extends Component<ColorPaletteSignature> {
   @tracked focusIndex = 0;
+  /** once the arrows move, the tab stop follows them instead of the selection */
+  @tracked navigated = false;
 
   get canonicalValue(): string | null {
     let parsed = parseColor(this.args.value ?? '');
@@ -72,7 +74,8 @@ export class ColorPalette extends Component<ColorPaletteSignature> {
     });
     // The tab stop follows the selection when there is one, so tabbing into
     // a palette lands on the current colour rather than always on the first.
-    let stop = selectedIndex >= 0 ? selectedIndex : this.focusIndex;
+    let stop =
+      selectedIndex >= 0 && !this.navigated ? selectedIndex : this.focusIndex;
     return mapped.map((entry) => ({
       ...entry,
       tabbable: entry.index === stop,
@@ -89,6 +92,7 @@ export class ColorPalette extends Component<ColorPaletteSignature> {
   }
 
   pick = (color: string) => {
+    this.navigated = false;
     this.args.onValueChange?.(color);
   };
 
@@ -99,7 +103,11 @@ export class ColorPalette extends Component<ColorPaletteSignature> {
       return;
     }
     let columns = this.args.columns ?? 8;
-    let current = this.entries.findIndex((entry) => entry.tabbable);
+    let swatch = event.currentTarget as HTMLElement;
+    let swatches = Array.from(
+      swatch.closest('.pretui-palette')?.querySelectorAll('.pretui-swatch') ?? [],
+    );
+    let current = swatches.indexOf(swatch);
     let next = current;
     switch (event.key) {
       case 'ArrowRight':
@@ -125,12 +133,8 @@ export class ColorPalette extends Component<ColorPaletteSignature> {
     }
     event.preventDefault();
     this.focusIndex = clamp(next, 0, count - 1);
-    let target = (event.currentTarget as HTMLElement)
-      ?.closest('.pretui-palette')
-      ?.querySelectorAll('.pretui-swatch')[this.focusIndex] as
-      | HTMLElement
-      | undefined;
-    target?.focus();
+    this.navigated = true;
+    (swatches[this.focusIndex] as HTMLElement | undefined)?.focus();
   };
 
   <template>
@@ -161,30 +165,32 @@ export class ColorPalette extends Component<ColorPaletteSignature> {
       {{/if}}
     </div>
     <style scoped>
-      .pretui-palette-shell {
-        display: flex;
-        flex-direction: column;
-        gap: var(--space-3, 8px);
-      }
-      .pretui-palette {
-        display: grid;
-        grid-template-columns: repeat(
-          var(--pretui-palette-columns, 8),
-          minmax(0, 26px)
-        );
-        gap: var(--space-2, 5px);
-        justify-content: start;
-      }
-      .pretui-palette-after {
-        display: flex;
-        align-items: center;
-        gap: var(--space-2, 5px);
-      }
-      /* unnamed only — a named container query silently deletes every rule
-         after it in this file */
-      @container (max-width: 260px) {
+      @layer PretComponent {
+        .pretui-palette-shell {
+          display: flex;
+          flex-direction: column;
+          gap: var(--space-3, 8px);
+        }
         .pretui-palette {
-          grid-template-columns: repeat(auto-fill, minmax(0, 26px));
+          display: grid;
+          grid-template-columns: repeat(
+            var(--pretui-palette-columns, 8),
+            minmax(0, 26px)
+          );
+          gap: var(--space-2, 5px);
+          justify-content: start;
+        }
+        .pretui-palette-after {
+          display: flex;
+          align-items: center;
+          gap: var(--space-2, 5px);
+        }
+        /* unnamed only — a named container query silently deletes every rule
+           after it in this file */
+        @container (max-width: 260px) {
+          .pretui-palette {
+            grid-template-columns: repeat(auto-fill, minmax(0, 26px));
+          }
         }
       }
     </style>

@@ -42,3 +42,5 @@ Where it is thinner: only cubic-bezier â€” no `linear()`, no springs, no steps â
 The curve and handles take the kit's control and accent tokens; the preview dot uses the accent.
 
 Nothing is separately themeable, which keeps an easing editor looking like the property panel it sits in rather than like an embedded tool.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

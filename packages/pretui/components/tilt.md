@@ -46,3 +46,5 @@ Where it is thinner: no spring or momentum on the return, no gyroscope input on 
 `--pretui-tilt-max` (from `@max`), `--pretui-tilt-perspective` (from `@perspective`), `--pretui-tilt-sign` (from `@reverse`), `--pretui-tilt-radius` and `--pretui-tilt-surface` (the plate), plus `--pretui-shadow-card` at rest and `--pretui-shadow-raised` on engage.
 
 Using the kit's two shared shadow tokens rather than bespoke ones is what makes a tilting card lift to exactly the elevation every other card in the season lifts to. A season that flattens its elevation scale flattens this with it, and the tilt keeps working at whatever depth that leaves.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

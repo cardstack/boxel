@@ -121,106 +121,108 @@ export class JumpChip extends Component<JumpChipSignature> {
     </div>
 
     <style scoped>
-      /* absolute against the caller's positioned scroll frame — stated in the
-         docs because it is the one thing the caller must provide */
-      .pretui-jump {
-        position: absolute;
-        inset-inline: 0;
-        bottom: var(--pretui-jump-offset, 12px);
-        display: flex;
-        justify-content: center;
-        pointer-events: none;
-        z-index: var(--pretui-z-sticky, 10);
-      }
-      .pretui-jump[data-direction='up'] {
-        bottom: auto;
-        top: var(--pretui-jump-offset, 12px);
-      }
-      .pretui-jump-btn {
-        display: inline-flex;
-        align-items: center;
-        gap: 7px;
-        min-height: 30px;
-        padding: 0 13px;
-        border: 0;
-        border-radius: 999px;
-        background: var(--card);
-        box-shadow: var(
-          --pretui-shadow-overlay,
-          0 0 0 1px var(--border),
-          0 8px 28px rgb(0 0 0 / 0.18)
-        );
-        font: inherit;
-        font-size: var(--text-ui-sm, 11.5px);
-        font-weight: 500;
-        color: var(--foreground);
-        cursor: pointer;
-        pointer-events: auto;
-        opacity: 0;
-        transform: translateY(8px) scale(0.96);
-        transition:
-          opacity 180ms ease-out,
-          transform 220ms
-            var(--pretui-ease-enter, cubic-bezier(0.22, 0.61, 0.25, 1));
-      }
-      .pretui-jump[data-visible] .pretui-jump-btn {
-        opacity: 1;
-        transform: none;
-      }
-      /* hidden means hidden: no pointer events, no tab stop, no hit area */
-      .pretui-jump:not([data-visible]) .pretui-jump-btn {
-        pointer-events: none;
-        visibility: hidden;
-        transition:
-          opacity 180ms ease-out,
-          transform 220ms ease-out,
-          visibility 0s linear 220ms;
-      }
-      .pretui-jump-btn:hover {
-        background: var(--hover, var(--boxel-100));
-      }
-      .pretui-jump-btn:focus-visible {
-        outline: 2px solid var(--ring);
-        outline-offset: 2px;
-      }
-      .pretui-jump-btn > svg {
-        width: 13px;
-        height: 13px;
-        flex: none;
-        color: var(--ink-3, var(--boxel-400));
-      }
-      .pretui-jump[data-direction='up'] .pretui-jump-btn > svg {
-        transform: rotate(180deg);
-      }
-      /* news is never colour alone — the count is in the label */
-      .pretui-jump[data-news] .pretui-jump-btn {
-        background: color-mix(
-          in oklch,
-          var(--primary) 12%,
-          var(--card)
-        );
-        box-shadow:
-          0 0 0 1px
-            color-mix(in oklch, var(--primary) 45%, var(--border)),
-          0 8px 28px rgb(0 0 0 / 0.18);
-      }
-      .pretui-jump[data-news] .pretui-jump-btn > svg {
-        color: color-mix(
-          in oklch,
-          var(--foreground) 18%,
-          var(--primary)
-        );
-      }
-      @media (any-pointer: coarse) {
-        .pretui-jump-btn {
-          min-height: 44px;
-          padding: 0 18px;
+      @layer PretComponent {
+        /* absolute against the caller's positioned scroll frame — stated in the
+           docs because it is the one thing the caller must provide */
+        .pretui-jump {
+          position: absolute;
+          inset-inline: 0;
+          bottom: var(--pretui-jump-offset, 12px);
+          display: flex;
+          justify-content: center;
+          pointer-events: none;
+          z-index: var(--pretui-z-sticky, 10);
         }
-      }
-      @media (prefers-reduced-motion: reduce) {
+        .pretui-jump[data-direction='up'] {
+          bottom: auto;
+          top: var(--pretui-jump-offset, 12px);
+        }
         .pretui-jump-btn {
-          transition: none;
+          display: inline-flex;
+          align-items: center;
+          gap: 7px;
+          min-height: 30px;
+          padding: 0 13px;
+          border: 0;
+          border-radius: 999px;
+          background: var(--card);
+          box-shadow: var(
+            --pretui-shadow-overlay,
+            0 0 0 1px var(--border),
+            0 8px 28px rgb(0 0 0 / 0.18)
+          );
+          font: inherit;
+          font-size: var(--text-ui-sm, 11.5px);
+          font-weight: 500;
+          color: var(--foreground);
+          cursor: pointer;
+          pointer-events: auto;
+          opacity: 0;
+          transform: translateY(8px) scale(0.96);
+          transition:
+            opacity 180ms ease-out,
+            transform 220ms
+              var(--pretui-ease-enter, cubic-bezier(0.22, 0.61, 0.25, 1));
+        }
+        .pretui-jump[data-visible] .pretui-jump-btn {
+          opacity: 1;
           transform: none;
+        }
+        /* hidden means hidden: no pointer events, no tab stop, no hit area */
+        .pretui-jump:not([data-visible]) .pretui-jump-btn {
+          pointer-events: none;
+          visibility: hidden;
+          transition:
+            opacity 180ms ease-out,
+            transform 220ms ease-out,
+            visibility 0s linear 220ms;
+        }
+        .pretui-jump-btn:hover {
+          background: var(--hover, var(--boxel-100));
+        }
+        .pretui-jump-btn:focus-visible {
+          outline: 2px solid var(--ring);
+          outline-offset: 2px;
+        }
+        .pretui-jump-btn > svg {
+          width: 13px;
+          height: 13px;
+          flex: none;
+          color: var(--ink-3, var(--boxel-400));
+        }
+        .pretui-jump[data-direction='up'] .pretui-jump-btn > svg {
+          transform: rotate(180deg);
+        }
+        /* news is never colour alone — the count is in the label */
+        .pretui-jump[data-news] .pretui-jump-btn {
+          background: color-mix(
+            in oklch,
+            var(--primary) 12%,
+            var(--card)
+          );
+          box-shadow:
+            0 0 0 1px
+              color-mix(in oklch, var(--primary) 45%, var(--border)),
+            0 8px 28px rgb(0 0 0 / 0.18);
+        }
+        .pretui-jump[data-news] .pretui-jump-btn > svg {
+          color: color-mix(
+            in oklch,
+            var(--foreground) 18%,
+            var(--primary)
+          );
+        }
+        @media (any-pointer: coarse) {
+          .pretui-jump-btn {
+            min-height: 44px;
+            padding: 0 18px;
+          }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .pretui-jump-btn {
+            transition: none;
+            transform: none;
+          }
         }
       }
     </style>

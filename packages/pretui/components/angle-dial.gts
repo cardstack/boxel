@@ -282,82 +282,84 @@ export class AngleDial extends Component<AngleDialSignature> {
       {{/if}}
     </div>
     <style scoped>
-      .pretui-angle {
-        display: flex;
-        align-items: center;
-        gap: var(--space-3, 8px);
-        min-width: 0;
-      }
-      .pretui-angle[data-disabled='true'] {
-        opacity: 0.5;
-      }
-      .pretui-angle-dial {
-        position: relative;
-        flex: none;
-        width: var(--pretui-dial-size, 28px);
-        height: var(--pretui-dial-size, 28px);
-        border-radius: 50%;
-        background: var(--field, var(--boxel-light));
-        box-shadow: 0 0 0 1px var(--input);
-        cursor: grab;
-        touch-action: none;
-      }
-      .pretui-angle-dial[data-dragging] {
-        cursor: grabbing;
-      }
-      .pretui-angle-dial:focus-visible {
-        outline: 2px solid var(--ring);
-        outline-offset: 2px;
-      }
-      /* The hand: one element rotated by a single custom property, so the
-         only thing a season or a value changes is that property. */
-      .pretui-angle-hand {
-        position: absolute;
-        inset: 0;
-        border-radius: inherit;
-        rotate: var(--pretui-dial-angle, 0deg);
-      }
-      .pretui-angle-hand::after {
-        content: '';
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        width: calc(50% - 3px);
-        height: 2px;
-        translate: 0 -50%;
-        transform-origin: 0 50%;
-        border-radius: 1px;
-        background: var(--primary);
-      }
-      .pretui-angle-hand::before {
-        content: '';
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        width: 3px;
-        height: 3px;
-        translate: -50% -50%;
-        border-radius: 50%;
-        background: var(--muted-foreground);
-      }
-      .pretui-angle-field {
-        display: flex;
-        align-items: center;
-        gap: 4px;
-        min-width: 0;
-        flex: 1 1 auto;
-      }
-      .pretui-angle-turns {
-        flex: none;
-        font-family: var(--font-mono);
-        font-size: var(--text-ui-xs, 11px);
-        color: var(--muted-foreground);
-        font-variant-numeric: tabular-nums;
-      }
-      @media (pointer: coarse) {
+      @layer PretComponent {
+        .pretui-angle {
+          display: flex;
+          align-items: center;
+          gap: var(--space-3, 8px);
+          min-width: 0;
+        }
+        .pretui-angle[data-disabled='true'] {
+          opacity: 0.5;
+        }
         .pretui-angle-dial {
-          width: max(var(--pretui-dial-size, 28px), 44px);
-          height: max(var(--pretui-dial-size, 28px), 44px);
+          position: relative;
+          flex: none;
+          width: var(--pretui-dial-size, 28px);
+          height: var(--pretui-dial-size, 28px);
+          border-radius: 50%;
+          background: var(--field, var(--boxel-light));
+          box-shadow: 0 0 0 1px var(--input);
+          cursor: grab;
+          touch-action: none;
+        }
+        .pretui-angle-dial[data-dragging] {
+          cursor: grabbing;
+        }
+        .pretui-angle-dial:focus-visible {
+          outline: 2px solid var(--ring);
+          outline-offset: 2px;
+        }
+        /* The hand: one element rotated by a single custom property, so the
+           only thing a season or a value changes is that property. */
+        .pretui-angle-hand {
+          position: absolute;
+          inset: 0;
+          border-radius: inherit;
+          rotate: var(--pretui-dial-angle, 0deg);
+        }
+        .pretui-angle-hand::after {
+          content: '';
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          width: calc(50% - 3px);
+          height: 2px;
+          translate: 0 -50%;
+          transform-origin: 0 50%;
+          border-radius: 1px;
+          background: var(--primary);
+        }
+        .pretui-angle-hand::before {
+          content: '';
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          width: 3px;
+          height: 3px;
+          translate: -50% -50%;
+          border-radius: 50%;
+          background: var(--muted-foreground);
+        }
+        .pretui-angle-field {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          min-width: 0;
+          flex: 1 1 auto;
+        }
+        .pretui-angle-turns {
+          flex: none;
+          font-family: var(--font-mono);
+          font-size: var(--text-ui-xs, 11px);
+          color: var(--muted-foreground);
+          font-variant-numeric: tabular-nums;
+        }
+        @media (pointer: coarse) {
+          .pretui-angle-dial {
+            width: max(var(--pretui-dial-size, 28px), 44px);
+            height: max(var(--pretui-dial-size, 28px), 44px);
+          }
         }
       }
     </style>

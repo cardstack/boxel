@@ -40,46 +40,48 @@ export class TextShimmer extends Component<TextShimmerSignature> {
       ...attributes
     >{{@text}}</span>
     <style scoped>
-      @keyframes pretui-shimmer-sweep {
-        from {
-          background-position:
-            100% center,
-            0 0;
+      @layer PretComponent {
+        @keyframes pretui-shimmer-sweep {
+          from {
+            background-position:
+              100% center,
+              0 0;
+          }
+          to {
+            background-position:
+              0% center,
+              0 0;
+          }
         }
-        to {
-          background-position:
-            0% center,
-            0 0;
-        }
-      }
-      .pretui-shimmer {
-        display: inline-block;
-        color: transparent;
-        background:
-          linear-gradient(
-            90deg,
-            transparent calc(50% - var(--pretui-shimmer-spread, 32px)),
-            var(--foreground),
-            transparent calc(50% + var(--pretui-shimmer-spread, 32px))
-          ),
-          linear-gradient(
-            var(--muted-foreground),
-            var(--muted-foreground)
-          );
-        background-size:
-          250% 100%,
-          auto;
-        background-repeat: no-repeat, repeat;
-        -webkit-background-clip: text;
-        background-clip: text;
-        animation: pretui-shimmer-sweep var(--pretui-shimmer-duration, 2s)
-          linear infinite;
-      }
-      @media (prefers-reduced-motion: reduce) {
         .pretui-shimmer {
-          animation: none;
-          background: none;
-          color: var(--muted-foreground);
+          display: inline-block;
+          color: transparent;
+          background:
+            linear-gradient(
+              90deg,
+              transparent calc(50% - var(--pretui-shimmer-spread, 32px)),
+              var(--foreground),
+              transparent calc(50% + var(--pretui-shimmer-spread, 32px))
+            ),
+            linear-gradient(
+              var(--muted-foreground),
+              var(--muted-foreground)
+            );
+          background-size:
+            250% 100%,
+            auto;
+          background-repeat: no-repeat, repeat;
+          -webkit-background-clip: text;
+          background-clip: text;
+          animation: pretui-shimmer-sweep var(--pretui-shimmer-duration, 2s)
+            linear infinite;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .pretui-shimmer {
+            animation: none;
+            background: none;
+            color: var(--muted-foreground);
+          }
         }
       }
     </style>

@@ -45,3 +45,5 @@ No pattern governs it, and this is where the design's cleverness costs something
 The verb's 10px size and letterspacing are hard-coded rather than tokenised, which is an inconsistency with the rest of the kit's eyebrow voice (**Label**, **Panel**, **DataGrid** all read `--text-ui-xs` and `--track-eyebrow`). A season retuning the eyebrow scale will move those three and not this one.
 
 The tail inks should recede relative to the verb — the tier hierarchy is carried by ink weight as much as by width, so a season that flattens the ink ramp loses the sense that T2 is *more detail* rather than *more text*.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

@@ -232,6 +232,10 @@ export class OriginGrid extends Component<OriginGridSignature> {
     event.preventDefault();
     // Radio-group convention: moving focus also moves selection.
     this.selectCell(next);
+    let cells = (event.currentTarget as HTMLElement)
+      .closest('.pretui-origin')
+      ?.querySelectorAll<HTMLElement>('.pretui-origin-cell');
+    cells?.[next]?.focus();
   };
 
   handleDrag = (part: SurfaceFrame) => {
@@ -291,7 +295,7 @@ export class OriginGrid extends Component<OriginGridSignature> {
           aria-label={{this.label}}
           aria-describedby={{this.statusId}}
         >
-          {{#each this.cells as |cell|}}
+          {{#each this.cells key='index' as |cell|}}
             <OriginCellButton
               @cell={{cell}}
               @disabled={{@disabled}}
@@ -344,40 +348,42 @@ export class OriginGrid extends Component<OriginGridSignature> {
       {{/if}}
     </div>
     <style scoped>
-      .pretui-origin {
-        display: grid;
-        gap: var(--space-2, 6px);
-        min-width: 0;
-      }
-      .pretui-origin[data-disabled='true'] {
-        opacity: 0.5;
-      }
-      .pretui-origin-pad {
-        position: relative;
-        width: var(--pretui-origin-size, 76px);
-        aspect-ratio: 1 / 1;
-        border-radius: var(--radius);
-        background: var(--field, var(--boxel-light));
-        box-shadow: inset 0 0 0 1px var(--input);
-        touch-action: none;
-      }
-      .pretui-origin-cells {
-        position: absolute;
-        inset: 0;
-        display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        grid-template-rows: repeat(3, 1fr);
-      }
-      .pretui-origin-status {
-        margin: 0;
-        font-size: var(--text-ui-xs, 11px);
-        color: var(--muted-foreground);
-        font-variant-numeric: tabular-nums;
-      }
-      .pretui-origin-fields {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-        gap: var(--space-2, 6px);
+      @layer PretComponent {
+        .pretui-origin {
+          display: grid;
+          gap: var(--space-2, 6px);
+          min-width: 0;
+        }
+        .pretui-origin[data-disabled='true'] {
+          opacity: 0.5;
+        }
+        .pretui-origin-pad {
+          position: relative;
+          width: var(--pretui-origin-size, 76px);
+          aspect-ratio: 1 / 1;
+          border-radius: var(--radius);
+          background: var(--field, var(--boxel-light));
+          box-shadow: inset 0 0 0 1px var(--input);
+          touch-action: none;
+        }
+        .pretui-origin-cells {
+          position: absolute;
+          inset: 0;
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          grid-template-rows: repeat(3, 1fr);
+        }
+        .pretui-origin-status {
+          margin: 0;
+          font-size: var(--text-ui-xs, 11px);
+          color: var(--muted-foreground);
+          font-variant-numeric: tabular-nums;
+        }
+        .pretui-origin-fields {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+          gap: var(--space-2, 6px);
+        }
       }
     </style>
   </template>
@@ -426,51 +432,53 @@ class OriginCellButton extends Component<OriginCellSignature> {
       ...attributes
     ></button>
     <style scoped>
-      /* A role='radio' element has children-presentational semantics, and
-         the realm's require-presentational-children rule rejects any svg or
-         component inside it — so the dot is a pseudo-element. */
-      .pretui-origin-cell {
-        position: relative;
-        padding: 0;
-        border: 0;
-        background: transparent;
-        cursor: pointer;
-      }
-      .pretui-origin-cell::before {
-        content: '';
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        width: 4px;
-        height: 4px;
-        translate: -50% -50%;
-        border-radius: 50%;
-        background: var(--ink-3, var(--boxel-400));
-        transition: scale var(--pretui-dur-snap, 140ms)
-          var(--pretui-ease-snap, ease);
-      }
-      .pretui-origin-cell:hover::before {
-        background: var(--muted-foreground);
-        scale: 1.4;
-      }
-      .pretui-origin-cell[aria-checked='true']::before {
-        width: 9px;
-        height: 9px;
-        background: var(--primary);
-        box-shadow: 0 0 0 2px
-          color-mix(in oklch, var(--primary) 22%, transparent);
-      }
-      .pretui-origin-cell[aria-disabled='true'] {
-        cursor: default;
-      }
-      .pretui-origin-cell:focus-visible {
-        outline: 2px solid var(--ring);
-        outline-offset: -2px;
-        border-radius: var(--radius-sm, 4px);
-      }
-      @media (prefers-reduced-motion: reduce) {
+      @layer PretComponent {
+        /* A role='radio' element has children-presentational semantics, and
+           the realm's require-presentational-children rule rejects any svg or
+           component inside it — so the dot is a pseudo-element. */
+        .pretui-origin-cell {
+          position: relative;
+          padding: 0;
+          border: 0;
+          background: transparent;
+          cursor: pointer;
+        }
         .pretui-origin-cell::before {
-          transition: none;
+          content: '';
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          width: 4px;
+          height: 4px;
+          translate: -50% -50%;
+          border-radius: 50%;
+          background: var(--ink-3, var(--boxel-400));
+          transition: scale var(--pretui-dur-snap, 140ms)
+            var(--pretui-ease-snap, ease);
+        }
+        .pretui-origin-cell:hover::before {
+          background: var(--muted-foreground);
+          scale: 1.4;
+        }
+        .pretui-origin-cell[aria-checked='true']::before {
+          width: 9px;
+          height: 9px;
+          background: var(--primary);
+          box-shadow: 0 0 0 2px
+            color-mix(in oklch, var(--primary) 22%, transparent);
+        }
+        .pretui-origin-cell[aria-disabled='true'] {
+          cursor: default;
+        }
+        .pretui-origin-cell:focus-visible {
+          outline: 2px solid var(--ring);
+          outline-offset: -2px;
+          border-radius: var(--radius-sm, 4px);
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .pretui-origin-cell::before {
+            transition: none;
+          }
         }
       }
     </style>

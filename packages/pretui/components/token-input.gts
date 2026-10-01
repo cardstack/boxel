@@ -51,89 +51,91 @@ class TokenChip extends Component<TokenChipSignature> {
       ><span class='pretui-token-cross' aria-hidden='true'></span></button>
     </li>
     <style scoped>
-      .pretui-token-item {
-        display: inline-flex;
-        align-items: center;
-        gap: 1px;
-        max-width: 100%;
-        height: 20px;
-        padding-inline-start: 7px;
-        border-radius: var(--radius-chip, 6px);
-        background: color-mix(
-          in oklch,
-          var(--primary) 12%,
-          var(--card)
-        );
-        box-shadow: 0 0 0 1px
-          color-mix(in oklch, var(--primary) 32%, var(--border));
-        font-size: var(--text-ui-xs, 11px);
-        letter-spacing: var(--track-ui, 0.01em);
-        color: var(--foreground);
-      }
-      .pretui-token-text {
-        min-width: 0;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-      .pretui-token-remove {
-        flex: none;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        width: 18px;
-        height: 18px;
-        margin-inline-end: 1px;
-        padding: 0;
-        border: 0;
-        border-radius: var(--radius-sm, 5px);
-        background: transparent;
-        color: var(--muted-foreground);
-        cursor: pointer;
-      }
-      .pretui-token-remove:hover {
-        background: var(--hover, rgb(0 0 0 / 0.05));
-        color: var(--foreground);
-      }
-      .pretui-token-remove:focus-visible {
-        outline: 2px solid var(--ring);
-        outline-offset: -1px;
-      }
-      .pretui-token-remove[aria-disabled='true'] {
-        cursor: default;
-        opacity: 0.45;
-      }
-      /* The cross is drawn from two borders rather than an <svg>, so the
-         chip stays legal inside any role a caller wraps the list in. */
-      .pretui-token-cross {
-        position: relative;
-        width: 7px;
-        height: 7px;
-      }
-      .pretui-token-cross::before,
-      .pretui-token-cross::after {
-        content: '';
-        position: absolute;
-        inset-block-start: 3px;
-        inset-inline-start: 0;
-        width: 7px;
-        height: 1.2px;
-        border-radius: 1px;
-        background: currentColor;
-      }
-      .pretui-token-cross::before {
-        transform: rotate(45deg);
-      }
-      .pretui-token-cross::after {
-        transform: rotate(-45deg);
-      }
-      @media (pointer: coarse) {
+      @layer PretComponent {
         .pretui-token-item {
-          height: 28px;
+          display: inline-flex;
+          align-items: center;
+          gap: 1px;
+          max-width: 100%;
+          height: 20px;
+          padding-inline-start: 7px;
+          border-radius: var(--radius-chip, 6px);
+          background: color-mix(
+            in oklch,
+            var(--primary) 12%,
+            var(--card)
+          );
+          box-shadow: 0 0 0 1px
+            color-mix(in oklch, var(--primary) 32%, var(--border));
+          font-size: var(--text-ui-xs, 11px);
+          letter-spacing: var(--track-ui, 0.01em);
+          color: var(--foreground);
+        }
+        .pretui-token-text {
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
         }
         .pretui-token-remove {
-          width: 26px;
-          height: 26px;
+          flex: none;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 18px;
+          height: 18px;
+          margin-inline-end: 1px;
+          padding: 0;
+          border: 0;
+          border-radius: var(--radius-sm, 5px);
+          background: transparent;
+          color: var(--muted-foreground);
+          cursor: pointer;
+        }
+        .pretui-token-remove:hover {
+          background: var(--hover, rgb(0 0 0 / 0.05));
+          color: var(--foreground);
+        }
+        .pretui-token-remove:focus-visible {
+          outline: 2px solid var(--ring);
+          outline-offset: -1px;
+        }
+        .pretui-token-remove[aria-disabled='true'] {
+          cursor: default;
+          opacity: 0.45;
+        }
+        /* The cross is drawn from two borders rather than an <svg>, so the
+           chip stays legal inside any role a caller wraps the list in. */
+        .pretui-token-cross {
+          position: relative;
+          width: 7px;
+          height: 7px;
+        }
+        .pretui-token-cross::before,
+        .pretui-token-cross::after {
+          content: '';
+          position: absolute;
+          inset-block-start: 3px;
+          inset-inline-start: 0;
+          width: 7px;
+          height: 1.2px;
+          border-radius: 1px;
+          background: currentColor;
+        }
+        .pretui-token-cross::before {
+          transform: rotate(45deg);
+        }
+        .pretui-token-cross::after {
+          transform: rotate(-45deg);
+        }
+        @media (pointer: coarse) {
+          .pretui-token-item {
+            height: 28px;
+          }
+          .pretui-token-remove {
+            width: 26px;
+            height: 26px;
+          }
         }
       }
     </style>
@@ -394,84 +396,86 @@ export class TokenInput extends Component<TokenInputSignature> {
       >{{this.status}}</span>
     </div>
     <style scoped>
-      .pretui-tokens {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: 4px;
-        min-width: 0;
-        width: 100%;
-        min-height: var(--control-h, 28px);
-        padding: 3px 5px;
-        border-radius: var(--radius);
-        background: var(--field, var(--boxel-light));
-        box-shadow: 0 0 0 1px var(--input);
-        color: var(--foreground);
-        font-size: var(--text-ui-md, 12.5px);
-      }
-      .pretui-tokens:hover {
-        box-shadow: 0 0 0 1px var(--line-strong, var(--boxel-400));
-      }
-      /* Transparent outline doubles the box-shadow ring for forced-colors —
-         see the identical note on .pretui-scrub above. */
-      .pretui-tokens:has(.pretui-token-entry:focus-visible) {
-        outline: 2px solid transparent;
-        outline-offset: 1px;
-        box-shadow: 0 0 0 2px var(--ring);
-      }
-      .pretui-tokens[data-disabled='true'] {
-        opacity: 0.5;
-      }
-      /* A real <ul> with an explicit role='list': `list-style: none` alone
-         strips list semantics in Safari, and `display: contents` — the
-         other way to get chips and entry on one line — drops the list out
-         of the accessibility tree entirely. Flex keeps both. */
-      .pretui-token-list {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: 4px;
-        flex: 0 1 auto;
-        min-width: 0;
-        margin: 0;
-        padding: 0;
-        list-style: none;
-      }
-      .pretui-token-entry {
-        flex: 1 1 60px;
-        min-width: 60px;
-        height: 20px;
-        border: 0;
-        background: transparent;
-        color: inherit;
-        font: inherit;
-        letter-spacing: var(--track-ui, 0.01em);
-        padding-inline: 3px;
-        outline: none;
-      }
-      .pretui-token-entry::placeholder {
-        color: var(--ink-3, var(--boxel-400));
-        font-family: var(--font-mono);
-        font-size: var(--text-ui-xs, 11px);
-      }
-      .pretui-token-count {
-        flex: none;
-        font-family: var(--font-mono);
-        font-size: var(--text-ui-xs, 11px);
-        color: var(--ink-3, var(--boxel-400));
-        font-variant-numeric: tabular-nums;
-      }
-      .pretui-sr {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        overflow: hidden;
-        clip-path: inset(50%);
-        white-space: nowrap;
-      }
-      @media (pointer: coarse) {
+      @layer PretComponent {
+        .pretui-tokens {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          gap: 4px;
+          min-width: 0;
+          width: 100%;
+          min-height: var(--control-h, 28px);
+          padding: 3px 5px;
+          border-radius: var(--radius);
+          background: var(--field, var(--boxel-light));
+          box-shadow: 0 0 0 1px var(--input);
+          color: var(--foreground);
+          font-size: var(--text-ui-md, 12.5px);
+        }
+        .pretui-tokens:hover {
+          box-shadow: 0 0 0 1px var(--line-strong, var(--boxel-400));
+        }
+        /* Transparent outline doubles the box-shadow ring for forced-colors —
+           see the identical note on .pretui-scrub above. */
+        .pretui-tokens:has(.pretui-token-entry:focus-visible) {
+          outline: 2px solid transparent;
+          outline-offset: 1px;
+          box-shadow: 0 0 0 2px var(--ring);
+        }
+        .pretui-tokens[data-disabled='true'] {
+          opacity: 0.5;
+        }
+        /* A real <ul> with an explicit role='list': `list-style: none` alone
+           strips list semantics in Safari, and `display: contents` — the
+           other way to get chips and entry on one line — drops the list out
+           of the accessibility tree entirely. Flex keeps both. */
+        .pretui-token-list {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          gap: 4px;
+          flex: 0 1 auto;
+          min-width: 0;
+          margin: 0;
+          padding: 0;
+          list-style: none;
+        }
         .pretui-token-entry {
-          height: 28px;
+          flex: 1 1 60px;
+          min-width: 60px;
+          height: 20px;
+          border: 0;
+          background: transparent;
+          color: inherit;
+          font: inherit;
+          letter-spacing: var(--track-ui, 0.01em);
+          padding-inline: 3px;
+          outline: none;
+        }
+        .pretui-token-entry::placeholder {
+          color: var(--ink-3, var(--boxel-400));
+          font-family: var(--font-mono);
+          font-size: var(--text-ui-xs, 11px);
+        }
+        .pretui-token-count {
+          flex: none;
+          font-family: var(--font-mono);
+          font-size: var(--text-ui-xs, 11px);
+          color: var(--ink-3, var(--boxel-400));
+          font-variant-numeric: tabular-nums;
+        }
+        .pretui-sr {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          overflow: hidden;
+          clip-path: inset(50%);
+          white-space: nowrap;
+        }
+        @media (pointer: coarse) {
+          .pretui-token-entry {
+            height: 28px;
+          }
         }
       }
     </style>

@@ -1,8 +1,6 @@
-// Pretui — Spotlight unit tests. Imports from ../motion-pointer; when Spotlight moves to its
-// own file only the import path changes.
+// Pretui — Spotlight unit tests.
 //
-// Local-only test file, kept off the realm by `.boxelignore` (`*.test.gts`);
-// run with `boxel test`. No assertion touches a computed style: the
+// Run with `boxel test`; deployment leaves `*.test.gts` off the realm. No assertion touches a computed style: the
 // component's own `<style scoped>` is inert in this harness (the scoped-css
 // attribute is stamped, the rules are not applied) — so motion is asserted
 // as the custom properties and structure the CSS animates from, never as
@@ -36,6 +34,6 @@ module('Pretui | components/spotlight', function (hooks) {
 
     await render(<template><Spotlight @intensity={{9}} @hue='url(javascript:0)'>x</Spotlight></template>);
     assert.strictEqual(prop('--pretui-spotlight-strength'), '100%', 'intensity clamps to 1');
-    assert.strictEqual(prop('--pretui-spotlight-hue'), '', 'the hue is dropped whole (numeric args are not guarded — see the KNOWN GAP in magnetic.test.gts)');
+    assert.strictEqual(prop('--pretui-spotlight-hue'), '', 'the hue is dropped whole');
   });
 });

@@ -1,10 +1,9 @@
-// Pretui — Composer unit tests. Imports from ../agentic-chat; when Composer moves to its
-// own file only the import path changes.
+// Pretui — Composer unit tests.
 //
-// Local-only test file, kept off the realm by `.boxelignore` (`*.test.gts`);
-// run with `boxel test`. No assertion touches a computed style: the
-// component's own `<style scoped>` is inert in this harness (the scoped-css
-// attribute is stamped, the rules are not applied).
+// Run with `boxel test`; deployment leaves `*.test.gts` off the realm.
+// No assertion touches a computed style: the component's own `<style scoped>`
+// is inert in this harness (the scoped-css attribute is stamped, the rules
+// are not applied).
 import { module, test } from 'qunit';
 import { render, click, fillIn, triggerKeyEvent } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
@@ -158,25 +157,12 @@ module('Pretui | components/composer', function (hooks) {
     assert.true(modeRadios()[1]?.checked);
     await fillIn(field(), 'typed');
     assert.deepEqual(inputs, ['typed'], 'the owner is told');
-    // KNOWN GAP: `value={{this.value}}` is a property binding, and in
-    // controlled mode the getter does not change on a keystroke — so nothing
-    // re-renders and the textarea keeps what the user typed, disagreeing with
-    // @value. Same mechanism as RadioGroup/SegmentedControl. The grow-sizer
-    // reads the same getter, so the field's height is computed from the stale
-    // string too; and the controlled @mode radios drift the same way (pinned
-    // below). Pinned so the day this is fixed the expectations fail and get
-    // flipped.
-    assert.strictEqual(field().value, 'typed', 'KNOWN GAP: the DOM drifted away from @value');
-    assert.strictEqual(
-      (root().querySelector('.pretui-composer-grow') as HTMLElement).dataset['value'],
-      'held ',
-      'the sizer still holds @value, so the textarea is sized for a string it no longer shows',
-    );
+    assert.strictEqual(field().value, 'held', 'the field shows @value until the owner moves it');
     const ignoreMode = () => {};
     await render(<template><Composer @mode='ask' @onModeChange={{ignoreMode}} /></template>);
     await click(modeRadios()[1] as HTMLElement);
-    assert.deepEqual(modeRadios().map((r) => r.checked), [false, true], 'KNOWN GAP: the mode radio drifted away from @mode');
-    assert.true(hint()?.startsWith('Ask'), 'while the hint still describes the owner-held mode');
+    assert.deepEqual(modeRadios().map((r) => r.checked), [true, false], 'the mode radio stays on @mode');
+    assert.true(hint()?.startsWith('Ask'), 'and the hint describes it');
 
     await render(<template><Composer @disabled={{true}} @defaultValue='x' @rows={{4}} @label='Ask the concierge' @sendLabel='Go' /></template>);
     assert.true(field().disabled);
@@ -184,6 +170,27 @@ module('Pretui | components/composer', function (hooks) {
     assert.strictEqual(field().rows, 4);
     assert.strictEqual(field().getAttribute('aria-label'), 'Ask the concierge');
     assert.strictEqual(send()?.textContent?.trim(), 'Go');
+  });
+
+  test('disabled reaches every action: attachments, modes, Stop and the tools block', async function (assert) {
+    const ATTACHMENTS: ComposerAttachment[] = [
+      { id: 'a', label: 'Account', auto: true },
+      { id: 'b', label: 'Brief' },
+    ];
+    let calls = 0;
+    const count = () => calls++;
+    await render(<template>
+      <Composer @disabled={{true}} @busy={{true}} @attachments={{ATTACHMENTS}} @onPin={{count}} @onRemove={{count}} @onStop={{count}}>
+        <:tools as |disabled|><button type='button' disabled={{disabled}} data-test-tool>Model</button></:tools>
+      </Composer>
+    </template>);
+    let acts = Array.from(root().querySelectorAll('.pretui-attach-act')) as HTMLButtonElement[];
+    assert.strictEqual(acts.length, 2);
+    assert.true(acts.every((b) => b.disabled), 'Pin and Remove are disabled');
+    assert.true(modeRadios().every((r) => r.disabled), 'so is the mode switch');
+    assert.true((root().querySelector('[data-test-pretui-composer-stop]') as HTMLButtonElement).disabled, 'and Stop');
+    assert.true((root().querySelector('[data-test-tool]') as HTMLButtonElement).disabled, 'and the tools block follows the yielded state');
+    assert.strictEqual(calls, 0);
   });
 
   test('renders the tools block in the action bar', async function (assert) {

@@ -35,7 +35,7 @@ export interface SwatchSignature {
      *  chip with no button semantics. */
     onSelect?: (color: string) => void;
   };
-  Element: HTMLButtonElement;
+  Element: HTMLElement;
 }
 
 export class Swatch extends Component<SwatchSignature> {
@@ -57,6 +57,7 @@ export class Swatch extends Component<SwatchSignature> {
     this.args.onSelect?.(this.args.color);
   };
   <template>
+    {{#if @onSelect}}
     <button
       type='button'
       class='pretui-swatch'
@@ -74,41 +75,66 @@ export class Swatch extends Component<SwatchSignature> {
       <SwatchChip @color={{@color}} @shape={{@shape}} @size={{@size}} />
       {{#if @label}}<span class='pretui-swatch-label'>{{@label}}</span>{{/if}}
     </button>
+    {{else}}
+    <span
+      class='pretui-swatch'
+      data-shape={{if @shape @shape 'round'}}
+      data-state={{if @selected 'selected'}}
+      data-empty={{unless this.parsed 'true'}}
+      title={{this.title}}
+      data-test-pretui-swatch={{@color}}
+      ...attributes
+    >
+      {{#if @label}}
+        <SwatchChip @color={{@color}} @shape={{@shape}} @size={{@size}} aria-hidden='true' />
+        <span class='pretui-swatch-label'>{{@label}}</span>
+      {{else}}
+        <SwatchChip @color={{@color}} @shape={{@shape}} @size={{@size}} role='img' aria-label={{this.accessibleName}} />
+      {{/if}}
+    </span>
+    {{/if}}
     <style scoped>
-      .pretui-swatch {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        border: 0;
-        background: none;
-        padding: 2px;
-        border-radius: 999px;
-        font: inherit;
-        font-size: var(--text-ui, 12px);
-        color: var(--muted-foreground);
-        cursor: pointer;
-      }
-      .pretui-swatch[disabled] {
-        cursor: not-allowed;
-        opacity: 0.5;
-      }
-      .pretui-swatch:hover:not([disabled]) .pretui-swatch-chip {
-        transform: scale(1.1);
-      }
-      .pretui-swatch:focus-visible {
-        outline: 2px solid var(--ring);
-        outline-offset: 2px;
-      }
-      .pretui-swatch[data-state='selected'] .pretui-swatch-chip {
-        box-shadow:
-          inset 0 0 0 1px
-            color-mix(in oklch, var(--foreground) 14%, transparent),
-          0 0 0 2px var(--card),
-          0 0 0 3.5px var(--primary);
-      }
-      .pretui-swatch[data-state='selected'] .pretui-swatch-label {
-        color: var(--foreground);
-        font-weight: 500;
+      /* above SwatchChip's layer, so these win by layer order, not file order */
+      @layer PretComponent, PretComposite;
+      @layer PretComposite {
+        .pretui-swatch {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          border: 0;
+          background: none;
+          padding: 2px;
+          border-radius: 999px;
+          font: inherit;
+          font-size: var(--text-ui, 12px);
+          color: var(--muted-foreground);
+          cursor: pointer;
+        }
+        .pretui-swatch[disabled] {
+          cursor: not-allowed;
+          opacity: 0.5;
+        }
+        span.pretui-swatch {
+          cursor: default;
+        }
+        button.pretui-swatch:hover:not([disabled]) .pretui-swatch-chip {
+          transform: scale(1.1);
+        }
+        .pretui-swatch:focus-visible {
+          outline: 2px solid var(--ring);
+          outline-offset: 2px;
+        }
+        .pretui-swatch[data-state='selected'] .pretui-swatch-chip {
+          box-shadow:
+            inset 0 0 0 1px
+              color-mix(in oklch, var(--foreground) 14%, transparent),
+            0 0 0 2px var(--card),
+            0 0 0 3.5px var(--primary);
+        }
+        .pretui-swatch[data-state='selected'] .pretui-swatch-label {
+          color: var(--foreground);
+          font-weight: 500;
+        }
       }
     </style>
   </template>

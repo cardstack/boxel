@@ -38,3 +38,5 @@ Where it is thinner, and honestly so: **two noise glyphs per character is not th
 `--pretui-scramble-window` (the per-character resolve window) and `--pretui-scr-delay` (each character's staggered start), both derived from `@duration` and the string's length.
 
 There is no colour token: the noise and the message are the same ink, inherited from context. That is what makes the resolve read as one piece of text changing rather than as two layers crossfading — and it means a season needs to do nothing for this component to fit.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

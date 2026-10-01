@@ -45,42 +45,44 @@ export class DiffBlock extends Component<DiffBlockSignature> {
       {{#if @receipt}}<div class='pretui-diff-receipt'>{{@receipt}}</div>{{/if}}
     </div>
     <style scoped>
-      .pretui-diff {
-        font-family: var(--font-mono);
-        font-size: var(--text-ui-sm, 11.5px);
-        line-height: 1.7;
-        background: var(--inset, var(--boxel-100));
-        border-radius: 8px;
-        box-shadow: var(--pretui-shadow-hairline, 0 0 0 1px var(--border));
-        overflow: hidden;
-      }
-      .pretui-diff-line {
-        padding: 0 10px;
-        white-space: pre;
-      }
-      .pretui-diff-line[data-op='add'] {
-        background: color-mix(in oklch, var(--success, var(--boxel-success)) 12%, transparent);
-        color: color-mix(in oklch, var(--foreground) 30%, var(--success, var(--boxel-success)));
-      }
-      .pretui-diff-line[data-op='del'] {
-        background: color-mix(in oklch, var(--destructive) 10%, transparent);
-        color: color-mix(in oklch, var(--foreground) 30%, var(--destructive));
-      }
-      .pretui-diff-toggle {
-        display: block;
-        width: 100%;
-        text-align: left;
-        border: 0;
-        background: none;
-        font: inherit;
-        color: var(--pretui-primary-ink, var(--primary));
-        cursor: pointer;
-      }
-      .pretui-diff-receipt {
-        padding: 5px 10px;
-        font-size: 10.5px;
-        color: var(--ink-3, var(--boxel-400));
-        box-shadow: 0 -1px 0 var(--border);
+      @layer PretComponent {
+        .pretui-diff {
+          font-family: var(--font-mono);
+          font-size: var(--text-ui-sm, 11.5px);
+          line-height: 1.7;
+          background: var(--inset, var(--boxel-100));
+          border-radius: 8px;
+          box-shadow: var(--pretui-shadow-hairline, 0 0 0 1px var(--border));
+          overflow: hidden;
+        }
+        .pretui-diff-line {
+          padding: 0 10px;
+          white-space: pre;
+        }
+        .pretui-diff-line[data-op='add'] {
+          background: color-mix(in oklch, var(--success, var(--boxel-success)) 12%, transparent);
+          color: color-mix(in oklch, var(--foreground) 30%, var(--success, var(--boxel-success)));
+        }
+        .pretui-diff-line[data-op='del'] {
+          background: color-mix(in oklch, var(--destructive) 10%, transparent);
+          color: color-mix(in oklch, var(--foreground) 30%, var(--destructive));
+        }
+        .pretui-diff-toggle {
+          display: block;
+          width: 100%;
+          text-align: left;
+          border: 0;
+          background: none;
+          font: inherit;
+          color: var(--pretui-primary-ink, var(--primary));
+          cursor: pointer;
+        }
+        .pretui-diff-receipt {
+          padding: 5px 10px;
+          font-size: 10.5px;
+          color: var(--ink-3, var(--boxel-400));
+          box-shadow: 0 -1px 0 var(--border);
+        }
       }
     </style>
   </template>

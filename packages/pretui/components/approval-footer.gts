@@ -43,24 +43,26 @@ export class ApprovalFooter extends Component<ApprovalFooterSignature> {
       </span>
     </div>
     <style scoped>
-      .pretui-approval {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 10px;
-        padding: 8px 11px;
-        border-radius: 0 0 10px 10px;
-        box-shadow: 0 -1px 0 var(--border);
-        background: color-mix(in oklch, var(--pretui-attention, var(--boxel-fuschia)) 7%, var(--card));
-      }
-      .pretui-approval-msg {
-        font-size: var(--text-ui, 12px);
-        color: var(--foreground);
-        font-weight: 500;
-      }
-      .pretui-approval-actions {
-        display: flex;
-        gap: 7px;
+      @layer PretComponent {
+        .pretui-approval {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          padding: 8px 11px;
+          border-radius: 0 0 10px 10px;
+          box-shadow: 0 -1px 0 var(--border);
+          background: color-mix(in oklch, var(--pretui-attention, var(--boxel-fuschia)) 7%, var(--card));
+        }
+        .pretui-approval-msg {
+          font-size: var(--text-ui, 12px);
+          color: var(--foreground);
+          font-weight: 500;
+        }
+        .pretui-approval-actions {
+          display: flex;
+          gap: 7px;
+        }
       }
     </style>
   </template>

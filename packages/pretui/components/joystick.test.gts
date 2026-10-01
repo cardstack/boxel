@@ -1,10 +1,9 @@
-// Pretui — Joystick unit tests. Imports from ../design-spatial; when Joystick moves to its
-// own file only the import path changes.
+// Pretui — Joystick unit tests.
 //
-// Local-only test file, kept off the realm by `.boxelignore` (`*.test.gts`);
-// run with `boxel test`. No assertion touches a computed style: the
-// component's own `<style scoped>` is inert in this harness (the scoped-css
-// attribute is stamped, the rules are not applied).
+// Run with `boxel test`; deployment leaves `*.test.gts` off the realm.
+// No assertion touches a computed style: the component's own `<style scoped>`
+// is inert in this harness (the scoped-css attribute is stamped, the rules
+// are not applied).
 import { module, test } from 'qunit';
 import { render, click, triggerKeyEvent } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
@@ -58,30 +57,18 @@ module('Pretui | components/joystick', function (hooks) {
     await triggerKeyEvent(handle(), 'keydown', 'Home');
     await triggerKeyEvent(handle(), 'keydown', 'End');
     await click(root().querySelector('[data-test-pretui-joystick-reset]') as HTMLElement);
-    // KNOWN GAP: Joystick passes @step to Handle; `keyboardNudge` (a module
-    // export in design-tools.gts, called by Handle) already scales dx/dy by
-    // it, then `Joystick.handleNudge` in design-spatial.gts multiplies by
-    // step again — so a step of 5 moves 25. The fix belongs in handleNudge
-    // (drop the second multiply); a matching note sits there. Pinned at the
-    // current behaviour; when fixed, expect
-    // [{45,60},{45,55},{0,55},{100,55},{40,60}]. The 0–100 clamp in `commit`
-    // is what hides the worst case — see the modifier test below.
-    assert.deepEqual(seen, [{ x: 65, y: 60 }, { x: 65, y: 35 }, { x: 0, y: 35 }, { x: 100, y: 35 }, { x: 40, y: 60 }]);
+    assert.deepEqual(seen, [{ x: 45, y: 60 }, { x: 45, y: 55 }, { x: 0, y: 55 }, { x: 100, y: 55 }, { x: 40, y: 60 }]);
     assert.strictEqual(handle().getAttribute('aria-label'), 'Position, 40%, 60%');
   });
 
-  test('KNOWN GAP: with a step, one modified press crosses the whole pad', async function (assert) {
-    // Same double-scaling: Shift is ×10 on top of step 5, then ×5 again =
-    // 250, clamped to 100 — one press from x=40 lands on the far edge. Alt is
-    // ÷10: 0.5 × 5 = 2.5 where 0.5 is intended. When fixed, expect
-    // [{90,60},{90,59.5}].
+  test('a modifier scales the step once: Shift moves ten steps, Alt a tenth', async function (assert) {
     let seen: { x: number; y: number }[] = [];
     let onChange = (p: { x: number; y: number }) => seen.push(p);
     const ORIGIN = { x: 40, y: 60 };
     await render(<template><Joystick @defaultValue={{ORIGIN}} @step={{5}} @onChange={{onChange}} /></template>);
     await triggerKeyEvent(handle(), 'keydown', 'ArrowRight', { shiftKey: true });
     await triggerKeyEvent(handle(), 'keydown', 'ArrowUp', { altKey: true });
-    assert.deepEqual(seen, [{ x: 100, y: 60 }, { x: 100, y: 57.5 }], 'KNOWN GAP: Shift crosses the pad, Alt moves 2.5');
+    assert.deepEqual(seen, [{ x: 90, y: 60 }, { x: 90, y: 59.5 }]);
   });
 
   test('fields can be hidden and disabled ignores the keyboard', async function (assert) {
@@ -89,8 +76,19 @@ module('Pretui | components/joystick', function (hooks) {
     let onChange = () => changes++;
     await render(<template><Joystick @fields={{false}} @disabled={{true}} @onChange={{onChange}} /></template>);
     assert.strictEqual(root().querySelector('[role="spinbutton"]'), null);
-    assert.strictEqual(root().dataset['disabled'], 'true', 'the wrapper is dimmed; the controls inside carry the state');
+    assert.strictEqual(root().dataset['disabled'], 'true', 'the wrapper is dimmed');
     await triggerKeyEvent(handle(), 'keydown', 'ArrowRight');
+    assert.strictEqual(changes, 0);
+  });
+
+  test('Reset is announced as disabled and does nothing on a disabled Joystick', async function (assert) {
+    let changes = 0;
+    let onChange = () => changes++;
+    const AT = { x: 10, y: 10 };
+    await render(<template><Joystick @defaultValue={{AT}} @disabled={{true}} @onChange={{onChange}} /></template>);
+    let reset = root().querySelector('[data-test-pretui-joystick-reset]') as HTMLElement;
+    assert.strictEqual(reset.getAttribute('aria-disabled'), 'true');
+    await click(reset);
     assert.strictEqual(changes, 0);
   });
 });

@@ -108,83 +108,85 @@ export class Tilt extends Component<TiltSignature> {
       </div>
     </div>
     <style scoped>
-      .pretui-tilt {
-        display: inline-block;
-        perspective: var(--pretui-tilt-perspective, 900px);
-      }
-      .pretui-tilt-plate {
-        position: relative;
-        overflow: hidden;
-        transform-style: preserve-3d;
-        border-radius: var(--pretui-tilt-radius, var(--radius));
-        transform: rotateX(
-            calc(
-              -2deg * var(--pretui-ny, 0) * var(--pretui-tilt-sign, 1) *
-                var(--pretui-tilt-max, 8)
+      @layer PretComponent {
+        .pretui-tilt {
+          display: inline-block;
+          perspective: var(--pretui-tilt-perspective, 900px);
+        }
+        .pretui-tilt-plate {
+          position: relative;
+          overflow: hidden;
+          transform-style: preserve-3d;
+          border-radius: var(--pretui-tilt-radius, var(--radius));
+          transform: rotateX(
+              calc(
+                -2deg * var(--pretui-ny, 0) * var(--pretui-tilt-sign, 1) *
+                  var(--pretui-tilt-max, 8)
+              )
             )
-          )
-          rotateY(
-            calc(
-              2deg * var(--pretui-nx, 0) * var(--pretui-tilt-sign, 1) *
-                var(--pretui-tilt-max, 8)
-            )
+            rotateY(
+              calc(
+                2deg * var(--pretui-nx, 0) * var(--pretui-tilt-sign, 1) *
+                  var(--pretui-tilt-max, 8)
+              )
+            );
+          transition:
+            transform 220ms cubic-bezier(0.22, 1, 0.36, 1),
+            box-shadow 220ms ease-out,
+            scale 140ms ease-out;
+          will-change: transform;
+        }
+        .pretui-tilt[data-plate='true'] .pretui-tilt-plate {
+          background: var(--pretui-tilt-surface, var(--card));
+          box-shadow: var(
+            --pretui-shadow-card,
+            0 0 0 1px var(--border),
+            0 1px 3px rgb(16 24 40 / 0.06)
           );
-        transition:
-          transform 220ms cubic-bezier(0.22, 1, 0.36, 1),
-          box-shadow 220ms ease-out,
-          scale 140ms ease-out;
-        will-change: transform;
-      }
-      .pretui-tilt[data-plate='true'] .pretui-tilt-plate {
-        background: var(--pretui-tilt-surface, var(--card));
-        box-shadow: var(
-          --pretui-shadow-card,
-          0 0 0 1px var(--border),
-          0 1px 3px rgb(16 24 40 / 0.06)
-        );
-      }
-      .pretui-tilt[data-plate='true'][data-pretui-pointer='fine']
-        .pretui-tilt-plate,
-      .pretui-tilt[data-plate='true'][data-pretui-pointer='focus']
-        .pretui-tilt-plate {
-        box-shadow: var(
-          --pretui-shadow-raised,
-          0 0 0 1px var(--border),
-          0 2px 10px rgb(16 24 40 / 0.12)
-        );
-      }
-      .pretui-tilt[data-press='true']:active .pretui-tilt-plate {
-        scale: 0.985;
-      }
-      /* a fingertip cannot see a 3D lean, and the drift reads as a bug */
-      .pretui-tilt[data-pretui-pointer='coarse'] .pretui-tilt-plate {
-        transform: none;
-      }
-      .pretui-tilt-glare {
-        position: absolute;
-        top: -30%;
-        left: -30%;
-        width: 160%;
-        height: 160%;
-        pointer-events: none;
-        background: radial-gradient(
-          circle at center,
-          color-mix(in oklch, var(--foreground) 4%, transparent) 0%,
-          transparent 58%
-        );
-        translate: calc(var(--pretui-nx, 0) * 46%)
-          calc(var(--pretui-ny, 0) * 46%);
-        transition: translate 220ms cubic-bezier(0.22, 1, 0.36, 1);
-      }
-      /* end state under reduced motion: a flat, elevated plate — the
-         resting state, not a frozen mid-tilt */
-      @media (prefers-reduced-motion: reduce) {
-        .pretui-tilt-plate {
+        }
+        .pretui-tilt[data-plate='true'][data-pretui-pointer='fine']
+          .pretui-tilt-plate,
+        .pretui-tilt[data-plate='true'][data-pretui-pointer='focus']
+          .pretui-tilt-plate {
+          box-shadow: var(
+            --pretui-shadow-raised,
+            0 0 0 1px var(--border),
+            0 2px 10px rgb(16 24 40 / 0.12)
+          );
+        }
+        .pretui-tilt[data-press='true']:active .pretui-tilt-plate {
+          scale: 0.985;
+        }
+        /* a fingertip cannot see a 3D lean, and the drift reads as a bug */
+        .pretui-tilt[data-pretui-pointer='coarse'] .pretui-tilt-plate {
           transform: none;
-          transition: box-shadow 220ms ease-out;
         }
         .pretui-tilt-glare {
-          display: none;
+          position: absolute;
+          top: -30%;
+          left: -30%;
+          width: 160%;
+          height: 160%;
+          pointer-events: none;
+          background: radial-gradient(
+            circle at center,
+            color-mix(in oklch, var(--foreground) 4%, transparent) 0%,
+            transparent 58%
+          );
+          translate: calc(var(--pretui-nx, 0) * 46%)
+            calc(var(--pretui-ny, 0) * 46%);
+          transition: translate 220ms cubic-bezier(0.22, 1, 0.36, 1);
+        }
+        /* end state under reduced motion: a flat, elevated plate — the
+           resting state, not a frozen mid-tilt */
+        @media (prefers-reduced-motion: reduce) {
+          .pretui-tilt-plate {
+            transform: none;
+            transition: box-shadow 220ms ease-out;
+          }
+          .pretui-tilt-glare {
+            display: none;
+          }
         }
       }
     </style>

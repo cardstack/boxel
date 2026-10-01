@@ -44,3 +44,5 @@ Where it is thinner: no time estimate, no per-step failure state — a step that
 Everything comes from **StepList** and the kit's block tokens; the component adds no surface.
 
 That keeps a warmup screen looking like the application it is warming up rather than like a splash screen, which matters because it is the first thing anyone sees.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

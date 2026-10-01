@@ -183,157 +183,159 @@ export class InteractiveInput extends Component<InteractiveInputSignature> {
     </div>
 
     <style scoped>
-      .pretui-iinput {
-        display: flex;
-        flex-direction: column;
-        gap: var(--space-3, 8px);
-        padding: var(--space-3, 9px) var(--space-4, 11px);
-        border-radius: 10px;
-        background: linear-gradient(
-          180deg,
-          color-mix(
-            in oklch,
-            var(--pretui-attention, var(--boxel-fuschia)) 7%,
-            var(--card)
-          ),
-          var(--card) 55%
-        );
-        box-shadow:
-          0 0 0 1px
+      @layer PretComponent {
+        .pretui-iinput {
+          display: flex;
+          flex-direction: column;
+          gap: var(--space-3, 8px);
+          padding: var(--space-3, 9px) var(--space-4, 11px);
+          border-radius: 10px;
+          background: linear-gradient(
+            180deg,
             color-mix(
               in oklch,
-              var(--pretui-attention, var(--boxel-fuschia)) 55%,
-              var(--border)
+              var(--pretui-attention, var(--boxel-fuschia)) 7%,
+              var(--card)
             ),
-          0 2px 10px
-            color-mix(
-              in oklch,
-              var(--pretui-attention, var(--boxel-fuschia)) 12%,
-              transparent
-            );
-        font-size: var(--text-ui-md, 12.5px);
-      }
-      /* settled: the attention hue is reserved for "a human must act now",
-         so an answered block gives it back */
-      .pretui-iinput[data-answered] {
-        background: var(--card);
-        box-shadow: var(
-          --pretui-shadow-hairline,
-          0 0 0 1px var(--border)
-        );
-      }
-      .pretui-iinput-head {
-        display: flex;
-        align-items: baseline;
-        gap: 8px;
-        flex-wrap: wrap;
-      }
-      .pretui-iinput-verb {
-        font-family: var(--font-mono);
-        font-size: 10px;
-        font-weight: 600;
-        letter-spacing: 0.06em;
-        color: var(--pretui-attention-ink, var(--pretui-attention, var(--boxel-fuschia)));
-        flex: none;
-      }
-      .pretui-iinput[data-answered] .pretui-iinput-verb {
-        color: var(--muted-foreground);
-      }
-      .pretui-iinput-prompt {
-        font-weight: 600;
-        min-width: 0;
-      }
-      .pretui-iinput-settled {
-        margin-left: auto;
-        font-size: var(--text-ui-sm, 11.5px);
-        color: var(--muted-foreground);
-      }
-      .pretui-iinput-detail {
-        margin: 0;
-        max-width: 62ch;
-        font-size: var(--text-ui-sm, 11.5px);
-        line-height: 1.6;
-        color: var(--muted-foreground);
-      }
-      .pretui-iinput-set {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 6px;
-        margin: 0;
-        padding: 0;
-        border: 0;
-        min-inline-size: 0;
-      }
-      .pretui-iinput-opt {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        min-height: 30px;
-        padding: 0 10px;
-        border-radius: 999px;
-        background: var(--card);
-        box-shadow: var(
-          --pretui-shadow-hairline,
-          0 0 0 1px var(--border)
-        );
-        font-size: var(--text-ui-sm, 11.5px);
-        cursor: pointer;
-      }
-      .pretui-iinput-set:disabled .pretui-iinput-opt {
-        cursor: default;
-        opacity: 0.75;
-      }
-      .pretui-iinput-opt input {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        opacity: 0;
-        pointer-events: none;
-      }
-      .pretui-iinput-swatch {
-        width: 12px;
-        height: 12px;
-        border-radius: 4px;
-        flex: none;
-        background: var(--pretui-swatch, var(--muted-foreground));
-        box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.18);
-      }
-      /* selection is never colour alone — the checked pill also gains weight
-         and a ring, so it survives greyscale */
-      .pretui-iinput-opt:has(input:checked) {
-        font-weight: 600;
-        background: color-mix(
-          in oklch,
-          var(--primary) 10%,
-          var(--card)
-        );
-        box-shadow:
-          0 0 0 1px
-            color-mix(in oklch, var(--primary) 55%, var(--border)),
-          inset 0 0 0 1px
-            color-mix(in oklch, var(--primary) 20%, transparent);
-      }
-      .pretui-iinput-opt:has(input:focus-visible) {
-        outline: 2px solid var(--ring);
-        outline-offset: 2px;
-      }
-      .pretui-iinput-foot {
-        display: flex;
-        justify-content: flex-end;
-      }
-      .pretui-sr {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        overflow: hidden;
-        clip-path: inset(50%);
-        white-space: nowrap;
-      }
-      /* coarse pointers get a 44px hit target without changing the fine one */
-      @media (any-pointer: coarse) {
+            var(--card) 55%
+          );
+          box-shadow:
+            0 0 0 1px
+              color-mix(
+                in oklch,
+                var(--pretui-attention, var(--boxel-fuschia)) 55%,
+                var(--border)
+              ),
+            0 2px 10px
+              color-mix(
+                in oklch,
+                var(--pretui-attention, var(--boxel-fuschia)) 12%,
+                transparent
+              );
+          font-size: var(--text-ui-md, 12.5px);
+        }
+        /* settled: the attention hue is reserved for "a human must act now",
+           so an answered block gives it back */
+        .pretui-iinput[data-answered] {
+          background: var(--card);
+          box-shadow: var(
+            --pretui-shadow-hairline,
+            0 0 0 1px var(--border)
+          );
+        }
+        .pretui-iinput-head {
+          display: flex;
+          align-items: baseline;
+          gap: 8px;
+          flex-wrap: wrap;
+        }
+        .pretui-iinput-verb {
+          font-family: var(--font-mono);
+          font-size: 10px;
+          font-weight: 600;
+          letter-spacing: 0.06em;
+          color: var(--pretui-attention-ink, var(--pretui-attention, var(--boxel-fuschia)));
+          flex: none;
+        }
+        .pretui-iinput[data-answered] .pretui-iinput-verb {
+          color: var(--muted-foreground);
+        }
+        .pretui-iinput-prompt {
+          font-weight: 600;
+          min-width: 0;
+        }
+        .pretui-iinput-settled {
+          margin-left: auto;
+          font-size: var(--text-ui-sm, 11.5px);
+          color: var(--muted-foreground);
+        }
+        .pretui-iinput-detail {
+          margin: 0;
+          max-width: 62ch;
+          font-size: var(--text-ui-sm, 11.5px);
+          line-height: 1.6;
+          color: var(--muted-foreground);
+        }
+        .pretui-iinput-set {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 6px;
+          margin: 0;
+          padding: 0;
+          border: 0;
+          min-inline-size: 0;
+        }
         .pretui-iinput-opt {
-          min-height: 44px;
-          padding: 0 14px;
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          min-height: 30px;
+          padding: 0 10px;
+          border-radius: 999px;
+          background: var(--card);
+          box-shadow: var(
+            --pretui-shadow-hairline,
+            0 0 0 1px var(--border)
+          );
+          font-size: var(--text-ui-sm, 11.5px);
+          cursor: pointer;
+        }
+        .pretui-iinput-set:disabled .pretui-iinput-opt {
+          cursor: default;
+          opacity: 0.75;
+        }
+        .pretui-iinput-opt input {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          opacity: 0;
+          pointer-events: none;
+        }
+        .pretui-iinput-swatch {
+          width: 12px;
+          height: 12px;
+          border-radius: 4px;
+          flex: none;
+          background: var(--pretui-swatch, var(--muted-foreground));
+          box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.18);
+        }
+        /* selection is never colour alone — the checked pill also gains weight
+           and a ring, so it survives greyscale */
+        .pretui-iinput-opt:has(input:checked) {
+          font-weight: 600;
+          background: color-mix(
+            in oklch,
+            var(--primary) 10%,
+            var(--card)
+          );
+          box-shadow:
+            0 0 0 1px
+              color-mix(in oklch, var(--primary) 55%, var(--border)),
+            inset 0 0 0 1px
+              color-mix(in oklch, var(--primary) 20%, transparent);
+        }
+        .pretui-iinput-opt:has(input:focus-visible) {
+          outline: 2px solid var(--ring);
+          outline-offset: 2px;
+        }
+        .pretui-iinput-foot {
+          display: flex;
+          justify-content: flex-end;
+        }
+        .pretui-sr {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          overflow: hidden;
+          clip-path: inset(50%);
+          white-space: nowrap;
+        }
+        /* coarse pointers get a 44px hit target without changing the fine one */
+        @media (any-pointer: coarse) {
+          .pretui-iinput-opt {
+            min-height: 44px;
+            padding: 0 14px;
+          }
         }
       }
     </style>

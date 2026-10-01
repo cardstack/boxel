@@ -43,3 +43,5 @@ Where it is thinner: no per-row timing or nesting, no streaming append contract 
 The rail, the disclosure and the shimmer all come from shared kit tokens — **TextShimmer**'s duration and spread for the working label, the disclosure's own transition for the reveal.
 
 A trace that had its own type scale or its own animation curve would read as a different application embedded in the transcript, which is exactly what the agentic set is trying not to be.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

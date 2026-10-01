@@ -1,8 +1,6 @@
-// Pretui — Typewriter unit tests. Imports from ../motion; when Typewriter moves to its
-// own file only the import path changes.
+// Pretui — Typewriter unit tests.
 //
-// Local-only test file, kept off the realm by `.boxelignore` (`*.test.gts`);
-// run with `boxel test`. No assertion touches a computed style: the
+// Run with `boxel test`; deployment leaves `*.test.gts` off the realm. No assertion touches a computed style: the
 // component's own `<style scoped>` is inert in this harness (the scoped-css
 // attribute is stamped, the rules are not applied) — so motion is asserted
 // as the custom properties and structure the CSS animates from, never as

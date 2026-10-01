@@ -52,3 +52,5 @@ Where it is thinner: no two-handle sweep, no compass-point presets, and no visua
 The dial and field take the kit's control tokens; the dial's grip is a **Handle**, so it inherits that component's shape and ring.
 
 Sharing the handle is what keeps a dial's grip identical to a gradient stop's and a picking plane's — three controls, one object.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

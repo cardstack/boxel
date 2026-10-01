@@ -33,7 +33,7 @@ It is about *work*, not choreography. **InView** animates an arrival; Defer deci
 
 **`@trigger='intent'` puts a named button over the placeholder** — hover, focus, tap or Enter all open it. That is the trigger to use for anything expensive enough that a scroll-past should not pay for it.
 
-**`@once={{false}}` re-hides on exit**, for content too heavy to keep alive off-screen.
+**`@once={{false}}` re-hides on exit** with `@trigger='visible'`, for content too heavy to keep alive off-screen: the observer stays armed, and the content unmounts when it scrolls away and mounts again when it returns. `@onReveal` still fires only the first time.
 
 ## Prior art
 
@@ -57,3 +57,5 @@ Where it is thinner: no priority or concurrency control across several Defers on
 `@minHeight` and `@aspect` are caller values rather than tokens, since a reserved box is a property of the content rather than of the season. The default placeholder is the kit's **Skeleton**, so it inherits that component's tokens and a season retunes every pending block at once.
 
 `<:placeholder>` must occupy the reserved box — a placeholder smaller than the content reintroduces exactly the layout shift the component exists to prevent.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

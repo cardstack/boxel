@@ -67,7 +67,7 @@ export class WorkItem extends Component<WorkItemSignature> {
     if (this.args.count) {
       return this.args.count;
     }
-    return `${this.args.progressValue} / ${this.args.progressMax}`;
+    return `${this.progressValue} / ${this.args.progressMax ?? 100}`;
   }
   get hasBody() {
     return this.hasProgress || this.args.activity;
@@ -103,102 +103,104 @@ export class WorkItem extends Component<WorkItemSignature> {
       {{yield to='footer'}}
     </div>
     <style scoped>
-      .pretui-workitem {
-        display: flex;
-        flex-direction: column;
-        background: var(--card);
-        border-radius: 10px;
-        box-shadow: var(--pretui-shadow-hairline, 0 0 0 1px var(--border));
-        font-size: var(--text-ui-md, 12.5px);
-      }
-      .pretui-workitem[data-attention] {
-        box-shadow: 0 0 0 1px color-mix(in oklch, var(--pretui-attention, var(--boxel-fuschia)) 60%, var(--border)),
-          0 2px 10px color-mix(in oklch, var(--pretui-attention, var(--boxel-fuschia)) 14%, transparent);
-        background: linear-gradient(
-          180deg,
-          color-mix(in oklch, var(--pretui-attention, var(--boxel-fuschia)) 7%, var(--card)),
-          var(--card) 55%
-        );
-      }
-      .pretui-workitem[data-state='failed'],
-      .pretui-workitem[data-state='invalid'] {
-        box-shadow: 0 0 0 1px color-mix(in oklch, var(--destructive) 45%, var(--border));
-      }
-      .pretui-workitem-row {
-        display: flex;
-        align-items: center;
-        gap: 9px;
-        padding: 7px 11px;
-        min-height: 32px;
-      }
-      .pretui-workitem-body {
-        padding: 0 11px 9px 36px;
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-      }
-      .pretui-disc {
-        width: 16px;
-        height: 16px;
-        border-radius: 50%;
-        display: grid;
-        place-items: center;
-        flex: none;
-        font-size: 9px;
-        font-weight: 700;
-        background: var(--inset, var(--boxel-100));
-        color: var(--muted-foreground);
-        box-shadow: var(--pretui-shadow-hairline, 0 0 0 1px var(--border));
-      }
-      .pretui-disc[data-tone='failed'] {
-        background: color-mix(in oklch, var(--destructive) 15%, var(--card));
-        color: var(--pretui-destructive-ink, var(--boxel-danger));
-      }
-      .pretui-disc[data-tone='attention'] {
-        background: color-mix(in oklch, var(--pretui-attention, var(--boxel-fuschia)) 22%, var(--card));
-        color: var(--pretui-attention-ink, var(--pretui-attention, var(--boxel-fuschia)));
-      }
-      .pretui-verb {
-        font-family: var(--font-mono);
-        font-size: 10px;
-        font-weight: 600;
-        letter-spacing: 0.06em;
-        color: var(--muted-foreground);
-        flex: none;
-      }
-      .pretui-workitem-title {
-        font-weight: 500;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        min-width: 0;
-        flex: 1;
-      }
-      .pretui-workitem-status {
-        margin-left: auto;
-        flex: none;
-        font-size: var(--text-ui-sm, 11.5px);
-        color: var(--muted-foreground);
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        font-variant-numeric: tabular-nums;
-      }
-      .pretui-workitem-status[data-tone='attention'] {
-        color: var(--pretui-attention-ink, var(--pretui-attention, var(--boxel-fuschia)));
-        font-weight: 600;
-      }
-      .pretui-workitem-status[data-tone='failed'] {
-        color: var(--pretui-destructive-ink, var(--boxel-danger));
-        font-weight: 500;
-      }
-      .pretui-activity {
-        font-family: var(--font-mono);
-        font-size: var(--text-ui-xs, 11px);
-        color: var(--ink-3, var(--boxel-400));
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
+      @layer PretComponent {
+        .pretui-workitem {
+          display: flex;
+          flex-direction: column;
+          background: var(--card);
+          border-radius: 10px;
+          box-shadow: var(--pretui-shadow-hairline, 0 0 0 1px var(--border));
+          font-size: var(--text-ui-md, 12.5px);
+        }
+        .pretui-workitem[data-attention] {
+          box-shadow: 0 0 0 1px color-mix(in oklch, var(--pretui-attention, var(--boxel-fuschia)) 60%, var(--border)),
+            0 2px 10px color-mix(in oklch, var(--pretui-attention, var(--boxel-fuschia)) 14%, transparent);
+          background: linear-gradient(
+            180deg,
+            color-mix(in oklch, var(--pretui-attention, var(--boxel-fuschia)) 7%, var(--card)),
+            var(--card) 55%
+          );
+        }
+        .pretui-workitem[data-state='failed'],
+        .pretui-workitem[data-state='invalid'] {
+          box-shadow: 0 0 0 1px color-mix(in oklch, var(--destructive) 45%, var(--border));
+        }
+        .pretui-workitem-row {
+          display: flex;
+          align-items: center;
+          gap: 9px;
+          padding: 7px 11px;
+          min-height: 32px;
+        }
+        .pretui-workitem-body {
+          padding: 0 11px 9px 36px;
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+        }
+        .pretui-disc {
+          width: 16px;
+          height: 16px;
+          border-radius: 50%;
+          display: grid;
+          place-items: center;
+          flex: none;
+          font-size: 9px;
+          font-weight: 700;
+          background: var(--inset, var(--boxel-100));
+          color: var(--muted-foreground);
+          box-shadow: var(--pretui-shadow-hairline, 0 0 0 1px var(--border));
+        }
+        .pretui-disc[data-tone='failed'] {
+          background: color-mix(in oklch, var(--destructive) 15%, var(--card));
+          color: var(--pretui-destructive-ink, var(--boxel-danger));
+        }
+        .pretui-disc[data-tone='attention'] {
+          background: color-mix(in oklch, var(--pretui-attention, var(--boxel-fuschia)) 22%, var(--card));
+          color: var(--pretui-attention-ink, var(--pretui-attention, var(--boxel-fuschia)));
+        }
+        .pretui-verb {
+          font-family: var(--font-mono);
+          font-size: 10px;
+          font-weight: 600;
+          letter-spacing: 0.06em;
+          color: var(--muted-foreground);
+          flex: none;
+        }
+        .pretui-workitem-title {
+          font-weight: 500;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          min-width: 0;
+          flex: 1;
+        }
+        .pretui-workitem-status {
+          margin-left: auto;
+          flex: none;
+          font-size: var(--text-ui-sm, 11.5px);
+          color: var(--muted-foreground);
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          font-variant-numeric: tabular-nums;
+        }
+        .pretui-workitem-status[data-tone='attention'] {
+          color: var(--pretui-attention-ink, var(--pretui-attention, var(--boxel-fuschia)));
+          font-weight: 600;
+        }
+        .pretui-workitem-status[data-tone='failed'] {
+          color: var(--pretui-destructive-ink, var(--boxel-danger));
+          font-weight: 500;
+        }
+        .pretui-activity {
+          font-family: var(--font-mono);
+          font-size: var(--text-ui-xs, 11px);
+          color: var(--ink-3, var(--boxel-400));
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
       }
     </style>
   </template>

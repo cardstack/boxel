@@ -72,12 +72,8 @@ module('Pretui | components/segmented-control', function (hooks) {
     await click(inputs()[1] as HTMLElement);
     assert.deepEqual(activeLabels(), ['Grid'], 'the owner decides when the pill moves');
     assert.deepEqual(seen, ['list']);
-    // The visible state is an attribute driven by the unchanged getter, so it
-    // holds. The native radio underneath is a property the browser already
-    // moved, and nothing re-rendered to move it back — so the checked radio
-    // and the active segment disagree until the owner updates @value. Pinned
-    // so the day this is fixed the expectation fails and gets flipped.
-    assert.true(inputs()[1]?.checked, 'KNOWN GAP: the radio drifted away from @value');
+    assert.true(inputs()[0]?.checked, 'and the native radio stays on @value too');
+    assert.false(inputs()[1]?.checked);
   });
 
   test('notifies through the @onChange alias, and fires both listeners once', async function (assert) {

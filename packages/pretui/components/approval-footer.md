@@ -45,3 +45,5 @@ Gaps, and the first two are serious given what this component gates:
 `--card` or `--inset` (the bar), `--border` and `--pretui-shadow-hairline` (its edge), `--foreground` and `--muted-foreground` (the message), plus **Button**'s full token set for the three actions. The destructive dress reads `--destructive`.
 
 The three buttons use the kit's **Button**, so tone and appearance travel with the season — Keep is the affirmative, Revert the quiet outlined one, and the destructive variant re-tones them. A season must keep the destructive dress clearly distinct from the normal one at a glance; this is the one bar in the product where mistaking the state is expensive.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

@@ -216,73 +216,75 @@ export class TextMorph extends Component<TextMorphSignature> {
       <span class='pretui-morph-sr'>{{@text}}</span>
     </span>
     <style scoped>
-      .pretui-morph {
-        display: inline-block;
-        white-space: pre;
-      }
-      .pretui-morph-cell {
-        display: inline-block;
-        white-space: pre;
-      }
-      /* END STATE for a departing glyph: gone. Collapsing the font-size
-         rather than the width is the trick wave 1 established — it takes the
-         glyph's advance width with it exactly, so the surviving letters
-         close the gap with no measuring. */
-      .pretui-morph-cell[data-role='out'] {
-        font-size: 0;
-        opacity: 0;
-        animation: pretui-morph-out var(--pretui-morph-dur, 0.32s)
-          cubic-bezier(0.4, 0, 1, 1) both;
-        animation-delay: calc(
-          var(--pretui-morph-i, 0) * var(--pretui-morph-step, 0.012s)
-        );
-      }
-      @keyframes pretui-morph-out {
-        from {
+      @layer PretComponent {
+        .pretui-morph {
+          display: inline-block;
+          white-space: pre;
+        }
+        .pretui-morph-cell {
+          display: inline-block;
+          white-space: pre;
+        }
+        /* END STATE for a departing glyph: gone. Collapsing the font-size
+           rather than the width is the trick wave 1 established — it takes the
+           glyph's advance width with it exactly, so the surviving letters
+           close the gap with no measuring. */
+        .pretui-morph-cell[data-role='out'] {
+          font-size: 0;
+          opacity: 0;
+          animation: pretui-morph-out var(--pretui-morph-dur, 0.32s)
+            cubic-bezier(0.4, 0, 1, 1) both;
+          animation-delay: calc(
+            var(--pretui-morph-i, 0) * var(--pretui-morph-step, 0.012s)
+          );
+        }
+        @keyframes pretui-morph-out {
+          from {
+            font-size: 1em;
+            opacity: 1;
+            translate: 0 0;
+          }
+          to {
+            font-size: 0;
+            opacity: 0;
+            translate: 0 -0.35em;
+          }
+        }
+        /* END STATE for an arriving glyph: present. Arrivals wait for the
+           departures, so the line never overshoots its final width. */
+        .pretui-morph-cell[data-role='in'] {
           font-size: 1em;
           opacity: 1;
-          translate: 0 0;
+          animation: pretui-morph-in var(--pretui-morph-dur, 0.32s)
+            cubic-bezier(0, 0, 0.2, 1) both;
+          animation-delay: calc(
+            var(--pretui-morph-dur, 0.32s) + var(--pretui-morph-i, 0) *
+              var(--pretui-morph-step, 0.012s)
+          );
         }
-        to {
-          font-size: 0;
-          opacity: 0;
-          translate: 0 -0.35em;
+        @keyframes pretui-morph-in {
+          from {
+            font-size: 0;
+            opacity: 0;
+            translate: 0 0.35em;
+          }
         }
-      }
-      /* END STATE for an arriving glyph: present. Arrivals wait for the
-         departures, so the line never overshoots its final width. */
-      .pretui-morph-cell[data-role='in'] {
-        font-size: 1em;
-        opacity: 1;
-        animation: pretui-morph-in var(--pretui-morph-dur, 0.32s)
-          cubic-bezier(0, 0, 0.2, 1) both;
-        animation-delay: calc(
-          var(--pretui-morph-dur, 0.32s) + var(--pretui-morph-i, 0) *
-            var(--pretui-morph-step, 0.012s)
-        );
-      }
-      @keyframes pretui-morph-in {
-        from {
-          font-size: 0;
-          opacity: 0;
-          translate: 0 0.35em;
+        .pretui-morph-sr {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          overflow: hidden;
+          clip: rect(0 0 0 0);
+          white-space: nowrap;
         }
-      }
-      .pretui-morph-sr {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        overflow: hidden;
-        clip: rect(0 0 0 0);
-        white-space: nowrap;
-      }
-      /* Reduced motion lands on the END STATE, which for this component is
-         the complete text and nothing else: departing glyphs are already
-         collapsed to nothing by their base styles, arriving glyphs are
-         already at full size. Never a frozen midpoint. */
-      @media (prefers-reduced-motion: reduce) {
-        .pretui-morph-cell {
-          animation: none;
+        /* Reduced motion lands on the END STATE, which for this component is
+           the complete text and nothing else: departing glyphs are already
+           collapsed to nothing by their base styles, arriving glyphs are
+           already at full size. Never a frozen midpoint. */
+        @media (prefers-reduced-motion: reduce) {
+          .pretui-morph-cell {
+            animation: none;
+          }
         }
       }
     </style>

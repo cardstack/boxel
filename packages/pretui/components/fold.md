@@ -50,3 +50,5 @@ Gaps:
 The 14px indent, 7px offset and 1px rail are fixed — deliberately, since they *are* the fold law rather than decoration. A season should not increase the indent to make nesting more obvious; the two-tone rail is the intended mechanism, and the rails are the tokens to adjust.
 
 Check `--line-strong` against `--border` per season: at two levels of nesting the rails are the only depth cue, and if the two tokens converge, a nested Fold looks identical to a sibling.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

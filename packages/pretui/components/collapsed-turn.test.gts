@@ -1,10 +1,9 @@
-// Pretui — CollapsedTurn unit tests. Imports from ../agentic; when CollapsedTurn moves to its
-// own file only the import path changes.
+// Pretui — CollapsedTurn unit tests.
 //
-// Local-only test file, kept off the realm by `.boxelignore` (`*.test.gts`);
-// run with `boxel test`. No assertion touches a computed style: the
-// component's own `<style scoped>` is inert in this harness (the scoped-css
-// attribute is stamped, the rules are not applied).
+// Run with `boxel test`; deployment leaves `*.test.gts` off the realm.
+// No assertion touches a computed style: the component's own `<style scoped>`
+// is inert in this harness (the scoped-css attribute is stamped, the rules
+// are not applied).
 import { module, test } from 'qunit';
 import { render, click } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';

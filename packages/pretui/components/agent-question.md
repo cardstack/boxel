@@ -46,3 +46,5 @@ Gaps, and they are the same shape as the rest of the territory — the semantics
 Attention tone for the unanswered state (the territory's reserved "a human must act now" hue), receding to `--muted-foreground` once settled. Pills carry **Chip**- or **Button**-family dress; the input carries the kit's control tokens (`--field`, `--input`, `--primary`, `--control-h`, `--radius`).
 
 The unanswered-to-settled contrast is the thing a season must get right: the question must be visibly *pending* in a scroll-back of forty transcript rows, and visibly *done* afterwards. If a season flattens that difference, a long transcript stops showing where the agent is blocked — which is the one thing the territory exists to make obvious.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

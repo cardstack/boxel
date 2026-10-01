@@ -41,3 +41,5 @@ Where it is thinner: no loop, no delete-and-retype, no per-word or per-line mode
 `--pretui-type-step` (seconds per character, derived from `@speed`), `--pretui-type-i` (each character's index), `--pretui-type-delay` (from `@startDelay`).
 
 The effect inherits its colour and typeface entirely from context — there is no ink token — which is what lets it be dropped into a heading, a label or a paragraph without looking like a different component. A season changes how this looks by changing the text around it.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

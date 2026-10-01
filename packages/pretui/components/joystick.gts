@@ -158,11 +158,7 @@ export class Joystick extends Component<JoystickSignature> {
     this.commit(next, false);
   };
 
-  // KNOWN GAP, reported rather than patched: Handle already scales the nudge
-  // by @step (keyboardNudge in design-tools.gts), and this handler multiplies
-  // by `this.step` again, so a step of 5 moves 25 and Shift+Arrow crosses the
-  // pad in one press. The fix is to drop the second multiply here;
-  // components/joystick.test.gts pins the current values.
+  // Handle has already scaled dx/dy by @step and the modifier keys
   handleNudge = (dx: number, dy: number) => {
     if (this.args.disabled) {
       return;
@@ -176,7 +172,7 @@ export class Joystick extends Component<JoystickSignature> {
       return;
     }
     this.commit(
-      { x: this.point.x + dx * this.step, y: this.point.y + dy * this.step },
+      { x: this.point.x + dx, y: this.point.y + dy },
       true,
     );
   };
@@ -193,7 +189,13 @@ export class Joystick extends Component<JoystickSignature> {
     let screenY = this.args.coordinates === 'math' ? 100 - value : value;
     this.commit({ x: this.point.x, y: screenY }, true);
   };
+  get resetDisabled(): boolean {
+    return this.args.disabled === true || this.isDefault;
+  }
   reset = () => {
+    if (this.resetDisabled) {
+      return;
+    }
     this.commit({ x: this.origin.x, y: this.origin.y }, true);
   };
   <template>
@@ -260,7 +262,7 @@ export class Joystick extends Component<JoystickSignature> {
             type='button'
             class='pretui-joystick-reset'
             aria-label='Reset position to default'
-            aria-disabled={{if this.isDefault 'true'}}
+            aria-disabled={{if this.resetDisabled 'true'}}
             {{on 'click' this.reset}}
             data-test-pretui-joystick-reset
           >Reset</button>
@@ -268,108 +270,110 @@ export class Joystick extends Component<JoystickSignature> {
       {{/if}}
     </div>
     <style scoped>
-      .pretui-joystick {
-        display: grid;
-        gap: var(--space-3, 8px);
-        min-width: 0;
-      }
-      .pretui-joystick[data-disabled='true'] {
-        opacity: 0.5;
-      }
-      .pretui-joystick-frame {
-        position: relative;
-        padding: var(--pretui-joy-inset, 0);
-      }
-      .pretui-joystick-pad {
-        position: relative;
-        width: 100%;
-        aspect-ratio: var(--pretui-joy-ratio, 1 / 1);
-        border-radius: var(--radius);
-        background: var(--field, var(--boxel-light));
-        box-shadow: inset 0 0 0 1px var(--input);
-        touch-action: none;
-        overflow: hidden;
-      }
-      /* Guides: two hairlines that follow the handle. A design tool reads
-         alignment off these, which is why they are not decoration. */
-      .pretui-joystick-guide {
-        position: absolute;
-        background: color-mix(in oklch, var(--primary) 40%, transparent);
-      }
-      .pretui-joystick-guide[data-axis='x'] {
-        top: 0;
-        bottom: 0;
-        left: var(--pretui-joy-x, 50%);
-        width: 1px;
-      }
-      .pretui-joystick-guide[data-axis='y'] {
-        left: 0;
-        right: 0;
-        top: var(--pretui-joy-y, 50%);
-        height: 1px;
-      }
-      .pretui-joystick-axis {
-        position: absolute;
-        font-family: var(--font-mono);
-        font-size: var(--text-ui-xs, 11px);
-        color: var(--ink-3, var(--boxel-400));
-      }
-      .pretui-joystick-axis[data-edge='left'] {
-        top: 50%;
-        left: 4px;
-        translate: 0 -50%;
-      }
-      .pretui-joystick-axis[data-edge='right'] {
-        top: 50%;
-        right: 4px;
-        translate: 0 -50%;
-      }
-      .pretui-joystick-axis[data-edge='top'] {
-        top: 4px;
-        left: 50%;
-        translate: -50% 0;
-      }
-      .pretui-joystick-axis[data-edge='bottom'] {
-        bottom: 4px;
-        left: 50%;
-        translate: -50% 0;
-      }
-      .pretui-joystick-fields {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
-        gap: var(--space-2, 6px);
-        align-items: center;
-      }
-      .pretui-joystick-reset {
-        height: var(--control-h, 28px);
-        padding-inline: 8px;
-        border: 0;
-        border-radius: var(--radius);
-        background: transparent;
-        color: var(--muted-foreground);
-        font-size: var(--text-ui-xs, 11px);
-        cursor: pointer;
-      }
-      .pretui-joystick-reset:hover {
-        background: var(--hover, rgb(0 0 0 / 0.05));
-        color: var(--foreground);
-      }
-      .pretui-joystick-reset[aria-disabled='true'] {
-        opacity: 0.35;
-        cursor: default;
-      }
-      .pretui-joystick-reset:focus-visible {
-        outline: 2px solid var(--ring);
-        outline-offset: 1px;
-      }
-      /* Narrow panes drop the reset word to a glyph-width button and stack
-         the fields. Unnamed container query only. */
-      @container (max-width: 200px) {
+      @layer PretComponent {
+        .pretui-joystick {
+          display: grid;
+          gap: var(--space-3, 8px);
+          min-width: 0;
+        }
+        .pretui-joystick[data-disabled='true'] {
+          opacity: 0.5;
+        }
+        .pretui-joystick-frame {
+          position: relative;
+          padding: var(--pretui-joy-inset, 0);
+        }
+        .pretui-joystick-pad {
+          position: relative;
+          width: 100%;
+          aspect-ratio: var(--pretui-joy-ratio, 1 / 1);
+          border-radius: var(--radius);
+          background: var(--field, var(--boxel-light));
+          box-shadow: inset 0 0 0 1px var(--input);
+          touch-action: none;
+          overflow: hidden;
+        }
+        /* Guides: two hairlines that follow the handle. A design tool reads
+           alignment off these, which is why they are not decoration. */
+        .pretui-joystick-guide {
+          position: absolute;
+          background: color-mix(in oklch, var(--primary) 40%, transparent);
+        }
+        .pretui-joystick-guide[data-axis='x'] {
+          top: 0;
+          bottom: 0;
+          left: var(--pretui-joy-x, 50%);
+          width: 1px;
+        }
+        .pretui-joystick-guide[data-axis='y'] {
+          left: 0;
+          right: 0;
+          top: var(--pretui-joy-y, 50%);
+          height: 1px;
+        }
+        .pretui-joystick-axis {
+          position: absolute;
+          font-family: var(--font-mono);
+          font-size: var(--text-ui-xs, 11px);
+          color: var(--ink-3, var(--boxel-400));
+        }
+        .pretui-joystick-axis[data-edge='left'] {
+          top: 50%;
+          left: 4px;
+          translate: 0 -50%;
+        }
+        .pretui-joystick-axis[data-edge='right'] {
+          top: 50%;
+          right: 4px;
+          translate: 0 -50%;
+        }
+        .pretui-joystick-axis[data-edge='top'] {
+          top: 4px;
+          left: 50%;
+          translate: -50% 0;
+        }
+        .pretui-joystick-axis[data-edge='bottom'] {
+          bottom: 4px;
+          left: 50%;
+          translate: -50% 0;
+        }
         .pretui-joystick-fields {
-          grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+          gap: var(--space-2, 6px);
+          align-items: center;
         }
         .pretui-joystick-reset {
-          grid-column: 1 / -1;
+          height: var(--control-h, 28px);
+          padding-inline: 8px;
+          border: 0;
+          border-radius: var(--radius);
+          background: transparent;
+          color: var(--muted-foreground);
+          font-size: var(--text-ui-xs, 11px);
+          cursor: pointer;
+        }
+        .pretui-joystick-reset:hover {
+          background: var(--hover, rgb(0 0 0 / 0.05));
+          color: var(--foreground);
+        }
+        .pretui-joystick-reset[aria-disabled='true'] {
+          opacity: 0.35;
+          cursor: default;
+        }
+        .pretui-joystick-reset:focus-visible {
+          outline: 2px solid var(--ring);
+          outline-offset: 1px;
+        }
+        /* Narrow panes drop the reset word to a glyph-width button and stack
+           the fields. Unnamed container query only. */
+        @container (max-width: 200px) {
+          .pretui-joystick-fields {
+            grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+          }
+          .pretui-joystick-reset {
+            grid-column: 1 / -1;
+          }
         }
       }
     </style>

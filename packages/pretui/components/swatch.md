@@ -31,12 +31,11 @@ Missing versus both: no size axis, no shape option (always round), no drag-and-d
 
 No APG pattern; a swatch is a toggle button or a coloured span.
 
-What is right: it renders a real `<button>` with `aria-pressed` reflecting `@selected` and an `aria-label` — so a selected swatch announces as "Red, pressed" rather than as an unlabelled square. That is the correct treatment for a single swatch, and it is more than most implementations do.
+What is right: with `@onSelect` it renders a real `<button>` with `aria-pressed` reflecting `@selected` and an `aria-label`, so a selected swatch announces as "Red, pressed" rather than as an unlabelled square. Without `@onSelect` it is a plain `<span>`: the chip is a `role="img"` named by the colour, or decorative beside a visible `@label`, so a legend of twelve colours is not twelve tab stops that do nothing.
 
 Gaps:
 
 - **The `aria-label` derives from `@label`, which is optional.** A Swatch with no `@label` falls back to something derived from the colour value — verify what it produces, because `#e3474c` announced as a hex string is nearly useless. A colour used as a choice must have a human name; if your palette has none, that is a data problem the component cannot fix.
-- **It is always a `<button>`, even when non-interactive.** A Swatch with no `@onSelect` still renders a focusable button with `aria-pressed`, so a legend of twelve colours is twelve tab stops that do nothing. A non-interactive Swatch should be a `<span>` with `role="img"` and a label, or `aria-hidden` beside its own text. This is the clearest fix.
 - **`aria-pressed` is the wrong vocabulary inside a `ColorPalette`.** A palette is a single-choice group, so `role="radio"` with `aria-checked`, or `role="option"` with `aria-selected`, describes it more accurately — `aria-pressed` says "this button is toggled on", which does not convey that choosing another deselects this one.
 - **Colour is the entire content.** For users who cannot perceive the hue, the `aria-label` is the only information — which is why the label being optional matters. There is no secondary channel (a hex readout, a pattern) at all.
 - **No contrast guarantee on the hairline.** The hairline is a fixed token; a swatch whose colour is close to `--border` has an invisible edge.
@@ -47,3 +46,5 @@ Gaps:
 `--card` (the ring gap and the surface the hairline is designed to work against), `--border` (the hairline), `--primary` or `--pretui-selected` (the selection ring), `--muted-foreground` (the label), `--text-ui-sm`.
 
 The chip diameter, hairline width and ring gap are fixed. Because the ring gap is `--card`, a Swatch placed on `--canvas` or `--inset` — inside an **EmptyState**, a table band, a striped row — will show a ring gap in the wrong colour, the same placement trap **AvatarGroup** has. The component assumes it sits on a card surface.
+
+The styles sit in `@layer PretComposite`, above SwatchChip's `PretComponent` layer, so what this component sets on SwatchChip wins by layer order. A caller's unlayered CSS overrides both without a more specific selector.

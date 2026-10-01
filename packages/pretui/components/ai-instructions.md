@@ -45,3 +45,5 @@ Where it is thinner: no reordering — order matters and cannot be changed here 
 The shelf takes the kit's block, list and control tokens; the switches are the kit's **Switch**.
 
 Nothing is separately themeable, which keeps a settings-shaped surface looking like the rest of the application's settings.
+
+The styles sit in `@layer PretComposite`, above Input's `PretComponent` layer, so what this component sets on Input wins by layer order. A caller's unlayered CSS overrides both without a more specific selector.

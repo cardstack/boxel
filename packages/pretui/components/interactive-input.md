@@ -41,3 +41,5 @@ Where it is thinner: single-select only — no multi-choice or free-text answer 
 The block takes the agentic set's shared tier and attention tokens, and the radios are the kit's own — nothing here defines a surface.
 
 That is what makes an input request look like part of the run rather than like a modal interrupting it, which is the entire design intent: the agent is asking inside its work, not stopping to open a dialog.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

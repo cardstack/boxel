@@ -20,9 +20,9 @@ The agent input: a growing text field with a mode switch, context chips, a send/
 @label?        — accessible name for the field. Default 'Message the agent'
 @rows?         — minimum visible rows before the field grows. Default 2
 @submitOnEnter? — Enter submits, Shift+Enter inserts a newline. Default true
-@disabled?
+@disabled?     — the field, every action and the mode switch; yielded to <:tools>
 
-<:tools> — extra controls in the action bar, left of the send button
+<:tools as |disabled|> — extra controls in the action bar, left of the send button
 ```
 
 **`@queueCount` rewrites the placeholder to say so, and that is the whole point of the arg.** A queue the reader cannot see is a message they think was sent.
@@ -55,3 +55,5 @@ Where it is thinner: no slash-command menu, no inline mention autocomplete, no d
 The composer is built from the kit's **Button** and **SegmentedControl** and takes their shared recipe tokens rather than defining its own surface.
 
 That is deliberate for a surface this prominent: a composer that themed independently would be the one part of an agent UI that did not follow a season, and it is the part people look at most.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

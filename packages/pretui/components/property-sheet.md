@@ -14,7 +14,7 @@ A property inspector built from a list of typed specs: rows, controls and values
 @onChange? — fires with the key and the new value
 @onReset?  — invoked by a row's reset control
 
-<:custom> — receives [kind, value, spec] for kinds the sheet does not own
+<:custom> — receives [kind, value, spec, disabled] for kinds the sheet does not own
 ```
 
 **A row shows a reset control only when the spec is `modified` *and* `@onReset` is supplied.** Both conditions, because a reset that cannot reset is worse than no reset, and a dot on an unmodified row is noise.
@@ -44,3 +44,5 @@ Where it is thinner: no grouping or sections within a sheet, no collapsible cate
 Everything comes from **PropertyRow** and **ValueInput**; the sheet adds only stacking.
 
 That is the right shape: a property panel's appearance is its rows' appearance, and a sheet with its own surface would fight whichever inspector chrome it was placed in.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

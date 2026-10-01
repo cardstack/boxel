@@ -25,7 +25,7 @@ export interface PropertySheetSignature {
     onReset?: (key: string) => void;
   };
   Blocks: {
-    custom: [ValueKind, ValueOf, ValueSpec];
+    custom: [ValueKind, ValueOf, ValueSpec, boolean];
   };
   Element: HTMLDivElement;
 }
@@ -50,17 +50,19 @@ export const PropertySheet: TemplateOnlyComponent<PropertySheetSignature> = <tem
           @onChange={{@onChange}}
           @onReset={{@onReset}}
         >
-          <:custom as |kind value|>
-            {{yield kind value spec to='custom'}}
+          <:custom as |kind value disabled|>
+            {{yield kind value spec disabled to='custom'}}
           </:custom>
         </PropertySheetRow>
       {{/each}}
     </div>
     <style scoped>
-      .pretui-sheet {
-        display: grid;
-        gap: 1px;
-        min-width: 0;
+      @layer PretComponent {
+        .pretui-sheet {
+          display: grid;
+          gap: 1px;
+          min-width: 0;
+        }
       }
     </style>
 </template>;
@@ -84,7 +86,7 @@ interface PropertySheetRowSignature {
     onChange?: (key: string, value: ValueOf) => void;
     onReset?: (key: string) => void;
   };
-  Blocks: { custom: [ValueKind, ValueOf] };
+  Blocks: { custom: [ValueKind, ValueOf, boolean] };
   Element: HTMLDivElement;
 }
 
@@ -122,8 +124,8 @@ class PropertySheetRow extends Component<PropertySheetRowSignature> {
         @disabled={{this.disabled}}
         @onChange={{this.change}}
       >
-        <:custom as |kind value|>
-          {{yield kind value to='custom'}}
+        <:custom as |kind value disabled|>
+          {{yield kind value disabled to='custom'}}
         </:custom>
       </ValueInput>
     </PropertyRow>

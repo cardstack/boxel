@@ -226,128 +226,132 @@ export class PromptLibrary extends Component<PromptLibrarySignature> {
     </section>
 
     <style scoped>
-      .pretui-plib {
-        display: flex;
-        flex-direction: column;
-        gap: var(--space-3, 9px);
-        padding: var(--space-4, 13px);
-        border-radius: var(--radius-surface, 14px);
-        background: var(--card);
-        box-shadow: var(
-          --pretui-shadow-card,
-          0 0 0 1px var(--border),
-          0 1px 2px rgb(0 0 0 / 0.08)
-        );
-        font-size: var(--text-ui-md, 12.5px);
-        container-type: inline-size;
-      }
-      .pretui-plib-head {
-        display: flex;
-        align-items: baseline;
-        gap: 10px;
-      }
-      .pretui-plib-title {
-        margin: 0;
-        flex: 1;
-        min-width: 0;
-        font-size: 13px;
-        font-weight: 600;
-        letter-spacing: -0.01em;
-      }
-      .pretui-plib-count {
-        flex: none;
-        font-size: var(--text-ui-sm, 11.5px);
-        color: var(--ink-3, var(--boxel-400));
-        font-variant-numeric: tabular-nums;
-      }
-      .pretui-plib-filters {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        flex-wrap: wrap;
-      }
-      .pretui-plib-search {
-        flex: 1;
-        min-width: 12rem;
-      }
-      .pretui-plib-grid {
-        display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 8px;
-        margin: 0;
-        padding: 0;
-        list-style: none;
-      }
-      /* unnamed container queries — a card knows its pane, not the viewport */
-      @container (max-width: 46rem) {
-        .pretui-plib-grid {
-          grid-template-columns: repeat(2, minmax(0, 1fr));
+      /* above Input's layer, so these win by layer order, not file order */
+      @layer PretComponent, PretComposite;
+      @layer PretComposite {
+        .pretui-plib {
+          display: flex;
+          flex-direction: column;
+          gap: var(--space-3, 9px);
+          padding: var(--space-4, 13px);
+          border-radius: var(--radius-surface, 14px);
+          background: var(--card);
+          box-shadow: var(
+            --pretui-shadow-card,
+            0 0 0 1px var(--border),
+            0 1px 2px rgb(0 0 0 / 0.08)
+          );
+          font-size: var(--text-ui-md, 12.5px);
+          container-type: inline-size;
         }
-      }
-      @container (max-width: 28rem) {
-        .pretui-plib-grid {
-          grid-template-columns: minmax(0, 1fr);
+        .pretui-plib-head {
+          display: flex;
+          align-items: baseline;
+          gap: 10px;
         }
-      }
-      .pretui-plib-card {
-        display: flex;
-        flex-direction: column;
-        gap: 6px;
-        padding: 10px 11px;
-        border-radius: 10px;
-        background: var(--card);
-        box-shadow: var(
-          --pretui-shadow-hairline,
-          0 0 0 1px var(--border)
-        );
-      }
-      .pretui-plib-card:hover,
-      .pretui-plib-card:focus-within {
-        box-shadow: var(
-          --pretui-shadow-raised,
-          0 0 0 1px var(--border),
-          0 2px 10px rgb(0 0 0 / 0.1)
-        );
-      }
-      .pretui-plib-card-head {
-        display: flex;
-        align-items: center;
-        gap: 7px;
-      }
-      .pretui-plib-icon {
-        width: 14px;
-        height: 14px;
-        flex: none;
-        color: var(--ink-3, var(--boxel-400));
-      }
-      .pretui-plib-card-title {
-        margin: 0;
-        font-size: var(--text-ui-md, 12.5px);
-        font-weight: 600;
-        min-width: 0;
-      }
-      .pretui-plib-card-body {
-        margin: 0;
-        flex: 1;
-        font-size: var(--text-ui-sm, 11.5px);
-        line-height: 1.55;
-        color: var(--muted-foreground);
-        display: -webkit-box;
-        -webkit-box-orient: vertical;
-        -webkit-line-clamp: 3;
-        line-clamp: 3;
-        overflow: hidden;
-      }
-      .pretui-plib-tags {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 4px;
-      }
-      .pretui-plib-card-foot {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        margin-top: 2px;
+        .pretui-plib-title {
+          margin: 0;
+          flex: 1;
+          min-width: 0;
+          font-size: 13px;
+          font-weight: 600;
+          letter-spacing: -0.01em;
+        }
+        .pretui-plib-count {
+          flex: none;
+          font-size: var(--text-ui-sm, 11.5px);
+          color: var(--ink-3, var(--boxel-400));
+          font-variant-numeric: tabular-nums;
+        }
+        .pretui-plib-filters {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          flex-wrap: wrap;
+        }
+        .pretui-plib-search {
+          flex: 1;
+          min-width: 12rem;
+        }
+        .pretui-plib-grid {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 8px;
+          margin: 0;
+          padding: 0;
+          list-style: none;
+        }
+        /* unnamed container queries — a card knows its pane, not the viewport */
+        @container (max-width: 46rem) {
+          .pretui-plib-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+          }
+        }
+        @container (max-width: 28rem) {
+          .pretui-plib-grid {
+            grid-template-columns: minmax(0, 1fr);
+          }
+        }
+        .pretui-plib-card {
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+          padding: 10px 11px;
+          border-radius: 10px;
+          background: var(--card);
+          box-shadow: var(
+            --pretui-shadow-hairline,
+            0 0 0 1px var(--border)
+          );
+        }
+        .pretui-plib-card:hover,
+        .pretui-plib-card:focus-within {
+          box-shadow: var(
+            --pretui-shadow-raised,
+            0 0 0 1px var(--border),
+            0 2px 10px rgb(0 0 0 / 0.1)
+          );
+        }
+        .pretui-plib-card-head {
+          display: flex;
+          align-items: center;
+          gap: 7px;
+        }
+        .pretui-plib-icon {
+          width: 14px;
+          height: 14px;
+          flex: none;
+          color: var(--ink-3, var(--boxel-400));
+        }
+        .pretui-plib-card-title {
+          margin: 0;
+          font-size: var(--text-ui-md, 12.5px);
+          font-weight: 600;
+          min-width: 0;
+        }
+        .pretui-plib-card-body {
+          margin: 0;
+          flex: 1;
+          font-size: var(--text-ui-sm, 11.5px);
+          line-height: 1.55;
+          color: var(--muted-foreground);
+          display: -webkit-box;
+          -webkit-box-orient: vertical;
+          -webkit-line-clamp: 3;
+          line-clamp: 3;
+          overflow: hidden;
+        }
+        .pretui-plib-tags {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 4px;
+        }
+        .pretui-plib-card-foot {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          margin-top: 2px;
+        }
       }
     </style>
   </template>

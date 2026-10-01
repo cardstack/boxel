@@ -41,3 +41,5 @@ Where it is thinner: no inline citation markers tying a sentence to a source, no
 The report takes the kit's block spacing, heading and **Token** treatments; the card pills are **RecordPill**-shaped.
 
 Nothing here is separately themeable, which is right for a component whose job is to look like a document inside an application that already has a type scale.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

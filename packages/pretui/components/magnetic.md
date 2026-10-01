@@ -44,3 +44,5 @@ Where it is thinner: no spring physics — the return is an eased transition rat
 `--pretui-magnetic-range` (from `@range`), `--pretui-magnetic-intensity` (from `@intensity`), `--pretui-magnetic-hue` (from `@hue`, defaulting to `--primary`), `--pretui-magnetic-halo-radius`, plus the shared pointer channel `--pretui-px` / `--pretui-py` / `--pretui-nx` / `--pretui-ny` / `--pretui-dx` / `--pretui-dy` that every component in this module writes.
 
 That shared channel is why the pointer components compose: a **Spotlight** and a **Magnetic** in the same surface read the same pointer position from the same custom properties rather than each installing its own listener.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

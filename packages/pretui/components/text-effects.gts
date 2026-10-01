@@ -219,117 +219,119 @@ export class TextEffects extends Component<TextEffectsSignature> {
       <span class='pretui-fx-sr'>{{@text}}</span>
     </span>
     <style scoped>
-      .pretui-fx {
-        display: inline;
-      }
-      .pretui-fx[data-per='line'] .pretui-fx-stack {
-        display: block;
-        white-space: pre-wrap;
-      }
-      .pretui-fx[data-per='line'] .pretui-fx-unit {
-        display: block;
-      }
-      /* Base styles ARE the end state — every keyframe animates TOWARD
-         these values, never away from them. That is what makes
-         animation:none a correct reduced-motion fallback with nothing
-         restated. */
-      .pretui-fx-unit {
-        display: inline-block;
-        white-space: pre;
-        opacity: 1;
-        filter: none;
-        translate: none;
-        scale: 1;
-        animation-name: pretui-fx-fade;
-        animation-duration: var(--pretui-fx-dur, 0.5s);
-        animation-timing-function: cubic-bezier(0.22, 0.61, 0.36, 1);
-        animation-fill-mode: both;
-        animation-delay: calc(
-          var(--pretui-fx-delay, 0s) + var(--pretui-fx-i, 0) *
-            var(--pretui-fx-step, 0.04s)
-        );
-      }
-      /* A run of spaces has nothing to reveal; animating it only makes the
-         line reflow while the words arrive. */
-      .pretui-fx-unit[data-blank='true'] {
-        animation-name: none;
-      }
-      @keyframes pretui-fx-fade {
-        from {
-          opacity: 0;
+      @layer PretComponent {
+        .pretui-fx {
+          display: inline;
         }
-      }
-      @keyframes pretui-fx-blur {
-        from {
-          opacity: 0;
-          filter: blur(var(--pretui-fx-blur, 8px));
+        .pretui-fx[data-per='line'] .pretui-fx-stack {
+          display: block;
+          white-space: pre-wrap;
         }
-      }
-      @keyframes pretui-fx-rise {
-        from {
-          opacity: 0;
-          translate: 0 var(--pretui-fx-dist, 14px);
+        .pretui-fx[data-per='line'] .pretui-fx-unit {
+          display: block;
         }
-      }
-      @keyframes pretui-fx-fall {
-        from {
-          opacity: 0;
-          translate: 0 calc(-1 * var(--pretui-fx-dist, 14px));
-        }
-      }
-      @keyframes pretui-fx-scale {
-        from {
-          opacity: 0;
-          scale: 0.7;
-        }
-      }
-      @keyframes pretui-fx-slide {
-        from {
-          opacity: 0;
-          translate: calc(-1 * var(--pretui-fx-dist, 14px)) 0;
-        }
-      }
-      /* The one preset that is not a fade: the glyph is already opaque and
-         is uncovered from below, so the text reads as being revealed by
-         something rather than materialising out of nothing. */
-      @keyframes pretui-fx-unmask {
-        from {
-          clip-path: inset(0 0 100% 0);
-          translate: 0 calc(0.35 * var(--pretui-fx-dist, 14px));
-        }
-      }
-      .pretui-fx[data-effect='blur'] .pretui-fx-unit {
-        animation-name: pretui-fx-blur;
-      }
-      .pretui-fx[data-effect='rise'] .pretui-fx-unit {
-        animation-name: pretui-fx-rise;
-      }
-      .pretui-fx[data-effect='fall'] .pretui-fx-unit {
-        animation-name: pretui-fx-fall;
-      }
-      .pretui-fx[data-effect='scale'] .pretui-fx-unit {
-        animation-name: pretui-fx-scale;
-      }
-      .pretui-fx[data-effect='slide'] .pretui-fx-unit {
-        animation-name: pretui-fx-slide;
-      }
-      .pretui-fx[data-effect='unmask'] .pretui-fx-unit {
-        animation-name: pretui-fx-unmask;
-      }
-      .pretui-fx[data-effect='unmask'] .pretui-fx-unit {
-        clip-path: inset(0 0 0 0);
-      }
-      .pretui-fx-sr {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        overflow: hidden;
-        clip: rect(0 0 0 0);
-        white-space: nowrap;
-      }
-      @media (prefers-reduced-motion: reduce) {
+        /* Base styles ARE the end state — every keyframe animates TOWARD
+           these values, never away from them. That is what makes
+           animation:none a correct reduced-motion fallback with nothing
+           restated. */
         .pretui-fx-unit {
-          animation: none;
+          display: inline-block;
+          white-space: pre;
+          opacity: 1;
+          filter: none;
+          translate: none;
+          scale: 1;
+          animation-name: pretui-fx-fade;
+          animation-duration: var(--pretui-fx-dur, 0.5s);
+          animation-timing-function: cubic-bezier(0.22, 0.61, 0.36, 1);
+          animation-fill-mode: both;
+          animation-delay: calc(
+            var(--pretui-fx-delay, 0s) + var(--pretui-fx-i, 0) *
+              var(--pretui-fx-step, 0.04s)
+          );
+        }
+        /* A run of spaces has nothing to reveal; animating it only makes the
+           line reflow while the words arrive. */
+        .pretui-fx-unit[data-blank='true'] {
+          animation-name: none;
+        }
+        @keyframes pretui-fx-fade {
+          from {
+            opacity: 0;
+          }
+        }
+        @keyframes pretui-fx-blur {
+          from {
+            opacity: 0;
+            filter: blur(var(--pretui-fx-blur, 8px));
+          }
+        }
+        @keyframes pretui-fx-rise {
+          from {
+            opacity: 0;
+            translate: 0 var(--pretui-fx-dist, 14px);
+          }
+        }
+        @keyframes pretui-fx-fall {
+          from {
+            opacity: 0;
+            translate: 0 calc(-1 * var(--pretui-fx-dist, 14px));
+          }
+        }
+        @keyframes pretui-fx-scale {
+          from {
+            opacity: 0;
+            scale: 0.7;
+          }
+        }
+        @keyframes pretui-fx-slide {
+          from {
+            opacity: 0;
+            translate: calc(-1 * var(--pretui-fx-dist, 14px)) 0;
+          }
+        }
+        /* The one preset that is not a fade: the glyph is already opaque and
+           is uncovered from below, so the text reads as being revealed by
+           something rather than materialising out of nothing. */
+        @keyframes pretui-fx-unmask {
+          from {
+            clip-path: inset(0 0 100% 0);
+            translate: 0 calc(0.35 * var(--pretui-fx-dist, 14px));
+          }
+        }
+        .pretui-fx[data-effect='blur'] .pretui-fx-unit {
+          animation-name: pretui-fx-blur;
+        }
+        .pretui-fx[data-effect='rise'] .pretui-fx-unit {
+          animation-name: pretui-fx-rise;
+        }
+        .pretui-fx[data-effect='fall'] .pretui-fx-unit {
+          animation-name: pretui-fx-fall;
+        }
+        .pretui-fx[data-effect='scale'] .pretui-fx-unit {
+          animation-name: pretui-fx-scale;
+        }
+        .pretui-fx[data-effect='slide'] .pretui-fx-unit {
+          animation-name: pretui-fx-slide;
+        }
+        .pretui-fx[data-effect='unmask'] .pretui-fx-unit {
+          animation-name: pretui-fx-unmask;
+        }
+        .pretui-fx[data-effect='unmask'] .pretui-fx-unit {
+          clip-path: inset(0 0 0 0);
+        }
+        .pretui-fx-sr {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          overflow: hidden;
+          clip: rect(0 0 0 0);
+          white-space: nowrap;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .pretui-fx-unit {
+            animation: none;
+          }
         }
       }
     </style>

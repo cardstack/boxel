@@ -14,8 +14,8 @@
 //     other half of the contract: the full string is present and readable
 //     with the animated copy hidden from assistive technology.
 //
-// Local-only test file; run with `boxel test` from this directory — do NOT
-// push to the realm (a pushed *.test.gts opts the realm into a QUnit gate).
+// Run with `boxel test` from this directory; deployment leaves `*.test.gts`
+// off the realm.
 import { module, test } from 'qunit';
 import { render, click } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';

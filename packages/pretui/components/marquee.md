@@ -39,3 +39,5 @@ Where it is thinner: horizontal only, no vertical marquee, no path-following var
 `--pretui-marquee-duration` (derived from `@speed` and the content's width) and `--pretui-marquee-gap` (the space between repeats).
 
 There are no colour tokens — the strip inherits everything from context, which is what lets a marquee of logos sit on any surface without restyling. The gap token is the one thing a season tunes, and it is what keeps a logo strip's rhythm consistent with the spacing scale around it.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

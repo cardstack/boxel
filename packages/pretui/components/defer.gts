@@ -3,6 +3,7 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import { modifier } from 'ember-modifier';
+import { inViewport } from './in-view';
 import { Skeleton } from './skeleton';
 import { cssDeclaration, cssStyleFrom } from '../pretui-css';
 
@@ -47,46 +48,9 @@ import { cssDeclaration, cssStyleFrom } from '../pretui-css';
 //
 // Distinct from `InView`, deliberately: InView always renders its content
 // and animates the entrance; Defer decides whether to render at all. They
-// share the mechanism, not the job — `revealsInView` below is the callback
-// twin of motion-core's attribute-only `inViewport`, and the two should be
-// merged behind one modifier (diff proposed to motion-core.gts).
+// share the mechanism, InView's `inViewport` modifier, not the job.
 
 export type DeferTrigger = 'visible' | 'idle' | 'intent' | 'manual';
-
-/**
- * Reveal-on-intersection: the JS-callback twin of motion-core's `inViewport`
- * (which reports to CSS through a `data-inview` attribute and so cannot gate
- * *rendering*). One-shot by construction — it disconnects on the first
- * intersection and on teardown.
- */
-export const revealsInView = modifier(
-  (
-    el: HTMLElement,
-    [armed, threshold, rootMargin, reveal]: [
-      boolean,
-      number,
-      string,
-      () => void,
-    ],
-  ) => {
-    if (!armed || typeof IntersectionObserver === 'undefined') {
-      return;
-    }
-    let observer = new IntersectionObserver(
-      (entries) => {
-        for (let entry of entries) {
-          if (entry.isIntersecting) {
-            observer.disconnect();
-            reveal();
-          }
-        }
-      },
-      { threshold, rootMargin },
-    );
-    observer.observe(el);
-    return () => observer.disconnect();
-  },
-);
 
 interface IdleScheduler {
   requestIdleCallback?: (
@@ -222,9 +186,10 @@ export class Defer extends Component<DeferSignature> {
   get stateAttr(): string {
     return this.revealed ? 'revealed' : 'pending';
   }
-  /** Arm the observer only while it could still do something. */
+  /** Arm the observer only while it could still do something: until the
+   * first reveal, or for good when the content re-hides on exit. */
   get watching(): boolean {
-    return this.trigger === 'visible' && !this.revealed;
+    return this.trigger === 'visible' && (!this.once || !this.revealed);
   }
   get idling(): boolean {
     return this.trigger === 'idle' && !this.revealed;
@@ -256,8 +221,18 @@ export class Defer extends Component<DeferSignature> {
       return;
     }
     this.tripped = true;
-    this.everRevealed = true;
-    this.args.onReveal?.();
+    if (!this.everRevealed) {
+      this.everRevealed = true;
+      this.args.onReveal?.();
+    }
+  };
+
+  onViewport = (inView: boolean): void => {
+    if (inView) {
+      this.reveal();
+    } else if (!this.once) {
+      this.tripped = false;
+    }
   };
 
   <template>
@@ -268,11 +243,12 @@ export class Defer extends Component<DeferSignature> {
       aria-busy={{this.busyAttr}}
       style={{this.hostStyle}}
       data-test-pretui-defer
-      {{revealsInView
-        this.watching
+      {{inViewport
         this.threshold
         this.rootMargin
-        this.reveal
+        this.once
+        enabled=this.watching
+        onChange=this.onViewport
       }}
       {{revealsWhenIdle this.idling this.idleTimeout this.reveal}}
       ...attributes
@@ -312,84 +288,86 @@ export class Defer extends Component<DeferSignature> {
       <span class='pretui-sr' role='status' data-test-pretui-defer-live>{{this.liveText}}</span>
     </div>
     <style scoped>
-      .pretui-defer {
-        display: grid;
-        align-content: stretch;
-        min-width: 0;
-        position: relative;
-      }
-      .pretui-defer-content,
-      .pretui-defer-slot {
-        min-width: 0;
-      }
-      .pretui-defer-slot {
-        display: grid;
-        align-content: stretch;
-        position: relative;
-        border-radius: var(--radius-surface, 10px);
-        overflow: hidden;
-      }
-      /* The swap is a fade on opacity only, from a @starting-style — no
-         transform, because content that slides in has moved the layout the
-         placeholder just spent its life reserving. */
-      .pretui-defer-content {
-        opacity: 1;
-        transition: opacity var(--pretui-dur-snap, 180ms)
-          var(--pretui-ease-snap, cubic-bezier(0.23, 1, 0.32, 1));
-      }
-      @starting-style {
-        .pretui-defer-content {
-          opacity: 0;
+      @layer PretComponent {
+        .pretui-defer {
+          display: grid;
+          align-content: stretch;
+          min-width: 0;
+          position: relative;
         }
-      }
-      /* The intent affordance covers the placeholder rather than sitting
-         beside it: the whole reserved box is the target, which is how it
-         clears 44px on touch without a size arg. */
-      .pretui-defer-intent {
-        position: absolute;
-        inset: 0;
-        display: grid;
-        place-items: center;
-        border: 0;
-        border-radius: inherit;
-        background: transparent;
-        color: var(--muted-foreground);
-        font: inherit;
-        font-size: var(--text-ui-sm, 11.5px);
-        letter-spacing: var(--track-ui, 0.01em);
-        cursor: pointer;
-        transition: background var(--pretui-dur-snap, 180ms)
-          var(--pretui-ease-snap, cubic-bezier(0.23, 1, 0.32, 1));
-      }
-      .pretui-defer-intent:hover {
-        background: var(--hover, var(--boxel-100));
-      }
-      .pretui-defer-intent:focus-visible {
-        outline: 2px solid var(--ring);
-        outline-offset: -2px;
-      }
-      .pretui-defer-intent-text {
-        padding: var(--space-2, 6px) var(--space-4, 12px);
-        border-radius: var(--radius);
-        background: var(--card);
-        box-shadow: 0 0 0 1px var(--border);
-      }
-      @media (prefers-reduced-motion: reduce) {
         .pretui-defer-content,
-        .pretui-defer-intent {
-          transition: none;
+        .pretui-defer-slot {
+          min-width: 0;
         }
-      }
-      .pretui-sr {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        margin: -1px;
-        padding: 0;
-        overflow: hidden;
-        clip-path: inset(50%);
-        white-space: nowrap;
-        border: 0;
+        .pretui-defer-slot {
+          display: grid;
+          align-content: stretch;
+          position: relative;
+          border-radius: var(--radius-surface, 10px);
+          overflow: hidden;
+        }
+        /* The swap is a fade on opacity only, from a @starting-style — no
+           transform, because content that slides in has moved the layout the
+           placeholder just spent its life reserving. */
+        .pretui-defer-content {
+          opacity: 1;
+          transition: opacity var(--pretui-dur-snap, 180ms)
+            var(--pretui-ease-snap, cubic-bezier(0.23, 1, 0.32, 1));
+        }
+        @starting-style {
+          .pretui-defer-content {
+            opacity: 0;
+          }
+        }
+        /* The intent affordance covers the placeholder rather than sitting
+           beside it: the whole reserved box is the target, which is how it
+           clears 44px on touch without a size arg. */
+        .pretui-defer-intent {
+          position: absolute;
+          inset: 0;
+          display: grid;
+          place-items: center;
+          border: 0;
+          border-radius: inherit;
+          background: transparent;
+          color: var(--muted-foreground);
+          font: inherit;
+          font-size: var(--text-ui-sm, 11.5px);
+          letter-spacing: var(--track-ui, 0.01em);
+          cursor: pointer;
+          transition: background var(--pretui-dur-snap, 180ms)
+            var(--pretui-ease-snap, cubic-bezier(0.23, 1, 0.32, 1));
+        }
+        .pretui-defer-intent:hover {
+          background: var(--hover, var(--boxel-100));
+        }
+        .pretui-defer-intent:focus-visible {
+          outline: 2px solid var(--ring);
+          outline-offset: -2px;
+        }
+        .pretui-defer-intent-text {
+          padding: var(--space-2, 6px) var(--space-4, 12px);
+          border-radius: var(--radius);
+          background: var(--card);
+          box-shadow: 0 0 0 1px var(--border);
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .pretui-defer-content,
+          .pretui-defer-intent {
+            transition: none;
+          }
+        }
+        .pretui-sr {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          margin: -1px;
+          padding: 0;
+          overflow: hidden;
+          clip-path: inset(50%);
+          white-space: nowrap;
+          border: 0;
+        }
       }
     </style>
   </template>

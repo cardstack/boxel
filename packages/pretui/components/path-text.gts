@@ -241,44 +241,46 @@ export class PathText extends Component<PathTextSignature> {
       </svg>
     </span>
     <style scoped>
-      .pretui-pathtext {
-        display: inline-block;
-        line-height: 0;
-      }
-      .pretui-pathtext-svg {
-        display: block;
-        width: 100%;
-        height: auto;
-        overflow: visible;
-      }
-      .pretui-pathtext-text {
-        fill: var(--pretui-pathtext-fill, var(--foreground));
-        font-family: var(--font-sans);
-        font-weight: var(--weight-medium, 500);
-      }
-      /* The resting state is the finished picture: the ring is fully drawn,
-         fully legible, and passes the screenshot test with the animation
-         removed. Rotation only says "this is ongoing". */
-      .pretui-pathtext-spin {
-        transform-box: view-box;
-        transform-origin: 50% 50%;
-      }
-      @keyframes pretui-pathtext-turn {
-        to {
-          rotate: 360deg;
+      @layer PretComponent {
+        .pretui-pathtext {
+          display: inline-block;
+          line-height: 0;
         }
-      }
-      .pretui-pathtext-svg[data-travel='true'] .pretui-pathtext-spin {
-        animation: pretui-pathtext-turn
-          var(--pretui-pathtext-revolution, 14s) linear infinite;
-      }
-      .pretui-pathtext-svg[data-travel='true'][data-direction='ccw']
+        .pretui-pathtext-svg {
+          display: block;
+          width: 100%;
+          height: auto;
+          overflow: visible;
+        }
+        .pretui-pathtext-text {
+          fill: var(--pretui-pathtext-fill, var(--foreground));
+          font-family: var(--font-sans);
+          font-weight: var(--weight-medium, 500);
+        }
+        /* The resting state is the finished picture: the ring is fully drawn,
+           fully legible, and passes the screenshot test with the animation
+           removed. Rotation only says "this is ongoing". */
         .pretui-pathtext-spin {
-        animation-direction: reverse;
-      }
-      @media (prefers-reduced-motion: reduce) {
-        .pretui-pathtext-spin {
-          animation: none;
+          transform-box: view-box;
+          transform-origin: 50% 50%;
+        }
+        @keyframes pretui-pathtext-turn {
+          to {
+            rotate: 360deg;
+          }
+        }
+        .pretui-pathtext-svg[data-travel='true'] .pretui-pathtext-spin {
+          animation: pretui-pathtext-turn
+            var(--pretui-pathtext-revolution, 14s) linear infinite;
+        }
+        .pretui-pathtext-svg[data-travel='true'][data-direction='ccw']
+          .pretui-pathtext-spin {
+          animation-direction: reverse;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .pretui-pathtext-spin {
+            animation: none;
+          }
         }
       }
     </style>

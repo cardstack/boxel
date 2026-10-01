@@ -46,3 +46,5 @@ Where it is thinner: no suggestions while typing — that is **Autocomplete**'s 
 The chips are the kit's **Chip** treatment and the field is the kit's input, so a token row inherits both rather than defining a surface of its own.
 
 That is what keeps a tag row looking like the chips used elsewhere in the product — a token input that invented its own chip is how two visually different "tags" end up on the same screen.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

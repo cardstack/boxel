@@ -17,7 +17,8 @@
 // nothing here asserts a computed style. Structure, ARIA, and the emitted
 // tree only.
 //
-// Local-only test file. NEVER push a *.test.gts to the realm.
+// Run with `boxel test` from this directory; deployment leaves `*.test.gts`
+// off the realm.
 import { module, test } from 'qunit';
 import { click, render, triggerKeyEvent } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';

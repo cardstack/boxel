@@ -78,26 +78,28 @@ export const Collapse: TemplateOnlyComponent<CollapseSignature> =
       <div class='pretui-disclosure-inner'>{{yield}}</div>
     </div>
     <style scoped>
-      .pretui-disclosure {
-        display: grid;
-        grid-template-rows: 0fr;
-        opacity: 0;
-        transition:
-          grid-template-rows var(--pretui-disclosure-duration, 320ms)
-            var(--pretui-ease-enter, cubic-bezier(0.22, 0.61, 0.25, 1)),
-          opacity 180ms linear;
-      }
-      .pretui-disclosure[data-open] {
-        grid-template-rows: 1fr;
-        opacity: 1;
-      }
-      .pretui-disclosure-inner {
-        overflow: hidden;
-        min-height: 0;
-      }
-      @media (prefers-reduced-motion: reduce) {
+      @layer PretComponent {
         .pretui-disclosure {
-          transition: none;
+          display: grid;
+          grid-template-rows: 0fr;
+          opacity: 0;
+          transition:
+            grid-template-rows var(--pretui-disclosure-duration, 320ms)
+              var(--pretui-ease-enter, cubic-bezier(0.22, 0.61, 0.25, 1)),
+            opacity 180ms linear;
+        }
+        .pretui-disclosure[data-open] {
+          grid-template-rows: 1fr;
+          opacity: 1;
+        }
+        .pretui-disclosure-inner {
+          overflow: hidden;
+          min-height: 0;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .pretui-disclosure {
+            transition: none;
+          }
         }
       }
     </style>

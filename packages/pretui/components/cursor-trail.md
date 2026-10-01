@@ -52,3 +52,5 @@ Where it is thinner: no spring physics, no velocity-reactive sizing, no collisio
 `--pretui-trail-size` (from `@size`), `--pretui-trail-hue` (from `@hue`), `--pretui-trail-dur` (from `@lag`), `--pretui-trail-scale` and `--pretui-trail-opacity` (the per-mark falloff), `--pretui-trail-radius` (the shape), plus the shared `--pretui-px` / `--pretui-py` pointer channel.
 
 The falloff tokens are what make a season able to change the trail's character without touching the component: a season that wants a subtler trail lowers the opacity floor rather than reducing `@count` at every call site.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

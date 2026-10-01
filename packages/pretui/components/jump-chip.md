@@ -40,3 +40,5 @@ Where it is thinner: no auto-hide on reaching the end (the caller flips `@visibl
 The chip takes the kit's shared control and elevation tokens, floating at the raised layer.
 
 There is no jump-chip-specific surface, which keeps it reading as a control belonging to the transcript rather than as an overlay on top of it.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

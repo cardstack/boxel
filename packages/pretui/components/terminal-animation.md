@@ -45,3 +45,5 @@ Where it is thinner: no interaction — this is a replay, not a terminal — no 
 `--pretui-term-bg`, `--pretui-term-size`, `--pretui-term-ch` (the character cell the width sweep measures in), `--pretui-term-at` and `--pretui-term-dur` (each line's start and duration), `--pretui-term-min`, over `--pretui-shadow-card`, `--pretui-shadow-hairline` and `--pretui-ease-enter`.
 
 `--pretui-term-ch` is the load-bearing one: the typing sweep is a width animation, so it needs the character cell to be a known quantity, and a season that changes the mono face without checking it will produce typing that stops short of or overshoots its own text.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

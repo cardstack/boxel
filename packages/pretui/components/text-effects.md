@@ -45,3 +45,5 @@ Where it is thinner: no exit choreography, no custom keyframes beyond the preset
 `--pretui-fx-step` (from `@stagger`), `--pretui-fx-dur` (from `@duration`), `--pretui-fx-delay` (from `@delay`), `--pretui-fx-i` (each unit's index), `--pretui-fx-dist` (from `@distance`), `--pretui-fx-blur` (from `@blur`).
 
 Every token is derived from an arg rather than being a seasonal value, which is deliberate: an entrance is a property of the moment, not of the theme. Colour and typeface come entirely from context, so the effect drops into a heading or a paragraph without carrying any appearance of its own.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

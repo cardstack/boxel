@@ -15,7 +15,7 @@ It is the switch **PropertySheet** uses to turn a typed spec into a control, and
 @disabled?
 @onChange?
 
-<:custom> — kinds this component does not own — colour above all.
+<:custom as |kind value disabled|> — kinds this component does not own — colour above all.
             Receives the kind and the raw value
 ```
 
@@ -45,3 +45,5 @@ Where it is thinner: the kind list is fixed — extending it means `<:custom>` �
 Nothing of its own — every kind renders a kit control and inherits that control's tokens.
 
 A switch that themed would be a switch that made a text field in a property panel look different from a text field in a form, which is exactly the drift this component exists to prevent.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

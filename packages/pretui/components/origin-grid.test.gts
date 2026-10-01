@@ -1,10 +1,9 @@
-// Pretui — OriginGrid unit tests. Imports from ../design-spatial; when OriginGrid moves to its
-// own file only the import path changes.
+// Pretui — OriginGrid unit tests.
 //
-// Local-only test file, kept off the realm by `.boxelignore` (`*.test.gts`);
-// run with `boxel test`. No assertion touches a computed style: the
-// component's own `<style scoped>` is inert in this harness (the scoped-css
-// attribute is stamped, the rules are not applied).
+// Run with `boxel test`; deployment leaves `*.test.gts` off the realm.
+// No assertion touches a computed style: the component's own `<style scoped>`
+// is inert in this harness (the scoped-css attribute is stamped, the rules
+// are not applied).
 import { module, test } from 'qunit';
 import { render, click, triggerKeyEvent } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
@@ -67,17 +66,21 @@ module('Pretui | components/origin-grid', function (hooks) {
     await click(cells()[2] as HTMLElement);
     assert.deepEqual(seen, [{ x: 100, y: 0 }]);
     assert.strictEqual(status(), 'Top right');
-    await triggerKeyEvent(cells()[2] as HTMLElement, 'keydown', 'ArrowDown');
+    // every key goes to whatever holds focus, so focus has to travel too
+    let press = (key: string) => triggerKeyEvent(document.activeElement as HTMLElement, 'keydown', key);
+    await press('ArrowDown');
     assert.strictEqual(status(), 'Centre right');
-    await triggerKeyEvent(cells()[5] as HTMLElement, 'keydown', 'ArrowLeft');
+    assert.strictEqual(document.activeElement, cells()[5], 'focus moved with the selection');
+    await press('ArrowLeft');
     assert.strictEqual(status(), 'Centre');
-    await triggerKeyEvent(cells()[4] as HTMLElement, 'keydown', 'ArrowUp');
-    await triggerKeyEvent(cells()[1] as HTMLElement, 'keydown', 'ArrowUp');
+    await press('ArrowUp');
+    await press('ArrowUp');
     assert.strictEqual(status(), 'Top centre', 'the top edge holds');
-    await triggerKeyEvent(cells()[1] as HTMLElement, 'keydown', 'End');
+    await press('End');
     assert.strictEqual(status(), 'Bottom right');
-    await triggerKeyEvent(cells()[8] as HTMLElement, 'keydown', 'Home');
+    await press('Home');
     assert.strictEqual(status(), 'Top left');
+    assert.strictEqual(document.activeElement, cells()[0]);
     assert.strictEqual(seen.length, 7);
   });
 

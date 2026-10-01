@@ -41,3 +41,5 @@ Where it is thinner: no template variables or fill-in-the-blank interaction, no 
 The shelf uses the kit's card, input and control tokens throughout.
 
 A prompt library is a browsing surface, and it should look like every other browsing surface in the product — which is why nothing here is separately themeable.
+
+The styles sit in `@layer PretComposite`, above Input's `PretComponent` layer, so what this component sets on Input wins by layer order. A caller's unlayered CSS overrides both without a more specific selector.

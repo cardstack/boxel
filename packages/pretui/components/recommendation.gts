@@ -204,109 +204,111 @@ export class Recommendation extends Component<RecommendationSignature> {
     </div>
 
     <style scoped>
-      .pretui-reco {
-        width: 100%;
-        overflow: hidden;
-        border-radius: var(--radius-surface, 14px);
-        background: var(--card);
-        box-shadow: var(
-          --pretui-shadow-card,
-          0 0 0 1px var(--border),
-          0 1px 2px rgb(0 0 0 / 0.08)
-        );
-        container-type: inline-size;
-      }
-      .pretui-reco-head {
-        padding: 12px 14px;
-      }
-      .pretui-reco-question {
-        margin: 0;
-        font-size: 13px;
-        font-weight: 600;
-        letter-spacing: -0.01em;
-      }
-      .pretui-reco-body {
-        margin-top: 6px;
-        min-height: 40px;
-        max-width: 62ch;
-        font-size: var(--text-ui-md, 12.5px);
-        line-height: 1.6;
-        color: var(--muted-foreground);
-      }
-      .pretui-reco-drawer {
-        background: var(--inset, var(--boxel-100));
-        box-shadow: 0 -1px 0 var(--border);
-        padding: 8px;
-      }
-      .pretui-reco-drawer-cap {
-        margin: 0 0 4px;
-        padding: 0 8px;
-        font-size: 11px;
-        font-weight: 500;
-        color: var(--ink-3, var(--boxel-400));
-      }
-      .pretui-reco-drawer ul {
-        margin: 0;
-        padding: 0;
-        list-style: none;
-      }
-      .pretui-reco-alt {
-        display: flex;
-        width: 100%;
-        align-items: center;
-        gap: 10px;
-        min-height: 34px;
-        padding: 6px 8px;
-        border: 0;
-        border-radius: 8px;
-        background: none;
-        font: inherit;
-        font-size: var(--text-ui-md, 12.5px);
-        text-align: left;
-        color: var(--foreground);
-        cursor: pointer;
-      }
-      .pretui-reco-alt:hover {
-        background: var(--hover, var(--boxel-100));
-      }
-      .pretui-reco-alt:focus-visible {
-        outline: 2px solid var(--ring);
-        outline-offset: -2px;
-      }
-      .pretui-reco-alt-short {
-        min-width: 0;
-        flex: 1;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-      .pretui-reco-foot {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 10px;
-        flex-wrap: wrap;
-        padding: 8px 12px;
-        background: var(--inset, var(--boxel-100));
-        box-shadow: 0 -1px 0 var(--border);
-      }
-      .pretui-reco-foot-actions {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        margin-left: auto;
-      }
-      .pretui-sr {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        overflow: hidden;
-        clip-path: inset(50%);
-        white-space: nowrap;
-      }
-      @media (any-pointer: coarse) {
+      @layer PretComponent {
+        .pretui-reco {
+          width: 100%;
+          overflow: hidden;
+          border-radius: var(--radius-surface, 14px);
+          background: var(--card);
+          box-shadow: var(
+            --pretui-shadow-card,
+            0 0 0 1px var(--border),
+            0 1px 2px rgb(0 0 0 / 0.08)
+          );
+          container-type: inline-size;
+        }
+        .pretui-reco-head {
+          padding: 12px 14px;
+        }
+        .pretui-reco-question {
+          margin: 0;
+          font-size: 13px;
+          font-weight: 600;
+          letter-spacing: -0.01em;
+        }
+        .pretui-reco-body {
+          margin-top: 6px;
+          min-height: 40px;
+          max-width: 62ch;
+          font-size: var(--text-ui-md, 12.5px);
+          line-height: 1.6;
+          color: var(--muted-foreground);
+        }
+        .pretui-reco-drawer {
+          background: var(--inset, var(--boxel-100));
+          box-shadow: 0 -1px 0 var(--border);
+          padding: 8px;
+        }
+        .pretui-reco-drawer-cap {
+          margin: 0 0 4px;
+          padding: 0 8px;
+          font-size: 11px;
+          font-weight: 500;
+          color: var(--ink-3, var(--boxel-400));
+        }
+        .pretui-reco-drawer ul {
+          margin: 0;
+          padding: 0;
+          list-style: none;
+        }
         .pretui-reco-alt {
-          min-height: 44px;
+          display: flex;
+          width: 100%;
+          align-items: center;
+          gap: 10px;
+          min-height: 34px;
+          padding: 6px 8px;
+          border: 0;
+          border-radius: 8px;
+          background: none;
+          font: inherit;
+          font-size: var(--text-ui-md, 12.5px);
+          text-align: left;
+          color: var(--foreground);
+          cursor: pointer;
+        }
+        .pretui-reco-alt:hover {
+          background: var(--hover, var(--boxel-100));
+        }
+        .pretui-reco-alt:focus-visible {
+          outline: 2px solid var(--ring);
+          outline-offset: -2px;
+        }
+        .pretui-reco-alt-short {
+          min-width: 0;
+          flex: 1;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .pretui-reco-foot {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          flex-wrap: wrap;
+          padding: 8px 12px;
+          background: var(--inset, var(--boxel-100));
+          box-shadow: 0 -1px 0 var(--border);
+        }
+        .pretui-reco-foot-actions {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          margin-left: auto;
+        }
+        .pretui-sr {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          overflow: hidden;
+          clip-path: inset(50%);
+          white-space: nowrap;
+        }
+        @media (any-pointer: coarse) {
+          .pretui-reco-alt {
+            min-height: 44px;
+          }
         }
       }
     </style>

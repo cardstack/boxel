@@ -98,8 +98,8 @@ export interface ValueInputSignature {
   };
   Blocks: {
     /** kinds this component does not own — colour above all. Receives the
-     * kind and the raw value. */
-    custom: [ValueKind, ValueOf];
+     * kind, the raw value and whether the control is disabled. */
+    custom: [ValueKind, ValueOf, boolean];
   };
   Element: HTMLDivElement;
 }
@@ -242,14 +242,16 @@ export class ValueInput extends Component<ValueInputSignature> {
           @onChange={{this.emitCurve}}
         />
       {{else}}
-        {{yield @kind @value to='custom'}}
+        {{yield @kind @value this.disabled to='custom'}}
       {{/if}}
     </div>
     <style scoped>
-      .pretui-value {
-        display: block;
-        min-width: 0;
-        width: 100%;
+      @layer PretComponent {
+        .pretui-value {
+          display: block;
+          min-width: 0;
+          width: 100%;
+        }
       }
     </style>
   </template>

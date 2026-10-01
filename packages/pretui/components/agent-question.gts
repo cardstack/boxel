@@ -47,67 +47,69 @@ export class AgentQuestion extends Component<AgentQuestionSignature> {
       </div>
     {{/if}}
     <style scoped>
-      .pretui-question {
-        display: grid;
-        gap: 8px;
-      }
-      .pretui-question-text {
-        font-weight: 500;
-      }
-      .pretui-question-opts {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 6px;
-      }
-      .pretui-qpill {
-        display: inline-flex;
-        align-items: center;
-        height: 26px;
-        padding: 0 calc(6px * var(--pretui-capsule-base, 1.35) + 13px * var(--pretui-radius-encroach, 0.35));
-        border-radius: 13px;
-        border: 0;
-        background: var(--card);
-        box-shadow: var(--pretui-shadow-control, 0 0 0 1px var(--border));
-        font: inherit;
-        font-size: var(--text-ui, 12px);
-        font-weight: 500;
-        cursor: pointer;
-        color: var(--foreground);
-      }
-      .pretui-qpill:hover {
-        background: var(--hover, var(--boxel-100));
-      }
-      .pretui-qinput {
-        display: flex;
-        align-items: center;
-        height: var(--control-h, 28px);
-        padding: 0 9px;
-        border: 0;
-        border-radius: var(--radius);
-        font: inherit;
-        font-size: var(--text-ui-md, 12.5px);
-        color: var(--foreground);
-        background: var(--field, var(--boxel-light));
-        box-shadow: 0 0 0 1px var(--input);
-        width: 100%;
-      }
-      .pretui-qinput:focus {
-        outline: none;
-        box-shadow: 0 0 0 2px var(--primary), var(--pretui-shadow-inset, inset 0 1px 2px rgb(0 0 0 / 0.16));
-      }
-      .pretui-answered {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        font-size: var(--text-ui-md, 12.5px);
-        color: var(--muted-foreground);
-      }
-      .pretui-answered-check {
-        color: var(--success, var(--boxel-success));
-      }
-      .pretui-answered b {
-        color: var(--foreground);
-        font-weight: 500;
+      @layer PretComponent {
+        .pretui-question {
+          display: grid;
+          gap: 8px;
+        }
+        .pretui-question-text {
+          font-weight: 500;
+        }
+        .pretui-question-opts {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 6px;
+        }
+        .pretui-qpill {
+          display: inline-flex;
+          align-items: center;
+          height: 26px;
+          padding: 0 calc(6px * var(--pretui-capsule-base, 1.35) + 13px * var(--pretui-radius-encroach, 0.35));
+          border-radius: 13px;
+          border: 0;
+          background: var(--card);
+          box-shadow: var(--pretui-shadow-control, 0 0 0 1px var(--border));
+          font: inherit;
+          font-size: var(--text-ui, 12px);
+          font-weight: 500;
+          cursor: pointer;
+          color: var(--foreground);
+        }
+        .pretui-qpill:hover {
+          background: var(--hover, var(--boxel-100));
+        }
+        .pretui-qinput {
+          display: flex;
+          align-items: center;
+          height: var(--control-h, 28px);
+          padding: 0 9px;
+          border: 0;
+          border-radius: var(--radius);
+          font: inherit;
+          font-size: var(--text-ui-md, 12.5px);
+          color: var(--foreground);
+          background: var(--field, var(--boxel-light));
+          box-shadow: 0 0 0 1px var(--input);
+          width: 100%;
+        }
+        .pretui-qinput:focus {
+          outline: none;
+          box-shadow: 0 0 0 2px var(--primary), var(--pretui-shadow-inset, inset 0 1px 2px rgb(0 0 0 / 0.16));
+        }
+        .pretui-answered {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          font-size: var(--text-ui-md, 12.5px);
+          color: var(--muted-foreground);
+        }
+        .pretui-answered-check {
+          color: var(--success, var(--boxel-success));
+        }
+        .pretui-answered b {
+          color: var(--foreground);
+          font-weight: 500;
+        }
       }
     </style>
   </template>

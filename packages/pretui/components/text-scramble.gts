@@ -98,88 +98,90 @@ export class TextScramble extends Component<TextScrambleSignature> {
       <span class='pretui-sr'>{{@text}}</span>
     </span>
     <style scoped>
-      .pretui-scramble {
-        display: inline-block;
-      }
-      .pretui-scramble-space {
-        white-space: pre;
-      }
-      .pretui-scramble-cell {
-        position: relative;
-        display: inline-block;
-      }
-      /* base styles are the resolved end state; keyframes choreograph */
-      .pretui-scramble-real {
-        animation: pretui-scr-real var(--pretui-scramble-window, 0.4s) linear
-          both;
-        animation-delay: var(--pretui-scr-delay, 0s);
-      }
-      @keyframes pretui-scr-real {
-        0%,
-        60% {
-          opacity: 0;
-          filter: blur(3px);
+      @layer PretComponent {
+        .pretui-scramble {
+          display: inline-block;
         }
-        100% {
-          opacity: 1;
-          filter: blur(0);
+        .pretui-scramble-space {
+          white-space: pre;
         }
-      }
-      .pretui-scramble-noise {
-        position: absolute;
-        inset: 0;
-        text-align: center;
-        color: var(--muted-foreground);
-        opacity: 0;
-        pointer-events: none;
-      }
-      .pretui-scramble-noise-a {
-        animation: pretui-scr-noise-a var(--pretui-scramble-window, 0.4s)
-          linear both;
-        animation-delay: var(--pretui-scr-delay, 0s);
-      }
-      @keyframes pretui-scr-noise-a {
-        0%,
-        40% {
-          opacity: 1;
-          filter: blur(0);
+        .pretui-scramble-cell {
+          position: relative;
+          display: inline-block;
         }
-        55%,
-        100% {
-          opacity: 0;
-          filter: blur(2px);
+        /* base styles are the resolved end state; keyframes choreograph */
+        .pretui-scramble-real {
+          animation: pretui-scr-real var(--pretui-scramble-window, 0.4s) linear
+            both;
+          animation-delay: var(--pretui-scr-delay, 0s);
         }
-      }
-      .pretui-scramble-noise-b {
-        animation: pretui-scr-noise-b var(--pretui-scramble-window, 0.4s)
-          linear both;
-        animation-delay: var(--pretui-scr-delay, 0s);
-      }
-      @keyframes pretui-scr-noise-b {
-        0%,
-        40% {
-          opacity: 0;
+        @keyframes pretui-scr-real {
+          0%,
+          60% {
+            opacity: 0;
+            filter: blur(3px);
+          }
+          100% {
+            opacity: 1;
+            filter: blur(0);
+          }
         }
-        50%,
-        72% {
-          opacity: 1;
-        }
-        100% {
-          opacity: 0;
-          filter: blur(2px);
-        }
-      }
-      .pretui-sr {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        overflow: hidden;
-        clip: rect(0 0 0 0);
-      }
-      @media (prefers-reduced-motion: reduce) {
-        .pretui-scramble-real,
         .pretui-scramble-noise {
-          animation: none;
+          position: absolute;
+          inset: 0;
+          text-align: center;
+          color: var(--muted-foreground);
+          opacity: 0;
+          pointer-events: none;
+        }
+        .pretui-scramble-noise-a {
+          animation: pretui-scr-noise-a var(--pretui-scramble-window, 0.4s)
+            linear both;
+          animation-delay: var(--pretui-scr-delay, 0s);
+        }
+        @keyframes pretui-scr-noise-a {
+          0%,
+          40% {
+            opacity: 1;
+            filter: blur(0);
+          }
+          55%,
+          100% {
+            opacity: 0;
+            filter: blur(2px);
+          }
+        }
+        .pretui-scramble-noise-b {
+          animation: pretui-scr-noise-b var(--pretui-scramble-window, 0.4s)
+            linear both;
+          animation-delay: var(--pretui-scr-delay, 0s);
+        }
+        @keyframes pretui-scr-noise-b {
+          0%,
+          40% {
+            opacity: 0;
+          }
+          50%,
+          72% {
+            opacity: 1;
+          }
+          100% {
+            opacity: 0;
+            filter: blur(2px);
+          }
+        }
+        .pretui-sr {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          overflow: hidden;
+          clip: rect(0 0 0 0);
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .pretui-scramble-real,
+          .pretui-scramble-noise {
+            animation: none;
+          }
         }
       }
     </style>

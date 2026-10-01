@@ -51,3 +51,5 @@ Where it is thinner: no rotation or scale handles, no snapping — a parent impl
 The handle takes the kit's control and ring tokens, with `@shape` switching geometry rather than palette.
 
 Keeping all three shapes on one token set is what makes a gradient stop, a picking-plane thumb and a crop grip read as the same family of object — they are different shapes of the same affordance.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

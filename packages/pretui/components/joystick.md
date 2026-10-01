@@ -25,7 +25,7 @@ Use it for anything positioned in a box — a shadow offset, a focal point, a tr
 
 **`@axisLabels` name the four edges** — "cool/warm", "quiet/loud" — which is what turns an abstract square into a control someone can reason about.
 
-**A known defect:** `@step` is applied twice, so a step of 5 moves 25 and Shift+Arrow crosses the pad.
+**One arrow press moves `@step` percent**, Shift ten steps and Alt a tenth of one, so a step of 5 moves 5, 50 or 0.5.
 
 ## Prior art
 
@@ -41,10 +41,12 @@ Where it is thinner: no constraint to a shape other than the square, no snapping
 - **The X/Y spinbuttons are the exact path**, and turning them off leaves a control whose only precise input is a drag.
 - **`@axisLabels` are announced**, which is what makes position meaningful: "70%, 30%" says little; "warm, quiet" says what was chosen.
 - **`@origin` gives the reset a defined destination**, so returning to the default is one action rather than a careful drag.
-- **The step defect above is an accessibility defect first** — arrow keys that move five times the documented distance make fine positioning impossible by keyboard.
+- **Reset is announced as disabled** (`aria-disabled`) at the origin and while the Joystick is disabled, and does nothing then; it stays focusable either way.
 
 ## Theming
 
 The pad takes the kit's surface and control tokens; the grip is a **Handle** and inherits its shape and ring.
 
 Consistency with Handle is the point — a grip on a joystick, a gradient stop and a picking plane are the same object, and a reader who has learned one has learned all three.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

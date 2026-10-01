@@ -134,55 +134,57 @@ export class Handle extends Component<HandleSignature> {
       ...attributes
     >{{yield}}</button>
     <style scoped>
-      .pretui-handle {
-        position: absolute;
-        translate: -50% -50%;
-        display: block;
-        width: 11px;
-        height: 11px;
-        padding: 0;
-        border: 0;
-        border-radius: 50%;
-        background: var(--card);
-        box-shadow: 0 0 0 1.5px var(--primary),
-          0 1px 3px var(--shadow-ink-mid, rgb(0 0 0 / 0.22));
-        cursor: grab;
-        touch-action: none;
-        z-index: 2;
-      }
-      /* The hit area: invisible, centred, and never smaller than the dot. */
-      .pretui-handle::before {
-        content: '';
-        position: absolute;
-        inset: calc(-1 * var(--pretui-handle-hit, 6px));
-        border-radius: inherit;
-      }
-      .pretui-handle[data-shape='bar'] {
-        width: 10px;
-        height: 18px;
-        border-radius: var(--radius-sm, 4px);
-      }
-      .pretui-handle[data-shape='square'] {
-        border-radius: 2px;
-      }
-      .pretui-handle[data-selected='true'] {
-        background: var(--primary);
-        box-shadow: 0 0 0 1.5px var(--card),
-          0 0 0 3px var(--primary);
-        z-index: 3;
-      }
-      .pretui-handle[aria-disabled='true'] {
-        cursor: default;
-        opacity: 0.5;
-      }
-      .pretui-handle:focus-visible {
-        outline: 2px solid var(--ring);
-        outline-offset: 2px;
-        z-index: 4;
-      }
-      @media (pointer: coarse) {
+      @layer PretComponent {
+        .pretui-handle {
+          position: absolute;
+          translate: -50% -50%;
+          display: block;
+          width: 11px;
+          height: 11px;
+          padding: 0;
+          border: 0;
+          border-radius: 50%;
+          background: var(--card);
+          box-shadow: 0 0 0 1.5px var(--primary),
+            0 1px 3px var(--shadow-ink-mid, rgb(0 0 0 / 0.22));
+          cursor: grab;
+          touch-action: none;
+          z-index: 2;
+        }
+        /* The hit area: invisible, centred, and never smaller than the dot. */
         .pretui-handle::before {
-          inset: -16px;
+          content: '';
+          position: absolute;
+          inset: calc(-1 * var(--pretui-handle-hit, 6px));
+          border-radius: inherit;
+        }
+        .pretui-handle[data-shape='bar'] {
+          width: 10px;
+          height: 18px;
+          border-radius: var(--radius-sm, 4px);
+        }
+        .pretui-handle[data-shape='square'] {
+          border-radius: 2px;
+        }
+        .pretui-handle[data-selected='true'] {
+          background: var(--primary);
+          box-shadow: 0 0 0 1.5px var(--card),
+            0 0 0 3px var(--primary);
+          z-index: 3;
+        }
+        .pretui-handle[aria-disabled='true'] {
+          cursor: default;
+          opacity: 0.5;
+        }
+        .pretui-handle:focus-visible {
+          outline: 2px solid var(--ring);
+          outline-offset: 2px;
+          z-index: 4;
+        }
+        @media (pointer: coarse) {
+          .pretui-handle::before {
+            inset: -16px;
+          }
         }
       }
     </style>

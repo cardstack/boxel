@@ -43,3 +43,5 @@ Where it is thinner: no visual preview of what the origin does to the object, no
 The grid takes the kit's control and ring tokens; the freeform handle is a **Handle**.
 
 There is no origin-specific palette — the anchors are small buttons and should look like the kit's small buttons, because that is what tells a reader they can be pressed.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

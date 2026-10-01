@@ -41,3 +41,5 @@ Where it is thinner: the shared-letter matching is positional rather than a real
 `--pretui-morph-dur` (from `@duration`), `--pretui-morph-step` (from `@stagger`), `--pretui-morph-i` (each glyph's index).
 
 No colour tokens: the morph inherits ink and typeface from context, which is what makes it usable inside a heading or a table cell without looking like a widget. A season affects it only through the text around it.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
