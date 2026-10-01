@@ -434,14 +434,21 @@ module(basename(import.meta.filename), function (hooks) {
 
   test('an annotated predicate compiles and is judged against the snapshot', async function (assert) {
     let policy = await education.getCompiledPolicy();
+    // A classroom links to a teacher, which nothing here grants, and that is
+    // recorded against each read as a warning that keeps it.
+    let issues = (policy?.issues ?? []).filter(
+      ({ code }) =>
+        code !== 'grant-reaches-ungranted-type' &&
+        code !== 'render-reaches-ungranted-type',
+    );
     assert.deepEqual(
-      policy?.issues.map(({ code, path }) => ({ code, path })),
+      issues.map(({ code, path }) => ({ code, path })),
       [{ code: 'unsnapshotted-policy-read', path: 'rules[0].grants[3].where' }],
       'the create grant judged against the snapshot is recorded, since the card a create mints has no index row',
     );
     assert.true(
-      /judged by the card it would mint/.test(policy?.issues[0]?.message ?? ''),
-      `the issue says why: ${policy?.issues[0]?.message}`,
+      /judged by the card it would mint/.test(issues[0]?.message ?? ''),
+      `the issue says why: ${issues[0]?.message}`,
     );
     assert.deepEqual(
       policy?.rules.map((rule) =>
