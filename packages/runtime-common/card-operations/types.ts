@@ -922,24 +922,30 @@ export interface OperationValidateResult {
 // of any change to the card or to a type its rules name, so a fix the card
 // shows here is in force there within that bound.
 //
-// Every realm that names the card compiles it from what a validate reads: the
-// card's row, and the definitions of the types its rules name. So what a
-// validate reports is what each of them holds, however many there are, and a
-// card no realm names yet reports the same, which is how a draft is checked
-// before any realm is pointed at it. The one input that can differ is a type
-// in a realm the server has not mounted, such as one another realm server
-// serves. Each realm reads that type's definition as its own owner, so a realm
-// whose owner may not read it there holds the rule as unresolved where a
-// validate does not.
+// Every realm that names the card compiles it mostly from what a validate
+// reads: the card's row, and the definitions of the types its rules name. So
+// what a validate reports is, almost always, what each of them holds, however
+// many there are, and a card no realm names yet reports the same, which is how
+// a draft is checked before any realm is pointed at it. Two inputs can differ.
+// A type in a realm the server has not mounted, such as one another realm
+// server serves, is read by each realm as its own owner, so a realm whose
+// owner may not read it there holds the rule as unresolved where a validate
+// does not. And a query grant whose filter compares a field is checked against
+// the descendants of its rule's type that the compiling realm holds cards of.
+// A validate compiles in the card's own realm and checks against that realm's
+// cards, so a realm naming the card that holds a descendant the card's realm
+// does not can record `policy-not-filterable` where a validate does not.
 //
 // Invoked on a realm's config card, a validate answers for the card that
-// realm's pointer names instead, compiled as that realm compiles it. That is
-// where the problems with the pointer show, which have no policy card to land
-// on: a pointer naming a card the index does not hold, or one that is not a
-// RealmPolicy. The pointer can name a card in any realm, and whether a card
-// is there is what a refusal withholds from a caller who cannot read its
-// realm. So the realm holding the card must be one the caller reads, judged
-// before anything about the card is read, as well as every other realm
+// realm's pointer names instead, compiled as that realm compiles it: with the
+// realm's own compile environment, which its policy cache compiles with too.
+// So neither input above differs, and what it reports is what that realm
+// holds. That is also where the problems with the pointer show, which have no
+// policy card to land on: a pointer naming a card the index does not hold, or
+// one that is not a RealmPolicy. The pointer can name a card in any realm, and
+// whether a card is there is what a refusal withholds from a caller who cannot
+// read its realm. So the realm holding the card must be one the caller reads,
+// judged before anything about the card is read, as well as every other realm
 // compiling read.
 // ============================================================================
 

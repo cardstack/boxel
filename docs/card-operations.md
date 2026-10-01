@@ -1034,12 +1034,16 @@ Some things worth knowing before you read one:
   signed-in caller its ACL declines with a 500 until it is fixed. The
   card-level issue says why: most often, the card's latest index visit failed
   and what the index holds is an earlier visit's.
-- **It is the same answer for every realm that names the card.** Each of them
-  compiles the card from the same row and the same type definitions. The one
-  exception is a type in a realm the server has not mounted, such as one
-  another realm server serves, whose definition each realm reads as its own
-  owner. A card no realm names answers the same way, which is how a draft is
-  checked before a realm is pointed at it.
+- **It is almost always the same answer for every realm that names the card.**
+  Each of them compiles the card from the same row and the same type
+  definitions, and a card no realm names answers the same way, which is how a
+  draft is checked before a realm is pointed at it. Two inputs can differ. A
+  type in a realm the server has not mounted, such as one another realm server
+  serves, is read by each realm as its own owner. And a query grant whose
+  filter compares a field is checked against the descendants of its rule's type
+  that the compiling realm holds cards of. A validate compiles in the card's own
+  realm, so a realm naming the card that holds a descendant the card's realm
+  does not can record `policy-not-filterable` where a validate does not.
 - **It is live, and nothing is cached.** A fix shows on the next validate after
   the card, or a realm in `realms`, reindexes. A realm naming the card revalidates its own compiled
   policy within five seconds of any change to the card or to a type its rules
@@ -1060,7 +1064,11 @@ Some things worth knowing before you read one:
   card for the problem to land on. So the config card, the `RealmConfig` card
   at `realm.json`, declares a validate of its own, `validatePolicy`. Invoked on
   the realm's own config card, it compiles the card the realm's pointer names
-  as the realm compiles it, and answers in the same shape. A realm that names
+  as the realm compiles it, with the realm's own compile environment, and
+  answers in the same shape. So neither of the two inputs above differs: it
+  reports exactly what that realm holds, including a `policy-not-filterable`
+  that a validate of the policy card, compiled in the card's own realm, can
+  miss. A realm that names
   no policy, or whose pointer it could not read as a card's id and dropped,
   answers with no `card` and nothing in `realms`, `issues` or `rules`. The
   card shows the answer beside its `policy` field: in force, or not in force
