@@ -18,14 +18,22 @@
 // Run with the pull request's description in $PR_BODY:
 //
 //   node scripts/pairing.ts --repository=<owner/repo> --number=<n> \
-//     --counterpart=<owner/repo> --out=<file>
+//     --base=<branch> --counterpart=<owner/repo> --out=<file>
 //
 // Writes the resolution to <file> as JSON, with one entry in `pairs` per
 // declared key: the counterpart's number, head commit, whether it has merged,
 // and whether GitHub counts it approved. Exits 1, printing what to change on
 // which pull request, when a declaration is malformed or the counterpart does
-// not hold up its side: it must exist, be open or merged, target main, come
-// from a branch of its own repository, and name this pull request back.
+// not hold up its side: it must exist, be open or merged, target main or be
+// stacked, come from a branch of its own repository, and name this pull
+// request back.
+//
+// A paired pull request targets main, or is stacked on an open pull request
+// of its own repository: it targets that pull request's branch, and is
+// retargeted to main once that pull request merges. Either side of a pair may
+// be stacked. A stacked side passes with a notice saying so, and fails once
+// its parent has merged and it still targets the parent's branch, or when the
+// branch it targets belongs to no open pull request.
 //
 // Requests go to $GITHUB_API_URL and $GITHUB_GRAPHQL_URL when set (GitHub
 // Actions sets both), with $GH_TOKEN when set. Approval comes from GraphQL,
@@ -58,6 +66,15 @@ export interface Resolution {
   number: number;
   pairs: Pair[];
 }
+
+// What a pull request's base says about where it lands: on main; stacked on
+// an open pull request of its own repository, to be retargeted to main once
+// that one merges; or on the branch of a parent that has already merged.
+export type Landing =
+  | { kind: 'main' }
+  | { kind: 'stacked'; parent: string }
+  | { kind: 'parent-merged'; parent: string; base: string }
+  | { kind: 'problem'; problem: string };
 
 interface Declaration {
   key: PairingKey;
@@ -166,11 +183,7 @@ interface RestPull {
   head: { sha: string; repo: { full_name: string } | null };
 }
 
-async function fetchPull(
-  repository: string,
-  n: number,
-): Promise<RestPull | undefined> {
-  let path = `repos/${repository}/pulls/${n}`;
+async function getJson<T>(path: string): Promise<T | undefined> {
   let response = await fetch(apiUrl(path), {
     headers: {
       accept: 'application/vnd.github+json',
@@ -184,7 +197,80 @@ async function fetchPull(
   if (!response.ok) {
     throw new Error(`GET ${path} answered ${response.status}`);
   }
-  return (await response.json()) as RestPull;
+  return (await response.json()) as T;
+}
+
+function fetchPull(repository: string, n: number) {
+  return getJson<RestPull>(`repos/${repository}/pulls/${n}`);
+}
+
+// Where a pull request of `repository` that targets `base` lands. A base
+// other than main is a stack when it is the branch of an open pull request of
+// the same repository, which is the parent this one is retargeted from once it
+// merges. `who` names the pull request in what this says.
+export async function landing(
+  repository: string,
+  who: string,
+  base: string,
+): Promise<Landing> {
+  if (base === 'main') {
+    return { kind: 'main' };
+  }
+  let [owner] = repository.split('/');
+  let candidates: RestPull[] | undefined;
+  try {
+    candidates = await getJson<RestPull[]>(
+      `repos/${repository}/pulls?state=all&per_page=100&head=${encodeURIComponent(`${owner}:${base}`)}`,
+    );
+  } catch (error) {
+    return {
+      kind: 'problem',
+      problem:
+        `Could not read which pull request ${who}'s base \`${base}\` belongs ` +
+        `to (${error instanceof Error ? error.message : String(error)}). ` +
+        `Re-run this check.`,
+    };
+  }
+  let parents = (candidates ?? []).filter(
+    (pull) =>
+      pull.head.repo && sameRepository(pull.head.repo.full_name, repository),
+  );
+  let open = parents.find((pull) => pull.state === 'open');
+  if (open) {
+    return { kind: 'stacked', parent: `${repository}#${open.number}` };
+  }
+  let merged = parents.find((pull) => pull.merged);
+  if (merged) {
+    return {
+      kind: 'parent-merged',
+      parent: `${repository}#${merged.number}`,
+      base,
+    };
+  }
+  return {
+    kind: 'problem',
+    problem:
+      `${who} targets \`${base}\`, which is not the branch of an open pull ` +
+      `request. A pair's pull requests target main, or are stacked on an ` +
+      `open pull request and retargeted to main once it merges.`,
+  };
+}
+
+function retargetProblem(
+  who: string,
+  landed: { parent: string; base: string },
+) {
+  return (
+    `${who} targets \`${landed.base}\`, the branch of ${landed.parent}, ` +
+    `which has merged. Retarget ${who} to main.`
+  );
+}
+
+function stackedNotice(who: string, parent: string) {
+  return (
+    `${who} is stacked on ${parent}. Retarget ${who} to main once ${parent} ` +
+    `merges: the pair's merge order is between pull requests that land on main.`
+  );
 }
 
 const APPROVAL_QUERY = `
@@ -259,10 +345,12 @@ async function fetchApproval(repository: string, n: number) {
 export async function resolvePairing(
   repository: string,
   n: number,
+  base: string,
   counterpartRepository: string,
   body: string,
-): Promise<{ resolution: Resolution; problems: string[] }> {
+): Promise<{ resolution: Resolution; problems: string[]; notices: string[] }> {
   let here = `${repository}#${n}`;
+  let notices: string[] = [];
   let { declarations, malformed } = readDeclarations(body);
   let problems: string[] = malformed.map(
     (line) =>
@@ -284,7 +372,17 @@ export async function resolvePairing(
         `under both keys, but a pull request merges either before or after ` +
         `another. Keep the line that says which.`,
     );
-    return { resolution: { repository, number: n, pairs }, problems };
+    return { resolution: { repository, number: n, pairs }, problems, notices };
+  }
+  if (declarations.length > 0) {
+    let own = await landing(repository, here, base);
+    if (own.kind === 'stacked') {
+      notices.push(stackedNotice(here, own.parent));
+    } else if (own.kind === 'parent-merged') {
+      problems.push(retargetProblem(here, own));
+    } else if (own.kind === 'problem') {
+      problems.push(own.problem);
+    }
   }
   for (let key of Object.keys(KEY_LABEL) as PairingKey[]) {
     let declared = declarations.filter((d) => d.key === key);
@@ -334,12 +432,31 @@ export async function resolvePairing(
       );
       continue;
     }
-    if (pull.base.ref !== 'main') {
+    // An open stacked pull request is retargeted to main once its parent
+    // merges. One that merged into its parent's branch has landed on main
+    // only once the parent has merged too, and until then the pair waits.
+    let counterpartLanding = await landing(
+      counterpartRepository,
+      there,
+      pull.base.ref,
+    );
+    if (counterpartLanding.kind === 'problem') {
+      problems.push(counterpartLanding.problem);
+      continue;
+    }
+    if (pull.merged && counterpartLanding.kind === 'stacked') {
       problems.push(
-        `${here} pairs with ${there}, which targets ` +
-          `\`${pull.base.ref}\`. A pair's pull requests both target main.`,
+        `${there} merged into the branch of ${counterpartLanding.parent}, so it reaches ` +
+          `main only when ${counterpartLanding.parent} merges. Re-run this check then.`,
       );
       continue;
+    }
+    if (!pull.merged && counterpartLanding.kind === 'parent-merged') {
+      problems.push(retargetProblem(there, counterpartLanding));
+      continue;
+    }
+    if (counterpartLanding.kind === 'stacked') {
+      notices.push(stackedNotice(there, counterpartLanding.parent));
     }
     if (
       !pull.head.repo ||
@@ -398,7 +515,7 @@ export async function resolvePairing(
       ...(approvalError ? { approvalError } : {}),
     });
   }
-  return { resolution: { repository, number: n, pairs }, problems };
+  return { resolution: { repository, number: n, pairs }, problems, notices };
 }
 
 function describe(here: string, pair: Pair) {
@@ -429,17 +546,26 @@ async function main() {
     args.find((a) => a.startsWith(`--${name}=`))?.slice(name.length + 3);
   let repository = option('repository');
   let n = Number(option('number'));
+  let base = option('base');
   let counterpart = option('counterpart');
   let out = option('out');
-  if (!repository || !Number.isInteger(n) || n <= 0 || !counterpart || !out) {
+  if (
+    !repository ||
+    !Number.isInteger(n) ||
+    n <= 0 ||
+    !base ||
+    !counterpart ||
+    !out
+  ) {
     console.error(
-      'pairing: pass --repository=<owner/repo> --number=<n> --counterpart=<owner/repo> --out=<file>, with the description in $PR_BODY',
+      'pairing: pass --repository=<owner/repo> --number=<n> --base=<branch> --counterpart=<owner/repo> --out=<file>, with the description in $PR_BODY',
     );
     process.exit(1);
   }
-  let { resolution, problems } = await resolvePairing(
+  let { resolution, problems, notices } = await resolvePairing(
     repository,
     n,
+    base,
     counterpart,
     process.env.PR_BODY ?? '',
   );
@@ -449,6 +575,9 @@ async function main() {
   }
   if (resolution.pairs.length === 0 && problems.length === 0) {
     console.log(`pairing: ${here} declares no pair with ${counterpart}`);
+  }
+  for (let notice of notices) {
+    console.log(`::notice title=pairing::${annotation(notice)}`);
   }
   for (let problem of problems) {
     console.log(`::error title=pairing::${annotation(problem)}`);

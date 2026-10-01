@@ -53,11 +53,13 @@ jobs:
         env:
           PR_BODY: ${{ github.event.pull_request.body }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_BASE: ${{ github.event.pull_request.base.ref }}
           GH_TOKEN: ${{ github.token }}
         run: |
           node packages/catalog/scripts/pairing.ts \
             --repository="$GITHUB_REPOSITORY" \
             --number="$PR_NUMBER" \
+            --base="$PR_BASE" \
             --counterpart=cardstack/boxel-catalog \
             --out="$RUNNER_TEMP/catalog-pairing.json"
           # An open pair this change merges after is what it builds on, and
@@ -74,6 +76,9 @@ jobs:
             echo "paired=false" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Test the pairing check
+        if: always()
+        run: pnpm --dir packages/catalog test:pairing
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           repository: cardstack/boxel-catalog
