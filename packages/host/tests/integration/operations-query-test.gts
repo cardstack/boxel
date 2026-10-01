@@ -152,6 +152,12 @@ const ROSTER_MODULE = `
       query: { filter: { type: () => Roster } },
       links: 'none',
     };
+    @operation static listNoneDataOnly = {
+      base: 'query',
+      query: { filter: { type: () => Roster } },
+      links: 'none',
+      html: { fitted: 'unshareable', embedded: 'unshareable' },
+    };
   }
 `;
 
@@ -601,6 +607,58 @@ module('Integration | operations query', function (hooks) {
         (roster as RosterCard).students.map((student) => student.id),
         [ADA, BEN],
         'and carries the links its own read declares',
+      );
+    });
+
+    test('a row served with neither its markup nor its links renders the card loaded through its own read', async function (assert) {
+      // A `none` row usually renders from its prerendered HTML. One the query
+      // also serves data-only for the format asked for arrives with neither
+      // markup nor an item the host may adopt as the card's instance, so the
+      // row falls back to the card's own read.
+      let store = getService('store');
+      let { Roster } = await loader.import<{ Roster: typeof CardDef }>(
+        `${testRealmURL}roster`,
+      );
+      let query = (
+        operations(Roster as never) as any
+      ).listNoneDataOnly.query() as NamedSearchWireQuery;
+      let served = await store.searchEntries(query, [testRealmURL]);
+      let entry = served.data.find((row) => row.id === ALGEBRA);
+      assert.strictEqual(
+        (entry?.relationships?.html?.data ?? []).length,
+        0,
+        'the row arrives with no markup',
+      );
+      assert.true(
+        servedItem(served, ALGEBRA)?.meta?.relationshipsWithheld,
+        'and with its card’s relationships withheld',
+      );
+      assert.notOk(
+        isCardInstance(store.peek(ALGEBRA)),
+        'nothing has loaded the card yet',
+      );
+
+      await render(
+        <template>
+          <CardSearchContext as |context|>
+            <context.searchResultsComponent @query={{query}} />
+          </CardSearchContext>
+        </template>,
+      );
+      await waitUntil(() =>
+        Boolean(
+          document.querySelector(`[data-test-search-result="${ALGEBRA}"]`),
+        ),
+      );
+      await waitUntil(() => isCardInstance(store.peek(ALGEBRA)));
+      await settled();
+
+      assert.deepEqual(
+        (store.peek(ALGEBRA) as RosterCard).students.map(
+          (student) => student.id,
+        ),
+        [ADA, BEN],
+        'rendering the row loaded the card through its own read, with the links that read declares',
       );
     });
 

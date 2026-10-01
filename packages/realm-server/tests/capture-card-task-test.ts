@@ -22,7 +22,15 @@ module(basename(import.meta.filename), function () {
       await runSharedTest(captureCardTaskTests, assert, {});
     });
 
-    test('a capture that persists renders as a realm-authority session, and one answered only to its requester does not', async function (assert) {
+    test("a capture renders on its requester's ordinary session, whether or not it persists", async function (assert) {
+      await runSharedTest(captureCardTaskTests, assert, {});
+    });
+
+    test('a capture for a reader who authenticated nobody renders with no session', async function (assert) {
+      await runSharedTest(captureCardTaskTests, assert, {});
+    });
+
+    test('a capture for a reader who authenticated nobody is refused where anyone may not read', async function (assert) {
       await runSharedTest(captureCardTaskTests, assert, {});
     });
 
