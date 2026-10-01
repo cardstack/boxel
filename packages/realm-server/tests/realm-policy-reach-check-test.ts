@@ -61,6 +61,7 @@ const type = (module: string, name: string) => ({
 });
 const CLASSROOM = type('classroom', 'Classroom');
 const IDS_CLASSROOM = type('classroom', 'IdsClassroom');
+const BROKEN_CLASSROOM = type('classroom', 'BrokenClassroom');
 const HONORS_BOARD = type('classroom', 'HonorsBoard');
 const EXCURSION = type('classroom', 'Excursion');
 const LEDGER = type('classroom', 'Ledger');
@@ -88,7 +89,8 @@ function studentModule({ withGuardian }: { withGuardian: boolean }) {
 
 // `Classroom` links to its students, who link to their guardians. Its two
 // named queries differ only in what their `links` declares. `IdsClassroom`
-// has the same links, and narrows its own `read`.
+// has the same links, and narrows its own `read`. `BrokenClassroom` has them
+// too, and declares a query that fails to lower.
 //
 // `HonorsBoard` reaches students only through a query-backed field, and
 // `Excursion` reaches guardians only through a field it contains. `Ledger`
@@ -139,6 +141,17 @@ const CLASSROOM_MODULE = `
 
   export class IdsClassroom extends Classroom {
     @operation static read = { base: 'read', links: 'ids' };
+  }
+
+  // Exported by no module, so a query naming it has no code ref to store and
+  // fails to lower.
+  class Unlisted extends CardDef {}
+
+  export class BrokenClassroom extends Classroom {
+    @operation static listUnlisted = {
+      base: 'query',
+      query: { filter: { type: () => Unlisted } },
+    };
   }
 
   export class HonorsBoard extends CardDef {
@@ -621,7 +634,7 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
-  test('a named query whose html withholds every format serves no rendering, and one withholding some is told to withhold the rest', async function (assert) {
+  test('a named query whose html withholds every format serves no rendering, and one withholding some is told to withhold them all', async function (assert) {
     let policy = await compile([rule(CLASSROOM, 'listDataOnly')]);
     assert.deepEqual(
       reached(policy),
@@ -636,12 +649,12 @@ module(basename(import.meta.filename), function (hooks) {
         { code: 'render-reaches-ungranted-type', via: 'students' },
         { code: 'render-reaches-ungranted-type', via: 'students.guardian' },
       ],
-      'the formats it still shares are rendered with their links drawn',
+      'a format it still shares can be rendered with its links drawn',
     );
     let [message] = reachIssues(policy).map((issue) => issue.message);
     assert.true(
       message.includes(
-        "declare the formats that draw them `unshareable` in the `listFittedShared` query's `html`",
+        "declare every prerendered format `unshareable` in the `listFittedShared` query's `html`",
       ),
       `it names the query's html as the place to withhold them: ${message}`,
     );
@@ -652,9 +665,30 @@ module(basename(import.meta.filename), function (hooks) {
     );
     assert.true(
       adHoc?.message.includes(
-        'grant a named query whose `html` declares the formats that draw them `unshareable` in place of the ad-hoc `query`',
+        'in place of the ad-hoc `query`, which no declaration narrows, grant a named query whose `html` declares every prerendered format `unshareable`',
       ),
       `an ad-hoc query's fix is a named query, since nothing narrows it: ${adHoc?.message}`,
+    );
+  });
+
+  test('a grant of an operation that failed to lower serves nothing, so it records no reach', async function (assert) {
+    let policy = await compile([rule(BROKEN_CLASSROOM, 'listFull')]);
+    assert.deepEqual(
+      reached(policy).map(({ code }) => code),
+      [
+        'grant-reaches-ungranted-type',
+        'grant-reaches-ungranted-type',
+        'render-reaches-ungranted-type',
+        'render-reaches-ungranted-type',
+      ],
+      'a query the type serves reaches the students on both lanes',
+    );
+
+    policy = await compile([rule(BROKEN_CLASSROOM, 'listUnlisted')]);
+    assert.deepEqual(
+      reached(policy),
+      [],
+      'invoking the query is refused for every caller, so its grant hands nothing over',
     );
   });
 

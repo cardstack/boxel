@@ -1119,7 +1119,9 @@ async function compilePolicy(
 // own `read` or a named operation built on it. A named query's is the query's.
 // An ad-hoc `query` has no declaration, so nothing narrows what it serves.
 // A named query whose `html` declares every format unshareable serves its
-// rows data-only, so it serves no rendering.
+// rows data-only, so it serves no rendering. A query's `html` cannot say
+// which of the formats it shares draw a linked card, so sharing any format
+// counts as serving a rendering.
 //
 // Undefined for a grant that serves no rows' closure: one on any other base,
 // since a write's echo is the card and a stored-bytes read serves bytes, and a
@@ -1165,16 +1167,17 @@ function letsCallerRead(
 }
 
 // The base a kept grant runs on, where the grant can admit anything at all.
-// A query grant admits only through the filter it compiled to, since the gate
-// grants no query. Any other grant whose predicate is annotated as reading a
-// snapshot tier admits nothing: the gate reads the stored source alone, so it
-// never evaluates that predicate.
+// A grant of an operation that failed to lower admits nothing, since invoking
+// it is refused for every caller. A query grant admits only through the
+// filter it compiled to, since the gate grants no query. Any other grant whose
+// predicate is annotated as reading a snapshot tier admits nothing: the gate
+// reads the stored source alone, so it never evaluates that predicate.
 function admittingBase(
   definition: Definition,
   grant: CompiledOperationGrant,
 ): BaseOperation | undefined {
   let granted = grantedOperation(definition, grant.operation);
-  if (!granted) {
+  if (!granted || granted.invalid) {
     return undefined;
   }
   if (granted.base === 'query') {
@@ -1228,7 +1231,9 @@ function splitTypeKey(key: string): ResolvedCodeRef | undefined {
 function grantedOperation(
   definition: Definition,
   name: string,
-): { base: BaseOperation; nonGrantable: boolean } | undefined {
+):
+  | { base: BaseOperation; nonGrantable: boolean; invalid: boolean }
+  | undefined {
   let declared = isDefinitionFreeBaseOperation(name)
     ? undefined
     : ownOperation(definition, name);
@@ -1236,10 +1241,11 @@ function grantedOperation(
     return {
       base: declared.base,
       nonGrantable: declared.nonGrantable === true,
+      invalid: declared.invalid === true,
     };
   }
   return carriesBuiltIn(definition.type, name)
-    ? { base: name as BaseOperation, nonGrantable: false }
+    ? { base: name as BaseOperation, nonGrantable: false, invalid: false }
     : undefined;
 }
 

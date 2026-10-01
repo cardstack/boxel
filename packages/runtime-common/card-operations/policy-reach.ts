@@ -404,8 +404,8 @@ function renderingMessage(
 function withholdingFix(reach: ReachingGrant): string {
   let { operation } = reach.grant;
   return reach.governedBy === 'named-query'
-    ? `declare the formats that draw them \`unshareable\` in the \`${operation}\` query's \`html\``
-    : `grant a named query whose \`html\` declares the formats that draw them \`unshareable\` in place of the ad-hoc \`query\`, which no declaration narrows`;
+    ? `declare every prerendered format \`unshareable\` in the \`${operation}\` query's \`html\` (this check cannot tell which formats draw them, so a format left shared keeps the warning)`
+    : `in place of the ad-hoc \`query\`, which no declaration narrows, grant a named query whose \`html\` declares every prerendered format \`unshareable\``;
 }
 
 function ungrantedClause(
