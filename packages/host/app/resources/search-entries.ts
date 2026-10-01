@@ -823,6 +823,15 @@ export class SearchEntriesResource extends Resource<Args> {
         if (refreshed === undefined) {
           return 'fallback';
         }
+        // The card+html GET serves the formats the card's type withholds
+        // data-only, while this search is governed by its own declaration,
+        // and an ad-hoc one declares nothing. A member the search served with
+        // markup that comes back without any may be one of those formats, and
+        // splicing it in would show it data-only until the next full run
+        // shows it with markup again — so the whole search re-runs instead.
+        if (member.html.length > 0 && refreshed.html.length === 0) {
+          return 'fallback';
+        }
         replacements.set(member.id, refreshed);
       } catch (err) {
         this.#log.warn(

@@ -6,6 +6,7 @@ import {
   identifyCard,
   InvalidQueryError,
   localId,
+  PRERENDERED_HTML_FORMATS,
   realmURL,
   type CarriedOperationInfo,
   type CarriedQueryDeclaration,
@@ -18,6 +19,7 @@ import {
   type OperationsSubject,
   type PolicyExplanation,
   type PolicyValidation,
+  type PrerenderedHtmlFormat,
   type QueryTargetHandle,
   type SearchEntries,
   type SearchEntryWireQuery,
@@ -602,10 +604,67 @@ const LINK_STRATEGY_SET: Record<LinkStrategy, true> = {
 };
 const LINK_STRATEGIES = Object.keys(LINK_STRATEGY_SET) as LinkStrategy[];
 
+// Whether a format's prerendered HTML may be served alongside the data a read
+// or a query answers with.
+//
+//   * `shareable`   — the format's prerendered HTML is served. The default.
+//   * `unshareable` — the format is served data-only: no caller receives its
+//     prerendered HTML, and a consumer renders the card from its data instead.
+//
+// Prerendered HTML is rendered once per card and format, under the realm's own
+// authority, and shared by every viewer — so nothing in it can differ by
+// caller. A format whose template draws linked cards bakes their content into
+// that one shared markup, and a caller who receives the markup receives the
+// linked content whole, whatever they could fetch on their own. Declaring the
+// format unshareable is the author's statement that its markup reaches further
+// than this representation should. Nothing is rendered a second time and
+// nothing is rendered per caller: the format's markup is withheld and its data
+// is not.
+//
+// It is a claim about what the format draws, not a mechanism. An edit that
+// starts embedding a linked card in a format left shareable falsifies it
+// silently, which is what the policy's reach diagnostics are for.
+//
+// On a `read` it governs reads rooted at this card: the card's single-card
+// HTML read, the last-known-good markup an errored read carries in place of
+// the card, and the markup a host-mode page for the card is served with.
+//
+// On a `query` it governs every row the query answers with, alike, whatever
+// type each row is and whatever that type's own `read` declares — the same
+// rule `links` follows on a query. An ad-hoc search declares nothing, so it
+// serves every format's markup, and so does a policy's ad-hoc `query` grant: an
+// author who wants a grant-reached caller to see a format data-only grants a
+// named query that declares it unshareable rather than the ad-hoc one. A
+// search a render runs is exempt, and keeps every format's markup: the markup
+// it draws becomes part of the embedding card's own prerendered HTML, which
+// that card's own declarations govern.
+//
+// The narrowing is uniform: the same request answers a realm reader and a
+// caller reached by a policy grant with the same document, because the shape
+// is a property of the operation rather than of how the caller was
+// authorized.
+export type HtmlSharing = 'shareable' | 'unshareable';
+
+// A total map over the union, for the same reason `LINK_STRATEGY_SET` is one.
+const HTML_SHARING_SET: Record<HtmlSharing, true> = {
+  shareable: true,
+  unshareable: true,
+};
+const HTML_SHARINGS = Object.keys(HTML_SHARING_SET) as HtmlSharing[];
+
+// Whether each prerendered format may be served, by format. A format left out
+// is shareable.
+export type HtmlDeclaration = {
+  readonly [format in PrerenderedHtmlFormat]?: HtmlSharing;
+};
+
 export interface ReadOperationDeclaration extends OperationCommon {
   readonly base: 'read';
   // How much of the card's link graph this read carries. Absent is `full`.
   readonly links?: LinkStrategy;
+  // Which of the card's prerendered formats reads rooted here serve
+  // data-only. Absent, every format is shareable.
+  readonly html?: HtmlDeclaration;
 }
 
 export interface QueryOperationDeclaration extends OperationCommon {
@@ -614,6 +673,9 @@ export interface QueryOperationDeclaration extends OperationCommon {
   readonly query?: QueryDeclaration;
   // How much of each result's link graph the results carry. Absent is `full`.
   readonly links?: LinkStrategy;
+  // Which prerendered formats every result row is served data-only for.
+  // Absent, every format is shareable.
+  readonly html?: HtmlDeclaration;
 }
 
 // Appends one newline-terminated line to a text file. There is no clause: the
@@ -785,8 +847,8 @@ const CLAUSE_KEYS: Record<BaseOperationName, readonly string[]> = {
 // carrying one may still express its work with a raw `transformations`
 // program.
 const MODIFIER_KEYS: Partial<Record<BaseOperationName, readonly string[]>> = {
-  read: ['links'],
-  query: ['links'],
+  read: ['links', 'html'],
+  query: ['links', 'html'],
 };
 
 // Clauses without which an authored declaration names no work at all: a
@@ -1134,6 +1196,42 @@ function assertNameAvailable(owner: typeof BaseDef, key: string) {
   );
 }
 
+// An `html` declaration names prerendered formats, each shareable or not. A
+// key naming anything else would be read by nothing — the realm prerenders
+// only these formats — and a misspelled one would leave the format it meant
+// to withhold served, so both are refused where they are written.
+function assertValidHtmlDeclaration(
+  label: string,
+  base: BaseOperationName,
+  value: unknown,
+) {
+  let subject =
+    base === 'query'
+      ? "which prerendered formats this query's results are served data-only for"
+      : 'which prerendered formats reads of this card serve data-only';
+  if (!isPlainObject(value)) {
+    throw new Error(
+      `${label}: \`html\` must be an object naming ${subject}, by format`,
+    );
+  }
+  for (let [format, sharing] of Object.entries(value)) {
+    if (!PRERENDERED_HTML_FORMATS.includes(format as PrerenderedHtmlFormat)) {
+      throw new Error(
+        `${label}: \`html\` names "${format}", which is not a prerendered format — one of ${quoteList(
+          PRERENDERED_HTML_FORMATS,
+        )}`,
+      );
+    }
+    if (!HTML_SHARINGS.includes(sharing as HtmlSharing)) {
+      throw new Error(
+        `${label}: \`html.${format}\` must say whether the format's prerendered HTML is served — one of ${quoteList(
+          HTML_SHARINGS,
+        )}`,
+      );
+    }
+  }
+}
+
 function assertValidDeclaration(
   owner: typeof BaseDef,
   key: string,
@@ -1225,6 +1323,9 @@ function assertValidDeclaration(
           : 'this read carries'
       } — one of ${quoteList(LINK_STRATEGIES)}`,
     );
+  }
+  if (declaration.html !== undefined) {
+    assertValidHtmlDeclaration(label, base, declaration.html);
   }
   if (declaration.input !== undefined) {
     assertBxlProgram(label, 'input', declaration.input);

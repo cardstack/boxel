@@ -121,6 +121,22 @@ const classroomModule = `
   }
 `;
 
+// A roster links to its students, so a grant that serves a roster's document
+// hands over the students it links to.
+const rosterModule = `
+  import { contains, containsMany, field, linksToMany, CardDef } from "@cardstack/base/card-api";
+  import StringField from "@cardstack/base/string";
+
+  export class Student extends CardDef {
+    @field name = contains(StringField);
+  }
+
+  export class Roster extends CardDef {
+    @field teacherIds = containsMany(StringField);
+    @field students = linksToMany(() => Student);
+  }
+`;
+
 function classroom(teacherIds: string[]) {
   return {
     data: {
@@ -631,11 +647,13 @@ module('Integration | realm policy', function (hooks) {
   async function renderPolicyNamed(
     path: string,
     rules: Record<string, unknown>[],
+    modules: Record<string, string> = {},
   ) {
     let { realm } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
         'classroom.gts': classroomModule,
+        ...modules,
         [`${path}.json`]: policyDocument(rules),
       },
     });
@@ -891,6 +909,109 @@ module('Integration | realm policy', function (hooks) {
     assert.dom('[data-test-policy-grant-inactive]').doesNotExist();
     assert.dom('[data-test-policy-rule-inactive]').doesNotExist();
     assert.dom('[data-test-realm-policy-validate-failure]').doesNotExist();
+  });
+
+  // The grant a warning mark is beside, as the card lists it.
+  function grantMarkedWithWarning() {
+    return document
+      .querySelector('[data-test-policy-grant-warning]')
+      ?.closest('[data-test-policy-grant-status]');
+  }
+
+  test('a live grant that hands over cards of a type no rule grants is marked live with its warning beside it', async function (assert) {
+    await renderPolicyNamed(
+      'policies/reaching',
+      [
+        {
+          targetType: { module: '../roster', name: 'Roster' },
+          grants: [
+            { operation: 'read', where: teachesPredicate },
+            { operation: 'update', where: teachesPredicate },
+          ],
+        },
+      ],
+      { 'roster.gts': rosterModule },
+    );
+
+    assert.deepEqual(
+      await grantStatuses(),
+      ['live', 'live'],
+      'a warning leaves its grant live',
+    );
+    assert
+      .dom('[data-test-policy-grant-inactive]')
+      .doesNotExist('and marks nothing inactive');
+    assert
+      .dom('[data-test-policy-grant-warning]')
+      .exists({ count: 1 }, 'one grant is marked with a warning');
+    let marked = grantMarkedWithWarning();
+    assert.strictEqual(
+      marked?.getAttribute('data-test-policy-grant-status'),
+      'live',
+      'the marked grant is live',
+    );
+    assert
+      .dom('[data-test-operation-grant-operation]', marked ?? undefined)
+      .hasText('read', 'it is the read, whose document carries the students');
+
+    await click('[data-test-policy-grant-warning] summary');
+    assert
+      .dom(
+        '[data-test-policy-grant-warning-message="grant-reaches-ungranted-type"]',
+      )
+      .exists({ count: 1 })
+      .isVisible('opening the mark shows the warning')
+      .includesText(
+        'no rule grants a read of Student',
+        'which says what the grant hands over',
+      );
+
+    assert
+      .dom('[data-test-policy-issue]')
+      .exists({ count: 1 })
+      .hasAttribute('data-test-policy-issue', 'grant-reaches-ungranted-type');
+    assert
+      .dom('[data-test-policy-issue-rule]')
+      .hasText('Roster', 'the warning is listed with its rule');
+    assert
+      .dom('[data-test-policy-issue-operation]')
+      .hasText('read', 'and its grant');
+    assert
+      .dom('[data-test-policy-issue] [data-test-policy-issue-warning]')
+      .exists('and is marked there as a warning');
+    assert
+      .dom('[data-test-policy-issue-message]')
+      .includesText('no rule grants a read of Student');
+  });
+
+  test('a policy whose issues only leave grants inactive marks no warning', async function (assert) {
+    await renderPolicyNamed('policies/inactive-only', [
+      {
+        targetType: { module: '../classroom', name: 'Classroom' },
+        grants: [
+          { operation: 'read' },
+          { operation: 'delete', where: MISTYPED },
+          { operation: 'query', where: UNFILTERABLE },
+        ],
+      },
+    ]);
+
+    assert.deepEqual(await grantStatuses(), ['live', 'inactive', 'inactive']);
+    assert
+      .dom('[data-test-policy-grant-inactive]')
+      .exists(
+        { count: 2 },
+        'each grant an issue leaves out is marked inactive',
+      );
+    assert
+      .dom('[data-test-policy-issue]')
+      .exists({ count: 2 }, 'and each issue is listed');
+    assert
+      .dom('[data-test-policy-grant-warning]')
+      .doesNotExist('no grant is marked with a warning');
+    assert
+      .dom('[data-test-policy-issue-warning]')
+      .doesNotExist('and no listed issue is marked as one');
   });
 
   test('a view created in an index render never asks what the policy compiles to', async function (assert) {

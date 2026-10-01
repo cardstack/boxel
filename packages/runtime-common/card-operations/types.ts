@@ -10,8 +10,14 @@ import type {
   SearchEntryWireQuery,
 } from '../search-entry.ts';
 import type { OperationDiagnostics } from './telemetry.ts';
+import {
+  PRERENDERED_HTML_FORMATS,
+  type PrerenderedHtmlFormat,
+} from '../prerendered-html-format.ts';
 import type {
   BaseOperationName,
+  HtmlDeclaration,
+  HtmlSharing,
   LinkStrategy,
 } from '@cardstack/base/operations';
 
@@ -165,6 +171,49 @@ export function effectiveLinkStrategy(
   );
 }
 
+// The two answers an `html` declaration gives a format, as a total map over the
+// union for the same reason `LINK_STRATEGY_REACH` is one.
+const HTML_SHARING: Record<HtmlSharing, true> = {
+  shareable: true,
+  unshareable: true,
+};
+
+// Whether a value is an `html` declaration the serving path can act on: an
+// object naming prerendered formats, each shareable or not.
+export function isHtmlDeclaration(value: unknown): value is HtmlDeclaration {
+  if (value == null || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+  return Object.entries(value).every(
+    ([format, sharing]) =>
+      PRERENDERED_HTML_FORMATS.includes(format as PrerenderedHtmlFormat) &&
+      typeof sharing === 'string' &&
+      Object.prototype.hasOwnProperty.call(HTML_SHARING, sharing),
+  );
+}
+
+// The formats a stored definition's `html` serves data-only, in the realm's
+// own format order. Absent, there are none: every format is shareable, which
+// is the default for every read and query.
+//
+// Anything else is JSON the realm reads back, so it is only as good as what
+// wrote it. Lowering records an unrecognized declaration rather than storing
+// one, which leaves the last branch unreachable through the path definitions
+// actually take — and reads as every format withheld if something ever gets
+// around it, because a withholding the realm cannot interpret is not a reason
+// to serve more.
+export function unshareableFormatsOf(value: unknown): PrerenderedHtmlFormat[] {
+  if (value === undefined) {
+    return [];
+  }
+  if (!isHtmlDeclaration(value)) {
+    return [...PRERENDERED_HTML_FORMATS];
+  }
+  return PRERENDERED_HTML_FORMATS.filter(
+    (format) => value[format] === 'unshareable',
+  );
+}
+
 export interface OperationDefinition {
   // The built-in behavior that carries this operation out. The name the
   // operation is invoked under is the key it is stored under, and the two are
@@ -227,6 +276,23 @@ export interface OperationDefinition {
   // own authority, and sits in the card's own attributes rather than in the
   // link closure.
   links?: LinkStrategy;
+  // Which prerendered formats this read, or every row of this query, serves
+  // data-only: by format, `unshareable` to withhold the format's prerendered
+  // HTML and `shareable` (the same as leaving it out) to serve it. Absent,
+  // every format is served. Only a `read` or a `query` carries one.
+  //
+  // On a read it governs reads rooted at the target — its single-card HTML
+  // read, the last-known-good markup an errored read carries, and the markup
+  // a host-mode page for it is served with. On a query it governs every row
+  // alike, whatever type the row is and whatever that type's own `read`
+  // declares, as `links` does.
+  //
+  // It applies to every caller alike, for the reason `links` does: prerendered
+  // HTML is rendered once per card and format, under the realm's own
+  // authority, and shared by every viewer — so a format is either served to
+  // everyone or to no one, and the response never depends on how its caller
+  // was authorized.
+  html?: HtmlDeclaration;
   // The author's override of the client's optimistic eligibility.
   optimistic?: boolean;
   // Whether every program this operation runs yields the same result for the
@@ -321,6 +387,14 @@ export type OperationLoweringIssueCode =
   // A `links` value that is not one of the strategies a read or a query can
   // apply.
   | 'invalid-link-strategy'
+  // An `html` declaration on a base other than `read` or `query`. It withholds
+  // prerendered HTML a read of the target or a query's rows are served with,
+  // and no other base serves any: a write answers with the card's data, and a
+  // `readSource` serves stored bytes.
+  | 'html-without-rendering'
+  // An `html` declaration that is not an object naming prerendered formats,
+  // each `shareable` or `unshareable`.
+  | 'invalid-html-declaration'
   // A raw BXL program that does not parse.
   | 'invalid-program'
   // A declared query the realm's own query grammar refuses.
@@ -377,12 +451,13 @@ export interface LowerOperationDeclarationsResult {
   issues: OperationLoweringIssue[];
 }
 
-// What compiling a realm's policy found wrong with it. Each is recorded
-// against the part of the policy that caused it, and that part is inactive:
-// a problem with the card as a whole leaves the policy with no rules, one
-// with a rule leaves that rule out, and one with a grant leaves that grant
-// out. The rest of the policy applies. `policy-not-filterable` alone keeps
-// its grant, for everything but a search.
+// What compiling a realm's policy found wrong with it, or found worth telling
+// its author. Each is recorded against the part of the policy that caused it,
+// and its `severity` says what became of that part. Most leave it inactive: a
+// problem with the card as a whole leaves the policy with no rules, one with a
+// rule leaves that rule out, and one with a grant leaves that grant out, or,
+// for `policy-not-filterable`, keeps it with nothing it can admit. The rest of
+// the policy applies. The codes in `KEEPS_ITS_PART` leave their part live.
 export type PolicyIssueCode =
   // The realm's `policy` pointer names a card the index does not hold.
   | 'policy-card-missing'
@@ -429,15 +504,39 @@ export type PolicyIssueCode =
   // a listed one, so such a grant would admit callers it does not name.
   | 'partial-match'
   // A grant on a query whose `where` does not compile to a search filter. The
-  // grant is kept, and admits no search.
+  // grant is kept without one, and so admits nothing: the gate grants no
+  // query, and a search reaches a query grant only through its filter.
   | 'policy-not-filterable'
   // A `where` that reads a computed value or a linked card's field without
   // the `snapshot` annotation. Reserved: compiling does not record it.
   | 'unsnapshotted-policy-read'
-  // A grant on a type whose representation links to cards of types the
-  // policy grants nothing on, so the grant reaches those cards too. Reserved:
-  // compiling does not record it.
-  | 'grant-reaches-ungranted-type';
+  // A `read` or `query` grant whose document, under the link strategy that
+  // governs it, carries cards of a type no rule lets a caller read, so the
+  // grant hands those cards to every caller it admits. A type that is
+  // authorization infrastructure counts as unreadable whatever the rules say.
+  // The grant is kept: the reach is often deliberate, and this tells the
+  // author it is there.
+  | 'grant-reaches-ungranted-type'
+  // A `query` grant whose rows' prerendered HTML can draw cards of a type no
+  // rule lets a caller read. Search rows carry their renderings, and a render
+  // draws the card's links whatever strategy the grant's document is served
+  // under, so this is recorded independently of
+  // `grant-reaches-ungranted-type`. The grant is kept, for the same reason.
+  | 'render-reaches-ungranted-type';
+
+// The codes that leave the part of the policy they are recorded against live.
+export const KEEPS_ITS_PART: ReadonlySet<PolicyIssueCode> = new Set([
+  'grant-reaches-ungranted-type',
+  'render-reaches-ungranted-type',
+]);
+
+export type PolicyIssueSeverity = 'inactive' | 'warning';
+
+export function policyIssueSeverity(
+  code: PolicyIssueCode,
+): PolicyIssueSeverity {
+  return KEEPS_ITS_PART.has(code) ? 'warning' : 'inactive';
+}
 
 // A problem found while compiling a realm's policy. Recorded, never thrown,
 // for the reason lowering records rather than throws: the edit that caused it
@@ -449,6 +548,14 @@ export interface PolicyIssue {
   // for a problem with the card as a whole.
   path: string;
   message: string;
+  // What became of the part of the policy the issue is recorded against. That
+  // part is the rule or grant `path` falls under rather than the leaf it
+  // names: `rules[0].grants[1].where` is the grant `rules[0].grants[1]`,
+  // `rules[0].targetType` is the rule `rules[0]`, and the empty path is the
+  // whole policy. `inactive` means that part admits nothing: it was left out,
+  // or kept with nothing it can admit. `warning` means it is live, and the
+  // issue says something the author should know about what it grants.
+  severity: PolicyIssueSeverity;
 }
 
 // ============================================================================
