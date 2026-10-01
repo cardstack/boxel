@@ -1,6 +1,6 @@
 import type { Readable } from 'stream';
 import type { CodeRef } from '../code-ref.ts';
-import type { ScreenshotManifest } from '../capture-spec.ts';
+import type { CaptureManifest } from '../capture-spec.ts';
 import type {
   SingleCardDocument,
   SingleFileMetaDocument,
@@ -595,7 +595,7 @@ export interface OperationDocumentResult {
 
 // What the index row behind a read says about itself: the values the card+json
 // response headers are computed from — the validator, the modification time,
-// and the index-data generation and screenshot manifest that go into it.
+// and the index-data generation and capture manifest that go into it.
 // Carried by both read modes, since the document mode reports the row its body
 // came from alongside the body.
 export interface OperationRowHeaders {
@@ -608,7 +608,7 @@ export interface OperationRowHeaders {
   indexedAt: number | null;
   lastModified: number | null;
   generation: number | null;
-  screenshots: ScreenshotManifest | null;
+  captures: CaptureManifest | null;
   // The target's index-row dependencies. Carried because a validator is only
   // safe when none of them live in another realm: cross-realm invalidation
   // does not cascade `indexed_at`, so a stable local one does not mean the
@@ -829,10 +829,15 @@ export type PolicyExplanationReason =
   // other matching grant held.
   | 'predicate-threw'
   // The operation is kept out of every policy's reach: declared
-  // `nonGrantable` on the target's type or a type it descends from, or a
-  // behavior no grant reaches here at all — a query, which is authorized on
-  // the search engine's lane, and an explain.
+  // `nonGrantable` on the target's type or a type it descends from, or an
+  // explain, which no grant reaches.
   | 'non-grantable'
+  // The operation is a query. A query is not invoked on a card: it is named,
+  // with the type that declares it, in a search, and the search decides what
+  // it returns by composing into it the filter of each grant the actor holds
+  // on it. So invoking it on the card is refused whatever the policy grants,
+  // and this explanation reports no rule for it.
+  | 'query-lane'
   // Any operation on the realm's policy card or on its config card, or one
   // that reads, changes or mints any policy card, which no grant reaches
   // whatever the card's type declares.

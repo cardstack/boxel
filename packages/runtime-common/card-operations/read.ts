@@ -1,4 +1,4 @@
-import { screenshotsMetaFromManifest } from '../capture-spec.ts';
+import { capturesMetaFromManifest } from '../capture-spec.ts';
 import { isSingleCardDocument } from '../document-types.ts';
 import {
   canonicalizeTarget,
@@ -48,7 +48,7 @@ import type { SearchResultError } from '../realm-index-query-engine.ts';
 // The document mode's *body* is held to byte-for-byte agreement with what the
 // card+json GET handler serves: the same canonical URL, the same `links.self`,
 // the same prefix-form ids, the same freshly-joined `meta.generation` and
-// `meta.screenshots`, the same disk-read file-meta document for a path that
+// `meta.captures`, the same disk-read file-meta document for a path that
 // holds bytes, and the same mapping from an errored index row to an HTTP
 // status.
 //
@@ -170,7 +170,7 @@ async function readDocument(
     delete doc.data.relationships;
   }
   core.unresolveInstanceIds(doc);
-  // The index-data generation, the source version and the declared-screenshot
+  // The index-data generation, the source version and the declared-capture
   // manifest are joined at serve time onto a fresh `meta` — never a mutation of
   // the cached pristine doc's own. The generation lets a consumer tell fresh
   // index data from stale; the manifest is never written back into the index row
@@ -192,9 +192,9 @@ async function readDocument(
     ...doc.data.meta,
     generation: result.generation,
     ...(result.version != null ? { version: result.version } : {}),
-    ...(result.screenshots
+    ...(result.captures
       ? {
-          screenshots: screenshotsMetaFromManifest(result.screenshots, {
+          captures: capturesMetaFromManifest(result.captures, {
             realmURL: core.realmURL,
             instanceLocalPath: localPath,
           }),
@@ -217,7 +217,7 @@ async function readDocument(
       indexedAt: result.indexedAt,
       lastModified: numberOrNull(doc.data.meta.lastModified),
       generation: result.generation,
-      screenshots: result.screenshots,
+      captures: result.captures,
       deps: result.deps,
     },
     queryBacked: result.queryBacked,
@@ -267,7 +267,7 @@ async function readHeaders(
         indexedAt: file.indexedAt,
         lastModified: file.lastModified,
         generation: file.generation,
-        screenshots: file.screenshots,
+        captures: file.captures,
         deps: file.deps,
       };
     }
@@ -301,7 +301,7 @@ async function readHeaders(
     indexedAt: row.indexedAt,
     lastModified: row.lastModified,
     generation: row.generation,
-    screenshots: row.screenshots,
+    captures: row.captures,
     deps: row.deps,
   };
 }
@@ -316,7 +316,7 @@ function headersFromDisk(
     indexedAt: null,
     lastModified: numberOrNull(document.data.attributes?.lastModified),
     generation: null,
-    screenshots: null,
+    captures: null,
     deps: null,
   };
 }

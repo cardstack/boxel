@@ -1082,6 +1082,8 @@ class Isolated extends Component<typeof Workspace> {
             @onChangeFilter={{this.onChangeFilter}}
             @onChangeView={{this.onChangeView}}
             @onChangeSort={{this.onChangeSort}}
+            @page={{this.currentLibraryPage}}
+            @onPageChange={{this.onChangeLibraryPage}}
           >
             <:contentHeaderStart>
               <Tooltip @placement='bottom'>
@@ -2678,7 +2680,7 @@ class Isolated extends Component<typeof Workspace> {
     if (!chosenId) {
       return;
     }
-    let card = await this.args.context?.store.get<CardDef>(chosenId);
+    let card = await this.args.context?.store.get(chosenId);
     if (card && isCardInstance(card)) {
       let existing = (this.args.model.entryPoints ?? []) as CardDef[];
       if (existing.some((c) => c?.id === card.id)) {
@@ -3185,11 +3187,8 @@ class Isolated extends Component<typeof Workspace> {
     this.createCard.perform();
   }
 
-  private get query(): Query | undefined {
-    if (!this.activeFilter?.query) {
-      return undefined;
-    }
-    let filter = this.activeFilter.query.filter;
+  private get libraryFilter(): Query['filter'] {
+    let filter = this.activeFilter?.query?.filter;
     // Search-within-filter: typing in Library narrows the visible list to
     // filter ∧ term (the dropdown stays realm-wide). CLI-verified: the
     // composed clause needs its own `type` sibling to match.
@@ -3208,13 +3207,61 @@ class Isolated extends Component<typeof Workspace> {
         ],
       } as Query['filter'];
     }
+    return filter;
+  }
+
+  private get query(): Query | undefined {
+    if (!this.activeFilter?.query) {
+      return undefined;
+    }
     return {
       ...this.activeFilter.query,
-      filter,
+      filter: this.libraryFilter,
       sort: this.activeSort?.sort,
-      // Bound the unified Library search on the server.
-      page: { size: SEARCH_PAGE_SIZE },
+      // Bound the unified Library search on the server, one page at a time.
+      page: {
+        size: this.libraryPageSize,
+        number: this.currentLibraryPage - 1,
+      },
     };
+  }
+
+  private get libraryPageSize(): number {
+    return (this.args.model.constructor as typeof Workspace).libraryPageSize;
+  }
+
+  // The Library page (1-based) belongs to the filter + sort it was chosen
+  // under: once either changes, the list starts again at page 1, and going
+  // back to that filter later starts at page 1 too. A live re-run keeps the
+  // key, so it stays on the page. It lives only in this component, so a
+  // reload also starts at page 1.
+  @tracked private libraryPage: { key: string; page: number } | undefined;
+  // Pages chosen under a key the Library has since moved away from. Kept out
+  // of tracking so the getter below can record it while rendering; the key
+  // change that fills it already invalidated the getter.
+  #abandonedPages = new WeakSet<{ key: string; page: number }>();
+
+  private get libraryPageKey(): string {
+    return JSON.stringify({
+      filter: this.libraryFilter,
+      sort: this.activeSort?.sort,
+    });
+  }
+
+  private get currentLibraryPage(): number {
+    let chosen = this.libraryPage;
+    if (!chosen) {
+      return 1;
+    }
+    if (chosen.key !== this.libraryPageKey) {
+      this.#abandonedPages.add(chosen);
+      return 1;
+    }
+    return this.#abandonedPages.has(chosen) ? 1 : chosen.page;
+  }
+
+  @action private onChangeLibraryPage(page: number) {
+    this.libraryPage = { key: this.libraryPageKey, page };
   }
 
   private get realms(): string[] {
@@ -3440,7 +3487,7 @@ class Isolated extends Component<typeof Workspace> {
       presetRef ??
       (filter && 'type' in filter ? (filter.type as CodeRef) : undefined); // Glint-safe query projection
 
-    let spec: Spec | CardErrorJSONAPI | undefined;
+    let spec: CardDef | CardErrorJSONAPI | undefined;
     if (activeFilterRef) {
       let instances = await this.searchRealm({
         // Keep Spec lookup inside this realm.
@@ -3475,7 +3522,7 @@ class Isolated extends Component<typeof Workspace> {
         return;
       }
 
-      spec = await this.args.context?.store.get<Spec>(specId);
+      spec = await this.args.context?.store.get(specId);
     }
 
     if (spec && isCardInstance<Spec>(spec)) {
@@ -3831,6 +3878,8 @@ export class Workspace extends CardDef {
   static icon = LayoutGridPlusIcon;
   static isolated = Isolated;
   static prefersWideFormat = true;
+  // Rows per Library page. A subclass may page in smaller steps.
+  static libraryPageSize = SEARCH_PAGE_SIZE;
 
   // the edit format IS the workspace's settings page.
   // Five sections; every control wires to live behavior.

@@ -4,6 +4,7 @@ import { action } from '@ember/object';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 
+import { isEqual } from 'lodash-es';
 import { consume } from 'ember-provide-consume-context';
 import { modifier } from 'ember-modifier';
 
@@ -15,7 +16,9 @@ import {
 import FileIcon from '@cardstack/boxel-icons/file';
 import TriangleAlert from '@cardstack/boxel-icons/triangle-alert';
 
-import { cn, eq } from '@cardstack/boxel-ui/helpers';
+import { cn } from '@cardstack/boxel-ui/helpers';
+
+import { Pagination } from '@cardstack/pretui/components/pagination';
 
 import {
   isValidPrerenderedHtmlFormat,
@@ -27,6 +30,7 @@ import {
   type Query,
   type RenderableSearchEntryLike,
   type SearchEntryWireQuery,
+  type SearchResultsYield,
 } from '@cardstack/runtime-common';
 
 import type {
@@ -45,9 +49,16 @@ interface Signature {
     format: Format;
     cards?: BoxComponent[];
     viewOption?: string;
+    // Page controls, 1-based, for a query that names a `page.size`. The
+    // controls render only when `onPageChange` is passed and the results span
+    // more than one page; the caller owns the page and puts it on the query.
+    page?: number;
+    onPageChange?: (page: number) => void;
   };
   Element: HTMLElement;
 }
+
+const VIEW_CLASSES = new Set(['grid', 'strip', 'card']);
 
 type CardComponentModifier = NonNullable<CardContext['cardComponentModifier']>;
 
@@ -90,6 +101,79 @@ export default class CardList extends Component<Signature> {
       },
     };
   }
+
+  private get listClass(): string {
+    let view = this.args.viewOption;
+    return view && VIEW_CLASSES.has(view)
+      ? `boxel-card-list ${view}-view`
+      : 'boxel-card-list';
+  }
+
+  // The last page the results reach (1 when there are none), or undefined when
+  // the list is not paged.
+  private lastPage = (total: number | undefined): number | undefined => {
+    let size = this.args.query?.page?.size;
+    if (!this.args.onPageChange || !size) {
+      return undefined;
+    }
+    return Math.max(1, Math.ceil((total ?? 0) / size));
+  };
+
+  // The page count when the results span more than one page, else undefined.
+  private pageCount = (total: number | undefined): number | undefined => {
+    let pages = this.lastPage(total);
+    return pages !== undefined && pages > 1 ? pages : undefined;
+  };
+
+  // Settled on the answer to the current query, not a failed fetch — an error
+  // says nothing about how many pages there are.
+  private isSettled = (results: SearchResultsYield): boolean =>
+    !results.isLoading && !results.errors?.length;
+
+  // Deletions can leave the chosen page past the last one, where the query
+  // returns nothing and, once a single page remains, no controls render to
+  // leave it by. Once the results settle there, move the page owner to the
+  // last page. Out of the render that observed it, since the owner's page is
+  // tracked state this render already read.
+  private followLastPage = modifier(
+    (
+      _element: Element,
+      [lastPage, settled, page]: [
+        number | undefined,
+        boolean,
+        number | undefined,
+      ],
+    ) => {
+      if (!settled || lastPage === undefined || (page ?? 1) <= lastPage) {
+        return;
+      }
+      let onPageChange = this.args.onPageChange;
+      void Promise.resolve().then(() => onPageChange?.(lastPage));
+    },
+  );
+
+  // The rows to show: none while another page loads, so the loading state
+  // stands in for rows from the page the controls just left. Only a page turn
+  // does this — a query that differs in more than its page (a filter, sort or
+  // search-term change, which also sends the page back to 1) keeps its rows up
+  // meanwhile, as the term changes on every keystroke.
+  private visibleEntries = (
+    results: SearchResultsYield,
+  ): RenderableSearchEntryLike[] => {
+    let shown = results.entriesQuery;
+    let current = this.searchResultsQuery;
+    let turningPage =
+      results.isLoading &&
+      shown !== undefined &&
+      (shown.page?.number ?? 0) !== (current.page?.number ?? 0) &&
+      isEqual({ ...shown, page: undefined }, { ...current, page: undefined });
+    return turningPage ? [] : results.entries;
+  };
+
+  // Clamped, so the controls point at a real page in the moment before
+  // `followLastPage` moves a page left past the end back onto one.
+  private currentPage = (pages: number): number =>
+    Math.min(Math.max(this.args.page ?? 1, 1), pages);
 
   // Tracks the fallback row with the overlay system. Falls back to a no-op
   // when no context provides one (e.g. CardList used outside operator mode),
@@ -156,53 +240,53 @@ export default class CardList extends Component<Signature> {
   }
 
   <template>
-    <ul
-      class={{cn
-        'boxel-card-list'
-        grid-view=(eq @viewOption 'grid')
-        strip-view=(eq @viewOption 'strip')
-        card-view=(eq @viewOption 'card')
-      }}
-      ...attributes
-    >
+    <div class='boxel-card-list-container' ...attributes>
       {{#if @query}}
         <@context.searchResultsComponent
           @query={{this.searchResultsQuery}}
           @mode='none'
           as |results|
         >
-          {{#each results.entries key='id' as |entry|}}
-            <li
-              class={{cn
-                'boxel-card-list-item'
-                instance-error=entry.isError
-                clickable=(if this.cardCrudFunctions.viewCard true false)
-                fallback=(this.shouldRenderFallback entry)
-              }}
-              data-test-instance-error={{entry.isError}}
-              data-test-cards-grid-item={{removeFileExtension entry.id}}
-              {{! In order to support scrolling cards into view we use a selector that is not pruned out in production builds }}
-              data-cards-grid-item={{removeFileExtension entry.id}}
-              data-card-type-display-name={{if
-                (this.shouldRenderFallback entry)
-                entry.displayName
-              }}
-              data-card-type-icon-html={{if
-                (this.shouldRenderFallback entry)
-                entry.iconHtml
-              }}
-              role={{if this.cardCrudFunctions.viewCard 'button'}}
-              tabindex={{if this.cardCrudFunctions.viewCard '0'}}
-              {{on 'click' (fn this.handleCardClick entry.id)}}
-              {{(this.trackerFor entry)
-                cardId=entry.id
-                format='data'
-                fieldType=undefined
-                fieldName=undefined
-              }}
-            >
-              {{#if (this.shouldRenderErrorTile entry)}}
-                {{! An error row with no renderable HTML (no good rendering, no
+          <ul
+            class={{this.listClass}}
+            {{this.followLastPage
+              (this.lastPage results.meta.page.total)
+              (this.isSettled results)
+              @page
+            }}
+          >
+            {{#each (this.visibleEntries results) key='id' as |entry|}}
+              <li
+                class={{cn
+                  'boxel-card-list-item'
+                  instance-error=entry.isError
+                  clickable=(if this.cardCrudFunctions.viewCard true false)
+                  fallback=(this.shouldRenderFallback entry)
+                }}
+                data-test-instance-error={{entry.isError}}
+                data-test-cards-grid-item={{removeFileExtension entry.id}}
+                {{! In order to support scrolling cards into view we use a selector that is not pruned out in production builds }}
+                data-cards-grid-item={{removeFileExtension entry.id}}
+                data-card-type-display-name={{if
+                  (this.shouldRenderFallback entry)
+                  entry.displayName
+                }}
+                data-card-type-icon-html={{if
+                  (this.shouldRenderFallback entry)
+                  entry.iconHtml
+                }}
+                role={{if this.cardCrudFunctions.viewCard 'button'}}
+                tabindex={{if this.cardCrudFunctions.viewCard '0'}}
+                {{on 'click' (fn this.handleCardClick entry.id)}}
+                {{(this.trackerFor entry)
+                  cardId=entry.id
+                  format='data'
+                  fieldType=undefined
+                  fieldName=undefined
+                }}
+              >
+                {{#if (this.shouldRenderErrorTile entry)}}
+                  {{! An error row with no renderable HTML (no good rendering, no
                     last-known-good rendering, no live item). Render the
                     full-cell error tile — centered alert icon + the result's
                     realm-local name — so the grid cell reads as a card-shaped
@@ -211,23 +295,23 @@ export default class CardList extends Component<Signature> {
                     overlay can still select/label it. Routing these through
                     `<entry.component />` would render the compact
                     `SearchResultError` row, which doesn't fill a grid cell. }}
-                <CardContainer
-                  class='error-tile'
-                  @displayBoundaries={{true}}
-                  data-test-card-error
-                >
-                  <div class='error'>
-                    <div class='thumbnail'>
-                      <TriangleAlert />
+                  <CardContainer
+                    class='error-tile'
+                    @displayBoundaries={{true}}
+                    data-test-card-error
+                  >
+                    <div class='error'>
+                      <div class='thumbnail'>
+                        <TriangleAlert />
+                      </div>
+                      <div
+                        class='name'
+                        data-test-instance-error-name
+                      >{{entry.name}}</div>
                     </div>
-                    <div
-                      class='name'
-                      data-test-instance-error-name
-                    >{{entry.name}}</div>
-                  </div>
-                </CardContainer>
-              {{else if (this.shouldRenderFallback entry)}}
-                {{! A file row with no prerendered HTML (currently `.gts`/`.ts`
+                  </CardContainer>
+                {{else if (this.shouldRenderFallback entry)}}
+                  {{! A file row with no prerendered HTML (currently `.gts`/`.ts`
                     FileDef rows) — render the type icon + name so the row is
                     visible and the click handler on this `<li>` can still route
                     into interact-mode (and from there into Code Mode), without
@@ -237,42 +321,71 @@ export default class CardList extends Component<Signature> {
                     overlay labels and acts on these rows, aligned to the card.
                     Error-no-HTML rows render the tile above; no-HTML card rows
                     render live (self-healing) through `<entry.component />`. }}
-                <div class='card-fallback' data-test-card-fallback>
-                  {{#if entry.iconHtml}}
-                    <span
-                      class='card-fallback__icon card-fallback__icon--svg'
-                    >{{htmlSafe entry.iconHtml}}</span>
-                  {{else}}
-                    <FileIcon class='card-fallback__icon' role='presentation' />
-                  {{/if}}
-                  <div class='card-fallback__name'>
-                    {{this.fileNameFromUrl entry.id}}
+                  <div class='card-fallback' data-test-card-fallback>
+                    {{#if entry.iconHtml}}
+                      <span
+                        class='card-fallback__icon card-fallback__icon--svg'
+                      >{{htmlSafe entry.iconHtml}}</span>
+                    {{else}}
+                      <FileIcon
+                        class='card-fallback__icon'
+                        role='presentation'
+                      />
+                    {{/if}}
+                    <div class='card-fallback__name'>
+                      {{this.fileNameFromUrl entry.id}}
+                    </div>
                   </div>
+                {{else}}
+                  <entry.component />
+                {{/if}}
+              </li>
+            {{else}}
+              {{#if results.isLoading}}
+                <div class='loading-container' data-test-card-list-loading>
+                  <LoadingIndicator />
                 </div>
               {{else}}
-                <entry.component />
+                <p>No results were found</p>
               {{/if}}
-            </li>
-          {{else}}
-            {{#if results.isLoading}}
-              <div class='loading-container'>
-                <LoadingIndicator />
-              </div>
-            {{else}}
-              <p>No results were found</p>
+            {{/each}}
+          </ul>
+          {{#let (this.pageCount results.meta.page.total) as |pages|}}
+            {{#if pages}}
+              <Pagination
+                class='card-list-pagination'
+                @pages={{pages}}
+                @page={{this.currentPage pages}}
+                @onPageChange={{@onPageChange}}
+                data-test-card-list-pagination
+              />
             {{/if}}
-          {{/each}}
+          {{/let}}
         </@context.searchResultsComponent>
       {{else if @cards}}
-        {{#each @cards key='id' as |Card|}}
-          <li class='boxel-card-list-item'>
-            <Card @format={{@format}} class='card-item {{@format}}-card-item' />
-          </li>
-        {{/each}}
+        <ul class={{this.listClass}}>
+          {{#each @cards key='id' as |Card|}}
+            <li class='boxel-card-list-item'>
+              <Card
+                @format={{@format}}
+                class='card-item {{@format}}-card-item'
+              />
+            </li>
+          {{/each}}
+        </ul>
       {{/if}}
-    </ul>
+    </div>
 
     <style scoped>
+      .boxel-card-list-container {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+      }
+      .card-list-pagination {
+        align-self: center;
+        padding: 0 var(--boxel-sp) var(--boxel-sp-lg);
+      }
       .boxel-card-list {
         --padding: var(--boxel-card-list-padding, var(--boxel-sp));
         --gap: var(--boxel-card-list-gap, var(--boxel-sp));

@@ -23,6 +23,7 @@ import type {
   FileMetaResource,
   QueryResultsMeta,
   LinkShapePolicy,
+  ServedRealm,
 } from '@cardstack/runtime-common';
 import {
   Realm,
@@ -66,6 +67,7 @@ import {
   type RealmRegistryRow,
 } from '../../lib/realm-registry-reconciler.ts';
 import { realmDiskPath } from '../../lib/realm-disk-path.ts';
+import { findRealm } from '../../lib/realm-routing.ts';
 import { upsertPublishedRealmInRegistry } from '../../lib/realm-registry-writes.ts';
 
 import {
@@ -1333,7 +1335,7 @@ export async function createRealm({
   fullIndexOnStartup,
   skipBootIndex,
   mediaCacheAdapter,
-  screenshotSyncWaitMs,
+  captureSyncWaitMs,
   readIndexDrainBudgetMs,
   linkShapePolicy,
   cardDocumentCache = new CardDocumentCache(),
@@ -1376,12 +1378,12 @@ export async function createRealm({
   // if you are creating a realm  to test it directly without a server, you can
   // also specify `withWorker: true` to also include a worker with your realm
   withWorker?: true;
-  // MediaCache object store for the realm's `_screenshot/` route; absent
-  // means every screenshot request serves as an uncaptured miss.
+  // MediaCache object store for the realm's `_capture/` route; absent
+  // means every capture request serves as an uncaptured miss.
   mediaCacheAdapter?: MediaCacheAdapter;
-  // Shrinks the `_screenshot/` route's on-demand sync-wait budget so tests
+  // Shrinks the `_capture/` route's on-demand sync-wait budget so tests
   // can exercise the 503 + Retry-After path without holding real time.
-  screenshotSyncWaitMs?: number;
+  captureSyncWaitMs?: number;
   // Shrinks the card read endpoints' read-your-writes indexing-drain budget
   // so tests can exercise the bounded-wait path without holding real time.
   readIndexDrainBudgetMs?: number;
@@ -1397,7 +1399,7 @@ export async function createRealm({
   cardDocumentCache?: CardDocumentCache;
   // The other realms the realm can reach, for an explain on its policy card
   // that asks about a target in one of them.
-  realmFor?: (url: URL) => Promise<Realm | undefined>;
+  realmFor?: (url: URL) => Promise<ServedRealm | undefined>;
 }): Promise<{ realm: Realm; adapter: RealmAdapter }> {
   await insertPermissions(dbAdapter, new URL(realmURL), permissions);
 
@@ -1482,7 +1484,7 @@ export async function createRealm({
     {
       ...(fullIndexOnStartup ? { fullIndexOnStartup: true as const } : {}),
       ...(skipBootIndex ? { skipBootIndex: true as const } : {}),
-      ...(screenshotSyncWaitMs !== undefined ? { screenshotSyncWaitMs } : {}),
+      ...(captureSyncWaitMs !== undefined ? { captureSyncWaitMs } : {}),
       ...(linkShapePolicy ? { linkShapePolicy } : {}),
       ...(readIndexDrainBudgetMs !== undefined
         ? { readIndexDrainBudgetMs }
@@ -1589,7 +1591,7 @@ export async function runTestRealmServer({
     realmServerMatrixUsername: testRealmServerMatrixUsername,
     prerenderer,
     createPrerenderAuth: testCreatePrerenderAuth,
-    // The indexing worker persists declared screenshots when a store is
+    // The indexing worker persists declared captures when a store is
     // configured — same wiring as the production worker child.
     mediaCacheAdapter,
   });
@@ -1755,6 +1757,8 @@ export async function runTestRealmServerWithRealms({
   let createdRealms: Realm[] = [];
   let realmAdapters: RealmAdapter[] = [];
   let matrixUsers = ['test_realm', 'node-test_realm'];
+  // Built once every realm is, which is before any of them reaches another.
+  let reconciler: RealmRegistryReconciler | undefined;
 
   for (let [index, realmConfig] of realms.entries()) {
     let realmDir = join(realmsRootPath, `realm_${index}`);
@@ -1773,10 +1777,16 @@ export async function runTestRealmServerWithRealms({
       dbAdapter,
       enableFileWatcher,
       definitionLookup,
-      // Every realm this server holds, as the production server reaches the
-      // realms it serves.
+      // Every realm this server serves, reached as the production server
+      // reaches them: found without being mounted.
       realmFor: async (url) =>
-        createdRealms.find((candidate) => candidate.paths.inRealm(url)),
+        reconciler
+          ? await findRealm(url, {
+              realms: createdRealms,
+              reconciler,
+              dbAdapter,
+            })
+          : undefined,
     });
     await realm.logInToMatrix();
     virtualNetwork.mount(realm.handle);
@@ -1791,7 +1801,7 @@ export async function runTestRealmServerWithRealms({
   });
 
   let serverURL = new URL(realms[0].realmURL.origin);
-  let reconciler = makeTestReconciler(dbAdapter, createdRealms, {
+  reconciler = makeTestReconciler(dbAdapter, createdRealms, {
     realmsRootPath,
     virtualNetwork,
     queue: publisher,
@@ -3265,7 +3275,7 @@ export function realmConfigCardJSON(
     iconURL?: string;
     backgroundURL?: string;
     includePrerenderedDefaultRealmIndex?: boolean;
-    allowArbitraryScreenshots?: boolean;
+    allowArbitraryCaptures?: boolean;
     // The realm's own settings, which a card operation reads with
     // `realmConfig("key")`.
     config?: Record<string, unknown>;
@@ -3288,8 +3298,8 @@ export function realmConfigCardJSON(
     attrs.includePrerenderedDefaultRealmIndex =
       config.includePrerenderedDefaultRealmIndex;
   }
-  if (config.allowArbitraryScreenshots !== undefined) {
-    attrs.allowArbitraryScreenshots = config.allowArbitraryScreenshots;
+  if (config.allowArbitraryCaptures !== undefined) {
+    attrs.allowArbitraryCaptures = config.allowArbitraryCaptures;
   }
   if (config.config !== undefined) {
     attrs.config = config.config;

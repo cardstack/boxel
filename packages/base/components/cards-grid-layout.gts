@@ -1,5 +1,7 @@
 import Component from '@glimmer/component';
 
+import { modifier } from 'ember-modifier';
+
 import {
   FilterList,
   SortDropdown,
@@ -110,6 +112,9 @@ interface Signature {
     // Takes everything but the contentHeaderStart block out of interaction,
     // for when something else covers the pane, such as a sliding sidebar.
     isContentInert?: boolean;
+    // Page controls under the list, 1-based. See CardList.
+    page?: number;
+    onPageChange?: (page: number) => void;
   };
   Blocks: {
     content: [];
@@ -123,6 +128,22 @@ interface Signature {
 }
 
 export default class CardsGridLayout extends Component<Signature> {
+  private contentElement: HTMLElement | undefined;
+
+  private registerContent = modifier((element: HTMLElement) => {
+    this.contentElement = element;
+    return () => {
+      this.contentElement = undefined;
+    };
+  });
+
+  // A new page starts at the top of the list, not wherever the last one was
+  // scrolled to.
+  private changePage = (page: number) => {
+    this.args.onPageChange?.(page);
+    this.contentElement?.scrollTo({ top: 0 });
+  };
+
   <template>
     <section class='boxel-cards-grid-layout' ...attributes>
       {{#unless (eq @displaySidebar false)}}
@@ -141,6 +162,7 @@ export default class CardsGridLayout extends Component<Signature> {
       {{/unless}}
       <section
         class='content scroll-container'
+        {{this.registerContent}}
         tabindex={{if @isContentInert '-1' '0'}}
         aria-label={{@activeFilter.displayName}}
         data-test-cards-grid-content
@@ -253,6 +275,8 @@ export default class CardsGridLayout extends Component<Signature> {
             @format={{@format}}
             @cards={{@activeFilter.cards}}
             @viewOption={{@activeViewId}}
+            @page={{@page}}
+            @onPageChange={{if @onPageChange this.changePage}}
             inert={{if @isContentInert true false}}
             data-test-cards-grid-cards
           />

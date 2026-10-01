@@ -14,7 +14,8 @@ export type PretuiAppearance =
   | 'filled'
   | 'outlined'
   | 'filled-outlined'
-  | 'plain';
+  | 'plain'
+  | 'link';
 export type PretuiSize = 'xs' | 's' | 'm' | 'l' | 'xl';
 
 export const PRETUI_TONES = [
@@ -32,6 +33,7 @@ export const PRETUI_APPEARANCES = [
   'outlined',
   'filled-outlined',
   'plain',
+  'link',
 ] as const;
 export const PRETUI_SIZES = ['xs', 's', 'm', 'l', 'xl'] as const;
 

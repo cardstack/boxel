@@ -2,7 +2,8 @@ import QUnit from 'qunit';
 const { module, test } = QUnit;
 import supertest from 'supertest';
 import type { Test, SuperTest, Response } from 'supertest';
-import { basename, join } from 'path';
+import { mkdirSync, writeFileSync } from 'fs';
+import { basename, dirname, join } from 'path';
 import { dirSync } from 'tmp';
 import jwt from 'jsonwebtoken';
 import {
@@ -18,10 +19,12 @@ import type {
   QueuePublisher,
   QueueRunner,
   Realm,
+  RealmPermissions,
 } from '@cardstack/runtime-common';
 import type { PgAdapter } from '@cardstack/postgres';
 import { resetCatalogRealms } from '../handlers/handle-fetch-catalog-realms.ts';
-import type { RealmHttpServer as Server } from '../server.ts';
+import { insertSourceRealmInRegistry } from '../lib/realm-registry-writes.ts';
+import type { RealmHttpServer as Server, RealmServer } from '../server.ts';
 import {
   closeServer,
   createJWT,
@@ -96,6 +99,26 @@ const CLASSROOM_MODULE = `
       params: { note: StringField },
       fill: { note: params('note'), author: actor() },
     };
+
+    @operation static listMine = {
+      base: 'query',
+      query: { filter: { type: () => Classroom } },
+    };
+
+    @operation static listAudited = {
+      base: 'query',
+      nonGrantable: true,
+      query: { filter: { type: () => Classroom } },
+    };
+  }
+
+  // Redeclares the query its parent keeps out of every policy's reach, without
+  // the flag.
+  export class Seminar extends Classroom {
+    @operation static listAudited = {
+      base: 'query',
+      query: { filter: { type: () => Seminar } },
+    };
   }
 `;
 
@@ -124,8 +147,8 @@ type Grant = { operation: string; where?: unknown };
 type Rule = { targetType: { module: string; name: string }; grants: Grant[] };
 
 // Two rules govern `Classroom`, so a read is admitted by either one's grant.
-// `rename` and `appendActivity` are granted outright, and a `delete` rests on
-// the same predicate a read does. `Bulletin` takes its reads and updates
+// `rename` and `appendActivity` are granted outright, and a `delete` and the
+// `listMine` query rest on the same predicate a read does. `Bulletin` takes its reads and updates
 // outright. A `Syllabus` read rests on a predicate that throws for any title
 // that is not a number, or on one annotated as reading a snapshot tier, which
 // the gate never evaluates.
@@ -137,6 +160,7 @@ const EDUCATION_RULES: Rule[] = [
       { operation: 'rename' },
       { operation: 'appendActivity' },
       { operation: 'delete', where: TEACHES },
+      { operation: 'listMine', where: TEACHES },
     ],
   },
   { targetType: CLASSROOM, grants: [{ operation: 'read', where: LEADS }] },
@@ -208,6 +232,7 @@ const ROOM_204 = `${EDUCATION}classrooms/room-204`;
 const ROOM_205 = `${EDUCATION}classrooms/room-205`;
 const ROOM_206 = `${EDUCATION}classrooms/room-206`;
 const ROOM_999 = `${EDUCATION}classrooms/room-999`;
+const SEMINAR_1 = `${EDUCATION}classrooms/seminar-1`;
 const BULLETIN_1 = `${EDUCATION}bulletins/b1`;
 const ALGEBRA = `${EDUCATION}syllabi/algebra`;
 const COURSE_42 = `${EDUCATION}syllabi/course-42`;
@@ -219,6 +244,7 @@ module(basename(import.meta.filename), function (hooks) {
   let db: PgAdapter;
   let request: SuperTest<Test>;
   let server: Server;
+  let realmServer: RealmServer;
 
   setupCatalogTestSubset(hooks);
 
@@ -246,6 +272,10 @@ module(basename(import.meta.filename), function (hooks) {
             'bulletin.gts': BULLETIN_MODULE,
             'syllabus.gts': SYLLABUS_MODULE,
             'classrooms/room-204.json': classroom('Room 204', [TEACHER]),
+            'classrooms/seminar-1.json': card(
+              { module: '../classroom', name: 'Seminar' },
+              { title: 'Seminar 1', teacherIds: [TEACHER] },
+            ),
             'classrooms/room-205.json': classroom('Room 205', [COLLEAGUE]),
             'classrooms/room-206.json': classroom(
               'Room 206',
@@ -296,6 +326,7 @@ module(basename(import.meta.filename), function (hooks) {
       matrixURL,
     });
     server = result.testRealmHttpServer;
+    realmServer = result.testRealmServer;
     request = supertest(server);
     education = result.realms.find((realm) => realm.url === EDUCATION)!;
     org = result.realms.find((realm) => realm.url === ORG)!;
@@ -638,6 +669,55 @@ module(basename(import.meta.filename), function (hooks) {
         code: 'actor-required',
       });
     });
+
+    test("a query is left to the search it is named in, unless it is kept out of every policy's reach", async function (assert) {
+      let granted = await explain(TEACHER, ROOM_204, 'listMine');
+      assert.deepEqual(
+        {
+          decision: granted.decision,
+          reason: granted.reason,
+          refusal: granted.refusal,
+          rules: granted.rules,
+        },
+        {
+          decision: 'denied',
+          reason: 'query-lane',
+          refusal: { status: 404, code: 'target-not-found' },
+          rules: [],
+        },
+        'a query the teacher holds a grant on is not called non-grantable: invoking it on the card is refused as it is, and no rule is judged here',
+      );
+      let adHoc = await explain(TEACHER, ROOM_204, 'query');
+      assert.strictEqual(
+        adHoc.reason,
+        'query-lane',
+        'and so is the ad-hoc query, which a search runs under the base name',
+      );
+      let audited = await explain(TEACHER, ROOM_204, 'listAudited');
+      assert.strictEqual(
+        audited.reason,
+        'non-grantable',
+        'a query declared non-grantable is one no grant reaches, on the search engine as anywhere',
+      );
+      let redeclared = await explain(TEACHER, SEMINAR_1, 'listAudited');
+      assert.strictEqual(
+        redeclared.reason,
+        'non-grantable',
+        'and so is one a subclass redeclares without the flag, since the type it extends kept it out of reach',
+      );
+      let seminarsOwn = await explain(TEACHER, SEMINAR_1, 'listMine');
+      assert.strictEqual(
+        seminarsOwn.reason,
+        'query-lane',
+        'while a query nothing in its chain flags is still left to the search',
+      );
+      let reader = await explain(READER, ROOM_204, 'listMine');
+      assert.deepEqual(
+        { decision: reader.decision, reason: reader.reason },
+        { decision: 'allowed', reason: 'acl' },
+        "a reader runs the query unscoped, on the realm's own permissions",
+      );
+    });
   });
 
   module('agreement with the gate', function () {
@@ -876,6 +956,121 @@ module(basename(import.meta.filename), function (hooks) {
         'Room 204',
         'the classroom keeps its title',
       );
+    });
+
+    module('a realm this server has not mounted', function (hooks) {
+      // Each is staged the way a realm nothing on this process has touched
+      // since it started is: its files on disk and its row in the registry,
+      // and no mount. Each names the Education policy card as its policy and
+      // holds a classroom the teacher teaches.
+      const ANNEX = 'http://127.0.0.1:4444/annex/';
+      const PRIVATE_ANNEX = 'http://127.0.0.1:4444/private-annex/';
+      const ARCHIVED_ANNEX = 'http://127.0.0.1:4444/archived-annex/';
+      const ROOM_301 = 'classrooms/room-301';
+
+      async function stage(realmURL: string, permissions: RealmPermissions) {
+        let diskId = new URL(realmURL).pathname.replace(/\//g, '');
+        let dir = join(realmServer.testingOnlyRealmsRootPath, diskId);
+        let files: Record<string, string> = {
+          'realm.json': realmConfigCardJSON({
+            name: diskId,
+            policy: POLICY_CARD,
+          }),
+          [`${ROOM_301}.json`]: card(CLASSROOM, {
+            title: 'Room 301',
+            teacherIds: [TEACHER],
+            leadTeacherIds: [],
+          }),
+        };
+        for (let [path, content] of Object.entries(files)) {
+          mkdirSync(dirname(join(dir, path)), { recursive: true });
+          writeFileSync(join(dir, path), content);
+        }
+        await insertSourceRealmInRegistry(db, {
+          url: realmURL,
+          diskId,
+          ownerUsername: EDUCATION_ADMIN,
+        });
+        await insertPermissions(db, new URL(realmURL), {
+          [EDUCATION_ADMIN]: ['read', 'write', 'realm-owner'],
+          ...permissions,
+        });
+        // The registry as this process reflects it, which is what the realm
+        // is looked up in, brought up to date with the row just written
+        // rather than waiting on the notification it sent.
+        await realmServer.testingOnlyReconcile();
+      }
+
+      function isMounted(realmURL: string) {
+        let reconciler = realmServer.testingOnlyReconciler;
+        return (
+          reconciler.mounted.has(realmURL) ||
+          reconciler.pendingMounts.has(realmURL) ||
+          realmServer.testingOnlyRealms.some((realm) => realm.url === realmURL)
+        );
+      }
+
+      hooks.afterEach(function () {
+        realmServer?.testingOnlyReconciler.mounted.get(ANNEX)?.unsubscribe();
+      });
+
+      test('one the caller cannot read, or that is archived, is told of as a missing target is, and is not mounted to say so', async function (assert) {
+        await stage(PRIVATE_ANNEX, {});
+        await stage(ARCHIVED_ANNEX, { [IT_ADMIN]: ['read'] });
+        await archiveRealm(db, new URL(ARCHIVED_ANNEX));
+        let asked = { actor: TEACHER, operation: 'read' };
+        let missing = await ask(ASKER.itAdmin(), {
+          ...asked,
+          target: ROOM_999,
+        });
+        for (let [label, realmURL] of [
+          ['a realm the IT admin may not read', PRIVATE_ANNEX],
+          ['an archived realm the IT admin may read', ARCHIVED_ANNEX],
+        ] as const) {
+          assert.false(
+            isMounted(realmURL),
+            `${label}: precondition: nothing on this process has mounted it`,
+          );
+          let response = await ask(ASKER.itAdmin(), {
+            ...asked,
+            target: `${realmURL}${ROOM_301}`,
+          });
+          assert.strictEqual(
+            response.status,
+            missing.status,
+            `${label}: status`,
+          );
+          assert.strictEqual(
+            response.text,
+            missing.text,
+            `${label}: the body is the one a missing target gets, byte for byte`,
+          );
+          assert.false(isMounted(realmURL), `${label}: and it is not mounted`);
+        }
+        assert.strictEqual(errorOf(missing)?.code, 'target-not-found');
+      });
+
+      test('one the caller can read is mounted, and its target is explained as a mounted realm’s is', async function (assert) {
+        // Mounting the realm indexes it from scratch.
+        assert.timeout(180_000);
+        await stage(ANNEX, { [IT_ADMIN]: ['read'] });
+        assert.false(
+          isMounted(ANNEX),
+          'precondition: nothing on this process has mounted it',
+        );
+
+        let explanation = await explain(TEACHER, `${ANNEX}${ROOM_301}`, 'read');
+
+        assert.true(isMounted(ANNEX), 'the realm was mounted to explain it');
+        assert.deepEqual(
+          explanation,
+          {
+            ...(await explain(TEACHER, ROOM_204, 'read')),
+            target: `${ANNEX}${ROOM_301}`,
+          },
+          'the explanation is the one the same classroom gets in the mounted Education realm',
+        );
+      });
     });
   });
 });

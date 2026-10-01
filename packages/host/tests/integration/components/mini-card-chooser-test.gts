@@ -164,7 +164,7 @@ module('Integration | mini-card-chooser', function (hooks) {
   test('mounts in isolation with a search input and no filter chips, and renders the mini visual variant', async function (assert) {
     // Seed a recent so a row actually renders — without one, the empty state
     // has nothing to click and the design assertions (no show-only, no view
-    // picker) verify the negative case but the screenshot for manual diff
+    // picker) verify the negative case but the capture for manual diff
     // would be blank.
     let recent = getService('recent-cards-service') as RecentCardsService;
     recent.add(`${testRealmURL}books/mango`);
