@@ -173,9 +173,12 @@ export default async function percySnapshot(
   console.log(`[percy-snapshot] attempted ${JSON.stringify(snapshotName)}`);
 
   // PROBE (not for merge): every scope the captured DOM names, against the
-  // rules actually injected. A scope with no rule renders unstyled. Reported
-  // per snapshot so one run shows whether this is confined to one snapshot or
-  // affects the whole suite.
+  // rules in EVERY stylesheet the document holds — not only the injected
+  // `style[data-boxel-scoped-css]` tags. Those tags carry scoped CSS for card
+  // code the realm loader evaluates at runtime. Host and boxel-ui components
+  // are compiled by Vite into the app bundle and arrive through `<link>`, so
+  // checking the injected tags alone reports every bundled component as
+  // unstyled when it is not.
   {
     let scopes = new Set<string>();
     for (let el of document.querySelectorAll('*')) {
@@ -185,14 +188,21 @@ export default async function percySnapshot(
         }
       }
     }
-    let injectedCss = Array.from(
-      document.querySelectorAll('style[data-boxel-scoped-css]'),
-    )
-      .map((node) => node.textContent ?? '')
-      .join('\n');
-    let unstyled = [...scopes].filter((scope) => !injectedCss.includes(scope));
+    let cssText = '';
+    let unreadable = 0;
+    for (let sheet of Array.from(document.styleSheets)) {
+      try {
+        for (let rule of Array.from(sheet.cssRules)) {
+          cssText += rule.cssText + '\n';
+        }
+      } catch {
+        unreadable++;
+      }
+    }
+    let unstyled = [...scopes].filter((scope) => !cssText.includes(scope));
     console.log(
-      `[SCOPE-AUDIT] ${JSON.stringify(snapshotName)} scopes=${scopes.size} ` +
+      `[SCOPE-AUDIT2] ${JSON.stringify(snapshotName)} scopes=${scopes.size} ` +
+        `sheets=${document.styleSheets.length} unreadable=${unreadable} ` +
         `unstyled=${unstyled.length} first=${unstyled[0] ?? '-'}`,
     );
   }
