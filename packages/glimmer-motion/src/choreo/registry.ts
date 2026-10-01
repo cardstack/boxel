@@ -9,6 +9,22 @@ import { type ParticipantHost, setParticipantHost } from '../participant.ts';
 import type { ChoreoRun } from './run.ts';
 import type { ChoreoNode, TimelineNode } from './types.ts';
 
+// The `{{motion}}` args a region adds, typed here because the package's root
+// declarations re-export this module; measure.ts, which applies `pack`, is
+// reached only at runtime, so an augmentation there would not ship.
+declare module '../participant.ts' {
+  interface ParticipantArgs {
+    /**
+     * How Choreo measures this element for a shape-matched flight.
+     * `'box'` (default) is the layout border box — right for plates, cards,
+     * stages. `'content'` is the shrink-wrap (the ink): a full-bleed title
+     * still matches as a word. Written as `data-choreo-pack`; an explicit
+     * `[data-choreo-substance]` descendant still wins.
+     */
+    pack?: 'box' | 'content';
+  }
+}
+
 /** anything that can put a node on a region's timeline — a step component, or a lane from outside */
 export interface ChoreoProvider {
   node(): TimelineNode;

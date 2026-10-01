@@ -12,19 +12,7 @@
 import { defineParticipantArg } from '../participant.ts';
 import type { Bounds, Rect } from './types.ts';
 
-declare module '../participant.ts' {
-  interface ParticipantArgs {
-    /**
-     * How Choreo measures this element for a shape-matched flight.
-     * `'box'` (default) is the layout border box — right for plates, cards,
-     * stages. `'content'` is the shrink-wrap (the ink): a full-bleed title
-     * still matches as a word. Written as `data-choreo-pack`; an explicit
-     * `[data-choreo-substance]` descendant still wins.
-     */
-    pack?: 'box' | 'content';
-  }
-}
-
+// `pack`'s type is declared in registry.ts, which the published declarations reach
 defineParticipantArg('pack', (el, pack) => {
   if (pack === 'content') {
     el.setAttribute('data-choreo-pack', 'content');

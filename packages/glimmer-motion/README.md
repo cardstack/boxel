@@ -143,7 +143,8 @@ const stage = new Stage();
 - **Host args.** A host can add named args to `{{motion}}`. It declares each one by augmenting
   `ParticipantArgs` and registers it with `defineParticipantArg(name, apply)`. The modifier keeps the arg away
   from the engine and calls `apply(element, value)` on every pass, with `undefined` when the arg is absent.
-  `defineParticipantArg` returns a remover. `<Choreo>` declares `pack` this way:
+  `defineParticipantArg` returns a remover. Put the augmentation in a module that the host package's public
+  declarations import, or it won't reach that package's consumers. `<Choreo>` declares `pack` this way:
 
   ```ts
   declare module 'glimmer-motion/participant' {
