@@ -132,16 +132,22 @@ import {
 // bound.
 // ============================================================================
 
-// The realm a target belongs to, as an explain reaches it.
+// The realm a target belongs to, as an explain reaches it. It is found without
+// being mounted, so what the explain asks of it first, whether its caller may
+// read it, is answered before the server pays to mount a realm the caller may
+// be told nothing about.
 export interface TargetRealm {
   // Where the target the explain was asked about resolves, in this realm.
   url: URL;
-  // The realm's operation core, whose policy gate the explain runs.
-  core: OperationCore;
   // What the realm's ACL allows this caller, read from the permissions a
   // request from them is checked against. Read and write are kept apart
   // because a request is judged on one of them: the one its method needs.
   aclFor(caller: ScopeCaller): Promise<Acl>;
+  // The realm's operation core, whose policy gate the explain runs. Reaching
+  // it mounts the realm if it is not mounted. A realm this process has already
+  // published may still be starting, and until it has indexed, a target there
+  // is told of as a missing one. Undefined for a realm that will not mount.
+  core(): Promise<OperationCore | undefined>;
   // How far behind its source the realm's index is (see `indexLag`).
   indexLag(): Promise<ExplainedIndexLag>;
 }
@@ -191,8 +197,14 @@ export async function explainOperation(
   let realm = await core.targetRealm?.(question.target);
   // Whether the target's realm is served here, whether the caller may read
   // it, and whether the target is there are all answered as a missing target
-  // is, before anything else about the target is read.
+  // is, before anything else about the target is read. The first two are
+  // answered before the realm is mounted, so a caller cannot make the server
+  // mount a realm by asking about it unless they may read it.
   if (!realm || !(await realm.aclFor(asker)).read) {
+    throw noSuchTarget();
+  }
+  let targetCore = await realm.core();
+  if (!targetCore) {
     throw noSuchTarget();
   }
   let asksOfRealm = Boolean(question.search || question.list);
@@ -203,28 +215,28 @@ export async function explainOperation(
     // it says nothing the caller is not entitled to.
     if (
       ensureTrailingSlash(realm.url.href) !==
-      ensureTrailingSlash(realm.core.realmURL)
+      ensureTrailingSlash(targetCore.realmURL)
     ) {
       throw invalidQuestion(
         request,
-        `a question about a ${question.search ? 'search' : 'listing'} names the realm it runs in as its \`target\`, and ${question.target} is a card in ${realm.core.realmURL}`,
+        `a question about a ${question.search ? 'search' : 'listing'} names the realm it runs in as its \`target\`, and ${question.target} is a card in ${targetCore.realmURL}`,
       );
     }
   } else {
     target = canonicalizeTarget(
-      realm.core,
+      targetCore,
       { kind: 'instance', url: realm.url.href },
       {
         rootNamesIndexCard: !isDefinitionFreeBaseOperation(question.operation),
       },
     );
-    if (target.kind !== 'instance' || !(await exists(realm.core, target))) {
+    if (target.kind !== 'instance' || !(await exists(targetCore, target))) {
       throw noSuchTarget();
     }
   }
   if (
-    !realm.core.policy ||
-    !(await namesPolicyCard(realm.core.policy, policyCard))
+    !targetCore.policy ||
+    !(await namesPolicyCard(targetCore.policy, policyCard))
   ) {
     throw new OperationFailure({
       id: policyCard.href,
@@ -232,14 +244,14 @@ export async function explainOperation(
       code: 'policy-not-in-force',
       title: 'Policy not in force',
       detail:
-        `${target?.kind === 'instance' ? target.url : realm.core.realmURL} ` +
+        `${target?.kind === 'instance' ? target.url : targetCore.realmURL} ` +
         `is in a realm whose policy is not ${policyCard.href}, so that card ` +
         `decides nothing about it`,
     });
   }
   let governing = question.draft
-    ? await draftGoverned(realm.core, policyCard, question.draft)
-    : { core: realm.core };
+    ? await draftGoverned(targetCore, policyCard, question.draft)
+    : { core: targetCore };
   // What compiling a draft records describes the definitions it read, and a
   // draft names its own types, in any realm this server serves. So a draft is
   // answered only to a caller who may read every such realm compiling read
@@ -278,7 +290,7 @@ export async function explainOperation(
     };
   }
   if (question.list) {
-    let { cards, total } = await listedCards(realm.core, question.list);
+    let { cards, total } = await listedCards(targetCore, question.list);
     let explanations: PolicyExplanation[] = [];
     // One at a time: each runs the gate, and a predicate reads the card it
     // judges, so a page costs its realm one gate at a time however large it
@@ -354,27 +366,18 @@ async function draftGoverned(
 
 // Whether any of these URLs is in a realm this server serves that the asker
 // may not read, judged as the target's realm is: by a session vouched for as
-// their own. A URL no realm here serves is read as the owner of the realm that
-// looked it up, as every card in that realm reads it, so it discloses nothing
-// that realm does not already disclose to its readers.
+// their own, and without mounting the realm. A URL no realm here serves is
+// read as the owner of the realm that looked it up, as every card in that
+// realm reads it, so it discloses nothing that realm does not already disclose
+// to its readers.
 async function readsUnreadable(
   core: OperationCore,
   asker: ScopeCaller,
   urls: string[],
 ): Promise<boolean> {
-  let judged = new Map<string, boolean>();
-  for (let url of urls) {
+  for (let url of new Set(urls)) {
     let served = await core.targetRealm?.(url);
-    if (!served) {
-      continue;
-    }
-    let realmURL = served.core.realmURL;
-    let read = judged.get(realmURL);
-    if (read === undefined) {
-      read = (await served.aclFor(asker)).read;
-      judged.set(realmURL, read);
-    }
-    if (!read) {
+    if (served && !(await served.aclFor(asker)).read) {
       return true;
     }
   }
