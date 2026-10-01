@@ -313,6 +313,7 @@ module(basename(import.meta.filename), function (hooks) {
     let cache = new RealmPolicyCache({
       policyCard: async () => card,
       readCard: async (): Promise<IndexedInstanceSource> => ({
+        url: `${card}.json`,
         realmURL: ORG,
         generation: 1,
         sourceContentHash: 'v1',
@@ -351,6 +352,7 @@ module(basename(import.meta.filename), function (hooks) {
       realmURL: EDUCATION,
       instanceTypesUnder: async () => [],
       instanceTypeKeys: async () => [],
+      revisitCard: async () => {},
     });
     return { cache, state };
   }

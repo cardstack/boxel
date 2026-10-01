@@ -15295,6 +15295,7 @@ export class Realm {
     return new RealmPolicyCache({
       ...this.#policyCompileEnvironment(),
       policyCard: async () => (await this.getRealmPolicy())?.card,
+      revisitCard: (file, realmURL) => this.#revisitPolicyCard(file, realmURL),
     });
   }
 
@@ -15321,7 +15322,6 @@ export class Realm {
       // spelling, so a key computed the same way is found in either.
       typeKey: (codeRef) =>
         internalKeyFor(codeRef, undefined, this.#virtualNetwork),
-      revisitCard: (file, realmURL) => this.#revisitPolicyCard(file, realmURL),
       realmURL: this.url,
       instanceTypesUnder: (codeRef) =>
         this.#realmIndexQueryEngine.instanceTypesUnder(codeRef),
