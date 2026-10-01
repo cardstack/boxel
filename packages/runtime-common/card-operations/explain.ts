@@ -219,7 +219,7 @@ export async function explainOperation(
     ) {
       throw invalidQuestion(
         request,
-        `a question about a ${question.search ? 'search' : 'listing'} names the realm it runs in as its \`target\`, and ${question.target} is a card in ${targetCore.realmURL}`,
+        `to ask about a ${question.search ? 'search' : 'listing'}, use the realm it runs in as the \`target\`, and ${question.target} is a card in ${targetCore.realmURL}, not a realm`,
       );
     }
   } else {
@@ -245,8 +245,8 @@ export async function explainOperation(
       title: 'Policy not in force',
       detail:
         `${target?.kind === 'instance' ? target.url : targetCore.realmURL} ` +
-        `is in a realm whose policy is not ${policyCard.href}, so that card ` +
-        `decides nothing about it`,
+        `is in a realm that doesn't use the policy ${policyCard.href}, so ` +
+        `that policy has no say over it`,
     });
   }
   let governing = question.draft
@@ -266,8 +266,8 @@ export async function explainOperation(
       code: 'operation-not-permitted',
       title: 'Operation not permitted',
       detail:
-        `compiling the draft reads definitions in a realm you cannot read, ` +
-        `so what it compiles to is not reported to you`,
+        `this draft uses card types from a realm you can't read, so what it ` +
+        `would decide can't be shown to you`,
     });
   }
   let actor = scopeCallerFor(question.actor);
@@ -614,7 +614,7 @@ async function listedCards(
         status: err.status,
         code: 'invalid-params',
         title: 'Listing not read',
-        detail: `the realm could not read the page of cards the listing asks for: ${err.message}`,
+        detail: `the realm couldn't read the page of cards this listing asks for: ${err.message}`,
       });
     }
     throw err;
@@ -1087,9 +1087,9 @@ export function assertWithinExplainCap(
       code: 'invalid-params',
       title: 'Too many explanations',
       detail:
-        `a request explains at most ${EXPLAIN_CAP} triples, a listing's page ` +
-        `and a batch's explain entries together, and this one asks for ` +
-        `${asked}; send the rest in a request of their own`,
+        `one request can ask about at most ${EXPLAIN_CAP} decisions, counting ` +
+        `every card on a listing's page and every explain in a batch, and ` +
+        `this one asks about ${asked}. Ask about the rest in another request`,
     });
   }
 }

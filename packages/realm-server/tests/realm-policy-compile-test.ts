@@ -486,8 +486,8 @@ module(basename(import.meta.filename), function (hooks) {
       `the profile names params(): ${paramsIssue}`,
     );
     assert.true(
-      String(parseIssue).includes('does not parse'),
-      `a predicate that does not parse says so: ${parseIssue}`,
+      String(parseIssue).includes('has a syntax error'),
+      `a predicate with a syntax error says so: ${parseIssue}`,
     );
     assert.true(
       String(emptyIssue).includes('`where` is empty'),

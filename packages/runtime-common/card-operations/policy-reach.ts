@@ -380,11 +380,11 @@ function documentMessage(
   let { operation } = reach.grant;
   let from = reach.rule.targetType.name;
   let to = reached.codeRef.name;
-  let serves =
+  let sends =
     reach.governedBy === 'read'
-      ? `\`${operation}\` on ${from} serves the card with its links assembled`
-      : `\`${operation}\` on ${from} serves its rows with their links assembled`;
-  return `${serves}, so it hands every caller it admits the ${to} cards linked through \`${reached.via.join('.')}\`, and ${ungrantedClause(to, kind, anyType)}. To keep them out, ${narrowingFix(reach)}${deliberately(to, kind, anyType)}. A declaration on ${to} does not narrow this: a closure never consults a linked type's declaration`;
+      ? `\`${operation}\` on ${from} sends each card along with the cards it links to`
+      : `\`${operation}\` on ${from} sends its results along with the cards they link to`;
+  return `${sends}, so everyone this grant lets in also gets the ${to} cards linked through \`${reached.via.join('.')}\`, but ${ungrantedClause(to, kind, anyType)}. To send only the links and not those cards, ${narrowingFix(reach)}${deliberately(to, kind, anyType)}. Changing ${to}'s own settings won't help: a card sent along through a link is sent without checking them`;
 }
 
 function renderingMessage(
@@ -396,7 +396,7 @@ function renderingMessage(
   let { operation } = reach.grant;
   let from = reach.rule.targetType.name;
   let to = reached.codeRef.name;
-  return `the prerendered HTML of the ${from} rows \`${operation}\` serves can draw the ${to} cards linked through \`${reached.via.join('.')}\`, and ${ungrantedClause(to, kind, anyType)}. A render draws a card's links whatever strategy its document is served under, so narrowing \`links\` does not keep them out of the HTML. To keep them out, keep ${from}'s templates from embedding them${deliberately(to, kind, anyType)}`;
+  return `the pages \`${operation}\` shows for ${from} cards can display the ${to} cards linked through \`${reached.via.join('.')}\`, but ${ungrantedClause(to, kind, anyType)}. A card's page displays its linked cards whatever \`links\` is set to, so changing \`links\` won't keep them off the page. To keep them off, change ${from}'s templates so they don't display them${deliberately(to, kind, anyType)}`;
 }
 
 function ungrantedClause(
@@ -407,12 +407,12 @@ function ungrantedClause(
   switch (kind) {
     case 'ungranted':
       return anyType
-        ? `no rule grants a read of ${to}, and a link typed as ${to} can hold a card of any type`
-        : `no rule grants a read of ${to}`;
+        ? `no rule lets anyone read ${to} cards, and a link to a ${to} can point to a card of any type`
+        : `no rule lets anyone read ${to} cards`;
     case 'policy card':
-      return `${to} is a policy card type: a policy card's attributes are its whole rule list, and no rule grants one`;
+      return `${to} is a policy card, which no rule can share: a policy card holds every one of its rules`;
     case 'config card':
-      return `${to} is the realm config card type, and no rule grants a realm's config card`;
+      return `${to} is the realm's settings card, which no rule can share`;
   }
 }
 
@@ -425,7 +425,7 @@ function deliberately(
   anyType: boolean,
 ): string {
   return kind === 'ungranted' && !anyType
-    ? `; to hand them over deliberately, grant a read of ${to} in a rule of its own`
+    ? `. To share them on purpose, add a rule that lets people read ${to}`
     : '';
 }
 
@@ -434,11 +434,11 @@ function narrowingFix(reach: ReachingGrant): string {
   let { operation } = reach.grant;
   switch (reach.governedBy) {
     case 'read':
-      return `declare \`links: 'ids'\` on ${from}'s \`${operation}\``;
+      return `add \`links: 'ids'\` to ${from}'s \`${operation}\``;
     case 'named-query':
-      return `declare \`links: 'ids'\` on the \`${operation}\` query`;
+      return `add \`links: 'ids'\` to the \`${operation}\` query`;
     case 'ad-hoc-query':
-      return `grant a named query that declares \`links: 'ids'\` in place of the ad-hoc \`query\`, which no declaration narrows`;
+      return `grant a named query that sets \`links: 'ids'\` instead of the general \`query\`, which can't be limited this way`;
   }
 }
 

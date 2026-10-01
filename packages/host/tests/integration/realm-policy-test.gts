@@ -569,7 +569,7 @@ module('Integration | realm policy', function (hooks) {
     assert.dom('[data-test-explanation-decision]').hasText('allowed');
     assert
       .dom('[data-test-explanation-reason]')
-      .hasText('A grant in this policy admits it.');
+      .hasText('A grant in this policy allows it.');
     assert.dom('[data-test-explanation-actor]').hasText(TEACHER);
     assert
       .dom('[data-test-explanation-acl]')
@@ -606,7 +606,7 @@ module('Integration | realm policy', function (hooks) {
     assert
       .dom('[data-test-explanation-reason]')
       .hasText(
-        'Grants for this operation match the card, and none of their conditions holds.',
+        'This policy has grants for this operation on this card, but none of their conditions is met.',
       );
     assert
       .dom('[data-test-explanation-refusal]')
@@ -713,7 +713,7 @@ module('Integration | realm policy', function (hooks) {
       .hasText('delete', "and its grant's operation");
     assert
       .dom('[data-test-policy-issue-message]')
-      .includesText('does not parse', 'and says what is wrong');
+      .includesText('has a syntax error', 'and says what is wrong');
   });
 
   test('a query grant whose predicate compiles no search filter is inactive, and its issue says why', async function (assert) {
@@ -830,7 +830,7 @@ module('Integration | realm policy', function (hooks) {
       .dom('[data-test-realm-policy-uncompilable]')
       .includesText('Not in force', 'the whole policy is out of force')
       .includesText(
-        "This card's latest index visit failed",
+        "This card couldn't be indexed this time",
         'and says why of the card itself',
       );
     assert
@@ -952,7 +952,7 @@ module('Integration | realm policy', function (hooks) {
       .exists({ count: 1 })
       .isVisible('opening the mark shows the warning')
       .includesText(
-        'no rule grants a read of Student',
+        'no rule lets anyone read Student cards',
         'which says what the grant hands over',
       );
 
@@ -971,7 +971,7 @@ module('Integration | realm policy', function (hooks) {
       .exists('and is marked there as a warning');
     assert
       .dom('[data-test-policy-issue-message]')
-      .includesText('no rule grants a read of Student');
+      .includesText('no rule lets anyone read Student cards');
   });
 
   test('a policy whose issues only leave grants inactive marks no warning', async function (assert) {

@@ -835,7 +835,7 @@ class TierWalk {
           compound: true,
           unheld:
             place.unheld ??
-            `the type of \`.${place.path}\` has no definition, so what \`.${path}\` reads cannot be told`,
+            `the definition of \`.${place.path}\`'s type can't be found, so there's no telling what \`.${path}\` holds`,
         }),
       ];
     }
@@ -871,7 +871,7 @@ class TierWalk {
           ...place,
           tier: 1,
           tierReason: `\`.${path}\` is computed`,
-          unheld: `\`instance()\` holds the card's stored attributes, which never carry a computed value such as \`.${path}\`; read it as \`.${path}\``,
+          unheld: `\`instance()\` holds only the card's saved values, which never include a computed field like \`.${path}\`; use \`.${path}\` instead`,
         });
       }
       if (field.type === 'linksTo' || field.type === 'linksToMany') {
@@ -885,15 +885,16 @@ class TierWalk {
         ...place,
         compound: true,
         tier: Math.max(parent.tier, 1) as 1 | 2,
-        tierReason: parent.tierReason ?? `\`.${path}\` is filled by a query`,
-        unheld: `\`.${path}\` is filled by a query, which no snapshot the gate reads holds`,
+        tierReason:
+          parent.tierReason ?? `\`.${path}\` is filled in by a search`,
+        unheld: `\`.${path}\` is filled in by a search, which the index's copy of the card doesn't include`,
       });
     }
     if (field.isComputed && parent.tier === 0) {
       place.tier = 1;
       place.tierReason = `\`.${path}\` is computed`;
       if (parent.inList) {
-        place.unheld = `\`.${path}\` is computed inside a list, and the index's copy of a list cannot say which of the card's items it describes`;
+        place.unheld = `\`.${path}\` is computed inside a list, and the index's copy of a list can't be matched up item by item with the card's own list`;
       }
     }
     let plural = field.type === 'containsMany' || field.type === 'linksToMany';
@@ -904,15 +905,15 @@ class TierWalk {
       place.link = {
         membersUnheld:
           place.tier === 2
-            ? `\`.${path}\` is a link of a linked card, and the index carries only its id`
+            ? `\`.${path}\` is a link on a linked card, and the index keeps only the id of what it points to`
             : place.tier === 1
-              ? `\`.${path}\` is a computed link, and the index does not carry the fields of the card it points to`
+              ? `\`.${path}\` is a computed link, and the index doesn't keep the fields of the card it points to`
               : !parent.root
-                ? `\`.${path}\` is a link inside a contained value, and the index does not carry the fields of the card it points to`
+                ? `\`.${path}\` is a link inside another field, and the index doesn't keep the fields of the card it points to`
                 : field.type === 'linksToMany'
-                  ? `\`.${path}\` is a list of links, and the index's copy of a list cannot say which of the card's links it describes`
+                  ? `\`.${path}\` is a list of links, and the index's copy of a list can't be matched up link by link with the card's own list`
                   : !expanded(path, field)
-                    ? `\`.${path}\` is not marked \`searchable\`, so the index does not carry the fields of the card it points to`
+                    ? `\`.${path}\` isn't marked \`searchable\`, so the index doesn't keep the fields of the card it points to`
                     : undefined,
       };
     } else if (!field.isPrimitive) {
@@ -1004,7 +1005,7 @@ class TierWalk {
             ...place,
             path: `${place.path}.*`,
             tier: 2,
-            tierReason: `\`.${place.path}\` is read whole, and the index fills in the card it links to`,
+            tierReason: `\`.${place.path}\` is used as a whole, and the index fills in the card it links to`,
           });
         }
         continue;
@@ -1025,7 +1026,7 @@ class TierWalk {
     if (!definition) {
       this.record({
         ...place,
-        unheld: `the type of \`.${place.path}\` has no definition, so what reading it whole reads cannot be told`,
+        unheld: `the definition of \`.${place.path}\`'s type can't be found, so there's no telling what using all of it covers`,
       });
       return;
     }
@@ -1045,7 +1046,7 @@ class TierWalk {
         this.record({
           ...leaf(place, path),
           tier: 1,
-          tierReason: `${dotted(place.path)} is read whole, and \`.${path}\` beneath it is computed`,
+          tierReason: `${dotted(place.path)} is used as a whole, and \`.${path}\` inside it is computed`,
         });
       } else if (
         field.type === 'linksTo' &&
@@ -1055,7 +1056,7 @@ class TierWalk {
         this.record({
           ...leaf(place, `${path}.*`),
           tier: 2,
-          tierReason: `${dotted(place.path)} is read whole, and the index fills in the card \`.${path}\` links to`,
+          tierReason: `${dotted(place.path)} is used as a whole, and the index fills in the card \`.${path}\` links to`,
         });
       } else if (field.type === 'contains' && !field.isPrimitive) {
         await this.readCompound(
