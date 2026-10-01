@@ -10,6 +10,7 @@ import { codeRefFromInternalKey } from '../index.ts';
 import type { IndexedInstanceSource } from '../index-query-engine.ts';
 import { logger } from '../log.ts';
 import { MODULE_SOURCE_FILE_DEF_CODE_REFS } from '../policy-file-def.ts';
+import { PRERENDERED_HTML_FORMATS } from '../prerendered-html-format.ts';
 import { rri } from '../realm-identifiers.ts';
 import { chainType } from './adoption-chain.ts';
 import { carriesBuiltIn } from './dispatch.ts';
@@ -27,6 +28,7 @@ import {
   isDefinitionFreeBaseOperation,
   linkStrategyOf,
   policyIssueSeverity,
+  unshareableFormatsOf,
   type BaseOperation,
   type OperationQueryFilterTemplate,
   type PolicyIssue,
@@ -1116,6 +1118,8 @@ async function compilePolicy(
 // `read` grant's strategy is the declaration it invokes, the granted type's
 // own `read` or a named operation built on it. A named query's is the query's.
 // An ad-hoc `query` has no declaration, so nothing narrows what it serves.
+// A named query whose `html` declares every format unshareable serves its
+// rows data-only, so it serves no rendering.
 //
 // Undefined for a grant that serves no rows' closure: one on any other base,
 // since a write's echo is the card and a stored-bytes read serves bytes, and a
@@ -1140,7 +1144,9 @@ function reachLane(
       ? {
           governedBy: 'named-query',
           links: linkStrategyOf(declared.links),
-          rendered: true,
+          rendered:
+            unshareableFormatsOf(declared.html).length <
+            PRERENDERED_HTML_FORMATS.length,
         }
       : { governedBy: 'ad-hoc-query', links: 'full', rendered: true };
   }

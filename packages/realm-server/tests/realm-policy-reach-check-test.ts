@@ -117,6 +117,24 @@ const CLASSROOM_MODULE = `
       query: allClassrooms(),
       links: 'ids',
     };
+    @operation static listDataOnly = {
+      base: 'query',
+      query: allClassrooms(),
+      links: 'ids',
+      html: {
+        embedded: 'unshareable',
+        fitted: 'unshareable',
+        atom: 'unshareable',
+        head: 'unshareable',
+        isolated: 'unshareable',
+      },
+    };
+    @operation static listFittedShared = {
+      base: 'query',
+      query: allClassrooms(),
+      links: 'ids',
+      html: { isolated: 'unshareable', embedded: 'unshareable' },
+    };
   }
 
   export class IdsClassroom extends Classroom {
@@ -600,6 +618,43 @@ module(basename(import.meta.filename), function (hooks) {
       ),
       [],
       'a read serves no rendering, so it records none',
+    );
+  });
+
+  test('a named query whose html withholds every format serves no rendering, and one withholding some is told to withhold the rest', async function (assert) {
+    let policy = await compile([rule(CLASSROOM, 'listDataOnly')]);
+    assert.deepEqual(
+      reached(policy),
+      [],
+      'its rows are served data-only and with ids, so neither lane reaches the students',
+    );
+
+    policy = await compile([rule(CLASSROOM, 'listFittedShared')]);
+    assert.deepEqual(
+      reached(policy).map(({ code, via }) => ({ code, via })),
+      [
+        { code: 'render-reaches-ungranted-type', via: 'students' },
+        { code: 'render-reaches-ungranted-type', via: 'students.guardian' },
+      ],
+      'the formats it still shares are rendered with their links drawn',
+    );
+    let [message] = reachIssues(policy).map((issue) => issue.message);
+    assert.true(
+      message.includes(
+        "declare the formats that draw them `unshareable` in the `listFittedShared` query's `html`",
+      ),
+      `it names the query's html as the place to withhold them: ${message}`,
+    );
+
+    policy = await compile([rule(CLASSROOM, 'query')]);
+    let adHoc = reachIssues(policy).find(
+      ({ code }) => code === 'render-reaches-ungranted-type',
+    );
+    assert.true(
+      adHoc?.message.includes(
+        'grant a named query whose `html` declares the formats that draw them `unshareable` in place of the ad-hoc `query`',
+      ),
+      `an ad-hoc query's fix is a named query, since nothing narrows it: ${adHoc?.message}`,
     );
   });
 
