@@ -185,6 +185,7 @@ async function compile(grants: Grant[]): Promise<CompiledRealmPolicy> {
   let cache = new RealmPolicyCache({
     policyCard: async () => POLICY_CARD,
     readCard: async (): Promise<IndexedInstanceSource> => ({
+      url: `${POLICY_CARD}.json`,
       realmURL: ORG,
       generation: 1,
       sourceContentHash: 'v1',
@@ -224,6 +225,8 @@ async function compile(grants: Grant[]): Promise<CompiledRealmPolicy> {
     realmURL: EDUCATION,
     instanceTypesUnder: async () => [],
     instanceTypeKeys: async () => [],
+    // The card's row is never withheld here, so nothing asks for a revisit.
+    revisitCard: async () => {},
   });
   let policy = await cache.get();
   if (!policy) {
