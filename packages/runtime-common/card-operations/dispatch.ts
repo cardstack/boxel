@@ -1,6 +1,8 @@
 import type { Readable } from 'stream';
 import { RealmPaths, ensureTrailingSlash, type LocalPath } from '../paths.ts';
 import { urlNamesFile } from '../file-def-code-ref.ts';
+import { codeRefFromInternalKey } from '../index.ts';
+import { baseRealm } from '../constants.ts';
 import { readOperation } from './read.ts';
 import { readSourceOperation } from './read-source.ts';
 import {
@@ -33,6 +35,7 @@ import {
   isDocumentResult,
   linkStrategyOf,
   isOperationFailure,
+  unshareableFormatsOf,
   isHeadResult,
   type BaseOperation,
   type OperationDefinition,
@@ -41,8 +44,16 @@ import {
   type OperationSourceBody,
   type OperationTarget,
 } from './types.ts';
+import {
+  PRERENDERED_HTML_FORMATS,
+  type PrerenderedHtmlFormat,
+} from '../prerendered-html-format.ts';
 import type { LinkStrategy } from '@cardstack/base/operations';
-import type { CodeRef, ResolvedCodeRef } from '../code-ref.ts';
+import {
+  isResolvedCodeRef,
+  type CodeRef,
+  type ResolvedCodeRef,
+} from '../code-ref.ts';
 import type { Definition } from '../definitions.ts';
 import type { JsonValue } from '../json-validation.ts';
 import type {
@@ -510,7 +521,8 @@ const CARRIED_BY: Readonly<Record<BaseOperation, readonly DefKind[]>> = {
 // them. Nothing implies one, so a target whose type declares none has no
 // operation by that name, and asking for it is asking for an operation that
 // does not exist. An explain and a validate are the two: each answers only on
-// a policy card, and a policy card's type is what declares it.
+// the card that declares it, a policy card, or for a validate the realm's
+// config card too.
 const DECLARATION_ONLY: Readonly<Partial<Record<BaseOperation, true>>> =
   Object.assign(Object.create(null) as Partial<Record<BaseOperation, true>>, {
     explain: true,
@@ -1002,6 +1014,12 @@ export interface ReadPlan {
   // strategy keeps the validator it had and a conditional request is answered
   // 304 with the wider body still in the client's cache.
   links: LinkStrategy;
+  // The prerendered formats the type's `read` serves data-only, none where it
+  // declares none. Reads rooted at the card that serve its prerendered HTML
+  // without running the read — the single-card HTML read and the host-mode
+  // page — withhold these, so the declaration holds on every route a card's
+  // markup leaves the realm by, and not only on the ones that run the read.
+  unshareableFormats: PrerenderedHtmlFormat[];
 }
 
 export async function readPlan(
@@ -1018,37 +1036,43 @@ export async function readPlan(
   if (remembered) {
     return remembered;
   }
-  let plan = await resolveReadPlan(core, url, scope);
-  // An unresolved read is not remembered: it is a declaration with findings
-  // against it, which the author is presumably mid-way through fixing, and
-  // the answer costs the same to reach again.
-  if (plan.shape !== 'unresolved') {
+  let { plan, rememberable } = await resolveReadPlan(core, url, scope);
+  if (rememberable) {
     memo?.set(url.href, plan);
   }
   return plan;
 }
 
+// A read plan, and whether it holds until this realm's index next changes —
+// the event the caller's memo is cleared on.
+//
+// It does not when the plan could read differently on the next ask with this
+// realm's index standing still: a read with findings against it, which the
+// author is presumably mid-way through fixing; a type entry that could not be
+// read; a path the realm holds no row for, which every path a caller names
+// would otherwise take a memo entry for; and a type declared in another
+// realm's module, whose declaration can change without this realm's index
+// moving at all.
 async function resolveReadPlan(
   core: OperationCore,
   url: URL,
   scope: OperationScope,
-): Promise<ReadPlan> {
-  let definition: OperationDefinition;
+): Promise<{ plan: ReadPlan; rememberable: boolean }> {
+  let resolved: Awaited<ReturnType<typeof resolveUngated>>;
   try {
-    definition = await resolveOperation(
+    // Unattributed whatever the caller's scope says: this asks what kind of
+    // read the target has, not whether anyone may run it. A request that goes
+    // on to assemble is resolved again with its caller, but the two fast paths
+    // this answer opens — the conditional 304 and the shared response cache —
+    // are served without that second resolution, so nothing that judges the
+    // caller runs on them. The cross-request memo in `readPlan` is keyed by
+    // URL alone, which is sound only while this question stays caller-less.
+    // For the same reason the policy gate never runs here, and a caller the
+    // realm ACL declined is kept off both fast paths by the handler.
+    resolved = await resolveUngated(
       core,
       { kind: 'instance', url: url.href },
       'read',
-      // Unattributed whatever the caller's scope says: this asks what kind of
-      // read the target has, not whether anyone may run it. A request that
-      // goes on to assemble is resolved again with its caller, but the two
-      // fast paths this answer opens — the conditional 304 and the shared
-      // response cache — are served without that second resolution, so
-      // nothing that judges the caller runs on them. The cross-request memo in
-      // `readPlan` is keyed by URL alone, which is sound only while this
-      // question stays caller-less. For the same reason the policy gate never
-      // runs here, and a caller the realm ACL declined is kept off both fast
-      // paths by the handler.
       scope.derive({
         caller: { kind: 'unattributed' },
         coarseDeclined: 'none',
@@ -1059,15 +1083,143 @@ async function resolveReadPlan(
     // would carry, so the widest strategy is reported — which is the one that
     // keeps the caller off every fast path it could take with a narrower
     // answer. The refusal this read has coming is what the request gets.
-    return { shape: 'unresolved', links: 'full' };
+    //
+    // Every format is reported data-only, for the opposite reason: the routes
+    // that read this serve markup without running the read, so no refusal
+    // follows to stand in for a declaration nobody could read, and a
+    // withholding the realm cannot interpret is not a reason to serve more.
+    return {
+      plan: {
+        shape: 'unresolved',
+        links: 'full',
+        unshareableFormats: [...PRERENDERED_HTML_FORMATS],
+      },
+      rememberable: false,
+    };
   }
+  let { definition, typeDefinition, declared } = resolved;
+  // A type entry that resolved answers the `html` question itself, whether or
+  // not it declares a `read`. Without one the read resolved to the built-in
+  // behavior, which says nothing about what the card's type withholds: the
+  // row may be errored, or its type's entry unreadable, and either still
+  // serves the markup an earlier render left.
+  let html = typeDefinition
+    ? htmlAnswer(core, declared ? definition : undefined, typeDefinition)
+    : await htmlDeclarationOf(core, url, scope);
   return {
-    shape: hasTransforms(definition) ? 'staged' : 'plain',
-    // Read the same way the executor reads it, so the validator this answer
-    // is folded into names the shape the body will actually take.
-    links: linkStrategyOf(definition.links),
+    plan: {
+      shape: hasTransforms(definition) ? 'staged' : 'plain',
+      // Read the same way the executor reads it, so the validator this answer
+      // is folded into names the shape the body will actually take.
+      links: linkStrategyOf(definition.links),
+      unshareableFormats: html.unshareableFormats,
+    },
+    rememberable: html.rememberable,
   };
 }
+
+// The prerendered formats reads rooted at a card serve data-only, and whether
+// that answer holds until this realm's index next changes.
+export interface HtmlDeclarationAnswer {
+  unshareableFormats: PrerenderedHtmlFormat[];
+  rememberable: boolean;
+}
+
+// What the `read` a card's type declares withholds, read off the row the realm
+// holds for the card, healthy or errored.
+//
+// An errored row still names its type — on the document its last good visit
+// left, or in the adoption chain the realm recorded — and it still serves the
+// markup an earlier render left, so its type's declaration governs that markup
+// as it would a healthy card's. A path the realm holds no row for serves no
+// markup, so it withholds nothing.
+//
+// What the realm cannot read withholds every format: a row that names no type,
+// a type whose entry does not resolve, a `read` declaration lowering flagged.
+// A withholding the realm cannot interpret is not a reason to serve more.
+export async function htmlDeclarationOf(
+  core: OperationCore,
+  url: URL,
+  scope: OperationScope,
+): Promise<HtmlDeclarationAnswer> {
+  let codeRef: CodeRef | undefined;
+  if (urlNamesFile(url)) {
+    if (!(await core.indexQueryEngine.file(url))) {
+      return { unshareableFormats: [], rememberable: false };
+    }
+    codeRef = core.fileDefCodeRef(url);
+  } else {
+    let row = await scope.peekInstance(url);
+    if (!row) {
+      return { unshareableFormats: [], rememberable: false };
+    }
+    codeRef =
+      row.instance?.meta?.adoptsFrom ??
+      (row.type === 'instance-error'
+        ? codeRefFromInternalKey(row.types?.[0])
+        : undefined);
+  }
+  let resolved = codeRef ? core.resolveCodeRef(codeRef, url) : undefined;
+  let typeDefinition: Definition | undefined;
+  if (resolved) {
+    try {
+      typeDefinition = await core.definitionLookup.lookupDefinition(resolved);
+    } catch {
+      typeDefinition = undefined;
+    }
+  }
+  if (!typeDefinition) {
+    return {
+      unshareableFormats: [...PRERENDERED_HTML_FORMATS],
+      rememberable: false,
+    };
+  }
+  return htmlAnswer(
+    core,
+    own(typeDefinition.operations, 'read'),
+    typeDefinition,
+  );
+}
+
+function htmlAnswer(
+  core: OperationCore,
+  read: OperationDefinition | undefined,
+  typeDefinition: Definition,
+): HtmlDeclarationAnswer {
+  if (read?.invalid) {
+    return {
+      unshareableFormats: [...PRERENDERED_HTML_FORMATS],
+      rememberable: false,
+    };
+  }
+  return {
+    unshareableFormats: unshareableFormatsOf(read?.html),
+    rememberable: declaredWhereTheIndexMoves(core, typeDefinition.codeRef),
+  };
+}
+
+// Whether a change to the module declaring this type moves this realm's index,
+// which is what clears a memo of what the type declares. A module of this
+// realm's own does. The base realm's modules change only with a deploy, which
+// starts every realm afresh. A module of any other realm changes on that
+// realm's schedule, and invalidates that realm's cards alone.
+function declaredWhereTheIndexMoves(
+  core: OperationCore,
+  codeRef: CodeRef,
+): boolean {
+  if (!isResolvedCodeRef(codeRef)) {
+    return false;
+  }
+  let module = codeRef.module;
+  return (
+    module.startsWith(core.realmURL) ||
+    module.startsWith(baseRealm.url) ||
+    module.startsWith(BASE_REALM_PREFIX)
+  );
+}
+
+// The registered prefix the base realm's modules are spelled with.
+const BASE_REALM_PREFIX = '@cardstack/base/';
 
 export async function runOperation(
   core: OperationCore,

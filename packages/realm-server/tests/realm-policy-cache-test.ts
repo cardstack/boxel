@@ -4,8 +4,14 @@ import { basename } from 'path';
 import {
   FilterRefersToNonexistentTypeError,
   noteRealmIndexMoved,
+  realmPolicyRef,
   rri,
+  type Definition,
+  type FieldDefinition,
+  type IndexedInstanceSource,
+  type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
+import { RealmPolicyCache } from '@cardstack/runtime-common/card-operations';
 import { stubPolicyCache } from './helpers/policy-cache-stub.ts';
 
 // The compiled-policy cache's own logic, over an environment held in memory:
@@ -172,6 +178,141 @@ module(basename(import.meta.filename), function (hooks) {
     assert.strictEqual(cache.stats.compiles, 1, 'one compile');
     assert.strictEqual(b, a, 'one compiled policy answers every read');
     assert.strictEqual(c, a, 'one compiled policy answers every read');
+  });
+
+  // A classroom links to its students, who link to their guardians, and the
+  // policy grants a read of classrooms alone. What the reach check walks
+  // decides no grant, so a guardian's definition that cannot be read leaves
+  // that branch unwalked rather than failing the policy.
+  function reachSetup() {
+    let card = `${ORG}policies/education`;
+    let ref = (name: string): ResolvedCodeRef => ({
+      module: rri(`${EDUCATION}classroom`),
+      name,
+    });
+    let [classroom, student, guardian] = [
+      ref('Classroom'),
+      ref('Student'),
+      ref('Guardian'),
+    ];
+    let link = (fieldOrCard: ResolvedCodeRef): FieldDefinition => ({
+      type: 'linksTo',
+      isPrimitive: false,
+      isComputed: false,
+      fieldOrCard,
+    });
+    let definitions = new Map<string, Definition>(
+      [
+        [classroom, { students: link(student) }],
+        [student, { guardian: link(guardian) }],
+        [guardian, {}],
+      ].map(([codeRef, fields]) => {
+        let named = fields as Record<string, FieldDefinition>;
+        return [
+          (codeRef as ResolvedCodeRef).name,
+          {
+            type: 'card-def',
+            codeRef: codeRef as ResolvedCodeRef,
+            displayName: (codeRef as ResolvedCodeRef).name,
+            fields: Object.fromEntries(Object.keys(named).map((n) => [n, n])),
+            fieldDefs: named,
+          },
+        ];
+      }),
+    );
+    let state = { guardianFailure: undefined as Error | undefined };
+    let typeKey = (codeRef: ResolvedCodeRef) =>
+      `${codeRef.module}/${codeRef.name}`;
+    let cache = new RealmPolicyCache({
+      policyCard: async () => card,
+      readCard: async (): Promise<IndexedInstanceSource> => ({
+        realmURL: ORG,
+        generation: 1,
+        sourceContentHash: 'v1',
+        types: [typeKey(realmPolicyRef)],
+        error: null,
+        failureWithheld: false,
+        instance: {
+          id: rri(card),
+          type: 'card',
+          attributes: {
+            rules: [
+              {
+                targetType: { module: classroom.module, name: 'Classroom' },
+                grants: [{ operation: 'read' }],
+              },
+            ],
+          },
+          meta: { adoptsFrom: realmPolicyRef },
+        },
+      }),
+      resolveCodeRef: (codeRef) =>
+        codeRef.name === 'Classroom' ? classroom : undefined,
+      lookupDefinitionEntry: async (codeRef) => {
+        if (codeRef.name === 'Guardian' && state.guardianFailure) {
+          throw state.guardianFailure;
+        }
+        let found = definitions.get(codeRef.name);
+        if (!found) {
+          throw new FilterRefersToNonexistentTypeError(codeRef);
+        }
+        return { definition: found, types: [typeKey(codeRef)] };
+      },
+      toURL: (identifier) => new URL(identifier),
+      isPolicyCard: (types) => types.includes(typeKey(realmPolicyRef)),
+      typeKey,
+      realmURL: EDUCATION,
+      instanceTypesUnder: async () => [],
+      instanceTypeKeys: async () => [],
+    });
+    return { cache, state };
+  }
+
+  function reachedVia(
+    policy: Awaited<ReturnType<RealmPolicyCache['get']>>,
+  ): (string | undefined)[] {
+    return (policy?.issues ?? []).map(
+      ({ message }) => /linked through `([^`]+)`/.exec(message)?.[1],
+    );
+  }
+
+  test('a type the reach check cannot read leaves its branch unwalked, and is walked once it can be read', async function (assert) {
+    let { cache, state } = reachSetup();
+    state.guardianFailure = new Error('connection reset');
+    let policy = await cache.get();
+    assert.deepEqual(
+      policy?.rules.map((rule) => rule.grants.map((grant) => grant.operation)),
+      [['read']],
+      'the policy compiles, and its grant is kept',
+    );
+    assert.deepEqual(
+      reachedVia(policy),
+      ['students'],
+      'the students are walked, and the guardians are not',
+    );
+
+    noteRealmIndexMoved(EDUCATION);
+    await until(
+      () => cache.stats.revalidations === 1,
+      'the move while the guardian still cannot be read lands',
+    );
+    assert.strictEqual(
+      cache.stats.compiles,
+      1,
+      'a revalidation while it still cannot be read does not recompile',
+    );
+
+    state.guardianFailure = undefined;
+    noteRealmIndexMoved(EDUCATION);
+    await until(
+      () => cache.stats.compiles === 2,
+      'the move after the guardian can be read lands',
+    );
+    assert.deepEqual(
+      reachedVia(await cache.get()),
+      ['students', 'students.guardian'],
+      'and the recompile walks it',
+    );
   });
 
   test('a refresh that a move lands under while it reads answers its read, and is not kept', async function (assert) {

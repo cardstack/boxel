@@ -380,6 +380,20 @@ module(basename(import.meta.filename), function (hooks) {
     admin: () => bearer(ADMIN, ['read', 'write', 'realm-owner']),
     reader: () => bearer(READER, ['read']),
     teacher: () => bearer(TEACHER),
+    // The session a realm renders its own cards under, reading as the
+    // teacher.
+    teacherRealmRender: () =>
+      `Bearer ${education.createJWT(
+        {
+          user: TEACHER,
+          realm: education.url,
+          permissions: [],
+          sessionRoom: `test-session-room-for-${TEACHER}`,
+          realmServerURL: education.realmServerURL,
+          realmAuthority: true,
+        },
+        '7d',
+      )}`,
   };
 
   function path(url: string) {
@@ -1057,14 +1071,33 @@ module(basename(import.meta.filename), function (hooks) {
 
     test('a request a render sends is judged as the search it sends is', async function (assert) {
       let pair = { target: CLASSROOM, operation: 'listMine' };
-      let rendering = await check(AUTH.teacher(), [pair]).set(
+      let rendering = await check(AUTH.teacherRealmRender(), [pair]).set(
         DURING_PRERENDER_HEADER,
         'true',
       );
       assert.deepEqual<unknown[]>(
         (rendering.body as { checks: CapabilityAnswer[] }).checks,
         [{ ...pair, allowed: false }],
-        "a render runs under the realm's own authority, which no policy grants anything",
+        "a realm's own render runs under the realm's own authority, which no policy grants anything",
+      );
+      assert.deepEqual(
+        ids(
+          await realmSearch(AUTH.teacherRealmRender(), searchFor(pair)).set(
+            DURING_PRERENDER_HEADER,
+            'true',
+          ),
+        ),
+        [],
+        'as the search it sends is served no rows',
+      );
+      let askedFor = await check(AUTH.teacher(), [pair]).set(
+        DURING_PRERENDER_HEADER,
+        'true',
+      );
+      assert.deepEqual<unknown[]>(
+        (askedFor.body as { checks: CapabilityAnswer[] }).checks,
+        [{ ...pair, allowed: true }],
+        "a render a user asks for runs on that user's own session, and is judged as them",
       );
       assert.deepEqual(
         ids(
@@ -1073,13 +1106,13 @@ module(basename(import.meta.filename), function (hooks) {
             'true',
           ),
         ),
-        [],
-        'as the search it sends is served no rows',
+        MINE,
+        'as the search it sends is served their classrooms',
       );
       assert.deepEqual(
         (await answers(AUTH.teacher(), [pair])).map((a) => a.allowed),
         [true],
-        'while the same session outside a render is allowed',
+        'and so is the same session outside a render',
       );
       assert.deepEqual(
         ids(await realmSearch(AUTH.teacher(), searchFor(pair))),

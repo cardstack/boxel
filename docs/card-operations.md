@@ -501,6 +501,107 @@ without assembling the card's closure, and a `readSource` serves stored bytes. A
 definition carrying one records a `links-without-assembly` issue; a value that
 is not one of the three records `invalid-link-strategy`.
 
+### `html` — which prerendered formats a read or a query serves
+
+A card's prerendered HTML is rendered once per format, under the realm's own
+authority, and shared by every viewer. A format whose template draws linked
+cards bakes their content into that one markup: a `Classroom` whose `embedded`
+format lists its students by name hands those names to everyone who receives the
+classroom's embedded markup, whatever they could fetch on their own. A `read` or
+a `query` declaration may say which formats' markup it serves.
+
+```ts
+@operation static read = {
+  base: 'read',
+  html: { embedded: 'unshareable' },
+} satisfies OperationDeclaration;
+```
+
+The declaration is a record by format — `isolated`, `embedded`, `fitted`,
+`atom` or `head`, the formats the realm prerenders — each `shareable` (the
+default, the same as leaving the format out) or `unshareable`. An unshareable
+format is served **data-only**: no caller receives its markup, and a consumer
+renders the card from its data instead. Nothing is rendered a second time or
+per caller; the realm keeps its one rendering and withholds it. Leaving `html`
+out serves every format's markup.
+
+**It is a claim about what a format draws, not a mechanism.** Declaring a
+format unshareable says its markup reaches further than the card's
+representation should. A later edit that starts embedding a linked card in a
+format left shareable falsifies the claim silently, so declare it on the formats
+whose templates draw other cards, and revisit it when a template changes.
+
+**On a `read` it governs reads rooted at this card:**
+
+- the card's single-card HTML read (the `card+html` `GET`, and its `file-meta`
+  counterpart for a file def), which answers an unshareable format with the
+  card's data in place of its rendering;
+- the last-known-good isolated markup an errored read carries in place of the
+  card, which is withheld when `isolated` is unshareable;
+- the host-mode page for the card, which injects no `isolated` or `head` markup
+  for a format declared unshareable, so the host renders the card from its data
+  once it boots.
+
+**On a `query` it governs every row alike, under the query's declaration** — the
+same rule `links` follows. Each row the query answers with is served without its
+markup for the formats the query declares unshareable, whatever type the row is
+and whatever that type's own `read` declares. A row served data-only for the
+format asked for answers the way a row with no rendering of it does: with its
+card where the request falls back to one, and with an empty `html` branch where
+it pins one. The declaration is applied on a realm's own `_search` and on
+`_federated-search` alike.
+
+```ts
+@operation static listClassrooms = {
+  base: 'query',
+  query: { filter: { type: () => Classroom } },
+  html: { embedded: 'unshareable', fitted: 'unshareable' },
+} satisfies OperationDeclaration;
+```
+
+**An ad-hoc search declares nothing, so it serves every format's markup** — and
+so does a policy's ad-hoc `query` grant, which authorizes exactly that search.
+A policy author who wants a grant-reached caller to receive a format data-only
+grants a named query that declares it unshareable, not the ad-hoc `query`.
+Search is the main route by which a caller reached through a grant receives
+prerendered HTML, which is why the declaration that governs it is the one on the
+query the caller was granted.
+
+**A search a render runs keeps every format's markup**, whatever the query
+declares. What a render draws becomes part of the embedding card's own
+prerendered HTML, and that markup is governed by the embedding card's own
+declarations: a card whose format draws the rows of a query that withholds their
+markup draws their content all the same — served data-only, the render would
+draw each row from its data, under the realm's authority, with the same result.
+Declare the embedding card's format unshareable if what it embeds should not be
+shared.
+
+**It applies to every caller alike.** A format is served to everyone or to no
+one: the declaration belongs to the operation, so a realm reader and a caller
+reached by a policy grant receive the same document from the same request.
+
+**Disclosure is a union.** A caller who can invoke a wider operation receives
+what it serves, so withholding a format on one query achieves nothing for a
+caller who is also granted another query, or the ad-hoc `query`, that serves it.
+
+A query's `html` composes with its `links`. A row served under `none` usually
+renders from its prerendered HTML; one also served data-only for the format asked
+for has neither markup nor a card the host may adopt, so the host renders it from
+the card's own read. That read is gated like any other, so a caller reached only
+through a `query` grant, with no `read` grant on the row's type, is refused it and
+cannot render such a row. A query meant for such callers declares `ids` rather
+than `none` — its rows then carry cards the host renders from — or leaves the
+format shareable, or the policy grants `read` on the row's type as well.
+
+#### Where it is refused
+
+`html` is a `read` and `query` key: it withholds prerendered HTML a read of the
+card or a query's rows are served with, and no other base serves any. An `html`
+on any other base is refused where it is written, and a stored definition
+carrying one records an `html-without-rendering` issue. A declaration that is
+not a record of prerendered formats, each `shareable` or `unshareable`, records
+`invalid-html-declaration`.
+
 ### `optimistic`
 
 The client applies an eligible write to its local copy before the realm
@@ -1122,14 +1223,31 @@ Some things worth knowing before you read one:
   definition from, judged by a session of their own. Anyone else is refused
   with a 403. No policy grant reaches a validate, and none reaches a policy card
   at all.
-- **A problem with a realm's pointer is not on the policy card.** A realm whose
-  `policy` names a card the index does not hold (`policy-card-missing`), or a
-  card that is not a `RealmPolicy` (`not-a-policy`), refuses as an uncompilable
-  policy does, and records the issue on the `realm:policy` log channel. The
-  first has no card to ask. The second is a card of another type, which
-  carries a validate only if its own type declares one, and then answers
-  `uncompilable` with `not-a-policy`. A policy card whose latest index visit
-  failed outright renders its index error, as any card does.
+- **A problem with a realm's pointer shows on the realm's config card.** A
+  realm whose `policy` names a card the index does not hold
+  (`policy-card-missing`), or a card that is not a `RealmPolicy`
+  (`not-a-policy`), refuses as an uncompilable policy does, and has no policy
+  card for the problem to land on. So the config card, the `RealmConfig` card
+  at `realm.json`, declares a validate of its own, `validatePolicy`. Invoked on
+  the realm's own config card, it compiles the card the realm's pointer names
+  as the realm compiles it, with the realm's own compile environment, and
+  answers in the same shape. So neither of the two inputs above differs: it
+  reports exactly what that realm holds, including a `policy-not-filterable`
+  that a validate of the policy card, compiled in the card's own realm, can
+  miss. A realm that names
+  no policy, or whose pointer it could not read as a card's id and dropped,
+  answers with no `card` and nothing in `realms`, `issues` or `rules`. The
+  card shows the answer beside its `policy` field: in force, or not in force
+  with the issue that takes it out of force, and asks again when its own realm
+  or any realm in `realms` is indexed.
+- **The config card tells only a reader of the realm the pointer names.** The
+  pointer can name a card in any realm, so whether a card is there is what the
+  answer would disclose. The realm holding the named card is judged before
+  anything about the card is read: a caller who cannot read it, or a pointer
+  into an archived realm or one no realm here serves, gets the same 403
+  whatever is or is not there. The other realms compiling read are judged as
+  a validate of the policy card judges them. A policy card whose latest index
+  visit failed outright renders its index error, as any card does.
 
 ## Where to look next
 

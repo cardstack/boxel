@@ -4,6 +4,7 @@ import {
   type OperationCore,
   type ScopeCaller,
 } from './dispatch.ts';
+import { namesRealmConfigCard } from './gate.ts';
 import type { CompiledOperationGrant, CompiledRealmPolicy } from './policy.ts';
 import {
   OperationFailure,
@@ -44,6 +45,12 @@ import {
 // every card in that realm is, so what it discloses is already what the card's
 // realm discloses to its readers. Nothing compiling reads is cached or put in
 // force.
+//
+// Invoked on the realm's config card, it answers for the card the realm's
+// pointer names, compiled with this realm's own compile environment, which is
+// the one its policy cache compiles with. Two problems live in the pointer
+// rather than in any policy card, a card the index does not hold and a card
+// that is not a RealmPolicy, and this is where their author sees them.
 // ============================================================================
 
 export async function validateOperation(
@@ -51,30 +58,96 @@ export async function validateOperation(
   request: OperationRequest,
 ): Promise<OperationValidateResult> {
   let card = instanceTargetURL(request);
+  let asker = scopeCallerFor(request.principal ?? '');
+  if (namesRealmConfigCard(core, card)) {
+    return {
+      validation: await realmPolicyValidation(core, request, card, asker),
+    };
+  }
   if (!core.compilePolicyCard) {
-    throw new OperationFailure({
-      id: card.href,
-      status: 500,
-      code: 'internal-error',
-      title: 'Cannot validate',
-      detail: `operation "${request.name}" compiles a policy card, and this realm cannot compile one`,
-    });
+    throw cannotCompile(card, request);
   }
   let { compiled, reads } = await core.compilePolicyCard(card);
-  let asker = scopeCallerFor(request.principal ?? '');
   let realms = await servedRealmsRead(core, asker, reads);
   if (!realms) {
+    throw notReported(card, card.href);
+  }
+  return { validation: validation(compiled, realms) };
+}
+
+// The policy the realm's pointer names, for a validate of its config card.
+//
+// A realm writer may point the realm at a card in any realm, including one
+// they cannot read, and what this answers says whether a card is there and
+// what it holds. Whether a card is there is exactly what a refusal withholds
+// from a caller who cannot read its realm. So the realm holding the card is
+// judged before anything about the card is read, and must be one this server
+// serves and the caller reads: a pointer into a realm the caller cannot read,
+// an archived one, or one no realm here serves is refused in the same bytes,
+// whatever is or is not there. A realm URL nothing serves is not itself a
+// secret, but this cannot tell one from a realm that is registered and failed
+// to mount, whose cards are still in the index and are not the caller's to be
+// told about. The rest of what compiling reads is judged as a validate of the
+// policy card judges it.
+//
+// Compiled rather than read from the realm's policy cache, since the answer is
+// refused unless the caller reads every realm compiling read, which only a
+// compile reports. The cache compiles the same card with the same environment,
+// and revalidates within five seconds of a change to anything it read, so
+// what this reports is in force here within that bound.
+async function realmPolicyValidation(
+  core: OperationCore,
+  request: OperationRequest,
+  card: URL,
+  asker: ScopeCaller,
+): Promise<PolicyValidation> {
+  if (!core.policy || !core.compilePolicyCard) {
+    throw cannotCompile(card, request);
+  }
+  let pointer = await core.policy.policyCard();
+  if (!pointer) {
+    return { realms: [], issues: [], rules: [] };
+  }
+  if ((await core.readsRealmOf?.(pointer, asker))?.read !== true) {
     throw new OperationFailure({
       id: card.href,
       status: 403,
       code: 'operation-not-permitted',
       title: 'Operation not permitted',
       detail:
-        `compiling ${card.href} reads definitions in a realm you cannot ` +
-        `read, so what it compiles to is not reported to you`,
+        `the card this realm's policy pointer names is not in a realm you ` +
+        `can read here, so whether it is there, and what it compiles to, is ` +
+        `not reported to you`,
     });
   }
-  return { validation: validation(compiled, realms) };
+  let { compiled, reads } = await core.compilePolicyCard(new URL(pointer));
+  let realms = await servedRealmsRead(core, asker, reads);
+  if (!realms) {
+    throw notReported(card, `the policy this realm names`);
+  }
+  return validation(compiled, realms);
+}
+
+function cannotCompile(card: URL, request: OperationRequest): OperationFailure {
+  return new OperationFailure({
+    id: card.href,
+    status: 500,
+    code: 'internal-error',
+    title: 'Cannot validate',
+    detail: `operation "${request.name}" compiles a policy card, and this realm cannot compile one`,
+  });
+}
+
+function notReported(card: URL, compiling: string): OperationFailure {
+  return new OperationFailure({
+    id: card.href,
+    status: 403,
+    code: 'operation-not-permitted',
+    title: 'Operation not permitted',
+    detail:
+      `compiling ${compiling} reads definitions in a realm you cannot ` +
+      `read, so what it compiles to is not reported to you`,
+  });
 }
 
 // The realms this server serves that one of the URLs is in, each once in the
