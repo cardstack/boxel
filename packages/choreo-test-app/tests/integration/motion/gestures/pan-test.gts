@@ -1,7 +1,7 @@
 /**
  * Port of Motion's packages/framer-motion/src/gestures/__tests__/pan.test.tsx (motion@v13.4.6).
  * MockDrag's pointer is the Cypress-style trigger() on a real element; React state becomes a tracked property.
- * jest.spyOn(performance, 'now') → an own `now` on `performance`, deleted afterwards to expose the prototype's again.
+ * jest.spyOn(performance, 'now') → an own `now` on `performance`, deleted after each test to expose the prototype's again.
  */
 import { render } from '@ember/test-helpers';
 import { setupRenderingTest } from 'ember-qunit';
@@ -24,6 +24,10 @@ const el = () => document.querySelector('#el')!;
 
 module('Integration | motion | pan', function (hooks) {
   setupRenderingTest(hooks);
+  // runs even when a test times out waiting on a gesture that never ends
+  hooks.afterEach(function () {
+    delete (performance as { now?: unknown }).now;
+  });
 
   test("pan handlers aren't frozen at pan session start", async function (assert) {
     let count = 0,
@@ -135,33 +139,29 @@ module('Integration | motion | pan', function (hooks) {
     });
     const onPanEnd = (_: PointerEvent, info: PanInfo) => resolveEnd(info);
 
-    try {
-      await render(
-        <template>
-          <MotionConfig @transformPagePoint={{transformPagePoint}}>
-            <div id="el" {{motion onPanEnd=onPanEnd}}></div>
-          </MotionConfig>
-        </template>
-      );
-      await nextFrame();
-      pointerDown(el());
+    await render(
+      <template>
+        <MotionConfig @transformPagePoint={{transformPagePoint}}>
+          <div id="el" {{motion onPanEnd=onPanEnd}}></div>
+        </MotionConfig>
+      </template>
+    );
+    await nextFrame();
+    pointerDown(el());
 
-      now = 1000;
-      pos.x = 10;
-      pointerMove(document.body);
-      await nextFrame();
+    now = 1000;
+    pos.x = 10;
+    pointerMove(document.body);
+    await nextFrame();
 
-      now = 1050;
-      pos.x = 60;
-      pointerMove(document.body);
-      pointerUp(el());
+    now = 1050;
+    pos.x = 60;
+    pointerMove(document.body);
+    pointerUp(el());
 
-      const { offset, velocity } = await ended;
-      assert.strictEqual(offset.x, 60);
-      // 50px between the last two moves, 50ms apart
-      assert.strictEqual(velocity.x, 1000);
-    } finally {
-      delete (performance as { now?: unknown }).now;
-    }
+    const { offset, velocity } = await ended;
+    assert.strictEqual(offset.x, 60);
+    // 50px between the last two moves, 50ms apart
+    assert.strictEqual(velocity.x, 1000);
   });
 });
