@@ -24,6 +24,7 @@
       "realm-policy-batch-test",
       "realm-policy-capabilities-test",
       "realm-policy-card-write-test",
+      "realm-policy-chain-types-test",
       "realm-policy-compile-test",
       "realm-policy-config-standing-test",
       "realm-policy-create-lane-test",

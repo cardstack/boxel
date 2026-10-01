@@ -20,6 +20,16 @@
 //     that is already broken against boxel main does not fail every change.
 //     Writes a markdown summary to $GITHUB_STEP_SUMMARY when it is set.
 //
+//   node scripts/lint-sweep.ts --report=<file> [--baseline=<file>] --pairing=<file>
+//     Reports with the pull request's pairing as scripts/pairing.ts resolved
+//     it. A recording of a paired catalog pull request's head is reported as
+//     above. Any other recording is catalog main, and errors the change adds
+//     to it pass only while a catalog pull request this change merges before
+//     is open and approved, so it lands right after the change. A catalog
+//     pull request this change merges after has to land first, so until it
+//     does they fail, waiting on it. With no pairing they fail, saying how to
+//     declare one.
+//
 // Errors are matched by linter, file, rule, message and position first, then
 // the rest without position, so an error in a boxel file that the change only
 // moved still matches, and a repeated error the change adds is the one
@@ -36,6 +46,8 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { isAbsolute, join, relative, resolve } from 'node:path';
+
+import type { Pair, Resolution } from './pairing.ts';
 
 type Linter = 'lint:types' | 'lint:js' | 'lint:hbs';
 
@@ -396,10 +408,103 @@ function annotation(message: string) {
     .replace(/\n/g, '%0A');
 }
 
-function report(headPath: string, baselinePath: string | undefined) {
+// Whether catalog main may fail with the errors the change adds to it. A
+// catalog pull request this change merges after has to land first, so while it
+// is open the verdict is to wait for it. Otherwise they may only while a
+// catalog pull request this change merges before is open, ready for review and
+// approved, so it can land right after this one.
+function mainVerdict(resolution: Resolution) {
+  let here = `${resolution.repository}#${resolution.number}`;
+  let ref = (pair: Pair) => `${pair.repository}#${pair.number}`;
+  let before = resolution.pairs.find(
+    (p) => p.key === 'merges-before' && !p.merged,
+  );
+  let after = resolution.pairs.find(
+    (p) => p.key === 'merges-after' && !p.merged,
+  );
+  if (after) {
+    return {
+      passes: false,
+      message:
+        `${here} merges after ${ref(after)}, so catalog main is linted ` +
+        `against this change once that has landed: waiting on ${ref(after)} ` +
+        `to merge. Re-run this check after it merges.`,
+    };
+  }
+  if (before?.draft) {
+    return {
+      passes: false,
+      message:
+        `${here} merges before ${ref(before)}, which is still a draft, so it ` +
+        `can't merge right after this change. Mark it ready for review, get ` +
+        `it approved, and re-run this check.`,
+    };
+  }
+  if (before?.approved === true) {
+    return {
+      passes: true,
+      message:
+        `${here} merges before ${ref(before)}, which is approved: merge ` +
+        `${ref(before)} right after this change, so catalog main fails with ` +
+        `these errors only in between.`,
+    };
+  }
+  if (before?.approved === false) {
+    return {
+      passes: false,
+      message:
+        `${here} merges before ${ref(before)}, which is not approved yet, so ` +
+        `catalog main would fail with these errors until it is. Get it ` +
+        `approved, re-run this check, and merge ${ref(before)} right after ` +
+        `this change.`,
+    };
+  }
+  if (before) {
+    return {
+      passes: false,
+      message:
+        `${here} merges before ${ref(before)}, and whether that is approved ` +
+        `could not be read (${before.approvalError}). Re-run this check.`,
+    };
+  }
+  let catalogRepository = 'cardstack/boxel-catalog';
+  let pairing =
+    `\`Merges before: ${catalogRepository}#<number>\` in ${here}'s ` +
+    `description, and \`Merges after: ${here}\` in that pull request's`;
+  let mergedBefore = resolution.pairs.find((p) => p.key === 'merges-before');
+  if (mergedBefore) {
+    return {
+      passes: false,
+      message:
+        `Merging this change leaves catalog main failing with these errors, ` +
+        `and ${ref(mergedBefore)}, which it merges before, has already ` +
+        `merged, so it can't fix them. Keep the change compatible with the ` +
+        `catalog as it is, or fix the catalog in a new ${catalogRepository} ` +
+        `pull request and pair the two: replace the \`Merges before:\` line ` +
+        `so there is ${pairing}.`,
+    };
+  }
+  return {
+    passes: false,
+    message:
+      `Merging this change leaves catalog main failing with these errors. ` +
+      `Keep the change compatible with the catalog as it is, or fix the ` +
+      `catalog in a ${catalogRepository} pull request and pair the two, ` +
+      `with ${pairing}.`,
+  };
+}
+
+async function report(
+  headPath: string,
+  baselinePath: string | undefined,
+  pairingPath: string | undefined,
+) {
   let head = JSON.parse(readFileSync(headPath, 'utf8')) as Recording;
   let baseline = baselinePath
     ? (JSON.parse(readFileSync(baselinePath, 'utf8')) as Recording)
+    : undefined;
+  let resolution = pairingPath
+    ? (JSON.parse(readFileSync(pairingPath, 'utf8')) as Resolution)
     : undefined;
   let { added, existing } = newErrors(
     head.diagnostics,
@@ -407,42 +512,78 @@ function report(headPath: string, baselinePath: string | undefined) {
   );
   let catalog = head.catalog;
   let revision = catalog.revision?.slice(0, 12) ?? 'unknown revision';
-  let subject = `${catalog.repository ?? 'the catalog'}@${revision}`;
+  let at = `${catalog.repository ?? 'the catalog'}@${revision}`;
+
+  // With a pairing, this recording is either a paired catalog pull request's
+  // head, which the change is linted with, or catalog main, which the change
+  // must not leave failing behind a pull request that isn't ready.
+  let pair = resolution?.pairs.find(
+    (p) => !p.merged && p.headSha === catalog.revision,
+  );
+  let gated = Boolean(resolution) && !pair;
+  let subject = pair
+    ? `${pair.repository}#${pair.number}'s head (${at})`
+    : gated
+      ? `catalog main (${at})`
+      : at;
   let linting = `Linting ${subject} against this change`;
 
-  let summary = [`### Catalog lint`, ''];
+  let summary = [
+    pair
+      ? `### Catalog lint: ${pair.repository}#${pair.number}`
+      : gated
+        ? `### Catalog lint: main`
+        : `### Catalog lint`,
+    '',
+  ];
+  let passes = added.length === 0;
   if (added.length > 0) {
     let introduced = baseline
       ? `${added.length} lint error(s) that linting it against the base branch does not`
       : `${added.length} lint error(s)`;
     printErrors(`${linting} finds ${introduced}:`, added);
-    for (let d of added) {
+    let advice: string;
+    let verdict = gated && resolution ? mainVerdict(resolution) : undefined;
+    if (verdict && resolution!.pairs.length > 0) {
+      // What fails the check is the paired pull request not being ready,
+      // which the verdict states; the errors are what main would fail with.
+      passes = verdict.passes;
+      advice = verdict.message;
+      for (let d of added) {
+        console.log(
+          `::warning title=catalog lint (main)::${annotation(`${location(d)} ${d.rule}: ${d.message}`)}`,
+        );
+      }
       console.log(
-        `::error title=catalog lint::${annotation(`${location(d)} ${d.rule}: ${d.message}`)}`,
+        `::${passes ? 'notice' : 'error'} title=catalog lint (main)::${annotation(advice)}`,
       );
+    } else {
+      advice = pair
+        ? `Fix them in ${pair.repository}#${pair.number}, which this change ` +
+          `is paired with.`
+        : verdict
+          ? verdict.message
+          : `Keep the change compatible with the catalog as it is, or fix the ` +
+            `catalog in a boxel-catalog pull request and pair the two in ` +
+            `their descriptions, as packages/catalog/README.md describes.`;
+      for (let d of added) {
+        console.log(
+          `::error title=catalog lint::${annotation(`${location(d)} ${d.rule}: ${d.message}`)}`,
+        );
+      }
     }
     summary.push(
-      `${linting} finds ${introduced}. ` +
-        `Keep the change compatible with the catalog as it is, or fix the ` +
-        `catalog on a boxel-catalog branch named the same as this change's ` +
-        `branch: this check lints that branch in place of main, and its ` +
-        `catalog pull request should merge before or alongside this one.`,
+      `${linting} finds ${introduced}. ${advice}`,
       '',
       ...added.map((d) => markdownItem(d, catalog)),
       '',
     );
   } else {
-    log(
-      baseline
-        ? `${linting} finds no lint errors that the base branch does not`
-        : `${linting} finds no lint errors`,
-    );
-    summary.push(
-      existing.length > 0
-        ? `${linting} finds no lint errors that the base branch does not.`
-        : `${linting} finds no lint errors.`,
-      '',
-    );
+    let finding = baseline
+      ? `${linting} finds no lint errors that the base branch does not`
+      : `${linting} finds no lint errors`;
+    log(finding);
+    summary.push(`${finding}.`, '');
   }
   if (existing.length > 0) {
     printErrors(
@@ -466,7 +607,7 @@ function report(headPath: string, baselinePath: string | undefined) {
   if (process.env.GITHUB_STEP_SUMMARY) {
     appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${summary.join('\n')}\n`);
   }
-  process.exit(added.length > 0 ? 1 : 0);
+  process.exit(passes ? 0 : 1);
 }
 
 let args = process.argv.slice(2);
@@ -481,7 +622,14 @@ if (recordPath && !reportPath) {
   record(resolve(recordPath));
 } else if (reportPath && !recordPath) {
   let baselinePath = option('baseline');
-  report(resolve(reportPath), baselinePath ? resolve(baselinePath) : undefined);
+  let pairingPath = option('pairing');
+  report(
+    resolve(reportPath),
+    baselinePath ? resolve(baselinePath) : undefined,
+    pairingPath ? resolve(pairingPath) : undefined,
+  ).catch((error) => fail(String(error)));
 } else {
-  fail('pass either --record=<file> or --report=<file> [--baseline=<file>]');
+  fail(
+    'pass either --record=<file> or --report=<file> [--baseline=<file>] [--pairing=<file>]',
+  );
 }

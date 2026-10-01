@@ -1,6 +1,6 @@
 import type { CodeRef, ResolvedCodeRef } from '../code-ref.ts';
+import { isFilterRefersToNonexistentTypeError } from '../definition-lookup.ts';
 import type { Definition } from '../definitions.ts';
-import { codeRefFromInternalKey } from '../index.ts';
 import type { LocalPath } from '../paths.ts';
 import { isCardResource } from '../card-document-shape.ts';
 import { now } from '../clock.ts';
@@ -8,6 +8,7 @@ import { logger } from '../log.ts';
 import type { CardResource } from '../resource-types.ts';
 import { extensionOfName } from '../file-def-code-ref.ts';
 import { policyFileDefCodeRef } from '../policy-file-def.ts';
+import { chainType } from './adoption-chain.ts';
 import { localPathFor, pathsFor } from './dispatch.ts';
 import type { OperationCore, OperationScope } from './dispatch.ts';
 import type { AdmissionSubject, BxlMutationModule } from './executors.ts';
@@ -445,7 +446,7 @@ export async function gateOperation(
   if (base === 'query') {
     if (trace) {
       trace.refused(
-        (await queryKeptOutOfReach(core, scope, subject, name))
+        (await queryKeptOutOfReach(core, scope, subject, name, typeDefinition))
           ? 'non-grantable'
           : 'query-lane',
       );
@@ -544,7 +545,7 @@ export async function gateOperation(
   // there — on the read the realm serves most.
   if (
     !isDefinitionFreeBaseOperation(name) &&
-    (await nonGrantableInChain(core, types.slice(typeDefinition ? 1 : 0), name))
+    (await nonGrantableInChain(core, types, name, typeDefinition ? 1 : 0))
   ) {
     trace?.refused('non-grantable');
     return GATE_REFUSED;
@@ -624,12 +625,15 @@ async function indexedSubject(
 // Whether a type in the chain of the card or type a query is invoked on
 // declares the query `nonGrantable`. A subclass that redeclares the name
 // without the flag does not make grantable what the type it extends kept out
-// of a policy's reach, on the search engine as anywhere.
+// of a policy's reach, on the search engine as anywhere. The chain starts at
+// the target's own type, which is left out where its entry was read, as the
+// gate's own check leaves it out: its declaration was judged from that entry.
 async function queryKeptOutOfReach(
   core: OperationCore,
   scope: GateScope,
   subject: GateSubject,
   name: string,
+  typeDefinition: Definition | undefined,
 ): Promise<boolean> {
   if (subject.kind === 'unmatched') {
     return false;
@@ -638,7 +642,12 @@ async function queryKeptOutOfReach(
   if (!indexed || indexed.kind === GATE_MISSING.kind) {
     return false;
   }
-  return await nonGrantableInChain(core, indexed.types, name);
+  return await nonGrantableInChain(
+    core,
+    indexed.types,
+    name,
+    typeDefinition ? 1 : 0,
+  );
 }
 
 // What the bytes a stored-bytes read will serve are, judged from those bytes.
@@ -1053,8 +1062,9 @@ export async function authorizationCardIds(
   ];
 }
 
-// Whether any of these types, keys from an adoption chain, declares `name`
-// non-grantable.
+// Whether any type in an adoption chain, from the key at `from` on, declares
+// `name` non-grantable. The keys before `from` are read only as the chain's
+// account of the types they extend.
 //
 // A declaration a subclass writes takes the place of the one it inherits,
 // flag and all, and the subclass's author decides what its definition entry
@@ -1063,32 +1073,41 @@ export async function authorizationCardIds(
 // the type it extends kept out of a policy's reach.
 //
 // A type whose definition cannot be read might be the one holding the flag, so
-// it answers yes.
+// it answers yes. A class its module does not export is one: it has no
+// definition entry, and what it declares still reaches its subclasses, so a
+// subclass that redeclares one of its operations would drop a flag nothing
+// else records. Only the lookup's own "no such type" counts as the realm
+// having no definition; any other failure to read one answers yes as well.
 export async function nonGrantableInChain(
   core: OperationCore,
   types: string[],
   name: string,
+  from = 0,
 ): Promise<boolean> {
   let relativeTo = new URL(core.realmURL);
+  let read = async (codeRef: ResolvedCodeRef) => {
+    let resolved = core.resolveCodeRef(codeRef, relativeTo);
+    if (!resolved) {
+      return undefined;
+    }
+    try {
+      return await core.definitionLookup.lookupDefinition(resolved);
+    } catch (e: unknown) {
+      if (isFilterRefersToNonexistentTypeError(e)) {
+        return undefined;
+      }
+      throw e;
+    }
+  };
   let answers = await Promise.all(
-    types.map(async (key) => {
-      let codeRef = codeRefFromInternalKey(key);
-      let resolved = codeRef
-        ? core.resolveCodeRef(codeRef, relativeTo)
-        : undefined;
-      if (!resolved) {
+    types.slice(from).map(async (_key, offset) => {
+      let type = await chainType(types, from + offset, read).catch(
+        () => undefined,
+      );
+      if (!type) {
         return true;
       }
-      let definition: Definition | undefined;
-      try {
-        definition = await core.definitionLookup.lookupDefinition(resolved);
-      } catch {
-        return true;
-      }
-      if (!definition) {
-        return true;
-      }
-      let operations = definition.operations;
+      let operations = type.definition.operations;
       return Boolean(
         operations &&
         Object.prototype.hasOwnProperty.call(operations, name) &&
