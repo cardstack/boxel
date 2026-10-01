@@ -1,0 +1,104 @@
+name: Motion Bump
+
+# Opens a pull request that moves the workspace catalog's Motion pins
+# (framer-motion, motion, motion-dom, motion-utils) once npm has a newer
+# framer-motion release that pnpm's minimumReleaseAge lets the workspace
+# install. packages/glimmer-motion/scripts/bump-motion.mjs picks the release,
+# moves the pins and writes the PR body, which diffs upstream's source for every
+# module glimmer-motion inlines or adapts. packages/glimmer-motion/VENDORED.md
+# says how to review one.
+#
+# Each release gets one branch, motion-bump/<version>, and a run skips a
+# release whose branch exists. Closing a bump PR and keeping its branch
+# declines that release; the next release opens its own PR.
+#
+# The PR is opened with the job's GITHUB_TOKEN, and events that token causes
+# don't start pull_request workflows. workflow_dispatch is the exception, so the
+# job dispatches the workflows that cover Motion on the branch: ci.yaml (the
+# choreo suites) and ci-lint.yaml (choreo lint and ember-tsc). Their checks land
+# on the PR's head commit. A push to the branch by a person runs the usual
+# pull_request workflows.
+
+on:
+  schedule:
+    - cron: "17 8 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+
+concurrency:
+  group: motion-bump
+  cancel-in-progress: false
+
+env:
+  # Requested as the reviewer on every Motion bump PR.
+  REVIEWER: lukemelia
+
+jobs:
+  bump:
+    name: Open a Motion bump PR
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - uses: jdx/mise-action@c1ecc8f748cd28cdeabf76dab3cccde4ce692fe4 # v4.0.0
+        with:
+          install: true
+
+      - name: Pick the release
+        id: pick
+        run: node packages/glimmer-motion/scripts/bump-motion.mjs
+
+      - name: Check for its branch
+        id: branch
+        if: steps.pick.outputs.version != ''
+        env:
+          BRANCH: motion-bump/${{ steps.pick.outputs.version }}
+        run: |
+          if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null; then
+            echo "$BRANCH exists, so this release already has a bump PR."
+          else
+            echo "name=$BRANCH" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Move the pins
+        if: steps.branch.outputs.name != ''
+        env:
+          VERSION: ${{ steps.pick.outputs.version }}
+        run: |
+          node packages/glimmer-motion/scripts/bump-motion.mjs --to "$VERSION" --write --report "$RUNNER_TEMP/body.md"
+          pnpm install --lockfile-only
+
+      - name: Open the PR and start its CI
+        if: steps.branch.outputs.name != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ steps.branch.outputs.name }}
+          VERSION: ${{ steps.pick.outputs.version }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$BRANCH"
+          git commit -am "Bump Motion to framer-motion $VERSION"
+          git push origin "$BRANCH"
+
+          url=$(gh pr create --base main --head "$BRANCH" \
+            --title "fix: Bump Motion to $VERSION (framer-motion, motion, motion-dom, motion-utils)" \
+            --body-file "$RUNNER_TEMP/body.md")
+          echo "Opened $url"
+          gh pr edit "$url" --add-reviewer "$REVIEWER" \
+            || echo "::warning::Couldn't request a review from $REVIEWER on $url"
+
+          gh workflow run ci.yaml --ref "$BRANCH"
+          gh workflow run ci-lint.yaml --ref "$BRANCH"
+
+          gh pr list --state open --json number,headRefName \
+            --jq ".[] | select(.headRefName | startswith(\"motion-bump/\")) | select(.headRefName != \"$BRANCH\") | .number" \
+            | while read -r older; do
+                gh pr comment "$older" --body "framer-motion $VERSION has its own bump PR: $url. Close this one unless it carries a fix that one needs."
+              done
