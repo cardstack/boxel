@@ -449,36 +449,6 @@ module(basename(import.meta.filename), function (hooks) {
       );
     });
 
-    test('a grant whose predicate reads a snapshot admits nothing, except on a query', async function (assert) {
-      await writeTo(
-        org,
-        'policies/education.json',
-        policyCard([
-          {
-            targetType: CLASSROOM,
-            grants: [
-              { operation: 'read', where: { bxl: TEACHES, snapshot: true } },
-              { operation: 'query', where: { bxl: TEACHES, snapshot: true } },
-              { operation: 'delete', where: TEACHES },
-            ],
-          },
-        ]),
-      );
-      let validation = await validate();
-      assert.deepEqual(issuesOf(validation), [], 'nothing is wrong with it');
-      assert.deepEqual(live(validation), [
-        [
-          'rules[0]',
-          ['rules[0].grants[0]', 'rules[0].grants[1]', 'rules[0].grants[2]'],
-        ],
-      ]);
-      assert.deepEqual(
-        inert(validation),
-        [['rules[0].grants[0]', 'snapshot']],
-        'the gate never evaluates the read, and the query composes its filter into a search',
-      );
-    });
-
     test('a rule whose type does not resolve is left out with every grant in it', async function (assert) {
       await writeTo(
         org,

@@ -1085,10 +1085,7 @@ Some things worth knowing before you read one:
   `admitsNothing`.** `unfilterable` is a grant on a query whose predicate
   compiled no search filter, which `policy-not-filterable` explains: a query is
   authorized only by composing a grant's filter into the search, so such a
-  grant has nothing to compose. `snapshot` is a grant on anything but a query
-  whose predicate is annotated as reading a snapshot tier, which the gate never
-  evaluates. On a query, the same annotation compiles into the search filter
-  and admits what it matches.
+  grant has nothing to compose.
 - **An uncompilable policy is different in kind.** A policy with one inactive
   grant denies that grant. A policy that did not compile at all denies
   everything it would have granted, and a realm naming it answers every

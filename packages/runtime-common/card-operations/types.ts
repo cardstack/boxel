@@ -999,12 +999,7 @@ export type ValidatedGrantInertia =
   // authorized only by composing a grant's filter into the search, and the
   // gate refuses every invocation built on one, so the grant has nothing to
   // compose. `policy-not-filterable` says why there is no filter.
-  | 'unfilterable'
-  // A grant whose `where` is annotated as reading a snapshot tier, on anything
-  // but a query. The gate reads a card's stored source alone and never
-  // evaluates such a predicate. On a query, the same annotation compiles into
-  // the search filter and admits what it matches.
-  | 'snapshot';
+  'unfilterable';
 
 // A `delete` answers with `null`: there is no state left to describe.
 export type OperationResult =
