@@ -53,11 +53,12 @@ import { readDeclarations } from './pairing.ts';
 export const CATALOG_REPOSITORY = 'cardstack/boxel-catalog';
 export const BOXEL_REPOSITORY = 'cardstack/boxel';
 
-// The catalog workflow whose "Sync to Production" job deployed the catalog
-// before deployments were recorded. Its last successful job is where the
-// first recorded deploy starts from.
-const LEGACY_SYNC_WORKFLOW = 'sync-to-workspace.yml';
+// The catalog workflow that syncs staging on every merge. Its "Sync to
+// Production" job deployed production before deployments were recorded, and
+// its last success is where the first recorded deploy starts from.
+const SYNC_WORKFLOW = 'sync-to-workspace.yml';
 const LEGACY_SYNC_JOB = 'Sync to Production';
+const STAGING_SYNC_JOB = 'Sync to Staging';
 
 export interface PullSummary {
   number: number;
@@ -414,21 +415,20 @@ async function deployedRevision(repository: string, environment: string) {
   return undefined;
 }
 
-async function legacySyncRevision() {
+// The head of the newest push to catalog main whose sync job succeeded.
+async function lastSuccessfulSync(jobName: string) {
   for (let page = 1; page <= 10; page++) {
     let { workflow_runs: runs } = await get<{
       workflow_runs: { id: number; head_sha: string }[];
     }>(
-      `repos/${CATALOG_REPOSITORY}/actions/workflows/${LEGACY_SYNC_WORKFLOW}/runs?branch=main&event=push&per_page=50&page=${page}`,
+      `repos/${CATALOG_REPOSITORY}/actions/workflows/${SYNC_WORKFLOW}/runs?branch=main&event=push&per_page=50&page=${page}`,
     );
     for (let run of runs) {
       let { jobs } = await get<{
         jobs: { name: string; conclusion: string | null }[];
       }>(`repos/${CATALOG_REPOSITORY}/actions/runs/${run.id}/jobs`);
       if (
-        jobs.some(
-          (job) => job.name === LEGACY_SYNC_JOB && job.conclusion === 'success',
-        )
+        jobs.some((job) => job.name === jobName && job.conclusion === 'success')
       ) {
         return run.head_sha;
       }
@@ -438,6 +438,28 @@ async function legacySyncRevision() {
     }
   }
   return undefined;
+}
+
+// Production is meant to get a catalog revision staging has already served. A
+// staging sync pushes the whole tree, so a successful one at the target or a
+// later commit means staging has served it. Not finding one only warns.
+async function stagingWarning(to: string) {
+  let staged = await lastSuccessfulSync(STAGING_SYNC_JOB);
+  if (!staged) {
+    return `No successful "${STAGING_SYNC_JOB}" run was found, so staging may never have served ${to.slice(0, 12)}.`;
+  }
+  let { status } = await get<{ status: string }>(
+    `repos/${CATALOG_REPOSITORY}/compare/${to}...${staged}?per_page=1`,
+  );
+  if (status === 'ahead' || status === 'identical') {
+    return undefined;
+  }
+  return (
+    `Staging hasn't served ${to.slice(0, 12)} yet: its last successful ` +
+    `"${STAGING_SYNC_JOB}" was at ${staged.slice(0, 12)}. Check ` +
+    `https://github.com/${CATALOG_REPOSITORY}/actions/workflows/${SYNC_WORKFLOW} ` +
+    `before relying on this deploy.`
+  );
 }
 
 interface Compare {
@@ -587,7 +609,9 @@ async function main() {
   let from =
     option('catalog-from') ??
     (await deployedRevision(CATALOG_REPOSITORY, environment)) ??
-    (environment === 'production' ? await legacySyncRevision() : undefined);
+    (environment === 'production'
+      ? await lastSuccessfulSync(LEGACY_SYNC_JOB)
+      : undefined);
   if (!from) {
     console.log(
       `::error title=catalog deploy::No deployed catalog revision is recorded for ${environment}. Pass --catalog-from=<sha> with the revision ${environment} serves.`,
@@ -640,6 +664,12 @@ async function main() {
     boxelSha,
     readRules(option('catalog-dir')),
   );
+  if (movement === 'forward' && environment === 'production') {
+    let warning = await stagingWarning(to);
+    if (warning) {
+      assessment.warnings.push(warning);
+    }
+  }
   for (let warning of assessment.warnings) {
     console.log(`::warning title=catalog deploy::${annotation(warning)}`);
   }
