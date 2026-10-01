@@ -701,7 +701,10 @@ export interface SurfaceFrame {
  * Installed on the SURFACE, not on the handles: one listener set for any
  * number of handles, click-anywhere-to-jump falls out for free, and a
  * handle dragged past the edge keeps tracking instead of losing the pointer.
- * The handle under the initial press arrives as `origin`.
+ * The handle under the initial press arrives as `origin`. With
+ * `handle='<selector>'` only a press inside a matching element starts the
+ * gesture; every other press keeps its default, so controls on the surface
+ * stay focusable by pointer.
  */
 export const dragsSurface = modifier(
   (
@@ -710,6 +713,7 @@ export const dragsSurface = modifier(
       (frame: SurfaceFrame) => void,
       boolean | undefined,
     ],
+    { handle }: { handle?: string },
   ) => {
     let pointerId: number | undefined;
     let origin: Element | null = null;
@@ -758,10 +762,20 @@ export const dragsSurface = modifier(
       if (disabled || pointer.button !== 0 || pointerId !== undefined) {
         return;
       }
+      let target = pointer.target as Element | null;
+      // with a handle selector, a press elsewhere is left alone, so controls
+      // inside the surface keep their own focus-on-press
+      if (handle && !target?.closest?.(handle)) {
+        return;
+      }
       pointer.preventDefault();
       pointerId = pointer.pointerId;
-      origin = pointer.target instanceof Element ? pointer.target : null;
-      el.setPointerCapture(pointerId);
+      origin = target?.closest ? target : null;
+      try {
+        el.setPointerCapture(pointerId);
+      } catch {
+        // a pointer released before this handler ran has no capture to take
+      }
       el.setAttribute('data-dragging', 'true');
       onFrame(frameFor(pointer, 'start'));
     };
