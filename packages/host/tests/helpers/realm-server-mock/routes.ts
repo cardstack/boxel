@@ -216,15 +216,16 @@ function registerSearchRoutes() {
           payload = { ...namedQueryRendering(payload), realms: realmList };
         } else {
           try {
-            // A request a render is waiting on is a realm-authority principal,
-            // whatever session it holds, as it is on the realm server.
+            // Only a realm-authority session is a realm-authority principal,
+            // as it is on the realm server: a render a user asked for runs on
+            // their ordinary session.
             let resolved = await resolveNamedQuery(
               resolvingRealm.operationCore,
               payload,
               {
                 principal: searchPrincipal(
                   authenticatedUser(req),
-                  duringRender,
+                  realmAuthoritySession(req),
                 ),
                 realms: realmList,
               },
@@ -748,6 +749,17 @@ function authenticatedUser(req: Request): string | undefined {
     return undefined;
   }
   return claimsFromRawToken(authorization.replace(/^Bearer /, '')).user;
+}
+
+function realmAuthoritySession(req: Request): boolean {
+  let authorization = req.headers.get('Authorization');
+  if (!authorization) {
+    return false;
+  }
+  return (
+    claimsFromRawToken(authorization.replace(/^Bearer /, '')).realmAuthority ===
+    true
+  );
 }
 
 // The entry searchable-realm resolver. In-process registry

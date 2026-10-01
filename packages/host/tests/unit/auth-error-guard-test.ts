@@ -40,6 +40,36 @@ module('Unit | auth-error-guard', function () {
     }
   });
 
+  test('a refused stylesheet emits no auth error, so a render in flight carries on', async function (assert) {
+    let guard = createAuthErrorGuard(window);
+    guard.register();
+
+    try {
+      let fetch = fetcher(
+        async () => new Response('Unauthorized', { status: 401 }),
+        [authErrorEventMiddleware(window)],
+      );
+
+      let response = await fetch(
+        'http://example.com/realm/_scoped-css/card-api.gts.md5-9f2a6167417f22c4ff73303301a5b99a.glimmer-scoped.css',
+      );
+      assert.strictEqual(
+        response.status,
+        401,
+        'the stylesheet request answers its refusal to its own caller',
+      );
+
+      let next = await guard.race(async () => 'rendered');
+      assert.strictEqual(
+        next,
+        'rendered',
+        'and nothing is latched to fail the next step of the render',
+      );
+    } finally {
+      guard.unregister();
+    }
+  });
+
   test('card errors with auth statuses are recognized without event flag', function (assert) {
     let guard = createAuthErrorGuard(window);
     let error = new CardError('Forbidden', { status: 403 });

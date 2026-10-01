@@ -49,9 +49,9 @@ export const CAPTURE_CARD_JOB_TIMEOUT_SEC = 60;
 // ones; the `sameCaptureIdentity` compare below is belt-and-braces against a
 // producer whose hash and spec disagree, since joining hands the incoming
 // caller the twin's render verbatim. The `runAs` equality keeps joins
-// within one render identity: the GET lane renders as the realm owner and
-// the POST lane as the requester, so cross-surface twins never join even
-// when their persist targets match.
+// within one render identity: every capture renders as the reader who asked
+// for it, so two readers' captures of one spec never join, whichever surface
+// each came through.
 export function chooseCaptureCardCoalesceDecision(
   context: QueueCoalesceContext,
 ): QueueCoalesceDecision {
@@ -225,9 +225,9 @@ export async function estimateCaptureQueueWait(
   // already matches all of it, the request coalesces rather than rendering,
   // so `hasTwin` lets the caller bypass the congestion gate. `runAs` must be
   // part of the match because the coalesce join requires it — a persist-only
-  // match would report jobs the caller cannot actually join (a POST job runs
-  // as its requester, a GET job as the realm owner) and wave a
-  // gate-skipping request into a lane that then renders anyway.
+  // match would report jobs the caller cannot actually join (another
+  // reader's capture of the same spec) and wave a gate-skipping request into
+  // a lane that then renders anyway.
   twinOf?: {
     sourceURL: string;
     captureSpecHash: string;
