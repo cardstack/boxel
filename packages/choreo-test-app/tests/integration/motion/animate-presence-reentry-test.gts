@@ -3,8 +3,8 @@
  *   act(() => setState(…)) → act(() => …): run() flushes the re-render before it returns, so two
  *   flips in a row leave no gap for an exit to resolve in, as in React
  *   <PresenceContext.Provider value={…}> → a hand-built PresenceHandle passed as `presence=`
- * React mounts inside render's act; here a motion element mounts on the next frame, so each
- * case waits that frame after render before it changes presence or reads a style.
+ * React mounts inside render's act; a motion element mounts in Ember's afterRender queue, which
+ * `await render()` drains, so each case goes on straight after render as upstream's does.
  */
 import { run } from '@ember/runloop';
 import { find, render } from '@ember/test-helpers';
@@ -88,7 +88,6 @@ module(
             ></div></Presence>
         </template>
       );
-      await nextFrame();
       const bar = () => byTestId('bar');
 
       // Exit resolves on the next frame, after the element has re-entered
@@ -127,7 +126,6 @@ module(
           ></div>
         </template>
       );
-      await nextFrame();
       onExitComplete.calls.length = 0;
 
       act(() => (provider.isPresent = false));
@@ -177,7 +175,6 @@ module(
         </template>
       );
       const fastEl = () => byTestId('fast');
-      await nextFrame();
       assert.strictEqual(fastEl().style.opacity, '1');
 
       act(() => (v.isVisible = false));
