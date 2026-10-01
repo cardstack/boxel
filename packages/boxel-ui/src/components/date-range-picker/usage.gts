@@ -103,6 +103,10 @@ export default class DateRangePickerUsage extends Component {
           @value={{this.range1.end}}
         />
         <Args.Object
+          @name='center'
+          @description='The day the calendars open on when neither start nor end is set; defaults to today. Pass the day a caller treats as today when it reads the date from a clock of its own'
+        />
+        <Args.Object
           @name='minDate'
           @description='Earliest selectable day; days before it render disabled. Pass today for an Airbnb-style no-past-dates calendar (toggle in the example above)'
           @value={{this.minDate}}

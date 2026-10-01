@@ -18,6 +18,11 @@ import { setupDateLibrary } from './setup.gts';
 
 interface Signature {
   Args: {
+    // The day the calendars open on when neither `start` nor `end` is set.
+    // Absent, it is today by the real clock; a caller that reads "today"
+    // from a clock of its own passes that day, so the month shown and any
+    // bound computed from "today" agree.
+    center?: Date;
     disabled?: boolean;
     end?: Date | null;
     maxDate?: Date;
@@ -67,11 +72,12 @@ export default class DateRangePicker extends Component<Signature> {
       this.rightCenter = this.args.end;
       this.leftCenter = add(this.args.end, -1, 'month');
     }
-    // If neither is provided, use current date and next month
+    // If neither is provided, use the center (today unless given) and the
+    // month after it
     else {
-      const today = new Date();
-      this.leftCenter = today;
-      this.rightCenter = add(today, 1, 'month');
+      const center = this.args.center ?? new Date();
+      this.leftCenter = center;
+      this.rightCenter = add(center, 1, 'month');
     }
   }
 
