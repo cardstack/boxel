@@ -51,6 +51,7 @@ import {
   type RealmIdentifier,
   type RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
+import { awaitPublishedHtmlReady } from '@cardstack/runtime-common/jobs/prerender-html';
 import { effectiveRealmPermissions } from '@cardstack/runtime-common/realm-permission-checker';
 
 import CardPrerender from '@cardstack/host/components/card-prerender';
@@ -1399,7 +1400,10 @@ export async function setupIntegrationTestRealm({
   //
   // The realm's own work is still its own: the indexer's requests and the
   // in-browser render that indexes a card are dispatched as the realm's,
-  // which is the authority they run under in a deployed realm.
+  // which is the authority they run under in a deployed realm. A request the
+  // test sends while such a render is under way is too, so a test that writes
+  // calls `settleRealmRenders` before asking the realm anything its ACL
+  // decides.
   enforcePermissions?: true;
   startMatrix?: boolean;
   fileSizeLimitBytes?: number;
@@ -1573,6 +1577,15 @@ async function setupTestRealm({
   }
 
   await insertPermissions(dbAdapter, new URL(realmURL), permissions);
+  if (enforcePermissions) {
+    // Before accepting a session the realm asks whether its user's sessions
+    // were revoked, which it reads from the realm server's `users` table. The
+    // browser's schema leaves that table out with the rest of the realm
+    // server's account tables, so only the column the check reads is made.
+    await dbAdapter.execute(
+      `CREATE TABLE IF NOT EXISTS users (matrix_user_id TEXT PRIMARY KEY, sessions_revoked_at INTEGER)`,
+    );
+  }
   let worker = new Worker({
     indexWriter: new IndexWriter(dbAdapter),
     queue,
@@ -1674,6 +1687,9 @@ async function setupTestRealm({
   await adapter.ready;
   await worker.run();
   await realm.start();
+  if (enforcePermissions) {
+    await settleRealmRenders(realm);
+  }
   if (startMatrix) {
     await mockMatrixUtils.start();
   }
@@ -1712,9 +1728,15 @@ async function sessionPermissions(
 // The realm's own work carries the realm's authority in a deployed realm, so
 // it is dispatched as the realm's own here: the indexer sends every request
 // assuming the realm's owner, and the in-browser render that indexes a card
-// runs inside the render context. In a deployed realm the render runs in a
-// tab of its own; here it shares the app with the test, so a request the test
-// sends while an index render is under way is the realm's as well.
+// runs inside the render context. A render reads the source of every card it
+// indexes, the realm's policy card included, so judged as the signed-in user
+// the realm could not index what its ACL keeps from them.
+//
+// In a deployed realm the render runs in a tab of its own. Here it shares the
+// app with the test, and the render context is the only thing that marks its
+// requests, so a request the test sends while a render is under way is taken
+// for the realm's as well. `settleRealmRenders` is how a test makes sure none
+// is.
 function permissionCheckingHandler(
   realm: Realm,
 ): (request: Request) => Promise<ResponseWithNodeStream | null> {
@@ -1727,6 +1749,28 @@ function permissionCheckingHandler(
       ? await realm.maybeHandle(request)
       : await realm.handle(request);
   };
+}
+
+// Waits until the realm owes no render: its indexing has finished and every
+// card it indexed has its HTML rendered. The realm renders after an index pass
+// as a job of its own, so a render can still be under way after a write has
+// been answered. A suite that sets `enforcePermissions` calls this after a
+// write and before asking the realm anything its ACL decides, since a request
+// sent during a render is answered as the realm's own (see
+// `permissionCheckingHandler`). Setting up such a realm already waits.
+export async function settleRealmRenders(realm: Realm): Promise<void> {
+  await realm.incrementalIndexing();
+  await realm.indexing();
+  let rendered = await awaitPublishedHtmlReady(
+    await getDbAdapter(),
+    realm.url,
+    { timeoutMs: 30_000, pollIntervalMs: 25 },
+  );
+  if (!rendered) {
+    throw new Error(
+      `${realm.url} still owes renders of what it indexed after 30 seconds`,
+    );
+  }
 }
 
 function deriveTestUserPermissions(

@@ -8,6 +8,7 @@ import {
   OperationsError,
   rri,
   type LooseSingleCardDocument,
+  type Realm,
 } from '@cardstack/runtime-common';
 import { isCardErrorJSONAPI } from '@cardstack/runtime-common/error';
 import type { Loader } from '@cardstack/runtime-common/loader';
@@ -20,6 +21,7 @@ import {
   setupCardLogs,
   setupIntegrationTestRealm,
   setupLocalIndexing,
+  settleRealmRenders,
   testRealmURL,
 } from '../helpers';
 import { setupCatalogTestSubset } from '../helpers/catalog-test-subset';
@@ -172,7 +174,7 @@ module('Integration | a realm that checks permissions', function (hooks) {
     enforcePermissions,
   }: {
     enforcePermissions?: true;
-  }): Promise<TestRealmAdapter> {
+  }): Promise<{ realm: Realm; adapter: TestRealmAdapter }> {
     await setupIntegrationTestRealm({
       mockMatrixUtils,
       realmURL: DEFINITIONS,
@@ -182,7 +184,7 @@ module('Integration | a realm that checks permissions', function (hooks) {
         'classroom.gts': CLASSROOM_MODULE,
       },
     });
-    let { adapter } = await setupIntegrationTestRealm({
+    let { realm, adapter } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       realmURL: SCHOOL,
       enforcePermissions,
@@ -215,7 +217,7 @@ module('Integration | a realm that checks permissions', function (hooks) {
     provideConsumeContext(CardContextName, {
       canInvoke: capabilities.canInvoke,
     } as unknown as CardContext);
-    return adapter;
+    return { realm, adapter };
   }
 
   async function classroomAt(id: string): Promise<CardDef> {
@@ -259,7 +261,7 @@ module('Integration | a realm that checks permissions', function (hooks) {
   });
 
   test('invoking the operation is admitted where the predicate holds, and refused as not there where it does not', async function (assert) {
-    let adapter = await setupSchool({ enforcePermissions: true });
+    let { realm, adapter } = await setupSchool({ enforcePermissions: true });
 
     await renderClassroom(ROOM_204);
     await click('[data-test-rename]');
@@ -269,6 +271,9 @@ module('Integration | a realm that checks permissions', function (hooks) {
       'Renamed',
       'the rename the control offered lands',
     );
+    // The realm renders what the rename changed after answering it, and a
+    // request sent during that render would be answered as the realm's own.
+    await settleRealmRenders(realm);
 
     let refusal: unknown;
     try {
@@ -296,7 +301,7 @@ module('Integration | a realm that checks permissions', function (hooks) {
   });
 
   test('without enforcePermissions the realm answers the host as its own dispatch, and the policy decides nothing', async function (assert) {
-    let adapter = await setupSchool({});
+    let { adapter } = await setupSchool({});
 
     await renderClassroom(ROOM_205);
     assert
