@@ -1446,6 +1446,7 @@ module(
       await expectRestingAt(assert, start, 100, 100);
     });
 
+    // The frame applies the move before pointerup, so this rest position holds with or without the pointerup flush
     test('Applies a pointermove when a frame runs before pointerup', async function (assert) {
       const start = await startDrag(assert);
       pointerAt($(D), 'pointermove', start.left + 105, start.top + 105);
