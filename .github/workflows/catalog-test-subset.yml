@@ -1,21 +1,19 @@
 name: Catalog Test Subset
 
 # Validates the catalog test subset declared in packages/catalog/test-subset.json:
-# the pinned boxel-catalog revision must be on boxel-catalog's main, since the
-# deployed catalog realm serves main and a pin main lacks describes
-# definitions no deployment has; main must not have changed a subset file
-# since the pin, or boxel's tests would run against a definition deployments
-# no longer serve; and the pinned files must fetch and form a closed set a
-# test stack can load.
+# every subset file at the pinned boxel-catalog revision must match
+# boxel-catalog's main, since the deployed catalog realm serves main and
+# boxel's tests should run against exactly what deployments serve; and the
+# pinned files must fetch and form a closed set a test stack can load.
 #
-# Path-scoped, so it runs only for PRs that change the subset or its tooling.
+# Runs on every pull request so it can be a required check. A change that
+# touches neither the manifest, the sync script nor this workflow inherits its
+# base branch's pin, which was validated when it merged, so the job passes
+# without checking the catalog. Otherwise a catalog change to a subset file
+# would turn every open boxel PR red until someone re-pinned.
 
 on:
   pull_request:
-    paths:
-      - "packages/catalog/test-subset.json"
-      - "packages/catalog/scripts/sync-test-subset.ts"
-      - ".github/workflows/catalog-test-subset.yml"
 
 permissions:
   contents: read
@@ -27,20 +25,39 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
+          # The merge commit and its parents, so the next step can diff the
+          # change against its base branch.
+          fetch-depth: 2
           sparse-checkout: |
             packages/catalog/test-subset.json
             packages/catalog/scripts/sync-test-subset.ts
             packages/host/app/lib/externals.ts
           sparse-checkout-cone-mode: false
 
+      - name: Does this change touch the subset?
+        id: touched
+        run: |
+          if git diff-tree -r --quiet HEAD^1 HEAD -- \
+            packages/catalog/test-subset.json \
+            packages/catalog/scripts/sync-test-subset.ts \
+            .github/workflows/catalog-test-subset.yml; then
+            echo "touched=false" >> "$GITHUB_OUTPUT"
+            echo "This change keeps its base branch's catalog test subset pin; nothing to validate."
+          else
+            echo "touched=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        if: steps.touched.outputs.touched == 'true'
         with:
           node-version: "24"
 
-      - name: Pin is on boxel-catalog main and current with it
+      - name: Pinned subset files match boxel-catalog main
+        if: steps.touched.outputs.touched == 'true'
         run: node packages/catalog/scripts/sync-test-subset.ts --check-pin
         env:
           GITHUB_TOKEN: ${{ github.token }}
 
       - name: Pinned files fetch and form a closed set
+        if: steps.touched.outputs.touched == 'true'
         run: node packages/catalog/scripts/sync-test-subset.ts
