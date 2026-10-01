@@ -27,6 +27,7 @@ export type { CapabilityAnswer, CapabilityCheck } from './capability-wire.ts';
 export {
   policyQueryScope,
   principalQueryScope,
+  withoutMisreadings,
   RealmAuthorityPolicyScopeError,
   searchPrincipal,
 } from './policy-query.ts';
