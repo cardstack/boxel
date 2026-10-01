@@ -6,22 +6,25 @@
 // reading, not a suggestion.
 //
 // Each rule names a skill and says which tool calls need it. A call that
-// matches a rule is allowed once the session transcript shows the skill was
-// loaded (through the Skill tool or its slash command), and refused with the
-// skill's name otherwise. A call no rule matches never reads the transcript.
+// matches a rule is allowed once the transcript of the session or subagent
+// making it shows the skill was loaded (through the Skill tool or its slash
+// command), and refused with the skill's name otherwise. A call no rule
+// matches never reads a transcript. Rules err toward matching: a needless
+// refusal costs one skill load, and a miss is the mistake the rule exists for.
 //
-// The hook fails open: input it can't parse, or a transcript it can't read,
-// allows the call rather than wedging the session.
+// The hook fails open: input it can't parse, or a transcript it can't find or
+// read, allows the call rather than wedging the session.
 
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
+import { basename, dirname, join } from 'node:path';
 
 const MANIFEST = /(^|\/)packages\/catalog\/test-subset\.json$/;
-const MANIFEST_IN_COMMAND = /test-subset\.json/;
-// Shell forms that rewrite a file in place, redirect into it, or replace it.
-const SHELL_WRITE =
-  /\bsed\b[^\n;&|]*\s(-[a-zA-Z]*i\b|--in-place)|\bperl\b[^\n;&|]*\s-[a-zA-Z]*i|\btee\b[^\n;&|]*test-subset\.json|>\s*["']?[^\s;&|]*test-subset\.json|\b(mv|cp)\b[^\n;&|]*test-subset\.json|\bgit\s+(checkout|restore)\b[^\n;&|]*test-subset\.json/;
-const BUMP = /(catalog:test-subset|sync-test-subset\.ts)\b[^\n;&|]*--bump\b/;
-const LOCAL_SOURCE = /\bCATALOG_TEST_SUBSET_SOURCE=/;
+// Any shell command that names the manifest, the sync that writes from it, or
+// the variable that swaps what the sync reads. However the command touches
+// them (an interpreter one-liner, a continued line, a redirect), it is pin
+// work.
+const PIN_IN_COMMAND =
+  /test-subset\.json|catalog:test-subset|sync-test-subset|CATALOG_TEST_SUBSET_SOURCE/;
 
 const EDIT_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit']);
 
@@ -37,31 +40,84 @@ const rules = [
         );
       }
       if (tool_name === 'Bash') {
-        let command = tool_input?.command ?? '';
-        if (BUMP.test(command)) {
-          return 're-pinning the catalog test subset with --bump';
-        }
-        if (LOCAL_SOURCE.test(command)) {
-          return 'serving the catalog test subset from a local checkout';
-        }
-        if (MANIFEST_IN_COMMAND.test(command) && SHELL_WRITE.test(command)) {
-          return 'writing packages/catalog/test-subset.json from the shell';
-        }
+        return (
+          PIN_IN_COMMAND.test(tool_input?.command ?? '') &&
+          'a shell command on the catalog test subset pin'
+        );
       }
       return false;
     },
   },
 ];
 
-// The skill's own text opens with "Base directory for this skill: <dir>",
-// whether the Skill tool or the slash command loaded it, and <dir> ends in
-// the skill's name. A worktree-scoped copy of the skill ends the same way.
-// The transcript is JSON lines, so the newline after <dir> is the two
-// characters backslash and n.
+// A loaded skill is a user message whose text block opens with "Base
+// directory for this skill: <dir>", whether the Skill tool or the slash
+// command loaded it, and <dir> ends in the skill's name (a worktree-scoped
+// copy ends the same way). Tool output that happens to print the phrase isn't
+// a text block, so it doesn't count.
 function loaded(transcript, skill) {
-  return new RegExp(
-    `Base directory for this skill: [^\\s"\\\\]*/${skill}(\\\\n|")`,
-  ).test(transcript);
+  for (let line of transcript.split('\n')) {
+    if (!line.includes('Base directory for this skill: ')) {
+      continue;
+    }
+    let entry;
+    try {
+      entry = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (entry?.type !== 'user') {
+      continue;
+    }
+    let content = entry.message?.content;
+    let blocks =
+      typeof content === 'string'
+        ? [{ type: 'text', text: content }]
+        : Array.isArray(content)
+          ? content
+          : [];
+    for (let block of blocks) {
+      if (block?.type !== 'text' || typeof block.text !== 'string') {
+        continue;
+      }
+      let first = block.text.split('\n', 1)[0];
+      if (
+        first.startsWith('Base directory for this skill: ') &&
+        first.endsWith(`/${skill}`)
+      ) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+// Every hook call gets the main session's transcript_path, including calls a
+// subagent makes; those also carry agent_id, and the subagent's own messages,
+// its skill loads among them, are written to
+// <session dir>/<session id>/subagents/**/agent-<agent_id>.jsonl. A subagent
+// has to load the skill itself, except a fork, which inherits the main
+// session's context.
+function readTranscript(input) {
+  if (!input.agent_id) {
+    return readFileSync(input.transcript_path, 'utf8');
+  }
+  let dir = join(
+    dirname(input.transcript_path),
+    input.session_id ?? basename(input.transcript_path, '.jsonl'),
+    'subagents',
+  );
+  let own = readdirSync(dir, { recursive: true }).find(
+    (file) => basename(String(file)) === `agent-${input.agent_id}.jsonl`,
+  );
+  if (!own) {
+    return undefined;
+  }
+  let transcript = readFileSync(join(dir, String(own)), 'utf8');
+  if (input.agent_type === 'fork') {
+    transcript += '\n' + readFileSync(input.transcript_path, 'utf8');
+  }
+  return transcript;
 }
 
 let input;
@@ -80,8 +136,11 @@ for (let rule of rules) {
   }
   if (transcript === undefined) {
     try {
-      transcript = readFileSync(input.transcript_path, 'utf8');
+      transcript = readTranscript(input);
     } catch {
+      transcript = undefined;
+    }
+    if (transcript === undefined) {
       process.exit(0);
     }
   }

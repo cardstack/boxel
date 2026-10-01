@@ -12,7 +12,7 @@ The subset is declared in `packages/catalog/test-subset.json`:
 ```json
 {
   "repository": "cardstack/boxel-catalog",
-  "revision": "<40-char sha on boxel-catalog main>",
+  "revision": "<40-char boxel-catalog sha whose subset files match catalog main>",
   "files": [{ "path": "realm-policy/realm-policy.gts", "reason": "…" }],
   "tests": {
     "host": ["<ember test --filter>"],
@@ -65,7 +65,7 @@ Don't copy a catalog definition into this repo, whether as a base module, a test
 
 ## Moving the pin
 
-What the pin may point at depends on what it is for. This repo's `PreToolUse` hook (`.claude/hooks/require-skill.mjs`) refuses an edit to `packages/catalog/test-subset.json`, a `--bump`, and any command that sets `CATALOG_TEST_SUBSET_SOURCE` until this skill is loaded.
+What the pin may point at depends on what it is for. This repo's `PreToolUse` hook (`.claude/hooks/require-skill.mjs`) refuses an edit to `packages/catalog/test-subset.json`, and any shell command that names it, the sync (`catalog:test-subset`, `sync-test-subset`), or `CATALOG_TEST_SUBSET_SOURCE`, until the session or subagent making the call has loaded this skill.
 
 **For local tests.** Nothing has to be merged or pushed.
 
