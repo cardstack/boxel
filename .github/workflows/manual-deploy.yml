@@ -338,7 +338,7 @@ jobs:
 
   # A production deploy carries the catalog with it, by deploying the catalog
   # revision this commit pins in packages/catalog/test-subset.json (boxel is
-  # tested against it) through boxel-catalog's "Deploy catalog to production".
+  # tested against it) through boxel-catalog's "Deploy to production".
   # It runs twice. Before the release, its check runs against the boxel
   # production still runs, so it ships the catalog changes this boxel needs
   # and refuses any that need this boxel. After the release, the second run

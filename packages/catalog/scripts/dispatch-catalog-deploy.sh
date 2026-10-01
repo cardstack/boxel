@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Starts boxel-catalog's "Deploy catalog to production" at a catalog revision
+# Starts boxel-catalog's "Deploy to production" at a catalog revision
 # and waits for its result. Manual Deploy [boxel] to production runs this
 # twice with the revision the deployed commit pins: before the release, which
 # ships what the production boxel already runs, and after it, which ships the
@@ -25,7 +25,7 @@ runs="https://github.com/$repo/actions/workflows/$workflow"
 EXPIRY_WARNING_DAYS=30
 
 regenerate="Generate a new fine-grained token (GitHub, Settings, Developer settings, Fine-grained tokens: resource owner cardstack, only cardstack/boxel-catalog, Actions read and write), and save it as the CATALOG_DEPLOY_DISPATCH_TOKEN secret in cardstack/boxel."
-by_hand="Until then, run \"Deploy catalog to production\" with revision $revision by hand: $runs"
+by_hand="Until then, run \"Deploy to production\" with revision $revision by hand: $runs"
 
 if [ -z "${GH_TOKEN:-}" ]; then
   echo "::error title=catalog deploy token::CATALOG_DEPLOY_DISPATCH_TOKEN is not set in cardstack/boxel, so the catalog wasn't deployed. $regenerate $by_hand"

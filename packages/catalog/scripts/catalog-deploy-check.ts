@@ -333,7 +333,7 @@ export function keptMessages(
     `A catalog deploy never moves ${environment}'s catalog backwards. Deploy ` +
       `boxel to ${environment} at a commit that has the boxel pull requests ` +
       `above, or revert the catalog pull requests on catalog main and run ` +
-      `"Deploy catalog to production" by hand.`,
+      `"Deploy to production" by hand.`,
   );
   return messages;
 }

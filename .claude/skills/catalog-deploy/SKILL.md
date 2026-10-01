@@ -1,16 +1,16 @@
 ---
 name: catalog-deploy
-description: How a boxel-catalog change reaches staging and production, and how to deploy the catalog to production — every catalog merge syncs staging; production gets the catalog only from boxel-catalog's "Deploy catalog to production" workflow, started either by hand (to ship catalog work ahead of boxel) or by Manual Deploy [boxel] to production (which deploys the catalog revision the deployed boxel pins, once before its release and once after). Covers what the deploy checks before it changes anything (catalog pull requests that declare `Merges after:` a boxel pull request production doesn't run yet), how to read its refusal and its "nothing to do" skip, how to find which boxel and catalog revisions production runs, and what to do when a catalog change needs a boxel deploy. Use when asked to deploy, release or ship the catalog, when a catalog change merged but isn't in production, when "Deploy catalog to production" or a "Deploy the pinned catalog" job fails, when CATALOG_DEPLOY_DISPATCH_TOKEN is missing, rejected or about to expire, or before merging a catalog change that needs platform code production doesn't run yet.
+description: How a boxel-catalog change reaches staging and production, and how to deploy the catalog to production — every catalog merge syncs staging; production gets the catalog only from boxel-catalog's "Deploy to production" workflow, started either by hand (to ship catalog work ahead of boxel) or by Manual Deploy [boxel] to production (which deploys the catalog revision the deployed boxel pins, once before its release and once after). Covers what the deploy checks before it changes anything (catalog pull requests that declare `Merges after:` a boxel pull request production doesn't run yet), how to read its refusal and its "nothing to do" skip, how to find which boxel and catalog revisions production runs, and what to do when a catalog change needs a boxel deploy. Use when asked to deploy, release or ship the catalog, when a catalog change merged but isn't in production, when "Deploy to production" or a "Deploy the pinned catalog" job fails, when CATALOG_DEPLOY_DISPATCH_TOKEN is missing, rejected or about to expire, or before merging a catalog change that needs platform code production doesn't run yet.
 ---
 
 # Deploying the catalog
 
 The catalog realm (`/catalog/`) serves boxel-catalog's files, and its cards import the boxel platform the environment runs. A catalog change that needs boxel code breaks an environment whose boxel doesn't have that code yet. So each environment gets catalog changes on its own schedule:
 
-| Environment | Its boxel                                       | Its catalog                                                                                  |
-| ----------- | ----------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| staging     | boxel `main`, deployed on every merge           | catalog `main`, synced on every catalog merge (boxel-catalog's `sync-to-workspace.yml`)      |
-| production  | whatever the last Manual Deploy [boxel] shipped | only what boxel-catalog's **Deploy catalog to production** (`deploy-production.yml`) deploys |
+| Environment | Its boxel                                       | Its catalog                                                                                                    |
+| ----------- | ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| staging     | boxel `main`, deployed on every merge           | catalog `main`, synced on every catalog merge (boxel-catalog's **Deploy to staging**, `sync-to-workspace.yml`) |
+| production  | whatever the last Manual Deploy [boxel] shipped | only what boxel-catalog's **Deploy to production** (`deploy-production.yml`) deploys                           |
 
 ## Two ways a catalog change reaches production
 
@@ -20,7 +20,7 @@ The catalog realm (`/catalog/`) serves boxel-catalog's files, and its cards impo
 
   When production's catalog is already at the pin, both do nothing. When a single range holds catalog changes the new boxel needs _and_ ones that need the new boxel, the run before the release refuses, so the first kind reaches production only after the release.
 
-- **Ahead of boxel, by hand.** A catalog change that needs nothing new from boxel doesn't have to wait for a boxel deploy. Run **Deploy catalog to production** from boxel-catalog's Actions tab with `revision` empty, which deploys catalog `main`'s head, or with a catalog `main` SHA.
+- **Ahead of boxel, by hand.** A catalog change that needs nothing new from boxel doesn't have to wait for a boxel deploy. Run **Deploy to production** from boxel-catalog's Actions tab with `revision` empty, which deploys catalog `main`'s head, or with a catalog `main` SHA.
 
 Both go through the same check, and neither moves production's catalog backwards.
 
@@ -85,4 +85,4 @@ Both lockstep jobs start the catalog deploy with `CATALOG_DEPLOY_DISPATCH_TOKEN`
 - **Read-only Actions access**: the dispatch is refused with `It needs Actions read and write`.
 - **Expiring within 30 days**: each run warns with the expiry date. GitHub sends the date on every response the token signs.
 
-To fix any of these, generate a new token with the settings above, replace the secret, and run **Deploy catalog to production** with the revision the error names.
+To fix any of these, generate a new token with the settings above, replace the secret, and run **Deploy to production** with the revision the error names.
