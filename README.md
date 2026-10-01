@@ -29,6 +29,7 @@ source you own, in your own storage, and can fork.
 - this project uses [pnpm](https://pnpm.io/) for package management. run `pnpm install` to install the project dependencies first.
 - this project uses [docker](https://docker.com). Make sure to install docker on your system.
 - Ensure that node_modules/.bin is in your path. e.g. include `export PATH="./node_modules/.bin:$PATH"` in your .zshrc
+- if you run Claude Code sessions on more than one machine, see [Working with parallel Claude sessions](docs/parallel-claude-sessions.md) for the one setting that lets them reach each other
 
 ## Orientation
 

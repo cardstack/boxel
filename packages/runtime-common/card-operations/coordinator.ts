@@ -16,6 +16,7 @@ import {
   createIdentity,
   includedResources,
   localIdOf,
+  mintedIdentity,
   namesForeignRealm,
   stageAppendContainsMany,
   stageAppendLine,
@@ -299,6 +300,20 @@ export interface CommitBatchOptions {
   // and answered success: serialization records a link it cannot resolve as
   // an explicit null.
   foreignSideLoadLink?: 'refuse' | 'leave';
+  // Whether the realm names the cards this batch mints. By default a card the
+  // caller names with a `lid` is stored under that id, which is what lets a
+  // caller know a new card's URL before it exists. Set, every card the batch
+  // mints is stored under an id the realm mints instead. The `lid` still names
+  // the card inside the batch: it is the key another entry links to it by, and
+  // the one its result is reported under. It does not name the file, though
+  // it is held to the rule a card's id is, as any caller's is.
+  //
+  // It is for a caller the realm ACL won't let read the realm. What a create
+  // answers depends on what is stored where it lands: it mints a card where
+  // nothing is stored and is refused where a card is. So a caller who picks
+  // the id picks which path the answer describes, and such a caller is never
+  // told whether a path holds a card they may not see.
+  mintIds?: boolean;
   // Per-request wall-clock collector, threaded from a caller that reports
   // where its write's time went. The stages a commit owns are not observable
   // from outside it — waiting for the realm's write lock and draining
@@ -351,7 +366,7 @@ export async function commitBatch(
 ): Promise<BatchEntryResult[]> {
   // Planned before the lock is taken, because the plan is what says which
   // files to lock (see `planBatch`).
-  let planned = planBatch(core, batch);
+  let planned = planBatch(core, batch, opts.mintIds ?? false);
   let { paths, entries, positions, lids } = planned;
   if (entries.length === 0) {
     // Nothing to serialize the realm's writers behind, and nothing to
@@ -510,11 +525,15 @@ export async function commitBatch(
 export async function rehearseBatch(
   core: BatchCore,
   batch: BatchNode[],
-  opts: Pick<CommitBatchOptions, 'actor' | 'foreignSideLoadLink'> = {},
+  opts: Pick<
+    CommitBatchOptions,
+    'actor' | 'foreignSideLoadLink' | 'mintIds'
+  > = {},
 ): Promise<void> {
+  let mintIds = opts.mintIds ?? false;
   let planned: PlannedBatch;
   try {
-    planned = planBatch(core, batch);
+    planned = planBatch(core, batch, mintIds);
   } catch (err: unknown) {
     // Planning refuses at the first entry whose local id it cannot take, and
     // names it. The entries ahead of that one plan without it, and what
@@ -527,7 +546,7 @@ export async function rehearseBatch(
     if (!ahead) {
       throw err;
     }
-    planned = planBatch(core, ahead);
+    planned = planBatch(core, ahead, mintIds);
   }
   if (planned.entries.length === 0) {
     return;
@@ -585,13 +604,21 @@ interface PlannedBatch {
 // The caller's own numbering is resolved first because the lid index reports
 // against it: a batch that refuses part of what a caller composed names the
 // entry the caller sent, not the one this function is holding.
-function planBatch(core: BatchCore, batch: BatchNode[]): PlannedBatch {
+//
+// With `mintIds` each `lid` maps to an id the realm mints instead (see
+// `CommitBatchOptions.mintIds`), so a batch rehearsed with it lands each card
+// where the batch it rehearses would.
+function planBatch(
+  core: BatchCore,
+  batch: BatchNode[],
+  mintIds: boolean,
+): PlannedBatch {
   let paths = new RealmPaths(new URL(core.realmURL));
   // The tree resolved into the flat request order everything but staging works
   // from, once, before anything runs.
   let { tree, entries } = schedule(batch);
   let positions = positionsOf(entries);
-  let { lids, foreignLids } = indexLids(entries, positions, paths);
+  let { lids, foreignLids } = indexLids(entries, positions, paths, mintIds);
   return { paths, tree, entries, positions, lids, foreignLids };
 }
 
@@ -1429,10 +1456,16 @@ function assertOpReachesALock(entry: BatchEntry): void {
   }
 }
 
+// Every `lid` the batch claims, resolved to the identity its card takes. With
+// `mintIds` that identity is one the realm mints rather than the one the `lid`
+// spells (see `CommitBatchOptions.mintIds`), and since staging reads each
+// card's identity from here, the file a create writes and the link another
+// entry records both name the minted one.
 function indexLids(
   entries: BatchEntry[],
   positions: readonly EntryPosition[],
   paths: RealmPaths,
+  mintIds: boolean,
 ): { lids: LidIndex; foreignLids: ReadonlySet<string> } {
   let lids = new Map<string, StagedIdentity>();
   let foreignLids = new Set<string>();
@@ -1474,7 +1507,7 @@ function indexLids(
         if (primaryLid !== undefined) {
           claim(
             primaryLid,
-            createIdentity(entry, primary, paths, new Map()),
+            createIdentity(entry, primary, paths, new Map(), { mintIds }),
             `entry ${positions[index]}`,
           );
         }
@@ -1494,7 +1527,7 @@ function indexLids(
         }
         claim(
           resource.lid,
-          stagedIdentity(
+          (mintIds ? mintedIdentity : stagedIdentity)(
             resource.meta?.adoptsFrom,
             resource.lid,
             entry.op === 'create' ? entry.directory : undefined,
@@ -1907,6 +1940,11 @@ function assertWritesFit(
 //
 // Checked inside the lock, against the same critical section the commit runs
 // in, so nothing can take the path between the check and the write.
+//
+// The refusal names the path, since the caller chose it. A caller the realm
+// won't let read it chooses none: its batch mints its ids (see
+// `CommitBatchOptions.mintIds`), so no answer it gets depends on what a path
+// of its choosing holds.
 //
 // A path an earlier entry removes is not what this check is about, so it is
 // left out of it: the stored card is on its way out, and what stops the batch

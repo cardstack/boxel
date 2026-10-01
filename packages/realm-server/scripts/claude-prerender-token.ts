@@ -342,6 +342,7 @@ async function main(): Promise<void> {
     sessionRoom: '',
     permissions,
     realmServerURL: realmOrigin,
+    realmAuthority: true,
   };
   const token = jwt.sign(claims, secret, { expiresIn: '1d' });
   const session = JSON.stringify({ [realmURL]: token });

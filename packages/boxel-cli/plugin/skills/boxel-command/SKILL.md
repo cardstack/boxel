@@ -38,7 +38,7 @@ boxel run-command @cardstack/boxel-host/commands/get-card-type-schema/default \
 A command whose input has a `linksTo(CardDef)` field (here named `card`) takes that card's ID string:
 
 ```
-boxel run-command @cardstack/boxel-host/commands/screenshot-card/default \
+boxel run-command @cardstack/boxel-host/commands/capture-card/default \
   --realm http://localhost:4201/my-realm/ \
   --input '{"card":"http://localhost:4201/my-realm/Author/1","format":"isolated"}'
 ```

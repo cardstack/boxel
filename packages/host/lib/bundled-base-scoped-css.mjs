@@ -21,6 +21,9 @@
 import { sep } from 'node:path';
 
 const REGISTRY = '__boxelBundledBaseScopedCSS';
+// Where a bundled module publishes the classes it declares, so the loader can
+// name them without having been asked for the module. See DECLARED_EXPORT.
+const IDENTITIES = '__boxelBundledBaseIdentities';
 
 // `<fromFile>.<encoded stylesheet>.glimmer-scoped.css` wherever it appears as
 // a string in the compiled module. A stylesheet is imported for its side
@@ -92,6 +95,34 @@ function withoutComments(code) {
   return out;
 }
 
+// The names a module declares AND exports itself. Only these have a local
+// binding the appended registration can reference; `export { X } from './y'`
+// has none, and the module does not declare X anyway — `./y` does, and it
+// registers X itself.
+//
+// `export default class X` counts when it is named: the binding exists, and
+// the loader credits the name the module exposes it under.
+const DECLARED_EXPORT =
+  /\bexport\s+(?!default\b)(?:async\s+)?(?:abstract\s+)?(?:class|function|const|let|var)\s+([A-Za-z_$][\w$]*)/g;
+// `export default class X` binds X and exposes it as `default`, which is the
+// name the module namespace carries and so the name to record.
+const DEFAULT_EXPORT =
+  /\bexport\s+default\s+(?:async\s+)?(?:abstract\s+)?(?:class|function)\s+([A-Za-z_$][\w$]*)/;
+// `export { X }` with no `from`. The name is only a local binding when this
+// module also declares it — `import { X } from './y'; export { X };` exports a
+// name it does not bind, and the bundler emits that as an export alias with no
+// variable behind it. Referencing one in the appended registration is a
+// ReferenceError the moment the module evaluates.
+const LOCAL_EXPORT_LIST = /\bexport\s*\{([^}]*)\}\s*(?!\s*from)[;\n]/g;
+// A module-level declaration, which is what proves a binding the appended
+// registration can reference. Anchored to the start of a line so a name
+// declared inside a function body does not count: `card-api` has a local
+// `let meta` inside one and re-exports an imported `meta`, and taking the
+// inner one for a binding would publish a name the module does not declare.
+// The `export` form is matched separately by DECLARED_EXPORT.
+const LOCAL_DECLARATION =
+  /^(?:export\s+)?(?:async\s+)?(?:abstract\s+)?(?:class|function|const|let|var)\s+([A-Za-z_$][\w$]*)/gm;
+
 function isBaseModule(id) {
   return (
     id.includes(`${sep}packages${sep}base${sep}`) && /\.(gts|ts)(\?|$)/.test(id)
@@ -147,7 +178,42 @@ export function bundledBaseScopedCSS() {
             .map((specifier) => resolveSibling(name, specifier)),
         ),
       ].filter((imported) => imported !== name);
-      if (!css.length && !imports.length) {
+      // What this module declares, published under its own name as it is
+      // evaluated. A module reached only from inside another module's chunk is
+      // never served, so the loader is never asked for it and never learns the
+      // classes it declares; this is how it finds out anyway, at no cost —
+      // the module is being evaluated regardless, and nothing here resolves or
+      // fetches anything.
+      // `[name the namespace exposes, local binding to read it from]`. The
+      // two differ for `export default class X` and `export { X as Y }`, and
+      // the registry has to key on what the namespace exposes, because that is
+      // the name a code ref carries.
+      let declared = new Map();
+      for (let match of scannable.matchAll(DECLARED_EXPORT)) {
+        declared.set(match[1], match[1]);
+      }
+      let defaultExport = scannable.match(DEFAULT_EXPORT);
+      if (defaultExport) {
+        declared.set('default', defaultExport[1]);
+      }
+      let bound = new Set(
+        [...scannable.matchAll(LOCAL_DECLARATION)].map((m) => m[1]),
+      );
+      for (let match of scannable.matchAll(LOCAL_EXPORT_LIST)) {
+        for (let clause of match[1].split(',')) {
+          let parts = clause.trim().split(/\s+as\s+/);
+          let local = parts[0]?.trim();
+          if (!local || local.startsWith('type ')) {
+            continue;
+          }
+          if (bound.has(local)) {
+            declared.set((parts[1] ?? parts[0]).trim(), local);
+          }
+        }
+      }
+      let declaredNames = [...declared.keys()].sort();
+
+      if (!css.length && !imports.length && !declaredNames.length) {
         return null;
       }
       // A name that turns out to be something other than a base module costs
@@ -155,6 +221,18 @@ export function bundledBaseScopedCSS() {
       let registration =
         `\n;(globalThis.${REGISTRY} ??= {})[${JSON.stringify(name)}] = ` +
         `${JSON.stringify({ css, imports })};\n`;
+      if (declaredNames.length) {
+        // An object literal of the module's own bindings, so the values are
+        // the very classes the chunk uses — not a copy, and not a name match.
+        registration +=
+          `;(globalThis.${IDENTITIES} ??= {})[${JSON.stringify(name)}] = ` +
+          `{ ${declaredNames
+            .map(
+              (exposed) =>
+                `${JSON.stringify(exposed)}: ${declared.get(exposed)}`,
+            )
+            .join(', ')} };\n`;
+      }
       return { code: code + registration, map: null };
     },
   };

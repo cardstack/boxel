@@ -315,14 +315,18 @@ export interface OperationScope {
   // stages have run.
   readonly proposed: Record<string, unknown> | undefined;
   // Where the policy gate records how it reached its decision, for an explain
-  // to report. Absent on every invocation that is not being explained, which
-  // is every invocation a caller makes.
+  // to report, or for a capability check to read why the gate refused. Absent
+  // on every invocation a caller makes.
   readonly trace: GateTrace | undefined;
+  // The archived realm's refusal, where the realm holds one for this caller
+  // (see `OperationRequest.seal`). `resolveOperation` answers with it what the
+  // gate grants.
+  readonly seal: Error | undefined;
   // A scope for another invocation in the same request, sharing this one's row
   // memo so the invocations of one request still cost one read of each row
-  // between them. The caller and the ACL's verdict carry over unless named; a
-  // proposed document belongs to one invocation and never does, and neither
-  // does a trace.
+  // between them. The caller, the ACL's verdict and the seal carry over unless
+  // named; a proposed document belongs to one invocation and never does, and
+  // neither does a trace.
   derive(invocation: ScopeInvocation): OperationScope;
 }
 
@@ -348,6 +352,7 @@ export interface ScopeInvocation {
   coarseDeclined?: CoarseDeclined;
   proposed?: Record<string, unknown>;
   trace?: GateTrace;
+  seal?: Error;
 }
 
 // What the realm ACL declined for a request, judged per invocation rather than
@@ -387,18 +392,21 @@ export function newOperationScope(
     coarseDeclined: CoarseDeclined,
     proposed: Record<string, unknown> | undefined,
     trace: GateTrace | undefined,
+    seal: Error | undefined,
   ): OperationScope => ({
     peekInstance,
     caller,
     coarseDeclined,
     proposed,
     trace,
+    seal,
     derive: (next) =>
       scopeFor(
         next.caller ?? caller,
         next.coarseDeclined ?? coarseDeclined,
         next.proposed,
         next.trace,
+        next.seal ?? seal,
       ),
   });
   return scopeFor(
@@ -406,6 +414,7 @@ export function newOperationScope(
     invocation.coarseDeclined ?? 'none',
     invocation.proposed,
     invocation.trace,
+    invocation.seal,
   );
 }
 
@@ -628,6 +637,10 @@ function own<T>(
 // whose type the lock judges again from its bytes. A caller resolving through
 // here holds no lock and carries no pending decision to one. A caller that
 // does takes the decision from `resolveGatedOperation` instead.
+//
+// An invocation the gate grants in a scope that carries an archived realm's
+// seal is refused with the seal, here and not before, so the invocation never
+// runs and a caller the gate refuses is refused in the gate's own words.
 export async function resolveOperation(
   core: OperationCore,
   target: OperationTarget,
@@ -642,6 +655,9 @@ export async function resolveOperation(
   );
   if (leavesToLock(decision)) {
     throw notPermitted(target, name);
+  }
+  if (decision.kind === 'granted' && scope.seal) {
+    throw scope.seal;
   }
   return definition;
 }
@@ -1041,6 +1057,7 @@ export async function runOperation(
   let scope = newOperationScope(core, {
     caller: scopeCallerFor(canonical.actor),
     ...(canonical.coarseDeclined ? { coarseDeclined: 'all' as const } : {}),
+    ...(canonical.seal ? { seal: canonical.seal } : {}),
   });
   let definition = await resolveOperation(core, target, canonical.name, scope);
   // The four stages of an invocation, in the one order they run: the `input`

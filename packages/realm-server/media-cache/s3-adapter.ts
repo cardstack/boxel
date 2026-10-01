@@ -1,5 +1,5 @@
 // S3-backed MediaCache object store. The bucket holds only content-addressed
-// derived media (screenshots); the `media_cache_ledger` table is the sole
+// derived media (captures); the `media_cache_ledger` table is the sole
 // catalog of what's in here, so nothing in this adapter ever lists the
 // bucket. Region/credential resolution mirrors `prerender/artifact-sink.ts`:
 // in ECS the write grant rides on the task role, which the SDK resolves from

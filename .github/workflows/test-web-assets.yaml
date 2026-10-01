@@ -35,6 +35,16 @@ on:
         required: false
         type: string
         default: ""
+      runs_on_spec:
+        description: |
+          RunsOn spec (e.g. `cpu=4/ram=16/family=m8i+m7i/image=ubuntu24-full-x64`)
+          to build on an ephemeral EC2 runner in our AWS account instead of
+          ubuntu-latest. Empty builds on ubuntu-latest. The caller decides
+          whether a run may use RunsOn at all, including keeping fork PRs off
+          it; see host-test in ci-host.yaml.
+        required: false
+        type: string
+        default: ""
     outputs:
       artifact_name:
         description: Artifact name containing built test web assets
@@ -49,7 +59,10 @@ on:
 jobs:
   build:
     name: Build and cache test web assets
-    runs-on: ubuntu-latest
+    # The caller is in the label because one run can call this workflow more
+    # than once (catalog-test-subset-consumers does), and RunsOn needs a label
+    # unique to each job.
+    runs-on: ${{ inputs.runs_on_spec && format('runs-on={0}-web-assets-{1}/{2}', github.run_id, inputs.caller, inputs.runs_on_spec) || 'ubuntu-latest' }}
     timeout-minutes: 15
     concurrency:
       group: test-web-assets-${{ inputs.caller }}-${{ github.ref }}-${{ github.sha }}

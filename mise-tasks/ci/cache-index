@@ -230,10 +230,14 @@ ls -lh /tmp/boxel-index-cache.sql.gz
 # A second, smaller snapshot carrying only the realms a host test shard
 # actually serves. Every shard pays the download and the replay of whatever it
 # imports, and the realms left out here are the instance-heavy ones (catalog,
-# experiments, software-factory, submissions) — the shard neither mounts nor
-# queries them, so their rows are pure cost. Same table set and same COPY
-# format as the full snapshot above, so a consumer replays either one
-# unchanged.
+# experiments, software-factory, submissions), whose rows would be pure cost.
+# A shard neither mounts nor queries experiments, software-factory or
+# submissions. It does mount a catalog, but only the pinned test subset
+# (CATALOG_SOURCE=test-subset), whose few files are not the full catalog this
+# job indexes, so the shard indexes that subset itself.
+#
+# Same table set and same COPY format as the full snapshot above, so a
+# consumer replays either one unchanged.
 #
 # pg_dump takes no row filter, so the blocks are assembled here: a
 # `COPY public.<table> (<cols>) FROM stdin;` header, the matching

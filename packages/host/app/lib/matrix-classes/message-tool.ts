@@ -193,16 +193,14 @@ export default class MessageTool {
     }
     let id = cardDoc.data.id;
     if (id) {
-      let live = await this.store.get<CardDef>(id);
+      let live = await this.store.get(id);
       if (isCardInstance(live)) {
         return live;
       }
     }
     let { id: _id, ...resource } = cardDoc.data;
     let ephemeralDoc: LooseSingleCardDocument = { ...cardDoc, data: resource };
-    return (await this.store.add(ephemeralDoc, {
-      doNotPersist: true,
-    })) as CardDef;
+    return (await this.store.addWithoutPersisting(ephemeralDoc)) as CardDef;
   }
 }
 

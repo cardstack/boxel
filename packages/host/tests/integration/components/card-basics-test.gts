@@ -985,7 +985,7 @@ module('Integration | card-basics', function (hooks) {
     // The capture/discovery contract: a rendered field boundary — a card
     // rendered as a field, a compound field's wrapper, and the plural wrappers
     // in both their view and edit forms — carries data-card-field=<fieldName>,
-    // so selector-based screenshot capture and region discovery can address
+    // so selector-based capture and region discovery can address
     // fields in templates that never opted in. The card root itself carries no
     // field context, so it must not carry the attribute.
     test('rendered field boundaries carry data-card-field', async function (assert) {

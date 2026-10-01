@@ -129,8 +129,13 @@ function stubCore() {
 }
 
 const CONTEXT: NamedQueryContext = {
-  actor: '@caller:localhost',
+  principal: { kind: 'user', user: '@caller:localhost' },
   realms: [REALM_A, REALM_B],
+};
+
+const RENDER: NamedQueryContext = {
+  ...CONTEXT,
+  principal: { kind: 'realm-authority', user: '@caller:localhost' },
 };
 
 async function refusal(promise: Promise<unknown>) {
@@ -320,7 +325,7 @@ module(basename(import.meta.filename), function () {
       resolveNamedQuery(
         core,
         { operation: 'mine', on: REPORT, realms: [REALM_A] },
-        { ...CONTEXT, actor: undefined },
+        { ...CONTEXT, principal: undefined },
       ),
     );
     assert.strictEqual(anonymous.code, 'actor-required');
@@ -422,12 +427,12 @@ module(basename(import.meta.filename), function () {
     );
   });
 
-  test('a render has no actor', async function (assert) {
+  test('a realm-authority principal has no actor', async function (assert) {
     let { core } = stubCore();
     let { query: resolved } = await resolveNamedQuery(
       core,
       { operation: 'byStatus', on: REPORT, params: { status: 'open' } },
-      { ...CONTEXT, duringRender: true },
+      RENDER,
     );
     assert.deepEqual(
       resolved.filter?.eq,
@@ -436,11 +441,7 @@ module(basename(import.meta.filename), function () {
     );
 
     let noActor = await refusal(
-      resolveNamedQuery(
-        core,
-        { operation: 'mine', on: REPORT },
-        { ...CONTEXT, duringRender: true },
-      ),
+      resolveNamedQuery(core, { operation: 'mine', on: REPORT }, RENDER),
     );
     assert.strictEqual(
       noActor.code,
