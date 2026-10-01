@@ -405,7 +405,7 @@
     {
       "entrypoint": "glimmer-motion",
       "symbol": "scroll",
-      "source": "packages/glimmer-motion/src/dom/scroll/index.ts",
+      "source": "packages/glimmer-motion/src/scroll.ts",
       "kind": "value",
       "guide": "core-scroll",
       "declaration": "packages/glimmer-motion/src/index.ts"
@@ -413,7 +413,7 @@
     {
       "entrypoint": "glimmer-motion",
       "symbol": "scrollInfo",
-      "source": "packages/glimmer-motion/src/dom/scroll/track.ts",
+      "source": "packages/glimmer-motion/src/scroll.ts",
       "kind": "value",
       "guide": "core-scroll",
       "declaration": "packages/glimmer-motion/src/index.ts"
@@ -421,7 +421,7 @@
     {
       "entrypoint": "glimmer-motion",
       "symbol": "ScrollInfo",
-      "source": "packages/glimmer-motion/src/dom/scroll/types.ts",
+      "source": "packages/glimmer-motion/src/scroll.ts",
       "kind": "type",
       "guide": "core-scroll",
       "declaration": "packages/glimmer-motion/src/index.ts"
@@ -429,7 +429,7 @@
     {
       "entrypoint": "glimmer-motion",
       "symbol": "ScrollOffset",
-      "source": "packages/glimmer-motion/src/dom/scroll/types.ts",
+      "source": "packages/glimmer-motion/src/scroll.ts",
       "kind": "type",
       "guide": "core-scroll",
       "declaration": "packages/glimmer-motion/src/index.ts"
@@ -437,7 +437,7 @@
     {
       "entrypoint": "glimmer-motion",
       "symbol": "ScrollOptions",
-      "source": "packages/glimmer-motion/src/dom/scroll/types.ts",
+      "source": "packages/glimmer-motion/src/scroll.ts",
       "kind": "type",
       "guide": "core-scroll",
       "declaration": "packages/glimmer-motion/src/index.ts"
@@ -445,7 +445,7 @@
     {
       "entrypoint": "glimmer-motion",
       "symbol": "InViewOptions",
-      "source": "packages/glimmer-motion/src/dom/viewport.ts",
+      "source": "packages/glimmer-motion/src/scroll.ts",
       "kind": "type",
       "guide": "core-scroll",
       "declaration": "packages/glimmer-motion/src/index.ts"
@@ -453,7 +453,7 @@
     {
       "entrypoint": "glimmer-motion",
       "symbol": "inView",
-      "source": "packages/glimmer-motion/src/dom/viewport.ts",
+      "source": "packages/glimmer-motion/src/scroll.ts",
       "kind": "value",
       "guide": "core-scroll",
       "declaration": "packages/glimmer-motion/src/index.ts"
