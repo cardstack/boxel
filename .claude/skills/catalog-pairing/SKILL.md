@@ -40,7 +40,7 @@ Edit a description with `gh pr edit <n> --repo <owner/repo> --body-file <file>` 
 **boxel's Lint Catalog** (`.github/workflows/lint-catalog.yaml`, `packages/catalog/scripts/pairing.ts` and `lint-sweep.ts`):
 
 1. It reads this pull request's declaration and checks it from both sides. A problem fails the job immediately, naming the line to add or fix and the pull request it belongs on.
-2. It lints the paired catalog pull request's head against the change, in place of catalog `main`. That is the `Merges before` pair if it's unmerged, otherwise the `Merges after` pair. Errors there are for the catalog pull request to fix.
+2. It lints the paired catalog pull request's head against the change, in place of catalog `main`. That is the `Merges after` pair if it's unmerged, since it lands first, otherwise the `Merges before` pair. Errors there are for the catalog pull request to fix.
 3. It also lints catalog `main` against the change, against the base branch too, so only errors this change adds count. If the change adds errors to catalog `main`:
    - **`Merges after` pair unmerged**: fails with `waiting on cardstack/boxel-catalog#N to merge`. Re-run after it merges. This comes first, because that pull request has to land before this one.
    - **`Merges before` pair open, ready for review and approved** (GitHub's own review decision): passes, and says to merge the catalog pull request right after this one.
