@@ -124,7 +124,7 @@ const PresentationNotes: TOC<object> = <template>
           <code>@path</code>
           bends that journey — similarity-mapped, so the curve never moves the
           landing. The stamp is a round-trip scale,
-          <code>{{"{{array 0.86 1.08 1}}"}}</code>
+          <code>\{{array 0.86 1.08 1}}</code>
           , Keynote’s emphasis: it ends where it began.
         </p>
         <p>

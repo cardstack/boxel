@@ -503,7 +503,7 @@ export class FeatureReel extends Component {
           {{motion id="reel-lightbox-scene" role="scene"}}
           {{this.wire c this.take}}
         >
-          <header class="reel-kicker"><span>01</span><p>Lightbox</p></header>
+          <div class="reel-kicker"><span>01</span><p>Lightbox</p></div>
           <div class="reel-demo-asset is-lightbox"><Lightbox /></div>
           <div
             class="reel-camera-target lightbox-aim"
@@ -515,7 +515,7 @@ export class FeatureReel extends Component {
           class="reel-scene reel-beacons"
           {{motion id="reel-beacons-scene" role="scene"}}
         >
-          <header class="reel-kicker"><span>02</span><p>Beacons</p></header>
+          <div class="reel-kicker"><span>02</span><p>Beacons</p></div>
           <div class="reel-demo-asset is-inbox"><Inbox /></div>
           <div
             class="reel-camera-target beacon-aim"
@@ -527,7 +527,7 @@ export class FeatureReel extends Component {
           class="reel-scene reel-build"
           {{motion id="reel-build-scene" role="scene"}}
         >
-          <header class="reel-kicker"><span>03</span><p>Build Order</p></header>
+          <div class="reel-kicker"><span>03</span><p>Build Order</p></div>
           <div class="reel-demo-asset is-build"><BuildOrder /></div>
           <div
             class="reel-camera-target build-logo-aim"

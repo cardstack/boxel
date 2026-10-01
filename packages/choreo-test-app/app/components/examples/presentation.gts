@@ -1368,7 +1368,6 @@ export class Presentation extends Component {
             <label class="pres-xfade">
               <span class="pres-xfade-tag">Transition</span>
               <select
-                aria-label="Slide transition"
                 data-test-pres-xfade
                 tabindex="-1"
                 {{on "click" this.stop}}

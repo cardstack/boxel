@@ -175,8 +175,8 @@ export type GateSubject =
 // What the gate reads of an invocation's scope: who the caller is, what the
 // realm ACL declined, and the index rows a card's chain comes from. A create's
 // proposed document is not among them, because it names the type the caller
-// claims. A scope an explain built also carries the trace the gate records
-// into.
+// claims. A scope an explain or a capability check built also carries the
+// trace the gate records into.
 export type GateScope = Pick<
   OperationScope,
   'caller' | 'coarseDeclined' | 'peekInstance' | 'trace'
@@ -436,10 +436,26 @@ export async function gateOperation(
     return GATE_REFUSED;
   }
   // A query is planned and run on the search engine rather than against one
-  // target, so nothing here can grant one. An explain is granted nowhere: what
-  // it answers is what a refusal withholds, so it is refused here even where
-  // its declaration left the flag off.
-  if (base === 'query' || base === 'explain') {
+  // target, so nothing here can grant one. Its grants are judged by the search
+  // that runs it, which composes their filters into the query
+  // (`policyQueryScope`). The search also refuses one a type up the target's
+  // chain declares `nonGrantable` where the target's own type redeclares it
+  // without the flag, so a trace records that query as kept out of reach.
+  // Only a traced decision asks, since the refusal is the same either way.
+  if (base === 'query') {
+    if (trace) {
+      trace.refused(
+        (await queryKeptOutOfReach(core, scope, subject, name))
+          ? 'non-grantable'
+          : 'query-lane',
+      );
+    }
+    return GATE_REFUSED;
+  }
+  // An explain is granted nowhere: what it answers is what a refusal
+  // withholds, so it is refused here even where its declaration left the flag
+  // off.
+  if (base === 'explain') {
     trace?.refused('non-grantable');
     return GATE_REFUSED;
   }
@@ -602,6 +618,26 @@ async function indexedSubject(
     return types;
   }
   return { kind: 'card', url: subject.url, types };
+}
+
+// Whether a type in the chain of the card or type a query is invoked on
+// declares the query `nonGrantable`. A subclass that redeclares the name
+// without the flag does not make grantable what the type it extends kept out
+// of a policy's reach, on the search engine as anywhere.
+async function queryKeptOutOfReach(
+  core: OperationCore,
+  scope: GateScope,
+  subject: GateSubject,
+  name: string,
+): Promise<boolean> {
+  if (subject.kind === 'unmatched') {
+    return false;
+  }
+  let indexed = await indexedSubject(scope, subject);
+  if (!indexed || indexed.kind === GATE_MISSING.kind) {
+    return false;
+  }
+  return await nonGrantableInChain(core, indexed.types, name);
 }
 
 // What the bytes a stored-bytes read will serve are, judged from those bytes.
@@ -991,10 +1027,29 @@ function cardId(href: string): string {
   return href.endsWith('.json') ? href.slice(0, -'.json'.length) : href;
 }
 
-// Whether `url` is the realm's config card, the card stored at `realm.json`,
-// named either by its id or by that stored `.json`.
+// The id of the realm's config card, the card stored at `realm.json`.
+function realmConfigCardId(core: OperationCore): string {
+  return cardId(pathsFor(core).fileURL('realm.json').href);
+}
+
+// Whether `url` is the realm's config card, named either by its id or by that
+// stored `.json`.
 function namesRealmConfigCard(core: OperationCore, url: URL): boolean {
-  return cardId(pathsFor(core).fileURL('realm.json').href) === cardId(url.href);
+  return realmConfigCardId(core) === cardId(url.href);
+}
+
+// The ids of the cards that hold this realm's authorization by identity rather
+// than by type: its config card, and the card its policy key names when the
+// key names one. The gate refuses a grant every operation on either, and a
+// search a policy scopes leaves both out of the rows it finds.
+export async function authorizationCardIds(
+  core: OperationCore,
+): Promise<string[]> {
+  let pointer = await core.policy?.policyCard();
+  return [
+    realmConfigCardId(core),
+    ...(pointer === undefined ? [] : [cardId(pointer)]),
+  ];
 }
 
 // Whether any of these types, keys from an adoption chain, declares `name`

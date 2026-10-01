@@ -81,7 +81,7 @@ Available only inside the running Boxel app. Each is a default-export
 
 **Live audit:** verify tool names against the Boxel monorepo's
 `packages/host/app/tools/index.ts` shim list. `write-binary-file`,
-`screenshot-card`, and `generate-thumbnail` are present in current mainline;
+`capture-card`, and `generate-thumbnail` are present in current mainline;
 if something looks "missing," check the freshness of the checkout you
 audited before concluding the tool isn't live.
 
@@ -132,8 +132,7 @@ via `curl` or `boxel-cli`:
 
 OpenRouter calls go through `/_request-forward` to the external
 `https://openrouter.ai/api/v1/chat/completions` URL. There is no live
-`/_openrouter/chat/completions` or `/_screenshot-card` endpoint in the
-current monorepo.
+`/_openrouter/chat/completions` endpoint in the current monorepo.
 
 | Endpoint                                                             | Method | Purpose                                                                                         |
 | -------------------------------------------------------------------- | ------ | ----------------------------------------------------------------------------------------------- |
@@ -146,6 +145,7 @@ current monorepo.
 | `/_publish-realm`, `/_unpublish-realm`                               | POST   | Realm publishing controls.                                                                      |
 | `/_create-realm`, `/_delete-realm`                                   | POST   | Realm lifecycle.                                                                                |
 | `/_run-command`                                                      | POST   | Server-side host command execution (underlying `boxel run-command`).                            |
+| `/_capture-card`                                                     | POST   | Capture a card as a PNG or PDF (underlying `boxel capture`).                                    |
 | `/_realm-auth`                                                       | GET    | Realm auth metadata.                                                                            |
 | `/_queue-status`                                                     | GET    | Indexing queue state.                                                                           |
 | `/_catalog-realms`                                                   | GET    | List of catalog realms.                                                                         |

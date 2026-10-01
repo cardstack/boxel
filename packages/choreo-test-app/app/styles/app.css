@@ -4552,6 +4552,7 @@ html[data-gm-dragging] * {
 .cam-grade-dock .cam-pass {
   width: 32px;
   height: 32px;
+  padding: 0;
   border: 1px solid var(--line-strong);
   background: rgba(var(--surface-tint-rgb), 0.08);
   color: var(--ink-dim);
