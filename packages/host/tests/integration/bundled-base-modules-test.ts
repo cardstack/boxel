@@ -6,7 +6,7 @@ import { Loader } from '@cardstack/runtime-common';
 
 import {
   BUNDLED_BASE_MODULES,
-  FETCHED_RE_EXPORTS,
+  TYPE_INCOMPATIBLE,
 } from '@cardstack/host/lib/bundled-base';
 
 import { setupRenderingTest } from '../helpers/setup';
@@ -93,7 +93,7 @@ module('Integration | bundled base modules', function (hooks) {
         if (imported in BUNDLED_BASE_MODULES) {
           continue;
         }
-        if (FETCHED_RE_EXPORTS.has(imported)) {
+        if (TYPE_INCOMPATIBLE.has(imported)) {
           continue;
         }
         violations.push(`${name} -> ${imported}`);
@@ -106,15 +106,13 @@ module('Integration | bundled base modules', function (hooks) {
     );
   });
 
-  // Why the whole-file re-exporters are fetched rather than bundled: evaluating
-  // one asks the loader for what it re-exports from, so the declarer is served
-  // first and the class is credited to it. Bundling the re-exporter is what
-  // breaks this — the bundler resolves that import inside the chunk, the loader
-  // is never asked for `card-api`, and every `FileDef` code ref then names a
-  // module that does not declare it, which an adoption-chain walk reaches as a
-  // filter referring to a nonexistent type. So this fails if `file-api` is ever
-  // added to the table.
-  test('a re-exporter left out of the bundle credits the class to its declarer', async function (assert) {
+  // A module that re-exports a class it does not declare is bundled like any
+  // other now. It used to be fetched, because the loader credited the first
+  // module it served that exposed a name, and a bundled re-exporter served
+  // before the declarer took the credit — which an adoption-chain walk reached
+  // as a filter referring to a nonexistent type. The declarer publishes the
+  // class itself, so asking only for the re-exporter still names the declarer.
+  test('a re-exporter credits the class to its declarer', async function (assert) {
     let loader = getService('loader-service').loader;
     // Only the re-exporter is asked for, which is what a card importing just
     // `file-api` does.

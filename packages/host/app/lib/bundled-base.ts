@@ -87,63 +87,105 @@ function rebaseSpecifier(
 // `shimAsyncModule` calls in externals.ts: the boxel-cli guard that reads
 // literal shim ids out of that file covers `@cardstack/base/*` through its
 // path alias already, so nothing is lost to it here.
-// The base modules a bundled module may import while still leaving the set
-// closed: each one's whole content is a re-export, so it is fetched on purpose
-// and the copy the bundler puts in the chunk exposes the same class from that
-// same chunk. Anything else a bundled module imports has to be bundled too —
-// `Integration | bundled base modules` fails when it is not.
-export const FETCHED_RE_EXPORTS = new Set([
-  'string',
-  'markdown',
-  'text-area',
-  'file-api',
-]);
+// `string` is the one base module left out, and not for anything the loader
+// does. It is `export default StringField` re-exported from `card-api`, in a
+// `.ts` rather than a `.gts`, and a dynamic `import()` of it here would pull
+// that file into the TypeScript program — where TS reads the `.ts` as CommonJS
+// and retypes the default export for every consumer, which is 1553 errors
+// across the host suite. Bundling it is safe at runtime and the closure check
+// allows the import; what stops it is the type of its default export, and the
+// fix is for its consumers to import `StringField` from `card-api` instead.
+export const TYPE_INCOMPATIBLE = new Set(['string']);
 
 export const BUNDLED_BASE_MODULES: Record<
   string,
   () => Promise<Record<string, unknown>>
 > = {
-  // card-api declares the classes every other base module extends, so it is
-  // bundled first and unconditionally: while it is fetched and anything else is
-  // bundled, a bundled module extends the build's FieldDef while a fetched one
-  // extends the loader's, and nothing that compares the two agrees. Serving it
-  // from the bundle collapses both onto one set of classes.
-  //
-  // card-api's own imports follow it for the same reason, and this set has to
-  // stay closed under imports: the bundler resolves a bundled module's imports
-  // into its chunk, so a module reachable from a bundled one but missing here
-  // is bundled anyway AND fetched separately when card code imports it by
-  // identifier — two copies, whose classes and module state do not match.
-  //
-  // A module whose whole content is a re-export is the exception, and is left
-  // out on purpose: a loader credits a class to the first module it serves
-  // that exposes it, and a bundled re-exporter is served without the loader
-  // ever being asked for the module that declares the class. The class is then
-  // named by a module that does not declare it, which an adoption-chain walk
-  // reaches as a filter referring to a nonexistent type. Fetching the
-  // re-exporter instead costs one request and gets the attribution right, and
-  // the two module records that leaves behind expose the same class from the
-  // same chunk, so nothing compares them and disagrees.
-  //
-  // `file-api`, `command`, `commands/search-card-result`, `index`,
-  // `command-field` and `file-formats/index` are out on the same rule;
-  // `FETCHED_RE_EXPORTS` lists the ones a bundled module still imports, which
-  // are the ones the closure check has to allow.
-  //
-  // Passing a class through is no longer one of the reasons. A bundled module
-  // publishes the classes it declares as it is evaluated, and the loader reads
-  // that before its own record, so a class is named by the module that
-  // declares it whichever module was served first. `theme` and
-  // `image-file-def` are bundled on that footing: each re-exports a class from
-  // `card-api`, which publishes it and keeps the credit. What still keeps a
-  // module out is the closure rule — `command` and
-  // `commands/search-card-result` each import a sibling the table does not
-  // hold.
-  'card-api': () => import('@cardstack/base/card-api'),
   '-private': () => import('@cardstack/base/-private'),
+  address: () => import('@cardstack/base/address'),
+  'ai-app-generator': () => import('@cardstack/base/ai-app-generator'),
+  'amount-with-currency': () => import('@cardstack/base/amount-with-currency'),
+  'audio-file-def': () => import('@cardstack/base/audio-file-def'),
+  'audio-metadata': () => import('@cardstack/base/audio-metadata'),
+  'audio-waveform': () => import('@cardstack/base/audio-waveform'),
+  'avif-image-def': () => import('@cardstack/base/avif-image-def'),
+  'avif-meta-extractor': () => import('@cardstack/base/avif-meta-extractor'),
+  'base64-image': () => import('@cardstack/base/base64-image'),
+  'big-integer': () => import('@cardstack/base/big-integer'),
+  boolean: () => import('@cardstack/base/boolean'),
+  'brand-functional-palette': () =>
+    import('@cardstack/base/brand-functional-palette'),
+  'brand-guide': () => import('@cardstack/base/brand-guide'),
+  'brand-logo': () => import('@cardstack/base/brand-logo'),
+  'card-api': () => import('@cardstack/base/card-api'),
   'card-serialization': () => import('@cardstack/base/card-serialization'),
+  'cards-grid': () => import('@cardstack/base/cards-grid'),
+  'code-ref': () => import('@cardstack/base/code-ref'),
+  'codemirror-editor': () => import('@cardstack/base/codemirror-editor'),
+  color: () => import('@cardstack/base/color'),
+  'color-field/components/advanced-color-picker': () =>
+    import('@cardstack/base/color-field/components/advanced-color-picker'),
+  'color-field/components/color-picker-field': () =>
+    import('@cardstack/base/color-field/components/color-picker-field'),
+  'color-field/components/color-wheel-picker': () =>
+    import('@cardstack/base/color-field/components/color-wheel-picker'),
+  'color-field/components/contrast-checker-addon': () =>
+    import('@cardstack/base/color-field/components/contrast-checker-addon'),
+  'color-field/components/recent-colors-addon': () =>
+    import('@cardstack/base/color-field/components/recent-colors-addon'),
+  'color-field/components/slider-picker': () =>
+    import('@cardstack/base/color-field/components/slider-picker'),
+  'color-field/components/swatches-picker': () =>
+    import('@cardstack/base/color-field/components/swatches-picker'),
+  'color-field/modifiers/setup-element-modifier': () =>
+    import('@cardstack/base/color-field/modifiers/setup-element-modifier'),
+  'color-field/util/color-field-signature': () =>
+    import('@cardstack/base/color-field/util/color-field-signature'),
+  'color-field/util/color-utils': () =>
+    import('@cardstack/base/color-field/util/color-utils'),
+  'color-field/util/css-color-parsers': () =>
+    import('@cardstack/base/color-field/util/css-color-parsers'),
+  command: () => import('@cardstack/base/command'),
+  'command-field': () => import('@cardstack/base/command-field'),
+  'commands/search-card-result': () =>
+    import('@cardstack/base/commands/search-card-result'),
+  'commands/search-entry-result': () =>
+    import('@cardstack/base/commands/search-entry-result'),
+  'commands/search-result-list': () =>
+    import('@cardstack/base/commands/search-result-list'),
+  'components/age': () => import('@cardstack/base/components/age'),
+  'components/business-days': () =>
+    import('@cardstack/base/components/business-days'),
+  'components/card-list': () => import('@cardstack/base/components/card-list'),
+  'components/cards-grid-layout': () =>
+    import('@cardstack/base/components/cards-grid-layout'),
+  'components/countdown': () => import('@cardstack/base/components/countdown'),
+  'components/expiration-warning': () =>
+    import('@cardstack/base/components/expiration-warning'),
+  'components/markdown-editor-mode-select': () =>
+    import('@cardstack/base/components/markdown-editor-mode-select'),
+  'components/time-ago': () => import('@cardstack/base/components/time-ago'),
+  'components/time-slots': () =>
+    import('@cardstack/base/components/time-slots'),
+  'components/timeline': () => import('@cardstack/base/components/timeline'),
   'contains-many-component': () =>
     import('@cardstack/base/contains-many-component'),
+  coordinate: () => import('@cardstack/base/coordinate'),
+  country: () => import('@cardstack/base/country'),
+  'css-value': () => import('@cardstack/base/css-value'),
+  'csv-file-def': () => import('@cardstack/base/csv-file-def'),
+  currency: () => import('@cardstack/base/currency'),
+  date: () => import('@cardstack/base/date'),
+  'date-range-field': () => import('@cardstack/base/date-range-field'),
+  'date/day': () => import('@cardstack/base/date/day'),
+  'date/month': () => import('@cardstack/base/date/month'),
+  'date/month-day': () => import('@cardstack/base/date/month-day'),
+  'date/month-year': () => import('@cardstack/base/date/month-year'),
+  'date/quarter': () => import('@cardstack/base/date/quarter'),
+  'date/week': () => import('@cardstack/base/date/week'),
+  'date/year': () => import('@cardstack/base/date/year'),
+  datetime: () => import('@cardstack/base/datetime'),
+  'datetime-stamp': () => import('@cardstack/base/datetime-stamp'),
   'default-templates/atom': () =>
     import('@cardstack/base/default-templates/atom'),
   'default-templates/card-info': () =>
@@ -174,27 +216,29 @@ export const BUNDLED_BASE_MODULES: Record<
     import('@cardstack/base/default-templates/markdown-fallback'),
   'default-templates/missing-template': () =>
     import('@cardstack/base/default-templates/missing-template'),
+  'default-templates/theme-dashboard': () =>
+    import('@cardstack/base/default-templates/theme-dashboard'),
+  'detailed-style-reference': () =>
+    import('@cardstack/base/detailed-style-reference'),
+  'docx-file-def': () => import('@cardstack/base/docx-file-def'),
+  'docx-meta-extractor': () => import('@cardstack/base/docx-meta-extractor'),
+  email: () => import('@cardstack/base/email'),
+  enum: () => import('@cardstack/base/enum'),
+  'ethereum-address': () => import('@cardstack/base/ethereum-address'),
+  'exif-meta-extractor': () => import('@cardstack/base/exif-meta-extractor'),
   'field-component': () => import('@cardstack/base/field-component'),
   'field-support': () => import('@cardstack/base/field-support'),
-  // `file-api` is deliberately NOT bundled. It declares nothing: it re-exports
-  // `FileDef` and friends from card-api. A loader credits a class to the first
-  // module it serves that exposes it, and a bundled module is served without
-  // its re-export source being loaded first — so serving this one would make
-  // every `FileDef` code ref name `@cardstack/base/file-api`, and the
-  // adoption-chain walk, which stops at the module the family root names,
-  // walks past it. Card code importing it keeps fetching it from the realm,
-  // where evaluation loads card-api first and the identity comes out right.
-  //
-  // The file-def modules import it at runtime, which `FETCHED_RE_EXPORTS`
-  // allows on the same argument that covers `string`: the bundler resolves the
-  // re-export inside the importing chunk, so what it reaches is card-api's own
-  // class, from the chunk card-api is already in.
+  'file-api': () => import('@cardstack/base/file-api'),
+  'file-formats/audio-preview': () =>
+    import('@cardstack/base/file-formats/audio-preview'),
   'file-formats/file-image': () =>
     import('@cardstack/base/file-formats/file-image'),
   'file-formats/file-presentation': () =>
     import('@cardstack/base/file-formats/file-presentation'),
   'file-formats/file-preview-stage': () =>
     import('@cardstack/base/file-formats/file-preview-stage'),
+  'file-formats/file-resources': () =>
+    import('@cardstack/base/file-formats/file-resources'),
   'file-formats/file-shell-atom': () =>
     import('@cardstack/base/file-formats/file-shell-atom'),
   'file-formats/file-shell-embedded': () =>
@@ -207,170 +251,15 @@ export const BUNDLED_BASE_MODULES: Record<
     import('@cardstack/base/file-formats/file-type-profile'),
   'file-formats/file-view-model': () =>
     import('@cardstack/base/file-formats/file-view-model'),
-  'file-formats/image-captures': () =>
-    import('@cardstack/base/file-formats/image-captures'),
-  'file-formats/image-preview': () =>
-    import('@cardstack/base/file-formats/image-preview'),
-  'file-menu-items': () => import('@cardstack/base/file-menu-items'),
-  'helpers/clock': () => import('@cardstack/base/helpers/clock'),
-  'helpers/sanitized-html': () =>
-    import('@cardstack/base/helpers/sanitized-html'),
-  'helpers/set-background-image': () =>
-    import('@cardstack/base/helpers/set-background-image'),
-  'links-to-editor': () => import('@cardstack/base/links-to-editor'),
-  'links-to-many-component': () =>
-    import('@cardstack/base/links-to-many-component'),
-  'markdown-helpers': () => import('@cardstack/base/markdown-helpers'),
-  'menu-items': () => import('@cardstack/base/menu-items'),
-  'query-field-support': () => import('@cardstack/base/query-field-support'),
-  'shared-state': () => import('@cardstack/base/shared-state'),
-  'text-input-validator': () => import('@cardstack/base/text-input-validator'),
-  'watched-array': () => import('@cardstack/base/watched-array'),
-  'date/day': () => import('@cardstack/base/date/day'),
-  'date/month': () => import('@cardstack/base/date/month'),
-  'date/month-day': () => import('@cardstack/base/date/month-day'),
-  'date/month-year': () => import('@cardstack/base/date/month-year'),
-  'date/year': () => import('@cardstack/base/date/year'),
-  'date/week': () => import('@cardstack/base/date/week'),
-  'date/quarter': () => import('@cardstack/base/date/quarter'),
-  'time/duration': () => import('@cardstack/base/time/duration'),
-  'time/relative-time': () => import('@cardstack/base/time/relative-time'),
-  number: () => import('@cardstack/base/number'),
-  boolean: () => import('@cardstack/base/boolean'),
-  'big-integer': () => import('@cardstack/base/big-integer'),
-  email: () => import('@cardstack/base/email'),
-  'ethereum-address': () => import('@cardstack/base/ethereum-address'),
-  'phone-number': () => import('@cardstack/base/phone-number'),
-  'rich-markdown': () => import('@cardstack/base/rich-markdown'),
-  color: () => import('@cardstack/base/color'),
-  'code-ref': () => import('@cardstack/base/code-ref'),
-  realm: () => import('@cardstack/base/realm'),
-  enum: () => import('@cardstack/base/enum'),
-  searchable: () => import('@cardstack/base/searchable'),
-  'base64-image': () => import('@cardstack/base/base64-image'),
-  'codemirror-editor': () => import('@cardstack/base/codemirror-editor'),
-  'color-field/components/advanced-color-picker': () =>
-    import('@cardstack/base/color-field/components/advanced-color-picker'),
-  'color-field/components/color-picker-field': () =>
-    import('@cardstack/base/color-field/components/color-picker-field'),
-  'color-field/components/color-wheel-picker': () =>
-    import('@cardstack/base/color-field/components/color-wheel-picker'),
-  'color-field/components/contrast-checker-addon': () =>
-    import('@cardstack/base/color-field/components/contrast-checker-addon'),
-  'color-field/components/recent-colors-addon': () =>
-    import('@cardstack/base/color-field/components/recent-colors-addon'),
-  'color-field/components/slider-picker': () =>
-    import('@cardstack/base/color-field/components/slider-picker'),
-  'color-field/components/swatches-picker': () =>
-    import('@cardstack/base/color-field/components/swatches-picker'),
-  'color-field/modifiers/setup-element-modifier': () =>
-    import('@cardstack/base/color-field/modifiers/setup-element-modifier'),
-  'color-field/util/color-field-signature': () =>
-    import('@cardstack/base/color-field/util/color-field-signature'),
-  'color-field/util/color-utils': () =>
-    import('@cardstack/base/color-field/util/color-utils'),
-  'color-field/util/css-color-parsers': () =>
-    import('@cardstack/base/color-field/util/css-color-parsers'),
-  // `command` and `commands/search-card-result` are deliberately NOT bundled,
-  // both for the closure rule above.
-  //
-  // `command` imports `./commands/search-entry-result` and
-  // `commands/search-card-result` imports `./commands/search-result-list`,
-  // neither of which this table holds, so bundling either would compile its
-  // sibling into that chunk while a direct import of the sibling still
-  // fetched a separate copy.
-  //
-  // Each also re-exports a class it does not declare, which used to be a
-  // second reason and is no longer one: a bundled module publishes what it
-  // declares, so `json-field` keeps the credit for `JsonField` whichever
-  // module is served first. Bundling these two waits on their siblings, not
-  // on attribution.
-  'components/markdown-editor-mode-select': () =>
-    import('@cardstack/base/components/markdown-editor-mode-select'),
-  'components/time-slots': () =>
-    import('@cardstack/base/components/time-slots'),
-  'json-field': () => import('@cardstack/base/json-field'),
-  'number/components/badge-counter': () =>
-    import('@cardstack/base/number/components/badge-counter'),
-  'number/components/badge-metric': () =>
-    import('@cardstack/base/number/components/badge-metric'),
-  'number/components/badge-notification': () =>
-    import('@cardstack/base/number/components/badge-notification'),
-  'number/components/gauge': () =>
-    import('@cardstack/base/number/components/gauge'),
-  'number/components/progress-bar': () =>
-    import('@cardstack/base/number/components/progress-bar'),
-  'number/components/progress-circle': () =>
-    import('@cardstack/base/number/components/progress-circle'),
-  'number/components/score': () =>
-    import('@cardstack/base/number/components/score'),
-  'number/components/stat': () =>
-    import('@cardstack/base/number/components/stat'),
-  'number/util/index': () => import('@cardstack/base/number/util/index'),
-  'resources/command-data': () =>
-    import('@cardstack/base/resources/command-data'),
-  'response-field': () => import('@cardstack/base/response-field'),
-  skill: () => import('@cardstack/base/skill'),
-  spec: () => import('@cardstack/base/spec'),
-  'tool-field': () => import('@cardstack/base/tool-field'),
-  'components/age': () => import('@cardstack/base/components/age'),
-  'components/business-days': () =>
-    import('@cardstack/base/components/business-days'),
-  'components/card-list': () => import('@cardstack/base/components/card-list'),
-  'components/countdown': () => import('@cardstack/base/components/countdown'),
-  'components/expiration-warning': () =>
-    import('@cardstack/base/components/expiration-warning'),
-  'components/time-ago': () => import('@cardstack/base/components/time-ago'),
-  'components/timeline': () => import('@cardstack/base/components/timeline'),
-  'frontmatter-field': () => import('@cardstack/base/frontmatter-field'),
-  'helpers/country': () => import('@cardstack/base/helpers/country'),
-  'join-the-community': () => import('@cardstack/base/join-the-community'),
-  'llm-model': () => import('@cardstack/base/llm-model'),
-  'matrix-event': () => import('@cardstack/base/matrix-event'),
-  'number/components/number-input': () =>
-    import('@cardstack/base/number/components/number-input'),
-  operations: () => import('@cardstack/base/operations'),
-  percentage: () => import('@cardstack/base/percentage'),
-  'realm-config': () => import('@cardstack/base/realm-config'),
-  'skill-reference': () => import('@cardstack/base/skill-reference'),
-  'streaming-envelope': () => import('@cardstack/base/streaming-envelope'),
-  tag: () => import('@cardstack/base/tag'),
-  'ts-highlight': () => import('@cardstack/base/ts-highlight'),
-  url: () => import('@cardstack/base/url'),
-  'video-metadata': () => import('@cardstack/base/video-metadata'),
-  'welcome-to-boxel': () => import('@cardstack/base/welcome-to-boxel'),
-  'zip-archive': () => import('@cardstack/base/zip-archive'),
-  'components/cards-grid-layout': () =>
-    import('@cardstack/base/components/cards-grid-layout'),
-  datetime: () => import('@cardstack/base/datetime'),
-  image: () => import('@cardstack/base/image'),
-  website: () => import('@cardstack/base/website'),
-  'cards-grid': () => import('@cardstack/base/cards-grid'),
-  'datetime-stamp': () => import('@cardstack/base/datetime-stamp'),
-  'audio-file-def': () => import('@cardstack/base/audio-file-def'),
-  'audio-metadata': () => import('@cardstack/base/audio-metadata'),
-  'audio-waveform': () => import('@cardstack/base/audio-waveform'),
-  'avif-meta-extractor': () => import('@cardstack/base/avif-meta-extractor'),
-  'brand-functional-palette': () =>
-    import('@cardstack/base/brand-functional-palette'),
-  'brand-logo': () => import('@cardstack/base/brand-logo'),
-  coordinate: () => import('@cardstack/base/coordinate'),
-  country: () => import('@cardstack/base/country'),
-  'css-value': () => import('@cardstack/base/css-value'),
-  'csv-file-def': () => import('@cardstack/base/csv-file-def'),
-  currency: () => import('@cardstack/base/currency'),
-  date: () => import('@cardstack/base/date'),
-  'docx-file-def': () => import('@cardstack/base/docx-file-def'),
-  'docx-meta-extractor': () => import('@cardstack/base/docx-meta-extractor'),
-  'exif-meta-extractor': () => import('@cardstack/base/exif-meta-extractor'),
-  'file-formats/audio-preview': () =>
-    import('@cardstack/base/file-formats/audio-preview'),
-  'file-formats/file-resources': () =>
-    import('@cardstack/base/file-formats/file-resources'),
   'file-formats/font-specimen': () =>
     import('@cardstack/base/file-formats/font-specimen'),
   'file-formats/html-preview': () =>
     import('@cardstack/base/file-formats/html-preview'),
+  'file-formats/image-captures': () =>
+    import('@cardstack/base/file-formats/image-captures'),
+  'file-formats/image-preview': () =>
+    import('@cardstack/base/file-formats/image-preview'),
+  'file-formats/index': () => import('@cardstack/base/file-formats/index'),
   'file-formats/markdown-preview': () =>
     import('@cardstack/base/file-formats/markdown-preview'),
   'file-formats/metadata-fields': () =>
@@ -393,53 +282,160 @@ export const BUNDLED_BASE_MODULES: Record<
     import('@cardstack/base/file-formats/video-captures'),
   'file-formats/video-preview': () =>
     import('@cardstack/base/file-formats/video-preview'),
+  'file-menu-items': () => import('@cardstack/base/file-menu-items'),
+  'flac-audio-def': () => import('@cardstack/base/flac-audio-def'),
   'flac-meta-extractor': () => import('@cardstack/base/flac-meta-extractor'),
   'font-file-def': () => import('@cardstack/base/font-file-def'),
   'font-meta-extractor': () => import('@cardstack/base/font-meta-extractor'),
+  'frontmatter-field': () => import('@cardstack/base/frontmatter-field'),
+  'frontmatter-kinds': () => import('@cardstack/base/frontmatter-kinds'),
   'frontmatter-parse': () => import('@cardstack/base/frontmatter-parse'),
+  'gif-image-def': () => import('@cardstack/base/gif-image-def'),
   'gif-meta-extractor': () => import('@cardstack/base/gif-meta-extractor'),
   'gltf-meta-extractor': () => import('@cardstack/base/gltf-meta-extractor'),
+  'gltf-model-def': () => import('@cardstack/base/gltf-model-def'),
+  'gts-file-def': () => import('@cardstack/base/gts-file-def'),
+  'helpers/clock': () => import('@cardstack/base/helpers/clock'),
+  'helpers/country': () => import('@cardstack/base/helpers/country'),
+  'helpers/sanitized-html': () =>
+    import('@cardstack/base/helpers/sanitized-html'),
+  'helpers/set-background-image': () =>
+    import('@cardstack/base/helpers/set-background-image'),
   'html-file-def': () => import('@cardstack/base/html-file-def'),
   'html-meta-extractor': () => import('@cardstack/base/html-meta-extractor'),
   'id3v2-parser': () => import('@cardstack/base/id3v2-parser'),
+  image: () => import('@cardstack/base/image'),
   'image-animation': () => import('@cardstack/base/image-animation'),
   'image-color-profile': () => import('@cardstack/base/image-color-profile'),
   'image-file-def': () => import('@cardstack/base/image-file-def'),
+  index: () => import('@cardstack/base/index'),
   'iso-bmff': () => import('@cardstack/base/iso-bmff'),
+  'join-the-community': () => import('@cardstack/base/join-the-community'),
+  'jpg-image-def': () => import('@cardstack/base/jpg-image-def'),
   'jpg-meta-extractor': () => import('@cardstack/base/jpg-meta-extractor'),
+  'json-field': () => import('@cardstack/base/json-field'),
   'json-file-def': () => import('@cardstack/base/json-file-def'),
+  'jsonl-file-def': () => import('@cardstack/base/jsonl-file-def'),
+  'links-to-editor': () => import('@cardstack/base/links-to-editor'),
+  'links-to-many-component': () =>
+    import('@cardstack/base/links-to-many-component'),
+  'llm-model': () => import('@cardstack/base/llm-model'),
+  'log-file-def': () => import('@cardstack/base/log-file-def'),
+  'm4a-audio-def': () => import('@cardstack/base/m4a-audio-def'),
   'm4a-meta-extractor': () => import('@cardstack/base/m4a-meta-extractor'),
+  markdown: () => import('@cardstack/base/markdown'),
+  'markdown-file-def': () => import('@cardstack/base/markdown-file-def'),
+  'markdown-helpers': () => import('@cardstack/base/markdown-helpers'),
+  'matrix-event': () => import('@cardstack/base/matrix-event'),
+  'menu-items': () => import('@cardstack/base/menu-items'),
   'midi-audio-def': () => import('@cardstack/base/midi-audio-def'),
   'midi-meta-extractor': () => import('@cardstack/base/midi-meta-extractor'),
+  'mov-video-def': () => import('@cardstack/base/mov-video-def'),
+  'mp3-audio-def': () => import('@cardstack/base/mp3-audio-def'),
   'mp3-meta-extractor': () => import('@cardstack/base/mp3-meta-extractor'),
   'mp4-meta-extractor': () => import('@cardstack/base/mp4-meta-extractor'),
+  'mp4-video-def': () => import('@cardstack/base/mp4-video-def'),
+  number: () => import('@cardstack/base/number'),
+  'number/components/badge-counter': () =>
+    import('@cardstack/base/number/components/badge-counter'),
+  'number/components/badge-metric': () =>
+    import('@cardstack/base/number/components/badge-metric'),
+  'number/components/badge-notification': () =>
+    import('@cardstack/base/number/components/badge-notification'),
+  'number/components/gauge': () =>
+    import('@cardstack/base/number/components/gauge'),
+  'number/components/number-input': () =>
+    import('@cardstack/base/number/components/number-input'),
+  'number/components/progress-bar': () =>
+    import('@cardstack/base/number/components/progress-bar'),
+  'number/components/progress-circle': () =>
+    import('@cardstack/base/number/components/progress-circle'),
+  'number/components/score': () =>
+    import('@cardstack/base/number/components/score'),
+  'number/components/stat': () =>
+    import('@cardstack/base/number/components/stat'),
+  'number/util/index': () => import('@cardstack/base/number/util/index'),
   'office-extract': () => import('@cardstack/base/office-extract'),
+  'ogg-audio-def': () => import('@cardstack/base/ogg-audio-def'),
   'ogg-meta-extractor': () => import('@cardstack/base/ogg-meta-extractor'),
   ooxml: () => import('@cardstack/base/ooxml'),
+  operations: () => import('@cardstack/base/operations'),
+  'otf-font-def': () => import('@cardstack/base/otf-font-def'),
   'pdf-file-def': () => import('@cardstack/base/pdf-file-def'),
   'pdf-meta-extractor': () => import('@cardstack/base/pdf-meta-extractor'),
+  percentage: () => import('@cardstack/base/percentage'),
+  'phone-number': () => import('@cardstack/base/phone-number'),
   'png-image-def': () => import('@cardstack/base/png-image-def'),
   'png-meta-extractor': () => import('@cardstack/base/png-meta-extractor'),
+  'positioned-card': () => import('@cardstack/base/positioned-card'),
   'pptx-file-def': () => import('@cardstack/base/pptx-file-def'),
   'pptx-meta-extractor': () => import('@cardstack/base/pptx-meta-extractor'),
   'process-card': () => import('@cardstack/base/process-card'),
+  'query-field-support': () => import('@cardstack/base/query-field-support'),
+  realm: () => import('@cardstack/base/realm'),
+  'realm-config': () => import('@cardstack/base/realm-config'),
+  'remix-card': () => import('@cardstack/base/remix-card'),
+  'resources/command-data': () =>
+    import('@cardstack/base/resources/command-data'),
+  'response-field': () => import('@cardstack/base/response-field'),
+  'rich-markdown': () => import('@cardstack/base/rich-markdown'),
+  searchable: () => import('@cardstack/base/searchable'),
+  'shared-state': () => import('@cardstack/base/shared-state'),
+  skill: () => import('@cardstack/base/skill'),
+  'skill-frontmatter-field': () =>
+    import('@cardstack/base/skill-frontmatter-field'),
+  'skill-plus': () => import('@cardstack/base/skill-plus'),
+  'skill-reference': () => import('@cardstack/base/skill-reference'),
+  'skill-set': () => import('@cardstack/base/skill-set'),
+  spec: () => import('@cardstack/base/spec'),
   'stl-meta-extractor': () => import('@cardstack/base/stl-meta-extractor'),
+  'stl-model-def': () => import('@cardstack/base/stl-model-def'),
+  'streaming-envelope': () => import('@cardstack/base/streaming-envelope'),
+  'structured-theme': () => import('@cardstack/base/structured-theme'),
+  'structured-theme-variables': () =>
+    import('@cardstack/base/structured-theme-variables'),
+  'style-reference': () => import('@cardstack/base/style-reference'),
+  'svg-image-def': () => import('@cardstack/base/svg-image-def'),
   'svg-meta-extractor': () => import('@cardstack/base/svg-meta-extractor'),
+  'system-card': () => import('@cardstack/base/system-card'),
+  tag: () => import('@cardstack/base/tag'),
+  'text-area': () => import('@cardstack/base/text-area'),
   'text-file-def': () => import('@cardstack/base/text-file-def'),
+  'text-input-validator': () => import('@cardstack/base/text-input-validator'),
   theme: () => import('@cardstack/base/theme'),
   'three-d-model-def': () => import('@cardstack/base/three-d-model-def'),
+  'three-mf-def': () => import('@cardstack/base/three-mf-def'),
   'three-mf-meta-extractor': () =>
     import('@cardstack/base/three-mf-meta-extractor'),
   time: () => import('@cardstack/base/time'),
+  'time/duration': () => import('@cardstack/base/time/duration'),
+  'time/relative-time': () => import('@cardstack/base/time/relative-time'),
+  'time/time-range': () => import('@cardstack/base/time/time-range'),
+  'tool-field': () => import('@cardstack/base/tool-field'),
   'ts-file-def': () => import('@cardstack/base/ts-file-def'),
+  'ts-highlight': () => import('@cardstack/base/ts-highlight'),
+  'ttf-font-def': () => import('@cardstack/base/ttf-font-def'),
+  typography: () => import('@cardstack/base/typography'),
+  url: () => import('@cardstack/base/url'),
   'video-file-def': () => import('@cardstack/base/video-file-def'),
+  'video-metadata': () => import('@cardstack/base/video-metadata'),
   'vorbis-comment-parser': () =>
     import('@cardstack/base/vorbis-comment-parser'),
+  'watched-array': () => import('@cardstack/base/watched-array'),
+  'wav-audio-def': () => import('@cardstack/base/wav-audio-def'),
   'wav-meta-extractor': () => import('@cardstack/base/wav-meta-extractor'),
   'webm-meta-extractor': () => import('@cardstack/base/webm-meta-extractor'),
+  'webm-video-def': () => import('@cardstack/base/webm-video-def'),
+  'webp-image-def': () => import('@cardstack/base/webp-image-def'),
   'webp-meta-extractor': () => import('@cardstack/base/webp-meta-extractor'),
+  website: () => import('@cardstack/base/website'),
+  'welcome-to-boxel': () => import('@cardstack/base/welcome-to-boxel'),
+  'woff-font-def': () => import('@cardstack/base/woff-font-def'),
+  'woff2-font-def': () => import('@cardstack/base/woff2-font-def'),
+  workspace: () => import('@cardstack/base/workspace'),
   'xlsx-file-def': () => import('@cardstack/base/xlsx-file-def'),
   'xlsx-meta-extractor': () => import('@cardstack/base/xlsx-meta-extractor'),
+  'zip-archive': () => import('@cardstack/base/zip-archive'),
   'zip-file-def': () => import('@cardstack/base/zip-file-def'),
 };
 
