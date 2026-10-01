@@ -3,38 +3,35 @@
 ## Goal
 
 The gallery's `lint:types` script runs `sync-gallery.mjs` before
-`ember-tsc --noEmit`, so every gallery lint — the CI Lint "Lint Choreo
-Gallery" step included — copies `packages/choreo-test-app/public` (~27 MB of
-media) into `packages/choreo-gallery/public`. Type-checking reads only the
-synced sources under `src/`, so the copy is wasted I/O.
+`ember-tsc --noEmit`, and the gallery's `build` runs it before `scope-css.mjs`
+and rollup. The sync copied `packages/choreo-test-app/public` (~27 MB of media)
+into `packages/choreo-gallery/public` on every run, so both CI Lint's "Lint
+Choreo Gallery" step and its build-coverage step paid for the copy.
 
 ## Assumptions
 
-- The gallery lint step runs `pnpm run lint`, which does not depend on a
-  prior build: `lint:types` syncs the sources itself.
-- Nothing lint runs (`ember-tsc`, eslint, ember-template-lint, prettier)
-  reads the gallery's `public/` media. `public/*` is gitignored apart from
-  `icon.svg`.
-- The CI Lint build-coverage step runs the gallery's full `build`, which keeps
-  copying the media. It stays as is: `build` is the full build, and the copy
-  there goes away with the generator.
+- Nothing reads the media in `packages/choreo-gallery/public`:
+  - `build-boxel-realm.mjs` copies media into `dist-realm/` straight from
+    `packages/choreo-test-app/public`, and takes only `icon.svg` from the
+    gallery's own `public/`.
+  - The rollup build has no public-assets step.
+  - The package is private, so its `files` list is never packed.
+  - No other package or workflow refers to the gallery's `public/`.
+- `public/*` is gitignored apart from `icon.svg`, so dropping the copy changes
+  no tracked file.
 
 ## Steps
 
-1. Add a `--skip-media` flag to `scripts/sync-gallery.mjs` that skips the
-   `public/` copy.
-2. Pass `--skip-media` from the `lint:types` script.
-3. Document the flag in the gallery README's Rebuild section.
+1. Remove the `public/` copy from `scripts/sync-gallery.mjs`.
+2. Update the gallery README to say the sync copies no media.
 
 ## Target files
 
 - `packages/choreo-gallery/scripts/sync-gallery.mjs`
-- `packages/choreo-gallery/package.json`
 - `packages/choreo-gallery/README.md`
 
 ## Testing notes
 
-- From a fresh worktree (only `public/icon.svg` present), `pnpm run lint` in
-  `packages/choreo-gallery` passes and leaves `public/` holding only
-  `icon.svg`.
-- `node scripts/sync-gallery.mjs` with no flag still copies the media.
+- From a fresh worktree (only `public/icon.svg` present), `pnpm run lint` and
+  `pnpm run build` in `packages/choreo-gallery` pass and leave `public/`
+  holding only `icon.svg`.

@@ -1,10 +1,4 @@
-import {
-  cpSync,
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-  writeFileSync,
-} from 'node:fs';
+import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 
 import { scopeStyles } from './scope-css.mjs';
@@ -144,15 +138,4 @@ write(
   join(pkg, 'styles/app.css'),
   readFileSync(join(app, 'styles/app.css'), 'utf8'),
 );
-// `--skip-media` syncs only what type-checking reads. The test app's public/
-// media is served by the gallery but never imported, so lint leaves it out.
-if (process.argv.includes('--skip-media')) {
-  console.log('Synced the current test-app gallery sources for Boxel.');
-} else {
-  cpSync(join(root, 'packages/choreo-test-app/public'), join(pkg, 'public'), {
-    recursive: true,
-  });
-  console.log(
-    'Synced the current test-app gallery sources and media for Boxel.',
-  );
-}
+console.log('Synced the current test-app gallery sources for Boxel.');

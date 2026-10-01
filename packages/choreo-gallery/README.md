@@ -2,7 +2,7 @@
 
 `test-app/app` remains the canonical gallery. This private package generates
 the Boxel adaptation; do not edit copied demos, notes, catalog, or styles here.
-The generated copies and media are gitignored. Shared film engine fixes live
+The generated copies are gitignored. Shared film engine fixes live
 in `packages/glimmer-motion`, so the normal gallery benefits too.
 
 ## Rebuild
@@ -17,8 +17,8 @@ pnpm --filter choreo-gallery test:boxel
 ```
 
 `sync-gallery.mjs` copies the current demos and applies the host adapters.
-It also copies the test app's `public/` media unless given `--skip-media`,
-which `lint:types` passes because type-checking reads only the sources.
+It copies no media: `build-boxel-realm.mjs` reads the test app's `public/`
+directly.
 `scope-css.mjs` constrains gallery CSS and plain component style blocks to
 `.choreo-site`, preserving cross-component selectors without leaking into Boxel.
 `build-boxel-realm.mjs` emits `dist-realm/`, including a content-addressed

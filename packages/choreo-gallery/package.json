@@ -36,7 +36,7 @@
   "scripts": {
     "build": "node scripts/sync-gallery.mjs && node scripts/scope-css.mjs && rollup --config",
     "build:realm": "node scripts/build-boxel-realm.mjs",
-    "lint:types": "node scripts/sync-gallery.mjs --skip-media && ember-tsc --noEmit",
+    "lint:types": "node scripts/sync-gallery.mjs && ember-tsc --noEmit",
     "test:boxel": "node scripts/test-boxel-runtime.mjs",
     "test:realm": "node --test tests/realm-output.test.mjs",
     "test:theater-sizing": "node scripts/test-theater-sizing.mjs",
