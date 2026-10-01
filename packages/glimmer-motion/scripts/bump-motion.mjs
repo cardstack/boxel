@@ -229,9 +229,17 @@ function writePins(release) {
   }
   writeFileSync(workspaceFile, yaml);
 
+  // A peer range keeps its operator (`^`, `~` or none) and moves its version.
   const pkg = JSON.parse(readFileSync(packageJsonFile, 'utf8'));
-  pkg.peerDependencies['motion-dom'] = `^${release['motion-dom']}`;
-  pkg.peerDependencies['motion-utils'] = `^${release['motion-utils']}`;
+  for (const name of ['motion-dom', 'motion-utils']) {
+    const m = pkg.peerDependencies[name]?.match(/^([~^]?)\d+\.\d+\.\d+$/);
+    if (!m) {
+      throw new Error(
+        `glimmer-motion's ${name} peer range is ${pkg.peerDependencies[name] ?? '(missing)'}; expected ^x.y.z, ~x.y.z or x.y.z`,
+      );
+    }
+    pkg.peerDependencies[name] = `${m[1]}${release[name]}`;
+  }
   writeFileSync(packageJsonFile, JSON.stringify(pkg, null, 2) + '\n');
 }
 
