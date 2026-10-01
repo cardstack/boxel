@@ -22,9 +22,9 @@ import {
   unixTime,
   type Batch,
   type BatchDoneResult,
-  type DeclaredScreenshotError,
-  type DeclaredScreenshotVisitArgs,
-  type DeclaredScreenshotVisitResult,
+  type DeclaredCaptureError,
+  type DeclaredCaptureVisitArgs,
+  type DeclaredCaptureVisitResult,
   type DefinitionLookup,
   type Diagnostics,
   type Expression,
@@ -33,17 +33,21 @@ import {
   type LooseCardResource,
   type Prerenderer,
   type PrerenderedHtmlChange,
-  type PriorScreenshotState,
+  type PriorCaptureState,
   type Reader,
   type RenderRouteOptions,
   type RenderVisitResponse,
   type Stats,
 } from '../index.ts';
-import { putMedia, type MediaCacheAdapter } from '../media-cache.ts';
 import {
-  screenshotLedgerSourceURL,
-  type ScreenshotManifest,
-  type ScreenshotManifestEntry,
+  putMedia,
+  REALM_AUTHORITY_RENDER,
+  type MediaCacheAdapter,
+} from '../media-cache.ts';
+import {
+  captureLedgerSourceURL,
+  type CaptureManifest,
+  type CaptureManifestEntry,
 } from '../capture-spec.ts';
 import type { DBAdapter } from '../db.ts';
 import type { RealmIndexCommitsTable } from '../index-structure.ts';
@@ -116,7 +120,7 @@ export interface PrerenderHtmlPassArgs {
   jobInfo: JobInfo;
   jobPriority?: number;
   onProgress?: (event: IndexingProgressEvent) => void;
-  // Declared-screenshot persistence. Both must be present for the pass to
+  // Declared-capture persistence. Both must be present for the pass to
   // request captures; a worker without a MediaCache configured (or a caller
   // without a direct DB handle) renders HTML exactly as before and writes
   // null manifests.
@@ -323,7 +327,7 @@ export async function runPrerenderHtmlPass({
 
   // Hold the visits until the spawning passes have committed. A visit's own
   // card + source come from the reader, but anything its renders load lazily
-  // — a linked card only a capture-only screenshot component reads is the
+  // — a linked card only a capture-only capture component reads is the
   // canonical case — is served from `boxel_index`, which a spawning pass swaps
   // only at its commit. This job is enqueued as soon as the invalidation set
   // is known (deliberately, so queue latency and the module pre-warm above
@@ -785,8 +789,8 @@ async function committedGeneration(
 // time was spent all the same). Carry-forwards and never-attempted slots
 // (roster failure, capture-cap overflow) record nothing. Undefined when no
 // slot recorded a time, so callers can spread it conditionally.
-export function declaredScreenshotTimingsMs(
-  result: DeclaredScreenshotVisitResult | undefined,
+export function declaredCaptureTimingsMs(
+  result: DeclaredCaptureVisitResult | undefined,
 ): Record<string, number> | undefined {
   if (!result) {
     return undefined;
@@ -805,13 +809,13 @@ export function declaredScreenshotTimingsMs(
   return Object.keys(timings).length > 0 ? timings : undefined;
 }
 
-// Persist the visit's declared-screenshot captures into the MediaCache and
+// Persist the visit's declared captures into the MediaCache and
 // assemble the row's manifest. Fresh captures putMedia under the 'declared'
 // lane; carry-forwards copy the prior manifest entry (their ledger row from
 // the earlier generation stays live — a 'declared' entry ages out only when
 // superseded, and no supersession happens without a re-capture). A persist
 // failure is a per-slot error, never a visit failure — the manifest omits
-// the name and diagnostics.screenshotErrors records why, mirroring
+// the name and diagnostics.captureErrors records why, mirroring
 // brokenLinks.
 //
 // Every returned error carries `consecutiveFailures`: the prior row's
@@ -824,10 +828,10 @@ export function declaredScreenshotTimingsMs(
 // extends the row-level `captureFailureRenders` counter (the prior row's
 // count plus one, regardless of which names failed), and the reconcile
 // sweep's bounded retry lane caps on that.
-export async function persistDeclaredScreenshots({
+export async function persistDeclaredCaptures({
   result,
   priorManifest,
-  priorScreenshotErrors,
+  priorCaptureErrors,
   priorCaptureFailureRenders,
   dbAdapter,
   mediaCacheAdapter,
@@ -838,9 +842,9 @@ export async function persistDeclaredScreenshots({
   jobInfo,
   log,
 }: {
-  result: DeclaredScreenshotVisitResult | undefined;
-  priorManifest: ScreenshotManifest | null;
-  priorScreenshotErrors?: DeclaredScreenshotError[] | null;
+  result: DeclaredCaptureVisitResult | undefined;
+  priorManifest: CaptureManifest | null;
+  priorCaptureErrors?: DeclaredCaptureError[] | null;
   priorCaptureFailureRenders?: number | null;
   dbAdapter: DBAdapter;
   mediaCacheAdapter: MediaCacheAdapter;
@@ -851,10 +855,10 @@ export async function persistDeclaredScreenshots({
   jobInfo: JobInfo;
   log: ReturnType<typeof logger>;
 }): Promise<{
-  manifest: ScreenshotManifest | null;
-  errors: DeclaredScreenshotError[];
+  manifest: CaptureManifest | null;
+  errors: DeclaredCaptureError[];
   // Present exactly when `errors` is non-empty: the row's consecutive
-  // capture-failure render count, for `screenshotCaptureFailureRenders`.
+  // capture-failure render count, for `captureFailureRenders`.
   captureFailureRenders?: number;
 }> {
   // The prerenderer didn't run the capture step (an implementation without
@@ -862,8 +866,8 @@ export async function persistDeclaredScreenshots({
   if (!result) {
     return { manifest: null, errors: [] };
   }
-  let manifest: ScreenshotManifest = {};
-  let errors: DeclaredScreenshotError[] = [...(result.errors ?? [])];
+  let manifest: CaptureManifest = {};
+  let errors: DeclaredCaptureError[] = [...(result.errors ?? [])];
   for (let entry of result.entries) {
     if (entry.carriedForward) {
       let prior = priorManifest?.[entry.name];
@@ -902,13 +906,16 @@ export async function persistDeclaredScreenshots({
         sourceURL,
         captureSpecHash: entry.specHash,
         sourceGeneration,
+        // Declared captures are drawn by the realm's own render, which every
+        // reader of the card is served.
+        renderedAs: REALM_AUTHORITY_RENDER,
         sourceContentHash:
           entry.keyBy === 'file-content' ? (contentHash ?? null) : null,
         lane: 'declared',
         width: isPdf ? null : entry.width,
         height: isPdf ? null : entry.height,
       });
-      let manifestEntry: ScreenshotManifestEntry = {
+      let manifestEntry: CaptureManifestEntry = {
         specHash: entry.specHash,
         objectKey,
         contentType: entry.contentType,
@@ -932,7 +939,7 @@ export async function persistDeclaredScreenshots({
       manifest[entry.name] = manifestEntry;
     } catch (e: any) {
       log.warn(
-        `${jobIdentity(jobInfo)} failed to persist declared screenshot "${entry.name}" of ${sourceURL}: ${e?.message ?? e}`,
+        `${jobIdentity(jobInfo)} failed to persist declared capture "${entry.name}" of ${sourceURL}: ${e?.message ?? e}`,
       );
       errors.push({
         name: entry.name,
@@ -943,7 +950,7 @@ export async function persistDeclaredScreenshots({
   let captureFailureRenders: number | undefined;
   if (errors.length > 0) {
     let priorRunByName = new Map(
-      (priorScreenshotErrors ?? []).map((error) => [
+      (priorCaptureErrors ?? []).map((error) => [
         error.name,
         // A legacy row recorded before the bookkeeping counts as a run of
         // one — same default the reconcile sweep's scan applies.
@@ -958,7 +965,7 @@ export async function persistDeclaredScreenshots({
       (priorCaptureFailureRenders ??
         // A prior row with recorded failures but no counter is a legacy
         // row — one failing render, same default the sweep's scan applies.
-        (priorScreenshotErrors?.length ? 1 : 0)) + 1;
+        (priorCaptureErrors?.length ? 1 : 0)) + 1;
   }
   return {
     manifest: Object.keys(manifest).length > 0 ? manifest : null,
@@ -1102,30 +1109,29 @@ async function visitForPrerenderedHtml({
     fileCreatedAt,
   };
 
-  // Declared-screenshot capture rides the visit only when this pass can
+  // Declared-capture rides the visit only when this pass can
   // persist the bytes (both adapters present). One opt-in covers both of the
   // URL's renderings — the card pass captures only when the URL has a card
   // rendering at all, so no per-half gating is needed here. Each row's prior
   // state goes along keyed by row type: the manifest so file-content-keyed
   // slots can carry forward in-engine, the recorded failures to seed this
   // pass's consecutive-failure bookkeeping.
-  let captureScreenshots = Boolean(dbAdapter && mediaCacheAdapter);
+  let runCaptures = Boolean(dbAdapter && mediaCacheAdapter);
   let priorStates:
-    | Partial<Record<'instance' | 'file', PriorScreenshotState>>
+    | Partial<Record<'instance' | 'file', PriorCaptureState>>
     | undefined;
-  let screenshotVisitArgs: DeclaredScreenshotVisitArgs | undefined;
-  if (captureScreenshots) {
-    priorStates = await batch.priorScreenshotStates(url);
-    let priorManifests: Partial<
-      Record<'instance' | 'file', ScreenshotManifest>
-    > = {};
+  let captureVisitArgs: DeclaredCaptureVisitArgs | undefined;
+  if (runCaptures) {
+    priorStates = await batch.priorCaptureStates(url);
+    let priorManifests: Partial<Record<'instance' | 'file', CaptureManifest>> =
+      {};
     for (let kind of ['instance', 'file'] as const) {
       let manifest = priorStates[kind]?.manifest;
       if (manifest && Object.keys(manifest).length > 0) {
         priorManifests[kind] = manifest;
       }
     }
-    screenshotVisitArgs = {
+    captureVisitArgs = {
       ...(Object.keys(priorManifests).length > 0 ? { priorManifests } : {}),
       ...(contentHash !== undefined ? { contentHash } : {}),
     };
@@ -1149,7 +1155,7 @@ async function visitForPrerenderedHtml({
     ...(cardSource ? { cardSource } : {}),
     ...(jobPriority !== undefined ? { priority: jobPriority } : {}),
     ...(jobInfo ? { jobId: `${jobInfo.jobId}.${jobInfo.reservationId}` } : {}),
-    ...(screenshotVisitArgs ? { screenshots: screenshotVisitArgs } : {}),
+    ...(captureVisitArgs ? { captures: captureVisitArgs } : {}),
   });
 
   // The visit's render diagnostics (launch/wait timings, render elapsed,
@@ -1186,20 +1192,20 @@ async function visitForPrerenderedHtml({
       });
       stats.instanceErrors++;
     } else {
-      let screenshotOutcome =
-        captureScreenshots && dbAdapter && mediaCacheAdapter
-          ? await persistDeclaredScreenshots({
-              result: card.screenshots,
+      let captureOutcome =
+        runCaptures && dbAdapter && mediaCacheAdapter
+          ? await persistDeclaredCaptures({
+              result: card.captures,
               priorManifest: priorStates?.instance?.manifest ?? null,
-              priorScreenshotErrors: priorStates?.instance?.screenshotErrors,
+              priorCaptureErrors: priorStates?.instance?.captureErrors,
               priorCaptureFailureRenders:
                 priorStates?.instance?.captureFailureRenders,
               dbAdapter,
               mediaCacheAdapter,
               realmURL,
-              sourceURL: screenshotLedgerSourceURL(fileURL, 'instance'),
+              sourceURL: captureLedgerSourceURL(fileURL, 'instance'),
               // The generation the instance row is stamped with, which is its
-              // live index row's — the one the `_screenshot/` serving gate
+              // live index row's — the one the `_capture/` serving gate
               // resolves a capture under.
               sourceGeneration: batch.htmlRowGeneration(fileURL, 'instance'),
               contentHash,
@@ -1207,20 +1213,18 @@ async function visitForPrerenderedHtml({
               log,
             })
           : undefined;
-      let screenshotTimingsMs = declaredScreenshotTimingsMs(card.screenshots);
+      let captureTimingsMs = declaredCaptureTimingsMs(card.captures);
       let instanceDiagnostics: Diagnostics | undefined =
-        (screenshotOutcome && screenshotOutcome.errors.length > 0) ||
-        screenshotTimingsMs
+        (captureOutcome && captureOutcome.errors.length > 0) || captureTimingsMs
           ? {
               ...(diagnostics ?? {}),
-              ...(screenshotOutcome && screenshotOutcome.errors.length > 0
+              ...(captureOutcome && captureOutcome.errors.length > 0
                 ? {
-                    screenshotErrors: screenshotOutcome.errors,
-                    screenshotCaptureFailureRenders:
-                      screenshotOutcome.captureFailureRenders,
+                    captureErrors: captureOutcome.errors,
+                    captureFailureRenders: captureOutcome.captureFailureRenders,
                   }
                 : {}),
-              ...(screenshotTimingsMs ? { screenshotTimingsMs } : {}),
+              ...(captureTimingsMs ? { captureTimingsMs } : {}),
             }
           : diagnostics;
       await batch.updatePrerenderedHtmlEntry(url, {
@@ -1235,7 +1239,7 @@ async function visitForPrerenderedHtml({
         // format renders actually pulled in (scoped-CSS URLs included).
         deps: card.deps ?? [],
         ...(instanceDiagnostics ? { diagnostics: instanceDiagnostics } : {}),
-        screenshots: screenshotOutcome?.manifest ?? null,
+        captures: captureOutcome?.manifest ?? null,
       });
       stats.instancesIndexed++;
     }
@@ -1261,41 +1265,39 @@ async function visitForPrerenderedHtml({
     });
     stats.fileErrors++;
   } else {
-    let fileScreenshotOutcome =
-      captureScreenshots && dbAdapter && mediaCacheAdapter
-        ? await persistDeclaredScreenshots({
-            result: fileRender.screenshots,
+    let fileCaptureOutcome =
+      runCaptures && dbAdapter && mediaCacheAdapter
+        ? await persistDeclaredCaptures({
+            result: fileRender.captures,
             priorManifest: priorStates?.file?.manifest ?? null,
-            priorScreenshotErrors: priorStates?.file?.screenshotErrors,
+            priorCaptureErrors: priorStates?.file?.captureErrors,
             priorCaptureFailureRenders:
               priorStates?.file?.captureFailureRenders,
             dbAdapter,
             mediaCacheAdapter,
             realmURL,
-            sourceURL: screenshotLedgerSourceURL(fileURL, 'file'),
+            sourceURL: captureLedgerSourceURL(fileURL, 'file'),
             sourceGeneration: batch.htmlRowGeneration(fileURL, 'file'),
             contentHash,
             jobInfo,
             log,
           })
         : undefined;
-    let fileScreenshotTimingsMs = declaredScreenshotTimingsMs(
-      fileRender.screenshots,
-    );
+    let fileCaptureTimingsMs = declaredCaptureTimingsMs(fileRender.captures);
     let fileDiagnostics: Diagnostics | undefined =
-      (fileScreenshotOutcome && fileScreenshotOutcome.errors.length > 0) ||
-      fileScreenshotTimingsMs
+      (fileCaptureOutcome && fileCaptureOutcome.errors.length > 0) ||
+      fileCaptureTimingsMs
         ? {
             ...(diagnostics ?? {}),
-            ...(fileScreenshotOutcome && fileScreenshotOutcome.errors.length > 0
+            ...(fileCaptureOutcome && fileCaptureOutcome.errors.length > 0
               ? {
-                  screenshotErrors: fileScreenshotOutcome.errors,
-                  screenshotCaptureFailureRenders:
-                    fileScreenshotOutcome.captureFailureRenders,
+                  captureErrors: fileCaptureOutcome.errors,
+                  captureFailureRenders:
+                    fileCaptureOutcome.captureFailureRenders,
                 }
               : {}),
-            ...(fileScreenshotTimingsMs
-              ? { screenshotTimingsMs: fileScreenshotTimingsMs }
+            ...(fileCaptureTimingsMs
+              ? { captureTimingsMs: fileCaptureTimingsMs }
               : {}),
           }
         : diagnostics;
@@ -1309,7 +1311,7 @@ async function visitForPrerenderedHtml({
       markdown: fileRender.markdown,
       deps: response.fileExtract?.deps ?? [],
       ...(fileDiagnostics ? { diagnostics: fileDiagnostics } : {}),
-      screenshots: fileScreenshotOutcome?.manifest ?? null,
+      captures: fileCaptureOutcome?.manifest ?? null,
     });
     stats.filesIndexed++;
   }

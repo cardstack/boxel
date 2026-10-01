@@ -49,7 +49,7 @@ export default class SearchSheetSectionHeader extends Component<Signature> {
         {{! A section's result count reflects how many cards the realm holds,
         so in a Percy snapshot it changes every time someone adds a card to
         the base realm — a diff to approve on unrelated PRs, reporting a
-        number no screenshot is the right place to verify. `.percy.js` hides
+        number no capture is the right place to verify. `.percy.js` hides
         this with `visibility: hidden`, so the row's layout is still compared;
         only the digits stop being. Note the box keeps its natural width, so a
         change in digit *count* (99 -> 100) can still shift siblings. }}

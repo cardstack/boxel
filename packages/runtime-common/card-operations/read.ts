@@ -1,7 +1,8 @@
-import { screenshotsMetaFromManifest } from '../capture-spec.ts';
+import { capturesMetaFromManifest } from '../capture-spec.ts';
 import { isSingleCardDocument } from '../document-types.ts';
 import {
   canonicalizeTarget,
+  htmlDeclarationOf,
   instanceTargetURL,
   localPathFor,
   newOperationScope,
@@ -48,7 +49,7 @@ import type { SearchResultError } from '../realm-index-query-engine.ts';
 // The document mode's *body* is held to byte-for-byte agreement with what the
 // card+json GET handler serves: the same canonical URL, the same `links.self`,
 // the same prefix-form ids, the same freshly-joined `meta.generation` and
-// `meta.screenshots`, the same disk-read file-meta document for a path that
+// `meta.captures`, the same disk-read file-meta document for a path that
 // holds bytes, and the same mapping from an errored index row to an HTTP
 // status.
 //
@@ -91,7 +92,7 @@ export async function readOperation(
   if (opts.headersOnly) {
     return await readHeaders(core, url, localPath, links, scope);
   }
-  return await readDocument(core, url, localPath, links, opts);
+  return await readDocument(core, url, localPath, links, opts, scope);
 }
 
 // A declaration may specialize `read` by running a `program` over the target,
@@ -130,6 +131,7 @@ async function readDocument(
   localPath: LocalPath,
   links: LinkStrategy,
   opts: RunOperationOptions,
+  scope: OperationScope,
 ): Promise<OperationDocumentResult> {
   // The index decides first, and the bytes on disk are the fallback — not the
   // other way round. Classifying by the URL's extension before asking would be
@@ -156,7 +158,15 @@ async function readDocument(
     throw await missingTarget(core, url, localPath);
   }
   if (result.type === 'error') {
-    throw errorRowFailure(url, result);
+    // A read serves no markup of its own, but an errored one carries the
+    // card's last-known-good isolated markup in place of the card. The read
+    // this executor runs for an errored card is the built-in one, since the
+    // card's type is resolved off a healthy row, so what the type withholds is
+    // read off the errored row the realm holds for it.
+    let { unshareableFormats } = await htmlDeclarationOf(core, url, scope);
+    throw errorRowFailure(url, result, {
+      withholdMarkup: unshareableFormats.includes('isolated'),
+    });
   }
   let { doc } = result;
   doc.data.links = { self: url.href };
@@ -170,7 +180,7 @@ async function readDocument(
     delete doc.data.relationships;
   }
   core.unresolveInstanceIds(doc);
-  // The index-data generation, the source version and the declared-screenshot
+  // The index-data generation, the source version and the declared-capture
   // manifest are joined at serve time onto a fresh `meta` — never a mutation of
   // the cached pristine doc's own. The generation lets a consumer tell fresh
   // index data from stale; the manifest is never written back into the index row
@@ -192,9 +202,9 @@ async function readDocument(
     ...doc.data.meta,
     generation: result.generation,
     ...(result.version != null ? { version: result.version } : {}),
-    ...(result.screenshots
+    ...(result.captures
       ? {
-          screenshots: screenshotsMetaFromManifest(result.screenshots, {
+          captures: capturesMetaFromManifest(result.captures, {
             realmURL: core.realmURL,
             instanceLocalPath: localPath,
           }),
@@ -217,7 +227,7 @@ async function readDocument(
       indexedAt: result.indexedAt,
       lastModified: numberOrNull(doc.data.meta.lastModified),
       generation: result.generation,
-      screenshots: result.screenshots,
+      captures: result.captures,
       deps: result.deps,
     },
     queryBacked: result.queryBacked,
@@ -267,7 +277,7 @@ async function readHeaders(
         indexedAt: file.indexedAt,
         lastModified: file.lastModified,
         generation: file.generation,
-        screenshots: file.screenshots,
+        captures: file.captures,
         deps: file.deps,
       };
     }
@@ -301,7 +311,7 @@ async function readHeaders(
     indexedAt: row.indexedAt,
     lastModified: row.lastModified,
     generation: row.generation,
-    screenshots: row.screenshots,
+    captures: row.captures,
     deps: row.deps,
   };
 }
@@ -316,7 +326,7 @@ function headersFromDisk(
     indexedAt: null,
     lastModified: numberOrNull(document.data.attributes?.lastModified),
     generation: null,
-    screenshots: null,
+    captures: null,
     deps: null,
   };
 }
@@ -360,6 +370,9 @@ const ERRORED_ROW = 'erroredRow';
 function errorRowFailure(
   url: URL,
   result: SearchResultError,
+  // Whether the card's isolated format is served data-only, which is the
+  // format the salvage markup is.
+  { withholdMarkup = false }: { withholdMarkup?: boolean } = {},
 ): OperationFailure {
   let { errorDetail } = result.error;
   let status =
@@ -373,7 +386,7 @@ function errorRowFailure(
     title: errorDetail.title,
     message: errorDetail.message,
     stack: errorDetail.stack,
-    lastKnownGoodHtml: result.error.lastKnownGoodHtml,
+    lastKnownGoodHtml: withholdMarkup ? null : result.error.lastKnownGoodHtml,
     cardTitle: result.error.cardTitle,
     scopedCssUrls: result.error.scopedCssUrls,
   };

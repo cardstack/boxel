@@ -1,7 +1,8 @@
 import stableStringify from 'safe-stable-stringify';
 
+import { isResolvedCodeRef } from '../card-document-shape.ts';
 import { now } from '../clock.ts';
-import type { ResolvedCodeRef } from '../code-ref.ts';
+import type { CodeRef, ResolvedCodeRef } from '../code-ref.ts';
 import { computeContentHash } from '../content-hash.ts';
 import { isFilterRefersToNonexistentTypeError } from '../definition-lookup.ts';
 import type { Definition } from '../definitions.ts';
@@ -10,10 +11,22 @@ import type { IndexedInstanceSource } from '../index-query-engine.ts';
 import { logger } from '../log.ts';
 import { MODULE_SOURCE_FILE_DEF_CODE_REFS } from '../policy-file-def.ts';
 import { rri } from '../realm-identifiers.ts';
+import { chainType } from './adoption-chain.ts';
 import { carriesBuiltIn } from './dispatch.ts';
-import { compilePolicyFilter } from './policy-filter.ts';
+import {
+  compilePolicyFilter,
+  pathsFilterReads,
+  readsPathAlike,
+} from './policy-filter.ts';
+import {
+  reachIssues,
+  type ReachingGrant,
+  type ReadableType,
+} from './policy-reach.ts';
 import {
   isDefinitionFreeBaseOperation,
+  linkStrategyOf,
+  policyIssueSeverity,
   type BaseOperation,
   type OperationQueryFilterTemplate,
   type PolicyIssue,
@@ -86,6 +99,25 @@ export interface CompiledOperationGrant {
   // filter, which is recorded as a `policy-not-filterable` issue. That grant
   // admits no search, and its predicate is kept as it is.
   filter?: OperationQueryFilterTemplate;
+  // For a grant carrying a filter, each path it compares that some card of
+  // the governed realm reads differently from the rule's type, with the types
+  // of those cards: descendants of the rule's type whose own declarations
+  // read the path otherwise. `item.on` admits a descendant's cards, and for
+  // such a card the index holds what its own type makes of the path, which
+  // the predicate never reads. So a search keeps each comparison of the path
+  // from judging those cards, and leaves the rest of the filter to. Absent
+  // when no card of the realm reads a path differently.
+  misreadingTypes?: { path: string; types: MisreadingType[] }[];
+}
+
+// A type whose cards read a path differently from the rule's type.
+export interface MisreadingType {
+  type: CodeRef;
+  // The types descending from it that the governed realm holds cards of and
+  // that read the path as the rule's type does, having redeclared it back. A
+  // type filter matches a type's descendants too, so these are named for the
+  // search to keep. Absent when there are none.
+  except?: CodeRef[];
 }
 
 export interface CompiledPolicyPredicate {
@@ -133,6 +165,19 @@ export interface PolicyCompileEnvironment {
   // The key a type is recorded under in an adoption chain, the index's and
   // the definition cache's alike.
   typeKey(codeRef: ResolvedCodeRef): string;
+  // The realm the policy governs, whose cards a search it scopes runs over.
+  realmURL: string;
+  // The types the governed realm holds cards of that descend from `codeRef`,
+  // as the first key of each row's adoption chain, sorted. Read on the
+  // realm's own authority, like everything here. It reads every card of the
+  // type, so it is asked again only once `instanceTypeKeys` changes.
+  instanceTypesUnder(codeRef: ResolvedCodeRef): Promise<string[]>;
+  // The types the governed realm holds cards of, as the first key of each
+  // row's adoption chain, sorted: the realm's own summary of its cards, one
+  // small read. Which of them descend from a type changes only when this
+  // does, so while it reads the same, `instanceTypesUnder` would answer as it
+  // did. An edit to a card leaves it as it was.
+  instanceTypeKeys(): Promise<string[]>;
 }
 
 // The environment the cache needs beyond compiling: which card the realm's
@@ -287,13 +332,7 @@ export class RealmPolicyCache {
       compilation = await compilePolicy(card, row, this.#env, (url) =>
         refresh.inputs.push(url),
       );
-      if (compilation.compiled.issues.length > 0) {
-        log.warn(
-          `the policy ${card} compiled with issues: ${compilation.compiled.issues
-            .map((issue) => `${issue.path || '(card)'}: ${issue.message}`)
-            .join('; ')}`,
-        );
-      }
+      logIssues(card, compilation.compiled.issues);
     }
     // Kept only when no move landed under one of its inputs while this ran. A
     // kept entry is answered from memory until the next move, so keeping one
@@ -310,12 +349,42 @@ export class RealmPolicyCache {
   }
 }
 
+// One line per compile for the issues that left part of the policy admitting
+// nothing, which is an operator's problem as much as an author's, and a
+// quieter line for the warnings on grants that stay live. A policy with
+// deliberate reach records those on every compile, and at `warn` they would
+// read as a policy that is broken.
+function logIssues(card: string, issues: PolicyIssue[]): void {
+  let describe = (issue: PolicyIssue) =>
+    `${issue.path || '(card)'}: ${issue.code}: ${issue.message}`;
+  let inactive = issues.filter((issue) => issue.severity === 'inactive');
+  let warnings = issues.filter((issue) => issue.severity === 'warning');
+  if (inactive.length > 0) {
+    log.warn(
+      `the policy ${card} compiled with issues that leave part of it inactive: ${inactive
+        .map(describe)
+        .join('; ')}`,
+    );
+  }
+  if (warnings.length > 0) {
+    log.info(
+      `the policy ${card} compiled with warnings on grants that stay live: ${warnings
+        .map(describe)
+        .join('; ')}`,
+    );
+  }
+}
+
 // How long an entry is answered from memory without a revalidation, however
 // quiet the signals are. It is the same five seconds the live search cache
 // allows a result whose dependency it cannot see, for the same reason: it is
 // the staleness bound for what the signals miss. A revalidation is one narrow
-// index read plus the definition lookups, and a steady stream of reads pays it
-// once per interval rather than once per read.
+// index read plus the definition lookups, and, for a policy whose query
+// grants' filters read a field, a read of the governed realm's summary of the
+// types it holds cards of. Only when that has changed does it also read the
+// types the realm holds under each such rule's type, which reads every card
+// of the type. A steady stream of reads pays a revalidation once per interval
+// rather than once per read.
 const MAX_UNVALIDATED_MS = 5_000;
 
 // Every realm's policy cache in this process. A move in one realm has to
@@ -358,10 +427,32 @@ interface Compilation {
   row: string;
   // Fingerprints of the definition entries compiling read, keyed by code ref.
   // A missing fingerprint marks a type with no definition.
-  definitions: Map<string, { codeRef: ResolvedCodeRef; fingerprint?: string }>;
+  definitions: Map<string, DefinitionInput>;
   // URLs whose realm's index moving could change what this compiles to.
   inputs: string[];
+  // What the governed realm held under each rule type whose grants' filters
+  // read a field: the types a grant's `misreadingTypes` were chosen from.
+  subtypes: { targetType: ResolvedCodeRef; keys: string[] }[];
+  // The realm's `instanceTypeKeys`, read before `subtypes` was. A
+  // revalidation that finds them unchanged skips reading `subtypes` again,
+  // and one that reads it again and finds it unchanged records the keys it
+  // read.
+  heldTypes?: string;
 }
+
+interface DefinitionInput {
+  codeRef: ResolvedCodeRef;
+  fingerprint?: string;
+  // Set for a type only the reach check read. Such a type decides no grant, so
+  // a lookup of it that fails is recorded as `UNREADABLE` rather than failing
+  // the read.
+  diagnostic?: true;
+}
+
+// The fingerprint of a diagnostic type whose lookup failed. It matches no
+// entry, so the revalidation after the type can be read again recompiles, and
+// it matches itself, so revalidating while the lookup still fails does not.
+const UNREADABLE = 'unreadable';
 
 interface Refresh {
   card: string;
@@ -406,9 +497,34 @@ async function stillCurrent(
   if (rowIdentity(row) !== compilation.row) {
     return false;
   }
-  for (let { codeRef, fingerprint } of compilation.definitions.values()) {
-    if ((await fingerprintedEntry(codeRef, env))?.fingerprint !== fingerprint) {
+  for (let {
+    codeRef,
+    fingerprint,
+    diagnostic,
+  } of compilation.definitions.values()) {
+    let current = diagnostic
+      ? await fingerprintedEntry(codeRef, env).then(
+          (found) => found?.fingerprint,
+          () => UNREADABLE,
+        )
+      : (await fingerprintedEntry(codeRef, env))?.fingerprint;
+    if (current !== fingerprint) {
       return false;
+    }
+  }
+  if (compilation.subtypes.length > 0) {
+    // Read before the types under each rule, so a card of a new type landing
+    // between the reads leaves the recorded keys behind, and the next
+    // revalidation reads the types again.
+    let heldTypes = (await env.instanceTypeKeys()).join('\n');
+    if (heldTypes !== compilation.heldTypes) {
+      for (let { targetType, keys } of compilation.subtypes) {
+        let held = await env.instanceTypesUnder(targetType);
+        if (held.join('\n') !== keys.join('\n')) {
+          return false;
+        }
+      }
+      compilation.heldTypes = heldTypes;
     }
   }
   return true;
@@ -448,6 +564,33 @@ async function fingerprintedEntry(
   };
 }
 
+// The policy card at `card` compiled as it stands, the way a realm naming it
+// compiles it, for a caller that wants to know what the card puts in force
+// without putting it in force: the validate operation. Nothing is cached, and
+// no realm's compiled policy is touched.
+//
+// Answered with every URL compiling read: the card itself, and the module of
+// every type whose definition it looked up. What compiling reports turns on
+// each of them.
+export async function compilePolicyCard(
+  card: string,
+  env: PolicyCompileEnvironment,
+): Promise<CompiledPolicyCard> {
+  let row = await env.readCard(new URL(card));
+  let { compiled, inputs } = await compilePolicy(
+    card,
+    row,
+    env,
+    () => undefined,
+  );
+  return { compiled, reads: inputs };
+}
+
+export interface CompiledPolicyCard {
+  compiled: CompiledRealmPolicy;
+  reads: string[];
+}
+
 async function compilePolicy(
   card: string,
   row: IndexedInstanceSource | undefined,
@@ -457,10 +600,12 @@ async function compilePolicy(
   let issues: PolicyIssue[] = [];
   let definitions: Compilation['definitions'] = new Map();
   let inputs = [card];
+  let subtypes: Compilation['subtypes'] = [];
+  let heldTypes: string | undefined;
   let rules: CompiledPolicyRule[] = [];
   let cardURL = new URL(card);
   let issue = (code: PolicyIssueCode, path: string, message: string) =>
-    issues.push({ code, path, message });
+    issues.push({ code, path, message, severity: policyIssueSeverity(code) });
   // An error row carries the last good visit's fingerprint forward, as a row
   // whose failure was withheld carries everything forward, so only a row that
   // holds the card's current document says which bytes it describes.
@@ -473,6 +618,8 @@ async function compilePolicy(
     row: rowIdentity(row),
     definitions,
     inputs,
+    subtypes,
+    heldTypes,
   });
   // The policy as a whole did not compile, for the reason recorded. It has no
   // rules.
@@ -487,6 +634,7 @@ async function compilePolicy(
       row: rowIdentity(row),
       definitions,
       inputs,
+      subtypes,
     };
   };
 
@@ -521,6 +669,44 @@ async function compilePolicy(
   let readDefinition = async (
     codeRef: ResolvedCodeRef,
   ): Promise<Definition | undefined> => (await readType(codeRef))?.definition;
+  // A type the reach check reads, recorded as an input like every other. The
+  // types a closure crosses decide no grant, so one that cannot be read leaves
+  // its branch of the closure unwalked rather than failing the whole policy.
+  // Only a type nothing else read is recorded as diagnostic: one a rule or a
+  // filter read already decides a grant, and fails the read as it would have.
+  let readReachedType = (
+    codeRef: ResolvedCodeRef,
+  ): Promise<{ definition: Definition; types: string[] } | undefined> => {
+    let key = `${codeRef.module}#${codeRef.name}`;
+    if (entries.has(key)) {
+      return readType(codeRef);
+    }
+    let moduleURL = safeURL(codeRef.module, env);
+    if (moduleURL && !inputs.includes(moduleURL)) {
+      inputs.push(moduleURL);
+      onInput(moduleURL);
+    }
+    let read = fingerprintedEntry(codeRef, env).then(
+      (found) => {
+        definitions.set(key, {
+          codeRef,
+          fingerprint: found?.fingerprint,
+          diagnostic: true,
+        });
+        return found;
+      },
+      () => {
+        definitions.set(key, {
+          codeRef,
+          fingerprint: UNREADABLE,
+          diagnostic: true,
+        });
+        return undefined;
+      },
+    );
+    entries.set(key, read);
+    return read;
+  };
   // A grant on a query carries the search filter its predicate compiles to,
   // or has none and records why. No other grant carries one.
   let withFilter = async (
@@ -548,30 +734,33 @@ async function compilePolicy(
     }
     return { ...grant, filter: outcome.filter };
   };
-  // The type in `chain` that keeps `name` out of every policy's reach, if one
-  // does. A declaration a subclass writes takes the place of the one it
+  // What in `chain`, a rule's type and the types it descends from, keeps
+  // `name` out of every policy's reach, if anything does, judged as the gate
+  // judges it. A declaration a subclass writes takes the place of the one it
   // inherits, flag and all, so a type's own entry is not enough: the gate
-  // refuses a name any type in the chain flags, and compiling judges the grant
-  // by the same rule. A type whose entry cannot be read is not reported here.
-  // The gate refuses the operation all the same.
+  // refuses a name any type in the chain flags. It refuses one as well where a
+  // type in the chain has no definition it can read, since that type might be
+  // the one holding the flag. The rule's own type was read from its entry
+  // already. A flag is the more exact reason, so it is the one reported when
+  // the chain holds both.
+  let readChainDefinition = async (codeRef: ResolvedCodeRef) => {
+    let resolved = attempt(() => env.resolveCodeRef(codeRef, cardURL));
+    return resolved ? await readDefinition(resolved) : undefined;
+  };
   let keptOutOfReach = async (
     chain: string[],
     name: string,
-  ): Promise<string | undefined> => {
-    for (let key of chain) {
-      let codeRef = codeRefFromInternalKey(key);
-      let resolved = codeRef
-        ? attempt(() => env.resolveCodeRef(codeRef, cardURL))
-        : undefined;
-      if (!resolved) {
-        continue;
-      }
-      let entry = await readType(resolved);
-      if (entry && ownOperation(entry.definition, name)?.nonGrantable) {
-        return resolved.name;
+  ): Promise<{ declaredOn: string } | { unreadable: string } | undefined> => {
+    let unreadable: string | undefined;
+    for (let index = 1; index < chain.length; index++) {
+      let type = await chainType(chain, index, readChainDefinition);
+      if (!type) {
+        unreadable ??= chain[index];
+      } else if (ownOperation(type.definition, name)?.nonGrantable) {
+        return { declaredOn: type.codeRef.name };
       }
     }
-    return undefined;
+    return unreadable ? { unreadable } : undefined;
   };
 
   if (!row) {
@@ -695,16 +884,24 @@ async function compilePolicy(
       // refuses it whatever a compiled policy holds: an operation flagged
       // non-grantable, and any operation on a policy card. So a grant of either
       // is recorded rather than kept as though it admitted something.
-      let keptOutBy = granted.nonGrantable
-        ? resolved.name
+      let keptOut = granted.nonGrantable
+        ? { declaredOn: resolved.name }
         : isDefinitionFreeBaseOperation(operation)
           ? undefined
           : await keptOutOfReach(chain, operation);
-      if (keptOutBy) {
+      if (keptOut && 'declaredOn' in keptOut) {
         issue(
           'grants-authorization-infrastructure',
           `${grantPath}.operation`,
-          `\`${operation}\` is declared non-grantable on ${keptOutBy}, so only a caller the realm's own permissions allow may invoke it`,
+          `\`${operation}\` is declared non-grantable on ${keptOut.declaredOn}, so only a caller the realm's own permissions allow may invoke it`,
+        );
+        continue;
+      }
+      if (keptOut) {
+        issue(
+          'unresolved-type',
+          `${grantPath}.operation`,
+          `${resolved.name} descends from ${keptOut.unreadable}, which names no type the realm has a definition of, and that type might declare \`${operation}\` non-grantable, so the gate refuses it whatever a policy grants. A class its module does not export has no definition`,
         );
         continue;
       }
@@ -765,7 +962,256 @@ async function compilePolicy(
     }
     rules.push({ targetType: resolved, path: rulePath, grants });
   }
+
+  // A filter is compiled against its rule's type, and `item.on` admits every
+  // type descending from it as well. For each path a grant's filter compares,
+  // the grant records the descendants the governed realm holds cards of that
+  // read the path differently. The realm's rows are an input from here on,
+  // since a card of a new descendant can change what a grant records.
+  for (let rule of rules) {
+    let reading = new Map<CompiledOperationGrant, string[]>();
+    for (let grant of rule.grants) {
+      let paths = grant.filter ? pathsFilterReads(grant.filter) : [];
+      if (paths.length > 0) {
+        reading.set(grant, paths);
+      }
+    }
+    if (reading.size === 0) {
+      continue;
+    }
+    let ruleEntry = await readType(rule.targetType);
+    if (!ruleEntry) {
+      continue;
+    }
+    if (!inputs.includes(env.realmURL)) {
+      inputs.push(env.realmURL);
+      onInput(env.realmURL);
+    }
+    // Read before the types under any rule, as a revalidation reads them.
+    heldTypes ??= (await env.instanceTypeKeys()).join('\n');
+    let keys = await env.instanceTypesUnder(rule.targetType);
+    subtypes.push({ targetType: rule.targetType, keys });
+    let own = new Set([env.typeKey(rule.targetType), ruleEntry.types[0]]);
+    let held: HeldType[] = [];
+    let unnamed: string[] = [];
+    for (let key of keys) {
+      if (own.has(key)) {
+        continue;
+      }
+      let named = codeRefFromInternalKey(key);
+      let ref = named ?? heldTypeRef(key);
+      if (!ref) {
+        unnamed.push(key);
+        continue;
+      }
+      // A type whose key names it only in a shape `codeRefFromInternalKey`
+      // refuses has no definition read here, and one whose definition cannot
+      // be read has none either. Neither can be shown to read a path alike.
+      let resolved = named
+        ? attempt(() => env.resolveCodeRef(named, cardURL))
+        : undefined;
+      let entry = resolved ? await readType(resolved) : undefined;
+      held.push({ key, ref: resolved ?? ref, entry });
+    }
+    let grants: CompiledOperationGrant[] = [];
+    for (let grant of rule.grants) {
+      let paths = reading.get(grant);
+      if (!paths) {
+        grants.push(grant);
+        continue;
+      }
+      // A type no filter can name cannot be kept from a comparison, so a
+      // grant whose filter compares a field scopes no search at all.
+      if (unnamed.length > 0) {
+        issue(
+          'policy-not-filterable',
+          `${grant.path}.where`,
+          `the grant is on a query, and the realm holds cards of ${unnamed.join(', ')}, which descend from ${rule.targetType.name} and which no search filter can name, so its filter could not be kept from misreading them`,
+        );
+        let { filter: _filter, ...unfiltered } = grant;
+        grants.push(unfiltered);
+        continue;
+      }
+      let snapshot = grant.where?.snapshot ?? false;
+      let misreadingTypes: { path: string; types: MisreadingType[] }[] = [];
+      for (let path of paths) {
+        let misreading: HeldType[] = [];
+        for (let type of held) {
+          if (
+            !type.entry ||
+            !(await readsPathAlike(
+              ruleEntry.definition,
+              type.entry.definition,
+              path,
+              snapshot,
+              readDefinition,
+            ))
+          ) {
+            misreading.push(type);
+          }
+        }
+        if (misreading.length === 0) {
+          continue;
+        }
+        let misreads = new Set(misreading.map(({ key }) => key));
+        misreadingTypes.push({
+          path,
+          types: misreading.map(({ key, ref }) => {
+            let except = held
+              .filter(
+                (other) =>
+                  !misreads.has(other.key) && other.entry?.types.includes(key),
+              )
+              .map((other) => other.ref);
+            return except.length > 0 ? { type: ref, except } : { type: ref };
+          }),
+        });
+      }
+      grants.push(
+        misreadingTypes.length > 0 ? { ...grant, misreadingTypes } : grant,
+      );
+    }
+    rule.grants = grants;
+  }
+
+  // What each live grant hands over beyond the cards it names. Read once every
+  // rule has compiled and every filter is settled, since whether a reached
+  // type is granted is a question about the whole policy, and a query grant
+  // left with no filter above admits nothing.
+  let reaching: ReachingGrant[] = [];
+  let readable: ReadableType[] = [];
+  for (let rule of rules) {
+    let entry = await readType(rule.targetType);
+    if (!entry) {
+      continue;
+    }
+    let { definition } = entry;
+    for (let grant of rule.grants) {
+      let lane = reachLane(definition, grant);
+      if (lane) {
+        reaching.push({ rule, grant, definition, ...lane });
+      }
+    }
+    if (rule.grants.some((grant) => letsCallerRead(definition, grant))) {
+      readable.push({
+        codeRef: rule.targetType,
+        definedAs: isResolvedCodeRef(definition.codeRef)
+          ? definition.codeRef
+          : undefined,
+      });
+    }
+  }
+  for (let found of await reachIssues(reaching, readable, {
+    readType: readReachedType,
+    typeKey: (codeRef) => env.typeKey(codeRef),
+    isPolicyCard: (types) => env.isPolicyCard(types),
+  })) {
+    issue(found.code, found.path, found.message);
+  }
   return compiled();
+}
+
+// How a grant hands its rows over: the document it serves under the link
+// strategy that governs it, and whether it serves their prerendered HTML. A
+// `read` grant's strategy is the declaration it invokes, the granted type's
+// own `read` or a named operation built on it. A named query's is the query's.
+// An ad-hoc `query` has no declaration, so nothing narrows what it serves.
+//
+// Undefined for a grant that serves no rows' closure: one on any other base,
+// since a write's echo is the card and a stored-bytes read serves bytes, and a
+// grant that admits nothing.
+function reachLane(
+  definition: Definition,
+  grant: CompiledOperationGrant,
+): Pick<ReachingGrant, 'governedBy' | 'links' | 'rendered'> | undefined {
+  let base = admittingBase(definition, grant);
+  let declared = isDefinitionFreeBaseOperation(grant.operation)
+    ? undefined
+    : ownOperation(definition, grant.operation);
+  if (base === 'read') {
+    return {
+      governedBy: 'read',
+      links: linkStrategyOf(declared?.links),
+      rendered: false,
+    };
+  }
+  if (base === 'query') {
+    return declared
+      ? {
+          governedBy: 'named-query',
+          links: linkStrategyOf(declared.links),
+          rendered: true,
+        }
+      : { governedBy: 'ad-hoc-query', links: 'full', rendered: true };
+  }
+  return undefined;
+}
+
+// Whether a grant lets a caller read the cards it admits: a read of the
+// card's document, a read of its stored source, or a search. A write or a
+// delete hands the caller no card to read.
+function letsCallerRead(
+  definition: Definition,
+  grant: CompiledOperationGrant,
+): boolean {
+  let base = admittingBase(definition, grant);
+  return base === 'read' || base === 'readSource' || base === 'query';
+}
+
+// The base a kept grant runs on, where the grant can admit anything at all.
+// A query grant admits only through the filter it compiled to, since the gate
+// grants no query. Any other grant whose predicate is annotated as reading a
+// snapshot tier admits nothing: the gate reads the stored source alone, so it
+// never evaluates that predicate.
+function admittingBase(
+  definition: Definition,
+  grant: CompiledOperationGrant,
+): BaseOperation | undefined {
+  let granted = grantedOperation(definition, grant.operation);
+  if (!granted) {
+    return undefined;
+  }
+  if (granted.base === 'query') {
+    return grant.filter ? granted.base : undefined;
+  }
+  return grant.where?.snapshot ? undefined : granted.base;
+}
+
+// A type the governed realm holds cards of under a rule's type: the key the
+// index records it by, the ref a type filter names it by, and its definition
+// entry where one could be read.
+interface HeldType {
+  key: string;
+  ref: CodeRef;
+  entry?: { definition: Definition; types: string[] };
+}
+
+// The type a held key names, for a key `codeRefFromInternalKey` refuses: one
+// with a `fields/` segment, which it cannot tell from a field's key, and one
+// ending `/ancestor`, which names an unexported class through the type it
+// adopts from. Each is read from the key's shape so that `internalKeyFor`
+// turns it back into the key itself, which is what a type filter matches a
+// row's adoption chain on: a module and a name split at the last `/`, and an
+// `ancestorOf` of the type the rest of the key names. Undefined for a key
+// with nothing to split.
+function heldTypeRef(key: string): CodeRef | undefined {
+  let ancestor = '/ancestor';
+  if (key.endsWith(ancestor)) {
+    let card = splitTypeKey(key.slice(0, -ancestor.length));
+    return card ? { type: 'ancestorOf', card } : undefined;
+  }
+  return splitTypeKey(key);
+}
+
+function splitTypeKey(key: string): ResolvedCodeRef | undefined {
+  let lastSlash = key.lastIndexOf('/');
+  if (lastSlash <= 0 || lastSlash === key.length - 1) {
+    return undefined;
+  }
+  return {
+    module: key.slice(0, lastSlash) as ResolvedCodeRef['module'],
+    name: key.slice(lastSlash + 1),
+  };
 }
 
 // What invoking `name` on an instance of a type reaches: the type's own

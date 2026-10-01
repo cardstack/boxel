@@ -3,6 +3,7 @@ import { ensureTrailingSlash } from './paths.ts';
 import type { Query } from './query.ts';
 import type { RequestTimings } from './request-timings.ts';
 import { SupportedMimeType } from './router.ts';
+import type { PrerenderedHtmlFormat } from './prerendered-html-format.ts';
 import type { LinkStrategy } from '@cardstack/base/operations';
 
 export type SearchRequestErrorCode =
@@ -124,6 +125,12 @@ export type SearchOpts = {
   // declaration of a named query — through `effectiveLinkStrategy`, so it is
   // always the narrower of the two.
   links?: LinkStrategy;
+  // Prerendered formats every row is served data-only for: the rows carry no
+  // markup for them, and a consumer renders those rows from their data. Set
+  // from the `html` declaration of a named query, and never on a render's own
+  // search, which keeps every format's markup. Absent or empty, every format's
+  // markup is served.
+  unshareableFormats?: PrerenderedHtmlFormat[];
   priority?: number;
   // Correlation id minted by the client — a prerendering host stamps
   // `x-boxel-logging-correlation-id` on its `_federated-search` fetch, and so

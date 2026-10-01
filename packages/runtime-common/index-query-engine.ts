@@ -5,6 +5,7 @@ import {
   type CardResource,
   type CodeRef,
   type Diagnostics,
+  type ResolvedCodeRef,
   baseCardRef,
   internalKeyFor,
   isResolvedCodeRef,
@@ -58,7 +59,7 @@ import {
   isReferenceFilterField,
 } from './query.ts';
 import type { SerializedError } from './error.ts';
-import type { ScreenshotManifest } from './capture-spec.ts';
+import type { CaptureManifest } from './capture-spec.ts';
 import type { DBAdapter } from './db.ts';
 import {
   coerceTypes,
@@ -171,7 +172,7 @@ type IndexRowWithHtml = BoxelIndexTable &
     | 'fitted_html'
     | 'atom_html'
     | 'markdown'
-    | 'screenshots'
+    | 'captures'
   >;
 
 export interface IndexedFile {
@@ -191,11 +192,11 @@ export interface IndexedFile {
   atomHtml: string | null;
   iconHtml: string | null;
   markdown: string | null;
-  // The file row's declared-screenshot manifest
-  // (`prerendered_html.screenshots`, type 'file') — joined into the served
-  // file-meta resource's `meta.screenshots` the way an instance row's
+  // The file row's declared-capture manifest
+  // (`prerendered_html.captures`, type 'file') — joined into the served
+  // file-meta resource's `meta.captures` the way an instance row's
   // manifest is joined into a card's.
-  screenshots: ScreenshotManifest | null;
+  captures: CaptureManifest | null;
   generation: number;
   // The generation the file's prerendered HTML was produced at
   // (`prerendered_html.generation`; a file with no prerendered row falls back
@@ -231,9 +232,9 @@ export interface LinkTargetFile {
   lastModified: number | null;
   resourceCreatedAt: number | null;
   // Both the resource's `meta.realmURL` and the prefix test that decides
-  // whether the screenshot manifest applies to this URL.
+  // whether the capture manifest applies to this URL.
   realmURL: string;
-  screenshots: ScreenshotManifest | null;
+  captures: CaptureManifest | null;
 }
 
 export interface LinkTargetInstance {
@@ -246,7 +247,7 @@ export interface LinkTargetInstance {
   resource: CardResource;
   // Rides the prerendered_html channel and is joined into the side-loaded
   // resource's `meta`, so it is read here even though the formats are not.
-  screenshots: ScreenshotManifest | null;
+  captures: CaptureManifest | null;
 }
 
 export interface IndexedInstance {
@@ -264,10 +265,10 @@ export interface IndexedInstance {
   searchDoc: Record<string, any> | null;
   types: string[] | null;
   deps: string[] | null;
-  // The row's declared-screenshot manifest (`prerendered_html.screenshots`)
+  // The row's declared-capture manifest (`prerendered_html.captures`)
   // — like the HTML columns, whatever rendering currently exists, which may
   // trail the index-data generation until the row's prerender pass lands.
-  screenshots: ScreenshotManifest | null;
+  captures: CaptureManifest | null;
   generation: number;
   realmURL: string;
   indexedAt: number | null;
@@ -518,12 +519,12 @@ export class IndexQueryEngine {
       let chunkSet = new Set(chunk);
       let chunkParams = chunk.map((href) => [param(href)]);
       let rows = (await this.#query([
-        // The join carries two consumers: `ph.screenshots`, which is joined
+        // The join carries two consumers: `ph.captures`, which is joined
         // into the side-loaded resource's `meta`, and the effective-error
         // expression below, which reads `ph.error_doc` / `ph.generation`. It
         // stays for both even though every format column is gone.
         `SELECT i.url, i.file_alias, i.pristine_doc,
-                ph.screenshots AS screenshots`,
+                ph.captures AS captures`,
         `FROM ${tableFromOpts(opts)} as i ${prerenderedJoin(opts)}
          WHERE`,
         ...every([
@@ -546,7 +547,7 @@ export class IndexQueryEngine {
         url: string | null;
         file_alias: string | null;
         pristine_doc: CardResource | null;
-        screenshots: ScreenshotManifest | null;
+        captures: CaptureManifest | null;
       }[];
       for (let row of rows) {
         if (!row.url) {
@@ -568,7 +569,7 @@ export class IndexQueryEngine {
         let target: LinkTargetInstance = {
           canonicalURL: row.url,
           resource: row.pristine_doc,
-          screenshots: row.screenshots ?? null,
+          captures: row.captures ?? null,
         };
         // A row may be addressable by its url or its file_alias.
         // Index the result under whichever lookup keys the caller asked about.
@@ -587,8 +588,8 @@ export class IndexQueryEngine {
   // url/file_alias match, instance type, and tombstone exclusion, plus the
   // effective-error channel (a row `getInstance` would map to
   // `instance-error` is not live). Every liveness gate — `hasLiveInstance`,
-  // `liveInstanceGeneration`, `liveInstanceScreenshots` — spreads this one
-  // fragment, so the DSL and `?name=` screenshot routes' liveness semantics
+  // `liveInstanceGeneration`, `liveInstanceCaptures` — spreads this one
+  // fragment, so the DSL and `?name=` capture routes' liveness semantics
   // cannot silently split. (`findLiveInstanceGeneration` in media-cache.ts
   // is the realm-scoped raw-SQL twin, built from the same exported join
   // fragments.)
@@ -597,7 +598,7 @@ export class IndexQueryEngine {
   }
 
   // The same predicate over the URL's 'file' row — the file-flavored liveness
-  // gate the `?name=` screenshot route falls back to when no instance
+  // gate the `?name=` capture route falls back to when no instance
   // matches (a FileDef family's declared captures live on the file row).
   #liveRowConditions(url: URL, type: 'instance' | 'file'): Expression {
     return every([
@@ -614,7 +615,7 @@ export class IndexQueryEngine {
   // Existence probe with the live-instance predicate, without hydrating the
   // row. `getInstance` selects every wide column in the index (prerendered
   // HTML, pristine/search docs), so callers that gate on liveness alone —
-  // the screenshot route runs this on every request, 304 revalidations
+  // the capture route runs this on every request, 304 revalidations
   // included — must not pay for a hydration they discard.
   async hasLiveInstance(url: URL, opts?: GetEntryOptions): Promise<boolean> {
     let rows = (await this.#query([
@@ -629,7 +630,7 @@ export class IndexQueryEngine {
 
   // The index generation of a live instance, or undefined when none matches —
   // the generation companion to `hasLiveInstance`, selecting the one column
-  // the screenshot cache key needs, still without hydrating the row. Used
+  // the capture cache key needs, still without hydrating the row. Used
   // where the caller needs both the liveness gate and the generation, so the
   // two collapse into a single narrow read.
   async liveInstanceGeneration(
@@ -695,50 +696,50 @@ export class IndexQueryEngine {
     };
   }
 
-  // The declared-screenshot manifest of a live instance — the `?name=`
+  // The declared-capture manifest of a live instance — the `?name=`
   // serving route's addressing read: the shared live-instance predicate (so
   // a name resolves exactly when a DSL capture of the same instance would).
   // `undefined` means no live instance matches; a live row comes back with
   // its canonical `url` (the lookup also matches `file_alias`, and the
   // MediaCache ledger is keyed off the row's own spelling, never the
   // request's) and a `manifest` that is null when nothing has been captured.
-  async liveInstanceScreenshots(
+  async liveInstanceCaptures(
     url: URL,
     opts?: GetEntryOptions,
-  ): Promise<{ url: string; manifest: ScreenshotManifest | null } | undefined> {
-    return await this.#liveRowScreenshots(url, 'instance', opts);
+  ): Promise<{ url: string; manifest: CaptureManifest | null } | undefined> {
+    return await this.#liveRowCaptures(url, 'instance', opts);
   }
 
-  // The file-row twin of `liveInstanceScreenshots`: the declared-screenshot
+  // The file-row twin of `liveInstanceCaptures`: the declared-capture
   // manifest of a live 'file' row. The `?name=` serving route falls back to
   // this when the addressed path resolves to no live instance — a FileDef
   // family's declared captures are persisted on the file rendering's row.
-  async liveFileScreenshots(
+  async liveFileCaptures(
     url: URL,
     opts?: GetEntryOptions,
-  ): Promise<{ url: string; manifest: ScreenshotManifest | null } | undefined> {
-    return await this.#liveRowScreenshots(url, 'file', opts);
+  ): Promise<{ url: string; manifest: CaptureManifest | null } | undefined> {
+    return await this.#liveRowCaptures(url, 'file', opts);
   }
 
-  async #liveRowScreenshots(
+  async #liveRowCaptures(
     url: URL,
     type: 'instance' | 'file',
     opts?: GetEntryOptions,
-  ): Promise<{ url: string; manifest: ScreenshotManifest | null } | undefined> {
+  ): Promise<{ url: string; manifest: CaptureManifest | null } | undefined> {
     let rows = (await this.#query([
-      'SELECT i.url AS url, ph.screenshots AS screenshots',
+      'SELECT i.url AS url, ph.captures AS captures',
       `FROM ${tableFromOpts(opts)} AS i ${prerenderedJoin(opts)}`,
       'WHERE',
       ...this.#liveRowConditions(url, type),
       'LIMIT 1',
     ] as Expression)) as unknown as {
       url: string;
-      screenshots: ScreenshotManifest | null;
+      captures: CaptureManifest | null;
     }[];
     if (rows.length === 0) {
       return undefined;
     }
-    return { url: rows[0].url, manifest: rows[0].screenshots ?? null };
+    return { url: rows[0].url, manifest: rows[0].captures ?? null };
   }
 
   // Shared row → InstanceOrError mapping for getInstance.
@@ -764,7 +765,7 @@ export class IndexQueryEngine {
       fitted_html: fittedHtml,
       markdown,
       search_doc: searchDoc,
-      screenshots,
+      captures,
       generation,
       realm_url: realmURL,
       indexed_at: indexedAt,
@@ -786,7 +787,7 @@ export class IndexQueryEngine {
       atomHtml,
       markdown,
       searchDoc,
-      screenshots: (screenshots as ScreenshotManifest | null) ?? null,
+      captures: (captures as CaptureManifest | null) ?? null,
       types,
       indexedAt: indexedAt != null ? parseInt(indexedAt) : null,
       deps,
@@ -872,12 +873,12 @@ export class IndexQueryEngine {
       let chunkSet = new Set(chunk);
       let chunkParams = chunk.map((href) => [param(href)]);
       let rows = (await this.#query([
-        // `ph.screenshots` is the join's only consumer here — the effective
+        // `ph.captures` is the join's only consumer here — the effective
         // error expression below is in the WHERE, where this read already
         // decided liveness before it was narrowed.
         `SELECT i.url, i.file_alias, i.pristine_doc, i.search_doc, i.types,
                 i.last_modified, i.resource_created_at, i.realm_url,
-                ph.screenshots AS screenshots`,
+                ph.captures AS captures`,
         `FROM ${tableFromOpts(opts)} as i ${prerenderedJoin(opts)}
          WHERE`,
         ...every([
@@ -901,7 +902,7 @@ export class IndexQueryEngine {
         last_modified: string | number | null;
         resource_created_at: string | number | null;
         realm_url: string | null;
-        screenshots: ScreenshotManifest | null;
+        captures: CaptureManifest | null;
       }[];
       for (let row of rows) {
         if (!row.url) {
@@ -918,7 +919,7 @@ export class IndexQueryEngine {
           lastModified: toEpoch(row.last_modified),
           resourceCreatedAt: toEpoch(row.resource_created_at),
           realmURL: row.realm_url ?? '',
-          screenshots: row.screenshots ?? null,
+          captures: row.captures ?? null,
         };
         if (chunkSet.has(row.url)) {
           resultMap.set(row.url, mapped);
@@ -951,7 +952,7 @@ export class IndexQueryEngine {
       atom_html: atomHtml,
       icon_html: iconHtml,
       markdown,
-      screenshots,
+      captures,
       generation,
       realm_url: realmURL,
       indexed_at: indexedAt,
@@ -978,7 +979,7 @@ export class IndexQueryEngine {
       atomHtml,
       iconHtml: iconHtml ?? null,
       markdown,
-      screenshots: (screenshots as ScreenshotManifest | null) ?? null,
+      captures: (captures as CaptureManifest | null) ?? null,
       lastModified: lastModified != null ? parseInt(lastModified) : null,
       resourceCreatedAt:
         resourceCreatedAt != null ? parseInt(resourceCreatedAt) : null,
@@ -1032,6 +1033,38 @@ export class IndexQueryEngine {
       'LIMIT 1',
     ] as Expression)) as unknown as { 1: number }[];
     return rows.length > 0;
+  }
+
+  // The types a realm holds cards of that descend from `ref`: the first entry
+  // of the adoption chain of every live instance row whose chain carries one
+  // of the ref's keys, once each. A row of the ref's own type contributes its
+  // own key. Rows whose visit failed count too, since a search that includes
+  // errors can return them.
+  async instanceTypesUnder(
+    realmURL: URL,
+    ref: ResolvedCodeRef,
+  ): Promise<string[]> {
+    let typeKeys = await this.typeKeysFor(ref);
+    let rows = (await this.#query([
+      'SELECT DISTINCT',
+      dbExpression({
+        pg: `i.types->>0`,
+        sqlite: `json_extract(i.types, '$[0]')`,
+      }),
+      'AS type_key',
+      'FROM boxel_index AS i',
+      'WHERE',
+      ...every([
+        ['i.realm_url =', param(realmURL.href)],
+        ['i.type =', param('instance')],
+        any([['i.is_deleted = FALSE'], ['i.is_deleted IS NULL']]),
+        any(typeKeys.map((typeKey) => [typesContains(typeKey)])),
+      ]),
+    ] as Expression)) as unknown as { type_key: string | null }[];
+    return rows
+      .map(({ type_key }) => type_key)
+      .filter((key): key is string => typeof key === 'string')
+      .sort();
   }
 
   private async getDefinition(codeRef: CodeRef): Promise<Definition> {
@@ -2665,10 +2698,10 @@ export function fileEntryFromResult(
     iconHtml: result.icon_html ?? null,
     markdown: result.markdown ?? null,
     // The search projections don't select the manifest — like an instance
-    // search entry, whose `meta.screenshots` joins only on the single-card
+    // search entry, whose `meta.captures` joins only on the single-card
     // GET — so this is null on the search path and populated on the
-    // `getFile`/`getFiles` paths, whose SELECT carries `ph.screenshots`.
-    screenshots: (result.screenshots as ScreenshotManifest | null) ?? null,
+    // `getFile`/`getFiles` paths, whose SELECT carries `ph.captures`.
+    captures: (result.captures as CaptureManifest | null) ?? null,
     lastModified,
     resourceCreatedAt,
     generation: result.generation ?? 0,
@@ -2695,7 +2728,7 @@ const PRERENDERED_HTML_SELECTS = [
   'embedded_html',
   'fitted_html',
   'markdown',
-  'screenshots',
+  'captures',
 ]
   .map((col) => `ph.${col} AS ${col}`)
   .join(', ');

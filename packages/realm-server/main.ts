@@ -42,7 +42,7 @@ import {
   type RealmRegistryRow,
 } from './lib/realm-registry-reconciler.ts';
 import { realmDiskPath } from './lib/realm-disk-path.ts';
-import { findOrMountRealm } from './lib/realm-routing.ts';
+import { findRealm } from './lib/realm-routing.ts';
 import { RealmFileChangesListener } from './lib/realm-file-changes-listener.ts';
 import { RealmIndexUpdatedListener } from './lib/realm-index-updated-listener.ts';
 import { ModuleCacheInvalidationListener } from './lib/module-cache-invalidation-listener.ts';
@@ -563,7 +563,7 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
     moduleCacheCoordinator,
   );
 
-  // One store shared by every realm this server mounts; the `_screenshot/`
+  // One store shared by every realm this server mounts; the `_capture/`
   // route serves every request as an uncaptured miss when none is configured.
   let mediaCacheAdapter = createMediaCacheAdapterFromEnv();
 
@@ -689,7 +689,7 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
           cardDocumentCache,
           realmFor: (url: URL) =>
             reconciler
-              ? findOrMountRealm(url, { realms, reconciler, dbAdapter })
+              ? findRealm(url, { realms, reconciler, dbAdapter })
               : Promise.resolve(undefined),
         },
         {

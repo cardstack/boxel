@@ -74,6 +74,7 @@ import {
 import {
   emptySearchEntryDocument,
   fieldsetFromParam,
+  htmlQueryFormats,
   htmlQueryFromParams,
   markPolicyScoped,
   parseSearchEntryQueryFromPayload,
@@ -121,6 +122,7 @@ import {
   RealmPaths,
   ensureTrailingSlash,
   isCaptureServingPath,
+  withoutCaptureServingPrefix,
   isPartialWritePath,
   join,
   partialWritePath,
@@ -231,6 +233,7 @@ import {
   scopeCallerFor,
 } from './card-operations/dispatch.ts';
 import type { ReadPlan } from './card-operations/dispatch.ts';
+import type { PrerenderedHtmlFormat } from './prerendered-html-format.ts';
 import type { LinkStrategy } from '@cardstack/base/operations';
 import {
   dischargePendingDecision,
@@ -321,13 +324,15 @@ import {
 import { erroredTargetRow } from './card-operations/read.ts';
 import { commitBatch, rehearseBatch } from './card-operations/coordinator.ts';
 import {
+  compilePolicyCard,
   noteRealmIndexMoved,
   RealmPolicyCache,
   realmPolicyRef,
   type CompiledRealmPolicy,
+  type PolicyCompileEnvironment,
 } from './card-operations/policy.ts';
 import {
-  policyQueryScope,
+  principalQueryScope,
   searchPrincipal,
   type PolicyQueryScope,
   type SearchPrincipal,
@@ -381,21 +386,22 @@ import stableStringify from 'safe-stable-stringify';
 import {
   captureOutputContentType,
   captureSpecHash,
-  captureSpecOverrides,
-  isValidScreenshotName,
+  captureIdentityOverrides,
+  isValidCaptureName,
   parseCaptureSpecParams,
-  screenshotLedgerSourceURL,
-  screenshotsMetaFromManifest,
+  captureLedgerSourceURL,
+  capturesMetaFromManifest,
   type CaptureContentType,
-  type CaptureSpec,
-  type ScreenshotManifest,
-  type ScreenshotManifestEntry,
+  type CaptureIdentity,
+  type CaptureManifest,
+  type CaptureManifestEntry,
 } from './capture-spec.ts';
 import {
+  ANONYMOUS_RENDER,
   findMediaCacheEntry,
   putMedia,
   type MediaCacheAdapter,
-  type MediaCacheEntryKey,
+  type MediaCacheCaptureKey,
 } from './media-cache.ts';
 import {
   mediaCacheMissResponse,
@@ -404,14 +410,14 @@ import {
   MEDIA_CACHE_MAX_AGE_SECONDS,
 } from './media-cache-serving.ts';
 import {
-  enqueueScreenshotCardJob,
-  estimateScreenshotQueueWait,
-  SCREENSHOT_SYNC_WAIT_BUDGET_MS,
-} from './jobs/screenshot-card.ts';
+  enqueueCaptureCardJob,
+  estimateCaptureQueueWait,
+  CAPTURE_SYNC_WAIT_BUDGET_MS,
+} from './jobs/capture-card.ts';
 import {
-  emitScreenshotPerf,
-  type ScreenshotRequestPerfEvent,
-} from './screenshot-perf.ts';
+  emitCapturePerf,
+  type CaptureRequestPerfEvent,
+} from './capture-perf.ts';
 import {
   sanitizeLoggingCorrelationId,
   X_BOXEL_LOGGING_CORRELATION_ID_HEADER,
@@ -1029,7 +1035,7 @@ const SOURCE_ETAG_VARIANT = 'source';
 const CONDITIONAL_WRITE_INDEX_SETTLE_BUDGET_MS = 1_000;
 const CONDITIONAL_WRITE_INDEX_SETTLE_POLL_MS = 250;
 
-// Card+JSON ETag is `"<indexed_at>-<realmInfoHash>[-<screenshots>]:card"`
+// Card+JSON ETag is `"<indexed_at>-<realmInfoHash>[-<captures>]:card"`
 // — quoted per RFC 9110 §8.8.3 so CDNs / browsers don't re-quote inbound
 // validators and split the cache key. Three inputs feed the base:
 //   - `indexed_at` on the primary card's index row, which bumps on
@@ -1039,9 +1045,9 @@ const CONDITIONAL_WRITE_INDEX_SETTLE_POLL_MS = 250;
 //     injects `meta.realmInfo` (name / icon / `lastPublishedAt`)
 //     into the assembled response at request time and that field
 //     can change without any card being re-indexed;
-//   - a fingerprint of the joined screenshot manifest, which lands on
+//   - a fingerprint of the joined capture manifest, which lands on
 //     the prerendered_html channel without moving `indexed_at` (see
-//     `screenshotsEtagFingerprint`).
+//     `capturesEtagFingerprint`).
 // `buildCardJsonEtag()` constructs the value; cards with foreign-
 // realm instance deps suppress emission entirely because cross-realm
 // invalidation doesn't cascade `indexed_at` today.
@@ -1063,7 +1069,7 @@ const CARD_JSON_ETAG_VARIANT = 'card-srcver';
 // budget folded in. The budget decides which cards come back with a clipped
 // closure and what a clipped one contains, and it is settable per server, so
 // changing it changes bodies while `indexed_at`, the realm-info hash and the
-// screenshots fingerprint all stand still. That is the case the constant above
+// captures fingerprint all stand still. That is the case the constant above
 // exists for, except that the change arrives by configuration rather than by
 // revision — so the value belongs in the validator rather than in the memory of
 // whoever edits it. One number for the process, so it fragments no cache: every
@@ -1468,15 +1474,15 @@ function buildEtag(
   return variant ? `${baseStr}:${variant}` : baseStr;
 }
 
-// Card+JSON ETag = `"<indexed_at>-<realmInfoHash>[-<screenshotsFingerprint>]:card"`.
+// Card+JSON ETag = `"<indexed_at>-<realmInfoHash>[-<capturesFingerprint>]:card"`.
 // The value is wrapped in double quotes to satisfy RFC 9110 §8.8.3 — CDNs and
 // browsers don't re-quote inbound validators and an unquoted token
 // would fail strict-validator parsing in some intermediaries.
 // `indexedAt` captures direct + dep-cascaded writes; the
 // `realmInfoHash` captures `attachRealmInfo()`'s request-time
 // injection of `meta.realmInfo` (which can flip without re-indexing
-// any card); the screenshots fingerprint captures the joined
-// `meta.screenshots` (see `screenshotsEtagFingerprint`). A null
+// any card); the captures fingerprint captures the joined
+// `meta.captures` (see `capturesEtagFingerprint`). A null
 // `indexedAt` suppresses ETag emission entirely.
 //
 // How much of a card's link graph a card+json body carries. `full` side-loads
@@ -1530,14 +1536,14 @@ function cardJsonShapeFor(links: LinkStrategy): CardJsonShape {
 function buildCardJsonEtag(
   indexedAt: number | null | undefined,
   realmInfoHash: string | undefined,
-  screenshotsFingerprint?: string,
+  capturesFingerprint?: string,
   shape: CardJsonShape = 'full',
   unboundedAssembly = false,
 ): string | undefined {
   if (indexedAt == null) {
     return undefined;
   }
-  let base = [`${indexedAt}`, realmInfoHash, screenshotsFingerprint]
+  let base = [`${indexedAt}`, realmInfoHash, capturesFingerprint]
     .filter(Boolean)
     .join('-');
   // A response that carries less of the card's link graph than a full read
@@ -1569,17 +1575,17 @@ function buildCardJsonEtag(
   return `"${base}:${variant}"`;
 }
 
-// The joined `meta.screenshots` travels on the prerendered_html channel,
+// The joined `meta.captures` travels on the prerendered_html channel,
 // which publishes after — and independently of — the index row: `indexed_at`
 // does not move when a capture lands, so a validator built from it alone
-// would 304 a cached document past its own screenshots forever (the same
+// would 304 a cached document past its own captures forever (the same
 // two-channel trap `buildEntryEtag` documents below). Folding a fingerprint
 // of the manifest in rotates the validator exactly when the served
-// `meta.screenshots` changes — objectKeys are content hashes, so a re-render
+// `meta.captures` changes — objectKeys are content hashes, so a re-render
 // whose captures are byte-identical keeps its fingerprint. Absent manifest
 // contributes no component, so cards without captures keep their validators.
-function screenshotsEtagFingerprint(
-  manifest: ScreenshotManifest | null | undefined,
+function capturesEtagFingerprint(
+  manifest: CaptureManifest | null | undefined,
 ): string | undefined {
   if (!manifest) {
     return undefined;
@@ -1615,6 +1621,7 @@ function buildEntryHtmlEtag(
   realmInfoHash: string | undefined,
   resolveLinksOnly = false,
   unboundedAssembly = false,
+  unshareableFormats: readonly string[] = [],
 ): string {
   let indexGeneration = doc.data.meta?.generation ?? 0;
   let htmlIds = doc.data.relationships.html?.data ?? [];
@@ -1647,6 +1654,18 @@ function buildEntryHtmlEtag(
     base = unboundedAssembly
       ? `${base}:lb-off`
       : `${base}:lb${assembledLinkResourceBudget()}`;
+  }
+  // The withheld formats this request selects. For a healthy card the body
+  // already shows a withheld rendering as `none` above, but an errored card
+  // answers a withheld format with an error rendering at the same generation
+  // it answers a shared one with its last-known-good markup, and the type's
+  // declaration can change while the card's own generations stand still — a
+  // type declared in another realm's module, say. So they are named, and a
+  // validator issued before the declaration changed never matches the body
+  // served after. A request selecting only shared formats names none, so its
+  // pure-html body keeps the `<index>:<html>` validator a client rebuilds.
+  if (unshareableFormats.length > 0) {
+    base = `${base}:dataonly-${unshareableFormats.join(',')}`;
   }
   return `"${base}"`;
 }
@@ -1881,12 +1900,14 @@ export interface TokenClaims {
   // authorization treats it specially (read-only, no exact-permissions match).
   delegated?: boolean;
   // Set on the sessions a realm renders its own cards and modules under: the
-  // indexer's, the HTML render's, a module's definition render, a capture that
-  // persists. Such a session is a realm-authority principal rather than a
-  // person. What it produces is kept and served to every viewer, so its
-  // searches find what the realm ACL grants it and nothing more — no policy,
-  // which admits a caller by who is asking, scopes them. The `user` beside it
-  // is the identity the session reads as, not someone a grant was written for.
+  // indexer's, the HTML render's, a module's definition render, the
+  // skill-validation sweep's. Such a session is a realm-authority principal
+  // rather than a person. What it produces is kept and served to every viewer,
+  // so its searches find what the realm ACL grants it and nothing more — no
+  // policy, which admits a caller by who is asking, scopes them. The `user`
+  // beside it is the identity the session reads as, not someone a grant was
+  // written for. A render a user asks for — a capture, a command — carries that
+  // user's ordinary session instead.
   realmAuthority?: true;
 }
 
@@ -2129,11 +2150,11 @@ interface Options {
   // removes both the startup wait and the prerender-pool contention it would
   // otherwise create with the tests.
   skipBootIndex?: true;
-  // How long a `_screenshot/` request holds its connection waiting for an
+  // How long a `_capture/` request holds its connection waiting for an
   // on-demand capture before answering 503 + Retry-After. Defaults to
-  // SCREENSHOT_SYNC_WAIT_BUDGET_MS; tests shrink it to exercise the timeout
+  // CAPTURE_SYNC_WAIT_BUDGET_MS; tests shrink it to exercise the timeout
   // path without holding real time.
-  screenshotSyncWaitMs?: number;
+  captureSyncWaitMs?: number;
   // How long a card read (card+json / card+html GET) holds its connection
   // waiting on the requester's own in-flight incremental indexing before
   // serving the current index generation anyway. Defaults to
@@ -2192,7 +2213,12 @@ export type RequestContext = {
   // A token the public path verified without the checks above, which that
   // path skips because nothing it serves reads them. `#sessionPrincipal`
   // runs them, for a request that turns out to need a principal.
-  unvouchedSession?: { user: string; iat: number; delegated: boolean };
+  unvouchedSession?: {
+    user: string;
+    iat: number;
+    delegated: boolean;
+    realm: string;
+  };
   // The realm ACL's verdict on an external request, recorded by
   // `Realm.handle` rather than enforced where it is made, since that runs
   // before routing and cannot tell which route the request is for. `false`
@@ -2301,6 +2327,17 @@ const COARSE_CARD_WRITE: CardWriteAdmission = {
   seenBy: async (err) => err,
   sealed: async (seal) => seal,
 };
+
+// A realm a server serves, found without being mounted. Finding it answers
+// which realm a URL is in, so a caller can be judged against that realm's
+// permissions before the server pays to mount it.
+export interface ServedRealm {
+  // The realm's URL.
+  url: string;
+  // The realm, mounted if it is not. One found among the realms this process
+  // has already published may still be starting.
+  mount(): Promise<Realm | undefined>;
+}
 
 export class Realm {
   #startedUp = new Deferred<void>();
@@ -2423,14 +2460,14 @@ export class Realm {
   #dbAdapter: DBAdapter;
   #queue: QueuePublisher;
   #virtualNetwork: VirtualNetwork;
-  #realmFor: ((url: URL) => Promise<Realm | undefined>) | undefined;
+  #realmFor: ((url: URL) => Promise<ServedRealm | undefined>) | undefined;
   #mediaCacheAdapter: MediaCacheAdapter | undefined;
   // Shared with every realm the process serves — the cache keys on absolute
   // card URLs, and one byte cap for the process is the bound that matters.
   // Absent in deployments that don't configure one (the in-browser realm),
   // where every card GET assembles its own body as before.
   #cardDocumentCache: CardDocumentCache | undefined;
-  #screenshotSyncWaitMs: number;
+  #captureSyncWaitMs: number;
   #readIndexDrainBudgetMs: number;
   #cachedRealmInfo: RealmInfo | null = null;
   // The `config` half of the same parse, held apart from `#cachedRealmInfo`
@@ -2501,20 +2538,22 @@ export class Realm {
   #cachedHostRoutingMap: HostRoutingRule[] | null = null;
 
   // What a card's `read` would answer with — whether it carries a transform
-  // stage, and how much of the link graph its declaration carries — by card
-  // URL. Asked by the card+json `GET` before it takes either path that answers
-  // without running the read, and the lookup behind it is a database read — so
-  // on a realm serving conditional requests it would be a round trip added to
-  // exactly the requests that exist to avoid one.
+  // stage, how much of the link graph its declaration carries, and which
+  // prerendered formats it serves data-only — by card URL. Asked by the
+  // card+json `GET` before it takes either path that answers without running
+  // the read, and by the routes that serve a card's markup without running it,
+  // and the lookup behind it is a database read — so on a realm serving
+  // conditional requests it would be a round trip added to exactly the
+  // requests that exist to avoid one.
   //
   // Cleared by `clearRealmIndexCaches()` alongside the entries above, which is
-  // sound because the answer is a function of the card's `adoptsFrom` and its
-  // type's declarations, and neither moves without an index swap — a card's
-  // stored type is changed by a write, and a module's declarations by
-  // reindexing it. A foreign realm's module could change without this realm
-  // swapping, and does not reach this: a card with foreign-realm dependencies
-  // is served no validator at all, so neither fast path is taken and this is
-  // never asked.
+  // sound for the answers `readPlan` keeps: those are a function of the card's
+  // stored type and of declarations in this realm's own modules (or the base
+  // realm's, which change only with a deploy), and neither moves without an
+  // index swap — a card's stored type is changed by a write, and a module's
+  // declarations by reindexing it. A type declared in another realm's module
+  // can change on that realm's schedule, so `readPlan` resolves it afresh on
+  // every ask rather than keeping it here, as it does a path holding no card.
   #readPlanByURL = new Map<string, ReadPlan>();
 
   // This loader is not meant to be used operationally, rather it serves as a
@@ -2610,19 +2649,20 @@ export class Realm {
       // in-memory deployments leave this undefined and the uncoordinated
       // CS-11029 in-process dedup is the only sharing layer.
       transpileCoordinator?: PopulateCoordinator;
-      // The MediaCache object store the `_screenshot/` route streams from.
-      // Optional — a process without one configured serves every screenshot
+      // The MediaCache object store the `_capture/` route streams from.
+      // Optional — a process without one configured serves every capture
       // request as an uncaptured miss.
       mediaCacheAdapter?: MediaCacheAdapter;
       // Coalescing + TTL cache for assembled card+json GET bodies, shared
       // across every realm in the process. Optional — without one, each card
       // GET assembles its own body.
       cardDocumentCache?: CardDocumentCache;
-      // The realm this server serves at a URL, mounted if it is not yet. An
+      // The realm this server serves at a URL, found without mounting it. An
       // explain on this realm's policy card asks about a target in whichever
-      // realm that card governs, which is commonly another one. Without it,
-      // an explain reaches only this realm's own targets.
-      realmFor?: (url: URL) => Promise<Realm | undefined>;
+      // realm that card governs, which is commonly another one, and mounts
+      // that realm only for a caller who may read it. Without it, an explain
+      // reaches only this realm's own targets.
+      realmFor?: (url: URL) => Promise<ServedRealm | undefined>;
     },
     opts?: Options,
   ) {
@@ -2657,8 +2697,8 @@ export class Realm {
       opts?.linkShapePolicy ?? LinkShapePolicy.pinned('full');
     this.#mediaCacheAdapter = mediaCacheAdapter;
     this.#cardDocumentCache = cardDocumentCache;
-    this.#screenshotSyncWaitMs =
-      opts?.screenshotSyncWaitMs ?? SCREENSHOT_SYNC_WAIT_BUDGET_MS;
+    this.#captureSyncWaitMs =
+      opts?.captureSyncWaitMs ?? CAPTURE_SYNC_WAIT_BUDGET_MS;
     this.#readIndexDrainBudgetMs =
       opts?.readIndexDrainBudgetMs ?? READ_INDEX_DRAIN_BUDGET_MS;
     let owner: string | undefined;
@@ -5808,8 +5848,8 @@ export class Realm {
       // Keyed by position rather than by index, because a position is a path
       // through the tree for an entry inside a group and there is no array for
       // one to be an index into.
-      // Resolved once, and only for a batch that explains: it can cost a
-      // revocation read no other operation needs.
+      // Resolved once, and only for a batch that explains or validates: it can
+      // cost a revocation read no other operation needs.
       let principal: Promise<string | undefined> | undefined;
       for (let { entry, target, definition } of resolved) {
         if (isWrite(definition.base)) {
@@ -5818,7 +5858,7 @@ export class Realm {
         let result: OperationResult;
         try {
           let asker =
-            definition.base === 'explain'
+            definition.base === 'explain' || definition.base === 'validate'
               ? await (principal ??= this.#sessionPrincipal(requestContext))
               : undefined;
           result = await runOperation(this.operationCore, {
@@ -6290,6 +6330,7 @@ export class Realm {
         checks,
         {
           caller: scopeCallerFor(actor),
+          searchPrincipal: this.#searchPrincipal(requestContext),
           ...lanes,
         },
       );
@@ -6298,8 +6339,10 @@ export class Realm {
       // with the answers themselves where it admits them to none, as it does
       // while active. A pair answered `true` on a predicate the check cannot
       // run, a create against a type, is not one it admits: the predicate may
-      // never hold for this caller. A check runs nothing, so what the gate
-      // decided about its pairs is all there is to decide it by.
+      // never hold for this caller. Nor is a query answered `true`: a search
+      // meets the seal only where it would return a row, and the check runs
+      // no search. A check runs nothing, so what it decided about its pairs
+      // is all there is to decide it by.
       let seal = requestContext.archivedSeal;
       if (seal && admitsAny) {
         throw seal;
@@ -6348,7 +6391,7 @@ export class Realm {
   async #capabilityLanes(
     request: Request,
     requestContext: RequestContext,
-  ): Promise<Omit<CapabilityCaller, 'caller'>> {
+  ): Promise<Omit<CapabilityCaller, 'caller' | 'searchPrincipal'>> {
     if (requestContext.coarseAllowed === undefined) {
       // The realm never judged this request, which is the realm's own internal
       // dispatch. Nothing was declined, exactly as `#coarseDeclined` reads it.
@@ -6670,6 +6713,11 @@ export class Realm {
           isPolicyCard: (types) => this.#isPolicyCard(types),
         },
         targetRealm: (href) => this.#targetRealm(href),
+        // Compiled as this realm's own policy cache compiles the card its
+        // pointer names, and kept by neither.
+        compilePolicyCard: (card) =>
+          compilePolicyCard(card.href, this.#policyCompileEnvironment()),
+        readsRealmOf: (href, caller) => this.#readsRealmOf(href, caller),
       };
     }
     return this.#operationCore;
@@ -6678,7 +6726,9 @@ export class Realm {
   // The realm an explain's target belongs to, reached on the realm server's
   // own authority: the explain decides for itself what its caller may be
   // told. A target in this realm is this realm's, and any other is the realm
-  // the server serves it from, mounted if it has to be.
+  // the server serves it from. That realm is found without being mounted, and
+  // whether it is archived and what its ACL allows are read from the database,
+  // so it is mounted only when the explain reaches for its core.
   async #targetRealm(href: string): Promise<TargetRealm | undefined> {
     let url: URL;
     try {
@@ -6687,44 +6737,97 @@ export class Realm {
       return undefined;
     }
     if (this.paths.inRealm(url)) {
-      return this.#asTargetRealm(url);
+      return {
+        url,
+        aclFor: (caller) => this.#aclFor(new URL(this.url), caller),
+        core: async () => this.operationCore,
+      };
     }
-    let peer: Realm | undefined;
+    let served: ServedRealm | undefined;
     try {
-      peer = await this.#realmFor?.(url);
+      served = await this.#realmFor?.(url);
     } catch {
       return undefined;
     }
-    if (!peer?.paths.inRealm(url)) {
+    if (!served) {
+      return undefined;
+    }
+    let realmURL = new URL(served.url);
+    if (!new RealmPaths(realmURL, this.#virtualNetwork).inRealm(url)) {
       return undefined;
     }
     // An archived realm answers every request with a refusal, so there is
     // nothing about its cards to explain. It is reached here without passing
     // its own seal, which only the realm a request is sent to applies.
-    if (await isRealmArchived(this.#dbAdapter, new URL(peer.url))) {
+    if (await isRealmArchived(this.#dbAdapter, realmURL)) {
       return undefined;
     }
-    return peer.#asTargetRealm(url);
-  }
-
-  #asTargetRealm(url: URL): TargetRealm {
     return {
       url,
-      core: this.operationCore,
-      aclFor: (caller) => this.#aclFor(caller),
+      aclFor: (caller) => this.#aclFor(realmURL, caller),
+      core: async () => {
+        try {
+          return (await served.mount())?.operationCore;
+        } catch {
+          return undefined;
+        }
+      },
     };
   }
 
-  // What this realm's ACL allows a caller, read from the same permissions a
-  // request from them is checked against. The realm's own user is permitted
-  // everything, as it is on a request.
+  // The realm this server serves `href` from, and whether a caller may read
+  // it, for a validate. Found the way an explain finds a target's realm, and
+  // judged from the database, so no realm is mounted to answer. Undefined
+  // where no realm here holds `href`.
+  async #readsRealmOf(
+    href: string,
+    caller: ScopeCaller,
+  ): Promise<{ realm: string; read: boolean } | undefined> {
+    let url: URL;
+    try {
+      url = new URL(this.#resolveAtomicHref(href), this.paths.url);
+    } catch {
+      return undefined;
+    }
+    if (this.paths.inRealm(url)) {
+      return {
+        realm: this.url,
+        read: (await this.#aclFor(new URL(this.url), caller)).read,
+      };
+    }
+    let served: ServedRealm | undefined;
+    try {
+      served = await this.#realmFor?.(url);
+    } catch {
+      return undefined;
+    }
+    if (!served) {
+      return undefined;
+    }
+    let realmURL = new URL(served.url);
+    if (!new RealmPaths(realmURL, this.#virtualNetwork).inRealm(url)) {
+      return undefined;
+    }
+    if (await isRealmArchived(this.#dbAdapter, realmURL)) {
+      return { realm: served.url, read: false };
+    }
+    return {
+      realm: served.url,
+      read: (await this.#aclFor(realmURL, caller)).read,
+    };
+  }
+
+  // What a realm's ACL allows a caller, read from the same permissions a
+  // request from them is checked against, so the realm need not be running to
+  // answer. A realm's own user is permitted everything, as it is on a
+  // request. Every realm a server serves signs in as the server's one matrix
+  // user, so this realm's own user is also the own user of any realm it asks
+  // about.
   async #aclFor(
+    realmURL: URL,
     caller: ScopeCaller,
   ): Promise<{ read: boolean; write: boolean }> {
-    let permissions = await fetchRealmPermissions(
-      this.#dbAdapter,
-      new URL(this.url),
-    );
+    let permissions = await fetchRealmPermissions(this.#dbAdapter, realmURL);
     let may: (action: RealmAction) => Promise<boolean>;
     if (caller.kind === 'user') {
       if (caller.actor === this.#matrixClientUserId) {
@@ -6756,6 +6859,27 @@ export class Realm {
     return (await isSessionRevoked(this.#dbAdapter, session.user, session.iat))
       ? undefined
       : session.user;
+  }
+
+  // Whom a capture on the `_capture/` DSL route is drawn as and served to.
+  // A capture draws what its reader may see, so it is drawn as and served to
+  // only a reader this request vouches for: a session the realm verified end
+  // to end, a capture-URL token (minted only for a reader this vouched for —
+  // see `signCaptureURLs`), or a token a public realm's read path took
+  // without checking it, once it passes those checks here. A delegated session
+  // reads this realm as the user it acts for. Anyone else is
+  // `ANONYMOUS_RENDER`, drawn with no session at all.
+  async #captureReader(requestContext: RequestContext): Promise<string> {
+    let session = requestContext.unvouchedSession;
+    if (session) {
+      let vouched =
+        (!session.delegated ||
+          ensureTrailingSlash(session.realm) ===
+            ensureTrailingSlash(this.url)) &&
+        !(await isSessionRevoked(this.#dbAdapter, session.user, session.iat));
+      return vouched ? session.user : ANONYMOUS_RENDER;
+    }
+    return requestContext.authenticatedUser ?? ANONYMOUS_RENDER;
   }
 
   // What the realm ACL declined for this request, in the form an operation
@@ -6790,35 +6914,32 @@ export class Realm {
   // what a render produces is served to every viewer, so it reads what the ACL
   // grants it and nothing more: the ACL's refusal is its answer, and the
   // policy is never asked — as a federated search never asks one about it
-  // either.
+  // either. A capability check asks the same of a query it is asked about.
   async #policyQueryScope(
     invocation: SearchInvocation | undefined,
-    request: Request,
     requestContext: RequestContext,
   ): Promise<PolicyQueryScope> {
-    let principal = this.#searchPrincipal(request, requestContext);
-    if (!invocation || principal?.kind !== 'user') {
+    if (!invocation) {
       return { kind: 'denied' };
     }
-    return await policyQueryScope(this.operationCore, {
-      ...invocation,
-      principal,
-    });
+    return await principalQueryScope(
+      this.operationCore,
+      invocation,
+      this.#searchPrincipal(requestContext),
+    );
   }
 
   // Who a search runs for. A realm-authority principal is a session a realm
-  // renders its own cards under, or any request a render tab sends: the tab
-  // marks every request, whatever session it holds — one minted before its
-  // minter carried the claim, or one a command runs under — and what such a
-  // request reads is a render's. A caller who sets the marker themselves only
-  // narrows their own search to what the ACL grants them.
+  // renders its own cards under, which its claim says. A render tab marks
+  // every request it sends, but the marker says nothing about whose render it
+  // is: a capture a user asks for, or a command, renders on that user's
+  // ordinary session and is scoped as them.
   #searchPrincipal(
-    request: Request,
     requestContext: RequestContext,
   ): SearchPrincipal | undefined {
     return searchPrincipal(
       requestContext.authenticatedUser,
-      requestContext.realmAuthority || isDuringPrerenderRequest(request),
+      requestContext.realmAuthority,
     );
   }
 
@@ -7192,7 +7313,7 @@ export class Realm {
     try {
       let dispatch = this.#routeRequest(request, localPath, requestContext);
       if (!isLocal) {
-        // A capture-URL token (`?token=` on a `_screenshot/` GET) authorizes
+        // A capture-URL token (`?token=` on a `_capture/` GET) authorizes
         // exactly this request without an Authorization header — the door for
         // fetches the host's auth service worker cannot reach (`<object>`/
         // `<embed>` loads, top-level navigations). A missing or failing token
@@ -7375,7 +7496,7 @@ export class Realm {
     localPath: LocalPath,
     requestContext: RequestContext,
   ): RequestDispatch {
-    // Screenshot serving dispatches on the path prefix, not the router
+    // Capture serving dispatches on the path prefix, not the router
     // table: the router keys routes on the Accept header, and the browser
     // requests this route must serve (`<img>` loads, og:image fetches)
     // send `image/*`-shaped Accept values that match no supported mime
@@ -7389,10 +7510,10 @@ export class Realm {
       return {
         consumesCoarseOutcome: false,
         handle: () =>
-          this.serveScreenshot(
+          this.serveCapture(
             request,
             requestContext,
-            localPath.slice(CAPTURE_SERVING_PREFIX.length),
+            withoutCaptureServingPrefix(localPath),
           ),
       };
     }
@@ -7406,7 +7527,7 @@ export class Realm {
     // `_scoped-css/` prefix, not just the filename shape, so a realm file
     // whose path merely looks hashed isn't shadowed — `scopedCSSServingHref`
     // is the only producer of these hrefs and always roots them under the
-    // prefix. Inherits realm-read auth like screenshot serving; GET only for
+    // prefix. Inherits realm-read auth like capture serving; GET only for
     // the same HEAD-oracle reason.
     if (
       request.method === 'GET' &&
@@ -7430,7 +7551,7 @@ export class Realm {
         handle: async () => notFound(request, requestContext),
       };
     }
-    // The GET dispatch above claims the whole `_screenshot/` subtree, so a
+    // The GET dispatch above claims the whole `_capture/` subtree, so a
     // realm file stored under it could never be read back — it would
     // index, list, and answer every GET as an uncaptured miss. Refuse
     // creation writes up front so the collision surfaces at write time
@@ -8701,7 +8822,7 @@ export class Realm {
     });
   }
 
-  // Verifies a capture-URL token (`?token=` on a `_screenshot/` GET) and
+  // Verifies a capture-URL token (`?token=` on a `_capture/` GET) and
   // returns the user it authenticates, or undefined so the caller falls back
   // to the normal permission check. Every rejection is a fall-through, never
   // a thrown 401: an invalid token must not fail a request that public
@@ -8790,15 +8911,18 @@ export class Realm {
     return claims.user;
   }
 
-  // Mints capture-URL tokens: signed variants of this realm's `_screenshot/`
+  // Mints capture-URL tokens: signed variants of this realm's `_capture/`
   // URLs that authorize their own GET without a header, for the fetches the
   // host's auth service worker cannot reach. Routed as QUERY (a pure
   // computation with a body), so the realm-read gate the serving path
   // enforces is exactly the gate on minting — the token grants nothing the
-  // caller doesn't already hold; it only makes that grant portable. An
-  // anonymous caller (a public realm's reader) gets the URLs echoed back
-  // unsigned: there is no user to bind a token to, and none is needed where
-  // anonymous read already serves.
+  // caller doesn't already hold; it only makes that grant portable. A token
+  // binds the reader the request vouches for, the same reader a capture on
+  // the URL is drawn as and served to (`#captureReader`), since serving it
+  // trusts the user it names as that reader. A caller it vouches for as no
+  // one (a public realm's anonymous reader, or a session that realm can't
+  // vouch for) gets the URLs echoed back unsigned: there is no user to bind
+  // a token to, and none is needed where anonymous read already serves.
   private async signCaptureURLs(
     request: Request,
     requestContext: RequestContext,
@@ -8824,7 +8948,8 @@ export class Realm {
         requestContext,
       });
     }
-    let user = requestContext.authenticatedUser;
+    let reader = await this.#captureReader(requestContext);
+    let user = reader === ANONYMOUS_RENDER ? undefined : reader;
     let signed: {
       url: string;
       signedUrl: string;
@@ -8889,7 +9014,7 @@ export class Realm {
     });
   }
 
-  // The realm's screenshot-serving surface: `_screenshot/{instanceLocalPath}`
+  // The realm's capture-serving surface: `_capture/{instanceLocalPath}`
   // resolves a capture of one instance and streams it from the MediaCache
   // with content-hash ETags and short-max-age revalidation (see
   // `media-cache-serving.ts` for the response contract). The durable URL is
@@ -8907,7 +9032,7 @@ export class Realm {
   // store unconfigured, addressing unresolvable — is an uncaptured miss:
   // 404 with a short max-age so an `<img>` picks up a later capture on
   // revalidation, never a synchronous wait inside an image load.
-  private async serveScreenshot(
+  private async serveCapture(
     request: Request,
     requestContext: RequestContext,
     instanceLocalPath: string,
@@ -8926,7 +9051,7 @@ export class Realm {
     // unknown params by name), and so it can never enter the ledger identity.
     searchParams.delete(CAPTURE_URL_TOKEN_PARAM);
 
-    // `name=` addresses a declared screenshot through the instance's
+    // `name=` addresses a declared capture through the instance's
     // manifest — a different addressing form from the capture-spec params,
     // so mixing them is a request with two contradictory identities.
     let name = searchParams.get('name');
@@ -8940,9 +9065,9 @@ export class Realm {
           requestContext,
         });
       }
-      if (!isValidScreenshotName(name)) {
+      if (!isValidCaptureName(name)) {
         return badRequest({
-          message: `"${name}" is not a valid screenshot name`,
+          message: `"${name}" is not a valid capture name`,
           requestContext,
         });
       }
@@ -8966,14 +9091,12 @@ export class Realm {
       let manifestLookupStart = Date.now();
       let readInstance = async () => {
         let row =
-          await this.#realmIndexQueryEngine.liveInstanceScreenshots(
-            instanceURL,
-          );
+          await this.#realmIndexQueryEngine.liveInstanceCaptures(instanceURL);
         return row && ({ kind: 'instance', ...row } as const);
       };
       let readFileRow = async () => {
         let row =
-          await this.#realmIndexQueryEngine.liveFileScreenshots(rawFileURL);
+          await this.#realmIndexQueryEngine.liveFileCaptures(rawFileURL);
         return row && ({ kind: 'file', ...row } as const);
       };
       let reads = urlNamesFile(rawFileURL)
@@ -8986,7 +9109,7 @@ export class Realm {
       // own canonical url, never the request's spelling: the lookups also
       // match `file_alias`, and an alias-addressed hit would otherwise look
       // up a source URL the ledger never held.
-      let manifestEntry: ScreenshotManifestEntry | undefined;
+      let manifestEntry: CaptureManifestEntry | undefined;
       let manifestSourceURL = instanceURL.href;
       for (let read of reads) {
         let row = await read();
@@ -8996,7 +9119,7 @@ export class Realm {
         let entry = row.manifest?.[name];
         if (entry) {
           manifestEntry = entry;
-          manifestSourceURL = screenshotLedgerSourceURL(row.url, row.kind);
+          manifestSourceURL = captureLedgerSourceURL(row.url, row.kind);
           break;
         }
       }
@@ -9007,7 +9130,7 @@ export class Realm {
       // The manifest names both the capture identity (`specHash`) and the
       // exact artifact (`objectKey`), and the lookup pins both — so what
       // this URL serves always matches the `hash` the joined
-      // `meta.screenshots` advertises for it, whatever newer ledger rows
+      // `meta.captures` advertises for it, whatever newer ledger rows
       // exist (media persists before its manifest publishes, and a
       // carried-forward capture's row keeps an older generation). A fresher
       // capture serves once its own manifest publishes moments later; a
@@ -9023,7 +9146,7 @@ export class Realm {
       if (!entry) {
         return mediaCacheMissResponse({ requestContext });
       }
-      let perf: ScreenshotServePerf = {
+      let perf: CaptureServePerf = {
         requestStart,
         correlationId: sanitizeLoggingCorrelationId(
           request.headers.get(X_BOXEL_LOGGING_CORRELATION_ID_HEADER),
@@ -9040,7 +9163,7 @@ export class Realm {
         mediaCacheAdapter: this.#mediaCacheAdapter,
         dbAdapter: this.#dbAdapter,
       });
-      this.emitScreenshotServePerf(
+      this.emitCaptureServePerf(
         {
           realmURL: this.url,
           sourceURL: manifestSourceURL,
@@ -9078,15 +9201,21 @@ export class Realm {
     // The cache key pins the instance's own index generation: an edit bumps
     // it, so an edited card can never serve a stale capture, and an
     // unchanged card is a pure ledger hit with zero Chrome work.
-    let entryKey: MediaCacheEntryKey = {
+    let entryKey: MediaCacheCaptureKey = {
       realmURL: this.url,
       sourceURL: instanceURL.href,
       captureSpecHash: await captureSpecHash(parsed.spec),
       sourceGeneration,
     };
+    // A capture draws what its reader may see, so the reader is served the
+    // one drawn as them, or the realm's own, and a miss renders as them.
+    let reader = await this.#captureReader(requestContext);
     let ledgerLookupStart = Date.now();
-    let entry = await findMediaCacheEntry(this.#dbAdapter, entryKey);
-    let perf: ScreenshotServePerf = {
+    let entry = await findMediaCacheEntry(this.#dbAdapter, {
+      ...entryKey,
+      servedTo: reader,
+    });
+    let perf: CaptureServePerf = {
       requestStart,
       correlationId: sanitizeLoggingCorrelationId(
         request.headers.get(X_BOXEL_LOGGING_CORRELATION_ID_HEADER),
@@ -9106,17 +9235,19 @@ export class Realm {
         entry,
         mediaCacheAdapter: this.#mediaCacheAdapter,
         dbAdapter: this.#dbAdapter,
+        variesByReader: true,
       });
-      this.emitScreenshotServePerf(entryKey, perf, 'hit', {
+      this.emitCaptureServePerf(entryKey, perf, 'hit', {
         lane: entry.lane,
         serveMs: Date.now() - serveStart,
       });
       return response;
     }
-    return await this.captureScreenshotOnDemand(
+    return await this.runCaptureOnDemand(
       request,
       requestContext,
       entryKey,
+      reader,
       parsed.spec,
       perf,
     );
@@ -9200,17 +9331,17 @@ export class Realm {
     });
   }
 
-  // The stage clocks `serveScreenshot` accumulates before the hit/miss
+  // The stage clocks `serveCapture` accumulates before the hit/miss
   // fork, threaded into the miss path so its terminal emit covers the whole
   // request.
-  private emitScreenshotServePerf(
-    entryKey: MediaCacheEntryKey,
-    perf: ScreenshotServePerf,
-    outcome: ScreenshotRequestPerfEvent['outcome'],
-    fields: Partial<ScreenshotRequestPerfEvent> = {},
-    surface: ScreenshotRequestPerfEvent['surface'] = 'get-dsl',
+  private emitCaptureServePerf(
+    entryKey: MediaCacheCaptureKey,
+    perf: CaptureServePerf,
+    outcome: CaptureRequestPerfEvent['outcome'],
+    fields: Partial<CaptureRequestPerfEvent> = {},
+    surface: CaptureRequestPerfEvent['surface'] = 'get-dsl',
   ): void {
-    emitScreenshotPerf({
+    emitCapturePerf({
       eventType: 'request',
       surface,
       outcome,
@@ -9235,13 +9366,13 @@ export class Realm {
   // power on an unauthenticated-reachable GET is an unbounded spec space —
   // on an open realm every distinct viewport/dsf/fullPage/clip combination
   // is its own render and its own ledger entry — so new captures are
-  // per-realm opt-in (`allowArbitraryScreenshots` on the realm's config
+  // per-realm opt-in (`allowArbitraryCaptures` on the realm's config
   // card — the gate blocks Chrome work, never serving). That opt-in is the
   // deliberate cost boundary: no per-instance spec-cardinality cap beyond
   // it, since the parse bounds each capture's pixel cost, the serialized
   // lane bounds concurrency, and the on-demand lane's idle TTL reclaims
   // entries nothing requests. An open realm's captures run through the same
-  // per-realm serialized screenshot queue as the POST endpoint, bounded by
+  // per-realm serialized capture queue as the POST endpoint, bounded by
   // a sync-wait budget:
   //   - lane already too deep for the budget → immediate 503 + Retry-After
   //     (fail fast instead of holding a doomed connection);
@@ -9249,25 +9380,28 @@ export class Realm {
   //     capture to the MediaCache itself, so a wait that times out (503 +
   //     Retry-After) still lands the capture and the client's retry is a
   //     pure ledger hit.
-  private async captureScreenshotOnDemand(
+  private async runCaptureOnDemand(
     request: Request,
     requestContext: RequestContext,
-    entryKey: MediaCacheEntryKey,
-    spec: CaptureSpec,
-    perf: ScreenshotServePerf,
+    entryKey: MediaCacheCaptureKey,
+    reader: string,
+    spec: CaptureIdentity,
+    perf: CaptureServePerf,
   ): Promise<ResponseWithNodeStream> {
     let gateStart = Date.now();
-    let gateOpen = await this.allowsArbitraryScreenshots();
+    let gateOpen = await this.allowsArbitraryCaptures();
     let gateMs = Date.now() - gateStart;
     if (!gateOpen) {
-      this.emitScreenshotServePerf(entryKey, perf, 'gated', { gateMs });
+      this.emitCaptureServePerf(entryKey, perf, 'gated', { gateMs });
       // 403 isn't heuristically cacheable, so with no explicit freshness a
       // browser re-requests on every `<img>` load — and absent-⇒-false means
       // every realm is gated by default. Carry the same short window the miss
       // uses so a gated realm's image loads stop hammering the origin (and so
-      // opting the realm in surfaces images within that same window).
+      // opting the realm in surfaces images within that same window). Another
+      // reader may hold a capture of this URL, so the refusal varies by reader
+      // as a hit does.
       return createResponse({
-        body: `This realm does not allow arbitrary screenshot captures: set "allowArbitraryScreenshots" to true on the realm's config card to enable them. Captures that already exist still serve.`,
+        body: `This realm does not allow arbitrary captures: set "allowArbitraryCaptures" to true on the realm's config card to enable them. Captures that already exist still serve.`,
         init: {
           status: 403,
           headers: {
@@ -9275,56 +9409,50 @@ export class Realm {
           },
         },
         requestContext,
+        varyOn: ['Authorization'],
       });
     }
 
-    // Render as the realm's owner — the same identity an index pass renders
-    // under. The requester already proved realm read; the capture is a
-    // realm-derived artifact, not a per-user view. Resolved ahead of the
-    // congestion pre-check because the twin probe matches on `runAs`.
-    let owner = await this.getRealmOwnerUserId();
-
-    let concurrencyGroup = `screenshot:${this.url}`;
+    // The capture renders as its reader, and the twin probe matches on the
+    // `runAs` it renders as.
+    let concurrencyGroup = `capture:${this.url}`;
     let precheckStart = Date.now();
-    let estimate = await estimateScreenshotQueueWait(
+    let estimate = await estimateCaptureQueueWait(
       this.#dbAdapter,
       concurrencyGroup,
-      { ...entryKey, runAs: owner },
+      { ...entryKey, runAs: reader },
     );
     let precheckMs = Date.now() - precheckStart;
     // A request whose capture is already queued or rendering coalesces onto
-    // that job (see `chooseScreenshotCardCoalesceDecision`) and costs no new
+    // that job (see `chooseCaptureCardCoalesceDecision`) and costs no new
     // Chrome work, so the lane's depth is not its wait — only a genuinely new
     // capture faces the congestion gate. Without this, the second viewer of a
     // card that is mid-render is 503'd against a wait it would never incur.
     if (
       !estimate.hasTwin &&
-      estimate.estimatedWaitMs > this.#screenshotSyncWaitMs
+      estimate.estimatedWaitMs > this.#captureSyncWaitMs
     ) {
-      this.emitScreenshotServePerf(entryKey, perf, 'congested', {
+      this.emitCaptureServePerf(entryKey, perf, 'congested', {
         gateMs,
         precheckMs,
         hasTwin: estimate.hasTwin,
       });
-      return this.screenshotRetryLater(
-        requestContext,
-        estimate.estimatedWaitMs,
-      );
+      return this.captureRetryLater(requestContext, estimate.estimatedWaitMs);
     }
 
     let enqueueStart = Date.now();
-    let job = await enqueueScreenshotCardJob(
+    let job = await enqueueCaptureCardJob(
       {
         realmURL: this.url,
-        realmUsername: owner,
-        runAs: owner,
+        realmUsername: await this.getRealmOwnerUserId(),
+        runAs: reader,
         cardId: entryKey.sourceURL,
         format: spec.format,
         // The spec's geometry overrides (viewport / dsf / fullPage / clip)
         // ride to the capture engine; the entry key's `captureSpecHash`
         // already covers them, so the persisted capture serves only on this
         // exact spec's URL.
-        captureSpec: captureSpecOverrides(spec),
+        captureSpec: captureIdentityOverrides(spec),
         persist: { ...entryKey, lane: 'on-demand' },
         surface: 'get-dsl',
         loggingCorrelationId: perf.correlationId,
@@ -9335,7 +9463,7 @@ export class Realm {
     );
     let enqueueMs = Date.now() - enqueueStart;
     let jobWaitStart = Date.now();
-    let stagePerf: Partial<ScreenshotRequestPerfEvent> = {
+    let stagePerf: Partial<CaptureRequestPerfEvent> = {
       gateMs,
       precheckMs,
       hasTwin: estimate.hasTwin,
@@ -9353,20 +9481,20 @@ export class Realm {
         new Promise<typeof timedOut>((resolve) => {
           timeoutHandle = setTimeout(
             () => resolve(timedOut),
-            this.#screenshotSyncWaitMs,
+            this.#captureSyncWaitMs,
           );
           timeoutHandle.unref?.();
         }),
       ]);
       if (outcome === timedOut) {
-        this.emitScreenshotServePerf(entryKey, perf, 'timeout', {
+        this.emitCaptureServePerf(entryKey, perf, 'timeout', {
           ...stagePerf,
           jobWaitMs: Date.now() - jobWaitStart,
         });
         // The job keeps running and persists its own capture; the retry
         // hint is one average capture, since this request is now at the
         // front of the lane.
-        return this.screenshotRetryLater(
+        return this.captureRetryLater(
           requestContext,
           Math.max(estimate.avgCaptureMs, 1000),
         );
@@ -9374,7 +9502,10 @@ export class Realm {
       let jobWaitMs = Date.now() - jobWaitStart;
       // Prefer the ledger entry the job persisted; fall back to persisting
       // here from the response for a worker that has no store configured.
-      let entry = await findMediaCacheEntry(this.#dbAdapter, entryKey);
+      let entry = await findMediaCacheEntry(this.#dbAdapter, {
+        ...entryKey,
+        servedTo: reader,
+      });
       if (!entry && outcome.status === 'ready' && outcome.base64) {
         let binary = atob(outcome.base64);
         let bytes = new Uint8Array(binary.length);
@@ -9383,22 +9514,26 @@ export class Realm {
         }
         await putMedia(this.#dbAdapter, this.#mediaCacheAdapter!, {
           ...entryKey,
+          renderedAs: reader,
           bytes,
           contentType: outcome.contentType ?? 'image/png',
           width: outcome.width ?? null,
           height: outcome.height ?? null,
           lane: 'on-demand',
         });
-        entry = await findMediaCacheEntry(this.#dbAdapter, entryKey);
+        entry = await findMediaCacheEntry(this.#dbAdapter, {
+          ...entryKey,
+          servedTo: reader,
+        });
       }
       if (!entry) {
-        this.emitScreenshotServePerf(entryKey, perf, 'error', {
+        this.emitCaptureServePerf(entryKey, perf, 'error', {
           ...stagePerf,
           jobWaitMs,
         });
         let response = systemError({
           requestContext,
-          message: `screenshot capture failed for ${entryKey.sourceURL}`,
+          message: `capture failed for ${entryKey.sourceURL}`,
           additionalError: outcome.error
             ? new Error(String(outcome.error))
             : undefined,
@@ -9416,6 +9551,7 @@ export class Realm {
           'cache-control',
           `${mediaCacheVisibility(requestContext)}, max-age=${MEDIA_CACHE_MAX_AGE_SECONDS}`,
         );
+        response.headers.append('vary', 'Authorization');
         return response;
       }
       let serveStart = Date.now();
@@ -9425,8 +9561,9 @@ export class Realm {
         entry,
         mediaCacheAdapter: this.#mediaCacheAdapter!,
         dbAdapter: this.#dbAdapter,
+        variesByReader: true,
       });
-      this.emitScreenshotServePerf(entryKey, perf, 'rendered', {
+      this.emitCaptureServePerf(entryKey, perf, 'rendered', {
         ...stagePerf,
         jobWaitMs,
         serveMs: Date.now() - serveStart,
@@ -9438,13 +9575,13 @@ export class Realm {
       // lands here — without this emit, the pipeline's hard-failure class
       // would read on the telemetry board as missing request volume instead
       // of a rise in `error`.
-      this.emitScreenshotServePerf(entryKey, perf, 'error', {
+      this.emitCaptureServePerf(entryKey, perf, 'error', {
         ...stagePerf,
         jobWaitMs: Date.now() - jobWaitStart,
       });
       return systemError({
         requestContext,
-        message: `screenshot capture failed for ${entryKey.sourceURL}`,
+        message: `capture failed for ${entryKey.sourceURL}`,
         additionalError: e instanceof Error ? e : new Error(String(e)),
       });
     } finally {
@@ -9454,7 +9591,7 @@ export class Realm {
     }
   }
 
-  private screenshotRetryLater(
+  private captureRetryLater(
     requestContext: RequestContext,
     estimatedWaitMs: number,
   ): Response {
@@ -9463,7 +9600,7 @@ export class Realm {
       // Every other refusal on this route names its reason (the 400s name the
       // field, the 403 names the flag); a sync-wait caller honoring
       // Retry-After gets one too.
-      body: `Screenshot capture is queued; retry after ${retryAfterSeconds} seconds.`,
+      body: `Capture is queued; retry after ${retryAfterSeconds} seconds.`,
       init: {
         status: 503,
         headers: {
@@ -9478,8 +9615,9 @@ export class Realm {
   // indexed config card on every check — so a `realm.json` edit takes
   // effect with its own index update, with no restart and no cache to
   // invalidate. Absent, unindexed, or anything but `true` all read as
-  // gated.
-  private async allowsArbitraryScreenshots(): Promise<boolean> {
+  // gated. The legacy `allowArbitraryScreenshots` key opens it too, so a
+  // config that opted in under that spelling stays open.
+  private async allowsArbitraryCaptures(): Promise<boolean> {
     let realmConfigCardURL = new URL(
       this.paths.fileURL('realm.json').href.replace(/\.json$/, ''),
     );
@@ -9487,7 +9625,11 @@ export class Realm {
     if (entry?.type !== 'instance') {
       return false;
     }
-    return entry.instance.attributes?.allowArbitraryScreenshots === true;
+    let attributes = entry.instance.attributes;
+    return (
+      attributes?.allowArbitraryCaptures === true ||
+      attributes?.allowArbitraryScreenshots === true
+    );
   }
 
   // The stored bytes at `localPath`, read as the `readSource` operation. Every
@@ -9923,6 +10065,7 @@ export class Realm {
             user: publicToken.user,
             iat: publicToken.iat,
             delegated: Boolean(publicToken.delegated),
+            realm: publicToken.realm,
           };
         } catch (e) {
           // fall through with no identity
@@ -10643,7 +10786,7 @@ export class Realm {
   //
   // The prefixes the router or `handle` do claim are the exception in the
   // other direction: a path under one is answered by that endpoint rather than
-  // from disk, so bytes stored beneath it — `_screenshot/…`, say, whose GET is
+  // from disk, so bytes stored beneath it — `_capture/…`, say, whose GET is
   // claimed before the router — are reachable through this read and through no
   // byte route. Worth knowing when a facade routes here; not worth a
   // name-based refusal, which is what got this wrong in the first place.
@@ -10883,18 +11026,15 @@ export class Realm {
           ...(fileEntry.resource?.meta?.queryFieldDefs
             ? { queryFieldDefs: fileEntry.resource.meta.queryFieldDefs }
             : {}),
-          // The file row's declared-screenshot manifest, joined at serve time
+          // The file row's declared-capture manifest, joined at serve time
           // the way the card+json GET joins an instance row's — never
           // persisted into the index row's resource itself.
-          ...(fileEntry.screenshots
+          ...(fileEntry.captures
             ? {
-                screenshots: screenshotsMetaFromManifest(
-                  fileEntry.screenshots,
-                  {
-                    realmURL: this.url,
-                    instanceLocalPath: localPath,
-                  },
-                ),
+                captures: capturesMetaFromManifest(fileEntry.captures, {
+                  realmURL: this.url,
+                  instanceLocalPath: localPath,
+                }),
               }
             : {}),
         },
@@ -11503,14 +11643,14 @@ export class Realm {
       // server setting, or on whether the caller's last read was a write
       // echo, rather than on anything the caller did.
       let realmInfoHash = this.getCachedRealmInfoHash();
-      let screenshots = screenshotsEtagFingerprint(entry!.screenshots);
+      let captures = capturesEtagFingerprint(entry!.captures);
       let issued = new Set(
         CARD_JSON_SHAPES.flatMap((shape) =>
           [false, true].map((unboundedAssembly) =>
             buildCardJsonEtag(
               entry!.indexedAt,
               realmInfoHash,
-              screenshots,
+              captures,
               shape,
               unboundedAssembly,
             ),
@@ -11905,15 +12045,15 @@ export class Realm {
         meta: { lastModified, ...(version != null ? { version } : {}) },
       },
     });
-    // The PATCH echo carries the joined `meta.screenshots` like a GET does —
+    // The PATCH echo carries the joined `meta.captures` like a GET does —
     // the store replaces an instance's meta wholesale from a save response, so
     // an echo without it would wipe the key client-side until the next GET.
     // The two representations part company on the link graph only, which is
     // what the `write-echo` validator variant below records.
-    if (entry.screenshots) {
+    if (entry.captures) {
       doc.data.meta = {
         ...doc.data.meta,
-        screenshots: screenshotsMetaFromManifest(entry.screenshots, {
+        captures: capturesMetaFromManifest(entry.captures, {
           realmURL: this.url,
           instanceLocalPath: localPath,
         }),
@@ -11928,7 +12068,7 @@ export class Realm {
       : buildCardJsonEtag(
           entry.indexedAt,
           this.getCachedRealmInfoHash(),
-          screenshotsEtagFingerprint(entry.screenshots),
+          capturesEtagFingerprint(entry.captures),
           'write-echo',
         );
     this.#serveInstanceIdsAsRRI(doc);
@@ -12625,7 +12765,7 @@ export class Realm {
         : buildCardJsonEtag(
             result.indexedAt,
             this.getCachedRealmInfoHash(),
-            screenshotsEtagFingerprint(result.screenshots),
+            capturesEtagFingerprint(result.captures),
             // The strategy the read reports, not the one this request asked
             // for: the type's declaration may narrow it further, and a `HEAD`
             // states the validator the `GET` would send.
@@ -12872,7 +13012,7 @@ export class Realm {
           peekEtag = buildCardJsonEtag(
             instanceEntry.indexedAt,
             realmInfoHash,
-            screenshotsEtagFingerprint(instanceEntry.screenshots),
+            capturesEtagFingerprint(instanceEntry.captures),
             cardJsonShapeFor(
               effectiveLinkStrategy(plan.links, resolveLinksOnly),
             ),
@@ -13004,7 +13144,7 @@ export class Realm {
   ): Promise<CardJsonAssembly> {
     // The document itself is the `read` operation's — link expansion, the
     // `links.self` and prefix-form ids, the freshly joined `meta.generation`
-    // and `meta.screenshots`, the file-metadata answer for a path that holds
+    // and `meta.captures`, the file-metadata answer for a path that holds
     // bytes, and which absence a missing row is. What stays here is the
     // response around it: the validator, the redirect, the creation time, and
     // the mapping from a refusal to a status.
@@ -13087,7 +13227,7 @@ export class Realm {
       : buildCardJsonEtag(
           headers.indexedAt,
           this.getCachedRealmInfoHash(),
-          screenshotsEtagFingerprint(headers.screenshots),
+          capturesEtagFingerprint(headers.captures),
           // Read off the assembly for the same reason `deps` and `indexedAt`
           // are: the strategy this body was assembled under is the read's
           // answer, and the request's own `resolveLinksOnly` is only half of
@@ -13289,6 +13429,19 @@ export class Realm {
     let duringPrerender = isDuringPrerenderRequest(request);
     let resolveLinksOnly =
       this.#decideLinkShape(request, 'single-row')?.mode === 'links-only';
+    // A read rooted at this card, so the formats its type's `read` declares
+    // unshareable are served data-only here, as everywhere a read of the card
+    // serves its markup. The route answers without running the read, which is
+    // why the declaration is asked for on its own rather than learned from an
+    // assembly.
+    let { unshareableFormats } = await readPlan(
+      this.operationCore,
+      kind === 'file'
+        ? dbUrl
+        : this.paths.fileURL(localPath.replace(/\.json$/, '') || 'index'),
+      undefined,
+      this.#readPlanByURL,
+    );
     let doc = await this.#realmIndexQueryEngine.searchEntry(
       dbUrl,
       { htmlQuery, fieldset, kind },
@@ -13298,6 +13451,7 @@ export class Realm {
           ? { cacheOnlyDefinitions: true, skipLinkAssemblyBudget: true }
           : {}),
         ...(resolveLinksOnly ? { resolveLinksOnly: true } : {}),
+        ...(unshareableFormats.length > 0 ? { unshareableFormats } : {}),
       },
     );
     if (!doc) {
@@ -13312,6 +13466,14 @@ export class Realm {
       this.getCachedRealmInfoHash(),
       resolveLinksOnly,
       duringPrerender,
+      // Only the withheld formats this request selects decide its body; an
+      // htmlQuery naming no format selects among every one.
+      fieldset.html
+        ? unshareableFormats.filter((format) => {
+            let asked = htmlQueryFormats(htmlQuery);
+            return asked.length === 0 || asked.includes(format);
+          })
+        : [],
     );
     let ifNoneMatch = request.headers.get('if-none-match');
     if (ifNoneMatch && ifNoneMatchMatches(ifNoneMatch, etag)) {
@@ -13610,6 +13772,9 @@ export class Realm {
       ...(opts?.links === 'none' && !opts?.omitIncluded
         ? { omitRelationships: true }
         : {}),
+      ...(opts?.unshareableFormats?.length
+        ? { unshareableFormats: opts.unshareableFormats }
+        : {}),
       // `!== undefined` so an explicit priority 0 (system-initiated) survives.
       ...(opts?.priority !== undefined ? { priority: opts.priority } : {}),
       ...(opts?.timings ? { timings: opts.timings } : {}),
@@ -13692,18 +13857,21 @@ export class Realm {
     // what its result holds is the realm's to decide, not the caller's filter.
     let resolvedByServer = isNamedQueryPayload(payload);
     // How much of each result's link graph a named query's declaration lets
-    // its results carry. An ad-hoc search declares nothing.
+    // its results carry, and which formats it serves them data-only for. An
+    // ad-hoc search declares neither.
     let declaredLinks: LinkStrategy | undefined;
+    let unshareableFormats: PrerenderedHtmlFormat[] = [];
     if (isNamedQueryPayload(payload)) {
       // A named query searches this realm and no other, so this realm is the
       // whole of the scope it may resolve to.
       try {
         let resolved = await resolveNamedQuery(this.operationCore, payload, {
-          principal: this.#searchPrincipal(request, requestContext),
+          principal: this.#searchPrincipal(requestContext),
           realms: [this.url],
         });
         payload = resolved.query;
         declaredLinks = resolved.links;
+        unshareableFormats = resolved.unshareableFormats;
       } catch (err: unknown) {
         if (!isOperationFailure(err)) {
           throw err;
@@ -13733,7 +13901,7 @@ export class Realm {
       // nothing are the same answer, as they are for a card they may not read.
       let policyScope =
         this.#coarseDeclined(requestContext) === 'all'
-          ? await this.#policyQueryScope(invocation, request, requestContext)
+          ? await this.#policyQueryScope(invocation, requestContext)
           : undefined;
       // Marked policy-scoped, so a client holding this realm's cards adds none
       // the realm did not return: the caller's policy decided the rows, or the
@@ -13827,6 +13995,13 @@ export class Realm {
           // `included[]` expansion is throwaway work in this path.
           omitIncluded: duringPrerender,
           links,
+          // A render's search keeps every format's markup, whatever the
+          // declaration withholds. What it draws becomes part of the
+          // embedding card's own prerendered HTML, which that card's own
+          // declarations govern — and a render served a row data-only would
+          // draw the row from its data under the realm's authority, baking in
+          // the same content its markup holds.
+          ...(duringPrerender ? {} : { unshareableFormats }),
           ...(signal ? { signal } : {}),
         });
       // Cut an over-budget item-leg search off (408) rather than run it to
@@ -14997,6 +15172,22 @@ export class Realm {
     }
   }
 
+  // The prerendered formats reads rooted at this card serve data-only, as its
+  // type's `read` declares them: none where it declares none. For a route
+  // outside this class that serves a card's markup straight from the index —
+  // the host-mode page — so it withholds the same formats every read of the
+  // card here does. `cardURL` is taken in this realm's own spelling of its
+  // URL, which is the one the declaration is resolved against.
+  async unshareableFormatsFor(cardURL: URL): Promise<PrerenderedHtmlFormat[]> {
+    let { unshareableFormats } = await readPlan(
+      this.operationCore,
+      cardURL,
+      undefined,
+      this.#readPlanByURL,
+    );
+    return unshareableFormats;
+  }
+
   // CS-10054: read host routing rules from the indexed RealmConfig card.
   // The `instance` field is `linksTo(CardDef)`, so the indexed
   // searchDoc flattens each rule's link as `{ id, ...flattened
@@ -15187,7 +15378,16 @@ export class Realm {
   // definition lookup, as an operation's do.
   #makePolicyCache(): RealmPolicyCache {
     return new RealmPolicyCache({
+      ...this.#policyCompileEnvironment(),
       policyCard: async () => (await this.getRealmPolicy())?.card,
+    });
+  }
+
+  // What compiling a policy card reads, for the realm's own policy cache and
+  // for a validate of any policy card alike, so the two compile a card the
+  // same way.
+  #policyCompileEnvironment(): PolicyCompileEnvironment {
+    return {
       readCard: (url) => this.#realmIndexQueryEngine.instanceSource(url),
       resolveCodeRef: (codeRef, relativeTo) => {
         let absolute = codeRefWithAbsoluteIdentifier(
@@ -15206,7 +15406,14 @@ export class Realm {
       // spelling, so a key computed the same way is found in either.
       typeKey: (codeRef) =>
         internalKeyFor(codeRef, undefined, this.#virtualNetwork),
-    });
+      realmURL: this.url,
+      instanceTypesUnder: (codeRef) =>
+        this.#realmIndexQueryEngine.instanceTypesUnder(codeRef),
+      instanceTypeKeys: async () =>
+        (await this.#realmIndexQueryEngine.fetchCardTypeSummary()).instances
+          .map((summary) => summary.code_ref)
+          .sort(),
+    };
   }
 
   // Whether an adoption chain, as the index records one, is a policy card's.
@@ -15566,7 +15773,7 @@ export class Realm {
   // The echo carries what a saving client merges back: the assigned id, the
   // self link, `lastModified`, the stored file's `version`, and the realm's
   // `realmInfo`. It does not carry computed fields, resolved links, or the
-  // joined `meta.screenshots` — only the index knows those. A caller that needs
+  // joined `meta.captures` — only the index knows those. A caller that needs
   // them reads the instance again once indexing has settled.
   private async serializedInstanceEcho(
     serialization: LooseSingleCardDocument,
@@ -16032,10 +16239,10 @@ function assertRealmPermissions(
   }
 }
 
-// Stage clocks the `_screenshot/` serving path accumulates ahead of the
+// Stage clocks the `_capture/` serving path accumulates ahead of the
 // hit/miss fork; the terminal emit folds them into the request's telemetry
-// record (see `screenshot-perf.ts`).
-interface ScreenshotServePerf {
+// record (see `capture-perf.ts`).
+interface CaptureServePerf {
   requestStart: number;
   correlationId: string | null;
   generationLookupMs: number;

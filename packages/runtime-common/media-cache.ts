@@ -15,15 +15,15 @@ import { effectiveHasError, prerenderedJoin } from './index-query-engine.ts';
 
 const log = logger('media-cache');
 
-// The MediaCache: a content-addressed store for derived media (screenshots),
+// The MediaCache: a content-addressed store for derived media (captures),
 // split across two channels that this module keeps consistent:
 //
 //   * objects — the output bytes, held in a `MediaCacheAdapter` (S3 in
 //     deployment, local disk in dev/tests) under a key that is the hash of
 //     the bytes themselves, so identical output is stored exactly once;
 //   * the ledger — one `media_cache_ledger` row per capture (source
-//     instance × canonical capture spec × generation) pointing at its
-//     object. The ledger is the store's only catalog: GC reclaims objects by
+//     instance × canonical capture spec × generation × the authority it was
+//     drawn under) pointing at its object. The ledger is the store's only catalog: GC reclaims objects by
 //     scanning ledger rows, never by enumerating the bucket, so every object
 //     write is paired with a ledger write here.
 //
@@ -63,17 +63,30 @@ export interface MediaCacheAdapter {
 }
 
 // GC policy differs by how a capture came to exist. A 'declared' capture
-// (an indexing-time declared screenshot) lives until a newer generation
+// (an indexing-time declared capture) lives until a newer generation
 // supersedes it or its source is deleted; an 'on-demand' capture (URL DSL /
 // POST) additionally ages out when unused, since nothing re-creates demand
 // for it except another request.
 export type MediaCacheLane = 'declared' | 'on-demand';
 
-// The identity of one ledger row: one capture of one source instance under
-// one canonical spec at one generation.
-export interface MediaCacheEntryKey {
+// The `renderedAs` of a capture the realm makes of its own cards (a declared
+// capture, rendered by indexing under realm authority). Such a capture is
+// the realm's artifact, like its prerendered HTML, and serves to every reader
+// of the card.
+export const REALM_AUTHORITY_RENDER = '';
+
+// The `renderedAs` of a capture asked for by a reader who authenticated
+// nobody. It renders with no session, so it draws only what anyone may read,
+// and serves back to readers who authenticated nobody. The same spelling the
+// realm's permissions give everyone.
+export const ANONYMOUS_RENDER = '*';
+
+// One capture: one source instance under one canonical spec at one
+// generation. Which of its ledger rows a reader is served depends on who is
+// reading (see `findMediaCacheEntry`).
+export interface MediaCacheCaptureKey {
   realmURL: string;
-  // The source row's ledger spelling, per `screenshotLedgerSourceURL`: an
+  // The source row's ledger spelling, per `captureLedgerSourceURL`: an
   // instance's captures key on its extensionless card-id form (matching
   // `boxel_index.file_alias`), a file's on the file's own URL with its
   // extension intact (matching `boxel_index.url`). The GC sweep joins this
@@ -82,6 +95,14 @@ export interface MediaCacheEntryKey {
   sourceURL: string;
   captureSpecHash: string;
   sourceGeneration: number;
+}
+
+// The identity of one ledger row: one capture, drawn under one authority.
+export interface MediaCacheEntryKey extends MediaCacheCaptureKey {
+  // Whose authority the capture was drawn under: the user who asked for it,
+  // `ANONYMOUS_RENDER`, or `REALM_AUTHORITY_RENDER`. A capture a user asks for
+  // draws what that user may see, so it is served back only to them.
+  renderedAs: string;
 }
 
 export interface MediaPutResult {
@@ -102,7 +123,7 @@ export interface MediaCacheEntry extends MediaCacheEntryKey {
   createdAt: number;
   lastAccessedAt: number;
   // The row's `diagnostics` column (the capture's
-  // `ScreenshotCapturePerfEvent`-shaped stage breakdown, written by
+  // `CaptureRunPerfEvent`-shaped stage breakdown, written by
   // `updateMediaCacheDiagnostics`) is deliberately NOT part of this shape:
   // `findMediaCacheEntry` answers every `<img>` serve, and no serving path
   // reads the breakdown — read that column with its own query instead.
@@ -146,6 +167,7 @@ export async function putMedia(
     sourceURL,
     captureSpecHash,
     sourceGeneration,
+    renderedAs,
     sourceContentHash = null,
     lane,
     width = null,
@@ -170,6 +192,8 @@ export async function putMedia(
     param(captureSpecHash),
     `AND source_generation =`,
     param(sourceGeneration),
+    `AND rendered_as =`,
+    param(renderedAs),
   ] as Expression)) as { object_key: string }[];
   let priorObjectKey = priorRows[0]?.object_key;
   let now = Date.now();
@@ -178,6 +202,7 @@ export async function putMedia(
     source_url: sourceURL,
     capture_spec_hash: captureSpecHash,
     source_generation: sourceGeneration,
+    rendered_as: renderedAs,
     object_key: objectKey,
     source_content_hash: sourceContentHash,
     lane,
@@ -215,6 +240,7 @@ export async function updateMediaCacheDiagnostics(
     sourceURL,
     captureSpecHash,
     sourceGeneration,
+    renderedAs,
   }: MediaCacheEntryKey,
   diagnostics: Record<string, unknown>,
 ): Promise<void> {
@@ -229,6 +255,8 @@ export async function updateMediaCacheDiagnostics(
     param(captureSpecHash),
     `AND source_generation =`,
     param(sourceGeneration),
+    `AND rendered_as =`,
+    param(renderedAs),
   ] as Expression);
 }
 
@@ -280,6 +308,8 @@ export async function touchMediaCacheEntry(
     param(entryKey.captureSpecHash),
     `AND source_generation =`,
     param(entryKey.sourceGeneration),
+    `AND rendered_as =`,
+    param(entryKey.renderedAs),
   ] as Expression);
 }
 
@@ -289,8 +319,17 @@ export async function touchMediaCacheEntry(
 // generation — the row a re-capture repointed, whatever generation stamped
 // it. An `objectKey` narrows the lookup to the row holding that exact
 // artifact — the `?name=` route pins the object its manifest names, so what
-// a URL serves always matches the `hash` the joined `meta.screenshots`
+// a URL serves always matches the `hash` the joined `meta.captures`
 // advertises for it.
+//
+// `servedTo` names the reader a capture is being looked up for (a user, or
+// `ANONYMOUS_RENDER`), who is answered with the capture drawn as them and,
+// failing that, the realm's own. Without one, only the realm's own captures
+// answer. A capture drawn as one reader never answers another.
+//
+// The realm's own captures are its declared ones. An on-demand capture is
+// always one a reader asked for, so an on-demand row that names no reader
+// says nothing about whose view it drew, and answers no one.
 export async function findMediaCacheEntry(
   dbAdapter: DBAdapter,
   {
@@ -299,37 +338,56 @@ export async function findMediaCacheEntry(
     captureSpecHash,
     sourceGeneration,
     objectKey,
-  }: Omit<MediaCacheEntryKey, 'sourceGeneration'> & {
+    servedTo,
+  }: Omit<MediaCacheCaptureKey, 'sourceGeneration'> & {
     sourceGeneration?: number;
     objectKey?: string;
+    servedTo?: string;
   },
 ): Promise<MediaCacheEntry | undefined> {
+  let reader =
+    servedTo === undefined || servedTo === REALM_AUTHORITY_RENDER
+      ? undefined
+      : servedTo;
   // Explicit columns — exactly `MediaCacheEntry`'s shape — rather than
   // `SELECT *`: this read answers every ledger-served `<img>` request, and
   // `*` would also drag the row's `diagnostics` breakdown (~30 keys nothing
   // on the serve path reads) across the wire on each of them.
   let rows = (await query(dbAdapter, [
     `SELECT realm_url, source_url, capture_spec_hash, source_generation,
-            object_key, source_content_hash, lane, content_type, size_bytes,
-            width, height, created_at, last_accessed_at
+            rendered_as, object_key, source_content_hash, lane, content_type,
+            size_bytes, width, height, created_at, last_accessed_at
      FROM media_cache_ledger WHERE realm_url =`,
     param(realmURL),
     `AND source_url =`,
     param(sourceURL),
     `AND capture_spec_hash =`,
     param(captureSpecHash),
+    `AND (`,
+    ...(reader !== undefined
+      ? ([`rendered_as =`, param(reader), `OR`] as Expression)
+      : []),
+    `(rendered_as =`,
+    param(REALM_AUTHORITY_RENDER),
+    `AND lane = 'declared'))`,
     ...(sourceGeneration != null
       ? ([`AND source_generation =`, param(sourceGeneration)] as Expression)
       : []),
     ...(objectKey != null
       ? ([`AND object_key =`, param(objectKey)] as Expression)
       : []),
-    `ORDER BY source_generation DESC LIMIT 1`,
+    // The reader's own capture ahead of the realm's.
+    `ORDER BY source_generation DESC,
+       CASE WHEN rendered_as =`,
+    param(reader ?? REALM_AUTHORITY_RENDER),
+    `THEN 0 ELSE 1 END
+     LIMIT 1`,
   ] as Expression)) as {
     realm_url: string;
     source_url: string;
     capture_spec_hash: string;
     source_generation: number | string;
+    rendered_as: string;
     object_key: string;
     source_content_hash: string | null;
     lane: MediaCacheLane;
@@ -349,6 +407,7 @@ export async function findMediaCacheEntry(
     sourceURL: row.source_url,
     captureSpecHash: row.capture_spec_hash,
     sourceGeneration: Number(row.source_generation),
+    renderedAs: row.rendered_as,
     objectKey: row.object_key,
     sourceContentHash: row.source_content_hash,
     lane: row.lane,
@@ -368,7 +427,7 @@ export async function findMediaCacheEntry(
 // state.
 //
 // "Live" here MUST mean what `IndexQueryEngine.liveInstanceGeneration` (the
-// GET `_screenshot/` serving gate) means, or a capture persisted under this
+// GET `_capture/` serving gate) means, or a capture persisted under this
 // probe's generation resolves to a URL that route answers as a miss. The
 // row predicate is that method's, built from the same exported fragments
 // (`prerenderedJoin`, `effectiveHasError`), plus a realm scope this caller
@@ -407,7 +466,7 @@ export async function findLiveInstanceGeneration(
 export const MEDIA_CACHE_GC_MIN_AGE_MS = 24 * 60 * 60 * 1000;
 // The on-demand lane's idle TTL: a DSL/POST capture nobody has requested for
 // this long is reclaimed. Anything needing a longer-lived artifact should be
-// a declared screenshot, which never ages out.
+// a declared capture, which never ages out.
 export const MEDIA_CACHE_ON_DEMAND_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 export type MediaCacheGcReason =
@@ -432,7 +491,7 @@ export interface MediaCacheGcCandidate extends MediaCacheEntryKey {
 //     identity, and has for at least the min-age (so a serve that resolved
 //     the old row just before the swap can still finish streaming).
 //   - 'unreferenced': a declared-lane row whose capture spec hash no live
-//     `prerendered_html` row's `screenshots` manifest names — the slot was
+//     `prerendered_html` row's `captures` manifest names — the slot was
 //     renamed, deleted, or re-specced (any identity change mints a new
 //     hash), so nothing supersedes the old row and no serve can reach its
 //     object (`?name=` serving is pinned to the manifest). Two guards keep
@@ -455,7 +514,7 @@ export interface MediaCacheGcCandidate extends MediaCacheEntryKey {
 
 // The tombstone arm, verbatim in both the reason CASE and the WHERE below —
 // one string so the two can't drift. `IN ('instance', 'file')` covers both
-// ledger spellings (`screenshotLedgerSourceURL`): a non-`.json` file's
+// ledger spellings (`captureLedgerSourceURL`): a non-`.json` file's
 // captures have no instance row at all, so an instance-only predicate would
 // leak them forever.
 const GC_TOMBSTONED_PREDICATE = `
@@ -476,7 +535,7 @@ const GC_TOMBSTONED_PREDICATE = `
 // A live prerendered row for the ledger row's source, in the row's own realm
 // — realm-copied captures are duplicated per realm along with their
 // prerendered rows, so each copy answers to its own realm's manifest. The
-// ledger spelling (`screenshotLedgerSourceURL`) matches the row's `url` for
+// ledger spelling (`captureLedgerSourceURL`) matches the row's `url` for
 // files and its `file_alias` for instances, the same double match the
 // tombstone arm uses; a matching row of either type participates, so an
 // alias collision errs toward protecting bytes.
@@ -504,9 +563,9 @@ function gcUnreferencedPredicate(minAgeCutoff: number): Expression {
     `)
      AND NOT EXISTS (
        SELECT 1 ${GC_LIVE_PRERENDERED_ROW}
-         AND jsonb_typeof(p.screenshots) = 'object'
+         AND jsonb_typeof(p.captures) = 'object'
          AND EXISTS (
-           SELECT 1 FROM jsonb_each(p.screenshots) AS slot
+           SELECT 1 FROM jsonb_each(p.captures) AS slot
            WHERE slot.value->>'specHash' = r.capture_spec_hash
          )
      )`,
@@ -524,13 +583,15 @@ export async function findMediaCacheGcCandidates(
   let minAgeCutoff = now - minAgeMs;
   let idleCutoff = now - onDemandTtlMs;
   let rows = (await query(dbAdapter, [
-    `SELECT realm_url, source_url, capture_spec_hash, source_generation, object_key,
+    `SELECT realm_url, source_url, capture_spec_hash, source_generation,
+       rendered_as, object_key,
        CASE
          WHEN (${GC_TOMBSTONED_PREDICATE}) THEN 'tombstoned'
          WHEN EXISTS (
            SELECT 1 FROM media_cache_ledger n
            WHERE n.realm_url = r.realm_url AND n.source_url = r.source_url
              AND n.capture_spec_hash = r.capture_spec_hash
+             AND n.rendered_as = r.rendered_as
              AND n.source_generation > r.source_generation
              AND n.created_at <`,
     param(minAgeCutoff),
@@ -549,6 +610,7 @@ export async function findMediaCacheGcCandidates(
          SELECT 1 FROM media_cache_ledger n
          WHERE n.realm_url = r.realm_url AND n.source_url = r.source_url
            AND n.capture_spec_hash = r.capture_spec_hash
+           AND n.rendered_as = r.rendered_as
            AND n.source_generation > r.source_generation
            AND n.created_at <`,
     param(minAgeCutoff),
@@ -564,6 +626,7 @@ export async function findMediaCacheGcCandidates(
     source_url: string;
     capture_spec_hash: string;
     source_generation: number | string;
+    rendered_as: string;
     object_key: string;
     reason: MediaCacheGcReason;
   }[];
@@ -572,6 +635,7 @@ export async function findMediaCacheGcCandidates(
     sourceURL: row.source_url,
     captureSpecHash: row.capture_spec_hash,
     sourceGeneration: Number(row.source_generation),
+    renderedAs: row.rendered_as,
     objectKey: row.object_key,
     reason: row.reason,
   }));
@@ -642,7 +706,8 @@ export async function deleteMediaCacheRows(
     let chunk = rows.slice(i, i + DELETE_ROWS_CHUNK_SIZE);
     await query(dbAdapter, [
       `DELETE FROM media_cache_ledger
-       WHERE (realm_url, source_url, capture_spec_hash, source_generation) IN`,
+       WHERE (realm_url, source_url, capture_spec_hash, source_generation,
+              rendered_as) IN`,
       ...addExplicitParens(
         separatedByCommas(
           chunk.map((row) =>
@@ -652,6 +717,7 @@ export async function deleteMediaCacheRows(
                 [param(row.sourceURL)],
                 [param(row.captureSpecHash)],
                 [param(row.sourceGeneration)],
+                [param(row.renderedAs)],
               ]),
             ),
           ),
