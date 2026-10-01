@@ -1,0 +1,447 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>reel plate</title>
+<style>
+  html,
+  body {
+    margin: 0;
+    height: 100%;
+    background: #0b0a09;
+    overflow: hidden;
+  }
+  canvas {
+    display: block;
+    width: 100vw;
+    height: 100vh;
+  }
+</style>
+<canvas id="c"></canvas>
+<script>
+  /**
+   * A SECOND PICTURE, and a deliberately different one.
+   *
+   * The two reference films are handed a three.js architectural scene. This
+   * one is handed PLATES — ordinary images — and it exists to prove two
+   * things about the port rather than to be beautiful.
+   *
+   * One: `Picture` is a port. Thirty-eight required members, and a picture
+   * that has no weather, no building and no sun answers them all with a
+   * shrug. The film never learns the difference.
+   *
+   * Two: A SEAM CAN BE A SHADER. This picture DECLARES four seams by name
+   * (`PictureSpec.seams`), and a score reaches them with
+   * `<f.Join @presentation="ridged-burn" />`. The film hands over a
+   * progress and knows nothing else — no still, no read-back, no overlay in
+   * the parent document. The contract is the one every shader transition in
+   * the wild already has: two textures and a progress. `u_from` is the held
+   * frame, `u_to` is the live one.
+   *
+   * The four are written here after the shapes in ~/Projects/hyperframes:
+   * a ridged burn, a signed-distance iris, a chromatic split and a light
+   * leak. Ours composite in LIGHT, which theirs do not.
+   */
+  const cv = document.getElementById("c");
+  const gl = cv.getContext("webgl", {
+    preserveDrawingBuffer: true,
+    alpha: false,
+  });
+
+  /* ---- the plates: whatever the repo already has ------------------------ */
+  const PLATES = [
+    "/towers-poster.webp",
+    "/sagrada-poster.webp",
+    "/sylva-poster.webp",
+    "/still/macbook.webp",
+    "/og.png",
+  ];
+  const tex = PLATES.map(() => null);
+  let plate = 0,
+    plateReady = 0;
+
+  function upload(i, img) {
+    const t = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, t);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, img);
+    tex[i] = {
+      t,
+      w: img.naturalWidth || img.width,
+      h: img.naturalHeight || img.height,
+    };
+    plateReady++;
+  }
+  PLATES.forEach((src, i) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => upload(i, img);
+    img.src = src;
+  });
+
+  /* ---- one quad, one program ------------------------------------------- */
+  const VERT =
+    "attribute vec2 p;varying vec2 v;void main(){v=p*.5+.5;gl_Position=vec4(p,0.,1.);}";
+  const FRAG = [
+    "precision highp float;varying vec2 v;",
+    "uniform sampler2D uTo,uFrom;uniform vec2 uToSize,uFromSize,uRes;",
+    "uniform float uMix,uVeil,uSeam,uP,uHasFrom;uniform vec3 uVeilCol;",
+    /* the grade: exposure, contrast, saturation, vignette, grain */
+    "uniform float uExp,uCon,uSat,uVig,uGrain,uTime;",
+    /* REAL NOISE, after hyperframes' preamble — quintic-smoothed value noise
+   and a five-octave fbm whose octaves are ROTATED between steps, which is
+   what stops the field lining up with the axes. Theirs is not normalised
+   (it returns [0, 0.96875]) and their dissolves inherit that as untrue
+   endpoints; ours divides it out, so a threshold swept 0..1 really does
+   start covered and end clear. */
+    "float hash(vec2 q){return fract(sin(dot(q,vec2(127.1,311.7)))*43758.5453);}",
+    "float vnoise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*f*(f*(f*6.-15.)+10.);",
+    "  return mix(mix(hash(i),hash(i+vec2(1,0)),f.x),mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),f.x),f.y);}",
+    "float fbm(vec2 p){float v=0.,a=.5;mat2 R=mat2(.8,.6,-.6,.8);",
+    "  for(int i=0;i<5;i++){v+=a*vnoise(p);p=R*p*2.02;a*=.5;}return v/0.96875;}",
+    /* and the RIDGE is the textbook form, 1-|n|, which gives ridges. Theirs
+   omits the inversion and so gives valleys — a different picture, and not
+   the one the name promises. */
+    "float ridge(vec2 p){float v=0.,a=.5;mat2 R=mat2(.8,.6,-.6,.8);",
+    "  for(int i=0;i<5;i++){v+=a*(1.-abs(vnoise(p)*2.-1.));p=R*p*2.02;a*=.5;}return v/0.96875;}",
+    /* cover-fit: a plate fills the frame without distorting */
+    "vec2 cover(vec2 uv,vec2 src){float a=uRes.x/uRes.y,b=src.x/src.y;vec2 s=a>b?vec2(1.,b/a):vec2(a/b,1.);return (uv-.5)/s+.5;}",
+    "vec3 lin(vec3 c){return pow(max(c,0.),vec3(2.2));}",
+    "vec3 srgb(vec3 c){return pow(max(c,0.),vec3(1./2.2));}",
+    "vec3 grade(vec3 c){c*=pow(2.,uExp);c=(c-.5)*uCon+.5;float l=dot(c,vec3(.2126,.7152,.0722));c=mix(vec3(l),c,uSat);return c;}",
+    "void main(){",
+    "  vec2 tv=cover(v,uToSize);vec2 fv=cover(v,uFromSize);",
+    "  vec3 to=texture2D(uTo,clamp(tv,0.,1.)).rgb;",
+    "  vec3 fr=uHasFrom>.5?texture2D(uFrom,clamp(fv,0.,1.)).rgb:to;",
+    "  vec3 c;",
+    /* ---- the picture's own law: a mix and a veil, both in light ---- */
+    "  if(uSeam<0.){",
+    "    c=srgb(mix(lin(to),lin(fr),uMix));",
+    "    if(uVeil>0.)c=srgb(mix(lin(c),lin(uVeilCol),uVeil));",
+    "  }",
+    /* ---- 0: ridged-burn — a ridged-noise front eats the outgoing frame ---- */
+    "  else if(uSeam<0.5){",
+    "    float fld=ridge(v*4.);",
+    /* the threshold is swept from below the field to above it, so the burn is
+   guaranteed to start covered and end clear whatever the noise does */
+    "    float w=.09;float t=mix(-w,1.+w,uP);",
+    "    float edge=smoothstep(t-w,t+w,fld);",
+    "    float heat=smoothstep(w*1.6,0.,abs(fld-t));",
+    /* their three-stage temperature ramp: ember, accent, white-hot at the
+   front — and enveloped by p(1-p) so it cannot flash at either end, which
+   theirs can and does wherever the noise approaches zero */
+    "    float env=uP*(1.-uP)*4.;",
+    "    vec3 burn=mix(vec3(.36,.10,.02),vec3(1.,.45,.10),smoothstep(0.,.25,heat));",
+    "    burn=mix(burn,vec3(1.,.82,.35),smoothstep(.25,.5,heat));",
+    "    burn=mix(burn,vec3(1.),smoothstep(.5,1.,heat));",
+    "    float sparks=step(.93,vnoise(v*90.))*heat*env;",
+    "    c=srgb(mix(lin(to),lin(fr),edge));",
+    "    c=srgb(lin(c)+lin(burn)*heat*env*2.4+vec3(1.,.9,.7)*sparks*.6);",
+    "  }",
+    /* ---- 1: sdf-iris — a circle opens on the incoming frame ---- */
+    "  else if(uSeam<1.5){",
+    /* the field is the distance from the centre in frame units, so the
+   farthest pixel is the corner at |(aspect/2, 1/2)| — the radius has to
+   pass THAT, not 1, or the corners keep the outgoing frame and pop */
+    "    float far=length(vec2(uRes.x/uRes.y,1.)*.5)+.06;",
+    "    float d=length((v-.5)*vec2(uRes.x/uRes.y,1.));",
+    "    float r=uP*far;",
+    "    float k=smoothstep(r-.035,r+.035,d);",
+    "    c=srgb(mix(lin(to),lin(fr),k));",
+    /* their onion: three exponential rings trailing INSIDE the leading edge,
+   weighted 1, 1/2, 1/4, enveloped by p(1-p)*4 so it is exactly zero at
+   both ends and peaks at the halfway point. Added in light, not in
+   display values, which is the one thing theirs does not do. */
+    "    float g1=exp(-abs(d-r)*25.);",
+    "    float g2=exp(-abs(d-r+.04)*20.)*.5;",
+    "    float g3=exp(-abs(d-r+.08)*15.)*.25;",
+    "    float glow=(g1+g2+g3)*uP*(1.-uP)*4.;",
+    "    c=srgb(lin(c)+lin(vec3(1.,.88,.66))*glow*.55);",
+    "  }",
+    /* ---- 2: chromatic-split — the channels part, then close on the new frame ---- */
+    "  else if(uSeam<2.5){",
+    /* RADIAL, not lateral. Displacing by (uv-.5) puts the separation at zero
+   in the middle and grows it to the corners, so it reads as a lens coming
+   apart rather than as a tape fault. Theirs; a better default than ours. */
+    "    vec2 cc=v-.5;",
+    "    float fs=uP*.06,ts=(1.-uP)*.06;",
+    "    vec3 a=vec3(texture2D(uFrom,clamp(fv+cc*fs,0.,1.)).r,texture2D(uFrom,clamp(fv,0.,1.)).g,texture2D(uFrom,clamp(fv-cc*fs,0.,1.)).b);",
+    "    vec3 b=vec3(texture2D(uTo,clamp(tv-cc*ts,0.,1.)).r,texture2D(uTo,clamp(tv,0.,1.)).g,texture2D(uTo,clamp(tv+cc*ts,0.,1.)).b);",
+    "    if(uHasFrom<.5)a=b;",
+    "    c=srgb(mix(lin(b),lin(a),1.-smoothstep(0.,1.,uP)));",
+    "  }",
+    /* ---- 3: light-leak — a warm bloom crosses and hands the frame over ---- */
+    "  else{",
+    "    float k=smoothstep(0.,1.,uP);",
+    "    vec2 lp=vec2(1.25,-.15)+vec2(-1.9,1.25)*k;",
+    "    float d=length((v-lp)*vec2(uRes.x/uRes.y,1.));",
+    "    float leak=exp(-d*d*3.2);",
+    "    c=srgb(mix(lin(to),lin(fr),1.-k));",
+    "    c=srgb(lin(c)+lin(vec3(1.,.78,.45))*leak*1.5);",
+    "  }",
+    /* ---- the grade, then the frame furniture ---- */
+    "  c=grade(c);",
+    "  float r=length(v-.5);c*=1.-uVig*r*r*1.9;",
+    "  c+=(hash(v*vec2(1237.,911.)+fract(uTime))-.5)*uGrain;",
+    "  gl_FragColor=vec4(c,1.);",
+    "}",
+  ].join("");
+
+  function sh(t, src) {
+    const s = gl.createShader(t);
+    gl.shaderSource(s, src);
+    gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS))
+      console.error(gl.getShaderInfoLog(s));
+    return s;
+  }
+  const prog = gl.createProgram();
+  gl.attachShader(prog, sh(gl.VERTEX_SHADER, VERT));
+  gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, FRAG));
+  gl.linkProgram(prog);
+  gl.useProgram(prog);
+  const buf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(
+    gl.ARRAY_BUFFER,
+    new Float32Array([-1, -1, 3, -1, -1, 3]),
+    gl.STATIC_DRAW,
+  );
+  const loc = gl.getAttribLocation(prog, "p");
+  gl.enableVertexAttribArray(loc);
+  gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+  const U = (n) => gl.getUniformLocation(prog, n);
+  const u = {
+    to: U("uTo"),
+    from: U("uFrom"),
+    toSize: U("uToSize"),
+    fromSize: U("uFromSize"),
+    res: U("uRes"),
+    mix: U("uMix"),
+    veil: U("uVeil"),
+    seam: U("uSeam"),
+    p: U("uP"),
+    hasFrom: U("uHasFrom"),
+    veilCol: U("uVeilCol"),
+    exp: U("uExp"),
+    con: U("uCon"),
+    sat: U("uSat"),
+    vig: U("uVig"),
+    grain: U("uGrain"),
+    time: U("uTime"),
+  };
+
+  /* the freeze: the frame the seam holds, copied out of the canvas */
+  let freezeTex = null,
+    hasFreeze = 0,
+    freezeSize = [1, 1];
+  function captureFreeze() {
+    if (!freezeTex) {
+      freezeTex = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, freezeTex);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    }
+    gl.bindTexture(gl.TEXTURE_2D, freezeTex);
+    gl.copyTexImage2D(gl.TEXTURE_2D, 0, gl.RGB, 0, 0, cv.width, cv.height, 0);
+    freezeSize = [cv.width, cv.height];
+    hasFreeze = 1;
+  }
+
+  /* ---- the state the film writes --------------------------------------- */
+  const SEAMS = {
+    "ridged-burn": 0,
+    "sdf-iris": 1,
+    "chromatic-split": 2,
+    "light-leak": 3,
+  };
+  let seamIdx = -1,
+    seamP = 0,
+    seamMix = 0,
+    seamVeil = 0,
+    veilCol = [0.05, 0.035, 0.02];
+  let pinned = false;
+  let gExp = 0,
+    gCon = 1,
+    gSat = 1,
+    gVig = 0.18,
+    gGrain = 0.03;
+  let started = false;
+
+  function size() {
+    const d = Math.min(window.devicePixelRatio || 1, 2);
+    const w = Math.round(cv.clientWidth * d),
+      h = Math.round(cv.clientHeight * d);
+    if (cv.width !== w || cv.height !== h) {
+      cv.width = w;
+      cv.height = h;
+    }
+  }
+  function draw() {
+    size();
+    gl.viewport(0, 0, cv.width, cv.height);
+    const cur = tex[plate] || tex.find(Boolean);
+    if (!cur) {
+      requestAnimationFrame(draw);
+      return;
+    }
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, cur.t);
+    gl.uniform1i(u.to, 0);
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, freezeTex || cur.t);
+    gl.uniform1i(u.from, 1);
+    gl.uniform2f(u.toSize, cur.w, cur.h);
+    gl.uniform2f(
+      u.fromSize,
+      hasFreeze ? freezeSize[0] : cur.w,
+      hasFreeze ? freezeSize[1] : cur.h,
+    );
+    gl.uniform2f(u.res, cv.width, cv.height);
+    gl.uniform1f(u.mix, pinned && seamIdx < 0 ? 1 : seamMix);
+    gl.uniform1f(u.veil, seamVeil);
+    gl.uniform1f(u.seam, seamIdx);
+    gl.uniform1f(u.p, seamP);
+    gl.uniform1f(u.hasFrom, hasFreeze);
+    gl.uniform3f(u.veilCol, veilCol[0], veilCol[1], veilCol[2]);
+    gl.uniform1f(u.exp, gExp);
+    gl.uniform1f(u.con, gCon);
+    gl.uniform1f(u.sat, gSat);
+    gl.uniform1f(u.vig, gVig);
+    gl.uniform1f(u.grain, gGrain);
+    gl.uniform1f(u.time, performance.now() / 1000);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    requestAnimationFrame(draw);
+  }
+  requestAnimationFrame(draw);
+
+  const hex = (c) => {
+    const m = /^#?([0-9a-f]{6})$/i.exec(String(c || "").trim());
+    if (!m) return null;
+    const n = parseInt(m[1], 16);
+    return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
+  };
+  const nop = () => {};
+
+  /* ---- the port -------------------------------------------------------- */
+  window.__film = {
+    /* the members this picture actually means */
+    seam(spec) {
+      if (!spec) {
+        seamIdx = -1;
+        seamP = 0;
+        seamMix = 0;
+        seamVeil = 0;
+        hasFreeze = 0;
+        pinned = false;
+        return;
+      }
+      pinned = false;
+      if (spec.name && SEAMS[spec.name] !== undefined) {
+        seamIdx = SEAMS[spec.name];
+        seamP = spec.p;
+        seamMix = 0;
+        seamVeil = 0;
+        return;
+      }
+      seamIdx = -1;
+      seamMix = spec.mix || 0;
+      seamVeil = spec.veil || 0;
+      const c = hex(spec.color);
+      if (c) veilCol = c;
+    },
+    /* HOLD THE FRAME while the parent decodes a DOM seam's still: without
+     this the plate switches on the cut frame and the still lands a decode
+     later, so the viewer sees the incoming plate before the transition */
+    freeze(on) {
+      if (on) {
+        captureFreeze();
+        pinned = true;
+      } else pinned = false;
+    },
+    snapshot() {
+      return cv.toDataURL("image/jpeg", 0.85);
+    },
+    style(i) {
+      plate = Math.max(0, Math.min(PLATES.length - 1, i | 0));
+      return plate;
+    },
+    styleIndex() {
+      return plate;
+    },
+    grade(g) {
+      if (!g) return;
+      if (typeof g.bri === "number") gExp = Math.log2(Math.max(0.05, g.bri));
+      if (typeof g.con === "number") gCon = g.con;
+      if (typeof g.sat === "number") gSat = g.sat;
+      if (typeof g.vigA === "number") gVig = 0.1 + g.vigA * 0.5;
+    },
+    view() {
+      return { az: 0, el: 0, zoom: 1, fov: 40, w: cv.width, h: cv.height };
+    },
+    project() {
+      return { x: cv.width / 2, y: cv.height / 2, z: 0, on: true };
+    },
+    sun() {
+      return {
+        x: cv.width * 0.8,
+        y: cv.height * 0.2,
+        on: true,
+        w: cv.width,
+        h: cv.height,
+      };
+    },
+    palette() {
+      return {
+        paper: "#efe7d8",
+        ink: "#241d13",
+        ink2: "#7a6f5c",
+        ink3: "#3a3122",
+        time: "day",
+      };
+    },
+    height() {
+      return 1;
+    },
+    speaking() {
+      return false;
+    },
+    /* and the rest, answered with a shrug: this picture has no weather, no
+     building, no sun to move and no voice of its own */
+    pose: nop,
+    time: nop,
+    theme: nop,
+    themeDur: nop,
+    wx: nop,
+    haze: nop,
+    rain: nop,
+    rim: nop,
+    light: nop,
+    lightning: nop,
+    winter: nop,
+    sky: nop,
+    trace: nop,
+    clearTrace: nop,
+    traceDraw: nop,
+    traceFade: nop,
+    modelFade: nop,
+    mix: nop,
+    tag: nop,
+    ping: nop,
+    idle: nop,
+    pause: nop,
+    rewind: nop,
+    sound: nop,
+    fade: nop,
+    duck: nop,
+    voice: nop,
+    voicePrime: nop,
+    voiceStop: nop,
+    dissolve: () => false,
+  };
+  window.parent?.postMessage?.({ reel: "ready" }, "*");
+</script>

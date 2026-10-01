@@ -13,6 +13,11 @@ export interface RealmServerTokenClaim {
   // the federated endpoints accept for the `user` claim both token families
   // share.
   realmAuthority?: true;
+  // Carried by a delegated session (`TokenClaims.delegated`): a read-only
+  // session minted for a user on the one realm named by `realm`, which it reads
+  // on that user's behalf.
+  delegated?: boolean;
+  realm?: string;
 }
 
 export function createJWT(
