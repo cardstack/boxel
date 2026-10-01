@@ -440,13 +440,17 @@ jobs:
         working-directory: packages/boxel-ui/docs-app
 
   pretui-test:
-    name: Pret UI Tests
+    name: Pret UI Tests (shard ${{ matrix.shard }} of ${{ strategy.job-total }})
     needs: [change-check]
     if: needs.change-check.outputs.pretui == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     concurrency:
-      group: pretui-test-${{ github.head_ref || github.run_id }}
+      group: pretui-test-${{ matrix.shard }}-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -466,6 +470,18 @@ jobs:
       - name: Install Chromium
         run: |
           "$(npm root -g)/@cardstack/boxel-cli/node_modules/.bin/playwright" install --with-deps chromium
+      # `boxel test` caps a whole QUnit run at 300 s, so each job keeps a
+      # deterministic slice of the sorted test-file list. The divisor follows
+      # the matrix length, so resizing the matrix resizes the split.
+      - name: Select this shard's test files
+        run: |
+          i=0
+          for f in $(find . -name '*.test.gts' | sort); do
+            if [ $((i % ${{ strategy.job-total }} + 1)) -ne ${{ matrix.shard }} ]; then rm "$f"; fi
+            i=$((i + 1))
+          done
+          echo "$(find . -name '*.test.gts' | wc -l) test file(s) in this shard"
+        working-directory: packages/pretui
       - name: Run tests
         run: boxel test .
         working-directory: packages/pretui
