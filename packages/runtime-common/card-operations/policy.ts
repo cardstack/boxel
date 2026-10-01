@@ -927,20 +927,15 @@ async function compilePolicy(
 //
 // Undefined for a grant that serves no rows' closure: one on any other base,
 // since a write's echo is the card and a stored-bytes read serves bytes, and a
-// query grant that compiled no filter, which admits no search.
+// grant that admits nothing.
 function reachLane(
   definition: Definition,
   grant: CompiledOperationGrant,
 ): Pick<ReachingGrant, 'governedBy' | 'links' | 'rendered'> | undefined {
-  let name = grant.operation;
-  let declared = isDefinitionFreeBaseOperation(name)
+  let base = admittingBase(definition, grant);
+  let declared = isDefinitionFreeBaseOperation(grant.operation)
     ? undefined
-    : ownOperation(definition, name);
-  let base = declared
-    ? declared.base
-    : carriesBuiltIn(definition.type, name)
-      ? name
-      : undefined;
+    : ownOperation(definition, grant.operation);
   if (base === 'read') {
     return {
       governedBy: 'read',
@@ -948,7 +943,7 @@ function reachLane(
       rendered: false,
     };
   }
-  if (base === 'query' && grant.filter) {
+  if (base === 'query') {
     return declared
       ? {
           governedBy: 'named-query',
@@ -961,19 +956,33 @@ function reachLane(
 }
 
 // Whether a grant lets a caller read the cards it admits: a read of the
-// card's document, a read of its stored source, or a search that compiled a
-// filter. A write or a delete hands the caller no card to read, and a query
-// grant with no filter admits no search.
+// card's document, a read of its stored source, or a search. A write or a
+// delete hands the caller no card to read.
 function letsCallerRead(
   definition: Definition,
   grant: CompiledOperationGrant,
 ): boolean {
-  let base = grantedOperation(definition, grant.operation)?.base;
-  return (
-    base === 'read' ||
-    base === 'readSource' ||
-    (base === 'query' && grant.filter !== undefined)
-  );
+  let base = admittingBase(definition, grant);
+  return base === 'read' || base === 'readSource' || base === 'query';
+}
+
+// The base a kept grant runs on, where the grant can admit anything at all.
+// A query grant admits only through the filter it compiled to, since the gate
+// grants no query. Any other grant whose predicate is annotated as reading a
+// snapshot tier admits nothing: the gate reads the stored source alone, so it
+// never evaluates that predicate.
+function admittingBase(
+  definition: Definition,
+  grant: CompiledOperationGrant,
+): BaseOperation | undefined {
+  let granted = grantedOperation(definition, grant.operation);
+  if (!granted) {
+    return undefined;
+  }
+  if (granted.base === 'query') {
+    return grant.filter ? granted.base : undefined;
+  }
+  return grant.where?.snapshot ? undefined : granted.base;
 }
 
 // What invoking `name` on an instance of a type reaches: the type's own

@@ -207,6 +207,10 @@ module(basename(import.meta.filename), function (hooks) {
   let org: Realm;
   let request: SuperTest<Test>;
   let server: Server;
+  // The current test's boot. The teardown waits for it, so a test that timed
+  // out while its boot was still running still closes what that boot opens,
+  // rather than leaving the server holding its port for the next test.
+  let booting: Promise<void> | undefined;
 
   setupCatalogTestSubset(hooks);
 
@@ -269,16 +273,31 @@ module(basename(import.meta.filename), function (hooks) {
     org = result.realms.find((realm) => realm.url === ORG)!;
   }
 
+  // Every test boots both realms in its `beforeEach`, which indexes them and
+  // runs inside the test's own budget, so that budget is extended past the
+  // per-test timeout.
+  hooks.beforeEach(function (assert) {
+    assert.timeout(180_000);
+  });
+
   setupDB(hooks, {
     beforeEach: async (dbAdapter, publisher, runner) => {
-      await start({ dbAdapter, publisher, runner });
+      booting = start({ dbAdapter, publisher, runner });
+      await booting;
     },
     afterEach: async () => {
-      for (let realm of [education, org]) {
-        realm.__testOnlyClearCaches();
-        realm.unsubscribe();
+      let booted = await booting?.then(
+        () => true,
+        () => false,
+      );
+      booting = undefined;
+      if (booted) {
+        for (let realm of [education, org]) {
+          realm.__testOnlyClearCaches();
+          realm.unsubscribe();
+        }
+        await closeServer(server);
       }
-      await closeServer(server);
       resetCatalogRealms();
     },
   });
@@ -407,6 +426,44 @@ module(basename(import.meta.filename), function (hooks) {
         via: 'students',
       },
     ]);
+  });
+
+  test('a grant that admits nothing neither reaches nor grants', async function (assert) {
+    // The gate reads a card's stored source alone, so it never evaluates a
+    // predicate annotated as reading a snapshot tier, and a read whose
+    // predicate is one admits nothing.
+    let snapshotRead = (targetType: Rule['targetType']): Rule => ({
+      targetType,
+      grants: [{ operation: 'read', where: { bxl: TEACHES, snapshot: true } }],
+    });
+    let policy = await compile([snapshotRead(CLASSROOM)]);
+    assert.deepEqual(
+      policy.rules[0]?.grants.map((grant) => grant.operation),
+      ['read'],
+      'the grant compiles',
+    );
+    assert.deepEqual(
+      reached(policy),
+      [],
+      'and hands nothing over, so nothing is walked',
+    );
+
+    policy = await compile([
+      rule(CLASSROOM, 'read'),
+      snapshotRead(STUDENT),
+      rule(GUARDIAN, 'read'),
+    ]);
+    assert.deepEqual(
+      reached(policy),
+      [
+        {
+          code: 'grant-reaches-ungranted-type',
+          path: 'rules[0].grants[0]',
+          via: 'students',
+        },
+      ],
+      'nor does it make its type readable',
+    );
   });
 
   test('a link typed as a card of any type is not answered by granting that type', async function (assert) {
