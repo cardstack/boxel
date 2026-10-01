@@ -4,7 +4,7 @@ exports.shorthands = undefined;
 // A capture a user asks for renders as that user, so what it draws is that
 // user's view of the card and is served back only to them; `rendered_as`
 // names that user, or is `*` for a reader who authenticated nobody. A capture
-// the realm makes of its own cards (a declared screenshot, rendered by
+// the realm makes of its own cards (a declared capture, rendered by
 // indexing) is the realm's artifact, served to every reader, and carries the
 // empty string. Empty rather than NULL because the column is part of the
 // primary key.

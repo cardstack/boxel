@@ -55,21 +55,21 @@ export const PRERENDER_HTML_VISIT_FAILURE_RETRY_CAP = 3;
 // sweep tick that lands just after the failure immediately re-rendering it.
 export const PRERENDER_HTML_VISIT_FAILURE_RETRY_MIN_AGE_MS = 45 * 60 * 1000;
 
-// The declared-screenshot twin of the visit-failure bounds. A capture
+// The declared-capture twin of the visit-failure bounds. A capture
 // failure never errors its row — the row publishes with the manifest
-// omitting the failed name and `diagnostics.screenshotErrors` recording why
+// omitting the failed name and `diagnostics.captureErrors` recording why
 // (the broken-links model) — so the retry lane keys off that diagnostics
 // record rather than an `error_doc`. Same shape as the visit-failure lane:
 // consecutive-failure runs are capped, and a failed row waits out a minimum
 // age between attempts. The cap is enforced against the row-level
-// `screenshotCaptureFailureRenders` counter (renders that recorded any
+// `captureFailureRenders` counter (renders that recorded any
 // capture failure), not only the per-slot runs: a per-slot run resets
 // whenever the failing name changes, which is exactly the shape a
 // struggling row takes (a roster-level '*' failure alternating with a
 // per-name one, format groups failing on alternating renders), and the
 // row counter is the term no name change can reset. At the cap, the
 // absence is the recorded outcome — the card stays fully served and
-// searchable, the screenshot simply stays missing until the URL's next
+// searchable, the capture simply stays missing until the URL's next
 // invalidation re-renders it.
 // A row whose render failure was withheld as stale-shell carries no
 // `error_doc` and sits at the current generation, so it reads as a healthy
@@ -99,8 +99,8 @@ export const STALE_SHELL_FAILURE_RETRY_MIN_AGE_MS = 10 * 60 * 1000;
 export const GATEWAY_FAILURE_RETRY_CAP = 3;
 export const GATEWAY_FAILURE_RETRY_MIN_AGE_MS = 5 * 60 * 1000;
 
-export const DECLARED_SCREENSHOT_CAPTURE_RETRY_CAP = 3;
-export const DECLARED_SCREENSHOT_CAPTURE_RETRY_MIN_AGE_MS = 45 * 60 * 1000;
+export const DECLARED_CAPTURE_RETRY_CAP = 3;
+export const DECLARED_CAPTURE_RETRY_MIN_AGE_MS = 45 * 60 * 1000;
 
 // Index rows whose prerendered HTML is behind the search-doc index, or absent
 // entirely, restricted to live, non-errored rows:
@@ -120,12 +120,12 @@ export const DECLARED_SCREENSHOT_CAPTURE_RETRY_MIN_AGE_MS = 45 * 60 * 1000;
 // reaches `PRERENDER_HTML_VISIT_FAILURE_RETRY_CAP`, after which it reads as
 // terminal exactly like a deterministic render error.
 //
-// A fourth arm admits the declared-screenshot retry lane: a *healthy*
-// published row (no `error_doc`) whose `diagnostics.screenshotErrors`
+// A fourth arm admits the declared-capture retry lane: a *healthy*
+// published row (no `error_doc`) whose `diagnostics.captureErrors`
 // records capture failures is repairable while its row-level
-// `screenshotCaptureFailureRenders` counter AND some recorded slot's
+// `captureFailureRenders` counter AND some recorded slot's
 // consecutive-failure run are both below
-// `DECLARED_SCREENSHOT_CAPTURE_RETRY_CAP`. The row counter is what makes
+// `DECLARED_CAPTURE_RETRY_CAP`. The row counter is what makes
 // the lane converge — a per-slot run resets whenever the failing name
 // changes, and per-slot runs alone would retry such a row forever — while
 // the per-slot term stops retrying a stable failure set once every name
@@ -135,7 +135,7 @@ export const DECLARED_SCREENSHOT_CAPTURE_RETRY_MIN_AGE_MS = 45 * 60 * 1000;
 // a plain re-render of the URL; the capture rides the prerender-html
 // visit, and a slot already at its cap that happens to recapture
 // successfully along the way just heals early. A capped row is terminal —
-// the screenshots stay absent (thumbnail consumers fall through their
+// the captures stay absent (thumbnail consumers fall through their
 // chain) until the URL's next invalidation.
 //
 // The fifth and sixth arms admit the withheld-failure lanes — stale-shell and
@@ -171,17 +171,17 @@ export async function findStalePrerenderedHtmlRows(
              < (EXTRACT(EPOCH FROM NOW()) * 1000)::bigint
                - ${PRERENDER_HTML_VISIT_FAILURE_RETRY_MIN_AGE_MS})
          OR (ph.error_doc IS NULL
-           AND jsonb_typeof(ph.diagnostics->'screenshotErrors') = 'array'
-           AND COALESCE((ph.diagnostics->>'screenshotCaptureFailureRenders')::int, 1)
-             < ${DECLARED_SCREENSHOT_CAPTURE_RETRY_CAP}
+           AND jsonb_typeof(ph.diagnostics->'captureErrors') = 'array'
+           AND COALESCE((ph.diagnostics->>'captureFailureRenders')::int, 1)
+             < ${DECLARED_CAPTURE_RETRY_CAP}
            AND EXISTS (
              SELECT 1
-             FROM jsonb_array_elements(ph.diagnostics->'screenshotErrors') se
+             FROM jsonb_array_elements(ph.diagnostics->'captureErrors') se
              WHERE COALESCE((se->>'consecutiveFailures')::int, 1)
-               < ${DECLARED_SCREENSHOT_CAPTURE_RETRY_CAP})
+               < ${DECLARED_CAPTURE_RETRY_CAP})
            AND ph.rendered_at
              < (EXTRACT(EPOCH FROM NOW()) * 1000)::bigint
-               - ${DECLARED_SCREENSHOT_CAPTURE_RETRY_MIN_AGE_MS})
+               - ${DECLARED_CAPTURE_RETRY_MIN_AGE_MS})
          OR (ph.error_doc IS NULL
            AND jsonb_typeof(ph.diagnostics->'staleShellFailure') = 'array'
            AND COALESCE((ph.diagnostics->>'staleShellFailureRenders')::int, 1)

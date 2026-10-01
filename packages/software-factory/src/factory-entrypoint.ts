@@ -141,7 +141,7 @@ export interface FactoryEntrypointOptions {
   phaseSplit?: boolean;
   /**
    * Render gate + acceptance walkthrough: post-issue screenshot
-   * capture via `_screenshot-card` and a verifier turn that reads the
+   * capture via `_capture-card` and a verifier turn that reads the
    * PNGs, verdicts acceptance criteria, and files defect issues. Default
    * on; `--no-render-gate` opts out.
    */
@@ -351,7 +351,7 @@ export function getFactoryEntrypointUsage(): string {
     "                              issue; polishing also executes the bootstrap's",
     '                              pass-2 enhancement scope unattended.',
     '  --no-render-gate            Skip the render gate + acceptance walkthrough (post-issue',
-    '                              _screenshot-card captures and the verifier turn that reads',
+    '                              _capture-card captures and the verifier turn that reads',
     '                              them, verdicts acceptance criteria, and files defect issues).',
     '  --monitor-level <level>     Orchestrator monitor verbosity on the run log:',
     '                              "quiet" (stalls + failures only), "normal" (default — adds',

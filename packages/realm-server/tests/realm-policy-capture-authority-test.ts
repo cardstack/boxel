@@ -269,7 +269,7 @@ module(basename(import.meta.filename), function (hooks) {
           fileSystem: {
             'realm.json': realmConfigCardJSON({
               name: 'Board',
-              allowArbitraryScreenshots: true,
+              allowArbitraryCaptures: true,
             }),
             'boards/board.json': board(),
             'schedules/open.json': schedule('Board open', OWNER),
@@ -330,7 +330,7 @@ module(basename(import.meta.filename), function (hooks) {
 
   function postCapture(user: string, captureSpec: Record<string, unknown>) {
     return request
-      .post('/_screenshot-card')
+      .post('/_capture-card')
       .set('Accept', 'application/vnd.api+json')
       .set('Content-Type', 'application/vnd.api+json')
       .set(
@@ -342,7 +342,7 @@ module(basename(import.meta.filename), function (hooks) {
       )
       .send({
         data: {
-          type: 'screenshot-card',
+          type: 'capture-card',
           attributes: {
             realmURL: BOARD,
             cardId: BOARD_CARD,
@@ -431,7 +431,7 @@ module(basename(import.meta.filename), function (hooks) {
   test('a capture a reader asks for on the GET route renders as them', async function (assert) {
     // A spec of its own, so nothing the POST test persisted answers it, and
     // shorter than any reader's rows, as there.
-    let url = `${BOARD}_screenshot/boards/board?viewport=300x50&fullPage=true`;
+    let url = `${BOARD}_capture/boards/board?viewport=300x50&fullPage=true`;
 
     let requesters = await getCapture(REQUESTER, url);
     assert.strictEqual(

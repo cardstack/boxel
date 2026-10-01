@@ -98,7 +98,7 @@ export class ReorderList extends Component {
             {{! a custom property, through the modifier — Motion owns a motion
                 element's inline style, so a bound style= attribute here would
                 be wiped by the next transform it writes }}
-            @style={{(trackStyle track.hue)}}
+            @style={{trackStyle track.hue}}
           >
             <span class="grip" aria-hidden="true"></span>
             <span class="track-hue" aria-hidden="true"></span>

@@ -1,8 +1,8 @@
-// The PDF family's declared-screenshot capture: a capture-only component
+// The PDF family's declared-capture: a capture-only component
 // that paints page 1 with pdf.js so the fitted cell (and the thumbnail
 // fallback chain) get a real first page instead of the typed placeholder.
-// Capture-only means: referenced only from the `static screenshots`
-// declaration and rendered only by the screenshot render route during the
+// Capture-only means: referenced only from the `static captures`
+// declaration and rendered only by the capture render route during the
 // prerender pass — never part of the format API, so the live viewer stays a
 // native `<object>` with no pdf.js in the app's dependency graph.
 //
@@ -29,7 +29,7 @@ import { fileResourceURL } from './file-image';
 // `@cardstack/boxel-host/tools/*` shims.
 import { loadPdfjs } from '@cardstack/boxel-host/lib/pdfjs-loader';
 
-import type { ScreenshotSpec } from '../card-api';
+import type { CaptureSpec } from '../card-api';
 
 interface CaptureSignature {
   Args: {
@@ -39,7 +39,7 @@ interface CaptureSignature {
 }
 
 export class PdfPosterCapture extends GlimmerComponent<CaptureSignature> {
-  // The capture engine waits (bounded) for no `data-screenshot-pending`
+  // The capture engine waits (bounded) for no `data-capture-pending`
   // attribute before shooting: an async decode's paint isn't visible to the
   // engine's image-paint wait, so the component owns the readiness signal.
   //
@@ -54,7 +54,7 @@ export class PdfPosterCapture extends GlimmerComponent<CaptureSignature> {
     let container = canvas.parentElement!;
     let finish = () => {
       if (!cancelled) {
-        container.removeAttribute('data-screenshot-pending');
+        container.removeAttribute('data-capture-pending');
       }
     };
     // A document that cannot decode (corrupt, encrypted, password-protected
@@ -70,8 +70,8 @@ export class PdfPosterCapture extends GlimmerComponent<CaptureSignature> {
     // unreadable document is distinguishable from a hung component.
     let fail = (cause: unknown) => {
       if (!cancelled) {
-        container.removeAttribute('data-screenshot-pending');
-        container.setAttribute('data-screenshot-failed', String(cause));
+        container.removeAttribute('data-capture-pending');
+        container.setAttribute('data-capture-failed', String(cause));
       }
     };
     (async () => {
@@ -137,7 +137,7 @@ export class PdfPosterCapture extends GlimmerComponent<CaptureSignature> {
   });
 
   <template>
-    <div class='pdf-poster-capture' data-screenshot-pending='true'>
+    <div class='pdf-poster-capture' data-capture-pending='true'>
       <canvas {{this.paintFirstPage}} />
     </div>
     <style scoped>
@@ -159,7 +159,7 @@ export class PdfPosterCapture extends GlimmerComponent<CaptureSignature> {
 // deviceScaleFactor of 2), keyed on file content so a metadata-only edit
 // never re-rasterizes, feeding the thumbnail fallback chain and — through
 // the view model's thumbnail seam — the fitted cell.
-export const PDF_FAMILY_SCREENSHOTS: Record<string, ScreenshotSpec> = {
+export const PDF_FAMILY_CAPTURES: Record<string, CaptureSpec> = {
   poster: {
     render: PdfPosterCapture,
     width: 170,
