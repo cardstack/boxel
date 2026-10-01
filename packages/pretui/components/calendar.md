@@ -53,3 +53,5 @@ Concrete gaps against the pattern:
 Every day state is a `data-*` attribute, so a season can dress `today`, `in-range`, `range-start` and `range-end` independently — including giving the range endpoints asymmetric radii, which is what makes a range read as one continuous band.
 
 Two things to check per season: `data-today` must be distinguishable from `data-selected` without relying on colour alone, and `data-outside` (adjacent-month days) must be dim enough to recede but still clear **WCAG 1.4.3** — it is the most common contrast failure in any calendar.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

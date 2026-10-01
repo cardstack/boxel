@@ -526,7 +526,13 @@ async function lowerOperation(
     }
   }
 
-  if (takesNoPayload && declaration.input) {
+  if (base === 'explain' && declaration.input) {
+    sink.add(
+      'unrunnable-program',
+      'input',
+      `an "explain" operation answers the question its payload asks, so an \`input\` that rewrote it would answer a question nobody asked`,
+    );
+  } else if (takesNoPayload && declaration.input) {
     sink.add(
       'unrunnable-program',
       'input',

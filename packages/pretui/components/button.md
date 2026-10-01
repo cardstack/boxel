@@ -58,6 +58,8 @@ Tone tokens, all from the Boxel theme contract: `--primary`, `--destructive`, `-
 
 The `accent` recipe paints the tone as the background and its `-foreground` as the text, so a theme that changes `--warning` should change `--warning-foreground` with it. `theme.css` defaults every pair, so a theme that sets neither still renders a readable button.
 
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
+
 ## React ecosystem
 
 Button already accepts `@variant` as sugar. Agents will still emit the

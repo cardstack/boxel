@@ -164,6 +164,14 @@ export interface OperationPolicyAccess {
   // a `RealmPolicy`'s or a subtype's. It is the answer the policy compiler
   // gets when it asks whether the card a key names is one.
   isPolicyCard(types: string[]): boolean;
+  // A draft of the policy card `card`, compiled as this realm would compile
+  // the card were it to hold `document` (see `compileDraftPolicy`), with the
+  // URLs compiling read. Compiled afresh on every call and held by nothing,
+  // so the realm's own policy is untouched by it.
+  compileDraft(
+    card: string,
+    document: Record<string, unknown>,
+  ): Promise<{ compiled: CompiledRealmPolicy; reads: string[] }>;
 }
 
 // The target as the gate judges it. It holds what the realm resolved, and

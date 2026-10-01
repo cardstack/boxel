@@ -1151,6 +1151,125 @@ Some things worth knowing before you read one:
   card's index row as it stands, which lags the stored source (see
   [What a predicate reads](#what-a-predicate-reads)).
 
+### Asking about a draft, a search, or a page of cards
+
+An explain reads three more inputs beside the question itself: `draft`,
+`search` and `list`. It reads them by name, whatever the operation carrying
+them is called. A declaration's `params` are each required, and its typed
+payload takes exactly the params it declares. So each input rides a
+declaration of its own on the `explain` base, beside the one that asks the
+plain question:
+
+```ts
+class SchoolPolicy extends RealmPolicy {
+  @operation static explainDraft = {
+    base: 'explain',
+    params: {
+      actor: StringField,
+      target: StringField,
+      operation: StringField,
+      draft: JsonField,
+    },
+    nonGrantable: true,
+  } satisfies OperationDeclaration;
+  // explainSearch takes `search`, and explainReach takes `list`, the same
+  // way. A declaration whose params include `list` resolves to a listing.
+}
+```
+
+An explain carries no `input` stage: it answers the question its payload asks,
+and the cap below counts that payload.
+
+### Asking about a draft
+
+An explain can answer against rules that are not live yet. Pass `draft`, a
+policy document holding the `rules` a `RealmPolicy` card holds, to the explain
+of the card the target's realm names:
+
+```ts
+let explanation = await operations<typeof SchoolPolicy>(policy).explainDraft({
+  actor: '@teacher:example.org',
+  target: 'https://example.org/education/classrooms/room-205',
+  operation: 'read',
+  draft: {
+    rules: [
+      {
+        targetType: { module: '../../education/classroom', name: 'Classroom' },
+        grants: [{ operation: 'read' }],
+      },
+    ],
+  },
+});
+// explanation.draft.issues  what compiling the draft recorded, as a policy's
+//                           own issues read
+```
+
+The target's realm compiles the draft as it would compile the card its key
+names if that card held the document. So a relative `targetType` module
+resolves against that card, and a draft copied from the card's own document
+means what it means there. The draft is compiled for this answer alone. It is
+never cached and never activated, and the live policy answers exactly as it did
+before. A draft that doesn't compile reports its issues the way a policy card
+does. A draft whose `rules` can't be read at all fails every decision
+(`failed`, `policy-unloadable`), which is what the realm would do if its card
+held that document, on the search lane as on the direct one. A `draft` with
+no `rules` member is refused, since it would compile to a policy granting
+nothing.
+
+Asking about a draft needs what asking about the live policy needs, read on
+both realms, and one thing more. A draft names its own types, and compiling it
+looks them up in whatever realm this server serves them from. What it records
+about them, down to which of their fields a search filter can read, is answered
+only to a caller who can read every such realm. Anyone else is refused with
+`403 operation-not-permitted`, and nothing about the draft is explained.
+
+### Asking about a search
+
+A search is not decided by the gate. The search engine composes the grants
+that admit it into its filter, and it reads the index. So an explain of a
+search is answered from the search lane. Pass `search` and name the realm as
+the target: `{ on, params }` for a named query, or `{ filter }` for an ad-hoc
+one, asked as `query`:
+
+```ts
+let explanation = await operations<typeof SchoolPolicy>(policy).explainSearch({
+  actor: '@teacher:example.org',
+  target: 'https://example.org/education/',
+  operation: 'listClassrooms',
+  search: { on: { module: '…/classroom', name: 'Classroom' } },
+});
+// explanation.search.filter    the search's own filter, as the realm runs it
+// explanation.search.fragment  what the policy composes into it; the search
+//                              runs { every: [filter, fragment] }
+// explanation.search.index     how far behind its source the index is
+```
+
+`allowed` with `acl` means the actor reads the realm and searches it unscoped.
+`allowed` with `granted` means the fragment scopes the search. `denied` means
+the search answers with no rows, which refuses nobody, so no `refusal` comes
+with it. `search.index.pending` counts the passes that write the realm's index
+and haven't landed yet. Until they land, the search answers from the index as
+it was, while the direct lane already sees the card as stored. This is the
+freshness difference the explain makes visible. When the data a predicate reads
+changes, the direct lane sees it at the next request, and search sees it at
+the next reindex of the rows it matches. When the policy card itself changes,
+both lanes see it once that card's own index pass lands. `search.index` counts
+the passes of the searched realm, so when the policy card lives in another
+realm, its pass isn't among them.
+
+### Listing, and the cap
+
+Who can read a card is every actor, and what an actor can reach is every card,
+so an explain is bounded. Pass `list: { on?, page?: { number?, size? } }` and
+name the realm as the target to explain one page of the realm's cards. Each
+card is explained as its own triple, and the answer is
+`{ explanations, page: { number, size, total } }`, with `draft` once on the
+listing where it answers against one. A card removed while the page is being
+explained is left out of it. A request explains at most 100 triples, the
+capability check's pair cap, and that covers a listing's page and a batch's explain entries
+together. A listing entry counts as the page it asks for. A request over the
+cap is refused whole with `invalid-params` before anything is explained.
+
 ## Checking what a policy puts in force
 
 A policy card can hold a grant that does not compile: a predicate that does not

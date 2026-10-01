@@ -137,62 +137,64 @@ export class Stepper extends Component<StepperSignature> {
       </button>
     </div>
     <style scoped>
-      .pretui-stepper {
-        display: inline-flex;
-        align-items: stretch;
-        height: var(--control-h, 28px);
-        border-radius: var(--radius);
-        background: var(--field, var(--boxel-light));
-        box-shadow: 0 0 0 1px var(--input);
-        overflow: hidden;
-      }
-      .pretui-stepper:has(.pretui-stepper-input:focus-visible) {
-        outline: 2px solid transparent;
-        outline-offset: 1px;
-        box-shadow: 0 0 0 2px var(--primary),
-          var(--pretui-shadow-inset, inset 0 1px 2px rgb(0 0 0 / 0.16));
-      }
-      .pretui-stepper[data-disabled] {
-        opacity: 0.45;
-      }
-      .pretui-stepper-btn {
-        display: grid;
-        place-items: center;
-        width: 26px;
-        border: 0;
-        padding: 0;
-        background: none;
-        color: var(--muted-foreground);
-        cursor: pointer;
-        flex: none;
-      }
-      .pretui-stepper-btn:hover:not(:disabled) {
-        background: var(--hover, var(--boxel-100));
-        color: var(--foreground);
-      }
-      .pretui-stepper-btn:disabled {
-        opacity: 0.35;
-        cursor: default;
-      }
-      .pretui-stepper-input {
-        width: var(--pretui-stepper-w, 52px);
-        min-width: 0;
-        border: 0;
-        padding: 0 2px;
-        background: transparent;
-        text-align: center;
-        font: inherit;
-        font-size: var(--text-ui-md, 12.5px);
-        letter-spacing: var(--track-ui, 0.01em);
-        font-variant-numeric: tabular-nums;
-        color: var(--foreground);
-        appearance: textfield;
-        outline: none;
-      }
-      .pretui-stepper-input::-webkit-outer-spin-button,
-      .pretui-stepper-input::-webkit-inner-spin-button {
-        appearance: none;
-        margin: 0;
+      @layer PretComponent {
+        .pretui-stepper {
+          display: inline-flex;
+          align-items: stretch;
+          height: var(--control-h, 28px);
+          border-radius: var(--radius);
+          background: var(--field, var(--boxel-light));
+          box-shadow: 0 0 0 1px var(--input);
+          overflow: hidden;
+        }
+        .pretui-stepper:has(.pretui-stepper-input:focus-visible) {
+          outline: 2px solid transparent;
+          outline-offset: 1px;
+          box-shadow: 0 0 0 2px var(--primary),
+            var(--pretui-shadow-inset, inset 0 1px 2px rgb(0 0 0 / 0.16));
+        }
+        .pretui-stepper[data-disabled] {
+          opacity: 0.45;
+        }
+        .pretui-stepper-btn {
+          display: grid;
+          place-items: center;
+          width: 26px;
+          border: 0;
+          padding: 0;
+          background: none;
+          color: var(--muted-foreground);
+          cursor: pointer;
+          flex: none;
+        }
+        .pretui-stepper-btn:hover:not(:disabled) {
+          background: var(--hover, var(--boxel-100));
+          color: var(--foreground);
+        }
+        .pretui-stepper-btn:disabled {
+          opacity: 0.35;
+          cursor: default;
+        }
+        .pretui-stepper-input {
+          width: var(--pretui-stepper-w, 52px);
+          min-width: 0;
+          border: 0;
+          padding: 0 2px;
+          background: transparent;
+          text-align: center;
+          font: inherit;
+          font-size: var(--text-ui-md, 12.5px);
+          letter-spacing: var(--track-ui, 0.01em);
+          font-variant-numeric: tabular-nums;
+          color: var(--foreground);
+          appearance: textfield;
+          outline: none;
+        }
+        .pretui-stepper-input::-webkit-outer-spin-button,
+        .pretui-stepper-input::-webkit-inner-spin-button {
+          appearance: none;
+          margin: 0;
+        }
       }
     </style>
   </template>

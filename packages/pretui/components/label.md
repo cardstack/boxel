@@ -48,6 +48,8 @@ Four tokens, and they are the same four that define the eyebrow voice in **Panel
 
 The `line-height: 16px` is a fixed pixel value rather than a ratio, so a season that scales `--text-ui-xs` up will get labels that clip or crowd. Worth changing to a unitless ratio.
 
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
+
 ## React ecosystem
 
 shadcn/Radix/Aria `Label`. Keep the small-caps Pretui voice. Must

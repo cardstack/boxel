@@ -51,3 +51,5 @@ Practical guidance: treat this as decorative unless you pass `aria-label`, and p
 `--primary` (the arc), `--inset` (the track), `--card` (the hole). That is the whole set — and note the hole's dependence on `--card` described above.
 
 The 15% ring thickness and the circular shape are fixed; `@size` is the only dimension knob and it is an arg rather than a token, so a season cannot set a default size. A season must keep `--primary` and `--inset` separable in luminance, since at 28px the arc is a few pixels wide and hue alone will not carry it.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

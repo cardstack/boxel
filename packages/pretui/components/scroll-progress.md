@@ -44,3 +44,5 @@ Where it is thinner: no horizontal-scroll source, no segment or chapter markers 
 `--pretui-scroll-progress` (the 0–1 ratio, written by either path), `--pretui-scrollprogress-fill`, `--pretui-scrollprogress-track`, `--pretui-scrollprogress-thickness` (from `@thickness`), `--pretui-scrollprogress-radius`.
 
 Splitting fill and track into two tokens is what lets a season set the contrast between them; a season that makes them too close produces a ribbon that is technically animating and practically invisible, which is the failure mode to check in a dark palette.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

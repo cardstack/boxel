@@ -45,20 +45,22 @@ export class ProgressRadial extends Component<ProgressRadialSignature> {
       ...attributes
     ></span>
     <style scoped>
-      .pretui-radial {
-        display: inline-grid;
-        place-items: center;
-        border-radius: 50%;
-        background: conic-gradient(var(--primary) calc(var(--pretui-radial-pct, 0) * 1%), var(--inset, var(--boxel-100)) 0);
-      }
-      .pretui-radial::after {
-        content: '';
-        display: block;
-        width: 70%;
-        height: 70%;
-        margin: 15%;
-        border-radius: 50%;
-        background: var(--card);
+      @layer PretComponent {
+        .pretui-radial {
+          display: inline-grid;
+          place-items: center;
+          border-radius: 50%;
+          background: conic-gradient(var(--primary) calc(var(--pretui-radial-pct, 0) * 1%), var(--inset, var(--boxel-100)) 0);
+        }
+        .pretui-radial::after {
+          content: '';
+          display: block;
+          width: 70%;
+          height: 70%;
+          margin: 15%;
+          border-radius: 50%;
+          background: var(--card);
+        }
       }
     </style>
   </template>

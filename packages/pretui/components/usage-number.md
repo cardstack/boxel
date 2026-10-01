@@ -46,3 +46,5 @@ Gaps, and two are inherited and consequential in this context:
 **Slider**'s tokens (`--primary` for the filled track, `--line-strong` for the remainder and the thumb hairline, `--card` for the thumb, `--shadow-ink-mid`, `--font-mono` and `--ink-3` for tick labels) or **Input**'s, plus **Table**'s for the doc row and the property rail's label voice.
 
 Nothing of its own. Check Slider's thumb against `--line-strong` per season — a property list shows sliders at several positions at once, and a thumb that disappears at either end of the track makes the knob unreadable exactly where the bounds are being demonstrated.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

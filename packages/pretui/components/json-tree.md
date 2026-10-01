@@ -48,3 +48,5 @@ Where it is thinner: read-only — there is no editing — no JSON Pointer or JS
 `--pretui-json-indent` (depth step), `--pretui-json-row-height` (density), `--pretui-json-max-height` (the scroll ceiling), `--pretui-destructive-ink` (parse errors), `--pretui-shadow-hairline`, `--pretui-dur-snap` / `--pretui-ease-snap` for expansion.
 
 Indent as a token rather than a fixed value is what lets a dense inspector and a roomy document view share one component — and because depth is also carried by `aria-level`, tightening the indent for space never costs a reader the structure.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

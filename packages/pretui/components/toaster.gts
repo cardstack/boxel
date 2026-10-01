@@ -583,222 +583,224 @@ export class Toaster extends Component<ToasterSignature> {
     </section>
 
     <style scoped>
-      @keyframes pretui-toast-age {
-        from {
-          transform: scaleX(1);
+      @layer PretComponent {
+        @keyframes pretui-toast-age {
+          from {
+            transform: scaleX(1);
+          }
+          to {
+            transform: scaleX(0);
+          }
         }
-        to {
-          transform: scaleX(0);
+
+        .pretui-toaster {
+          /* A toast region must escape every scroll container and every
+             overflow-hidden ancestor between it and the viewport, which is the
+             one thing absolute and sticky cannot do. Same accepted warning
+             overlay.gts carries for Popup and the Popover backdrop. */
+          position: fixed;
+          z-index: var(--pretui-z-toast, 100);
+          display: grid;
+          gap: var(--space-3, 8px);
+          width: min(var(--pretui-toaster-width, 380px), calc(100vw - 24px));
+          padding: var(--space-4, 11px);
+          pointer-events: none;
+          outline: none;
+          font-family: var(--font-sans);
         }
-      }
-
-      .pretui-toaster {
-        /* A toast region must escape every scroll container and every
-           overflow-hidden ancestor between it and the viewport, which is the
-           one thing absolute and sticky cannot do. Same accepted warning
-           overlay.gts carries for Popup and the Popover backdrop. */
-        position: fixed;
-        z-index: var(--pretui-z-toast, 100);
-        display: grid;
-        gap: var(--space-3, 8px);
-        width: min(var(--pretui-toaster-width, 380px), calc(100vw - 24px));
-        padding: var(--space-4, 11px);
-        pointer-events: none;
-        outline: none;
-        font-family: var(--font-sans);
-      }
-      .pretui-toaster > * {
-        pointer-events: auto;
-      }
-      .pretui-toaster[data-placement^='top'] {
-        top: 0;
-      }
-      .pretui-toaster[data-placement^='bottom'] {
-        bottom: 0;
-      }
-      /* Written out rather than as a suffix-match attribute selector: the
-         dollar sign it needs counts toward the twelve-metacharacter threshold
-         that
-         silently kills the lint pass's template extraction, and two extra
-         selectors are cheaper than a booby trap for whoever edits this next. */
-      .pretui-toaster[data-placement='top-start'],
-      .pretui-toaster[data-placement='bottom-start'] {
-        inset-inline-start: 0;
-      }
-      .pretui-toaster[data-placement='top-end'],
-      .pretui-toaster[data-placement='bottom-end'] {
-        inset-inline-end: 0;
-      }
-      .pretui-toaster[data-placement='top'],
-      .pretui-toaster[data-placement='bottom'] {
-        inset-inline: 0;
-        margin-inline: auto;
-      }
-
-      .pretui-toast-item {
-        position: relative;
-        overflow: hidden;
-        display: grid;
-        background: var(--popover);
-        color: var(--popover-foreground);
-        border-radius: var(--radius-surface, 10px);
-        box-shadow: var(--pretui-shadow-raised, 0 0 0 1px var(--border), 0 6px 20px rgb(16 24 40 / 0.12));
-        font-size: var(--text-ui-md, 12.5px);
-        opacity: 1;
-        translate: 0 0;
-        transition: opacity var(--pretui-dur-enter, 220ms) var(--pretui-ease-enter, cubic-bezier(0.23, 1, 0.32, 1)),
-          translate var(--pretui-dur-enter, 220ms) var(--pretui-ease-enter, cubic-bezier(0.23, 1, 0.32, 1));
-      }
-      @starting-style {
-        .pretui-toaster[data-placement^='bottom'] .pretui-toast-item {
-          opacity: 0;
-          translate: 0 12px;
+        .pretui-toaster > * {
+          pointer-events: auto;
         }
-        .pretui-toaster[data-placement^='top'] .pretui-toast-item {
-          opacity: 0;
-          translate: 0 -12px;
+        .pretui-toaster[data-placement^='top'] {
+          top: 0;
         }
-      }
+        .pretui-toaster[data-placement^='bottom'] {
+          bottom: 0;
+        }
+        /* Written out rather than as a suffix-match attribute selector: the
+           dollar sign it needs counts toward the twelve-metacharacter threshold
+           that
+           silently kills the lint pass's template extraction, and two extra
+           selectors are cheaper than a booby trap for whoever edits this next. */
+        .pretui-toaster[data-placement='top-start'],
+        .pretui-toaster[data-placement='bottom-start'] {
+          inset-inline-start: 0;
+        }
+        .pretui-toaster[data-placement='top-end'],
+        .pretui-toaster[data-placement='bottom-end'] {
+          inset-inline-end: 0;
+        }
+        .pretui-toaster[data-placement='top'],
+        .pretui-toaster[data-placement='bottom'] {
+          inset-inline: 0;
+          margin-inline: auto;
+        }
 
-      .pretui-toast-face {
-        display: flex;
-        align-items: flex-start;
-        gap: var(--space-3, 8px);
-        padding: var(--space-4, 11px);
-      }
-      .pretui-toast-text {
-        display: grid;
-        gap: 2px;
-        flex: 1;
-        min-width: 0;
-      }
-      .pretui-toast-title {
-        font-weight: 600;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-      .pretui-toast-msg {
-        color: var(--muted-foreground);
-        font-size: var(--text-ui-sm, 11.5px);
-        line-height: 1.5;
-      }
-      .pretui-toast-do {
-        flex: none;
-        border: 0;
-        background: transparent;
-        color: var(--pretui-toast-tone, var(--primary));
-        font: inherit;
-        font-weight: 600;
-        padding: 2px 4px;
-        border-radius: var(--radius-control, 6px);
-        cursor: pointer;
-      }
-      .pretui-toast-do:hover {
-        background: var(--hover, color-mix(in oklch, currentColor 10%, transparent));
-      }
-      .pretui-toast-x {
-        flex: none;
-        display: grid;
-        place-items: center;
-        width: 20px;
-        height: 20px;
-        border: 0;
-        border-radius: var(--radius-control, 6px);
-        background: transparent;
-        color: var(--muted-foreground);
-        cursor: pointer;
-      }
-      .pretui-toast-x:hover {
-        color: var(--foreground);
-        background: var(--hover, color-mix(in oklch, currentColor 10%, transparent));
-      }
-      .pretui-toast-do:focus-visible,
-      .pretui-toast-x:focus-visible {
-        outline: 2px solid var(--ring);
-        outline-offset: 1px;
-      }
+        .pretui-toast-item {
+          position: relative;
+          overflow: hidden;
+          display: grid;
+          background: var(--popover);
+          color: var(--popover-foreground);
+          border-radius: var(--radius-surface, 10px);
+          box-shadow: var(--pretui-shadow-raised, 0 0 0 1px var(--border), 0 6px 20px rgb(16 24 40 / 0.12));
+          font-size: var(--text-ui-md, 12.5px);
+          opacity: 1;
+          translate: 0 0;
+          transition: opacity var(--pretui-dur-enter, 220ms) var(--pretui-ease-enter, cubic-bezier(0.23, 1, 0.32, 1)),
+            translate var(--pretui-dur-enter, 220ms) var(--pretui-ease-enter, cubic-bezier(0.23, 1, 0.32, 1));
+        }
+        @starting-style {
+          .pretui-toaster[data-placement^='bottom'] .pretui-toast-item {
+            opacity: 0;
+            translate: 0 12px;
+          }
+          .pretui-toaster[data-placement^='top'] .pretui-toast-item {
+            opacity: 0;
+            translate: 0 -12px;
+          }
+        }
 
-      /* Touch: the dismiss control has to clear 44px on a coarse pointer, and
-         it does it by growing its hit area rather than its ink. */
-      @media (any-pointer: coarse) {
-        .pretui-toast-x::after,
-        .pretui-toast-do::after {
-          content: '';
-          position: absolute;
-          inset: auto;
-          min-width: 44px;
-          min-height: 44px;
+        .pretui-toast-face {
+          display: flex;
+          align-items: flex-start;
+          gap: var(--space-3, 8px);
+          padding: var(--space-4, 11px);
+        }
+        .pretui-toast-text {
+          display: grid;
+          gap: 2px;
+          flex: 1;
+          min-width: 0;
+        }
+        .pretui-toast-title {
+          font-weight: 600;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .pretui-toast-msg {
+          color: var(--muted-foreground);
+          font-size: var(--text-ui-sm, 11.5px);
+          line-height: 1.5;
+        }
+        .pretui-toast-do {
+          flex: none;
+          border: 0;
+          background: transparent;
+          color: var(--pretui-toast-tone, var(--primary));
+          font: inherit;
+          font-weight: 600;
+          padding: 2px 4px;
+          border-radius: var(--radius-control, 6px);
+          cursor: pointer;
+        }
+        .pretui-toast-do:hover {
+          background: var(--hover, color-mix(in oklch, currentColor 10%, transparent));
         }
         .pretui-toast-x {
-          position: relative;
-          width: 28px;
-          height: 28px;
+          flex: none;
+          display: grid;
+          place-items: center;
+          width: 20px;
+          height: 20px;
+          border: 0;
+          border-radius: var(--radius-control, 6px);
+          background: transparent;
+          color: var(--muted-foreground);
+          cursor: pointer;
         }
-      }
+        .pretui-toast-x:hover {
+          color: var(--foreground);
+          background: var(--hover, color-mix(in oklch, currentColor 10%, transparent));
+        }
+        .pretui-toast-do:focus-visible,
+        .pretui-toast-x:focus-visible {
+          outline: 2px solid var(--ring);
+          outline-offset: 1px;
+        }
 
-      /* Tone. One recipe, seven hue tokens (Appendix E.1) — the stripe is the
-         only place a tone paints, so a neutral toast is genuinely neutral. */
-      .pretui-toast-item[data-tone='info'] {
-        --pretui-toast-tone: var(--pretui-info, var(--boxel-blue));
-      }
-      .pretui-toast-item[data-tone='success'] {
-        --pretui-toast-tone: var(--success, var(--boxel-success));
-      }
-      .pretui-toast-item[data-tone='warning'] {
-        --pretui-toast-tone: var(--warning, var(--boxel-warning));
-      }
-      .pretui-toast-item[data-tone='danger'] {
-        --pretui-toast-tone: var(--destructive);
-      }
-      .pretui-toast-item[data-tone='neutral'] {
-        --pretui-toast-tone: var(--muted-foreground);
-      }
-      .pretui-toast-item::before {
-        content: '';
-        position: absolute;
-        inset-block: 0;
-        inset-inline-start: 0;
-        width: 3px;
-        background: var(--pretui-toast-tone, var(--muted-foreground));
-      }
+        /* Touch: the dismiss control has to clear 44px on a coarse pointer, and
+           it does it by growing its hit area rather than its ink. */
+        @media (any-pointer: coarse) {
+          .pretui-toast-x::after,
+          .pretui-toast-do::after {
+            content: '';
+            position: absolute;
+            inset: auto;
+            min-width: 44px;
+            min-height: 44px;
+          }
+          .pretui-toast-x {
+            position: relative;
+            width: 28px;
+            height: 28px;
+          }
+        }
 
-      .pretui-toast-life {
-        display: block;
-        height: 2px;
-        transform-origin: left center;
-        background: var(--pretui-toast-tone, var(--muted-foreground));
-        opacity: 0.55;
-        animation: pretui-toast-age var(--pretui-toast-life, 5s) linear forwards;
-      }
-      .pretui-toaster[data-paused] .pretui-toast-life,
-      .pretui-toaster[data-pause-hover]:hover .pretui-toast-life,
-      .pretui-toaster[data-pause-focus]:focus-within .pretui-toast-life {
-        animation-play-state: paused;
-      }
+        /* Tone. One recipe, seven hue tokens (Appendix E.1) — the stripe is the
+           only place a tone paints, so a neutral toast is genuinely neutral. */
+        .pretui-toast-item[data-tone='info'] {
+          --pretui-toast-tone: var(--pretui-info, var(--boxel-blue));
+        }
+        .pretui-toast-item[data-tone='success'] {
+          --pretui-toast-tone: var(--success, var(--boxel-success));
+        }
+        .pretui-toast-item[data-tone='warning'] {
+          --pretui-toast-tone: var(--warning, var(--boxel-warning));
+        }
+        .pretui-toast-item[data-tone='danger'] {
+          --pretui-toast-tone: var(--destructive);
+        }
+        .pretui-toast-item[data-tone='neutral'] {
+          --pretui-toast-tone: var(--muted-foreground);
+        }
+        .pretui-toast-item::before {
+          content: '';
+          position: absolute;
+          inset-block: 0;
+          inset-inline-start: 0;
+          width: 3px;
+          background: var(--pretui-toast-tone, var(--muted-foreground));
+        }
 
-      .pretui-toaster-more {
-        margin: 0;
-        justify-self: end;
-        padding: 3px 8px;
-        border-radius: 999px;
-        background: var(--popover);
-        box-shadow: var(--pretui-shadow-raised, 0 0 0 1px var(--border));
-        color: var(--muted-foreground);
-        font-size: var(--text-ui-sm, 11.5px);
-      }
-      .pretui-toaster-more-n {
-        font-variant-numeric: tabular-nums;
-        font-weight: 600;
-        color: var(--foreground);
-      }
+        .pretui-toast-life {
+          display: block;
+          height: 2px;
+          transform-origin: left center;
+          background: var(--pretui-toast-tone, var(--muted-foreground));
+          opacity: 0.55;
+          animation: pretui-toast-age var(--pretui-toast-life, 5s) linear forwards;
+        }
+        .pretui-toaster[data-paused] .pretui-toast-life,
+        .pretui-toaster[data-pause-hover]:hover .pretui-toast-life,
+        .pretui-toaster[data-pause-focus]:focus-within .pretui-toast-life {
+          animation-play-state: paused;
+        }
 
-      /* Reduced motion takes the ENTRANCE, never the clock. The life bar is
-         not decoration — it is the toast's remaining time, and WCAG 2.3.3
-         exempts motion essential to the information conveyed. Stopping it
-         would stop the dismissal itself. */
-      @media (prefers-reduced-motion: reduce) {
-        .pretui-toast-item {
-          transition: none;
+        .pretui-toaster-more {
+          margin: 0;
+          justify-self: end;
+          padding: 3px 8px;
+          border-radius: 999px;
+          background: var(--popover);
+          box-shadow: var(--pretui-shadow-raised, 0 0 0 1px var(--border));
+          color: var(--muted-foreground);
+          font-size: var(--text-ui-sm, 11.5px);
+        }
+        .pretui-toaster-more-n {
+          font-variant-numeric: tabular-nums;
+          font-weight: 600;
+          color: var(--foreground);
+        }
+
+        /* Reduced motion takes the ENTRANCE, never the clock. The life bar is
+           not decoration — it is the toast's remaining time, and WCAG 2.3.3
+           exempts motion essential to the information conveyed. Stopping it
+           would stop the dismissal itself. */
+        @media (prefers-reduced-motion: reduce) {
+          .pretui-toast-item {
+            transition: none;
+          }
         }
       }
     </style>

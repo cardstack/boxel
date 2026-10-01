@@ -724,6 +724,20 @@ module('Integration | operations', function (hooks) {
         /carries no `output` to reshape it/,
       ],
       [
+        'an explain that rewrites its question',
+        () => {
+          class Rewritten extends CardDef {
+            @operation static explain = {
+              base: 'explain',
+              nonGrantable: true,
+              input: bxl`.`,
+            };
+          }
+          return Rewritten;
+        },
+        /carries no `input` to rewrite it/,
+      ],
+      [
         'an explain on a file def',
         () => {
           class LogFile extends FileDef {

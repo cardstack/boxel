@@ -142,68 +142,70 @@ export class Tooltip extends Component<TooltipSignature> {
       {{/if}}
     </span>
     <style scoped>
-      .pretui-tipwrap {
-        position: relative;
-        display: inline-flex;
-      }
-      .pretui-tip-key {
-        display: none;
-      }
-      .pretui-tooltip {
-        position: absolute;
-        /* kit stacking scale (pretui-css.gts): a tooltip describes whatever
-           is under the pointer, which may be an item inside a dropdown or a
-           popover, so it is the highest non-modal tier. */
-        z-index: var(--pretui-z-tooltip, 80);
-        background: var(--tooltip, var(--boxel-dark));
-        color: var(--tooltip-foreground, var(--boxel-light));
-        font-size: var(--text-ui-sm, 11.5px);
-        font-weight: 500;
-        padding: 4px 8px;
-        border-radius: 6px;
-        box-shadow: 0 4px 14px var(--shadow-ink-strong, rgb(0 0 0 / 0.16));
-        white-space: nowrap;
-        width: max-content;
-        opacity: 0;
-        /* `visibility`, not opacity alone: an opacity-0 bubble is still in
-           the accessibility tree and still hit-testable. Hidden here means
-           hidden to everyone — while a DIRECT aria-describedby reference
-           still resolves its text, which is the whole point. */
-        visibility: hidden;
-        transition: opacity 120ms ease, visibility 0s linear 120ms;
-      }
-      .pretui-tooltip[data-open='true'] {
-        opacity: 1;
-        visibility: visible;
-        transition: opacity 120ms ease, visibility 0s;
-      }
-      /* WCAG 1.4.13 "Hoverable": the pointer must be able to travel onto the
-         bubble without it vanishing. The gap between trigger and bubble is
-         bridged by a transparent extension of the bubble's own box. */
-      .pretui-tooltip::before {
-        content: '';
-        position: absolute;
-        inset: -6px;
-      }
-      .pretui-tooltip[data-side='top'] {
-        bottom: calc(100% + 6px);
-        left: 50%;
-        transform: translateX(-50%);
-      }
-      .pretui-tooltip[data-side='bottom'] {
-        top: calc(100% + 6px);
-        left: 50%;
-        transform: translateX(-50%);
-      }
-      .pretui-tooltip[data-side='left'] {
-        right: calc(100% + 6px);
-        top: 50%;
-        transform: translateY(-50%);
-      }
-      .pretui-tooltip[data-side='right'] {
-        left: calc(100% + 6px);
-        top: 50%;
-        transform: translateY(-50%);
+      @layer PretComponent {
+        .pretui-tipwrap {
+          position: relative;
+          display: inline-flex;
+        }
+        .pretui-tip-key {
+          display: none;
+        }
+        .pretui-tooltip {
+          position: absolute;
+          /* kit stacking scale (pretui-css.gts): a tooltip describes whatever
+             is under the pointer, which may be an item inside a dropdown or a
+             popover, so it is the highest non-modal tier. */
+          z-index: var(--pretui-z-tooltip, 80);
+          background: var(--tooltip, var(--boxel-dark));
+          color: var(--tooltip-foreground, var(--boxel-light));
+          font-size: var(--text-ui-sm, 11.5px);
+          font-weight: 500;
+          padding: 4px 8px;
+          border-radius: 6px;
+          box-shadow: 0 4px 14px var(--shadow-ink-strong, rgb(0 0 0 / 0.16));
+          white-space: nowrap;
+          width: max-content;
+          opacity: 0;
+          /* `visibility`, not opacity alone: an opacity-0 bubble is still in
+             the accessibility tree and still hit-testable. Hidden here means
+             hidden to everyone — while a DIRECT aria-describedby reference
+             still resolves its text, which is the whole point. */
+          visibility: hidden;
+          transition: opacity 120ms ease, visibility 0s linear 120ms;
+        }
+        .pretui-tooltip[data-open='true'] {
+          opacity: 1;
+          visibility: visible;
+          transition: opacity 120ms ease, visibility 0s;
+        }
+        /* WCAG 1.4.13 "Hoverable": the pointer must be able to travel onto the
+           bubble without it vanishing. The gap between trigger and bubble is
+           bridged by a transparent extension of the bubble's own box. */
+        .pretui-tooltip::before {
+          content: '';
+          position: absolute;
+          inset: -6px;
+        }
+        .pretui-tooltip[data-side='top'] {
+          bottom: calc(100% + 6px);
+          left: 50%;
+          transform: translateX(-50%);
+        }
+        .pretui-tooltip[data-side='bottom'] {
+          top: calc(100% + 6px);
+          left: 50%;
+          transform: translateX(-50%);
+        }
+        .pretui-tooltip[data-side='left'] {
+          right: calc(100% + 6px);
+          top: 50%;
+          transform: translateY(-50%);
+        }
+        .pretui-tooltip[data-side='right'] {
+          left: calc(100% + 6px);
+          top: 50%;
+          transform: translateY(-50%);
+        }
       }
     </style>
   </template>

@@ -9,6 +9,7 @@ import type {
   SearchEntryWireFilter,
   SearchEntryWireQuery,
 } from '../search-entry.ts';
+import { CAPABILITY_CHECK_CAP } from './capability-wire.ts';
 import type { OperationDiagnostics } from './telemetry.ts';
 import {
   PRERENDERED_HTML_FORMATS,
@@ -877,6 +878,35 @@ export interface OperationExplainResult {
   explanation: PolicyExplanation;
 }
 
+// A listing explain's answer: one page of the target realm's cards, each
+// explained as the single question would explain it. Carried on the wire as
+// `{ explanations, page }`.
+export interface OperationExplainListingResult {
+  listing: PolicyExplanationListing;
+}
+
+export interface PolicyExplanationListing {
+  // One per card on the page, in the page's order.
+  explanations: PolicyExplanation[];
+  // The page this is, and how many cards the listing pages through. `size` is
+  // the size asked for, so a last page can hold fewer, as can a page a card
+  // was removed from while it was explained.
+  page: { number: number; size: number; total: number };
+  // Present where the listing was answered against a draft, as on a single
+  // explanation.
+  draft?: { issues: PolicyIssue[] };
+}
+
+// The most questions one request may have explained: one listing's page, or,
+// inside a batch, the questions of every explain entry in it together, where
+// a listing entry counts as the page it asks for. An explain answers per
+// question what a capability check answers per pair, and more, so a request
+// explains no more questions than a capability check checks pairs. Refused
+// whole above it, before anything is explained: who can read a card is every
+// actor, and what an actor can reach is every card, so an uncapped explain is
+// an enumeration.
+export const EXPLAIN_CAP = CAPABILITY_CHECK_CAP;
+
 // ============================================================================
 // What an explain says.
 //
@@ -924,6 +954,64 @@ export interface PolicyExplanation {
   // The grant that admitted the invocation, where one did: its position in
   // `rules`, and in that rule's `grants`.
   admittedBy?: { rule: number; grant: number };
+  // Present where the question was answered against a draft rather than the
+  // policy in force: what compiling the draft recorded against it, in the
+  // shape the policy's own issues take. A draft is compiled in memory for this
+  // answer alone, and nothing about the policy in force changes.
+  draft?: { issues: PolicyIssue[] };
+  // Present for a question asked about a search: what the target realm's
+  // policy composes into it.
+  search?: ExplainedSearch;
+}
+
+// ============================================================================
+// The search lane, as an explain reports it.
+//
+// A search is not decided by the gate. It is authorized on the search engine,
+// which composes the grants that admit it into its filter, so it answers with
+// the rows those grants admit rather than admitting or refusing a card. And it
+// reads the index, so it is only as fresh as the index: a write the direct
+// lane sees on the next request, a search sees once the index has it. An
+// explain of a search reports both, so the answer says what the search would
+// return and how stale that could be.
+//
+// `decision` reads accordingly: `allowed` is a search that runs, unscoped where
+// the realm's ACL lets the actor read the realm (`reason` is `acl`, with no
+// fragment) and scoped by the fragment where a grant admits it (`granted`).
+// `denied` is a search that answers with no rows, which is no refusal, so no
+// `refusal` accompanies it.
+// ============================================================================
+export interface ExplainedSearch {
+  // The name a grant must carry to contribute: a named query's own name, or
+  // `query` for an ad-hoc search.
+  operation: string;
+  // The types whose rules the policy consults: the one a named query is
+  // declared on, or each type an ad-hoc search's filter anchors to. Empty for a
+  // filter that anchors to none, which no grant reaches.
+  types: CodeRef[];
+  // The search's own filter, as the realm runs it: a named query's declaration
+  // lowered with its params and the actor, or an ad-hoc search's filter as it
+  // was sent. Absent for a declaration that filters on nothing.
+  filter?: SearchEntryWireFilter;
+  // What the policy composes into the search, in the grammar a search is
+  // written in: the filter of every grant that admits it, any-composed. The
+  // search runs `{ every: [filter, fragment] }`. Absent where the policy
+  // contributes nothing: the realm's ACL lets the actor read the realm, so no
+  // policy is consulted, or no grant admits the search, so it has no rows.
+  fragment?: SearchEntryWireFilter;
+  // How far behind its source the index the search reads is, as the realm's
+  // queue records it.
+  index: ExplainedIndexLag;
+}
+
+export interface ExplainedIndexLag {
+  // The passes that write the realm's index and have yet to land. Until one
+  // lands, a search answers from the index as it was before the change it
+  // carries: a card written since can still match, or fail to, as it did.
+  pending: number;
+  // How long the oldest of them has been waiting, in milliseconds. Absent
+  // where none is.
+  oldestPendingMs?: number;
 }
 
 export type PolicyExplanationDecision =
@@ -944,7 +1032,8 @@ export type PolicyExplanationReason =
   | 'acl'
   // A grant admits it: one with no condition, or one whose predicate held.
   | 'granted'
-  // No rule governing the target's type has a grant for the operation.
+  // No rule governing the target's type has a grant for the operation. On the
+  // search lane, none has one that compiled to a search filter.
   | 'no-grant'
   // Grants for the operation matched, and none of their predicates held.
   | 'predicate-false'
@@ -1005,6 +1094,10 @@ export interface ExplainedGrant {
   // last indexed.
   tier?: 'stored' | 'snapshot';
   outcome: ExplainedGrantOutcome;
+  // On the search lane, whether the grant compiled to a search filter, which
+  // is what it composes into the search. One whose predicate has none admits
+  // no search (`policy-not-filterable`). Absent on the direct lane.
+  filterable?: boolean;
 }
 
 export type ExplainedGrantOutcome =
@@ -1014,7 +1107,9 @@ export type ExplainedGrantOutcome =
   | 'did-not-hold'
   | 'threw'
   // The gate decided without evaluating it: an earlier grant admitted the
-  // invocation, or a refusal came first.
+  // invocation, or a refusal came first. On the search lane every predicate is
+  // this: a search runs a grant's filter over the index rather than evaluating
+  // its predicate per card.
   | 'not-evaluated';
 
 // A validate's answer: what the policy card it was invoked on compiles to, or,
@@ -1139,6 +1234,7 @@ export type OperationResult =
   | OperationIdentityResult
   | OperationSourceResult
   | OperationExplainResult
+  | OperationExplainListingResult
   | OperationValidateResult
   | null;
 
@@ -1173,6 +1269,12 @@ export function isExplainResult(
   result: OperationResult,
 ): result is OperationExplainResult {
   return result != null && 'explanation' in result;
+}
+
+export function isExplainListingResult(
+  result: OperationResult,
+): result is OperationExplainListingResult {
+  return result != null && 'listing' in result;
 }
 
 export function isValidateResult(

@@ -18,6 +18,7 @@ import {
   type OperationWriteResult,
   type OperationsSubject,
   type PolicyExplanation,
+  type PolicyExplanationListing,
   type PolicyValidation,
   type PrerenderedHtmlFormat,
   type QueryTargetHandle,
@@ -1330,6 +1331,14 @@ function assertValidDeclaration(
   if (declaration.input !== undefined) {
     assertBxlProgram(label, 'input', declaration.input);
   }
+  // The question an explain answers is its payload as sent. An `input` stage
+  // would answer a question other than the one asked, and would change how
+  // many questions the request asks after they were counted against the cap.
+  if (base === 'explain' && declaration.input !== undefined) {
+    throw new Error(
+      `${label}: an "explain" operation answers the question its payload asks, so it carries no \`input\` to rewrite it`,
+    );
+  }
   let usedClauses = clauseKeys.filter(
     (clause) =>
       declaration[clause] !== undefined && !TYPE_NAMING_KEYS.includes(clause),
@@ -2202,6 +2211,7 @@ export type {
   OperationValueResult,
   OperationWriteResult,
   PolicyExplanation,
+  PolicyExplanationListing,
   PolicyValidation,
   SearchEntries,
   SearchInvokeOptions,
@@ -2221,17 +2231,20 @@ type PayloadArgs<Declaration> = Declaration extends {
 // What an operation resolves to, by the behavior it is built on: a write
 // reports the identity and version of what it wrote, a delete reports that
 // there is nothing left to describe, a read reports its document, an explain
-// reports what the policy decided and why, and a validate reports what the
-// policy compiles to.
+// reports what the policy decided and why — or, for one whose params ask for a
+// `list`, one page of explanations — and a validate reports what the policy
+// compiles to.
 type ResultOf<Declaration> = Declaration extends { base: 'delete' }
   ? null
   : Declaration extends { base: 'read' }
     ? OperationDocument
-    : Declaration extends { base: 'explain' }
-      ? PolicyExplanation
-      : Declaration extends { base: 'validate' }
-        ? PolicyValidation
-        : OperationWriteResult;
+    : Declaration extends { base: 'explain'; params: { list: unknown } }
+      ? PolicyExplanationListing
+      : Declaration extends { base: 'explain' }
+        ? PolicyExplanation
+        : Declaration extends { base: 'validate' }
+          ? PolicyValidation
+          : OperationWriteResult;
 
 // The behaviors invocable on an instance, and the one invocable on a class.
 // A declared `create` appears in both: invoked on the class it mints a card

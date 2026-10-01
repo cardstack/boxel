@@ -428,6 +428,9 @@ function policyStub(
       return policyCard;
     },
     isPolicyCard: (types) => types.includes(typeKey(REALM_POLICY)),
+    async compileDraft() {
+      throw new Error('this stub compiles no draft');
+    },
   };
   return { access, loads };
 }

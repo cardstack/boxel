@@ -332,6 +332,33 @@ export interface LaneHolder {
   claimed: boolean;
 }
 
+// How far a realm's index is behind its source, as the queue records it: how
+// many passes that write the index are yet to land, and how long the oldest of
+// them has been waiting. A search reads the index, so this is how stale a
+// search's answer can be. The queue is shared by every process, so a pass
+// another replica enqueued counts, and the age is measured on the database's
+// clock, which is the one that stamped it. Undefined where there is no queue
+// to read.
+export async function indexLag(
+  dbAdapter: DBAdapter,
+  realmURL: string,
+): Promise<{ pending: number; oldestPendingMs?: number } | undefined> {
+  if (dbAdapter.kind !== 'pg') {
+    return undefined;
+  }
+  let [row] = (await query(dbAdapter, [
+    `SELECT COUNT(*) AS pending,`,
+    `FLOOR(EXTRACT(EPOCH FROM (NOW() - MIN(created_at))) * 1000) AS oldest_ms`,
+    `FROM jobs WHERE status = 'unfulfilled' AND`,
+    ...laneFamilyPredicate(indexingConcurrencyGroup(realmURL)),
+    ...jobTypeFilter(INDEX_WRITING_JOB_TYPES),
+  ])) as { pending: number | string; oldest_ms: number | string | null }[];
+  let pending = Number(row?.pending ?? 0);
+  return pending > 0 && row?.oldest_ms != null
+    ? { pending, oldestPendingMs: Math.max(0, Number(row.oldest_ms)) }
+    : { pending };
+}
+
 export async function outstandingIndexJobs(
   dbAdapter: DBAdapter,
   realmURL: string,
