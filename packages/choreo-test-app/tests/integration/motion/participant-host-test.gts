@@ -201,4 +201,14 @@ module('Integration | motion | participant host', function (hooks) {
       undefine();
     }
   });
+
+  test("the modifier's own args cannot be defined as participant args", function (assert) {
+    for (const name of ['id', 'presence', 'role']) {
+      assert.throws(
+        () => defineParticipantArg(name as 'testTag', () => {}),
+        /cannot be a participant arg/,
+        name
+      );
+    }
+  });
 });

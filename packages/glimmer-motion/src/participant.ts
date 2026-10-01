@@ -94,6 +94,9 @@ type ApplyArg = (element: Element, value: unknown) => void;
 
 const participantArgs = new Map<string, ApplyArg>();
 
+/** the args MotionNode consumes itself before any participant arg is applied */
+const reservedArgs = new Set(['id', 'presence', 'role']);
+
 /**
  * Claim a named arg of `{{motion}}` for a host. On every update pass the
  * modifier removes it from the props it gives the engine and calls
@@ -101,11 +104,20 @@ const participantArgs = new Map<string, ApplyArg>();
  * `apply` both sets and clears. It runs for every motion element, inside a
  * host or not, from the first pass on, before the element mounts. Returns the
  * remover.
+ *
+ * A defined name is always withheld from the engine, so a Motion prop name
+ * (`layout`, `transition`, …) would take that prop away from every element.
+ * `id`, `presence` and `role` belong to the modifier itself and throw.
  */
 export function defineParticipantArg<K extends keyof ParticipantArgs & string>(
   name: K,
   apply: (element: Element, value: ParticipantArgs[K] | undefined) => void,
 ) {
+  if (reservedArgs.has(name)) {
+    throw new Error(
+      `glimmer-motion: '${name}' is a {{motion}} arg of its own and cannot be a participant arg`,
+    );
+  }
   participantArgs.set(name, apply as ApplyArg);
   return () => {
     if (participantArgs.get(name) === apply) {
