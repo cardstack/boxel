@@ -271,47 +271,49 @@ export class AspectRatio extends Component<AspectRatioSignature> {
     {{/if}}
 
     <style scoped>
-      .pretui-aspect {
-        /* The property, not the padding-bottom hack: one element, composable
-           with object-fit, and `min-block-size` still works on it. */
-        aspect-ratio: var(--pretui-aspect-ratio, 1);
-        inline-size: 100%;
-        min-inline-size: 0;
-        overflow: hidden;
-        border-radius: var(--pretui-aspect-radius, var(--radius));
-        background-color: var(
-          --pretui-aspect-bg,
-          color-mix(in oklch, var(--foreground) 6%, var(--card))
-        );
-        background-position: center;
-        background-repeat: no-repeat;
-        box-sizing: border-box;
-      }
-      /* A slot frame is a single-cell grid, so a yielded child stretches to
-         the box without this component styling the caller's element — which
-         the scoped-CSS transpiler would not let it do anyway. */
-      .pretui-aspect[data-fit='slot'] {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr);
-        grid-template-rows: minmax(0, 1fr);
-      }
-      .pretui-aspect[data-fit='contain'] {
-        background-size: contain;
-      }
-      .pretui-aspect[data-fit='cover'] {
-        background-size: cover;
-      }
-      .pretui-aspect[data-bordered='true'] {
-        box-shadow: var(
-          --pretui-shadow-hairline,
-          0 0 0 1px var(--border)
-        );
-      }
-      .pretui-aspect-img {
-        display: block;
-        inline-size: 100%;
-        block-size: 100%;
-        object-fit: var(--pretui-aspect-object-fit, cover);
+      @layer PretComponent {
+        .pretui-aspect {
+          /* The property, not the padding-bottom hack: one element, composable
+             with object-fit, and `min-block-size` still works on it. */
+          aspect-ratio: var(--pretui-aspect-ratio, 1);
+          inline-size: 100%;
+          min-inline-size: 0;
+          overflow: hidden;
+          border-radius: var(--pretui-aspect-radius, var(--radius));
+          background-color: var(
+            --pretui-aspect-bg,
+            color-mix(in oklch, var(--foreground) 6%, var(--card))
+          );
+          background-position: center;
+          background-repeat: no-repeat;
+          box-sizing: border-box;
+        }
+        /* A slot frame is a single-cell grid, so a yielded child stretches to
+           the box without this component styling the caller's element — which
+           the scoped-CSS transpiler would not let it do anyway. */
+        .pretui-aspect[data-fit='slot'] {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr);
+          grid-template-rows: minmax(0, 1fr);
+        }
+        .pretui-aspect[data-fit='contain'] {
+          background-size: contain;
+        }
+        .pretui-aspect[data-fit='cover'] {
+          background-size: cover;
+        }
+        .pretui-aspect[data-bordered='true'] {
+          box-shadow: var(
+            --pretui-shadow-hairline,
+            0 0 0 1px var(--border)
+          );
+        }
+        .pretui-aspect-img {
+          display: block;
+          inline-size: 100%;
+          block-size: 100%;
+          object-fit: var(--pretui-aspect-object-fit, cover);
+        }
       }
     </style>
   </template>

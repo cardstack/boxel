@@ -11,13 +11,15 @@ It is the design-tool number input, and it handles the case a plain number field
 @min?, @max?
 @step?          — one arrow press, one stepper click, and @pixelsPerStep px of
                   horizontal scrub each move by this much. Default 1
-@pixelsPerStep? — px of pointer travel that buys one step. Default 1
+@pixelsPerStep? — px of pointer travel that buys one step. Default 1, or 6
+                  on a stepped scale
 @steps?         — A STEPPED SCALE: the ordered list of legal values
 @precision?     — decimal places kept on commit. Default 2
 @unit?, @unitPosition? — 'px', '%', '°', 'ms'; prefix or suffix
 @grip?          — short text shown in the grip when there is no unit
-@scrubFrom?     — 'grip' (default) scrubs from the affix only; 'field' makes the
-                  whole control a scrub surface; 'none'
+@scrubFrom?     — 'grip' scrubs from the affix only; 'field' makes the
+                  whole control a scrub surface; 'none'. Default 'grip' when
+                  there is a grip (@unit or @grip), otherwise 'field'
 @label?         — accessible name. REQUIRED in practice
 @placeholder?
 @steppers?      — show the up/down stepper pair
@@ -25,7 +27,9 @@ It is the design-tool number input, and it handles the case a plain number field
 
 **`@steps` is the interesting arg.** Apertures, ISO speeds, type ramps and zoom levels are numeric without being continuous — the gaps between legal values are not uniform, so `@step` cannot describe them. Supply the ordered list and the control becomes a discrete spinbutton: scrub, arrows and steppers travel whole stops, `@min`/`@max` default to the ends of the list, a typed number snaps to the nearest legal value on commit, and the field shows the stop's label — `f/5.6` — while `aria-valuenow` still carries the number.
 
-**`@pixelsPerStep` defaults to 1, and 6 is right for a stepped scale**, where one stop per pixel is unusable. Raise it for any control that needs a slower hand.
+**`@pixelsPerStep` defaults to 1, and to 6 on a stepped scale**, where one stop per pixel is unusable. Raise it for any control that needs a slower hand.
+
+**A scrub commits once, on release.** Move frames fire `@onInput`; `@onChange` gets the scrubbed value when the pointer lifts, so a controlled `@value` persisted only through `@onChange` still receives the drag. Escape or a `pointercancel` puts the starting value back through `@onInput` and commits nothing, and that Escape goes no further, so an enclosing dialog stays open.
 
 **`@scrubFrom='field'` still lets you select text**, because the field only scrubs while it is not focused.
 
@@ -53,3 +57,5 @@ Where it is thinner: no expression evaluation (`120/2`), no unit conversion on t
 The control takes the kit's shared input and control tokens; the grip is a affix rather than a separate surface.
 
 There is deliberately no scrub-specific palette — a scrub input in a property panel should be indistinguishable from the other fields until you drag it.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

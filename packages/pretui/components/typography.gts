@@ -71,26 +71,28 @@ export class Title extends Component<TitleSignature> {
       <h6 class='pretui-title' data-size={{this.size}} data-test-pretui-title ...attributes>{{yield}}</h6>
     {{/if}}
     <style scoped>
-      .pretui-title {
-        margin: 0;
-        font-family: var(--font-serif);
-        font-weight: var(--weight-heading, 500);
-        letter-spacing: var(--track-heading, -0.01em);
-        line-height: var(--leading-heading, 1.2);
-        color: var(--foreground);
-        text-wrap: balance;
-      }
-      .pretui-title[data-size='display'] {
-        font-size: var(--text-display, 2rem);
-      }
-      .pretui-title[data-size='heading'] {
-        font-size: var(--text-heading, 1.1875rem);
-      }
-      .pretui-title[data-size='subheading'] {
-        font-family: var(--font-sans);
-        font-size: var(--text-ui-lg, 0.9375rem);
-        font-weight: var(--weight-strong, 600);
-        letter-spacing: 0;
+      @layer PretComponent {
+        .pretui-title {
+          margin: 0;
+          font-family: var(--font-serif);
+          font-weight: var(--weight-heading, 500);
+          letter-spacing: var(--track-heading, -0.01em);
+          line-height: var(--leading-heading, 1.2);
+          color: var(--foreground);
+          text-wrap: balance;
+        }
+        .pretui-title[data-size='display'] {
+          font-size: var(--text-display, 2rem);
+        }
+        .pretui-title[data-size='heading'] {
+          font-size: var(--text-heading, 1.1875rem);
+        }
+        .pretui-title[data-size='subheading'] {
+          font-family: var(--font-sans);
+          font-size: var(--text-ui-lg, 0.9375rem);
+          font-weight: var(--weight-strong, 600);
+          letter-spacing: 0;
+        }
       }
     </style>
   </template>
@@ -139,38 +141,40 @@ export class Text extends Component<TextSignature> {
       {{/if}}
     </span>
     <style scoped>
-      .pretui-text[data-tone='muted'] {
-        color: var(--muted-foreground);
-      }
-      .pretui-text[data-tone='success'] {
-        color: color-mix(in oklch, var(--foreground) 30%, var(--success));
-      }
-      .pretui-text[data-tone='warning'] {
-        color: color-mix(in oklch, var(--foreground) 45%, var(--warning));
-      }
-      .pretui-text[data-tone='danger'] {
-        color: color-mix(in oklch, var(--foreground) 25%, var(--destructive));
-      }
-      .pretui-text[data-size='xs'] {
-        font-size: var(--text-ui-xs, 0.66rem);
-      }
-      .pretui-text[data-size='sm'] {
-        font-size: var(--text-ui-sm, 0.72rem);
-      }
-      .pretui-text[data-size='md'] {
-        font-size: var(--text-ui-md, 0.78rem);
-      }
-      .pretui-text[data-size='lg'] {
-        font-size: var(--text-ui-lg, 0.9375rem);
-      }
-      .pretui-text mark {
-        padding-inline: 0.125em;
-        border-radius: 0.2em;
-        color: inherit;
-        background: color-mix(in oklch, var(--pretui-text-mark, var(--warning)) 35%, transparent);
-      }
-      .pretui-text strong {
-        font-weight: var(--weight-strong, 600);
+      @layer PretComponent {
+        .pretui-text[data-tone='muted'] {
+          color: var(--muted-foreground);
+        }
+        .pretui-text[data-tone='success'] {
+          color: color-mix(in oklch, var(--foreground) 30%, var(--success));
+        }
+        .pretui-text[data-tone='warning'] {
+          color: color-mix(in oklch, var(--foreground) 45%, var(--warning));
+        }
+        .pretui-text[data-tone='danger'] {
+          color: color-mix(in oklch, var(--foreground) 25%, var(--destructive));
+        }
+        .pretui-text[data-size='xs'] {
+          font-size: var(--text-ui-xs, 0.66rem);
+        }
+        .pretui-text[data-size='sm'] {
+          font-size: var(--text-ui-sm, 0.72rem);
+        }
+        .pretui-text[data-size='md'] {
+          font-size: var(--text-ui-md, 0.78rem);
+        }
+        .pretui-text[data-size='lg'] {
+          font-size: var(--text-ui-lg, 0.9375rem);
+        }
+        .pretui-text mark {
+          padding-inline: 0.125em;
+          border-radius: 0.2em;
+          color: inherit;
+          background: color-mix(in oklch, var(--pretui-text-mark, var(--warning)) 35%, transparent);
+        }
+        .pretui-text strong {
+          font-weight: var(--weight-strong, 600);
+        }
       }
     </style>
   </template>
@@ -195,37 +199,39 @@ export class Paragraph extends Component<ParagraphSignature> {
   <template>
     <p class='pretui-paragraph' data-tone={{this.tone}} data-size={{this.size}} data-test-pretui-paragraph ...attributes>{{yield}}</p>
     <style scoped>
-      .pretui-paragraph {
-        margin: 0;
-        max-inline-size: var(--pretui-paragraph-measure, 68ch);
-        font-size: var(--text-body, 0.875rem);
-        line-height: var(--leading-body, 1.55);
-        color: var(--foreground);
-        text-wrap: pretty;
-      }
-      .pretui-paragraph[data-tone='muted'] {
-        color: var(--muted-foreground);
-      }
-      .pretui-paragraph[data-tone='success'] {
-        color: color-mix(in oklch, var(--foreground) 30%, var(--success));
-      }
-      .pretui-paragraph[data-tone='warning'] {
-        color: color-mix(in oklch, var(--foreground) 45%, var(--warning));
-      }
-      .pretui-paragraph[data-tone='danger'] {
-        color: color-mix(in oklch, var(--foreground) 25%, var(--destructive));
-      }
-      .pretui-paragraph[data-size='xs'] {
-        font-size: var(--text-ui-xs, 0.66rem);
-      }
-      .pretui-paragraph[data-size='sm'] {
-        font-size: var(--text-ui-sm, 0.72rem);
-      }
-      .pretui-paragraph[data-size='md'] {
-        font-size: var(--text-ui-md, 0.78rem);
-      }
-      .pretui-paragraph[data-size='lg'] {
-        font-size: var(--text-ui-lg, 0.9375rem);
+      @layer PretComponent {
+        .pretui-paragraph {
+          margin: 0;
+          max-inline-size: var(--pretui-paragraph-measure, 68ch);
+          font-size: var(--text-body, 0.875rem);
+          line-height: var(--leading-body, 1.55);
+          color: var(--foreground);
+          text-wrap: pretty;
+        }
+        .pretui-paragraph[data-tone='muted'] {
+          color: var(--muted-foreground);
+        }
+        .pretui-paragraph[data-tone='success'] {
+          color: color-mix(in oklch, var(--foreground) 30%, var(--success));
+        }
+        .pretui-paragraph[data-tone='warning'] {
+          color: color-mix(in oklch, var(--foreground) 45%, var(--warning));
+        }
+        .pretui-paragraph[data-tone='danger'] {
+          color: color-mix(in oklch, var(--foreground) 25%, var(--destructive));
+        }
+        .pretui-paragraph[data-size='xs'] {
+          font-size: var(--text-ui-xs, 0.66rem);
+        }
+        .pretui-paragraph[data-size='sm'] {
+          font-size: var(--text-ui-sm, 0.72rem);
+        }
+        .pretui-paragraph[data-size='md'] {
+          font-size: var(--text-ui-md, 0.78rem);
+        }
+        .pretui-paragraph[data-size='lg'] {
+          font-size: var(--text-ui-lg, 0.9375rem);
+        }
       }
     </style>
   </template>
@@ -242,13 +248,15 @@ export interface CodeSignature {
 export const Code: TemplateOnlyComponent<CodeSignature> = <template>
   <code class='pretui-code' data-test-pretui-code ...attributes>{{yield}}</code>
   <style scoped>
-    .pretui-code {
-      padding: 0.1em 0.35em;
-      border-radius: var(--radius-control, 6px);
-      background: color-mix(in oklch, var(--foreground) 7%, var(--card));
-      font-family: var(--font-mono);
-      font-size: 0.9em;
-      overflow-wrap: anywhere;
+    @layer PretComponent {
+      .pretui-code {
+        padding: 0.1em 0.35em;
+        border-radius: var(--radius-control, 6px);
+        background: color-mix(in oklch, var(--foreground) 7%, var(--card));
+        font-family: var(--font-mono);
+        font-size: 0.9em;
+        overflow-wrap: anywhere;
+      }
     }
   </style>
 </template>;
@@ -275,22 +283,24 @@ export const Blockquote: TemplateOnlyComponent<BlockquoteSignature> = <template>
     {{/if}}
   </figure>
   <style scoped>
-    .pretui-quote {
-      margin: 0;
-      padding-inline-start: var(--space-4, 0.6875rem);
-      border-inline-start: 3px solid var(--pretui-quote-rule, var(--border));
-    }
-    .pretui-quote-body {
-      margin: 0;
-      font-family: var(--font-serif);
-      font-size: var(--text-body, 0.875rem);
-      line-height: var(--leading-body, 1.55);
-      color: var(--foreground);
-    }
-    .pretui-quote-by {
-      margin-block-start: var(--space-2, 0.375rem);
-      font-size: var(--text-ui-sm, 0.72rem);
-      color: var(--muted-foreground);
+    @layer PretComponent {
+      .pretui-quote {
+        margin: 0;
+        padding-inline-start: var(--space-4, 0.6875rem);
+        border-inline-start: 3px solid var(--pretui-quote-rule, var(--border));
+      }
+      .pretui-quote-body {
+        margin: 0;
+        font-family: var(--font-serif);
+        font-size: var(--text-body, 0.875rem);
+        line-height: var(--leading-body, 1.55);
+        color: var(--foreground);
+      }
+      .pretui-quote-by {
+        margin-block-start: var(--space-2, 0.375rem);
+        font-size: var(--text-ui-sm, 0.72rem);
+        color: var(--muted-foreground);
+      }
     }
   </style>
 </template>;
@@ -325,27 +335,29 @@ export class Link extends Component<LinkSignature> {
     >{{yield}}{{#if @external}}<span class='pretui-link-ext' aria-hidden='true'>↗</span><VisuallyHidden>
           (opens in a new tab)</VisuallyHidden>{{/if}}</a>
     <style scoped>
-      .pretui-link {
-        color: var(--pretui-link-ink, var(--primary));
-        text-decoration-line: underline;
-        text-decoration-thickness: 1px;
-        text-underline-offset: 0.18em;
-        border-radius: 2px;
-      }
-      .pretui-link[data-variant='quiet'] {
-        text-decoration-line: none;
-      }
-      .pretui-link:hover {
-        text-decoration-line: underline;
-        text-decoration-thickness: 2px;
-      }
-      .pretui-link:focus-visible {
-        outline: 2px solid var(--ring);
-        outline-offset: 2px;
-      }
-      .pretui-link-ext {
-        margin-inline-start: 0.15em;
-        font-size: 0.85em;
+      @layer PretComponent {
+        .pretui-link {
+          color: var(--pretui-link-ink, var(--primary));
+          text-decoration-line: underline;
+          text-decoration-thickness: 1px;
+          text-underline-offset: 0.18em;
+          border-radius: 2px;
+        }
+        .pretui-link[data-variant='quiet'] {
+          text-decoration-line: none;
+        }
+        .pretui-link:hover {
+          text-decoration-line: underline;
+          text-decoration-thickness: 2px;
+        }
+        .pretui-link:focus-visible {
+          outline: 2px solid var(--ring);
+          outline-offset: 2px;
+        }
+        .pretui-link-ext {
+          margin-inline-start: 0.15em;
+          font-size: 0.85em;
+        }
       }
     </style>
   </template>

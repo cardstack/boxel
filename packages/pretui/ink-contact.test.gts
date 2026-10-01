@@ -6,8 +6,8 @@
 // there was yes. Every hostile shape below is asserted to produce no link at
 // all — which is why they are enumerated rather than summarised.
 //
-// Local-only test file; run with `boxel test` from this directory — do NOT
-// push to the realm.
+// Run with `boxel test` from this directory; deployment leaves `*.test.gts`
+// off the realm.
 import { module, test } from 'qunit';
 import { render } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';

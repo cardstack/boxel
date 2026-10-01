@@ -1,5 +1,4 @@
-// Pretui — RelativeTime unit tests. Imports from ../reading-extras; when
-// RelativeTime moves to its own file only the import path changes. Every
+// Pretui — RelativeTime unit tests. Every
 // assertion passes @now: without it the component falls back to the clock it
 // read at construction, and the assertion would depend on wall time.
 //

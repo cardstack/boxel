@@ -138,156 +138,158 @@ export class PulsingBorder extends Component<PulsingBorderSignature> {
       <div class='pretui-pb-body'>{{yield}}</div>
     </div>
     <style scoped>
-      .pretui-pb {
-        position: relative;
-        border-radius: var(--pretui-pb-radius, var(--radius-surface, 10px));
-        isolation: isolate;
-      }
-      /* Law 1: the boundary is a shadow, not a border — switching it on can
-         never reflow the content it wraps. */
-      .pretui-pb-ring {
-        position: absolute;
-        inset: 0;
-        border-radius: inherit;
-        pointer-events: none;
-        z-index: 2;
-        box-shadow: inset 0 0 0 var(--pretui-pb-thickness, 1.5px)
-          color-mix(
-            in oklch,
-            var(--pretui-pb-hue, var(--primary)) 72%,
-            transparent
-          );
-      }
-      .pretui-pb[data-active='false'] .pretui-pb-ring {
-        box-shadow: inset 0 0 0 var(--pretui-pb-thickness, 1.5px)
-          var(--border);
-      }
-      /* resting state = a soft static glow (screenshot test); the keyframes
-         only add the breathing on top of it */
-      .pretui-pb-halo {
-        position: absolute;
-        inset: 0;
-        border-radius: inherit;
-        pointer-events: none;
-        z-index: 0;
-        opacity: 0.42;
-        box-shadow: 0 0 0 3px
-          color-mix(
-            in oklch,
-            var(--pretui-pb-hue, var(--primary)) 30%,
-            transparent
-          );
-      }
-      @keyframes pretui-pb-breathe {
-        from {
-          opacity: 0.42;
-          transform: scale(1);
-        }
-        to {
-          opacity: 0;
-          transform: scale(1.028);
-        }
-      }
-      .pretui-pb[data-active='true'] .pretui-pb-halo {
-        animation: pretui-pb-breathe calc(2.6s / var(--pretui-pb-speed, 1))
-          cubic-bezier(0.23, 1, 0.32, 1) infinite;
-      }
-      .pretui-pb[data-active='false'] .pretui-pb-halo {
-        opacity: 0;
-      }
-
-      /* trail: a conic sweep clipped to the ring band by a two-layer mask.
-         The angle is a registered custom property so the sweep is one
-         declaration; if @property is unavailable the fallback angle still
-         resolves and the ring rests as a static gradient boundary. */
       @property --pretui-pb-angle {
         syntax: '<angle>';
         inherits: false;
         initial-value: 0deg;
       }
-      .pretui-pb-trail {
-        position: absolute;
-        inset: 0;
-        border-radius: inherit;
-        pointer-events: none;
-        z-index: 1;
-        padding: calc(var(--pretui-pb-thickness, 1.5px) + 1px);
-        background: conic-gradient(
-          from var(--pretui-pb-angle, 0deg),
-          transparent 0turn 0.55turn,
-          color-mix(
-              in oklch,
-              var(--pretui-pb-hue, var(--primary)) 45%,
-              transparent
-            )
-            0.82turn,
-          var(--pretui-pb-hue, var(--primary)) 0.94turn,
-          transparent 1turn
-        );
-        mask-image: linear-gradient(rgb(0 0 0 / 1) 0 0),
-          linear-gradient(rgb(0 0 0 / 1) 0 0);
-        mask-clip: content-box, border-box;
-        mask-composite: exclude;
-      }
-      @keyframes pretui-pb-sweep {
-        to {
-          --pretui-pb-angle: 360deg;
+      @layer PretComponent {
+        .pretui-pb {
+          position: relative;
+          border-radius: var(--pretui-pb-radius, var(--radius-surface, 10px));
+          isolation: isolate;
         }
-      }
-      .pretui-pb[data-active='true'] .pretui-pb-trail {
-        animation: pretui-pb-sweep calc(4.5s / var(--pretui-pb-speed, 1))
-          linear infinite;
-      }
-      .pretui-pb[data-active='false'] .pretui-pb-trail {
-        opacity: 0.3;
-      }
+        /* Law 1: the boundary is a shadow, not a border — switching it on can
+           never reflow the content it wraps. */
+        .pretui-pb-ring {
+          position: absolute;
+          inset: 0;
+          border-radius: inherit;
+          pointer-events: none;
+          z-index: 2;
+          box-shadow: inset 0 0 0 var(--pretui-pb-thickness, 1.5px)
+            color-mix(
+              in oklch,
+              var(--pretui-pb-hue, var(--primary)) 72%,
+              transparent
+            );
+        }
+        .pretui-pb[data-active='false'] .pretui-pb-ring {
+          box-shadow: inset 0 0 0 var(--pretui-pb-thickness, 1.5px)
+            var(--border);
+        }
+        /* resting state = a soft static glow (screenshot test); the keyframes
+           only add the breathing on top of it */
+        .pretui-pb-halo {
+          position: absolute;
+          inset: 0;
+          border-radius: inherit;
+          pointer-events: none;
+          z-index: 0;
+          opacity: 0.42;
+          box-shadow: 0 0 0 3px
+            color-mix(
+              in oklch,
+              var(--pretui-pb-hue, var(--primary)) 30%,
+              transparent
+            );
+        }
+        @keyframes pretui-pb-breathe {
+          from {
+            opacity: 0.42;
+            transform: scale(1);
+          }
+          to {
+            opacity: 0;
+            transform: scale(1.028);
+          }
+        }
+        .pretui-pb[data-active='true'] .pretui-pb-halo {
+          animation: pretui-pb-breathe calc(2.6s / var(--pretui-pb-speed, 1))
+            cubic-bezier(0.23, 1, 0.32, 1) infinite;
+        }
+        .pretui-pb[data-active='false'] .pretui-pb-halo {
+          opacity: 0;
+        }
 
-      .pretui-pb-marker {
-        position: absolute;
-        z-index: 3;
-        display: inline-flex;
-        line-height: 0;
-      }
-      .pretui-pb[data-marker='top-start'] .pretui-pb-marker {
-        top: 0;
-        left: var(--space-4, 11px);
-        transform: translateY(-50%);
-      }
-      .pretui-pb[data-marker='top-end'] .pretui-pb-marker {
-        top: 0;
-        right: var(--space-4, 11px);
-        transform: translateY(-50%);
-      }
-      .pretui-pb[data-marker='bottom-start'] .pretui-pb-marker {
-        bottom: 0;
-        left: var(--space-4, 11px);
-        transform: translateY(50%);
-      }
-      .pretui-pb[data-marker='bottom-end'] .pretui-pb-marker {
-        bottom: 0;
-        right: var(--space-4, 11px);
-        transform: translateY(50%);
-      }
-      .pretui-pb-body {
-        position: relative;
-        z-index: 1;
-        border-radius: inherit;
-      }
-      .pretui-pb-sr {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        margin: -1px;
-        padding: 0;
-        overflow: hidden;
-        clip-path: inset(50%);
-        white-space: nowrap;
-        border: 0;
-      }
-      @media (prefers-reduced-motion: reduce) {
-        .pretui-pb-halo,
+        /* trail: a conic sweep clipped to the ring band by a two-layer mask.
+           The angle is a registered custom property so the sweep is one
+           declaration; if @property is unavailable the fallback angle still
+           resolves and the ring rests as a static gradient boundary. */
         .pretui-pb-trail {
-          animation: none;
+          position: absolute;
+          inset: 0;
+          border-radius: inherit;
+          pointer-events: none;
+          z-index: 1;
+          padding: calc(var(--pretui-pb-thickness, 1.5px) + 1px);
+          background: conic-gradient(
+            from var(--pretui-pb-angle, 0deg),
+            transparent 0turn 0.55turn,
+            color-mix(
+                in oklch,
+                var(--pretui-pb-hue, var(--primary)) 45%,
+                transparent
+              )
+              0.82turn,
+            var(--pretui-pb-hue, var(--primary)) 0.94turn,
+            transparent 1turn
+          );
+          mask-image: linear-gradient(rgb(0 0 0 / 1) 0 0),
+            linear-gradient(rgb(0 0 0 / 1) 0 0);
+          mask-clip: content-box, border-box;
+          mask-composite: exclude;
+        }
+        @keyframes pretui-pb-sweep {
+          to {
+            --pretui-pb-angle: 360deg;
+          }
+        }
+        .pretui-pb[data-active='true'] .pretui-pb-trail {
+          animation: pretui-pb-sweep calc(4.5s / var(--pretui-pb-speed, 1))
+            linear infinite;
+        }
+        .pretui-pb[data-active='false'] .pretui-pb-trail {
+          opacity: 0.3;
+        }
+
+        .pretui-pb-marker {
+          position: absolute;
+          z-index: 3;
+          display: inline-flex;
+          line-height: 0;
+        }
+        .pretui-pb[data-marker='top-start'] .pretui-pb-marker {
+          top: 0;
+          left: var(--space-4, 11px);
+          transform: translateY(-50%);
+        }
+        .pretui-pb[data-marker='top-end'] .pretui-pb-marker {
+          top: 0;
+          right: var(--space-4, 11px);
+          transform: translateY(-50%);
+        }
+        .pretui-pb[data-marker='bottom-start'] .pretui-pb-marker {
+          bottom: 0;
+          left: var(--space-4, 11px);
+          transform: translateY(50%);
+        }
+        .pretui-pb[data-marker='bottom-end'] .pretui-pb-marker {
+          bottom: 0;
+          right: var(--space-4, 11px);
+          transform: translateY(50%);
+        }
+        .pretui-pb-body {
+          position: relative;
+          z-index: 1;
+          border-radius: inherit;
+        }
+        .pretui-pb-sr {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          margin: -1px;
+          padding: 0;
+          overflow: hidden;
+          clip-path: inset(50%);
+          white-space: nowrap;
+          border: 0;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .pretui-pb-halo,
+          .pretui-pb-trail {
+            animation: none;
+          }
         }
       }
     </style>

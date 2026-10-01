@@ -228,223 +228,225 @@ export class Card extends Component<CardSignature> {
     </section>
 
     <style scoped>
-      .pretui-card {
-        --pretui-tone: var(--foreground);
-        --pretui-tone-on: var(--background);
-        display: flex;
-        flex-direction: column;
-        min-inline-size: 0;
-        box-sizing: border-box;
-        border-radius: var(--pretui-card-radius, var(--radius-surface, 10px));
-        color: var(--card-foreground);
-        font-size: var(--pretui-size-m, var(--text-ui-md, 0.78rem));
-        letter-spacing: var(--track-ui, 0.01em);
-        /* Deliberately NOT `overflow: hidden`. Mantine clips its card root
-           unconditionally, which kills every Popover, Menu and Tooltip
-           rendered inline inside a card — and this kit renders overlays in
-           place (Appendix F). Only the media band ever needed clipping, and
-           it carries its own corners below. */
-        transition: box-shadow var(--pretui-dur-snap, 180ms)
-          var(--pretui-ease-snap, ease);
-      }
-      /* size — font-size only; every internal dimension below is em, so one
-         declaration scales the whole card (Appendix E.2). */
-      .pretui-card[data-size='xs'] {
-        font-size: var(--pretui-size-xs, var(--text-ui-xs, 0.66rem));
-      }
-      .pretui-card[data-size='s'] {
-        font-size: var(--pretui-size-s, var(--text-ui-sm, 0.72rem));
-      }
-      .pretui-card[data-size='l'] {
-        font-size: var(--pretui-size-l, var(--text-ui-lg, 0.875rem));
-      }
-      .pretui-card[data-size='xl'] {
-        font-size: var(--pretui-size-xl, var(--text-ui-xl, 1rem));
-      }
-      /* tone — one hue token in, the appearance recipes below read it out.
-         Appendix E.1, written once. */
-      .pretui-card[data-tone='primary'] {
-        --pretui-tone: var(--primary);
-        --pretui-tone-on: var(--primary-foreground);
-      }
-      .pretui-card[data-tone='info'] {
-        --pretui-tone: var(--pretui-info, var(--boxel-blue));
-        --pretui-tone-on: var(--pretui-on-info, var(--background));
-      }
-      .pretui-card[data-tone='success'] {
-        --pretui-tone: var(--success, var(--boxel-success));
-        --pretui-tone-on: var(--pretui-on-success, var(--background));
-      }
-      .pretui-card[data-tone='warning'] {
-        --pretui-tone: var(--warning, var(--boxel-warning));
-        --pretui-tone-on: var(--pretui-on-warning, var(--background));
-      }
-      .pretui-card[data-tone='danger'] {
-        --pretui-tone: var(--destructive);
-        --pretui-tone-on: var(--destructive-foreground);
-      }
-      .pretui-card[data-tone='attention'] {
-        --pretui-tone: var(--pretui-attention, var(--boxel-fuschia));
-        --pretui-tone-on: var(
-          --pretui-on-attention,
-          var(--background)
-        );
-      }
-      /* appearance — the five canonical recipes, reading the tone channel. */
-      .pretui-card[data-appearance='outlined'] {
-        background: var(--pretui-card-bg, var(--card));
-        box-shadow: var(
-          --pretui-card-shadow,
-          var(--pretui-shadow-card, 0 0 0 1px var(--border))
-        );
-      }
-      .pretui-card[data-appearance='filled'] {
-        background: var(
-          --pretui-card-bg,
-          color-mix(in oklch, var(--pretui-tone) 12%, var(--card))
-        );
-      }
-      .pretui-card[data-appearance='filled-outlined'] {
-        background: var(
-          --pretui-card-bg,
-          color-mix(in oklch, var(--pretui-tone) 12%, var(--card))
-        );
-        box-shadow: var(
-          --pretui-card-shadow,
-          0 0 0 1px color-mix(in oklch, var(--pretui-tone) 32%, var(--border))
-        );
-      }
-      .pretui-card[data-appearance='accent'] {
-        background: var(--pretui-card-bg, var(--pretui-tone));
-        color: var(--pretui-tone-on);
-      }
-      .pretui-card[data-appearance='plain'] {
-        background: none;
-      }
-      /* horizontal — media on the START edge, logical so RTL flips for free */
-      .pretui-card[data-orientation='horizontal'] {
-        flex-direction: row;
-        align-items: stretch;
-      }
-      .pretui-card[data-orientation='horizontal'] .pretui-card-media {
-        flex: none;
-        inline-size: var(--pretui-card-media-size, 34%);
-      }
-      .pretui-card-column {
-        display: flex;
-        flex-direction: column;
-        min-inline-size: 0;
-        min-block-size: 0;
-        flex: 1 1 auto;
-      }
-      /* The media band is the only part that has to clip, and it owns the
-         two corners it touches — logical, so RTL costs nothing. */
-      .pretui-card-media {
-        min-inline-size: 0;
-        overflow: hidden;
-        border-start-start-radius: var(
-          --pretui-card-radius,
-          var(--radius-surface, 10px)
-        );
-        border-start-end-radius: var(
-          --pretui-card-radius,
-          var(--radius-surface, 10px)
-        );
-      }
-      .pretui-card[data-orientation='horizontal'] .pretui-card-media {
-        border-start-end-radius: 0;
-        border-end-start-radius: var(
-          --pretui-card-radius,
-          var(--radius-surface, 10px)
-        );
-      }
-      /* The header grid. Two rows so an action parked at the end edge spans
-         eyebrow+title+description without any measurement — the column count
-         comes from a reflected attribute the component OWNS, not from a
-         `:has()` probe that a nested action defeats. */
-      .pretui-card-header {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr);
-        align-items: start;
-        gap: var(--pretui-card-gap, 0.9em);
-        padding: var(--pretui-card-pad, 1.1em) var(--pretui-card-pad, 1.1em) 0;
-      }
-      .pretui-card-header[data-has-action='true'] {
-        grid-template-columns: minmax(0, 1fr) auto;
-      }
-      .pretui-card-heading {
-        display: grid;
-        gap: 0.15em;
-        min-inline-size: 0;
-      }
-      .pretui-card-action {
-        grid-column: 2;
-        grid-row: 1;
-        justify-self: end;
-        align-self: start;
-      }
-      .pretui-card-title {
-        margin: 0;
-        font-size: 1.12em;
-        font-weight: 600;
-        letter-spacing: var(--track-heading, -0.02em);
-        min-inline-size: 0;
-      }
-      .pretui-card-desc {
-        margin: 0;
-        font-size: 0.94em;
-        color: var(--muted-foreground);
-        min-inline-size: 0;
-      }
-      .pretui-eyebrow {
-        font-family: var(--font-mono);
-        font-size: 0.86em;
-        font-weight: 500;
-        letter-spacing: var(--track-eyebrow, 0.08em);
-        text-transform: uppercase;
-        color: var(--muted-foreground);
-      }
-      .pretui-card-body {
-        padding: var(--pretui-card-pad, 1.1em);
-        min-inline-size: 0;
-        flex: 1 1 auto;
-      }
-      .pretui-card-footer {
-        display: flex;
-        align-items: center;
-        gap: 0.65em;
-        padding: 0.75em var(--pretui-card-pad, 1.1em);
-        box-shadow: 0 -1px 0 var(--border);
-        flex: none;
-      }
-      /* scroll — the body is the part that moves; header and footer pin. */
-      .pretui-card[data-scroll='true'] {
-        min-block-size: 0;
-      }
-      .pretui-card[data-scroll='true'] .pretui-card-body {
-        min-block-size: 0;
-        overflow-y: auto;
-        overscroll-behavior: contain;
-        scrollbar-gutter: stable;
-      }
-      /* interactive — hover for the pointer, focus-within for the keyboard.
-         The second half is what every source library omits. */
-      .pretui-card[data-interactive='true']:hover {
-        box-shadow: var(
-          --pretui-card-shadow-hover,
-          var(
-            --pretui-shadow-raised,
-            0 0 0 1px var(--border),
-            0 2px 10px var(--shadow-ink-mid, rgb(0 0 0 / 0.08))
-          )
-        );
-      }
-      .pretui-card[data-interactive='true']:focus-within {
-        box-shadow: 0 0 0 2px var(--ring);
-      }
-      @media (prefers-reduced-motion: reduce) {
+      @layer PretComponent {
         .pretui-card {
-          transition: none;
+          --pretui-tone: var(--foreground);
+          --pretui-tone-on: var(--background);
+          display: flex;
+          flex-direction: column;
+          min-inline-size: 0;
+          box-sizing: border-box;
+          border-radius: var(--pretui-card-radius, var(--radius-surface, 10px));
+          color: var(--card-foreground);
+          font-size: var(--pretui-size-m, var(--text-ui-md, 0.78rem));
+          letter-spacing: var(--track-ui, 0.01em);
+          /* Deliberately NOT `overflow: hidden`. Mantine clips its card root
+             unconditionally, which kills every Popover, Menu and Tooltip
+             rendered inline inside a card — and this kit renders overlays in
+             place (Appendix F). Only the media band ever needed clipping, and
+             it carries its own corners below. */
+          transition: box-shadow var(--pretui-dur-snap, 180ms)
+            var(--pretui-ease-snap, ease);
+        }
+        /* size — font-size only; every internal dimension below is em, so one
+           declaration scales the whole card (Appendix E.2). */
+        .pretui-card[data-size='xs'] {
+          font-size: var(--pretui-size-xs, var(--text-ui-xs, 0.66rem));
+        }
+        .pretui-card[data-size='s'] {
+          font-size: var(--pretui-size-s, var(--text-ui-sm, 0.72rem));
+        }
+        .pretui-card[data-size='l'] {
+          font-size: var(--pretui-size-l, var(--text-ui-lg, 0.875rem));
+        }
+        .pretui-card[data-size='xl'] {
+          font-size: var(--pretui-size-xl, var(--text-ui-xl, 1rem));
+        }
+        /* tone — one hue token in, the appearance recipes below read it out.
+           Appendix E.1, written once. */
+        .pretui-card[data-tone='primary'] {
+          --pretui-tone: var(--primary);
+          --pretui-tone-on: var(--primary-foreground);
+        }
+        .pretui-card[data-tone='info'] {
+          --pretui-tone: var(--pretui-info, var(--boxel-blue));
+          --pretui-tone-on: var(--pretui-on-info, var(--background));
+        }
+        .pretui-card[data-tone='success'] {
+          --pretui-tone: var(--success, var(--boxel-success));
+          --pretui-tone-on: var(--pretui-on-success, var(--background));
+        }
+        .pretui-card[data-tone='warning'] {
+          --pretui-tone: var(--warning, var(--boxel-warning));
+          --pretui-tone-on: var(--pretui-on-warning, var(--background));
+        }
+        .pretui-card[data-tone='danger'] {
+          --pretui-tone: var(--destructive);
+          --pretui-tone-on: var(--destructive-foreground);
+        }
+        .pretui-card[data-tone='attention'] {
+          --pretui-tone: var(--pretui-attention, var(--boxel-fuschia));
+          --pretui-tone-on: var(
+            --pretui-on-attention,
+            var(--background)
+          );
+        }
+        /* appearance — the five canonical recipes, reading the tone channel. */
+        .pretui-card[data-appearance='outlined'] {
+          background: var(--pretui-card-bg, var(--card));
+          box-shadow: var(
+            --pretui-card-shadow,
+            var(--pretui-shadow-card, 0 0 0 1px var(--border))
+          );
+        }
+        .pretui-card[data-appearance='filled'] {
+          background: var(
+            --pretui-card-bg,
+            color-mix(in oklch, var(--pretui-tone) 12%, var(--card))
+          );
+        }
+        .pretui-card[data-appearance='filled-outlined'] {
+          background: var(
+            --pretui-card-bg,
+            color-mix(in oklch, var(--pretui-tone) 12%, var(--card))
+          );
+          box-shadow: var(
+            --pretui-card-shadow,
+            0 0 0 1px color-mix(in oklch, var(--pretui-tone) 32%, var(--border))
+          );
+        }
+        .pretui-card[data-appearance='accent'] {
+          background: var(--pretui-card-bg, var(--pretui-tone));
+          color: var(--pretui-tone-on);
+        }
+        .pretui-card[data-appearance='plain'] {
+          background: none;
+        }
+        /* horizontal — media on the START edge, logical so RTL flips for free */
+        .pretui-card[data-orientation='horizontal'] {
+          flex-direction: row;
+          align-items: stretch;
+        }
+        .pretui-card[data-orientation='horizontal'] .pretui-card-media {
+          flex: none;
+          inline-size: var(--pretui-card-media-size, 34%);
+        }
+        .pretui-card-column {
+          display: flex;
+          flex-direction: column;
+          min-inline-size: 0;
+          min-block-size: 0;
+          flex: 1 1 auto;
+        }
+        /* The media band is the only part that has to clip, and it owns the
+           two corners it touches — logical, so RTL costs nothing. */
+        .pretui-card-media {
+          min-inline-size: 0;
+          overflow: hidden;
+          border-start-start-radius: var(
+            --pretui-card-radius,
+            var(--radius-surface, 10px)
+          );
+          border-start-end-radius: var(
+            --pretui-card-radius,
+            var(--radius-surface, 10px)
+          );
+        }
+        .pretui-card[data-orientation='horizontal'] .pretui-card-media {
+          border-start-end-radius: 0;
+          border-end-start-radius: var(
+            --pretui-card-radius,
+            var(--radius-surface, 10px)
+          );
+        }
+        /* The header grid. Two rows so an action parked at the end edge spans
+           eyebrow+title+description without any measurement — the column count
+           comes from a reflected attribute the component OWNS, not from a
+           `:has()` probe that a nested action defeats. */
+        .pretui-card-header {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr);
+          align-items: start;
+          gap: var(--pretui-card-gap, 0.9em);
+          padding: var(--pretui-card-pad, 1.1em) var(--pretui-card-pad, 1.1em) 0;
+        }
+        .pretui-card-header[data-has-action='true'] {
+          grid-template-columns: minmax(0, 1fr) auto;
+        }
+        .pretui-card-heading {
+          display: grid;
+          gap: 0.15em;
+          min-inline-size: 0;
+        }
+        .pretui-card-action {
+          grid-column: 2;
+          grid-row: 1;
+          justify-self: end;
+          align-self: start;
+        }
+        .pretui-card-title {
+          margin: 0;
+          font-size: 1.12em;
+          font-weight: 600;
+          letter-spacing: var(--track-heading, -0.02em);
+          min-inline-size: 0;
+        }
+        .pretui-card-desc {
+          margin: 0;
+          font-size: 0.94em;
+          color: var(--muted-foreground);
+          min-inline-size: 0;
+        }
+        .pretui-eyebrow {
+          font-family: var(--font-mono);
+          font-size: 0.86em;
+          font-weight: 500;
+          letter-spacing: var(--track-eyebrow, 0.08em);
+          text-transform: uppercase;
+          color: var(--muted-foreground);
+        }
+        .pretui-card-body {
+          padding: var(--pretui-card-pad, 1.1em);
+          min-inline-size: 0;
+          flex: 1 1 auto;
+        }
+        .pretui-card-footer {
+          display: flex;
+          align-items: center;
+          gap: 0.65em;
+          padding: 0.75em var(--pretui-card-pad, 1.1em);
+          box-shadow: 0 -1px 0 var(--border);
+          flex: none;
+        }
+        /* scroll — the body is the part that moves; header and footer pin. */
+        .pretui-card[data-scroll='true'] {
+          min-block-size: 0;
+        }
+        .pretui-card[data-scroll='true'] .pretui-card-body {
+          min-block-size: 0;
+          overflow-y: auto;
+          overscroll-behavior: contain;
+          scrollbar-gutter: stable;
+        }
+        /* interactive — hover for the pointer, focus-within for the keyboard.
+           The second half is what every source library omits. */
+        .pretui-card[data-interactive='true']:hover {
+          box-shadow: var(
+            --pretui-card-shadow-hover,
+            var(
+              --pretui-shadow-raised,
+              0 0 0 1px var(--border),
+              0 2px 10px var(--shadow-ink-mid, rgb(0 0 0 / 0.08))
+            )
+          );
+        }
+        .pretui-card[data-interactive='true']:focus-within {
+          box-shadow: 0 0 0 2px var(--ring);
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .pretui-card {
+            transition: none;
+          }
         }
       }
     </style>

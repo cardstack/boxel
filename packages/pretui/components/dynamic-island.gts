@@ -144,117 +144,119 @@ export class DynamicIsland extends Component<DynamicIslandSignature> {
     </div>
 
     <style scoped>
-      .pretui-island {
-        display: flex;
-        justify-content: center;
-        font-family: var(--font-sans);
-      }
-      .pretui-island-capsule {
-        position: relative;
-        display: grid;
-        overflow: hidden;
-        color: var(--pretui-island-ink, var(--card));
-        background: var(--pretui-island-ground, var(--foreground));
-        box-shadow: var(--pretui-shadow-raised, 0 2px 10px rgb(0 0 0 / 0.22));
-        inline-size: var(--pretui-island-width, 260px);
-        block-size: var(--pretui-island-height, 44px);
-        border-radius: var(--pretui-island-radius, 22px);
-        /* THE morph. Three properties, one transition, and the reader reads
-           it as one object changing rather than three surfaces swapping. */
-        transition: inline-size 340ms cubic-bezier(0.23, 1, 0.32, 1),
-          block-size 340ms cubic-bezier(0.23, 1, 0.32, 1),
-          border-radius 340ms cubic-bezier(0.23, 1, 0.32, 1);
-      }
-      .pretui-island-capsule[data-view='idle'] {
-        inline-size: var(--pretui-island-idle-width, 96px);
-        block-size: var(--pretui-island-idle-height, 26px);
-        border-radius: var(--pretui-island-idle-radius, 13px);
-      }
-      .pretui-island-capsule[data-view='expanded'] {
-        inline-size: var(--pretui-island-expanded-width, 340px);
-        block-size: var(--pretui-island-expanded-height, 156px);
-        border-radius: var(--pretui-island-expanded-radius, 26px);
-      }
-      .pretui-island-body {
-        display: grid;
-        align-items: center;
-        min-inline-size: 0;
-        block-size: 100%;
-        padding-inline: var(--space-5, 14px);
-        padding-block: var(--space-3, 8px);
-        font-size: var(--text-ui-md, 12.5px);
-      }
-      .pretui-island-capsule[data-view='idle'] .pretui-island-body {
-        padding-inline: var(--space-3, 8px);
-        padding-block: 0;
-        justify-items: center;
-      }
-      .pretui-island-view {
-        min-inline-size: 0;
-        opacity: 1;
-        /* The incoming view fades up as the box grows. @starting-style is
-           what gives an ENTERING element something to animate from without
-           a JS frame — verified to survive the scoped-CSS transpile. */
-        transition: opacity 220ms ease-out;
-      }
-      @starting-style {
+      @layer PretComponent {
+        .pretui-island {
+          display: flex;
+          justify-content: center;
+          font-family: var(--font-sans);
+        }
+        .pretui-island-capsule {
+          position: relative;
+          display: grid;
+          overflow: hidden;
+          color: var(--pretui-island-ink, var(--card));
+          background: var(--pretui-island-ground, var(--foreground));
+          box-shadow: var(--pretui-shadow-raised, 0 2px 10px rgb(0 0 0 / 0.22));
+          inline-size: var(--pretui-island-width, 260px);
+          block-size: var(--pretui-island-height, 44px);
+          border-radius: var(--pretui-island-radius, 22px);
+          /* THE morph. Three properties, one transition, and the reader reads
+             it as one object changing rather than three surfaces swapping. */
+          transition: inline-size 340ms cubic-bezier(0.23, 1, 0.32, 1),
+            block-size 340ms cubic-bezier(0.23, 1, 0.32, 1),
+            border-radius 340ms cubic-bezier(0.23, 1, 0.32, 1);
+        }
+        .pretui-island-capsule[data-view='idle'] {
+          inline-size: var(--pretui-island-idle-width, 96px);
+          block-size: var(--pretui-island-idle-height, 26px);
+          border-radius: var(--pretui-island-idle-radius, 13px);
+        }
+        .pretui-island-capsule[data-view='expanded'] {
+          inline-size: var(--pretui-island-expanded-width, 340px);
+          block-size: var(--pretui-island-expanded-height, 156px);
+          border-radius: var(--pretui-island-expanded-radius, 26px);
+        }
+        .pretui-island-body {
+          display: grid;
+          align-items: center;
+          min-inline-size: 0;
+          block-size: 100%;
+          padding-inline: var(--space-5, 14px);
+          padding-block: var(--space-3, 8px);
+          font-size: var(--text-ui-md, 12.5px);
+        }
+        .pretui-island-capsule[data-view='idle'] .pretui-island-body {
+          padding-inline: var(--space-3, 8px);
+          padding-block: 0;
+          justify-items: center;
+        }
         .pretui-island-view {
-          opacity: 0;
+          min-inline-size: 0;
+          opacity: 1;
+          /* The incoming view fades up as the box grows. @starting-style is
+             what gives an ENTERING element something to animate from without
+             a JS frame — verified to survive the scoped-CSS transpile. */
+          transition: opacity 220ms ease-out;
         }
-      }
-      .pretui-island-view[data-view='expanded'] {
-        align-self: start;
-        inline-size: 100%;
-      }
-      .pretui-island-toggle {
-        position: absolute;
-        inset: 0;
-        border: 0;
-        padding: 0;
-        background: transparent;
-        color: inherit;
-        cursor: pointer;
-        display: grid;
-        place-items: end center;
-        padding-block-end: 6px;
-      }
-      .pretui-island-capsule[data-view='expanded'] .pretui-island-toggle {
-        inset: auto 6px 6px auto;
-        inline-size: 30px;
-        block-size: 30px;
-        border-radius: 999px;
-        place-items: center;
-        padding: 0;
-        background: color-mix(in oklch, var(--card) 16%, transparent);
-      }
-      @media (any-pointer: coarse) {
+        @starting-style {
+          .pretui-island-view {
+            opacity: 0;
+          }
+        }
+        .pretui-island-view[data-view='expanded'] {
+          align-self: start;
+          inline-size: 100%;
+        }
+        .pretui-island-toggle {
+          position: absolute;
+          inset: 0;
+          border: 0;
+          padding: 0;
+          background: transparent;
+          color: inherit;
+          cursor: pointer;
+          display: grid;
+          place-items: end center;
+          padding-block-end: 6px;
+        }
         .pretui-island-capsule[data-view='expanded'] .pretui-island-toggle {
-          inline-size: 44px;
-          block-size: 44px;
+          inset: auto 6px 6px auto;
+          inline-size: 30px;
+          block-size: 30px;
+          border-radius: 999px;
+          place-items: center;
+          padding: 0;
+          background: color-mix(in oklch, var(--card) 16%, transparent);
         }
-      }
-      .pretui-island-toggle:focus-visible {
-        outline: 2px solid var(--ring);
-        outline-offset: -3px;
-        border-radius: inherit;
-      }
-      .pretui-island-caret {
-        inline-size: 7px;
-        block-size: 7px;
-        border-inline-end: 1.5px solid currentColor;
-        border-block-end: 1.5px solid currentColor;
-        transform: rotate(45deg);
-        opacity: 0.7;
-        transition: transform 340ms cubic-bezier(0.23, 1, 0.32, 1);
-      }
-      .pretui-island-capsule[data-view='expanded'] .pretui-island-caret {
-        transform: rotate(-135deg);
-      }
-      @media (prefers-reduced-motion: reduce) {
-        .pretui-island-capsule,
-        .pretui-island-view,
+        @media (any-pointer: coarse) {
+          .pretui-island-capsule[data-view='expanded'] .pretui-island-toggle {
+            inline-size: 44px;
+            block-size: 44px;
+          }
+        }
+        .pretui-island-toggle:focus-visible {
+          outline: 2px solid var(--ring);
+          outline-offset: -3px;
+          border-radius: inherit;
+        }
         .pretui-island-caret {
-          transition: none;
+          inline-size: 7px;
+          block-size: 7px;
+          border-inline-end: 1.5px solid currentColor;
+          border-block-end: 1.5px solid currentColor;
+          transform: rotate(45deg);
+          opacity: 0.7;
+          transition: transform 340ms cubic-bezier(0.23, 1, 0.32, 1);
+        }
+        .pretui-island-capsule[data-view='expanded'] .pretui-island-caret {
+          transform: rotate(-135deg);
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .pretui-island-capsule,
+          .pretui-island-view,
+          .pretui-island-caret {
+            transition: none;
+          }
         }
       }
     </style>

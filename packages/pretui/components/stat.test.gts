@@ -1,5 +1,4 @@
-// Pretui — Stat unit tests. Imports from ../reading; when Stat moves to
-// its own file only the import path changes.
+// Pretui — Stat unit tests.
 //
 // No assertion touches a computed style: the component's own `<style scoped>`
 // is inert in this harness (the scoped-css attribute is stamped, the rules are

@@ -281,8 +281,7 @@ export class Popconfirm extends Component<PopconfirmSignature> {
                   @tone={{this.tone}}
                   @appearance='accent'
                   @size='s'
-                  aria-busy={{if @busy 'true'}}
-                  data-state={{if @busy 'busy'}}
+                  @busy={{@busy}}
                   data-test-pretui-popconfirm-confirm
                   {{on 'click' this.confirm}}
                 >{{this.confirmLabel}}</Button>
@@ -291,8 +290,7 @@ export class Popconfirm extends Component<PopconfirmSignature> {
                   @tone={{this.tone}}
                   @appearance='accent'
                   @size='s'
-                  aria-busy={{if @busy 'true'}}
-                  data-state={{if @busy 'busy'}}
+                  @busy={{@busy}}
                   data-test-pretui-popconfirm-confirm
                   {{focusOnInstall}}
                   {{on 'click' this.confirm}}
@@ -305,74 +303,76 @@ export class Popconfirm extends Component<PopconfirmSignature> {
     </span>
 
     <style scoped>
-      .pretui-pc {
-        display: inline-flex;
-      }
-      .pretui-pc-trigger {
-        display: inline-flex;
-      }
-      .pretui-pc-panel {
-        background: var(--popover);
-        color: var(--popover-foreground);
-        border-radius: var(--radius-surface, 10px);
-        box-shadow: var(--pretui-shadow-overlay, 0 0 0 1px var(--border), 0 8px 28px rgb(0 0 0 / 0.16));
-        padding: var(--space-4, 11px);
-        width: max-content;
-        max-width: var(--pretui-popconfirm-max-width, min(280px, calc(100vw - 16px)));
-        font-family: var(--font-sans);
-        font-size: var(--text-ui-md, 12.5px);
-        opacity: 1;
-        transform: none;
-        transition: opacity var(--pretui-dur-enter, 180ms) var(--pretui-ease-enter, cubic-bezier(0.23, 1, 0.32, 1)),
-          transform var(--pretui-dur-enter, 180ms) var(--pretui-ease-enter, cubic-bezier(0.23, 1, 0.32, 1));
-      }
-      @starting-style {
-        .pretui-pc-panel {
-          opacity: 0;
-          transform: scale(0.97);
+      @layer PretComponent {
+        .pretui-pc {
+          display: inline-flex;
         }
-      }
-      .pretui-pc-body {
-        display: flex;
-        gap: var(--space-3, 8px);
-        align-items: flex-start;
-      }
-      .pretui-pc-mark {
-        flex: none;
-        width: 15px;
-        height: 15px;
-        margin-top: 1px;
-        border-radius: 50%;
-        display: grid;
-        place-items: center;
-        font-size: 9px;
-        font-weight: 700;
-        background: var(--warning, var(--boxel-warning));
-        color: var(--pretui-on-warning, var(--background));
-      }
-      .pretui-pc-text {
-        display: grid;
-        gap: 2px;
-        min-width: 0;
-      }
-      .pretui-pc-title {
-        font-weight: 600;
-        line-height: 1.4;
-      }
-      .pretui-pc-desc {
-        color: var(--muted-foreground);
-        font-size: var(--text-ui-sm, 11.5px);
-        line-height: 1.5;
-      }
-      .pretui-pc-acts {
-        display: flex;
-        justify-content: flex-end;
-        gap: var(--space-2, 6px);
-        margin-top: var(--space-4, 11px);
-      }
-      @media (prefers-reduced-motion: reduce) {
+        .pretui-pc-trigger {
+          display: inline-flex;
+        }
         .pretui-pc-panel {
-          transition: none;
+          background: var(--popover);
+          color: var(--popover-foreground);
+          border-radius: var(--radius-surface, 10px);
+          box-shadow: var(--pretui-shadow-overlay, 0 0 0 1px var(--border), 0 8px 28px rgb(0 0 0 / 0.16));
+          padding: var(--space-4, 11px);
+          width: max-content;
+          max-width: var(--pretui-popconfirm-max-width, min(280px, calc(100vw - 16px)));
+          font-family: var(--font-sans);
+          font-size: var(--text-ui-md, 12.5px);
+          opacity: 1;
+          transform: none;
+          transition: opacity var(--pretui-dur-enter, 180ms) var(--pretui-ease-enter, cubic-bezier(0.23, 1, 0.32, 1)),
+            transform var(--pretui-dur-enter, 180ms) var(--pretui-ease-enter, cubic-bezier(0.23, 1, 0.32, 1));
+        }
+        @starting-style {
+          .pretui-pc-panel {
+            opacity: 0;
+            transform: scale(0.97);
+          }
+        }
+        .pretui-pc-body {
+          display: flex;
+          gap: var(--space-3, 8px);
+          align-items: flex-start;
+        }
+        .pretui-pc-mark {
+          flex: none;
+          width: 15px;
+          height: 15px;
+          margin-top: 1px;
+          border-radius: 50%;
+          display: grid;
+          place-items: center;
+          font-size: 9px;
+          font-weight: 700;
+          background: var(--warning, var(--boxel-warning));
+          color: var(--pretui-on-warning, var(--background));
+        }
+        .pretui-pc-text {
+          display: grid;
+          gap: 2px;
+          min-width: 0;
+        }
+        .pretui-pc-title {
+          font-weight: 600;
+          line-height: 1.4;
+        }
+        .pretui-pc-desc {
+          color: var(--muted-foreground);
+          font-size: var(--text-ui-sm, 11.5px);
+          line-height: 1.5;
+        }
+        .pretui-pc-acts {
+          display: flex;
+          justify-content: flex-end;
+          gap: var(--space-2, 6px);
+          margin-top: var(--space-4, 11px);
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .pretui-pc-panel {
+            transition: none;
+          }
         }
       }
     </style>

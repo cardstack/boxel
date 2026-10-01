@@ -161,7 +161,7 @@ export class MorphingPopover extends Component<MorphingPopoverSignature> {
           class='pretui-morph-pop-trigger'
           aria-haspopup='dialog'
           aria-expanded={{if this.open 'true' 'false'}}
-          aria-controls={{this.panelId}}
+          aria-controls={{if this.open this.panelId}}
           data-test-pretui-morphing-popover-trigger
           {{this.captureTrigger}}
           {{on 'click' this.toggle}}
@@ -188,55 +188,57 @@ export class MorphingPopover extends Component<MorphingPopoverSignature> {
     </Popup>
 
     <style scoped>
-      .pretui-morph-pop-trigger {
-        display: inline-flex;
-        align-items: center;
-        gap: var(--space-2, 6px);
-        padding: 6px 11px;
-        min-block-size: 30px;
-        border: 0;
-        border-radius: var(--radius-control, 7px);
-        background: var(--card);
-        color: var(--foreground);
-        box-shadow: var(
-          --pretui-shadow-control,
-          0 0 0 1px var(--border),
-          0 1px 2px rgb(0 0 0 / 0.3)
-        );
-        font: inherit;
-        font-size: var(--text-ui-md, 12.5px);
-        cursor: pointer;
-      }
-      @media (any-pointer: coarse) {
+      @layer PretComponent {
         .pretui-morph-pop-trigger {
-          min-block-size: 44px;
+          display: inline-flex;
+          align-items: center;
+          gap: var(--space-2, 6px);
+          padding: 6px 11px;
+          min-block-size: 30px;
+          border: 0;
+          border-radius: var(--radius-control, 7px);
+          background: var(--card);
+          color: var(--foreground);
+          box-shadow: var(
+            --pretui-shadow-control,
+            0 0 0 1px var(--border),
+            0 1px 2px rgb(0 0 0 / 0.3)
+          );
+          font: inherit;
+          font-size: var(--text-ui-md, 12.5px);
+          cursor: pointer;
         }
-      }
-      .pretui-morph-pop-trigger:focus-visible {
-        outline: 2px solid var(--ring);
-        outline-offset: 2px;
-      }
-      .pretui-morph-pop-panel {
-        min-inline-size: var(--pretui-morph-popover-width, 240px);
-        max-inline-size: min(92vw, 420px);
-        padding: var(--space-4, 11px);
-        border-radius: var(--radius-surface, 10px);
-        background: var(--card);
-        color: var(--foreground);
-        box-shadow: var(
-          --pretui-shadow-overlay,
-          0 0 0 1px var(--border),
-          0 8px 28px rgb(0 0 0 / 0.34)
-        );
-        font-family: var(--font-sans);
-        font-size: var(--text-ui-md, 12.5px);
-        /* Transform origin follows the anchor edge so the morph reads as
-           growth out of the trigger rather than a slide from nowhere. */
-        transform-origin: top left;
-      }
-      .pretui-morph-pop-panel:focus-visible {
-        outline: 2px solid var(--ring);
-        outline-offset: 2px;
+        @media (any-pointer: coarse) {
+          .pretui-morph-pop-trigger {
+            min-block-size: 44px;
+          }
+        }
+        .pretui-morph-pop-trigger:focus-visible {
+          outline: 2px solid var(--ring);
+          outline-offset: 2px;
+        }
+        .pretui-morph-pop-panel {
+          min-inline-size: var(--pretui-morph-popover-width, 240px);
+          max-inline-size: min(92vw, 420px);
+          padding: var(--space-4, 11px);
+          border-radius: var(--radius-surface, 10px);
+          background: var(--card);
+          color: var(--foreground);
+          box-shadow: var(
+            --pretui-shadow-overlay,
+            0 0 0 1px var(--border),
+            0 8px 28px rgb(0 0 0 / 0.34)
+          );
+          font-family: var(--font-sans);
+          font-size: var(--text-ui-md, 12.5px);
+          /* Transform origin follows the anchor edge so the morph reads as
+             growth out of the trigger rather than a slide from nowhere. */
+          transform-origin: top left;
+        }
+        .pretui-morph-pop-panel:focus-visible {
+          outline: 2px solid var(--ring);
+          outline-offset: 2px;
+        }
       }
     </style>
   </template>

@@ -78,6 +78,8 @@ Fixed: the title at `1.12em` weight 600, the description at `0.94em`, the footer
 
 A season changes every card by retuning `--card`, `--radius-surface` and the shadow ladder, which moves Panel in lockstep. Because the filled recipes mix the tone against `--card`, a dark season gets correct dark tinted cards without a dark-mode branch.
 
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
+
 ## React ecosystem
 
 | Agent types                                | Give them                           |

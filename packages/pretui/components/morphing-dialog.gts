@@ -136,35 +136,37 @@ export class MorphingDialog extends Component<MorphingDialogSignature> {
     </div>
 
     <style scoped>
-      .pretui-morph-dialog {
-        display: contents;
-      }
-      .pretui-morph-trigger {
-        display: block;
-        inline-size: 100%;
-        padding: 0;
-        border: 0;
-        background: transparent;
-        color: inherit;
-        font: inherit;
-        text-align: start;
-        cursor: pointer;
-        border-radius: var(--radius-surface, 10px);
-      }
-      .pretui-morph-trigger:focus-visible {
-        outline: 2px solid var(--ring);
-        outline-offset: 2px;
-      }
-      .pretui-morph-body {
-        color: var(--foreground);
-      }
-      .pretui-morph-actions {
-        display: flex;
-        justify-content: flex-end;
-        gap: var(--space-3, 8px);
-        margin-block-start: var(--space-4, 11px);
-        padding-block-start: var(--space-4, 11px);
-        border-block-start: 1px solid var(--border);
+      @layer PretComponent {
+        .pretui-morph-dialog {
+          display: contents;
+        }
+        .pretui-morph-trigger {
+          display: block;
+          inline-size: 100%;
+          padding: 0;
+          border: 0;
+          background: transparent;
+          color: inherit;
+          font: inherit;
+          text-align: start;
+          cursor: pointer;
+          border-radius: var(--radius-surface, 10px);
+        }
+        .pretui-morph-trigger:focus-visible {
+          outline: 2px solid var(--ring);
+          outline-offset: 2px;
+        }
+        .pretui-morph-body {
+          color: var(--foreground);
+        }
+        .pretui-morph-actions {
+          display: flex;
+          justify-content: flex-end;
+          gap: var(--space-3, 8px);
+          margin-block-start: var(--space-4, 11px);
+          padding-block-start: var(--space-4, 11px);
+          border-block-start: 1px solid var(--border);
+        }
       }
     </style>
   </template>

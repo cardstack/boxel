@@ -41,3 +41,5 @@ Where it is thinner: no multi-activity stacking — one capsule, one state — n
 The capsule takes the kit's elevation and surface tokens, with the morph riding the shared duration and easing.
 
 Using the shared motion tokens is what keeps the island feeling like the same product as every other transition — an island with its own curve is the one element that moves differently from everything around it.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

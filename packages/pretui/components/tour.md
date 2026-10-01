@@ -21,7 +21,7 @@ Element: HTMLDivElement
 
 **Anchoring.** A step's `target` is a CSS selector for the control it explains. The target is scrolled into view (nearest, never the whole page). The card is placed by the kit's `anchorTo` on its `placement` side (`bottom` by default, then `top`, `start` or `end`, logical in RTL). It flips to the other side when there is no room, so it never covers the target, and it follows the target on scroll and resize. A step with no target, or with a selector that isn't valid, is centred. A ring is drawn around the target and never covers it.
 
-**Moving.** Next advances, Back returns, and on the last step Next becomes Done, which calls `@onFinish` and closes. Skip, the close button and Escape call `@onSkip` and close. Escape counts only while focus is in the card, so any other control on the page keeps its own Escape. The step can be controlled with `@index` and `@onIndexChange`, and visibility with `@open` and `@onOpenChange`.
+**Moving.** Next advances, Back returns, and on the last step Next becomes Done, which calls `@onFinish` and closes. Skip, the close button and Escape call `@onSkip` and close. Escape counts only while focus is in the card, so any other control on the page keeps its own Escape. The step can be controlled with `@index` and `@onIndexChange`, and visibility with `@open` and `@onOpenChange`. When Done, Skip, the close button or Escape closes the tour, an uncontrolled step goes back to the first one, so reopening starts over. Closing it through `@open` keeps the place.
 
 **Modal only on request.** By default the page stays usable around the card. `@modal` adds a scrim around the target, drawn as four rects that catch the pointer, so the rest of the page can't be clicked while the target stays pressable. Under `@modal`, Escape skips the tour from anywhere. The page is not made inert for the keyboard, so the dialog is never marked `aria-modal`.
 
@@ -48,6 +48,8 @@ APG **Dialog**, non-modal by default.
 `--pretui-tour-ring` (default `--primary`), `--pretui-overlay-scrim` (the `@modal` scrim), `--pretui-z-overlay` (the card and ring), `--popover`, `--popover-foreground`, `--pretui-shadow-overlay`, `--radius-surface`, `--radius-control`, `--border`, `--hover`, `--ring`, `--muted-foreground`, `--foreground`, `--font-sans`, `--font-serif` (the title), `--text-heading`, `--weight-heading`, `--text-ui-md`, `--text-ui-xs`, `--track-eyebrow`, `--leading-body`, `--space-2`, `--space-4`, and `--pretui-dur-snap` / `--pretui-ease-snap` (the ring moving between steps).
 
 The card is 20rem wide at most. The ring's move is dropped under reduced motion.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
 
 ## React ecosystem
 

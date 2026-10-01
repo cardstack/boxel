@@ -117,69 +117,71 @@ export class Badge extends Component<BadgeSignature> {
       {{/if}}
     </span>
     <style scoped>
-      .pretui-badge {
-        position: relative;
-        display: inline-flex;
-        vertical-align: middle;
-        --pretui-mark-inset: 0%;
-        --pretui-mark-x: 50%;
-      }
-      .pretui-badge:dir(rtl) {
-        --pretui-mark-x: -50%;
-      }
-      .pretui-badge[data-circular='true'] {
-        --pretui-mark-inset: 14%;
-      }
-      .pretui-badge-mark {
-        position: absolute;
-        z-index: 1;
-        display: inline-grid;
-        place-items: center;
-        box-sizing: border-box;
-        min-inline-size: 1.125rem;
-        block-size: 1.125rem;
-        padding-inline: 0.3rem;
-        border-radius: 999px;
-        background: var(--pretui-mark-hue);
-        color: var(--pretui-badge-ink, var(--card));
-        box-shadow: 0 0 0 2px var(--pretui-badge-ring, var(--card));
-        font-family: var(--font-sans);
-        font-size: var(--text-ui-xs, 0.66rem);
-        font-weight: 600;
-        font-variant-numeric: tabular-nums;
-        line-height: 1;
-        white-space: nowrap;
-        pointer-events: none;
-      }
-      .pretui-badge-mark[data-dot='true'] {
-        min-inline-size: 0.5rem;
-        inline-size: 0.5rem;
-        block-size: 0.5rem;
-        padding: 0;
-      }
-      .pretui-badge-mark[data-tone='warning'],
-      .pretui-badge-mark[data-tone='attention'] {
-        color: var(--foreground);
-      }
-      .pretui-badge[data-placement='top-end'] .pretui-badge-mark {
-        inset-block-start: var(--pretui-mark-inset);
-        inset-inline-end: var(--pretui-mark-inset);
-        translate: var(--pretui-mark-x) -50%;
-      }
-      .pretui-badge[data-placement='top-start'] .pretui-badge-mark {
-        inset-block-start: var(--pretui-mark-inset);
-        inset-inline-start: var(--pretui-mark-inset);
-        translate: calc(-1 * var(--pretui-mark-x)) -50%;
-      }
-      .pretui-badge[data-placement='bottom-end'] .pretui-badge-mark {
-        inset-block-end: var(--pretui-mark-inset);
-        inset-inline-end: var(--pretui-mark-inset);
-        translate: var(--pretui-mark-x) 50%;
-      }
-      .pretui-badge[data-placement='bottom-start'] .pretui-badge-mark {
-        inset-block-end: var(--pretui-mark-inset);
-        inset-inline-start: var(--pretui-mark-inset);
-        translate: calc(-1 * var(--pretui-mark-x)) 50%;
+      @layer PretComponent {
+        .pretui-badge {
+          position: relative;
+          display: inline-flex;
+          vertical-align: middle;
+          --pretui-mark-inset: 0%;
+          --pretui-mark-x: 50%;
+        }
+        .pretui-badge:dir(rtl) {
+          --pretui-mark-x: -50%;
+        }
+        .pretui-badge[data-circular='true'] {
+          --pretui-mark-inset: 14%;
+        }
+        .pretui-badge-mark {
+          position: absolute;
+          z-index: 1;
+          display: inline-grid;
+          place-items: center;
+          box-sizing: border-box;
+          min-inline-size: 1.125rem;
+          block-size: 1.125rem;
+          padding-inline: 0.3rem;
+          border-radius: 999px;
+          background: var(--pretui-mark-hue);
+          color: var(--pretui-badge-ink, var(--card));
+          box-shadow: 0 0 0 2px var(--pretui-badge-ring, var(--card));
+          font-family: var(--font-sans);
+          font-size: var(--text-ui-xs, 0.66rem);
+          font-weight: 600;
+          font-variant-numeric: tabular-nums;
+          line-height: 1;
+          white-space: nowrap;
+          pointer-events: none;
+        }
+        .pretui-badge-mark[data-dot='true'] {
+          min-inline-size: 0.5rem;
+          inline-size: 0.5rem;
+          block-size: 0.5rem;
+          padding: 0;
+        }
+        .pretui-badge-mark[data-tone='warning'],
+        .pretui-badge-mark[data-tone='attention'] {
+          color: var(--foreground);
+        }
+        .pretui-badge[data-placement='top-end'] .pretui-badge-mark {
+          inset-block-start: var(--pretui-mark-inset);
+          inset-inline-end: var(--pretui-mark-inset);
+          translate: var(--pretui-mark-x) -50%;
+        }
+        .pretui-badge[data-placement='top-start'] .pretui-badge-mark {
+          inset-block-start: var(--pretui-mark-inset);
+          inset-inline-start: var(--pretui-mark-inset);
+          translate: calc(-1 * var(--pretui-mark-x)) -50%;
+        }
+        .pretui-badge[data-placement='bottom-end'] .pretui-badge-mark {
+          inset-block-end: var(--pretui-mark-inset);
+          inset-inline-end: var(--pretui-mark-inset);
+          translate: var(--pretui-mark-x) 50%;
+        }
+        .pretui-badge[data-placement='bottom-start'] .pretui-badge-mark {
+          inset-block-end: var(--pretui-mark-inset);
+          inset-inline-start: var(--pretui-mark-inset);
+          translate: calc(-1 * var(--pretui-mark-x)) 50%;
+        }
       }
     </style>
   </template>

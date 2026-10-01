@@ -9,8 +9,8 @@
 //  2. Render proof for the roles, the single tab stop, the keyboard path, the
 //     aria-disabled contract, and focus returning to the region on dismissal.
 //
-// Local-only test file; run with `boxel test` from this directory — do NOT
-// push to the realm.
+// Run with `boxel test` from this directory; deployment leaves `*.test.gts`
+// off the realm.
 import { module, test } from 'qunit';
 import { render, click, triggerEvent, triggerKeyEvent } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
@@ -207,6 +207,29 @@ module('Pretui | ContextMenu | render', function (hooks) {
       row,
       'a keyboard invocation lands on the first item, per the APG',
     );
+  });
+
+  test('after a right-click, the first arrow moves focus into the menu', async function (assert) {
+    let board = new Board();
+
+    await render(<template>
+      <button type='button' data-test-elsewhere>elsewhere</button>
+      <ContextMenu @items={{board.items}}>
+        <:default><div data-test-board>board</div></:default>
+      </ContextMenu>
+    </template>);
+
+    let elsewhere = document.querySelector('[data-test-elsewhere]') as HTMLElement;
+    elsewhere.focus();
+    await rightClick(document.querySelector('[data-test-board]')!);
+    assert.strictEqual(document.activeElement, elsewhere, 'the right-click left focus alone');
+
+    await triggerKeyEvent(elsewhere, 'keydown', 'ArrowDown');
+    let rows = document.querySelectorAll('[role="menuitem"]') as NodeListOf<HTMLElement>;
+    assert.strictEqual(document.activeElement, rows[0], 'Down lands on the first row');
+
+    await triggerKeyEvent(document.activeElement!, 'keydown', 'Enter');
+    assert.strictEqual(board.log, 'Open lot', 'and the menu now takes its keys');
   });
 
   test('arrows walk, the submenu opens and closes, and Enter activates', async function (assert) {

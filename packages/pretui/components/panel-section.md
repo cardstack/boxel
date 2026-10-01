@@ -12,6 +12,8 @@ A titled group inside a panel, optionally collapsible, with a nesting depth that
 @open?, @defaultOpen? — controlled / uncontrolled. Default open
 @summary?     — small count shown after the title, e.g. "3 effects"
 @depth?       — 0 (default) is top-level; 1–3 mark a group nested INSIDE another
+<:default>    — the section body
+<:actions>    — header affordances beside the title (an add button, a menu)
 ```
 
 **`@depth` is the arg worth understanding.** A nested group drops the peer hairline, de-shouts its heading out of small-caps, and hangs its body off a vertical rule — so the nesting is legible **in a still frame** rather than only while collapsing. Indentation alone compounds and stops meaning anything by the third level.
@@ -26,14 +28,15 @@ The inspector section in design tools and the accordion section in kits.
 
 Where Pretui is better: separating depth from heading level, and making depth legible at rest. Most implementations convey nesting by indentation only, which is invisible in a screenshot and meaningless past two levels.
 
-Where it is thinner: no drag-to-reorder, no per-section actions in the header, and depth capped at 3.
+Where it is thinner: no drag-to-reorder, and depth capped at 3.
 
 ## Accessibility
 
 - **The heading is a real heading at `@level`**, so a panel of sections has a navigable outline.
 - **`@depth` and `@level` being separate is the accessibility point**: a section can be visually nested without lying about the document structure, and vice versa.
 - **When collapsible, it is a full disclosure** — real button, `aria-expanded`, `aria-controls` — and when not, there is no control at all rather than a disabled one.
-- **`@summary` is part of the heading's announced text**, so "Effects, 3" arrives together rather than as two fragments.
+- **`@summary` describes the toggle** through `aria-describedby`, so "Effects, 3 effects" arrives together. It sits outside the heading, so the outline lists the title alone.
+- **A closed section is `inert`** as well as `aria-hidden`, so Tab never lands on a control nobody can see.
 - **Default open is the right default** for a panel: content that starts hidden is content many readers never find.
 
 ## Theming
@@ -41,3 +44,5 @@ Where it is thinner: no drag-to-reorder, no per-section actions in the header, a
 The section takes the kit's border, heading and surface tokens; depth changes which of them apply rather than introducing new ones.
 
 That is what keeps a nested section recognisably the same component as a top-level one — it is quieter, not different.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

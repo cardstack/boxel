@@ -90,6 +90,7 @@ export class HoverCard extends Component<HoverCardSignature> {
   private closeHandle: ReturnType<typeof setTimeout> | undefined;
   private triggerControl: HTMLElement | undefined;
   private hostEl: HTMLElement | undefined;
+  private restoringFocus = false;
 
   @tracked private internalOpen = this.args.defaultOpen ?? false;
 
@@ -163,7 +164,12 @@ export class HoverCard extends Component<HoverCardSignature> {
   close = () => {
     this.clearHandles();
     this.setOpen(false);
-    this.triggerControl?.focus();
+    this.restoringFocus = true;
+    try {
+      this.triggerControl?.focus();
+    } finally {
+      this.restoringFocus = false;
+    }
   };
 
   onPointerEnter = (event: Event) => {
@@ -186,6 +192,10 @@ export class HoverCard extends Component<HoverCardSignature> {
   };
 
   onFocusIn = () => {
+    // the focus close() puts back on the trigger is not a request to reopen
+    if (this.restoringFocus) {
+      return;
+    }
     this.wantOpen(true);
   };
 
@@ -247,7 +257,12 @@ export class HoverCard extends Component<HoverCardSignature> {
     (el: HTMLElement, [isOpen, panelId]: [boolean, string]) => {
       let control = controlIn(el);
       control.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
-      control.setAttribute('aria-controls', panelId);
+      // the panel only exists while open, so point at it only then
+      if (isOpen) {
+        control.setAttribute('aria-controls', panelId);
+      } else {
+        control.removeAttribute('aria-controls');
+      }
       return () => {
         control.removeAttribute('aria-expanded');
         control.removeAttribute('aria-controls');
@@ -293,36 +308,38 @@ export class HoverCard extends Component<HoverCardSignature> {
     </span>
 
     <style scoped>
-      .pretui-hc {
-        display: inline-flex;
-      }
-      .pretui-hc-trigger {
-        display: inline-flex;
-      }
-      .pretui-hc-panel {
-        background: var(--popover);
-        color: var(--popover-foreground);
-        border-radius: var(--radius-surface, 10px);
-        box-shadow: var(--pretui-shadow-overlay, 0 0 0 1px var(--border), 0 8px 28px rgb(0 0 0 / 0.16));
-        padding: var(--space-4, 11px);
-        width: var(--pretui-hovercard-width, 260px);
-        max-width: calc(100vw - 16px);
-        font-family: var(--font-sans);
-        font-size: var(--text-ui-md, 12.5px);
-        opacity: 1;
-        transform: none;
-        transition: opacity var(--pretui-dur-enter, 180ms) var(--pretui-ease-enter, cubic-bezier(0.23, 1, 0.32, 1)),
-          transform var(--pretui-dur-enter, 180ms) var(--pretui-ease-enter, cubic-bezier(0.23, 1, 0.32, 1));
-      }
-      @starting-style {
-        .pretui-hc-panel {
-          opacity: 0;
-          transform: translateY(4px) scale(0.98);
+      @layer PretComponent {
+        .pretui-hc {
+          display: inline-flex;
         }
-      }
-      @media (prefers-reduced-motion: reduce) {
+        .pretui-hc-trigger {
+          display: inline-flex;
+        }
         .pretui-hc-panel {
-          transition: none;
+          background: var(--popover);
+          color: var(--popover-foreground);
+          border-radius: var(--radius-surface, 10px);
+          box-shadow: var(--pretui-shadow-overlay, 0 0 0 1px var(--border), 0 8px 28px rgb(0 0 0 / 0.16));
+          padding: var(--space-4, 11px);
+          width: var(--pretui-hovercard-width, 260px);
+          max-width: calc(100vw - 16px);
+          font-family: var(--font-sans);
+          font-size: var(--text-ui-md, 12.5px);
+          opacity: 1;
+          transform: none;
+          transition: opacity var(--pretui-dur-enter, 180ms) var(--pretui-ease-enter, cubic-bezier(0.23, 1, 0.32, 1)),
+            transform var(--pretui-dur-enter, 180ms) var(--pretui-ease-enter, cubic-bezier(0.23, 1, 0.32, 1));
+        }
+        @starting-style {
+          .pretui-hc-panel {
+            opacity: 0;
+            transform: translateY(4px) scale(0.98);
+          }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .pretui-hc-panel {
+            transition: none;
+          }
         }
       }
     </style>

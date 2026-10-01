@@ -75,6 +75,12 @@ interface Engine {
   deltaE: (a: PlainColor, b: PlainColor, method?: string) => number;
   contrastWCAG21: (a: PlainColor, b: PlainColor) => number;
   getLuminance: (color: PlainColor) => number;
+  mix: (
+    a: PlainColor,
+    b: PlainColor,
+    t: number,
+    options: { space: any; hue: HueMethod; premultiplied: boolean },
+  ) => PlainColor;
 }
 
 const engine = Vendor as unknown as Engine;
@@ -966,10 +972,9 @@ export function sampleGradientAt(
 }
 
 /**
- * Interpolate two colours in an arbitrary space. Hue takes the requested
- * path rather than always the short way — `longer hue` between two nearly
- * identical hues is the whole-wheel sweep the CSS keyword promises, and a
- * naive lerp would collapse it to nothing.
+ * Interpolate two colours the way a CSS gradient does in `space`: the
+ * requested hue path, a powerless hue taking the other stop's, and alpha
+ * premultiplied.
  */
 export function mixIn(
   from: ColorValue,
@@ -978,30 +983,20 @@ export function mixIn(
   space: InterpolationSpace,
   hueMethod: HueMethod = 'shorter',
 ): ColorValue {
-  let interp = INTERPOLATION_SPACES.find((s) => s.id === space);
-  // Only the spaces this kit registers as channel models can be mixed
-  // directly; the rest (lab, lch, hwb, srgb-linear) fall back to OKLab,
-  // which is the closest perceptual match and never wrong-looking.
-  let mixSpace: SpaceId = SPACE_BY_ID.has(space as SpaceId)
-    ? (space as SpaceId)
-    : 'oklab';
-  let a = toSpace(from, mixSpace);
-  let b = toSpace(to, mixSpace);
-  let spec = spaceSpec(mixSpace);
   let amount = clamp(numeric(t), 0, 1);
-
-  let coords = [0, 0, 0] as [number, number, number];
-  for (let i = 0; i < 3; i++) {
-    let ch = spec.channels[i]!;
-    let av = numeric(a.coords[i]);
-    let bv = numeric(b.coords[i]);
-    coords[i] =
-      ch.isHue && interp?.polar
-        ? wrapHue(av + hueDelta(av, bv, hueMethod) * amount)
-        : av + (bv - av) * amount;
+  try {
+    // through sRGB so the engine sees an achromatic stop's hue as missing
+    let mixed = engine.mix(
+      toPlain(toSpace(from, 'srgb')),
+      toPlain(toSpace(to, 'srgb')),
+      amount,
+      { space: spaceObject(space), hue: hueMethod, premultiplied: true },
+    );
+    let out = engine.to(mixed, spaceObject(spaceSpec(from.space).cssId));
+    return fromPlain(out, from.space);
+  } catch {
+    return from;
   }
-  let alpha = numeric(a.alpha, 1) + (numeric(b.alpha, 1) - numeric(a.alpha, 1)) * amount;
-  return toSpace({ space: mixSpace, coords, alpha: clamp(alpha, 0, 1) }, from.space);
 }
 
 /** The signed hue travel from `a` to `b` under a CSS hue-interpolation

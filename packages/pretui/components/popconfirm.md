@@ -26,7 +26,7 @@ Reach for **AlertDialog** instead when the consequence is not visible from where
 
 **Ant's names work.** `@okText` and `@cancelText` are what an agent trained on Ant will type, and they resolve to the same labels as `@confirmLabel` and `@cancelLabel`; the Pretui names win when both are given. The defaults are the bare "Yes" / "No", which is the one place a bare yes/no is right: the question is one line and the object is on screen.
 
-**Busy holds the bubble open.** While `@busy` the confirm button is `aria-busy` and a further confirm is refused; the bubble closes itself after `@onConfirm` only if `@busy` is still off, so a caller that turns it on from `@onConfirm` keeps the bubble open until it closes it. `@disabled` makes `toggle` inert without removing the trigger.
+**Busy holds the bubble open.** While `@busy` the confirm button shows Button's pending state (a spinner and `aria-busy`, still focusable) and a further confirm is refused; the bubble closes itself after `@onConfirm` only if `@busy` is still off, so a caller that turns it on from `@onConfirm` keeps the bubble open until it closes it. `@disabled` makes `toggle` inert without removing the trigger.
 
 **Outside clicks are not swallowed.** Dismissal is a document `pointerdown` listener rather than a covering backdrop, so closing the bubble to press a button behind it takes one press, not two.
 
@@ -60,6 +60,8 @@ Read directly: `--popover` and `--popover-foreground` (the bubble), `--radius-su
 One knob of its own: `--pretui-popconfirm-max-width` (default `min(280px, 100vw - 16px)`). The buttons are the kit's **Button** at size `s`, so they take the season's control tokens through it; the confirm's colour is whatever `@tone` resolves to in the season.
 
 Entry motion is `@starting-style` (opacity plus a 0.97 scale, 180ms) with a `prefers-reduced-motion` opt-out. The 15px warning disc and its 9px glyph are fixed.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
 
 ## React ecosystem
 

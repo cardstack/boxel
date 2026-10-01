@@ -44,3 +44,5 @@ Where it is thinner: no anchored tooltips pointing at real UI — this is a scen
 Everything comes from **StepList** and the kit's block and button tokens.
 
 An onboarding that themed independently would be the first thing a new reader sees and the one screen that does not look like the product — which is the exact opposite of what it is for.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

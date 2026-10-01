@@ -44,7 +44,7 @@ Governing pattern: APG **Menu and Menubar**, with the menu surface itself suppli
 What this component does, and the tests assert:
 
 - **The region is in the tab order** (`tabindex='0'` through the roving-tabindex modifier) unless `@focusable={{false}}`, which takes it out of the tab order.
-- **A right-click opens the menu displayed, focus untouched**, exactly as a platform menu does. **Shift+F10 opens it with focus on the first item.** The two invocations are deliberately different, and both are asserted.
+- **A right-click opens the menu displayed, focus untouched**, exactly as a platform menu does; the first Down or Home then moves focus onto the first item (Up or End onto the last) from wherever focus was. **Shift+F10 opens it with focus on the first item.** The two invocations are deliberately different, and both are asserted.
 - **Arrow keys walk the rows, Home and End jump, Right opens a submenu onto its first item, Left closes it back to the parent, Enter activates.** Type-ahead comes from the shared buffer.
 - **Escape closes one level at a time**, and the last one returns focus to the region. Activating an item closes everything and returns focus the same way.
 - **A disabled row is present and skipped**, not removed.
@@ -56,6 +56,8 @@ The caller's part: keep the region a thing, not the page. The tab stop and the a
 ## Theming
 
 The region reads `--radius-surface` for its focus outline shape and `--ring` for the outline itself. Everything else — panel surface, border, shadow, rows, shortcut faces, the destructive tone, check and submenu indicators — is `MenuPanel`'s and follows **Menu**'s theming exactly. Nothing here has a knob of its own; a season that retunes Menu retunes this with it, which is the point of sharing the engine.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
 
 ## React ecosystem
 

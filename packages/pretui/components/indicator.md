@@ -47,6 +47,8 @@ No APG pattern.
 
 The ping's timing and scale are fixed.
 
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
+
 ## React ecosystem
 
 | Agent types                          | Give them                             |

@@ -21,7 +21,7 @@ Use it for a preview the reader might want and can live without. If the content 
 
 **Focus ignores the open delay.** A reader who deliberately tabbed to the trigger has already expressed the intent, so the card opens at once. Focus leaving the whole surface — trigger and card together — closes it at once too.
 
-**The trigger block owns the control.** The focusable element inside it is given `aria-expanded` and an `aria-controls` pointing at the card, both removed on teardown. Wrap a link, a button, or a **RecordPill**; the trigger's own activation is untouched, so a link stays a link.
+**The trigger block owns the control.** The focusable element inside it is given `aria-expanded`, plus an `aria-controls` pointing at the card while the card is open, both removed on teardown. Wrap a link, a button, or a **RecordPill**; the trigger's own activation is untouched, so a link stays a link.
 
 **Touch has a path.** On a coarse pointer a tap opens the card without swallowing the trigger; a tap outside closes it. `@tapToOpen={{false}}` turns that off, leaving the card reachable only by keyboard on touch devices — usually the wrong trade.
 
@@ -55,6 +55,8 @@ The caller's part: put a real focusable control in the trigger block, or none of
 Read directly: `--popover` and `--popover-foreground`, `--radius-surface`, `--space-4`, `--font-sans`, `--text-ui-md`, `--pretui-shadow-overlay`, and the enter motion pair `--pretui-dur-enter` / `--pretui-ease-enter`.
 
 One knob of its own: `--pretui-hovercard-width` (default 260px), capped at the viewport minus 16px. Entry motion is `@starting-style` (opacity plus a 4px rise and 0.98 scale, 180ms) with a `prefers-reduced-motion` opt-out. Position and flip come from the shared `Popup`, so a season that retunes overlay placement retunes this with it.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
 
 ## React ecosystem
 

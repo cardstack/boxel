@@ -43,3 +43,5 @@ This component is deliberately invisible to assistive technology, and that is th
 `--pretui-swatch-size` (18px default; `@size` overrides per instance), `--pretui-swatch-color` (the parsed colour, written per instance), `--pretui-checker` (the alpha checkerboard, defaulting to a conic gradient mixed from `--foreground` at 11%), `--foreground` (the checker and the inset hairline at 14%), `--radius` (the square shape's corner, at a 2.5 divisor), `--destructive` and `--field` (the empty state).
 
 A season changes every colour chip in the product by retuning `--pretui-swatch-size` and `--pretui-checker`. Because the checker and the hairline are both mixed from `--foreground`, a dark season inverts them automatically — but a season with a very low-contrast `--foreground` will lose the hairline, and a white swatch on a light `--card` then has no edge at all.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

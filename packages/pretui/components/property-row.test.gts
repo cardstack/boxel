@@ -1,10 +1,9 @@
-// Pretui — PropertyRow unit tests. Imports from ../design-tools; when PropertyRow moves to its
-// own file only the import path changes.
+// Pretui — PropertyRow unit tests.
 //
-// Local-only test file, kept off the realm by `.boxelignore` (`*.test.gts`);
-// run with `boxel test`. No assertion touches a computed style: the
-// component's own `<style scoped>` is inert in this harness (the scoped-css
-// attribute is stamped, the rules are not applied).
+// Run with `boxel test`; deployment leaves `*.test.gts` off the realm.
+// No assertion touches a computed style: the component's own `<style scoped>`
+// is inert in this harness (the scoped-css attribute is stamped, the rules
+// are not applied).
 import { module, test } from 'qunit';
 import { render, click } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
@@ -66,10 +65,27 @@ module('Pretui | components/property-row', function (hooks) {
     assert.strictEqual(row().dataset['mixed'], 'true');
     assert.strictEqual(row().querySelector('[data-test-pretui-property-mixed]')?.textContent, 'Mixed');
     assert.strictEqual(row().dataset['layout'], 'stack');
-    assert.strictEqual(row().dataset['disabled'], 'true', 'dimmed; the control itself carries the disabled state');
+    assert.strictEqual(row().dataset['disabled'], 'true', 'dimmed');
     assert.strictEqual(row().querySelector('label'), null, 'the label block replaces the default label');
     assert.strictEqual(row().querySelector('[data-test-custom-label]')?.getAttribute('data-for'), row().querySelector('input')?.id);
     assert.ok(row().querySelector('.pretui-property-tail [data-test-action]'));
+  });
+
+  test('a disabled row blocks reset and yields its state to the control', async function (assert) {
+    let resets = 0;
+    let onReset = () => resets++;
+    await render(
+      <template>
+        <PropertyRow @label='Width' @modified={{true}} @onReset={{onReset}} @disabled={{true}} as |controlId _hintId disabled|>
+          <input id={{controlId}} disabled={{disabled}} />
+        </PropertyRow>
+      </template>,
+    );
+    let reset = row().querySelector('[data-test-pretui-property-reset]') as HTMLElement;
+    assert.strictEqual(reset.getAttribute('aria-disabled'), 'true');
+    await click(reset);
+    assert.strictEqual(resets, 0, 'reset does nothing while disabled');
+    assert.true((row().querySelector('input') as HTMLInputElement).disabled, 'the yielded state reaches the control');
   });
 
   test('labelWidth is written as a custom property only when it is a plain CSS length', async function (assert) {

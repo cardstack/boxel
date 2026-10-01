@@ -1,19 +1,4 @@
-// The usage pages this module used to hold now live in
-// components/<slug>.usage.gts; what remains here is the fixtures they
-// share. The header below describes those pages, not this file.
-// Pretui — demo-texture: freestyle usage pages for the texture territory
-// (BackgroundField, Backdrop, PulsingBorder in texture.gts).
-//
-// The BackgroundField page is deliberately shaped as a CATALOGUE rather than
-// a specimen. That is the whole argument of the component: react-bits ships
-// 55 separate background imports and cult-ui a parallel `bg-*` family, while
-// Pretui ships one component whose `@variant` names a compiled field. A page
-// that showed one field at a time would demonstrate a background; a page that
-// shows all nine responding to ONE shared set of knobs demonstrates the
-// consolidation. So the knob rail drives the focus specimen and all nine
-// catalogue tiles simultaneously — change `@hue` once and watch every field
-// re-tint, which is also the fastest way to see that nothing here carries a
-// hardcoded palette.
+// Pretui — demo-texture: the hue rail the BackgroundField, Backdrop and PulsingBorder usage pages share.
 
 // A curated hue rail. Every entry but the first is a THEME TOKEN, because the
 // point being demonstrated is that a field re-tints with the season and with

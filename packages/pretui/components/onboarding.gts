@@ -19,8 +19,8 @@ import { EmptyState } from './empty-state';
 //   · Position is announced. "Step 2 of 4 — Attach a card" goes to a polite
 //     live region, because a walkthrough whose progress is only visible is a
 //     walkthrough a screen-reader user has to count.
-//   · Skip is always available and never hidden behind a corner glyph. A
-//     walkthrough you cannot leave is a modal, and this is not one.
+//   · Skip is a named button, never a corner glyph, whenever `@onSkip` is
+//     given. A walkthrough you cannot leave is a modal, and this is not one.
 
 export interface OnboardingStep {
   /** stable id */
@@ -123,9 +123,16 @@ export class Onboarding extends Component<OnboardingSignature> {
     this.args.onStepChange?.(index);
   };
 
-  back = () => {
-    if (!this.isFirst) {
-      this.go(this.current - 1);
+  back = (event: Event) => {
+    if (this.isFirst) {
+      return;
+    }
+    this.go(this.current - 1);
+    // Back is about to go disabled on step one; hand focus to Next first so
+    // it doesn't drop to the body
+    let button = event.currentTarget as HTMLElement;
+    if (this.isFirst && document.activeElement === button) {
+      (button.parentElement?.querySelector('.pretui-onb-next') as HTMLElement | null)?.focus();
     }
   };
 
@@ -198,6 +205,7 @@ export class Onboarding extends Component<OnboardingSignature> {
             {{on 'click' this.back}}
           >Back</Button>
           <Button
+            class='pretui-onb-next'
             @size='s'
             @disabled={{unless this.step true}}
             aria-controls={{this.sceneId}}
@@ -209,79 +217,81 @@ export class Onboarding extends Component<OnboardingSignature> {
     </section>
 
     <style scoped>
-      .pretui-onb {
-        display: flex;
-        flex-direction: column;
-        gap: var(--space-4, 13px);
-        padding: var(--space-4, 15px);
-        border-radius: var(--radius-surface, 14px);
-        background: var(--card);
-        box-shadow: var(
-          --pretui-shadow-card,
-          0 0 0 1px var(--border),
-          0 1px 2px rgb(0 0 0 / 0.08)
-        );
-        font-size: var(--text-ui-md, 12.5px);
-        container-type: inline-size;
-      }
-      .pretui-onb-scene {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-        gap: var(--space-4, 15px);
-        align-items: center;
-        min-height: 9rem;
-      }
-      .pretui-onb-scene:not(:has(.pretui-onb-media)) {
-        grid-template-columns: minmax(0, 1fr);
-      }
-      /* unnamed container query — resolves against .pretui-onb */
-      @container (max-width: 34rem) {
+      @layer PretComponent {
+        .pretui-onb {
+          display: flex;
+          flex-direction: column;
+          gap: var(--space-4, 13px);
+          padding: var(--space-4, 15px);
+          border-radius: var(--radius-surface, 14px);
+          background: var(--card);
+          box-shadow: var(
+            --pretui-shadow-card,
+            0 0 0 1px var(--border),
+            0 1px 2px rgb(0 0 0 / 0.08)
+          );
+          font-size: var(--text-ui-md, 12.5px);
+          container-type: inline-size;
+        }
         .pretui-onb-scene {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+          gap: var(--space-4, 15px);
+          align-items: center;
+          min-height: 9rem;
+        }
+        .pretui-onb-scene:not(:has(.pretui-onb-media)) {
           grid-template-columns: minmax(0, 1fr);
         }
-      }
-      .pretui-onb-media {
-        border-radius: 10px;
-        overflow: hidden;
-        background: var(--inset, var(--boxel-100));
-        box-shadow: var(
-          --pretui-shadow-hairline,
-          0 0 0 1px var(--border)
-        );
-      }
-      .pretui-onb-copy {
-        min-width: 0;
-      }
-      .pretui-onb-title {
-        margin: 0;
-        font-size: 16px;
-        font-weight: 600;
-        letter-spacing: -0.02em;
-      }
-      .pretui-onb-body {
-        margin: 6px 0 0;
-        max-width: 52ch;
-        line-height: 1.65;
-        color: var(--muted-foreground);
-      }
-      .pretui-onb-nav {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-      }
-      .pretui-onb-nav-end {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        margin-left: auto;
-      }
-      .pretui-sr {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        overflow: hidden;
-        clip-path: inset(50%);
-        white-space: nowrap;
+        /* unnamed container query — resolves against .pretui-onb */
+        @container (max-width: 34rem) {
+          .pretui-onb-scene {
+            grid-template-columns: minmax(0, 1fr);
+          }
+        }
+        .pretui-onb-media {
+          border-radius: 10px;
+          overflow: hidden;
+          background: var(--inset, var(--boxel-100));
+          box-shadow: var(
+            --pretui-shadow-hairline,
+            0 0 0 1px var(--border)
+          );
+        }
+        .pretui-onb-copy {
+          min-width: 0;
+        }
+        .pretui-onb-title {
+          margin: 0;
+          font-size: 16px;
+          font-weight: 600;
+          letter-spacing: -0.02em;
+        }
+        .pretui-onb-body {
+          margin: 6px 0 0;
+          max-width: 52ch;
+          line-height: 1.65;
+          color: var(--muted-foreground);
+        }
+        .pretui-onb-nav {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+        .pretui-onb-nav-end {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          margin-left: auto;
+        }
+        .pretui-sr {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          overflow: hidden;
+          clip-path: inset(50%);
+          white-space: nowrap;
+        }
       }
     </style>
   </template>

@@ -84,17 +84,49 @@ export const listenDocument = modifier(
  * A document-level listener in the CAPTURE phase, non-passive so the handler
  * may `preventDefault`.
  *
- * This is how an open overlay takes ownership of a key before anything else
- * sees it. The boxel-catalog `46f065-popover` fork found the failure it
- * prevents: a host grid that listens for Escape in the capture phase gets the
- * key first and clears its own state, so Escape inside the overlay does two
- * things at once. Capture + `stopPropagation` makes Escape mean exactly one
- * thing — close THIS surface.
+ * This is how an open overlay takes ownership of a key. Handlers for one
+ * event type share a single listener that calls them newest first and stops
+ * at the first one that calls `stopPropagation`, so an Escape inside nested
+ * overlays closes only the innermost one.
  */
+const captureStacks = new Map<string, ((event: Event) => void)[]>();
+
+function dispatchCapture(event: Event) {
+  let stack = captureStacks.get(event.type);
+  if (!stack) {
+    return;
+  }
+  for (let handler of [...stack].reverse()) {
+    handler(event);
+    if (event.cancelBubble) {
+      return;
+    }
+  }
+}
+
 export const listenDocumentCapture = modifier(
   (_el: HTMLElement, [type, handler]: [string, (event: Event) => void]) => {
-    document.addEventListener(type, handler, true);
-    return () => document.removeEventListener(type, handler, true);
+    let stack = captureStacks.get(type);
+    if (!stack) {
+      stack = [];
+      captureStacks.set(type, stack);
+      document.addEventListener(type, dispatchCapture, true);
+    }
+    stack.push(handler);
+    return () => {
+      let current = captureStacks.get(type);
+      if (!current) {
+        return;
+      }
+      let at = current.lastIndexOf(handler);
+      if (at !== -1) {
+        current.splice(at, 1);
+      }
+      if (current.length === 0) {
+        captureStacks.delete(type);
+        document.removeEventListener(type, dispatchCapture, true);
+      }
+    };
   },
 );
 

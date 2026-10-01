@@ -1,11 +1,4 @@
-// The usage pages this module used to hold now live in
-// components/<slug>.usage.gts; what remains here is the fixtures they
-// share. The header below describes those pages, not this file.
-// Pretui — demo-ink-feedback: boxel-ui freestyle usage pages ported to the
-// ink + feedback territories, rendered with the verbatim ember-freestyle
-// machinery ported in ./freestyle. Sources: pill, tag, avatar, alert,
-// progress-bar, progress-radial, skeleton-placeholder, loading-indicator,
-// circle-spinner, broken-link usage.gts.
+// Pretui — demo-ink-feedback: the hue rail the ink and feedback usage pages share.
 
 export const HUE_OPTIONS = [
   '',

@@ -170,111 +170,113 @@ export class Collapsible extends Component<CollapsibleSignature> {
     </div>
 
     <style scoped>
-      .pretui-collapsible {
-        display: grid;
-        min-inline-size: 0;
-        font-size: var(--pretui-size-m, var(--text-ui-md, 0.78rem));
-        letter-spacing: var(--track-ui, 0.01em);
-        color: var(--foreground);
-      }
-      .pretui-collapsible[data-size='xs'] {
-        font-size: var(--pretui-size-xs, var(--text-ui-xs, 0.66rem));
-      }
-      .pretui-collapsible[data-size='s'] {
-        font-size: var(--pretui-size-s, var(--text-ui-sm, 0.72rem));
-      }
-      .pretui-collapsible[data-size='l'] {
-        font-size: var(--pretui-size-l, var(--text-ui-lg, 0.875rem));
-      }
-      .pretui-collapsible[data-size='xl'] {
-        font-size: var(--pretui-size-xl, var(--text-ui-xl, 1rem));
-      }
-      .pretui-collapsible-trigger {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.5em;
-        justify-self: start;
-        min-block-size: var(--pretui-collapsible-h, 2.24em);
-        padding: 0 var(--pretui-collapsible-px, 0.5em);
-        margin-inline-start: calc(var(--pretui-collapsible-px, 0.5em) * -1);
-        border: 0;
-        border-radius: var(--radius-chip, 6px);
-        background: none;
-        color: inherit;
-        font: inherit;
-        letter-spacing: inherit;
-        font-weight: 600;
-        text-align: start;
-        cursor: pointer;
-        min-inline-size: 0;
-      }
-      .pretui-collapsible-trigger:hover {
-        background: var(--hover, var(--boxel-100));
-      }
-      .pretui-collapsible-trigger:focus-visible {
-        outline: 2px solid var(--ring);
-        outline-offset: 1px;
-      }
-      .pretui-collapsible-trigger:active {
-        transform: scale(0.985);
-      }
-      .pretui-collapsible[data-disabled='true'] .pretui-collapsible-trigger {
-        opacity: 0.45;
-        cursor: default;
-      }
-      .pretui-collapsible[data-disabled='true'] .pretui-collapsible-trigger:hover {
-        background: none;
-      }
-      .pretui-collapsible-label {
-        min-inline-size: 0;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-      .pretui-collapsible-caret {
-        flex: none;
-        inline-size: 0.45em;
-        block-size: 0.45em;
-        border-inline-end: 1.5px solid currentColor;
-        border-block-end: 1.5px solid currentColor;
-        transform: rotate(-45deg) translate(-0.1em, -0.1em);
-        color: var(--muted-foreground);
-        transition: transform var(--pretui-dur-snap, 180ms)
-          var(--pretui-ease-snap, ease);
-      }
-      .pretui-collapsible-trigger[data-state='open'] .pretui-collapsible-caret {
-        transform: rotate(45deg) translate(-0.05em, -0.15em);
-      }
-      .pretui-collapsible-fold {
-        display: grid;
-        grid-template-rows: 0fr;
-        visibility: hidden;
-        transition: grid-template-rows var(--pretui-dur-morph, 300ms)
-            var(--pretui-ease-morph, cubic-bezier(0.3, 0.7, 0.2, 1.02)),
-          visibility 0s linear var(--pretui-dur-morph, 300ms);
-      }
-      .pretui-collapsible-fold[data-state='open'] {
-        grid-template-rows: 1fr;
-        visibility: visible;
-        transition: grid-template-rows var(--pretui-dur-morph, 300ms)
-            var(--pretui-ease-morph, cubic-bezier(0.3, 0.7, 0.2, 1.02)),
-          visibility 0s;
-      }
-      .pretui-collapsible-inner {
-        min-block-size: 0;
-        min-inline-size: 0;
-        overflow: hidden;
-      }
-      /* Reduced motion lands on the END state — open is open, closed is
-         closed, never a frozen midpoint of the row track. */
-      @media (prefers-reduced-motion: reduce) {
-        .pretui-collapsible-fold,
-        .pretui-collapsible-fold[data-state='open'],
-        .pretui-collapsible-caret {
-          transition: none;
+      @layer PretComponent {
+        .pretui-collapsible {
+          display: grid;
+          min-inline-size: 0;
+          font-size: var(--pretui-size-m, var(--text-ui-md, 0.78rem));
+          letter-spacing: var(--track-ui, 0.01em);
+          color: var(--foreground);
+        }
+        .pretui-collapsible[data-size='xs'] {
+          font-size: var(--pretui-size-xs, var(--text-ui-xs, 0.66rem));
+        }
+        .pretui-collapsible[data-size='s'] {
+          font-size: var(--pretui-size-s, var(--text-ui-sm, 0.72rem));
+        }
+        .pretui-collapsible[data-size='l'] {
+          font-size: var(--pretui-size-l, var(--text-ui-lg, 0.875rem));
+        }
+        .pretui-collapsible[data-size='xl'] {
+          font-size: var(--pretui-size-xl, var(--text-ui-xl, 1rem));
+        }
+        .pretui-collapsible-trigger {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.5em;
+          justify-self: start;
+          min-block-size: var(--pretui-collapsible-h, 2.24em);
+          padding: 0 var(--pretui-collapsible-px, 0.5em);
+          margin-inline-start: calc(var(--pretui-collapsible-px, 0.5em) * -1);
+          border: 0;
+          border-radius: var(--radius-chip, 6px);
+          background: none;
+          color: inherit;
+          font: inherit;
+          letter-spacing: inherit;
+          font-weight: 600;
+          text-align: start;
+          cursor: pointer;
+          min-inline-size: 0;
+        }
+        .pretui-collapsible-trigger:hover {
+          background: var(--hover, var(--boxel-100));
+        }
+        .pretui-collapsible-trigger:focus-visible {
+          outline: 2px solid var(--ring);
+          outline-offset: 1px;
         }
         .pretui-collapsible-trigger:active {
-          transform: none;
+          transform: scale(0.985);
+        }
+        .pretui-collapsible[data-disabled='true'] .pretui-collapsible-trigger {
+          opacity: 0.45;
+          cursor: default;
+        }
+        .pretui-collapsible[data-disabled='true'] .pretui-collapsible-trigger:hover {
+          background: none;
+        }
+        .pretui-collapsible-label {
+          min-inline-size: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .pretui-collapsible-caret {
+          flex: none;
+          inline-size: 0.45em;
+          block-size: 0.45em;
+          border-inline-end: 1.5px solid currentColor;
+          border-block-end: 1.5px solid currentColor;
+          transform: rotate(-45deg) translate(-0.1em, -0.1em);
+          color: var(--muted-foreground);
+          transition: transform var(--pretui-dur-snap, 180ms)
+            var(--pretui-ease-snap, ease);
+        }
+        .pretui-collapsible-trigger[data-state='open'] .pretui-collapsible-caret {
+          transform: rotate(45deg) translate(-0.05em, -0.15em);
+        }
+        .pretui-collapsible-fold {
+          display: grid;
+          grid-template-rows: 0fr;
+          visibility: hidden;
+          transition: grid-template-rows var(--pretui-dur-morph, 300ms)
+              var(--pretui-ease-morph, cubic-bezier(0.3, 0.7, 0.2, 1.02)),
+            visibility 0s linear var(--pretui-dur-morph, 300ms);
+        }
+        .pretui-collapsible-fold[data-state='open'] {
+          grid-template-rows: 1fr;
+          visibility: visible;
+          transition: grid-template-rows var(--pretui-dur-morph, 300ms)
+              var(--pretui-ease-morph, cubic-bezier(0.3, 0.7, 0.2, 1.02)),
+            visibility 0s;
+        }
+        .pretui-collapsible-inner {
+          min-block-size: 0;
+          min-inline-size: 0;
+          overflow: hidden;
+        }
+        /* Reduced motion lands on the END state — open is open, closed is
+           closed, never a frozen midpoint of the row track. */
+        @media (prefers-reduced-motion: reduce) {
+          .pretui-collapsible-fold,
+          .pretui-collapsible-fold[data-state='open'],
+          .pretui-collapsible-caret {
+            transition: none;
+          }
+          .pretui-collapsible-trigger:active {
+            transform: none;
+          }
         }
       }
     </style>

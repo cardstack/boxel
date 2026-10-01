@@ -52,3 +52,5 @@ Gaps and cautions:
 `--pretui-overlay-scrim` (the tint — shared with **Dialog**'s and **Drawer**'s `::backdrop`, so a season defines it once), `--pretui-backdrop-z` (stacking level), plus the `@blur` radius as an arg.
 
 `--pretui-overlay-scrim` is the token seasons most often get wrong: it must read as a scrim in **both** light and dark, not simply invert. A dark-mode scrim that is pure black at the same alpha as the light one produces an overlay you cannot see through and a surface with no apparent elevation.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

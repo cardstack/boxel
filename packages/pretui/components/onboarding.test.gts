@@ -1,10 +1,9 @@
-// Pretui — Onboarding unit tests. Imports from ../agentic-shelf; when Onboarding moves to its
-// own file only the import path changes.
+// Pretui — Onboarding unit tests.
 //
-// Local-only test file, kept off the realm by `.boxelignore` (`*.test.gts`);
-// run with `boxel test`. No assertion touches a computed style: the
-// component's own `<style scoped>` is inert in this harness (the scoped-css
-// attribute is stamped, the rules are not applied).
+// Run with `boxel test`; deployment leaves `*.test.gts` off the realm.
+// No assertion touches a computed style: the component's own `<style scoped>`
+// is inert in this harness (the scoped-css attribute is stamped, the rules
+// are not applied).
 import { module, test } from 'qunit';
 import { render, click } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
@@ -73,6 +72,15 @@ module('Pretui | components/onboarding', function (hooks) {
     assert.deepEqual(seen, [1, 2]);
     await click(back());
     assert.strictEqual(title(), 'Connect a supplier');
+  });
+
+  test('Back onto step one hands focus to Next instead of the body', async function (assert) {
+    await render(<template><Onboarding @steps={{STEPS}} /></template>);
+    await click(next());
+    back().focus();
+    await click(back());
+    assert.true(back().disabled, 'Back is disabled on step one');
+    assert.strictEqual(document.activeElement, next(), 'and focus moved to Next');
   });
 
   test('a controlled @current holds still and reports; out-of-range values clamp', async function (assert) {

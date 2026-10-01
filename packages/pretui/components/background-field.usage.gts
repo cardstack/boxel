@@ -1,4 +1,4 @@
-// Pretui — BackgroundField usage page.
+// Pretui — BackgroundField usage page. One knob rail drives the focus specimen and all nine catalogue tiles at once, so a single @hue change re-tints every field.
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { fn } from '@ember/helper';

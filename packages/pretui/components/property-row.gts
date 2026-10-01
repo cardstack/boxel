@@ -30,14 +30,15 @@ export interface PropertyRowSignature {
     modified?: boolean;
     /** invoked by the reset control */
     onReset?: () => void;
-    /** dims the row (`data-disabled`); the control itself is the
-     * caller's to disable */
+    /** dims the row (`data-disabled`), blocks the reset control, and is
+     * yielded so the control can follow it */
     disabled?: boolean;
   };
   Blocks: {
     /** the control(s). Yields the id to put on the control so the label
-     * points at it, and the id of the hint for `aria-describedby`. */
-    default: [controlId: string, hintId: string];
+     * points at it, the id of the hint for `aria-describedby`, and
+     * whether the row is disabled. */
+    default: [controlId: string, hintId: string, disabled: boolean];
     /** replaces the plain text label — for a label that is itself a
      * control (a scrub grip, a units toggle) */
     label: [controlId: string];
@@ -80,7 +81,13 @@ export class PropertyRow extends Component<PropertyRowSignature> {
   get resetLabel(): string {
     return this.args.label ? 'Reset ' + this.args.label : 'Reset to default';
   }
+  get disabled(): boolean {
+    return this.args.disabled === true;
+  }
   handleReset = () => {
+    if (this.disabled) {
+      return;
+    }
     this.args.onReset?.();
   };
   <template>
@@ -106,7 +113,7 @@ export class PropertyRow extends Component<PropertyRowSignature> {
       </div>
 
       <div class='pretui-property-control'>
-        {{yield this.controlId this.hintId}}
+        {{yield this.controlId this.hintId this.disabled}}
       </div>
 
       <div class='pretui-property-tail'>
@@ -117,6 +124,7 @@ export class PropertyRow extends Component<PropertyRowSignature> {
               type='button'
               class='pretui-property-reset'
               aria-label={{this.resetLabel}}
+              aria-disabled={{if @disabled 'true'}}
               {{on 'click' this.handleReset}}
               data-test-pretui-property-reset
             >
@@ -150,155 +158,157 @@ export class PropertyRow extends Component<PropertyRowSignature> {
       {{/if}}
     </div>
     <style scoped>
-      .pretui-property {
-        --pretui-property-label-w: 84px;
-        display: grid;
-        grid-template-columns: var(--pretui-property-label-w) minmax(0, 1fr) auto;
-        grid-template-areas: 'name control tail' '. hint hint';
-        align-items: center;
-        column-gap: var(--space-3, 8px);
-        row-gap: 2px;
-        min-height: var(--control-h, 28px);
-        padding-block: 1px;
-        font-size: var(--text-ui, 12px);
-        letter-spacing: var(--track-ui, 0.01em);
-        color: var(--foreground);
-      }
-      .pretui-property[data-layout='stack'] {
-        grid-template-columns: minmax(0, 1fr) auto;
-        grid-template-areas: 'name tail' 'control control' 'hint hint';
-        align-items: start;
-        row-gap: 4px;
-      }
-      .pretui-property[data-layout='split'] {
-        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
-      }
-      .pretui-property[data-disabled='true'] {
-        opacity: 0.45;
-      }
-      .pretui-property-name {
-        grid-area: name;
-        display: flex;
-        align-items: baseline;
-        gap: 5px;
-        min-width: 0;
-      }
-      .pretui-property-name > label {
-        display: block;
-        min-width: 0;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        font-weight: 500;
-        color: var(--muted-foreground);
-        cursor: default;
-      }
-      .pretui-property-control {
-        grid-area: control;
-        min-width: 0;
-        display: flex;
-        align-items: center;
-        gap: var(--space-2, 6px);
-      }
-      .pretui-property-control > * {
-        min-width: 0;
-      }
-      .pretui-property-tail {
-        grid-area: tail;
-        display: flex;
-        align-items: center;
-        gap: 2px;
-        /* The reset control is revealed by hover/focus but must never be
-           the ONLY way to reach it: it stays in the tab order and becomes
-           fully opaque on :focus-visible, and on a coarse pointer it is
-           always visible (see the pointer query below). */
-        opacity: 0;
-        transition: opacity var(--pretui-dur-snap, 160ms)
-          var(--pretui-ease-snap, ease);
-      }
-      .pretui-property:hover .pretui-property-tail,
-      .pretui-property:focus-within .pretui-property-tail,
-      .pretui-property[data-mixed='true'] .pretui-property-tail {
-        opacity: 1;
-      }
-      .pretui-property-hint {
-        grid-area: hint;
-        margin: 0;
-        font-size: var(--text-ui-sm, 11.5px);
-        color: var(--ink-3, var(--boxel-400));
-      }
-      .pretui-property-mixed {
-        flex: none;
-        font-family: var(--font-mono);
-        font-size: var(--text-ui-xs, 11px);
-        letter-spacing: var(--track-eyebrow, 0.04em);
-        color: var(--muted-foreground);
-        background: var(--field, var(--boxel-light));
-        border-radius: var(--radius-sm, 5px);
-        padding: 0 4px;
-      }
-      .pretui-property-reset {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        width: 20px;
-        height: 20px;
-        padding: 0;
-        border: 0;
-        border-radius: var(--radius-sm, 5px);
-        background: transparent;
-        color: var(--muted-foreground);
-        cursor: pointer;
-      }
-      .pretui-property-reset:hover {
-        background: var(--hover, rgb(0 0 0 / 0.05));
-        color: var(--foreground);
-      }
-      .pretui-property-reset:focus-visible {
-        outline: 2px solid var(--ring);
-        outline-offset: 1px;
-      }
-      .pretui-property-dot {
-        display: inline-block;
-        width: 6px;
-        height: 6px;
-        margin: 0 7px;
-        border-radius: 50%;
-        background: var(--primary);
-      }
-      .pretui-sr {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        overflow: hidden;
-        clip-path: inset(50%);
-        white-space: nowrap;
-      }
-      /* Touch: hover-reveal is meaningless, and 20px is under the 44px
-         floor, so the tail is always visible and the hit area grows. */
-      @media (pointer: coarse) {
-        .pretui-property-tail {
-          opacity: 1;
+      @layer PretComponent {
+        .pretui-property {
+          --pretui-property-label-w: 84px;
+          display: grid;
+          grid-template-columns: var(--pretui-property-label-w) minmax(0, 1fr) auto;
+          grid-template-areas: 'name control tail' '. hint hint';
+          align-items: center;
+          column-gap: var(--space-3, 8px);
+          row-gap: 2px;
+          min-height: var(--control-h, 28px);
+          padding-block: 1px;
+          font-size: var(--text-ui, 12px);
+          letter-spacing: var(--track-ui, 0.01em);
+          color: var(--foreground);
         }
-        .pretui-property-reset {
-          width: 32px;
-          height: 32px;
-        }
-      }
-      @media (prefers-reduced-motion: reduce) {
-        .pretui-property-tail {
-          transition: none;
-        }
-      }
-      /* Narrow panes fold the label above the control. Unnamed container
-         query only — a named one silently deletes every rule after it. */
-      @container (max-width: 240px) {
-        .pretui-property,
-        .pretui-property[data-layout='split'] {
+        .pretui-property[data-layout='stack'] {
           grid-template-columns: minmax(0, 1fr) auto;
           grid-template-areas: 'name tail' 'control control' 'hint hint';
           align-items: start;
           row-gap: 4px;
+        }
+        .pretui-property[data-layout='split'] {
+          grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+        }
+        .pretui-property[data-disabled='true'] {
+          opacity: 0.45;
+        }
+        .pretui-property-name {
+          grid-area: name;
+          display: flex;
+          align-items: baseline;
+          gap: 5px;
+          min-width: 0;
+        }
+        .pretui-property-name > label {
+          display: block;
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          font-weight: 500;
+          color: var(--muted-foreground);
+          cursor: default;
+        }
+        .pretui-property-control {
+          grid-area: control;
+          min-width: 0;
+          display: flex;
+          align-items: center;
+          gap: var(--space-2, 6px);
+        }
+        .pretui-property-control > * {
+          min-width: 0;
+        }
+        .pretui-property-tail {
+          grid-area: tail;
+          display: flex;
+          align-items: center;
+          gap: 2px;
+          /* The reset control is revealed by hover/focus but must never be
+             the ONLY way to reach it: it stays in the tab order and becomes
+             fully opaque on :focus-visible, and on a coarse pointer it is
+             always visible (see the pointer query below). */
+          opacity: 0;
+          transition: opacity var(--pretui-dur-snap, 160ms)
+            var(--pretui-ease-snap, ease);
+        }
+        .pretui-property:hover .pretui-property-tail,
+        .pretui-property:focus-within .pretui-property-tail,
+        .pretui-property[data-mixed='true'] .pretui-property-tail {
+          opacity: 1;
+        }
+        .pretui-property-hint {
+          grid-area: hint;
+          margin: 0;
+          font-size: var(--text-ui-sm, 11.5px);
+          color: var(--ink-3, var(--boxel-400));
+        }
+        .pretui-property-mixed {
+          flex: none;
+          font-family: var(--font-mono);
+          font-size: var(--text-ui-xs, 11px);
+          letter-spacing: var(--track-eyebrow, 0.04em);
+          color: var(--muted-foreground);
+          background: var(--field, var(--boxel-light));
+          border-radius: var(--radius-sm, 5px);
+          padding: 0 4px;
+        }
+        .pretui-property-reset {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 20px;
+          height: 20px;
+          padding: 0;
+          border: 0;
+          border-radius: var(--radius-sm, 5px);
+          background: transparent;
+          color: var(--muted-foreground);
+          cursor: pointer;
+        }
+        .pretui-property-reset:hover {
+          background: var(--hover, rgb(0 0 0 / 0.05));
+          color: var(--foreground);
+        }
+        .pretui-property-reset:focus-visible {
+          outline: 2px solid var(--ring);
+          outline-offset: 1px;
+        }
+        .pretui-property-dot {
+          display: inline-block;
+          width: 6px;
+          height: 6px;
+          margin: 0 7px;
+          border-radius: 50%;
+          background: var(--primary);
+        }
+        .pretui-sr {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          overflow: hidden;
+          clip-path: inset(50%);
+          white-space: nowrap;
+        }
+        /* Touch: hover-reveal is meaningless, and 20px is under the 44px
+           floor, so the tail is always visible and the hit area grows. */
+        @media (pointer: coarse) {
+          .pretui-property-tail {
+            opacity: 1;
+          }
+          .pretui-property-reset {
+            width: 32px;
+            height: 32px;
+          }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .pretui-property-tail {
+            transition: none;
+          }
+        }
+        /* Narrow panes fold the label above the control. Unnamed container
+           query only — a named one silently deletes every rule after it. */
+        @container (max-width: 240px) {
+          .pretui-property,
+          .pretui-property[data-layout='split'] {
+            grid-template-columns: minmax(0, 1fr) auto;
+            grid-template-areas: 'name tail' 'control control' 'hint hint';
+            align-items: start;
+            row-gap: 4px;
+          }
         }
       }
     </style>

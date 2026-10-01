@@ -59,6 +59,8 @@ No APG pattern. A frame is layout, and it carries no role unless it is itself th
 
 A season changes the empty-frame ground and the corner through `--card`, `--foreground` and `--radius`. Everything else is geometry, and that is fixed: full inline size, `min-inline-size: 0`, and clipped overflow.
 
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
+
 ## React ecosystem
 
 | Agent types                          | Give them                                  |

@@ -15,9 +15,9 @@ One labelled row of a property inspector: a label column, a control, a hint, a m
 @mixed?      — the selection holds more than one value for this property
 @modified?   — the value differs from its default: reveals the reset control
 @onReset?    — invoked by the reset control
-@disabled?   — dims the row and marks it aria-disabled
+@disabled?   — dims the row, blocks reset, and is yielded to the control
 
-<:default> — the control(s). Yields [controlId, hintId]
+<:default> — the control(s). Yields [controlId, hintId, disabled]
 <:label>   — replaces the plain text label, for a label that is itself a control
 <:actions> — trailing affordances: a link/unlink toggle, an overflow menu
 ```
@@ -28,7 +28,7 @@ One labelled row of a property inspector: a label column, a control, a hint, a m
 
 **Without `@onReset` the modified dot is informational only.** The affordance appears when there is something for it to do.
 
-**`@disabled` dims the row and marks it, but the control itself is the caller's to disable** — the row cannot reach into a yielded block.
+**`@disabled` dims the row (`data-disabled`) and blocks the reset control, which stays focusable with `aria-disabled`.** The row cannot reach into a yielded block, so it yields the state as the third block param: pass it to the control's own `@disabled`.
 
 ## Prior art
 
@@ -44,10 +44,12 @@ Where it is thinner: no inline validation state, no per-row units switching (tha
 - **The hint is referenced by `aria-describedby`**, not left as adjacent text.
 - **"Mixed" is a word**, so a multi-value selection is perceivable without sight and without interpreting an empty field.
 - **`<:label>` exists for a label that is itself a control** — a scrub grip, a units toggle — which is the case where a plain `<label>` would be wrong.
-- **`@disabled` marks the row `aria-disabled`** rather than removing it, keeping it discoverable.
+- **The disabled state belongs to the controls.** The row is a layout box, not a widget, so it carries `data-disabled` for styling only. The reset button gets `aria-disabled`, and the yielded `disabled` lets the control announce its own state.
 
 ## Theming
 
 `@labelWidth` is a caller value rather than a token, because inspector density is a property of the panel rather than the season; everything else takes the kit's shared control and text tokens.
 
 The three layouts exist so one component serves a dense left-column inspector, a stacked mobile form and an equal-halves settings row without any of them inventing their own row.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

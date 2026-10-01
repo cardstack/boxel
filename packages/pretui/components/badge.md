@@ -48,6 +48,8 @@ No APG pattern. What matters is the name.
 
 The ring mixes against `--card`, so the mark reads as cut out of the control in any season. The 1.125rem height, the 0.5rem dot and the half-out corner offset are fixed.
 
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
+
 ## React ecosystem
 
 | Agent types                       | Give them                         |

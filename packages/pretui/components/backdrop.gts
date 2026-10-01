@@ -118,58 +118,60 @@ export class Backdrop extends Component<BackdropSignature> {
       {{/if}}
     {{/if}}
     <style scoped>
-      .pretui-backdrop {
-        /* a scrim must escape scroll clipping when it is covering the
-           viewport (lint warns on fixed; accepted, same as overlay.gts) */
-        position: fixed;
-        inset: 0;
-        z-index: var(--pretui-backdrop-z, 50);
-        display: block;
-        margin: 0;
-        padding: 0;
-        border: 0;
-        cursor: var(--pretui-backdrop-cursor, default);
-        background: var(
-          --pretui-backdrop-tint,
-          var(--pretui-overlay-scrim, rgb(16 24 40 / 0.4))
-        );
-        opacity: 1;
-        transition: opacity 180ms cubic-bezier(0.23, 1, 0.32, 1);
-      }
-      .pretui-backdrop[data-position='absolute'] {
-        position: absolute;
-      }
-      .pretui-backdrop[data-tone='frost'] {
-        background: var(
-          --pretui-backdrop-tint,
-          color-mix(in oklch, var(--background) 55%, transparent)
-        );
-        backdrop-filter: blur(var(--pretui-backdrop-blur, 8px))
-          saturate(var(--pretui-backdrop-saturate, 1.3));
-      }
-      .pretui-backdrop[data-tone='clear'] {
-        background: transparent;
-      }
-      /* An explicit @blur opts a NON-frost tone into the filter (frost already
-         reads the same custom property, and excluding it here is what keeps
-         `@tone='frost' @blur={{16}}` from quietly losing frost's saturation
-         lift — same specificity, and this rule comes later). */
-      .pretui-backdrop[data-blur='true']:not([data-tone='frost']) {
-        backdrop-filter: blur(var(--pretui-backdrop-blur, 0px))
-          saturate(var(--pretui-backdrop-saturate, 1));
-      }
-      .pretui-backdrop:focus-visible {
-        outline: 2px solid var(--ring);
-        outline-offset: -3px;
-      }
-      @starting-style {
+      @layer PretComponent {
         .pretui-backdrop {
-          opacity: 0;
+          /* a scrim must escape scroll clipping when it is covering the
+             viewport (lint warns on fixed; accepted, same as overlay.gts) */
+          position: fixed;
+          inset: 0;
+          z-index: var(--pretui-backdrop-z, 50);
+          display: block;
+          margin: 0;
+          padding: 0;
+          border: 0;
+          cursor: var(--pretui-backdrop-cursor, default);
+          background: var(
+            --pretui-backdrop-tint,
+            var(--pretui-overlay-scrim, rgb(16 24 40 / 0.4))
+          );
+          opacity: 1;
+          transition: opacity 180ms cubic-bezier(0.23, 1, 0.32, 1);
         }
-      }
-      @media (prefers-reduced-motion: reduce) {
-        .pretui-backdrop {
-          transition: none;
+        .pretui-backdrop[data-position='absolute'] {
+          position: absolute;
+        }
+        .pretui-backdrop[data-tone='frost'] {
+          background: var(
+            --pretui-backdrop-tint,
+            color-mix(in oklch, var(--background) 55%, transparent)
+          );
+          backdrop-filter: blur(var(--pretui-backdrop-blur, 8px))
+            saturate(var(--pretui-backdrop-saturate, 1.3));
+        }
+        .pretui-backdrop[data-tone='clear'] {
+          background: transparent;
+        }
+        /* An explicit @blur opts a NON-frost tone into the filter (frost already
+           reads the same custom property, and excluding it here is what keeps
+           `@tone='frost' @blur={{16}}` from quietly losing frost's saturation
+           lift — same specificity, and this rule comes later). */
+        .pretui-backdrop[data-blur='true']:not([data-tone='frost']) {
+          backdrop-filter: blur(var(--pretui-backdrop-blur, 0px))
+            saturate(var(--pretui-backdrop-saturate, 1));
+        }
+        .pretui-backdrop:focus-visible {
+          outline: 2px solid var(--ring);
+          outline-offset: -3px;
+        }
+        @starting-style {
+          .pretui-backdrop {
+            opacity: 0;
+          }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .pretui-backdrop {
+            transition: none;
+          }
         }
       }
     </style>

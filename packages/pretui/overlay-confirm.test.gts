@@ -16,8 +16,8 @@
 // attribute and delivers no stylesheet, so every one would read as an initial
 // value.
 //
-// Local-only test file; run with `boxel test` from this directory — do NOT
-// push to the realm.
+// Run with `boxel test` from this directory; deployment leaves `*.test.gts`
+// off the realm.
 import { module, test } from 'qunit';
 import { render, click, focus, blur, triggerKeyEvent } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
@@ -106,6 +106,11 @@ module('Pretui | AlertDialog', function (hooks) {
       buttons[1]?.getAttribute('data-test-pretui-alertdialog-confirm'),
       '',
       'and Confirm follows it',
+    );
+    assert.strictEqual(
+      document.activeElement,
+      buttons[0],
+      'and the platform focuses it when the dialog opens',
     );
   });
 
@@ -307,6 +312,34 @@ module('Pretui | Popconfirm', function (hooks) {
     );
   });
 
+  test('Escape inside an AlertDialog closes only the Popconfirm', async function (assert) {
+    let outer = new Toggle();
+    outer.open = true;
+    let inner = new Toggle();
+
+    await render(<template>
+      <AlertDialog @open={{outer.open}} @onOpenChange={{outer.setOpen}} @title='Delete?'>
+        <:default>
+          <Popconfirm @open={{inner.open}} @onOpenChange={{inner.setOpen}} @title='Really?'>
+            <:trigger as |isOpen toggle|>
+              <button type='button' data-test-pc-trigger {{on 'click' toggle}}>{{if isOpen 'open' 'Ask'}}</button>
+            </:trigger>
+          </Popconfirm>
+        </:default>
+      </AlertDialog>
+    </template>);
+
+    await click('[data-test-pc-trigger]');
+    assert.true(inner.open, 'the Popconfirm is open inside the dialog');
+
+    await triggerKeyEvent(document, 'keydown', 'Escape');
+    assert.false(inner.open, 'Escape closes the innermost surface');
+    assert.true(outer.open, 'and the dialog around it stays open');
+
+    await triggerKeyEvent(document, 'keydown', 'Escape');
+    assert.false(outer.open, 'the next Escape reaches the dialog');
+  });
+
   test('confirm fires, closes, and restores focus', async function (assert) {
     let host = new Toggle();
     let confirmed = 0;
@@ -419,9 +452,10 @@ module('Pretui | HoverCard', function (hooks) {
       'false',
       'the trigger announces the collapsed preview',
     );
-    assert.ok(
+    assert.strictEqual(
       trigger.getAttribute('aria-controls'),
-      'and points at it, which Radix and shadcn never do',
+      null,
+      'and points at nothing while there is no card to point at',
     );
 
     await focus(trigger);
@@ -433,6 +467,11 @@ module('Pretui | HoverCard', function (hooks) {
       trigger.getAttribute('aria-expanded'),
       'true',
       'and the state follows',
+    );
+    assert.strictEqual(
+      trigger.getAttribute('aria-controls'),
+      document.querySelector('[data-test-pretui-hovercard-panel]')?.id,
+      'and it points at the open card, which Radix and shadcn never do',
     );
   });
 
@@ -501,6 +540,29 @@ module('Pretui | HoverCard', function (hooks) {
       trigger,
       'and hands focus back rather than stranding it',
     );
+  });
+
+  test('Escape from a link inside the card closes it and it stays closed', async function (assert) {
+    let host = new Toggle();
+    host.open = true;
+
+    await render(<template>
+      <HoverCard @open={{host.open}} @onOpenChange={{host.setOpen}}>
+        <:trigger>
+          <a href='#x' data-test-hc-trigger>Ama Boateng</a>
+        </:trigger>
+        <:default>
+          <a href='#profile' data-test-hc-link>Open profile</a>
+        </:default>
+      </HoverCard>
+    </template>);
+
+    await focus('[data-test-hc-link]');
+    host.log = [];
+    await triggerKeyEvent('[data-test-hc-link]', 'keydown', 'Escape');
+    assert.false(host.open, 'Escape closes it');
+    assert.deepEqual(host.log, ['close'], 'putting focus back on the trigger does not reopen it');
+    assert.strictEqual(document.activeElement, document.querySelector('[data-test-hc-trigger]'));
   });
 
   test('focus leaving the whole surface closes it', async function (assert) {

@@ -44,13 +44,13 @@ export interface ScrubInputSignature {
     /** unit appended (or prepended) in the field: 'px', '%', '°', 'ms' */
     unit?: string;
     unitPosition?: 'prefix' | 'suffix';
-    /** short text shown in the grip when there is no unit — the scrub
-     * affordance needs SOMETHING to grab. Defaults to the unit, then to a
-     * drag glyph. */
+    /** short text shown in the grip when there is no unit. Defaults to the
+     * unit; with neither, there is no grip and the field scrubs. */
     grip?: string;
-    /** 'grip' (default) scrubs from the affix only; 'field' makes the
-     * entire control a scrub surface (text selection still works, because
-     * the field only scrubs while not focused) */
+    /** 'grip' scrubs from the affix only; 'field' makes the entire control
+     * a scrub surface (text selection still works, because the field only
+     * scrubs while not focused). Defaults to 'grip' when there is a grip
+     * (a `@unit` or `@grip`), otherwise 'field'. */
     scrubFrom?: 'grip' | 'field' | 'none';
     /** accessible name — REQUIRED in practice; a bare spinbutton in a
      * panel of twenty is unusable without one */
@@ -105,6 +105,8 @@ export class ScrubInput extends Component<ScrubInputSignature> {
   /** value at pointerdown; every scrub frame is an absolute offset from it,
    * so rounding cannot accumulate across a long drag */
   private scrubOrigin = 0;
+  private scrubStart: number | null = null;
+  private scrubValue: number | null | undefined;
   /** the same idea in index space, for a stepped scale */
   private scrubOriginIndex = 0;
 
@@ -169,12 +171,7 @@ export class ScrubInput extends Component<ScrubInputSignature> {
     if (this.args.scrubFrom) {
       return this.args.scrubFrom;
     }
-    // The grip is the scrub surface WHEN THERE IS ONE. This defaulted flatly
-    // to 'grip', but the grip only renders `{{#if this.gripText}}` — so a
-    // ScrubInput with neither @unit nor @grip rendered no grip element, and
-    // therefore no drag surface at all. Every plain numeric row in a property
-    // list is exactly that shape, so the control silently stopped being a
-    // scrub input in its most common configuration.
+    // without a grip element there is nothing else to drag from
     return this.gripText ? 'grip' : 'field';
   }
   get inert(): boolean {
@@ -257,6 +254,12 @@ export class ScrubInput extends Component<ScrubInputSignature> {
     let bound = this.highBound;
     return bound !== undefined && this.value !== null && this.value >= bound;
   }
+  get upDisabled(): boolean {
+    return this.inert || this.atMax;
+  }
+  get downDisabled(): boolean {
+    return this.inert || this.atMin;
+  }
 
   private normalize(raw: number): number {
     let clamped = clampRange(raw, this.lowBound, this.highBound);
@@ -308,11 +311,24 @@ export class ScrubInput extends Component<ScrubInputSignature> {
     }
     if (part.phase === 'start') {
       this.scrubOrigin = this.base;
+      this.scrubStart = this.value;
+      this.scrubValue = undefined;
       this.scrubOriginIndex = Math.max(0, this.scaleIndex);
       return;
     }
+    if (part.phase === 'cancel') {
+      if (this.scrubValue !== undefined) {
+        this.scrubValue = undefined;
+        this.write(this.scrubStart, false);
+      }
+      return;
+    }
     if (part.phase === 'end') {
-      this.args.onChange?.(this.value);
+      if (this.scrubValue !== undefined) {
+        let committed = this.scrubValue;
+        this.scrubValue = undefined;
+        this.args.onChange?.(committed);
+      }
       // `scrubs` calls preventDefault on pointerdown to suppress the text
       // selection a drag would otherwise start — which also suppresses the
       // focus a plain click would have given the input. Below the movement
@@ -334,13 +350,15 @@ export class ScrubInput extends Component<ScrubInputSignature> {
       let stop = stopAt(this.scrubOriginIndex + stride, this.scaleStops);
       this.draft = null;
       if (stop) {
+        this.scrubValue = stop.value;
         this.write(stop.value, false);
       }
       return;
     }
     let delta = scrubDelta(part.dx, this.step, part, this.travelPerStep);
     this.draft = null;
-    this.write(this.normalize(this.scrubOrigin + delta), false);
+    this.scrubValue = this.normalize(this.scrubOrigin + delta);
+    this.write(this.scrubValue, false);
   };
 
   // ── steppers ───────────────────────────────────────────────────────
@@ -508,7 +526,7 @@ export class ScrubInput extends Component<ScrubInputSignature> {
             class='pretui-scrub-step'
             tabindex='-1'
             aria-label={{this.increaseLabel}}
-            aria-disabled={{if this.atMax 'true'}}
+            aria-disabled={{if this.upDisabled 'true'}}
             {{on 'click' this.stepUp}}
             data-test-pretui-scrub-up
           ><span class='pretui-scrub-caret' data-dir='up'></span></button>
@@ -517,7 +535,7 @@ export class ScrubInput extends Component<ScrubInputSignature> {
             class='pretui-scrub-step'
             tabindex='-1'
             aria-label={{this.decreaseLabel}}
-            aria-disabled={{if this.atMin 'true'}}
+            aria-disabled={{if this.downDisabled 'true'}}
             {{on 'click' this.stepDown}}
             data-test-pretui-scrub-down
           ><span class='pretui-scrub-caret' data-dir='down'></span></button>
@@ -525,145 +543,147 @@ export class ScrubInput extends Component<ScrubInputSignature> {
       {{/if}}
     </div>
     <style scoped>
-      .pretui-scrub {
-        display: flex;
-        align-items: stretch;
-        min-width: 0;
-        width: 100%;
-        height: var(--control-h, 28px);
-        border-radius: var(--radius);
-        background: var(--field, var(--boxel-light));
-        box-shadow: 0 0 0 1px var(--input);
-        color: var(--foreground);
-        font-size: var(--text-ui-md, 12.5px);
-        letter-spacing: var(--track-ui, 0.01em);
-        font-variant-numeric: tabular-nums;
-        overflow: hidden;
-      }
-      .pretui-scrub:hover {
-        box-shadow: 0 0 0 1px var(--line-strong, var(--boxel-400));
-      }
-      /* The inner input drops its own outline and the field wraps it in a
-         box-shadow ring, so the ring costs no layout. Forced-colors mode
-         paints no box-shadow at all, so the ring is doubled by a transparent
-         outline: invisible and layout-free in normal rendering, forced to a
-         system colour in high contrast. */
-      .pretui-scrub:has(.pretui-scrub-input:focus-visible) {
-        outline: 2px solid transparent;
-        outline-offset: 1px;
-        box-shadow: 0 0 0 2px var(--ring);
-      }
-      .pretui-scrub[data-disabled='true'] {
-        opacity: 0.5;
-      }
-      /* The whole field is a scrub surface only in scrubFrom='field'. */
-      .pretui-scrub[data-scrub-from='field'] {
-        cursor: ew-resize;
-        touch-action: none;
-      }
-      /* Scoped CSS does not cross a component boundary, so the sr-only
-         rule is repeated here rather than shared with PropertyRow's. */
-      .pretui-sr {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        overflow: hidden;
-        clip-path: inset(50%);
-        white-space: nowrap;
-      }
-      .pretui-scrub-input {
-        flex: 1 1 auto;
-        min-width: 0;
-        width: 100%;
-        border: 0;
-        background: transparent;
-        color: inherit;
-        font: inherit;
-        letter-spacing: inherit;
-        font-variant-numeric: inherit;
-        padding-inline: var(--space-2, 6px);
-        outline: none;
-      }
-      .pretui-scrub-input::placeholder {
-        color: var(--ink-3, var(--boxel-400));
-        font-family: var(--font-mono);
-        font-size: var(--text-ui-xs, 11px);
-      }
-      /* The grip: a permanently visible ew-resize affordance. This is the
-         discoverability figui3 leaves to a hidden Alt chord. */
-      .pretui-scrub-grip {
-        flex: none;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        min-width: 22px;
-        padding-inline: 5px;
-        font-family: var(--font-mono);
-        font-size: var(--text-ui-xs, 11px);
-        color: var(--muted-foreground);
-        user-select: none;
-        touch-action: none;
-      }
-      .pretui-scrub[data-scrub-from='grip'] .pretui-scrub-grip {
-        cursor: ew-resize;
-        background: color-mix(in oklch, var(--foreground) 4%, transparent);
-      }
-      .pretui-scrub[data-scrub-from='grip'] .pretui-scrub-grip:hover,
-      .pretui-scrub-grip[data-scrubbing] {
-        color: var(--foreground);
-        background: color-mix(in oklch, var(--foreground) 9%, transparent);
-      }
-      .pretui-scrub-grip[data-position='suffix'] {
-        order: 2;
-      }
-      .pretui-scrub-steppers {
-        flex: none;
-        order: 3;
-        display: grid;
-        grid-template-rows: 1fr 1fr;
-        width: 18px;
-        border-inline-start: 1px solid var(--border);
-      }
-      .pretui-scrub-step {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        padding: 0;
-        border: 0;
-        background: transparent;
-        color: var(--muted-foreground);
-        cursor: pointer;
-      }
-      .pretui-scrub-step:hover {
-        background: var(--hover, rgb(0 0 0 / 0.05));
-        color: var(--foreground);
-      }
-      .pretui-scrub-step[aria-disabled='true'] {
-        opacity: 0.35;
-        cursor: default;
-      }
-      .pretui-scrub-caret {
-        width: 0;
-        height: 0;
-        border-inline: 3px solid transparent;
-      }
-      .pretui-scrub-caret[data-dir='up'] {
-        border-block-end: 3.5px solid currentColor;
-      }
-      .pretui-scrub-caret[data-dir='down'] {
-        border-block-start: 3.5px solid currentColor;
-      }
-      /* Coarse pointers get a real target on the steppers, and the grip
-         widens so a thumb can find it. */
-      @media (pointer: coarse) {
+      @layer PretComponent {
         .pretui-scrub {
-          height: max(var(--control-h, 28px), 36px);
+          display: flex;
+          align-items: stretch;
+          min-width: 0;
+          width: 100%;
+          height: var(--control-h, 28px);
+          border-radius: var(--radius);
+          background: var(--field, var(--boxel-light));
+          box-shadow: 0 0 0 1px var(--input);
+          color: var(--foreground);
+          font-size: var(--text-ui-md, 12.5px);
+          letter-spacing: var(--track-ui, 0.01em);
+          font-variant-numeric: tabular-nums;
+          overflow: hidden;
+        }
+        .pretui-scrub:hover {
+          box-shadow: 0 0 0 1px var(--line-strong, var(--boxel-400));
+        }
+        /* The inner input drops its own outline and the field wraps it in a
+           box-shadow ring, so the ring costs no layout. Forced-colors mode
+           paints no box-shadow at all, so the ring is doubled by a transparent
+           outline: invisible and layout-free in normal rendering, forced to a
+           system colour in high contrast. */
+        .pretui-scrub:has(.pretui-scrub-input:focus-visible) {
+          outline: 2px solid transparent;
+          outline-offset: 1px;
+          box-shadow: 0 0 0 2px var(--ring);
+        }
+        .pretui-scrub[data-disabled='true'] {
+          opacity: 0.5;
+        }
+        /* The whole field is a scrub surface only in scrubFrom='field'. */
+        .pretui-scrub[data-scrub-from='field'] {
+          cursor: ew-resize;
+          touch-action: none;
+        }
+        /* Scoped CSS does not cross a component boundary, so the sr-only
+           rule is repeated here rather than shared with PropertyRow's. */
+        .pretui-sr {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          overflow: hidden;
+          clip-path: inset(50%);
+          white-space: nowrap;
+        }
+        .pretui-scrub-input {
+          flex: 1 1 auto;
+          min-width: 0;
+          width: 100%;
+          border: 0;
+          background: transparent;
+          color: inherit;
+          font: inherit;
+          letter-spacing: inherit;
+          font-variant-numeric: inherit;
+          padding-inline: var(--space-2, 6px);
+          outline: none;
+        }
+        .pretui-scrub-input::placeholder {
+          color: var(--ink-3, var(--boxel-400));
+          font-family: var(--font-mono);
+          font-size: var(--text-ui-xs, 11px);
+        }
+        /* The grip: a permanently visible ew-resize affordance. This is the
+           discoverability figui3 leaves to a hidden Alt chord. */
+        .pretui-scrub-grip {
+          flex: none;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          min-width: 22px;
+          padding-inline: 5px;
+          font-family: var(--font-mono);
+          font-size: var(--text-ui-xs, 11px);
+          color: var(--muted-foreground);
+          user-select: none;
+          touch-action: none;
+        }
+        .pretui-scrub[data-scrub-from='grip'] .pretui-scrub-grip {
+          cursor: ew-resize;
+          background: color-mix(in oklch, var(--foreground) 4%, transparent);
+        }
+        .pretui-scrub[data-scrub-from='grip'] .pretui-scrub-grip:hover,
+        .pretui-scrub-grip[data-scrubbing] {
+          color: var(--foreground);
+          background: color-mix(in oklch, var(--foreground) 9%, transparent);
+        }
+        .pretui-scrub-grip[data-position='suffix'] {
+          order: 2;
         }
         .pretui-scrub-steppers {
-          width: 28px;
+          flex: none;
+          order: 3;
+          display: grid;
+          grid-template-rows: 1fr 1fr;
+          width: 18px;
+          border-inline-start: 1px solid var(--border);
         }
-        .pretui-scrub-grip {
-          min-width: 32px;
+        .pretui-scrub-step {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 0;
+          border: 0;
+          background: transparent;
+          color: var(--muted-foreground);
+          cursor: pointer;
+        }
+        .pretui-scrub-step:hover {
+          background: var(--hover, rgb(0 0 0 / 0.05));
+          color: var(--foreground);
+        }
+        .pretui-scrub-step[aria-disabled='true'] {
+          opacity: 0.35;
+          cursor: default;
+        }
+        .pretui-scrub-caret {
+          width: 0;
+          height: 0;
+          border-inline: 3px solid transparent;
+        }
+        .pretui-scrub-caret[data-dir='up'] {
+          border-block-end: 3.5px solid currentColor;
+        }
+        .pretui-scrub-caret[data-dir='down'] {
+          border-block-start: 3.5px solid currentColor;
+        }
+        /* Coarse pointers get a real target on the steppers, and the grip
+           widens so a thumb can find it. */
+        @media (pointer: coarse) {
+          .pretui-scrub {
+            height: max(var(--control-h, 28px), 36px);
+          }
+          .pretui-scrub-steppers {
+            width: 28px;
+          }
+          .pretui-scrub-grip {
+            min-width: 32px;
+          }
         }
       }
     </style>

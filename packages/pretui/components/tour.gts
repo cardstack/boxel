@@ -110,10 +110,18 @@ export class Tour extends Component<TourSignature> {
     this.args.onOpenChange?.(next);
   }
 
+  /** the tour's own close sends an uncontrolled index back to the start */
+  private end() {
+    if (this.args.index === undefined) {
+      this.internalIndex = 0;
+    }
+    this.setOpen(false);
+  }
+
   next = () => {
     if (this.isLast) {
       this.args.onFinish?.();
-      this.setOpen(false);
+      this.end();
       return;
     }
     this.setIndex(this.index + 1);
@@ -125,7 +133,7 @@ export class Tour extends Component<TourSignature> {
   };
   skip = () => {
     this.args.onSkip?.();
-    this.setOpen(false);
+    this.end();
   };
   onKey = (event: Event) => {
     let ev = event as KeyboardEvent;
@@ -315,110 +323,112 @@ export class Tour extends Component<TourSignature> {
       </div>
     {{/if}}
     <style scoped>
-      .pretui-tour-ring {
-        position: fixed;
-        z-index: var(--pretui-z-overlay, 70);
-        border-radius: var(--radius-control, 6px);
-        box-shadow: 0 0 0 2px var(--pretui-tour-ring, var(--primary));
-        pointer-events: none;
-        transition: top var(--pretui-dur-snap, 160ms) var(--pretui-ease-snap, ease-out),
-          left var(--pretui-dur-snap, 160ms) var(--pretui-ease-snap, ease-out),
-          width var(--pretui-dur-snap, 160ms) var(--pretui-ease-snap, ease-out),
-          height var(--pretui-dur-snap, 160ms) var(--pretui-ease-snap, ease-out);
-      }
-      .pretui-tour-scrim {
-        position: fixed;
-        z-index: var(--pretui-z-overlay, 70);
-        background: var(--pretui-overlay-scrim, rgb(0 0 0 / 0.45));
-      }
-      .pretui-tour-card[data-anchored='false'] {
-        inset-block-start: 50%;
-        inset-inline-start: 50%;
-        translate: -50% -50%;
-      }
-      .pretui-tour-card {
-        position: fixed;
-        z-index: var(--pretui-z-overlay, 70);
-        box-sizing: border-box;
-        inline-size: min(20rem, calc(100vw - 16px));
-        padding: var(--space-4, 0.6875rem);
-        border-radius: var(--radius-surface, 10px);
-        background: var(--popover);
-        color: var(--popover-foreground);
-        box-shadow: var(--pretui-shadow-overlay, 0 0 0 1px var(--border), 0 12px 32px rgb(16 24 40 / 0.18));
-        font-family: var(--font-sans);
-        font-size: var(--text-ui-md, 0.78rem);
-      }
-      .pretui-tour-head {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-      }
-      .pretui-tour-progress {
-        color: var(--muted-foreground);
-        font-size: var(--text-ui-xs, 0.66rem);
-        font-variant-numeric: tabular-nums;
-        letter-spacing: var(--track-eyebrow, 0.04em);
-        text-transform: uppercase;
-      }
-      .pretui-tour-close {
-        display: grid;
-        place-items: center;
-        inline-size: 1.5rem;
-        block-size: 1.5rem;
-        border: 0;
-        border-radius: var(--radius-control, 6px);
-        background: transparent;
-        color: var(--muted-foreground);
-        cursor: pointer;
-      }
-      .pretui-tour-close:hover {
-        color: var(--foreground);
-        background: var(--hover, color-mix(in oklch, currentColor 10%, transparent));
-      }
-      .pretui-tour-title {
-        margin: var(--space-2, 0.375rem) 0 0;
-        font-family: var(--font-serif);
-        font-size: var(--text-heading, 1.1875rem);
-        font-weight: var(--weight-heading, 500);
-      }
-      .pretui-tour-body {
-        margin: var(--space-2, 0.375rem) 0 0;
-        color: var(--muted-foreground);
-        line-height: var(--leading-body, 1.5);
-      }
-      .pretui-tour-actions {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: var(--space-2, 0.375rem);
-        margin-block-start: var(--space-4, 0.6875rem);
-      }
-      .pretui-tour-nav {
-        display: flex;
-        gap: var(--space-2, 0.375rem);
-      }
-      .pretui-tour-skip {
-        padding: 0.25rem;
-        border: 0;
-        background: transparent;
-        color: var(--muted-foreground);
-        font: inherit;
-        text-decoration: underline;
-        text-underline-offset: 0.18em;
-        cursor: pointer;
-      }
-      .pretui-tour-close:focus-visible,
-      .pretui-tour-skip:focus-visible {
-        outline: 2px solid var(--ring);
-        outline-offset: 1px;
-      }
-      .pretui-tour-watch {
-        display: none;
-      }
-      @media (prefers-reduced-motion: reduce) {
+      @layer PretComponent {
         .pretui-tour-ring {
-          transition: none;
+          position: fixed;
+          z-index: var(--pretui-z-overlay, 70);
+          border-radius: var(--radius-control, 6px);
+          box-shadow: 0 0 0 2px var(--pretui-tour-ring, var(--primary));
+          pointer-events: none;
+          transition: top var(--pretui-dur-snap, 160ms) var(--pretui-ease-snap, ease-out),
+            left var(--pretui-dur-snap, 160ms) var(--pretui-ease-snap, ease-out),
+            width var(--pretui-dur-snap, 160ms) var(--pretui-ease-snap, ease-out),
+            height var(--pretui-dur-snap, 160ms) var(--pretui-ease-snap, ease-out);
+        }
+        .pretui-tour-scrim {
+          position: fixed;
+          z-index: var(--pretui-z-overlay, 70);
+          background: var(--pretui-overlay-scrim, rgb(0 0 0 / 0.45));
+        }
+        .pretui-tour-card[data-anchored='false'] {
+          inset-block-start: 50%;
+          inset-inline-start: 50%;
+          translate: -50% -50%;
+        }
+        .pretui-tour-card {
+          position: fixed;
+          z-index: var(--pretui-z-overlay, 70);
+          box-sizing: border-box;
+          inline-size: min(20rem, calc(100vw - 16px));
+          padding: var(--space-4, 0.6875rem);
+          border-radius: var(--radius-surface, 10px);
+          background: var(--popover);
+          color: var(--popover-foreground);
+          box-shadow: var(--pretui-shadow-overlay, 0 0 0 1px var(--border), 0 12px 32px rgb(16 24 40 / 0.18));
+          font-family: var(--font-sans);
+          font-size: var(--text-ui-md, 0.78rem);
+        }
+        .pretui-tour-head {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+        }
+        .pretui-tour-progress {
+          color: var(--muted-foreground);
+          font-size: var(--text-ui-xs, 0.66rem);
+          font-variant-numeric: tabular-nums;
+          letter-spacing: var(--track-eyebrow, 0.04em);
+          text-transform: uppercase;
+        }
+        .pretui-tour-close {
+          display: grid;
+          place-items: center;
+          inline-size: 1.5rem;
+          block-size: 1.5rem;
+          border: 0;
+          border-radius: var(--radius-control, 6px);
+          background: transparent;
+          color: var(--muted-foreground);
+          cursor: pointer;
+        }
+        .pretui-tour-close:hover {
+          color: var(--foreground);
+          background: var(--hover, color-mix(in oklch, currentColor 10%, transparent));
+        }
+        .pretui-tour-title {
+          margin: var(--space-2, 0.375rem) 0 0;
+          font-family: var(--font-serif);
+          font-size: var(--text-heading, 1.1875rem);
+          font-weight: var(--weight-heading, 500);
+        }
+        .pretui-tour-body {
+          margin: var(--space-2, 0.375rem) 0 0;
+          color: var(--muted-foreground);
+          line-height: var(--leading-body, 1.5);
+        }
+        .pretui-tour-actions {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: var(--space-2, 0.375rem);
+          margin-block-start: var(--space-4, 0.6875rem);
+        }
+        .pretui-tour-nav {
+          display: flex;
+          gap: var(--space-2, 0.375rem);
+        }
+        .pretui-tour-skip {
+          padding: 0.25rem;
+          border: 0;
+          background: transparent;
+          color: var(--muted-foreground);
+          font: inherit;
+          text-decoration: underline;
+          text-underline-offset: 0.18em;
+          cursor: pointer;
+        }
+        .pretui-tour-close:focus-visible,
+        .pretui-tour-skip:focus-visible {
+          outline: 2px solid var(--ring);
+          outline-offset: 1px;
+        }
+        .pretui-tour-watch {
+          display: none;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .pretui-tour-ring {
+            transition: none;
+          }
         }
       }
     </style>

@@ -491,89 +491,91 @@ export class ContactLink extends Component<ContactLinkSignature> {
       </span>
     {{/if}}
     <style scoped>
-      /* Law 2 — one hue in, a complete treatment out. The ink is derived from
-         the same hue rather than picked, so contrast holds in light and dark
-         and any caller hue stays legible. */
-      .pretui-contact {
-        --hue: var(--pretui-contact-hue, var(--primary));
-        display: inline-flex;
-        align-items: center;
-        gap: var(--space-2, 6px);
-        min-width: 0;
-        max-width: 100%;
-        padding: 3px calc(6px * var(--pretui-capsule-base, 1.35));
-        border-radius: var(--radius);
-        background: color-mix(in oklch, var(--hue) 12%, var(--card));
-        color: color-mix(in oklch, var(--foreground) 16%, var(--hue));
-        font-size: var(--text-ui-sm, 11.5px);
-        text-decoration: none;
-        transition:
-          background-color 140ms
-            var(--pretui-ease-snap, cubic-bezier(0.23, 1, 0.32, 1)),
-          transform 140ms var(--pretui-ease-snap, cubic-bezier(0.23, 1, 0.32, 1));
-      }
-      a.pretui-contact:hover {
-        background: color-mix(in oklch, var(--hue) 20%, var(--card));
-      }
-      /* Appendix O.4 — one consistent press across everything pressable. */
-      a.pretui-contact:active {
-        transform: scale(0.96);
-      }
-      a.pretui-contact:focus-visible {
-        outline: 2px solid var(--ring);
-        outline-offset: 2px;
-      }
-      .pretui-contact[data-unresolved='true'] {
-        --hue: var(--muted-foreground);
-        flex-wrap: wrap;
-      }
-      .pretui-contact-mark {
-        flex: 0 0 auto;
-        display: inline-flex;
-      }
-      /* Appendix O.8 — min-width: 0 plus truncation on every flex child, or a
-         long address blows the row out. */
-      .pretui-contact-value {
-        min-width: 0;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-      .pretui-contact-cta {
-        flex: 0 0 auto;
-        font-weight: var(--weight-medium, 500);
-        opacity: 0.75;
-      }
-      .pretui-contact-note {
-        flex: 0 0 auto;
-        font-size: var(--text-ui-xs, 10.5px);
-        color: var(--muted-foreground);
-      }
-      .pretui-contact[data-variant='row'] {
-        display: flex;
-        width: 100%;
-        padding: var(--space-2, 6px) var(--space-3, 8px);
-        font-size: var(--text-ui-md, 13px);
-      }
-      .pretui-contact[data-variant='row'] .pretui-contact-cta {
-        margin-inline-start: auto;
-      }
-      .pretui-contact[data-variant='icon'] {
-        padding: 5px;
-        border-radius: 999px;
-      }
-      @media (pointer: coarse) {
-        .pretui-contact[data-variant='icon'],
-        .pretui-contact[data-variant='row'] {
-          min-height: 44px;
-        }
-      }
-      @media (prefers-reduced-motion: reduce) {
+      @layer PretComponent {
+        /* Law 2 — one hue in, a complete treatment out. The ink is derived from
+           the same hue rather than picked, so contrast holds in light and dark
+           and any caller hue stays legible. */
         .pretui-contact {
-          transition: none;
+          --hue: var(--pretui-contact-hue, var(--primary));
+          display: inline-flex;
+          align-items: center;
+          gap: var(--space-2, 6px);
+          min-width: 0;
+          max-width: 100%;
+          padding: 3px calc(6px * var(--pretui-capsule-base, 1.35));
+          border-radius: var(--radius);
+          background: color-mix(in oklch, var(--hue) 12%, var(--card));
+          color: color-mix(in oklch, var(--foreground) 16%, var(--hue));
+          font-size: var(--text-ui-sm, 11.5px);
+          text-decoration: none;
+          transition:
+            background-color 140ms
+              var(--pretui-ease-snap, cubic-bezier(0.23, 1, 0.32, 1)),
+            transform 140ms var(--pretui-ease-snap, cubic-bezier(0.23, 1, 0.32, 1));
         }
+        a.pretui-contact:hover {
+          background: color-mix(in oklch, var(--hue) 20%, var(--card));
+        }
+        /* Appendix O.4 — one consistent press across everything pressable. */
         a.pretui-contact:active {
-          transform: none;
+          transform: scale(0.96);
+        }
+        a.pretui-contact:focus-visible {
+          outline: 2px solid var(--ring);
+          outline-offset: 2px;
+        }
+        .pretui-contact[data-unresolved='true'] {
+          --hue: var(--muted-foreground);
+          flex-wrap: wrap;
+        }
+        .pretui-contact-mark {
+          flex: 0 0 auto;
+          display: inline-flex;
+        }
+        /* Appendix O.8 — min-width: 0 plus truncation on every flex child, or a
+           long address blows the row out. */
+        .pretui-contact-value {
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .pretui-contact-cta {
+          flex: 0 0 auto;
+          font-weight: var(--weight-medium, 500);
+          opacity: 0.75;
+        }
+        .pretui-contact-note {
+          flex: 0 0 auto;
+          font-size: var(--text-ui-xs, 10.5px);
+          color: var(--muted-foreground);
+        }
+        .pretui-contact[data-variant='row'] {
+          display: flex;
+          width: 100%;
+          padding: var(--space-2, 6px) var(--space-3, 8px);
+          font-size: var(--text-ui-md, 13px);
+        }
+        .pretui-contact[data-variant='row'] .pretui-contact-cta {
+          margin-inline-start: auto;
+        }
+        .pretui-contact[data-variant='icon'] {
+          padding: 5px;
+          border-radius: 999px;
+        }
+        @media (pointer: coarse) {
+          .pretui-contact[data-variant='icon'],
+          .pretui-contact[data-variant='row'] {
+            min-height: 44px;
+          }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .pretui-contact {
+            transition: none;
+          }
+          a.pretui-contact:active {
+            transform: none;
+          }
         }
       }
     </style>

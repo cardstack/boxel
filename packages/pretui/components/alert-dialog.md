@@ -34,7 +34,7 @@ Element: HTMLDialogElement
 
 **An outside click never answers.** Dialog's one dismissible flag covers both the scrim and Escape, so AlertDialog turns it off and handles Escape itself. It listens in the capture phase and only while open, so one keypress cannot also reach a host shortcut. `@dismissOnEscape={{false}}` removes even that, leaving the two buttons as the only way out. Outside-click dismissal is not a knob.
 
-**Confirm can wait for the work.** Confirm calls `@onConfirm` and closes, unless `@busy` is true once the handler returns. Then the dialog stays open and the confirm button goes pending: `aria-busy="true"` and `data-state="busy"`, never the native `disabled` attribute, so focus stays on it. A second activation while busy is ignored. When the caller clears `@busy` it closes the dialog through `@open` (or `@onOpenChange`), or leaves it open to report a failure in place.
+**Confirm can wait for the work.** Confirm calls `@onConfirm` and closes, unless `@busy` is true once the handler returns. Then the dialog stays open and the confirm button goes pending through Button's own `@busy`: a spinner, `aria-busy="true"` and `aria-disabled`, never the native `disabled` attribute, so focus stays on it. A second activation while busy is ignored. When the caller clears `@busy` it closes the dialog through `@open` (or `@onOpenChange`), or leaves it open to report a failure in place.
 
 Cancel calls `@onCancel`, then closes. A platform-level close routes through the same path.
 
@@ -44,7 +44,7 @@ Cancel calls `@onCancel`, then closes. A platform-level close routes through the
 
 Where Pretui is better: **a failed confirm has somewhere to go.** Radix's `AlertDialogAction` closes the dialog on click whether or not the work succeeded. `@busy` holds it open with the button pending and still focused, so the result can be announced where the user is looking. **Focus lands on Cancel** with no script: Cancel is first in DOM order, and the native `<dialog>` focusing steps pick the first focusable. Spectrum focuses the destructive button, and that is the wrong default for this pattern.
 
-Where it is thinner: **no imperative helper.** There is no promise-returning `confirm()` for the Ant shape. The caller renders the component and wires `@open`. **No media slot** for an icon or illustration beside the question. **No per-button busy spinner**: the pending state is applied through attributes because Button's own `@busy` resolves to `disabled`, so the button shows its pending dress but not its spinner.
+Where it is thinner: **no imperative helper.** There is no promise-returning `confirm()` for the Ant shape. The caller renders the component and wires `@open`. **No media slot** for an icon or illustration beside the question.
 
 ## Accessibility
 
@@ -61,6 +61,8 @@ APG **Alert and Message Dialogs**. The element is the native `<dialog>` opened m
 AlertDialog adds no tokens of its own. It wears **Dialog**'s: `--card`, `--foreground`, `--muted-foreground`, `--border`, `--radius-surface`, `--pretui-shadow-overlay`, `--pretui-overlay-scrim`, `--text-heading`, `--weight-heading`, `--track-heading`, `--text-body`, `--leading-body`, `--space-3`, `--space-4` and `--space-6`. The buttons are **Button**'s: the confirm tone reads `--destructive` / `--destructive-foreground` for `danger`, and `--pretui-button-*` for size and shape.
 
 A season that retunes Dialog and Button retunes every AlertDialog with them. The Cancel-then-Confirm order and the outlined-then-accent pairing are fixed.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
 
 ## React ecosystem
 

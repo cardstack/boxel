@@ -1,89 +1,5 @@
-// Pretui — design-tools territory, wave 1: the property-panel foundation.
-//
-// PORTED (not vendored) from figui3 v8.1.0 by Rogie King — MIT licensed
-// (LICENSE verified in the source tree: "MIT License / Copyright (c) 2026
-// Rogie King"). figui3 is a web-components kit whose stated purpose is a
-// *native Figma look and feel*; vendoring it would import Figma's visual
-// language wholesale into a design system that has its own laws. What is
-// ported here is the INTERACTION DESIGN and the CONTROL CONTRACTS —
-// `fig-field`, `fig-group`, `fig-header`/`fig-content`/`fig-footer`,
-// `fig-input-number`, `fig-steppers`, `fig-handle` — reimplemented in
-// Pretui idiom (Glimmer, scoped CSS, Pretui tokens, zero Figma colour).
-//
-// ── What this module owns ────────────────────────────────────────────────
-//
-//   scrubs / dragsSurface  the two pointer gestures every design tool needs,
-//                          as ember-modifiers that own their listeners,
-//                          their pointer capture, and their cleanup.
-//   PropertyRow            label + control + reset + mixed — the atom every
-//                          inspector panel is made of (fig-field).
-//   PanelSection           collapsible titled group (fig-group).
-//   ScrubInput             numeric input you drag horizontally
-//                          (fig-input-number + fig-steppers), continuous
-//                          OR addressed by index over a STEPPED SCALE.
-//   TokenInput             free-entry list of short values as removable
-//                          chips — the array-of-values row.
-//   Handle                 focusable drag grip with a real hit area
-//                          (fig-handle).
-//
-// The last two answer needs that came from auditing a real property panel
-// (a Photoshop-style parameter inspector built as Boxel FieldDefs) rather
-// than from figui3, which has no representation for either: a numeric
-// property whose legal values are an ordered, non-uniform list (apertures,
-// ISO speeds, type ramps), and a property that holds an open-ended set of
-// short strings (mood keywords, materials, props). `PanelSection @depth`
-// came from the same audit — a property group nested inside another one.
-//
-// The scrub/drag MATH is exported as pure functions above the components so
-// it is unit-testable without a DOM: given a pointer delta and a set of
-// modifier keys, exactly one value comes out. See `design-tools.test.gts`.
-//
-// ── Better than the inspiration (Appendix K acceptance test) ─────────────
-//
-//  1. **Scrubbing is discoverable.** figui3's `fig-input-number` only
-//     scrubs while Alt is held, or when the pointer starts on a `[slot]`
-//     adornment — with no cursor affordance for either. Pretui gives the
-//     unit/prefix affix a permanent `ew-resize` grip (visible in a still
-//     frame — Law 8) and lets a caller opt the whole field in.
-//  2. **Modifier granularity.** Upstream scrubs at exactly `step` per
-//     pixel, always. Pretui: Shift = coarse (×10), Alt/⌘ = fine (×0.1) —
-//     on the pointer path AND the keyboard path, with the same multiplier
-//     function driving both.
-//  3. **Real pointer capture.** Upstream reads `event.movementX` and binds
-//     `pointermove` on `window`; `movementX` is unspecified across browsers
-//     under page zoom and is 0 for synthetic/touch input. Pretui
-//     accumulates from `clientX` under `setPointerCapture`, so the gesture
-//     survives leaving the element and works identically for touch and pen.
-//  4. **A complete keyboard path.** Upstream handles ArrowUp/ArrowDown
-//     only. Pretui adds PageUp/PageDown (coarse) and Home/End (min/max),
-//     which is what the spinbutton APG pattern actually asks for.
-//  5. **A mixed state.** Multi-selection is the normal case in a design
-//     tool and upstream has no representation for it. Pretui's mixed state
-//     is a TEXT channel ("Mixed" as placeholder and as `aria-valuetext`),
-//     never colour alone.
-//  6. **Disabled stays reachable.** Upstream sets the `disabled` attribute,
-//     which drops the control out of the tab order and out of most screen
-//     readers' reading order. Pretui uses `readonly` + `aria-disabled`, so
-//     a keyboard reader can still find the row and hear its value.
-//  7. **No timers, no `innerHTML`, no MutationObserver.** Upstream rebuilds
-//     its light DOM from strings on every attribute change and reconciles
-//     with a `MutationObserver` + `requestAnimationFrame` pair; it also
-//     schedules a `setTimeout(0)` purely to select text on focus. Glimmer
-//     makes all three unnecessary.
-//  8. **Zero dark branches.** Upstream ships a `@media (prefers-color-
-//     scheme: dark)` fork per component. Every colour here is a token that
-//     a season re-tints in both directions.
-//
-// Deliberately NOT ported: `fig-field`'s auto-wiring of `<label for>` by
-// walking the light DOM for the first `fig-*` child (Glimmer has explicit
-// ids), and its label-overflow tooltip (Pretui's `Tooltip` composes).
-//
-// Every component here lives in its own module under components/; this
-// module re-exports them so existing imports keep working.
-//
-// (the design-tools group)
-
 // Pretui — the shared math and gesture modifiers behind the design-tools components.
+// Interaction design ported (not vendored) from figui3 v8.1.0 by Rogie King, MIT.
 import { modifier } from 'ember-modifier';
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -622,7 +538,8 @@ export interface ScrubFrame {
   alt: boolean;
   meta: boolean;
   ctrl: boolean;
-  phase: 'start' | 'move' | 'end';
+  /** `end` commits; `cancel` (Escape, `pointercancel`) puts the value back */
+  phase: 'start' | 'move' | 'end' | 'cancel';
 }
 
 /**
@@ -654,7 +571,7 @@ export const scrubs = modifier(
     let lastX = 0;
     let previousCursor = '';
 
-    let release = (emit: boolean) => {
+    let release = (phase: 'end' | 'cancel' | undefined) => {
       if (pointerId === undefined) {
         return;
       }
@@ -664,7 +581,7 @@ export const scrubs = modifier(
       pointerId = undefined;
       document.body.style.cursor = previousCursor;
       el.removeAttribute('data-scrubbing');
-      if (emit) {
+      if (phase) {
         onFrame({
           dx: lastX - originX,
           stepX: 0,
@@ -672,7 +589,7 @@ export const scrubs = modifier(
           alt: false,
           meta: false,
           ctrl: false,
-          phase: 'end',
+          phase,
         });
       }
     };
@@ -686,7 +603,11 @@ export const scrubs = modifier(
       pointerId = pointer.pointerId;
       originX = pointer.clientX;
       lastX = pointer.clientX;
-      el.setPointerCapture(pointerId);
+      try {
+        el.setPointerCapture(pointerId);
+      } catch {
+        // a pointer released before this handler ran has no capture to take
+      }
       previousCursor = document.body.style.cursor;
       document.body.style.cursor = 'ew-resize';
       el.setAttribute('data-scrubbing', 'true');
@@ -724,12 +645,16 @@ export const scrubs = modifier(
       if (pointerId === undefined || pointer.pointerId !== pointerId) {
         return;
       }
-      release(true);
+      release(event.type === 'pointercancel' ? 'cancel' : 'end');
     };
 
+    // window capture runs before any overlay's document listener, so the
+    // Escape that cancels a scrub doesn't also close the dialog around it
     let key = (event: Event) => {
       if ((event as KeyboardEvent).key === 'Escape' && pointerId !== undefined) {
-        release(true);
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        release('cancel');
       }
     };
 
@@ -737,15 +662,15 @@ export const scrubs = modifier(
     el.addEventListener('pointermove', move);
     el.addEventListener('pointerup', up);
     el.addEventListener('pointercancel', up);
-    document.addEventListener('keydown', key);
+    window.addEventListener('keydown', key, true);
 
     return () => {
-      release(false);
+      release(undefined);
       el.removeEventListener('pointerdown', down);
       el.removeEventListener('pointermove', move);
       el.removeEventListener('pointerup', up);
       el.removeEventListener('pointercancel', up);
-      document.removeEventListener('keydown', key);
+      window.removeEventListener('keydown', key, true);
     };
   },
 );

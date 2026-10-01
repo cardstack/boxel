@@ -42,3 +42,5 @@ Where it is thinner: no shared-element transition across routes, no drag-to-dism
 Everything comes from **Dialog** and the kit's shared motion tokens; the morph uses the shared duration and easing.
 
 There is no morph-specific palette, so a morphing dialog and an ordinary one are the same surface arriving two ways.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

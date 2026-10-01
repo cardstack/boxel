@@ -58,3 +58,5 @@ Derived on the element: `--pretui-field-cell` (22px × scale) and `--pretui-fiel
 Per-layer internals, set by the field rules rather than by callers: `--pretui-field-o0` / `--pretui-field-o1` (layer opacity), `--pretui-field-fx0` / `--pretui-field-fy0` / `--pretui-field-fx1` / `--pretui-field-fy1` (offsets), `--pretui-field-r0` / `--pretui-field-r1` (rotation), `--pretui-field-s0` / `--pretui-field-s1` (scale), `--pretui-field-dx` / `--pretui-field-dy` with `--pretui-field-over-x` / `--pretui-field-over-y` (drift and its matching overhang).
 
 Hue defaults are per field — the `--chart-*` channel for the pattern fields, `--foreground` for `grain` — so a season that retunes its chart palette retunes every ambient surface with it, and a season that changes `--foreground` changes the grain's weight in both light and dark without touching this component.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

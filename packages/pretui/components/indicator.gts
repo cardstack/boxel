@@ -66,68 +66,70 @@ export class Indicator extends Component<IndicatorSignature> {
       {{/unless}}
     </span>
     <style scoped>
-      .pretui-indicator {
-        position: relative;
-        display: inline-flex;
-        vertical-align: middle;
-        --pretui-mark-inset: 0%;
-        --pretui-mark-x: 50%;
-      }
-      .pretui-indicator:dir(rtl) {
-        --pretui-mark-x: -50%;
-      }
-      .pretui-indicator[data-circular='true'] {
-        --pretui-mark-inset: 14%;
-      }
-      .pretui-indicator-dot {
-        position: absolute;
-        z-index: 1;
-        inline-size: var(--pretui-indicator-size, 0.625rem);
-        block-size: var(--pretui-indicator-size, 0.625rem);
-        border-radius: 50%;
-        background: var(--pretui-mark-hue);
-        box-shadow: 0 0 0 2px var(--pretui-indicator-ring, var(--card));
-        pointer-events: none;
-      }
-      .pretui-indicator-dot[data-ping='true']::after {
-        content: '';
-        position: absolute;
-        inset: 0;
-        border-radius: 50%;
-        background: var(--pretui-mark-hue);
-        animation: pretui-indicator-ping 1.6s cubic-bezier(0, 0, 0.2, 1) infinite;
-      }
-      .pretui-indicator[data-placement='top-end'] .pretui-indicator-dot {
-        inset-block-start: var(--pretui-mark-inset);
-        inset-inline-end: var(--pretui-mark-inset);
-        translate: var(--pretui-mark-x) -50%;
-      }
-      .pretui-indicator[data-placement='top-start'] .pretui-indicator-dot {
-        inset-block-start: var(--pretui-mark-inset);
-        inset-inline-start: var(--pretui-mark-inset);
-        translate: calc(-1 * var(--pretui-mark-x)) -50%;
-      }
-      .pretui-indicator[data-placement='bottom-end'] .pretui-indicator-dot {
-        inset-block-end: var(--pretui-mark-inset);
-        inset-inline-end: var(--pretui-mark-inset);
-        translate: var(--pretui-mark-x) 50%;
-      }
-      .pretui-indicator[data-placement='bottom-start'] .pretui-indicator-dot {
-        inset-block-end: var(--pretui-mark-inset);
-        inset-inline-start: var(--pretui-mark-inset);
-        translate: calc(-1 * var(--pretui-mark-x)) 50%;
-      }
-      @keyframes pretui-indicator-ping {
-        75%,
-        100% {
-          scale: 2.2;
-          opacity: 0;
+      @layer PretComponent {
+        .pretui-indicator {
+          position: relative;
+          display: inline-flex;
+          vertical-align: middle;
+          --pretui-mark-inset: 0%;
+          --pretui-mark-x: 50%;
         }
-      }
-      @media (prefers-reduced-motion: reduce) {
+        .pretui-indicator:dir(rtl) {
+          --pretui-mark-x: -50%;
+        }
+        .pretui-indicator[data-circular='true'] {
+          --pretui-mark-inset: 14%;
+        }
+        .pretui-indicator-dot {
+          position: absolute;
+          z-index: 1;
+          inline-size: var(--pretui-indicator-size, 0.625rem);
+          block-size: var(--pretui-indicator-size, 0.625rem);
+          border-radius: 50%;
+          background: var(--pretui-mark-hue);
+          box-shadow: 0 0 0 2px var(--pretui-indicator-ring, var(--card));
+          pointer-events: none;
+        }
         .pretui-indicator-dot[data-ping='true']::after {
-          animation: none;
-          opacity: 0;
+          content: '';
+          position: absolute;
+          inset: 0;
+          border-radius: 50%;
+          background: var(--pretui-mark-hue);
+          animation: pretui-indicator-ping 1.6s cubic-bezier(0, 0, 0.2, 1) infinite;
+        }
+        .pretui-indicator[data-placement='top-end'] .pretui-indicator-dot {
+          inset-block-start: var(--pretui-mark-inset);
+          inset-inline-end: var(--pretui-mark-inset);
+          translate: var(--pretui-mark-x) -50%;
+        }
+        .pretui-indicator[data-placement='top-start'] .pretui-indicator-dot {
+          inset-block-start: var(--pretui-mark-inset);
+          inset-inline-start: var(--pretui-mark-inset);
+          translate: calc(-1 * var(--pretui-mark-x)) -50%;
+        }
+        .pretui-indicator[data-placement='bottom-end'] .pretui-indicator-dot {
+          inset-block-end: var(--pretui-mark-inset);
+          inset-inline-end: var(--pretui-mark-inset);
+          translate: var(--pretui-mark-x) 50%;
+        }
+        .pretui-indicator[data-placement='bottom-start'] .pretui-indicator-dot {
+          inset-block-end: var(--pretui-mark-inset);
+          inset-inline-start: var(--pretui-mark-inset);
+          translate: calc(-1 * var(--pretui-mark-x)) 50%;
+        }
+        @keyframes pretui-indicator-ping {
+          75%,
+          100% {
+            scale: 2.2;
+            opacity: 0;
+          }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .pretui-indicator-dot[data-ping='true']::after {
+            animation: none;
+            opacity: 0;
+          }
         }
       }
     </style>

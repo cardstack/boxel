@@ -61,3 +61,5 @@ Gaps:
 The Law-2 hue derivation (one hue in, ring, halo and marker tint all derived), `--card` and `--border` for the resting hairline, plus the **Chip** tokens the marker reuses (`--pretui-chip-mix`, `--pretui-ink-mix`) and the animation's duration and easing.
 
 Because the ring is a `box-shadow` and the halo is a transform, a season retunes intensity by changing the hue and the mix ratios rather than by changing geometry. A season must keep the *resting* hairline visible — it is what carries the state in a screenshot and under reduced motion, and a season that tunes only the animated peak will produce a component that says nothing when still.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

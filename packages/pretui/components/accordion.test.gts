@@ -1,15 +1,14 @@
-// Pretui — Accordion unit tests. Imports from ../structure-extras; when Accordion moves to its
-// own file only the import path changes. The wrapper is three lines (hook,
+// Pretui — Accordion unit tests. The wrapper is three lines (hook,
 // ...attributes, @displayContainer pass-through, {{yield A}}); every ARIA
 // attribute asserted in the first test is emitted by boxel-ui's AccordionItem.
 // It is kept here deliberately as a downstream integration guard, since
 // boxel-ui's own suite covers aria-expanded and aria-hidden but not region,
 // labelledby, controls or inert.
 //
-// Local-only test file, kept off the realm by `.boxelignore` (`*.test.gts`);
-// run with `boxel test`. No assertion touches a computed style: the
-// component's own `<style scoped>` is inert in this harness (the scoped-css
-// attribute is stamped, the rules are not applied).
+// Run with `boxel test`; deployment leaves `*.test.gts` off the realm.
+// No assertion touches a computed style: the component's own `<style scoped>`
+// is inert in this harness (the scoped-css attribute is stamped, the rules
+// are not applied).
 import { module, test } from 'qunit';
 import { render, click } from '@ember/test-helpers';
 import { tracked } from '@glimmer/tracking';

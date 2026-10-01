@@ -1,7 +1,6 @@
 // Pretui — Tour unit tests: a labelled non-modal dialog per step, the step
 // buttons, Escape, focus moving to Next and returning when it closes.
-// Local-only test file, kept off the realm by `.boxelignore` (`*.test.gts`);
-// run with `boxel test`.
+// Run with `boxel test`; deployment leaves `*.test.gts` off the realm.
 import { module, test } from 'qunit';
 import { click, render, settled, triggerKeyEvent } from '@ember/test-helpers';
 import { tracked } from '@glimmer/tracking';
@@ -149,6 +148,25 @@ module('Pretui | components/tour', function (hooks) {
     await click(b);
     await click('[data-test-pretui-tour-skip]');
     assert.strictEqual(document.activeElement, b, 'and the second open returns to B, not A');
+  });
+
+  test('an uncontrolled step starts over after Done or Skip', async function (assert) {
+    let state = new State();
+    await render(<template>
+      <button type='button' class='t-a' {{on 'click' state.show}}>A</button>
+      <Tour @steps={{STEPS}} @open={{state.open}} @onOpenChange={{state.set}} />
+    </template>);
+    await click('.t-a');
+    await click('[data-test-pretui-tour-next]');
+    await click('[data-test-pretui-tour-next]');
+    await click('[data-test-pretui-tour-next]');
+    assert.false(state.open, 'Done closed it');
+    await click('.t-a');
+    assert.strictEqual(card()?.querySelector('[data-test-pretui-tour-title]')?.textContent?.trim(), 'Search lots', 'reopening after Done starts at step one');
+    await click('[data-test-pretui-tour-next]');
+    await click('[data-test-pretui-tour-skip]');
+    await click('.t-a');
+    assert.strictEqual(card()?.querySelector('[data-test-pretui-tour-title]')?.textContent?.trim(), 'Search lots', 'and so does reopening after Skip');
   });
 });
 

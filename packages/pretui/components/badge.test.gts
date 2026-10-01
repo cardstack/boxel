@@ -1,7 +1,6 @@
 // Pretui — Badge unit tests: count display, max, dot, zero, invisibility and
 // the spoken run that keeps the child's own name.
-// Local-only test file, kept off the realm by `.boxelignore` (`*.test.gts`);
-// run with `boxel test`.
+// Run with `boxel test`; deployment leaves `*.test.gts` off the realm.
 import { module, test } from 'qunit';
 import { render } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';

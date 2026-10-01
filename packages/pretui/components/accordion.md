@@ -50,6 +50,8 @@ Remapped into the boxel-ui channel: `--ring` ← `--primary` (the trigger's focu
 
 A season retunes the accordion entirely through those tokens. The one thing to verify per season is `--ring` against the header background, since the focus indicator here is the engine's and is not the same treatment as the rest of the kit's controls.
 
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
+
 ## React ecosystem
 
 A stack of **Collapsible**s. Single-panel disclosure is **Collapsible**

@@ -49,3 +49,5 @@ Where it is thinner: the validators are conservative rather than RFC-complete, a
 The caller hue reaches CSS through the kit's `cssStyle` guard, so a rejected value drops the declaration and the default stands rather than half a declaration landing in the attribute.
 
 Because every colour mixes against `--card`, a dark season gets correct dark contact chips with no per-season work — but it must pick a `--primary` that survives a 12% mix against a dark `--card`, or the chip and its background converge and only the mark separates them. Retuning `--pretui-capsule-base` restyles this alongside every other capsule in the kit, which is the intent: a contact chip should read as the same family as the chips beside it.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

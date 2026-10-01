@@ -59,6 +59,8 @@ No single APG pattern. These are the tags the patterns are made of.
 
 A season restyles all prose through the font, size and weight tokens it already defines for the kit.
 
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
+
 ## React ecosystem
 
 | Agent types                                     | Give them                                   |

@@ -54,45 +54,49 @@ export class SwatchChip extends Component<SwatchChipSignature> {
       ...attributes
     ></span>
     <style scoped>
-      .pretui-swatch-chip {
-        display: inline-block;
-        width: var(--pretui-swatch-size, 18px);
-        height: var(--pretui-swatch-size, 18px);
-        border-radius: 50%;
-        /* the checker sits UNDER the colour so alpha is legible — a solid
-           chip for a 40%-opaque colour is a lie the eye cannot catch */
-        background:
-          var(--pretui-swatch-color, transparent),
-          var(
-            --pretui-checker,
-            repeating-conic-gradient(
-              color-mix(in oklch, var(--foreground) 11%, transparent) 0 25%,
-              transparent 0 50%
-            )
-          );
-        background-size: cover, 8px 8px;
-        box-shadow: inset 0 0 0 1px
-          color-mix(in oklch, var(--foreground) 14%, transparent);
-        flex: none;
-        transition: transform 120ms ease;
-      }
-      .pretui-swatch-chip[data-shape='square'] {
-        border-radius: calc(var(--radius) / 2.5);
-      }
-      .pretui-swatch-chip[data-empty='true'] {
-        background:
-          linear-gradient(
-              to bottom right,
-              transparent calc(50% - 1px),
-              var(--destructive) calc(50% - 1px),
-              var(--destructive) calc(50% + 1px),
-              transparent calc(50% + 1px)
-            ),
-          var(--field, var(--boxel-light));
-      }
-      @media (prefers-reduced-motion: reduce) {
+      @layer PretComponent {
         .pretui-swatch-chip {
-          transition: none;
+          display: inline-block;
+          width: var(--pretui-swatch-size, 18px);
+          height: var(--pretui-swatch-size, 18px);
+          border-radius: 50%;
+          /* the checker sits UNDER the colour so alpha is legible; the colour
+             is an image layer because a bare <color> is only valid last */
+          background:
+            linear-gradient(
+              var(--pretui-swatch-color, transparent) 0 0
+            ),
+            var(
+              --pretui-checker,
+              repeating-conic-gradient(
+                color-mix(in oklch, var(--foreground) 11%, transparent) 0 25%,
+                transparent 0 50%
+              )
+            );
+          background-size: auto, 8px 8px;
+          box-shadow: inset 0 0 0 1px
+            color-mix(in oklch, var(--foreground) 14%, transparent);
+          flex: none;
+          transition: transform 120ms ease;
+        }
+        .pretui-swatch-chip[data-shape='square'] {
+          border-radius: calc(var(--radius) / 2.5);
+        }
+        .pretui-swatch-chip[data-empty='true'] {
+          background:
+            linear-gradient(
+                to bottom right,
+                transparent calc(50% - 1px),
+                var(--destructive) calc(50% - 1px),
+                var(--destructive) calc(50% + 1px),
+                transparent calc(50% + 1px)
+              ),
+            var(--field, var(--boxel-light));
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .pretui-swatch-chip {
+            transition: none;
+          }
         }
       }
     </style>

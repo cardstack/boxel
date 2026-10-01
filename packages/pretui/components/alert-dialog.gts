@@ -73,11 +73,9 @@ export interface AlertDialogSignature {
  * **Better than shadcn/Radix:** Radix's `AlertDialogAction` closes the dialog
  * on click whether or not the work succeeded, so a failed confirm leaves no
  * surface to report the failure on. `@busy` here holds the dialog open with
- * the confirm button in Aria's *pending* state — `aria-busy` and inert, with
+ * the confirm button in Button's *pending* state — `aria-busy` and inert, with
  * focus retained, never the native `disabled` attribute that would drop focus
- * onto the body mid-action. (Pretui's own `Button` still resolves `@busy` to
- * `disabled`; until that is fixed the pending state is applied through
- * attributes here, which costs the button's spinner.)
+ * onto the body mid-action.
  */
 export class AlertDialog extends Component<AlertDialogSignature> {
   private guid = guidFor(this);
@@ -200,21 +198,10 @@ export class AlertDialog extends Component<AlertDialogSignature> {
             data-test-pretui-alertdialog-cancel
             {{on 'click' this.cancel}}
           >{{this.cancelLabel}}</Button>
-          {{!-- Pending, not disabled. Button's own busy arg resolves to the
-                NATIVE disabled attribute, which drops focus onto the body the
-                instant the work starts — the exact thing Appendix L's pending
-                rule forbids. Setting the state through attributes instead
-                keeps the button focusable and announced (aria-busy) while
-                data-state=busy supplies Button's own pending dress and its
-                pointer-events: none. The diff that would let this use the busy
-                arg again is in the report.
-                (No backticks in template text: the lint pass stops seeing the
-                whole template past twelve of them.) --}}
           <Button
             @tone={{this.tone}}
             @appearance='accent'
-            aria-busy={{if @busy 'true'}}
-            data-state={{if @busy 'busy'}}
+            @busy={{@busy}}
             data-test-pretui-alertdialog-confirm
             {{on 'click' this.confirm}}
           >{{this.confirmLabel}}</Button>
@@ -223,11 +210,13 @@ export class AlertDialog extends Component<AlertDialogSignature> {
     </Dialog>
 
     <style scoped>
-      .pretui-ad-trigger {
-        display: inline-flex;
-      }
-      .pretui-ad-watch {
-        display: none;
+      @layer PretComponent {
+        .pretui-ad-trigger {
+          display: inline-flex;
+        }
+        .pretui-ad-watch {
+          display: none;
+        }
       }
     </style>
   </template>

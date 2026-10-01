@@ -67,6 +67,9 @@ export class PanelSection extends Component<PanelSectionSignature> {
   get regionId(): string {
     return this.guid + '-region';
   }
+  get summaryId(): string {
+    return this.guid + '-summary';
+  }
   get open(): boolean {
     return this.args.open ?? this.internalOpen;
   }
@@ -111,6 +114,7 @@ export class PanelSection extends Component<PanelSectionSignature> {
                 class='pretui-section-toggle'
                 aria-expanded={{if this.expanded 'true' 'false'}}
                 aria-controls={{this.regionId}}
+                aria-describedby={{if @summary this.summaryId}}
                 {{on 'click' this.toggle}}
                 data-test-pretui-section-toggle
               >
@@ -124,7 +128,7 @@ export class PanelSection extends Component<PanelSectionSignature> {
             {{/if}}
           </div>
           {{#if @summary}}
-            <span class='pretui-section-summary'>{{@summary}}</span>
+            <span class='pretui-section-summary' id={{this.summaryId}}>{{@summary}}</span>
           {{/if}}
           {{#if (has-block 'actions')}}
             <span class='pretui-section-actions'>{{yield to='actions'}}</span>
@@ -136,157 +140,160 @@ export class PanelSection extends Component<PanelSectionSignature> {
         id={{this.regionId}}
         role='group'
         aria-hidden={{unless this.expanded 'true'}}
+        inert={{unless this.expanded true}}
       >
         <div class='pretui-section-body'>{{yield}}</div>
       </div>
     </section>
     <style scoped>
-      .pretui-section {
-        display: block;
-        container-type: inline-size;
-        border-top: 1px solid var(--border);
-      }
-      .pretui-section:first-of-type {
-        border-top: 0;
-      }
-      .pretui-section-head {
-        display: flex;
-        align-items: center;
-        gap: var(--space-2, 6px);
-        min-height: 32px;
-        padding-inline: var(--space-4, 11px);
-      }
-      .pretui-section-heading {
-        flex: 1 1 auto;
-        min-width: 0;
-      }
-      .pretui-section-toggle,
-      .pretui-section-static {
-        display: flex;
-        align-items: center;
-        gap: 5px;
-        width: 100%;
-        min-height: 32px;
-        padding: 0;
-        border: 0;
-        background: transparent;
-        color: inherit;
-        text-align: start;
-        cursor: pointer;
-        font: inherit;
-      }
-      .pretui-section-static {
-        cursor: default;
-      }
-      .pretui-section-toggle:focus-visible {
-        outline: 2px solid var(--ring);
-        outline-offset: -1px;
-        border-radius: var(--radius-sm, 5px);
-      }
-      .pretui-section-title {
-        font-size: var(--text-ui-xs, 11px);
-        font-weight: 600;
-        letter-spacing: var(--track-eyebrow, 0.06em);
-        text-transform: uppercase;
-        color: var(--muted-foreground);
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-      .pretui-section-toggle:hover .pretui-section-title {
-        color: var(--foreground);
-      }
-      /* The chevron is a CSS triangle, not an icon component: it must sit
-         inside a role-bearing button, where remote lint's
-         require-presentational-children rejects any svg or component. */
-      .pretui-section-chevron {
-        flex: none;
-        width: 0;
-        height: 0;
-        margin-inline: 2px 1px;
-        border-inline-start: 4px solid currentColor;
-        border-block: 3.5px solid transparent;
-        color: var(--muted-foreground);
-        transform-origin: 25% 50%;
-        transition: transform var(--pretui-dur-snap, 160ms)
-          var(--pretui-ease-snap, ease);
-      }
-      .pretui-section[data-open='true'] .pretui-section-chevron {
-        transform: rotate(90deg);
-      }
-      .pretui-section-summary {
-        flex: none;
-        font-family: var(--font-mono);
-        font-size: var(--text-ui-xs, 11px);
-        color: var(--ink-3, var(--boxel-400));
-        font-variant-numeric: tabular-nums;
-      }
-      .pretui-section-actions {
-        flex: none;
-        display: flex;
-        align-items: center;
-        gap: 2px;
-      }
-      .pretui-section-region {
-        display: grid;
-        grid-template-rows: 1fr;
-        transition: grid-template-rows var(--pretui-dur-snap, 160ms)
-          var(--pretui-ease-snap, ease);
-      }
-      .pretui-section[data-open='false'] .pretui-section-region {
-        grid-template-rows: 0fr;
-      }
-      .pretui-section-region > .pretui-section-body {
-        overflow: hidden;
-        min-height: 0;
-      }
-      .pretui-section[data-open='true'] > .pretui-section-region
-        > .pretui-section-body {
-        /* Once open, stop clipping so a dropdown inside a row can escape. */
-        overflow: visible;
-        padding: 2px var(--space-4, 11px) var(--space-3, 8px);
-      }
-      .pretui-section[data-open='false'] .pretui-section-body {
-        padding-inline: var(--space-4, 11px);
-      }
-      /* ── Nested groups ────────────────────────────────────────────────
-         A group inside a group must not read as its peer. Upstream has no
-         representation for depth at all, and the source panel this was
-         checked against expressed it purely as left padding — which reads
-         as "slightly misaligned" rather than "contained". The hairline
-         goes (it is the peer separator), the heading stops shouting in
-         small-caps, and the body hangs off a vertical rule that makes the
-         containment visible in a still frame. */
-      .pretui-section:not([data-depth='0']) {
-        border-top: 0;
-        margin-block-start: 2px;
-      }
-      .pretui-section:not([data-depth='0']) .pretui-section-head {
-        min-height: 26px;
-        padding-inline: 0;
-      }
-      .pretui-section:not([data-depth='0']) .pretui-section-title {
-        font-size: var(--text-ui, 12px);
-        font-weight: 600;
-        letter-spacing: var(--track-ui, 0.01em);
-        text-transform: none;
-        color: var(--foreground);
-      }
-      .pretui-section:not([data-depth='0'])[data-open='true']
-        > .pretui-section-region
-        > .pretui-section-body {
-        padding: 1px 0 var(--space-2, 6px) var(--space-3, 8px);
-        margin-inline-start: 5px;
-        border-inline-start: 1px solid var(--border);
-      }
-      .pretui-section:not([data-depth='0'])[data-open='false']
-        .pretui-section-body {
-        padding-inline: 0;
-      }
-      @media (prefers-reduced-motion: reduce) {
-        .pretui-section-region,
+      @layer PretComponent {
+        .pretui-section {
+          display: block;
+          container-type: inline-size;
+          border-top: 1px solid var(--border);
+        }
+        .pretui-section:first-of-type {
+          border-top: 0;
+        }
+        .pretui-section-head {
+          display: flex;
+          align-items: center;
+          gap: var(--space-2, 6px);
+          min-height: 32px;
+          padding-inline: var(--space-4, 11px);
+        }
+        .pretui-section-heading {
+          flex: 1 1 auto;
+          min-width: 0;
+        }
+        .pretui-section-toggle,
+        .pretui-section-static {
+          display: flex;
+          align-items: center;
+          gap: 5px;
+          width: 100%;
+          min-height: 32px;
+          padding: 0;
+          border: 0;
+          background: transparent;
+          color: inherit;
+          text-align: start;
+          cursor: pointer;
+          font: inherit;
+        }
+        .pretui-section-static {
+          cursor: default;
+        }
+        .pretui-section-toggle:focus-visible {
+          outline: 2px solid var(--ring);
+          outline-offset: -1px;
+          border-radius: var(--radius-sm, 5px);
+        }
+        .pretui-section-title {
+          font-size: var(--text-ui-xs, 11px);
+          font-weight: 600;
+          letter-spacing: var(--track-eyebrow, 0.06em);
+          text-transform: uppercase;
+          color: var(--muted-foreground);
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .pretui-section-toggle:hover .pretui-section-title {
+          color: var(--foreground);
+        }
+        /* The chevron is a CSS triangle, not an icon component: it must sit
+           inside a role-bearing button, where remote lint's
+           require-presentational-children rejects any svg or component. */
         .pretui-section-chevron {
-          transition: none;
+          flex: none;
+          width: 0;
+          height: 0;
+          margin-inline: 2px 1px;
+          border-inline-start: 4px solid currentColor;
+          border-block: 3.5px solid transparent;
+          color: var(--muted-foreground);
+          transform-origin: 25% 50%;
+          transition: transform var(--pretui-dur-snap, 160ms)
+            var(--pretui-ease-snap, ease);
+        }
+        .pretui-section[data-open='true'] .pretui-section-chevron {
+          transform: rotate(90deg);
+        }
+        .pretui-section-summary {
+          flex: none;
+          font-family: var(--font-mono);
+          font-size: var(--text-ui-xs, 11px);
+          color: var(--ink-3, var(--boxel-400));
+          font-variant-numeric: tabular-nums;
+        }
+        .pretui-section-actions {
+          flex: none;
+          display: flex;
+          align-items: center;
+          gap: 2px;
+        }
+        .pretui-section-region {
+          display: grid;
+          grid-template-rows: 1fr;
+          transition: grid-template-rows var(--pretui-dur-snap, 160ms)
+            var(--pretui-ease-snap, ease);
+        }
+        .pretui-section[data-open='false'] .pretui-section-region {
+          grid-template-rows: 0fr;
+        }
+        .pretui-section-region > .pretui-section-body {
+          overflow: hidden;
+          min-height: 0;
+        }
+        .pretui-section[data-open='true'] > .pretui-section-region
+          > .pretui-section-body {
+          /* Once open, stop clipping so a dropdown inside a row can escape. */
+          overflow: visible;
+          padding: 2px var(--space-4, 11px) var(--space-3, 8px);
+        }
+        .pretui-section[data-open='false'] .pretui-section-body {
+          padding-inline: var(--space-4, 11px);
+        }
+        /* ── Nested groups ────────────────────────────────────────────────
+           A group inside a group must not read as its peer. Upstream has no
+           representation for depth at all, and the source panel this was
+           checked against expressed it purely as left padding — which reads
+           as "slightly misaligned" rather than "contained". The hairline
+           goes (it is the peer separator), the heading stops shouting in
+           small-caps, and the body hangs off a vertical rule that makes the
+           containment visible in a still frame. */
+        .pretui-section:not([data-depth='0']) {
+          border-top: 0;
+          margin-block-start: 2px;
+        }
+        .pretui-section:not([data-depth='0']) .pretui-section-head {
+          min-height: 26px;
+          padding-inline: 0;
+        }
+        .pretui-section:not([data-depth='0']) .pretui-section-title {
+          font-size: var(--text-ui, 12px);
+          font-weight: 600;
+          letter-spacing: var(--track-ui, 0.01em);
+          text-transform: none;
+          color: var(--foreground);
+        }
+        .pretui-section:not([data-depth='0'])[data-open='true']
+          > .pretui-section-region
+          > .pretui-section-body {
+          padding: 1px 0 var(--space-2, 6px) var(--space-3, 8px);
+          margin-inline-start: 5px;
+          border-inline-start: 1px solid var(--border);
+        }
+        .pretui-section:not([data-depth='0'])[data-open='false']
+          .pretui-section-body {
+          padding-inline: 0;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .pretui-section-region,
+          .pretui-section-chevron {
+            transition: none;
+          }
         }
       }
     </style>

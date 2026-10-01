@@ -43,3 +43,5 @@ Where it is thinner: no arrow or tail pointing at the trigger, no nested popover
 The panel takes the kit's overlay tokens and the morph the shared motion tokens.
 
 `@distance` is a caller value rather than a token because the right gap depends on the trigger, not on the season.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

@@ -562,12 +562,33 @@ export class ContextMenu extends Component<ContextMenuSignature> {
 
   onEscapeCapture = (event: Event) => {
     let ev = event as KeyboardEvent;
-    if (ev.key !== 'Escape' || !this.isOpen) {
+    if (!this.isOpen) {
+      return;
+    }
+    if (ev.key === 'Escape') {
+      ev.preventDefault();
+      ev.stopPropagation();
+      this.closeLevel();
+      return;
+    }
+    // a right-click leaves focus where it was, so the first arrow has to be
+    // routed into the menu from wherever focus is
+    if (this.navigating) {
+      return;
+    }
+    let rows = this.levels[0]?.rows ?? [];
+    let target =
+      ev.key === 'ArrowDown' || ev.key === 'Home'
+        ? rows[0]
+        : ev.key === 'ArrowUp' || ev.key === 'End'
+          ? rows[rows.length - 1]
+          : undefined;
+    if (!target) {
       return;
     }
     ev.preventDefault();
     ev.stopPropagation();
-    this.closeLevel();
+    this.moveTo(target);
   };
 
   // ── Keyboard inside the panels ───────────────────────────────────────
@@ -758,30 +779,32 @@ export class ContextMenu extends Component<ContextMenuSignature> {
     </div>
 
     <style scoped>
-      .pretui-cm {
-        display: contents;
-      }
-      .pretui-cm-region {
-        display: block;
-        border-radius: var(--radius-surface, 10px);
-      }
-      .pretui-cm-region:focus-visible {
-        outline: 2px solid var(--ring);
-        outline-offset: 2px;
-      }
-      .pretui-cm-point {
-        /* The virtual anchor is measured in VIEWPORT coordinates, because
-           that is what a contextmenu event reports and what
-           getBoundingClientRect returns. Anything but fixed would place it
-           against an offset parent the point knows nothing about. Same
-           accepted warning overlay.gts carries. */
-        position: fixed;
-        width: 0;
-        height: 0;
-        pointer-events: none;
-      }
-      .pretui-cm-watch {
-        display: none;
+      @layer PretComponent {
+        .pretui-cm {
+          display: contents;
+        }
+        .pretui-cm-region {
+          display: block;
+          border-radius: var(--radius-surface, 10px);
+        }
+        .pretui-cm-region:focus-visible {
+          outline: 2px solid var(--ring);
+          outline-offset: 2px;
+        }
+        .pretui-cm-point {
+          /* The virtual anchor is measured in VIEWPORT coordinates, because
+             that is what a contextmenu event reports and what
+             getBoundingClientRect returns. Anything but fixed would place it
+             against an offset parent the point knows nothing about. Same
+             accepted warning overlay.gts carries. */
+          position: fixed;
+          width: 0;
+          height: 0;
+          pointer-events: none;
+        }
+        .pretui-cm-watch {
+          display: none;
+        }
       }
     </style>
   </template>
