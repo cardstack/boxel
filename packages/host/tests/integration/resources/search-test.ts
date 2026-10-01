@@ -2391,21 +2391,18 @@ module(`Integration | search resource`, function (hooks) {
       firstName: string,
       lastName: string,
     ): Promise<any> {
-      return await storeService.add(
-        {
-          data: {
-            type: 'card',
-            id: `${testRealmURL}${idPath}`,
-            attributes: {
-              author: { firstName, lastName },
-              editions: 0,
-              pubDate: '2024-01-01',
-            },
-            meta: { adoptsFrom: bookRef },
+      return await storeService.addWithoutPersisting({
+        data: {
+          type: 'card',
+          id: `${testRealmURL}${idPath}`,
+          attributes: {
+            author: { firstName, lastName },
+            editions: 0,
+            pubDate: '2024-01-01',
           },
-        } as LooseSingleCardDocument,
-        { doNotPersist: true },
-      );
+          meta: { adoptsFrom: bookRef },
+        },
+      } as LooseSingleCardDocument);
     }
 
     test(`a locally added matching card appears in an eligible live search without a server round-trip`, async function (assert) {
@@ -2867,22 +2864,19 @@ module(`Integration | search resource`, function (hooks) {
       await settled();
       let serverIds = search.instances.map((i) => i.id);
 
-      await storeService.add(
-        {
-          data: {
-            type: 'card',
-            id: `${testRealmURL}posts/unresolved`,
-            attributes: { cardTitle: 'Lonely Post' },
-            relationships: {
-              article: {
-                links: { self: `${testRealmURL}does/not/exist` },
-              },
+      await storeService.addWithoutPersisting({
+        data: {
+          type: 'card',
+          id: `${testRealmURL}posts/unresolved`,
+          attributes: { cardTitle: 'Lonely Post' },
+          relationships: {
+            article: {
+              links: { self: `${testRealmURL}does/not/exist` },
             },
-            meta: { adoptsFrom: postRef },
           },
-        } as LooseSingleCardDocument,
-        { doNotPersist: true },
-      );
+          meta: { adoptsFrom: postRef },
+        },
+      } as LooseSingleCardDocument);
       await settled();
 
       assert.deepEqual(
@@ -2904,21 +2898,18 @@ module(`Integration | search resource`, function (hooks) {
       // not surface even when it satisfies the filter — that's another
       // realm's data and the local search has no authority over it.
       let otherRealmURL = 'https://other-realm.example/';
-      await storeService.add(
-        {
-          data: {
-            type: 'card',
-            id: `${otherRealmURL}books/foreign`,
-            attributes: {
-              author: { firstName: 'Foreign', lastName: 'Abdel-Rahman' },
-              editions: 0,
-              pubDate: '2024-01-01',
-            },
-            meta: { adoptsFrom: bookRef },
+      await storeService.addWithoutPersisting({
+        data: {
+          type: 'card',
+          id: `${otherRealmURL}books/foreign`,
+          attributes: {
+            author: { firstName: 'Foreign', lastName: 'Abdel-Rahman' },
+            editions: 0,
+            pubDate: '2024-01-01',
           },
-        } as LooseSingleCardDocument,
-        { doNotPersist: true },
-      );
+          meta: { adoptsFrom: bookRef },
+        },
+      } as LooseSingleCardDocument);
 
       let search = getSearchResourceForTest(loaderService, () => ({
         named: {
@@ -3185,11 +3176,14 @@ module(`Integration | search resource`, function (hooks) {
       fetchCalls = 0;
 
       let obsolete = false;
-      let queued = storeService.search(abdelRahmanQuery, [testRealmURL], {
-        includeMeta: true,
-        throttled: true,
-        isObsolete: () => obsolete,
-      });
+      let queued = storeService.searchWithMeta(
+        abdelRahmanQuery,
+        [testRealmURL],
+        {
+          throttled: true,
+          isObsolete: () => obsolete,
+        },
+      );
       // The consumer goes away while the search is still waiting its turn.
       obsolete = true;
 
@@ -3431,6 +3425,123 @@ module(`Integration | search resource`, function (hooks) {
         (e: Error) => e instanceof SearchBoundError,
         'the facade enforces the realms cap on an explicit list',
       );
+    });
+
+    // The caps hang off `search`, so a sibling that runs the same search
+    // without them is a way around the facade rather than a gap in it. The
+    // facade is an allowlist for that reason, and this pins it: a method the
+    // card-facing `Store` interface doesn't declare is absent at runtime, not
+    // merely absent from the types card code is checked against.
+    test('the card-facing store withholds the search methods that skip the caps', async function (assert) {
+      let cardStore = storeService.cardFacingStore(
+        () => 'http://current/',
+      ) as unknown as Record<string, unknown>;
+
+      for (let name of ['searchWithMeta', 'searchEntries', 'getWithoutCache']) {
+        assert.strictEqual(
+          typeof storeService[name as keyof typeof storeService],
+          'function',
+          `${name} is a real method on the store service`,
+        );
+        assert.strictEqual(
+          cardStore[name],
+          undefined,
+          `${name} is not reachable through the card-facing store`,
+        );
+      }
+
+      // Everything the interface does declare still arrives callable, so the
+      // allowlist withholds the siblings rather than the surface.
+      for (let name of [
+        'save',
+        'create',
+        'add',
+        'addWithoutPersisting',
+        'addWithoutWaiting',
+        'peek',
+        'peekError',
+        'get',
+        'delete',
+        'patch',
+        'search',
+        'getSaveState',
+      ]) {
+        assert.strictEqual(
+          typeof cardStore[name],
+          'function',
+          `${name} is reachable through the card-facing store`,
+        );
+      }
+    });
+
+    // The allowlist only gates property reads, so the two other ways to the
+    // service have to be closed too: an `Object.prototype` member handing back
+    // the service it was bound to, and a write landing on the service the
+    // whole host app shares.
+    test('the card-facing store gives no way back to the service and refuses writes', async function (assert) {
+      let cardStore = storeService.cardFacingStore(
+        () => 'http://current/',
+      ) as unknown as Record<string, any>;
+      let realGet = storeService.get;
+      let realSearch = storeService.search;
+
+      assert.strictEqual(
+        cardStore.valueOf(),
+        cardStore,
+        'valueOf answers the facade, not the service',
+      );
+      assert.strictEqual(
+        (cardStore.valueOf() as Record<string, unknown>).searchWithMeta,
+        undefined,
+        'so an uncapped sibling stays out of reach through it',
+      );
+      assert.strictEqual(
+        String(cardStore),
+        '[object Object]',
+        'the facade still converts to a string',
+      );
+
+      assert.throws(
+        () => {
+          cardStore.get = () => 'replaced';
+        },
+        TypeError,
+        'assigning a method through the facade is refused',
+      );
+      assert.throws(
+        () => cardStore.__defineGetter__('search', () => 'replaced'),
+        TypeError,
+        'defining a getter through the facade is refused',
+      );
+      assert.throws(
+        () => Object.defineProperty(cardStore, 'patch', { value: 'replaced' }),
+        TypeError,
+        'defining a property on the facade is refused',
+      );
+      assert.throws(
+        () => {
+          delete cardStore.search;
+        },
+        TypeError,
+        'deleting a method through the facade is refused',
+      );
+
+      assert.strictEqual(
+        storeService.get,
+        realGet,
+        "the service's get is untouched",
+      );
+      assert.strictEqual(
+        storeService.search,
+        realSearch,
+        "the service's search is untouched",
+      );
+      for (let name of ['get', 'search', 'patch']) {
+        assert.false(
+          Object.prototype.hasOwnProperty.call(storeService, name),
+          `nothing was installed as an own ${name} on the service`,
+        );
+      }
     });
   });
 });

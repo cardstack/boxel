@@ -347,7 +347,7 @@ module('Acceptance | Tools tests', function (hooks) {
           let { roomId } = await createAIAssistantRoomCommand.execute({
             name: 'AI Assistant Room',
             enabledSkills: [
-              (await getService('store').get<Skill>(
+              (await getService('store').get(
                 `${testRealmURL}Skill/useful-commands`,
               )) as Skill,
             ],
