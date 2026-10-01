@@ -395,7 +395,10 @@ export type PolicyIssueCode =
   // code ref or whose `grants` is not a list.
   | 'invalid-rule'
   // A rule whose `targetType` does not resolve against the policy card, or
-  // resolves to no definition.
+  // resolves to no definition. And a grant on a rule whose type descends from
+  // a type the realm has no definition of, a class its module does not export
+  // among them: that type might declare the operation `nonGrantable`, so the
+  // gate refuses it whatever a compiled policy holds.
   | 'unresolved-type'
   // A rule whose `targetType` is module source, or descends from it. Module
   // source is readable only with the realm's own read permission, so there is
