@@ -28,6 +28,7 @@
       "realm-policy-explain-test",
       "realm-policy-gate-test",
       "realm-policy-non-grantable-test",
+      "realm-policy-publish-test",
       "realm-policy-query-filter-test",
       "realm-policy-query-reach-test",
       "realm-policy-reach-check-test",

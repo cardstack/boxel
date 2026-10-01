@@ -14,6 +14,7 @@ import {
   uuidv4,
   userInitiatedPriority,
   deriveRealmName,
+  notifyAllFileChanges,
 } from '@cardstack/runtime-common';
 import { getUnlistedSlug } from '../lib/unlisted-realm-path.ts';
 import { getPublishedRealmDomainOverrides } from '@cardstack/runtime-common/constants';
@@ -237,6 +238,44 @@ async function ensureRealmIndexBoilerplateOptIn(
       }`,
     );
   }
+}
+
+// A published realm names no policy, so it answers on its ACL alone. The
+// source's pointer is an absolute card id, so a copy of it would name the
+// source's policy card rather than anything in the snapshot: the published
+// realm would be governed by the source's live policy, and a grant there of
+// any writing operation (create, update, delete, transform, …) could admit a
+// signed-in caller's write into a realm nobody may write. Removed from the
+// copy before it is swapped in, so the file a mounted published realm reads
+// after the swap never names the source's pointer.
+//
+// A `realm.json` that doesn't parse is left alone, since a realm reads no
+// policy from it either. Any other failure to read or rewrite it fails the
+// publish.
+async function dropRealmPolicyPointer(realmPath: string): Promise<void> {
+  let realmJsonPath = join(realmPath, 'realm.json');
+  if (!(await pathExists(realmJsonPath))) {
+    return;
+  }
+  let realmConfigDoc: { data?: { attributes?: Record<string, unknown> } };
+  try {
+    realmConfigDoc = await readJson(realmJsonPath);
+  } catch (e) {
+    if (!(e instanceof SyntaxError)) {
+      throw e;
+    }
+    return;
+  }
+  let attributes = realmConfigDoc?.data?.attributes;
+  if (
+    !attributes ||
+    typeof attributes !== 'object' ||
+    !('policy' in attributes)
+  ) {
+    return;
+  }
+  delete attributes.policy;
+  await writeJson(realmJsonPath, realmConfigDoc, { spaces: 2 });
 }
 
 export default function handlePublishRealm({
@@ -510,6 +549,7 @@ export default function handlePublishRealm({
           await remove(backupPath);
           await copy(sourceRealmPath, tempCopyPath);
           try {
+            await dropRealmPolicyPointer(tempCopyPath);
             if (await pathExists(publishedRealmPath)) {
               await move(publishedRealmPath, backupPath);
             }
@@ -526,6 +566,15 @@ export default function handlePublishRealm({
             await remove(tempCopyPath);
             throw swapError;
           }
+
+          // A mounted realm memoizes the policy pointer it read from
+          // `realm.json`. When the file this swap replaced named one, the memo
+          // still holds it, and a write resolved against it would wait out
+          // this lock and then commit. Drop it while the lock still excludes
+          // every writer in the realm.
+          reconciler.mounted
+            .get(publishedRealmURL)
+            ?.invalidateCachedRealmInfo();
 
           // CS-10053: publishable lives in realm_metadata now. Mark the
           // published realm not-publishable via UPSERT after the swap
@@ -613,6 +662,12 @@ export default function handlePublishRealm({
             // the broadcast (CS-11156) covers peers that still have the
             // realm mounted with pre-swap bytes.
             await mountedRealmForCacheClear.clearLocalSourceCachesAndBroadcast();
+          } else {
+            // Not mounted here, but a peer may have it mounted. The same
+            // broadcast drops the peer's pre-swap bytes and the realm info
+            // (policy pointer included) it memoized from the replaced
+            // `realm.json`.
+            await notifyAllFileChanges(dbAdapter, publishedRealmURL);
           }
 
           // Durability enqueue: guarantees the swapped files get indexed
