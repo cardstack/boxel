@@ -172,46 +172,52 @@ export default async function percySnapshot(
   // there before changing its wording.
   console.log(`[percy-snapshot] attempted ${JSON.stringify(snapshotName)}`);
 
-  // PROBE (not for merge): every scope the captured DOM names, against the
-  // rules in EVERY stylesheet the document holds — not only the injected
-  // `style[data-boxel-scoped-css]` tags. Those tags carry scoped CSS for card
-  // code the realm loader evaluates at runtime. Host and boxel-ui components
-  // are compiled by Vite into the app bundle and arrive through `<link>`, so
-  // checking the injected tags alone reports every bundled component as
-  // unstyled when it is not.
+  // PROBE (not for merge): record how the page actually looks, rather than
+  // asking about the plumbing that is supposed to make it look that way. Two
+  // previous probes asked whether a scope attribute appears in stylesheet
+  // text; both reported a fault that did not exist, because a bundled
+  // component's CSS lives in a `<link>` sheet and a `:global` component's CSS
+  // never names its scope at all.
+  //
+  // Computed style and geometry are what a pixel diff is a function of. Run
+  // the same snapshot twice and diff these records: whatever differs is the
+  // property and the element the diff is made of, with no theory in between.
   {
-    let scopes = new Set<string>();
-    for (let el of document.querySelectorAll('*')) {
-      for (let attr of el.getAttributeNames()) {
-        if (attr.startsWith('data-scopedcss-')) {
-          scopes.add(attr);
-        }
-      }
-    }
-    let cssText = '';
-    let unreadable = 0;
-    for (let sheet of Array.from(document.styleSheets)) {
-      try {
-        for (let rule of Array.from(sheet.cssRules)) {
-          cssText += rule.cssText + '\n';
-        }
-      } catch {
-        unreadable++;
-      }
-    }
-    let unstyled = [...scopes].filter((scope) => !cssText.includes(scope));
-    for (let scope of unstyled) {
-      let el = document.querySelector(`[${scope}]`);
-      console.log(
-        `[SCOPE-WHO] ${scope} tag=${el?.tagName ?? 'NONE'} ` +
-          `cls=${String(el?.className ?? '').slice(0, 70)} ` +
-          `parentCls=${String(el?.parentElement?.className ?? '').slice(0, 50)}`,
+    const PROPS = [
+      'display',
+      'position',
+      'font-family',
+      'font-size',
+      'line-height',
+      'padding',
+      'margin',
+      'border-radius',
+      'box-shadow',
+      'background-color',
+      'color',
+      'overflow',
+    ];
+    let record: string[] = [];
+    let seen = 0;
+    for (let el of Array.from(
+      document.querySelectorAll(
+        '.operator-mode, .submode-layout, .boxel-panel, .boxel-panel-group, ' +
+          '.boxel-card-container, .search-result-block, [data-test-search-result]',
+      ),
+    ).slice(0, 24)) {
+      seen++;
+      let cs = getComputedStyle(el);
+      let r = el.getBoundingClientRect();
+      let cls = String(el.className).split(/\s+/).slice(0, 3).join('.');
+      record.push(
+        `${el.tagName}.${cls}|` +
+          `box=${Math.round(r.width)}x${Math.round(r.height)}@${Math.round(r.left)},${Math.round(r.top)}|` +
+          PROPS.map((prop) => `${prop}=${cs.getPropertyValue(prop)}`).join(';'),
       );
     }
     console.log(
-      `[SCOPE-AUDIT2] ${JSON.stringify(snapshotName)} scopes=${scopes.size} ` +
-        `sheets=${document.styleSheets.length} unreadable=${unreadable} ` +
-        `unstyled=${unstyled.length} first=${unstyled[0] ?? '-'}`,
+      `[LOOK] ${JSON.stringify(snapshotName)} elements=${seen}\n` +
+        record.map((line) => `[LOOK-EL] ${line}`).join('\n'),
     );
   }
 
