@@ -30,7 +30,7 @@ const framerMotionNotice = () => {
 };
 
 /**
- * src/framer-motion-internals.js imports modules from framer-motion's
+ * src/framer-motion-internals.ts imports modules from framer-motion's
  * `dist/es` that its exports map doesn't expose. Resolve them on disk, past
  * the exports map, and keep them (and every relative import they make) in
  * glimmer-motion's own output instead of letting addon.dependencies() mark
