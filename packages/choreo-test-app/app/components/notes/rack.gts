@@ -81,9 +81,9 @@ const RackNotes: TOC<object> = <template>
           The rule that makes everything else possible:
           <strong>a keyframe array is the from-and-to and any waypoints, in one
             value</strong>. Only springs are limited to two.
-          <code>@opacity={{"{{"}}array 0 1{{"}}"}}</code>
+          <code>@opacity=\{{array 0 1}}</code>
           is the degenerate case of
-          <code>@opacity={{"{{"}}array 0 0 1 1 0{{"}}"}}</code>.
+          <code>@opacity=\{{array 0 0 1 1 0}}</code>.
         </p>
         <p>
           So N poses is not N−1 animations. It is one animation with N stops,

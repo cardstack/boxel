@@ -6,16 +6,19 @@ import type {
   CodeRef,
   CompiledOperationGrant,
   CompiledRealmPolicy,
+  Filter,
   ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 import {
   policyQueryScope,
   RealmAuthorityPolicyScopeError,
+  realmPolicyRef,
   searchInvocation,
   type OperationCore,
   type OperationDefinition,
   type SearchPrincipal,
 } from '@cardstack/runtime-common/card-operations';
+import { nonGrantableInChain } from '@cardstack/runtime-common/card-operations/gate';
 import type { Definition } from '@cardstack/runtime-common/definitions';
 
 // ============================================================================
@@ -51,6 +54,41 @@ const NOTICE: ResolvedCodeRef = {
 const ELSEWHERE: ResolvedCodeRef = {
   module: rri(`${REALM}elsewhere`),
   name: 'Elsewhere',
+};
+
+// A schedule type exported from a module under a `fields/` directory, and a
+// subclass of it. The base type keeps `listSealed` out of every policy's
+// reach, and the subclass redeclares it without saying so.
+const RATED_BASE: ResolvedCodeRef = {
+  module: rri(`${REALM}fields/rating/rated`),
+  name: 'RatedSchedule',
+};
+const RATED: ResolvedCodeRef = {
+  module: rri(`${REALM}rated-plan`),
+  name: 'RatedPlanSchedule',
+};
+// A type exported from a module named `fields`, whose key is spelled as the key
+// of a field's type, and a subclass of it.
+const TIER_BASE: ResolvedCodeRef = {
+  module: rri(`${REALM}plan/fields`),
+  name: 'TierSchedule',
+};
+const TIER: ResolvedCodeRef = {
+  module: rri(`${REALM}tier-plan`),
+  name: 'TierPlanSchedule',
+};
+// A type extending a class its module does not export, which the chain keys as
+// the type's ancestor. Something else answers to that key's spelling read as a
+// module and a name: a type `ancestor` exported from a module at the path the
+// key spells, which grants what the unexported class might not.
+const LOCAL: ResolvedCodeRef = {
+  module: rri(`${REALM}local`),
+  name: 'LocalSchedule',
+};
+const LOCAL_ANCESTOR_KEY = `${REALM}local/LocalSchedule/ancestor`;
+const LOOKALIKE: ResolvedCodeRef = {
+  module: rri(`${REALM}local/LocalSchedule`),
+  name: 'ancestor',
 };
 
 function key(ref: ResolvedCodeRef) {
@@ -94,6 +132,21 @@ const DEFINITIONS = new Map<string, Definition>([
     }),
   ],
   [key(NOTICE), definitionOf(NOTICE, {})],
+  [
+    key(RATED_BASE),
+    definitionOf(RATED_BASE, {
+      listOpen: listing(),
+      listSealed: listing(true),
+    }),
+  ],
+  [
+    key(RATED),
+    definitionOf(RATED, { listOpen: listing(), listSealed: listing() }),
+  ],
+  [key(TIER_BASE), definitionOf(TIER_BASE, { listOpen: listing() })],
+  [key(TIER), definitionOf(TIER, { listOpen: listing() })],
+  [key(LOCAL), definitionOf(LOCAL, { listOpen: listing() })],
+  [key(LOOKALIKE), definitionOf(LOOKALIKE, { listOpen: listing() })],
 ]);
 
 // The adoption chain the index records beside each type's definition.
@@ -101,6 +154,11 @@ const CHAINS = new Map<string, string[]>([
   [key(BASE_SCHEDULE), [key(BASE_SCHEDULE)]],
   [key(SCHEDULE), [key(SCHEDULE), key(BASE_SCHEDULE)]],
   [key(NOTICE), [key(NOTICE)]],
+  [key(RATED_BASE), [key(RATED_BASE)]],
+  [key(RATED), [key(RATED), key(RATED_BASE)]],
+  [key(TIER_BASE), [key(TIER_BASE)]],
+  [key(TIER), [key(TIER), key(TIER_BASE)]],
+  [key(LOCAL), [key(LOCAL), LOCAL_ANCESTOR_KEY, key(BASE_SCHEDULE)]],
 ]);
 
 // The filter a query grant compiles to: the caller's own schedules.
@@ -119,7 +177,12 @@ function stubCore(
   {
     reads = { policy: 0 },
     ruleOn = SCHEDULE,
-  }: { reads?: { policy: number }; ruleOn?: ResolvedCodeRef } = {},
+    lookups = [],
+  }: {
+    reads?: { policy: number };
+    ruleOn?: ResolvedCodeRef;
+    lookups?: string[];
+  } = {},
 ): OperationCore {
   let policy: CompiledRealmPolicy = {
     card: `${REALM}policies/policy`,
@@ -142,6 +205,7 @@ function stubCore(
       isResolvedCodeRef(codeRef) ? codeRef : undefined,
     definitionLookup: {
       async lookupDefinition(ref: ResolvedCodeRef) {
+        lookups.push(key(ref));
         return DEFINITIONS.get(key(ref));
       },
       async lookupDefinitionEntry(ref: ResolvedCodeRef) {
@@ -167,8 +231,9 @@ function scope(
   operation: string,
   grants: Grant[],
   types: CodeRef[] = [SCHEDULE],
+  options: Parameters<typeof stubCore>[1] = {},
 ) {
-  return policyQueryScope(stubCore(grants), {
+  return policyQueryScope(stubCore(grants, options), {
     operation,
     types,
     principal: { kind: 'user', user: ACTOR },
@@ -178,6 +243,25 @@ function scope(
 // The filter `OWN_FILTER` compiles to, in the grammar the engine runs.
 const OWN = { on: SCHEDULE, eq: { providerId: ACTOR } };
 
+// `filter` as a scope carries it: less the realm's config card, the card its
+// policy key names, and every policy card, whichever grant it came from.
+function scoped(filter: Filter): Filter {
+  return {
+    every: [
+      filter,
+      {
+        not: {
+          any: [
+            { eq: { id: `${REALM}realm` } },
+            { eq: { id: `${REALM}policies/policy` } },
+            { type: realmPolicyRef },
+          ],
+        },
+      },
+    ],
+  };
+}
+
 module(basename(import.meta.filename), function () {
   test('a query grant contributes its filter, bound to the caller', async function (assert) {
     let result = await scope('listOpen', [
@@ -186,7 +270,7 @@ module(basename(import.meta.filename), function () {
     assert.strictEqual(result.kind, 'scoped');
     assert.deepEqual(
       result.kind === 'scoped' ? result.filters : undefined,
-      [OWN],
+      [scoped(OWN)],
       'the filter in the grammar the engine runs, with actor() filled in',
     );
   });
@@ -236,7 +320,7 @@ module(basename(import.meta.filename), function () {
     );
     assert.deepEqual(
       await scope('query', [{ operation: 'query', filter: OWN_FILTER }]),
-      { kind: 'scoped', filters: [OWN] },
+      { kind: 'scoped', filters: [scoped(OWN)] },
       'a grant on `query` is',
     );
   });
@@ -262,7 +346,7 @@ module(basename(import.meta.filename), function () {
         [{ operation: 'query', filter: OWN_FILTER }],
         [SCHEDULE, NOTICE],
       ),
-      { kind: 'scoped', filters: [{ on: SCHEDULE, any: [OWN] }] },
+      { kind: 'scoped', filters: [scoped({ on: SCHEDULE, any: [OWN] })] },
       "the schedule type's grant, confined to schedules, and nothing for the type no rule names",
     );
     assert.deepEqual(
@@ -299,10 +383,10 @@ module(basename(import.meta.filename), function () {
     assert.deepEqual(result, {
       kind: 'scoped',
       filters: [
-        {
+        scoped({
           on: SCHEDULE,
           any: [{ on: BASE_SCHEDULE, eq: { providerId: ACTOR } }],
-        },
+        }),
       ],
     });
   });
@@ -344,7 +428,7 @@ module(basename(import.meta.filename), function () {
           [{ operation: 'query', filter: OWN_FILTER }],
           searchInvocation({ filter: { every } })!.types,
         ),
-        { kind: 'scoped', filters: [{ on: SCHEDULE, any: [OWN] }] },
+        { kind: 'scoped', filters: [scoped({ on: SCHEDULE, any: [OWN] })] },
       );
     }
   });
@@ -356,7 +440,7 @@ module(basename(import.meta.filename), function () {
         [{ operation: 'query', filter: OWN_FILTER }],
         [SCHEDULE, { ...SCHEDULE }],
       ),
-      { kind: 'scoped', filters: [OWN] },
+      { kind: 'scoped', filters: [scoped(OWN)] },
       'as a search on the one type is',
     );
   });
@@ -390,6 +474,85 @@ module(basename(import.meta.filename), function () {
       ]),
       { kind: 'denied' },
       'the base type declares it nonGrantable, and the subclass redeclaring it without the flag does not lift that',
+    );
+  });
+
+  test('a type descending from one in a `fields/` directory is judged by that type’s declarations', async function (assert) {
+    assert.deepEqual(
+      await scope(
+        'listOpen',
+        [{ operation: 'listOpen', filter: OWN_FILTER }],
+        [RATED],
+        { ruleOn: RATED },
+      ),
+      { kind: 'scoped', filters: [scoped(OWN)] },
+      'a grant on the subclass contributes its filter',
+    );
+    assert.deepEqual(
+      await scope(
+        'listSealed',
+        [{ operation: 'listSealed', filter: OWN_FILTER }],
+        [RATED],
+        { ruleOn: RATED },
+      ),
+      { kind: 'denied' },
+      'and the flag the `fields/` type declares holds on the subclass that redeclares the query',
+    );
+  });
+
+  test('a type exported from a `fields` module is judged by its own declarations', async function (assert) {
+    assert.deepEqual(
+      await scope(
+        'listOpen',
+        [{ operation: 'listOpen', filter: OWN_FILTER }],
+        [TIER],
+        { ruleOn: TIER },
+      ),
+      { kind: 'scoped', filters: [scoped(OWN)] },
+      'its key is spelled as a field type’s, and it is read as the type it is',
+    );
+  });
+
+  test('a class its module does not export is never read as a type its key’s spelling names', async function (assert) {
+    let lookups: string[] = [];
+    assert.deepEqual(
+      await scope(
+        'listOpen',
+        [{ operation: 'listOpen', filter: OWN_FILTER }],
+        [LOCAL],
+        { ruleOn: LOCAL, lookups },
+      ),
+      { kind: 'denied' },
+      'the unexported class has no definition to show it leaves the query grantable',
+    );
+    assert.false(
+      lookups.includes(key(LOOKALIKE)),
+      'and the type exported at the path its key spells is not read in its place',
+    );
+  });
+
+  test('a chain’s first key spelled as an unexported class’s is judged as a type with no definition', async function (assert) {
+    let lookups: string[] = [];
+    let core = stubCore([], { lookups });
+    assert.true(
+      await nonGrantableInChain(
+        core,
+        [LOCAL_ANCESTOR_KEY, key(BASE_SCHEDULE)],
+        'listOpen',
+      ),
+      'no type before it says where the class sits, so it might be one, and the chain is refused',
+    );
+    assert.false(
+      lookups.includes(key(LOOKALIKE)),
+      'and the type exported at the path its key spells is not read in its place',
+    );
+    assert.false(
+      await nonGrantableInChain(
+        core,
+        [key(RATED), key(RATED_BASE)],
+        'listOpen',
+      ),
+      'a first key under a `fields/` directory is read as the type it names',
     );
   });
 });

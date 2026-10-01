@@ -4,6 +4,15 @@ description: Setup common dependencies
 runs:
   using: composite
   steps:
+    # On a RunsOn runner, this points actions/cache (and the caches inside
+    # setup actions) at RunsOn's S3 bucket when the job's label carries
+    # `extras=s3-cache`, so cache traffic stays inside AWS instead of being
+    # billed as transfer out to GitHub. RunsOn requires it before the first
+    # cache step, and for upload-artifact to keep working under s3-cache. It
+    # also prints what the job's instance cost. Skipped on GitHub's runners.
+    - if: startsWith(runner.name, 'runs-on--')
+      uses: runs-on/action@dfae4d98c5537a0dc7bbb7e6b9211f30ba240f6d # v2.4.0
+
     - uses: jdx/mise-action@c1ecc8f748cd28cdeabf76dab3cccde4ce692fe4 # v4.0.0
       with:
         install: true

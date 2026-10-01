@@ -1,6 +1,6 @@
 import type { Readable } from 'stream';
 import type { CodeRef } from '../code-ref.ts';
-import type { ScreenshotManifest } from '../capture-spec.ts';
+import type { CaptureManifest } from '../capture-spec.ts';
 import type {
   SingleCardDocument,
   SingleFileMetaDocument,
@@ -10,8 +10,14 @@ import type {
   SearchEntryWireQuery,
 } from '../search-entry.ts';
 import type { OperationDiagnostics } from './telemetry.ts';
+import {
+  PRERENDERED_HTML_FORMATS,
+  type PrerenderedHtmlFormat,
+} from '../prerendered-html-format.ts';
 import type {
   BaseOperationName,
+  HtmlDeclaration,
+  HtmlSharing,
   LinkStrategy,
 } from '@cardstack/base/operations';
 
@@ -165,6 +171,49 @@ export function effectiveLinkStrategy(
   );
 }
 
+// The two answers an `html` declaration gives a format, as a total map over the
+// union for the same reason `LINK_STRATEGY_REACH` is one.
+const HTML_SHARING: Record<HtmlSharing, true> = {
+  shareable: true,
+  unshareable: true,
+};
+
+// Whether a value is an `html` declaration the serving path can act on: an
+// object naming prerendered formats, each shareable or not.
+export function isHtmlDeclaration(value: unknown): value is HtmlDeclaration {
+  if (value == null || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+  return Object.entries(value).every(
+    ([format, sharing]) =>
+      PRERENDERED_HTML_FORMATS.includes(format as PrerenderedHtmlFormat) &&
+      typeof sharing === 'string' &&
+      Object.prototype.hasOwnProperty.call(HTML_SHARING, sharing),
+  );
+}
+
+// The formats a stored definition's `html` serves data-only, in the realm's
+// own format order. Absent, there are none: every format is shareable, which
+// is the default for every read and query.
+//
+// Anything else is JSON the realm reads back, so it is only as good as what
+// wrote it. Lowering records an unrecognized declaration rather than storing
+// one, which leaves the last branch unreachable through the path definitions
+// actually take — and reads as every format withheld if something ever gets
+// around it, because a withholding the realm cannot interpret is not a reason
+// to serve more.
+export function unshareableFormatsOf(value: unknown): PrerenderedHtmlFormat[] {
+  if (value === undefined) {
+    return [];
+  }
+  if (!isHtmlDeclaration(value)) {
+    return [...PRERENDERED_HTML_FORMATS];
+  }
+  return PRERENDERED_HTML_FORMATS.filter(
+    (format) => value[format] === 'unshareable',
+  );
+}
+
 export interface OperationDefinition {
   // The built-in behavior that carries this operation out. The name the
   // operation is invoked under is the key it is stored under, and the two are
@@ -227,6 +276,23 @@ export interface OperationDefinition {
   // own authority, and sits in the card's own attributes rather than in the
   // link closure.
   links?: LinkStrategy;
+  // Which prerendered formats this read, or every row of this query, serves
+  // data-only: by format, `unshareable` to withhold the format's prerendered
+  // HTML and `shareable` (the same as leaving it out) to serve it. Absent,
+  // every format is served. Only a `read` or a `query` carries one.
+  //
+  // On a read it governs reads rooted at the target — its single-card HTML
+  // read, the last-known-good markup an errored read carries, and the markup
+  // a host-mode page for it is served with. On a query it governs every row
+  // alike, whatever type the row is and whatever that type's own `read`
+  // declares, as `links` does.
+  //
+  // It applies to every caller alike, for the reason `links` does: prerendered
+  // HTML is rendered once per card and format, under the realm's own
+  // authority, and shared by every viewer — so a format is either served to
+  // everyone or to no one, and the response never depends on how its caller
+  // was authorized.
+  html?: HtmlDeclaration;
   // The author's override of the client's optimistic eligibility.
   optimistic?: boolean;
   // Whether every program this operation runs yields the same result for the
@@ -321,6 +387,14 @@ export type OperationLoweringIssueCode =
   // A `links` value that is not one of the strategies a read or a query can
   // apply.
   | 'invalid-link-strategy'
+  // An `html` declaration on a base other than `read` or `query`. It withholds
+  // prerendered HTML a read of the target or a query's rows are served with,
+  // and no other base serves any: a write answers with the card's data, and a
+  // `readSource` serves stored bytes.
+  | 'html-without-rendering'
+  // An `html` declaration that is not an object naming prerendered formats,
+  // each `shareable` or `unshareable`.
+  | 'invalid-html-declaration'
   // A raw BXL program that does not parse.
   | 'invalid-program'
   // A declared query the realm's own query grammar refuses.
@@ -336,7 +410,9 @@ export type OperationLoweringIssueCode =
   | 'base-not-carried'
   // A raw program declared on a base that runs none. The two appends edit the
   // stored file and a file's content is replaced wholesale, so a program
-  // stored for one of them would never be reached.
+  // stored for one of them would never be reached. So is a payload stage, a
+  // `params` schema or an `input` program, declared on a base that takes no
+  // payload.
   | 'unrunnable-program'
   // An `appendContainsMany` that does not say what to append where: no field,
   // no item for a field it names, or both spellings at once with no rule for
@@ -375,12 +451,13 @@ export interface LowerOperationDeclarationsResult {
   issues: OperationLoweringIssue[];
 }
 
-// What compiling a realm's policy found wrong with it. Each is recorded
-// against the part of the policy that caused it, and that part is inactive:
-// a problem with the card as a whole leaves the policy with no rules, one
-// with a rule leaves that rule out, and one with a grant leaves that grant
-// out. The rest of the policy applies. `policy-not-filterable` alone keeps
-// its grant, for everything but a search.
+// What compiling a realm's policy found wrong with it, or found worth telling
+// its author. Each is recorded against the part of the policy that caused it,
+// and its `severity` says what became of that part. Most leave it inactive: a
+// problem with the card as a whole leaves the policy with no rules, one with a
+// rule leaves that rule out, and one with a grant leaves that grant out, or,
+// for `policy-not-filterable`, keeps it with nothing it can admit. The rest of
+// the policy applies. The codes in `KEEPS_ITS_PART` leave their part live.
 export type PolicyIssueCode =
   // The realm's `policy` pointer names a card the index does not hold.
   | 'policy-card-missing'
@@ -394,7 +471,10 @@ export type PolicyIssueCode =
   // code ref or whose `grants` is not a list.
   | 'invalid-rule'
   // A rule whose `targetType` does not resolve against the policy card, or
-  // resolves to no definition.
+  // resolves to no definition. And a grant on a rule whose type descends from
+  // a type the realm has no definition of, a class its module does not export
+  // among them: that type might declare the operation `nonGrantable`, so the
+  // gate refuses it whatever a compiled policy holds.
   | 'unresolved-type'
   // A rule whose `targetType` is module source, or descends from it. Module
   // source is readable only with the realm's own read permission, so there is
@@ -424,15 +504,39 @@ export type PolicyIssueCode =
   // a listed one, so such a grant would admit callers it does not name.
   | 'partial-match'
   // A grant on a query whose `where` does not compile to a search filter. The
-  // grant is kept, and admits no search.
+  // grant is kept without one, and so admits nothing: the gate grants no
+  // query, and a search reaches a query grant only through its filter.
   | 'policy-not-filterable'
   // A `where` that reads a computed value or a linked card's field without
   // the `snapshot` annotation. Reserved: compiling does not record it.
   | 'unsnapshotted-policy-read'
-  // A grant on a type whose representation links to cards of types the
-  // policy grants nothing on, so the grant reaches those cards too. Reserved:
-  // compiling does not record it.
-  | 'grant-reaches-ungranted-type';
+  // A `read` or `query` grant whose document, under the link strategy that
+  // governs it, carries cards of a type no rule lets a caller read, so the
+  // grant hands those cards to every caller it admits. A type that is
+  // authorization infrastructure counts as unreadable whatever the rules say.
+  // The grant is kept: the reach is often deliberate, and this tells the
+  // author it is there.
+  | 'grant-reaches-ungranted-type'
+  // A `query` grant whose rows' prerendered HTML can draw cards of a type no
+  // rule lets a caller read. Search rows carry their renderings, and a render
+  // draws the card's links whatever strategy the grant's document is served
+  // under, so this is recorded independently of
+  // `grant-reaches-ungranted-type`. The grant is kept, for the same reason.
+  | 'render-reaches-ungranted-type';
+
+// The codes that leave the part of the policy they are recorded against live.
+export const KEEPS_ITS_PART: ReadonlySet<PolicyIssueCode> = new Set([
+  'grant-reaches-ungranted-type',
+  'render-reaches-ungranted-type',
+]);
+
+export type PolicyIssueSeverity = 'inactive' | 'warning';
+
+export function policyIssueSeverity(
+  code: PolicyIssueCode,
+): PolicyIssueSeverity {
+  return KEEPS_ITS_PART.has(code) ? 'warning' : 'inactive';
+}
 
 // A problem found while compiling a realm's policy. Recorded, never thrown,
 // for the reason lowering records rather than throws: the edit that caused it
@@ -444,6 +548,14 @@ export interface PolicyIssue {
   // for a problem with the card as a whole.
   path: string;
   message: string;
+  // What became of the part of the policy the issue is recorded against. That
+  // part is the rule or grant `path` falls under rather than the leaf it
+  // names: `rules[0].grants[1].where` is the grant `rules[0].grants[1]`,
+  // `rules[0].targetType` is the rule `rules[0]`, and the empty path is the
+  // whole policy. `inactive` means that part admits nothing: it was left out,
+  // or kept with nothing it can admit. `warning` means it is live, and the
+  // issue says something the author should know about what it grants.
+  severity: PolicyIssueSeverity;
 }
 
 // ============================================================================
@@ -497,6 +609,7 @@ const WRITES: Readonly<Record<BaseOperation, boolean>> = {
   appendContainsMany: true,
   appendLine: true,
   explain: false,
+  validate: false,
 };
 
 export function isWrite(base: BaseOperation): boolean {
@@ -531,8 +644,8 @@ export interface OperationRequest {
   // The invoking user as a session the realm vouched for end to end: not
   // revoked, not delegated to one realm, not an assumed identity. Absent for
   // anything less. `actor` is an identity to record and compare. This is the
-  // one to judge a caller by in another realm, which is what an explain does,
-  // and nothing else reads it.
+  // one to judge a caller by in another realm, which is what an explain and a
+  // validate do, and nothing else reads it.
   principal?: string;
   // The caller's own id for this request. Echoed on the realm's index event so
   // a client can tell its own write's event from anyone else's, which is what
@@ -595,7 +708,7 @@ export interface OperationDocumentResult {
 
 // What the index row behind a read says about itself: the values the card+json
 // response headers are computed from — the validator, the modification time,
-// and the index-data generation and screenshot manifest that go into it.
+// and the index-data generation and capture manifest that go into it.
 // Carried by both read modes, since the document mode reports the row its body
 // came from alongside the body.
 export interface OperationRowHeaders {
@@ -608,7 +721,7 @@ export interface OperationRowHeaders {
   indexedAt: number | null;
   lastModified: number | null;
   generation: number | null;
-  screenshots: ScreenshotManifest | null;
+  captures: CaptureManifest | null;
   // The target's index-row dependencies. Carried because a validator is only
   // safe when none of them live in another realm: cross-realm invalidation
   // does not cascade `indexed_at`, so a stable local one does not mean the
@@ -829,10 +942,15 @@ export type PolicyExplanationReason =
   // other matching grant held.
   | 'predicate-threw'
   // The operation is kept out of every policy's reach: declared
-  // `nonGrantable` on the target's type or a type it descends from, or a
-  // behavior no grant reaches here at all — a query, which is authorized on
-  // the search engine's lane, and an explain.
+  // `nonGrantable` on the target's type or a type it descends from, or an
+  // explain or a validate, which no grant reaches.
   | 'non-grantable'
+  // The operation is a query. A query is not invoked on a card: it is named,
+  // with the type that declares it, in a search, and the search decides what
+  // it returns by composing into it the filter of each grant the actor holds
+  // on it. So invoking it on the card is refused whatever the policy grants,
+  // and this explanation reports no rule for it.
+  | 'query-lane'
   // Any operation on the realm's policy card or on its config card, or one
   // that reads, changes or mints any policy card, which no grant reaches
   // whatever the card's type declares.
@@ -888,6 +1006,126 @@ export type ExplainedGrantOutcome =
   // invocation, a refusal came first, or the predicate reads a snapshot tier.
   | 'not-evaluated';
 
+// A validate's answer: what the policy card it was invoked on compiles to, or,
+// invoked on a realm's config card, what the card its pointer names compiles
+// to there. It
+// is carried on the wire as it is here, so a card reading it back reads this
+// shape.
+export interface OperationValidateResult {
+  validation: PolicyValidation;
+}
+
+// ============================================================================
+// What a validate says.
+//
+// A policy that compiles in part is in force in part: a grant that does not
+// compile is inactive, and the rest of the policy applies. That is exactly
+// what an author misreads when the only record of it is a log line the
+// operator reads. A validate is how the card tells its author instead. It
+// compiles the card as a realm that names it compiles it, and reports every
+// issue compiling recorded and every rule and grant that compiled.
+//
+// The card is compiled as it stands, from what its latest index visit
+// recorded, and from nothing earlier. Nothing is cached and nothing is
+// activated, so a realm's compiled policy is unaffected by one. A realm that
+// names the card holds its own compilation, revalidated within a few seconds
+// of any change to the card or to a type its rules name, so a fix the card
+// shows here is in force there within that bound.
+//
+// Every realm that names the card compiles it mostly from what a validate
+// reads: the card's row, and the definitions of the types its rules name. So
+// what a validate reports is, almost always, what each of them holds, however
+// many there are, and a card no realm names yet reports the same, which is how
+// a draft is checked before any realm is pointed at it. Two inputs can differ.
+// A type in a realm the server has not mounted, such as one another realm
+// server serves, is read by each realm as its own owner, so a realm whose
+// owner may not read it there holds the rule as unresolved where a validate
+// does not. And a query grant whose filter compares a field is checked against
+// the descendants of its rule's type that the compiling realm holds cards of.
+// A validate compiles in the card's own realm and checks against that realm's
+// cards, so a realm naming the card that holds a descendant the card's realm
+// does not can record `policy-not-filterable` where a validate does not.
+//
+// Invoked on a realm's config card, a validate answers for the card that
+// realm's pointer names instead, compiled as that realm compiles it: with the
+// realm's own compile environment, which its policy cache compiles with too.
+// So neither input above differs, and what it reports is what that realm
+// holds. That is also where the problems with the pointer show, which have no
+// policy card to land on: a pointer naming a card the index does not hold, or
+// one that is not a RealmPolicy. The pointer can name a card in any realm, and
+// whether a card is there is what a refusal withholds from a caller who cannot
+// read its realm. So the realm holding the card must be one the caller reads,
+// judged before anything about the card is read, as well as every other realm
+// compiling read.
+// ============================================================================
+
+export interface PolicyValidation {
+  // The policy card, and the `meta.version` of the stored source compiling
+  // read. Absent when what the index holds of the card is an earlier visit's.
+  //
+  // `card` is absent only on a validate of a realm's config card, for a realm
+  // that names no policy, including one whose pointer the realm could not
+  // read as a card's id. Such a realm is governed by its permissions alone,
+  // and `realms`, `issues` and `rules` are empty.
+  card?: string;
+  version?: string;
+  // The realms this server serves whose index compiling read: the card's own,
+  // and each one a type its rules name, or a type those descend from, is
+  // defined in. A change indexed in any of them can change what the card
+  // compiles to, so a view that shows a validation asks again when one of them
+  // is indexed. The caller may read every one of them, since a validate is
+  // refused to anyone who may not.
+  realms: string[];
+  // Set when the policy as a whole did not compile. A realm that names it
+  // grants nothing through it, and refuses every caller its ACL declines with
+  // a 500. `issues` says why, and `rules` is empty.
+  uncompilable?: true;
+  // Every issue compiling recorded, in the order it found them, each with the
+  // rule and grant its `path` falls under.
+  issues: ValidatedPolicyIssue[];
+  // The rules that compiled, in the order the card lists them, each with its
+  // grants that compiled. This is what a realm naming the card puts in force.
+  // A rule or grant the card holds that is not here is inactive, and an issue
+  // says why. A grant here can still admit nothing, and says so with
+  // `admitsNothing`.
+  rules: ValidatedRule[];
+}
+
+export interface ValidatedPolicyIssue extends PolicyIssue {
+  // The position in the card's `rules` of the rule the issue is recorded
+  // against, and in that rule's `grants` of the grant. Absent where the issue
+  // is about the card as a whole, or, for `grant`, about a rule.
+  rule?: number;
+  grant?: number;
+}
+
+export interface ValidatedRule {
+  // Where the rule is in the policy card, as `rules[2]`.
+  path: string;
+  grants: ValidatedGrant[];
+}
+
+export interface ValidatedGrant {
+  // Where the grant is in the policy card, as `rules[2].grants[1]`.
+  path: string;
+  // Set on a grant that compiled and can admit nothing, with the reason. The
+  // policy keeps such a grant exactly as it compiled, so it is in force, and it
+  // has no invocation to admit.
+  admitsNothing?: ValidatedGrantInertia;
+}
+
+export type ValidatedGrantInertia =
+  // A grant on a query whose `where` compiled no search filter. A query is
+  // authorized only by composing a grant's filter into the search, and the
+  // gate refuses every invocation built on one, so the grant has nothing to
+  // compose. `policy-not-filterable` says why there is no filter.
+  | 'unfilterable'
+  // A grant whose `where` is annotated as reading a snapshot tier, on anything
+  // but a query. The gate reads a card's stored source alone and never
+  // evaluates such a predicate. On a query, the same annotation compiles into
+  // the search filter and admits what it matches.
+  | 'snapshot';
+
 // A `delete` answers with `null`: there is no state left to describe.
 export type OperationResult =
   | OperationDocumentResult
@@ -895,6 +1133,7 @@ export type OperationResult =
   | OperationIdentityResult
   | OperationSourceResult
   | OperationExplainResult
+  | OperationValidateResult
   | null;
 
 export function isDocumentResult(
@@ -928,6 +1167,12 @@ export function isExplainResult(
   result: OperationResult,
 ): result is OperationExplainResult {
   return result != null && 'explanation' in result;
+}
+
+export function isValidateResult(
+  result: OperationResult,
+): result is OperationValidateResult {
+  return result != null && 'validation' in result;
 }
 
 export type OperationErrorCode =

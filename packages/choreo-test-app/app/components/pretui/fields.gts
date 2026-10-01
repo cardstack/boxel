@@ -181,7 +181,10 @@ export class DateField extends Component<{
 
   <template>
     <div class="pt-date" role="group" aria-label={{@label}} ...attributes>
+      {{! the id lets the field's own label focus the first part; the
+          aria-label names the part }}
       <select
+        {{! template-lint-disable require-input-label }}
         class="pt-input pt-date-day"
         {{motion id=(concat @id "-day") role="chip"}}
         id={{@id}}

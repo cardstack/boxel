@@ -337,7 +337,17 @@ module(basename(import.meta.filename), function (hooks) {
 
   test("each query grant's filter admits, for its caller, no classroom its predicate refuses", async function (assert) {
     let policy = await education.getCompiledPolicy();
-    assert.deepEqual(policy?.issues, [], 'every grant compiles a filter');
+    // A classroom links to `Person`, which nothing here grants, and that is
+    // recorded against each grant as a warning that keeps it.
+    assert.deepEqual(
+      policy?.issues.filter(
+        ({ code }) =>
+          code !== 'grant-reaches-ungranted-type' &&
+          code !== 'render-reaches-ungranted-type',
+      ),
+      [],
+      'every grant compiles a filter',
+    );
     let grants = policy?.rules[0]?.grants ?? [];
     assert.strictEqual(grants.length, CASES.length);
 

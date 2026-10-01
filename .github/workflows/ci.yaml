@@ -447,13 +447,17 @@ jobs:
         working-directory: packages/boxel-ui/docs-app
 
   pretui-test:
-    name: Pret UI Tests
+    name: Pret UI Tests (shard ${{ matrix.shard }} of ${{ strategy.job-total }})
     needs: [change-check]
     if: needs.change-check.outputs.pretui == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     concurrency:
-      group: pretui-test-${{ github.head_ref || github.run_id }}
+      group: pretui-test-${{ matrix.shard }}-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -473,6 +477,18 @@ jobs:
       - name: Install Chromium
         run: |
           "$(npm root -g)/@cardstack/boxel-cli/node_modules/.bin/playwright" install --with-deps chromium
+      # `boxel test` caps a whole QUnit run at 300 s, so each job keeps a
+      # deterministic slice of the sorted test-file list. The divisor follows
+      # the matrix length, so resizing the matrix resizes the split.
+      - name: Select this shard's test files
+        run: |
+          i=0
+          for f in $(find . -name '*.test.gts' | sort); do
+            if [ $((i % ${{ strategy.job-total }} + 1)) -ne ${{ matrix.shard }} ]; then rm "$f"; fi
+            i=$((i + 1))
+          done
+          echo "$(find . -name '*.test.gts' | wc -l) test file(s) in this shard"
+        working-directory: packages/pretui
       - name: Run tests
         run: boxel test .
         working-directory: packages/pretui
@@ -497,28 +513,30 @@ jobs:
       # The gallery resolves these packages through their built output
       # (package.json#exports maps into dist/ and declarations/).
       - name: Build Glimmer Motion and Choreo Player
+        id: build-libs
         if: ${{ !cancelled() }}
         run: |
           (cd packages/glimmer-motion && pnpm run build)
           (cd packages/choreo-player && pnpm run build)
       - name: Choreo Player unit tests
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && steps.build-libs.outcome == 'success' }}
         run: pnpm run test:unit
         working-directory: packages/choreo-player
       # The realm output test reads dist-realm/, and the theater sizing test
       # reads the scoped stylesheet the build generates.
       - name: Build Choreo Gallery and its realm
-        if: ${{ !cancelled() }}
+        id: build-gallery
+        if: ${{ !cancelled() && steps.build-libs.outcome == 'success' }}
         run: pnpm run build && pnpm run build:realm
         working-directory: packages/choreo-gallery
       - name: Choreo Gallery realm output tests
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && steps.build-gallery.outcome == 'success' }}
         run: pnpm run test:realm
         working-directory: packages/choreo-gallery
       # Playwright launches the runner's preinstalled Google Chrome (the
       # script's default `chrome` channel), so no browser download is needed.
       - name: Choreo Gallery theater sizing test
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && steps.build-gallery.outcome == 'success' }}
         run: pnpm run test:theater-sizing
         working-directory: packages/choreo-gallery
 

@@ -103,15 +103,15 @@ export class Player extends Component<PlayerSignature> {
         <span class='cf-scrub-track' {{@trackWrap}}>
           {{#each @playbar as |c|}}
             <span class='cf-scrub-ch' style={{c.style}}>
-              <em></em>
-              <i></i>
+              <span class='cf-scrub-ghost'></span>
+              <span class='cf-scrub-fill'></span>
             </span>
           {{/each}}
           <span class='cf-scrub-head'></span>
           {{#if @tip}}
             <span class='cf-scrub-tip'>
-              <small>{{@tip.ch}}</small>
-              <b>{{@tip.t}}</b>
+              <span class='cf-scrub-tip-ch'>{{@tip.ch}}</span>
+              <span class='cf-scrub-tip-t'>{{@tip.t}}</span>
             </span>
           {{/if}}
         </span>

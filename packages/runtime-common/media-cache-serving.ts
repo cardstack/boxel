@@ -4,6 +4,8 @@ import { createResponse } from './create-response.ts';
 import type { DBAdapter } from './db.ts';
 import { logger } from './log.ts';
 import {
+  ANONYMOUS_RENDER,
+  REALM_AUTHORITY_RENDER,
   touchMediaCacheEntry,
   type MediaCacheAdapter,
   type MediaCacheEntry,
@@ -15,7 +17,7 @@ const log = logger('media-cache');
 
 // The HTTP face of a MediaCache capture, shared by every route that serves
 // one. The URL is the durable reference — what rendered HTML and
-// `meta.screenshots` embed — and the content hash surfaces only as the
+// `meta.captures` embed — and the content hash surfaces only as the
 // validator: a re-capture changes what the URL serves (the ETag rotates),
 // never the URL itself. The cache policy is a short freshness window with
 // cheap revalidation (an unchanged capture answers as a bodyless 304) plus
@@ -31,7 +33,7 @@ export const MEDIA_CACHE_MAX_AGE_SECONDS = 60;
 export const MEDIA_CACHE_STALE_WHILE_REVALIDATE_SECONDS = 3600;
 
 // `public` exactly when the realm is world-readable — the same derivation as
-// `serveLocalFile` — so a shared cache can hold a public realm's screenshots
+// `serveLocalFile` — so a shared cache can hold a public realm's captures
 // (og:image fetches, crawlers) while a private realm's stay per-client.
 export function mediaCacheVisibility(
   requestContext: RequestContext,
@@ -41,9 +43,20 @@ export function mediaCacheVisibility(
     : 'private';
 }
 
-function hitCacheControl(requestContext: RequestContext): string {
+// A capture drawn as one user is that user's view of the card, so no shared
+// cache may hold it, whatever the realm's own visibility. The realm's own
+// captures and anonymous ones draw nothing a reader of the realm may not see.
+function hitCacheControl(
+  requestContext: RequestContext,
+  entry: MediaCacheEntry,
+): string {
+  let visibility =
+    entry.renderedAs === REALM_AUTHORITY_RENDER ||
+    entry.renderedAs === ANONYMOUS_RENDER
+      ? mediaCacheVisibility(requestContext)
+      : 'private';
   return (
-    `${mediaCacheVisibility(requestContext)}, ` +
+    `${visibility}, ` +
     `max-age=${MEDIA_CACHE_MAX_AGE_SECONDS}, ` +
     `stale-while-revalidate=${MEDIA_CACHE_STALE_WHILE_REVALIDATE_SECONDS}`
   );
@@ -53,11 +66,14 @@ function hitCacheControl(requestContext: RequestContext): string {
 // short freshness window as a hit rather than being uncacheable: an `<img>`
 // pointing at a not-yet-captured name picks the image up on a later
 // revalidation, and an image load is never made to wait synchronously on
-// capture work.
+// capture work. `varyOn` carries the vary of a URL whose answer depends on
+// the reader, so a miss for one reader never stands in for another's hit.
 export function mediaCacheMissResponse({
   requestContext,
+  varyOn,
 }: {
   requestContext: RequestContext;
+  varyOn?: string[];
 }): Response {
   return createResponse({
     body: null,
@@ -68,6 +84,7 @@ export function mediaCacheMissResponse({
       },
     },
     requestContext,
+    varyOn,
   });
 }
 
@@ -84,24 +101,32 @@ export function mediaCacheMissResponse({
 // request's ledger read and its stream open) is served as an uncaptured
 // miss, not an error: the ledger row is the GC's cleanup path and a
 // re-capture heals the URL.
+//
+// `variesByReader` marks a URL that answers each reader with the capture
+// drawn as them: the response varies on `Authorization`, so a cache keyed
+// by URL alone (a browser's, across an account switch) never hands one
+// reader's capture to another.
 export async function serveMediaCacheEntry({
   request,
   requestContext,
   entry,
   mediaCacheAdapter,
   dbAdapter,
+  variesByReader = false,
 }: {
   request: Request;
   requestContext: RequestContext;
   entry: MediaCacheEntry;
   mediaCacheAdapter: MediaCacheAdapter;
   dbAdapter: DBAdapter;
+  variesByReader?: boolean;
 }): Promise<ResponseWithNodeStream> {
+  let varyOn = variesByReader ? ['Authorization'] : undefined;
   let etag = `"${entry.objectKey}"`;
   let headers: Record<string, string> = {
     'content-type': entry.contentType,
     etag,
-    'cache-control': hitCacheControl(requestContext),
+    'cache-control': hitCacheControl(requestContext, entry),
   };
   // A PDF opens in the browser's viewer (or downloads), where the filename
   // shown is otherwise the URL's last segment plus its query string. Name it
@@ -119,12 +144,13 @@ export async function serveMediaCacheEntry({
       body: null,
       init: { status: 304, headers },
       requestContext,
+      varyOn,
     });
   }
 
   let stream = await mediaCacheAdapter.getStream(entry.objectKey);
   if (!stream) {
-    return mediaCacheMissResponse({ requestContext });
+    return mediaCacheMissResponse({ requestContext, varyOn });
   }
   await touch(dbAdapter, entry);
 
@@ -141,6 +167,7 @@ export async function serveMediaCacheEntry({
       headers: { ...headers, 'content-length': String(entry.sizeBytes) },
     },
     requestContext,
+    varyOn,
   });
   response.nodeStream = toNodeStream(stream) as Readable;
   return response;
@@ -174,7 +201,7 @@ export const MEDIA_CACHE_TOUCH_THROTTLE_MS = 60 * 60 * 1000;
 // on-demand capture looking idle to the GC one sweep early, and a later
 // serve re-marks it. Exported (as `touchMediaCacheEntryOnHit`) so every
 // surface that answers from the ledger — this route and the POST
-// `_screenshot-card` fast path — marks use through the one guard.
+// `_capture-card` fast path — marks use through the one guard.
 async function touch(dbAdapter: DBAdapter, entry: MediaCacheEntry) {
   if (entry.lane !== 'on-demand') {
     return;

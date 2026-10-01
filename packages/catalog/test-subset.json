@@ -1,6 +1,6 @@
 {
   "repository": "cardstack/boxel-catalog",
-  "revision": "c97265ebecbd7590b8f56d6a30ee9528a17014e0",
+  "revision": "eea1391f7230d8858426c66636da9e30159f22c4",
   "files": [
     {
       "path": "realm-policy/realm-policy.gts",
@@ -14,6 +14,7 @@
   "tests": {
     "host": [
       "Integration | realm policy",
+      "Integration | realm config policy standing",
       "Integration | policy-scoped search"
     ],
     "realmServer": [
@@ -22,17 +23,25 @@
       "realm-policy-archived-seal-test",
       "realm-policy-batch-test",
       "realm-policy-capabilities-test",
+      "realm-policy-capture-authority-test",
       "realm-policy-card-write-test",
+      "realm-policy-chain-types-test",
       "realm-policy-compile-test",
+      "realm-policy-config-standing-test",
       "realm-policy-create-lane-test",
       "realm-policy-explain-test",
       "realm-policy-gate-test",
+      "realm-policy-html-sharing-test",
       "realm-policy-non-grantable-test",
+      "realm-policy-publish-test",
       "realm-policy-query-filter-test",
       "realm-policy-query-reach-test",
+      "realm-policy-reach-check-test",
       "realm-policy-render-search-test",
       "realm-policy-row-reach-test",
+      "realm-policy-search-infrastructure-test",
       "realm-policy-source-read-test",
+      "realm-policy-validate-test",
       "realm-policy-write-lock-test",
       "server-endpoints/delegated-session-federated-endpoints-test",
       "server-endpoints/policy-scoped-search-test"

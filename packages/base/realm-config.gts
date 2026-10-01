@@ -5,26 +5,50 @@ import {
   field,
   contains,
   containsMany,
+  getComponent,
   getRelationshipMembershipState,
   linksTo,
   realmURL,
+  type CardContext,
+  type CardCrudFunctions,
 } from './card-api';
+import type { RealmEventContent } from './matrix-event';
 import BooleanField from './boolean';
 import NumberField from './number';
 import StringField from './string';
 import { JsonField } from './json-field';
+import {
+  operation,
+  operations,
+  OperationsError,
+  type OperationDeclaration,
+  type PolicyValidation,
+} from './operations';
 import CardInfoTemplates from './default-templates/card-info';
 import {
+  CardCrudFunctionsContextName,
+  PermissionsContextName,
   cardDefComputedFields,
+  chooseCard,
   DEFAULT_REDIRECT_STATUS,
   findDuplicateRoutingPaths,
   findRedirectCycles,
   getField,
   getFieldIcon,
+  isCardInstance,
+  isLocalId,
+  RealmPaths,
   REDIRECT_STATUS_CODES,
+  realmPolicyRef,
+  rri,
+  subscribeToRealm,
   validateRedirectTarget,
   validateRoutingPath,
+  type CodeRef,
+  type CreateNewCard,
+  type Permissions,
 } from '@cardstack/runtime-common';
+import { getCardDirectoryName } from '@cardstack/runtime-common/helpers/card-directory-name';
 import {
   BoxelInput,
   BoxelInputGroup,
@@ -33,18 +57,32 @@ import {
   FieldContainer,
   Header,
   IconButton,
+  LoadingIndicator,
+  Pill,
   RadioInput,
 } from '@cardstack/boxel-ui/components';
 import { eq, not } from '@cardstack/boxel-ui/helpers';
-import { IconPlus, IconTrash } from '@cardstack/boxel-ui/icons';
+import {
+  IconMinusCircle,
+  IconPlus,
+  IconTrash,
+} from '@cardstack/boxel-ui/icons';
+import AlertTriangleIcon from '@cardstack/boxel-icons/alert-triangle';
+import CircleCheckIcon from '@cardstack/boxel-icons/circle-check';
 import FileSettingsIcon from '@cardstack/boxel-icons/file-settings';
+import ShieldCheckIcon from '@cardstack/boxel-icons/shield-check';
 import LinkIcon from '@cardstack/boxel-icons/link';
 import SettingsIcon from '@cardstack/boxel-icons/settings';
+import { registerDestructor } from '@ember/destroyable';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import type Owner from '@ember/owner';
+import { restartableTask, timeout } from 'ember-concurrency';
+import { modifier } from 'ember-modifier';
+import { consume } from 'ember-provide-consume-context';
 import { startCase } from 'lodash-es';
 import type { FieldsTypeFor } from './card-api';
 
@@ -837,6 +875,773 @@ export class RealmSettingsField extends JsonField {
   static edit = RealmSettingsEdit;
 }
 
+// A render for the indexer rather than for someone looking at the card. Base
+// cards read this global to tell the two apart.
+function isLiveRender(): boolean {
+  return !(globalThis as { __boxelRenderContext?: unknown })
+    .__boxelRenderContext;
+}
+
+// A pointer written as an absolute http(s) URL, as the realm resolves one.
+function httpURL(pointer: string): string | undefined {
+  try {
+    let url = new URL(pointer);
+    return url.protocol === 'http:' || url.protocol === 'https:'
+      ? url.href
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+interface PolicyStandingSignature {
+  Args: { config: RealmConfig };
+}
+
+// What the realm answered, and what the field held when the answer landed.
+interface StandingAnswer {
+  validation?: PolicyValidation;
+  unavailable?: string;
+  pointer: string;
+}
+
+// Whether the policy this realm names is in force, as the realm compiles it.
+//
+// The pointer is written on this card, and two of the problems that take a
+// realm's whole policy out of force are problems with the pointer rather than
+// with any policy card: it names a card the index does not hold, or one that
+// is not a RealmPolicy. Either one refuses every caller the realm's
+// permissions decline, and the realm's log is the only other place that says
+// why. So the card asks the realm, through `validatePolicy`, and shows the
+// answer beside the pointer.
+//
+// Asked only in a live render. Prerendered HTML is shared by everyone who
+// reads the card, and the realm tells a policy's standing only to a caller
+// who can read every realm the policy reaches. Asked again whenever this
+// realm finishes indexing, because the realm reads the pointer from
+// `realm.json` as saved, not from the field as typed, so a fix to the pointer
+// takes effect when the save lands. Asked again, too, whenever a realm the
+// last answer compiled from finishes indexing, which is where a fix to the
+// policy card, or to a type its rules name, lands.
+class PolicyStanding extends GlimmerComponent<PolicyStandingSignature> {
+  @tracked private answer: StandingAnswer | undefined;
+  // Read once, as the card renders: a render for the indexer asks nothing,
+  // however long the card stays up afterwards.
+  #live = isLiveRender();
+  #subscriptions = new Map<string, () => void>();
+
+  constructor(owner: Owner, args: PolicyStandingSignature['Args']) {
+    super(owner, args);
+    registerDestructor(this, () => {
+      for (let unsubscribe of this.#subscriptions.values()) {
+        unsubscribe();
+      }
+      this.#subscriptions.clear();
+    });
+  }
+
+  // Only the realm's own config card names the realm's policy. A RealmConfig
+  // stored anywhere else governs nothing.
+  private get realm(): string | undefined {
+    let realm = this.args.config[realmURL];
+    let id = this.args.config.id;
+    if (!realm || !id || id !== new URL('realm', realm).href) {
+      return undefined;
+    }
+    return realm.href;
+  }
+
+  private get pointer(): string {
+    return this.args.config.policy?.trim() ?? '';
+  }
+
+  // The realm's answer, when it is about the pointer this card shows. The
+  // realm reads the pointer from `realm.json` as saved, and the field can
+  // hold an edit the save has not reached, so an answer about another
+  // pointer is kept back until one about this pointer arrives.
+  //
+  // An answer that names a card by its URL is about a field that resolves to
+  // that URL, whenever the field came to hold it. Every other answer is about
+  // the field as it stood when the answer landed: a pointer written as a
+  // realm-prefixed id cannot be resolved here, and a refusal names no card.
+  // An answer that the realm names no policy is also about an empty field.
+  private get current(): StandingAnswer | undefined {
+    let answer = this.answer;
+    if (!answer) {
+      return undefined;
+    }
+    let shown = this.pointer;
+    let card = answer.validation?.card;
+    let shownURL = httpURL(shown);
+    let about: boolean;
+    if (answer.validation && !card && !shown) {
+      about = true;
+    } else if (card && shownURL) {
+      about = shownURL === card;
+    } else {
+      about = shown === answer.pointer;
+    }
+    return about ? answer : undefined;
+  }
+
+  private get inForce(): boolean {
+    let validation = this.current?.validation;
+    return Boolean(validation?.card && !validation.uncompilable);
+  }
+
+  private get notInForce(): boolean {
+    let validation = this.current?.validation;
+    return Boolean(validation?.card && validation.uncompilable);
+  }
+
+  // The realm names no policy although the field holds a value: the realm
+  // did not read it as a card's URL or realm-prefixed id, and dropped it.
+  private get unreadPointer(): boolean {
+    let validation = this.current?.validation;
+    return Boolean(validation && !validation.card && this.pointer.length);
+  }
+
+  private get unavailable(): string | undefined {
+    return this.current?.unavailable;
+  }
+
+  private get issues() {
+    return this.current?.validation?.issues ?? [];
+  }
+
+  // The realms whose indexing can change the answer: this one, which holds
+  // the pointer, and each one the last answer says compiling read.
+  private get watched(): string[] {
+    let realms = new Set<string>();
+    if (this.realm) {
+      realms.add(this.realm);
+      for (let realm of this.answer?.validation?.realms ?? []) {
+        realms.add(realm);
+      }
+    }
+    return [...realms];
+  }
+
+  private ask = modifier((_element, [realm]: [string | undefined]) => {
+    if (realm && this.#live) {
+      this.load.perform();
+    }
+  });
+
+  // Subscribes to each realm the answer depends on, and unsubscribes from
+  // each one it no longer does. Every answer runs this again, and one that
+  // names the realms already watched changes nothing.
+  private listen = modifier((_element, [watched]: [string[]]) => {
+    if (!this.#live) {
+      return;
+    }
+    let wanted = new Set(watched);
+    for (let [realm, unsubscribe] of this.#subscriptions) {
+      if (!wanted.has(realm)) {
+        unsubscribe();
+        this.#subscriptions.delete(realm);
+      }
+    }
+    for (let realm of wanted) {
+      if (!this.#subscriptions.has(realm)) {
+        this.#subscriptions.set(
+          realm,
+          subscribeToRealm(realm, this.onRealmEvent),
+        );
+      }
+    }
+  });
+
+  private onRealmEvent = (event: RealmEventContent) => {
+    if (
+      event.eventName === 'index' &&
+      (event.indexType === 'incremental' || event.indexType === 'full')
+    ) {
+      this.load.perform();
+    }
+  };
+
+  private load = restartableTask(async () => {
+    let answer: Omit<StandingAnswer, 'pointer'>;
+    try {
+      answer = {
+        validation: await operations<typeof RealmConfig>(
+          this.args.config,
+        ).validatePolicy(),
+      };
+    } catch (err) {
+      answer = {
+        unavailable:
+          err instanceof OperationsError
+            ? (err.detail ?? err.message)
+            : err instanceof Error
+              ? err.message
+              : String(err),
+      };
+    }
+    this.answer = { ...answer, pointer: this.pointer };
+  });
+
+  <template>
+    <div
+      class='policy-standing'
+      data-test-realm-policy-standing={{if this.answer 'answered'}}
+      {{this.ask this.realm}}
+      {{this.listen this.watched}}
+    >
+      {{#if this.inForce}}
+        <div class='standing'>
+          <Pill
+            class='standing-pill in-force'
+            data-test-realm-policy-status='in-force'
+          >
+            <:iconLeft><CircleCheckIcon class='pill-icon' /></:iconLeft>
+            <:default>In force</:default>
+          </Pill>
+          {{#if this.issues.length}}
+            <span class='standing-note'>
+              The policy card lists
+              {{this.issues.length}}
+              {{if (eq this.issues.length 1) 'issue' 'issues'}}
+              with its rules.
+            </span>
+          {{/if}}
+        </div>
+      {{else if this.notInForce}}
+        <div class='standing callout' role='status'>
+          <Pill
+            @variant='destructive'
+            class='standing-pill'
+            data-test-realm-policy-status='not-in-force'
+          >
+            <:iconLeft><AlertTriangleIcon class='pill-icon' /></:iconLeft>
+            <:default>Not in force</:default>
+          </Pill>
+          <p class='standing-note'>
+            The realm refuses every caller its permissions decline until this is
+            fixed.
+          </p>
+          <ul class='issues'>
+            {{#each this.issues as |issue|}}
+              <li data-test-realm-policy-issue={{issue.code}}>
+                <code>{{issue.code}}</code>
+                {{issue.message}}
+              </li>
+            {{/each}}
+          </ul>
+        </div>
+      {{else if this.unreadPointer}}
+        <div class='standing callout' role='status'>
+          <Pill
+            class='standing-pill no-policy'
+            data-test-realm-policy-status='unread-pointer'
+          >
+            <:iconLeft><AlertTriangleIcon class='pill-icon' /></:iconLeft>
+            <:default>No policy</:default>
+          </Pill>
+          <p class='standing-note'>
+            The realm doesn't read this as a card's URL or realm-prefixed id, so
+            its permissions alone decide who may do what.
+          </p>
+        </div>
+      {{else if this.unavailable}}
+        <p
+          class='standing standing-note'
+          data-test-realm-policy-status='unavailable'
+        >
+          The realm didn't report this policy's standing:
+          {{this.unavailable}}
+        </p>
+      {{/if}}
+    </div>
+    <style scoped>
+      .policy-standing {
+        display: contents;
+      }
+      .standing {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--boxel-sp-xs);
+        margin: 0;
+      }
+      .callout {
+        display: grid;
+        justify-items: start;
+        gap: var(--boxel-sp-xs);
+        background: var(--muted, var(--boxel-100));
+        border: var(--boxel-border);
+        border-radius: var(--boxel-border-radius-sm);
+        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
+      }
+      .standing-pill {
+        flex-shrink: 0;
+      }
+      .pill-icon {
+        width: var(--boxel-icon-xs);
+        height: var(--boxel-icon-xs);
+      }
+      .in-force {
+        --boxel-pill-background-color: color-mix(
+          in oklch,
+          var(--boxel-success-100) 22%,
+          var(--background, var(--boxel-light))
+        );
+        --boxel-pill-font-color: var(--boxel-success-300);
+        --boxel-pill-border: 1px solid var(--boxel-success-300);
+      }
+      .no-policy {
+        --boxel-pill-background-color: color-mix(
+          in oklch,
+          var(--boxel-warning-100) 22%,
+          var(--background, var(--boxel-light))
+        );
+        --boxel-pill-font-color: var(--foreground, var(--boxel-dark));
+        --boxel-pill-border: 1px solid var(--boxel-warning-200);
+      }
+      .standing-note {
+        margin: 0;
+        font-size: var(--boxel-font-size-xs);
+        color: var(--muted-foreground, var(--boxel-450));
+      }
+      .issues {
+        margin: 0;
+        padding-left: var(--boxel-sp);
+        font-size: var(--boxel-font-size-xs);
+        color: var(--foreground, var(--boxel-dark));
+      }
+      .issues code {
+        font-family: var(--boxel-font-family-mono, monospace);
+        background: var(--background, var(--boxel-light));
+        padding: 0 var(--boxel-sp-5xs);
+        border-radius: var(--boxel-border-radius-xs);
+      }
+    </style>
+  </template>
+}
+
+interface PolicyCardSignature {
+  Args: {
+    pointer: string | null | undefined;
+    context: CardContext | undefined;
+    // Show the pointer itself beneath the card.
+    showPointer?: boolean;
+    // The card the pointer names is being created, and is not there to load
+    // until its realm has saved and indexed it.
+    busy?: boolean;
+  };
+}
+
+// The policy card the pointer names, rendered as any card renders a card it
+// links to: in the policy card's own fitted view, opening in a stack of its
+// own when clicked.
+//
+// The pointer is a card id rather than a link so that nothing reading this
+// card is handed the policy on the realm's authority, since a link is loaded
+// on the realm's authority for every reader. This loads the card on the
+// viewer's own session instead, and only once the viewer's session says it
+// may read it. A viewer who may not is told the card can't be shown here, in
+// the same words whether the card is there or not, as the realm's own
+// refusal would be. Nothing is asked in a render for the indexer, so no
+// prerendered HTML carries the card.
+class PolicyCard extends GlimmerComponent<PolicyCardSignature> {
+  @consume(CardCrudFunctionsContextName)
+  declare private cardCrudFunctions: CardCrudFunctions | undefined;
+  @tracked private settled: string | undefined;
+  #live = isLiveRender();
+
+  private get readable(): boolean | undefined {
+    if (this.args.busy || !this.settled || !this.#live) {
+      return undefined;
+    }
+    return this.args.context?.canInvoke?.('read', this.settled);
+  }
+
+  private cardResource = this.args.context?.getCard(this, () =>
+    this.readable ? this.settled : undefined,
+  );
+
+  private get card(): CardDef | undefined {
+    return this.readable ? this.cardResource?.card : undefined;
+  }
+
+  // The viewer may read the realm, and the card is not there to load.
+  private get missing(): boolean {
+    return Boolean(
+      this.readable && Number(this.cardResource?.cardError?.status) === 404,
+    );
+  }
+
+  private get failed(): boolean {
+    return Boolean(
+      this.readable && this.cardResource?.cardError && !this.missing,
+    );
+  }
+
+  private get state(): string | undefined {
+    if (this.args.busy) {
+      return 'creating';
+    }
+    if (this.card) {
+      return 'shown';
+    }
+    if (this.readable === false) {
+      return 'unreadable';
+    }
+    if (this.missing) {
+      return 'missing';
+    }
+    return this.failed ? 'failed' : undefined;
+  }
+
+  private follow = modifier((_element, [pointer]: [string]) => {
+    if (this.#live) {
+      this.settle.perform(pointer);
+    }
+  });
+
+  // After the render that asked, which may not write what it read.
+  private settle = restartableTask(async (pointer: string) => {
+    await timeout(0);
+    let settled = pointer || undefined;
+    if (this.settled !== settled) {
+      this.settled = settled;
+    }
+  });
+
+  private open = (event: Event) => {
+    if (this.settled && this.cardCrudFunctions?.viewCard) {
+      event.preventDefault();
+      this.cardCrudFunctions.viewCard(rri(this.settled));
+    }
+  };
+
+  private get pointer(): string {
+    return this.args.pointer?.trim() ?? '';
+  }
+
+  private get href(): string | undefined {
+    return httpURL(this.pointer);
+  }
+
+  <template>
+    <div
+      class='policy-card'
+      data-test-realm-config-policy-card={{this.state}}
+      {{this.follow this.pointer}}
+    >
+      {{#if @busy}}
+        <div
+          class='policy-card-fitted policy-card-busy'
+          data-test-realm-config-policy-card-busy
+        >
+          <LoadingIndicator />
+          <span>Creating the policy…</span>
+        </div>
+      {{else if this.card}}
+        <div
+          class='policy-card-fitted'
+          data-test-realm-config-policy-card-fitted
+          {{@context.cardComponentModifier
+            cardId=this.card.id
+            format='data'
+            fieldType=undefined
+            fieldName=undefined
+          }}
+        >
+          {{#let (getComponent this.card) as |Card|}}
+            <Card @format='fitted' @displayContainer={{true}} />
+          {{/let}}
+        </div>
+      {{else if (eq this.readable false)}}
+        <p class='policy-card-note'>
+          This card can't be shown here: it isn't in a realm you can read, or it
+          isn't there.
+        </p>
+      {{else if this.missing}}
+        <p class='policy-card-note'>There is no card at this URL.</p>
+      {{else if this.failed}}
+        <p class='policy-card-note'>This card couldn't be loaded.</p>
+      {{/if}}
+      {{#if @showPointer}}
+        {{#if this.card}}
+          <a
+            class='pointer'
+            href={{this.href}}
+            data-test-realm-config-policy-pointer
+            {{on 'click' this.open}}
+          >{{this.pointer}}</a>
+        {{else}}
+          <code
+            class='pointer'
+            data-test-realm-config-policy-pointer
+          >{{this.pointer}}</code>
+        {{/if}}
+      {{/if}}
+    </div>
+    <style scoped>
+      .policy-card {
+        display: contents;
+      }
+      .pointer {
+        font-family: var(--boxel-font-family-mono, monospace);
+        font-size: var(--boxel-font-size-2xs);
+        color: var(--muted-foreground, var(--boxel-450));
+        opacity: 0.75;
+        overflow-wrap: anywhere;
+      }
+      a.pointer {
+        text-decoration: none;
+      }
+      a.pointer:hover {
+        text-decoration: underline;
+      }
+      .policy-card-fitted {
+        width: 100%;
+        max-width: 25rem;
+        height: var(--realm-config-policy-card-height, 4.0625rem);
+        cursor: pointer;
+      }
+      .policy-card-busy {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xs);
+        box-sizing: border-box;
+        padding: 0 var(--boxel-sp-sm);
+        border: 1px dashed var(--border, var(--boxel-border-color));
+        border-radius: var(--boxel-border-radius);
+        color: var(--muted-foreground, var(--boxel-450));
+        font-size: var(--boxel-font-size-sm);
+        cursor: progress;
+      }
+      .policy-card-note {
+        margin: 0;
+        color: var(--muted-foreground, var(--boxel-450));
+        font-size: var(--boxel-font-size-sm);
+      }
+    </style>
+  </template>
+}
+
+// How long a policy just created from the chooser is given to be saved,
+// which is how long it shows as being created.
+const NEW_POLICY_SAVE_WAIT_MS = 30_000;
+
+// The id a realm gives a card it is sent with a local id, when the caller may
+// write the realm: the realm's URL, a directory named after the card's type,
+// and the local id. A realm names a card this way whether or not it has saved
+// it yet, so the pointer can name the card before it is there.
+function newCardIdOf(localId: string, ref: CodeRef, realm: URL): string {
+  let paths = new RealmPaths(realm);
+  return `${paths.url}${getCardDirectoryName(ref, paths)}/${localId}`;
+}
+
+interface PolicyPointerEditorSignature {
+  Args: {
+    config: RealmConfig;
+    context: CardContext | undefined;
+  };
+}
+
+// The edit view's control for the pointer. A policy is chosen the way a
+// linked card is, from the card chooser, filtered to RealmPolicy cards and
+// able to create one in this realm, and removed the same way. What is stored
+// is still the chosen card's id rather than a link, for the reason the field
+// gives.
+class PolicyPointerEditor extends GlimmerComponent<PolicyPointerEditorSignature> {
+  @consume(PermissionsContextName)
+  declare private permissions: Permissions | undefined;
+  @consume(CardCrudFunctionsContextName)
+  declare private cardCrudFunctions: CardCrudFunctions | undefined;
+
+  private get pointer(): string {
+    return this.args.config.policy?.trim() ?? '';
+  }
+
+  private get canWrite(): boolean {
+    return Boolean(this.permissions?.canWrite);
+  }
+
+  private choose = () => {
+    this.chooseTask.perform();
+  };
+
+  private get creating(): boolean {
+    return this.awaitCreatedTask.isRunning;
+  }
+
+  // A policy being created is shown as chosen, whether or not the pointer
+  // could be given its id yet.
+  private get hasPolicy(): boolean {
+    return Boolean(this.pointer) || this.creating;
+  }
+
+  private remove = () => {
+    this.awaitCreatedTask.cancelAll();
+    this.args.config.policy = null as unknown as string;
+  };
+
+  private chooseTask = restartableTask(async () => {
+    let consumingRealm = this.args.config[realmURL];
+    let createCard = this.cardCrudFunctions?.createCard;
+    // Where the chooser creates a card, which it says only to the function
+    // that creates it.
+    let created: { ref: CodeRef; realm: URL | undefined } | undefined;
+    let createNewCard: CreateNewCard | undefined = createCard
+      ? async (ref, relativeTo, opts) => {
+          created = { ref, realm: opts?.realmURL };
+          return await createCard(ref, relativeTo, opts);
+        }
+      : undefined;
+    let cardId = await chooseCard(
+      { filter: { type: realmPolicyRef } },
+      {
+        offerToCreate: {
+          ref: realmPolicyRef,
+          relativeTo: undefined,
+          realmURL: consumingRealm,
+        },
+        createNewCard,
+        consumingRealm,
+      },
+    );
+    if (!cardId) {
+      return;
+    }
+    if (!isLocalId(cardId)) {
+      this.args.config.policy = cardId;
+      return;
+    }
+    // A card the chooser just created is answered by its local id, before
+    // its realm has saved it. The realm reads a pointer only as a URL or a
+    // realm-prefixed id, so the pointer names the id the realm will give the
+    // card, and the card shows as being created until it is saved.
+    let expected = created?.realm
+      ? newCardIdOf(cardId, created.ref, created.realm)
+      : undefined;
+    if (expected) {
+      this.args.config.policy = expected;
+    }
+    this.awaitCreatedTask.perform(cardId, expected);
+  });
+
+  // Once the created card is saved, the pointer names the id it was given,
+  // should that differ from the one expected and the pointer not have been
+  // changed since.
+  private awaitCreatedTask = restartableTask(
+    async (localId: string, expected: string | undefined) => {
+      let card = await this.args.context?.store.get(localId);
+      if (!isCardInstance(card)) {
+        return;
+      }
+      for (
+        let waited = 0;
+        !card.id && waited < NEW_POLICY_SAVE_WAIT_MS;
+        waited += 100
+      ) {
+        await timeout(100);
+      }
+      if (
+        card.id &&
+        card.id !== expected &&
+        this.pointer === (expected ?? '')
+      ) {
+        this.args.config.policy = card.id;
+      }
+    },
+  );
+
+  <template>
+    <div class='policy-pointer-editor' data-test-realm-config-policy-editor>
+      {{#if this.hasPolicy}}
+        <div class='chosen {{if this.canWrite "can-write"}}'>
+          <div class='chosen-card'>
+            <PolicyCard
+              @pointer={{this.pointer}}
+              @context={{@context}}
+              @showPointer={{true}}
+              @busy={{this.creating}}
+            />
+          </div>
+          {{#if this.canWrite}}
+            <IconButton
+              @icon={{IconMinusCircle}}
+              @width='20px'
+              @height='20px'
+              class='remove'
+              {{on 'click' this.remove}}
+              aria-label='Remove the policy'
+              data-test-realm-config-policy-remove
+            />
+          {{/if}}
+        </div>
+      {{else if this.canWrite}}
+        <Button
+          class='choose'
+          @kind='secondary'
+          @size='tall'
+          @rectangular={{true}}
+          {{on 'click' this.choose}}
+          data-test-realm-config-policy-choose
+        >
+          Link Realm Policy
+        </Button>
+      {{else}}
+        <p class='empty'>No policy.</p>
+      {{/if}}
+      {{! A card being created is not there to judge, so its standing is not
+        asked about until it is saved. }}
+      {{#unless this.creating}}
+        <PolicyStanding @config={{@config}} />
+      {{/unless}}
+    </div>
+    <style scoped>
+      .policy-pointer-editor {
+        --realm-config-policy-card-height: 4.0625rem;
+        display: grid;
+        gap: var(--boxel-sp-xs);
+      }
+      .chosen.can-write {
+        display: grid;
+        grid-template-columns: minmax(0, 25rem) auto;
+        gap: var(--boxel-sp-xs);
+        align-items: start;
+      }
+      .chosen-card {
+        display: grid;
+        gap: var(--boxel-sp-xxs);
+        min-width: 0;
+      }
+      .remove {
+        --icon-color: var(--background, var(--boxel-light));
+        --icon-border: var(--foreground, var(--boxel-dark));
+        --icon-bg: var(--foreground, var(--boxel-dark));
+        --boxel-icon-button-width: var(--boxel-icon-med);
+        --boxel-icon-button-height: var(--boxel-icon-med);
+        margin-top: calc(
+          (var(--realm-config-policy-card-height) - var(--boxel-icon-med)) / 2
+        );
+        outline: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .remove:focus,
+      .remove:hover {
+        --icon-bg: var(--primary, var(--boxel-highlight));
+        --icon-border: var(--primary, var(--boxel-highlight));
+      }
+      .choose {
+        width: fit-content;
+      }
+      .empty {
+        margin: 0;
+        color: var(--muted-foreground, var(--boxel-450));
+      }
+    </style>
+  </template>
+}
+
 class RealmConfigEmbedded extends Component<typeof RealmConfig> {
   <template>
     <div class='realm-config-embedded' data-test-realm-config-embedded>
@@ -958,6 +1763,14 @@ class RealmConfigEdit extends Component<typeof RealmConfig> {
     return this.args.model as unknown as CardDef;
   }
 
+  get config(): RealmConfig {
+    return this.args.model as unknown as RealmConfig;
+  }
+
+  // The policy field holds a string, but what it names is a policy card, so
+  // its row carries the policy card's icon rather than a string's.
+  policyIcon = ShieldCheckIcon;
+
   <template>
     <div class='realm-config-edit' data-test-realm-config-edit>
       <Header @hasBottomBorder={{true}} class='card-info-header'>
@@ -1007,10 +1820,21 @@ class RealmConfigEdit extends Component<typeof RealmConfig> {
             {{/if}}
             <FieldContainer
               @label={{startCase key}}
-              @icon={{getFieldIcon @model key}}
+              @icon={{if
+                (eq key 'policy')
+                this.policyIcon
+                (getFieldIcon @model key)
+              }}
               data-test-field={{key}}
             >
-              <Field />
+              {{#if (eq key 'policy')}}
+                <PolicyPointerEditor
+                  @config={{this.config}}
+                  @context={{@context}}
+                />
+              {{else}}
+                <Field />
+              {{/if}}
             </FieldContainer>
           {{/each-in}}
         </section>
@@ -1070,6 +1894,14 @@ class RealmConfigEdit extends Component<typeof RealmConfig> {
 }
 
 class RealmConfigIsolated extends Component<typeof RealmConfig> {
+  get config(): RealmConfig {
+    return this.args.model as unknown as RealmConfig;
+  }
+
+  get pointer(): string {
+    return this.args.model.policy?.trim() ?? '';
+  }
+
   <template>
     <article class='realm-config-isolated' data-test-realm-config-isolated>
       <header class='header'>
@@ -1099,6 +1931,22 @@ class RealmConfigIsolated extends Component<typeof RealmConfig> {
       <section class='section'>
         <h2 class='section-title'>Settings</h2>
         <@fields.config @format='embedded' />
+      </section>
+
+      <section class='section policy' data-test-realm-config-policy>
+        <h2 class='section-title'>Policy</h2>
+        {{#if this.pointer}}
+          <PolicyCard
+            @pointer={{@model.policy}}
+            @context={{@context}}
+            @showPointer={{true}}
+          />
+        {{else}}
+          <p class='empty' data-test-realm-config-policy-none>
+            No policy. The realm's permissions alone decide who may do what.
+          </p>
+        {{/if}}
+        <PolicyStanding @config={{this.config}} />
       </section>
     </article>
     <style scoped>
@@ -1139,6 +1987,16 @@ class RealmConfigIsolated extends Component<typeof RealmConfig> {
       .empty {
         color: var(--boxel-450);
       }
+      .policy {
+        display: grid;
+        gap: var(--boxel-sp-xs);
+      }
+      .policy .section-title {
+        margin: 0;
+      }
+      .policy .empty {
+        margin: 0;
+      }
     </style>
   </template>
 }
@@ -1161,17 +2019,23 @@ export class RealmConfig extends CardDef {
   // automatically in that case) or when an operator otherwise needs
   // the full isolated render present in the index.
   @field includePrerenderedDefaultRealmIndex = contains(BooleanField);
-  // Opt-in for the realm's GET `_screenshot/` route to trigger NEW captures
+  // Opt-in for the realm's GET `_capture/` route to trigger NEW captures
   // for arbitrary capture specs. Full captureSpec power on a GET is an
   // unbounded spec space reachable with only realm read, so it is off
   // unless the realm turns it on; the gate blocks Chrome work only, never
   // serving — any capture whose canonical spec already has a MediaCache
   // ledger entry streams regardless, including one a write-holder published
-  // via POST /_screenshot-card (which persists under the same canonical
+  // via POST /_capture-card (which persists under the same canonical
   // identity the GET resolves). Read from the realm's indexed config at
   // request time, so editing this takes effect with the index update, no
   // restart.
-  @field allowArbitraryScreenshots = contains(BooleanField);
+  @field allowArbitraryCaptures = contains(BooleanField);
+  // The legacy spelling of `allowArbitraryCaptures`. A realm that opted in
+  // under this name keeps its gate open: either key set to `true` opens it.
+  @field allowArbitraryScreenshots = contains(BooleanField, {
+    description:
+      'Legacy spelling of allowArbitraryCaptures; either one set to true opens the capture gate',
+  });
 
   @field config = contains(RealmSettingsField, {
     description:
@@ -1193,6 +2057,17 @@ export class RealmConfig extends CardDef {
     description:
       'The RealmPolicy card that governs this realm, by its URL or realm-prefixed id. Absent for a realm with no policy. Only the pointer lives here; the rules live on the card it names',
   });
+
+  // What the policy this realm names compiles to, as the realm compiles it:
+  // the answer says when the policy is not in force at all, and why,
+  // including a pointer to a card the index does not hold or to one that is
+  // not a RealmPolicy. The realm answers only a caller who can read this realm
+  // and every realm compiling reads, the policy card's first, so no policy may
+  // grant it.
+  @operation static validatePolicy = {
+    base: 'validate',
+    nonGrantable: true,
+  } satisfies OperationDeclaration;
 
   @field cardTitle = contains(StringField, {
     computeVia: function (this: RealmConfig) {

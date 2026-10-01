@@ -1224,7 +1224,7 @@ export class WidgetRoom extends Component {
                 >Gallery</button><a
                   href={{this.fullUrl}}
                   target="_blank"
-                  rel="noopener"
+                  rel="noopener noreferrer"
                 >Full demo <BoxelGlyph @name="arrow-up-right" /></a><button
                   type="button"
                   aria-label="Next demo"

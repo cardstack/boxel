@@ -91,7 +91,7 @@ function stub(operations?: Definition['operations']): OperationCore {
           generation: 7,
           indexedAt: 1700,
           deps: [],
-          screenshots: null,
+          captures: null,
           queryBacked: false,
         } as any;
       },
@@ -107,7 +107,7 @@ function stub(operations?: Definition['operations']): OperationCore {
           indexedAt: 1700,
           lastModified: 1699,
           deps: [],
-          screenshots: null,
+          captures: null,
         } as any;
       },
       async file() {
@@ -247,7 +247,7 @@ module(basename(import.meta.filename), function () {
           indexedAt: 1700,
           lastModified: 1699,
           generation: 7,
-          screenshots: null,
+          captures: null,
           deps: [],
         },
         'a projection reshapes the body and not the row behind it',
@@ -472,12 +472,12 @@ module(basename(import.meta.filename), function () {
     test('the projection question is answerable without assembling', async function (assert) {
       assert.deepEqual(
         await readPlan(stub({ read: REDACTING_READ }), new URL(CARD)),
-        { shape: 'staged', links: 'full' },
+        { shape: 'staged', links: 'full', unshareableFormats: [] },
         'a type that declares an output has a stage to run',
       );
       assert.deepEqual(
         await readPlan(stub(), new URL(CARD)),
-        { shape: 'plain', links: 'full' },
+        { shape: 'plain', links: 'full', unshareableFormats: [] },
         'a type that declares nothing does not',
       );
       assert.deepEqual(
@@ -485,7 +485,7 @@ module(basename(import.meta.filename), function () {
           stub({ read: { base: 'read', deterministic: true } }),
           new URL(CARD),
         ),
-        { shape: 'plain', links: 'full' },
+        { shape: 'plain', links: 'full', unshareableFormats: [] },
         'a declared read with no output does not either',
       );
     });
@@ -500,7 +500,7 @@ module(basename(import.meta.filename), function () {
           stub({ read: { base: 'read', deterministic: true, links: 'ids' } }),
           new URL(CARD),
         ),
-        { shape: 'plain', links: 'ids' },
+        { shape: 'plain', links: 'ids', unshareableFormats: [] },
         'a narrowed read is still plain, and says how far it reaches',
       );
       assert.deepEqual(
@@ -515,8 +515,36 @@ module(basename(import.meta.filename), function () {
           }),
           new URL(CARD),
         ),
-        { shape: 'staged', links: 'none' },
+        { shape: 'staged', links: 'none', unshareableFormats: [] },
         'the two answers are independent',
+      );
+    });
+
+    test('the formats a read serves data-only are answerable without assembling', async function (assert) {
+      // The single-card HTML read and the host-mode page serve a card's
+      // markup without running its read, so the declaration has to be
+      // reachable from the definition alone.
+      assert.deepEqual(
+        await readPlan(
+          stub({
+            read: {
+              base: 'read',
+              deterministic: true,
+              html: {
+                isolated: 'unshareable',
+                embedded: 'shareable',
+                fitted: 'unshareable',
+              },
+            },
+          }),
+          new URL(CARD),
+        ),
+        {
+          shape: 'plain',
+          links: 'full',
+          unshareableFormats: ['fitted', 'isolated'],
+        },
+        'the unshareable formats, in the realm’s own format order',
       );
     });
 
@@ -541,8 +569,20 @@ module(basename(import.meta.filename), function () {
           new URL(CARD),
         ),
         // The widest strategy, which is the one that keeps the caller off
-        // every fast path a narrower answer would have opened.
-        { shape: 'unresolved', links: 'full' },
+        // every fast path a narrower answer would have opened — and every
+        // format data-only, since the routes that serve markup without
+        // running the read have no refusal coming to stand in for it.
+        {
+          shape: 'unresolved',
+          links: 'full',
+          unshareableFormats: [
+            'embedded',
+            'fitted',
+            'atom',
+            'head',
+            'isolated',
+          ],
+        },
         'a refusal is coming, and only the full request can report it',
       );
     });

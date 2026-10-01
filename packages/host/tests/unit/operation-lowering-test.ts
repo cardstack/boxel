@@ -672,6 +672,86 @@ module('Unit | operation lowering', function (hooks) {
     assert.true(projected.operations.explain.invalid);
   });
 
+  test('a validate lowers with no payload, and is non-grantable whatever reaches lowering', async function (assert) {
+    let { CardDef } = api;
+    let { operation } = operations;
+    class Policy extends CardDef {
+      static displayName = 'Policy';
+      @operation static validate = {
+        base: 'validate',
+        nonGrantable: true,
+      } satisfies OperationsModule.OperationDeclaration;
+    }
+    shim({ Policy });
+
+    let { operations: lowered, issues } = await lower(Policy);
+    assert.deepEqual(issues, [], 'the declaration lowers clean');
+    assert.strictEqual(lowered.validate.base, 'validate');
+    assert.true(lowered.validate.nonGrantable, 'the flag reaches the realm');
+
+    // Lowering is exported over plain data, so an entry the decorator never
+    // saw can reach it. One that leaves the flag off is marked anyway, and one
+    // that reshapes the answer is recorded as unreachable.
+    let context: Parameters<typeof lowerOperationDeclarations>[1] = {
+      definition: buildDefinition(Policy),
+      lookupDefinition,
+      identifyCard: (target) => identifyCard(target),
+    };
+    let unmarked = await lowerOperationDeclarations(
+      { validate: { base: 'validate' } } as unknown as Record<
+        string,
+        OperationsModule.OperationDeclaration
+      >,
+      context,
+    );
+    assert.true(
+      unmarked.operations.validate.nonGrantable,
+      'a validate is never grantable, flag or no flag',
+    );
+    let projected = await lowerOperationDeclarations(
+      {
+        validate: {
+          base: 'validate',
+          nonGrantable: true,
+          output: { issues: { $bxl: '.issues' } },
+        },
+      } as unknown as Record<string, OperationsModule.OperationDeclaration>,
+      context,
+    );
+    assert.deepEqual(
+      codes(projected),
+      ['unrunnable-program'],
+      'a projection over the validation is recorded as never reached',
+    );
+    assert.true(projected.operations.validate.invalid);
+
+    let withPayload = await lowerOperationDeclarations(
+      {
+        validate: {
+          base: 'validate',
+          nonGrantable: true,
+          params: { realm: { type: 'string' } },
+          input: { $bxl: '{ strict: true }' },
+        },
+      } as unknown as Record<string, OperationsModule.OperationDeclaration>,
+      context,
+    );
+    assert.deepEqual(
+      withPayload.issues.map((issue) => [issue.code, issue.path]),
+      [
+        ['unrunnable-program', 'params'],
+        ['unrunnable-program', 'input'],
+      ],
+      'a payload stage on a validate is recorded as never read',
+    );
+    assert.strictEqual(
+      withPayload.operations.validate.params,
+      undefined,
+      'and no payload schema is stored for one',
+    );
+    assert.strictEqual(withPayload.operations.validate.input, undefined);
+  });
+
   // -------------------------------------------------------------------------
   // The source-level writes
   // -------------------------------------------------------------------------
@@ -1768,6 +1848,95 @@ module('Unit | operation lowering', function (hooks) {
       undefined,
       'and is not stored for the serving path to read as the narrowest one',
     );
+  });
+
+  test('an html declaration is carried onto a read or a query and recorded on anything else', async function (assert) {
+    let { field, contains, CardDef } = api;
+    class Roster extends CardDef {
+      static displayName = 'Roster';
+      @field title = contains(StringField);
+    }
+    shim({ Roster });
+    let lower = (
+      declarations: Record<string, unknown>,
+    ): ReturnType<typeof lowerOperationDeclarations> =>
+      lowerOperationDeclarations(
+        declarations as unknown as Record<
+          string,
+          OperationsModule.OperationDeclaration
+        >,
+        {
+          definition: buildDefinition(Roster as unknown as typeof BaseDef),
+          lookupDefinition,
+          identifyCard: (target) => identifyCard(target),
+        },
+      );
+
+    let read = await lower({
+      summary: {
+        base: 'read',
+        html: { embedded: 'unshareable', fitted: 'shareable' },
+      },
+    });
+    assert.deepEqual(codes(read), [], 'a read may declare one');
+    assert.deepEqual(
+      read.operations.summary.html,
+      { embedded: 'unshareable', fitted: 'shareable' },
+      'and the realm serves reads of the card from the stored entry',
+    );
+
+    let query = await lower({
+      roll: {
+        base: 'query',
+        query: { filter: { on: Roster, eq: { title: 'x' } } },
+        html: { isolated: 'unshareable' },
+      },
+    });
+    assert.deepEqual(codes(query), [], 'a query may declare one');
+    assert.deepEqual(
+      query.operations.roll.html,
+      { isolated: 'unshareable' },
+      'and the realm serves its rows from the stored entry',
+    );
+
+    // The decorator refuses this where it is written, so one only ever reaches
+    // a stored entry — which outlives the code that built it, and where a
+    // withholding that is never applied reads as one that is.
+    let write = await lower({
+      rename: {
+        base: 'transform',
+        set: { title: 'Renamed' },
+        html: { embedded: 'unshareable' },
+      },
+    });
+    assert.deepEqual(
+      codes(write),
+      ['html-without-rendering'],
+      'a base that serves no prerendered HTML has nothing to withhold',
+    );
+    assert.strictEqual(
+      write.operations.rename.html,
+      undefined,
+      'and nothing is stored that a serving path would read as a withholding',
+    );
+
+    for (let [label, html] of [
+      ['a format the realm does not prerender', { edit: 'unshareable' }],
+      ['a value that says neither', { embedded: 'hidden' }],
+      ['something other than a record of formats', ['embedded']],
+    ] as const) {
+      let unknown = await lower({ summary: { base: 'read', html } });
+      assert.deepEqual(
+        codes(unknown),
+        ['invalid-html-declaration'],
+        `${label} is its own finding`,
+      );
+      assert.strictEqual(
+        unknown.operations.summary.html,
+        undefined,
+        `${label} is not stored for the serving path to read as withholding every format`,
+      );
+    }
   });
 
   test('an append that says nothing to append is recorded rather than stored as work', async function (assert) {

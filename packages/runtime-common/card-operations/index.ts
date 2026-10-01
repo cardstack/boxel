@@ -26,6 +26,8 @@ export { CAPABILITY_CHECK_CAP } from './capability-wire.ts';
 export type { CapabilityAnswer, CapabilityCheck } from './capability-wire.ts';
 export {
   policyQueryScope,
+  principalQueryScope,
+  withoutMisreadings,
   RealmAuthorityPolicyScopeError,
   searchPrincipal,
 } from './policy-query.ts';
@@ -50,6 +52,7 @@ export {
   scopeCallerFor,
   pathsFor,
   readPlan,
+  htmlDeclarationOf,
   resolveFacadeWrite,
   resolveGatedOperation,
   resolveOperation,
@@ -67,6 +70,7 @@ export type {
   ScopeInvocation,
   OperationStoredFile,
   OperationStoredFileMeta,
+  HtmlDeclarationAnswer,
   ReadPlan,
   ReadShape,
   RunOperationOptions,
@@ -204,15 +208,18 @@ export {
   isDefinitionFreeBaseOperation,
   isDocumentResult,
   isExplainResult,
+  isValidateResult,
   isHeadResult,
   isIdentityResult,
   effectiveLinkStrategy,
+  isHtmlDeclaration,
   isLinkStrategy,
   isOperationFailure,
   isSourceResult,
   isWrite,
   linkStrategyOf,
   refusalForNonReader,
+  unshareableFormatsOf,
 } from './types.ts';
 export type {
   BaseOperation,
@@ -242,4 +249,10 @@ export type {
   PolicyExplanation,
   PolicyExplanationDecision,
   PolicyExplanationReason,
+  OperationValidateResult,
+  PolicyValidation,
+  ValidatedGrant,
+  ValidatedGrantInertia,
+  ValidatedPolicyIssue,
+  ValidatedRule,
 } from './types.ts';

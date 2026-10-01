@@ -4,6 +4,7 @@ import { basename } from 'path';
 
 import {
   dischargePendingDecision,
+  erroredTargetRow,
   isDocumentResult,
   isHeadResult,
   isOperationFailure,
@@ -11,12 +12,14 @@ import {
   newOperationScope,
   pendingWriteFor,
   policyGateStats,
+  readPlan,
   resolveFacadeWrite,
   resolveGatedOperation,
   resolveOperation,
   runOperation,
   scopeCallerFor,
   type OperationCore,
+  type OperationDefinition,
   type OperationError,
   type OperationScope,
   type OperationTarget,
@@ -52,7 +55,11 @@ const PERSON: CodeRef = {
 
 interface StubOptions {
   // What `cardDocument` answers. `undefined` is a missing row.
-  document?: 'ok' | 'missing' | { errorStatus: number };
+  // An errored row may carry the card's last-known-good isolated markup.
+  document?:
+    | 'ok'
+    | 'missing'
+    | { errorStatus: number; lastKnownGoodHtml?: string };
   // What the row peek answers. `undefined` is a missing row.
   row?: 'ok' | 'missing';
   // The operations the target's type declares.
@@ -206,7 +213,7 @@ function stub(opts: StubOptions = {}): Stub {
                 message: 'the card could not be built',
               },
               scopedCssUrls: [],
-              lastKnownGoodHtml: null,
+              lastKnownGoodHtml: document.lastKnownGoodHtml ?? null,
               cardTitle: null,
             },
           } as any;
@@ -224,13 +231,29 @@ function stub(opts: StubOptions = {}): Stub {
           generation: 7,
           indexedAt: 1700,
           deps: [],
-          screenshots: null,
+          captures: null,
         } as any;
       },
       async instance(url) {
         calls.push('instance');
         if (row === 'missing' || !isCanonicalKey(url)) {
           return undefined;
+        }
+        // An errored document is read off an errored row: the index answers
+        // both from the one row, so the stub never pairs a healthy peek with
+        // an errored document. The row keeps the adoption chain its last
+        // visit recorded, and no document of its own.
+        if (typeof document === 'object') {
+          return {
+            type: 'instance-error',
+            error: { status: document.errorStatus },
+            instance: null,
+            types: [typeKey(PERSON), typeKey(CARD_DEF)],
+            generation: 7,
+            realmURL: REALM,
+            lastModified: null,
+            resourceCreatedAt: null,
+          } as any;
         }
         return {
           type: 'instance',
@@ -242,7 +265,7 @@ function stub(opts: StubOptions = {}): Stub {
           generation: 7,
           indexedAt: 1700,
           lastModified: 1699,
-          screenshots: null,
+          captures: null,
         } as any;
       },
       async file() {
@@ -252,7 +275,7 @@ function stub(opts: StubOptions = {}): Stub {
               type: 'file',
               lastModified: 1699,
               generation: 4,
-              screenshots: null,
+              captures: null,
               deps: null,
               indexedAt: 1700,
             } as any)
@@ -721,6 +744,156 @@ module(basename(import.meta.filename), function () {
       );
       assert.strictEqual(nonHttp.status, 500);
     });
+    test('an errored read withholds its salvage markup when its isolated format is unshareable', async function (assert) {
+      // The salvage an errored read carries in place of the card is the card's
+      // last-known-good isolated markup, so a read declaring the isolated
+      // format unshareable carries none — while one declaring another format
+      // unshareable, or nothing, carries it.
+      let salvage = async (operations?: Definition['operations']) => {
+        try {
+          await runOperation(
+            stub({
+              document: { errorStatus: 500, lastKnownGoodHtml: '<p>Ada</p>' },
+              operations,
+            }).core,
+            invoke(CARD, 'read'),
+          );
+        } catch (err) {
+          if (isOperationFailure(err)) {
+            return erroredTargetRow(err)?.lastKnownGoodHtml;
+          }
+          throw err;
+        }
+        throw new Error('expected the read to be refused');
+      };
+      let read = (html: OperationDefinition['html']) => ({
+        read: { base: 'read' as const, deterministic: true, html },
+      });
+      assert.strictEqual(
+        await salvage(),
+        '<p>Ada</p>',
+        'a read declaring nothing carries the markup',
+      );
+      assert.strictEqual(
+        await salvage(read({ embedded: 'unshareable' })),
+        '<p>Ada</p>',
+        'so does one withholding a different format',
+      );
+      assert.strictEqual(
+        await salvage(read({ isolated: 'unshareable' })),
+        null,
+        'one withholding the isolated format carries none',
+      );
+    });
+
+    test('what a type withholds is read off an errored row too', async function (assert) {
+      // An errored row resolves to the built-in read, since its type is not
+      // on a healthy document, yet it still serves the markup an earlier
+      // render left. The type its visit recorded is what governs that markup.
+      let { core } = stub({
+        document: { errorStatus: 500, lastKnownGoodHtml: '<p>Ada</p>' },
+        operations: {
+          read: {
+            base: 'read',
+            deterministic: true,
+            html: { isolated: 'unshareable', embedded: 'unshareable' },
+          },
+        },
+      });
+      let memo = new Map();
+      let plan = await readPlan(core, new URL(CARD.url), undefined, memo);
+      assert.deepEqual(
+        plan.unshareableFormats,
+        ['embedded', 'isolated'],
+        'the declaration on the errored card’s recorded type is read',
+      );
+      assert.strictEqual(memo.size, 1, 'and it holds until the index moves');
+    });
+
+    test('a read plan the realm cannot settle withholds every format and is not remembered', async function (assert) {
+      let every = ['embedded', 'fitted', 'atom', 'head', 'isolated'];
+
+      let unreadable = new Map();
+      assert.deepEqual(
+        (
+          await readPlan(
+            stub({ definitionType: 'unresolvable' }).core,
+            new URL(CARD.url),
+            undefined,
+            unreadable,
+          )
+        ).unshareableFormats,
+        every,
+        'a card whose type entry cannot be read withholds every format',
+      );
+      assert.strictEqual(
+        unreadable.size,
+        0,
+        'and is asked afresh, since the entry may read on the next ask',
+      );
+
+      let missing = new Map();
+      assert.deepEqual(
+        (
+          await readPlan(
+            stub({ row: 'missing', document: 'missing' }).core,
+            new URL(CARD.url),
+            undefined,
+            missing,
+          )
+        ).unshareableFormats,
+        [],
+        'a path holding no card serves no markup, so withholds none',
+      );
+      assert.strictEqual(
+        missing.size,
+        0,
+        'and takes no memo entry, whatever path a caller names',
+      );
+    });
+
+    test('a type another realm declares is asked afresh rather than remembered', async function (assert) {
+      let read = {
+        read: {
+          base: 'read' as const,
+          deterministic: true,
+          html: { embedded: 'unshareable' as const },
+        },
+      };
+      let own = new Map();
+      await readPlan(
+        stub({ operations: read }).core,
+        new URL(CARD.url),
+        undefined,
+        own,
+      );
+      assert.strictEqual(own.size, 1, 'a type of this realm’s own is kept');
+
+      let foreign = new Map();
+      let plan = await readPlan(
+        stub({
+          operations: read,
+          definitionCodeRef: {
+            module: 'http://example.com/elsewhere/person',
+            name: 'Person',
+          } as CodeRef,
+        }).core,
+        new URL(CARD.url),
+        undefined,
+        foreign,
+      );
+      assert.deepEqual(
+        plan.unshareableFormats,
+        ['embedded'],
+        'another realm’s type is answered as declared',
+      );
+      assert.strictEqual(
+        foreign.size,
+        0,
+        'but not kept, since its declaration changes without this realm’s index moving',
+      );
+    });
+
     test('a read tells a missing card from one still being indexed', async function (assert) {
       let gone = await refusalFrom(() =>
         runOperation(
@@ -896,7 +1069,7 @@ module(basename(import.meta.filename), function () {
         indexedAt: 1700,
         lastModified: 1699,
         generation: 4,
-        screenshots: null,
+        captures: null,
         deps: null,
       });
       assert.strictEqual(
@@ -918,7 +1091,7 @@ module(basename(import.meta.filename), function () {
         indexedAt: null,
         lastModified: 42,
         generation: null,
-        screenshots: null,
+        captures: null,
         deps: null,
       });
     });

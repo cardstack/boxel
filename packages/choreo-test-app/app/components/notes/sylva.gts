@@ -24,12 +24,15 @@ const SylvaNotes: TOC<object> = <template>
       <div class="dd-col">
         <p>
           The scene is "Living Green" by
-          <a href="https://x.com/MengTo" target="_blank" rel="noopener">Meng To</a>,
-          from
+          <a
+            href="https://x.com/MengTo"
+            target="_blank"
+            rel="noopener noreferrer"
+          >Meng To</a>, from
           <a
             href="https://threeui.com/browse"
             target="_blank"
-            rel="noopener"
+            rel="noopener noreferrer"
           >threeui</a>, his library of three.js interface work — vendored whole
           on its own pinned three r149. Two moss roots swept along centrelines
           traced off the original artwork; ~45,000 instanced blades planted on

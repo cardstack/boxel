@@ -667,10 +667,10 @@ export class Grip extends Component {
               class={{this.tableClass table.id}}
               {{this.bindTable table.id}}
             >
-              <header class="tp-table-head">
+              <div class="tp-table-head">
                 <span>{{table.name}}</span>
                 <small>{{this.freeAt table.id}}</small>
-              </header>
+              </div>
 
               <ul class="tp-seats">
                 {{#each (this.seatedAt table.id) key="id" as |guest|}}

@@ -1,5 +1,6 @@
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
+import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { modifier } from 'ember-modifier';
@@ -254,6 +255,10 @@ export class LongTake extends Component {
 
   get shots() {
     return tunedShots();
+  }
+
+  get clockStyle() {
+    return htmlSafe(`width:${this.take}px`);
   }
   readonly glide = GLIDE;
 
@@ -1487,7 +1492,7 @@ export class LongTake extends Component {
           <div
             class="lt-clock"
             data-take={{this.take}}
-            style="width:{{this.take}}px"
+            style={{this.clockStyle}}
             aria-hidden="true"
             {{motion id="clock"}}
             {{this.wire c this.take}}

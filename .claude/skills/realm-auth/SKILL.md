@@ -93,7 +93,12 @@ row-only claims.
 **Realm-server session**: `retrieveTokenClaim` (signature + `exp`) plus the same
 revocation check, at each of `jwtMiddleware`, `multiRealmAuthorization`, and
 `handle-download-realm`. There is **no** permission claim on this token, so the
-permission-match invariant does not apply to it at all.
+permission-match invariant does not apply to it at all. A delegated session
+verifies here too, since it is signed with the same seed, so each verifier also
+decides what it may do. `jwtMiddleware` and `handle-download-realm` act as the
+user in full and refuse it outright (401 `TokenInvalid`) through
+`retrieveUserSessionClaim`. `multiRealmAuthorization` holds it to the one realm
+it names.
 
 Permissions and revocation state are both read **fresh from Postgres on every
 request** — no memoization — because a change made against one replica has to
@@ -197,9 +202,11 @@ re-mint, while a legitimate device recovers without the user noticing.
 ## When changing any of this
 
 - Add a new endpoint behind `jwtMiddleware` or `multiRealmAuthorization` and the
-  revocation check comes with it. A handler that calls `retrieveTokenClaim`
-  itself must check revocation itself — `handle-download-realm` is the
-  precedent.
+  revocation check comes with it. A handler that verifies its own token and
+  acts as the user must call `retrieveUserSessionClaim`, which checks
+  revocation and refuses a delegated session — `handle-download-realm` is the
+  precedent. Calling `retrieveTokenClaim` alone accepts a delegated session as
+  the user in full.
 - Match the sync/async shape of any interface you implement exactly. Synapse's
   `OidcMappingProvider.get_remote_user_id` is **sync** while its siblings are
   async; declaring it `async def` made the stored external id a coroutine repr
