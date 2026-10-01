@@ -15,12 +15,16 @@
 // only when each such boxel pull request has merged and its merge commit is in
 // the boxel revision the environment runs. Pull requests closed without
 // merging count for nothing: a closed catalog pull request never reached main,
-// and a pairing that names a closed boxel pull request holds nothing back and
-// is reported as a warning.
+// and a pairing that names a boxel pull request closed without merging holds
+// nothing back and is reported as a warning. A boxel pull request merged into
+// a branch other than main hasn't landed, so it holds.
 //
-// A target at or behind the deployed catalog revision is a no-op, so a deploy
-// never moves an environment's catalog backwards. That is what lets boxel's
-// production deploy ask for the catalog revision it pins whenever it runs.
+// A target at or behind the deployed catalog revision deploys nothing, so a
+// deploy never moves an environment's catalog backwards. That is what lets
+// boxel's production deploy ask for the catalog revision it pins whenever it
+// runs. Behind it, the check reads the pull requests the environment keeps
+// past the target instead, and refuses when the boxel it runs lacks what they
+// need, as after a boxel deploy of an older commit.
 //
 // Run with:
 //
@@ -87,16 +91,20 @@ export interface Assessment {
   warnings: string[];
 }
 
-export type Movement = 'forward' | 'none' | 'diverged';
+export type Movement = 'forward' | 'none' | 'backward' | 'diverged';
 
 // GitHub's compare of the deployed revision (base) against the target (head).
+// A target behind the deployed revision is never deployed, since that would
+// move the environment's catalog backwards; the check still asks whether the
+// catalog the environment keeps needs boxel code the environment runs.
 export function movementFor(compareStatus: string): Movement {
   switch (compareStatus) {
     case 'ahead':
       return 'forward';
     case 'identical':
-    case 'behind':
       return 'none';
+    case 'behind':
+      return 'backward';
     default:
       return 'diverged';
   }
@@ -106,6 +114,7 @@ interface IgnoreRule {
   pattern: RegExp;
   anchored: boolean;
   directoryOnly: boolean;
+  negated: boolean;
 }
 
 function globToRegExp(glob: string) {
@@ -126,50 +135,63 @@ function globToRegExp(glob: string) {
   return new RegExp(`^${source}$`);
 }
 
-// The rules of a root .gitignore or .boxelignore. Negated patterns are not
-// read, so a file one of them would re-include counts as skipped.
+// The rules of a root .gitignore or .boxelignore.
 export function readIgnoreRules(content: string): IgnoreRule[] {
   let rules: IgnoreRule[] = [];
   for (let raw of content.split(/\r?\n/)) {
     let line = raw.trim();
-    if (!line || line.startsWith('#') || line.startsWith('!')) {
+    if (!line || line.startsWith('#')) {
       continue;
     }
+    let negated = line.startsWith('!');
+    line = line.replace(/^!/, '');
     let directoryOnly = line.endsWith('/');
     line = line.replace(/\/+$/, '');
     let anchored = line.startsWith('/') || line.includes('/');
     line = line.replace(/^\/+/, '');
     if (line) {
-      rules.push({ pattern: globToRegExp(line), anchored, directoryOnly });
+      rules.push({
+        pattern: globToRegExp(line),
+        anchored,
+        directoryOnly,
+        negated,
+      });
     }
   }
   return rules;
 }
 
+function ruleMatches(rule: IgnoreRule, segments: string[]) {
+  let starts = rule.anchored ? [0] : segments.map((_, i) => i);
+  for (let start of starts) {
+    for (let end = start + 1; end <= segments.length; end++) {
+      // A directory-only rule matches a directory above the file, never the
+      // file itself.
+      if (rule.directoryOnly && end === segments.length) {
+        continue;
+      }
+      if (rule.pattern.test(segments.slice(start, end).join('/'))) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 // Whether `boxel realm push` uploads the file at this repository path. It
 // skips every path with a segment that starts with a dot, and whatever the
-// root .gitignore and .boxelignore match.
+// root .gitignore and .boxelignore match. A path a negated pattern matches
+// counts as uploaded whatever the order of the rules, so a mistake here can
+// only check a pull request it didn't need to.
 export function shipsToRealm(path: string, rules: IgnoreRule[]) {
   let segments = path.split('/');
   if (segments.some((segment) => segment.startsWith('.'))) {
     return false;
   }
-  for (let rule of rules) {
-    let starts = rule.anchored ? [0] : segments.map((_, i) => i);
-    for (let start of starts) {
-      for (let end = start + 1; end <= segments.length; end++) {
-        // A directory-only rule matches a directory above the file, never
-        // the file itself.
-        if (rule.directoryOnly && end === segments.length) {
-          continue;
-        }
-        if (rule.pattern.test(segments.slice(start, end).join('/'))) {
-          return false;
-        }
-      }
-    }
+  if (rules.some((rule) => rule.negated && ruleMatches(rule, segments))) {
+    return true;
   }
-  return true;
+  return !rules.some((rule) => !rule.negated && ruleMatches(rule, segments));
 }
 
 function boxelDependencies(body: string) {
@@ -280,6 +302,37 @@ export function refusalMessages(
       `Deploy [boxel] to ${environment} once boxel main has the pull ` +
       `requests above; it deploys the catalog to the revision boxel pins ` +
       `when it finishes.`,
+  );
+  return messages;
+}
+
+// What to tell a person when the environment keeps catalog changes, past the
+// target, whose boxel pull requests the boxel it runs doesn't have, as after a
+// boxel deploy of an older commit. Nothing is deployed backwards; the fix is a
+// boxel deploy that has them, or a revert on catalog main deployed forward.
+export function keptMessages(
+  environment: string,
+  holds: Hold[],
+  deployed: { sha: string; pull?: PullSummary },
+  catalogSha: string,
+) {
+  let runs = deployed.pull
+    ? `${BOXEL_REPOSITORY}@${deployed.sha.slice(0, 12)} ` +
+      `(${ref(BOXEL_REPOSITORY, deployed.pull)})`
+    : `${BOXEL_REPOSITORY}@${deployed.sha.slice(0, 12)}`;
+  let messages = holds.map(
+    (hold) =>
+      `${environment}'s catalog (at ${catalogSha.slice(0, 12)}) has ` +
+      `${ref(CATALOG_REPOSITORY, hold.catalog)} (${hold.catalog.url}), ` +
+      `which merges after ${ref(BOXEL_REPOSITORY, hold.boxel)} ` +
+      `(${hold.boxel.url}), but ${environment} runs ${runs}, which doesn't ` +
+      `have it.`,
+  );
+  messages.push(
+    `A catalog deploy never moves ${environment}'s catalog backwards. Deploy ` +
+      `boxel to ${environment} at a commit that has the boxel pull requests ` +
+      `above, or revert the catalog pull requests on catalog main and run ` +
+      `"Deploy catalog to production" by hand.`,
   );
   return messages;
 }
@@ -403,10 +456,24 @@ async function compare(repository: string, base: string, head: string) {
   return { status: first.status, commits };
 }
 
-// A pull request counts only once it has merged into main; one closed without
-// merging never changed main, whatever commits it shares with one that did.
-export function mergedIntoMain(pull: Pick<RestPull, 'merged_at' | 'base'>) {
-  return Boolean(pull.merged_at) && pull.base.ref === 'main';
+// A pull request closed without merging counts for nothing, whatever commits
+// it shares with one that merged. A catalog pull request in the compare range
+// reached main whichever branch it merged into: a stacked one merges into its
+// parent, and the parent's merge brings it along.
+export function merged(pull: Pick<RestPull, 'merged_at'>) {
+  return Boolean(pull.merged_at);
+}
+
+// A boxel pull request's code is on main only once it merges into main. One
+// merged into another branch, such as a stack parent, hasn't landed yet, so it
+// holds like an open one.
+export function boxelPullState(
+  pull: Pick<RestPull, 'merged_at' | 'state' | 'base'>,
+) {
+  return {
+    merged: Boolean(pull.merged_at) && pull.base.ref === 'main',
+    closed: pull.state === 'closed' && !pull.merged_at,
+  };
 }
 
 const MERGE_MESSAGE = /^Merge pull request #(\d+) from /;
@@ -436,8 +503,7 @@ async function catalogPullsFor(commits: Compare['commits']) {
     let pulls = await get<RestPull[]>(
       `repos/${CATALOG_REPOSITORY}/commits/${c.sha}/pulls`,
     );
-    let merged = pulls.filter(mergedIntoMain);
-    for (let pull of merged) {
+    for (let pull of pulls.filter(merged)) {
       if (!numbers.has(pull.number)) {
         await addPull(pull.number);
       }
@@ -446,7 +512,7 @@ async function catalogPullsFor(commits: Compare['commits']) {
   let pulls: CatalogPull[] = [];
   for (let n of [...numbers].sort((a, b) => a - b)) {
     let pull = await get<RestPull>(`repos/${CATALOG_REPOSITORY}/pulls/${n}`);
-    if (!mergedIntoMain(pull)) {
+    if (!merged(pull)) {
       continue;
     }
     let files = await getAll<{ filename: string; previous_filename?: string }>(
@@ -467,7 +533,7 @@ async function catalogPullsFor(commits: Compare['commits']) {
 
 async function mergedPullFor(repository: string, sha: string) {
   let pulls = await get<RestPull[]>(`repos/${repository}/commits/${sha}/pulls`);
-  let pull = pulls.find(mergedIntoMain);
+  let pull = pulls.find(merged);
   return pull
     ? { number: pull.number, title: pull.title, url: pull.html_url }
     : undefined;
@@ -532,18 +598,18 @@ async function main() {
 
   let range = await compare(CATALOG_REPOSITORY, from, to);
   let movement = movementFor(range.status);
-  if (movement === 'none') {
-    let message = `${environment}'s catalog is at ${from.slice(0, 12)}, which is already at or past ${to.slice(0, 12)}. Nothing to deploy.`;
-    console.log(`catalog-deploy-check: ${message}`);
-    summarize([`### Catalog deploy to ${environment}: nothing to do`, message]);
-    write({ action: 'skip', environment, from, to });
-    return;
-  }
   if (movement === 'diverged') {
     let message = `${environment}'s catalog is at ${from.slice(0, 12)}, which isn't an ancestor of ${to.slice(0, 12)}. Deploy a revision on catalog main.`;
     console.log(`::error title=catalog deploy::${annotation(message)}`);
     write({ action: 'refuse', environment, from, to });
     process.exit(1);
+  }
+  if (movement === 'none') {
+    let message = `${environment}'s catalog is already at ${to.slice(0, 12)}. Nothing to deploy.`;
+    console.log(`catalog-deploy-check: ${message}`);
+    summarize([`### Catalog deploy to ${environment}: nothing to do`, message]);
+    write({ action: 'skip', environment, from, to });
+    return;
   }
 
   let boxelSha = await deployedRevision(BOXEL_REPOSITORY, environment);
@@ -554,52 +620,52 @@ async function main() {
     write({ action: 'refuse', environment, from, to });
     process.exit(1);
   }
-  let boxelDeployedPull = await mergedPullFor(BOXEL_REPOSITORY, boxelSha);
-  let catalogPulls = await catalogPullsFor(range.commits);
-  let rules = readRules(option('catalog-dir'));
-
-  let boxelPulls = new Map<number, BoxelPull | undefined>();
-  let deployedPulls = new Set<number>();
-  for (let n of new Set(
-    catalogPulls.flatMap((p) => boxelDependencies(p.body)),
-  )) {
-    let pull = await getOrUndefined<RestPull>(
-      `repos/${BOXEL_REPOSITORY}/pulls/${n}`,
-    );
-    boxelPulls.set(
-      n,
-      pull && {
-        number: pull.number,
-        title: pull.title,
-        url: pull.html_url,
-        merged: mergedIntoMain(pull),
-        closed: pull.state === 'closed',
-      },
-    );
-    if (pull && mergedIntoMain(pull) && pull.merge_commit_sha) {
-      let { status } = await get<{ status: string }>(
-        `repos/${BOXEL_REPOSITORY}/compare/${pull.merge_commit_sha}...${boxelSha}?per_page=1`,
-      );
-      if (status === 'ahead' || status === 'identical') {
-        deployedPulls.add(n);
-      }
-    }
-  }
-
-  let assessment = assessRollout({
-    catalogPulls,
-    boxelPulls,
-    isDeployed: (n) => deployedPulls.has(n),
-    ships: (path) => shipsToRealm(path, rules),
-  });
-
-  let boxel = { sha: boxelSha, pull: boxelDeployedPull };
-  let runs = boxelDeployedPull
-    ? `${BOXEL_REPOSITORY}#${boxelDeployedPull.number} (${boxelSha.slice(0, 12)})`
+  let deployedPull = await mergedPullFor(BOXEL_REPOSITORY, boxelSha);
+  let boxel = { sha: boxelSha, pull: deployedPull };
+  let runs = deployedPull
+    ? `${BOXEL_REPOSITORY}#${deployedPull.number} (${boxelSha.slice(0, 12)})`
     : `${BOXEL_REPOSITORY}@${boxelSha.slice(0, 12)}`;
+
+  // Moving forward, the pull requests to check are the ones the deploy would
+  // add. Behind the deployed revision, nothing deploys, and the ones to check
+  // are the ones the environment keeps past the target: a boxel deploy of an
+  // older commit leaves them running against a platform that may lack what
+  // they need.
+  let commits =
+    movement === 'forward'
+      ? range.commits
+      : (await compare(CATALOG_REPOSITORY, to, from)).commits;
+  let assessment = await assess(
+    await catalogPullsFor(commits),
+    boxelSha,
+    readRules(option('catalog-dir')),
+  );
   for (let warning of assessment.warnings) {
     console.log(`::warning title=catalog deploy::${annotation(warning)}`);
   }
+
+  if (movement === 'backward') {
+    if (assessment.holds.length > 0) {
+      let messages = keptMessages(environment, assessment.holds, boxel, from);
+      for (let message of messages) {
+        console.log(`::error title=catalog deploy::${annotation(message)}`);
+      }
+      summarize([
+        `### Catalog deploy to ${environment}: its catalog needs boxel code it doesn't run`,
+        `${environment} runs ${runs}.`,
+        '',
+        ...messages.map((m) => `- ${m}`),
+      ]);
+      write({ action: 'refuse', environment, from, to, boxel, ...assessment });
+      process.exit(1);
+    }
+    let message = `${environment}'s catalog is at ${from.slice(0, 12)}, past ${to.slice(0, 12)}, and ${runs} runs everything it needs. Nothing to deploy.`;
+    console.log(`catalog-deploy-check: ${message}`);
+    summarize([`### Catalog deploy to ${environment}: nothing to do`, message]);
+    write({ action: 'skip', environment, from, to, boxel, ...assessment });
+    return;
+  }
+
   let listed = assessment.checked.map(
     (p) =>
       `- [${CATALOG_REPOSITORY}#${p.number}](${p.url}) ${p.title}` +
@@ -633,6 +699,49 @@ async function main() {
     ...assessment.warnings.map((w) => `- ${w}`),
   ]);
   write({ action: 'deploy', environment, from, to, boxel, ...assessment });
+}
+
+// Reads the boxel pull requests these catalog pull requests declare, and which
+// of them the boxel revision an environment runs contains.
+async function assess(
+  catalogPulls: CatalogPull[],
+  boxelSha: string,
+  rules: IgnoreRule[],
+) {
+  let boxelPulls = new Map<number, BoxelPull | undefined>();
+  let deployedPulls = new Set<number>();
+  for (let n of new Set(
+    catalogPulls.flatMap((p) => boxelDependencies(p.body)),
+  )) {
+    let pull = await getOrUndefined<RestPull>(
+      `repos/${BOXEL_REPOSITORY}/pulls/${n}`,
+    );
+    let state = pull && boxelPullState(pull);
+    boxelPulls.set(
+      n,
+      pull &&
+        state && {
+          number: pull.number,
+          title: pull.title,
+          url: pull.html_url,
+          ...state,
+        },
+    );
+    if (pull && state?.merged && pull.merge_commit_sha) {
+      let { status } = await get<{ status: string }>(
+        `repos/${BOXEL_REPOSITORY}/compare/${pull.merge_commit_sha}...${boxelSha}?per_page=1`,
+      );
+      if (status === 'ahead' || status === 'identical') {
+        deployedPulls.add(n);
+      }
+    }
+  }
+  return assessRollout({
+    catalogPulls,
+    boxelPulls,
+    isDeployed: (n) => deployedPulls.has(n),
+    ships: (path) => shipsToRealm(path, rules),
+  });
 }
 
 if (

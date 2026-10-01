@@ -260,6 +260,7 @@ jobs:
         build-prerender,
         build-worker,
         build-pg-migration,
+        deploy-catalog-before-release,
       ]
     concurrency:
       group: deploy-${{ inputs.environment }}-release
@@ -335,42 +336,58 @@ jobs:
                   : 'Deployment finished with errors',
             });
 
-  # A production deploy carries the catalog with it: boxel-catalog's "Deploy
-  # catalog to production" deploys the catalog revision this commit pins in
-  # packages/catalog/test-subset.json, which boxel is tested against. It does
-  # nothing when production's catalog is already at or past the pin, and it
-  # refuses when a catalog pull request in the range needs a boxel pull
-  # request production still doesn't run. It runs after finalize-deployment
-  # so the deployment it checks against is already recorded as successful.
-  deploy-catalog:
-    name: Deploy the pinned catalog
+  # A production deploy carries the catalog with it, by deploying the catalog
+  # revision this commit pins in packages/catalog/test-subset.json (boxel is
+  # tested against it) through boxel-catalog's "Deploy catalog to production".
+  # It runs twice. Before the release, its check runs against the boxel
+  # production still runs, so it ships the catalog changes this boxel needs
+  # and refuses any that need this boxel. After the release, the second run
+  # ships the rest. Neither moves production's catalog backwards, and each
+  # refuses, naming the pull requests, when a catalog change needs a boxel
+  # pull request production doesn't run. Only the second one can fail this
+  # deploy: by then the platform is live, and a red job is the signal that
+  # production runs it against an older catalog.
+  #
+  # The release needs this job, so the job itself always runs and only its
+  # steps are limited to production: a skipped need would skip the release.
+  deploy-catalog-before-release:
+    name: Deploy the pinned catalog before the release
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    # A problem here, such as a missing or rejected token, is reported, but it
+    # doesn't hold back the release.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        if: github.event_name == 'workflow_dispatch' && inputs.environment == 'production'
+        with:
+          sparse-checkout: packages/catalog
+      - name: Deploy the catalog at the pin
+        if: github.event_name == 'workflow_dispatch' && inputs.environment == 'production'
+        env:
+          GH_TOKEN: ${{ secrets.CATALOG_DEPLOY_DISPATCH_TOKEN }}
+        run: |
+          packages/catalog/scripts/dispatch-catalog-deploy.sh before-release \
+            "$(jq -r .revision packages/catalog/test-subset.json)"
+
+  # Runs after finalize-deployment, so the boxel deployment the catalog check
+  # reads is already recorded as successful.
+  deploy-catalog-after-release:
+    name: Deploy the pinned catalog after the release
     needs: [release, finalize-deployment]
     if: >-
       github.event_name == 'workflow_dispatch'
       && inputs.environment == 'production'
       && needs.release.result == 'success'
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          sparse-checkout: packages/catalog/test-subset.json
-          sparse-checkout-cone-mode: false
-      - name: Start the catalog deploy
+          sparse-checkout: packages/catalog
+      - name: Deploy the catalog at the pin
         env:
-          # A fine-grained token with Actions read and write on
-          # cardstack/boxel-catalog; this repository's token can't start
-          # another repository's workflow.
           GH_TOKEN: ${{ secrets.CATALOG_DEPLOY_DISPATCH_TOKEN }}
         run: |
-          pin=$(jq -r .revision packages/catalog/test-subset.json)
-          runs=https://github.com/cardstack/boxel-catalog/actions/workflows/deploy-production.yml
-          if [ -z "$GH_TOKEN" ]; then
-            echo "::warning title=catalog deploy::CATALOG_DEPLOY_DISPATCH_TOKEN is not set, so the catalog wasn't deployed. Run \"Deploy catalog to production\" with revision $pin by hand: $runs"
-            exit 0
-          fi
-          gh workflow run deploy-production.yml \
-            --repo cardstack/boxel-catalog \
-            --ref main \
-            -f revision="$pin" \
-            -f reason="lockstep with cardstack/boxel@${GITHUB_SHA}"
-          echo "Started the catalog deploy to $pin: $runs" | tee -a "$GITHUB_STEP_SUMMARY"
+          packages/catalog/scripts/dispatch-catalog-deploy.sh after-release \
+            "$(jq -r .revision packages/catalog/test-subset.json)"

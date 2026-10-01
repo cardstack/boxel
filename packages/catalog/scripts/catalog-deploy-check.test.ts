@@ -5,7 +5,9 @@ import { test } from 'node:test';
 
 import {
   assessRollout,
-  mergedIntoMain,
+  boxelPullState,
+  keptMessages,
+  merged,
   movementFor,
   readIgnoreRules,
   refusalMessages,
@@ -70,9 +72,12 @@ test('a pin ahead of the deployed catalog moves forward', () => {
   assert.equal(movementFor('ahead'), 'forward');
 });
 
-test('a pin at or behind the deployed catalog is a no-op', () => {
+test('a pin at the deployed catalog is a no-op', () => {
   assert.equal(movementFor('identical'), 'none');
-  assert.equal(movementFor('behind'), 'none');
+});
+
+test('a pin behind the deployed catalog never moves it backwards', () => {
+  assert.equal(movementFor('behind'), 'backward');
 });
 
 test('a revision off the deployed history is diverged', () => {
@@ -230,18 +235,61 @@ test('the refusal names each catalog pull request and the boxel one it needs', (
   assert.match(messages[2], /Manual Deploy \[boxel\] to production/);
 });
 
-test('only pull requests merged into main count', () => {
+test('a catalog pull request counts once it has merged, into any branch', () => {
+  assert.equal(merged({ merged_at: '2026-10-01T00:00:00Z' }), true);
+  assert.equal(merged({ merged_at: null }), false);
+});
+
+test('a boxel pull request merged into a stack parent still holds', () => {
   let main = { ref: 'main' };
-  assert.equal(
-    mergedIntoMain({ merged_at: '2026-10-01T00:00:00Z', base: main }),
-    true,
+  let at = '2026-10-01T00:00:00Z';
+  assert.deepEqual(
+    boxelPullState({ merged_at: at, state: 'closed', base: main }),
+    { merged: true, closed: false },
   );
-  assert.equal(mergedIntoMain({ merged_at: null, base: main }), false);
+  assert.deepEqual(
+    boxelPullState({ merged_at: null, state: 'closed', base: main }),
+    { merged: false, closed: true },
+  );
+  let stacked = boxelPullState({
+    merged_at: at,
+    state: 'closed',
+    base: { ref: 'cs-1-parent' },
+  });
+  assert.deepEqual(stacked, { merged: false, closed: false });
+  let result = assess(
+    [catalogPull(1, 'Merges after: cardstack/boxel#10')],
+    [{ ...boxelPull(10), ...stacked }],
+  );
+  assert.equal(result.holds[0]?.reason, 'unmerged');
+});
+
+test('a path a negated pattern re-includes ships', () => {
+  let rules = readIgnoreRules('tests\n!tests/fixtures/card.gts');
+  assert.equal(shipsToRealm('tests/foo.ts', rules), false);
+  assert.equal(shipsToRealm('tests/fixtures/card.gts', rules), true);
   assert.equal(
-    mergedIntoMain({
-      merged_at: '2026-10-01T00:00:00Z',
-      base: { ref: 'other' },
-    }),
+    shipsToRealm('.github/x.yml', readIgnoreRules('!.github')),
     false,
   );
+});
+
+test('a kept catalog change names the boxel pull request the environment lacks', () => {
+  let messages = keptMessages(
+    'production',
+    [
+      {
+        catalog: { number: 1, title: 'catalog change 1', url: 'c1' },
+        boxel: { number: 10, title: 'boxel change 10', url: 'b10' },
+        reason: 'not-deployed',
+      },
+    ],
+    { sha: 'abcdef0123456789' },
+    '0123456789abcdef',
+  );
+  assert.match(
+    messages[0],
+    /catalog \(at 0123456789ab\) has cardstack\/boxel-catalog#1 .*merges after cardstack\/boxel#10 .*runs cardstack\/boxel@abcdef012345/,
+  );
+  assert.match(messages[1], /never moves production's catalog backwards/);
 });

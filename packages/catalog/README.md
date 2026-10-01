@@ -112,7 +112,7 @@ To reproduce it locally, run `pnpm lint` here with the boxel-catalog revision th
 3. **Review**: Code review process in GitHub
 4. **Merge**: Changes automatically deployed to staging, which runs boxel `main`
 5. **Production**: boxel-catalog's "Deploy catalog to production" workflow deploys the catalog, in one of two ways:
-   - **In lockstep with boxel.** Manual Deploy [boxel] to production finishes by deploying the catalog revision the deployed boxel pins in `test-subset.json`. It does nothing when production's catalog is already at or past the pin.
+   - **In lockstep with boxel.** Manual Deploy [boxel] to production deploys the catalog revision the deployed boxel pins in `test-subset.json` twice. The run before the release ships the catalog changes the new boxel needs, and the run after it ships the rest. Neither moves production's catalog backwards.
    - **Ahead of boxel.** Run the workflow by hand from boxel-catalog's Actions tab to deploy catalog `main`, for changes that need nothing new from boxel.
 
    Before it changes anything, the deploy checks each catalog pull request since the last production deploy. It refuses when one says `Merges after: cardstack/boxel#N` and production doesn't run #N yet, and it names both pull requests. The script is `scripts/catalog-deploy-check.ts`, and the `catalog-deploy` skill (`.claude/skills/catalog-deploy/SKILL.md`) explains how to read a refusal.
