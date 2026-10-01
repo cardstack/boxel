@@ -48,6 +48,7 @@
     "catalog:reset": "rm -rf contents && pnpm catalog:setup",
     "catalog:test-subset": "node scripts/sync-test-subset.ts",
     "test:deploy-check": "node --test scripts/catalog-deploy-check.test.ts",
+    "test:pairing": "node --test scripts/pairing.test.ts",
     "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
     "lint:fix": "concurrently \"pnpm:lint:*:fix\" --names \"fix:\"",
     "lint:hbs": "ember-template-lint contents --no-error-on-unmatched-pattern",
