@@ -70,6 +70,9 @@ await esbuild.build({
   target: 'es2022',
   mainFields: ['module', 'main'],
   conditions: ['import', 'module', 'default'],
+  // tsconfig.json maps glimmer-motion and choreo-player to their source for
+  // type-checking. The realm bundles their built output, so skip it.
+  tsconfigRaw: {},
   splitting: false,
   // Boxel currently evaluates lazy dependency initializers through a classic
   // wrapper. Three 0.185 uses import.meta.url only to construct DRACO defaults;

@@ -47,6 +47,7 @@ jobs:
       boxel-icons: ${{ steps.filter.outputs.boxel-icons }}
       boxel-ui: ${{ steps.filter.outputs.boxel-ui }}
       pretui: ${{ steps.filter.outputs.pretui }}
+      choreo: ${{ steps.filter.outputs.choreo }}
       matrix: ${{ steps.filter.outputs.matrix }}
       realm-server: ${{ steps.filter.outputs.realm-server }}
       vscode-boxel-tools: ${{ steps.filter.outputs.vscode-boxel-tools }}
@@ -129,6 +130,12 @@ jobs:
             pretui:
               - *shared
               - 'packages/pretui/**'
+            choreo:
+              - *shared
+              - 'packages/choreo-gallery/**'
+              - 'packages/choreo-player/**'
+              - 'packages/choreo-test-app/**'
+              - 'packages/glimmer-motion/**'
             matrix:
               - *shared
               - 'packages/base/**'
@@ -485,6 +492,77 @@ jobs:
       - name: Run tests
         run: boxel test .
         working-directory: packages/pretui
+
+  choreo-test:
+    name: Choreo Tests
+    needs: [change-check]
+    if: needs.change-check.outputs.choreo == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: choreo-test-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/init
+      # Reads the TypeScript sources and the guides directly, so it needs no
+      # build.
+      - name: Check guide coverage
+        run: pnpm run docs:check
+        working-directory: packages/choreo-gallery
+      # The gallery resolves these packages through their built output
+      # (package.json#exports maps into dist/ and declarations/).
+      - name: Build Glimmer Motion and Choreo Player
+        id: build-libs
+        if: ${{ !cancelled() }}
+        run: |
+          (cd packages/glimmer-motion && pnpm run build)
+          (cd packages/choreo-player && pnpm run build)
+      - name: Choreo Player unit tests
+        if: ${{ !cancelled() && steps.build-libs.outcome == 'success' }}
+        run: pnpm run test:unit
+        working-directory: packages/choreo-player
+      # The realm output test reads dist-realm/, and the theater sizing test
+      # reads the scoped stylesheet the build generates.
+      - name: Build Choreo Gallery and its realm
+        id: build-gallery
+        if: ${{ !cancelled() && steps.build-libs.outcome == 'success' }}
+        run: pnpm run build && pnpm run build:realm
+        working-directory: packages/choreo-gallery
+      - name: Choreo Gallery realm output tests
+        if: ${{ !cancelled() && steps.build-gallery.outcome == 'success' }}
+        run: pnpm run test:realm
+        working-directory: packages/choreo-gallery
+      # Playwright launches the runner's preinstalled Google Chrome (the
+      # script's default `chrome` channel), so no browser download is needed.
+      - name: Choreo Gallery theater sizing test
+        if: ${{ !cancelled() && steps.build-gallery.outcome == 'success' }}
+        run: pnpm run test:theater-sizing
+        working-directory: packages/choreo-gallery
+
+  # The QUnit suite for glimmer-motion, Choreo and film, which lives in
+  # choreo-test-app.
+  choreo-test-app-test:
+    name: Choreo Test App Tests
+    needs: [change-check]
+    if: needs.change-check.outputs.choreo == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    concurrency:
+      group: choreo-test-app-test-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/init
+      # The test app resolves these packages through their built output
+      # (package.json#exports maps into dist/ and declarations/).
+      - name: Build Glimmer Motion and Choreo Player
+        run: |
+          (cd packages/glimmer-motion && pnpm run build)
+          (cd packages/choreo-player && pnpm run build)
+      - name: Run test suite
+        run: pnpm test
+        working-directory: packages/choreo-test-app
 
   boxel-ui-raw-icon-changes-only:
     name: Boxel UI ensure raw icon changes only
