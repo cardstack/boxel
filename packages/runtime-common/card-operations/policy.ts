@@ -1034,7 +1034,7 @@ async function compileDocument(
         issue(
           'grants-invalid-operation',
           `${grantPath}.operation`,
-          `${resolved.name} declares \`${operation}\`, but the declaration failed to lower, so invoking it is refused and the grant admits nothing. The declaration's issues are on ${resolved.name}'s definition`,
+          `${resolved.name}'s \`${operation}\` has a mistake in how it's declared, so nobody can use it and this grant does nothing. ${resolved.name}'s definition says what the mistake is`,
         );
         continue;
       }
