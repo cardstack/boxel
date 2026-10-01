@@ -741,16 +741,13 @@ module('Integration | realm policy', function (hooks) {
       .dom('[data-test-policy-grant-inactive]')
       .exists({ count: 1 }, 'and it is marked where it is listed');
     assert
-      .dom('[data-test-policy-grant-note]')
-      .doesNotExist('its issue says why, rather than a note');
-    assert
       .dom('[data-test-policy-issue]')
       .exists({ count: 1 })
       .hasAttribute('data-test-policy-issue', 'policy-not-filterable');
     assert.dom('[data-test-policy-issue-operation]').hasText('query');
   });
 
-  test('a grant whose condition reads a snapshot is inactive on anything but a query, and says why', async function (assert) {
+  test('a grant whose condition is annotated as reading a snapshot is live', async function (assert) {
     await renderPolicyNamed('policies/snapshot', [
       {
         targetType: { module: '../classroom', name: 'Classroom' },
@@ -766,16 +763,9 @@ module('Integration | realm policy', function (hooks) {
 
     assert.deepEqual(
       await grantStatuses(),
-      ['inactive', 'live'],
-      'the gate never evaluates a snapshot condition, so the read admits nothing',
+      ['live', 'live'],
+      'the gate evaluates an annotated condition, so the annotation leaves the read in force',
     );
-    assert
-      .dom('[data-test-policy-grant-note]')
-      .exists({ count: 1 })
-      .includesText(
-        'reads a snapshot',
-        'the grant says why, since no issue does',
-      );
     assert
       .dom('[data-test-realm-policy-issues]')
       .doesNotExist('compiling recorded no issue');

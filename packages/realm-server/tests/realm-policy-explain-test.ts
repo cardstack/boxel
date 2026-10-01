@@ -66,6 +66,7 @@ const SYLLABUS = { module: `${EDUCATION}syllabus`, name: 'Syllabus' };
 const TEACHES = '.teacherIds | any(. == actor())';
 const LEADS = '.leadTeacherIds | any(. == actor())';
 const NUMERIC_TITLE = '(.title | tonumber) > 0';
+const COURSE_CODE = '.code == "42-101"';
 
 const CLASSROOM_MODULE = `
   import { contains, containsMany, field, CardDef } from "@cardstack/base/card-api";
@@ -135,6 +136,11 @@ const SYLLABUS_MODULE = `
   import StringField from "@cardstack/base/string";
   export class Syllabus extends CardDef {
     @field title = contains(StringField);
+    @field code = contains(StringField, {
+      computeVia: function (this: Syllabus) {
+        return this.title + '-101';
+      },
+    });
   }
 `;
 
@@ -151,7 +157,7 @@ type Rule = { targetType: { module: string; name: string }; grants: Grant[] };
 // `listMine` query rest on the same predicate a read does. `Bulletin` takes its reads and updates
 // outright. A `Syllabus` read rests on a predicate that throws for any title
 // that is not a number, or on one annotated as reading a snapshot tier, which
-// the gate never evaluates.
+// holds for a course code the index computed as `42-101`.
 const EDUCATION_RULES: Rule[] = [
   {
     targetType: CLASSROOM,
@@ -172,7 +178,7 @@ const EDUCATION_RULES: Rule[] = [
     targetType: SYLLABUS,
     grants: [
       { operation: 'read', where: NUMERIC_TITLE },
-      { operation: 'read', where: { bxl: 'true', snapshot: true } },
+      { operation: 'read', where: { bxl: COURSE_CODE, snapshot: true } },
     ],
   },
 ];
@@ -552,7 +558,7 @@ module(basename(import.meta.filename), function (hooks) {
       );
     });
 
-    test('a snapshot-tier predicate is never evaluated, and one that throws fails the decision', async function (assert) {
+    test('a snapshot-tier predicate is evaluated against the index, and one that throws fails the decision where none holds', async function (assert) {
       let numeric = await explain(TEACHER, COURSE_42, 'read');
       assert.strictEqual(numeric.decision, 'allowed');
       assert.deepEqual(numeric.rules, [
@@ -568,7 +574,7 @@ module(basename(import.meta.filename), function (hooks) {
             },
             {
               path: 'rules[3].grants[1]',
-              where: 'true',
+              where: COURSE_CODE,
               tier: 'snapshot',
               outcome: 'not-evaluated',
             },
@@ -580,8 +586,14 @@ module(basename(import.meta.filename), function (hooks) {
       assert.strictEqual(throwing.decision, 'failed');
       assert.strictEqual(throwing.reason, 'predicate-threw');
       assert.deepEqual(
-        throwing.rules[0].grants.map((grant) => grant.outcome),
-        ['threw', 'not-evaluated'],
+        throwing.rules[0].grants.map((grant) => ({
+          tier: grant.tier,
+          outcome: grant.outcome,
+        })),
+        [
+          { tier: 'stored', outcome: 'threw' },
+          { tier: 'snapshot', outcome: 'did-not-hold' },
+        ],
       );
       assert.deepEqual(
         throwing.refusal,

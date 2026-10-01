@@ -415,12 +415,34 @@ module(basename(import.meta.filename), function () {
   });
 
   test('a computed field compiles for a predicate annotated as reading a snapshot, whose values are what the index holds', async function (assert) {
-    let { filter, issues } = await filterFor({
+    let { filter, issues, grant } = await filterFor({
       bxl: '.summary == actor()',
       snapshot: true,
     });
     assert.deepEqual(issues, []);
     assert.deepEqual(filter, { ...ANCHOR, eq: { 'item.summary': ACTOR } });
+    assert.true(grant?.where?.snapshot, 'the grant is judged as a snapshot');
+  });
+
+  test('a field the stored source does not hold records `unsnapshotted-policy-read` rather than `policy-not-filterable`, and compiles no grant', async function (assert) {
+    for (let [where, reason] of [
+      ['.summary == actor()', /computed.*snapshot: true/],
+      ['.roster | any(.id == actor())', /filled by a query/],
+    ] as [string, RegExp][]) {
+      let { grant, issues, messages } = await filterFor(where);
+      assert.deepEqual(
+        issues,
+        [
+          {
+            code: 'unsnapshotted-policy-read',
+            path: 'rules[0].grants[0].where',
+          },
+        ],
+        where,
+      );
+      assert.strictEqual(grant, undefined, `${where}: no grant compiles`);
+      assert.true(reason.test(messages[0] ?? ''), `${where}: ${messages[0]}`);
+    }
   });
 
   test('a field of a contained value compiles to an `eq` on its dotted path', async function (assert) {
@@ -597,9 +619,6 @@ module(basename(import.meta.filename), function () {
       ['.lead.id == actor()', /only with an absolute URL/],
       ['.teachers | any(.id == actor())', /only with an absolute URL/],
       ['.id == "@cardstack/catalog/classrooms/1"', /only with an absolute URL/],
-      // A field the stored source does not hold.
-      ['.summary == actor()', /computed.*snapshot: true/],
-      ['.roster | any(.id == actor())', /filled by a query/],
       // A field the index holds in a form the stored source does not.
       ['.published == true', /boolean field holds its unset value/],
       ['.published == null', /compares only the base string and number/],
@@ -866,7 +885,7 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('a grant annotated as reading a snapshot reads a field computed in one type and stored in the other alike, and any other difference is still recorded', async function (assert) {
+    test('a grant judged against the snapshot reads a field computed in one type and stored in the other alike, and an annotated grant that reads only stored fields is judged as the stored source is', async function (assert) {
       let policy = await compileHolding(
         [
           { operation: 'query', where: { bxl: OWN, snapshot: true } },
@@ -889,21 +908,26 @@ module(basename(import.meta.filename), function () {
         },
       );
       assert.deepEqual(policy.issues, []);
-      let [snapshotOwn, snapshotSummary, own] = grantsOf(policy);
+      let [annotatedOwn, snapshotSummary, own] = grantsOf(policy);
       assert.deepEqual(
-        misreadings(snapshotOwn),
-        { providerId: ['RetypedClassroom'] },
-        'the snapshot grant reads the descendant that computes `providerId` alike, and records the one that retypes it',
+        [annotatedOwn.where?.snapshot, snapshotSummary.where?.snapshot],
+        [false, true],
+        '`Classroom` stores `providerId` and computes `summary`, so only the grant reading `summary` is judged against the snapshot',
+      );
+      assert.deepEqual(
+        misreadings(annotatedOwn),
+        { providerId: [COMPUTED.name, 'RetypedClassroom'] },
+        'the annotated grant reading only a stored field records the descendant that computes `providerId`, as the unannotated grant does',
       );
       assert.strictEqual(
         misreadings(snapshotSummary),
         undefined,
-        'and a descendant that stores what `Classroom` computes is read alike too',
+        'a descendant that stores what `Classroom` computes is read alike by the grant judged against the snapshot',
       );
       assert.deepEqual(
         misreadings(own),
         { providerId: [COMPUTED.name, 'RetypedClassroom'] },
-        'while the same predicate unannotated records both',
+        'and the same predicate unannotated records both',
       );
     });
 
