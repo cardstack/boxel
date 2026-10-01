@@ -27,18 +27,28 @@ import {
 import CardInfoTemplates from './default-templates/card-info';
 import {
   CardCrudFunctionsContextName,
+  PermissionsContextName,
   cardDefComputedFields,
+  chooseCard,
   DEFAULT_REDIRECT_STATUS,
   findDuplicateRoutingPaths,
   findRedirectCycles,
   getField,
   getFieldIcon,
+  isCardInstance,
+  isLocalId,
+  RealmPaths,
   REDIRECT_STATUS_CODES,
+  realmPolicyRef,
   rri,
   subscribeToRealm,
   validateRedirectTarget,
   validateRoutingPath,
+  type CodeRef,
+  type CreateNewCard,
+  type Permissions,
 } from '@cardstack/runtime-common';
+import { getCardDirectoryName } from '@cardstack/runtime-common/helpers/card-directory-name';
 import {
   BoxelInput,
   BoxelInputGroup,
@@ -47,14 +57,20 @@ import {
   FieldContainer,
   Header,
   IconButton,
+  LoadingIndicator,
   Pill,
   RadioInput,
 } from '@cardstack/boxel-ui/components';
 import { eq, not } from '@cardstack/boxel-ui/helpers';
-import { IconPlus, IconTrash } from '@cardstack/boxel-ui/icons';
+import {
+  IconMinusCircle,
+  IconPlus,
+  IconTrash,
+} from '@cardstack/boxel-ui/icons';
 import AlertTriangleIcon from '@cardstack/boxel-icons/alert-triangle';
 import CircleCheckIcon from '@cardstack/boxel-icons/circle-check';
 import FileSettingsIcon from '@cardstack/boxel-icons/file-settings';
+import ShieldCheckIcon from '@cardstack/boxel-icons/shield-check';
 import LinkIcon from '@cardstack/boxel-icons/link';
 import SettingsIcon from '@cardstack/boxel-icons/settings';
 import { registerDestructor } from '@ember/destroyable';
@@ -1216,6 +1232,9 @@ interface PolicyCardSignature {
     // Show the pointer itself beneath the card, as the isolated view does.
     // The edit view has the pointer in its field already.
     showPointer?: boolean;
+    // The card the pointer names is being created, and is not there to load
+    // until its realm has saved and indexed it.
+    busy?: boolean;
   };
 }
 
@@ -1238,7 +1257,7 @@ class PolicyCard extends GlimmerComponent<PolicyCardSignature> {
   #live = isLiveRender();
 
   private get readable(): boolean | undefined {
-    if (!this.settled || !this.#live) {
+    if (this.args.busy || !this.settled || !this.#live) {
       return undefined;
     }
     return this.args.context?.canInvoke?.('read', this.settled);
@@ -1266,6 +1285,9 @@ class PolicyCard extends GlimmerComponent<PolicyCardSignature> {
   }
 
   private get state(): string | undefined {
+    if (this.args.busy) {
+      return 'creating';
+    }
     if (this.card) {
       return 'shown';
     }
@@ -1319,7 +1341,15 @@ class PolicyCard extends GlimmerComponent<PolicyCardSignature> {
       data-test-realm-config-policy-card={{this.state}}
       {{this.follow this.pointer}}
     >
-      {{#if this.card}}
+      {{#if @busy}}
+        <div
+          class='policy-card-fitted policy-card-busy'
+          data-test-realm-config-policy-card-busy
+        >
+          <LoadingIndicator />
+          <span>Creating the policy…</span>
+        </div>
+      {{else if this.card}}
         <div
           class='policy-card-fitted'
           data-test-realm-config-policy-card-fitted
@@ -1380,13 +1410,244 @@ class PolicyCard extends GlimmerComponent<PolicyCardSignature> {
       .policy-card-fitted {
         width: 100%;
         max-width: 25rem;
-        height: 4.0625rem;
+        height: var(--realm-config-policy-card-height, 4.0625rem);
         cursor: pointer;
+      }
+      .policy-card-busy {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xs);
+        box-sizing: border-box;
+        padding: 0 var(--boxel-sp-sm);
+        border: 1px dashed var(--border, var(--boxel-border-color));
+        border-radius: var(--boxel-border-radius);
+        color: var(--muted-foreground, var(--boxel-450));
+        font-size: var(--boxel-font-size-sm);
+        cursor: progress;
       }
       .policy-card-note {
         margin: 0;
         color: var(--muted-foreground, var(--boxel-450));
         font-size: var(--boxel-font-size-sm);
+      }
+    </style>
+  </template>
+}
+
+// How long a policy just created from the chooser is given to be saved,
+// which is how long it shows as being created.
+const NEW_POLICY_SAVE_WAIT_MS = 30_000;
+
+// The id a realm gives a card it is sent with a local id, when the caller may
+// write the realm: the realm's URL, a directory named after the card's type,
+// and the local id. A realm names a card this way whether or not it has saved
+// it yet, so the pointer can name the card before it is there.
+function newCardIdOf(localId: string, ref: CodeRef, realm: URL): string {
+  let paths = new RealmPaths(realm);
+  return `${paths.url}${getCardDirectoryName(ref, paths)}/${localId}`;
+}
+
+interface PolicyPointerEditorSignature {
+  Args: {
+    config: RealmConfig;
+    context: CardContext | undefined;
+  };
+}
+
+// The edit view's control for the pointer. A policy is chosen the way a
+// linked card is, from the card chooser, filtered to RealmPolicy cards and
+// able to create one in this realm, and removed the same way. What is stored
+// is still the chosen card's id rather than a link, for the reason the field
+// gives.
+class PolicyPointerEditor extends GlimmerComponent<PolicyPointerEditorSignature> {
+  @consume(PermissionsContextName)
+  declare private permissions: Permissions | undefined;
+  @consume(CardCrudFunctionsContextName)
+  declare private cardCrudFunctions: CardCrudFunctions | undefined;
+
+  private get pointer(): string {
+    return this.args.config.policy?.trim() ?? '';
+  }
+
+  private get canWrite(): boolean {
+    return Boolean(this.permissions?.canWrite);
+  }
+
+  private choose = () => {
+    this.chooseTask.perform();
+  };
+
+  private get creating(): boolean {
+    return this.awaitCreatedTask.isRunning;
+  }
+
+  // A policy being created is shown as chosen, whether or not the pointer
+  // could be given its id yet.
+  private get hasPolicy(): boolean {
+    return Boolean(this.pointer) || this.creating;
+  }
+
+  private remove = () => {
+    this.awaitCreatedTask.cancelAll();
+    this.args.config.policy = null as unknown as string;
+  };
+
+  private chooseTask = restartableTask(async () => {
+    let consumingRealm = this.args.config[realmURL];
+    let createCard = this.cardCrudFunctions?.createCard;
+    // Where the chooser creates a card, which it says only to the function
+    // that creates it.
+    let created: { ref: CodeRef; realm: URL | undefined } | undefined;
+    let createNewCard: CreateNewCard | undefined = createCard
+      ? async (ref, relativeTo, opts) => {
+          created = { ref, realm: opts?.realmURL };
+          return await createCard(ref, relativeTo, opts);
+        }
+      : undefined;
+    let cardId = await chooseCard(
+      { filter: { type: realmPolicyRef } },
+      {
+        offerToCreate: {
+          ref: realmPolicyRef,
+          relativeTo: undefined,
+          realmURL: consumingRealm,
+        },
+        createNewCard,
+        consumingRealm,
+      },
+    );
+    if (!cardId) {
+      return;
+    }
+    if (!isLocalId(cardId)) {
+      this.args.config.policy = cardId;
+      return;
+    }
+    // A card the chooser just created is answered by its local id, before
+    // its realm has saved it. The realm reads a pointer only as a URL or a
+    // realm-prefixed id, so the pointer names the id the realm will give the
+    // card, and the card shows as being created until it is saved.
+    let expected = created?.realm
+      ? newCardIdOf(cardId, created.ref, created.realm)
+      : undefined;
+    if (expected) {
+      this.args.config.policy = expected;
+    }
+    this.awaitCreatedTask.perform(cardId, expected);
+  });
+
+  // Once the created card is saved, the pointer names the id it was given,
+  // should that differ from the one expected and the pointer not have been
+  // changed since.
+  private awaitCreatedTask = restartableTask(
+    async (localId: string, expected: string | undefined) => {
+      let card = await this.args.context?.store.get(localId);
+      if (!isCardInstance(card)) {
+        return;
+      }
+      for (
+        let waited = 0;
+        !card.id && waited < NEW_POLICY_SAVE_WAIT_MS;
+        waited += 100
+      ) {
+        await timeout(100);
+      }
+      if (
+        card.id &&
+        card.id !== expected &&
+        this.pointer === (expected ?? '')
+      ) {
+        this.args.config.policy = card.id;
+      }
+    },
+  );
+
+  <template>
+    <div class='policy-pointer-editor' data-test-realm-config-policy-editor>
+      {{#if this.hasPolicy}}
+        <div class='chosen {{if this.canWrite "can-write"}}'>
+          <div class='chosen-card'>
+            <PolicyCard
+              @pointer={{this.pointer}}
+              @context={{@context}}
+              @showPointer={{true}}
+              @busy={{this.creating}}
+            />
+          </div>
+          {{#if this.canWrite}}
+            <IconButton
+              @icon={{IconMinusCircle}}
+              @width='20px'
+              @height='20px'
+              class='remove'
+              {{on 'click' this.remove}}
+              aria-label='Remove the policy'
+              data-test-realm-config-policy-remove
+            />
+          {{/if}}
+        </div>
+      {{else if this.canWrite}}
+        <Button
+          class='choose'
+          @kind='secondary'
+          @size='tall'
+          @rectangular={{true}}
+          {{on 'click' this.choose}}
+          data-test-realm-config-policy-choose
+        >
+          Link Realm Policy
+        </Button>
+      {{else}}
+        <p class='empty'>No policy.</p>
+      {{/if}}
+      {{! A card being created is not there to judge, so its standing is not
+        asked about until it is saved. }}
+      {{#unless this.creating}}
+        <PolicyStanding @config={{@config}} />
+      {{/unless}}
+    </div>
+    <style scoped>
+      .policy-pointer-editor {
+        --realm-config-policy-card-height: 4.0625rem;
+        display: grid;
+        gap: var(--boxel-sp-xs);
+      }
+      .chosen.can-write {
+        display: grid;
+        grid-template-columns: minmax(0, 25rem) auto;
+        gap: var(--boxel-sp-xs);
+        align-items: start;
+      }
+      .chosen-card {
+        display: grid;
+        gap: var(--boxel-sp-xxs);
+        min-width: 0;
+      }
+      .remove {
+        --icon-color: var(--background, var(--boxel-light));
+        --icon-border: var(--foreground, var(--boxel-dark));
+        --icon-bg: var(--foreground, var(--boxel-dark));
+        --boxel-icon-button-width: var(--boxel-icon-med);
+        --boxel-icon-button-height: var(--boxel-icon-med);
+        margin-top: calc(
+          (var(--realm-config-policy-card-height) - var(--boxel-icon-med)) / 2
+        );
+        outline: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .remove:focus,
+      .remove:hover {
+        --icon-bg: var(--primary, var(--boxel-highlight));
+        --icon-border: var(--primary, var(--boxel-highlight));
+      }
+      .choose {
+        width: fit-content;
+      }
+      .empty {
+        margin: 0;
+        color: var(--muted-foreground, var(--boxel-450));
       }
     </style>
   </template>
@@ -1517,6 +1778,10 @@ class RealmConfigEdit extends Component<typeof RealmConfig> {
     return this.args.model as unknown as RealmConfig;
   }
 
+  // The policy field holds a string, but what it names is a policy card, so
+  // its row carries the policy card's icon rather than a string's.
+  policyIcon = ShieldCheckIcon;
+
   <template>
     <div class='realm-config-edit' data-test-realm-config-edit>
       <Header @hasBottomBorder={{true}} class='card-info-header'>
@@ -1566,18 +1831,18 @@ class RealmConfigEdit extends Component<typeof RealmConfig> {
             {{/if}}
             <FieldContainer
               @label={{startCase key}}
-              @icon={{getFieldIcon @model key}}
+              @icon={{if
+                (eq key 'policy')
+                this.policyIcon
+                (getFieldIcon @model key)
+              }}
               data-test-field={{key}}
             >
               {{#if (eq key 'policy')}}
-                <div class='policy-field'>
-                  <Field />
-                  <PolicyCard
-                    @pointer={{this.config.policy}}
-                    @context={{@context}}
-                  />
-                  <PolicyStanding @config={{this.config}} />
-                </div>
+                <PolicyPointerEditor
+                  @config={{this.config}}
+                  @context={{@context}}
+                />
               {{else}}
                 <Field />
               {{/if}}
@@ -1628,10 +1893,6 @@ class RealmConfigEdit extends Component<typeof RealmConfig> {
         border-radius: var(--boxel-border-radius-sm, 6px);
         padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
         font-size: var(--boxel-font-size-sm);
-      }
-      .policy-field {
-        display: grid;
-        gap: var(--boxel-sp-xs);
       }
       .warning code {
         font-family: var(--boxel-font-family-mono, monospace);

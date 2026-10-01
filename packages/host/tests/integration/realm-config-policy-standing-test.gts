@@ -1,6 +1,5 @@
 import {
   click,
-  fillIn,
   rerender,
   waitFor,
   type RenderingTestContext,
@@ -218,11 +217,16 @@ module('Integration | realm config policy standing', function (hooks) {
       .exists('the issue is shown in the policy field’s row');
   });
 
-  test('typing a fixed pointer clears the issue once the save lands', async function (assert) {
+  test('choosing a policy from the card chooser clears the issue once the save lands', async function (assert) {
     await renderConfig(MISSING, 'edit');
     assert.deepEqual(issuesShown(), ['policy-card-missing']);
 
-    await fillIn('[data-test-field="policy"] input', POLICY);
+    await click('[data-test-realm-config-policy-remove]');
+    await click('[data-test-realm-config-policy-choose]');
+    await waitFor(`[data-test-item-button="${POLICY}"]`, { timeout: 10_000 });
+    await click(`[data-test-item-button="${POLICY}"]`);
+    await click('[data-test-card-chooser-go-button]');
+
     await waitFor('[data-test-realm-policy-status="in-force"]', {
       timeout: 10_000,
     });
@@ -232,7 +236,116 @@ module('Integration | realm config policy standing', function (hooks) {
       .dom(
         '[data-test-field="policy"] [data-test-realm-config-policy-card-fitted]',
       )
-      .containsText('Education', 'and the card it names renders beside it');
+      .containsText('Education', 'and the chosen card renders in its place');
+    assert
+      .dom('[data-test-field="policy"] [data-test-realm-config-policy-pointer]')
+      .hasText(POLICY, 'with its id beneath it, which is what is stored');
+  });
+
+  test('a policy created from the card chooser is named at once, and shows as being created until it is saved', async function (assert) {
+    let { config } = await renderConfig(undefined, 'edit');
+
+    await click('[data-test-realm-config-policy-choose]');
+    await waitFor(`[data-test-item-button-create-new="${testRealmURL}"]`, {
+      timeout: 10_000,
+    });
+    // Not awaited, since a click waits for everything it sets going, the
+    // card's save included, and what shows while the save is in flight is
+    // what this looks at.
+    let created = click(`[data-test-item-button-create-new="${testRealmURL}"]`);
+
+    await waitFor('[data-test-realm-config-policy-card="creating"]', {
+      timeout: 10_000,
+    });
+    assert
+      .dom('[data-test-card-chooser-modal]')
+      .doesNotExist('the chooser is dismissed without waiting for the save');
+    let expected = config.policy!;
+    assert.true(
+      new RegExp(`^${testRealmURL}RealmPolicy/[0-9a-f-]{36}$`).test(expected),
+      `the pointer names the id the realm will give the new card: ${expected}`,
+    );
+    assert
+      .dom('[data-test-field="policy"] [data-test-realm-config-policy-pointer]')
+      .hasText(expected, 'and shows it');
+    assert
+      .dom('[data-test-realm-config-policy-card-busy]')
+      .hasText('Creating the policy…', 'the card shows as being created');
+    assert
+      .dom('[data-test-realm-config-policy-card-fitted]')
+      .doesNotExist('there is no card to render yet');
+    assert
+      .dom('[data-test-realm-policy-standing]')
+      .doesNotExist('nor a standing to report');
+    assert
+      .dom('[data-test-realm-config-policy-remove]')
+      .exists('and it can be removed like any chosen policy');
+
+    await created;
+    await waitFor('[data-test-realm-config-policy-card="shown"]', {
+      timeout: 10_000,
+    });
+    assert
+      .dom('[data-test-realm-config-policy-card-busy]')
+      .doesNotExist('once saved, the card is no longer being created');
+    assert
+      .dom(
+        '[data-test-field="policy"] [data-test-realm-config-policy-card-fitted]',
+      )
+      .exists('and its fitted view renders in its place');
+    assert.strictEqual(
+      config.policy,
+      expected,
+      'the realm gave the card the id the pointer names',
+    );
+    assert
+      .dom(`[data-test-stack-card="${expected}"]`)
+      .exists('the new policy opens in a stack item of its own to be written');
+
+    await waitFor('[data-test-realm-policy-status="in-force"]', {
+      timeout: 10_000,
+    });
+    assert
+      .dom('[data-test-realm-policy-status="in-force"]')
+      .hasText('In force', 'and the policy it names is in force');
+  });
+
+  test('a policy removed while it is being created stays removed once it is saved', async function (assert) {
+    let { config } = await renderConfig(undefined, 'edit');
+
+    await click('[data-test-realm-config-policy-choose]');
+    await waitFor(`[data-test-item-button-create-new="${testRealmURL}"]`, {
+      timeout: 10_000,
+    });
+    let created = click(`[data-test-item-button-create-new="${testRealmURL}"]`);
+    await waitFor('[data-test-realm-config-policy-card="creating"]', {
+      timeout: 10_000,
+    });
+
+    await click('[data-test-realm-config-policy-remove]');
+    assert
+      .dom('[data-test-realm-config-policy-card-busy]')
+      .doesNotExist('the card no longer shows as being created');
+    assert
+      .dom('[data-test-field="policy"] [data-test-realm-config-policy-choose]')
+      .exists('and the chooser is offered again');
+
+    await created;
+    assert.notOk(
+      config.policy,
+      'the save landing afterwards does not name the card again',
+    );
+    assert
+      .dom('[data-test-field="policy"] [data-test-realm-config-policy-choose]')
+      .exists('and the chooser is still offered');
+  });
+
+  test('a realm with no policy offers the card chooser where the pointer is edited', async function (assert) {
+    await renderConfig(undefined, 'edit');
+    assert
+      .dom('[data-test-field="policy"] [data-test-realm-config-policy-choose]')
+      .hasText('Link Realm Policy');
+    assert.dom('[data-test-realm-config-policy-remove]').doesNotExist();
   });
 
   test('an answer about the saved pointer is not shown beside a different one', async function (assert) {
@@ -257,15 +370,45 @@ module('Integration | realm config policy standing', function (hooks) {
     );
   });
 
-  test('emptying the pointer takes its answer away at once', async function (assert) {
-    let { config } = await renderConfig(MISSING, 'edit');
-    assert.deepEqual(issuesShown(), ['policy-card-missing']);
+  test('removing a policy in force clears the pointer, and the realm names no policy once the save lands', async function (assert) {
+    let { realm, config } = await renderConfig(POLICY, 'edit');
+    await waitFor('[data-test-realm-config-policy-card="shown"]');
+    assert.dom('[data-test-realm-policy-status="in-force"]').exists();
 
-    config.policy = '';
-    await rerender();
+    await click('[data-test-realm-config-policy-remove]');
+    assert.notOk(config.policy, 'the pointer is cleared');
+    assert
+      .dom('[data-test-realm-config-policy-card-fitted]')
+      .doesNotExist('the policy card is no longer shown');
+    assert.dom('[data-test-realm-config-policy-remove]').doesNotExist();
+    assert
+      .dom('[data-test-realm-config-policy-choose]')
+      .exists('and another policy can be chosen');
     assert
       .dom('[data-test-realm-policy-status]')
-      .doesNotExist('an empty field is not shown the old pointer’s problem');
+      .doesNotExist('a realm that names no policy has no standing');
+
+    let named: unknown = await realm.getRealmPolicy();
+    for (let tries = 0; named !== undefined && tries < 50; tries++) {
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      named = await realm.getRealmPolicy();
+    }
+    assert.strictEqual(
+      named,
+      undefined,
+      'once the save lands, the realm reads no policy from realm.json',
+    );
+  });
+
+  test('removing the policy takes its standing away at once, and offers the chooser', async function (assert) {
+    await renderConfig(MISSING, 'edit');
+    assert.deepEqual(issuesShown(), ['policy-card-missing']);
+
+    await click('[data-test-realm-config-policy-remove]');
+    assert
+      .dom('[data-test-realm-policy-status]')
+      .doesNotExist('an empty pointer is not shown the old pointer’s problem');
+    assert.dom('[data-test-realm-config-policy-choose]').exists();
   });
 
   test('creating the card the pointer names clears the issue', async function (assert) {

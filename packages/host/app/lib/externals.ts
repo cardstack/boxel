@@ -276,6 +276,11 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
     id: '@cardstack/runtime-common/helpers/ai',
     resolve: () => import('@cardstack/runtime-common/helpers/ai'),
   });
+  virtualNetwork.shimAsyncModule({
+    id: '@cardstack/runtime-common/helpers/card-directory-name',
+    resolve: () =>
+      import('@cardstack/runtime-common/helpers/card-directory-name'),
+  });
 
   shimModulesForLiveTests(virtualNetwork);
 
