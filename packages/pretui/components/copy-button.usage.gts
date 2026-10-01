@@ -8,11 +8,11 @@ const COPY_VARIANTS = ['primary', 'secondary', 'ghost', 'destructive'];
 
 // ── CopyButton ← copy-button/usage.gts ───────────────────────────────────
 // Dropped knobs: @tooltipText / @placement / @offset (boxel-ui wraps the
-// button in an ember-velcro Tooltip — wart list forbids; the confirmation
-// is the glyph swap itself), @size / @width / @height (fixed 28px
-// IconButton square), @ariaLabel (renamed @label). Adaptation on record:
-// the copied state resets on pointerleave/blur, not a 2s setTimeout —
-// realm code takes no timers.
+// button in an ember-velcro Tooltip — wart list forbids; the result is the
+// glyph swap plus a status announcement), @width / @height (the glyph
+// follows @size). @textToCopy and @ariaLabel are accepted as aliases of
+// @text and @label. Adaptation on record: the result resets on
+// pointerleave/blur, not a 2s setTimeout — realm code takes no timers.
 class CopyButtonUsage extends Component {
   variantOptions = COPY_VARIANTS;
   @tracked textToCopy = 'Text to copy';
@@ -32,7 +32,7 @@ class CopyButtonUsage extends Component {
   <template>
     <FreestyleUsage
       @name='CopyButton'
-      @description='Button that copies a string to the clipboard on click and surfaces a brief confirmation — common in code blocks, share-link rows, and developer tools. The glyph swaps to a success check until the pointer leaves.'
+      @description='Button that copies a string to the clipboard on click and surfaces a brief confirmation — common in code blocks, share-link rows, and developer tools. The glyph swaps to a check, or a cross on failure, until the pointer leaves.'
       @source={{this.usage}}
     >
       <:example>
@@ -47,14 +47,14 @@ class CopyButtonUsage extends Component {
           @name='text'
           @required={{true}}
           @value={{this.textToCopy}}
-          @description="The string written to navigator.clipboard — boxel-ui's @textToCopy."
+          @description='The string written to navigator.clipboard; @value and @textToCopy are aliases.'
           @onInput={{this.setText}}
         />
         <Args.String
           @name='label'
           @defaultValue='Copy to clipboard'
           @value={{this.labelText}}
-          @description="Accessible name while idle — boxel-ui's @ariaLabel; swaps to 'Copied' while the confirmation holds."
+          @description='Accessible name, fixed through the result; @ariaLabel is an alias.'
           @onInput={{this.setLabel}}
         />
         <Args.String
