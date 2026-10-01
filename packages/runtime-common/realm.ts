@@ -74,6 +74,7 @@ import {
 import {
   emptySearchEntryDocument,
   fieldsetFromParam,
+  htmlQueryFormats,
   htmlQueryFromParams,
   markPolicyScoped,
   parseSearchEntryQueryFromPayload,
@@ -232,6 +233,7 @@ import {
   scopeCallerFor,
 } from './card-operations/dispatch.ts';
 import type { ReadPlan } from './card-operations/dispatch.ts';
+import type { PrerenderedHtmlFormat } from './prerendered-html-format.ts';
 import type { LinkStrategy } from '@cardstack/base/operations';
 import {
   dischargePendingDecision,
@@ -1618,6 +1620,7 @@ function buildEntryHtmlEtag(
   realmInfoHash: string | undefined,
   resolveLinksOnly = false,
   unboundedAssembly = false,
+  unshareableFormats: readonly string[] = [],
 ): string {
   let indexGeneration = doc.data.meta?.generation ?? 0;
   let htmlIds = doc.data.relationships.html?.data ?? [];
@@ -1650,6 +1653,18 @@ function buildEntryHtmlEtag(
     base = unboundedAssembly
       ? `${base}:lb-off`
       : `${base}:lb${assembledLinkResourceBudget()}`;
+  }
+  // The withheld formats this request selects. For a healthy card the body
+  // already shows a withheld rendering as `none` above, but an errored card
+  // answers a withheld format with an error rendering at the same generation
+  // it answers a shared one with its last-known-good markup, and the type's
+  // declaration can change while the card's own generations stand still — a
+  // type declared in another realm's module, say. So they are named, and a
+  // validator issued before the declaration changed never matches the body
+  // served after. A request selecting only shared formats names none, so its
+  // pure-html body keeps the `<index>:<html>` validator a client rebuilds.
+  if (unshareableFormats.length > 0) {
+    base = `${base}:dataonly-${unshareableFormats.join(',')}`;
   }
   return `"${base}"`;
 }
@@ -2515,20 +2530,22 @@ export class Realm {
   #cachedHostRoutingMap: HostRoutingRule[] | null = null;
 
   // What a card's `read` would answer with — whether it carries a transform
-  // stage, and how much of the link graph its declaration carries — by card
-  // URL. Asked by the card+json `GET` before it takes either path that answers
-  // without running the read, and the lookup behind it is a database read — so
-  // on a realm serving conditional requests it would be a round trip added to
-  // exactly the requests that exist to avoid one.
+  // stage, how much of the link graph its declaration carries, and which
+  // prerendered formats it serves data-only — by card URL. Asked by the
+  // card+json `GET` before it takes either path that answers without running
+  // the read, and by the routes that serve a card's markup without running it,
+  // and the lookup behind it is a database read — so on a realm serving
+  // conditional requests it would be a round trip added to exactly the
+  // requests that exist to avoid one.
   //
   // Cleared by `clearRealmIndexCaches()` alongside the entries above, which is
-  // sound because the answer is a function of the card's `adoptsFrom` and its
-  // type's declarations, and neither moves without an index swap — a card's
-  // stored type is changed by a write, and a module's declarations by
-  // reindexing it. A foreign realm's module could change without this realm
-  // swapping, and does not reach this: a card with foreign-realm dependencies
-  // is served no validator at all, so neither fast path is taken and this is
-  // never asked.
+  // sound for the answers `readPlan` keeps: those are a function of the card's
+  // stored type and of declarations in this realm's own modules (or the base
+  // realm's, which change only with a deploy), and neither moves without an
+  // index swap — a card's stored type is changed by a write, and a module's
+  // declarations by reindexing it. A type declared in another realm's module
+  // can change on that realm's schedule, so `readPlan` resolves it afresh on
+  // every ask rather than keeping it here, as it does a path holding no card.
   #readPlanByURL = new Map<string, ReadPlan>();
 
   // This loader is not meant to be used operationally, rather it serves as a
@@ -13364,6 +13381,19 @@ export class Realm {
     let duringPrerender = isDuringPrerenderRequest(request);
     let resolveLinksOnly =
       this.#decideLinkShape(request, 'single-row')?.mode === 'links-only';
+    // A read rooted at this card, so the formats its type's `read` declares
+    // unshareable are served data-only here, as everywhere a read of the card
+    // serves its markup. The route answers without running the read, which is
+    // why the declaration is asked for on its own rather than learned from an
+    // assembly.
+    let { unshareableFormats } = await readPlan(
+      this.operationCore,
+      kind === 'file'
+        ? dbUrl
+        : this.paths.fileURL(localPath.replace(/\.json$/, '') || 'index'),
+      undefined,
+      this.#readPlanByURL,
+    );
     let doc = await this.#realmIndexQueryEngine.searchEntry(
       dbUrl,
       { htmlQuery, fieldset, kind },
@@ -13373,6 +13403,7 @@ export class Realm {
           ? { cacheOnlyDefinitions: true, skipLinkAssemblyBudget: true }
           : {}),
         ...(resolveLinksOnly ? { resolveLinksOnly: true } : {}),
+        ...(unshareableFormats.length > 0 ? { unshareableFormats } : {}),
       },
     );
     if (!doc) {
@@ -13387,6 +13418,14 @@ export class Realm {
       this.getCachedRealmInfoHash(),
       resolveLinksOnly,
       duringPrerender,
+      // Only the withheld formats this request selects decide its body; an
+      // htmlQuery naming no format selects among every one.
+      fieldset.html
+        ? unshareableFormats.filter((format) => {
+            let asked = htmlQueryFormats(htmlQuery);
+            return asked.length === 0 || asked.includes(format);
+          })
+        : [],
     );
     let ifNoneMatch = request.headers.get('if-none-match');
     if (ifNoneMatch && ifNoneMatchMatches(ifNoneMatch, etag)) {
@@ -13685,6 +13724,9 @@ export class Realm {
       ...(opts?.links === 'none' && !opts?.omitIncluded
         ? { omitRelationships: true }
         : {}),
+      ...(opts?.unshareableFormats?.length
+        ? { unshareableFormats: opts.unshareableFormats }
+        : {}),
       // `!== undefined` so an explicit priority 0 (system-initiated) survives.
       ...(opts?.priority !== undefined ? { priority: opts.priority } : {}),
       ...(opts?.timings ? { timings: opts.timings } : {}),
@@ -13767,8 +13809,10 @@ export class Realm {
     // what its result holds is the realm's to decide, not the caller's filter.
     let resolvedByServer = isNamedQueryPayload(payload);
     // How much of each result's link graph a named query's declaration lets
-    // its results carry. An ad-hoc search declares nothing.
+    // its results carry, and which formats it serves them data-only for. An
+    // ad-hoc search declares neither.
     let declaredLinks: LinkStrategy | undefined;
+    let unshareableFormats: PrerenderedHtmlFormat[] = [];
     if (isNamedQueryPayload(payload)) {
       // A named query searches this realm and no other, so this realm is the
       // whole of the scope it may resolve to.
@@ -13779,6 +13823,7 @@ export class Realm {
         });
         payload = resolved.query;
         declaredLinks = resolved.links;
+        unshareableFormats = resolved.unshareableFormats;
       } catch (err: unknown) {
         if (!isOperationFailure(err)) {
           throw err;
@@ -13902,6 +13947,13 @@ export class Realm {
           // `included[]` expansion is throwaway work in this path.
           omitIncluded: duringPrerender,
           links,
+          // A render's search keeps every format's markup, whatever the
+          // declaration withholds. What it draws becomes part of the
+          // embedding card's own prerendered HTML, which that card's own
+          // declarations govern — and a render served a row data-only would
+          // draw the row from its data under the realm's authority, baking in
+          // the same content its markup holds.
+          ...(duringPrerender ? {} : { unshareableFormats }),
           ...(signal ? { signal } : {}),
         });
       // Cut an over-budget item-leg search off (408) rather than run it to
@@ -15070,6 +15122,22 @@ export class Realm {
       this.#log.warn(`Failed to query realm index counts: ${error}`);
       return { cardCount: null, fileCount: null, definitionCount: null };
     }
+  }
+
+  // The prerendered formats reads rooted at this card serve data-only, as its
+  // type's `read` declares them: none where it declares none. For a route
+  // outside this class that serves a card's markup straight from the index —
+  // the host-mode page — so it withholds the same formats every read of the
+  // card here does. `cardURL` is taken in this realm's own spelling of its
+  // URL, which is the one the declaration is resolved against.
+  async unshareableFormatsFor(cardURL: URL): Promise<PrerenderedHtmlFormat[]> {
+    let { unshareableFormats } = await readPlan(
+      this.operationCore,
+      cardURL,
+      undefined,
+      this.#readPlanByURL,
+    );
+    return unshareableFormats;
   }
 
   // CS-10054: read host routing rules from the indexed RealmConfig card.

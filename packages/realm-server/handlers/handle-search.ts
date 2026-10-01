@@ -33,6 +33,7 @@ import {
   X_BOXEL_LINK_SHAPE_HEADER,
   type Filter,
   type LinkShapeDecision,
+  type PrerenderedHtmlFormat,
   type Query,
   type SearchEntryQuery,
   type SearchShapeCacheOutcome,
@@ -211,8 +212,10 @@ export default function handleSearch(opts: {
     // answer rows to, which is then run with no filter of its own.
     let consultPolicies = true;
     // How much of each result's link graph a named query's declaration lets
-    // its results carry. An ad-hoc search declares nothing.
+    // its results carry, and which formats it serves them data-only for. An
+    // ad-hoc search declares neither.
     let declaredLinks: LinkStrategy | undefined;
+    let unshareableFormats: PrerenderedHtmlFormat[] = [];
     if (isNamedQueryPayload(payload)) {
       // The realms the declaration may be read through: the ones the caller
       // reads, and the ones whose policy could admit them, which are offered
@@ -277,6 +280,7 @@ export default function handleSearch(opts: {
           }
           payload = resolved.query;
           declaredLinks = resolved.links;
+          unshareableFormats = resolved.unshareableFormats;
           // The declaration's own scope narrows what the request named, and
           // its order is the order it is searched in.
           named = resolved.query.realms!;
@@ -318,6 +322,7 @@ export default function handleSearch(opts: {
         requested,
         resolvedByServer,
         mountRealms,
+        unshareableFormats,
       }),
     );
   };
@@ -481,10 +486,14 @@ export default function handleSearch(opts: {
       requested,
       resolvedByServer,
       mountRealms,
+      unshareableFormats,
     }: {
       requested: string[];
       resolvedByServer: boolean;
       mountRealms: MountRealms;
+      // The formats a named query's declaration serves its rows data-only
+      // for, none for an ad-hoc search.
+      unshareableFormats: PrerenderedHtmlFormat[];
     },
   ) {
     let handlerStart = Date.now();
@@ -618,12 +627,21 @@ export default function handleSearch(opts: {
       cacheOnlyDefinitions?: true;
       omitIncluded?: true;
       links?: LinkStrategy;
+      unshareableFormats?: PrerenderedHtmlFormat[];
       priority?: number;
     } = {};
     if (cacheOnlyDefinitions) searchOpts.cacheOnlyDefinitions = true;
     if (omitIncluded) searchOpts.omitIncluded = true;
     // Carried only when it narrows, so a search served whole keys without it.
     if (links !== 'full') searchOpts.links = links;
+    // Likewise carried only when the declaration withholds a format, and never
+    // on a render's search: that keeps every format's markup, since what it
+    // draws becomes part of the embedding card's own prerendered HTML, which
+    // that card's own declarations govern. It folds into the cache key below
+    // with the rest of these, because the two are different response bodies.
+    if (unshareableFormats.length > 0 && !cacheOnlyDefinitions) {
+      searchOpts.unshareableFormats = unshareableFormats;
+    }
     if (jobPriority !== null) searchOpts.priority = jobPriority;
 
     // The inner cache key: the membership query is the key's `query` member

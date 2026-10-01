@@ -1850,6 +1850,95 @@ module('Unit | operation lowering', function (hooks) {
     );
   });
 
+  test('an html declaration is carried onto a read or a query and recorded on anything else', async function (assert) {
+    let { field, contains, CardDef } = api;
+    class Roster extends CardDef {
+      static displayName = 'Roster';
+      @field title = contains(StringField);
+    }
+    shim({ Roster });
+    let lower = (
+      declarations: Record<string, unknown>,
+    ): ReturnType<typeof lowerOperationDeclarations> =>
+      lowerOperationDeclarations(
+        declarations as unknown as Record<
+          string,
+          OperationsModule.OperationDeclaration
+        >,
+        {
+          definition: buildDefinition(Roster as unknown as typeof BaseDef),
+          lookupDefinition,
+          identifyCard: (target) => identifyCard(target),
+        },
+      );
+
+    let read = await lower({
+      summary: {
+        base: 'read',
+        html: { embedded: 'unshareable', fitted: 'shareable' },
+      },
+    });
+    assert.deepEqual(codes(read), [], 'a read may declare one');
+    assert.deepEqual(
+      read.operations.summary.html,
+      { embedded: 'unshareable', fitted: 'shareable' },
+      'and the realm serves reads of the card from the stored entry',
+    );
+
+    let query = await lower({
+      roll: {
+        base: 'query',
+        query: { filter: { on: Roster, eq: { title: 'x' } } },
+        html: { isolated: 'unshareable' },
+      },
+    });
+    assert.deepEqual(codes(query), [], 'a query may declare one');
+    assert.deepEqual(
+      query.operations.roll.html,
+      { isolated: 'unshareable' },
+      'and the realm serves its rows from the stored entry',
+    );
+
+    // The decorator refuses this where it is written, so one only ever reaches
+    // a stored entry — which outlives the code that built it, and where a
+    // withholding that is never applied reads as one that is.
+    let write = await lower({
+      rename: {
+        base: 'transform',
+        set: { title: 'Renamed' },
+        html: { embedded: 'unshareable' },
+      },
+    });
+    assert.deepEqual(
+      codes(write),
+      ['html-without-rendering'],
+      'a base that serves no prerendered HTML has nothing to withhold',
+    );
+    assert.strictEqual(
+      write.operations.rename.html,
+      undefined,
+      'and nothing is stored that a serving path would read as a withholding',
+    );
+
+    for (let [label, html] of [
+      ['a format the realm does not prerender', { edit: 'unshareable' }],
+      ['a value that says neither', { embedded: 'hidden' }],
+      ['something other than a record of formats', ['embedded']],
+    ] as const) {
+      let unknown = await lower({ summary: { base: 'read', html } });
+      assert.deepEqual(
+        codes(unknown),
+        ['invalid-html-declaration'],
+        `${label} is its own finding`,
+      );
+      assert.strictEqual(
+        unknown.operations.summary.html,
+        undefined,
+        `${label} is not stored for the serving path to read as withholding every format`,
+      );
+    }
+  });
+
   test('an append that says nothing to append is recorded rather than stored as work', async function (assert) {
     // The decorator refuses each of these, so one only ever arrives on a
     // stored entry — where appending nothing, or a literal `null`, or picking

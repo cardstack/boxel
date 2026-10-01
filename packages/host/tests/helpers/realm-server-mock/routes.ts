@@ -17,6 +17,7 @@ import {
   X_BOXEL_LOGGING_CORRELATION_ID_HEADER,
   type RealmInfo,
   type EntryCollectionDocument,
+  type PrerenderedHtmlFormat,
   type SearchEntryQuery,
 } from '@cardstack/runtime-common';
 
@@ -186,13 +187,16 @@ function registerSearchRoutes() {
       // Mirror the realm-server's `handle-search`: a request naming a
       // declared query is answered with the realm's own resolution of it,
       // read through the first realm the request names that is in process,
-      // and its results carry what the declaration's link strategy lets them.
-      // A render's search is the exception, as it is there: it keeps each
-      // row's stored links whatever the query declares, because the render
-      // resolves the cards those links name itself.
+      // and its results carry what the declaration's link strategy lets them,
+      // with the formats it declares unshareable served data-only. A render's
+      // search is the exception, as it is there: it keeps each row's stored
+      // links and every format's markup whatever the query declares, because
+      // the render resolves the cards those links name itself, and what it
+      // draws is governed as the embedding card's own markup.
       let duringRender =
         (req.headers.get(DURING_PRERENDER_HEADER) ?? '').length > 0;
       let links: LinkStrategy = 'full';
+      let unshareableFormats: PrerenderedHtmlFormat[] = [];
       let invocation = searchInvocation(payload);
       let resolvedByServer = isNamedQueryPayload(payload);
       let requested = realmList;
@@ -228,6 +232,9 @@ function registerSearchRoutes() {
             payload = resolved.query;
             realmList = resolved.query.realms!;
             links = duringRender ? 'full' : resolved.links;
+            unshareableFormats = duringRender
+              ? []
+              : resolved.unshareableFormats;
           } catch (e) {
             if (isOperationFailure(e)) {
               return new Response(JSON.stringify(errorsDocument(e.error)), {
@@ -317,6 +324,7 @@ function registerSearchRoutes() {
           {
             ...(loggingCorrelationId ? { loggingCorrelationId } : {}),
             ...(links !== 'full' ? { links } : {}),
+            ...(unshareableFormats.length > 0 ? { unshareableFormats } : {}),
           },
           scopedQueries.size === 0
             ? undefined
