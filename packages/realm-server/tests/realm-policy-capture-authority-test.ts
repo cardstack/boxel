@@ -367,7 +367,9 @@ module(basename(import.meta.filename), function (hooks) {
   }
 
   test('a capture its requester POSTs draws what they may see, and serves back to them alone', async function (assert) {
-    let captureSpec = { viewport: { width: 400, height: 100 }, fullPage: true };
+    // Shorter than any reader's rows, so a full-page capture's height is the
+    // board's own.
+    let captureSpec = { viewport: { width: 400, height: 50 }, fullPage: true };
 
     let requesters = await postCapture(REQUESTER, captureSpec);
     assert.strictEqual(
@@ -427,7 +429,9 @@ module(basename(import.meta.filename), function (hooks) {
   });
 
   test('a capture a reader asks for on the GET route renders as them', async function (assert) {
-    let url = `${BOARD}_screenshot/boards/board?viewport=400x120&fullPage=true`;
+    // A spec of its own, so nothing the POST test persisted answers it, and
+    // shorter than any reader's rows, as there.
+    let url = `${BOARD}_screenshot/boards/board?viewport=300x50&fullPage=true`;
 
     let requesters = await getCapture(REQUESTER, url);
     assert.strictEqual(
