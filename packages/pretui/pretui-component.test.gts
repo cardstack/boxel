@@ -6,6 +6,7 @@ import { setupCardTest } from '@cardstack/host/tests/helpers';
 import { PretUISpec } from './pretui-component';
 import { loadDemo, siblingHref } from './demo-locations';
 import { PretuiNote } from './pretui-note';
+import { realmURL } from 'https://cardstack.com/base/card-api';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const Isolated = PretUISpec.isolated as any;
@@ -84,17 +85,21 @@ module('Pretui | PretUISpec', function (hooks) {
   test('a note adopts from the PretuiNote module in this package, wherever the Spec lives', async function (assert) {
     assert.ok(PretuiNote, 'the note card ships with the package');
     let created: { module: string; name: string }[] = [];
+    let createdIn: URL[] = [];
     let context = {
       actions: {
-        createCard: (ref: { module: string; name: string }) => {
+        createCard: (ref: { module: string; name: string }, realm: URL) => {
           created.push(ref);
+          createdIn.push(realm);
           return Promise.resolve(undefined);
         },
       },
     };
+    // a prefix-form id is not a URL base, so the realm must come from the card
     let model = {
       ...specModel('Button'),
-      id: 'https://example.test/some-catalog/components/button-spec',
+      id: '@cardstack/catalog/Spec/pretui-button',
+      [realmURL]: new URL('https://example.test/some-catalog/'),
     };
     await render(<template><Isolated @model={{model}} @context={{context}} /></template>);
     await click('[data-test-pretui-note-add]');
@@ -108,5 +113,6 @@ module('Pretui | PretUISpec', function (hooks) {
       { module: siblingHref('./pretui-note'), name: 'PretuiNote' },
       'the note adopts from the package module, not a path beside the Spec instance',
     );
+    assert.strictEqual(createdIn[0]?.href, 'https://example.test/some-catalog/', "the note is created in the Spec's realm");
   });
 });
