@@ -71,11 +71,19 @@ export default class RoomMessageTool extends Component<Signature> {
   // a deployed monitor) can tell a long tool call that is still streaming
   // from a stalled one, even while the box is collapsed.
   private get argumentsLength() {
-    return JSON.stringify(this.args.messageTool.arguments ?? {}).length;
+    return (
+      this.args.messageTool.argumentsText ??
+      JSON.stringify(this.args.messageTool.arguments ?? {})
+    ).length;
   }
 
+  // While the arguments are still streaming they are not valid JSON yet, so
+  // show the raw text received so far as it is.
   private get previewCommandCode() {
-    let { name, arguments: payload } = this.args.messageTool;
+    let { name, arguments: payload, argumentsText } = this.args.messageTool;
+    if (argumentsText) {
+      return argumentsText;
+    }
     return JSON.stringify({ name, payload }, null, 2);
   }
 

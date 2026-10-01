@@ -10,7 +10,7 @@ import type {
   ChatCompletionMessageToolCall,
 } from 'openai/resources';
 import type { DelegatedUserRealmSessionManager } from './user-delegated-realm-server-session.ts';
-import { parseLenientJson } from './partial-json.ts';
+import { parseLenientJson } from './lenient-json.ts';
 
 let log = logger('ai-bot:read-realm-file');
 

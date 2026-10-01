@@ -97,6 +97,10 @@ export default class MessageTool {
     return this.toolRequest.argumentsError;
   }
 
+  get argumentsText() {
+    return this.toolRequest.argumentsText;
+  }
+
   // ai-bot fulfilled this tool call itself (e.g. readRealmFile), so the host
   // shows only a status indicator for it — never an Apply button.
   get isBotExecuted() {

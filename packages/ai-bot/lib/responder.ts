@@ -13,7 +13,7 @@ import type { ISendEventResponse } from 'matrix-js-sdk/lib/matrix.js';
 import type { ChatCompletionMessageFunctionToolCall } from 'openai/resources/chat/completions';
 import type { FunctionToolCall } from '@cardstack/runtime-common/helpers/ai';
 import type OpenAI from 'openai';
-import { parseLenientJson } from './partial-json.ts';
+import { parseLenientJson } from './lenient-json.ts';
 import type { ChatCompletionSnapshot } from 'openai/lib/ChatCompletionStream';
 import type { MatrixEvent as DiscreteMatrixEvent } from 'matrix-js-sdk';
 import MatrixResponsePublisher, {
@@ -178,13 +178,13 @@ export class Responder {
       reasoning: this.responseState.latestReasoning ?? '',
       // Normalize to the same shape the room event carries (see
       // toCommandRequest) so a client reads toolRequests identically on both
-      // channels. Arguments still streaming are parsed as far as they go, so
-      // the preview shows them as they are written.
+      // channels. Arguments still streaming also carry their raw text, so the
+      // preview shows them as they are written.
       toolRequests: (this.responseState.toolCalls ?? [])
         .filter(Boolean)
         .map((toolCall) =>
           toCommandRequest(toolCall as ChatCompletionMessageFunctionToolCall, {
-            partialArguments: true,
+            argumentsText: true,
           }),
         ),
     };

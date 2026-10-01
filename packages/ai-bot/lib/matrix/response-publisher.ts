@@ -25,17 +25,17 @@ import ResponseEventData from './response-event-data.ts';
 import { logger } from '@cardstack/runtime-common';
 import type { MatrixClient } from 'matrix-js-sdk';
 
-import { parseLenientJson, parsePartialJson } from '../partial-json.ts';
+import { parseLenientJson } from '../lenient-json.ts';
 
 let log = logger('ai-bot');
 
-// With `partialArguments`, arguments that are still streaming are parsed as
-// far as they go, so a preview can show them growing. Only the ephemeral
-// stream preview asks for that; room events keep empty arguments until the
-// JSON is complete, so nothing can run a half-written call.
+// With `argumentsText`, arguments that are still streaming also go out as the
+// raw text received so far, so a preview can show them growing. Only the
+// ephemeral stream preview asks for that; `arguments` stays empty until the
+// JSON is complete on every channel, so nothing can run a half-written call.
 export function toCommandRequest(
   toolCall: ChatCompletionMessageFunctionToolCall,
-  opts?: { partialArguments?: boolean; finished?: boolean },
+  opts?: { argumentsText?: boolean; finished?: boolean },
 ): Partial<ToolRequest> {
   let { id, function: f } = toolCall;
   let result = {} as Partial<ToolRequest>;
@@ -54,14 +54,9 @@ export function toCommandRequest(
       // If the arguments are not valid JSON, we'll just return an empty object
       // This will happen during streaming, when the tool call is not yet complete
       // and the arguments are not yet available
-      if (opts?.partialArguments) {
-        let partial = parsePartialJson(f.arguments);
-        result['arguments'] =
-          partial && typeof partial === 'object' && !Array.isArray(partial)
-            ? (partial as ToolRequest['arguments'])
-            : {};
-      } else {
-        result['arguments'] = {};
+      result['arguments'] = {};
+      if (opts?.argumentsText) {
+        result['argumentsText'] = f.arguments;
       }
       if (opts?.finished) {
         // The turn is over, so these arguments will never complete. Say so,

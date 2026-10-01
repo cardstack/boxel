@@ -30,6 +30,10 @@ export interface ToolRequest {
   // JSON once the turn finished; `arguments` is then empty. It carries the
   // parse error so the tool result can tell the model what was wrong.
   argumentsError?: string;
+  // Set by ai-bot only on stream previews, while the arguments are not
+  // complete JSON yet: the raw text received so far, for display. `arguments`
+  // is empty then; nothing runs a call from this text.
+  argumentsText?: string;
 }
 
 export const ToolContextStamp = Symbol.for('CommandContext');
