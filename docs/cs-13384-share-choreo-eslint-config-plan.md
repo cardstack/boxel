@@ -46,8 +46,7 @@ package's config holds only what differs for that package.
 
 - Dump `ESLint#calculateConfigForFile` for every lintable file in each package,
   before and after, and diff them.
-- Run `pnpm lint` in all four packages and in the shared package, in CI's
-  order (glimmer-motion and choreo-player are built before the test app and
-  the gallery lint).
+- Run `pnpm lint` in all four packages and in the shared package. Lint
+  type-checks the packages from source, so nothing needs building first.
 - Lint probe files to confirm the erasable-syntax and public-asset selectors
   still fire.
