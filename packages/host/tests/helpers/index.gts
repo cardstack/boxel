@@ -1577,15 +1577,16 @@ async function setupTestRealm({
   }
 
   await insertPermissions(dbAdapter, new URL(realmURL), permissions);
-  if (enforcePermissions) {
-    // Before accepting a session the realm asks whether its user's sessions
-    // were revoked, which it reads from the realm server's `users` table. The
-    // browser's schema leaves that table out with the rest of the realm
-    // server's account tables, so only the column the check reads is made.
-    await dbAdapter.execute(
-      `CREATE TABLE IF NOT EXISTS users (matrix_user_id TEXT PRIMARY KEY, sessions_revoked_at INTEGER)`,
-    );
-  }
+  // Before accepting a session the realm asks whether its user's sessions were
+  // revoked, which it reads from the realm server's `users` table. The
+  // browser's schema leaves that table out with the rest of the realm server's
+  // account tables, so only the column the check reads is made. Every realm
+  // needs it, not only one that sets `enforcePermissions`: a realm asks the
+  // question of any session it verifies, and the read probe a card+json `HEAD`
+  // makes verifies one in any realm not everyone may read.
+  await dbAdapter.execute(
+    `CREATE TABLE IF NOT EXISTS users (matrix_user_id TEXT PRIMARY KEY, sessions_revoked_at INTEGER)`,
+  );
   let worker = new Worker({
     indexWriter: new IndexWriter(dbAdapter),
     queue,
