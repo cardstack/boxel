@@ -197,7 +197,7 @@ export interface RenderSettlementMeta {
 // terminal-error probes, response assembly.
 //
 // Emitted only when the visit recorded at least one step bucket, so a
-// screenshot-capture visit (whose components are the `screenshot*` fields,
+// capture-capture visit (whose components are the `capture*` fields,
 // not these) reports nothing rather than reporting its whole elapsed time as
 // unattributed. Clamped at zero: the buckets are wall-clock spans measured
 // around each step and the total is measured around all of them, so

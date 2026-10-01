@@ -904,8 +904,8 @@ export default class CreateFileModal extends Component<Signature> {
 
     let spec: Spec | undefined;
     if (this.selectedSpecResource?.id) {
-      let maybeSpec = await this.store.get<Spec>(this.selectedSpecResource.id);
-      if (maybeSpec && !isCardInstance(maybeSpec)) {
+      let maybeSpec = await this.store.get(this.selectedSpecResource.id);
+      if (maybeSpec && !isCardInstance<Spec>(maybeSpec)) {
         throw new Error(`Failed to load spec ${maybeSpec.id}`);
       }
       spec = maybeSpec;
@@ -1029,8 +1029,8 @@ export class ${className} extends ${exportName} {
     }
     let spec: Spec | undefined;
     if (this.selectedSpecResource?.id) {
-      let maybeSpec = await this.store.get<Spec>(this.selectedSpecResource.id);
-      if (maybeSpec && !isCardInstance(maybeSpec)) {
+      let maybeSpec = await this.store.get(this.selectedSpecResource.id);
+      if (maybeSpec && !isCardInstance<Spec>(maybeSpec)) {
         throw new Error(`Failed to load spec ${maybeSpec.id}`);
       }
       spec = maybeSpec;

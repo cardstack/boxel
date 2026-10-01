@@ -9,6 +9,7 @@ import * as CreateListingPRRequestToolModule from './bot-requests/create-listing
 import * as SendBotTriggerEventToolModule from './bot-requests/send-bot-trigger-event';
 import * as CanReadRealmToolModule from './can-read-realm';
 import * as CancelIndexingJobToolModule from './cancel-indexing-job';
+import * as CaptureCardToolModule from './capture-card';
 import * as CheckCorrectnessToolModule from './check-correctness';
 import * as CheckDomainAvailabilityToolModule from './check-domain-availability';
 import * as CopyAndEditToolModule from './copy-and-edit';
@@ -72,7 +73,6 @@ import * as ReindexRealmToolModule from './reindex-realm';
 import * as RetrySubmissionWorkflowToolModule from './retry-submission-workflow';
 import * as SanitizeModuleListToolModule from './sanitize-module-list';
 import * as SaveCardToolModule from './save-card';
-import * as ScreenshotCardToolModule from './screenshot-card';
 import * as SearchAndChooseToolModule from './search-and-choose';
 import * as SearchCardsToolModule from './search-cards';
 import * as SearchEntriesToolModule from './search-entries';
@@ -411,11 +411,7 @@ export function shimHostTools(virtualNetwork: VirtualNetwork) {
     'generate-thumbnail',
     GenerateThumbnailToolModule,
   );
-  shimHostToolModule(
-    virtualNetwork,
-    'screenshot-card',
-    ScreenshotCardToolModule,
-  );
+  shimHostToolModule(virtualNetwork, 'capture-card', CaptureCardToolModule);
   shimHostToolModule(virtualNetwork, 'get-card', GetCardToolModule);
   shimHostToolModule(
     virtualNetwork,
@@ -504,7 +500,7 @@ export const HostToolClasses: (typeof HostBaseTool<any, any>)[] = [
   GenerateExampleCardsToolModule.default,
   GenerateReadmeSpecToolModule.default,
   GenerateThumbnailToolModule.default,
-  ScreenshotCardToolModule.default,
+  CaptureCardToolModule.default,
   GetAllRealmMetasToolModule.default,
   GetAvailableRealmIdentifiersToolModule.default,
   GetDefaultWritableRealmToolModule.default,

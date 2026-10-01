@@ -1,0 +1,2750 @@
+{
+  "minimumProseWords": 300,
+  "scope": "Public root, film, test-support and choreo-player entrypoints; yielded Choreo and film vocabulary. Related helpers, aliases and supporting types share a concept chapter. Wildcard deep implementation modules are not promised as standalone application APIs.",
+  "entries": [
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "beacon",
+      "source": "packages/glimmer-motion/src/beacon.ts",
+      "kind": "value",
+      "guide": "interactive-beacons",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "ChoreoContext",
+      "source": "packages/glimmer-motion/src/choreo.gts",
+      "kind": "type",
+      "guide": "interactive-start",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "Choreo",
+      "source": "packages/glimmer-motion/src/choreo.gts",
+      "kind": "value",
+      "guide": "interactive-start",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "AnchorRef",
+      "source": "packages/glimmer-motion/src/choreo/anchors.ts",
+      "kind": "type",
+      "guide": "interactive-anchors",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "after",
+      "source": "packages/glimmer-motion/src/choreo/anchors.ts",
+      "kind": "value",
+      "guide": "interactive-anchors",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "at",
+      "source": "packages/glimmer-motion/src/choreo/anchors.ts",
+      "kind": "value",
+      "guide": "interactive-anchors",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "Arming",
+      "source": "packages/glimmer-motion/src/choreo/arming.ts",
+      "kind": "type",
+      "guide": "interactive-arming",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "ArmingOptions",
+      "source": "packages/glimmer-motion/src/choreo/arming.ts",
+      "kind": "type",
+      "guide": "interactive-arming",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "ArmingRegion",
+      "source": "packages/glimmer-motion/src/choreo/arming.ts",
+      "kind": "type",
+      "guide": "interactive-arming",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "createArming",
+      "source": "packages/glimmer-motion/src/choreo/arming.ts",
+      "kind": "value",
+      "guide": "interactive-arming",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "BeaconRef",
+      "source": "packages/glimmer-motion/src/choreo/beacons.ts",
+      "kind": "type",
+      "guide": "interactive-beacons",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "Changeset",
+      "source": "packages/glimmer-motion/src/choreo/changeset.ts",
+      "kind": "type",
+      "guide": "interactive-queries",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "easeIn",
+      "source": "packages/glimmer-motion/src/choreo/easings.ts",
+      "kind": "value",
+      "guide": "core-tweens",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "easeInAndOut",
+      "source": "packages/glimmer-motion/src/choreo/easings.ts",
+      "kind": "value",
+      "guide": "core-tweens",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "easeOut",
+      "source": "packages/glimmer-motion/src/choreo/easings.ts",
+      "kind": "value",
+      "guide": "core-tweens",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "GestureRef",
+      "source": "packages/glimmer-motion/src/choreo/gesture.ts",
+      "kind": "type",
+      "guide": "core-drag",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "ChoreoHost",
+      "source": "packages/glimmer-motion/src/choreo/registry.ts",
+      "kind": "type",
+      "guide": "interactive-registry",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "choreoHostAt",
+      "source": "packages/glimmer-motion/src/choreo/registry.ts",
+      "kind": "value",
+      "guide": "interactive-registry",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "choreoHostById",
+      "source": "packages/glimmer-motion/src/choreo/registry.ts",
+      "kind": "value",
+      "guide": "interactive-registry",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "ChoreoProvider",
+      "source": "packages/glimmer-motion/src/choreo/registry.ts",
+      "kind": "type",
+      "guide": "interactive-registry",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "closestChoreo",
+      "source": "packages/glimmer-motion/src/choreo/registry.ts",
+      "kind": "value",
+      "guide": "interactive-registry",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "ChoreoRun",
+      "source": "packages/glimmer-motion/src/choreo/run.ts",
+      "kind": "type",
+      "guide": "interactive-run",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "PlanePoint",
+      "source": "packages/glimmer-motion/src/choreo/space.ts",
+      "kind": "type",
+      "guide": "spatial-coordinates",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "appliedCamera",
+      "source": "packages/glimmer-motion/src/choreo/space.ts",
+      "kind": "value",
+      "guide": "spatial-coordinates",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "toLocal",
+      "source": "packages/glimmer-motion/src/choreo/space.ts",
+      "kind": "value",
+      "guide": "spatial-coordinates",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "toPage",
+      "source": "packages/glimmer-motion/src/choreo/space.ts",
+      "kind": "value",
+      "guide": "spatial-coordinates",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "StepArgs",
+      "source": "packages/glimmer-motion/src/choreo/steps.gts",
+      "kind": "type",
+      "guide": "interactive-composites",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "StepArgsBase",
+      "source": "packages/glimmer-motion/src/choreo/steps.gts",
+      "kind": "type",
+      "guide": "interactive-composites",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "StepComponent",
+      "source": "packages/glimmer-motion/src/choreo/steps.gts",
+      "kind": "value",
+      "guide": "interactive-composites",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "toMs",
+      "source": "packages/glimmer-motion/src/choreo/steps.gts",
+      "kind": "value",
+      "guide": "interactive-composites",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "Block",
+      "source": "packages/glimmer-motion/src/choreo/types.ts",
+      "kind": "type",
+      "guide": "interactive-blocks",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "Bounds",
+      "source": "packages/glimmer-motion/src/choreo/types.ts",
+      "kind": "type",
+      "guide": "interactive-queries",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "Camera3DState",
+      "source": "packages/glimmer-motion/src/choreo/types.ts",
+      "kind": "type",
+      "guide": "spatial-camera3d",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "Camera3DWaypoint",
+      "source": "packages/glimmer-motion/src/choreo/types.ts",
+      "kind": "type",
+      "guide": "spatial-paths",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "CameraState",
+      "source": "packages/glimmer-motion/src/choreo/types.ts",
+      "kind": "type",
+      "guide": "spatial-frame",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "DeliveryBy",
+      "source": "packages/glimmer-motion/src/choreo/types.ts",
+      "kind": "type",
+      "guide": "interactive-delivery",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "DeliveryOrder",
+      "source": "packages/glimmer-motion/src/choreo/types.ts",
+      "kind": "type",
+      "guide": "interactive-delivery",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "DeriveContext",
+      "source": "packages/glimmer-motion/src/choreo/types.ts",
+      "kind": "type",
+      "guide": "interactive-follow",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "Easing",
+      "source": "packages/glimmer-motion/src/choreo/types.ts",
+      "kind": "type",
+      "guide": "core-tweens",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "FollowSource",
+      "source": "packages/glimmer-motion/src/choreo/types.ts",
+      "kind": "type",
+      "guide": "interactive-follow",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "GateNode",
+      "source": "packages/glimmer-motion/src/choreo/types.ts",
+      "kind": "type",
+      "guide": "interactive-gates",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "PerformCommand",
+      "source": "packages/glimmer-motion/src/choreo/types.ts",
+      "kind": "type",
+      "guide": "interactive-commands",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "PropSource",
+      "source": "packages/glimmer-motion/src/choreo/types.ts",
+      "kind": "type",
+      "guide": "interactive-property-steps",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "PropValue",
+      "source": "packages/glimmer-motion/src/choreo/types.ts",
+      "kind": "type",
+      "guide": "interactive-property-steps",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "Query",
+      "source": "packages/glimmer-motion/src/choreo/types.ts",
+      "kind": "type",
+      "guide": "interactive-queries",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "Rect",
+      "source": "packages/glimmer-motion/src/choreo/types.ts",
+      "kind": "type",
+      "guide": "spatial-coordinates",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "SpringSpec",
+      "source": "packages/glimmer-motion/src/choreo/types.ts",
+      "kind": "type",
+      "guide": "core-springs",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "Sprite",
+      "source": "packages/glimmer-motion/src/choreo/types.ts",
+      "kind": "type",
+      "guide": "interactive-queries",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "Step",
+      "source": "packages/glimmer-motion/src/choreo/types.ts",
+      "kind": "type",
+      "guide": "interactive-composites",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "TimelineNode",
+      "source": "packages/glimmer-motion/src/choreo/types.ts",
+      "kind": "type",
+      "guide": "interactive-composites",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "scroll",
+      "source": "packages/glimmer-motion/src/dom/scroll/index.ts",
+      "kind": "value",
+      "guide": "core-scroll",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "scrollInfo",
+      "source": "packages/glimmer-motion/src/dom/scroll/track.ts",
+      "kind": "value",
+      "guide": "core-scroll",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "ScrollInfo",
+      "source": "packages/glimmer-motion/src/dom/scroll/types.ts",
+      "kind": "type",
+      "guide": "core-scroll",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "ScrollOffset",
+      "source": "packages/glimmer-motion/src/dom/scroll/types.ts",
+      "kind": "type",
+      "guide": "core-scroll",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "ScrollOptions",
+      "source": "packages/glimmer-motion/src/dom/scroll/types.ts",
+      "kind": "type",
+      "guide": "core-scroll",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "InViewOptions",
+      "source": "packages/glimmer-motion/src/dom/viewport.ts",
+      "kind": "type",
+      "guide": "core-scroll",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "inView",
+      "source": "packages/glimmer-motion/src/dom/viewport.ts",
+      "kind": "value",
+      "guide": "core-scroll",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "Film",
+      "source": "packages/glimmer-motion/src/film.ts",
+      "kind": "value",
+      "guide": "film-start",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "FilmBeat",
+      "source": "packages/glimmer-motion/src/film/types.ts",
+      "kind": "type",
+      "guide": "film-poses",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "FilmCam",
+      "source": "packages/glimmer-motion/src/film/types.ts",
+      "kind": "type",
+      "guide": "film-poses",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "FilmChapter",
+      "source": "packages/glimmer-motion/src/film/types.ts",
+      "kind": "type",
+      "guide": "film-graph",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "FilmClock",
+      "source": "packages/glimmer-motion/src/film/types.ts",
+      "kind": "type",
+      "guide": "film-schedule",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "FilmGrade",
+      "source": "packages/glimmer-motion/src/film/types.ts",
+      "kind": "type",
+      "guide": "film-adjustments",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "FilmHandle",
+      "source": "packages/glimmer-motion/src/film/types.ts",
+      "kind": "type",
+      "guide": "film-transport",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "FilmJoin",
+      "source": "packages/glimmer-motion/src/film/types.ts",
+      "kind": "type",
+      "guide": "film-joins",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "FilmPicture",
+      "source": "packages/glimmer-motion/src/film/types.ts",
+      "kind": "type",
+      "guide": "film-picture",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "createDragControls",
+      "source": "packages/glimmer-motion/src/gestures/drag-controls.ts",
+      "kind": "value",
+      "guide": "core-drag-handles",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "DragControls",
+      "source": "packages/glimmer-motion/src/gestures/drag-controls.ts",
+      "kind": "value",
+      "guide": "core-drag-handles",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "correctParentTransform",
+      "source": "packages/glimmer-motion/src/gestures/transform-page-point.ts",
+      "kind": "value",
+      "guide": "core-drag-handles",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "transformViewBoxPoint",
+      "source": "packages/glimmer-motion/src/gestures/transform-page-point.ts",
+      "kind": "value",
+      "guide": "core-drag-handles",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "InertiaArgs",
+      "source": "packages/glimmer-motion/src/helpers.ts",
+      "kind": "type",
+      "guide": "core-drag",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "SpringArgs",
+      "source": "packages/glimmer-motion/src/helpers.ts",
+      "kind": "type",
+      "guide": "core-springs",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "TweenArgs",
+      "source": "packages/glimmer-motion/src/helpers.ts",
+      "kind": "type",
+      "guide": "core-tweens",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "ease",
+      "source": "packages/glimmer-motion/src/helpers.ts",
+      "kind": "value",
+      "guide": "core-tweens",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "inertia",
+      "source": "packages/glimmer-motion/src/helpers.ts",
+      "kind": "value",
+      "guide": "core-drag",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "perValue",
+      "source": "packages/glimmer-motion/src/helpers.ts",
+      "kind": "value",
+      "guide": "core-targets",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "spring",
+      "source": "packages/glimmer-motion/src/helpers.ts",
+      "kind": "value",
+      "guide": "core-springs",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "stagger",
+      "source": "packages/glimmer-motion/src/helpers.ts",
+      "kind": "value",
+      "guide": "core-variants",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "styles",
+      "source": "packages/glimmer-motion/src/helpers.ts",
+      "kind": "value",
+      "guide": "core-targets",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "to",
+      "source": "packages/glimmer-motion/src/helpers.ts",
+      "kind": "value",
+      "guide": "core-targets",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "tween",
+      "source": "packages/glimmer-motion/src/helpers.ts",
+      "kind": "value",
+      "guide": "core-tweens",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "afterSettle",
+      "source": "packages/glimmer-motion/src/layout.ts",
+      "kind": "value",
+      "guide": "core-host",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "instantLayoutTransition",
+      "source": "packages/glimmer-motion/src/layout.ts",
+      "kind": "value",
+      "guide": "core-host",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "layoutChange",
+      "source": "packages/glimmer-motion/src/layout.ts",
+      "kind": "value",
+      "guide": "core-layout",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "layoutLoopDetected",
+      "source": "packages/glimmer-motion/src/layout.ts",
+      "kind": "value",
+      "guide": "core-host",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "requestSettle",
+      "source": "packages/glimmer-motion/src/layout.ts",
+      "kind": "value",
+      "guide": "core-host",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "resetLayoutLoopGuard",
+      "source": "packages/glimmer-motion/src/layout.ts",
+      "kind": "value",
+      "guide": "core-host",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "snapshotAll",
+      "source": "packages/glimmer-motion/src/layout.ts",
+      "kind": "value",
+      "guide": "core-host",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "closestLayoutGroup",
+      "source": "packages/glimmer-motion/src/layout-group.gts",
+      "kind": "value",
+      "guide": "core-layout",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "LayoutGroup",
+      "source": "packages/glimmer-motion/src/layout-group.gts",
+      "kind": "value",
+      "guide": "core-layout",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "snapshotOnRender",
+      "source": "packages/glimmer-motion/src/layout-group.gts",
+      "kind": "value",
+      "guide": "core-layout",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "MotionEl",
+      "source": "packages/glimmer-motion/src/motion.ts",
+      "kind": "type",
+      "guide": "core-host",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "MotionProps",
+      "source": "packages/glimmer-motion/src/motion.ts",
+      "kind": "type",
+      "guide": "core-elements",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "motion",
+      "source": "packages/glimmer-motion/src/motion.ts",
+      "kind": "value",
+      "guide": "core-elements",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "MotionModifier",
+      "source": "packages/glimmer-motion/src/motion.ts",
+      "kind": "value",
+      "guide": "core-host",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "MotionConfigContext",
+      "source": "packages/glimmer-motion/src/motion-config.gts",
+      "kind": "type",
+      "guide": "core-config",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "closestMotionConfig",
+      "source": "packages/glimmer-motion/src/motion-config.gts",
+      "kind": "value",
+      "guide": "core-config",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "MotionConfig",
+      "source": "packages/glimmer-motion/src/motion-config.gts",
+      "kind": "value",
+      "guide": "core-config",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "flushPendingMounts",
+      "source": "packages/glimmer-motion/src/node.ts",
+      "kind": "value",
+      "guide": "core-host",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "MotionNode",
+      "source": "packages/glimmer-motion/src/node.ts",
+      "kind": "value",
+      "guide": "core-host",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "Presence",
+      "source": "packages/glimmer-motion/src/presence.gts",
+      "kind": "value",
+      "guide": "core-presence",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "PresenceHandle",
+      "source": "packages/glimmer-motion/src/presence-types.ts",
+      "kind": "type",
+      "guide": "core-presence",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "ReorderGroup",
+      "source": "packages/glimmer-motion/src/reorder/group.gts",
+      "kind": "value",
+      "guide": "core-reorder",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "ReorderItem",
+      "source": "packages/glimmer-motion/src/reorder/item.gts",
+      "kind": "value",
+      "guide": "core-reorder",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "ReorderAxis",
+      "source": "packages/glimmer-motion/src/reorder/types.ts",
+      "kind": "type",
+      "guide": "core-reorder",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "ReorderContextProps",
+      "source": "packages/glimmer-motion/src/reorder/types.ts",
+      "kind": "type",
+      "guide": "core-reorder",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "postRender",
+      "source": "packages/glimmer-motion/src/scheduler.ts",
+      "kind": "value",
+      "guide": "core-host",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "setPostRender",
+      "source": "packages/glimmer-motion/src/scheduler.ts",
+      "kind": "value",
+      "guide": "core-host",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "ScrollValues",
+      "source": "packages/glimmer-motion/src/scroll.ts",
+      "kind": "type",
+      "guide": "core-scroll",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "UseInViewOptions",
+      "source": "packages/glimmer-motion/src/scroll.ts",
+      "kind": "type",
+      "guide": "core-scroll",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "UseScrollOptions",
+      "source": "packages/glimmer-motion/src/scroll.ts",
+      "kind": "type",
+      "guide": "core-scroll",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "InView",
+      "source": "packages/glimmer-motion/src/scroll.ts",
+      "kind": "value",
+      "guide": "core-scroll",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "scrollProgress",
+      "source": "packages/glimmer-motion/src/scroll.ts",
+      "kind": "value",
+      "guide": "core-scroll",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "useInView",
+      "source": "packages/glimmer-motion/src/scroll.ts",
+      "kind": "value",
+      "guide": "core-scroll",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "useScroll",
+      "source": "packages/glimmer-motion/src/scroll.ts",
+      "kind": "value",
+      "guide": "core-scroll",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "motionSpeed",
+      "source": "packages/glimmer-motion/src/speed.ts",
+      "kind": "value",
+      "guide": "core-tempo",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "onMotionSpeed",
+      "source": "packages/glimmer-motion/src/speed.ts",
+      "kind": "value",
+      "guide": "core-tempo",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "scaleTransition",
+      "source": "packages/glimmer-motion/src/speed.ts",
+      "kind": "value",
+      "guide": "core-tempo",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "setMotionSpeed",
+      "source": "packages/glimmer-motion/src/speed.ts",
+      "kind": "value",
+      "guide": "core-tempo",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "ViewTransitionBuilder",
+      "source": "packages/glimmer-motion/src/view-transition.ts",
+      "kind": "type",
+      "guide": "core-page-transitions",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "ViewTransitionOptions",
+      "source": "packages/glimmer-motion/src/view-transition.ts",
+      "kind": "type",
+      "guide": "core-page-transitions",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "ViewTransitionUpdate",
+      "source": "packages/glimmer-motion/src/view-transition.ts",
+      "kind": "type",
+      "guide": "core-page-transitions",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "animateView",
+      "source": "packages/glimmer-motion/src/view-transition.ts",
+      "kind": "value",
+      "guide": "core-page-transitions",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "viewTransition",
+      "source": "packages/glimmer-motion/src/view-transition.ts",
+      "kind": "value",
+      "guide": "core-page-transitions",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "Clip",
+      "source": "packages/glimmer-motion/src/film/clip.gts",
+      "kind": "value",
+      "guide": "film-clips",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "ClipEnd",
+      "source": "packages/glimmer-motion/src/film/clips.ts",
+      "kind": "type",
+      "guide": "film-clips",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "ClipKind",
+      "source": "packages/glimmer-motion/src/film/clips.ts",
+      "kind": "type",
+      "guide": "film-clips",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "clipLanes",
+      "source": "packages/glimmer-motion/src/film/clips.ts",
+      "kind": "value",
+      "guide": "film-clips",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "ClipLook",
+      "source": "packages/glimmer-motion/src/film/clips.ts",
+      "kind": "type",
+      "guide": "film-adjustments",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "ClipSpec",
+      "source": "packages/glimmer-motion/src/film/clips.ts",
+      "kind": "type",
+      "guide": "film-clips",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "ClipState",
+      "source": "packages/glimmer-motion/src/film/clips.ts",
+      "kind": "type",
+      "guide": "film-clips",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "clipWindow",
+      "source": "packages/glimmer-motion/src/film/clips.ts",
+      "kind": "value",
+      "guide": "film-clips",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "resolveClip",
+      "source": "packages/glimmer-motion/src/film/clips.ts",
+      "kind": "value",
+      "guide": "film-clips",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "resolveClips",
+      "source": "packages/glimmer-motion/src/film/clips.ts",
+      "kind": "value",
+      "guide": "film-clips",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "ResolvedClip",
+      "source": "packages/glimmer-motion/src/film/clips.ts",
+      "kind": "type",
+      "guide": "film-clips",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "Film",
+      "source": "packages/glimmer-motion/src/film/film.gts",
+      "kind": "value",
+      "guide": "film-start",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "FilmContext",
+      "source": "packages/glimmer-motion/src/film/film.gts",
+      "kind": "type",
+      "guide": "film-start",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "FilmSignature",
+      "source": "packages/glimmer-motion/src/film/film.gts",
+      "kind": "type",
+      "guide": "film-start",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "TICK",
+      "source": "packages/glimmer-motion/src/film/film.gts",
+      "kind": "value",
+      "guide": "film-schedule",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "Adjustment",
+      "source": "packages/glimmer-motion/src/film/graph/adjust.gts",
+      "kind": "value",
+      "guide": "film-graph-extension",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "Build",
+      "source": "packages/glimmer-motion/src/film/graph/adjust.gts",
+      "kind": "value",
+      "guide": "film-adjustments",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "Filter",
+      "source": "packages/glimmer-motion/src/film/graph/adjust.gts",
+      "kind": "value",
+      "guide": "film-graph-extension",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "IFRAME_PICTURE",
+      "source": "packages/glimmer-motion/src/film/graph/adjust.gts",
+      "kind": "value",
+      "guide": "film-adjustments",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "Light",
+      "source": "packages/glimmer-motion/src/film/graph/adjust.gts",
+      "kind": "value",
+      "guide": "film-adjustments",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "Look",
+      "source": "packages/glimmer-motion/src/film/graph/adjust.gts",
+      "kind": "value",
+      "guide": "film-adjustments",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "Mix",
+      "source": "packages/glimmer-motion/src/film/graph/adjust.gts",
+      "kind": "value",
+      "guide": "film-audio-mix",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "Set",
+      "source": "packages/glimmer-motion/src/film/graph/adjust.gts",
+      "kind": "value",
+      "guide": "film-adjustments",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "SOUND",
+      "source": "packages/glimmer-motion/src/film/graph/adjust.gts",
+      "kind": "value",
+      "guide": "film-audio-mix",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "Sun",
+      "source": "packages/glimmer-motion/src/film/graph/adjust.gts",
+      "kind": "value",
+      "guide": "film-adjustments",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "Weather",
+      "source": "packages/glimmer-motion/src/film/graph/adjust.gts",
+      "kind": "value",
+      "guide": "film-adjustments",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "Winter",
+      "source": "packages/glimmer-motion/src/film/graph/adjust.gts",
+      "kind": "value",
+      "guide": "film-adjustments",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "AttachNode",
+      "source": "packages/glimmer-motion/src/film/graph/compile.ts",
+      "kind": "type",
+      "guide": "film-graph-extension",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "CompiledGraph",
+      "source": "packages/glimmer-motion/src/film/graph/compile.ts",
+      "kind": "type",
+      "guide": "film-graph-extension",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "compileGraph",
+      "source": "packages/glimmer-motion/src/film/graph/compile.ts",
+      "kind": "value",
+      "guide": "film-graph-extension",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "EyeNode",
+      "source": "packages/glimmer-motion/src/film/graph/compile.ts",
+      "kind": "type",
+      "guide": "film-graph-extension",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "GraphNode",
+      "source": "packages/glimmer-motion/src/film/graph/compile.ts",
+      "kind": "type",
+      "guide": "film-graph-extension",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "GroupNode",
+      "source": "packages/glimmer-motion/src/film/graph/compile.ts",
+      "kind": "type",
+      "guide": "film-graph-extension",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "JoinNode",
+      "source": "packages/glimmer-motion/src/film/graph/compile.ts",
+      "kind": "type",
+      "guide": "film-graph-extension",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "Patch",
+      "source": "packages/glimmer-motion/src/film/graph/compile.ts",
+      "kind": "type",
+      "guide": "film-graph-extension",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "PatchNode",
+      "source": "packages/glimmer-motion/src/film/graph/compile.ts",
+      "kind": "type",
+      "guide": "film-graph-extension",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "ShotNode",
+      "source": "packages/glimmer-motion/src/film/graph/compile.ts",
+      "kind": "type",
+      "guide": "film-graph-extension",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "ToNode",
+      "source": "packages/glimmer-motion/src/film/graph/compile.ts",
+      "kind": "type",
+      "guide": "film-graph-extension",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "VoiceNode",
+      "source": "packages/glimmer-motion/src/film/graph/compile.ts",
+      "kind": "type",
+      "guide": "film-graph-extension",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "FilmGraph",
+      "source": "packages/glimmer-motion/src/film/graph/host.gts",
+      "kind": "value",
+      "guide": "film-graph",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "FilmGraphSignature",
+      "source": "packages/glimmer-motion/src/film/graph/host.gts",
+      "kind": "type",
+      "guide": "film-graph",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "FilmVocabulary",
+      "source": "packages/glimmer-motion/src/film/graph/host.gts",
+      "kind": "type",
+      "guide": "film-graph",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "VOCABULARY",
+      "source": "packages/glimmer-motion/src/film/graph/host.gts",
+      "kind": "value",
+      "guide": "film-graph",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "collectGraph",
+      "source": "packages/glimmer-motion/src/film/graph/nodes.gts",
+      "kind": "value",
+      "guide": "film-graph-extension",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "Eye",
+      "source": "packages/glimmer-motion/src/film/graph/nodes.gts",
+      "kind": "value",
+      "guide": "film-poses",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "Freeze",
+      "source": "packages/glimmer-motion/src/film/graph/nodes.gts",
+      "kind": "value",
+      "guide": "film-media-graph",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "GraphAttach",
+      "source": "packages/glimmer-motion/src/film/graph/nodes.gts",
+      "kind": "value",
+      "guide": "film-media-graph",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "GraphChapter",
+      "source": "packages/glimmer-motion/src/film/graph/nodes.gts",
+      "kind": "value",
+      "guide": "film-graph",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "GraphInsert",
+      "source": "packages/glimmer-motion/src/film/graph/nodes.gts",
+      "kind": "value",
+      "guide": "film-media-graph",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "GraphNodeComponent",
+      "source": "packages/glimmer-motion/src/film/graph/nodes.gts",
+      "kind": "value",
+      "guide": "film-graph-extension",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "GraphProvider",
+      "source": "packages/glimmer-motion/src/film/graph/nodes.gts",
+      "kind": "type",
+      "guide": "film-graph-extension",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "GraphStamp",
+      "source": "packages/glimmer-motion/src/film/graph/nodes.gts",
+      "kind": "value",
+      "guide": "film-world-annotations",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "JoinInto",
+      "source": "packages/glimmer-motion/src/film/graph/nodes.gts",
+      "kind": "value",
+      "guide": "film-joins",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "Lineup",
+      "source": "packages/glimmer-motion/src/film/graph/nodes.gts",
+      "kind": "value",
+      "guide": "film-world-annotations",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "Mark",
+      "source": "packages/glimmer-motion/src/film/graph/nodes.gts",
+      "kind": "value",
+      "guide": "film-world-annotations",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "PatchComponent",
+      "source": "packages/glimmer-motion/src/film/graph/nodes.gts",
+      "kind": "value",
+      "guide": "film-graph-extension",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "Sequence",
+      "source": "packages/glimmer-motion/src/film/graph/nodes.gts",
+      "kind": "value",
+      "guide": "film-graph",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "Shot",
+      "source": "packages/glimmer-motion/src/film/graph/nodes.gts",
+      "kind": "value",
+      "guide": "film-poses",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "Sky",
+      "source": "packages/glimmer-motion/src/film/graph/nodes.gts",
+      "kind": "value",
+      "guide": "film-world-annotations",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "Spine",
+      "source": "packages/glimmer-motion/src/film/graph/nodes.gts",
+      "kind": "value",
+      "guide": "film-graph",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "To",
+      "source": "packages/glimmer-motion/src/film/graph/nodes.gts",
+      "kind": "value",
+      "guide": "film-poses",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "Trace",
+      "source": "packages/glimmer-motion/src/film/graph/nodes.gts",
+      "kind": "value",
+      "guide": "film-world-annotations",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "Type",
+      "source": "packages/glimmer-motion/src/film/graph/nodes.gts",
+      "kind": "value",
+      "guide": "film-typography",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "Video",
+      "source": "packages/glimmer-motion/src/film/graph/nodes.gts",
+      "kind": "value",
+      "guide": "film-media-graph",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "Voice",
+      "source": "packages/glimmer-motion/src/film/graph/nodes.gts",
+      "kind": "value",
+      "guide": "film-audio-mix",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "Blend",
+      "source": "packages/glimmer-motion/src/film/joins.gts",
+      "kind": "value",
+      "guide": "film-joins",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "Blur",
+      "source": "packages/glimmer-motion/src/film/joins.gts",
+      "kind": "value",
+      "guide": "film-joins",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "Dip",
+      "source": "packages/glimmer-motion/src/film/joins.gts",
+      "kind": "value",
+      "guide": "film-joins",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "Flash",
+      "source": "packages/glimmer-motion/src/film/joins.gts",
+      "kind": "value",
+      "guide": "film-joins",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "inGlass",
+      "source": "packages/glimmer-motion/src/film/joins.gts",
+      "kind": "value",
+      "guide": "film-joins",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "Iris",
+      "source": "packages/glimmer-motion/src/film/joins.gts",
+      "kind": "value",
+      "guide": "film-joins",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "JOIN_SECS",
+      "source": "packages/glimmer-motion/src/film/joins.gts",
+      "kind": "value",
+      "guide": "film-joins",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "Joins",
+      "source": "packages/glimmer-motion/src/film/joins.gts",
+      "kind": "value",
+      "guide": "film-joins",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "Luma",
+      "source": "packages/glimmer-motion/src/film/joins.gts",
+      "kind": "value",
+      "guide": "film-joins",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "Melt",
+      "source": "packages/glimmer-motion/src/film/joins.gts",
+      "kind": "value",
+      "guide": "film-joins",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "Presentation",
+      "source": "packages/glimmer-motion/src/film/joins.gts",
+      "kind": "type",
+      "guide": "film-joins",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "PresentationComponent",
+      "source": "packages/glimmer-motion/src/film/joins.gts",
+      "kind": "type",
+      "guide": "film-joins",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "PRESENTATIONS",
+      "source": "packages/glimmer-motion/src/film/joins.gts",
+      "kind": "value",
+      "guide": "film-joins",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "PresentationSignature",
+      "source": "packages/glimmer-motion/src/film/joins.gts",
+      "kind": "type",
+      "guide": "film-joins",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "retire",
+      "source": "packages/glimmer-motion/src/film/joins.gts",
+      "kind": "value",
+      "guide": "film-joins",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "seamShape",
+      "source": "packages/glimmer-motion/src/film/joins.gts",
+      "kind": "value",
+      "guide": "film-joins",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "STILL_JOINS",
+      "source": "packages/glimmer-motion/src/film/joins.gts",
+      "kind": "value",
+      "guide": "film-joins",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "Wipe",
+      "source": "packages/glimmer-motion/src/film/joins.gts",
+      "kind": "value",
+      "guide": "film-joins",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "clamp01",
+      "source": "packages/glimmer-motion/src/film/math.ts",
+      "kind": "value",
+      "guide": "film-utilities",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "hex",
+      "source": "packages/glimmer-motion/src/film/math.ts",
+      "kind": "value",
+      "guide": "film-utilities",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "lerp",
+      "source": "packages/glimmer-motion/src/film/math.ts",
+      "kind": "value",
+      "guide": "film-utilities",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "luminance",
+      "source": "packages/glimmer-motion/src/film/math.ts",
+      "kind": "value",
+      "guide": "film-utilities",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "mmss",
+      "source": "packages/glimmer-motion/src/film/math.ts",
+      "kind": "value",
+      "guide": "film-utilities",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "RAD",
+      "source": "packages/glimmer-motion/src/film/math.ts",
+      "kind": "value",
+      "guide": "film-utilities",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "rgba",
+      "source": "packages/glimmer-motion/src/film/math.ts",
+      "kind": "value",
+      "guide": "film-utilities",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "smooth",
+      "source": "packages/glimmer-motion/src/film/math.ts",
+      "kind": "value",
+      "guide": "film-utilities",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "Captions",
+      "source": "packages/glimmer-motion/src/film/overlays.gts",
+      "kind": "value",
+      "guide": "film-typography",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "Insert",
+      "source": "packages/glimmer-motion/src/film/overlays.gts",
+      "kind": "value",
+      "guide": "film-typography",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "Stamp",
+      "source": "packages/glimmer-motion/src/film/overlays.gts",
+      "kind": "value",
+      "guide": "film-typography",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "Track",
+      "source": "packages/glimmer-motion/src/film/overlays.gts",
+      "kind": "value",
+      "guide": "film-typography",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "IframePicture",
+      "source": "packages/glimmer-motion/src/film/picture.gts",
+      "kind": "value",
+      "guide": "film-picture",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "IframePictureSignature",
+      "source": "packages/glimmer-motion/src/film/picture.gts",
+      "kind": "type",
+      "guide": "film-picture",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "PictureSpec",
+      "source": "packages/glimmer-motion/src/film/picture.gts",
+      "kind": "type",
+      "guide": "film-picture",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "Plate",
+      "source": "packages/glimmer-motion/src/film/plate.gts",
+      "kind": "value",
+      "guide": "film-typography",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "Burst",
+      "source": "packages/glimmer-motion/src/film/player.gts",
+      "kind": "value",
+      "guide": "film-interface",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "Menu",
+      "source": "packages/glimmer-motion/src/film/player.gts",
+      "kind": "value",
+      "guide": "film-interface",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "MenuEntry",
+      "source": "packages/glimmer-motion/src/film/player.gts",
+      "kind": "type",
+      "guide": "film-interface",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "PlaybarSegment",
+      "source": "packages/glimmer-motion/src/film/player.gts",
+      "kind": "type",
+      "guide": "film-interface",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "Player",
+      "source": "packages/glimmer-motion/src/film/player.gts",
+      "kind": "value",
+      "guide": "film-interface",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "Rail",
+      "source": "packages/glimmer-motion/src/film/rail.gts",
+      "kind": "value",
+      "guide": "film-interface",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "RailMark",
+      "source": "packages/glimmer-motion/src/film/rail.gts",
+      "kind": "type",
+      "guide": "film-interface",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "beatStart",
+      "source": "packages/glimmer-motion/src/film/schedule.ts",
+      "kind": "value",
+      "guide": "film-schedule",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "chapterHeads",
+      "source": "packages/glimmer-motion/src/film/schedule.ts",
+      "kind": "value",
+      "guide": "film-schedule",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "Content",
+      "source": "packages/glimmer-motion/src/film/schedule.ts",
+      "kind": "type",
+      "guide": "film-schedule",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "contents",
+      "source": "packages/glimmer-motion/src/film/schedule.ts",
+      "kind": "value",
+      "guide": "film-schedule",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "Cue",
+      "source": "packages/glimmer-motion/src/film/schedule.ts",
+      "kind": "type",
+      "guide": "film-schedule",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "cues",
+      "source": "packages/glimmer-motion/src/film/schedule.ts",
+      "kind": "value",
+      "guide": "film-schedule",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "joinInto",
+      "source": "packages/glimmer-motion/src/film/schedule.ts",
+      "kind": "value",
+      "guide": "film-schedule",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "Schedule",
+      "source": "packages/glimmer-motion/src/film/schedule.ts",
+      "kind": "type",
+      "guide": "film-schedule",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "schedule",
+      "source": "packages/glimmer-motion/src/film/schedule.ts",
+      "kind": "value",
+      "guide": "film-schedule",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "secsBefore",
+      "source": "packages/glimmer-motion/src/film/schedule.ts",
+      "kind": "value",
+      "guide": "film-schedule",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "tailFor",
+      "source": "packages/glimmer-motion/src/film/schedule.ts",
+      "kind": "value",
+      "guide": "film-schedule",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "totalSecs",
+      "source": "packages/glimmer-motion/src/film/schedule.ts",
+      "kind": "value",
+      "guide": "film-schedule",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "Waypoint",
+      "source": "packages/glimmer-motion/src/film/schedule.ts",
+      "kind": "type",
+      "guide": "film-schedule",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "waypoints",
+      "source": "packages/glimmer-motion/src/film/schedule.ts",
+      "kind": "value",
+      "guide": "film-schedule",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "Seam",
+      "source": "packages/glimmer-motion/src/film/seam.ts",
+      "kind": "value",
+      "guide": "film-seam-readiness",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "EndCard",
+      "source": "packages/glimmer-motion/src/film/titles.gts",
+      "kind": "value",
+      "guide": "film-interface",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "Gate",
+      "source": "packages/glimmer-motion/src/film/titles.gts",
+      "kind": "value",
+      "guide": "film-interface",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "Beat",
+      "source": "packages/glimmer-motion/src/film/types.ts",
+      "kind": "type",
+      "guide": "film-poses",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "Cam",
+      "source": "packages/glimmer-motion/src/film/types.ts",
+      "kind": "type",
+      "guide": "film-poses",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "Chapter",
+      "source": "packages/glimmer-motion/src/film/types.ts",
+      "kind": "type",
+      "guide": "film-graph",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "FilmClock",
+      "source": "packages/glimmer-motion/src/film/types.ts",
+      "kind": "type",
+      "guide": "film-schedule",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "FilmGrade",
+      "source": "packages/glimmer-motion/src/film/types.ts",
+      "kind": "type",
+      "guide": "film-adjustments",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "FilmHandle",
+      "source": "packages/glimmer-motion/src/film/types.ts",
+      "kind": "type",
+      "guide": "film-transport",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "Join",
+      "source": "packages/glimmer-motion/src/film/types.ts",
+      "kind": "type",
+      "guide": "film-joins",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "JoinName",
+      "source": "packages/glimmer-motion/src/film/types.ts",
+      "kind": "type",
+      "guide": "film-joins",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "LookFx",
+      "source": "packages/glimmer-motion/src/film/types.ts",
+      "kind": "type",
+      "guide": "film-adjustments",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "Over",
+      "source": "packages/glimmer-motion/src/film/types.ts",
+      "kind": "type",
+      "guide": "film-joins",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "Picture",
+      "source": "packages/glimmer-motion/src/film/types.ts",
+      "kind": "type",
+      "guide": "film-picture",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "PlateMode",
+      "source": "packages/glimmer-motion/src/film/types.ts",
+      "kind": "type",
+      "guide": "film-typography",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "Pt3",
+      "source": "packages/glimmer-motion/src/film/types.ts",
+      "kind": "type",
+      "guide": "film-poses",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "SeamSpec",
+      "source": "packages/glimmer-motion/src/film/types.ts",
+      "kind": "type",
+      "guide": "film-joins",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/film",
+      "symbol": "ShotState",
+      "source": "packages/glimmer-motion/src/film/types.ts",
+      "kind": "type",
+      "guide": "film-poses",
+      "declaration": "packages/glimmer-motion/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/test-support",
+      "symbol": "isMotionIdle",
+      "source": "packages/glimmer-motion/src/activity.ts",
+      "kind": "value",
+      "guide": "core-test-timing",
+      "declaration": "packages/glimmer-motion/src/test-support/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/test-support",
+      "symbol": "whatIsBusy",
+      "source": "packages/glimmer-motion/src/activity.ts",
+      "kind": "value",
+      "guide": "core-test-timing",
+      "declaration": "packages/glimmer-motion/src/test-support/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/test-support",
+      "symbol": "Box",
+      "source": "packages/glimmer-motion/src/test-support/index.ts",
+      "kind": "type",
+      "guide": "core-test-geometry",
+      "declaration": "packages/glimmer-motion/src/test-support/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/test-support",
+      "symbol": "bounds",
+      "source": "packages/glimmer-motion/src/test-support/index.ts",
+      "kind": "value",
+      "guide": "core-test-geometry",
+      "declaration": "packages/glimmer-motion/src/test-support/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/test-support",
+      "symbol": "shape",
+      "source": "packages/glimmer-motion/src/test-support/index.ts",
+      "kind": "value",
+      "guide": "core-test-geometry",
+      "declaration": "packages/glimmer-motion/src/test-support/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/test-support",
+      "symbol": "boundsAndShape",
+      "source": "packages/glimmer-motion/src/test-support/index.ts",
+      "kind": "value",
+      "guide": "core-test-geometry",
+      "declaration": "packages/glimmer-motion/src/test-support/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/test-support",
+      "symbol": "SettleOptions",
+      "source": "packages/glimmer-motion/src/test-support/index.ts",
+      "kind": "type",
+      "guide": "core-test-timing",
+      "declaration": "packages/glimmer-motion/src/test-support/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/test-support",
+      "symbol": "animationsSettled",
+      "source": "packages/glimmer-motion/src/test-support/index.ts",
+      "kind": "value",
+      "guide": "core-test-timing",
+      "declaration": "packages/glimmer-motion/src/test-support/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/test-support",
+      "symbol": "advanceGate",
+      "source": "packages/glimmer-motion/src/test-support/index.ts",
+      "kind": "value",
+      "guide": "core-test-timing",
+      "declaration": "packages/glimmer-motion/src/test-support/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/test-support",
+      "symbol": "seekTo",
+      "source": "packages/glimmer-motion/src/test-support/index.ts",
+      "kind": "value",
+      "guide": "core-test-timing",
+      "declaration": "packages/glimmer-motion/src/test-support/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/test-support",
+      "symbol": "velocityOf",
+      "source": "packages/glimmer-motion/src/test-support/index.ts",
+      "kind": "value",
+      "guide": "core-test-geometry",
+      "declaration": "packages/glimmer-motion/src/test-support/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/test-support",
+      "symbol": "orphanCount",
+      "source": "packages/glimmer-motion/src/test-support/index.ts",
+      "kind": "value",
+      "guide": "core-test-geometry",
+      "declaration": "packages/glimmer-motion/src/test-support/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/test-support",
+      "symbol": "live",
+      "source": "packages/glimmer-motion/src/test-support/index.ts",
+      "kind": "value",
+      "guide": "core-test-geometry",
+      "declaration": "packages/glimmer-motion/src/test-support/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/test-support",
+      "symbol": "liveAll",
+      "source": "packages/glimmer-motion/src/test-support/index.ts",
+      "kind": "value",
+      "guide": "core-test-geometry",
+      "declaration": "packages/glimmer-motion/src/test-support/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/test-support",
+      "symbol": "strandedTransforms",
+      "source": "packages/glimmer-motion/src/test-support/index.ts",
+      "kind": "value",
+      "guide": "core-test-geometry",
+      "declaration": "packages/glimmer-motion/src/test-support/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/test-support",
+      "symbol": "setupMotion",
+      "source": "packages/glimmer-motion/src/test-support/index.ts",
+      "kind": "value",
+      "guide": "core-test-timing",
+      "declaration": "packages/glimmer-motion/src/test-support/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/test-support",
+      "symbol": "resetMotion",
+      "source": "packages/glimmer-motion/src/test-support/index.ts",
+      "kind": "value",
+      "guide": "core-test-timing",
+      "declaration": "packages/glimmer-motion/src/test-support/index.ts"
+    },
+    {
+      "entrypoint": "choreo-player",
+      "symbol": "ChoreoRun",
+      "source": "packages/choreo-player/src/index.ts",
+      "kind": "type",
+      "guide": "film-player",
+      "declaration": "packages/choreo-player/src/index.ts"
+    },
+    {
+      "entrypoint": "choreo-player",
+      "symbol": "ChoreoPlayer",
+      "source": "packages/choreo-player/src/index.ts",
+      "kind": "type",
+      "guide": "film-player",
+      "declaration": "packages/choreo-player/src/index.ts"
+    },
+    {
+      "entrypoint": "choreo-player",
+      "symbol": "ChoreoPlayerUpdateOptions",
+      "source": "packages/choreo-player/src/index.ts",
+      "kind": "type",
+      "guide": "film-player",
+      "declaration": "packages/choreo-player/src/index.ts"
+    },
+    {
+      "entrypoint": "choreo-player",
+      "symbol": "ChoreoPlayerOptions",
+      "source": "packages/choreo-player/src/index.ts",
+      "kind": "type",
+      "guide": "film-player",
+      "declaration": "packages/choreo-player/src/index.ts"
+    },
+    {
+      "entrypoint": "choreo-player",
+      "symbol": "createChoreoPlayer",
+      "source": "packages/choreo-player/src/index.ts",
+      "kind": "value",
+      "guide": "film-player",
+      "declaration": "packages/choreo-player/src/index.ts"
+    },
+    {
+      "entrypoint": "ChoreoContext",
+      "symbol": "c.Aim",
+      "source": "packages/glimmer-motion/src/choreo.gts",
+      "declaration": "packages/glimmer-motion/src/choreo.gts",
+      "kind": "context",
+      "guide": "spatial-frame"
+    },
+    {
+      "entrypoint": "ChoreoContext",
+      "symbol": "c.Attach",
+      "source": "packages/glimmer-motion/src/choreo.gts",
+      "declaration": "packages/glimmer-motion/src/choreo.gts",
+      "kind": "context",
+      "guide": "film-attachments"
+    },
+    {
+      "entrypoint": "ChoreoContext",
+      "symbol": "c.Camera",
+      "source": "packages/glimmer-motion/src/choreo.gts",
+      "declaration": "packages/glimmer-motion/src/choreo.gts",
+      "kind": "context",
+      "guide": "spatial-frame"
+    },
+    {
+      "entrypoint": "ChoreoContext",
+      "symbol": "c.Camera3D",
+      "source": "packages/glimmer-motion/src/choreo.gts",
+      "declaration": "packages/glimmer-motion/src/choreo.gts",
+      "kind": "context",
+      "guide": "spatial-camera3d"
+    },
+    {
+      "entrypoint": "ChoreoContext",
+      "symbol": "c.Crossing",
+      "source": "packages/glimmer-motion/src/choreo.gts",
+      "declaration": "packages/glimmer-motion/src/choreo.gts",
+      "kind": "context",
+      "guide": "interactive-crossings"
+    },
+    {
+      "entrypoint": "ChoreoContext",
+      "symbol": "c.Follow",
+      "source": "packages/glimmer-motion/src/choreo.gts",
+      "declaration": "packages/glimmer-motion/src/choreo.gts",
+      "kind": "context",
+      "guide": "interactive-follow"
+    },
+    {
+      "entrypoint": "ChoreoContext",
+      "symbol": "c.Frame",
+      "source": "packages/glimmer-motion/src/choreo.gts",
+      "declaration": "packages/glimmer-motion/src/choreo.gts",
+      "kind": "context",
+      "guide": "spatial-frame"
+    },
+    {
+      "entrypoint": "ChoreoContext",
+      "symbol": "c.Gate",
+      "source": "packages/glimmer-motion/src/choreo.gts",
+      "declaration": "packages/glimmer-motion/src/choreo.gts",
+      "kind": "context",
+      "guide": "interactive-gates"
+    },
+    {
+      "entrypoint": "ChoreoContext",
+      "symbol": "c.Hold",
+      "source": "packages/glimmer-motion/src/choreo.gts",
+      "declaration": "packages/glimmer-motion/src/choreo.gts",
+      "kind": "context",
+      "guide": "interactive-holds"
+    },
+    {
+      "entrypoint": "ChoreoContext",
+      "symbol": "c.Move",
+      "source": "packages/glimmer-motion/src/choreo.gts",
+      "declaration": "packages/glimmer-motion/src/choreo.gts",
+      "kind": "context",
+      "guide": "interactive-move"
+    },
+    {
+      "entrypoint": "ChoreoContext",
+      "symbol": "c.Pan",
+      "source": "packages/glimmer-motion/src/choreo.gts",
+      "declaration": "packages/glimmer-motion/src/choreo.gts",
+      "kind": "context",
+      "guide": "spatial-relative"
+    },
+    {
+      "entrypoint": "ChoreoContext",
+      "symbol": "c.Parallel",
+      "source": "packages/glimmer-motion/src/choreo.gts",
+      "declaration": "packages/glimmer-motion/src/choreo.gts",
+      "kind": "context",
+      "guide": "interactive-blocks"
+    },
+    {
+      "entrypoint": "ChoreoContext",
+      "symbol": "c.Perform",
+      "source": "packages/glimmer-motion/src/choreo.gts",
+      "declaration": "packages/glimmer-motion/src/choreo.gts",
+      "kind": "context",
+      "guide": "interactive-commands"
+    },
+    {
+      "entrypoint": "ChoreoContext",
+      "symbol": "c.Raise",
+      "source": "packages/glimmer-motion/src/choreo.gts",
+      "declaration": "packages/glimmer-motion/src/choreo.gts",
+      "kind": "context",
+      "guide": "interactive-raise-scroll"
+    },
+    {
+      "entrypoint": "ChoreoContext",
+      "symbol": "c.Scroll",
+      "source": "packages/glimmer-motion/src/choreo.gts",
+      "declaration": "packages/glimmer-motion/src/choreo.gts",
+      "kind": "context",
+      "guide": "interactive-raise-scroll"
+    },
+    {
+      "entrypoint": "ChoreoContext",
+      "symbol": "c.Sequence",
+      "source": "packages/glimmer-motion/src/choreo.gts",
+      "declaration": "packages/glimmer-motion/src/choreo.gts",
+      "kind": "context",
+      "guide": "interactive-blocks"
+    },
+    {
+      "entrypoint": "ChoreoContext",
+      "symbol": "c.SlowZoom",
+      "source": "packages/glimmer-motion/src/choreo.gts",
+      "declaration": "packages/glimmer-motion/src/choreo.gts",
+      "kind": "context",
+      "guide": "spatial-relative"
+    },
+    {
+      "entrypoint": "ChoreoContext",
+      "symbol": "c.Spring",
+      "source": "packages/glimmer-motion/src/choreo.gts",
+      "declaration": "packages/glimmer-motion/src/choreo.gts",
+      "kind": "context",
+      "guide": "interactive-property-steps"
+    },
+    {
+      "entrypoint": "ChoreoContext",
+      "symbol": "c.Tether",
+      "source": "packages/glimmer-motion/src/choreo.gts",
+      "declaration": "packages/glimmer-motion/src/choreo.gts",
+      "kind": "context",
+      "guide": "interactive-tethers"
+    },
+    {
+      "entrypoint": "ChoreoContext",
+      "symbol": "c.Tween",
+      "source": "packages/glimmer-motion/src/choreo.gts",
+      "declaration": "packages/glimmer-motion/src/choreo.gts",
+      "kind": "context",
+      "guide": "interactive-property-steps"
+    },
+    {
+      "entrypoint": "ChoreoContext",
+      "symbol": "c.Wait",
+      "source": "packages/glimmer-motion/src/choreo.gts",
+      "declaration": "packages/glimmer-motion/src/choreo.gts",
+      "kind": "context",
+      "guide": "interactive-holds"
+    },
+    {
+      "entrypoint": "ChoreoContext",
+      "symbol": "c.advance",
+      "source": "packages/glimmer-motion/src/choreo.gts",
+      "declaration": "packages/glimmer-motion/src/choreo.gts",
+      "kind": "context",
+      "guide": "interactive-gates"
+    },
+    {
+      "entrypoint": "ChoreoContext",
+      "symbol": "c.all",
+      "source": "packages/glimmer-motion/src/choreo.gts",
+      "declaration": "packages/glimmer-motion/src/choreo.gts",
+      "kind": "context",
+      "guide": "interactive-queries"
+    },
+    {
+      "entrypoint": "ChoreoContext",
+      "symbol": "c.beacon",
+      "source": "packages/glimmer-motion/src/choreo.gts",
+      "declaration": "packages/glimmer-motion/src/choreo.gts",
+      "kind": "context",
+      "guide": "interactive-beacons"
+    },
+    {
+      "entrypoint": "ChoreoContext",
+      "symbol": "c.camera",
+      "source": "packages/glimmer-motion/src/choreo.gts",
+      "declaration": "packages/glimmer-motion/src/choreo.gts",
+      "kind": "context",
+      "guide": "spatial-frame"
+    },
+    {
+      "entrypoint": "ChoreoContext",
+      "symbol": "c.counterpart",
+      "source": "packages/glimmer-motion/src/choreo.gts",
+      "declaration": "packages/glimmer-motion/src/choreo.gts",
+      "kind": "context",
+      "guide": "interactive-queries"
+    },
+    {
+      "entrypoint": "ChoreoContext",
+      "symbol": "c.gesture",
+      "source": "packages/glimmer-motion/src/choreo.gts",
+      "declaration": "packages/glimmer-motion/src/choreo.gts",
+      "kind": "context",
+      "guide": "core-drag"
+    },
+    {
+      "entrypoint": "ChoreoContext",
+      "symbol": "c.id",
+      "source": "packages/glimmer-motion/src/choreo.gts",
+      "declaration": "packages/glimmer-motion/src/choreo.gts",
+      "kind": "context",
+      "guide": "interactive-queries"
+    },
+    {
+      "entrypoint": "ChoreoContext",
+      "symbol": "c.inserted",
+      "source": "packages/glimmer-motion/src/choreo.gts",
+      "declaration": "packages/glimmer-motion/src/choreo.gts",
+      "kind": "context",
+      "guide": "interactive-queries"
+    },
+    {
+      "entrypoint": "ChoreoContext",
+      "symbol": "c.kept",
+      "source": "packages/glimmer-motion/src/choreo.gts",
+      "declaration": "packages/glimmer-motion/src/choreo.gts",
+      "kind": "context",
+      "guide": "interactive-queries"
+    },
+    {
+      "entrypoint": "ChoreoContext",
+      "symbol": "c.moved",
+      "source": "packages/glimmer-motion/src/choreo.gts",
+      "declaration": "packages/glimmer-motion/src/choreo.gts",
+      "kind": "context",
+      "guide": "interactive-queries"
+    },
+    {
+      "entrypoint": "ChoreoContext",
+      "symbol": "c.onstage",
+      "source": "packages/glimmer-motion/src/choreo.gts",
+      "declaration": "packages/glimmer-motion/src/choreo.gts",
+      "kind": "context",
+      "guide": "interactive-queries"
+    },
+    {
+      "entrypoint": "ChoreoContext",
+      "symbol": "c.received",
+      "source": "packages/glimmer-motion/src/choreo.gts",
+      "declaration": "packages/glimmer-motion/src/choreo.gts",
+      "kind": "context",
+      "guide": "interactive-queries"
+    },
+    {
+      "entrypoint": "ChoreoContext",
+      "symbol": "c.removed",
+      "source": "packages/glimmer-motion/src/choreo.gts",
+      "declaration": "packages/glimmer-motion/src/choreo.gts",
+      "kind": "context",
+      "guide": "interactive-queries"
+    },
+    {
+      "entrypoint": "ChoreoContext",
+      "symbol": "c.role",
+      "source": "packages/glimmer-motion/src/choreo.gts",
+      "declaration": "packages/glimmer-motion/src/choreo.gts",
+      "kind": "context",
+      "guide": "interactive-queries"
+    },
+    {
+      "entrypoint": "ChoreoContext",
+      "symbol": "c.run",
+      "source": "packages/glimmer-motion/src/choreo.gts",
+      "declaration": "packages/glimmer-motion/src/choreo.gts",
+      "kind": "context",
+      "guide": "interactive-run"
+    },
+    {
+      "entrypoint": "ChoreoContext",
+      "symbol": "c.still",
+      "source": "packages/glimmer-motion/src/choreo.gts",
+      "declaration": "packages/glimmer-motion/src/choreo.gts",
+      "kind": "context",
+      "guide": "interactive-queries"
+    },
+    {
+      "entrypoint": "FilmVocabulary",
+      "symbol": "f.Attach",
+      "source": "packages/glimmer-motion/src/film/graph/host.gts",
+      "declaration": "packages/glimmer-motion/src/film/graph/host.gts",
+      "kind": "context",
+      "guide": "film-media-graph"
+    },
+    {
+      "entrypoint": "FilmVocabulary",
+      "symbol": "f.Chapter",
+      "source": "packages/glimmer-motion/src/film/graph/host.gts",
+      "declaration": "packages/glimmer-motion/src/film/graph/host.gts",
+      "kind": "context",
+      "guide": "film-graph"
+    },
+    {
+      "entrypoint": "FilmVocabulary",
+      "symbol": "f.Eye",
+      "source": "packages/glimmer-motion/src/film/graph/host.gts",
+      "declaration": "packages/glimmer-motion/src/film/graph/host.gts",
+      "kind": "context",
+      "guide": "film-poses"
+    },
+    {
+      "entrypoint": "FilmVocabulary",
+      "symbol": "f.Freeze",
+      "source": "packages/glimmer-motion/src/film/graph/host.gts",
+      "declaration": "packages/glimmer-motion/src/film/graph/host.gts",
+      "kind": "context",
+      "guide": "film-media-graph"
+    },
+    {
+      "entrypoint": "FilmVocabulary",
+      "symbol": "f.Insert",
+      "source": "packages/glimmer-motion/src/film/graph/host.gts",
+      "declaration": "packages/glimmer-motion/src/film/graph/host.gts",
+      "kind": "context",
+      "guide": "film-media-graph"
+    },
+    {
+      "entrypoint": "FilmVocabulary",
+      "symbol": "f.Inset",
+      "source": "packages/glimmer-motion/src/film/graph/host.gts",
+      "declaration": "packages/glimmer-motion/src/film/graph/host.gts",
+      "kind": "context",
+      "guide": "film-media-graph"
+    },
+    {
+      "entrypoint": "FilmVocabulary",
+      "symbol": "f.Join",
+      "source": "packages/glimmer-motion/src/film/graph/host.gts",
+      "declaration": "packages/glimmer-motion/src/film/graph/host.gts",
+      "kind": "context",
+      "guide": "film-joins"
+    },
+    {
+      "entrypoint": "FilmVocabulary",
+      "symbol": "f.Lineup",
+      "source": "packages/glimmer-motion/src/film/graph/host.gts",
+      "declaration": "packages/glimmer-motion/src/film/graph/host.gts",
+      "kind": "context",
+      "guide": "film-world-annotations"
+    },
+    {
+      "entrypoint": "FilmVocabulary",
+      "symbol": "f.Mark",
+      "source": "packages/glimmer-motion/src/film/graph/host.gts",
+      "declaration": "packages/glimmer-motion/src/film/graph/host.gts",
+      "kind": "context",
+      "guide": "film-world-annotations"
+    },
+    {
+      "entrypoint": "FilmVocabulary",
+      "symbol": "f.Sequence",
+      "source": "packages/glimmer-motion/src/film/graph/host.gts",
+      "declaration": "packages/glimmer-motion/src/film/graph/host.gts",
+      "kind": "context",
+      "guide": "film-graph"
+    },
+    {
+      "entrypoint": "FilmVocabulary",
+      "symbol": "f.Shot",
+      "source": "packages/glimmer-motion/src/film/graph/host.gts",
+      "declaration": "packages/glimmer-motion/src/film/graph/host.gts",
+      "kind": "context",
+      "guide": "film-poses"
+    },
+    {
+      "entrypoint": "FilmVocabulary",
+      "symbol": "f.Sky",
+      "source": "packages/glimmer-motion/src/film/graph/host.gts",
+      "declaration": "packages/glimmer-motion/src/film/graph/host.gts",
+      "kind": "context",
+      "guide": "film-world-annotations"
+    },
+    {
+      "entrypoint": "FilmVocabulary",
+      "symbol": "f.Spine",
+      "source": "packages/glimmer-motion/src/film/graph/host.gts",
+      "declaration": "packages/glimmer-motion/src/film/graph/host.gts",
+      "kind": "context",
+      "guide": "film-graph"
+    },
+    {
+      "entrypoint": "FilmVocabulary",
+      "symbol": "f.Stamp",
+      "source": "packages/glimmer-motion/src/film/graph/host.gts",
+      "declaration": "packages/glimmer-motion/src/film/graph/host.gts",
+      "kind": "context",
+      "guide": "film-world-annotations"
+    },
+    {
+      "entrypoint": "FilmVocabulary",
+      "symbol": "f.To",
+      "source": "packages/glimmer-motion/src/film/graph/host.gts",
+      "declaration": "packages/glimmer-motion/src/film/graph/host.gts",
+      "kind": "context",
+      "guide": "film-poses"
+    },
+    {
+      "entrypoint": "FilmVocabulary",
+      "symbol": "f.Trace",
+      "source": "packages/glimmer-motion/src/film/graph/host.gts",
+      "declaration": "packages/glimmer-motion/src/film/graph/host.gts",
+      "kind": "context",
+      "guide": "film-world-annotations"
+    },
+    {
+      "entrypoint": "FilmVocabulary",
+      "symbol": "f.Type",
+      "source": "packages/glimmer-motion/src/film/graph/host.gts",
+      "declaration": "packages/glimmer-motion/src/film/graph/host.gts",
+      "kind": "context",
+      "guide": "film-typography"
+    },
+    {
+      "entrypoint": "FilmVocabulary",
+      "symbol": "f.Video",
+      "source": "packages/glimmer-motion/src/film/graph/host.gts",
+      "declaration": "packages/glimmer-motion/src/film/graph/host.gts",
+      "kind": "context",
+      "guide": "film-media-graph"
+    },
+    {
+      "entrypoint": "FilmVocabulary",
+      "symbol": "f.Voice",
+      "source": "packages/glimmer-motion/src/film/graph/host.gts",
+      "declaration": "packages/glimmer-motion/src/film/graph/host.gts",
+      "kind": "context",
+      "guide": "film-audio-mix"
+    },
+    {
+      "entrypoint": "FilmVocabulary",
+      "symbol": "f.clip",
+      "source": "packages/glimmer-motion/src/film/graph/host.gts",
+      "declaration": "packages/glimmer-motion/src/film/graph/host.gts",
+      "kind": "context",
+      "guide": "film-adjustments"
+    },
+    {
+      "entrypoint": "FilmVocabulary",
+      "symbol": "f.picture",
+      "source": "packages/glimmer-motion/src/film/graph/host.gts",
+      "declaration": "packages/glimmer-motion/src/film/graph/host.gts",
+      "kind": "context",
+      "guide": "film-adjustments"
+    },
+    {
+      "entrypoint": "FilmVocabulary",
+      "symbol": "f.sound",
+      "source": "packages/glimmer-motion/src/film/graph/host.gts",
+      "declaration": "packages/glimmer-motion/src/film/graph/host.gts",
+      "kind": "context",
+      "guide": "film-audio-mix"
+    }
+  ]
+}

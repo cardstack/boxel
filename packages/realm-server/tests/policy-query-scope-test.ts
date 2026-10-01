@@ -6,12 +6,14 @@ import type {
   CodeRef,
   CompiledOperationGrant,
   CompiledRealmPolicy,
+  Filter,
   ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 import {
   isOperationFailure,
   policyQueryScope,
   RealmAuthorityPolicyScopeError,
+  realmPolicyRef,
   searchInvocation,
   type OperationCore,
   type OperationDefinition,
@@ -186,6 +188,25 @@ function scope(
 // The filter `OWN_FILTER` compiles to, in the grammar the engine runs.
 const OWN = { on: SCHEDULE, eq: { providerId: ACTOR } };
 
+// `filter` as a scope carries it: less the realm's config card, the card its
+// policy key names, and every policy card, whichever grant it came from.
+function scoped(filter: Filter): Filter {
+  return {
+    every: [
+      filter,
+      {
+        not: {
+          any: [
+            { eq: { id: `${REALM}realm` } },
+            { eq: { id: `${REALM}policies/policy` } },
+            { type: realmPolicyRef },
+          ],
+        },
+      },
+    ],
+  };
+}
+
 module(basename(import.meta.filename), function () {
   test('a query grant contributes its filter, bound to the caller', async function (assert) {
     let result = await scope('listOpen', [
@@ -194,7 +215,7 @@ module(basename(import.meta.filename), function () {
     assert.strictEqual(result.kind, 'scoped');
     assert.deepEqual(
       result.kind === 'scoped' ? result.filters : undefined,
-      [OWN],
+      [scoped(OWN)],
       'the filter in the grammar the engine runs, with actor() filled in',
     );
   });
@@ -244,7 +265,7 @@ module(basename(import.meta.filename), function () {
     );
     assert.deepEqual(
       await scope('query', [{ operation: 'query', filter: OWN_FILTER }]),
-      { kind: 'scoped', filters: [OWN] },
+      { kind: 'scoped', filters: [scoped(OWN)] },
       'a grant on `query` is',
     );
   });
@@ -295,7 +316,7 @@ module(basename(import.meta.filename), function () {
         [{ operation: 'query', filter: OWN_FILTER }],
         [SCHEDULE, NOTICE],
       ),
-      { kind: 'scoped', filters: [{ on: SCHEDULE, any: [OWN] }] },
+      { kind: 'scoped', filters: [scoped({ on: SCHEDULE, any: [OWN] })] },
       "the schedule type's grant, confined to schedules, and nothing for the type no rule names",
     );
     assert.deepEqual(
@@ -332,10 +353,10 @@ module(basename(import.meta.filename), function () {
     assert.deepEqual(result, {
       kind: 'scoped',
       filters: [
-        {
+        scoped({
           on: SCHEDULE,
           any: [{ on: BASE_SCHEDULE, eq: { providerId: ACTOR } }],
-        },
+        }),
       ],
     });
   });
@@ -377,7 +398,7 @@ module(basename(import.meta.filename), function () {
           [{ operation: 'query', filter: OWN_FILTER }],
           searchInvocation({ filter: { every } })!.types,
         ),
-        { kind: 'scoped', filters: [{ on: SCHEDULE, any: [OWN] }] },
+        { kind: 'scoped', filters: [scoped({ on: SCHEDULE, any: [OWN] })] },
       );
     }
   });
@@ -389,7 +410,7 @@ module(basename(import.meta.filename), function () {
         [{ operation: 'query', filter: OWN_FILTER }],
         [SCHEDULE, { ...SCHEDULE }],
       ),
-      { kind: 'scoped', filters: [OWN] },
+      { kind: 'scoped', filters: [scoped(OWN)] },
       'as a search on the one type is',
     );
   });

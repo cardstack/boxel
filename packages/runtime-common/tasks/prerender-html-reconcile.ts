@@ -74,8 +74,8 @@ registerQueueJobDefinition({
 // scan), and an individual URL whose visit requests keep failing is retried
 // only up to its consecutive-failure cap before its recorded error stands
 // (see `findStalePrerenderedHtmlRows`). The same scan also retries healthy
-// rows whose declared-screenshot captures failed (recorded on
-// `diagnostics.screenshotErrors`, never as an error row), capped on that
+// rows whose declared captures failed (recorded on
+// `diagnostics.captureErrors`, never as an error row), capped on that
 // lane's row-level failing-render counter. Purely additive: a sweep over a
 // healthy system finds nothing and enqueues nothing.
 const prerenderHtmlReconcile: Task<
