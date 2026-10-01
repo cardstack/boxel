@@ -270,8 +270,8 @@ module('Integration | a realm that checks permissions', function (hooks) {
       'Renamed',
       'the rename the control offered lands',
     );
-    // The realm renders what the rename changed after answering it, and a
-    // request sent during that render would be answered as the realm's own.
+    // The realm renders what the rename changed after answering it, and the
+    // next question waits for that (see `settleRealmRenders`).
     await settleRealmRenders();
 
     let refusal: unknown;
