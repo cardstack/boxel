@@ -15290,6 +15290,13 @@ export class Realm {
       // spelling, so a key computed the same way is found in either.
       typeKey: (codeRef) =>
         internalKeyFor(codeRef, undefined, this.#virtualNetwork),
+      realmURL: this.url,
+      instanceTypesUnder: (codeRef) =>
+        this.#realmIndexQueryEngine.instanceTypesUnder(codeRef),
+      instanceTypeKeys: async () =>
+        (await this.#realmIndexQueryEngine.fetchCardTypeSummary()).instances
+          .map((summary) => summary.code_ref)
+          .sort(),
     };
   }
 
