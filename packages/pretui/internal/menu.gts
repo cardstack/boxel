@@ -149,6 +149,17 @@ export type MenuNode =
 /** A menu's contents: nodes plus `'---'` separators. */
 export type MenuEntry = MenuNode | '---';
 
+/**
+ * Overflow entries with the destructive ones last, below a separator —
+ * `[...safe, '---', ...destructive]`, the order the `destructive` doc asks
+ * for. The separator only appears when both groups are non-empty.
+ */
+export function destructiveLast<T extends { destructive?: boolean }>(entries: readonly T[]): (T | '---')[] {
+  let safe = entries.filter((entry) => !entry.destructive);
+  let risky = entries.filter((entry) => entry.destructive);
+  return safe.length && risky.length ? [...safe, '---', ...risky] : [...safe, ...risky];
+}
+
 /** The pre-rebuild name, kept so every existing call site still compiles. */
 export type MenuItemSpec = CommandNode;
 
