@@ -16,7 +16,7 @@ const FILL_PAIRS: [fill: string, text: string][] = [
   ['attention', 'attention-foreground'],
   ['destructive', 'destructive-foreground'],
   ['boxel-button-destructive-active-background', 'destructive-foreground'],
-  ['popover', 'boxel-menu-dangerous-foreground'],
+  ['popover', 'destructive-ink'],
 ];
 const INK_HUES = [
   'primary',

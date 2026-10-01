@@ -121,6 +121,7 @@
         "success": "var(--boxel-success, #00892F)",
         "attention": "var(--boxel-dark-amber, #B26106)",
         "attentionForeground": "var(--boxel-light, #FFFFFF)",
+        "destructiveInk": "var(--destructive)",
         "sidebarAccentForeground": "var(--boxel-dark, #000000)",
         "sidebarPrimaryForeground": "var(--boxel-light, #FFFFFF)"
       },
@@ -225,6 +226,7 @@
         "success": "var(--boxel-success, #00892F)",
         "attention": "var(--boxel-dark-amber, #B26106)",
         "attentionForeground": "var(--boxel-light, #FFFFFF)",
+        "destructiveInk": "color-mix(in oklch, var(--destructive) 30%, var(--foreground))",
         "sidebarAccentForeground": "var(--boxel-dark, #000000)",
         "sidebarPrimaryForeground": "var(--boxel-dark, #000000)"
       },

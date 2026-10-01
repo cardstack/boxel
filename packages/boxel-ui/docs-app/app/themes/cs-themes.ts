@@ -45,6 +45,7 @@ export const BoxelBrandGuide = `:root {
   --sidebar-ring: var(--boxel-teal, #00FFBA);
   --spacing: 0.25rem;
   --success: var(--boxel-success, #00892F);
+  --destructive-ink: var(--destructive);
   --tracking-normal: 0.01em;
   --brand-primary: var(--boxel-teal);
   --brand-secondary: var(--cardstack-purple);
@@ -140,6 +141,7 @@ export const BoxelBrandGuide = `:root {
   --sidebar-ring: var(--boxel-teal, #00FFBA);
   --spacing: 0.25rem;
   --success: var(--boxel-success, #00892F);
+  --destructive-ink: color-mix(in oklch, var(--destructive) 30%, var(--foreground));
   --tracking-normal: 0.01em;
   --brand-primary: var(--boxel-teal);
   --brand-secondary: var(--cardstack-purple);

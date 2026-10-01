@@ -126,6 +126,7 @@
         "sidebarForeground": "#0F172A",
         "secondaryForeground": "var(--boxel-light, #FFFFFF)",
         "destructiveForeground": "#F8FAFC",
+        "destructiveInk": "var(--destructive)",
         "sidebarAccentForeground": "#0F172A",
         "sidebarPrimaryForeground": "#0F172A"
       },
@@ -227,6 +228,7 @@
         "sidebarForeground": "var(--boxel-light, #FFFFFF)",
         "secondaryForeground": "var(--boxel-light, #FFFFFF)",
         "destructiveForeground": "var(--boxel-light, #FFFFFF)",
+        "destructiveInk": "color-mix(in oklch, var(--destructive) 30%, var(--foreground))",
         "sidebarAccentForeground": "#0F172A",
         "sidebarPrimaryForeground": "#0F172A"
       },

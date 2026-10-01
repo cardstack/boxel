@@ -41,11 +41,11 @@ Gaps, and the first is the real one:
 - **`data-sign` reaches CSS but not assistive tech.** There is no `aria-label`, no visually-hidden "increase"/"decrease", nothing. The announced text is "+12" — better than nothing, and `+` is announced as "plus" by most readers, which does carry it. Verify with your target readers; this is the mitigating factor.
 - **`NaN` renders as "NaN"** with `flat` styling. A malformed value produces visible garbage rather than an empty cell.
 - **No relationship to what it measures.** A Delta beside a Stat is loose adjacent text; **Stat** composes it, which is the right way to use it.
-- **`--success` and `--destructive` must both clear WCAG 1.4.3 at 11.5px weight 500** against `--card`. Green in particular is the token most often set too light for small text.
+- **`--success-ink` and `--destructive` must both clear WCAG 1.4.3 at 11.5px weight 500** against `--card`. Green in particular is the token most often set too light for small text.
 - Nothing is focusable, correctly.
 
 ## Theming
 
-`--success` (up), `--destructive` (down), `--muted-foreground` (flat), `--font-mono`, `--text-ui-sm`. The 500 weight and tabular figures are fixed.
+`--success-ink` (up), `--destructive` (down), `--muted-foreground` (flat), `--font-mono`, `--text-ui-sm`. The 500 weight and tabular figures are fixed.
 
 Three tokens and nothing else — which makes this the cheapest component in the kit to season, and also means a season that wants a different sign convention (or a colour-blind-safe blue/orange pair instead of green/red) can get it entirely by repointing `--success` and `--destructive` _for this component's context_, without touching the code. That is worth knowing: the sign→token mapping is fixed, but the token→colour mapping is not.

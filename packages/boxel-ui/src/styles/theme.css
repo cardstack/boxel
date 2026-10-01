@@ -188,14 +188,20 @@
   --boxel-button-secondary-border: var(--boxel-button-border-color);
   --boxel-button-secondary-active-border: var(--foreground);
   --boxel-button-destructive-active-background: var(--boxel-dark-red);
-  /* not reset at themed-card boundaries: it names only contract tokens, so
-     it resolves against the card's own theme there */
-  --boxel-menu-dangerous-foreground: var(--destructive);
   --boxel-button-link-primary-foreground: var(--boxel-highlight-hover);
   --boxel-button-disabled-opacity: 1;
   --boxel-button-disabled-background: var(--boxel-border-color);
   --boxel-button-disabled-border: 1px solid var(--boxel-border-color);
   --boxel-button-disabled-foreground: var(--boxel-450);
+}
+
+/* The default theme's destructive fill is dark enough to read as ink on its
+   light surfaces, so its ink is the fill itself. Themed cards keep the mix
+   above, since a theme's own fill may be too light to read as text; a theme
+   that wants the fill sets its own `--destructive-ink`. */
+:root,
+[data-theme='light']:not(:where([data-boxel-theme-scope]) *) {
+  --destructive-ink: var(--destructive);
 }
 
 /* ── Themed-card boundary reset ─────────────────────────────────────────────
@@ -310,7 +316,6 @@
   --boxel-button-secondary-border: var(--border);
   --boxel-button-secondary-active-border: var(--foreground);
   --boxel-button-destructive-active-background: var(--boxel-dark-red);
-  --boxel-menu-dangerous-foreground: var(--destructive-ink);
   --boxel-button-disabled-opacity: 1;
   --boxel-button-disabled-background: #444051;
   --boxel-button-disabled-foreground: #817c93;
@@ -416,6 +421,5 @@
     --sidebar-accent-foreground: var(--boxel-light);
     --sidebar-border: var(--boxel-550);
     --sidebar-ring: var(--boxel-highlight);
-    --boxel-menu-dangerous-foreground: var(--destructive-ink);
   }
 }

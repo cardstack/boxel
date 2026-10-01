@@ -30,7 +30,7 @@ export class Delta extends Component<DeltaSignature> {
         font-weight: 500;
       }
       .pretui-delta[data-sign='up'] {
-        color: var(--success, var(--boxel-success));
+        color: var(--success-ink, var(--boxel-success));
       }
       .pretui-delta[data-sign='down'] {
         color: var(--pretui-destructive-ink, var(--boxel-danger));

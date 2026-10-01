@@ -1977,7 +1977,7 @@ class Isolated extends Component<typeof Workspace> {
         color: var(--muted-foreground);
       }
       .setup-tease-mark {
-        color: var(--attention);
+        color: var(--attention-ink);
       }
       .setup-tease-link {
         font-weight: 600;

@@ -152,7 +152,7 @@ const DropdownButton: TemplateOnlyComponent<Signature> = <template>
       }
 
       .boxel-context-button--destructive-icon {
-        color: var(--destructive, var(--boxel-danger));
+        color: var(--destructive-ink, var(--boxel-danger));
       }
       .boxel-context-button--destructive:hover,
       .boxel-context-button--destructive.boxel-context-button--active,
