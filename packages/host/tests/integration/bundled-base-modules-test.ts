@@ -4,10 +4,7 @@ import { module, test } from 'qunit';
 
 import { Loader } from '@cardstack/runtime-common';
 
-import {
-  BUNDLED_BASE_MODULES,
-  TYPE_INCOMPATIBLE,
-} from '@cardstack/host/lib/bundled-base';
+import { BUNDLED_BASE_MODULES } from '@cardstack/host/lib/bundled-base';
 
 import { setupRenderingTest } from '../helpers/setup';
 
@@ -91,9 +88,6 @@ module('Integration | bundled base modules', function (hooks) {
     for (let name of Object.keys(BUNDLED_BASE_MODULES)) {
       for (let imported of registry[name]?.imports ?? []) {
         if (imported in BUNDLED_BASE_MODULES) {
-          continue;
-        }
-        if (TYPE_INCOMPATIBLE.has(imported)) {
           continue;
         }
         violations.push(`${name} -> ${imported}`);

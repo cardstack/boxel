@@ -87,15 +87,6 @@ function rebaseSpecifier(
 // `shimAsyncModule` calls in externals.ts: the boxel-cli guard that reads
 // literal shim ids out of that file covers `@cardstack/base/*` through its
 // path alias already, so nothing is lost to it here.
-// `string` is the one base module left out, and not for anything the loader
-// does. It is `export default StringField` re-exported from `card-api`, in a
-// `.ts` rather than a `.gts`, and a dynamic `import()` of it here would pull
-// that file into the TypeScript program — where TS reads the `.ts` as CommonJS
-// and retypes the default export for every consumer, which is 1553 errors
-// across the host suite. Bundling it is safe at runtime and the closure check
-// allows the import; what stops it is the type of its default export, and the
-// fix is for its consumers to import `StringField` from `card-api` instead.
-export const TYPE_INCOMPATIBLE = new Set(['string']);
 
 export const BUNDLED_BASE_MODULES: Record<
   string,
@@ -388,6 +379,7 @@ export const BUNDLED_BASE_MODULES: Record<
   'skill-reference': () => import('@cardstack/base/skill-reference'),
   'skill-set': () => import('@cardstack/base/skill-set'),
   spec: () => import('@cardstack/base/spec'),
+  string: () => import('@cardstack/base/string'),
   'stl-meta-extractor': () => import('@cardstack/base/stl-meta-extractor'),
   'stl-model-def': () => import('@cardstack/base/stl-model-def'),
   'streaming-envelope': () => import('@cardstack/base/streaming-envelope'),

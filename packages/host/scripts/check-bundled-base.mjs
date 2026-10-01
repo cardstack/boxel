@@ -134,12 +134,7 @@ function readTable() {
     ...body.matchAll(/^ {2}(?:'([^']+)'|([A-Za-z_$][\w$-]*)): \(\) =>/gm),
   ].map((m) => m[1] ?? m[2]);
 
-  let allowedBlock = src.slice(src.indexOf('TYPE_INCOMPATIBLE'));
-  allowedBlock = allowedBlock.slice(0, allowedBlock.indexOf(']'));
-  let allowed = new Set(
-    [...allowedBlock.matchAll(/'([^']+)'/g)].map((m) => m[1]),
-  );
-  return { table: new Set(names), allowed };
+  return new Set(names);
 }
 
 // `import { A, B as C } from './x'` and `import D from './x'`, mapping each
@@ -190,7 +185,7 @@ function importOrigins(code, file) {
 }
 
 function main() {
-  let { table, allowed } = readTable();
+  let table = readTable();
   let closureViolations = [];
 
   for (let name of table) {
@@ -203,7 +198,7 @@ function main() {
 
     for (let match of code.matchAll(RUNTIME_IMPORT)) {
       let target = baseTargetOf(match[1], file);
-      if (!target || table.has(target) || allowed.has(target)) {
+      if (!target || table.has(target)) {
         continue;
       }
       closureViolations.push(`${name} imports ${target}`);
@@ -225,8 +220,7 @@ function main() {
         `The bundler compiles it into the chunk anyway, and the realm still serves ` +
         `it, so card code importing it by identifier gets a second copy whose ` +
         `classes do not match.\n` +
-        `Add it to the table, or — if bundling it is blocked by something ` +
-        `other than the loader — to TYPE_INCOMPATIBLE with that reason.\n`,
+        `Add it to the table.\n`,
     );
     for (let line of closure) {
       console.error(`  ${line}`);
