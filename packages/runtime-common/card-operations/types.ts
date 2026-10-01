@@ -1,6 +1,6 @@
 import type { Readable } from 'stream';
 import type { CodeRef } from '../code-ref.ts';
-import type { ScreenshotManifest } from '../capture-spec.ts';
+import type { CaptureManifest } from '../capture-spec.ts';
 import type {
   SingleCardDocument,
   SingleFileMetaDocument,
@@ -409,9 +409,11 @@ export type PolicyIssueCode =
   | 'unknown-operation'
   // A grant of authorization infrastructure: an operation declared
   // `nonGrantable` on its rule's type or on any type that type descends from,
-  // or a write on a rule whose type is a `RealmPolicy`. The gate refuses both
-  // whatever a compiled policy holds, so the grant could admit nothing, and
-  // recording it says so where the author wrote it.
+  // or any grant on a rule whose type is a `RealmPolicy`. The gate refuses
+  // both whatever a compiled policy holds, so the grant could admit nothing,
+  // and recording it says so where the author wrote it. A query grant on a
+  // policy type is recorded too, since it would contribute a filter that
+  // lists policy cards.
   | 'grants-authorization-infrastructure'
   // A `where` that does not parse, or that the `policy` profile refuses.
   | 'invalid-predicate'
@@ -545,6 +547,11 @@ export interface OperationRequest {
   // the ACL allowed the caller, or never judged the request, as with a
   // realm-internal dispatch.
   coarseDeclined?: true;
+  // The refusal an archived realm answers with, for a caller its ACL declined.
+  // An invocation the policy gate admits is refused with it instead of
+  // running. One the gate refuses is refused as it is in an active realm, so
+  // a caller no grant admits is not told the realm is archived.
+  seal?: Error;
 }
 
 // A read's answer: the assembled JSON:API document, exactly as the card+json
@@ -588,7 +595,7 @@ export interface OperationDocumentResult {
 
 // What the index row behind a read says about itself: the values the card+json
 // response headers are computed from — the validator, the modification time,
-// and the index-data generation and screenshot manifest that go into it.
+// and the index-data generation and capture manifest that go into it.
 // Carried by both read modes, since the document mode reports the row its body
 // came from alongside the body.
 export interface OperationRowHeaders {
@@ -601,7 +608,7 @@ export interface OperationRowHeaders {
   indexedAt: number | null;
   lastModified: number | null;
   generation: number | null;
-  screenshots: ScreenshotManifest | null;
+  captures: CaptureManifest | null;
   // The target's index-row dependencies. Carried because a validator is only
   // safe when none of them live in another realm: cross-realm invalidation
   // does not cascade `indexed_at`, so a stable local one does not mean the
@@ -822,13 +829,18 @@ export type PolicyExplanationReason =
   // other matching grant held.
   | 'predicate-threw'
   // The operation is kept out of every policy's reach: declared
-  // `nonGrantable` on the target's type or a type it descends from, or a
-  // behavior no grant reaches here at all — a query, which is authorized on
-  // the search engine's lane, and an explain.
+  // `nonGrantable` on the target's type or a type it descends from, or an
+  // explain, which no grant reaches.
   | 'non-grantable'
-  // A write to the realm's policy card or to its config card, or a write that
-  // changes or mints any policy card, which no grant reaches whatever the
-  // card's type declares.
+  // The operation is a query. A query is not invoked on a card: it is named,
+  // with the type that declares it, in a search, and the search decides what
+  // it returns by composing into it the filter of each grant the actor holds
+  // on it. So invoking it on the card is refused whatever the policy grants,
+  // and this explanation reports no rule for it.
+  | 'query-lane'
+  // Any operation on the realm's policy card or on its config card, or one
+  // that reads, changes or mints any policy card, which no grant reaches
+  // whatever the card's type declares.
   | 'authorization-infrastructure'
   // The target is nothing a rule can be matched against for this operation:
   // a card whose index row records an error, so its type is unknown; a file,
@@ -979,6 +991,14 @@ export type OperationErrorCode =
   // wire only for a caller who may read the realm: one who may not is told
   // `target-not-found` instead (see `refusalForNonReader`).
   | 'operation-not-permitted'
+  // The realm ACL declined the caller, no grant in the realm's policy admits
+  // this operation on this target, and a predicate threw while the gate was
+  // deciding. That is a fault in the policy rather than anything the caller
+  // did, so it carries a 500. It is distinct from `internal-error` because it
+  // is a refusal too, and one only a card or type a rule names can raise: a
+  // caller who may not read the realm is told `target-not-found` instead (see
+  // `refusalForNonReader`).
+  | 'policy-predicate-failed'
   // An explain was asked about a target whose realm does not name the policy
   // card it was invoked on. The card governs nothing there, so there is
   // nothing for it to explain: the explain belongs on the card that realm's
@@ -1054,6 +1074,13 @@ export function isOperationFailure(err: unknown): err is OperationFailure {
 // than flattened where each is raised. A caller who may read the realm can list
 // it anyway, so they get every detail, and the gate's own refusal as a 403.
 //
+// A predicate that threw gets the same answer. The gate raises that fault only
+// against a card or type a rule names, and whether a predicate throws depends
+// on the card's stored values. So a 500 would tell such a caller that the card
+// is there, and something about what it holds. The gate logs the fault where
+// the predicate throws. A caller who may read the realm is told it as the 500
+// it is.
+//
 // A refusal of any other kind passes through. Such a caller is refused, as
 // the target is resolved, every invocation the gate did not admit outright, a
 // write whose predicate is still to run included. So nothing past that point
@@ -1061,7 +1088,8 @@ export function isOperationFailure(err: unknown): err is OperationFailure {
 export function refusalForNonReader(error: OperationError): OperationError {
   if (
     error.code !== 'target-not-found' &&
-    error.code !== 'operation-not-permitted'
+    error.code !== 'operation-not-permitted' &&
+    error.code !== 'policy-predicate-failed'
   ) {
     return error;
   }

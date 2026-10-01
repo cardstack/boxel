@@ -24,6 +24,9 @@ const SKIP_DIRS = new Set(['node_modules', 'scripts', 'types', 'tests']);
 // card in any realm may import any base module, and nothing here sees those
 // realms. Widen it deliberately — an entry added to quiet this check asserts
 // that card code names the module, and is wrong if it does not.
+//
+// It holds only for a loader some card has already made import the module, so
+// it is the weakest of the exemptions and the last one to reach for.
 const NAMED_BY_CARD_CODE = new Set(['card-api', 'skill']);
 
 // Read source with comments blanked, so prose that looks like a specifier is
@@ -164,6 +167,54 @@ const RUNTIME_IMPORT =
 const FIELD_USE =
   /\b(?:linksTo|linksToMany)\s*\(\s*(?:\(\)\s*=>\s*)?([A-Za-z_$][\w$]*)/g;
 
+// `identifyCard(Foo)` asks for a class's code ref by name, which is the same
+// question a link's type asks and has the same answer: the module the loader
+// was asked for. A bundled module calling it on a class another bundled module
+// declares gets undefined, since the import between them never reaches the
+// loader. Reading a class's own identity — `identifyCard(this.card)`,
+// `identifyCard(model.constructor)` — asks about a value, not an import, so
+// only a bare imported name counts here.
+const IDENTIFY_USE = /\bidentifyCard\s*\(\s*([A-Za-z_$][\w$]*)\s*[,)]/g;
+
+// Which base module each imported name comes from, keyed by the local name and
+// carrying the name the declaring module exports it under — `import { X as Y }`
+// is looked up in the declarer as X, not Y.
+function importOrigins(code, file) {
+  let origin = new Map();
+  for (let match of code.matchAll(IMPORT_STATEMENT)) {
+    let target = baseTargetOf(match[2], file);
+    if (!target) {
+      continue;
+    }
+    let named = match[1].match(/\{([\s\S]*?)\}/);
+    if (named) {
+      for (let piece of named[1].split(',')) {
+        let local = piece.trim();
+        if (!local || local.startsWith('type ')) {
+          continue;
+        }
+        let [exported, alias] = local.includes(' as ')
+          ? local.split(' as ').map((part) => part.trim())
+          : [local, local];
+        origin.set(alias, { module: target, name: exported });
+      }
+    }
+    let defaultImport = match[1]
+      .replace(/\{[\s\S]*?\}/, '')
+      .replace(/^\s*,|,\s*$/g, '')
+      .trim();
+    for (let piece of defaultImport.split(',')) {
+      let local = piece.trim();
+      if (/^[A-Za-z_$][\w$]*$/.test(local)) {
+        // A default import is exposed under whatever name the importer chose;
+        // the declaring module's own name for it is `default`.
+        origin.set(local, { module: target, name: 'default' });
+      }
+    }
+  }
+  return origin;
+}
+
 function main() {
   let { table, exceptions } = readTable();
   let closureViolations = [];
@@ -185,39 +236,14 @@ function main() {
       closureViolations.push(`${name} imports ${target}`);
     }
 
-    let origin = new Map();
-    for (let match of code.matchAll(IMPORT_STATEMENT)) {
-      let target = baseTargetOf(match[2], file);
-      if (!target) {
-        continue;
-      }
-      let named = match[1].match(/\{([\s\S]*?)\}/);
-      if (named) {
-        for (let piece of named[1].split(',')) {
-          let local = piece.trim();
-          if (!local || local.startsWith('type ')) {
-            continue;
-          }
-          origin.set(
-            local.includes(' as ') ? local.split(' as ')[1].trim() : local,
-            target,
-          );
-        }
-      }
-      let defaultImport = match[1]
-        .replace(/\{[\s\S]*?\}/, '')
-        .replace(/^\s*,|,\s*$/g, '')
-        .trim();
-      for (let piece of defaultImport.split(',')) {
-        let local = piece.trim();
-        if (/^[A-Za-z_$][\w$]*$/.test(local)) {
-          origin.set(local, target);
-        }
-      }
-    }
+    let origin = importOrigins(code, file);
 
-    for (let match of code.matchAll(FIELD_USE)) {
-      let declaredIn = origin.get(match[1]);
+    let uses = [
+      ...[...code.matchAll(FIELD_USE)].map((m) => ({ referenced: m[1] })),
+      ...[...code.matchAll(IDENTIFY_USE)].map((m) => ({ referenced: m[1] })),
+    ];
+    for (let use of uses) {
+      let declaredIn = origin.get(use.referenced)?.module;
       if (
         !declaredIn ||
         declaredIn === name ||
@@ -226,7 +252,9 @@ function main() {
       ) {
         continue;
       }
-      identityHazards.push(`${name} links to ${match[1]} from ${declaredIn}`);
+      identityHazards.push(
+        `${name} names ${use.referenced} from ${declaredIn}`,
+      );
     }
   }
 
@@ -236,7 +264,7 @@ function main() {
   if (closure.length === 0 && identity.length === 0) {
     console.log(
       `ok: ${table.size} bundled base modules are closed under imports, ` +
-        `and link to no class the loader is never asked for`,
+        `and name no class the loader is never asked for`,
     );
     return;
   }
@@ -257,15 +285,16 @@ function main() {
 
   if (identity.length > 0) {
     console.error(
-      `\n${identity.length} bundled module(s) link to a class another bundled ` +
+      `\n${identity.length} bundled module(s) name a class another bundled ` +
         `module declares.\n` +
         `A class is named only when the loader is asked for the module ` +
         `declaring it, and one bundled module asking for another is resolved ` +
-        `inside the chunk — so a code ref for the link's type names the field ` +
-        `it is held as, and a chooser that filters on it asks for the wrong ` +
-        `type.\n` +
-        `Leave the holder and the declarer both out of the table, or — if card ` +
-        `code names the declarer by identifier — add it to NAMED_BY_CARD_CODE ` +
+        `inside the chunk unless the module publishes what it declares. A ` +
+        `link's type and an identifyCard call both read that name as data, ` +
+        `and a chooser filters on it.\n` +
+        `Leave the holder out of the table — a fetched holder imports the ` +
+        `declarer through the loader, which is what names it — or, if card ` +
+        `code names the declarer by identifier, add it to NAMED_BY_CARD_CODE ` +
         `in this script.\n`,
     );
     for (let line of identity) {

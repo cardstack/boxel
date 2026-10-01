@@ -242,8 +242,7 @@ export default class InteractSubmode extends Component {
   ): Promise<string | undefined> => {
     let instance: CardDef;
     if (opts?.doc) {
-      instance = await this.store.add(opts.doc, {
-        doNotWaitForPersist: true,
+      instance = await this.store.addWithoutWaiting(opts.doc, {
         realm: opts?.realmURL?.href,
       });
     } else {
@@ -259,8 +258,7 @@ export default class InteractSubmode extends Component {
         },
       );
       instance = new CardKlass() as CardDef;
-      await this.store.add(instance, {
-        doNotWaitForPersist: true,
+      await this.store.addWithoutWaiting(instance, {
         realm: opts?.realmURL?.href,
         localDir: opts?.localDir,
       });
@@ -486,7 +484,7 @@ export default class InteractSubmode extends Component {
     if (takesFileDeleteRoute(card, id, this.store)) {
       let fileDef = isFileDefInstance<FileDef>(card)
         ? card
-        : await this.store.get<FileDef>(id, { type: 'file-meta' });
+        : await this.store.get(id, { type: 'file-meta' });
       // A file whose metadata fails to load is still deletable; fall back to
       // its URL's filename for the dialog.
       let title = isFileDefInstance<FileDef>(fileDef)
@@ -793,7 +791,7 @@ export default class InteractSubmode extends Component {
       return;
     }
 
-    let spec = await this.store.get<Spec>(specId);
+    let spec = await this.store.get(specId);
 
     if (!spec) {
       throw new Error(`Could not find spec "${specId}" in the store`);

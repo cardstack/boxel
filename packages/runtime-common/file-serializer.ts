@@ -122,10 +122,13 @@ export default async function serialize({
   // Storing it inside those bytes would make it a statement about the file as
   // it was before this write, and change the very content it describes.
   delete result.data.meta.version;
-  // Serve-time join output (the durable screenshot URLs of whatever instance
+  // Serve-time join output (the durable capture URLs of whatever instance
   // the doc was GET from) — persisting an echo would pin a copied card's
   // source file to the original's captures.
-  delete result.data.meta.screenshots;
+  delete result.data.meta.captures;
+  // How a search row carrying this card was served, not a fact about the card:
+  // a client writing back a row whose relationships were withheld echoes it.
+  delete result.data.meta.relationshipsWithheld;
   delete result.included;
   delete result.data.links;
   result.data.type = 'card';

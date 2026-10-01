@@ -33,9 +33,10 @@ name: Catalog Test Subset Consumers
 # use; merging main into it fixes that.
 #
 # A boxel PR that changes this workflow, the test web assets build, the subset
-# manifest, its sync or the test helpers that read the sync's marker, or the CI
-# boot path the stack comes up through (mise, the composite actions, the
-# observability scripts and Traefik, as ci-host.yaml lists them) runs it too,
+# manifest, its sync, the script that packs the realm-server files into shards,
+# the test helpers that read the sync's marker, or the CI boot path the stack
+# comes up through (mise, the composite actions, the observability scripts and
+# Traefik, as ci-host.yaml lists them) runs it too,
 # against the pinned catalog revision, and so does the push that merges it. A
 # change that would break the catalog's run is then red in boxel rather than on
 # the next catalog PR.
@@ -58,6 +59,7 @@ on:
       - ".github/workflows/test-web-assets.yaml"
       - "packages/catalog/test-subset.json"
       - "packages/catalog/scripts/sync-test-subset.ts"
+      - "packages/realm-server/scripts/shard-test-modules.cjs"
       # The only runs that take these helpers' local-checkout branch.
       - "packages/host/tests/helpers/catalog-test-subset.ts"
       - "packages/realm-server/tests/helpers/catalog-test-subset.ts"
@@ -74,6 +76,7 @@ on:
       - ".github/workflows/test-web-assets.yaml"
       - "packages/catalog/test-subset.json"
       - "packages/catalog/scripts/sync-test-subset.ts"
+      - "packages/realm-server/scripts/shard-test-modules.cjs"
       - "packages/host/tests/helpers/catalog-test-subset.ts"
       - "packages/realm-server/tests/helpers/catalog-test-subset.ts"
       - ".mise.toml"
@@ -108,12 +111,16 @@ jobs:
       catalog_sha: ${{ steps.plan.outputs.catalog_sha }}
       host_filters: ${{ steps.plan.outputs.host_filters }}
       realm_server_files: ${{ steps.plan.outputs.realm_server_files }}
+      realm_server_shards: ${{ steps.shards.outputs.realm_server_shards }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           repository: cardstack/boxel
           ref: ${{ inputs.boxel_ref || github.sha }}
-          sparse-checkout: packages/catalog/test-subset.json
+          sparse-checkout: |
+            packages/catalog/test-subset.json
+            packages/realm-server/scripts/shard-test-modules.cjs
+            packages/realm-server/tests/test-module-timings.json
           sparse-checkout-cone-mode: false
 
       # Both refs resolve to a sha here, and every job below checks out those
@@ -147,6 +154,48 @@ jobs:
             echo "host_filters=$host_filters"
             echo "realm_server_files=$realm_server_files"
           } >> "$GITHUB_OUTPUT"
+
+      # The realm-server files run in shards, packed by the durations main CI
+      # records for them in test-module-timings.json with the same packing
+      # ci.yaml's realm-server shards use. Run serially in one job they take
+      # about 37 minutes of tests after 4 of setup, against that job's 40-minute
+      # limit, and every policy test added to the manifest makes it longer.
+      #
+      # The packing balances the shards only roughly. These files run here at
+      # 0.9 to 2.6 times the durations main CI records for them, so the weights
+      # rank some of them differently than this job runs them. Four shards take
+      # 11 to 15 minutes each, setup included, which leaves the limit well
+      # clear. Each shard boots its own stack, so a count raised past that buys
+      # little: a fifth still leaves one shard near 10 minutes of tests.
+      - name: Pack the realm-server files into shards
+        id: shards
+        env:
+          REALM_SERVER_FILES: ${{ steps.plan.outputs.realm_server_files }}
+          SHARD_COUNT: 4
+        run: |
+          set -euo pipefail
+          # The script is single-quoted so that the shell expands nothing in it.
+          # shellcheck disable=SC2016
+          realm_server_shards=$(node -e '
+            const { assignByWeight, loadTimings } = require("./packages/realm-server/scripts/shard-test-modules.cjs");
+            const files = process.env.REALM_SERVER_FILES.split(",").filter(Boolean).map((file) => `${file}.ts`);
+            const timings = loadTimings("packages/realm-server/tests") ?? {};
+            const total = Math.min(Number(process.env.SHARD_COUNT), files.length);
+            const shards = Array.from({ length: total }, (_, index) => ({
+              shard: index + 1,
+              total,
+              files: assignByWeight(files, timings, index + 1, total)
+                .map((file) => file.replace(/\.ts$/, ""))
+                .join(","),
+            }));
+            const packed = shards.flatMap(({ files }) => files.split(","));
+            if (packed.length !== files.length || new Set(packed).size !== files.length) {
+              throw new Error(`the shards do not partition the realm-server files: ${JSON.stringify(shards)}`);
+            }
+            process.stdout.write(JSON.stringify(shards));
+          ')
+          echo "realm-server shards: $realm_server_shards"
+          echo "realm_server_shards=$realm_server_shards" >> "$GITHUB_OUTPUT"
 
   # The host tests run against the env-mode stack (https://*.ci.localhost
   # behind Traefik), as ci-host.yaml's host-test does, and the realm-server
@@ -281,10 +330,17 @@ jobs:
         run: mise run ci:traefik-diagnostics
 
   realm-server:
-    name: Realm-server tests
+    name: Realm-server tests (${{ matrix.shard }}/${{ matrix.total }})
     needs: [plan, realm-server-web-assets]
+    if: needs.plan.outputs.realm_server_files != ''
     runs-on: ubuntu-latest
     timeout-minutes: 40
+    strategy:
+      # Each shard answers for its own files, so one failing leaves the
+      # others to report theirs.
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.realm_server_shards) }}
     env:
       # test-services:realm-server serves the subset as the catalog realm;
       # this makes it the catalog checkout's copy, as on the host job.
@@ -328,7 +384,7 @@ jobs:
         run: pnpm test:wait-for-servers
         working-directory: packages/realm-server
         env:
-          TEST_FILES: ${{ needs.plan.outputs.realm_server_files }}
+          TEST_FILES: ${{ matrix.files }}
 
       - name: Print realm server logs
         if: ${{ !cancelled() }}

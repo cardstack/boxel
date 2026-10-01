@@ -24,8 +24,13 @@ export { checkCapabilities, parseCapabilityChecks } from './capabilities.ts';
 export type { CapabilityCaller } from './capabilities.ts';
 export { CAPABILITY_CHECK_CAP } from './capability-wire.ts';
 export type { CapabilityAnswer, CapabilityCheck } from './capability-wire.ts';
-export { policyQueryScope } from './policy-query.ts';
-export type { PolicyQueryScope } from './policy-query.ts';
+export {
+  policyQueryScope,
+  principalQueryScope,
+  RealmAuthorityPolicyScopeError,
+  searchPrincipal,
+} from './policy-query.ts';
+export type { PolicyQueryScope, SearchPrincipal } from './policy-query.ts';
 export type {
   GateDecision,
   GrantedDecision,
@@ -181,8 +186,13 @@ export {
   namedQueryInvocation,
   namedQueryRendering,
   resolveNamedQuery,
+  searchInvocation,
 } from './named-query.ts';
-export type { NamedQueryContext, ResolvedNamedQuery } from './named-query.ts';
+export type {
+  NamedQueryContext,
+  ResolvedNamedQuery,
+  SearchInvocation,
+} from './named-query.ts';
 export type {
   QueryDefinition,
   QueryInvocation,

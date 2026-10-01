@@ -6,12 +6,12 @@
  * five issues green and every one had a runtime defect). The render gate
  * closes the cheapest half of that hole: after an issue finishes, capture
  * real host-rendered screenshots of the cards it shipped via the realm
- * server's `POST /_screenshot-card` endpoint, attach them to the run log,
+ * server's `POST /_capture-card` endpoint, attach them to the run log,
  * and hand the PNG paths to the acceptance walkthrough turn — whose agent
  * READS them with its image-capable Read tool and verdicts each
  * acceptance criterion against what is actually on screen.
  *
- * Endpoint contract (see realm-server handle-screenshot-card):
+ * Endpoint contract (see realm-server handle-capture-card):
  * - formats: 'isolated' | 'embedded' only (fitted capture is an upstream
  *   ask — the prerenderer doesn't expose a sized fitted container yet).
  * - response: { data: { attributes: { status, base64?, width?, height?,
@@ -106,13 +106,13 @@ export class RenderGate {
     let cardId = new URL(cardPath, targetRealm).href;
     try {
       let response = await client.authedServerFetch(
-        new URL('_screenshot-card', realmServerUrl),
+        new URL('_capture-card', realmServerUrl),
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             data: {
-              type: 'screenshot-card',
+              type: 'capture-card',
               attributes: { realmURL: targetRealm, cardId, format },
             },
           }),

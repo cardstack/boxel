@@ -675,8 +675,9 @@ module(basename(import.meta.filename), function (hooks) {
         },
         {
           targetType: REALM_POLICY,
-          // A write on a RealmPolicy, and two reads of one.
-          grants: grants('read', 'update', 'readSource'),
+          // A write on a RealmPolicy, two reads of one, and a query, none of
+          // which a rule naming a policy type grants.
+          grants: grants('read', 'update', 'readSource', 'query'),
         },
         { targetType: TS_FILE_DEF, grants: grants('readSource') },
         { targetType: GTS_FILE_DEF, grants: grants('readSource') },
@@ -711,10 +712,10 @@ module(basename(import.meta.filename), function (hooks) {
           code: 'grants-authorization-infrastructure',
           path: 'rules[1].grants[0].operation',
         },
-        {
+        ...[0, 1, 2, 3].map((grant) => ({
           code: 'grants-authorization-infrastructure',
-          path: 'rules[2].grants[1].operation',
-        },
+          path: `rules[2].grants[${grant}].operation`,
+        })),
         { code: 'grants-module-source', path: 'rules[3].targetType' },
         { code: 'grants-module-source', path: 'rules[4].targetType' },
         { code: 'unresolved-type', path: 'rules[6].targetType' },
@@ -743,10 +744,7 @@ module(basename(import.meta.filename), function (hooks) {
           ],
         },
         { rule: 'rules[1]', grants: ['rules[1].grants[1] approve'] },
-        {
-          rule: 'rules[2]',
-          grants: ['rules[2].grants[0] read', 'rules[2].grants[2] readSource'],
-        },
+        { rule: 'rules[2]', grants: [] },
         { rule: 'rules[5]', grants: ['rules[5].grants[0] readSource'] },
         { rule: 'rules[7]', grants: ['rules[7].grants[1] update'] },
       ],

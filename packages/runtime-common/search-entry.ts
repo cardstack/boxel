@@ -786,6 +786,54 @@ export function policyScopedQuery(
   };
 }
 
+// The realms of a search whose rows the result marks policy-scoped
+// (`meta.policyScopedRealms`). A realm the caller does not read outright is
+// scoped whatever it contributed. Its policy composed a grant, admitted
+// nothing, or could not be judged, and the mark reads the same in each case,
+// so it cannot tell a caller whether they hold a grant there. A declared query
+// the server resolved from its own definition scopes every realm the request
+// named, since what it matched is the server's resolution rather than the
+// caller's. That includes a realm its declaration leaves out, which contributes
+// no rows to it, so the mark never says which realms the declaration searched.
+// `realms` are the ones the request named, and they are marked in that order,
+// once each.
+export function policyScopedRealms({
+  realms,
+  readable,
+  resolvedByServer,
+}: {
+  realms: string[];
+  readable: (realm: string) => boolean;
+  resolvedByServer: boolean;
+}): string[] {
+  return [
+    ...new Set(
+      resolvedByServer ? realms : realms.filter((realm) => !readable(realm)),
+    ),
+  ];
+}
+
+// `doc` with `realms` marked policy-scoped, beside any it already marks. A
+// document with no realm to mark is returned as it is, so a search of realms
+// the caller reads outright carries no mark at all.
+export function markPolicyScoped(
+  doc: EntryCollectionDocument,
+  realms: string[],
+): EntryCollectionDocument {
+  if (realms.length === 0) {
+    return doc;
+  }
+  return {
+    ...doc,
+    meta: {
+      ...doc.meta,
+      policyScopedRealms: [
+        ...new Set([...(doc.meta.policyScopedRealms ?? []), ...realms]),
+      ],
+    },
+  };
+}
+
 // The document a realm answers with when it contributes no rows because the
 // caller may not see any: the one a search matching nothing produces, so a
 // realm that grants the caller nothing reads exactly as a realm holding
@@ -1017,6 +1065,64 @@ export function wireFilterTypeAnchors(
   return undefined;
 }
 
+// The card types a policy is asked about for an ad-hoc search with this
+// filter, or `undefined` when the filter admits an entry of any type.
+//
+// Every entry the filter matches adopts from at least one of them, as with
+// `wireFilterTypeAnchors`, and on the same readings of a node: an unanchored
+// node is read only through its one deciding member, and `any` only when all
+// of its branches are anchored. It differs in what it keeps. Where a live
+// search needs only enough of a filter's anchors to bound its matches, a
+// policy is asked about every type a match is known to adopt from, since each
+// such type brings its own rules. So an `every` contributes the anchors of all
+// of its anchored branches rather than the first one found, and an anchored
+// node contributes its own anchor together with those its body names. Two
+// filters that match the same cards are then asked about the same types,
+// whichever order their branches are written in.
+//
+// A match of an `every` adopts from all of its anchors at once, so each of
+// them brings rules the gate would consult for that match. A match of an `any`
+// adopts from the anchors of one branch, and `policyQueryScope` confines what
+// each type's rules admit to that type's cards, so the other branches' types
+// admit nothing of it.
+export function wireFilterGrantTypes(
+  filter: SearchEntryWireFilter | undefined,
+): CodeRef[] | undefined {
+  if (!filter) {
+    return undefined;
+  }
+  let own = filter[ITEM_ANCHOR];
+  let body = grantTypesOfBody(filter);
+  if (own) {
+    return [own, ...(body ?? [])];
+  }
+  return body;
+}
+
+function grantTypesOfBody(
+  filter: SearchEntryWireFilter,
+): CodeRef[] | undefined {
+  let member = soleShapeMember(filter);
+  if (member === 'every' && filter.every?.length) {
+    let types = filter.every.flatMap(
+      (branch) => wireFilterGrantTypes(branch) ?? [],
+    );
+    return types.length > 0 ? types : undefined;
+  }
+  if (member === 'any' && filter.any?.length) {
+    let types: CodeRef[] = [];
+    for (let branch of filter.any) {
+      let branchTypes = wireFilterGrantTypes(branch);
+      if (!branchTypes) {
+        return undefined;
+      }
+      types.push(...branchTypes);
+    }
+    return types;
+  }
+  return undefined;
+}
+
 // The members that decide what a filter node matches, as opposed to the
 // `item.on` anchor that gates whichever of them runs.
 const SHAPE_MEMBERS = [
@@ -1208,6 +1314,16 @@ export function combineSearchEntryResults(
     // merge.
     if (doc.meta?.linkClosureTruncated) {
       combined.meta.linkClosureTruncated = true;
+    }
+    // A realm that scoped its own rows scopes them in the merge too: the mark
+    // is per realm, so merging only collects which realms carry it.
+    if (doc.meta?.policyScopedRealms?.length) {
+      combined.meta.policyScopedRealms = [
+        ...new Set([
+          ...(combined.meta.policyScopedRealms ?? []),
+          ...doc.meta.policyScopedRealms,
+        ]),
+      ];
     }
     for (let resource of doc.included ?? []) {
       if (resource.id) {

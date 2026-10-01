@@ -14,9 +14,17 @@ on:
     paths-ignore:
       - "packages/observability/**"
 
+# Pull requests: a new push cancels the run in progress for the same branch.
+# Pushes to main share one group but never cancel a run in progress: GitHub
+# keeps at most one running and one pending run per group, and a newer pending
+# run replaces the older one. A burst of merges therefore runs the commit in
+# progress and then the newest, rather than every commit in between.
+# The main group is `push:main` because `:` cannot appear in a branch name, so
+# no pull request's head_ref (a fork's `main`, say) can land in it and cancel a
+# main run.
 concurrency:
-  group: ci-lint-${{ github.head_ref || github.run_id }}
-  cancel-in-progress: true
+  group: ci-lint-${{ github.head_ref || (github.event_name == 'push' && github.ref == 'refs/heads/main' && 'push:main') || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   checks: write
@@ -142,6 +150,32 @@ jobs:
         if: ${{ !cancelled() }}
         run: pnpm run lint
         working-directory: packages/bxl
+      - name: Lint Glimmer Motion
+        if: ${{ !cancelled() }}
+        run: pnpm run lint
+        working-directory: packages/glimmer-motion
+      - name: Lint Choreo Player
+        if: ${{ !cancelled() }}
+        run: pnpm run lint
+        working-directory: packages/choreo-player
+      - name: Lint Choreo Test App
+        if: ${{ !cancelled() }}
+        run: pnpm run lint
+        working-directory: packages/choreo-test-app
+      - name: Lint Choreo Gallery
+        if: ${{ !cancelled() }}
+        run: pnpm run lint
+        working-directory: packages/choreo-gallery
+      - name: Build Glimmer Motion, Choreo Player and Choreo Gallery
+        # Build coverage, not a lint prerequisite: lint type-checks these
+        # packages from source. The builds catch what only rollup sees, such
+        # as the gallery's `?raw` guide imports, fix-declarations and
+        # scope-css.
+        if: ${{ !cancelled() }}
+        run: |
+          (cd packages/glimmer-motion && pnpm run build)
+          (cd packages/choreo-player && pnpm run build)
+          (cd packages/choreo-gallery && pnpm run build)
 
   catalog:
     # The catalog (cardstack/boxel-catalog) type-checks and lints its cards
