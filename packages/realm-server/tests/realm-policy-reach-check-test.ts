@@ -409,6 +409,44 @@ module(basename(import.meta.filename), function (hooks) {
     ]);
   });
 
+  test('a grant that admits nothing neither reaches nor grants', async function (assert) {
+    // The gate reads a card's stored source alone, so it never evaluates a
+    // predicate annotated as reading a snapshot tier, and a read whose
+    // predicate is one admits nothing.
+    let snapshotRead = (targetType: Rule['targetType']): Rule => ({
+      targetType,
+      grants: [{ operation: 'read', where: { bxl: TEACHES, snapshot: true } }],
+    });
+    let policy = await compile([snapshotRead(CLASSROOM)]);
+    assert.deepEqual(
+      policy.rules[0]?.grants.map((grant) => grant.operation),
+      ['read'],
+      'the grant compiles',
+    );
+    assert.deepEqual(
+      reached(policy),
+      [],
+      'and hands nothing over, so nothing is walked',
+    );
+
+    policy = await compile([
+      rule(CLASSROOM, 'read'),
+      snapshotRead(STUDENT),
+      rule(GUARDIAN, 'read'),
+    ]);
+    assert.deepEqual(
+      reached(policy),
+      [
+        {
+          code: 'grant-reaches-ungranted-type',
+          path: 'rules[0].grants[0]',
+          via: 'students',
+        },
+      ],
+      'nor does it make its type readable',
+    );
+  });
+
   test('a link typed as a card of any type is not answered by granting that type', async function (assert) {
     let policy = await compile([rule(NOTICEBOARD, 'read')]);
     assert.deepEqual(reached(policy), [
