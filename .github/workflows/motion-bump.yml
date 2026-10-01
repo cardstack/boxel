@@ -9,8 +9,10 @@ name: Motion Bump
 # says how to review one.
 #
 # Each release gets one branch, motion-bump/<version>, and a run skips a
-# release whose branch exists. Closing a bump PR and keeping its branch
-# declines that release; the next release opens its own PR.
+# release that already has a PR from it, open or closed. Closing a bump PR
+# declines that release, whether or not its branch is deleted; the next release
+# opens its own PR. A branch with no PR is left over from a run that failed
+# after pushing, and the next run pushes over it.
 #
 # The PR is opened with the job's GITHUB_TOKEN, and events that token causes
 # don't start pull_request workflows. workflow_dispatch is the exception, so the
@@ -53,14 +55,16 @@ jobs:
         id: pick
         run: node packages/glimmer-motion/scripts/bump-motion.mjs
 
-      - name: Check for its branch
+      - name: Check for its PR
         id: branch
         if: steps.pick.outputs.version != ''
         env:
+          GH_TOKEN: ${{ github.token }}
           BRANCH: motion-bump/${{ steps.pick.outputs.version }}
         run: |
-          if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null; then
-            echo "$BRANCH exists, so this release already has a bump PR."
+          existing=$(gh pr list --head "$BRANCH" --state all --json url --jq '.[0].url // empty')
+          if [ -n "$existing" ]; then
+            echo "This release already has a bump PR: $existing"
           else
             echo "name=$BRANCH" >> "$GITHUB_OUTPUT"
           fi
@@ -85,7 +89,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git switch -c "$BRANCH"
           git commit -am "Bump Motion to framer-motion $VERSION"
-          git push origin "$BRANCH"
+          git push --force origin "$BRANCH"
 
           url=$(gh pr create --base main --head "$BRANCH" \
             --title "fix: Bump Motion to $VERSION (framer-motion, motion, motion-dom, motion-utils)" \

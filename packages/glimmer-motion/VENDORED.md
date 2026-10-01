@@ -86,4 +86,4 @@ Reviewing a bump PR:
 4. **Title.** The PR opens as `fix:`, for a catch-up. Retitle it `feat:` when upstream adds a capability
    glimmer-motion exposes. The prefix covers glimmer-motion and choreo, which release together.
 
-To decline a release, close its PR and keep the branch: the workflow skips a release whose branch exists.
+To decline a release, close its PR: the workflow skips a release that has a bump PR, open or closed.
