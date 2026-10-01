@@ -502,7 +502,8 @@ const CARRIED_BY: Readonly<Record<BaseOperation, readonly DefKind[]>> = {
 // them. Nothing implies one, so a target whose type declares none has no
 // operation by that name, and asking for it is asking for an operation that
 // does not exist. An explain and a validate are the two: each answers only on
-// a policy card, and a policy card's type is what declares it.
+// the card that declares it, a policy card, or for a validate the realm's
+// config card too.
 const DECLARATION_ONLY: Readonly<Partial<Record<BaseOperation, true>>> =
   Object.assign(Object.create(null) as Partial<Record<BaseOperation, true>>, {
     explain: true,

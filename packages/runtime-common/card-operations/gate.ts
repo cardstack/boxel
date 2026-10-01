@@ -65,7 +65,7 @@ import {
 //   any rule is matched, or on any type the target's type descends from,
 //   refused before a matching grant admits anything.
 // - An explain, which answers what a refusal withholds, and a validate, which
-//   reports what a policy card compiles to, whatever their declarations say.
+//   reports what a policy compiles to, whatever their declarations say.
 // - Any operation on the card the realm's policy key names: a read of it, a
 //   read of its stored bytes, or a write.
 // - Any operation on the realm's config card, which holds that key and the
@@ -454,8 +454,9 @@ export async function gateOperation(
     return GATE_REFUSED;
   }
   // An explain and a validate are granted nowhere: an explain answers what a
-  // refusal withholds, and a validate reads a policy card. So each is refused
-  // here even where its declaration left the flag off.
+  // refusal withholds, and a validate reads a policy card, or the one the
+  // realm's pointer names. So each is refused here even where its declaration
+  // left the flag off.
   if (base === 'explain' || base === 'validate') {
     trace?.refused('non-grantable');
     return GATE_REFUSED;
@@ -1043,7 +1044,7 @@ function realmConfigCardId(core: OperationCore): string {
 
 // Whether `url` is the realm's config card, named either by its id or by that
 // stored `.json`.
-function namesRealmConfigCard(core: OperationCore, url: URL): boolean {
+export function namesRealmConfigCard(core: OperationCore, url: URL): boolean {
   return realmConfigCardId(core) === cardId(url.href);
 }
 
