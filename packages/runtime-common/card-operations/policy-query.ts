@@ -9,7 +9,13 @@ import {
   nonGrantableInChain,
   policyUnavailable,
 } from './gate.ts';
-import { realmPolicyRef, type CompiledRealmPolicy } from './policy.ts';
+import { FIELD_KEYED_OPERATORS } from './policy-filter.ts';
+import {
+  realmPolicyRef,
+  type CompiledOperationGrant,
+  type CompiledRealmPolicy,
+  type MisreadingType,
+} from './policy.ts';
 import { lowerQueryOperation } from './query.ts';
 
 // ============================================================================
@@ -314,7 +320,8 @@ function ownDeclaration(
 }
 
 // Every matching grant's filter, with the caller filled in, in the grammar the
-// engine runs.
+// engine runs, each comparison in it kept from judging a card whose type reads
+// the compared path differently from the rule's type.
 //
 // A compiled filter stands the caller as the `{ $ref: 'actor' }` marker a
 // declared query uses, so filling one in is the substitution a named query
@@ -345,7 +352,71 @@ async function grantFilters(
         `a compiled query grant on "${operation}" lowered to no filter`,
       );
     }
-    filters.push(policyFilterFromWire(bound.filter));
+    filters.push(withoutMisreadings(policyFilterFromWire(bound.filter), grant));
   }
   return filters;
+}
+
+// `filter` with each comparison of a path some type reads differently kept
+// from judging that type's cards, which the index holds a reading of that the
+// predicate never makes. Where the comparison would admit a card, it admits
+// none of those. Under a `not`, where it would refuse one, it refuses all of
+// them. So for such a card the filter holds only when it would hold whatever
+// the path read, and the rest of the filter still judges the card: an `or`
+// whose other branch reads a path the type declares alike still admits it. A
+// filter with nothing misread is `filter` itself, untouched.
+export function withoutMisreadings(
+  filter: Filter,
+  grant: Pick<CompiledOperationGrant, 'misreadingTypes'>,
+): Filter {
+  let byPath = new Map(
+    (grant.misreadingTypes ?? []).map(({ path, types }) => [path, types]),
+  );
+  if (byPath.size === 0) {
+    return filter;
+  }
+  let guard = (node: Filter, positive: boolean): Filter => {
+    if ('any' in node) {
+      return {
+        ...node,
+        any: node.any.map((branch) => guard(branch, positive)),
+      };
+    }
+    if ('every' in node) {
+      return {
+        ...node,
+        every: node.every.map((branch) => guard(branch, positive)),
+      };
+    }
+    if ('not' in node) {
+      return { ...node, not: guard(node.not, !positive) };
+    }
+    let compared = node as Partial<
+      Record<(typeof FIELD_KEYED_OPERATORS)[number], object>
+    >;
+    let types = FIELD_KEYED_OPERATORS.flatMap((operator) =>
+      Object.keys(compared[operator] ?? {}),
+    ).flatMap((path) => byPath.get(path) ?? []);
+    if (types.length === 0) {
+      return node;
+    }
+    let misread: Filter = { any: types.map(cardsOf) };
+    return positive
+      ? { every: [node, { not: misread }] }
+      : { any: [node, misread] };
+  };
+  return guard(filter, true);
+}
+
+// The cards whose own type is `type`, or descends from it without having
+// redeclared the path back.
+function cardsOf({ type, except }: MisreadingType): Filter {
+  return except
+    ? {
+        every: [
+          { type },
+          { not: { any: except.map((kept) => ({ type: kept })) } },
+        ],
+      }
+    : { type };
 }

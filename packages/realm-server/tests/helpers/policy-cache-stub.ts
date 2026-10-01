@@ -125,6 +125,9 @@ export function stubPolicyCache({
       await (state.revisitGate ?? Promise.resolve());
       state.onRevisit?.();
     },
+    realmURL: educationURL,
+    instanceTypesUnder: async () => [],
+    instanceTypeKeys: async () => [],
   });
   return { cache, state, card };
 }
