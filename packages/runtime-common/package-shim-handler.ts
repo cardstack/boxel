@@ -349,9 +349,9 @@ const defaultDelay = (ms: number) =>
 // that legitimately takes this long has already lost the render it was for.
 // It has to fire before the tightest budget an import can sit under, so the
 // error names the specifier rather than being overtaken by that budget's own
-// timeout. The tightest is the prerender's `SCREENSHOT_PENDING_WAIT_MS`
+// timeout. The tightest is the prerender's `CAPTURE_PENDING_WAIT_MS`
 // (15s), which a capture-only component's `await import(...)` waits under
-// while it holds `data-screenshot-pending`; `cardRenderTimeout` is longer.
+// while it holds `data-capture-pending`; `cardRenderTimeout` is longer.
 export const SHIM_RESOLVE_DEADLINE_MS = 10_000;
 
 const defaultScheduleTimeout = (callback: () => void, ms: number) => {

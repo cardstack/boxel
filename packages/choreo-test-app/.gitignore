@@ -1,0 +1,15 @@
+dist/
+dist-tests/
+tmp/
+*.log
+.claude/
+
+# screen recordings used for frame-by-frame debugging; large and disposable
+*.mov
+*.mp4
+!public/*.mp4
+
+# copied out of the installed three at config time (see vite.config.mjs)
+public/draco/
+# copied from the dialkit package at config time (see vite.config.mjs)
+public/dialkit-theme.css
