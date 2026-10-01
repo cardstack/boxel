@@ -11,8 +11,14 @@ import type {
 } from '../search-entry.ts';
 import { CAPABILITY_CHECK_CAP } from './capability-wire.ts';
 import type { OperationDiagnostics } from './telemetry.ts';
+import {
+  PRERENDERED_HTML_FORMATS,
+  type PrerenderedHtmlFormat,
+} from '../prerendered-html-format.ts';
 import type {
   BaseOperationName,
+  HtmlDeclaration,
+  HtmlSharing,
   LinkStrategy,
 } from '@cardstack/base/operations';
 
@@ -166,6 +172,49 @@ export function effectiveLinkStrategy(
   );
 }
 
+// The two answers an `html` declaration gives a format, as a total map over the
+// union for the same reason `LINK_STRATEGY_REACH` is one.
+const HTML_SHARING: Record<HtmlSharing, true> = {
+  shareable: true,
+  unshareable: true,
+};
+
+// Whether a value is an `html` declaration the serving path can act on: an
+// object naming prerendered formats, each shareable or not.
+export function isHtmlDeclaration(value: unknown): value is HtmlDeclaration {
+  if (value == null || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+  return Object.entries(value).every(
+    ([format, sharing]) =>
+      PRERENDERED_HTML_FORMATS.includes(format as PrerenderedHtmlFormat) &&
+      typeof sharing === 'string' &&
+      Object.prototype.hasOwnProperty.call(HTML_SHARING, sharing),
+  );
+}
+
+// The formats a stored definition's `html` serves data-only, in the realm's
+// own format order. Absent, there are none: every format is shareable, which
+// is the default for every read and query.
+//
+// Anything else is JSON the realm reads back, so it is only as good as what
+// wrote it. Lowering records an unrecognized declaration rather than storing
+// one, which leaves the last branch unreachable through the path definitions
+// actually take — and reads as every format withheld if something ever gets
+// around it, because a withholding the realm cannot interpret is not a reason
+// to serve more.
+export function unshareableFormatsOf(value: unknown): PrerenderedHtmlFormat[] {
+  if (value === undefined) {
+    return [];
+  }
+  if (!isHtmlDeclaration(value)) {
+    return [...PRERENDERED_HTML_FORMATS];
+  }
+  return PRERENDERED_HTML_FORMATS.filter(
+    (format) => value[format] === 'unshareable',
+  );
+}
+
 export interface OperationDefinition {
   // The built-in behavior that carries this operation out. The name the
   // operation is invoked under is the key it is stored under, and the two are
@@ -228,6 +277,23 @@ export interface OperationDefinition {
   // own authority, and sits in the card's own attributes rather than in the
   // link closure.
   links?: LinkStrategy;
+  // Which prerendered formats this read, or every row of this query, serves
+  // data-only: by format, `unshareable` to withhold the format's prerendered
+  // HTML and `shareable` (the same as leaving it out) to serve it. Absent,
+  // every format is served. Only a `read` or a `query` carries one.
+  //
+  // On a read it governs reads rooted at the target — its single-card HTML
+  // read, the last-known-good markup an errored read carries, and the markup
+  // a host-mode page for it is served with. On a query it governs every row
+  // alike, whatever type the row is and whatever that type's own `read`
+  // declares, as `links` does.
+  //
+  // It applies to every caller alike, for the reason `links` does: prerendered
+  // HTML is rendered once per card and format, under the realm's own
+  // authority, and shared by every viewer — so a format is either served to
+  // everyone or to no one, and the response never depends on how its caller
+  // was authorized.
+  html?: HtmlDeclaration;
   // The author's override of the client's optimistic eligibility.
   optimistic?: boolean;
   // Whether every program this operation runs yields the same result for the
@@ -322,6 +388,14 @@ export type OperationLoweringIssueCode =
   // A `links` value that is not one of the strategies a read or a query can
   // apply.
   | 'invalid-link-strategy'
+  // An `html` declaration on a base other than `read` or `query`. It withholds
+  // prerendered HTML a read of the target or a query's rows are served with,
+  // and no other base serves any: a write answers with the card's data, and a
+  // `readSource` serves stored bytes.
+  | 'html-without-rendering'
+  // An `html` declaration that is not an object naming prerendered formats,
+  // each `shareable` or `unshareable`.
+  | 'invalid-html-declaration'
   // A raw BXL program that does not parse.
   | 'invalid-program'
   // A declared query the realm's own query grammar refuses.
@@ -435,7 +509,12 @@ export type PolicyIssueCode =
   // query, and a search reaches a query grant only through its filter.
   | 'policy-not-filterable'
   // A `where` that reads a computed value or a linked card's field without
-  // the `snapshot` annotation. Reserved: compiling does not record it.
+  // the `snapshot` annotation, or that reads one no snapshot holds: a linked
+  // card's field behind a list of links, a link not marked `searchable`, or a
+  // link inside a contained value, a computed value inside a list, or a
+  // relationship a query fills. Also a `create` grant whose `where` is judged
+  // against the snapshot, since the card a create mints has no index row. The
+  // grant is left out in both lanes.
   | 'unsnapshotted-policy-read'
   // A `read` or `query` grant whose document, under the link strategy that
   // governs it, carries cards of a type no rule lets a caller read, so the
@@ -1004,9 +1083,10 @@ export interface ExplainedGrant {
   // What the predicate reads. `stored` is the target's own stored source
   // (tier 0): its scalars, contained values and relationship links, as fresh
   // as the last write. `snapshot` is a predicate annotated as reading computed
-  // values or linked cards (tiers 1 and 2), which lag the index. The gate
-  // reads the stored source alone, so it never evaluates a `snapshot`
-  // predicate, and such a grant admits nothing.
+  // values or linked cards (tiers 1 and 2), judged against the stored source
+  // with the index's values for those laid under it. The index lags the
+  // stored source, so such a grant decides on what the card held when it was
+  // last indexed.
   tier?: 'stored' | 'snapshot';
   outcome: ExplainedGrantOutcome;
   // On the search lane, whether the grant compiled to a search filter, which
@@ -1022,9 +1102,9 @@ export type ExplainedGrantOutcome =
   | 'did-not-hold'
   | 'threw'
   // The gate decided without evaluating it: an earlier grant admitted the
-  // invocation, a refusal came first, or the predicate reads a snapshot tier.
-  // On the search lane every predicate is this: a search runs a grant's
-  // filter over the index rather than evaluating its predicate per card.
+  // invocation, or a refusal came first. On the search lane every predicate is
+  // this: a search runs a grant's filter over the index rather than evaluating
+  // its predicate per card.
   | 'not-evaluated';
 
 // A validate's answer: what the policy card it was invoked on compiles to, or,
@@ -1140,12 +1220,7 @@ export type ValidatedGrantInertia =
   // authorized only by composing a grant's filter into the search, and the
   // gate refuses every invocation built on one, so the grant has nothing to
   // compose. `policy-not-filterable` says why there is no filter.
-  | 'unfilterable'
-  // A grant whose `where` is annotated as reading a snapshot tier, on anything
-  // but a query. The gate reads a card's stored source alone and never
-  // evaluates such a predicate. On a query, the same annotation compiles into
-  // the search filter and admits what it matches.
-  | 'snapshot';
+  'unfilterable';
 
 // A `delete` answers with `null`: there is no state left to describe.
 export type OperationResult =

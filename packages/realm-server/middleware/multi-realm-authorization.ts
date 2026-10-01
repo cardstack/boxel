@@ -2,7 +2,6 @@ import type Koa from 'koa';
 import type { DBAdapter, Realm } from '@cardstack/runtime-common';
 import {
   archivedRealmURLs,
-  DURING_PRERENDER_HEADER,
   ensureTrailingSlash,
   fetchRealmPermissions,
   fetchUserPermissions,
@@ -59,10 +58,9 @@ export type MultiRealmAuthorizationState = {
   // which any policy admits.
   grantCandidates: string[];
   // Who the request's token was verified for: the user it names, or a
-  // realm-authority principal — a session a realm renders its own cards under,
-  // or any request a render tab sends. Absent on a request that carried no
-  // token, which reached here only because every realm it names is publicly
-  // readable.
+  // realm-authority principal — a session a realm renders its own cards
+  // under. Absent on a request that carried no token, which reached here only
+  // because every realm it names is publicly readable.
   principal?: SearchPrincipal;
 };
 
@@ -224,16 +222,12 @@ export function multiRealmAuthorization(
         }
       }
 
-      // A render tab marks every request it sends, whatever session it holds:
-      // a session minted before its minter carried the claim, or one a
-      // command or a request-only capture runs under. What such a request
-      // reads is a render's, so it is read as one. A caller who sets the
-      // marker themselves only narrows their own search to what the ACL
-      // grants them.
-      principal = searchPrincipal(
-        token.user,
-        token.realmAuthority || ctxt.get(DURING_PRERENDER_HEADER).length > 0,
-      );
+      // Only the session's own claim makes a request a realm-authority
+      // principal. A render tab marks every request it sends, but what it
+      // renders is not always the realm's: a capture a user asks for, or a
+      // command, renders on that user's ordinary session and is scoped as
+      // them.
+      principal = searchPrincipal(token.user, token.realmAuthority);
       let permissionsForAllRealms = await fetchUserPermissions(dbAdapter, {
         userId: token.user,
         onlyOwnRealms: false,

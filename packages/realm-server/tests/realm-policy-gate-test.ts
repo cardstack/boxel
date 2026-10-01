@@ -187,8 +187,7 @@ type Rule = { targetType: { module: string; name: string }; grants: Grant[] };
 // writes on `Classroom` are the named operations `rename` and
 // `appendActivity`, granted outright, and a `delete` that rests on a
 // predicate. `Bulletin` takes its plain writes outright. A `Syllabus` read
-// rests on a predicate that throws for any title that is not a number, or on
-// one annotated as reading a snapshot tier, which the gate never evaluates.
+// rests on a predicate that throws for any title that is not a number.
 const RULES: Rule[] = [
   {
     targetType: CLASSROOM,
@@ -210,10 +209,7 @@ const RULES: Rule[] = [
   },
   {
     targetType: SYLLABUS,
-    grants: [
-      { operation: 'read', where: '(.title | tonumber) > 0' },
-      { operation: 'read', where: { bxl: 'true', snapshot: true } },
-    ],
+    grants: [{ operation: 'read', where: '(.title | tonumber) > 0' }],
   },
   {
     targetType: { module: `${EDUCATION}school`, name: 'Syllabus' },
@@ -548,6 +544,7 @@ module(basename(import.meta.filename), function (hooks) {
           predicateEvaluations: 0,
           pendingDischarges: 0,
           definitionLookups: 0,
+          snapshotReads: 0,
         },
         'the gate did nothing for any of them',
       );
@@ -571,6 +568,7 @@ module(basename(import.meta.filename), function (hooks) {
           predicateEvaluations: 1,
           pendingDischarges: 0,
           definitionLookups: 0,
+          snapshotReads: 0,
         },
         'through one policy load and one predicate',
       );
@@ -968,7 +966,7 @@ module(basename(import.meta.filename), function (hooks) {
   });
 
   module('fail closed', function () {
-    test('a predicate that throws refuses as a card that is not there is refused, and one that reads a snapshot tier is never evaluated', async function (assert) {
+    test('a predicate that throws refuses as a card that is not there is refused', async function (assert) {
       const ALGEBRA = `${EDUCATION}syllabi/algebra`;
       const GEOMETRY = `${EDUCATION}syllabi/geometry`;
       assert.strictEqual(
@@ -1031,7 +1029,7 @@ module(basename(import.meta.filename), function (hooks) {
       assert.strictEqual(
         gateStats().predicateEvaluations,
         3,
-        'the throwing predicate was evaluated each time, and the snapshot one never',
+        'the throwing predicate was evaluated each time',
       );
     });
 
@@ -1915,6 +1913,7 @@ module(basename(import.meta.filename), function (hooks) {
         predicateEvaluations: 0,
         pendingDischarges: 0,
         definitionLookups: 0,
+        snapshotReads: 0,
       });
     });
 

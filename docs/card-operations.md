@@ -501,6 +501,107 @@ without assembling the card's closure, and a `readSource` serves stored bytes. A
 definition carrying one records a `links-without-assembly` issue; a value that
 is not one of the three records `invalid-link-strategy`.
 
+### `html` — which prerendered formats a read or a query serves
+
+A card's prerendered HTML is rendered once per format, under the realm's own
+authority, and shared by every viewer. A format whose template draws linked
+cards bakes their content into that one markup: a `Classroom` whose `embedded`
+format lists its students by name hands those names to everyone who receives the
+classroom's embedded markup, whatever they could fetch on their own. A `read` or
+a `query` declaration may say which formats' markup it serves.
+
+```ts
+@operation static read = {
+  base: 'read',
+  html: { embedded: 'unshareable' },
+} satisfies OperationDeclaration;
+```
+
+The declaration is a record by format — `isolated`, `embedded`, `fitted`,
+`atom` or `head`, the formats the realm prerenders — each `shareable` (the
+default, the same as leaving the format out) or `unshareable`. An unshareable
+format is served **data-only**: no caller receives its markup, and a consumer
+renders the card from its data instead. Nothing is rendered a second time or
+per caller; the realm keeps its one rendering and withholds it. Leaving `html`
+out serves every format's markup.
+
+**It is a claim about what a format draws, not a mechanism.** Declaring a
+format unshareable says its markup reaches further than the card's
+representation should. A later edit that starts embedding a linked card in a
+format left shareable falsifies the claim silently, so declare it on the formats
+whose templates draw other cards, and revisit it when a template changes.
+
+**On a `read` it governs reads rooted at this card:**
+
+- the card's single-card HTML read (the `card+html` `GET`, and its `file-meta`
+  counterpart for a file def), which answers an unshareable format with the
+  card's data in place of its rendering;
+- the last-known-good isolated markup an errored read carries in place of the
+  card, which is withheld when `isolated` is unshareable;
+- the host-mode page for the card, which injects no `isolated` or `head` markup
+  for a format declared unshareable, so the host renders the card from its data
+  once it boots.
+
+**On a `query` it governs every row alike, under the query's declaration** — the
+same rule `links` follows. Each row the query answers with is served without its
+markup for the formats the query declares unshareable, whatever type the row is
+and whatever that type's own `read` declares. A row served data-only for the
+format asked for answers the way a row with no rendering of it does: with its
+card where the request falls back to one, and with an empty `html` branch where
+it pins one. The declaration is applied on a realm's own `_search` and on
+`_federated-search` alike.
+
+```ts
+@operation static listClassrooms = {
+  base: 'query',
+  query: { filter: { type: () => Classroom } },
+  html: { embedded: 'unshareable', fitted: 'unshareable' },
+} satisfies OperationDeclaration;
+```
+
+**An ad-hoc search declares nothing, so it serves every format's markup** — and
+so does a policy's ad-hoc `query` grant, which authorizes exactly that search.
+A policy author who wants a grant-reached caller to receive a format data-only
+grants a named query that declares it unshareable, not the ad-hoc `query`.
+Search is the main route by which a caller reached through a grant receives
+prerendered HTML, which is why the declaration that governs it is the one on the
+query the caller was granted.
+
+**A search a render runs keeps every format's markup**, whatever the query
+declares. What a render draws becomes part of the embedding card's own
+prerendered HTML, and that markup is governed by the embedding card's own
+declarations: a card whose format draws the rows of a query that withholds their
+markup draws their content all the same — served data-only, the render would
+draw each row from its data, under the realm's authority, with the same result.
+Declare the embedding card's format unshareable if what it embeds should not be
+shared.
+
+**It applies to every caller alike.** A format is served to everyone or to no
+one: the declaration belongs to the operation, so a realm reader and a caller
+reached by a policy grant receive the same document from the same request.
+
+**Disclosure is a union.** A caller who can invoke a wider operation receives
+what it serves, so withholding a format on one query achieves nothing for a
+caller who is also granted another query, or the ad-hoc `query`, that serves it.
+
+A query's `html` composes with its `links`. A row served under `none` usually
+renders from its prerendered HTML; one also served data-only for the format asked
+for has neither markup nor a card the host may adopt, so the host renders it from
+the card's own read. That read is gated like any other, so a caller reached only
+through a `query` grant, with no `read` grant on the row's type, is refused it and
+cannot render such a row. A query meant for such callers declares `ids` rather
+than `none` — its rows then carry cards the host renders from — or leaves the
+format shareable, or the policy grants `read` on the row's type as well.
+
+#### Where it is refused
+
+`html` is a `read` and `query` key: it withholds prerendered HTML a read of the
+card or a query's rows are served with, and no other base serves any. An `html`
+on any other base is refused where it is written, and a stored definition
+carrying one records an `html-without-rendering` issue. A declaration that is
+not a record of prerendered formats, each `shareable` or `unshareable`, records
+`invalid-html-declaration`.
+
 ### `optimistic`
 
 The client applies an eligible write to its local copy before the realm
@@ -927,6 +1028,66 @@ could be seen side by side: with a `readSource` grant and no `read`, the editor
 shows the stored document beside a preview that is refused. The host keeps such
 a caller from being led there, but it is not a boundary. The endpoints are.
 
+### What a predicate reads
+
+A grant's `where` reads the card's stored source by default: its own values,
+its contained values, and the ids its links hold. That is as fresh as the last
+write, so a grant written against it stops admitting a caller the moment a
+write takes them off the card. `.teachers | any(.id == actor())` and
+`.teacherIds | any(. == actor())` both read the stored source.
+
+A computed value and a linked card's fields are not in the stored source. Only
+the index holds them, and the index lags the stored source. A `where` that
+reads one has to say so:
+
+```json
+{
+  "operation": "read",
+  "where": { "bxl": ".headTeacher == actor()", "snapshot": true }
+}
+```
+
+An annotated predicate is judged against the snapshot: the stored source with
+the card's index row laid under it. The stored source still answers wherever it
+holds a value, so only the computed values and linked cards' fields come from
+the row, and a computed value always comes from the row. **This is a window, and the annotation is how you accept it.** If
+`headTeacher` is computed from the roster, taking someone off the roster does
+not stop the grant admitting them until the classroom is indexed again. That
+holds at the gate and under the write lock alike: a write's predicate reads the
+row as it stands when the lock is taken, not the state the write changes. A
+realm that needs a grant to stop admitting as soon as a card changes writes its
+predicate against the stored source.
+
+The snapshot holds a computed value on the card itself or inside one of its
+single contained values, and the fields of the card a single link on the card
+points to, for a link marked `searchable`. It holds nothing inside a list: not
+a computed value on each item, and not the fields behind a list of links. It
+does not hold a linked card's own links beyond their ids, a link inside a
+contained value, or a relationship a `query` fills. A card with no index row
+yet, or whose row records an error, has no snapshot, and an annotated
+predicate does not hold for it. So a snapshot grant never admits a create
+against a type: the card it would mint has no row.
+
+The policy records which tier each `where` reads when it compiles, as
+`unsnapshotted-policy-read` against the grant, and leaves the grant out:
+
+- A `where` that reads a computed value or a linked card's field without the
+  annotation.
+- A `where` that reads a value no snapshot holds, annotated or not.
+- An annotated `where` on `create` that reads a computed value or a linked
+  card's field, which could never admit.
+
+An annotated `where` that reads only the stored source is judged against the
+stored source and pays no index read. Where a `where` reads a value whole
+(`tostring`, a comparison of a whole contained value or link, `to_entries`),
+it reads everything beneath that value, and that counts as reading any
+computed value or linked card beneath it.
+
+Each time a snapshot predicate decides an invocation, the realm logs a
+`policy-snapshot-read` line on its `boxel:operations` channel, naming the grant
+and the rule's type, so an operator can count the windows a realm has
+accepted.
+
 ## Asking a policy what it decides
 
 A realm's policy widens what the realm's own permissions allow. A policy
@@ -986,8 +1147,9 @@ Some things worth knowing before you read one:
   can change the answer.
 - **The tier says what a predicate reads.** `stored` is the card's own stored
   source, which is as fresh as the last write. `snapshot` is a predicate
-  annotated as reading computed values or linked cards. Those lag the index,
-  the gate never evaluates them, and such a grant admits nothing.
+  annotated as reading computed values or linked cards, judged against the
+  card's index row as it stands, which lags the stored source (see
+  [What a predicate reads](#what-a-predicate-reads)).
 
 ### Asking about a draft, a search, or a page of cards
 
@@ -1150,10 +1312,7 @@ Some things worth knowing before you read one:
   `admitsNothing`.** `unfilterable` is a grant on a query whose predicate
   compiled no search filter, which `policy-not-filterable` explains: a query is
   authorized only by composing a grant's filter into the search, so such a
-  grant has nothing to compose. `snapshot` is a grant on anything but a query
-  whose predicate is annotated as reading a snapshot tier, which the gate never
-  evaluates. On a query, the same annotation compiles into the search filter
-  and admits what it matches.
+  grant has nothing to compose.
 - **An uncompilable policy is different in kind.** A policy with one inactive
   grant denies that grant. A policy that did not compile at all denies
   everything it would have granted, and a realm naming it answers every

@@ -52,6 +52,7 @@ export {
   scopeCallerFor,
   pathsFor,
   readPlan,
+  htmlDeclarationOf,
   resolveFacadeWrite,
   resolveGatedOperation,
   resolveOperation,
@@ -69,6 +70,7 @@ export type {
   ScopeInvocation,
   OperationStoredFile,
   OperationStoredFileMeta,
+  HtmlDeclarationAnswer,
   ReadPlan,
   ReadShape,
   RunOperationOptions,
@@ -117,8 +119,10 @@ export {
   OPERATIONS_CHANNEL,
   emitCapabilityCheck,
   emitOperationPerf,
+  emitPolicySnapshotRead,
   setCapabilityCheckSink,
   setOperationPerfSink,
+  setPolicySnapshotReadSink,
 } from './telemetry.ts';
 export type {
   CapabilityCheckEvent,
@@ -128,6 +132,7 @@ export type {
   OperationOutcome,
   OperationPerfEvent,
   OperationReadLayer,
+  PolicySnapshotReadEvent,
 } from './telemetry.ts';
 export {
   MalformedCardSourceError,
@@ -212,12 +217,14 @@ export {
   isHeadResult,
   isIdentityResult,
   effectiveLinkStrategy,
+  isHtmlDeclaration,
   isLinkStrategy,
   isOperationFailure,
   isSourceResult,
   isWrite,
   linkStrategyOf,
   refusalForNonReader,
+  unshareableFormatsOf,
 } from './types.ts';
 export type {
   BaseOperation,

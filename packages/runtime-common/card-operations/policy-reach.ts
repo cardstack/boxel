@@ -50,9 +50,8 @@ import type { LinkStrategy } from '@cardstack/base/operations';
 // `readSource`, or a `query` that compiled a filter. A rule that only lets a
 // caller write or delete the type has not made its cards readable, so the
 // reach still hands over something no rule does. Nor has a grant that admits
-// nothing, such as a `read` whose predicate reads a snapshot tier, which the
-// gate never evaluates; and such a grant is not walked either, since it hands
-// nothing over. Authorization infrastructure
+// nothing, such as a `query` that compiled no filter; and such a grant is not
+// walked either, since it hands nothing over. Authorization infrastructure
 // never counts as granted, even under a catch-all rule. A `CardDef` rule reaches a
 // `RealmPolicy` by ancestry, yet the gate refuses every grant-reached caller
 // every operation on one, and a policy card's attributes are its whole rule
