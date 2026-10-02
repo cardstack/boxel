@@ -1058,7 +1058,7 @@ async function firstHolding(
     // are.
     let judged = where.snapshot ? await subject.snapshot?.() : subject;
     let outcome = judged
-      ? await evaluate(core, candidate.grant.operation, where, judged, actor)
+      ? await evaluate(core, candidate.grant, where, judged, actor)
       : 'fails';
     let said: GateTraceOutcome =
       outcome === 'holds'
@@ -1778,7 +1778,7 @@ async function projector(
 // when the card's pass lands.
 async function evaluate(
   core: OperationCore,
-  operation: string,
+  grant: CompiledOperationGrant,
   where: CompiledPolicyPredicate,
   subject: PredicateSubject,
   actor: string | undefined,
@@ -1804,9 +1804,9 @@ async function evaluate(
       return 'fails';
     }
     let judged = subject.instance?.id;
-    logThrow(
+    await logThrow(
       core,
-      operation,
+      grant,
       where,
       typeof judged === 'string' ? judged : 'its target',
       actor,
@@ -1823,36 +1823,55 @@ async function evaluate(
 // evaluates a predicate once for each card it is asked about, and a view asks
 // again as it re-renders, so a line for every throw would put the whole view
 // into the log at the rate it renders. One line says what the author needs:
-// that the predicate throws, on what, and why, and an explain answers which
-// card it throws on. The error is cut short because BXL's quotes the value it
-// failed on, which can be a whole stored field.
-function logThrow(
+// that the predicate throws, on what, and where in the policy card it is. An
+// explain answers which card it throws on, and the author, who may read the
+// card, can run the predicate against it to see why.
+//
+// The line carries no card content and no predicate source. BXL's message
+// quotes the value it failed on, which can be a whole stored field of the
+// governed card, so only the error's kind is logged. The grant's path in the
+// policy card names the predicate without quoting it.
+async function logThrow(
   core: OperationCore,
-  operation: string,
+  grant: CompiledOperationGrant,
   where: CompiledPolicyPredicate,
   judged: string,
   actor: string | undefined,
   e: unknown,
-): void {
+): Promise<void> {
   let at = now();
   let last = lastLoggedThrow.get(where);
   if (last !== undefined && at - last < THROW_LOG_INTERVAL_MS) {
     return;
   }
   lastLoggedThrow.set(where, at);
-  let error = e instanceof Error ? e.message : String(e);
-  if (error.length > THROW_ERROR_LENGTH) {
-    error = `${error.slice(0, THROW_ERROR_LENGTH)}…`;
+  let policyCard: string | undefined;
+  try {
+    policyCard = await core.policy?.policyCard();
+  } catch {
+    policyCard = undefined;
   }
   policyLog.warn(
     `a predicate in the policy of realm ${core.realmURL} threw while ` +
       `deciding whether ${actor ?? 'an anonymous caller'} may invoke ` +
-      `"${operation}" on ${judged}: ${where.source}: ${error}`,
+      `"${grant.operation}" on ${judged}: the grant at ${grant.path} of ` +
+      `${policyCard ?? 'its policy card'} threw ${errorKind(e)}`,
   );
 }
 
+// What kind of error a predicate threw, without its message. A transform's
+// error carries the phase it failed in, which separates a predicate that
+// cannot run at all from one that failed on the values it was handed.
+function errorKind(e: unknown): string {
+  if (!(e instanceof Error)) {
+    return typeof e;
+  }
+  let name = e.name !== 'Error' ? e.name : e.constructor.name;
+  let phase = (e as { phase?: unknown }).phase;
+  return typeof phase === 'string' ? `${name} (${phase})` : name;
+}
+
 const THROW_LOG_INTERVAL_MS = 60_000;
-const THROW_ERROR_LENGTH = 200;
 
 // When each compiled predicate last logged a throw. Keyed on the compiled
 // predicate, so a policy compiled again starts over.
