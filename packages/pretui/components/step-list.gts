@@ -377,7 +377,7 @@ export class StepList extends Component<StepListSignature> {
         .pretui-step[data-state='complete'] {
           --pretui-step-tone: var(--pretui-step-complete-tone, var(--muted-foreground));
           --pretui-step-marker-bg: var(--pretui-step-complete-marker-bg, color-mix(in oklch, var(--success, var(--boxel-success)) 15%, var(--card)));
-          --pretui-step-marker-fg: var(--pretui-step-complete-marker-fg, var(--success-ink, var(--boxel-success)));
+          --pretui-step-marker-fg: var(--pretui-step-complete-marker-fg, var(--success-ink));
           --pretui-step-ring: var(--pretui-step-complete-ring, color-mix(in oklch, var(--success, var(--boxel-success)) 40%, var(--border)));
           --pretui-step-bar-fill: var(--pretui-step-complete-bar, var(--success, var(--boxel-success)));
         }
@@ -402,7 +402,7 @@ export class StepList extends Component<StepListSignature> {
         .pretui-step[data-state='blocked'] {
           --pretui-step-tone: var(--pretui-step-blocked-tone, var(--foreground));
           --pretui-step-marker-bg: var(--pretui-step-blocked-marker-bg, color-mix(in oklch, var(--warning, var(--boxel-warning)) 14%, var(--card)));
-          --pretui-step-marker-fg: var(--pretui-step-blocked-marker-fg, var(--warning-ink, var(--boxel-warning)));
+          --pretui-step-marker-fg: var(--pretui-step-blocked-marker-fg, var(--warning-ink));
           --pretui-step-ring: var(--pretui-step-blocked-ring, color-mix(in oklch, var(--warning, var(--boxel-warning)) 50%, var(--border)));
           --pretui-step-bar-fill: var(--pretui-step-blocked-bar, var(--warning, var(--boxel-warning)));
         }

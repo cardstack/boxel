@@ -464,7 +464,7 @@ export default class BoxelInput extends Component<Signature> {
 
           margin-top: var(--boxel-sp-xxxs);
           margin-left: calc(var(--boxel-sp-sm) + 1px);
-          color: var(--destructive-ink, var(--boxel-error-200));
+          color: var(--destructive-ink);
           font-size: var(--boxel-font-size-sm);
           font-weight: 500;
           letter-spacing: var(--boxel-lsp);
