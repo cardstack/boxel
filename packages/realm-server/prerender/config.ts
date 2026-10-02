@@ -17,10 +17,11 @@ export function resolvePrerenderManagerURL(): string {
 // stays on the old task for as long as that task drains, while callers opening
 // new connections reach the new task and find no servers registered. Closing
 // the connection after each response lets every request pick a task afresh.
-// While both tasks are up, heartbeats spread across them, and each task hears
-// from every server several times within the manager's heartbeat timeout.
-// Once the old task drains it is never picked, so every heartbeat reaches the
-// new one.
+// While both tasks are up, heartbeats spread across them, and each task
+// typically hears from every server several times within the manager's
+// heartbeat timeout. A server that misses one task for a whole timeout window
+// is pruned there and added again on its next heartbeat. Once the old task
+// drains it is never picked, so every heartbeat reaches the new one.
 export function fetchFromManager(
   url: string | URL,
   init: RequestInit = {},
