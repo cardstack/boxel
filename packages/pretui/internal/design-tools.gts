@@ -110,32 +110,84 @@ export function keyboardNudge(
   let coarse = step * COARSE;
   switch (key) {
     case 'ArrowLeft':
-      return { handled: true, dx: -unit, dy: 0, delta: -unit, toMin: false, toMax: false };
+      return {
+        handled: true,
+        dx: -unit,
+        dy: 0,
+        delta: -unit,
+        toMin: false,
+        toMax: false,
+      };
     case 'ArrowRight':
-      return { handled: true, dx: unit, dy: 0, delta: unit, toMin: false, toMax: false };
+      return {
+        handled: true,
+        dx: unit,
+        dy: 0,
+        delta: unit,
+        toMin: false,
+        toMax: false,
+      };
     case 'ArrowUp':
-      return { handled: true, dx: 0, dy: -unit, delta: unit, toMin: false, toMax: false };
+      return {
+        handled: true,
+        dx: 0,
+        dy: -unit,
+        delta: unit,
+        toMin: false,
+        toMax: false,
+      };
     case 'ArrowDown':
-      return { handled: true, dx: 0, dy: unit, delta: -unit, toMin: false, toMax: false };
+      return {
+        handled: true,
+        dx: 0,
+        dy: unit,
+        delta: -unit,
+        toMin: false,
+        toMax: false,
+      };
     case 'PageUp':
-      return { handled: true, dx: 0, dy: -coarse, delta: coarse, toMin: false, toMax: false };
+      return {
+        handled: true,
+        dx: 0,
+        dy: -coarse,
+        delta: coarse,
+        toMin: false,
+        toMax: false,
+      };
     case 'PageDown':
-      return { handled: true, dx: 0, dy: coarse, delta: -coarse, toMin: false, toMax: false };
+      return {
+        handled: true,
+        dx: 0,
+        dy: coarse,
+        delta: -coarse,
+        toMin: false,
+        toMax: false,
+      };
     case 'Home':
-      return { handled: true, dx: 0, dy: 0, delta: 0, toMin: true, toMax: false };
+      return {
+        handled: true,
+        dx: 0,
+        dy: 0,
+        delta: 0,
+        toMin: true,
+        toMax: false,
+      };
     case 'End':
-      return { handled: true, dx: 0, dy: 0, delta: 0, toMin: false, toMax: true };
+      return {
+        handled: true,
+        dx: 0,
+        dy: 0,
+        delta: 0,
+        toMin: false,
+        toMax: true,
+      };
     default:
       return NO_NUDGE;
   }
 }
 
 /** Clamps to an optional range. `undefined` bounds are open. */
-export function clampRange(
-  value: number,
-  min?: number,
-  max?: number,
-): number {
+export function clampRange(value: number, min?: number, max?: number): number {
   let next = value;
   if (min !== undefined && Number.isFinite(min)) {
     next = Math.max(min, next);
@@ -324,9 +376,7 @@ export function stopText(
   if (!stop) {
     return '';
   }
-  return (
-    stop.label ?? formatMeasure(stop.value, precision, unit, unitPosition)
-  );
+  return stop.label ?? formatMeasure(stop.value, precision, unit, unitPosition);
 }
 
 // ── Token lists ────────────────────────────────────────────────────────
@@ -362,7 +412,12 @@ export function addToken(
     return { list: next, status: '' };
   }
   let max = options.max;
-  if (max !== undefined && Number.isFinite(max) && max > 0 && list.length >= max) {
+  if (
+    max !== undefined &&
+    Number.isFinite(max) &&
+    max > 0 &&
+    list.length >= max
+  ) {
     return { list: next, status: 'List is full at ' + max + ' items' };
   }
   if (!options.allowDuplicates) {
@@ -372,7 +427,10 @@ export function addToken(
     }
   }
   next.push(text);
-  return { list: next, status: 'Added ' + text + ', ' + next.length + ' items' };
+  return {
+    list: next,
+    status: 'Added ' + text + ', ' + next.length + ' items',
+  };
 }
 
 /** Removes the member at `index`. An out-of-range index is a no-op with an
@@ -386,12 +444,18 @@ export function removeTokenAt(
   }
   let removed = list[index];
   let next = list.filter((_item, position) => position !== index);
-  return { list: next, status: 'Removed ' + removed + ', ' + next.length + ' items' };
+  return {
+    list: next,
+    status: 'Removed ' + removed + ', ' + next.length + ' items',
+  };
 }
 
 /** Splits pasted text on commas / newlines so a list pasted from a
  * spreadsheet arrives as members rather than as one long member. */
-export function splitTokens(raw: string, separators?: readonly string[]): string[] {
+export function splitTokens(
+  raw: string,
+  separators?: readonly string[],
+): string[] {
   return (raw ?? '')
     .split(tokenBreaks(separators))
     .map((part) => part.trim())
@@ -403,7 +467,9 @@ const REGEX_SPECIAL = new RegExp('[.*+?^$' + '{}()|[\\]\\\\]', 'g');
 /** The characters that end a token: the separators (default a comma), plus
  * a newline or tab, so a list pasted from a spreadsheet splits too. */
 export function tokenBreaks(separators?: readonly string[]): RegExp {
-  let chars = (separators ?? [',']).filter((c) => c.length > 0).map((c) => c.replace(REGEX_SPECIAL, '\\$&'));
+  let chars = (separators ?? [','])
+    .filter((c) => c.length > 0)
+    .map((c) => c.replace(REGEX_SPECIAL, '\\$&'));
   return new RegExp('(?:' + [...chars, '\\n', '\\r', '\\t'].join('|') + ')+');
 }
 
@@ -561,10 +627,7 @@ export interface ScrubFrame {
 export const scrubs = modifier(
   (
     el: HTMLElement,
-    [onFrame, disabled]: [
-      (frame: ScrubFrame) => void,
-      boolean | undefined,
-    ],
+    [onFrame, disabled]: [(frame: ScrubFrame) => void, boolean | undefined],
   ) => {
     let pointerId: number | undefined;
     let originX = 0;
@@ -606,7 +669,10 @@ export const scrubs = modifier(
       try {
         el.setPointerCapture(pointerId);
       } catch {
-        // a pointer released before this handler ran has no capture to take
+        // Only synthetic events reach this: a real pointer is always active
+        // during its own pointerdown. A synthetic pointerId has no active
+        // pointer, so capture throws, and the gesture stays armed for the
+        // pointermove/pointerup the same caller dispatches on this element.
       }
       previousCursor = document.body.style.cursor;
       document.body.style.cursor = 'ew-resize';
@@ -651,7 +717,10 @@ export const scrubs = modifier(
     // window capture runs before any overlay's document listener, so the
     // Escape that cancels a scrub doesn't also close the dialog around it
     let key = (event: Event) => {
-      if ((event as KeyboardEvent).key === 'Escape' && pointerId !== undefined) {
+      if (
+        (event as KeyboardEvent).key === 'Escape' &&
+        pointerId !== undefined
+      ) {
         event.preventDefault();
         event.stopImmediatePropagation();
         release('cancel');
@@ -701,15 +770,16 @@ export interface SurfaceFrame {
  * Installed on the SURFACE, not on the handles: one listener set for any
  * number of handles, click-anywhere-to-jump falls out for free, and a
  * handle dragged past the edge keeps tracking instead of losing the pointer.
- * The handle under the initial press arrives as `origin`.
+ * The handle under the initial press arrives as `origin`. With
+ * `handle='<selector>'` only a press inside a matching element starts the
+ * gesture; every other press keeps its default, so controls on the surface
+ * stay focusable by pointer.
  */
 export const dragsSurface = modifier(
   (
     el: HTMLElement,
-    [onFrame, disabled]: [
-      (frame: SurfaceFrame) => void,
-      boolean | undefined,
-    ],
+    [onFrame, disabled]: [(frame: SurfaceFrame) => void, boolean | undefined],
+    { handle }: { handle?: string },
   ) => {
     let pointerId: number | undefined;
     let origin: Element | null = null;
@@ -758,10 +828,23 @@ export const dragsSurface = modifier(
       if (disabled || pointer.button !== 0 || pointerId !== undefined) {
         return;
       }
+      let target = pointer.target as Element | null;
+      // with a handle selector, a press elsewhere is left alone, so controls
+      // inside the surface keep their own focus-on-press
+      if (handle && !target?.closest?.(handle)) {
+        return;
+      }
       pointer.preventDefault();
       pointerId = pointer.pointerId;
-      origin = pointer.target instanceof Element ? pointer.target : null;
-      el.setPointerCapture(pointerId);
+      origin = target?.closest ? target : null;
+      try {
+        el.setPointerCapture(pointerId);
+      } catch {
+        // Only synthetic events reach this: a real pointer is always active
+        // during its own pointerdown. A synthetic pointerId has no active
+        // pointer, so capture throws, and the gesture stays armed for the
+        // pointermove/pointerup the same caller dispatches on this element.
+      }
       el.setAttribute('data-dragging', 'true');
       onFrame(frameFor(pointer, 'start'));
     };
