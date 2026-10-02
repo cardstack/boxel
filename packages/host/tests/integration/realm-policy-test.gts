@@ -1331,6 +1331,20 @@ module('Integration | realm policy explain forms', function (hooks) {
     assert
       .dom('[data-test-explanation-grant-label]')
       .hasText('narrows the search');
+    assert
+      .dom('[data-test-explanation-grant] .tier')
+      .doesNotExist(
+        'a search runs the condition over the index, so no copy of one card is named',
+      );
+
+    await fillIn('[data-test-explain-operation]', 'listTheirs');
+    await submitAndWait('[data-test-explanation]');
+    assert
+      .dom('[data-test-explanation-reason]')
+      .includesText(
+        "This search couldn't be resolved",
+        'a search the type does not declare is said to be one',
+      );
 
     await fillIn('[data-test-explain-operation]', 'query');
     assert
@@ -1358,6 +1372,23 @@ module('Integration | realm policy explain forms', function (hooks) {
         "a search can't use its condition, so it adds nothing",
         'the grant whose condition a search cannot use is shown as adding nothing',
       );
+
+    await click('[data-test-explain-use-draft]');
+    await fillIn(
+      '[data-test-explain-draft]',
+      draftRules([{ operation: 'query', where: teachesPredicate }]),
+    );
+    await submitAndWait('[data-test-explanation]');
+    assert
+      .dom('[data-test-explanation-decision]')
+      .hasText('allowed', 'a draft whose grant a search can use admits it');
+    assert
+      .dom('[data-test-explanation-search-fragment]')
+      .includesText(TEACHER, 'and composes a fragment naming the teacher');
+    assert
+      .dom('[data-test-explanation-grant]')
+      .hasAttribute('data-test-explanation-grant-filterable', 'true');
+    assert.dom('[data-test-explanation-draft-clean]').exists();
   });
 
   test('the policy explains a page of the cards in a realm at a time', async function (assert) {
@@ -1393,6 +1424,9 @@ module('Integration | realm policy explain forms', function (hooks) {
     assert.dom('[data-test-explanation-listing-previous]').isDisabled();
     assert.dom('[data-test-explanation-listing-next]').isEnabled();
 
+    // Paging asks the question the listing shows, whatever has been typed
+    // since: room-211 is the colleague's, so the teacher is still refused it.
+    await fillIn('[data-test-explain-actor]', COLLEAGUE);
     await click('[data-test-explanation-listing-next]');
     await waitUntil(
       () =>
@@ -1404,6 +1438,12 @@ module('Integration | realm policy explain forms', function (hooks) {
     assert.deepEqual(listed(), [
       [`${testRealmURL}classrooms/room-211`, 'denied'],
     ]);
+    assert
+      .dom('[data-test-explanation-listed] [data-test-explanation-actor]')
+      .hasText(
+        TEACHER,
+        'the next page answers for the teacher it was asked for',
+      );
     assert.dom('[data-test-explanation-listing-previous]').isEnabled();
     assert.dom('[data-test-explanation-listing-next]').isDisabled();
 
