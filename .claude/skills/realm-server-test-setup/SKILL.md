@@ -11,11 +11,11 @@ The cost is real. A 40-test suite that brought up two realms before every test t
 
 ## Pick the helper
 
-| Your module brings up | Use |
-|---|---|
-| One realm | `setupPermissionedRealmCached(hooks, { realmURL, permissions, fileSystem \| fixture, onRealmSetup })` |
-| Several realms, each on its own realm server | `setupPermissionedRealmsCached(hooks, { realms: [...], onRealmSetup })` |
-| Several realms on **one** realm server, or any other setup of your own | `setupTestDatabaseTemplate` beside `setupDB` (below) |
+| Your module brings up                                                  | Use                                                                                                   |
+| ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| One realm                                                              | `setupPermissionedRealmCached(hooks, { realmURL, permissions, fileSystem \| fixture, onRealmSetup })` |
+| Several realms, each on its own realm server                           | `setupPermissionedRealmsCached(hooks, { realms: [...], onRealmSetup })`                               |
+| Several realms on **one** realm server, or any other setup of your own | `setupTestDatabaseTemplate` beside `setupDB` (below)                                                  |
 
 All three live in `packages/realm-server/tests/helpers/index.ts`. `setupPermissionedRealmsCached` starts every realm on its own server and virtual network, so it does not fit realms that must reach each other through one server — for example a realm whose policy card lives in another realm, which the server loads on its own authority. Use `setupTestDatabaseTemplate` for those.
 
