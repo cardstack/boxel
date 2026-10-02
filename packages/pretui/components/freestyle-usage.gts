@@ -50,17 +50,17 @@ export interface FreestyleUsageSignature {
 
 export const FreestyleUsage: TemplateOnlyComponent<FreestyleUsageSignature> =
   <template>
-    <div class='FreestyleUsage' ...attributes>
+    <div class='pretui-usage' ...attributes>
       {{! identity lives in the page header (breadcrumb) — no h2 here; one
           compact description line, then straight to the artboard }}
       {{#if (has-block 'description')}}
-        <p class='FreestyleUsage-description'>{{yield to='description'}}</p>
+        <p class='pretui-usage-description'>{{yield to='description'}}</p>
       {{else if @description}}
-        <p class='FreestyleUsage-description'>{{@description}}</p>
+        <p class='pretui-usage-description'>{{@description}}</p>
       {{/if}}
 
-      <div class='FreestyleUsage-stage'>
-        <div class='FreestyleUsage-previewCol'>
+      <div class='pretui-usage-stage'>
+        <div class='pretui-usage-preview-col'>
           <div class='wb-panel'>
             <Viewport @defaultMode={{@viewportMode}} @label={{@name}}>
               {{yield to='example'}}
@@ -78,8 +78,8 @@ export const FreestyleUsage: TemplateOnlyComponent<FreestyleUsageSignature> =
           </div>
         </div>
         {{#if (has-block 'api')}}
-          <aside class='FreestyleUsage-props'>
-            <h3 class='FreestyleUsage-sectionTitle'>Properties</h3>
+          <aside class='pretui-usage-props'>
+            <h3 class='pretui-usage-section-title'>Properties</h3>
             {{yield
               (hash
                 Action=(component UsageAction mode='prop')
@@ -105,9 +105,9 @@ export const FreestyleUsage: TemplateOnlyComponent<FreestyleUsageSignature> =
       </div>
 
       {{#if (has-block 'api')}}
-        <div class='FreestyleUsage-api wb-panel'>
+        <div class='pretui-usage-api wb-panel'>
           <div class='wb-panel-h'>
-            <h3 class='FreestyleUsage-sectionTitle wb-cap'>API</h3>
+            <h3 class='pretui-usage-section-title wb-cap'>API</h3>
           </div>
           <Table>
             <:head>
@@ -139,9 +139,9 @@ export const FreestyleUsage: TemplateOnlyComponent<FreestyleUsageSignature> =
       {{/if}}
 
       {{#if (has-block 'cssVars')}}
-        <div class='FreestyleUsage-api wb-panel'>
+        <div class='pretui-usage-api wb-panel'>
           <div class='wb-panel-h'>
-            <h3 class='FreestyleUsage-sectionTitle wb-cap'>CSS Variables</h3>
+            <h3 class='pretui-usage-section-title wb-cap'>CSS Variables</h3>
           </div>
           <Table>
             <:head>
@@ -163,40 +163,45 @@ export const FreestyleUsage: TemplateOnlyComponent<FreestyleUsageSignature> =
       {{/if}}
     </div>
     <style scoped>
-      .FreestyleUsage {
+      .pretui-usage {
+        --freestyle-usage-props-w: 17.5rem;
+        --freestyle-usage-panel-h: 2.25rem;
+        --freestyle-usage-props-top: 3.25rem;
+
+        container: freestyle-usage / inline-size;
         display: grid;
-        gap: var(--space-3, 8px);
+        gap: var(--boxel-sp-xs);
         align-content: start;
         min-width: 0;
         max-width: 100%;
       }
-      .FreestyleUsage-description {
-        margin: 0;
+      .pretui-usage-description {
         max-width: 78ch;
         font-size: var(--boxel-font-size-sm);
         color: var(--muted-foreground);
         line-height: 1.5;
       }
-      .FreestyleUsage-stage {
+      .pretui-usage-stage {
         display: grid;
-        grid-template-columns: minmax(0, 1fr) 280px;
-        gap: var(--space-5, 14px);
+        grid-template-columns: minmax(0, 1fr) var(--freestyle-usage-props-w);
+        gap: var(--boxel-sp);
         align-items: start;
       }
-      @media (max-width: 900px) {
-        .FreestyleUsage-stage {
+      @container freestyle-usage (width < 900px) {
+        .pretui-usage-stage {
           grid-template-columns: minmax(0, 1fr);
         }
       }
-      .FreestyleUsage-previewCol {
+      .pretui-usage-preview-col {
         display: grid;
-        gap: var(--space-3, 8px);
+        gap: var(--boxel-sp-xs);
         min-width: 0;
       }
       /* workbench panel chrome: bordered card, header row, clipped body */
       .wb-panel {
         background: var(--card);
-        border-radius: 6px;
+        color: var(--card-foreground);
+        border-radius: var(--radius);
         box-shadow: var(--pretui-shadow-hairline, 0 0 0 1px var(--border));
         overflow: hidden;
         min-width: 0;
@@ -204,13 +209,10 @@ export const FreestyleUsage: TemplateOnlyComponent<FreestyleUsageSignature> =
       .wb-panel-h {
         display: flex;
         align-items: center;
-        gap: 10px;
-        min-height: 36px;
-        padding: 8px var(--space-4, 11px);
+        gap: var(--boxel-sp-xs);
+        min-height: var(--freestyle-usage-panel-h);
+        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
         box-shadow: inset 0 -1px 0 var(--border);
-      }
-      h3.wb-cap {
-        margin: 0;
       }
       .wb-th-right {
         text-align: right;
@@ -218,15 +220,14 @@ export const FreestyleUsage: TemplateOnlyComponent<FreestyleUsageSignature> =
       .wb-codestrip {
         display: flex;
         align-items: center;
-        gap: var(--space-4, 11px);
-        padding: 6px var(--space-4, 11px);
+        gap: var(--boxel-sp-sm);
+        padding: var(--boxel-sp-2xs) var(--boxel-sp-sm);
         box-shadow: inset 0 1px 0 var(--border);
-        background: var(--card);
         overflow-x: auto;
       }
       .wb-code {
         font-family: var(--font-mono);
-        font-size: var(--text-ui, 12px);
+        font-size: var(--boxel-font-size-xs);
         color: var(--muted-foreground);
         white-space: pre;
         flex: 1;
@@ -235,37 +236,31 @@ export const FreestyleUsage: TemplateOnlyComponent<FreestyleUsageSignature> =
         flex: none;
         margin-left: auto;
       }
-      .FreestyleUsage-props {
+      .pretui-usage-props {
         background: var(--card);
-        border-radius: 6px;
+        color: var(--card-foreground);
+        border-radius: var(--radius);
         box-shadow: var(--pretui-shadow-hairline, 0 0 0 1px var(--border));
-        padding: var(--space-4, 11px) var(--space-5, 14px) var(--space-5, 14px);
+        padding: var(--boxel-sp-sm) var(--boxel-sp) var(--boxel-sp);
         min-width: 0;
         align-self: start;
         position: sticky;
-        top: 52px;
+        top: var(--freestyle-usage-props-top);
       }
       /* THE caps treatment — panel and group headers only */
-      .FreestyleUsage-sectionTitle {
-        margin: 0 0 var(--space-3, 8px);
-        font-size: var(--text-ui-xs, 11px);
+      .pretui-usage-section-title {
+        margin-block-end: var(--boxel-sp-xs);
+        font-size: var(--boxel-font-size-2xs);
         font-weight: 600;
         letter-spacing: 0.06em;
         text-transform: uppercase;
         color: var(--muted-foreground);
       }
-      .FreestyleUsage-api {
-        min-width: 0;
+      .wb-cap {
+        margin-block-end: 0;
       }
-      .FreestyleUsage-source {
-        margin: 0;
-        font-family: var(--font-mono);
-        font-size: var(--text-ui-sm, 11.5px);
-        background: var(--inset, var(--boxel-100));
-        border-radius: var(--radius);
-        box-shadow: inset 0 0 0 1px var(--border);
-        padding: var(--space-4, 11px);
-        overflow-x: auto;
+      .pretui-usage-api {
+        min-width: 0;
       }
     </style>
   </template>;

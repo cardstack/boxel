@@ -13,7 +13,7 @@ module('Pretui | components/usage-css-variable', function (hooks) {
 
   test('doc mode is an API row typed CSS with no sigil', async function (assert) {
     await render(<template><table><tbody><UsageCssVariable @name='--pretui-gap' @description='Grid gutter' @defaultValue='8px' /></tbody></table></template>);
-    let cells = Array.from(document.querySelectorAll('tr.FreestyleUsageArgument td')).map((td) => td.textContent?.replace(/\s+/g, ' ').trim());
+    let cells = Array.from(document.querySelectorAll('tr.pretui-usage-arg td')).map((td) => td.textContent?.replace(/\s+/g, ' ').trim());
     assert.deepEqual(cells, ['--pretui-gap', 'CSS', 'Grid gutter', '8px']);
   });
 

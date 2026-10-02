@@ -9,10 +9,10 @@ import { setupCardTest } from '@cardstack/host/tests/helpers';
 import { FreestyleUsage } from './freestyle-usage';
 
 function root(): HTMLElement {
-  return document.querySelector('.FreestyleUsage') as HTMLElement;
+  return document.querySelector('.pretui-usage') as HTMLElement;
 }
 function titles(): string[] {
-  return Array.from(root().querySelectorAll('.FreestyleUsage-sectionTitle')).map((h) => h.textContent?.trim() ?? '');
+  return Array.from(root().querySelectorAll('.pretui-usage-section-title')).map((h) => h.textContent?.trim() ?? '');
 }
 
 module('Pretui | components/freestyle-usage', function (hooks) {
@@ -26,7 +26,7 @@ module('Pretui | components/freestyle-usage', function (hooks) {
         </FreestyleUsage>
       </template>,
     );
-    assert.strictEqual(root().querySelector('.FreestyleUsage-description')?.textContent, 'Primary action.');
+    assert.strictEqual(root().querySelector('.pretui-usage-description')?.textContent, 'Primary action.');
     assert.ok(root().querySelector('[data-test-pretui-viewport] .pretui-artboard-body [data-test-demo]'), 'the example is framed, so it can be resized');
     assert.strictEqual(root().querySelector('.wb-codestrip'), null, 'no source, no code strip');
     assert.deepEqual(titles(), [], 'no api block, no Properties aside and no API table');
@@ -41,7 +41,7 @@ module('Pretui | components/freestyle-usage', function (hooks) {
         </FreestyleUsage>
       </template>,
     );
-    assert.strictEqual(root().querySelector('.FreestyleUsage-description')?.textContent, 'From the block');
+    assert.strictEqual(root().querySelector('.pretui-usage-description')?.textContent, 'From the block');
     assert.strictEqual(root().querySelector('.wb-codestrip .wb-code')?.textContent, '<Button>Go</Button>');
     assert.ok(root().querySelector('.wb-codestrip button'), 'copy usage');
   });
@@ -66,12 +66,12 @@ module('Pretui | components/freestyle-usage', function (hooks) {
       </template>,
     );
     assert.deepEqual(titles(), ['Properties', 'API', 'CSS Variables']);
-    let aside = root().querySelector('.FreestyleUsage-props') as HTMLElement;
+    let aside = root().querySelector('.pretui-usage-props') as HTMLElement;
     assert.deepEqual(Array.from(aside.querySelectorAll('.proprow-label')).map((l) => l.textContent?.trim()), ['label', 'disabled', '--pretui-btn-radius'], 'actions and yields have no knob');
-    let apiRows = Array.from(root().querySelectorAll('.FreestyleUsage-api')[0]?.querySelectorAll('tr.FreestyleUsageArgument') ?? []);
+    let apiRows = Array.from(root().querySelectorAll('.pretui-usage-api')[0]?.querySelectorAll('tr.pretui-usage-arg') ?? []);
     assert.deepEqual(apiRows.map((r) => r.querySelector('td')?.textContent?.replace(/\s+/g, ' ').trim()), ['@label', '@disabled', '@onClick', '{{default}}']);
     assert.deepEqual(apiRows.map((r) => r.querySelectorAll('td')[1]?.textContent?.trim()), ['String', 'Bool', 'Action', 'Yield']);
-    let cssRows = Array.from(root().querySelectorAll('.FreestyleUsage-api')[1]?.querySelectorAll('tr.FreestyleUsageArgument') ?? []);
+    let cssRows = Array.from(root().querySelectorAll('.pretui-usage-api')[1]?.querySelectorAll('tr.pretui-usage-arg') ?? []);
     assert.deepEqual(cssRows.map((r) => Array.from(r.querySelectorAll('td')).map((td) => td.textContent?.replace(/\s+/g, ' ').trim())), [['--pretui-btn-radius', 'CSS', '', '6px']]);
   });
 });

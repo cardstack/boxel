@@ -44,16 +44,16 @@ export class UsageArgument extends Component<UsageArgumentSignature> {
   }
   <template>
     {{#if this.isDoc}}
-      <tr class='FreestyleUsageArgument'>
-        <td class='FreestyleUsageArgument-name'>
-          <span class='u-sig'>{{this.sigilPre}}</span>{{#if @name}}{{@name}}{{/if}}<span
-            class='u-sig'
-          >{{this.sigilPost}}</span>
+      <tr class='pretui-usage-arg'>
+        <td class='pretui-usage-arg-name'>
+          <span class='u-sig'>{{this.sigilPre}}</span>{{#if
+            @name
+          }}{{@name}}{{/if}}<span class='u-sig'>{{this.sigilPost}}</span>
           {{#if @required}}<span class='u-req' title='Required'>*</span>{{/if}}
         </td>
-        <td class='FreestyleUsageArgument-type'>{{this.typeLabel}}</td>
-        <td class='FreestyleUsageArgument-description'>{{@description}}</td>
-        <td class='FreestyleUsageArgument-default'>
+        <td class='pretui-usage-arg-type'>{{this.typeLabel}}</td>
+        <td class='pretui-usage-arg-description'>{{@description}}</td>
+        <td class='pretui-usage-arg-default'>
           {{#if this.shouldRenderDefaultValue}}
             {{this.defaultText}}
           {{else}}
@@ -64,7 +64,7 @@ export class UsageArgument extends Component<UsageArgumentSignature> {
     {{/if}}
     <style scoped>
       @layer PretComponent {
-        .FreestyleUsageArgument-name {
+        .pretui-usage-arg-name {
           font-family: var(--font-mono);
           font-size: var(--text-ui, 12px);
           white-space: nowrap;
@@ -76,7 +76,7 @@ export class UsageArgument extends Component<UsageArgumentSignature> {
         .u-req {
           color: var(--pretui-destructive-ink, var(--boxel-danger));
         }
-        .FreestyleUsageArgument-type {
+        .pretui-usage-arg-type {
           font-family: var(--font-mono);
           font-size: var(--text-ui, 12px);
           color: var(--muted-foreground);
@@ -84,11 +84,11 @@ export class UsageArgument extends Component<UsageArgumentSignature> {
           width: 1%;
           text-transform: lowercase;
         }
-        .FreestyleUsageArgument-description {
+        .pretui-usage-arg-description {
           color: var(--foreground);
           max-width: 520px;
         }
-        .FreestyleUsageArgument-default {
+        .pretui-usage-arg-default {
           font-family: var(--font-mono);
           font-size: var(--text-ui, 12px);
           color: var(--muted-foreground);

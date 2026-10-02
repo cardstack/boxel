@@ -13,7 +13,7 @@ module('Pretui | components/usage-object', function (hooks) {
 
   test('doc mode is an API row typed Object', async function (assert) {
     await render(<template><table><tbody><UsageObject @name='item' @description='The record' @required={{true}} /></tbody></table></template>);
-    let cells = Array.from(document.querySelectorAll('tr.FreestyleUsageArgument td')).map((td) => td.textContent?.replace(/\s+/g, ' ').trim());
+    let cells = Array.from(document.querySelectorAll('tr.pretui-usage-arg td')).map((td) => td.textContent?.replace(/\s+/g, ' ').trim());
     assert.deepEqual(cells, ['@item *', 'Object', 'The record', '—']);
   });
 

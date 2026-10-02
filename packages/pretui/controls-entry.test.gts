@@ -669,7 +669,7 @@ module('controls-entry | usage pages', function (hooks) {
       let Demo = PAGES[name] as AnyComponent;
       assert.ok(Demo, name + ' is present in the registry');
       await render(<template><Demo /></template>);
-      assert.ok(one('.FreestyleUsage'), name + ' rendered a FreestyleUsage shell');
+      assert.ok(one('.pretui-usage'), name + ' rendered a FreestyleUsage shell');
     });
   }
 });

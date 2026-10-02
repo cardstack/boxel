@@ -9,7 +9,7 @@ import { setupCardTest } from '@cardstack/host/tests/helpers';
 import { UsageArgument } from './usage-argument';
 
 function cellTexts(): string[] {
-  return Array.from(document.querySelectorAll('tr.FreestyleUsageArgument td')).map((td) => td.textContent?.replace(/\s+/g, ' ').trim() ?? '');
+  return Array.from(document.querySelectorAll('tr.pretui-usage-arg td')).map((td) => td.textContent?.replace(/\s+/g, ' ').trim() ?? '');
 }
 
 module('Pretui | components/usage-argument', function (hooks) {

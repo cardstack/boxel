@@ -441,6 +441,6 @@ module('Pretui | Toaster | usage page', function (hooks) {
     let Page = PAGES['Toaster'];
     assert.ok(Page, 'the page is in the registry');
     await render(<template><Page /></template>);
-    assert.dom('.FreestyleUsage').exists('the page mounted');
+    assert.dom('.pretui-usage').exists('the page mounted');
   });
 });

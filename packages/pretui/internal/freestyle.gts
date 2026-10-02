@@ -39,20 +39,22 @@ export const PropRow: TemplateOnlyComponent<PropRowSignature> = <template>
   <style scoped>
     /* workbench inspector row: label rail left, control right */
     .proprow {
+      --proprow-label-w: 4.75rem;
+
       display: grid;
-      grid-template-columns: 76px minmax(0, 1fr);
-      gap: 10px;
+      grid-template-columns: var(--proprow-label-w) minmax(0, 1fr);
+      gap: var(--boxel-sp-xs);
       align-items: center;
-      padding: 4px 0;
+      padding-block: var(--boxel-sp-3xs);
     }
     .proprow-label {
       font-family: var(--font-mono);
-      font-size: var(--text-ui, 12px);
+      font-size: var(--boxel-font-size-xs);
       color: var(--muted-foreground);
-      overflow-wrap: anywhere;
+      overflow-wrap: break-word;
     }
     .proprow-req {
-      color: var(--pretui-destructive-ink, var(--boxel-danger));
+      color: var(--destructive-ink);
     }
     .proprow-control {
       min-width: 0;
@@ -75,10 +77,10 @@ export const PropReadOnly: TemplateOnlyComponent<PropReadOnlySignature> =
       .proprow-readonly {
         display: block;
         min-width: 0;
-        overflow-wrap: anywhere;
+        overflow-wrap: break-word;
         color: var(--muted-foreground);
         font-family: var(--font-mono);
-        font-size: var(--text-ui-sm, 11.5px);
+        font-size: var(--boxel-font-size-xs);
         line-height: 1.4;
       }
     </style>

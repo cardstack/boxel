@@ -20,8 +20,8 @@ module('Pretui | PretUISpec', function (hooks) {
   test('renders the usage page and examples it loads', async function (assert) {
     let model = specModel('Button');
     await render(<template><Isolated @model={{model}} /></template>);
-    await waitFor('[data-demo-policy="included"] .FreestyleUsage');
-    assert.dom('[data-demo-policy="included"] .FreestyleUsage').exists();
+    await waitFor('[data-demo-policy="included"] .pretui-usage');
+    assert.dom('[data-demo-policy="included"] .pretui-usage').exists();
     await waitFor('[data-test-pretui-examples]');
     assert.dom('[data-test-pretui-examples]').containsText('Examples');
   });
@@ -29,8 +29,8 @@ module('Pretui | PretUISpec', function (hooks) {
   test('a page in a shared usage module renders too', async function (assert) {
     let model = specModel('EmailInput');
     await render(<template><Isolated @model={{model}} /></template>);
-    await waitFor('[data-demo-policy="included"] .FreestyleUsage');
-    assert.dom('[data-demo-policy="included"] .FreestyleUsage').exists();
+    await waitFor('[data-demo-policy="included"] .pretui-usage');
+    assert.dom('[data-demo-policy="included"] .pretui-usage').exists();
   });
 
   test('a component with no usage page says so', async function (assert) {
@@ -45,8 +45,8 @@ module('Pretui | PretUISpec', function (hooks) {
   test('a planned entry that has a page shows it', async function (assert) {
     let model = specModel('Button', 'planned');
     await render(<template><Isolated @model={{model}} /></template>);
-    await waitFor('[data-demo-policy="included"] .FreestyleUsage');
-    assert.dom('[data-demo-policy="included"] .FreestyleUsage').exists();
+    await waitFor('[data-demo-policy="included"] .pretui-usage');
+    assert.dom('[data-demo-policy="included"] .pretui-usage').exists();
   });
 
   test('a Runtime entry without a page is excluded', async function (assert) {
