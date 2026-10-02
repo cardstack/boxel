@@ -1,7 +1,4 @@
-// Pretui — Divider unit tests. Imports from ./composites rather than the
-// './controls' barrel: the per-component test is the unit contract and has to
-// keep holding as modules are extracted; when Divider moves to its own file only
-// the import path changes.
+// Pretui — Divider unit tests.
 //
 // No assertion touches a computed style: the component's own `<style scoped>`
 // is inert in this harness (the scoped-css attribute is stamped, the rules are

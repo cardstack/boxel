@@ -1,5 +1,4 @@
-// Pretui — DateRangePicker unit tests. Imports from ../reading-extras; when
-// DateRangePicker moves to its own file only the import path changes. The
+// Pretui — DateRangePicker unit tests. The
 // range grid is Calendar's contract (calendar.test.gts); asserted here is the
 // trigger, the two-click round-trip and when the popover closes.
 //

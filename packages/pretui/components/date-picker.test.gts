@@ -1,5 +1,4 @@
-// Pretui — DatePicker unit tests. Imports from ../reading-extras; when
-// DatePicker moves to its own file only the import path changes. The grid
+// Pretui — DatePicker unit tests. The grid
 // itself is Calendar's contract (calendar.test.gts); asserted here is the
 // trigger, the popover round-trip and the value it hands back.
 //

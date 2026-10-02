@@ -1,6 +1,4 @@
-// Pretui — Cue unit tests. Imports from its own module rather than the
-// './controls' barrel: the per-component test is the unit contract and has to
-// keep holding as the barrel is dismantled.
+// Pretui — Cue unit tests.
 //
 // No assertion touches a computed style: the component's own `<style scoped>`
 // is inert in this harness (the scoped-css attribute is stamped, the rules are

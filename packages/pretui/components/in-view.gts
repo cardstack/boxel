@@ -33,12 +33,18 @@ export function normalizeRootMargin(value: unknown): string {
   return tokens.join(' ');
 }
 
+/** `onChange` hears every enter (and, unless `once`, every exit); `enabled`
+ * false leaves the element unobserved. */
 export const inViewport = modifier(
   (
     el: HTMLElement,
     [threshold, rootMargin, once]: [number, string, boolean],
+    {
+      onChange,
+      enabled = true,
+    }: { onChange?: (inView: boolean) => void; enabled?: boolean },
   ) => {
-    if (typeof IntersectionObserver === 'undefined') return;
+    if (!enabled || typeof IntersectionObserver === 'undefined') return;
     el.setAttribute('data-inview', 'false');
     let observer = new IntersectionObserver(
       (entries) => {
@@ -46,8 +52,10 @@ export const inViewport = modifier(
           if (entry.isIntersecting) {
             el.setAttribute('data-inview', 'true');
             if (once) observer.disconnect();
+            onChange?.(true);
           } else if (!once) {
             el.setAttribute('data-inview', 'false');
+            onChange?.(false);
           }
         }
       },
