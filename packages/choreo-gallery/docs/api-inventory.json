@@ -804,6 +804,62 @@
     },
     {
       "entrypoint": "glimmer-motion",
+      "symbol": "MotionParticipant",
+      "source": "packages/glimmer-motion/src/participant.ts",
+      "kind": "type",
+      "guide": "core-host",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "ParticipantArgs",
+      "source": "packages/glimmer-motion/src/participant.ts",
+      "kind": "type",
+      "guide": "core-host",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "ParticipantHost",
+      "source": "packages/glimmer-motion/src/participant.ts",
+      "kind": "type",
+      "guide": "core-host",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "closestParticipantHost",
+      "source": "packages/glimmer-motion/src/participant.ts",
+      "kind": "value",
+      "guide": "core-host",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "defineParticipantArg",
+      "source": "packages/glimmer-motion/src/participant.ts",
+      "kind": "value",
+      "guide": "core-host",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "PARTICIPANT_HOST_ATTRIBUTE",
+      "source": "packages/glimmer-motion/src/participant.ts",
+      "kind": "value",
+      "guide": "core-host",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "setParticipantHost",
+      "source": "packages/glimmer-motion/src/participant.ts",
+      "kind": "value",
+      "guide": "core-host",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
       "symbol": "Presence",
       "source": "packages/glimmer-motion/src/presence.gts",
       "kind": "value",

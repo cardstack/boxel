@@ -1284,7 +1284,12 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
    */
   <template>
     {{this.renderDetector}}
-    <div data-choreo={{if @id @id ''}} {{this.host}} ...attributes>
+    <div
+      data-choreo={{if @id @id ''}}
+      data-motion-host
+      {{this.host}}
+      ...attributes
+    >
       <div
         data-choreo-orphans
         style='position:absolute;inset:0;pointer-events:none;overflow:visible'

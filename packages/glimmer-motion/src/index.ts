@@ -93,6 +93,17 @@ export { default as motion, MotionModifier } from './motion.ts';
 export type { MotionConfigContext } from './motion-config.gts';
 export { closestMotionConfig, MotionConfig } from './motion-config.gts';
 export { flushPendingMounts, MotionNode } from './node.ts';
+export type {
+  MotionParticipant,
+  ParticipantArgs,
+  ParticipantHost,
+} from './participant.ts';
+export {
+  closestParticipantHost,
+  defineParticipantArg,
+  PARTICIPANT_HOST_ATTRIBUTE,
+  setParticipantHost,
+} from './participant.ts';
 export { Presence } from './presence.gts';
 export type { PresenceHandle } from './presence-types.ts';
 export { ReorderGroup } from './reorder/group.gts';

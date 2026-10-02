@@ -1,18 +1,36 @@
 /**
- * How a participant finds its region: the nearest `[data-choreo]` ancestor, by
- * DOM — the same discovery <LayoutGroup> and <MotionConfig> use, so nothing
- * has to be threaded through the tree. No imports from node.ts here: node.ts
- * imports this.
+ * A region is a participant host (glimmer-motion/participant): its root
+ * renders `data-motion-host` beside `data-choreo`, and registering a region
+ * here registers it as that element's participant host too, so the {{motion}}
+ * elements inside join it. The lookups below are Choreo's own, for code that
+ * already speaks in regions.
  */
+import { type ParticipantHost, setParticipantHost } from '../participant.ts';
 import type { ChoreoRun } from './run.ts';
 import type { ChoreoNode, TimelineNode } from './types.ts';
+
+// The `{{motion}}` args a region adds, typed here because the package's root
+// declarations re-export this module; measure.ts, which applies `pack`, is
+// reached only at runtime, so an augmentation there would not ship.
+declare module '../participant.ts' {
+  interface ParticipantArgs {
+    /**
+     * How Choreo measures this element for a shape-matched flight.
+     * `'box'` (default) is the layout border box — right for plates, cards,
+     * stages. `'content'` is the shrink-wrap (the ink): a full-bleed title
+     * still matches as a word. Written as `data-choreo-pack`; an explicit
+     * `[data-choreo-substance]` descendant still wins.
+     */
+    pack?: 'box' | 'content';
+  }
+}
 
 /** anything that can put a node on a region's timeline — a step component, or a lane from outside */
 export interface ChoreoProvider {
   node(): TimelineNode;
 }
 
-export interface ChoreoHost {
+export interface ChoreoHost extends ParticipantHost {
   /** a destroyed participant asks whether the region still needs its element; true → the region unmounts it later */
   claim(node: ChoreoNode): boolean;
   /**
@@ -34,6 +52,7 @@ export function setChoreoHost(el: Element, host: ChoreoHost | undefined) {
   const id = el.getAttribute('data-choreo');
   if (host) {
     hosts.set(el, host);
+    setParticipantHost(el, host);
     if (id) {
       hostsById.set(id, host);
     }
@@ -42,6 +61,7 @@ export function setChoreoHost(el: Element, host: ChoreoHost | undefined) {
     // successor: only the entry that is THIS host's comes off
     const mine = hosts.get(el);
     hosts.delete(el);
+    setParticipantHost(el, undefined);
     if (id && mine && hostsById.get(id) === mine) {
       hostsById.delete(id);
     }
