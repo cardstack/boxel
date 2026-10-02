@@ -913,12 +913,13 @@ const READINESS_CHECK_PATH = '/_readiness-check';
 //
 // The realm's `_info` consumes it too, and resolves no operation: it answers
 // any signed-in caller the realm hands to its policy (see
-// `#admitsDespiteCoarseRefusal`). It carries the realm's name and icon, which
-// a view of a card a grant admits that caller to shows, and nothing a grant
-// decides. The policy's own pointer is kept out of it. Since it runs nothing
-// a grant admits, an archived realm answers such a caller with its info as
-// it does while active, so the answer does not say the realm is archived
-// (see `APPLIES_ARCHIVED_SEAL`).
+// `#admitsDespiteCoarseRefusal`), whether or not a grant reaches them, since
+// it asks the gate nothing. Such a caller is shown only how the realm
+// presents itself, its name, icon and background, which a view of a card a
+// grant admits them to shows (see `realmInfo`). The policy's own pointer is
+// kept out of it. Since it runs nothing a grant admits, an archived realm
+// answers such a caller as it does while active, so the answer does not say
+// the realm is archived (see `APPLIES_ARCHIVED_SEAL`).
 //
 // No other route does. Each of the rest is marked `ACL_ONLY` where it is
 // declared, or serves code and the file tree (`COARSE_READ_ONLY`), and each
@@ -15955,7 +15956,27 @@ export class Realm {
     _request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
-    let { info: realmInfo } = await this.parseRealmInfo();
+    let { info } = await this.parseRealmInfo();
+    // A caller the realm ACL declined reaches this route only when the
+    // realm's policy is the one to judge them, and is answered whether or not
+    // it grants them anything (see `CONSUMES_COARSE_OUTCOME`). They are shown
+    // how the realm presents itself, its name, icon and background, which a
+    // view of a card a grant admits them to shows, and nothing about how the
+    // realm is run: who serves it, whom its ACL names, or whether and when it
+    // is published. Its visibility is given as `private`, which is what the
+    // realm is to a caller its ACL names nowhere.
+    let realmInfo: RealmInfo =
+      requestContext.coarseAllowed === false
+        ? {
+            name: info.name,
+            backgroundURL: info.backgroundURL,
+            iconURL: info.iconURL,
+            showAsCatalog: null,
+            visibility: 'private',
+            publishable: null,
+            lastPublishedAt: null,
+          }
+        : info;
 
     let doc = {
       data: {

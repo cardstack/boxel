@@ -43,6 +43,8 @@ const ORG_ADMIN = '@org-admin:localhost';
 const PLAIN_ADMIN = '@plain-admin:localhost';
 // A user no realm's ACL names, whom Education's policy lets read a classroom.
 const TEACHER = '@teacher:localhost';
+// A user no realm's ACL names, whom Education's policy grants nothing.
+const STRANGER = '@stranger:localhost';
 
 const REALM_POLICY = {
   module: rri('@cardstack/catalog/realm-policy/realm-policy'),
@@ -120,7 +122,12 @@ module(basename(import.meta.filename), function (hooks) {
                   rules: [
                     {
                       targetType: CLASSROOM,
-                      grants: [{ operation: 'read' }],
+                      grants: [
+                        {
+                          operation: 'read',
+                          where: `actor() == "${TEACHER}"`,
+                        },
+                      ],
                     },
                   ],
                 },
@@ -181,6 +188,10 @@ module(basename(import.meta.filename), function (hooks) {
     return `Bearer ${createJWT(realm, TEACHER, [])}`;
   }
 
+  function strangerIn(realm: Realm) {
+    return `Bearer ${createJWT(realm, STRANGER, [])}`;
+  }
+
   function info(realmURL: string, method: 'GET' | 'QUERY', auth?: string) {
     let path = new URL('_info', realmURL).pathname;
     let req =
@@ -191,20 +202,39 @@ module(basename(import.meta.filename), function (hooks) {
     return auth ? req.set('Authorization', auth) : req;
   }
 
-  test('_info answers a signed-in caller the ACL declines in a realm that names a policy', async function (assert) {
-    for (let method of ['GET', 'QUERY'] as const) {
-      let response = await info(EDUCATION, method, teacherIn(education));
-      assert.strictEqual(response.status, 200, `${method}: answered`);
-      assert.strictEqual(
-        response.body.data.attributes.name,
-        'Education',
-        `${method}: with the realm's name`,
-      );
-      assert.false(
-        'policy' in response.body.data.attributes,
-        `${method}: and not the policy's pointer`,
-      );
+  test('_info shows a signed-in caller the ACL declines how a realm that names a policy presents itself, whatever the policy grants them', async function (assert) {
+    for (let [who, auth] of [
+      ['a caller a grant reaches', teacherIn(education)],
+      ['a caller the policy grants nothing', strangerIn(education)],
+    ] as const) {
+      for (let method of ['GET', 'QUERY'] as const) {
+        let response = await info(EDUCATION, method, auth);
+        assert.strictEqual(response.status, 200, `${who}, ${method}: answered`);
+        assert.deepEqual(
+          response.body.data.attributes,
+          {
+            name: 'Education',
+            backgroundURL: null,
+            iconURL: null,
+            showAsCatalog: null,
+            visibility: 'private',
+            publishable: null,
+            lastPublishedAt: null,
+          },
+          `${who}, ${method}: with its name, icon and background, and nothing about how it is run or its policy`,
+        );
+      }
     }
+    let admin = await info(
+      EDUCATION,
+      'GET',
+      `Bearer ${createJWT(education, ADMIN, ['read', 'write', 'realm-owner'])}`,
+    );
+    assert.strictEqual(
+      typeof admin.body.data.attributes.realmUserId,
+      'string',
+      'a caller the ACL lets read the realm is shown who serves it',
+    );
   });
 
   test('an archived realm answers that caller with its info as it does while active', async function (assert) {

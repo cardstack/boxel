@@ -720,11 +720,13 @@ export class SearchEntriesResource extends Resource<Args> {
     return this.#fieldsetIsRefreshable(query.fields?.entry);
   }
 
-  // Whether the session is known not to read `realm`. A realm the host holds
-  // no session for, such as a public one it never signed in to, is not
-  // known either way, and its card+html GET is answered as it always is.
+  // Whether the session is known not to read `realm`: the host holds a
+  // session for it whose permissions leave out `read`. A realm the host holds
+  // no session for, such as a public one it never signed in to, or one whose
+  // info it loaded without signing in, is not known either way, and its
+  // card+html GET is answered as it always is.
   #sessionCannotRead(realm: string): boolean {
-    return this.realm.url(realm) !== undefined && !this.realm.canRead(realm);
+    return this.realm.token(realm) !== undefined && !this.realm.canRead(realm);
   }
 
   // Refreshable = the html branch is in play (the default resolution or an
