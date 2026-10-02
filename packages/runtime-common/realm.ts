@@ -8805,6 +8805,14 @@ export class Realm {
       compileStart = performance.now();
       transpiled = await transpileJS(source, debugFilename);
     } catch (err: any) {
+      // A compile that fails can hold the thread as long as one that
+      // succeeds, so it is recorded too. Nothing is recorded when the failure
+      // came before the compile started.
+      if (compileStart > 0) {
+        this.#recordCompile(canonicalPath, source.length, compileStart, {
+          failed: true,
+        });
+      }
       let cardError =
         err instanceof CardError
           ? err
@@ -8849,13 +8857,19 @@ export class Realm {
   }
 
   // Record one real compile, from the start of the transpile through the
-  // dependency scan of its output. Both run on the calling thread, so this is
+  // dependency scan of its output, or to the point where the transpile
+  // threw. Both run on the calling thread, so this is
   // how long the compile kept the process from answering anything else.
   // Logged at info when it is long enough to be felt by other requests.
-  #recordCompile(canonicalPath: string, sourceLength: number, start: number) {
+  #recordCompile(
+    canonicalPath: string,
+    sourceLength: number,
+    start: number,
+    opts: { failed?: boolean } = {},
+  ) {
     let durationMs = performance.now() - start;
     recordModuleCompile(durationMs);
-    let line = `compiled ${canonicalPath} sourceBytes=${sourceLength} ms=${Math.round(durationMs)}`;
+    let line = `${opts.failed ? 'compile failed' : 'compiled'} ${canonicalPath} sourceBytes=${sourceLength} ms=${Math.round(durationMs)}`;
     if (durationMs >= SLOW_MODULE_COMPILE_MS) {
       this.#compileLog.info(line);
     } else {

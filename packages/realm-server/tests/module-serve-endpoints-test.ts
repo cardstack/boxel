@@ -495,12 +495,19 @@ module(basename(import.meta.filename), function () {
           'uncompilable.gts',
           `export class Broken extends {{{ {`,
         );
+        // The compile stats are process-wide, so take what earlier work left
+        // in them before counting this test's compile.
+        takeModuleCompileStats();
 
         let response = await request
           .get('/uncompilable.gts')
           .set('Accept', SupportedMimeType.All);
 
         assert.strictEqual(response.status, 406, 'HTTP 406 status');
+        assert.true(
+          takeModuleCompileStats().count >= 1,
+          'the failed compile is recorded in the compile stats too',
+        );
         assert.strictEqual(
           response.headers['content-type'],
           SupportedMimeType.JSONAPI,
