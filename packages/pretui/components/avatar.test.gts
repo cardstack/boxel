@@ -7,6 +7,7 @@ import { module, test } from 'qunit';
 import { render, settled } from '@ember/test-helpers';
 import { tracked } from '@glimmer/tracking';
 import { htmlSafe } from '@ember/template';
+import { setCssVar } from '@cardstack/boxel-ui/modifiers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
 import { Avatar } from './avatar';
 import { statusHue } from '../internal/ink';
@@ -104,15 +105,87 @@ module('Pretui | components/avatar', function (hooks) {
   test("@size wins over a size in the caller's style, which comes back when @size is cleared", async function (assert) {
     class State {
       @tracked size: number | undefined = 40;
+      @tracked style = CALLER_SIZE_STYLE;
     }
     let state = new State();
-    await render(<template><Avatar @name='Ada' @size={{state.size}} style={{CALLER_SIZE_STYLE}} /></template>);
+    await render(<template><Avatar @name='Ada' @size={{state.size}} style={{state.style}} /></template>);
     let el = q('[data-test-pretui-avatar]');
     assert.strictEqual(size(el), '2.5rem', '@size wins');
 
     state.size = undefined;
     await settled();
     assert.strictEqual(size(el), '3rem', "the caller's size is back");
+
+    state.size = 40;
+    await settled();
+    assert.strictEqual(size(el), '2.5rem', '@size wins again');
+
+    state.style = htmlSafe('--pretui-avatar-size: 2.5rem');
+    state.size = undefined;
+    await settled();
+    assert.strictEqual(
+      size(el),
+      '2.5rem',
+      "a caller style rewritten in the same render that clears @size is kept, not replaced by the caller's earlier size",
+    );
+  });
+
+  test("clearing @size after another modifier writes to the style leaves no size behind", async function (assert) {
+    class State {
+      @tracked size: number | undefined = 40;
+      @tracked ring = 'var(--chart-3)';
+    }
+    let state = new State();
+    await render(
+      <template>
+        <Avatar
+          @name='Ada'
+          @size={{state.size}}
+          style={{RING_STYLE}}
+          {{setCssVar status-ring=state.ring}}
+        />
+      </template>,
+    );
+    let el = q('[data-test-pretui-avatar]');
+
+    state.ring = 'var(--chart-4)';
+    await settled();
+    assert.strictEqual(
+      el.style.getPropertyValue('--status-ring').trim(),
+      'var(--chart-4)',
+      'the other modifier wrote its property',
+    );
+    assert.strictEqual(size(el), '2.5rem');
+
+    state.size = undefined;
+    await settled();
+    assert.strictEqual(size(el), '', "Avatar's own size is not mistaken for the caller's");
+  });
+
+  test("a @name change after another modifier writes to the style moves the hue to the new name", async function (assert) {
+    class State {
+      @tracked name = 'Ada Lovelace';
+      @tracked ring = 'var(--chart-3)';
+    }
+    let state = new State();
+    await render(
+      <template>
+        <Avatar
+          @name={{state.name}}
+          style={{RING_STYLE}}
+          {{setCssVar status-ring=state.ring}}
+        />
+      </template>,
+    );
+    let el = q('[data-test-pretui-avatar]');
+    state.ring = 'var(--chart-4)';
+    await settled();
+    assert.notStrictEqual(statusHue('Ada Lovelace'), statusHue('Alan Turing'), 'the two names hash to different hues');
+    assert.strictEqual(hue(el), statusHue('Ada Lovelace'));
+
+    state.name = 'Alan Turing';
+    await settled();
+    assert.strictEqual(hue(el), statusHue('Alan Turing'), "the previous name's hue is not mistaken for the caller's");
   });
 
   test("the size and hue are put back after a later change to the caller's style", async function (assert) {
@@ -159,8 +232,8 @@ module('Pretui | components/avatar', function (hooks) {
     assert.strictEqual(hue(el), statusHue('Ada'), 'the hue goes back to the name hash');
   });
 
-  test('refuses a hue that carries its own declaration', async function (assert) {
-    await render(<template><Avatar @name='Ada' @hue='red; background: url(https://example.com/x)' style={{RING_STYLE}} /></template>);
+  test('refuses a hue outside the CSS value allowlist', async function (assert) {
+    await render(<template><Avatar @name='Ada' @hue='url(https://example.com/x)' style={{RING_STYLE}} /></template>);
     let el = q('[data-test-pretui-avatar]');
     assert.strictEqual(hue(el), '', 'the hue is dropped whole');
     assert.notOk(el.getAttribute('style')?.includes('url('), 'nothing from the rejected value reaches the element');

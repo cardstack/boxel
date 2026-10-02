@@ -83,7 +83,7 @@ class AvatarUsage extends GlimmerComponent {
         <Css.Basic
           @name='pretui-avatar-size'
           @type='dimension'
-          @description='Diameter for an Avatar with no @size; the font size is 0.42 of it. Set on the Avatar or any ancestor, through a class or a container query; @size wins over it.'
+          @description='Diameter for an Avatar with no @size; the font size is 0.42 of it. Give it a rem, px or container-query length: em and % do not keep that ratio. Set on the Avatar or any ancestor, through a class or a container query; @size wins over it.'
           @defaultValue='1.5rem'
         />
         <Css.Basic
