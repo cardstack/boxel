@@ -1,5 +1,4 @@
-// Pretui — Kbd unit tests, plus the shortcut helpers behind it. Imports from
-// ../menu; when Kbd moves to its own file only the import path changes.
+// Pretui — Kbd unit tests, plus the shortcut helpers behind it.
 //
 // No assertion touches a computed style: the component's own `<style scoped>`
 // is inert in this harness (the scoped-css attribute is stamped, the rules are

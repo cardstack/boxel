@@ -1,5 +1,4 @@
-// Pretui — TimeInput unit tests. Imports from ./composites; when TimeInput moves to
-// its own file only the import path changes.
+// Pretui — TimeInput unit tests.
 //
 // No assertion touches a computed style: the component's own `<style scoped>`
 // is inert in this harness (the scoped-css attribute is stamped, the rules are
