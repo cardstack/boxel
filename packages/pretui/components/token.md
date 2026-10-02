@@ -5,12 +5,18 @@ A machine value set like jewelry: a small mono pill for an id, a hash, a path, a
 ## The contract
 
 ```
-@value?, @hue?
+@value?, @hue?, @size?, @wrap?
 <:default>   — used when @value is absent
 Element: HTMLElement (a <code>)
 ```
 
 **It renders `<code>`**, which is the correct element and is what makes it a Token rather than a styled span.
+
+**`@size`** takes the house scale `xs | s | m | l | xl` (and the `sm` / `md` / `lg` / `small` / `medium` / `large` aliases), the same steps and the same `--pretui-size-*` → `--text-ui-*` tokens as **Button**'s `@size`. Like Button's, it sets the font-size only; the padding, radius and margins stay as they are. It lands as `data-size` on the element. Without `@size`, the size is derived from the surrounding type (see Prior art); `--pretui-token-font-size` pins it to an exact value instead, such as `var(--boxel-font-size-xs)`. `@size` wins over that property.
+
+**`@hue` and a caller's `style` work together.** Glimmer lets a caller's `style` attribute replace a component's own, so `@hue` is also written as a single `--pretui-token-hue` property on top of whatever style the element ends up with, and written again if the caller's style changes later. The caller's own declarations are kept. If the caller's style sets `--pretui-token-hue` as well, `@hue` wins. `@size` and `@wrap` are data attributes, so a caller's style cannot remove them.
+
+**`@wrap`** lets a long value (a path, a rule, a phrase) wrap: `white-space: normal` with `overflow-wrap: anywhere`, so it breaks even inside an unbroken id.
 
 Two details worth knowing, both about how it behaves in context:
 
@@ -33,7 +39,7 @@ So the comparison is against "a global `code { }` rule", and the improvements ar
 - **The context-aware margins** (above) — a global `code` rule cannot know it is in a table cell without the same `:where()` trick, and almost none do it.
 - **The size is derived**: `calc(var(--text-body) - 3.5px)`, so mono at the same optical size as the surrounding proportional text rather than the visually-larger result you get from matching point sizes. That is the detail that makes it read as jewelry rather than as a foreign object.
 
-Where it is thinner: no copy affordance (compose **CopyButton** beside it), no truncation for long values (`white-space: nowrap` means a long path overflows), and no block variant.
+Where it is thinner: no copy affordance (compose **CopyButton** beside it), no truncation for long values (it stays on one line unless `@wrap` is set, so a long path overflows), and no block variant.
 
 ## Accessibility
 
@@ -43,14 +49,16 @@ Notes and gaps:
 
 - **`<code>` semantics are announced inconsistently.** Some screen readers say "code" before the content, some enter a verbatim/character-by-character mode, and most say nothing. That is a property of `<code>`, not of this component, and it is generally the right trade — the element is the honest markup for a machine value.
 - **Long or opaque values are hostile to speech.** A UUID or a hash announced character by character is unusable, and announced as a word is meaningless. If a Token holds something a screen-reader user might need to transcribe, pair it with a **CopyButton** — that is the accessible affordance, not the text.
-- **`white-space: nowrap`** means a long value overflows its container rather than wrapping, which can push a card horizontally and fail **WCAG 1.4.10 Reflow** at 320px. This is the most likely practical problem: paths and URLs are exactly what people put in Tokens.
-- **Contrast.** Ink is `color-mix(--foreground 26%, hue)` on an **8%** hue fill — so the fill is nearly `--card` and the ink is nearly the hue. That is a better-behaved combination than **Chip**'s, but the text is `--text-body - 3.5px` (≈11.5px) and a pale `@hue` will produce pale ink on white. Check any custom hue at that size.
+- **`white-space: nowrap`** is the default, so a long value overflows its container rather than wrapping, which can push a card horizontally and fail **WCAG 1.4.10 Reflow** at 320px. This is the most likely practical problem: paths and URLs are exactly what people put in Tokens. Set `@wrap` wherever the value can be long.
+- **Contrast.** Ink is `color-mix(--foreground 26%, hue)` on an **8%** hue fill — so the fill is nearly `--card` and the ink is nearly the hue. That is a better-behaved combination than **Chip**'s, but the text is `--text-body - 3.5px` (≈11.5px), or smaller at `@size='xs'`, and a pale `@hue` will produce pale ink on white. Check any custom hue at the size it is used.
 - **The hue carries no meaning** and there is no non-colour channel, so do not use `@hue` to encode state — use two components, or add text.
 - Nothing is focusable, correctly.
 
 ## Theming
 
-`--pretui-token-hue` (per instance, defaulting to `--pretui-primary-ink` → `--primary`), `--card` (mix base), `--foreground` (mixed into ink), `--border` (mixed into the hairline), `--font-mono`, `--text-body` (the size is derived from it), `--pretui-shadow-hairline` semantics via `box-shadow`.
+`--pretui-token-hue` (per instance, defaulting to `--pretui-primary-ink` → `--primary`), `--card` (mix base), `--foreground` (mixed into ink), `--border` (mixed into the hairline), `--font-mono`, `--pretui-token-font-size` (an exact size; unset, the size is derived from `--text-body`), `--pretui-size-*` / `--text-ui-*` (the `@size` steps), `--pretui-shadow-hairline` semantics via `box-shadow`.
+
+Both `--pretui-token-hue` and `--pretui-token-font-size` can be set on the Token, through a class or `style`, or on any ancestor.
 
 The 8% / 26% / 30% mix ratios, the 4px radius, 5px padding and `0.35ch` margins are fixed — unlike **Chip**, whose mixes are tokenised. A season wanting quieter or louder tokens must change `--pretui-primary-ink`, which is the only lever.
 
