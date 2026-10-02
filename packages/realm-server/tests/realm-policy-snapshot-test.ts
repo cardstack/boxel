@@ -32,6 +32,7 @@ import {
   realmConfigCardJSON,
   runTestRealmServerWithRealms,
   setupDB,
+  setupTestDatabaseTemplate,
 } from './helpers/index.ts';
 import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
 
@@ -302,21 +303,34 @@ module(basename(import.meta.filename), function (hooks) {
     org = result.realms.find((realm) => realm.url === ORG)!;
   }
 
+  async function stop() {
+    setPolicySnapshotReadSink(undefined);
+    for (let realm of [education, org]) {
+      realm.__testOnlyClearCaches();
+      realm.unsubscribe();
+    }
+    await closeServer(server);
+    resetCatalogRealms();
+  }
+
+  // Every realm `start` brings up is indexed once, into a template database
+  // each test starts from, rather than from scratch before each test.
+  let templateDatabase = setupTestDatabaseTemplate(hooks, {
+    key: basename(import.meta.filename),
+    build: async (args) => {
+      await start(args);
+      return stop;
+    },
+  });
+
   setupDB(hooks, {
+    templateDatabase,
     beforeEach: async (dbAdapter, publisher, runner) => {
       await start({ dbAdapter, publisher, runner });
       reads = [];
       setPolicySnapshotReadSink((event) => reads.push(event));
     },
-    afterEach: async () => {
-      setPolicySnapshotReadSink(undefined);
-      for (let realm of [education, org]) {
-        realm.__testOnlyClearCaches();
-        realm.unsubscribe();
-      }
-      await closeServer(server);
-      resetCatalogRealms();
-    },
+    afterEach: stop,
   });
 
   function bearer(

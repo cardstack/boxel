@@ -28,6 +28,7 @@ import {
   realmConfigCardJSON,
   runTestRealmServerWithRealms,
   setupDB,
+  setupTestDatabaseTemplate,
 } from './helpers/index.ts';
 import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
 
@@ -213,16 +214,29 @@ module(basename(import.meta.filename), function (hooks) {
     testRealm = result.realms.find((realm) => realm.url === REALM_URL)!;
   }
 
+  async function stop() {
+    testRealm.__testOnlyClearCaches();
+    testRealm.unsubscribe();
+    await closeServer(server);
+    resetCatalogRealms();
+  }
+
+  // Every realm `start` brings up is indexed once, into a template database
+  // each test starts from, rather than from scratch before each test.
+  let templateDatabase = setupTestDatabaseTemplate(hooks, {
+    key: basename(import.meta.filename),
+    build: async (args) => {
+      await start(args);
+      return stop;
+    },
+  });
+
   setupDB(hooks, {
+    templateDatabase,
     beforeEach: async (dbAdapter, publisher, runner) => {
       await start({ dbAdapter, publisher, runner });
     },
-    afterEach: async () => {
-      testRealm.__testOnlyClearCaches();
-      testRealm.unsubscribe();
-      await closeServer(server);
-      resetCatalogRealms();
-    },
+    afterEach: stop,
   });
 
   function bearer(
