@@ -186,9 +186,14 @@ class TableOfContentsUsage extends Component {
           @description='Fires with the id whenever the active section changes, from a click or from the observer.'
           @hideControls={{true}}
         />
+        <Args.Action
+          @name='onSelect'
+          @description='Button mode. Pass it and every row is a button type=button with no href; a click calls it with (id, event) and the component does no scrolling, so a caller whose sections sit in its own scroll panel scrolls from event.currentTarget. Turn @spy off when the ids are not DOM ids.'
+          @hideControls={{true}}
+        />
         <Args.Yield
           @name=':item'
-          @description='Replaces the link text. Receives (item, active) so a caller can render a count, an icon, or a progress dot beside the label.'
+          @description='Replaces the row text. Receives (item, active, index) so a caller can render a count, an icon, a progress dot, or a step number beside the label.'
           @hideControls={{true}}
         />
       </:api>

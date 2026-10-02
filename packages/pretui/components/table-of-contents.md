@@ -8,15 +8,20 @@ The "On this page" sidebar: a list of a document's sections that follows the rea
 @items: { id, label, level? }[]   (required, in document order)
 @label? ('On this page')
 @activeId? / @defaultActiveId? / @onActiveChange?(id)
+@onSelect?(id, event)   (button mode)
 @spy? (default true)
 @band? (default 38)
-<:item as |item, active|>
+<:item as |item, active, index|>
 Element: HTMLElement (a <nav>)
 ```
 
 **`@band` is the read band, as a percentage of the viewport.** A heading becomes active once it reaches the top 38% of the scroll container. That is the parameter every scroll-spy has and almost none exposes: too small and headings activate only when they touch the very top, too large and the active item runs ahead of what you are reading. Clamped to 5–90.
 
 **`@items[].id` is a real DOM id** and becomes the link's `href` fragment — so the links work with JavaScript off, and the browser's native fragment navigation does the scrolling.
+
+**`@onSelect` is button mode.** Pass it and every row is a `<button type="button">` with no `href`. A click calls `@onSelect(id, event)` with the click event, and the component does no scrolling, so the caller owns it. Use it when the sections live in the caller's own scroll container and fragment navigation would scroll the wrong thing, such as an edit form inside a panel: the caller finds its root from `event.currentTarget` and calls `scrollIntoView` on the section. The ids then only have to mean something to the caller. `@onActiveChange`, `@activeId`, the marker and `aria-current` work the same in both modes. The spy still looks up each id as a DOM id, so pass `@spy={{false}}` when the ids name something else, or when the caller drives `@activeId` itself.
+
+**`<:item>` gets the row's 0-based position** as its third argument, for a numbered rail ("01", "02") without the caller indexing `@items` itself.
 
 Two things deliberately dropped from the docs-site originals: **nested collapsible sub-lists** (an accordion in a table of contents hides the thing the reader came for; levels indent instead), and **scroll-into-view on activation** (that is the caller's `scroll-behavior`, not the component's to seize).
 
@@ -44,13 +49,14 @@ What is right, and two details are better than most implementations:
 - **`role="list"` is set explicitly on the `<ol>`, and it is not redundant** — `list-style: none` strips list semantics in Safari/VoiceOver, so an unstyled list silently stops being announced as a list. The source calls this out. This is a real bug that most kits ship.
 - **The marker is `aria-hidden`** — it is chrome, and the `aria-current` carries the meaning.
 - Links are ordinary tab stops with no roving tabindex, which is correct: a TOC is navigation, not a composite widget.
+- **Button mode uses real buttons.** Rows are `<button type="button">`, so Enter and Space activate them and a TOC inside a `<form>` never submits it. They keep the same `<nav>`, list and `aria-current="location"`. A button is the honest element there: with no `href` the row does not navigate, it runs the caller's code.
 
 Gaps:
 
 - **The active change is not announced.** As the reader scrolls, `aria-current` moves silently. That is arguably right (announcing on every scroll would be intolerable), but it means a screen-reader user reading the body has no signal from the TOC at all — they would have to navigate back to it.
 - **`@level` indents but carries no semantics.** A level-3 item is visually nested under a level-2 one and is announced as a sibling. `aria-level` on the list items, or real nesting, would convey the document's structure.
 - **The link targets must actually exist.** `href="#id"` pointing at a missing element silently does nothing, and nothing validates it.
-- **Fragment navigation moves focus** to the target element only if it is focusable or has `tabindex="-1"` — a plain `<h2>` receives *scroll* but not *focus* in several browsers, so a keyboard user clicking a TOC link may find focus still in the TOC. Adding `tabindex="-1"` to headings at the call site is the fix.
+- **Fragment navigation moves focus** to the target element only if it is focusable or has `tabindex="-1"` — a plain `<h2>` receives _scroll_ but not _focus_ in several browsers, so a keyboard user clicking a TOC link may find focus still in the TOC. Adding `tabindex="-1"` to headings at the call site is the fix. In button mode focus always stays on the button; a caller that wants it to follow should focus the section after scrolling.
 - **Target size**: TOC links are small text with tight vertical rhythm, likely below WCAG **2.5.8**'s 24×24 minimum.
 
 ## Theming

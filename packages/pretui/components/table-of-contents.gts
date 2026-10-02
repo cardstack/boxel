@@ -24,9 +24,17 @@ import { modifier } from 'ember-modifier';
 // accordion in a TOC hides the thing the reader came for; levels indent
 // instead), and scroll-into-view on activation (that is the caller's
 // scroll-behavior, not ours to seize).
+//
+// Two row modes. Links (the default) are `<a href="#id">`, so the browser's
+// fragment navigation scrolls the page. Passing @onSelect turns every row into
+// a `<button type="button">` with no href and hands the caller the id and the
+// click event, so a caller whose sections live in its own scrolling panel (an
+// edit form, a split view) does the scrolling itself, starting from
+// `event.currentTarget`.
 
 export interface TocItem {
-  /** the target element's DOM id — becomes the link's href fragment */
+  /** the target element's DOM id — becomes the link's href fragment and
+   * what the spy observes; in button mode it is whatever key @onSelect needs */
   id: string;
   /** link text; override the rendering with the <:item> block */
   label: string;
@@ -53,6 +61,10 @@ export interface TableOfContentsSignature {
     /** fires with the id whenever the active section changes — from a click
      * or from the observer */
     onActiveChange?: (id: string) => void;
+    /** button mode: rows render as `<button type="button">` with no href, and
+     * a click calls this with the id and the click event. The component never
+     * scrolls; the caller does, typically from `event.currentTarget`. */
+    onSelect?: (id: string, event: Event) => void;
     /** watch the document and follow the reader's scroll (default true) */
     spy?: boolean;
     /** how far down the viewport a heading must reach before it becomes
@@ -60,8 +72,9 @@ export interface TableOfContentsSignature {
     band?: number;
   };
   Blocks: {
-    /** replaces the link text; receives the item and whether it is active */
-    item?: [item: TocItem, active: boolean];
+    /** replaces the row text; receives the item, whether it is active, and
+     * its 0-based position in @items */
+    item?: [item: TocItem, active: boolean, index: number];
   };
   Element: HTMLElement;
 }
@@ -116,8 +129,12 @@ export class TableOfContents extends Component<TableOfContentsSignature> {
     }
     this.args.onActiveChange?.(id);
   }
-  activate = (id: string, _event: Event) => {
+  get buttons(): boolean {
+    return typeof this.args.onSelect === 'function';
+  }
+  activate = (id: string, event: Event) => {
     this.setActive(id);
+    this.args.onSelect?.(id, event);
   };
   private handleSpy = (id: string) => {
     this.setActive(id);
@@ -219,22 +236,39 @@ export class TableOfContents extends Component<TableOfContentsSignature> {
         {{! role='list' is not redundant: list-style:none strips list
             semantics in Safari/VoiceOver, and the lint rule allows ol+list }}
         <ol class='pretui-toc-list' role='list'>
-          {{#each this.rows key='item.id' as |row|}}
+          {{#each this.rows key='item.id' as |row index|}}
             <li class='pretui-toc-row' style={{row.style}}>
-              <a
-                class='pretui-toc-link'
-                href={{this.hrefFor row}}
-                data-toc-id={{row.item.id}}
-                data-active={{if (this.isActive row) 'true'}}
-                aria-current={{if (this.isActive row) 'location'}}
-                {{on 'click' (fn this.activate row.item.id)}}
-              >
-                {{#if (has-block 'item')}}
-                  {{yield row.item (this.isActive row) to='item'}}
-                {{else}}
-                  {{row.item.label}}
-                {{/if}}
-              </a>
+              {{#if this.buttons}}
+                <button
+                  type='button'
+                  class='pretui-toc-link'
+                  data-toc-id={{row.item.id}}
+                  data-active={{if (this.isActive row) 'true'}}
+                  aria-current={{if (this.isActive row) 'location'}}
+                  {{on 'click' (fn this.activate row.item.id)}}
+                >
+                  {{#if (has-block 'item')}}
+                    {{yield row.item (this.isActive row) index to='item'}}
+                  {{else}}
+                    {{row.item.label}}
+                  {{/if}}
+                </button>
+              {{else}}
+                <a
+                  class='pretui-toc-link'
+                  href={{this.hrefFor row}}
+                  data-toc-id={{row.item.id}}
+                  data-active={{if (this.isActive row) 'true'}}
+                  aria-current={{if (this.isActive row) 'location'}}
+                  {{on 'click' (fn this.activate row.item.id)}}
+                >
+                  {{#if (has-block 'item')}}
+                    {{yield row.item (this.isActive row) index to='item'}}
+                  {{else}}
+                    {{row.item.label}}
+                  {{/if}}
+                </a>
+              {{/if}}
             </li>
           {{/each}}
         </ol>
@@ -296,6 +330,15 @@ export class TableOfContents extends Component<TableOfContentsSignature> {
           text-overflow: ellipsis;
           white-space: nowrap;
           transition: color 140ms var(--pretui-ease-snap, ease);
+        }
+        /* button mode: the same row, without the button's own chrome */
+        button.pretui-toc-link {
+          width: 100%;
+          border: 0;
+          background: transparent;
+          font: inherit;
+          text-align: start;
+          cursor: pointer;
         }
         .pretui-toc-link:hover {
           color: var(--foreground);

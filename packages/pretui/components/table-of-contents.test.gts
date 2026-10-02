@@ -2,8 +2,9 @@
 // scroll spy is passed `@spy={{false}}` and would be inert anyway: these
 // tests render no elements carrying the item ids, so `sectionSpy` returns
 // before constructing its IntersectionObserver. Asserted: the nav semantics,
-// active-state routing, the controlled/uncontrolled split, and the travelling
-// marker's inline geometry (offsetTop/offsetHeight are real here). A spy test
+// active-state routing, the controlled/uncontrolled split, button mode
+// (@onSelect: real buttons, the id and the click event handed back), and the
+// travelling marker's inline geometry (offsetTop/offsetHeight are real here). A spy test
 // that renders the target headings is the open follow-up.
 //
 // Run with `boxel test`; deployment leaves `*.test.gts` off the realm.
@@ -29,6 +30,9 @@ function nav(): HTMLElement {
 function links(): HTMLAnchorElement[] {
   return Array.from(nav().querySelectorAll('.pretui-toc-link')) as HTMLAnchorElement[];
 }
+function buttons(): HTMLButtonElement[] {
+  return Array.from(nav().querySelectorAll('button.pretui-toc-link')) as HTMLButtonElement[];
+}
 function marker(): string[] {
   let s = (nav().querySelector('.pretui-toc-track') as HTMLElement).style;
   return ['--pretui-toc-marker-opacity', '--pretui-toc-marker-top', '--pretui-toc-marker-height'].map((p) => s.getPropertyValue(p));
@@ -46,6 +50,7 @@ module('Pretui | components/table-of-contents', function (hooks) {
     assert.strictEqual(nav().getAttribute('aria-label'), 'On this page');
     assert.strictEqual(nav().querySelector('ol')?.getAttribute('role'), 'list', 'list-style:none strips list semantics in VoiceOver; the role restores them');
     assert.deepEqual(links().map((l) => l.getAttribute('href')), ['#intro', '#cupping', '#storage', '#price'], 'real fragment links — they work with no JS at all');
+    assert.deepEqual(links().map((l) => l.tagName), ['A', 'A', 'A', 'A'], 'links are the default; no @onSelect, no buttons');
     assert.deepEqual(
       Array.from(nav().querySelectorAll('.pretui-toc-row')).map((r) => r.getAttribute('style')),
       ['--_level: 1', '--_level: 2', '--_level: 2', '--_level: 1'],
@@ -92,6 +97,78 @@ module('Pretui | components/table-of-contents', function (hooks) {
     assert.deepEqual(
       Array.from(nav().querySelectorAll('[data-test-custom]')).slice(0, 2).map((e) => e.textContent),
       ['Introduction ●', 'Cupping notes'],
+    );
+  });
+
+  test('@onSelect turns the rows into buttons that keep the list and the current marker', async function (assert) {
+    const select = () => {};
+    await render(<template><TableOfContents @items={{ITEMS}} @spy={{false}} @onSelect={{select}} /></template>);
+    assert.strictEqual(nav().tagName, 'NAV', 'still a named nav landmark');
+    assert.strictEqual(nav().querySelector('ol')?.getAttribute('role'), 'list');
+    assert.strictEqual(buttons().length, 4, 'every row is a button');
+    assert.strictEqual(nav().querySelectorAll('a').length, 0, 'and none is a link');
+    assert.deepEqual(buttons().map((b) => b.getAttribute('type')), ['button', 'button', 'button', 'button'], 'type=button, so a TOC inside a form never submits it');
+    assert.true(buttons().every((b) => !b.hasAttribute('href')), 'no href: the caller owns scrolling');
+    assert.deepEqual(
+      Array.from(nav().querySelectorAll('.pretui-toc-row')).map((r) => r.getAttribute('style')),
+      ['--_level: 1', '--_level: 2', '--_level: 2', '--_level: 1'],
+      'levels indent the same way',
+    );
+    assert.strictEqual(active(), 'intro', 'aria-current="location" marks the first row');
+    assert.deepEqual(marker(), ['1', `${buttons()[0]?.offsetTop}px`, `${buttons()[0]?.offsetHeight}px`], 'the marker parks on the first button');
+  });
+
+  test('a button click hands back the id and the click event, and moves the current row', async function (assert) {
+    let selected: { id: string; type: string; currentTarget: EventTarget | null }[] = [];
+    let changed: string[] = [];
+    const select = (id: string, event: Event) => selected.push({ id, type: event.type, currentTarget: event.currentTarget });
+    const record = (id: string) => changed.push(id);
+    await render(<template><TableOfContents @items={{ITEMS}} @spy={{false}} @onSelect={{select}} @onActiveChange={{record}} /></template>);
+    let hashBefore = window.location.hash;
+    let target = buttons()[2] as HTMLButtonElement;
+    await click(target);
+    assert.strictEqual(selected.length, 1);
+    assert.strictEqual(selected[0]?.id, 'storage');
+    assert.strictEqual(selected[0]?.type, 'click', 'the real click event');
+    assert.strictEqual(selected[0]?.currentTarget, target, 'its currentTarget is the button, so the caller can find its own scroll root');
+    assert.deepEqual(changed, ['storage'], '@onActiveChange still reports');
+    assert.strictEqual(active(), 'storage');
+    assert.deepEqual(marker(), ['1', `${target.offsetTop}px`, `${target.offsetHeight}px`], 'the marker travels to the clicked button');
+    assert.strictEqual(window.location.hash, hashBefore, 'no fragment navigation');
+  });
+
+  test('a controlled @activeId in button mode holds still and reports the request', async function (assert) {
+    let selected: string[] = [];
+    const select = (id: string) => selected.push(id);
+    await render(<template><TableOfContents @items={{ITEMS}} @spy={{false}} @activeId='cupping' @onSelect={{select}} /></template>);
+    await click(buttons()[3] as HTMLButtonElement);
+    assert.strictEqual(active(), 'cupping', 'the owner decides');
+    assert.deepEqual(selected, ['price']);
+  });
+
+  test('the item block gets each row’s position, in both modes', async function (assert) {
+    const select = () => {};
+    await render(
+      <template>
+        <TableOfContents @items={{ITEMS}} @spy={{false}} @onSelect={{select}}>
+          <:item as |item isActive index|><span data-test-numbered>{{index}} {{item.label}}{{if isActive ' ●'}}</span></:item>
+        </TableOfContents>
+      </template>,
+    );
+    assert.deepEqual(
+      Array.from(nav().querySelectorAll('button [data-test-numbered]')).map((e) => e.textContent),
+      ['0 Introduction ●', '1 Cupping notes', '2 Storage', '3 Pricing'],
+    );
+    await render(
+      <template>
+        <TableOfContents @items={{ITEMS}} @spy={{false}}>
+          <:item as |item isActive index|><span data-test-numbered>{{index}}:{{item.id}}{{if isActive ' ●'}}</span></:item>
+        </TableOfContents>
+      </template>,
+    );
+    assert.deepEqual(
+      Array.from(nav().querySelectorAll('a [data-test-numbered]')).map((e) => e.textContent),
+      ['0:intro ●', '1:cupping', '2:storage', '3:price'],
     );
   });
 });
