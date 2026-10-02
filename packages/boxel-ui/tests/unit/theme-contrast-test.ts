@@ -28,6 +28,12 @@ const INK_HUES = [
 ];
 const INK_SURFACES = ['background', 'card', 'canvas'];
 const TARGET_APCA_LC = 60;
+// Decoration (an aria-hidden glyph) has no WCAG contrast requirement, so it
+// keeps the hue's fill rather than its ink. It still has to stay visible:
+// Lc 15 is APCA's floor for non-text meant to be noticed at all.
+const DECORATIVE_HUES = ['attention'];
+const DECORATIVE_SURFACES = ['background', 'card', 'popover'];
+const TARGET_DECORATIVE_LC = 15;
 
 // APCA-W3 0.1.9 lightness contrast; the sign only encodes polarity
 function apcaContrast(text: RGB, background: RGB): number {
@@ -93,6 +99,20 @@ module('Unit | theme contrast', function () {
         for (const hue of INK_HUES) {
           for (const surface of INK_SURFACES) {
             check(surface, `${hue}-ink`);
+          }
+        }
+        for (const hue of DECORATIVE_HUES) {
+          for (const surface of DECORATIVE_SURFACES) {
+            const lc = Math.abs(
+              apcaContrast(
+                resolveColor(scope, hue),
+                resolveColor(scope, surface),
+              ),
+            );
+            assert.true(
+              lc >= TARGET_DECORATIVE_LC,
+              `decorative --${hue} on --${surface}: APCA Lc ${lc.toFixed(1)}`,
+            );
           }
         }
       } finally {
