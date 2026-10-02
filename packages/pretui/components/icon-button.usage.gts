@@ -1,6 +1,7 @@
 // Pretui — IconButton usage page.
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
+import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { FreestyleUsage } from './freestyle-usage';
 import { IconButton } from './icon-button';
 import type { ButtonVariant } from './button';
@@ -10,6 +11,16 @@ import type { PretuiSize } from '../pretui-primitives';
 const ICON_VARIANTS = ['primary', 'secondary', 'ghost', 'destructive'];
 const SIZES = [...PRETUI_SIZES];
 
+const PlusIcon: TemplateOnlyComponent<{ Element: SVGSVGElement }> = <template>
+  <svg viewBox='0 0 14 14' ...attributes><path
+      d='M7 2v10M2 7h10'
+      fill='none'
+      stroke='currentColor'
+      stroke-width='1.5'
+      stroke-linecap='round'
+    /></svg>
+</template>;
+
 // ── IconButton ← icon-button/usage.gts ───────────────────────────────────
 // Dropped knobs: @round (use @shape='pill'), @class (pass class directly).
 // @size takes Pret UI's scale rather than boxel-ui's fixed heights.
@@ -18,7 +29,7 @@ export class IconButtonUsage extends Component {
   @tracked labelText = 'Add item';
   @tracked variant = 'secondary';
   @tracked size = 'm';
-  @tracked pressed = false;
+  @tracked pressed: boolean | undefined;
   @tracked busy = false;
   @tracked disabled = false;
   setLabel = (v: string) => (this.labelText = v);
@@ -33,16 +44,13 @@ export class IconButtonUsage extends Component {
   get sizeVal() {
     return this.size as PretuiSize;
   }
-  get pressedVal() {
-    return this.pressed || undefined;
-  }
   get usage() {
     let bits = [`@label='${this.labelText}'`, `@variant='${this.variant}'`];
     if (this.size !== 'm') bits.push(`@size='${this.size}'`);
-    if (this.pressed) bits.push('@pressed={{true}}');
+    if (this.pressed !== undefined) bits.push(`@pressed={{${this.pressed}}}`);
     if (this.busy) bits.push('@busy={{true}}');
     if (this.disabled) bits.push('@disabled={{true}}');
-    return `<IconButton ${bits.join(' ')}>…icon svg…</IconButton>`;
+    return `<IconButton ${bits.join(' ')} @icon={{PlusIcon}} />`;
   }
   <template>
     <FreestyleUsage
@@ -55,18 +63,11 @@ export class IconButtonUsage extends Component {
           @label={{this.labelText}}
           @variant={{this.variantVal}}
           @size={{this.sizeVal}}
-          @pressed={{this.pressedVal}}
+          @pressed={{this.pressed}}
           @busy={{this.busy}}
           @disabled={{this.disabled}}
-        >
-          <svg width='14' height='14' viewBox='0 0 14 14'><path
-              d='M7 2v10M2 7h10'
-              fill='none'
-              stroke='currentColor'
-              stroke-width='1.5'
-              stroke-linecap='round'
-            /></svg>
-        </IconButton>
+          @icon={{PlusIcon}}
+        />
       </:example>
       <:api as |Args|>
         <Args.String

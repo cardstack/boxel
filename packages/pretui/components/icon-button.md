@@ -7,7 +7,7 @@ A square **Button** carrying an icon instead of text, with a mandatory label. Us
 ```
 @label: string   (required)
 @icon?: ComponentLike<{ Element: SVGSVGElement }>   (rendered before any block content)
-@width?, @height?: string | number   (the @icon's size; default follows @size: 12 / 14 / 16 / 18 / 20 px)
+@width?, @height?: string | number   (the @icon's size; default follows @size: 10 / 12 / 14 / 16 / 18 px)
 @variant?: ButtonVariant   (default 'secondary'; the same spellings Button accepts)
 @tone?, @appearance?   (forwarded to Button; they override @variant's axes)
 @size?: 'xs' | 's' | 'm' | 'l' | 'xl'   (default 'm', forwarded to Button)
@@ -53,7 +53,7 @@ What is right:
 
 - `aria-label={{@label}}` gives the accessible name, and it is required.
 - **The face is `aria-hidden`.** `aria-label` already names the button, so an icon that emits its own `<title>`, or a text glyph such as `✕`, is not read a second time.
-- **`@pressed` sets `aria-pressed`** for a toggle (pin, favorite, bold). Per APG, a toggle's label must not change with its state, so `@label` stays fixed and `aria-pressed` carries the state. A pressed button takes Button's filled surface, and a forced-colors `Highlight` edge. An `accent` appearance has no quieter step to show it, so a toggle should use another appearance.
+- **`@pressed` sets `aria-pressed`** for a toggle (pin, favorite, bold). Per APG, a toggle's label must not change with its state, so `@label` stays fixed and `aria-pressed` carries the state. A pressed button takes a tint one step stronger than the `filled` appearance's, so the state shows on `outlined`, `plain` and `filled` alike, plus a forced-colors `Highlight` edge. An `accent` appearance has no stronger step to show it, so a toggle should use another appearance.
 - **`@busy` keeps focus** (Button's `aria-disabled` treatment), and `@busyLabel` joins the accessible name, because `aria-label` hides Button's own busy text from it.
 
 Gaps and cautions:

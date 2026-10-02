@@ -16,11 +16,11 @@ export type IconButtonIcon = ComponentLike<{ Element: SVGSVGElement }>;
 // Glyph size per @size, set as width/height attributes rather than CSS so the
 // icon has an intrinsic size before any stylesheet applies.
 const ICON_PX: Record<PretuiSize, number> = {
-  xs: 12,
-  s: 14,
-  m: 16,
-  l: 18,
-  xl: 20,
+  xs: 10,
+  s: 12,
+  m: 14,
+  l: 16,
+  xl: 18,
 };
 export function iconSizeFor(size: PretuiSizeArg | undefined): number {
   return ICON_PX[resolveSize(size)];
@@ -126,17 +126,18 @@ export class IconButton extends Component<IconButtonSignature> {
           align-items: center;
           justify-content: center;
         }
-        /* pressed takes Button's filled surface; an accent fill has no
-           quieter step to show it, so toggles use another appearance */
+        /* pressed is a tint one step stronger than the filled appearance's,
+           so it reads on outlined, plain and filled alike; an accent fill has
+           no stronger step, so toggles use another appearance */
         .pretui-iconbtn[aria-pressed='true']:not([data-appearance='accent']) {
           --pretui-btn-surface: color-mix(
             in oklch,
-            var(--pretui-tone) 15%,
+            var(--pretui-tone) 28%,
             var(--background)
           );
           --pretui-btn-surface-hover: color-mix(
             in oklch,
-            var(--pretui-btn-tint) 22%,
+            var(--pretui-btn-tint) 34%,
             var(--background)
           );
         }

@@ -60,15 +60,15 @@ module('Pretui | components/icon-button', function (hooks) {
       </template>,
     );
     let icon = el('[data-test-default] [data-test-icon]');
-    assert.strictEqual(icon.getAttribute('width'), '16');
-    assert.strictEqual(icon.getAttribute('height'), '16');
+    assert.strictEqual(icon.getAttribute('width'), '14');
+    assert.strictEqual(icon.getAttribute('height'), '14');
     assert.ok(
       icon.closest('[aria-hidden="true"]'),
       "the icon's own <title> stays out of the name",
     );
     assert.strictEqual(
       el('[data-test-xl] [data-test-icon]').getAttribute('width'),
-      '20',
+      '18',
     );
     assert.strictEqual(
       el('[data-test-explicit] [data-test-icon]').getAttribute('width'),
