@@ -289,7 +289,7 @@ async function searchDecision(
 ): Promise<PairDecision> {
   let scope = await principalQueryScope(
     core,
-    { operation, types: [on] },
+    { operation, types: [on], advisory: true },
     who.searchPrincipal,
   );
   return {
