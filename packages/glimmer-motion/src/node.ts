@@ -46,12 +46,12 @@ import {
   type MotionConfigContext,
 } from './motion-config.gts';
 import {
-  applyParticipantArgs,
   closestParticipantHost,
   type MotionParticipant,
   type ParticipantArgs,
   type ParticipantHost,
 } from './participant.ts';
+import { applyParticipantArgs } from './participant-args.ts';
 import type { PopMeasurable, PresenceHandle } from './presence-types.ts';
 import { postRender } from './scheduler.ts';
 import { motionSpeed, onMotionSpeed, slowed } from './speed.ts';

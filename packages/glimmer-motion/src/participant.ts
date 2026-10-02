@@ -22,6 +22,8 @@
  */
 import type { VisualElement } from 'motion-dom';
 
+import { type ApplyArg, participantArgs } from './participant-args.ts';
+
 /** what a host sees of one {{motion}} element */
 export interface MotionParticipant {
   element?: Element;
@@ -90,10 +92,6 @@ export function closestParticipantHost(
  */
 export interface ParticipantArgs {}
 
-type ApplyArg = (element: Element, value: unknown) => void;
-
-const participantArgs = new Map<string, ApplyArg>();
-
 /** the args MotionNode consumes itself before any participant arg is applied */
 const reservedArgs = new Set(['id', 'presence', 'role']);
 
@@ -124,15 +122,4 @@ export function defineParticipantArg<K extends keyof ParticipantArgs & string>(
       participantArgs.delete(name);
     }
   };
-}
-
-/** the modifier's half of defineParticipantArg: split the defined args out of a pass's named args, applying each */
-export function applyParticipantArgs(
-  element: Element,
-  args: Record<string, unknown>,
-) {
-  for (const [name, apply] of participantArgs) {
-    apply(element, args[name]);
-    delete args[name];
-  }
 }
