@@ -2271,8 +2271,9 @@ module(basename(import.meta.filename), function () {
               'resize-observer-loop.gts': `
               import { CardDef, Component } from '@cardstack/base/card-api';
               import { modifier } from 'ember-modifier';
-              // each delivery grows the observed element, which queues another
-              // notification inside the same frame until it reaches 100px
+              // each delivery grows the element it observes, so the browser
+              // skips the re-notification for that frame, reports the loop
+              // notice, and delivers it on the next frame, until 100px
               const growOnResize = modifier((el) => {
                 let observer = new ResizeObserver(() => {
                   if (el.offsetHeight < 100) {
@@ -3287,8 +3288,10 @@ module(basename(import.meta.filename), function () {
           `ResizeObserver loop notice is not a render error, got: ${result.response.error?.error.message}`,
         );
         assert.ok(
-          /class="resize-loop/.test(result.response.isolatedHTML ?? ''),
-          'isolated HTML is captured',
+          /<div(?=[^>]*class="resize-loop)(?=[^>]*style="height:\s*\d+px)/.test(
+            result.response.isolatedHTML ?? '',
+          ),
+          `the observer resized its element before capture, got: ${result.response.isolatedHTML}`,
         );
         assert.false(
           result.pool.evicted,
