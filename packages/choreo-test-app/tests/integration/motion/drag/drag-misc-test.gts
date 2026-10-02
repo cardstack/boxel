@@ -19,6 +19,7 @@ import { layoutChange } from 'glimmer-motion/layout';
 import LayoutGroup from 'glimmer-motion/layout-group';
 import motion from 'glimmer-motion/motion';
 import Presence from 'glimmer-motion/presence';
+import { setupMotion } from 'glimmer-motion/test-support';
 import { motionValue, type PanInfo, transformValue } from 'motion-dom';
 import { module, test } from 'qunit';
 
@@ -106,6 +107,7 @@ module(
   'Integration | motion | cypress | Drag Input Propagation',
   function (hooks) {
     setupRenderingTest(hooks);
+    setupMotion(hooks);
     setupFixtureViewport(hooks);
 
     const atStart = (assert: Assert) =>
@@ -193,6 +195,7 @@ const Momentum = <template>
 
 module('Integration | motion | cypress | Drag Momentum', function (hooks) {
   setupRenderingTest(hooks);
+  setupMotion(hooks);
   setupFixtureViewport(hooks, { scroll: true });
 
   test('Fast flick after hold produces momentum', async function (assert) {
@@ -324,6 +327,7 @@ class FramerPage extends Component {
 
 module('Integration | motion | cypress | Nested Scroll/Page', function (hooks) {
   setupRenderingTest(hooks);
+  setupMotion(hooks);
   setupFixtureViewport(hooks);
 
   test('correctly positions children after dragging', async function (assert) {
@@ -405,6 +409,7 @@ module(
   'Integration | motion | cypress | Drag with rotated parent',
   function (hooks) {
     setupRenderingTest(hooks);
+    setupMotion(hooks);
     setupFixtureViewport(hooks);
 
     test('Element follows cursor when parent is rotated 180deg', async function (assert) {
@@ -433,6 +438,7 @@ module(
   'Integration | motion | cypress | Drag with scaled parent',
   function (hooks) {
     setupRenderingTest(hooks);
+    setupMotion(hooks);
     setupFixtureViewport(hooks);
 
     for (const scale of [0.5, 2]) {
@@ -499,6 +505,7 @@ for (const win of [false, true]) {
     `Integration | motion | cypress | Drag with ${win ? 'window' : 'element'} scroll during drag`,
     function (hooks) {
       setupRenderingTest(hooks);
+      setupMotion(hooks);
       setupFixtureViewport(hooks, { scroll: true });
       const scrollBy = (amount: number) => {
         if (win) {
@@ -629,6 +636,7 @@ module(
   'Integration | motion | cypress | Drag with ref constraints on absolute element after scroll',
   function (hooks) {
     setupRenderingTest(hooks);
+    setupMotion(hooks);
     setupFixtureViewport(hooks, { width: 1000, height: 800, scroll: true });
 
     test('Allows dragging to the visible bottom of the viewport after scroll', async function (assert) {
@@ -763,6 +771,7 @@ module(
   'Integration | motion | cypress | Drag Constraints Update on Element Resize',
   function (hooks) {
     setupRenderingTest(hooks);
+    setupMotion(hooks);
     setupFixtureViewport(hooks);
 
     test('Constrains drag correctly before resize', async function (assert) {
@@ -810,6 +819,7 @@ module(
   'Integration | motion | cypress | Drag Constraints Update on Imperative Resize',
   function (hooks) {
     setupRenderingTest(hooks);
+    setupMotion(hooks);
     setupFixtureViewport(hooks);
 
     test('Updates drag constraints when element grows via direct DOM mutation', async function (assert) {
@@ -887,6 +897,7 @@ module(
   'Integration | motion | cypress | drag + dragSnapToOrigin + AnimatePresence exit',
   function (hooks) {
     setupRenderingTest(hooks);
+    setupMotion(hooks);
     setupFixtureViewport(hooks);
 
     test('exits cleanly after a drag and re-enters without a stranded transform', async function (assert) {
@@ -1033,6 +1044,7 @@ module(
   'Integration | motion | cypress | drag + dragSnapToOrigin + layoutId horizontal swap',
   function (hooks) {
     setupRenderingTest(hooks);
+    setupMotion(hooks);
     setupFixtureViewport(hooks);
 
     test('does not strand the drag transform after a same-row swap', async function (assert) {
@@ -1211,6 +1223,7 @@ module(
   'Integration | motion | cypress | Drag layout reorder in StrictMode',
   function (hooks) {
     setupRenderingTest(hooks);
+    setupMotion(hooks);
     setupFixtureViewport(hooks);
     const F = "[data-testid='file-File1']";
 
@@ -1317,6 +1330,7 @@ module(
   'Integration | motion | cypress | snapToCursor with initial coordinates',
   function (hooks) {
     setupRenderingTest(hooks);
+    setupMotion(hooks);
     setupFixtureViewport(hooks);
 
     // cy.get().then(): measured once, no retry
@@ -1406,6 +1420,7 @@ module(
   'Integration | motion | cypress | Drag release before the next frame',
   function (hooks) {
     setupRenderingTest(hooks);
+    setupMotion(hooks);
     setupFixtureViewport(hooks);
 
     async function startDrag(assert: Assert) {

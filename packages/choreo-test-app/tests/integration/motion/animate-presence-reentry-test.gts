@@ -13,6 +13,7 @@ import { setupRenderingTest } from 'ember-qunit';
 import motion from 'glimmer-motion/motion';
 import Presence from 'glimmer-motion/presence';
 import type { PresenceHandle } from 'glimmer-motion/presence-types';
+import { setupMotion } from 'glimmer-motion/test-support';
 import type { PresenceContextProps } from 'motion-dom';
 import { MotionGlobalConfig } from 'motion-utils';
 import { module, test } from 'qunit';
@@ -55,6 +56,7 @@ module(
   'Integration | motion | AnimatePresence re-entry during exit',
   function (hooks) {
     setupRenderingTest(hooks);
+    setupMotion(hooks);
 
     hooks.beforeEach(function () {
       MotionGlobalConfig.instantAnimations = true;

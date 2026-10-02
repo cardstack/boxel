@@ -11,6 +11,7 @@ import { tracked } from '@glimmer/tracking';
 import { setupRenderingTest } from 'ember-qunit';
 import motion from 'glimmer-motion/motion';
 import Presence from 'glimmer-motion/presence';
+import { setupMotion } from 'glimmer-motion/test-support';
 import type { Transition } from 'motion-dom';
 import { module, test } from 'qunit';
 
@@ -24,6 +25,7 @@ const keyOf = (x: { key: string }) => x.key;
 
 module('Integration | motion | presence late child', function (hooks) {
   setupRenderingTest(hooks);
+  setupMotion(hooks);
 
   test('a motion element mounting inside a leaving child does not block its exit', async function (assert) {
     class App extends Component {
