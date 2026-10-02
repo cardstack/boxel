@@ -8,8 +8,9 @@ The "On this page" sidebar: a list of a document's sections that follows the rea
 @items: { id, label, level? }[]   (required, in document order)
 @label? ('On this page')
 @activeId? / @defaultActiveId? / @onActiveChange?(id)
-@onSelect?(id, event)   (button mode)
-@spy? (default true)
+@onSelect?(id, event)
+@links? (default true)
+@spy? (default @links)
 @band? (default 38)
 <:item as |item, active, index|>
 Element: HTMLElement (a <nav>)
@@ -19,7 +20,11 @@ Element: HTMLElement (a <nav>)
 
 **`@items[].id` is a real DOM id** and becomes the link's `href` fragment — so the links work with JavaScript off, and the browser's native fragment navigation does the scrolling.
 
-**`@onSelect` is button mode.** Pass it and every row is a `<button type="button">` with no `href`. A click calls `@onSelect(id, event)` with the click event, and the component does no scrolling, so the caller owns it. Use it when the sections live in the caller's own scroll container and fragment navigation would scroll the wrong thing, such as an edit form inside a panel: the caller finds its root from `event.currentTarget` and calls `scrollIntoView` on the section. The ids then only have to mean something to the caller. `@onActiveChange`, `@activeId`, the marker and `aria-current` work the same in both modes. The spy still looks up each id as a DOM id, so pass `@spy={{false}}` when the ids name something else, or when the caller drives `@activeId` itself.
+**`@onSelect` reports a click.** It fires with `(id, event)` when a row is clicked, and it never changes what renders: a link-mode caller can use it to close a mobile drawer and the fragment link still navigates. Like every other `@onSelect` in the kit, it only notifies.
+
+**`@links={{false}}` is button mode.** The kit renders a row with an `href` as a link and a row without one as a button (**Button**, **BottomNav**, **SidebarItem**), and here the `href` is the generated `#id`, so turning it off is the switch. Every row is then a `<button type="button">` with no `href`, and the component does no scrolling, so the caller owns it through `@onSelect`. Use it when the sections live in the caller's own scroll container and fragment navigation would scroll the wrong thing, such as an edit form inside a panel: the caller finds its root from `event.currentTarget` and calls `scrollIntoView` on the section. The ids then only have to mean something to the caller. `@onActiveChange`, `@activeId`, the marker and `aria-current` work the same in both modes.
+
+**`@spy` defaults to `@links`.** The spy looks up each id with `getElementById` across the whole document, which is right for fragment links and wrong for buttons, whose ids may be generic keys (`details`, `pricing`) that match an unrelated element elsewhere on the page. So it is on for links and off for buttons. A button-mode caller whose keys are real DOM ids in its own scroller can pass `@spy={{true}}`.
 
 **`<:item>` gets the row's 0-based position** as its third argument, for a numbered rail ("01", "02") without the caller indexing `@items` itself.
 

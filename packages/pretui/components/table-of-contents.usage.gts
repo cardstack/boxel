@@ -158,7 +158,7 @@ class TableOfContentsUsage extends Component {
           @name='spy'
           @value={{this.spy}}
           @defaultValue={{true}}
-          @description='Watch the document and follow the reader’s scroll. Turn it off to drive the active section entirely from @activeId.'
+          @description='Watch the document and follow the reader’s scroll. Defaults to @links: on for fragment links, off for buttons, whose ids need not be DOM ids. Turn it off to drive the active section entirely from @activeId.'
           @onInput={{this.setSpy}}
         />
         <Args.Number
@@ -186,9 +186,15 @@ class TableOfContentsUsage extends Component {
           @description='Fires with the id whenever the active section changes, from a click or from the observer.'
           @hideControls={{true}}
         />
+        <Args.Bool
+          @name='links'
+          @defaultValue={{true}}
+          @description='Rows are fragment links (a href="#id"). False renders them as button type=button with no href, and the component does no scrolling: a caller whose sections sit in its own scroll panel scrolls from the @onSelect event’s currentTarget. @spy then defaults off.'
+          @hideControls={{true}}
+        />
         <Args.Action
           @name='onSelect'
-          @description='Button mode. Pass it and every row is a button type=button with no href; a click calls it with (id, event) and the component does no scrolling, so a caller whose sections sit in its own scroll panel scrolls from event.currentTarget. Turn @spy off when the ids are not DOM ids.'
+          @description='Fires with (id, event) when a row is clicked, in either mode. It only reports: passing it never changes what renders, so link-mode rows keep their hrefs.'
           @hideControls={{true}}
         />
         <Args.Yield

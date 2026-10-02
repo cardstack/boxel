@@ -25,16 +25,19 @@ import { modifier } from 'ember-modifier';
 // instead), and scroll-into-view on activation (that is the caller's
 // scroll-behavior, not ours to seize).
 //
-// Two row modes. Links (the default) are `<a href="#id">`, so the browser's
-// fragment navigation scrolls the page. Passing @onSelect turns every row into
-// a `<button type="button">` with no href and hands the caller the id and the
-// click event, so a caller whose sections live in its own scrolling panel (an
-// edit form, a split view) does the scrolling itself, starting from
-// `event.currentTarget`.
+// Two row modes, chosen the way the rest of the kit chooses: a row with an
+// href is a link, a row without one is a button. Links (the default) are
+// `<a href="#id">`, so the browser's fragment navigation scrolls the page.
+// `@links={{false}}` drops the href and renders every row as a
+// `<button type="button">`, so a caller whose sections live in its own
+// scrolling panel (an edit form, a split view) does the scrolling itself from
+// the @onSelect event's `currentTarget`. @onSelect only reports the click, in
+// either mode; it never changes what renders.
 
 export interface TocItem {
   /** the target element's DOM id — becomes the link's href fragment and
-   * what the spy observes; in button mode it is whatever key @onSelect needs */
+   * what the spy observes; with `@links={{false}}` it is whatever key the
+   * caller needs */
   id: string;
   /** link text; override the rendering with the <:item> block */
   label: string;
@@ -61,11 +64,17 @@ export interface TableOfContentsSignature {
     /** fires with the id whenever the active section changes — from a click
      * or from the observer */
     onActiveChange?: (id: string) => void;
-    /** button mode: rows render as `<button type="button">` with no href, and
-     * a click calls this with the id and the click event. The component never
-     * scrolls; the caller does, typically from `event.currentTarget`. */
+    /** fires with the id and the click event when a row is clicked, in
+     * either mode; it reports, and never changes what renders */
     onSelect?: (id: string, event: Event) => void;
-    /** watch the document and follow the reader's scroll (default true) */
+    /** rows are `<a href="#id">` fragment links (default true). False renders
+     * them as `<button type="button">` with no href: the component never
+     * scrolls, and the caller does from the @onSelect event's
+     * `currentTarget`. */
+    links?: boolean;
+    /** watch the document and follow the reader's scroll. Defaults to
+     * @links: on for fragment links, off for buttons, whose ids need not be
+     * DOM ids and would otherwise match unrelated elements in the document */
     spy?: boolean;
     /** how far down the viewport a heading must reach before it becomes
      * active, as a percentage (default 38 — the top ~38% is the read band) */
@@ -114,8 +123,11 @@ export class TableOfContents extends Component<TableOfContentsSignature> {
       this.args.activeId ?? this.internalActive ?? this.args.items?.[0]?.id
     );
   }
+  get links(): boolean {
+    return this.args.links ?? true;
+  }
   get spy(): boolean {
-    return this.args.spy ?? true;
+    return this.args.spy ?? this.links;
   }
   get band(): number {
     return Math.min(90, Math.max(5, this.args.band ?? 38));
@@ -128,9 +140,6 @@ export class TableOfContents extends Component<TableOfContentsSignature> {
       this.internalActive = id;
     }
     this.args.onActiveChange?.(id);
-  }
-  get buttons(): boolean {
-    return typeof this.args.onSelect === 'function';
   }
   activate = (id: string, event: Event) => {
     this.setActive(id);
@@ -238,22 +247,7 @@ export class TableOfContents extends Component<TableOfContentsSignature> {
         <ol class='pretui-toc-list' role='list'>
           {{#each this.rows key='item.id' as |row index|}}
             <li class='pretui-toc-row' style={{row.style}}>
-              {{#if this.buttons}}
-                <button
-                  type='button'
-                  class='pretui-toc-link'
-                  data-toc-id={{row.item.id}}
-                  data-active={{if (this.isActive row) 'true'}}
-                  aria-current={{if (this.isActive row) 'location'}}
-                  {{on 'click' (fn this.activate row.item.id)}}
-                >
-                  {{#if (has-block 'item')}}
-                    {{yield row.item (this.isActive row) index to='item'}}
-                  {{else}}
-                    {{row.item.label}}
-                  {{/if}}
-                </button>
-              {{else}}
+              {{#if this.links}}
                 <a
                   class='pretui-toc-link'
                   href={{this.hrefFor row}}
@@ -268,6 +262,21 @@ export class TableOfContents extends Component<TableOfContentsSignature> {
                     {{row.item.label}}
                   {{/if}}
                 </a>
+              {{else}}
+                <button
+                  type='button'
+                  class='pretui-toc-link'
+                  data-toc-id={{row.item.id}}
+                  data-active={{if (this.isActive row) 'true'}}
+                  aria-current={{if (this.isActive row) 'location'}}
+                  {{on 'click' (fn this.activate row.item.id)}}
+                >
+                  {{#if (has-block 'item')}}
+                    {{yield row.item (this.isActive row) index to='item'}}
+                  {{else}}
+                    {{row.item.label}}
+                  {{/if}}
+                </button>
               {{/if}}
             </li>
           {{/each}}
