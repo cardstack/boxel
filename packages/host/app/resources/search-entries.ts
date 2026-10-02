@@ -27,6 +27,7 @@ import {
   resourceIdentity,
   ri,
   rri,
+  stringifyErrorForLog,
   wireFilterHasMatches,
   wireFilterTypeAnchors,
   RealmPaths,
@@ -866,8 +867,8 @@ export class SearchEntriesResource extends Resource<Args> {
     for (let [i, result] of results.entries()) {
       if (result.status === 'rejected') {
         this.#log.warn(
-          `could not load scoped stylesheet ${hrefs[i]}; results render unstyled`,
-          result.reason,
+          `could not load scoped stylesheet ${hrefs[i]}; results render ` +
+            `unstyled: ${stringifyErrorForLog(result.reason)}`,
         );
       }
     }
