@@ -60,14 +60,10 @@ const CAROUSEL_KEY_EXEMPT =
  * a template-level `{{on 'keydown'}}` on an element the linter sees as
  * non-interactive is rejected by `no-invalid-interactive`.
  *
- * **Fixed 2026-08-13.** This used to be installed on the TRACK, which is a
- * descendant of the element `scrollEdges` makes focusable — so the keydown
- * fired on the focused viewport and bubbled *upward*, past the listener,
- * every time. Tab to the carousel, press an arrow, and nothing but the
- * native scroll step happened, landing between two snap points: precisely
- * what the preventDefault below exists to stop. It now rides the carousel
- * ROOT, above the viewport, and guards `event.target` so a control inside a
- * slide keeps its own arrows.
+ * It rides the carousel ROOT, above the focusable viewport: keydown fires on
+ * the focused viewport and bubbles upward, so a listener on the track below
+ * it would never hear the keys. `event.target` is guarded so a control
+ * inside a slide keeps its own arrows.
  */
 const carouselKeys = modifier(
   (root: HTMLElement, [go]: [(delta: number | 'first' | 'last') => void]) => {
@@ -166,6 +162,10 @@ export class Carousel<T = unknown> extends Component<CarouselSignature<T>> {
    * to it. Every slide that scroll passes would otherwise read as the
    * reader moving; until it arrives, the requested index stands. */
   private pendingIndex: number | undefined;
+  /** The last index the carousel itself moved to or read back from the
+   * viewport. An `@index` that differs came from the parent, and the
+   * viewport follows it. */
+  private shownIndex: number | undefined;
 
   captureTrack = modifier((track: HTMLElement) => {
     // The Scroller's viewport is the element that scrolls; the track is its
@@ -192,6 +192,14 @@ export class Carousel<T = unknown> extends Component<CarouselSignature<T>> {
       viewport.removeEventListener('scrollend', onScroll);
       viewport.style.scrollSnapType = '';
     };
+  });
+
+  followIndex = modifier((_track: HTMLElement, [index]: [number]) => {
+    if (index === this.shownIndex) {
+      return;
+    }
+    this.shownIndex = index;
+    this.scrollToIndex(index);
   });
 
   get count(): number {
@@ -259,6 +267,7 @@ export class Carousel<T = unknown> extends Component<CarouselSignature<T>> {
     if (this.args.index === undefined) {
       this.internalIndex = target;
     }
+    this.shownIndex = target;
     this.args.onIndexChange?.(target);
     this.scrollToIndex(target);
   };
@@ -297,6 +306,7 @@ export class Carousel<T = unknown> extends Component<CarouselSignature<T>> {
     if (index === this.index) {
       return;
     }
+    this.shownIndex = index;
     if (this.args.index === undefined) {
       this.internalIndex = index;
     }
@@ -352,6 +362,7 @@ export class Carousel<T = unknown> extends Component<CarouselSignature<T>> {
           style={{this.trackStyle}}
           data-test-pretui-carousel-track
           {{this.captureTrack}}
+          {{this.followIndex this.index}}
         >
           {{#each this.slides key='index' as |slide|}}
             <div

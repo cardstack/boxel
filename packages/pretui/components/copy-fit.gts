@@ -11,6 +11,8 @@ import Component from '@glimmer/component';
 import { cssDeclaration, cssStyleFrom } from '../pretui-css';
 import { statusHue } from '../internal/ink';
 
+const or = (...values: unknown[]) => values.some(Boolean);
+
 export interface CopyFitSignature {
   Args: {
     title: string;
@@ -153,8 +155,8 @@ export class CopyFit extends Component<CopyFitSignature> {
             {{#if @eyebrow}}<span class='pretui-eyebrow pretui-fitted-eyebrow'>{{@eyebrow}}</span>{{/if}}
             <span class='pretui-fitted-title'>{{@title}}</span>
             {{#if @meta}}<span class='pretui-fitted-meta'>{{@meta}}</span>{{/if}}
-            {{#if this.hasFooter}}
-              <span class='pretui-fitted-footer'><span>{{@footerLeft}}</span><span>{{@footerRight}}</span></span>
+            {{#if (or this.hasFooter (has-block 'footerLeft') (has-block 'footerRight'))}}
+              <span class='pretui-fitted-footer'><span>{{#if (has-block 'footerLeft')}}{{yield to='footerLeft'}}{{else}}{{@footerLeft}}{{/if}}</span><span>{{#if (has-block 'footerRight')}}{{yield to='footerRight'}}{{else}}{{@footerRight}}{{/if}}</span></span>
             {{/if}}
           {{/if}}
         </div>

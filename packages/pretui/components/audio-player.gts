@@ -10,7 +10,10 @@ import type { MediaPlayerSignature } from './media-player';
 // art, title and artist are args with slot escape hatches, per Law 7.
 
 export interface AudioPlayerSignature {
-  Args: Omit<MediaPlayerSignature['Args'], 'kind' | 'poster' | 'aspectRatio'> & {
+  Args: Omit<
+    MediaPlayerSignature['Args'],
+    'kind' | 'poster' | 'placeholder' | 'thumbnails' | 'aspectRatio'
+  > & {
     /** Cover art URL. */
     cover?: string;
     /** Alt text for the cover. Empty (the default) marks it decorative,
@@ -69,6 +72,7 @@ export class AudioPlayer extends Component<AudioPlayerSignature> {
         @captionsDefault={{@captionsDefault}}
         @chrome={{@chrome}}
         @seekOffset={{@seekOffset}}
+        @autoHide={{@autoHide}}
         @loop={{@loop}}
         @muted={{@muted}}
         @preload={{@preload}}
