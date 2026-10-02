@@ -1,6 +1,7 @@
 // Pretui — Select: BoxelSelect (ember-power-select) behind Pretui's value API.
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
+import { modifier } from 'ember-modifier';
 import { BoxelSelect } from '@cardstack/boxel-ui/components';
 import { emit, firstDefined } from '../pretui-primitives';
 import type { ControlNotifyArgs } from '../pretui-primitives';
@@ -21,6 +22,12 @@ export interface SelectSignature {
     placeholder?: string;
     disabled?: boolean;
     controlId?: string;
+    /** accessible name for the trigger. The trigger is not a labelable
+     * element, so a `<label for={{controlId}}>` alone may not name it. */
+    label?: string;
+    /** id of an element that names the trigger; preferred over @label when
+     * a visible or visually hidden label already exists */
+    labelledBy?: string;
     /** alias — React Aria / Base UI spelling of @disabled */
     isDisabled?: boolean;
   };
@@ -58,6 +65,8 @@ interface PoweredSelectSignature {
     matchTriggerWidth?: boolean;
     renderInPlace?: boolean;
     dropdownClass?: string;
+    ariaLabel?: string;
+    ariaLabelledBy?: string;
   };
   Blocks: { default: [SelectOption] };
   Element: HTMLElement;
@@ -67,8 +76,30 @@ const PoweredSelect = BoxelSelect as unknown as new (
   args: PoweredSelectSignature['Args'],
 ) => Component<PoweredSelectSignature>;
 
+// The trigger is a role='button' div, which a <label for> does not name, so
+// a label pointing at @controlId is linked through aria-labelledby instead.
+const nameFromLabel = modifier(
+  (wrap: HTMLElement, [controlId, explicit]: [string | undefined, boolean]) => {
+    if (!controlId || explicit) {
+      return;
+    }
+    let trigger = wrap.querySelector<HTMLElement>(`[id="${CSS.escape(controlId)}"]`);
+    let label = document.querySelector<HTMLElement>(`label[for="${CSS.escape(controlId)}"]`);
+    if (!trigger || !label) {
+      return;
+    }
+    if (!label.id) {
+      label.id = `${controlId}-label`;
+    }
+    trigger.setAttribute('aria-labelledby', label.id);
+  },
+);
+
 export class Select extends Component<SelectSignature> {
   @tracked internal = this.args.defaultValue;
+  get explicitName(): boolean {
+    return this.args.label !== undefined || this.args.labelledBy !== undefined;
+  }
 
   get options(): SelectOption[] {
     return firstDefined(this.args.options, this.args.items) ?? [];
@@ -97,7 +128,12 @@ export class Select extends Component<SelectSignature> {
   };
 
   <template>
-    <div class='pretui-selectwrap' data-test-pretui-select ...attributes>
+    <div
+      class='pretui-selectwrap'
+      data-test-pretui-select
+      {{nameFromLabel @controlId this.explicitName}}
+      ...attributes
+    >
       {{! id lands on the power-select trigger (label[for] wiring). It
           overrides BoxelSelect's own guid id, which is safe here: that id
           only feeds its wormhole theme observer, skipped for renderInPlace. }}
@@ -114,6 +150,8 @@ export class Select extends Component<SelectSignature> {
         @matchTriggerWidth={{true}}
         @renderInPlace={{true}}
         @dropdownClass='pretui-select-dropdown'
+        @ariaLabel={{@label}}
+        @ariaLabelledBy={{@labelledBy}}
         as |option|
       >
         {{option.label}}

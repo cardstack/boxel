@@ -35,11 +35,6 @@
 // thing added is the morph, and it is added through ONE shared primitive
 // (`morphFrom`) rather than twice.
 //
-// Every component here lives in its own module under components/; this
-// module re-exports them so existing imports keep working.
-//
-// (the structure-morph group)
-
 // Pretui — shared motion helpers for the morphing components (morphFrom and friends).
 import { cancel, scheduleOnce } from '@ember/runloop';
 import { modifier } from 'ember-modifier';
