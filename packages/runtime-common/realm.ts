@@ -938,6 +938,10 @@ const READINESS_CHECK_PATH = '/_readiness-check';
 // path instead: for a data file or a card's document, whose bytes a
 // `readSource` grant reaches, and for nothing else they serve (see
 // `GRANTABLE_BYTES`).
+//
+// The hashed scoped-CSS serve consumes it too, and asks the gate nothing: a
+// stylesheet goes with the markup that references it, so every caller the
+// realm's policy judges is served it (see `#routeRequest`).
 const CONSUMES_COARSE_OUTCOME = { consumesCoarseOutcome: true } as const;
 // Marks the consumers that apply an archived realm's seal themselves, where
 // they would run what a caller the ACL declined outright asked for (see
@@ -7564,15 +7568,24 @@ export class Realm {
     // `_scoped-css/` prefix, not just the filename shape, so a realm file
     // whose path merely looks hashed isn't shadowed — `scopedCSSServingHref`
     // is the only producer of these hrefs and always roots them under the
-    // prefix. Inherits realm-read auth like capture serving; GET only for
-    // the same HEAD-oracle reason.
+    // prefix. GET only, for the same HEAD-oracle reason as capture serving.
+    //
+    // A stylesheet is part of the markup that references it, not code: the
+    // inline form carries the same bytes inside the href itself, and a search
+    // serves those hrefs to every caller it serves the row to. So in a realm
+    // that names a policy, the serve consumes the ACL's outcome and answers
+    // every authenticated caller the policy judges, not only the realm's
+    // readers. A realm with no policy serves no row to a caller who may not
+    // read it, and keeps the ACL's refusal. The lookup stays scoped to this
+    // realm's own `scoped_css` rows, so a hash names only a stylesheet this
+    // realm's index references.
     if (
       request.method === 'GET' &&
       localPath.startsWith(SCOPED_CSS_SERVING_PREFIX) &&
       isHashedScopedCSSRequest(localPath)
     ) {
       return {
-        consumesCoarseOutcome: false,
+        consumesCoarseOutcome: true,
         handle: () => this.serveHashedScopedCSS(request, requestContext),
       };
     }

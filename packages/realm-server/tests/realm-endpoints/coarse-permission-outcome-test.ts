@@ -103,6 +103,13 @@ const readProbes: Probe[] = [
     send: (r) =>
       r.get('/person-1.json').set('Accept', SupportedMimeType.CardSource),
   },
+  // A hash this realm never interned, so the serve's own answer is a 404.
+  {
+    label: 'GET a hashed scoped stylesheet',
+    consumes: true,
+    send: (r) =>
+      r.get(`/_scoped-css/person.gts.md5-${'0'.repeat(32)}.glimmer-scoped.css`),
+  },
   {
     label: 'GET raw file',
     consumes: true,
