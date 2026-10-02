@@ -14,7 +14,7 @@ Each guide contains at least 300 words of explanatory prose, approximately three
 
 The inventory reflects the checked-in implementation. Historical design notes can include proposals or older signatures, so the source links beside an API are the authority for its current shape. Advanced host APIs and the external-provider lane surface are identified as integration work rather than required application patterns. Wildcard deep imports expose implementation modules, but the inventory does not promise every internal helper as a supported standalone application API.
 
-The library uses MotionValues from `motion-dom` directly. The continuous-value guide explains that integration without inventing a Choreo re-export. Similarly, the spatial guides distinguish camera direction from renderer capabilities, and the film guides distinguish a compiled graph from decoded, paintable media. Those boundaries are part of learning the system, not details to skip when assembling a demonstration.
+The library uses the engine's own MotionValues. `glimmer-motion` re-exports a small, curated set of engine functions (`motionValue`, `transformValue`, `styleEffect`, `frame`, `animate`) rather than wrapping them, and the continuous-value guide explains that integration. Similarly, the spatial guides distinguish camera direction from renderer capabilities, and the film guides distinguish a compiled graph from decoded, paintable media. Those boundaries are part of learning the system, not details to skip when assembling a demonstration.
 
 ## Maintaining Coverage
 
@@ -157,6 +157,12 @@ Run `pnpm docs:check` after changing an export or a guide. The check compares th
 | `ViewTransitionUpdate`       | [core-page-transitions](/docs/core-page-transitions)           | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/view-transition.ts)               |
 | `animateView`                | [core-page-transitions](/docs/core-page-transitions)           | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/view-transition.ts)               |
 | `viewTransition`             | [core-page-transitions](/docs/core-page-transitions)           | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/view-transition.ts)               |
+| `animate`                    | [core-tweens](/docs/core-tweens)                               | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/index.ts)                         |
+| `frame`                      | [core-motion-values](/docs/core-motion-values)                 | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/index.ts)                         |
+| `MotionValue`                | [core-motion-values](/docs/core-motion-values)                 | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/index.ts)                         |
+| `motionValue`                | [core-motion-values](/docs/core-motion-values)                 | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/index.ts)                         |
+| `styleEffect`                | [core-motion-values](/docs/core-motion-values)                 | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/index.ts)                         |
+| `transformValue`             | [core-motion-values](/docs/core-motion-values)                 | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/index.ts)                         |
 
 ### glimmer-motion/film
 
