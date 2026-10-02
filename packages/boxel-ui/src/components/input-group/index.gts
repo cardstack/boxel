@@ -329,7 +329,7 @@ export default class InputGroup extends Component<Signature> {
       .error-message {
         margin-top: var(--boxel-sp-xxxs);
         margin-left: calc(var(--boxel-sp-sm) + 1px);
-        color: var(--destructive, var(--boxel-error-200));
+        color: var(--destructive-ink);
         font-size: var(--boxel-font-size-sm);
         font-weight: 500;
         letter-spacing: var(--boxel-lsp);
