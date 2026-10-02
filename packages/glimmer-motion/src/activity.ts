@@ -21,9 +21,9 @@
  * Probes are module-global rather than owner-linked because the things they
  * watch are: the engine's frameloop, the projection tree and the beacon
  * registry are all one per document, and a probe that could not see across an
- * owner boundary could not see the far-match barrier at all. Registration is
- * still tied to a destructor at every call site, so nothing outlives its
- * element.
+ * owner boundary could not see the far-match barrier at all. A probe over one
+ * element's or component's state is removed in its destructor, so nothing
+ * outlives its element; a probe over module-global state stays registered.
  */
 
 /** busy → a short reason; idle → false */
@@ -35,7 +35,9 @@ const probes = new Set<BusyProbe>();
  * Make a layer's own in-flight work count toward "motion is busy", so
  * `animationsSettled()` and `whatIsBusy()` wait on it too. The probe runs on
  * every settle check and answers `false` at rest or a short reason while busy.
- * Returns the remover; call it from the destructor of whatever registered it.
+ * Returns the remover: a probe over one instance's state is removed in that
+ * instance's destructor; a probe over module-global state (Choreo's far-match
+ * barrier) may stay registered for the life of the page.
  */
 export function registerBusyProbe(probe: BusyProbe): () => void {
   probes.add(probe);

@@ -160,7 +160,8 @@ const stage = new Stage();
   barrier waiting on another region) registers a `BusyProbe` with `registerBusyProbe(probe)`. The probe
   answers `false` at rest or a short reason while busy, and `animationsSettled()` / `whatIsBusy()` from
   `glimmer-motion/test-support` consult it alongside the frame loop and the projection tree. It returns a
-  remover; call it from the host's destructor.
+  remover: a probe over one host instance's state is removed in that instance's destructor, and a probe over
+  module-global state may stay registered for the life of the page.
 
 ### The engine's imperative surface
 

@@ -40,7 +40,7 @@ Only a motion element with an `id` or a `role` joins, and it joins the nearest h
 
 A host can also add its own named arguments to the modifier. It declares them by augmenting `ParticipantArgs` and registers each one with `defineParticipantArg()`. The modifier keeps those arguments away from the engine and hands each value to the host on every pass.
 
-A host whose work outlasts the engine's own animations, such as a timeline still running between steps, registers a `BusyProbe` with `registerBusyProbe()`. The probe answers `false` at rest or a short reason while busy, and `animationsSettled()` and `whatIsBusy()` consult it alongside the frameloop and the projection tree. Registration returns a remover, which the host calls from its destructor so a torn-down host never holds a test open.
+A host whose work outlasts the engine's own animations, such as a timeline still running between steps, registers a `BusyProbe` with `registerBusyProbe()`. The probe answers `false` at rest or a short reason while busy, and `animationsSettled()` and `whatIsBusy()` consult it alongside the frameloop and the projection tree. Registration returns a remover. A probe over one host instance's state is removed in that instance's destructor, so a torn-down host never holds a test open; a probe over module-global state, such as Choreo's far-match barrier, may stay registered for the life of the page.
 
 ## API Coverage
 
