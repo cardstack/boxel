@@ -138,4 +138,19 @@ module('Pretui | components/token', function (hooks) {
     await settled();
     assert.strictEqual(hue(el), 'var(--muted-foreground)', "the caller's hue is back");
   });
+
+  test("a caller's hue that matches @hue stays when @hue is cleared", async function (assert) {
+    class State {
+      @tracked hue: string | undefined = 'var(--chart-2)';
+    }
+    let state = new State();
+    let sameHueStyle = htmlSafe('--pretui-token-hue: var(--chart-2)');
+    await render(<template><Token @value='LOT-3' @hue={{state.hue}} style={{sameHueStyle}} /></template>);
+    let el = q('[data-test-pretui-token]');
+    assert.strictEqual(hue(el), 'var(--chart-2)');
+
+    state.hue = undefined;
+    await settled();
+    assert.strictEqual(hue(el), 'var(--chart-2)', "the caller's own hue is still there");
+  });
 });

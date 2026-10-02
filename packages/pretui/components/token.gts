@@ -34,7 +34,7 @@ const keepHue = modifier((el: HTMLElement, [hue]: [string | undefined]) => {
   if (value === undefined) {
     return;
   }
-  let displaced: string | undefined;
+  let displaced = el.style.getPropertyValue(HUE_PROPERTY).trim() || undefined;
   let apply = () => {
     let current = el.style.getPropertyValue(HUE_PROPERTY).trim();
     if (current !== value) {
