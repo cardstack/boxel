@@ -592,8 +592,10 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           `POST ${SupportedMimeType.JSON} /_capabilities`,
           `QUERY ${SupportedMimeType.BoxelOperations} /_operations`,
           `QUERY ${SupportedMimeType.JSONAPI} /_operations`,
+          `GET ${SupportedMimeType.RealmInfo} /_info`,
+          `QUERY ${SupportedMimeType.RealmInfo} /_info`,
         ].sort(),
-        'the card+json read and writes, the search, the operations envelope and the capability check',
+        'the card+json read and writes, the search, the operations envelope, the capability check, and the realm info, which applies it by never sealing',
       );
       assert.deepEqual(
         testRealm

@@ -4,7 +4,12 @@ import supertest from 'supertest';
 import type { Test, SuperTest } from 'supertest';
 import { basename, join } from 'path';
 import { dirSync } from 'tmp';
-import { rri, SupportedMimeType } from '@cardstack/runtime-common';
+import {
+  archiveRealm,
+  rri,
+  unarchiveRealm,
+  SupportedMimeType,
+} from '@cardstack/runtime-common';
 import type {
   QueuePublisher,
   QueueRunner,
@@ -73,6 +78,7 @@ module(basename(import.meta.filename), function (hooks) {
   let plain: Realm;
   let server: Server;
   let request: SuperTest<Test>;
+  let db: PgAdapter;
 
   setupCatalogTestSubset(hooks);
 
@@ -85,6 +91,7 @@ module(basename(import.meta.filename), function (hooks) {
     publisher: QueuePublisher;
     runner: QueueRunner;
   }) {
+    db = dbAdapter;
     let result = await runTestRealmServerWithRealms({
       virtualNetwork: createVirtualNetwork(),
       realmsRootPath: join(dirSync().name, 'realm_server_1'),
@@ -197,6 +204,23 @@ module(basename(import.meta.filename), function (hooks) {
         'policy' in response.body.data.attributes,
         `${method}: and not the policy's pointer`,
       );
+    }
+  });
+
+  test('an archived realm answers that caller with its info as it does while active', async function (assert) {
+    let auth = teacherIn(education);
+    let active = await info(EDUCATION, 'GET', auth);
+    await archiveRealm(db, new URL(EDUCATION));
+    try {
+      let archived = await info(EDUCATION, 'GET', auth);
+      assert.strictEqual(archived.status, active.status, 'the same status');
+      assert.strictEqual(archived.text, active.text, 'the same body');
+      assert.notOk(
+        archived.get('X-Boxel-Realm-Archived'),
+        'and nothing says the realm is archived',
+      );
+    } finally {
+      await unarchiveRealm(db, new URL(EDUCATION));
     }
   });
 
