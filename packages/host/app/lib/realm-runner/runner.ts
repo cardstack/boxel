@@ -20,16 +20,17 @@ const BOOT_TIMEOUT_MS = 60_000;
 // `renderBuiltUrl` hook already prefixes this URL with the assets origin; in
 // dev it stays root-relative, so resolving it against the document would ask
 // the realm origin for a file only the asset origin has.
-function resolveWorkerURL(workerURL: string): URL {
+function assetsBaseURL(): URL {
   let assetsURL = (
     globalThis as typeof globalThis & {
       __boxelAssetsURL?: string;
     }
   ).__boxelAssetsURL;
-  let base = assetsURL
-    ? new URL(assetsURL, window.location.href)
-    : window.location.href;
-  return new URL(workerURL, base);
+  return new URL(assetsURL ?? '/', window.location.href);
+}
+
+function resolveWorkerURL(workerURL: string): URL {
+  return new URL(workerURL, assetsBaseURL());
 }
 
 function makeRealmWorker(absoluteURL: URL): Worker {
@@ -38,12 +39,24 @@ function makeRealmWorker(absoluteURL: URL): Worker {
   }
 
   // A worker's own script must be same-origin, so a cross-origin chunk cannot
-  // be passed to the constructor. A same-origin Blob module may import it,
-  // and the imported module keeps its real URL — which is what lets QuickJS
-  // find `emscripten-module.wasm` next to itself.
-  let blob = new Blob([`import ${JSON.stringify(absoluteURL.href)};`], {
-    type: 'text/javascript',
-  });
+  // be passed to the constructor. A same-origin Blob module may import it.
+  // In a build, vite's `renderBuiltUrl` hook writes the chunk's asset URLs
+  // (QuickJS's `emscripten-module.wasm` among them) as
+  // `new URL(globalThis.__boxelAssetsURL + file, self.location.href)`. The
+  // page sets that global, but a worker has its own globals, and its
+  // `self.location` is the `blob:` URL, which cannot be a base for a
+  // root-relative path. So the Blob sets the global to the absolute assets
+  // origin first, then imports the chunk. The import is dynamic because a
+  // static one would run before the assignment. A failed dynamic import does
+  // not fire the worker's `error` event, so it reports as the worker does.
+  let blob = new Blob(
+    [
+      `globalThis.__boxelAssetsURL = ${JSON.stringify(assetsBaseURL().href)};\n`,
+      `import(${JSON.stringify(absoluteURL.href)}).catch((e) => `,
+      `self.postMessage({ type: 'error', error: 'Realm runner failed to load: ' + (e && e.message || e) }));\n`,
+    ],
+    { type: 'text/javascript' },
+  );
   let blobURL = URL.createObjectURL(blob);
   try {
     return new Worker(blobURL, { type: 'module' });
