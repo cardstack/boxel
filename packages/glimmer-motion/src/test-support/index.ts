@@ -26,7 +26,7 @@
  *   `bounds()` is relative to `#ember-testing`, not the viewport. QUnit moves
  *   its container around (and scales it, unless a fixture pins it), so a raw
  *   getBoundingClientRect() answers a different question depending on how many
- *   tests have run. Every Choreo assertion about position should go through
+ *   tests have run. Every assertion about position should go through
  *   this.
  *
  * `animationsSettled()` is explicit rather than an `@ember/test-waiters` waiter
@@ -37,14 +37,10 @@
  * anything. See src/activity.ts.
  */
 import { settled } from '@ember/test-helpers';
-import { frame, visualElementStore } from 'motion-dom';
+import { frame } from 'motion-dom';
 import { rootProjectionNode } from 'motion-dom';
 
 import { isMotionIdle, whatIsBusy } from '../activity.ts';
-import { resetBeacons } from '../choreo/beacons.ts';
-import { resetBarrier } from '../choreo/far.ts';
-import { resetGestures } from '../choreo/gesture.ts';
-import { activeRuns } from '../choreo/run.ts';
 import { layoutLoopDetected, resetLayoutLoopGuard } from '../layout.ts';
 import { setMotionSpeed } from '../speed.ts';
 
@@ -152,27 +148,7 @@ export async function animationsSettled({
   }
 }
 
-/* ---- driving the run from a test (§8.3) ---- */
-
-/** open every parked gate and settle the segment it releases */
-export async function advanceGate(): Promise<void> {
-  for (const run of activeRuns) {
-    if (run.parked) {
-      run.advance();
-    }
-  }
-  await animationsSettled();
-}
-
-/** set every live run's clock, in seconds — a scrubbed still */
-export async function seekTo(seconds: number): Promise<void> {
-  for (const run of activeRuns) {
-    run.pause();
-    run.time = seconds;
-  }
-  await settled();
-  await nextFrame();
-}
+/* ---- measuring motion ---- */
 
 /** how fast an element is moving, in px/s, sampled across two frames */
 export async function velocityOf(
@@ -189,112 +165,18 @@ export async function velocityOf(
     : { x: 0, y: 0 };
 }
 
-/* ---- Choreo invariants, shared by the contract suite and the soak ---- */
-
-const testRoot = () =>
-  (document.querySelector('#ember-testing') ?? document.body) as HTMLElement;
-
-/** how many leavers are parked in a <Choreo> orphan layer right now */
-export function orphanCount(root: HTMLElement = testRoot()): number {
-  return [...root.querySelectorAll('[data-choreo-orphans]')].reduce(
-    (n, layer) => n + layer.children.length,
-    0,
-  );
-}
-
-/**
- * The first LIVE match for `selector` — the copy that is still part of the
- * rendered tree, never a leaver parked in a region's orphan layer.
- *
- * Mid-crossing an identity exists twice: the arriving element in the live
- * tree, and the departing skin the region locked into `[data-choreo-orphans]`
- * so it can be flown and faded. That layer is the region's FIRST child, so a
- * bare `querySelector` answers with the ghost — an element whose component
- * has already been torn down, whose listeners are gone, and whose box is
- * where the OLD scene stood. Clicking it does nothing; measuring it measures
- * the past. Neither failure names itself.
- *
- * So any assertion or interaction a test performs while a crossing may be
- * aloft should come through here. A raised sprite (`c.Raise`) is deliberately
- * still live: it is the real element on a different layer, not a copy.
- */
-export function live<E extends Element = HTMLElement>(
-  selector: string,
-  root: ParentNode = testRoot(),
-): E | null {
-  return liveAll<E>(selector, root)[0] ?? null;
-}
-
-/** every live match for `selector`, in document order — see `live()` */
-export function liveAll<E extends Element = HTMLElement>(
-  selector: string,
-  root: ParentNode = testRoot(),
-): E[] {
-  return [...root.querySelectorAll<E>(selector)].filter(
-    (el) => !el.closest('[data-choreo-orphans]'),
-  );
-}
-
-/**
- * Elements still wearing a transform that nothing is animating.
- *
- * The identity spellings (`translateX(0px)`, `scale(1)`) are rest: the engine
- * writes them and they are harmless. Anything else, once everything has
- * settled, is a value somebody borrowed and never gave back.
- */
-const IDENTITY =
-  /^(translate[XYZ]?\(0px\)\s*|translate\(0px,\s*0px\)\s*|scale[XY]?\(1\)\s*|rotate\(0deg\)\s*)+$/;
-
-export function strandedTransforms(root: HTMLElement = testRoot()): string[] {
-  return [...root.querySelectorAll<HTMLElement>('*')]
-    .filter((el) => {
-      const t = el.style.transform;
-      if (!t || t === 'none' || IDENTITY.test(t)) {
-        return false;
-      }
-      // a region root's transform is its camera, and a directed plane
-      // RESTS transformed — a held zoom is a pose, not a leak
-      if (el.hasAttribute('data-choreo')) {
-        return false;
-      }
-      return !isFollower(el);
-    })
-    .map(
-      (el) =>
-        `${el.tagName.toLowerCase()}.${el.className}: ${el.style.transform}`,
-    );
-}
-
-/**
- * Is this element's transform owned by somebody else?
- *
- * A shared-element pair is one identity with two elements, and only one of them
- * leads. The follower is projected onto the lead's box on purpose — that is
- * what makes the crossfade possible — so a thumbnail sitting behind an open
- * lightbox wears a large scale at rest and is entirely correct.
- *
- * Without this, "no element kept a transform" fails for any stage a test
- * happens to leave open, which reads exactly like a leak and is not one.
- */
-function isFollower(el: HTMLElement): boolean {
-  const projection = visualElementStore.get(el)?.projection;
-  if (!projection || projection.isLead()) {
-    return false;
-  }
-  const lead = projection.getStack()?.lead;
-  return Boolean(lead?.instance?.isConnected);
-}
-
 /* ---- setup ---- */
 
 /**
  * Reset the state that outlives an owner.
  *
- * The beacon registry, the far-match barrier and the projection root are one
- * per document by design — a beacon in the chrome has to be visible to a region
- * in an outlet, and the barrier exists to see across regions. That is right for
- * an app and a leak between tests: a torn-down element still holding the name
- * "trash" wins the first-registration race against the next test's real one.
+ * The projection root, the layout-loop guard and the speed dial are one per
+ * document by design. That is right for an app and a leak between tests: a root
+ * left blocked by one test makes the next test's layout animations snap.
+ *
+ * Every reset added with `registerMotionReset()` runs here too, so a layer
+ * built on glimmer-motion that keeps document-wide state of its own is cleared
+ * by the same call.
  */
 export function setupMotion(hooks: {
   afterEach(fn: (assert?: LoopAssert) => void): void;
@@ -329,13 +211,30 @@ interface LoopAssert {
   ok?: (state: boolean, message?: string) => void;
 }
 
+const resets = new Set<() => void>();
+
+/**
+ * Add a reset that `resetMotion()` runs after glimmer-motion's own.
+ *
+ * For a layer that keeps per-document state — a registry, a barrier, a
+ * gesture table — that would otherwise leak from one test into the next. Adding
+ * the same function twice adds it once. Resets run in the order they were
+ * first added. The returned function removes it.
+ */
+export function registerMotionReset(reset: () => void): () => void {
+  resets.add(reset);
+  return () => {
+    resets.delete(reset);
+  };
+}
+
 export function resetMotion() {
   setMotionSpeed(1);
-  resetBeacons();
-  resetGestures();
-  resetBarrier();
   resetLayoutLoopGuard();
   unblockLayout();
+  for (const reset of resets) {
+    reset();
+  }
 }
 
 /**

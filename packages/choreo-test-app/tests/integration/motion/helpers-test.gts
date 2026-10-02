@@ -14,14 +14,15 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { setupRenderingTest } from 'ember-qunit';
 import { ease, inertia, motion, spring, to, tween } from 'glimmer-motion';
-import { animationsSettled, setupMotion } from 'glimmer-motion/test-support';
+import { setupChoreo } from 'glimmer-motion/choreo/test-support';
+import { animationsSettled } from 'glimmer-motion/test-support';
 import { module, test } from 'qunit';
 
 import { nextFrame } from '../../helpers/motion';
 
 module('Integration | motion | template helpers', function (hooks) {
   setupRenderingTest(hooks);
-  setupMotion(hooks);
+  setupChoreo(hooks);
 
   test('named arguments reach a plain function as one trailing object', function (assert) {
     assert.deepEqual(to({ opacity: 1, x: 4 }), { opacity: 1, x: 4 });

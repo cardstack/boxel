@@ -23,7 +23,8 @@ import {
   motion,
   type SpringSpec,
 } from 'glimmer-motion';
-import { animationsSettled, setupMotion } from 'glimmer-motion/test-support';
+import { setupChoreo } from 'glimmer-motion/choreo/test-support';
+import { animationsSettled } from 'glimmer-motion/test-support';
 import { module, test } from 'qunit';
 
 import { setupFixtureViewport } from '../../helpers/layout-fixture';
@@ -40,7 +41,7 @@ const grabCtx = (c: ChoreoContext) => {
 module('Integration | choreo | arming', function (hooks) {
   setupRenderingTest(hooks);
   setupFixtureViewport(hooks);
-  setupMotion(hooks);
+  setupChoreo(hooks);
 
   class Board extends Component {
     @tracked far = false;

@@ -12,7 +12,7 @@ import { on } from '@ember/modifier';
 import { click, render } from '@ember/test-helpers';
 import { tracked } from '@glimmer/tracking';
 import { motion, Presence } from 'glimmer-motion';
-import { setupMotion } from 'glimmer-motion/test-support';
+import { setupChoreo } from 'glimmer-motion/choreo/test-support';
 import { module, test } from 'qunit';
 import { BuildOrder } from 'test-app/components/examples/build-order';
 import { setupRenderingTest } from 'test-app/tests/helpers';
@@ -33,7 +33,7 @@ const rest = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 module('Integration | choreo | build-order leaver', function (hooks) {
   setupRenderingTest(hooks);
-  setupMotion(hooks);
+  setupChoreo(hooks);
 
   test('a popLayout leaver holding BuildOrder is removed', async function (assert) {
     const state = new Shown();

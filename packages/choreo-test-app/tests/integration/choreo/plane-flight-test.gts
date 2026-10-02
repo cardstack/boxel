@@ -15,10 +15,10 @@ import { tracked } from '@glimmer/tracking';
 import { setupRenderingTest } from 'ember-qunit';
 import { Choreo, type ChoreoContext, motion } from 'glimmer-motion';
 import {
-  animationsSettled,
   orphanCount,
   strandedTransforms,
-} from 'glimmer-motion/test-support';
+} from 'glimmer-motion/choreo/test-support';
+import { animationsSettled } from 'glimmer-motion/test-support';
 import { module, test } from 'qunit';
 
 import { setupFixtureViewport } from '../../helpers/layout-fixture';

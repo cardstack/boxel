@@ -7,11 +7,11 @@
 import { find, settled, visit } from '@ember/test-helpers';
 import { setupApplicationTest } from 'ember-qunit';
 import {
-  animationsSettled,
   orphanCount,
-  setupMotion,
+  setupChoreo,
   strandedTransforms,
-} from 'glimmer-motion/test-support';
+} from 'glimmer-motion/choreo/test-support';
+import { animationsSettled } from 'glimmer-motion/test-support';
 import { module, test } from 'qunit';
 
 interface CrossingStressHandle {
@@ -36,7 +36,7 @@ const frames = (n: number) =>
 
 module('Acceptance | crossing stress', function (hooks) {
   setupApplicationTest(hooks);
-  setupMotion(hooks);
+  setupChoreo(hooks);
 
   test('three slides Magic-Move the looping hero from its live pose', async function (assert) {
     await visit('/crossing-stress');
