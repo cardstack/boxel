@@ -84,7 +84,7 @@ export const Table: TemplateOnlyComponent<TableSignature> = <template>
         box-shadow: inset 0 -1px 0 var(--border);
       }
       .pretui-table :deep(tbody th) {
-        text-align: left;
+        text-align: start;
       }
       .pretui-table :deep(tbody tr:nth-child(even) td),
       .pretui-table :deep(tbody tr:nth-child(even) th) {
