@@ -13,7 +13,7 @@ export interface TokenSignature {
   Args: {
     value?: string;
     hue?: string;
-    /** house scale xs|s|m|l|xl; omitted, the size follows `--text-body` */
+    /** house scale xs|s|m|l|xl; omitted or 'default', the size follows `--text-body` */
     size?: PretuiSizeArg;
     /** let a long value wrap instead of overflowing on one line */
     wrap?: boolean;
@@ -27,14 +27,18 @@ const HUE_PROPERTY = '--pretui-token-hue';
 // A caller's `style` replaces Token's own `style` attribute, so `@hue` is also
 // written as a single property on top of whatever style the element ends up
 // with. The observer puts it back when the caller's style changes later and
-// the attribute is rewritten.
+// the attribute is rewritten. A hue the caller's style set is remembered, and
+// comes back when `@hue` is cleared.
 const keepHue = modifier((el: HTMLElement, [hue]: [string | undefined]) => {
   let value = cssValue(hue);
   if (value === undefined) {
     return;
   }
+  let displaced: string | undefined;
   let apply = () => {
-    if (el.style.getPropertyValue(HUE_PROPERTY).trim() !== value) {
+    let current = el.style.getPropertyValue(HUE_PROPERTY).trim();
+    if (current !== value) {
+      displaced = current || undefined;
       el.style.setProperty(HUE_PROPERTY, value);
     }
   };
@@ -44,7 +48,11 @@ const keepHue = modifier((el: HTMLElement, [hue]: [string | undefined]) => {
   return () => {
     observer.disconnect();
     if (el.style.getPropertyValue(HUE_PROPERTY).trim() === value) {
-      el.style.removeProperty(HUE_PROPERTY);
+      if (displaced) {
+        el.style.setProperty(HUE_PROPERTY, displaced);
+      } else {
+        el.style.removeProperty(HUE_PROPERTY);
+      }
     }
   };
 });
@@ -55,10 +63,12 @@ export class Token extends Component<TokenSignature> {
   get style() {
     return hueStyle(HUE_PROPERTY, this.args.hue);
   }
+  // 'default' is the component's own default, which for Token is no step.
   get size(): PretuiSize | undefined {
-    return this.args.size === undefined
+    let { size } = this.args;
+    return size === undefined || size === 'default'
       ? undefined
-      : resolveSize(this.args.size);
+      : resolveSize(size);
   }
   <template>
     <code

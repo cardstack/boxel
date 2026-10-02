@@ -51,6 +51,7 @@ module('Pretui | components/token', function (hooks) {
         <Token @value='b' @size='xs' data-test-xs />
         <Token @value='c' @size='sm' data-test-sm />
         <Token @value='d' @size='large' data-test-large />
+        <Token @value='e' @size='default' data-test-default-alias />
       </template>,
     );
     assert.false(
@@ -60,6 +61,10 @@ module('Pretui | components/token', function (hooks) {
     assert.strictEqual(q('[data-test-xs]').dataset.size, 'xs');
     assert.strictEqual(q('[data-test-sm]').dataset.size, 's');
     assert.strictEqual(q('[data-test-large]').dataset.size, 'l');
+    assert.false(
+      q('[data-test-default-alias]').hasAttribute('data-size'),
+      "@size='default' means the same as leaving @size off",
+    );
   });
 
   test('@wrap lets a long value wrap', async function (assert) {
@@ -114,5 +119,23 @@ module('Pretui | components/token', function (hooks) {
     await settled();
     assert.strictEqual(hue(el), '', 'removing @hue removes the property');
     assert.strictEqual(el.style.letterSpacing, '1px', "the caller's style is left alone");
+  });
+
+  test("@hue wins over a hue in the caller's style, which comes back when @hue is cleared", async function (assert) {
+    class State {
+      @tracked hue: string | undefined = 'var(--chart-2)';
+    }
+    let state = new State();
+    await render(<template><Token @value='LOT-9' @hue={{state.hue}} style={{MUTED_HUE_STYLE}} /></template>);
+    let el = q('[data-test-pretui-token]');
+    assert.strictEqual(hue(el), 'var(--chart-2)', '@hue wins');
+
+    state.hue = 'var(--chart-5)';
+    await settled();
+    assert.strictEqual(hue(el), 'var(--chart-5)', 'a new @hue still wins');
+
+    state.hue = undefined;
+    await settled();
+    assert.strictEqual(hue(el), 'var(--muted-foreground)', "the caller's hue is back");
   });
 });
