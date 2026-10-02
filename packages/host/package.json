@@ -203,7 +203,7 @@
     "@cardstack/pretui": "workspace:*",
     "@jitl/quickjs-wasmfile-release-sync": "0.31.0",
     "ember-modify-based-class-resource": "catalog:",
-    "quickjs-emscripten": "^0.31.0",
+    "quickjs-emscripten": "0.31.0",
     "reactiveweb": "catalog:",
     "unique-names-generator": "^4.7.1"
   },

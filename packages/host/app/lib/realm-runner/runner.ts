@@ -1,3 +1,7 @@
+// The worker's QuickJS glue comes from `quickjs-emscripten`, which pins this
+// variant package exactly. The glue calls the binary's exports by minified
+// name, so the two must be the same version: package.json pins both packages
+// exactly, and they move together.
 import QuickJSWasmURL from '@jitl/quickjs-wasmfile-release-sync/wasm?url';
 
 import WorkerURL from './worker?worker&url';
