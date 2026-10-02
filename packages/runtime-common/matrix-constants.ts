@@ -237,9 +237,15 @@ export const DEFAULT_FALLBACK_MODELS: readonly FallbackModelConfig[] = [
     toolsSupported: true,
     inputModalities: ['file', 'image', 'text'],
   },
+  {
+    modelId: 'openai/gpt-6-luna',
+    displayName: 'OpenAI: GPT-6 Luna',
+    toolsSupported: true,
+    inputModalities: ['file', 'image', 'text'],
+  },
 ] as const;
 
-export const DEFAULT_FALLBACK_MODEL_ID = 'anthropic/claude-sonnet-4.6';
+export const DEFAULT_FALLBACK_MODEL_ID = 'openai/gpt-6-luna';
 
 export const SLIDING_SYNC_AI_ROOM_LIST_NAME = 'ai-room';
 export const SLIDING_SYNC_AUTH_ROOM_LIST_NAME = 'auth-room';
