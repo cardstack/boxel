@@ -27,29 +27,38 @@ const HUE_PROPERTY = '--pretui-token-hue';
 // A caller's `style` replaces Token's own `style` attribute, so `@hue` is also
 // written as a single property on top of whatever style the element ends up
 // with. The observer puts it back when the caller's style changes later and
-// the attribute is rewritten. A hue the caller's style set is remembered, and
-// comes back when `@hue` is cleared.
+// the attribute is rewritten. The hue the caller's style last set comes back
+// when `@hue` is cleared.
+//
+// The observer drains the record of each of the modifier's own writes as soon
+// as it makes one, so every record it delivers is a caller rewrite, and the
+// hue that rewrite leaves is the caller's hue, even when it equals `@hue`.
 const keepHue = modifier((el: HTMLElement, [hue]: [string | undefined]) => {
   let value = cssValue(hue);
   if (value === undefined) {
     return;
   }
-  let displaced = el.style.getPropertyValue(HUE_PROPERTY).trim() || undefined;
-  let apply = () => {
-    let current = el.style.getPropertyValue(HUE_PROPERTY).trim();
-    if (current !== value) {
-      displaced = current || undefined;
+  let read = () => el.style.getPropertyValue(HUE_PROPERTY).trim() || undefined;
+  let callerHue = read();
+  let write = (observer?: MutationObserver) => {
+    if (read() !== value) {
       el.style.setProperty(HUE_PROPERTY, value);
+      observer?.takeRecords();
     }
   };
-  apply();
-  let observer = new MutationObserver(apply);
+  write();
+  let observer = new MutationObserver((_records, self) => {
+    callerHue = read();
+    write(self);
+  });
   observer.observe(el, { attributes: true, attributeFilter: ['style'] });
   return () => {
+    // A caller rewrite in the same render as this teardown is still queued.
+    let rewritten = observer.takeRecords().length > 0;
     observer.disconnect();
-    if (el.style.getPropertyValue(HUE_PROPERTY).trim() === value) {
-      if (displaced) {
-        el.style.setProperty(HUE_PROPERTY, displaced);
+    if (!rewritten && read() === value) {
+      if (callerHue) {
+        el.style.setProperty(HUE_PROPERTY, callerHue);
       } else {
         el.style.removeProperty(HUE_PROPERTY);
       }

@@ -149,8 +149,99 @@ module('Pretui | components/token', function (hooks) {
     let el = q('[data-test-pretui-token]');
     assert.strictEqual(hue(el), 'var(--chart-2)');
 
+    state.hue = 'var(--chart-4)';
+    await settled();
+    assert.strictEqual(hue(el), 'var(--chart-4)', 'a new @hue wins');
+
     state.hue = undefined;
     await settled();
     assert.strictEqual(hue(el), 'var(--chart-2)', "the caller's own hue is still there");
+  });
+
+  test("a caller's rewrite to a new hue is the hue that comes back when @hue is cleared", async function (assert) {
+    class State {
+      @tracked style = MUTED_HUE_STYLE;
+      @tracked hue: string | undefined = 'var(--chart-2)';
+    }
+    let state = new State();
+    await render(<template><Token @value='LOT-4' @hue={{state.hue}} style={{state.style}} /></template>);
+    let el = q('[data-test-pretui-token]');
+
+    state.style = htmlSafe('--pretui-token-hue: var(--chart-6)');
+    await settled();
+    assert.strictEqual(hue(el), 'var(--chart-2)', '@hue still wins over the rewrite');
+
+    state.hue = undefined;
+    await settled();
+    assert.strictEqual(hue(el), 'var(--chart-6)', "the caller's new hue, not its first one");
+  });
+
+  test("a caller's rewrite to the hue @hue already set is kept when @hue is cleared", async function (assert) {
+    class State {
+      @tracked style = MUTED_HUE_STYLE;
+      @tracked hue: string | undefined = 'var(--chart-2)';
+    }
+    let state = new State();
+    await render(<template><Token @value='LOT-5' @hue={{state.hue}} style={{state.style}} /></template>);
+    let el = q('[data-test-pretui-token]');
+
+    state.style = htmlSafe('--pretui-token-hue: var(--chart-2)');
+    await settled();
+    assert.strictEqual(hue(el), 'var(--chart-2)');
+
+    state.hue = undefined;
+    await settled();
+    assert.strictEqual(hue(el), 'var(--chart-2)', "the caller's current hue, not the muted one it replaced");
+  });
+
+  test("a caller's rewrite spelled exactly as the element's current style still counts", async function (assert) {
+    class State {
+      @tracked style = MUTED_HUE_STYLE;
+      @tracked hue: string | undefined = 'var(--chart-2)';
+    }
+    let state = new State();
+    await render(<template><Token @value='LOT-6' @hue={{state.hue}} style={{state.style}} /></template>);
+    let el = q('[data-test-pretui-token]');
+    let written = el.getAttribute('style') ?? '';
+    assert.true(written.includes('var(--chart-2)'), 'the element carries the @hue write');
+
+    state.style = htmlSafe(written);
+    await settled();
+    state.hue = undefined;
+    await settled();
+    assert.strictEqual(hue(el), 'var(--chart-2)', 'the rewrite is the caller\'s hue even though the attribute text did not change');
+  });
+
+  test("a caller's rewrite in the same render that clears @hue is kept", async function (assert) {
+    class State {
+      @tracked style = MUTED_HUE_STYLE;
+      @tracked hue: string | undefined = 'var(--chart-2)';
+    }
+    let state = new State();
+    await render(<template><Token @value='LOT-7' @hue={{state.hue}} style={{state.style}} /></template>);
+    let el = q('[data-test-pretui-token]');
+
+    state.style = htmlSafe('--pretui-token-hue: var(--chart-2)');
+    state.hue = undefined;
+    await settled();
+    assert.strictEqual(hue(el), 'var(--chart-2)', "the caller's new hue, not the muted one");
+  });
+
+  test('with no caller style, @hue changes and clears through Token\'s own style', async function (assert) {
+    class State {
+      @tracked hue: string | undefined = 'var(--chart-1)';
+    }
+    let state = new State();
+    await render(<template><Token @value='LOT-8' @hue={{state.hue}} /></template>);
+    let el = q('[data-test-pretui-token]');
+    assert.strictEqual(hue(el), 'var(--chart-1)');
+
+    state.hue = 'var(--chart-3)';
+    await settled();
+    assert.strictEqual(hue(el), 'var(--chart-3)');
+
+    state.hue = undefined;
+    await settled();
+    assert.strictEqual(hue(el), '', 'no hue is left behind');
   });
 });
