@@ -12,12 +12,13 @@
  * its run STANDING, and a standing run survives the render noise of a busy
  * page rather than being torn down and rebuilt on every pass.
  */
+import { Choreo, type ChoreoContext, type Rect } from '@cardstack/choreo';
+import { setupChoreo } from '@cardstack/choreo/test-support';
 import { find, render, settled } from '@ember/test-helpers';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { setupRenderingTest } from 'ember-qunit';
-import { Choreo, type ChoreoContext, motion, type Rect } from 'glimmer-motion';
-import { setupChoreo } from 'glimmer-motion/choreo/test-support';
+import { motion } from 'glimmer-motion';
 import { animationsSettled } from 'glimmer-motion/test-support';
 import { module, test } from 'qunit';
 

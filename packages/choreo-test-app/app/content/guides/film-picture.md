@@ -19,7 +19,7 @@ Place IframePicture inside Film's picture block and pass the registrar yielded b
 </Film>
 ```
 
-Import both components from `glimmer-motion/film`. The source must implement the picture contract expected by the film; an arbitrary webpage at that URL is not automatically a compatible renderer. The component registers a specification rather than directly drawing a second iframe of its own.
+Import both components from `@cardstack/choreo/film`. The source must implement the picture contract expected by the film; an arbitrary webpage at that URL is not automatically a compatible renderer. The component registers a specification rather than directly drawing a second iframe of its own.
 
 ## Describing the Renderer
 
@@ -35,8 +35,6 @@ Test a direct cold load, a missing subordinate asset, a frame request before ord
 
 ## API Coverage
 
-**glimmer-motion**: `FilmPicture`.
-
-**glimmer-motion/film**: `IframePicture`, `IframePictureSignature`, `PictureSpec`, `Picture`.
+**@cardstack/choreo/film**: `IframePicture`, `IframePictureSignature`, `PictureSpec`, `Picture`.
 
 Read the implementation: [`types.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/film/types.ts), [`picture.gts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/film/picture.gts).

@@ -9,10 +9,10 @@
 > [film-construct.md](film-construct.md).
 
 ```ts
-import { Film } from 'glimmer-motion/film';
+import { Film } from '@cardstack/choreo/film';
 ```
 
-Everything in this document lives at `glimmer-motion/film`. A subset is
+Everything in this document lives at `@cardstack/choreo/film`. A subset is
 re-exported from the package root under prefixed names (`Film`,
 `FilmBeat`, `FilmChapter`, `FilmGrade`, `FilmHandle`, `FilmJoin`,
 `FilmPicture`, `FilmCam`, `FilmClock`), but neither reference film uses
@@ -379,7 +379,7 @@ the outgoing still; it now stands at the seam's end instead — §5.4.)
 ### 4.5 The schedule, headless
 
 Everything in this section is arithmetic on the shot list, and it lives
-in one pure module: `packages/glimmer-motion/src/film/schedule.ts` —
+in one pure module: `packages/choreo/src/film/schedule.ts` —
 `totalSecs`, `secsBefore`, `beatStart`, `cues`, `chapterHeads`,
 `contents`, `joinInto`, `tailFor` (where a shot ends: the authored tail,
 floored so it reads as a move, clamped so it never travels past the next

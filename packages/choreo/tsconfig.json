@@ -1,0 +1,18 @@
+{
+  "extends": "@ember/library-tsconfig",
+  "include": ["src/**/*", "unpublished-development-types/**/*"],
+  "compilerOptions": {
+    "allowJs": true,
+    /**
+      glimmer-motion resolves to its source, so type-checking needs it unbuilt.
+      The declarations build (tsconfig.declarations.json) resolves it through
+      its package.json#exports instead, the way npm consumers do, so the
+      emitted declarations import `glimmer-motion` rather than its source.
+    */
+    "paths": {
+      "glimmer-motion": ["../glimmer-motion/src/index.ts"],
+      "glimmer-motion/*": ["../glimmer-motion/src/*"]
+    },
+    "types": ["ember-source/types"]
+  }
+}

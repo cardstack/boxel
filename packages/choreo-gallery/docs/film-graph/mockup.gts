@@ -21,7 +21,7 @@
  */
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { Film, Player } from 'glimmer-motion/film';
+import { Film, Player } from '@cardstack/choreo/film';
 import { PhoneStage } from 'test-app/components/mockup/stage';
 
 // Unchanged from mockup.gts: the six apps and their authored grid, the

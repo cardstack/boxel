@@ -10,9 +10,9 @@
  * transaction driven here is renderAt(), the same one the capture
  * worker's hf-seek barrier calls.
  */
+import { setupChoreo } from '@cardstack/choreo/test-support';
 import { find, visit } from '@ember/test-helpers';
 import { setupApplicationTest } from 'ember-qunit';
-import { setupChoreo } from 'glimmer-motion/choreo/test-support';
 import { module, test } from 'qunit';
 
 interface ReelHandle {

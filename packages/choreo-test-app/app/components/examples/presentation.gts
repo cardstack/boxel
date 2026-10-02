@@ -1,11 +1,12 @@
+import type { ChoreoContext } from '@cardstack/choreo';
+import { beacon, Choreo } from '@cardstack/choreo';
 import type { TOC } from '@ember/component/template-only';
 import { array, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { modifier } from 'ember-modifier';
-import type { ChoreoContext } from 'glimmer-motion';
-import { beacon, Choreo, motion, Presence } from 'glimmer-motion';
+import { motion, Presence } from 'glimmer-motion';
 import { tuneMotion, tuneSeconds } from 'test-app/lib/demo-tuning';
 
 const IN = 0.32;

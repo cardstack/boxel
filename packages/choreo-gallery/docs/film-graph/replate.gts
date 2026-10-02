@@ -37,7 +37,7 @@
  */
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { Film, Player, Video } from 'glimmer-motion/film';
+import { Film, Player, Video } from '@cardstack/choreo/film';
 import { PremierePlate } from './replate-plate';
 
 // Unchanged from the picture page: the four corners of the program

@@ -9,7 +9,8 @@
  * offset produce a flight that lands next to its target, which is the kind of
  * bug that looks like a spring problem for a day.
  */
-import { defineParticipantArg } from '../participant.ts';
+import { defineParticipantArg } from 'glimmer-motion';
+
 import type { Bounds, Rect } from './types.ts';
 
 // `pack`'s type is declared in registry.ts, which the published declarations reach

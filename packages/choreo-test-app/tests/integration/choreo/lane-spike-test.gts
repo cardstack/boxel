@@ -12,20 +12,20 @@
  * below is a test-only component that walks through that door; the real
  * `f.Lane` would be the same thing with the film's clock behind it.
  */
-import { render, settled } from '@ember/test-helpers';
-import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
-import { modifier } from 'ember-modifier';
-import { setupRenderingTest } from 'ember-qunit';
 import {
   Choreo,
   type ChoreoContext,
   choreoHostById,
   type ChoreoRun,
-  motion,
   type TimelineNode,
-} from 'glimmer-motion';
-import { setupChoreo } from 'glimmer-motion/choreo/test-support';
+} from '@cardstack/choreo';
+import { setupChoreo } from '@cardstack/choreo/test-support';
+import { render, settled } from '@ember/test-helpers';
+import Component from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
+import { modifier } from 'ember-modifier';
+import { setupRenderingTest } from 'ember-qunit';
+import { motion } from 'glimmer-motion';
 import { module, test } from 'qunit';
 
 const frames = (n: number) =>

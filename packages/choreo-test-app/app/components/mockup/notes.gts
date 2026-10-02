@@ -1,8 +1,9 @@
+import { Choreo } from '@cardstack/choreo';
 import { array, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { Choreo, motion } from 'glimmer-motion';
+import { motion } from 'glimmer-motion';
 
 /**
  * A fake "Notes" screen for the phone mockup. Fills a 390 x 844 screen box

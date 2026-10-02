@@ -132,6 +132,7 @@ jobs:
               - 'packages/pretui/**'
             choreo:
               - *shared
+              - 'packages/choreo/**'
               - 'packages/choreo-gallery/**'
               - 'packages/choreo-player/**'
               - 'packages/choreo-test-app/**'
@@ -511,12 +512,14 @@ jobs:
         run: pnpm run docs:check
         working-directory: packages/choreo-gallery
       # The gallery resolves these packages through their built output
-      # (package.json#exports maps into dist/ and declarations/).
-      - name: Build Glimmer Motion and Choreo Player
+      # (package.json#exports maps into dist/ and declarations/). glimmer-motion
+      # builds first: choreo's declarations build resolves it the same way.
+      - name: Build Glimmer Motion, Choreo and Choreo Player
         id: build-libs
         if: ${{ !cancelled() }}
         run: |
           (cd packages/glimmer-motion && pnpm run build)
+          (cd packages/choreo && pnpm run build)
           (cd packages/choreo-player && pnpm run build)
       - name: Choreo Player unit tests
         if: ${{ !cancelled() && steps.build-libs.outcome == 'success' }}
@@ -555,10 +558,12 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/init
       # The test app resolves these packages through their built output
-      # (package.json#exports maps into dist/ and declarations/).
-      - name: Build Glimmer Motion and Choreo Player
+      # (package.json#exports maps into dist/ and declarations/). glimmer-motion
+      # builds first: choreo's declarations build resolves it the same way.
+      - name: Build Glimmer Motion, Choreo and Choreo Player
         run: |
           (cd packages/glimmer-motion && pnpm run build)
+          (cd packages/choreo && pnpm run build)
           (cd packages/choreo-player && pnpm run build)
       - name: Run test suite
         run: pnpm test

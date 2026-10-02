@@ -11,6 +11,7 @@
  * The clock runs in tempo-scaled milliseconds; the public face (`time`,
  * `duration`) speaks seconds at 1×, as Motion's playback controls do.
  */
+import { motionSpeed, scaleTransition } from 'glimmer-motion';
 import type { AnimationPlaybackControls, VisualElement } from 'motion-dom';
 import {
   animateTarget,
@@ -23,7 +24,6 @@ import {
 } from 'motion-dom';
 import { easingDefinitionToFunction } from 'motion-utils';
 
-import { motionSpeed, scaleTransition } from '../speed.ts';
 import { cssEasing, deliver, type Delivery, keyframesOf } from './deliver.ts';
 import { sampleThrough, settleThrough } from './path.ts';
 import { choreoHostById } from './registry.ts';

@@ -6,10 +6,10 @@
  * caught — a field initialiser read the first row's camera at
  * construction — pinned so it cannot come back.
  */
+import { Film, IframePicture } from '@cardstack/choreo/film';
+import { setupChoreo } from '@cardstack/choreo/test-support';
 import { render, waitUntil } from '@ember/test-helpers';
 import { setupRenderingTest } from 'ember-qunit';
-import { setupChoreo } from 'glimmer-motion/choreo/test-support';
-import { Film, IframePicture } from 'glimmer-motion/film';
 import { module, test } from 'qunit';
 import { SagradaScore } from 'test-app/components/films/sagrada-score';
 import { TowersScore } from 'test-app/components/films/towers-score';

@@ -7,7 +7,7 @@ Most templates receive their Choreo context directly from the region. Integratio
 `closestChoreo(element)` finds the nearest ancestor host for a participant. `choreoHostAt(element)` looks up the host registered on a region element itself. `choreoHostById(id)` finds a region declared with that identifier. These functions answer different questions; passing a region element to an ancestor lookup can select its parent instead of the region you intended.
 
 ```ts title="Component logic excerpt"
-import { choreoHostById } from 'glimmer-motion';
+import { choreoHostById } from '@cardstack/choreo';
 
 const host = choreoHostById('presentation');
 const run = host?.currentRun();
@@ -32,6 +32,6 @@ Test lookup before mount, after replacement, and after teardown. Verify that des
 
 ## API Coverage
 
-**glimmer-motion**: `ChoreoHost`, `choreoHostAt`, `choreoHostById`, `ChoreoProvider`, `closestChoreo`.
+**@cardstack/choreo**: `ChoreoHost`, `choreoHostAt`, `choreoHostById`, `ChoreoProvider`, `closestChoreo`.
 
 Read the implementation: [`registry.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/registry.ts).

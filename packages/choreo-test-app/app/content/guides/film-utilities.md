@@ -7,7 +7,7 @@ The film subpath exports a small set of arithmetic and formatting helpers used t
 `lerp(a, b, t)` linearly interpolates between two numbers. It does not clamp t, which is useful for some extrapolations but means callers should use `clamp01()` when progress must stay within an interval. `smooth()` applies a clamped smoothstep curve. `RAD` converts degrees to radians by multiplication.
 
 ```ts title="Component logic excerpt"
-import { clamp01, lerp, smooth, RAD, mmss } from 'glimmer-motion/film';
+import { clamp01, lerp, smooth, RAD, mmss } from '@cardstack/choreo/film';
 
 const progress = clamp01(elapsed / duration);
 const opacity = smooth(progress);
@@ -35,6 +35,6 @@ Test edge values that your interface can produce: progress before the window, pr
 
 ## API Coverage
 
-**glimmer-motion/film**: `clamp01`, `hex`, `lerp`, `luminance`, `mmss`, `RAD`, `rgba`, `smooth`.
+**@cardstack/choreo/film**: `clamp01`, `hex`, `lerp`, `luminance`, `mmss`, `RAD`, `rgba`, `smooth`.
 
 Read the implementation: [`math.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/film/math.ts).

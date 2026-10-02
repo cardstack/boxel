@@ -4,13 +4,13 @@
  * Tests step through the public handle so live autoplay cannot race
  * the assertions.
  */
-import { find, settled, visit } from '@ember/test-helpers';
-import { setupApplicationTest } from 'ember-qunit';
 import {
   orphanCount,
   setupChoreo,
   strandedTransforms,
-} from 'glimmer-motion/choreo/test-support';
+} from '@cardstack/choreo/test-support';
+import { find, settled, visit } from '@ember/test-helpers';
+import { setupApplicationTest } from 'ember-qunit';
 import { animationsSettled } from 'glimmer-motion/test-support';
 import { module, test } from 'qunit';
 

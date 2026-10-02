@@ -31,6 +31,12 @@ export type BusyProbe = () => false | string;
 
 const probes = new Set<BusyProbe>();
 
+/**
+ * Make a layer's own in-flight work count toward "motion is busy", so
+ * `animationsSettled()` and `whatIsBusy()` wait on it too. The probe runs on
+ * every settle check and answers `false` at rest or a short reason while busy.
+ * Returns the remover; call it from the destructor of whatever registered it.
+ */
 export function registerBusyProbe(probe: BusyProbe): () => void {
   probes.add(probe);
   return () => {

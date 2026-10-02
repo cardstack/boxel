@@ -2,12 +2,12 @@ import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { modifier } from 'ember-modifier';
+import { motion } from 'glimmer-motion';
 
+import { at } from '../anchors.ts';
 import { Choreo, type ChoreoContext } from '../choreo.gts';
-import { at } from '../choreo/anchors.ts';
-import type { ChoreoRun } from '../choreo/run.ts';
-import type { PerformCommand } from '../choreo/types.ts';
-import motion from '../motion.ts';
+import type { ChoreoRun } from '../run.ts';
+import type { PerformCommand } from '../types.ts';
 import { Clip } from './clip.gts';
 import {
   type ClipSpec,

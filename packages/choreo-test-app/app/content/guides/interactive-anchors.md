@@ -7,7 +7,7 @@ Sequential order is sufficient until an action needs to begin during another act
 Give a step or block a unique `@name`. `at(name, progress)` refers to a fraction of that span; `after(name, delay)` refers to its end plus an optional delay in seconds. These helpers return an `AnchorRef`, which a step accepts through `@at`.
 
 ```gts title="Component template excerpt"
-import { at, after } from 'glimmer-motion';
+import { at, after } from '@cardstack/choreo';
 
 <template>
   <c.Sequence>
@@ -44,6 +44,6 @@ Use the build-order demo to inspect the relationship between names, starts, dela
 
 ## API Coverage
 
-**glimmer-motion**: `AnchorRef`, `after`, `at`.
+**@cardstack/choreo**: `AnchorRef`, `after`, `at`.
 
 Read the implementation: [`anchors.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/anchors.ts).

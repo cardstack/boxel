@@ -1,11 +1,12 @@
+import type { ChoreoRun, Sprite } from '@cardstack/choreo';
+import { Choreo } from '@cardstack/choreo';
 import { array } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { modifier } from 'ember-modifier';
-import type { ChoreoRun, Sprite } from 'glimmer-motion';
-import { afterSettle, Choreo, motion } from 'glimmer-motion';
+import { afterSettle, motion } from 'glimmer-motion';
 import { tuneSeconds } from 'test-app/lib/demo-tuning';
 import { preventSelect } from 'test-app/lib/pointer';
 

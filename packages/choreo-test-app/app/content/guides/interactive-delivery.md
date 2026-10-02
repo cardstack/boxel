@@ -28,6 +28,6 @@ Inspect the build-order and presentation examples for timing relationships aroun
 
 ## API Coverage
 
-**glimmer-motion**: `DeliveryBy`, `DeliveryOrder`.
+**@cardstack/choreo**: `DeliveryBy`, `DeliveryOrder`.
 
 Read the implementation: [`types.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/types.ts).

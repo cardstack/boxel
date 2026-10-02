@@ -1,10 +1,11 @@
+import { beacon, Choreo } from '@cardstack/choreo';
 import { concat } from '@ember/helper';
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import type { DialConfig } from 'dialkit/store';
 import { modifier } from 'ember-modifier';
-import { beacon, Choreo, motion } from 'glimmer-motion';
+import { motion } from 'glimmer-motion';
 import { DialPanel } from 'test-app/components/dial-panel';
 import { tuneSeconds, tuneSpring } from 'test-app/lib/demo-tuning';
 import { Dial } from 'test-app/lib/dial';
