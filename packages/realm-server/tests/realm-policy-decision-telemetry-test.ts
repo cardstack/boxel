@@ -700,11 +700,16 @@ module(basename(import.meta.filename), function (hooks) {
         transport,
         actor,
       })),
-      decisions.map(() => ({
-        hypothetical: true,
-        transport: 'explain',
-        actor: TEACHER,
-      })),
+      decisions.map(
+        (): Pick<
+          PolicyDecisionEvent,
+          'hypothetical' | 'transport' | 'actor'
+        > => ({
+          hypothetical: true,
+          transport: 'explain',
+          actor: TEACHER,
+        }),
+      ),
     );
     assert.ok(
       snapshotReads.every(({ hypothetical }) => hypothetical),
