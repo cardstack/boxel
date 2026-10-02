@@ -63,7 +63,7 @@ export class Alert extends Component<AlertSignature> {
   }
   <template>
     <div class='pretui-alert' role={{this.role}} style={{this.hueStyle}} data-test-pretui-alert ...attributes>
-      <span class='pretui-alert-glyph'>{{this.glyph}}</span>
+      <span class='pretui-alert-glyph' aria-hidden='true'>{{this.glyph}}</span>
       <div class='pretui-alert-body'>
         {{#if @title}}<div class='pretui-alert-title'>{{@title}}</div>{{/if}}
         {{#if (has-block)}}<div>{{yield}}</div>{{/if}}

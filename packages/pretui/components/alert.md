@@ -30,12 +30,11 @@ Where it is thinner: no `appearance` axis (Web Awesome's outlined/plain callouts
 
 Governing pattern: APG **Alert** (`role="alert"`, nothing else required) and the live-region rules generally.
 
-What is right: the assertive/polite split by tone, and the fact that both `alert` and `status` carry implicit `aria-atomic="true"`, so the whole banner is re-read rather than just the changed fragment.
+What is right: the assertive/polite split by tone, and the fact that both `alert` and `status` carry implicit `aria-atomic="true"`, so the whole banner is re-read rather than just the changed fragment. The glyph is `aria-hidden`: the tone already reaches a screen reader through the role and the text, so the banner is announced as its title and message, not "multiplication x" or "letter i" first.
 
 Gaps, and one is significant:
 
 - **The live region is created together with its content.** A live region must exist in the DOM _before_ its content changes to be reliably announced. `{{#if this.showAlert}}<Alert>` mounts the region and its text in the same frame, and several screen readers will say nothing. `role="alert"` is partly exempt — some readers do announce alerts inserted with content already present — but `role="status"` generally is not, so **`info`/`success`/`warning` alerts frequently announce nothing at all**. The fix is the pattern React Aria and Web Awesome both use: one persistent, empty, visually-hidden region that messages are written into. Render the Alert always and toggle its content, or pair it with such a region.
-- **The glyph is not `aria-hidden`.** The literal characters `i`, `✓`, `!`, `✕` are inside a `<span>` in the announced content, so a danger alert may be read as "multiplication x" or "letter i" before the title.
 - **`role="alert"` on a persistent banner is wrong in the other direction.** An Alert that is always present (a standing warning on a record) will be announced on every re-render that touches it. Alerts are for messages that _appear_.
 - **Contrast is derived, not verified.** Body ink is `color-mix(--foreground 40%, hue)` on a `color-mix(hue 20%, --card)` background. That reads well for the default palette and is not guaranteed for an arbitrary season hue — a light amber `--warning` produces low-contrast body text with nothing to catch it.
 - No dismiss control, so nothing to make keyboard-accessible — which is the honest upside of the smaller API.

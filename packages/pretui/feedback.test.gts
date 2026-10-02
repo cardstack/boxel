@@ -1,7 +1,8 @@
 // Pretui — semantics proof for the feedback territory's status and progress
 // components (Toast, ProgressBar, ProgressRadial, Spinner, BrokenLink,
 // LoadingState) and the shared `resolvePixelSize` helper. Alert's own
-// contract is asserted in controls.test.gts.
+// contract is asserted in components/alert.test.gts, and its React-dialect
+// aliases in controls.test.gts.
 //
 // No assertion reads a computed style: the components' own `<style scoped>` is
 // inert in this harness (the scoped-css attribute is stamped, the rules are not
