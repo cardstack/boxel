@@ -473,6 +473,7 @@ export class AmountInput extends Component<AmountInputSignature> {
       {{/unless}}
     </div>
     <style scoped>
+      /* above Select's and SegmentedControl's layer, so these win by layer order, not file order */
       @layer PretComponent, PretComposite;
       @layer PretComposite {
         .pretui-amount {
@@ -599,23 +600,20 @@ export class AmountInput extends Component<AmountInputSignature> {
             min-height: 44px;
           }
         }
-      }
-      /* Unlayered: Select and SegmentedControl style their roots unlayered,
-         and unlayered CSS beats any layer. The shell ancestor lifts these
-         above the child's single-class root rule. */
-      .pretui-amount-shell .pretui-amount-segments,
-      .pretui-amount-shell .pretui-amount-select {
-        flex: 0 0 auto;
-        margin-inline-start: auto;
-      }
-      .pretui-amount-shell .pretui-amount-select {
-        min-width: var(--pretui-amount-select-width, 7.5rem);
-      }
-      @container (max-width: 260px) {
         .pretui-amount-shell .pretui-amount-segments,
         .pretui-amount-shell .pretui-amount-select {
-          margin-inline-start: 0;
-          width: 100%;
+          flex: 0 0 auto;
+          margin-inline-start: auto;
+        }
+        .pretui-amount-shell .pretui-amount-select {
+          min-width: var(--pretui-amount-select-width, 7.5rem);
+        }
+        @container (max-width: 260px) {
+          .pretui-amount-shell .pretui-amount-segments,
+          .pretui-amount-shell .pretui-amount-select {
+            margin-inline-start: 0;
+            width: 100%;
+          }
         }
       }
     </style>

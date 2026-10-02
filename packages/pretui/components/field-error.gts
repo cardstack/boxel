@@ -75,6 +75,7 @@ export class FieldError extends Component<FieldErrorSignature> {
       {{/if}}
     </div>
     <style scoped>
+      /* above Token's layer, so these win by layer order, not file order */
       @layer PretComponent, PretComposite;
       @layer PretComposite {
         /* Law 2 — one hue in, a complete treatment out. The severity picks the
@@ -117,11 +118,9 @@ export class FieldError extends Component<FieldErrorSignature> {
         .pretui-field-error-msg {
           min-width: 0;
         }
-      }
-      /* Unlayered: Token styles its root unlayered, and unlayered CSS beats
-         any layer. */
-      .pretui-field-error .pretui-field-error-rule {
-        flex: none;
+        .pretui-field-error .pretui-field-error-rule {
+          flex: none;
+        }
       }
     </style>
   </template>

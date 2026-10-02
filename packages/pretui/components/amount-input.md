@@ -60,4 +60,4 @@ Where it is thinner: no unit conversion — changing the unit reinterprets the n
 
 The two width tokens are what keep a column of amounts aligned: fixing the mark and picker widths means the digits line up down a table even when the units differ in length, which is the whole reason to have them as tokens rather than letting content size them.
 
-The component's own styles sit in `@layer PretComposite`, so a caller's unlayered CSS overrides them without a more specific selector. The rules it sets on Select and SegmentedControl stay unlayered, because those components style their roots unlayered and unlayered CSS beats any layer.
+The styles sit in `@layer PretComposite`, above the `PretComponent` layer that Select and SegmentedControl use, so what this component sets on them wins by layer order. A caller's unlayered CSS overrides both without a more specific selector.

@@ -57,4 +57,4 @@ Because severity is carried by **glyph and hue together**, it survives WCAG 1.4.
 
 A season must define `--warning` and `--pretui-info` legibly at 11.5px against `--card`; amber and pale blue at small sizes are the two most common contrast failures in this territory.
 
-The component's own styles sit in `@layer PretComposite`, so a caller's unlayered CSS overrides them without a more specific selector. The rule it sets on Token stays unlayered, because Token styles its root unlayered and unlayered CSS beats any layer.
+The styles sit in `@layer PretComposite`, above Token's `PretComponent` layer, so what this component sets on Token wins by layer order. A caller's unlayered CSS overrides both without a more specific selector.

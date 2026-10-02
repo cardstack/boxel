@@ -208,6 +208,7 @@ export class MultiSelect extends Component<MultiSelectSignature> {
       <span class='pretui-ms-count' role='status'>{{this.countText}}</span>
     </div>
     <style scoped>
+      /* above Popup's layer, so these win by layer order, not file order */
       @layer PretComponent, PretComposite;
       @layer PretComposite {
         .pretui-selectwrap {
@@ -380,12 +381,10 @@ export class MultiSelect extends Component<MultiSelectSignature> {
             transition: none;
           }
         }
-      }
-      /* Unlayered: Popup styles its anchor unlayered, and unlayered CSS beats
-         any layer. The anchor must carry the trigger's full width. */
-      .pretui-selectwrap :deep(.pretui-popup-anchor) {
-        display: block;
-        width: 100%;
+        .pretui-selectwrap :deep(.pretui-popup-anchor) {
+          display: block;
+          width: 100%;
+        }
       }
     </style>
   </template>

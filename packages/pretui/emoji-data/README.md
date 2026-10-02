@@ -32,6 +32,8 @@ but that is a fact that had to be checked, not assumed.
 | `engine.ts`    | Search, tokenisation, skin tones and emoji-support detection, **ported** from upstream source. Our code, derived from theirs. |
 | `LICENSE`      | Apache-2.0, verbatim from the emoji-picker-element checkout.                                                                  |
 | `LICENSE.data` | Apache-2.0, verbatim from the emoji-picker-element-data package.                                                              |
+| `LICENSE.emojibase` | MIT, verbatim from the emojibase-data package the dataset is built from.                                            |
+| `LICENSE.unicode` | Unicode License V3, for the CLDR annotations in the dataset.                                                          |
 
 The component that consumes them is `../components/emoji-picker.gts`.
 
@@ -132,9 +134,11 @@ satisfied by the two `LICENSE` copies plus the headers of `data.ts` and
 changed. Apache-2.0 also carries a **patent grant** (§3), which is a reason to
 prefer it, not a burden.
 
-Upstream data chain, for completeness: `emoji-picker-element-data` 1.8.0
-(Apache-2.0) is built from `emojibase-data` 17.0.0 (MIT), whose annotations
-originate in **Unicode CLDR**.
+Upstream data chain: `emoji-picker-element-data` 1.8.0 (Apache-2.0) is built
+from `emojibase-data` 17.0.0 (MIT), whose annotations originate in **Unicode
+CLDR** (Unicode License V3). Both notices ship here too: `LICENSE.emojibase`
+is verbatim from the `emojibase-data@17.0.0` npm package, and
+`LICENSE.unicode` is verbatim from <https://www.unicode.org/license.txt>.
 
 ## The dataset
 
