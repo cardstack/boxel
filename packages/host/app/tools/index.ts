@@ -71,6 +71,7 @@ import * as ReadTextFileToolModule from './read-text-file';
 import * as RegisterBotToolModule from './register-bot';
 import * as ReindexRealmToolModule from './reindex-realm';
 import * as RetrySubmissionWorkflowToolModule from './retry-submission-workflow';
+import * as RunRealmCodeToolModule from './run-realm-code';
 import * as SanitizeModuleListToolModule from './sanitize-module-list';
 import * as SaveCardToolModule from './save-card';
 import * as SearchAndChooseToolModule from './search-and-choose';
@@ -255,6 +256,7 @@ export function shimHostTools(virtualNetwork: VirtualNetwork) {
     PatchCardInstanceToolModule,
   );
   shimHostToolModule(virtualNetwork, 'patch-code', PatchCodeToolModule);
+  shimHostToolModule(virtualNetwork, 'run-realm-code', RunRealmCodeToolModule);
   shimHostToolModule(virtualNetwork, 'patch-fields', PatchFieldsToolModule);
   shimHostToolModule(virtualNetwork, 'patch-theme', PatchThemeToolModule);
   shimHostToolModule(
@@ -529,6 +531,7 @@ export const HostToolClasses: (typeof HostBaseTool<any, any>)[] = [
   OpenWorkspaceToolModule.default,
   GenerateThemeExampleToolModule.default,
   PatchCodeToolModule.default,
+  RunRealmCodeToolModule.default,
   PatchFieldsToolModule.default,
   PatchThemeToolModule.default,
   PersistModuleInspectorViewToolModule.default,

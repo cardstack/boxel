@@ -35,10 +35,13 @@ proceeds without further interruption.
 **Which evaluation.** Read every `eval-realm/Evaluation/*.json` under
 `packages/ai-assistant-evals` and take `data.attributes.cardInfo.name` and
 `.summary` from each — never a hardcoded list, because evaluations are added
-by dropping a file in that directory. List all of them in the reply, one line
-each as `name — summary`. Then ask, with `hello-world` first (it is the
-cheapest and the one to start from) and the rest by ascending cost, and say in
-the question that "Other" takes any name from the list. An evaluation's URL is
+by dropping a file in that directory. List all of them in the reply, numbered,
+one line each as `name — summary`, with the summary copied word for word:
+it already says what each prompt asks and what the eval tests, so do not
+shorten or rephrase it. Then ask, with `hello-world` first (it is the
+cheapest and the one to start from) and the rest by ascending cost. Each
+option's label is the `name`, and its description is the `summary`, word for
+word. Say in the question that "Other" takes any file name from the list. An evaluation's URL is
 `https://localhost:4201/user/evals/Evaluation/<file name without .json>`.
 
 **Which models.** Read every model the SystemCard offers
