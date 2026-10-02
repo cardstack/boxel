@@ -115,30 +115,29 @@ export const BUNDLED_BASE_MODULES: Record<
   // is bundled anyway AND fetched separately when card code imports it by
   // identifier — two copies, whose classes and module state do not match.
   //
-  // A module whose whole content is a re-export is the exception, and is left
-  // out on purpose: a loader credits a class to the first module it serves
-  // that exposes it, and a bundled re-exporter is served without the loader
-  // ever being asked for the module that declares the class. The class is then
-  // named by a module that does not declare it, which an adoption-chain walk
-  // reaches as a filter referring to a nonexistent type. Fetching the
-  // re-exporter instead costs one request and gets the attribution right, and
-  // the two module records that leaves behind expose the same class from the
-  // same chunk, so nothing compares them and disagrees.
+  // Attribution does not decide what goes in this table. A bundled module
+  // publishes the classes it declares as it is evaluated, and the loader reads
+  // that registry before its own record, so a class is named by the module
+  // that declares it whichever module was served first. `theme` and
+  // `image-file-def` are bundled on that footing: each re-exports a class
+  // `card-api` declares, and `card-api` keeps the credit.
   //
-  // `file-api`, `command`, `commands/search-card-result`, `index`,
-  // `command-field` and `file-formats/index` are out on the same rule;
+  // The closure rule is what keeps a module out. `command` imports
+  // `commands/search-card-result`, `commands/search-entry-result` and
+  // `markdown`; `commands/search-card-result` imports
+  // `commands/search-result-list`. The table holds none of those four, so
+  // neither importer can join it.
+  //
+  // `markdown`, `text-area`, `file-api`, `index`, `command-field` and
+  // `file-formats/index` import nothing the table lacks. They are fetched
+  // because bundling them is follow-on work, not because anything blocks it.
+  // `string` has a reason of its own: it is `export default StringField` in a
+  // `.ts`, so a dynamic `import()` of it here pulls that file into the
+  // TypeScript program, where TS reads the `.ts` as CommonJS and retypes the
+  // default export for every consumer.
+  //
   // `FETCHED_RE_EXPORTS` lists the ones a bundled module still imports, which
   // are the ones the closure check has to allow.
-  //
-  // Passing a class through is no longer one of the reasons. A bundled module
-  // publishes the classes it declares as it is evaluated, and the loader reads
-  // that before its own record, so a class is named by the module that
-  // declares it whichever module was served first. `theme` and
-  // `image-file-def` are bundled on that footing: each re-exports a class from
-  // `card-api`, which publishes it and keeps the credit. What still keeps a
-  // module out is the closure rule — `command` and
-  // `commands/search-card-result` each import a sibling the table does not
-  // hold.
   'card-api': () => import('@cardstack/base/card-api'),
   '-private': () => import('@cardstack/base/-private'),
   'card-serialization': () => import('@cardstack/base/card-serialization'),
@@ -271,20 +270,13 @@ export const BUNDLED_BASE_MODULES: Record<
     import('@cardstack/base/color-field/util/color-utils'),
   'color-field/util/css-color-parsers': () =>
     import('@cardstack/base/color-field/util/css-color-parsers'),
-  // `command` and `commands/search-card-result` are deliberately NOT bundled,
-  // both for the closure rule above.
-  //
-  // `command` imports `./commands/search-entry-result` and
-  // `commands/search-card-result` imports `./commands/search-result-list`,
-  // neither of which this table holds, so bundling either would compile its
-  // sibling into that chunk while a direct import of the sibling still
-  // fetched a separate copy.
-  //
-  // Each also re-exports a class it does not declare, which used to be a
-  // second reason and is no longer one: a bundled module publishes what it
-  // declares, so `json-field` keeps the credit for `JsonField` whichever
-  // module is served first. Bundling these two waits on their siblings, not
-  // on attribution.
+  // `command` and `commands/search-card-result` are out for the closure rule
+  // above. `command` imports `./commands/search-card-result`,
+  // `./commands/search-entry-result` and `./markdown`;
+  // `commands/search-card-result` imports `./commands/search-result-list`.
+  // This table holds none of those, so bundling either would compile its
+  // siblings into that chunk while a direct import of a sibling still fetched
+  // a separate copy. Bundling these two waits on their siblings.
   'components/markdown-editor-mode-select': () =>
     import('@cardstack/base/components/markdown-editor-mode-select'),
   'components/time-slots': () =>
