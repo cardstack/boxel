@@ -2,6 +2,8 @@
 
 An inline banner carrying a tone: something succeeded, something needs attention, something failed. It sits **in the flow of the page**, next to the thing it is about. Use it for state that persists — a form-level failure, a warning about a record's condition, a note about what a panel is showing. If the message is transient and about an action just taken, use **Toast**. If it belongs to one field, use **FieldError**. If it is the whole content of an empty region, use **EmptyState**.
 
+**Callout** is this same class re-exported under another name, and `callout.md` documents it too, so a change to the tones, roles or glyph here must also be made there.
+
 ## The contract
 
 ```

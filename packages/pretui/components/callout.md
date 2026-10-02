@@ -21,7 +21,7 @@ Identical to Alert. Tones outside the four fall back to `info` rather than emitt
 
 ## Accessibility
 
-Governing pattern: APG **Alert**. `role="alert"` for `warning` and `danger`, `role="status"` otherwise, both with implicit `aria-atomic`. The live region mounts together with its content, so a banner that appears complete is announced less reliably than one written into an existing region — render it from first paint and toggle the content when the announcement matters. The tone glyph is literal text and is not `aria-hidden`. No dismiss control, so nothing to make keyboard-reachable.
+Governing pattern: APG **Alert**. `role="alert"` for `danger`, `role="status"` otherwise, both with implicit `aria-atomic`. The live region mounts together with its content, so a banner that appears complete is announced less reliably than one written into an existing region — render it from first paint and toggle the content when the announcement matters. No dismiss control, so nothing to make keyboard-reachable.
 
 ## Theming
 

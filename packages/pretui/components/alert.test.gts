@@ -1,8 +1,7 @@
 // Alert unit tests: what a screen reader reaches inside the banner. The tone
 // reaches it through the role and the text, so the tone glyph is decoration.
 //
-// Local-only test file, kept off the realm by `.boxelignore` (`*.test.gts`);
-// run with `boxel test`.
+// Run with `boxel test`.
 import { module, test } from 'qunit';
 import { render } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
