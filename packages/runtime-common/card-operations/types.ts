@@ -385,8 +385,9 @@ export type OperationLoweringIssueCode =
   // assemble, and no other base assembles one: a write answers without
   // assembling the card's closure, and a `readSource` serves stored bytes.
   | 'links-without-assembly'
-  // A `links` value that is not one of the strategies a read or a query can
-  // apply.
+  // A `links` value that is not one of the strategies its base can apply,
+  // including `none` on a `read`: `none` is a query's strategy, since a card
+  // the host loads without its links would have them replaced by an edit.
   | 'invalid-link-strategy'
   // An `html` declaration on a base other than `read` or `query`. It withholds
   // prerendered HTML a read of the target or a query's rows are served with,

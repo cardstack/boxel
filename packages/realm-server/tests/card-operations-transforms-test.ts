@@ -509,13 +509,13 @@ module(basename(import.meta.filename), function () {
             read: {
               base: 'read',
               deterministic: true,
-              links: 'none',
+              links: 'ids',
               output: { source: '{title:.title}', syntax: 'solidified' },
             },
           }),
           new URL(CARD),
         ),
-        { shape: 'staged', links: 'none', unshareableFormats: [] },
+        { shape: 'staged', links: 'ids', unshareableFormats: [] },
         'the two answers are independent',
       );
     });
