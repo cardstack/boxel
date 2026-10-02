@@ -20,7 +20,7 @@ Element: HTMLElement (a <nav>)
 
 **`@items[].id` is a real DOM id** and becomes the link's `href` fragment — so the links work with JavaScript off, and the browser's native fragment navigation does the scrolling.
 
-**`@onSelect` reports a click.** It fires with `(id, event)` when a row is clicked, and it never changes what renders: a link-mode caller can use it to close a mobile drawer and the fragment link still navigates. Like every other `@onSelect` in the kit, it only notifies.
+**`@onSelect` reports a click.** It fires with `(id, event)` when a row is clicked, and it never changes what renders: a link-mode caller can use it to close a mobile drawer and the fragment link still navigates. This is unlike **Swatch**, where `@onSelect` is what turns a static `<span>` chip into a `<button>`: a contents row is clickable in both modes, so the element follows the `href` (`@links`), not the handler.
 
 **`@links={{false}}` is button mode.** The kit renders a row with an `href` as a link and a row without one as a button (**Button**, **BottomNav**, **SidebarItem**), and here the `href` is the generated `#id`, so turning it off is the switch. Every row is then a `<button type="button">` with no `href`, and the component does no scrolling, so the caller owns it through `@onSelect`. Use it when the sections live in the caller's own scroll container and fragment navigation would scroll the wrong thing, such as an edit form inside a panel: the caller finds its root from `event.currentTarget` and calls `scrollIntoView` on the section. The ids then only have to mean something to the caller. `@onActiveChange`, `@activeId`, the marker and `aria-current` work the same in both modes.
 
