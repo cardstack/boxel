@@ -78,6 +78,7 @@ const SIZE_ALIASES: Record<string, PretuiSize> = Object.assign(
     small: 's',
     medium: 'm',
     large: 'l',
+    middle: 'm',
   } as const,
 );
 /** Every `@size` spelling accepted, narrowed to the house scale. */

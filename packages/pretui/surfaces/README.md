@@ -9,6 +9,7 @@ host-provided modules (`@ember/*`, `@glimmer/*`, `@cardstack/boxel-ui`,
 | ---------- | ------------------------ | --------------- | ------------------------ | ------------ |
 | `canvas/`  | `@cardstack/boxel-canvas` | 0.1.0-alpha.0  | 2026-05-14T22:19:52.706Z | NodeCanvas   |
 | `layout/`  | `@cardstack/boxel-layout` | 0.1.0-alpha.0  | 2026-05-14T22:19:53.000Z | PageScaffold |
+| `grid/`    | `@cardstack/boxel-grid`   | 0.1.0-alpha.0  | 2026-05-14T22:19:52.862Z | Sheet        |
 
 ## Licences
 
@@ -19,7 +20,7 @@ host-provided modules (`@ember/*`, `@glimmer/*`, `@cardstack/boxel-ui`,
 
 ## Notes
 
-- Do not hand-edit or reformat `canvas/index.js` or `layout/index.js`; they are
+- Do not hand-edit or reformat the `index.js` bundles; they are
   build output. `lint-staged.config.mjs` and `.prettierignore` keep the
   autofix away from them.
 - The canvas stylesheet is not imported from the bundle. A side-effect CSS
