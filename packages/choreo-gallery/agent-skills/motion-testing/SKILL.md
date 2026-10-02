@@ -14,8 +14,8 @@ description: >-
 change a spring and every sleep becomes flaky or slow.
 
 ```ts
+import { setupChoreo } from 'glimmer-motion/choreo/test-support';
 import {
-  setupMotion,
   animationsSettled,
   bounds,
   shape,
@@ -23,7 +23,7 @@ import {
 
 module('the inbox', function (hooks) {
   setupRenderingTest(hooks);
-  setupMotion(hooks);
+  setupChoreo(hooks);
 
   test('a deleted row flies to the bin', async function (assert) {
     await render(<template><Inbox /></template>);
