@@ -1,7 +1,6 @@
 // Pretui — ActionBar unit tests: one tab stop through membership changes,
 // and destructive actions last in an overflow menu.
-// Local-only test file, kept off the realm by `.boxelignore` (`*.test.gts`);
-// run with `boxel test`.
+// Run with `boxel test`; deployment leaves `*.test.gts` off the realm.
 import { module, test } from 'qunit';
 import { render, settled } from '@ember/test-helpers';
 import { tracked } from '@glimmer/tracking';

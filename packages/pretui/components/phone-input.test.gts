@@ -1,5 +1,4 @@
-// Pretui — PhoneInput unit tests. Imports from ./extras; when PhoneInput moves to
-// its own file only the import path changes.
+// Pretui — PhoneInput unit tests.
 //
 // No assertion touches a computed style: the component's own `<style scoped>`
 // is inert in this harness (the scoped-css attribute is stamped, the rules are

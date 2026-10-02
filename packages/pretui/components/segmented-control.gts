@@ -27,6 +27,7 @@ export interface SegmentedControlSignature {
      * as an unnamed group; supply this whenever no visible heading precedes
      * the control. */
     label?: string;
+    disabled?: boolean;
   };
   Element: HTMLDivElement;
 }
@@ -63,11 +64,19 @@ export class SegmentedControl extends Component<SegmentedControlSignature> {
   get value() {
     return this.args.value ?? this.internal;
   }
-  pick = (option: SegmentOption) => {
+  pick = (option: SegmentOption, event: Event) => {
     if (this.args.value === undefined) {
       this.internal = option.value;
     }
     emit([this.args.onValueChange, this.args.onChange], option.value);
+    // controlled: the browser already moved the radio; move it back unless the
+    // owner took the new value
+    if (this.args.value !== undefined && this.args.value !== option.value) {
+      let group = (event.target as HTMLElement).closest('.pretui-seg');
+      group?.querySelectorAll<HTMLInputElement>('.pretui-seg-input').forEach((radio) => {
+        radio.checked = radio.value === this.args.value;
+      });
+    }
   };
   isActive = (option: SegmentOption) => this.value === option.value;
   <template>
@@ -91,6 +100,7 @@ export class SegmentedControl extends Component<SegmentedControlSignature> {
             name={{this.name}}
             value={{option.value}}
             checked={{this.isActive option}}
+            disabled={{@disabled}}
             {{on 'change' (fn this.pick option)}}
           />
           {{option.label}}

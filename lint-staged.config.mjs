@@ -28,6 +28,12 @@ const VERBATIM_COPIED_TREES = [
   // Licensed FileDef sample files whose bytes must match the integrity
   // manifest in the sibling SOURCES.md.
   '/packages/experiments-realm/filedef-fixtures/samples/',
+  // Vendored third-party bundles and data in Pret UI; each directory's
+  // README.md records the upstream version and how the bytes were built.
+  '/packages/pretui/color/index.js',
+  '/packages/pretui/zxcvbn/index.js',
+  '/packages/pretui/sigpad/index.js',
+  '/packages/pretui/emoji-data/data.ts',
 ];
 const isVerbatimCopy = (file) => {
   const posix = file.replace(/\\/g, '/');

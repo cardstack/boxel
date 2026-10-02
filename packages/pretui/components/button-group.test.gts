@@ -1,5 +1,4 @@
-// Pretui — ButtonGroup unit tests. Imports from ./composites; when ButtonGroup moves to
-// its own file only the import path changes.
+// Pretui — ButtonGroup unit tests.
 //
 // No assertion touches a computed style: the component's own `<style scoped>`
 // is inert in this harness (the scoped-css attribute is stamped, the rules are

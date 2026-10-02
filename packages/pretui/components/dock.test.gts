@@ -1,11 +1,10 @@
-// Pretui — Dock unit tests. Imports from ../structure-scenes; when Dock moves
-// to its own file only the import path changes. The magnification is CSS
+// Pretui — Dock unit tests. The magnification is CSS
 // (:hover / :has), so it is not assertable here — the toolbar semantics are.
 //
-// Local-only test file, kept off the realm by `.boxelignore` (`*.test.gts`);
-// run with `boxel test`. No assertion touches a computed style: the
-// component's own `<style scoped>` is inert in this harness (the scoped-css
-// attribute is stamped, the rules are not applied).
+// Run with `boxel test`; deployment leaves `*.test.gts` off the realm.
+// No assertion touches a computed style: the component's own `<style scoped>`
+// is inert in this harness (the scoped-css attribute is stamped, the rules
+// are not applied).
 import { module, test } from 'qunit';
 import { render, click } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
