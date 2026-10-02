@@ -731,12 +731,17 @@ module(basename(import.meta.filename), function (hooks) {
         `${who}'s capture rendered: ${response.body.data.attributes.error}`,
       );
     }
-    let requesterHeight = requesters.body.data.attributes.captures[0].height;
-    let otherHeight = others.body.data.attributes.captures[0].height;
+    // The styled board draws nothing but its rows, and a capture is never
+    // shorter than its viewport.
     assert.strictEqual(
-      requesterHeight - otherHeight,
+      requesters.body.data.attributes.captures[0].height,
       STYLED_ROW_HEIGHT,
-      `the requester's capture drew the row their grant admits them to at the height its stylesheet gives it, and the other reader's drew no row (${requesterHeight}px against ${otherHeight}px)`,
+      "the requester's capture drew the row their grant admits them to at the height its stylesheet gives it",
+    );
+    assert.strictEqual(
+      others.body.data.attributes.captures[0].height,
+      captureSpec.viewport.height,
+      "the other reader's drew no row",
     );
   });
 });
