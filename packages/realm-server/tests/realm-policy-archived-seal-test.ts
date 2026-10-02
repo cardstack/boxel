@@ -232,7 +232,7 @@ module(basename(import.meta.filename), function (hooks) {
   // Every realm `start` brings up is indexed once, into a template database
   // each test starts from, rather than from scratch before each test.
   let templateDatabase = setupTestDatabaseTemplate(hooks, {
-    key: basename(import.meta.filename),
+    key: import.meta.filename,
     build: async (args) => {
       await start(args);
       return stop;

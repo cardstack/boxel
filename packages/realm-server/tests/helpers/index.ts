@@ -3226,7 +3226,10 @@ export function setupPermissionedRealmsCached(
 //
 // A realm that boots on a copy finds its index there and skips its boot index
 // (see `Realm#startup`), so the copy has to hold what each test would index:
-// `key` must change whenever what `build` writes does.
+// `key` must change whenever what `build` writes does. The cache spans the
+// whole test process, so a module's key must also differ from every other
+// module's: use its full path (`import.meta.filename`), not its basename,
+// which modules in different directories can share.
 export function setupTestDatabaseTemplate(
   hooks: NestedHooks,
   {

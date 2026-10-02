@@ -316,7 +316,7 @@ module(basename(import.meta.filename), function (hooks) {
   // Both realms are indexed once, into a template database every test starts
   // from, rather than from scratch before each test.
   let templateDatabase = setupTestDatabaseTemplate(hooks, {
-    key: basename(import.meta.filename),
+    key: import.meta.filename,
     build: async (args) => {
       await start(args);
       return stop;
