@@ -1,0 +1,31 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "assistantPrompt": "Make me a LinkedIn-style profile card with a first name, a last name, and a headline. It should show the full name without me typing it. Create two profiles and show me one of them.",
+      "followUpPrompts": [
+        "Add the company the person works at, and show it under the headline. Keep my two profiles as they are, and give both of them a company. Also make the design a little bit more stylish."
+      ],
+      "successCriteria": "1. One definition exists: a profile card with `firstName`, `lastName` and `headline`, and a `fullName` that is a `computeVia` of the first and last name, not a stored field.\n2. Two profile instances exist, with different names and headlines. One of them is open on screen with no error boundary and shows its full name.\n3. After the follow-up: the same `.gts` file was edited in place (a `run-realm-code` call with `realm.fs.replace`, or a read and a rewrite of that file). No second profile definition was written, and the two instances were edited, not deleted and created again.\n4. The profile has a company field, and the card shows it under the headline.\n5. Both instances have a company, and keep their names and headlines from the first prompt.\n6. The design changed visibly from the first version (for example layout, spacing, type or color) and uses theme variables, not hard-coded colors. The profile still renders with no error boundary.\n7. Every tool call applied or was repaired by the model, the assistant did not ask a question or wait for confirmation before acting, and the whole flow took at most 20 turns.",
+      "cardInfo": {
+        "name": "LinkedIn Profile Card",
+        "summary": "The first prompt asks for a LinkedIn-style profile card with a first name, a last name and a headline, a full name that is computed, and two profiles, one of them shown. The second prompt asks to add the company the person works at under the headline, give both profiles a company, and make the design a little more stylish. This eval tests whether the selected models can build a small card with a computed field, then edit that card and its instances in place and restyle it.",
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../evaluation",
+        "name": "EvaluationCard"
+      }
+    }
+  }
+}

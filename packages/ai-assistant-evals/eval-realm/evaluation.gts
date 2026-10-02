@@ -719,7 +719,11 @@ export class EvaluationReportCard extends CardDef {
   @field results = linksToMany(() => EvaluationResultCard, {
     query: {
       filter: { eq: { sessionId: '$this.sessionId' } },
-      sort: [{ by: 'modelName', direction: 'asc' }],
+      sort: [
+        { by: 'effectivenessScore', direction: 'desc' },
+        { by: 'qualityScore', direction: 'desc' },
+        { by: 'modelName', direction: 'asc' },
+      ],
       realm: '$REALM',
     },
   });

@@ -17,6 +17,7 @@ import {
 } from '@cardstack/runtime-common';
 
 import HostBaseTool from '../lib/host-base-tool';
+import { pruneEmptyQueryParts } from '../utils/search/prune-empty-query';
 import { hasNarrowingPositiveTypeRef } from '../utils/search/query-builder';
 
 import type StoreService from '../services/store';
@@ -180,7 +181,8 @@ export default class SearchEntriesTool extends HostBaseTool<
   protected async run(
     input: BaseToolModule.SearchEntriesInput,
   ): Promise<BaseToolModule.SearchEntriesResult> {
-    assertQuery(input.query);
+    let requestQuery = pruneEmptyQueryParts(input.query);
+    assertQuery(requestQuery);
     let scope = resolveScope(input.scope);
     let limit = Math.min(
       Math.max(Math.floor(input.limit ?? DEFAULT_LIMIT), 1),
@@ -188,7 +190,7 @@ export default class SearchEntriesTool extends HostBaseTool<
     );
 
     let { query, addedRelevanceSort } = composeSearchEntriesQuery(
-      input.query,
+      requestQuery,
       scope,
     );
     let wireQuery = searchEntryWireQueryFromQuery(query, {
@@ -228,7 +230,7 @@ export default class SearchEntriesTool extends HostBaseTool<
       // reported through this flag rather than a thrown error — the realms
       // that answered still return; the flag keeps their partiality visible.
       incomplete: doc.meta.incomplete === true,
-      cardDescription: `Query: ${JSON.stringify(input.query.filter ?? {})}`,
+      cardDescription: `Query: ${JSON.stringify(requestQuery.filter ?? {})}`,
     });
   }
 }
