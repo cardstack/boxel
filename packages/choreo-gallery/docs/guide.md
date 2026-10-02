@@ -292,8 +292,10 @@ module('the inbox', function (hooks) {
 });
 ```
 
-- **`setupMotion(hooks)`** resets what outlives an owner: the beacon registry, the far-match
-  barrier, the motion speed.
+- **`setupMotion(hooks)`** resets what outlives an owner: the projection root, the layout-loop
+  guard, the motion speed. A suite that renders `<Choreo>` calls `setupChoreo(hooks)` from
+  `glimmer-motion/choreo/test-support` instead, which also resets the beacon registry, the
+  far-match barrier and gesture samples.
 - **`animationsSettled()`** resolves when every motion element, layout animation and `<Choreo>`
   timeline in the document has stopped. When it times out it names what was still moving.
 - **`bounds(el)`** measures relative to `#ember-testing`, not the viewport — QUnit moves and scales
@@ -301,8 +303,8 @@ module('the inbox', function (hooks) {
   many tests have run.
 - **`shape(el)`** is the cumulative 2×2 transform. It is how you assert that a label did not get
   stretched by its parent's scale, which reading `x` will never tell you.
-- **`orphanCount()`** and **`strandedTransforms()`** are the two invariants worth asserting after
-  any interruption: nothing parked in a `<Choreo>` orphan layer, nothing wearing a transform that
+- **`orphanCount()`** and **`strandedTransforms()`**, from `glimmer-motion/choreo/test-support`,
+  are the two invariants worth asserting after any interruption: nothing parked in a `<Choreo>` orphan layer, nothing wearing a transform that
   nobody is animating.
 
 `animationsSettled()` is something a test asks for, not something `settled()` does on its own. That

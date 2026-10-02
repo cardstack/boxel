@@ -1,6 +1,6 @@
 {
   "minimumProseWords": 300,
-  "scope": "Public root, film, test-support and choreo-player entrypoints; yielded Choreo and film vocabulary. Related helpers, aliases and supporting types share a concept chapter. Wildcard deep implementation modules are not promised as standalone application APIs.",
+  "scope": "Public root, film, test-support, choreo/test-support and choreo-player entrypoints; yielded Choreo and film vocabulary. Related helpers, aliases and supporting types share a concept chapter. Wildcard deep implementation modules are not promised as standalone application APIs.",
   "entries": [
     {
       "entrypoint": "glimmer-motion",
@@ -2164,55 +2164,7 @@
     },
     {
       "entrypoint": "glimmer-motion/test-support",
-      "symbol": "advanceGate",
-      "source": "packages/glimmer-motion/src/test-support/index.ts",
-      "kind": "value",
-      "guide": "core-test-timing",
-      "declaration": "packages/glimmer-motion/src/test-support/index.ts"
-    },
-    {
-      "entrypoint": "glimmer-motion/test-support",
-      "symbol": "seekTo",
-      "source": "packages/glimmer-motion/src/test-support/index.ts",
-      "kind": "value",
-      "guide": "core-test-timing",
-      "declaration": "packages/glimmer-motion/src/test-support/index.ts"
-    },
-    {
-      "entrypoint": "glimmer-motion/test-support",
       "symbol": "velocityOf",
-      "source": "packages/glimmer-motion/src/test-support/index.ts",
-      "kind": "value",
-      "guide": "core-test-geometry",
-      "declaration": "packages/glimmer-motion/src/test-support/index.ts"
-    },
-    {
-      "entrypoint": "glimmer-motion/test-support",
-      "symbol": "orphanCount",
-      "source": "packages/glimmer-motion/src/test-support/index.ts",
-      "kind": "value",
-      "guide": "core-test-geometry",
-      "declaration": "packages/glimmer-motion/src/test-support/index.ts"
-    },
-    {
-      "entrypoint": "glimmer-motion/test-support",
-      "symbol": "live",
-      "source": "packages/glimmer-motion/src/test-support/index.ts",
-      "kind": "value",
-      "guide": "core-test-geometry",
-      "declaration": "packages/glimmer-motion/src/test-support/index.ts"
-    },
-    {
-      "entrypoint": "glimmer-motion/test-support",
-      "symbol": "liveAll",
-      "source": "packages/glimmer-motion/src/test-support/index.ts",
-      "kind": "value",
-      "guide": "core-test-geometry",
-      "declaration": "packages/glimmer-motion/src/test-support/index.ts"
-    },
-    {
-      "entrypoint": "glimmer-motion/test-support",
-      "symbol": "strandedTransforms",
       "source": "packages/glimmer-motion/src/test-support/index.ts",
       "kind": "value",
       "guide": "core-test-geometry",
@@ -2233,6 +2185,70 @@
       "kind": "value",
       "guide": "core-test-timing",
       "declaration": "packages/glimmer-motion/src/test-support/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/test-support",
+      "symbol": "registerMotionReset",
+      "source": "packages/glimmer-motion/src/test-support/index.ts",
+      "kind": "value",
+      "guide": "core-test-timing",
+      "declaration": "packages/glimmer-motion/src/test-support/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/choreo/test-support",
+      "symbol": "setupChoreo",
+      "source": "packages/glimmer-motion/src/choreo/test-support/index.ts",
+      "kind": "value",
+      "guide": "core-test-timing",
+      "declaration": "packages/glimmer-motion/src/choreo/test-support/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/choreo/test-support",
+      "symbol": "advanceGate",
+      "source": "packages/glimmer-motion/src/choreo/test-support/index.ts",
+      "kind": "value",
+      "guide": "core-test-timing",
+      "declaration": "packages/glimmer-motion/src/choreo/test-support/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/choreo/test-support",
+      "symbol": "seekTo",
+      "source": "packages/glimmer-motion/src/choreo/test-support/index.ts",
+      "kind": "value",
+      "guide": "core-test-timing",
+      "declaration": "packages/glimmer-motion/src/choreo/test-support/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/choreo/test-support",
+      "symbol": "orphanCount",
+      "source": "packages/glimmer-motion/src/choreo/test-support/index.ts",
+      "kind": "value",
+      "guide": "core-test-geometry",
+      "declaration": "packages/glimmer-motion/src/choreo/test-support/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/choreo/test-support",
+      "symbol": "live",
+      "source": "packages/glimmer-motion/src/choreo/test-support/index.ts",
+      "kind": "value",
+      "guide": "core-test-geometry",
+      "declaration": "packages/glimmer-motion/src/choreo/test-support/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/choreo/test-support",
+      "symbol": "liveAll",
+      "source": "packages/glimmer-motion/src/choreo/test-support/index.ts",
+      "kind": "value",
+      "guide": "core-test-geometry",
+      "declaration": "packages/glimmer-motion/src/choreo/test-support/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/choreo/test-support",
+      "symbol": "strandedTransforms",
+      "source": "packages/glimmer-motion/src/choreo/test-support/index.ts",
+      "kind": "value",
+      "guide": "core-test-geometry",
+      "declaration": "packages/glimmer-motion/src/choreo/test-support/index.ts"
     },
     {
       "entrypoint": "choreo-player",

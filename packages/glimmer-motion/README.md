@@ -65,7 +65,9 @@ from a Glimmer card rather than from a React translation table.
 - **Glimmer** — `.gts`, Glint signatures, named exports, plain-function template helpers
   (`to` / `spring` / `tween` / `styles` / `start`), and `prefers-reduced-motion` honoured by default
 - **Testing** — `glimmer-motion/test-support`: `animationsSettled()`, `bounds()`, `shape()`,
-  `setupMotion(hooks)`. No `sleep()` in a motion test
+  `setupMotion(hooks)`, and `registerMotionReset()` for a layer that keeps document-wide state of
+  its own; `glimmer-motion/choreo/test-support`: `setupChoreo(hooks)`, `live()`, `orphanCount()`,
+  `strandedTransforms()`. No `sleep()` in a motion test
 - **Re-hostable** — host hooks are ~40 lines plus the components; everything above that line is
   framework-free
 
