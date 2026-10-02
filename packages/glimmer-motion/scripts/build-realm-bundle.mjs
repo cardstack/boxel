@@ -1,8 +1,9 @@
 /**
  * Build glimmer-motion and @cardstack/choreo as one hashed realm module and
  * publish it with boxel-cli. The module exports both packages' roots, plus
- * `Film`, so cards import the motion layer and Choreo from the same place. Pattern taken from @cardstack/bxl's realm bundle, plus a
- * content-hash so a bad build is one import change from rolling back.
+ * `Film`, so cards import the motion layer and Choreo from the same place.
+ * Pattern taken from @cardstack/bxl's realm bundle, plus a content-hash so a
+ * bad build is one import change from rolling back.
  *
  * Layout in the target realm:
  *
