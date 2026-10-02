@@ -1,6 +1,17 @@
 // Pretui — EmptyState: the kit's zero-data surface, with one or two honest
 // ways forward and the texture that marks it as intentional.
 import Component from '@glimmer/component';
+import { resolveSize, type PretuiSizeArg } from '../pretui-primitives';
+
+/** The two steps an EmptyState paints: 's' is the compact well, 'm' the page-section default. */
+export type EmptyStateSize = 's' | 'm';
+const EMPTY_STATE_SIZES: Record<string, EmptyStateSize> = {
+  xs: 's',
+  s: 's',
+  m: 'm',
+  l: 'm',
+  xl: 'm',
+};
 
 export interface EmptyStateSignature {
   Args: {
@@ -9,8 +20,11 @@ export interface EmptyStateSignature {
     texture?: boolean;
     /** wording of the separator between the two paths (default 'or') */
     separator?: string;
+    /** 's' is the compact well for an empty note inside a card section; 'm' (default) sizes for a page section */
+    size?: PretuiSizeArg;
   };
   Blocks: {
+    /** The message with markup in it (a Token, a link, emphasis); used when @message is absent. */
     default: [];
     action: [];
     /**
@@ -33,11 +47,25 @@ export class EmptyState extends Component<EmptyStateSignature> {
   get separator() {
     return this.args.separator ?? 'or';
   }
+  // Only the compact step lands as data-size, so the default element is unchanged.
+  get size(): EmptyStateSize | undefined {
+    let size = EMPTY_STATE_SIZES[resolveSize(this.args.size)] ?? 'm';
+    return size === 'm' ? undefined : size;
+  }
   <template>
-    <div class='pretui-empty' data-test-pretui-empty ...attributes>
+    <div
+      class='pretui-empty'
+      data-size={{this.size}}
+      data-test-pretui-empty
+      ...attributes
+    >
       {{#if this.showTexture}}<div class='pretui-empty-texture'></div>{{/if}}
       <div class='pretui-empty-title'>{{@title}}</div>
-      {{#if @message}}<div class='pretui-empty-msg'>{{@message}}</div>{{/if}}
+      {{#if @message}}
+        <div class='pretui-empty-msg'>{{@message}}</div>
+      {{else if (has-block)}}
+        <div class='pretui-empty-msg'>{{yield}}</div>
+      {{/if}}
       {{#if (has-block 'altAction')}}
         <div class='pretui-empty-paths'>
           <div class='pretui-empty-action'>{{yield to='action'}}</div>
@@ -61,6 +89,10 @@ export class EmptyState extends Component<EmptyStateSignature> {
           border-radius: var(--radius-surface, 10px);
           background: var(--canvas, var(--boxel-100));
         }
+        /* compact: the well an empty note sits in inside a card section */
+        .pretui-empty[data-size='s'] {
+          padding: 1rem;
+        }
         .pretui-empty-texture {
           position: absolute;
           inset: 0;
@@ -75,6 +107,9 @@ export class EmptyState extends Component<EmptyStateSignature> {
           position: relative;
           font-family: var(--font-serif);
           font-size: var(--text-heading, 19px);
+        }
+        .pretui-empty[data-size='s'] .pretui-empty-title {
+          font-size: var(--boxel-font-size, 1rem);
         }
         .pretui-empty-msg {
           position: relative;

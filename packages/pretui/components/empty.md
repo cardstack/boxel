@@ -9,7 +9,9 @@
 @message?        — the explanation, kept to a 34ch measure
 @texture?        — the tinted radial behind the title (default true)
 @separator?      — the word between two actions (default 'or')
-<:default>  <:action>  <:altAction>
+@size?           — 's' for the compact well inside a card section, 'm' (default) for a page section
+<:default>       — the message with markup in it, used when @message is absent
+<:action>  <:altAction>
 ```
 
 **`@title` is required.** shadcn lets `EmptyTitle` be omitted; here an empty state that does not say what is missing is not accepted.
@@ -20,7 +22,7 @@
 
 Where this is better: nothing to compose for the common case, a required title, and a generated texture in place of stock illustration so the state reads as designed with zero assets. The `<:altAction>` block gives the second honest path equal billing, which neither kit models.
 
-Where it is thinner: there is no media slot — shadcn's `EmptyMedia` and Ant's `image` have only `<:default>` to land in, and it sits between texture and title with no layout guarantees. There is no size variant, so a table's empty state and a full page's get the same padding.
+Where it is thinner: there is no media slot, so shadcn's `EmptyMedia` and Ant's `image` have nowhere to land. There are two sizes, the compact well (`@size='s'`) and the page-section default.
 
 ## Accessibility
 
@@ -28,14 +30,14 @@ EmptyState's. No APG pattern governs it. The title is a `<div>` styled as a head
 
 ## Theming
 
-EmptyState's tokens: `--canvas` (the recess, deliberately not `--card`), `--primary` (the texture tint), `--font-serif` and `--text-heading` (title), `--muted-foreground` and `--text-ui-md` (message), `--radius-surface`, `--space-2`, `--space-3`, `--space-6`, `--space-9`. A season must define `--font-serif` and keep `--canvas` distinguishable from `--card`. Nothing is themed under an Empty name.
+EmptyState's tokens: `--canvas` (the recess, deliberately not `--card`), `--primary` (the texture tint), `--font-serif` and `--text-heading` (title), `--muted-foreground` and `--text-ui-md` (message), `--radius-surface`, `--space-2`, `--space-3`, `--space-6`, `--space-9` (at `@size='s'` the padding is a fixed `1rem` and the title reads `--boxel-font-size`). A season must define `--font-serif` and keep `--canvas` distinguishable from `--card`. Nothing is themed under an Empty name.
 
 ## React ecosystem
 
 | shadcn / Ant                             | Pretui                                                |
 | ---------------------------------------- | ----------------------------------------------------- |
 | `<EmptyTitle>`                           | `@title`                                              |
-| `<EmptyDescription>` / Ant `description` | `@message`                                            |
+| `<EmptyDescription>` / Ant `description` | `@message`, or `<:default>` when it carries markup    |
 | `<EmptyContent>` / Ant children          | `<:action>`, and `<:altAction>` for the second path   |
-| `<EmptyMedia>` / Ant `image`             | `<:default>`                                          |
+| `<EmptyMedia>` / Ant `image`             | no equivalent; the texture stands in for art          |
 | `<EmptyHeader>`                          | no equivalent; title and message are laid out for you |
