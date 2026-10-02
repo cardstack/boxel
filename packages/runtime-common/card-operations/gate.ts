@@ -1824,8 +1824,7 @@ async function evaluate(
 // again as it re-renders, so a line for every throw would put the whole view
 // into the log at the rate it renders. One line says what the author needs:
 // that the predicate throws, on what, and where in the policy card it is. An
-// explain answers which card it throws on, and the author, who may read the
-// card, can run the predicate against it to see why.
+// explain answers which card it throws on.
 //
 // The line carries no card content and no predicate source. BXL's message
 // quotes the value it failed on, which can be a whole stored field of the
