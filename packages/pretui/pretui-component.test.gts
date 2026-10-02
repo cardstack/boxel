@@ -115,4 +115,26 @@ module('Pretui | PretUISpec', function (hooks) {
     );
     assert.strictEqual(createdIn[0]?.href, 'https://example.test/some-catalog/', "the note is created in the Spec's realm");
   });
+
+  test('notes are found and opened by their prefix-form ids', async function (assert) {
+    let searchedIn: string[] = [];
+    let viewed: unknown[] = [];
+    let noteId = '@cardstack/catalog/PretuiNote/sample-note';
+    let context = {
+      getCards: (_parent: unknown, _query: unknown, realms: () => string[] | undefined) => {
+        searchedIn.push(...(realms() ?? []));
+        return { instances: [{ id: noteId, note: 'Tighten the hit area', status: 'open' }] };
+      },
+    };
+    let viewCard = (card: unknown) => viewed.push(card);
+    let model = {
+      ...specModel('Button'),
+      id: '@cardstack/catalog/Spec/pretui-button',
+      [realmURL]: new URL('https://example.test/some-catalog/'),
+    };
+    await render(<template><Isolated @model={{model}} @context={{context}} @viewCard={{viewCard}} /></template>);
+    assert.deepEqual(searchedIn, ['https://example.test/some-catalog/'], "notes are searched in the Spec's realm");
+    await click('[data-test-pretui-note]');
+    assert.deepEqual(viewed, [noteId], 'the note opens by its id as given');
+  });
 });
