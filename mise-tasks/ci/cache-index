@@ -208,7 +208,26 @@ echo "Test realms ready. Dumping index tables..."
 # "Verify index cache" CI step (via the sidecar written below). Keep the
 # TRUNCATE list in scripts/import-cached-index.sh in sync. The *_pending
 # tables are deliberately excluded — they are transient UNLOGGED scratch space.
-CACHE_TABLES=(boxel_index prerendered_html realm_generations realm_meta)
+#
+# `scoped_css` holds the stylesheet bytes that the dumped rows' hashed
+# scoped-CSS deps resolve to. Without it a consumer replays rows whose deps
+# name hashes nothing in its database holds, and every request the realm
+# serves under `_scoped-css/` answers 404 — which renders search results
+# unstyled rather than failing, so nothing goes red. It carries `realm_url`,
+# so the host-scoped dump's realm filter below applies to it unchanged.
+CACHE_TABLES=(boxel_index prerendered_html realm_generations realm_meta scoped_css)
+
+# A snapshot with no `scoped_css` rows replays as cleanly as a full one and
+# returns every consumer to 404ing the hashed deps the other tables carry, with
+# nothing going red to show it. Same silent no-op the realm guards below catch,
+# so it fails here while the cause is still legible.
+scoped_css_rows=$(docker exec boxel-pg psql -U postgres -d boxel -tAc \
+  "SELECT count(*) FROM scoped_css")
+if [ "${scoped_css_rows:-0}" -eq 0 ]; then
+  echo "::error title=Index cache incomplete::No scoped_css rows in boxel. The dumped rows' hashed scoped-CSS deps would resolve to nothing, and every request under a realm's _scoped-css/ space would answer 404."
+  exit 1
+fi
+echo "  scoped_css: ${scoped_css_rows} interned stylesheets"
 
 DUMP_ARGS=()
 for t in "${CACHE_TABLES[@]}"; do
