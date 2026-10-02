@@ -2,13 +2,14 @@
 
 An inline banner carrying a tone: something succeeded, something needs attention, something failed. It sits **in the flow of the page**, next to the thing it is about. Use it for state that persists — a form-level failure, a warning about a record's condition, a note about what a panel is showing. If the message is transient and about an action just taken, use **Toast**. If it belongs to one field, use **FieldError**. If it is the whole content of an empty region, use **EmptyState**.
 
-**Callout** is this same class re-exported under another name, and `callout.md` documents it too, so a change to the tones, roles or glyph here must also be made there.
+**Callout** is this same class re-exported under another name, and `callout.md` documents it too, so a change to the tones, roles, glyph or tone word here must also be made there.
 
 ## The contract
 
 ```
 @tone? 'info' | 'success' | 'warning' | 'danger'   (default 'info')
 @title?
+@toneLabel?   (default by tone: 'Info' | 'Success' | 'Warning' | 'Error')
 <:default>  <:action>
 ```
 
@@ -32,7 +33,7 @@ Where it is thinner: no `appearance` axis (Web Awesome's outlined/plain callouts
 
 Governing pattern: APG **Alert** (`role="alert"`, nothing else required) and the live-region rules generally.
 
-What is right: the assertive/polite split by tone, and the fact that both `alert` and `status` carry implicit `aria-atomic="true"`, so the whole banner is re-read rather than just the changed fragment. The glyph is `aria-hidden`: the tone already reaches a screen reader through the role and the text, so the banner is announced as its title and message, not "multiplication x" or "letter i" first.
+What is right: the assertive/polite split by tone, and the fact that both `alert` and `status` carry implicit `aria-atomic="true"`, so the whole banner is re-read rather than just the changed fragment. The glyph is `aria-hidden`, so the banner is not announced as "multiplication x" or "letter i" first. The role alone cannot carry the tone: it singles out `danger`, and `info`, `success` and `warning` all share `role="status"`. So a visually hidden tone word sits where the glyph is, and the banner is announced as "Warning: Low credit", the way GOV.UK's warning text carries a hidden "Warning". `@toneLabel` replaces the word, for a translation or a more exact one such as "Caution" on a delete confirmation.
 
 Gaps, and one is significant:
 
