@@ -1273,6 +1273,20 @@ module('Integration | realm policy explain forms', function (hooks) {
       .hasAttribute('data-test-explanation-draft-issue', 'invalid-predicate')
       .includesText('rules[0].grants[0].where', 'the issue names where it is');
 
+    // A draft the realm refuses: valid JSON, but not a policy document.
+    await fillIn(
+      '[data-test-explain-draft]',
+      JSON.stringify({ attributes: { rules: [] } }),
+    );
+    await submitAndWait('[data-test-explain-refusal]');
+    assert
+      .dom('[data-test-explain-refusal]')
+      .includesText(
+        'a policy document',
+        "the realm's refusal of the draft is shown in place of an answer",
+      );
+    assert.dom('[data-test-explanation]').doesNotExist();
+
     await fillIn('[data-test-explain-draft]', '{ "rules": ');
     await submitAndWait('[data-test-explain-refusal]');
     assert
@@ -1374,6 +1388,15 @@ module('Integration | realm policy explain forms', function (hooks) {
       );
 
     await click('[data-test-explain-use-draft]');
+    await fillIn('[data-test-explain-draft]', JSON.stringify({ grants: [] }));
+    await submitAndWait('[data-test-explain-refusal]');
+    assert
+      .dom('[data-test-explain-refusal]')
+      .includesText(
+        'a policy document',
+        'a search asked of a draft the realm refuses shows the refusal',
+      );
+
     await fillIn(
       '[data-test-explain-draft]',
       draftRules([{ operation: 'query', where: teachesPredicate }]),
