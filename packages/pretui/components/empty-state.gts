@@ -24,7 +24,7 @@ export interface EmptyStateSignature {
     size?: PretuiSizeArg;
   };
   Blocks: {
-    /** The message with markup in it (a Token, a link, emphasis); used when @message is absent. */
+    /** The message with markup in it (a Token, a link, emphasis); wins over @message when both are given. */
     default: [];
     action: [];
     /**
@@ -47,10 +47,9 @@ export class EmptyState extends Component<EmptyStateSignature> {
   get separator() {
     return this.args.separator ?? 'or';
   }
-  // Only the compact step lands as data-size, so the default element is unchanged.
-  get size(): EmptyStateSize | undefined {
-    let size = EMPTY_STATE_SIZES[resolveSize(this.args.size)] ?? 'm';
-    return size === 'm' ? undefined : size;
+  // data-size is always set, 'm' included, as on every sized component in the kit.
+  get size(): EmptyStateSize {
+    return EMPTY_STATE_SIZES[resolveSize(this.args.size)] ?? 'm';
   }
   <template>
     <div
@@ -61,10 +60,10 @@ export class EmptyState extends Component<EmptyStateSignature> {
     >
       {{#if this.showTexture}}<div class='pretui-empty-texture'></div>{{/if}}
       <div class='pretui-empty-title'>{{@title}}</div>
-      {{#if @message}}
-        <div class='pretui-empty-msg'>{{@message}}</div>
-      {{else if (has-block)}}
+      {{#if (has-block)}}
         <div class='pretui-empty-msg'>{{yield}}</div>
+      {{else if @message}}
+        <div class='pretui-empty-msg'>{{@message}}</div>
       {{/if}}
       {{#if (has-block 'altAction')}}
         <div class='pretui-empty-paths'>

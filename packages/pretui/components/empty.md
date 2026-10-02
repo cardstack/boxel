@@ -10,7 +10,7 @@
 @texture?        — the tinted radial behind the title (default true)
 @separator?      — the word between two actions (default 'or')
 @size?           — 's' for the compact well inside a card section, 'm' (default) for a page section
-<:default>       — the message with markup in it, used when @message is absent
+<:default>       — the message with markup in it; wins over @message
 <:action>  <:altAction>
 ```
 

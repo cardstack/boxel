@@ -7,7 +7,7 @@ What a region shows when it has nothing to show: a title, an optional message, a
 ```
 @title: string   (required)
 @message?, @texture? (default true), @separator? (default 'or'), @size? (default 'm')
-<:default>   — the message with markup in it, used when @message is absent
+<:default>   — the message with markup in it; wins over @message
 <:action>  <:altAction>
 Element: HTMLDivElement
 ```
@@ -16,9 +16,9 @@ Element: HTMLDivElement
 
 **This is the one place texture lives.** The kit's Law 6 says decoration is confined, and an EmptyState is where it is allowed: a radial gradient at 8% `--primary` centred slightly above the middle. `@texture={{false}}` turns it off for dense contexts. Everything else in the kit is flat, and that is what makes this read as a deliberate pause rather than as ornament.
 
-**The message takes markup through `<:default>`.** `@message` is plain text. When the message needs a **Token**, a link or emphasis, leave `@message` off and pass the message as the block; it renders in the same place with the same type, colour and measure. If both are given, `@message` wins, as **Token**'s `@value` does over its block.
+**The message takes markup through `<:default>`.** `@message` is plain text. When the message needs a **Token**, a link or emphasis, pass the message as the block; it renders in the same place with the same type, colour and measure. A block wins over its arg, as on **Notification**, **AlertDialog** and **Card**: if both are given, the block renders and `@message` does not.
 
-**`@size`** takes the house scale (`xs | s | m | l | xl` and the `sm` / `md` / `lg` / `small` / `medium` / `large` / `default` aliases) and paints two steps. `s` is the compact well for an empty note inside a card section: `1rem` padding on every side and the title at `--boxel-font-size`. `m`, the default, is sized for a page section. `xs` lands on `s`, and `l` / `xl` on `m`. Only the compact step lands as `data-size='s'`; at the default size the element carries no `data-size`.
+**`@size`** takes the house scale (`xs | s | m | l | xl` and the `sm` / `md` / `lg` / `small` / `medium` / `large` / `default` aliases) and paints two steps. `s` is the compact well for an empty note inside a card section: `1rem` padding on every side and the title at `--boxel-font-size`. `m`, the default, is sized for a page section. `xs` lands on `s`, and `l` / `xl` on `m`. The resolved step lands as `data-size`, `'s'` or `'m'`, on every render, the default included.
 
 `max-width: 34ch` on the message is the measure at which a centred paragraph stays scannable — wider and the eye loses the line, and centred text is much less forgiving of long measures than left-aligned.
 

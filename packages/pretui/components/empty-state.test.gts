@@ -28,7 +28,7 @@ module('Pretui | components/empty-state', function (hooks) {
     assert.ok(el.querySelector('.pretui-empty-texture'), 'texture is on by default (Law 6)');
     assert.notOk(el.querySelector('.pretui-empty-msg'));
     assert.notOk(el.querySelector('.pretui-empty-action'));
-    assert.false(el.hasAttribute('data-size'), 'the default size adds no attribute');
+    assert.strictEqual(el.dataset.size, 'm', 'the default size is emitted as m');
   });
 
   test('EmptyState drops the texture on request', async function (assert) {
@@ -117,16 +117,16 @@ module('Pretui | components/empty-state', function (hooks) {
     assert.ok(q('.pretui-empty-action [data-test-clear]'), 'the action still renders');
   });
 
-  test('EmptyState prefers @message over its default block', async function (assert) {
+  test('EmptyState lets its default block win over @message', async function (assert) {
     await render(
       <template>
-        <EmptyState @title='No rows' @message='Plain text wins.'>
-          <em data-test-rich>ignored</em>
+        <EmptyState @title='No rows' @message='Plain text is ignored.'>
+          <em data-test-rich>The block wins.</em>
         </EmptyState>
       </template>,
     );
-    assert.deepEqual(texts('.pretui-empty-msg'), ['Plain text wins.'], 'one message, the string');
-    assert.notOk(q('[data-test-rich]'), 'the block is not rendered as well');
+    assert.deepEqual(texts('.pretui-empty-msg'), ['The block wins.'], 'one message, the block');
+    assert.strictEqual(q('.pretui-empty-msg [data-test-rich]')?.tagName, 'EM', 'the block keeps its markup');
   });
 
   test('EmptyState @size picks the compact step from the house scale', async function (assert) {
@@ -145,7 +145,7 @@ module('Pretui | components/empty-state', function (hooks) {
       assert.strictEqual(q(sel).dataset.size, 's', `${sel} lands on the compact step`);
     }
     for (let sel of ['[data-test-m]', '[data-test-default]', '[data-test-xl]']) {
-      assert.false(q(sel).hasAttribute('data-size'), `${sel} keeps the page-section default`);
+      assert.strictEqual(q(sel).dataset.size, 'm', `${sel} lands on the page-section default`);
     }
   });
 });

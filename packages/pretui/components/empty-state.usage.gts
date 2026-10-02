@@ -20,16 +20,13 @@ class EmptyStateUsage extends Component {
   get messageVal() {
     return this.message || undefined;
   }
-  get sizeVal(): EmptyStateSize | undefined {
-    return this.size === 'm' ? undefined : this.size;
-  }
   get usage() {
     let bits = [`@title='${this.title}'`];
     if (this.messageVal) {
       bits.push(`@message='${this.messageVal}'`);
     }
-    if (this.sizeVal) {
-      bits.push(`@size='${this.sizeVal}'`);
+    if (this.size !== 'm') {
+      bits.push(`@size='${this.size}'`);
     }
     if (!this.texture) {
       bits.push('@texture={{false}}');
@@ -46,19 +43,30 @@ class EmptyStateUsage extends Component {
       @source={{this.usage}}
     >
       <:example>
-        <EmptyState
-          @title={{this.title}}
-          @message={{this.messageVal}}
-          @texture={{this.texture}}
-          @size={{this.sizeVal}}
-        >
-          <:default>Try clearing the
-            <Token @value='origin' />
-            and
-            <Token @value='harvest' />
-            filters.</:default>
-          <:action><Button @variant='secondary'>Clear filters</Button></:action>
-        </EmptyState>
+        {{! A block wins over @message, so the block is passed only while the message knob is empty. }}
+        {{#if this.messageVal}}
+          <EmptyState
+            @title={{this.title}}
+            @message={{this.messageVal}}
+            @texture={{this.texture}}
+            @size={{this.size}}
+          >
+            <:action><Button @variant='secondary'>Clear filters</Button></:action>
+          </EmptyState>
+        {{else}}
+          <EmptyState
+            @title={{this.title}}
+            @texture={{this.texture}}
+            @size={{this.size}}
+          >
+            <:default>Try clearing the
+              <Token @value='origin' />
+              and
+              <Token @value='harvest' />
+              filters.</:default>
+            <:action><Button @variant='secondary'>Clear filters</Button></:action>
+          </EmptyState>
+        {{/if}}
       </:example>
       <:api as |Args|>
         <Args.String
@@ -69,7 +77,7 @@ class EmptyStateUsage extends Component {
         <Args.String
           @name='message'
           @value={{this.message}}
-          @description='Plain-text message. When it is set it wins over the default block; leave it empty to see the block.'
+          @description='Plain-text message. The default block wins over it when both are given; this page passes the block only while the knob is empty.'
           @onInput={{this.setMessage}}
         />
         <Args.Bool
@@ -88,7 +96,7 @@ class EmptyStateUsage extends Component {
         />
         <Args.Yield
           @name='default'
-          @description='The message with markup in it (a Token, a link, emphasis), in the same place and type as @message. Used when @message is absent.'
+          @description='The message with markup in it (a Token, a link, emphasis), in the same place and type as @message. Wins over @message when both are given.'
         />
         <Args.Yield @name='action' />
         <Args.Yield
