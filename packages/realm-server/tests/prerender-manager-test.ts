@@ -2868,6 +2868,88 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('a task with no servers closes the connection it answers on, so the caller’s retry reconnects', async function (assert) {
+      process.env.PRERENDER_SERVER_DISCOVERY_WAIT_MS = '0';
+      let { app } = buildPrerenderManagerApp();
+      let manager = await serveCountingConnections(app);
+      try {
+        let realm = 'https://realm.example/none';
+        let statuses: number[] = [];
+        let connectionHeaders: (string | null)[] = [];
+        for (let i = 0; i < 2; i++) {
+          let response = await fetch(`${manager.url}/prerender-visit`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/vnd.api+json' },
+            body: JSON.stringify(makeBody(realm, `${realm}/${i}`)),
+          });
+          await response.text();
+          statuses.push(response.status);
+          connectionHeaders.push(response.headers.get('connection'));
+        }
+        assert.deepEqual(statuses, [503, 503]);
+        assert.deepEqual(connectionHeaders, ['close', 'close']);
+        assert.strictEqual(
+          manager.connections(),
+          2,
+          'the second request arrives on a new connection',
+        );
+      } finally {
+        await manager.close();
+      }
+    });
+
+    test('a task whose servers are all unusable closes the connection it answers on', async function (assert) {
+      process.env.PRERENDER_SERVER_DISCOVERY_WAIT_MS = '0';
+      let { app, registry } = buildPrerenderManagerApp();
+      let manager = await serveCountingConnections(app);
+      try {
+        let heartbeat = await fetch(`${manager.url}/prerender-servers`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/vnd.api+json' },
+          body: JSON.stringify({
+            data: {
+              type: 'prerender-server',
+              attributes: { capacity: 2, url: serverUrlA },
+            },
+          }),
+        });
+        await heartbeat.text();
+        registry.servers.get(serverUrlA!)!.status = 'draining';
+
+        let realm = 'https://realm.example/unusable';
+        let response = await fetch(`${manager.url}/prerender-visit`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/vnd.api+json' },
+          body: JSON.stringify(makeBody(realm, `${realm}/1`)),
+        });
+        await response.text();
+        assert.strictEqual(response.status, 503);
+        assert.strictEqual(response.headers.get('connection'), 'close');
+      } finally {
+        await manager.close();
+      }
+    });
+
+    test('a task keeps pooled connections open for responses other than no servers', async function (assert) {
+      // The contrast the two tests above depend on: requests the task can
+      // answer reuse the caller's connection.
+      let { app } = buildPrerenderManagerApp();
+      let manager = await serveCountingConnections(app);
+      try {
+        for (let i = 0; i < 3; i++) {
+          let response = await fetch(`${manager.url}/`);
+          await response.text();
+          assert.strictEqual(response.status, 200);
+        }
+        assert.true(
+          manager.connections() < 3,
+          'at least one request reuses an earlier connection',
+        );
+      } finally {
+        await manager.close();
+      }
+    });
+
     test('waits for discovery when registry empty before returning 503', async function (assert) {
       process.env.PRERENDER_SERVER_DISCOVERY_WAIT_MS = '500';
       process.env.PRERENDER_SERVER_DISCOVERY_POLL_MS = '25';
@@ -3517,6 +3599,36 @@ function makeCommandBody(
         command,
       },
     },
+  };
+}
+
+// Serve a manager app on a real socket, counting the connections it accepts,
+// so a test can tell whether a client reused a connection or opened a new one.
+async function serveCountingConnections(
+  app: Koa<Koa.DefaultState, Koa.Context>,
+): Promise<{
+  url: string;
+  connections: () => number;
+  close: () => Promise<void>;
+}> {
+  let server = createServer(app.callback());
+  // Long enough that nothing but the server or client closing a connection
+  // ends it between two requests.
+  server.keepAliveTimeout = 60_000;
+  let accepted = 0;
+  server.on('connection', () => accepted++);
+  await new Promise<void>((resolve) =>
+    server.listen(0, '127.0.0.1', () => resolve()),
+  );
+  let { port } = server.address() as import('net').AddressInfo;
+  return {
+    url: `http://127.0.0.1:${port}`,
+    connections: () => accepted,
+    close: () =>
+      new Promise<void>((resolve) => {
+        server.closeAllConnections();
+        server.close(() => resolve());
+      }),
   };
 }
 
