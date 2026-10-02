@@ -41,13 +41,30 @@ The workspace catalog in `pnpm-workspace.yaml` pins `framer-motion`, `motion`, `
 
 ## Adapted, not inlined
 
+Upstream paths in this table and the next are relative to framer-motion's `src/`. `scripts/bump-motion.mjs`
+reads both tables to build a bump PR's report, and fails when an upstream path is in neither release.
+
 | here                                   | upstream                                                                                                     |
 | -------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
 | `src/gestures/transform-page-point.ts` | `utils/transform-rotated-parent.ts`, `utils/transform-viewbox-point.ts` (React ref → element or `{current}`) |
 
-Everything else in `src/` is the Glimmer re-implementation of React glue (`motion` component lifecycle,
-AnimatePresence, LayoutGroup, MeasureLayout timing, Reorder.Group/Item). The test-app carries the ports of
-Motion's Jest suites and Cypress fixtures that pin the fidelity.
+## Ported by hand
+
+The rest of `src/` that follows Motion re-implements its React glue for Glimmer. Each file below ports the
+behavior of the upstream modules beside it.
+
+| here                    | upstream                                                                                                                                                                 |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `src/node.ts`           | `motion/index.tsx`, `motion/utils/use-visual-element.ts`, `motion/features/layout/MeasureLayout.tsx`, `components/AnimatePresence/use-presence.ts`                       |
+| `src/layout.ts`         | `motion/features/layout/MeasureLayout.tsx`                                                                                                                               |
+| `src/layout-group.gts`  | `components/LayoutGroup/index.tsx`                                                                                                                                       |
+| `src/motion-config.gts` | `components/MotionConfig/index.tsx`                                                                                                                                      |
+| `src/presence.gts`      | `components/AnimatePresence/index.tsx`, `components/AnimatePresence/PresenceChild.tsx`, `components/AnimatePresence/PopChild.tsx`, `components/AnimatePresence/utils.ts` |
+| `src/reorder/group.gts` | `components/Reorder/Group.tsx`                                                                                                                                           |
+| `src/reorder/item.gts`  | `components/Reorder/Item.tsx`                                                                                                                                            |
+| `src/scroll.ts`         | `value/use-scroll.ts`, `utils/use-in-view.ts`                                                                                                                            |
+
+The test-app carries the ports of Motion's Jest suites and Cypress fixtures that pin the fidelity.
 
 ## Deviations
 
@@ -76,12 +93,15 @@ Reviewing a bump PR:
    module imports React or a framer-motion path other than `framer-motion/dom`. A PR opened with the
    workflow's `GITHUB_TOKEN` starts no `pull_request` workflows, so the workflow dispatches `ci.yaml` and
    `ci-lint.yaml` on the branch itself. A push to the branch runs the rest.
-2. **The PR body.** It lists every inlined or adapted module whose TypeScript changed between the two
-   releases, entry modules first, with diffs, read from the `sourcesContent` of framer-motion's
-   `dist/es/**/*.mjs.map`. For a changed entry module, compare its exports with the declarations in
-   `src/framer-motion-internals.ts`, and its overridden methods with the subclasses in
-   `src/gestures/drag-gesture.ts`. Neither fails to compile when upstream changes a signature. Port a change
-   in an adapted source into `src/gestures/transform-page-point.ts` by hand.
+2. **The PR body.** It lists every inlined, adapted or ported module whose TypeScript changed between the
+   two releases, with diffs, read from the `sourcesContent` of framer-motion's `dist/es/**/*.mjs.map`.
+   - For a changed entry module, compare its exports with the declarations in
+     `src/framer-motion-internals.ts`, and its overridden methods with the subclasses in
+     `src/gestures/drag-gesture.ts`. Neither fails to compile when upstream changes a signature.
+   - Port a change in an adapted source into `src/gestures/transform-page-point.ts` by hand.
+   - Read a changed ported module against the Glimmer file the report names, and port what applies to
+     Glimmer. Neither typecheck nor the ported suites, which are frozen at the upstream revision they came
+     from, catch this drift.
 3. **Fixes** are ordinary commits on the bump branch.
 4. **Title.** The PR opens as `fix:`, for a catch-up. Retitle it `feat:` when upstream adds a capability
    glimmer-motion exposes. The prefix covers glimmer-motion and choreo, which release together.

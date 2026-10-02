@@ -1,7 +1,8 @@
 // Moves the workspace catalog's Motion pins (framer-motion, motion, motion-dom,
 // motion-utils) to a newer framer-motion release, and writes the report a bump
 // PR carries: how the TypeScript source of every framer-motion module
-// glimmer-motion inlines or adapts differs between the two releases.
+// glimmer-motion inlines, adapts or ports differs between the two releases.
+// The adapted and ported modules come from VENDORED.md's tables.
 //
 //   node scripts/bump-motion.mjs                 print the release a bump would take
 //   node scripts/bump-motion.mjs --write         move the pins to it
@@ -37,14 +38,54 @@ const repoRoot = join(packageDir, '..', '..');
 const workspaceFile = join(repoRoot, 'pnpm-workspace.yaml');
 const packageJsonFile = join(packageDir, 'package.json');
 const internalsFile = join(packageDir, 'src', 'framer-motion-internals.ts');
+const vendoredFile = join(packageDir, 'VENDORED.md');
 const registry = 'https://registry.npmjs.org';
 
-// Upstream modules src/gestures/transform-page-point.ts is adapted from.
-const adaptedFrom = {
-  'src/gestures/transform-page-point.ts': [
-    'utils/transform-rotated-parent.mjs',
-    'utils/transform-viewbox-point.mjs',
-  ],
+// A `here | upstream` table in VENDORED.md, under `## <heading>`: each
+// glimmer-motion file mapped to the framer-motion dist/es modules built from
+// the upstream sources the table names (paths relative to framer-motion's
+// src/).
+function vendoredTable(heading) {
+  const md = readFileSync(vendoredFile, 'utf8');
+  const start = md.indexOf(`\n## ${heading}\n`);
+  if (start === -1) {
+    throw new Error(`VENDORED.md has no "## ${heading}" section`);
+  }
+  const table = {};
+  for (const line of md
+    .slice(start + 1)
+    .split(/\n## /)[0]
+    .split('\n')) {
+    const cells = line.split('|').slice(1, -1);
+    const here = cells[0]?.trim().match(/^`(src\/[^`]+)`$/);
+    if (cells.length !== 2 || !here) {
+      continue;
+    }
+    const upstream = [...cells[1].matchAll(/`([^`]+)\.tsx?`/g)].map(
+      (m) => `${m[1]}.mjs`,
+    );
+    if (!upstream.length) {
+      throw new Error(
+        `VENDORED.md's "${heading}" row for ${here[1]} names no upstream .ts/.tsx file`,
+      );
+    }
+    table[here[1]] = upstream;
+  }
+  if (!Object.keys(table).length) {
+    throw new Error(`VENDORED.md's "${heading}" section has no table rows`);
+  }
+  return table;
+}
+
+// Each upstream module in `mapping`, with the glimmer-motion files built from it.
+const byUpstream = (mapping) => {
+  const owners = new Map();
+  for (const [file, modules] of Object.entries(mapping)) {
+    for (const module of modules) {
+      owners.set(module, [...(owners.get(module) ?? []), file]);
+    }
+  }
+  return owners;
 };
 
 // GitHub rejects a PR body over 65,536 characters. A report printed to stdout
@@ -290,20 +331,21 @@ function sourceOf(distEs, path) {
     const map = JSON.parse(readFileSync(mapFile, 'utf8'));
     if (map.sources?.length === 1 && map.sourcesContent?.[0] != null) {
       return {
-        path: posix
-          .normalize(
-            posix.join(
-              'packages/framer-motion/dist/es',
-              posix.dirname(path),
-              map.sources[0],
-            ),
-          )
-          .replace(/^packages\/framer-motion\//, ''),
+        path: posix.normalize(
+          posix.join(
+            'packages/framer-motion/dist/es',
+            posix.dirname(path),
+            map.sources[0],
+          ),
+        ),
         text: map.sourcesContent[0],
       };
     }
   }
-  return { path: `dist/es/${path}`, text: readFileSync(file, 'utf8') };
+  return {
+    path: `packages/framer-motion/dist/es/${path}`,
+    text: readFileSync(file, 'utf8'),
+  };
 }
 
 function unifiedDiff(scratch, path, before, after) {
@@ -353,15 +395,23 @@ async function compareSources(from, to, tarballs) {
       ...closure(before, entries),
       ...closure(after, entries),
     ]);
-    const adapted = Object.values(adaptedFrom).flat();
-    for (const path of [...entries, ...adapted]) {
+    const adapted = byUpstream(vendoredTable('Adapted, not inlined'));
+    const ported = byUpstream(vendoredTable('Ported by hand'));
+    for (const path of [...entries, ...adapted.keys(), ...ported.keys()]) {
       imported.delete(path);
     }
 
-    const changes = (paths) =>
+    const changes = (paths, owners) =>
       [...paths].sort().flatMap((path) => {
         const a = sourceOf(before, path);
         const b = sourceOf(after, path);
+        if (!a && !b) {
+          // A renamed or moved upstream module would otherwise report as
+          // unchanged.
+          throw new Error(
+            `framer-motion ${from} and ${to} both lack dist/es/${path}; update its row in VENDORED.md`,
+          );
+        }
         if (a?.text === b?.text) {
           return [];
         }
@@ -370,13 +420,18 @@ async function compareSources(from, to, tarballs) {
           {
             path: sourcePath,
             status: !a ? 'added' : !b ? 'removed' : 'changed',
+            owners: owners?.get(path) ?? [],
             diff: unifiedDiff(scratch, sourcePath, a?.text, b?.text),
           },
         ];
       });
     return {
       entries: { count: entries.length, changed: changes(entries) },
-      adapted: { count: adapted.length, changed: changes(adapted) },
+      adapted: {
+        count: adapted.size,
+        changed: changes(adapted.keys(), adapted),
+      },
+      ported: { count: ported.size, changed: changes(ported.keys(), ported) },
       imported: { count: imported.size, changed: changes(imported) },
     };
   } finally {
@@ -391,7 +446,12 @@ function report(pins, release, sources, budget) {
   const major = from.split('.')[0] !== to.split('.')[0];
   const list = (group) =>
     group.changed.length
-      ? group.changed.map((c) => `- \`${c.path}\` (${c.status})`).join('\n')
+      ? group.changed
+          .map(
+            (c) =>
+              `- \`${c.path}\` (${c.status})${c.owners.length ? ` → ${c.owners.map((o) => `\`${o}\``).join(', ')}` : ''}`,
+          )
+          .join('\n')
       : '- none';
 
   let body = `## Background and Goal
@@ -414,7 +474,8 @@ Upstream: [${from}…${to}](${repo}/compare/v${from}...v${to}), [CHANGELOG](${re
 
 - **CI.** The Choreo Tests and Choreo Test App Tests jobs run the fidelity suites; Lint runs \`ember-tsc\` over the choreo packages. glimmer-motion's build fails if an inlined module starts importing React or another framer-motion path.
 - **Declarations.** \`src/framer-motion-internals.ts\` declares the surface of the inlined entry modules by hand, and the subclasses in \`src/gestures/drag-gesture.ts\` override their methods. A signature change in an entry module below compiles silently against the old declaration, so read those diffs against both files.
-- **Adapted code.** A change in the sources \`src/gestures/transform-page-point.ts\` adapts is ported by hand.
+- **Adapted code.** Carry a change in an adapted source into the file it names by hand.
+- **Ported code.** The Glimmer re-implementations port React modules by hand. Read each diff below against the file it names, and port what applies to Glimmer.
 - **Title.** \`fix:\` for a catch-up. Retitle to \`feat:\` when upstream adds a capability glimmer-motion exposes.
 
 ## Upstream source changes
@@ -425,9 +486,13 @@ From the TypeScript embedded in framer-motion's \`dist/es/**/*.mjs.map\`.
 
 ${list(sources.entries)}
 
-**Adapted** (${sources.adapted.changed.length} of ${sources.adapted.count} changed): the sources of \`src/gestures/transform-page-point.ts\`.
+**Adapted** (${sources.adapted.changed.length} of ${sources.adapted.count} changed): the upstream sources glimmer-motion code is adapted from, each with the files adapted from it.
 
 ${list(sources.adapted)}
+
+**Ported** (${sources.ported.changed.length} of ${sources.ported.count} changed): the React modules the Glimmer re-implementations port, each with the files that port it.
+
+${list(sources.ported)}
 
 **Modules the entry modules import** (${sources.imported.changed.length} of ${sources.imported.count} changed).
 
@@ -437,6 +502,7 @@ ${list(sources.imported)}
   const diffs = [
     ...sources.entries.changed,
     ...sources.adapted.changed,
+    ...sources.ported.changed,
     ...sources.imported.changed,
   ];
   if (diffs.length) {
