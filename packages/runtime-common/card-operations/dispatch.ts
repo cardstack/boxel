@@ -33,7 +33,7 @@ import {
   DEFINITION_FREE_BASE_OPERATIONS,
   OperationFailure,
   isDocumentResult,
-  linkStrategyOf,
+  readLinkStrategyOf,
   isOperationFailure,
   unshareableFormatsOf,
   isHeadResult,
@@ -1111,7 +1111,7 @@ async function resolveReadPlan(
       shape: hasTransforms(definition) ? 'staged' : 'plain',
       // Read the same way the executor reads it, so the validator this answer
       // is folded into names the shape the body will actually take.
-      links: linkStrategyOf(definition.links),
+      links: readLinkStrategyOf(definition.links),
       unshareableFormats: html.unshareableFormats,
     },
     rememberable: html.rememberable,

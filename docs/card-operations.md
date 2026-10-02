@@ -504,7 +504,9 @@ definition carrying one records a `links-without-assembly` issue. A value its
 base cannot apply records `invalid-link-strategy`: on a `query`, anything but the
 three; on a `read`, anything but `full` and `ids`. The `@operation` decorator
 refuses a `read` declaring `none` where it is written, and the declaration's
-type does not admit it.
+type does not admit it. A stored `read` entry that carries `none` anyway, or a
+value the realm cannot interpret, is served as `ids`, so the card's `GET` still
+tells the host what it links to.
 
 ### `html` — which prerendered formats a read or a query serves
 
