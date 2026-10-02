@@ -52,6 +52,7 @@ const COLLEAGUE = '@colleague:localhost';
 const SCHOOL_ADMIN = '@school-admin:localhost';
 
 const ROOM_204 = `${SCHOOL}classrooms/room-204`;
+const SCHOOL_ICON = 'https://boxel-images.boxel.ai/icons/Letter-s.png';
 const ROOM_205 = `${SCHOOL}classrooms/room-205`;
 
 // Is the caller one of the classroom's teachers.
@@ -199,6 +200,7 @@ module('Integration | a realm that checks permissions', function (hooks) {
       contents: {
         'realm.json': realmConfigCardJSON({
           name: 'School',
+          iconURL: SCHOOL_ICON,
           policy: `${SCHOOL}policies/classrooms`,
         }),
         'classrooms/room-204.json': classroom('Room 204', [TEST_USER]),
@@ -243,11 +245,21 @@ module('Integration | a realm that checks permissions', function (hooks) {
     return JSON.parse(file!.content as string).data.attributes.title;
   }
 
-  test('a user the policy admits opens a classroom in the host, and its header names the realm', async function (assert) {
+  test('a user the policy admits opens a classroom in the host, and its header shows the realm', async function (assert) {
     await setupSchool({ enforcePermissions: true });
+    // Sign in again as the host does on its first contact with a realm,
+    // holding nothing for it yet: no session, and no realm info.
+    let realmService = getService('realm');
+    realmService.removeRealm(SCHOOL);
+    await realmService.login(SCHOOL);
     assert.false(
-      getService('realm').canRead(SCHOOL),
+      realmService.canRead(SCHOOL),
       'the school realm’s ACL gives the test user nothing',
+    );
+    assert.strictEqual(
+      realmService.info(SCHOOL).name,
+      'School',
+      'and the realm’s info is loaded',
     );
 
     getService('operator-mode-state-service').restore({
@@ -263,8 +275,10 @@ module('Integration | a realm that checks permissions', function (hooks) {
       .dom(`[data-test-stack-card="${ROOM_204}"] [data-test-classroom-title]`)
       .hasText('Room 204', 'the classroom the policy grants renders');
     assert
-      .dom('[data-test-stack-card-header]')
-      .containsText('School', 'with the realm’s name in its header');
+      .dom(
+        `[data-test-stack-card-header] [data-test-card-header-realm-icon="${SCHOOL_ICON}"]`,
+      )
+      .exists('with the realm’s icon in its header');
   });
 
   test('a sign-in that fails is reported, and the next one tries again', async function (assert) {
@@ -289,7 +303,9 @@ module('Integration | a realm that checks permissions', function (hooks) {
       },
       { prepend: true },
     );
+    // A realm the host holds nothing for yet, so signing in fetches its info.
     let realmService = getService('realm');
+    realmService.removeRealm(SCHOOL);
 
     let [first, joined] = [
       realmService.reauthenticate(SCHOOL),

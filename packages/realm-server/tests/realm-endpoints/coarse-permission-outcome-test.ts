@@ -41,11 +41,6 @@ interface Probe {
 const readProbes: Probe[] = [
   // Routes that do not consume the ACL's outcome.
   {
-    label: 'GET /_info',
-    consumes: false,
-    send: (r) => r.get('/_info').set('Accept', SupportedMimeType.RealmInfo),
-  },
-  {
     label: 'GET /_mtimes',
     consumes: false,
     send: (r) => r.get('/_mtimes').set('Accept', SupportedMimeType.Mtimes),
@@ -61,6 +56,11 @@ const readProbes: Probe[] = [
     send: (r) => r.get('/').set('Accept', SupportedMimeType.DirectoryListing),
   },
   // Routes that consume it.
+  {
+    label: 'GET /_info',
+    consumes: true,
+    send: (r) => r.get('/_info').set('Accept', SupportedMimeType.RealmInfo),
+  },
   {
     label: 'QUERY /_search',
     consumes: true,
@@ -867,17 +867,20 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
     });
 
     test('every consuming route hands an admitted caller to the policy gate', async function (assert) {
-      // Two consumers answer an admitted caller with something other than a
+      // Three consumers answer an admitted caller with something other than a
       // refusal, and each is pinned on its own. The search hands them to the
       // policy's query lane, which answers with rows (below). The capability
       // check answers a decision per pair, a 200 with denials in it (its own
-      // module).
+      // module). The realm info resolves no operation, and answers them with
+      // the info (below).
       let consumers = testRealm
         .routeDescriptions()
         .filter((route) => route.consumesCoarseOutcome)
         .filter(
           (route) =>
-            route.path !== '/_search' && route.path !== '/_capabilities',
+            route.path !== '/_search' &&
+            route.path !== '/_capabilities' &&
+            route.path !== '/_info',
         )
         .map((route) => `${route.method} ${route.mimeType}`)
         .filter((route) => route !== `HEAD ${SupportedMimeType.CardJson}`)
@@ -912,6 +915,37 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           `Bearer ${createJWT(testRealm, 'owner', ['read', 'write', 'realm-owner'])}`,
         );
       assert.strictEqual(person.status, 200, 'and nothing was deleted');
+    });
+
+    test('the realm info answers an admitted caller without asking the policy gate', async function (assert) {
+      testRealm.__testOnlySetCoarseAdmission(() => true);
+      try {
+        for (let send of [
+          () =>
+            request.get('/_info').set('Accept', SupportedMimeType.RealmInfo),
+          () =>
+            request
+              .post('/_info')
+              .set('X-HTTP-Method-Override', 'QUERY')
+              .set('Accept', SupportedMimeType.RealmInfo),
+        ]) {
+          let before = testRealm.__testOnlyPolicyGateStats().policyLoads;
+          let response = await send();
+          assert.strictEqual(response.status, 200, 'admitting: answered');
+          assert.strictEqual(
+            response.body.data.id,
+            testRealm.url,
+            'admitting: with the realm’s info',
+          );
+          assert.strictEqual(
+            testRealm.__testOnlyPolicyGateStats().policyLoads,
+            before,
+            'admitting: and nothing asked the gate',
+          );
+        }
+      } finally {
+        testRealm.__testOnlySetCoarseAdmission(undefined);
+      }
     });
 
     test('the search hands an admitted caller to the query lane, which a realm with no policy answers with no rows', async function (assert) {

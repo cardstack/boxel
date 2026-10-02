@@ -915,7 +915,10 @@ const READINESS_CHECK_PATH = '/_readiness-check';
 // any signed-in caller the realm hands to its policy (see
 // `#admitsDespiteCoarseRefusal`). It carries the realm's name and icon, which
 // a view of a card a grant admits that caller to shows, and nothing a grant
-// decides. The policy's own pointer is kept out of it.
+// decides. The policy's own pointer is kept out of it. Since it runs nothing
+// a grant admits, an archived realm answers such a caller with its info as
+// it does while active, so the answer does not say the realm is archived
+// (see `APPLIES_ARCHIVED_SEAL`).
 //
 // No other route does. Each of the rest is marked `ACL_ONLY` where it is
 // declared, or serves code and the file tree (`COARSE_READ_ONLY`), and each
@@ -968,9 +971,10 @@ const ACL_ONLY = { aclOnly: true } as const;
 // the read, the search once a grant would answer it with a row, the operations
 // envelope once every entry has resolved, the capability check once it would
 // admit a pair, and each card+json write once the gate has decided it and
-// before its batch runs (see `#sealAdmittedCardWrite`). A consumer
-// marked only `CONSUMES_COARSE_OUTCOME` seals a caller as soon as it admits
-// them. The card+json `HEAD` is one, and never admits anyone: the ACL lets
+// before its batch runs (see `#sealAdmittedCardWrite`). The realm info is
+// one too, and never runs anything a grant admits, so it never applies the
+// seal. A consumer marked only `CONSUMES_COARSE_OUTCOME` seals a caller as
+// soon as it admits them. The card+json `HEAD` is one, and never admits anyone: the ACL lets
 // every `HEAD` through.
 const APPLIES_ARCHIVED_SEAL = {
   consumesCoarseOutcome: true,
@@ -2793,13 +2797,13 @@ export class Realm {
         '/_info',
         SupportedMimeType.RealmInfo,
         this.realmInfo.bind(this),
-        CONSUMES_COARSE_OUTCOME,
+        APPLIES_ARCHIVED_SEAL,
       )
       .query(
         '/_info',
         SupportedMimeType.RealmInfo,
         this.realmInfo.bind(this),
-        CONSUMES_COARSE_OUTCOME,
+        APPLIES_ARCHIVED_SEAL,
       )
       // These read the realm's modules, or answer for the whole realm at
       // once, so they are answered on the realm ACL alone (see
