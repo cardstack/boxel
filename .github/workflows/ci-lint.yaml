@@ -13,6 +13,9 @@ on:
     # silently skipping lint for a new package — is worse).
     paths-ignore:
       - "packages/observability/**"
+  # Motion Bump (motion-bump.yml) dispatches this on the branches it opens,
+  # whose pull requests start no pull_request workflows.
+  workflow_dispatch:
 
 # Pull requests: a new push cancels the run in progress for the same branch.
 # Pushes to main share one group but never cancel a run in progress: GitHub
