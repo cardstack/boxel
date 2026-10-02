@@ -34,7 +34,7 @@ async function stop() {
 }
 
 let templateDatabase = setupTestDatabaseTemplate(hooks, {
-  key: basename(import.meta.filename),
+  key: import.meta.filename,
   build: async (args) => {
     await start(args); // the same start() beforeEach calls
     return stop;
@@ -52,7 +52,7 @@ setupDB(hooks, {
 
 `build` runs once per key per test process, against a builder database. The helper waits for its queue to drain (index and prerender jobs both), tears it down with the function `build` returns, and snapshots the database as the template.
 
-- **`key`** must be unique to what `build` writes. The module's file name is right when the module has one `start()`. A module that builds two different setups needs two keys.
+- **`key`** must be unique to what `build` writes, across every module in the run: the template cache is shared by the whole test process. The module's full path, `import.meta.filename`, is right when the module has one `start()`. Its `basename` is not, because modules in different directories share names (`realm-endpoints/info-test.ts` and `server-endpoints/info-test.ts`), and the second to build would silently get the first one's snapshot. A module that builds two different setups needs two keys.
 - **`build` must bring up exactly what `beforeEach` does.** A realm that boots on a copy finds its index there and skips its boot index (`Realm#startup` runs one only on a new index or with `fullIndexOnStartup`). Anything `beforeEach` adds that `build` didn't is never indexed.
 - Rows `start()` writes besides the index (realm permissions and the like) are upserts, so writing them again on a copy is safe.
 
