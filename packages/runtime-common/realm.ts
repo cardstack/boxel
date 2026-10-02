@@ -911,8 +911,15 @@ const READINESS_CHECK_PATH = '/_readiness-check';
 // out. A route consumes the outcome only if every operation it resolves is
 // resolved with the ACL's refusal on it.
 //
-// No other route does, and each of the rest is a write no grant can reach
-// rather than one left out:
+// The realm's `_info` consumes it too, and resolves no operation: it answers
+// any signed-in caller the realm hands to its policy (see
+// `#admitsDespiteCoarseRefusal`). It carries the realm's name and icon, which
+// a view of a card a grant admits that caller to shows, and nothing a grant
+// decides. The policy's own pointer is kept out of it.
+//
+// No other route does. Each of the rest is marked `ACL_ONLY` where it is
+// declared, or serves code and the file tree (`COARSE_READ_ONLY`), and each
+// is one no grant can reach rather than one left out:
 //
 // - The card+source write, its octet-stream spelling and the card+source
 //   removal put or remove whatever bytes they are sent at whatever path they
@@ -929,6 +936,19 @@ const READINESS_CHECK_PATH = '/_readiness-check';
 //   does.
 // - The realm's administration routes (`_reindex`, `_invalidate`,
 //   `_permissions` and the rest) do not act on a card at all.
+// - The card+html, file-meta+html, markdown and file-meta reads serve what the
+//   index holds for a path without running an operation, so no grant's `read`
+//   is consulted and no projection it declares narrows what they serve. A
+//   caller a grant admits reads the card through the card+json read or the
+//   search, which resolve the read through the gate.
+// - `_types`, `_mtimes`, `_publishability` and `_indexing-errors` answer for
+//   the whole realm at once: every type it holds, every file's modification
+//   time, and every card's indexing state. A grant reaches a card, not the
+//   realm.
+// - `_dependencies`, `_card-dependencies` and `_lint` read the realm's
+//   modules, which are code.
+// - `_sign-capture-urls` signs the URLs of the capture serve, which the ACL
+//   alone admits a caller to.
 //
 // So they keep the ACL's refusal, which a realm with a policy words
 // differently on some of them (see `#refusalUnderPolicy`), as do the directory
@@ -939,6 +959,9 @@ const READINESS_CHECK_PATH = '/_readiness-check';
 // `readSource` grant reaches, and for nothing else they serve (see
 // `GRANTABLE_BYTES`).
 const CONSUMES_COARSE_OUTCOME = { consumesCoarseOutcome: true } as const;
+// Marks the routes left to the realm ACL by decision (see
+// `CONSUMES_COARSE_OUTCOME` for why each is, and `RouteOptions.aclOnly`).
+const ACL_ONLY = { aclOnly: true } as const;
 // Marks the consumers that apply an archived realm's seal themselves, where
 // they would run what a caller the ACL declined outright asked for (see
 // `RouteOptions.appliesArchivedSeal`): the card+json read once the gate admits
@@ -2284,6 +2307,7 @@ export type DispatchDescription =
       appliesArchivedSeal: boolean;
       grantableBytes: boolean;
       operationalEndpoint: boolean;
+      aclOnly: boolean;
     };
 
 type CoarseAdmission = (
@@ -2763,10 +2787,30 @@ export class Realm {
     this.#policyCache = this.#makePolicyCache();
 
     this.#router = new Router(new URL(url))
-      .get('/_info', SupportedMimeType.RealmInfo, this.realmInfo.bind(this))
-      .query('/_info', SupportedMimeType.RealmInfo, this.realmInfo.bind(this))
-      .query('/_lint', SupportedMimeType.JSON, this.lint.bind(this))
-      .get('/_mtimes', SupportedMimeType.Mtimes, this.realmMtimes.bind(this))
+      // Answers a signed-in caller the realm hands to its policy, as well as
+      // one its ACL lets read it (see `CONSUMES_COARSE_OUTCOME`).
+      .get(
+        '/_info',
+        SupportedMimeType.RealmInfo,
+        this.realmInfo.bind(this),
+        CONSUMES_COARSE_OUTCOME,
+      )
+      .query(
+        '/_info',
+        SupportedMimeType.RealmInfo,
+        this.realmInfo.bind(this),
+        CONSUMES_COARSE_OUTCOME,
+      )
+      // These read the realm's modules, or answer for the whole realm at
+      // once, so they are answered on the realm ACL alone (see
+      // `CONSUMES_COARSE_OUTCOME`).
+      .query('/_lint', SupportedMimeType.JSON, this.lint.bind(this), ACL_ONLY)
+      .get(
+        '/_mtimes',
+        SupportedMimeType.Mtimes,
+        this.realmMtimes.bind(this),
+        ACL_ONLY,
+      )
       .get(
         '/_search',
         SupportedMimeType.CardJson,
@@ -2779,30 +2823,36 @@ export class Realm {
         this.searchEntriesResponse.bind(this),
         APPLIES_ARCHIVED_SEAL,
       )
+      // Answered on the realm ACL alone, as `_lint` and `_mtimes` are.
       .get(
         '/_types',
         SupportedMimeType.CardTypeSummary,
         this.fetchCardTypeSummary.bind(this),
+        ACL_ONLY,
       )
       .get(
         '/_dependencies',
         SupportedMimeType.JSONAPI,
         this.getDependencies.bind(this),
+        ACL_ONLY,
       )
       .get(
         '/_publishability',
         SupportedMimeType.JSONAPI,
         this.publishability.bind(this),
+        ACL_ONLY,
       )
       .get(
         '/_indexing-errors',
         SupportedMimeType.JSONAPI,
         this.indexingErrors.bind(this),
+        ACL_ONLY,
       )
       .get(
         '/_card-dependencies',
         SupportedMimeType.CardDependencies,
         this.getCardDependencies.bind(this),
+        ACL_ONLY,
       )
       .post(
         '/_session',
@@ -2810,20 +2860,27 @@ export class Realm {
         this.createSession.bind(this),
         OPERATIONAL_ENDPOINT,
       )
+      // Signs the URLs of the capture serve, which the realm ACL alone admits
+      // a caller to, so it is answered on the ACL alone too.
       .query(
         '/_sign-capture-urls',
         SupportedMimeType.JSON,
         this.signCaptureURLs.bind(this),
+        ACL_ONLY,
       )
+      // The administration routes, here and below, do not act on a card, and
+      // are answered on the realm ACL alone (see `CONSUMES_COARSE_OUTCOME`).
       .get(
         '/_permissions',
         SupportedMimeType.Permissions,
         this.getRealmPermissions.bind(this),
+        ACL_ONLY,
       )
       .patch(
         '/_permissions',
         SupportedMimeType.Permissions,
         this.patchRealmPermissions.bind(this),
+        ACL_ONLY,
       )
       .get(
         READINESS_CHECK_PATH,
@@ -2837,6 +2894,7 @@ export class Realm {
         '/_atomic',
         SupportedMimeType.JSONAPI,
         this.handleAtomicOperations.bind(this),
+        ACL_ONLY,
       )
       // The operations envelope, under the media type that carries its
       // extension and under the plain JSON:API one it extends. Both reach the
@@ -2889,17 +2947,25 @@ export class Realm {
         '/_cancel-indexing-job',
         SupportedMimeType.JSON,
         this.cancelIndexingJob.bind(this),
+        ACL_ONLY,
       )
-      .post('/_reindex', SupportedMimeType.JSON, this.queueReindex.bind(this))
+      .post(
+        '/_reindex',
+        SupportedMimeType.JSON,
+        this.queueReindex.bind(this),
+        ACL_ONLY,
+      )
       .post(
         '/_full-reindex',
         SupportedMimeType.JSON,
         this.queueFullReindex.bind(this),
+        ACL_ONLY,
       )
       .post(
         '/_invalidate',
         SupportedMimeType.JSONAPI,
         this.invalidateURLs.bind(this),
+        ACL_ONLY,
       )
       .post(
         '(/|/.+/)',
@@ -2913,13 +2979,29 @@ export class Realm {
         this.getCard.bind(this),
         APPLIES_ARCHIVED_SEAL,
       )
-      .get('/.*', SupportedMimeType.CardHtml, this.getCardHtml.bind(this))
+      // The card+html, file-meta+html and markdown reads serve what the index
+      // holds for a path without running an operation, so they are answered
+      // on the realm ACL alone, as the file-meta read below is: a caller a
+      // policy grant admits reads the card through the card+json read or the
+      // search (see `CONSUMES_COARSE_OUTCOME`).
+      .get(
+        '/.*',
+        SupportedMimeType.CardHtml,
+        this.getCardHtml.bind(this),
+        ACL_ONLY,
+      )
       .get(
         '/.*',
         SupportedMimeType.FileMetaHtml,
         this.getFileMetaHtml.bind(this),
+        ACL_ONLY,
       )
-      .get('/.*', SupportedMimeType.Markdown, this.getCardMarkdown.bind(this))
+      .get(
+        '/.*',
+        SupportedMimeType.Markdown,
+        this.getCardMarkdown.bind(this),
+        ACL_ONLY,
+      )
       .patch(
         '/.+(?<!.json)',
         SupportedMimeType.CardJson,
@@ -2940,6 +3022,7 @@ export class Realm {
         '/.*',
         SupportedMimeType.CardSource,
         this.upsertCardSource.bind(this),
+        ACL_ONLY,
       )
       // The octet-stream spelling of the card+source write: the same one-file
       // `update` operation, sent as bytes rather than text.
@@ -2947,8 +3030,14 @@ export class Realm {
         '/.*',
         SupportedMimeType.OctetStream,
         this.upsertBinaryFile.bind(this),
+        ACL_ONLY,
       )
-      .get('/.*', SupportedMimeType.FileMeta, this.getFileMeta.bind(this))
+      .get(
+        '/.*',
+        SupportedMimeType.FileMeta,
+        this.getFileMeta.bind(this),
+        ACL_ONLY,
+      )
       .head(
         '/.*',
         SupportedMimeType.CardSource,
@@ -2965,6 +3054,7 @@ export class Realm {
         '/.+',
         SupportedMimeType.CardSource,
         this.removeCardSource.bind(this),
+        ACL_ONLY,
       )
       .get(
         '.*/',
@@ -7956,6 +8046,7 @@ export class Realm {
         appliesArchivedSeal: false,
         grantableBytes: method === 'GET' || method === 'HEAD',
         operationalEndpoint: false,
+        aclOnly: false,
       })),
     ];
   }

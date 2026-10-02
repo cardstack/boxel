@@ -481,8 +481,10 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           `POST ${SupportedMimeType.JSON} /_capabilities`,
           `QUERY ${SupportedMimeType.BoxelOperations} /_operations`,
           `QUERY ${SupportedMimeType.JSONAPI} /_operations`,
+          `GET ${SupportedMimeType.RealmInfo} /_info`,
+          `QUERY ${SupportedMimeType.RealmInfo} /_info`,
         ].sort(),
-        'the consumer set is the card+json read and writes, the search, the operations envelope and the capability check',
+        'the consumer set is the card+json read and writes, the search, the operations envelope, the capability check and the realm info',
       );
       let nonConsumers = testRealm
         .routeDescriptions()
@@ -498,6 +500,76 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           .sort(),
         ['DELETE', 'GET', 'HEAD', 'PATCH', 'POST', 'QUERY'],
         'the fallback file and module serve does not consume it for any method',
+      );
+    });
+
+    test('exactly the routes left to the ACL by decision say so, and every route declares what it does with the outcome', async function (assert) {
+      let describe = (route: {
+        method: string;
+        mimeType: string;
+        path: string;
+      }) => `${route.method} ${route.mimeType} ${route.path}`;
+      assert.deepEqual(
+        testRealm
+          .routeDescriptions()
+          .filter((route) => route.aclOnly)
+          .map(describe)
+          .sort(),
+        [
+          `GET ${SupportedMimeType.CardHtml} /.*`,
+          `GET ${SupportedMimeType.FileMetaHtml} /.*`,
+          `GET ${SupportedMimeType.Markdown} /.*`,
+          `GET ${SupportedMimeType.FileMeta} /.*`,
+          `GET ${SupportedMimeType.CardTypeSummary} /_types`,
+          `GET ${SupportedMimeType.Mtimes} /_mtimes`,
+          `GET ${SupportedMimeType.JSONAPI} /_dependencies`,
+          `GET ${SupportedMimeType.CardDependencies} /_card-dependencies`,
+          `GET ${SupportedMimeType.JSONAPI} /_publishability`,
+          `GET ${SupportedMimeType.JSONAPI} /_indexing-errors`,
+          `QUERY ${SupportedMimeType.JSON} /_lint`,
+          `QUERY ${SupportedMimeType.JSON} /_sign-capture-urls`,
+          `POST ${SupportedMimeType.CardSource} /.*`,
+          `POST ${SupportedMimeType.OctetStream} /.*`,
+          `DELETE ${SupportedMimeType.CardSource} /.+`,
+          `POST ${SupportedMimeType.JSONAPI} /_atomic`,
+          `GET ${SupportedMimeType.Permissions} /_permissions`,
+          `PATCH ${SupportedMimeType.Permissions} /_permissions`,
+          `POST ${SupportedMimeType.JSON} /_cancel-indexing-job`,
+          `POST ${SupportedMimeType.JSON} /_reindex`,
+          `POST ${SupportedMimeType.JSON} /_full-reindex`,
+          `POST ${SupportedMimeType.JSONAPI} /_invalidate`,
+        ].sort(),
+        'the index-backed reads, the verbatim writes, and the administration routes',
+      );
+      assert.deepEqual(
+        testRealm
+          .routeDescriptions()
+          .filter(
+            (route) =>
+              route.aclOnly &&
+              (route.consumesCoarseOutcome || route.coarseReadOnly),
+          )
+          .map(describe),
+        [],
+        'none of them also consumes the outcome or serves code',
+      );
+      // The ACL lets every `HEAD` through, so a `HEAD` route has no refusal
+      // to decide about.
+      assert.deepEqual(
+        testRealm
+          .routeDescriptions()
+          .filter(
+            (route) =>
+              route.path !== '*' &&
+              route.method !== 'HEAD' &&
+              !route.consumesCoarseOutcome &&
+              !route.coarseReadOnly &&
+              !route.operationalEndpoint &&
+              !route.aclOnly,
+          )
+          .map(describe),
+        [],
+        'every other route consumes the outcome, serves code, or is an operational endpoint',
       );
     });
 
