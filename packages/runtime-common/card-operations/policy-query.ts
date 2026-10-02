@@ -8,7 +8,13 @@ import {
   matchingGrants,
   nonGrantableInChain,
   policyUnavailable,
+  type MatchedGrant,
 } from './gate.ts';
+import {
+  elapsedMs,
+  emitPolicySearchScope,
+  type PolicySearchScopeEvent,
+} from './telemetry.ts';
 import { FIELD_KEYED_OPERATORS } from './policy-filter.ts';
 import {
   realmPolicyRef,
@@ -164,19 +170,82 @@ export class RealmAuthorityPolicyScopeError extends Error {
 // type the several share is anchored on that shared type, and unconfined it
 // would reach, through the type it was matched for, the cards of one whose
 // own judgment refused them — a type the realm cannot resolve, say.
+//
+// Each call is recorded on `boxel:operations` as one `policy-search-scope`
+// line: the realm, the grants that contributed a filter, and how long judging
+// them took (see `SearchScopeRecording`).
 export async function policyQueryScope(
   core: OperationCore,
   invocation: {
     operation: string;
     types: readonly CodeRef[];
     principal: SearchPrincipal;
-  },
+  } & SearchScopeRecording,
 ): Promise<PolicyQueryScope> {
   let { operation, types, principal } = invocation;
   if (principal.kind === 'realm-authority') {
     throw new RealmAuthorityPolicyScopeError(core.realmURL, operation);
   }
-  let actor = principal.user;
+  let started = performance.now();
+  let contributed: MatchedGrant[] = [];
+  let record = (outcome: PolicySearchScopeEvent['outcome']) => {
+    if (invocation.advisory) {
+      return;
+    }
+    emitPolicySearchScope({
+      kind: 'policy-search-scope',
+      realmURL: core.realmURL,
+      actor: principal.user,
+      operation,
+      types: types.map(typeLabel).join(','),
+      transport: invocation.transport ?? 'search',
+      outcome,
+      rules: [...new Set(contributed.map(({ rule }) => rule.path))].join(','),
+      grants: contributed.map(({ grant }) => grant.path).join(','),
+      evaluationMs: elapsedMs(started),
+      hypothetical: invocation.hypothetical ?? false,
+    });
+  };
+  let scope: PolicyQueryScope;
+  try {
+    scope = await scopeFor(core, operation, types, principal.user, contributed);
+  } catch (e: unknown) {
+    record('failed');
+    throw e;
+  }
+  if (scope.kind !== 'scoped') {
+    contributed.length = 0;
+  }
+  record(scope.kind === 'scoped' ? 'scoped' : 'none');
+  return scope;
+}
+
+// How a search-lane call is recorded. `transport` names the surface the search
+// arrived on, `search` where unsaid. An explain's call is `hypothetical`, and a
+// capability check's is `advisory`, which records nothing: it asks what a
+// search would admit at the rate a view renders, and its own line counts it.
+export interface SearchScopeRecording {
+  transport?: PolicySearchScopeEvent['transport'];
+  hypothetical?: boolean;
+  advisory?: boolean;
+}
+
+// A type as a search-lane record names it.
+function typeLabel(type: CodeRef): string {
+  return 'module' in type && 'name' in type
+    ? `${type.module}/${type.name}`
+    : JSON.stringify(type);
+}
+
+// What `policyQueryScope` answers, with the grants that contributed a filter
+// pushed onto `contributed`.
+async function scopeFor(
+  core: OperationCore,
+  operation: string,
+  types: readonly CodeRef[],
+  actor: string,
+  contributed: MatchedGrant[],
+): Promise<PolicyQueryScope> {
   let distinct = [
     ...new Map(types.map((type) => [JSON.stringify(type), type])).values(),
   ];
@@ -186,11 +255,11 @@ export async function policyQueryScope(
   if (distinct.length === 1) {
     return await withoutAuthorization(
       core,
-      await typeScope(core, operation, distinct[0], actor),
+      await typeScope(core, operation, distinct[0], actor, contributed),
     );
   }
   let scopes = await Promise.all(
-    distinct.map((on) => typeScope(core, operation, on, actor)),
+    distinct.map((on) => typeScope(core, operation, on, actor, contributed)),
   );
   let filters: Filter[] = [];
   for (let [index, scope] of scopes.entries()) {
@@ -239,7 +308,10 @@ function excluding(filter: Filter, excluded: Filter[]): Filter {
 // asked about it.
 export async function principalQueryScope(
   core: OperationCore,
-  invocation: { operation: string; types: readonly CodeRef[] },
+  invocation: {
+    operation: string;
+    types: readonly CodeRef[];
+  } & SearchScopeRecording,
   principal: SearchPrincipal | undefined,
 ): Promise<PolicyQueryScope> {
   return principal?.kind === 'user'
@@ -253,6 +325,7 @@ async function typeScope(
   operation: string,
   on: CodeRef,
   actor: string,
+  contributed: MatchedGrant[],
 ): Promise<PolicyQueryScope> {
   let policy = await core.policy?.compiledPolicy();
   if (!policy) {
@@ -271,8 +344,8 @@ async function typeScope(
   if (ownDeclaration(entry.definition, operation)?.nonGrantable) {
     return DENIED;
   }
-  let filters = await grantFilters(policy, entry.types, operation, actor, core);
-  if (filters.length === 0) {
+  let granted = await grantFilters(policy, entry.types, operation, actor, core);
+  if (granted.length === 0) {
     return DENIED;
   }
   // Only once a grant would contribute, as at the gate, so a query nothing
@@ -281,7 +354,8 @@ async function typeScope(
   if (await nonGrantableInChain(core, entry.types, operation, 1)) {
     return DENIED;
   }
-  return { kind: 'scoped', filters };
+  contributed.push(...granted.map(({ matched }) => matched));
+  return { kind: 'scoped', filters: granted.map(({ filter }) => filter) };
 }
 
 // The definition-cache entry of the type a query names: its definition, and
@@ -336,10 +410,11 @@ async function grantFilters(
   operation: string,
   actor: string,
   core: OperationCore,
-): Promise<Filter[]> {
+): Promise<{ filter: Filter; matched: MatchedGrant }[]> {
   let matched = await matchingGrants(policy, types, operation, core.policy!);
-  let filters: Filter[] = [];
-  for (let { grant } of matched) {
+  let filters: { filter: Filter; matched: MatchedGrant }[] = [];
+  for (let candidate of matched) {
+    let { grant } = candidate;
     if (!grant.filter) {
       continue;
     }
@@ -352,7 +427,10 @@ async function grantFilters(
         `a compiled query grant on "${operation}" lowered to no filter`,
       );
     }
-    filters.push(withoutMisreadings(policyFilterFromWire(bound.filter), grant));
+    filters.push({
+      filter: withoutMisreadings(policyFilterFromWire(bound.filter), grant),
+      matched: candidate,
+    });
   }
   return filters;
 }

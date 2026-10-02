@@ -35,6 +35,7 @@ import {
 import { resolveNamedQuery, searchInvocation } from './named-query.ts';
 import type { CompiledRealmPolicy } from './policy.ts';
 import { policyQueryScope, type PolicyQueryScope } from './policy-query.ts';
+import type { PolicyRoute } from './telemetry.ts';
 import {
   EXPLAIN_CAP,
   OperationFailure,
@@ -54,6 +55,12 @@ import {
   type PolicyExplanation,
   type PolicyExplanationReason,
 } from './types.ts';
+
+// What an explain's gate decisions are recorded as having arrived on.
+const EXPLAIN_ROUTE: PolicyRoute = Object.freeze({
+  transport: 'explain' as const,
+  route: 'explain',
+});
 
 // ============================================================================
 // The explain operation.
@@ -490,6 +497,8 @@ async function explainSearch(
       operation: invocation.operation,
       types: invocation.types,
       principal: { kind: 'user', user: actor.actor },
+      transport: 'explain',
+      hypothetical: true,
     });
   } catch (e: unknown) {
     if (!isOperationFailure(e) || e.error.status < 500) {
@@ -663,6 +672,7 @@ async function explain(
     caller: actor,
     coarseDeclined,
     trace,
+    route: EXPLAIN_ROUTE,
   });
   let decision: GateDecision | undefined;
   let failure: OperationFailure | undefined;
