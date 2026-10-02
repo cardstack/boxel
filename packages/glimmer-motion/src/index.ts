@@ -140,3 +140,15 @@ export type {
   ViewTransitionUpdate,
 } from './view-transition.ts';
 export { animateView, viewTransition } from './view-transition.ts';
+// The engine's imperative surface, curated: realm cards reach motion-dom only
+// through these names, so each one is glimmer-motion API under semver. They are
+// the engine's own functions, not copies, so they share its frame loop with
+// `{{motion}}`. `animate` is the same function the `motion` package exports.
+export { animate } from 'framer-motion/dom';
+export {
+  frame,
+  type MotionValue,
+  motionValue,
+  styleEffect,
+  transformValue,
+} from 'motion-dom';

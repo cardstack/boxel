@@ -84,6 +84,7 @@ from a Glimmer card rather than from a React translation table.
 | `correctParentTransform(elOrRef)`, `transformViewBoxPoint(svgOrRef)`                                           | `transformPagePoint` helpers                                                                                     |
 | `MotionNode`, `postRender`, `setPostRender`, `flushPendingMounts`                                              | for re-hosting on another Glimmer runtime                                                                        |
 | `setParticipantHost`, `closestParticipantHost`, `defineParticipantArg`, `ParticipantHost`, `MotionParticipant` | the participant-host extension point (below)                                                                     |
+| `motionValue`, `MotionValue`, `transformValue`, `styleEffect`, `frame`, `animate`                              | the engine's imperative surface (below)                                                                          |
 
 Deep imports (`glimmer-motion/motion`, `glimmer-motion/presence`, `glimmer-motion/reorder/group`, …) are the
 same modules.
@@ -159,13 +160,39 @@ const stage = new Stage();
   });
   ```
 
+### The engine's imperative surface
+
+A few of the engine's own functions are exported from `glimmer-motion` directly, for code that drives motion
+values by hand rather than through `{{motion}}`. They are the engine's functions, not wrappers, so they run on
+the same frame loop as every `{{motion}}` element.
+
+| export                       | from                | what                                                                       |
+| ---------------------------- | ------------------- | -------------------------------------------------------------------------- |
+| `motionValue`, `MotionValue` | `motion-dom`        | create a motion value, and its type; pass one to `{{motion}}` in `style`   |
+| `transformValue`             | `motion-dom`        | a motion value derived from others, recomputed when they change            |
+| `styleEffect`                | `motion-dom`        | bind motion values to an element's style outside `{{motion}}`              |
+| `frame`                      | `motion-dom`        | schedule `read` / `update` / `render` work on the engine's frame loop      |
+| `animate`                    | `framer-motion/dom` | animate a motion value, an element or a selector; `motion`'s own `animate` |
+
+```ts
+import { animate, motionValue } from 'glimmer-motion';
+
+const x = motionValue(0);
+animate(x, 120, { type: 'spring', visualDuration: 0.4 });
+```
+
+This is the only route by which realm cards reach the engine: `motion-dom` itself is not shimmed into
+realms. The list is deliberately small. The engine's internals (`animateVisualElement`, `visualElementStore`
+and the like) stay unexported, and adding a name to it is an API change to glimmer-motion, reviewed like
+one.
+
 ### React → Glimmer
 
 | React                            | here                                                      |
 | -------------------------------- | --------------------------------------------------------- |
 | `<motion.div …>`                 | `<div {{motion …}}>` — any tag, including SVG             |
 | `ref`                            | the element, or a `{current}` object filled by a modifier |
-| `useMotionValue`, `useTransform` | `motionValue`, `transformValue` from `motion-dom`         |
+| `useMotionValue`, `useTransform` | `motionValue`, `transformValue`                           |
 | `<AnimatePresence>`              | `<Presence @items @key>` yielding a handle                |
 | `useIsPresent()`                 | `h.isPresent`                                             |
 | re-render → layout snapshot      | a render pass inside `<LayoutGroup>`, or `layoutChange()` |

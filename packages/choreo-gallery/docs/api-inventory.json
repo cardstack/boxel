@@ -1051,6 +1051,54 @@
       "declaration": "packages/glimmer-motion/src/index.ts"
     },
     {
+      "entrypoint": "glimmer-motion",
+      "symbol": "animate",
+      "source": "packages/glimmer-motion/src/index.ts",
+      "kind": "value",
+      "guide": "core-tweens",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "frame",
+      "source": "packages/glimmer-motion/src/index.ts",
+      "kind": "value",
+      "guide": "core-motion-values",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "MotionValue",
+      "source": "packages/glimmer-motion/src/index.ts",
+      "kind": "type",
+      "guide": "core-motion-values",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "motionValue",
+      "source": "packages/glimmer-motion/src/index.ts",
+      "kind": "value",
+      "guide": "core-motion-values",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "styleEffect",
+      "source": "packages/glimmer-motion/src/index.ts",
+      "kind": "value",
+      "guide": "core-motion-values",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "transformValue",
+      "source": "packages/glimmer-motion/src/index.ts",
+      "kind": "value",
+      "guide": "core-motion-values",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
       "entrypoint": "glimmer-motion/film",
       "symbol": "Clip",
       "source": "packages/glimmer-motion/src/film/clip.gts",
