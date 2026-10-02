@@ -7,6 +7,7 @@ A compact row of mutually exclusive options, all visible, with a pill that slide
 ```
 @options: { value, label }[]   (required)
 @value?, @defaultValue?, @onValueChange?(value: string)
+@disabled?    — disables every segment
 ```
 
 Hybrid controlled/uncontrolled: `@value ?? @internal`, initialised from `@defaultValue ?? options[0].value`. Unlike RadioGroup there is no empty state — a segmented control always has a selection, which is the semantic difference from a set of toggle buttons.

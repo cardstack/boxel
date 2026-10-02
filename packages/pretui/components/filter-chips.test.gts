@@ -1,5 +1,4 @@
-// Pretui — FilterChips unit tests. Imports from its own module rather than
-// the './controls' barrel.
+// Pretui — FilterChips unit tests.
 //
 // The 2026-08-13 semantics rebuild is what most needs pinning: this used to
 // be role='tablist' over plain buttons — invalid ARIA, and the wrong pattern,
