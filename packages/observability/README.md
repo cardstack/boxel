@@ -457,6 +457,44 @@ CI runs `apply.sh --env staging` on merge to main (workflow:
 `apply.sh --env production` on the production workflow
 (CS-10936).
 
+A PR that changes anything under `grafanactl/resources/dashboards/` also gets
+a live preview of just the dashboards it touches, pushed to **both** the
+staging and the production Grafana under `pr<n>-`-prefixed UIDs in a per-PR
+folder, so it coexists with the canonical copies rather than overwriting them.
+One sticky PR comment links each changed dashboard in both environments, and
+both previews are deleted when the PR closes.
+`.github/workflows/observability-preview-sweep.yml` sweeps both environments
+daily for any the close hook missed.
+
+**The preview runs pull-request-controlled code, so it holds a deliberately
+weak credential.** It runs on `pull_request`, and GitHub loads that workflow —
+and every script it calls — from the PR itself. Whatever the assumed role can
+read, a contributor can read. So the preview uses its own IAM role,
+`boxel-observability-preview` (cardstack/infra,
+`configs/boxel-observability-preview/`), which grants exactly two parameters
+per environment:
+
+```
+/<env>/grafana/grafanactl_token        authenticate grafanactl
+/<env>/boxel-grafana/realm_server_url  fill the realm_server template variable
+```
+
+Not `boxel-observability-apply`. That role also grants the Grafana database
+password and `GRAFANA_SECRET` — and `GRAFANA_SECRET` is the shared bearer token
+guarding the realm-server's operator endpoints (`_grafana-reindex`,
+`_grafana-add-credit`, `_grafana-upsert-realm-user-permission`,
+`_grafana-revoke-user-sessions`). Never point the preview at it.
+
+Two things keep that grant list short, so keep them true:
+
+- **Previews carry no operator secret.** `render-preview.sh` stamps an inert
+  placeholder into the `grafana_secret` constant unconditionally, so operator
+  buttons on a preview dashboard return 401. Review an operator-button change
+  against the canonical dashboards after merge.
+- **Previews cannot address a canonical dashboard.** `render-preview.sh`
+  rewrites every UID it emits and then fails closed if any manifest lacks the
+  `pr<n>-` prefix, so a bug there costs a preview rather than a live dashboard.
+
 ## Operator actions
 
 Some dashboards carry buttons that POST to a realm-server operator endpoint —
