@@ -56,7 +56,6 @@ import * as OpenCreateListingModalToolModule from './open-create-listing-modal';
 import * as OpenInInteractModeModule from './open-in-interact-mode';
 import * as OpenWorkspaceToolModule from './open-workspace';
 import * as PatchCardInstanceToolModule from './patch-card-instance';
-import * as PatchCodeToolModule from './patch-code';
 import * as PatchFieldsToolModule from './patch-fields';
 import * as PatchThemeToolModule from './patch-theme';
 import * as PersistModuleInspectorViewToolModule from './persist-module-inspector-view';
@@ -255,7 +254,6 @@ export function shimHostTools(virtualNetwork: VirtualNetwork) {
     'patch-card-instance',
     PatchCardInstanceToolModule,
   );
-  shimHostToolModule(virtualNetwork, 'patch-code', PatchCodeToolModule);
   shimHostToolModule(virtualNetwork, 'run-realm-code', RunRealmCodeToolModule);
   shimHostToolModule(virtualNetwork, 'patch-fields', PatchFieldsToolModule);
   shimHostToolModule(virtualNetwork, 'patch-theme', PatchThemeToolModule);
@@ -530,7 +528,6 @@ export const HostToolClasses: (typeof HostBaseTool<any, any>)[] = [
   OpenInInteractModeModule.default,
   OpenWorkspaceToolModule.default,
   GenerateThemeExampleToolModule.default,
-  PatchCodeToolModule.default,
   RunRealmCodeToolModule.default,
   PatchFieldsToolModule.default,
   PatchThemeToolModule.default,

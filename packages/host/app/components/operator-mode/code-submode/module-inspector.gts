@@ -274,21 +274,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
     }
 
     if (lastMessage.isStreamingFinished !== false) {
-      return lastMessage.htmlParts?.some((htmlPart) => {
-        let codeData = htmlPart.codeData;
-        if (!codeData) {
-          return false;
-        }
-
-        if (
-          codeData.fileUrl !== this.args.readyFile.url ||
-          !codeData.searchReplaceBlock
-        ) {
-          return false;
-        }
-
-        return this.toolService.getCodePatchStatus(codeData) === 'ready';
-      });
+      return false;
     }
 
     return lastMessage.htmlParts?.some((htmlPart) => {
