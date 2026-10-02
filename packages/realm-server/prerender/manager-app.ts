@@ -122,6 +122,22 @@ function formatTimestampWithTimezone(timestamp: number): string {
   return `${formattedDate} (${timezone})`;
 }
 
+// Answer that this manager task has no prerender server to give the request,
+// and close the connection the request came on. The manager sits behind a load
+// balancer that picks a task per connection, and keeps a deregistered task's
+// open connections alive while it drains. During a manager deploy the
+// prerender servers' heartbeats move to the new task, so the draining task's
+// registry empties while callers' pooled connections still reach it. A caller
+// that retries on the same connection would reach the same empty task every
+// time; closed, its retry opens a new connection, which the load balancer
+// never gives to a draining task. Connections to a task that has servers stay
+// pooled.
+function respondNoServersHere(ctxt: Koa.Context) {
+  ctxt.status = 503;
+  ctxt.set('Connection', 'close');
+  ctxt.body = { errors: [{ status: 503, message: 'No servers' }] };
+}
+
 export function buildPrerenderManagerApp(options?: {
   isDraining?: () => boolean;
 }): {
@@ -1157,8 +1173,7 @@ export function buildPrerenderManagerApp(options?: {
       }
       if (registry.servers.size === 0) {
         log.debug('503 No servers: registry empty');
-        ctxt.status = 503;
-        ctxt.body = { errors: [{ status: 503, message: 'No servers' }] };
+        respondNoServersHere(ctxt);
         return;
       }
       let attempts = new Set<string>();
@@ -1178,8 +1193,7 @@ export function buildPrerenderManagerApp(options?: {
             registry.servers.size,
             normalizeServersForLog(),
           );
-          ctxt.status = 503;
-          ctxt.body = { errors: [{ status: 503, message: 'No servers' }] };
+          respondNoServersHere(ctxt);
           return;
         }
         attempts.add(target);
