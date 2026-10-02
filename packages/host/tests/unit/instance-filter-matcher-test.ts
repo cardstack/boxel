@@ -650,6 +650,28 @@ module('Unit | instance-filter-matcher', function (hooks) {
     );
   });
 
+  test('isClientEvaluable declines a filter carrying more than one operator', function (assert) {
+    // Such a node is invalid (`assertFilter` rejects it), but live local
+    // queries don't pass through `assertQuery` — declining it defers to the
+    // server, so the caller gets the server's rejection instead of results
+    // from a silently-picked operator.
+    assert.false(
+      isClientEvaluable({
+        on: personRef,
+        eq: { name: 'x' },
+        contains: { name: 'y' },
+      } as unknown as Filter),
+    );
+    assert.false(
+      isClientEvaluable({
+        every: [
+          { on: personRef, eq: { name: 'x' }, range: { age: { gt: 1 } } },
+        ],
+      } as unknown as Filter),
+      'a multi-operator node nested under every also declines',
+    );
+  });
+
   // -- comparator -------------------------------------------------------------
 
   test('comparator orders by a single on-field key with direction', function (assert) {
@@ -699,6 +721,25 @@ module('Unit | instance-filter-matcher', function (hooks) {
       [mango.id, ringo.id],
       'mango sorts before ringo by URL',
     );
+  });
+
+  test('comparator treats a relevance sort the same with or without on', function (assert) {
+    // `_matchRelevance` is computed per query, never a card field, so an `on`
+    // beside it must not send it down the card-field path — either spelling
+    // has no client-side value and falls back to URL order, mirroring the
+    // engine's key-only dispatch.
+    let { mango, ringo } = cards;
+    for (let sort of [
+      [{ by: '_matchRelevance', direction: 'desc' }],
+      [{ by: '_matchRelevance', on: personRef, direction: 'desc' }],
+    ] as Sort[]) {
+      let sorted = [ringo, mango].sort(makeInstanceComparator(sort, api));
+      assert.deepEqual(
+        sorted.map((c) => c.id),
+        [mango.id, ringo.id],
+        `${JSON.stringify(sort)} falls back to URL order`,
+      );
+    }
   });
 
   // -- file timestamps (meta parity with cards) -------------------------------

@@ -402,6 +402,14 @@ export const generalSortFields: Record<string, string> = {
 // it defaults to `desc` (best match first).
 export const MATCH_RELEVANCE_SORT_KEY = '_matchRelevance';
 
+// A relevance sort is recognized by its key alone. The score belongs to the
+// query, not to any card type, so an `on` beside it anchors nothing and is
+// ignored rather than sending the key down the card-field path, where it
+// would resolve as a nonexistent field.
+export function isMatchRelevanceSort(sort: { by: string }): boolean {
+  return sort.by === MATCH_RELEVANCE_SORT_KEY;
+}
+
 export { isValidPrerenderedHtmlFormat };
 
 // Whether a predicate sits under an even (`positive`) or odd (`negated`) number
@@ -1161,9 +1169,7 @@ export class IndexQueryEngine {
       // `_matchRelevance`, so every existing `matches` caller pays nothing. When
       // present it rides the projection as an aggregated, aliased column that the
       // ORDER BY (below) references — see `matchRelevanceExpression`.
-      let sortsByMatchRelevance = (sort ?? []).some(
-        (s) => !('on' in s) && s.by === MATCH_RELEVANCE_SORT_KEY,
-      );
+      let sortsByMatchRelevance = (sort ?? []).some(isMatchRelevanceSort);
       let relevanceColumn: CardExpression = [];
       if (sortsByMatchRelevance) {
         // `assertQuery` already rejects this on the wire surfaces (as an
@@ -1419,7 +1425,7 @@ export class IndexQueryEngine {
           // `_matchRelevance` is the aggregated relevance column projected by
           // the SELECT (see `_search`); reference the alias directly and default
           // to `desc` (best match first). Everything else sorts on a column.
-          !('on' in s) && s.by === MATCH_RELEVANCE_SORT_KEY
+          isMatchRelevanceSort(s)
             ? [
                 `"${MATCH_RELEVANCE_SORT_KEY}"`,
                 sortDirection(s.direction ?? 'desc'),
@@ -1469,7 +1475,7 @@ export class IndexQueryEngine {
       // `_matchRelevance` is already projected by the inner SELECT (see
       // `_search`), so it rides through `sub.*` — reference it in the outer
       // ORDER BY directly, with no inner `_sort_i` alias, defaulting to `desc`.
-      if (!('on' in s) && s.by === MATCH_RELEVANCE_SORT_KEY) {
+      if (isMatchRelevanceSort(s)) {
         outerKeys.push([
           `"${MATCH_RELEVANCE_SORT_KEY}"`,
           sortDirection(s.direction ?? 'desc'),
