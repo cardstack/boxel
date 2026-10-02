@@ -73,7 +73,7 @@ export class KeyValue extends Component<KeyValueSignature> {
           margin: 0;
         }
         /* Key typography knobs. The four without a fallback inherit while
-           unset, as the keys did before they had knobs. */
+           unset. */
         .pretui-kv dt {
           color: var(--pretui-kv-label-color, var(--muted-foreground));
           font-family: var(--pretui-kv-label-font-family);
