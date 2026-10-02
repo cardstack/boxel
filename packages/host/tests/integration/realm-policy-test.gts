@@ -1004,6 +1004,305 @@ module('Integration | realm policy', function (hooks) {
       .doesNotExist('and no listed issue is marked as one');
   });
 
+  // A realm whose ACL gives the teacher nothing, so the policy decides every
+  // question asked about them, and whose owner is the signed-in user who asks.
+  // The policy lets a teacher read and delete the classrooms they teach, and
+  // run `listMine` over them. Its grant on an ad-hoc search has a condition a
+  // search can't use.
+  const classroomQueryModule = `
+    import { contains, containsMany, field, CardDef } from "@cardstack/base/card-api";
+    import StringField from "@cardstack/base/string";
+    import { operation } from "@cardstack/base/operations";
+
+    export class Classroom extends CardDef {
+      @field title = contains(StringField);
+      @field teacherIds = containsMany(StringField);
+      @field leadTeacherIds = containsMany(StringField);
+
+      @operation static listMine = {
+        base: 'query',
+        query: { filter: { type: () => Classroom } },
+      };
+    }
+  `;
+  const CLASSROOM = { module: `${testRealmURL}classroom`, name: 'Classroom' };
+  const askingPolicyRules = [
+    {
+      targetType: { module: '../classroom', name: 'Classroom' },
+      grants: [
+        { operation: 'read', where: teachesPredicate },
+        { operation: 'delete', where: teachesPredicate },
+        { operation: 'listMine', where: teachesPredicate },
+        { operation: 'query', where: UNFILTERABLE },
+      ],
+    },
+  ];
+  // Eleven classrooms, one more than a page of a listing, and the teacher
+  // teaches the first three.
+  const ROOMS = Array.from({ length: 11 }, (_, i) => `room-${201 + i}`);
+
+  async function renderAskingPolicy() {
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      enforcePermissions: true,
+      permissions: {
+        '@testuser:localhost': ['read', 'write', 'realm-owner'],
+      },
+      contents: {
+        'realm.json': realmConfigCardJSON({
+          policy: `${testRealmURL}policies/classrooms`,
+        }),
+        'classroom.gts': classroomQueryModule,
+        ...Object.fromEntries(
+          ROOMS.map((room, i) => [
+            `classrooms/${room}.json`,
+            classroom(i < 3 ? [TEACHER] : [COLLEAGUE]),
+          ]),
+        ),
+        'policies/classrooms.json': policyDocument(askingPolicyRules),
+      },
+    });
+    getService('operations');
+    let policy = await loadPolicy('policies/classrooms');
+    await renderCard(loader, policy, 'isolated');
+  }
+
+  async function chooseMode(mode: 'card' | 'search' | 'listing') {
+    await click(`[data-test-explain-mode="${mode}"] input`);
+  }
+
+  async function submitAndWait(answer: string) {
+    await click('[data-test-explain-submit]');
+    await waitFor(`${answer}, [data-test-explain-refusal]`, {
+      timeout: 10_000,
+    });
+  }
+
+  test('the policy answers a question against a draft, and the policy in force is unchanged', async function (assert) {
+    await renderAskingPolicy();
+    let room205 = `${testRealmURL}classrooms/room-205`;
+
+    await ask(TEACHER, room205, 'delete');
+    assert
+      .dom('[data-test-explanation-decision]')
+      .hasText(
+        'denied',
+        'the policy in force lets a teacher delete only their own classrooms',
+      );
+    assert.dom('[data-test-explanation-draft]').doesNotExist();
+
+    await click('[data-test-explain-use-draft]');
+    let started = JSON.parse(
+      (
+        document.querySelector(
+          '[data-test-explain-draft]',
+        ) as HTMLTextAreaElement
+      ).value,
+    ) as { rules: { grants: { operation: string }[] }[] };
+    assert.deepEqual(
+      started.rules.map((rule) => rule.grants.map((g) => g.operation)),
+      [['read', 'delete', 'listMine', 'query']],
+      "the draft starts from this card's rules",
+    );
+
+    let wider = [
+      {
+        targetType: { module: '../classroom', name: 'Classroom' },
+        grants: [{ operation: 'delete' }],
+      },
+    ];
+    await fillIn('[data-test-explain-draft]', JSON.stringify({ rules: wider }));
+    await submitAndWait('[data-test-explanation]');
+    assert
+      .dom('[data-test-explanation-decision]')
+      .hasText('allowed', 'the draft lets the teacher delete any classroom');
+    assert
+      .dom('[data-test-explanation-reason]')
+      .hasText('A grant in this policy allows it.');
+    assert
+      .dom('[data-test-explanation-draft]')
+      .exists('the answer says it was answered against the draft');
+    assert.dom('[data-test-explanation-draft-clean]').exists();
+
+    let mistyped = [
+      {
+        targetType: { module: '../classroom', name: 'Classroom' },
+        grants: [{ operation: 'delete', where: MISTYPED }],
+      },
+    ];
+    await fillIn(
+      '[data-test-explain-draft]',
+      JSON.stringify({ rules: mistyped }),
+    );
+    await submitAndWait('[data-test-explanation]');
+    assert.dom('[data-test-explanation-decision]').hasText('denied');
+    assert
+      .dom('[data-test-explanation-draft-issue]')
+      .exists({ count: 1 })
+      .hasAttribute('data-test-explanation-draft-issue', 'invalid-predicate')
+      .includesText('rules[0].grants[0].where', 'the issue names where it is');
+
+    await fillIn('[data-test-explain-draft]', '{ "rules": ');
+    await submitAndWait('[data-test-explain-refusal]');
+    assert
+      .dom('[data-test-explain-refusal]')
+      .includesText(
+        "The draft isn't valid JSON",
+        'a draft that does not parse is never sent',
+      );
+
+    await click('[data-test-explain-use-draft]');
+    await submitAndWait('[data-test-explanation]');
+    assert
+      .dom('[data-test-explanation-decision]')
+      .hasText(
+        'denied',
+        'and without the draft, the policy in force answers as before',
+      );
+    assert.dom('[data-test-explanation-draft]').doesNotExist();
+  });
+
+  test('the policy says what it composes into a search, and how far behind the index is', async function (assert) {
+    await renderAskingPolicy();
+
+    await chooseMode('search');
+    assert
+      .dom('[data-test-explain-realm]')
+      .hasValue(
+        testRealmURL,
+        "a search runs in this card's realm unless another is named",
+      );
+    assert.dom('[data-test-explain-target]').doesNotExist();
+    await fillIn('[data-test-explain-actor]', TEACHER);
+    await fillIn('[data-test-explain-operation]', 'listMine');
+    await fillIn('[data-test-explain-type-module]', CLASSROOM.module);
+    await fillIn('[data-test-explain-type-name]', CLASSROOM.name);
+    await submitAndWait('[data-test-explanation]');
+
+    assert.dom('[data-test-explanation-decision]').hasText('allowed');
+    assert
+      .dom('[data-test-explanation-reason]')
+      .hasText(
+        'Grants in this policy let this search return the cards their conditions match, and no others.',
+      );
+    assert.dom('[data-test-explanation-search-operation]').hasText('listMine');
+    assert.dom('[data-test-explanation-search-types]').hasText('Classroom');
+    assert
+      .dom('[data-test-explanation-search-fragment]')
+      .includesText(TEACHER, 'what the policy composes names the teacher');
+    assert
+      .dom('[data-test-explanation-search-index]')
+      .hasText('Up to date.', 'the index has every write');
+    assert
+      .dom('[data-test-explanation-grant]')
+      .exists({ count: 1 }, 'the one grant on the named query')
+      .hasAttribute('data-test-explanation-grant-filterable', 'true');
+    assert
+      .dom('[data-test-explanation-grant-label]')
+      .hasText('narrows the search');
+
+    await fillIn('[data-test-explain-operation]', 'query');
+    assert
+      .dom('[data-test-explain-type-module]')
+      .doesNotExist('an ad-hoc search names its types in its filter');
+    await fillIn(
+      '[data-test-explain-search-filter]',
+      JSON.stringify({ type: CLASSROOM }),
+    );
+    await submitAndWait('[data-test-explanation]');
+    assert.dom('[data-test-explanation-decision]').hasText('denied');
+    assert
+      .dom('[data-test-explanation-reason]')
+      .includesText('No grant in this policy can narrow this search');
+    assert.dom('[data-test-explanation-search-operation]').hasText('query');
+    assert
+      .dom('[data-test-explanation-search-no-fragment]')
+      .exists('the policy composes nothing');
+    assert
+      .dom('[data-test-explanation-grant]')
+      .hasAttribute('data-test-explanation-grant-filterable', 'false');
+    assert
+      .dom('[data-test-explanation-grant-label]')
+      .hasText(
+        "a search can't use its condition, so it adds nothing",
+        'the grant whose condition a search cannot use is shown as adding nothing',
+      );
+  });
+
+  test('the policy explains a page of the cards in a realm at a time', async function (assert) {
+    await renderAskingPolicy();
+
+    await chooseMode('listing');
+    await fillIn('[data-test-explain-actor]', TEACHER);
+    await fillIn('[data-test-explain-operation]', 'read');
+    await fillIn('[data-test-explain-type-module]', CLASSROOM.module);
+    await fillIn('[data-test-explain-type-name]', CLASSROOM.name);
+    await submitAndWait('[data-test-explanation-listing]');
+
+    let listed = () =>
+      [...document.querySelectorAll('[data-test-explanation-listed]')].map(
+        (el) => [
+          el.getAttribute('data-test-explanation-listed'),
+          el
+            .querySelector('[data-test-explanation-listed-decision]')
+            ?.textContent?.trim(),
+        ],
+      );
+    assert
+      .dom('[data-test-explanation-listing-page]')
+      .hasText('Cards 1 to 10 of 11');
+    assert.deepEqual(
+      listed(),
+      ROOMS.slice(0, 10).map((room, i) => [
+        `${testRealmURL}classrooms/${room}`,
+        i < 3 ? 'allowed' : 'denied',
+      ]),
+      'each card on the page is explained for the teacher',
+    );
+    assert.dom('[data-test-explanation-listing-previous]').isDisabled();
+    assert.dom('[data-test-explanation-listing-next]').isEnabled();
+
+    await click('[data-test-explanation-listing-next]');
+    await waitUntil(
+      () =>
+        document
+          .querySelector('[data-test-explanation-listing-page]')
+          ?.textContent?.trim() === 'Cards 11 to 11 of 11',
+      { timeout: 10_000 },
+    );
+    assert.deepEqual(listed(), [
+      [`${testRealmURL}classrooms/room-211`, 'denied'],
+    ]);
+    assert.dom('[data-test-explanation-listing-previous]').isEnabled();
+    assert.dom('[data-test-explanation-listing-next]').isDisabled();
+
+    await click('[data-test-explain-use-draft]');
+    await fillIn(
+      '[data-test-explain-draft]',
+      JSON.stringify({
+        rules: [
+          {
+            targetType: { module: '../classroom', name: 'Classroom' },
+            grants: [{ operation: 'read' }],
+          },
+        ],
+      }),
+    );
+    await submitAndWait('[data-test-explanation-listing]');
+    assert
+      .dom('[data-test-explanation-listing-page]')
+      .hasText(
+        'Cards 1 to 10 of 11',
+        'a new question starts at the first page',
+      );
+    assert.deepEqual(
+      listed().map(([, decision]) => decision),
+      Array(10).fill('allowed'),
+      'the draft lets the teacher read every classroom',
+    );
+    assert.dom('[data-test-explanation-draft-clean]').exists();
+  });
+
   test('a view created in an index render never asks what the policy compiles to', async function (assert) {
     await setupIntegrationTestRealm({
       mockMatrixUtils,
