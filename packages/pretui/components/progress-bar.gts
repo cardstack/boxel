@@ -1,6 +1,7 @@
 // Pretui — ProgressBar: quantitative progress along a track.
 import Component from '@glimmer/component';
 import { htmlSafe } from '@ember/template';
+import { cssStyle } from '../pretui-css';
 
 export interface ProgressBarSignature {
   Args: {
@@ -8,12 +9,19 @@ export interface ProgressBarSignature {
     max?: number;
     label?: string;
     count?: string;
+    valueText?: string;
+    fill?: string;
     steps?: boolean;
   };
   Element: HTMLDivElement;
 }
 
 // Quantitative completion. Stepped mode for small discrete totals ("3 / 6").
+//
+// The root element is the `progressbar`, so `aria-label` and `aria-labelledby`
+// passed as attributes name it directly; `@label` names it otherwise. The
+// visible header sits inside the widget and is hidden from assistive tech,
+// which hears the name and value from the ARIA attributes instead.
 export class ProgressBar extends Component<ProgressBarSignature> {
   get max() {
     return this.args.max ?? 100;
@@ -40,22 +48,45 @@ export class ProgressBar extends Component<ProgressBarSignature> {
   get showHeader() {
     return this.args.label || this.args.count !== undefined;
   }
+  // A caller's words for the value win; the visible count is next, since it is
+  // already the human reading ("3 / 6"). With neither, assistive tech derives
+  // a percentage from the value range itself.
+  get valueText() {
+    return this.args.valueText ?? this.args.count;
+  }
+  // `@fill` is a caller string, so it goes through the kit-wide allowlist
+  // before it reaches htmlSafe. A rejected value drops the override and the
+  // stylesheet's own `--primary` paints.
+  get fillKnobStyle() {
+    return cssStyle('--pretui-progress-fill', this.args.fill);
+  }
   <template>
-    <div class='pretui-progresswrap' data-test-pretui-progress ...attributes>
+    <div
+      class='pretui-progresswrap'
+      role='progressbar'
+      aria-label={{@label}}
+      aria-valuemin='0'
+      aria-valuenow={{@value}}
+      aria-valuemax={{this.max}}
+      aria-valuetext={{this.valueText}}
+      style={{this.fillKnobStyle}}
+      data-test-pretui-progress
+      ...attributes
+    >
       {{#if this.showHeader}}
-        <div class='pretui-progress-head'>
+        <div class='pretui-progress-head' aria-hidden='true'>
           <span>{{@label}}</span>
           <span class='pretui-progress-count'>{{this.countText}}</span>
         </div>
       {{/if}}
       {{#if this.stepped}}
-        <div role='progressbar' aria-valuenow={{@value}} aria-valuemax={{this.max}} class='pretui-progress-steps'>
+        <div class='pretui-progress-steps'>
           {{#each this.stepList as |s|}}
             <span class='pretui-progress-step' data-on={{if s.on 'true'}}></span>
           {{/each}}
         </div>
       {{else}}
-        <div class='pretui-progress' role='progressbar' aria-valuenow={{@value}} aria-valuemax={{this.max}}>
+        <div class='pretui-progress'>
           <div class='pretui-progress-fill' style={{this.fillStyle}}></div>
         </div>
       {{/if}}
@@ -88,7 +119,7 @@ export class ProgressBar extends Component<ProgressBarSignature> {
         .pretui-progress-fill {
           height: 100%;
           border-radius: 2px;
-          background: var(--primary);
+          background-color: var(--pretui-progress-fill, var(--primary));
           transition: width var(--pretui-dur-morph, 300ms) var(--pretui-ease-morph, ease);
         }
         .pretui-progress-steps {
@@ -103,7 +134,7 @@ export class ProgressBar extends Component<ProgressBarSignature> {
           transition: background var(--pretui-dur-morph, 300ms) var(--pretui-ease-morph, ease);
         }
         .pretui-progress-step[data-on] {
-          background: var(--primary);
+          background-color: var(--pretui-progress-fill, var(--primary));
         }
       }
     </style>

@@ -4,6 +4,17 @@ import { tracked } from '@glimmer/tracking';
 import { FreestyleUsage } from './freestyle-usage';
 import { ProgressBar } from './progress-bar';
 
+// The fill knob's choices: the default plus the contract's state hues.
+const DEFAULT_FILL = 'var(--primary)';
+const FILLS = [
+  DEFAULT_FILL,
+  'var(--success)',
+  'var(--warning)',
+  'var(--attention)',
+  'var(--destructive)',
+  'var(--info)',
+];
+
 // ── ProgressBar ← progress-bar/usage.gts ─────────────────────────────────
 // Dropped knobs: position (the label/count header layout is fixed — label
 // left, count right).
@@ -12,6 +23,8 @@ class ProgressBarUsage extends GlimmerComponent {
   @tracked max = 100;
   @tracked label = 'Task progress';
   @tracked count = '';
+  @tracked valueText = '';
+  @tracked fill = DEFAULT_FILL;
   @tracked steps = false;
   setValue = (v: number | null) => {
     if (v !== null) {
@@ -25,12 +38,20 @@ class ProgressBarUsage extends GlimmerComponent {
   };
   setLabel = (v: string) => (this.label = v);
   setCount = (v: string) => (this.count = v);
+  setValueText = (v: string) => (this.valueText = v);
+  setFill = (v: string) => (this.fill = v);
   toggleSteps = (v: boolean) => (this.steps = v);
   get labelVal() {
     return this.label || undefined;
   }
   get countVal() {
     return this.count || undefined;
+  }
+  get valueTextVal() {
+    return this.valueText || undefined;
+  }
+  get fillVal() {
+    return this.fill === DEFAULT_FILL ? undefined : this.fill;
   }
   get usage() {
     let bits = [`@value={{${this.value}}}`];
@@ -42,6 +63,12 @@ class ProgressBarUsage extends GlimmerComponent {
     }
     if (this.count) {
       bits.push(`@count='${this.count}'`);
+    }
+    if (this.valueText) {
+      bits.push(`@valueText='${this.valueText}'`);
+    }
+    if (this.fillVal) {
+      bits.push(`@fill='${this.fillVal}'`);
     }
     if (this.steps) {
       bits.push('@steps={{true}}');
@@ -61,6 +88,8 @@ class ProgressBarUsage extends GlimmerComponent {
             @max={{this.max}}
             @label={{this.labelVal}}
             @count={{this.countVal}}
+            @valueText={{this.valueTextVal}}
+            @fill={{this.fillVal}}
             @steps={{this.steps}}
           />
         </div>
@@ -87,7 +116,7 @@ class ProgressBarUsage extends GlimmerComponent {
         />
         <Args.String
           @name='label'
-          @description='Custom label for the progress bar'
+          @description='Visible label, and the progress bar’s accessible name. Without it, name the bar with aria-label or aria-labelledby, which land on the progressbar element.'
           @value={{this.label}}
           @onInput={{this.setLabel}}
         />
@@ -97,6 +126,20 @@ class ProgressBarUsage extends GlimmerComponent {
           @value={{this.count}}
           @onInput={{this.setCount}}
         />
+        <Args.String
+          @name='valueText'
+          @description='Announced reading of the value (aria-valuetext) when the number alone would mislead — defaults to @count (Pretui addition).'
+          @value={{this.valueText}}
+          @onInput={{this.setValueText}}
+        />
+        <Args.String
+          @name='fill'
+          @description='Any CSS colour for the fill and lit segments, typically a state hue. Sets --pretui-progress-fill, which can also be set on any ancestor; defaults to --primary (Pretui addition).'
+          @value={{this.fill}}
+          @options={{FILLS}}
+          @defaultValue={{DEFAULT_FILL}}
+          @onInput={{this.setFill}}
+        />
         <Args.Bool
           @name='steps'
           @description='Discrete stepped track for small totals (Pretui addition).'
@@ -105,6 +148,14 @@ class ProgressBarUsage extends GlimmerComponent {
           @onInput={{this.toggleSteps}}
         />
       </:api>
+      <:cssVars as |Css|>
+        <Css.Basic
+          @name='pretui-progress-fill'
+          @type='color'
+          @description='Colour of the fill and the lit segments. Set on the bar or any ancestor, or through @fill.'
+          @defaultValue='var(--primary)'
+        />
+      </:cssVars>
     </FreestyleUsage>
     <style scoped>
       .bar-col {
