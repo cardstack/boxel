@@ -267,17 +267,14 @@ Never `sleep(200)`. A sleep encodes a duration your test does not own: change a 
 sleep in the suite becomes either flaky or slow, and you find out on someone else's machine.
 
 ```ts
-import {
-  setupMotion,
-  animationsSettled,
-  bounds,
-} from 'glimmer-motion/test-support';
+import { setupChoreo } from 'glimmer-motion/choreo/test-support';
+import { animationsSettled, bounds } from 'glimmer-motion/test-support';
 ```
 
 ```gts
 module('the inbox', function (hooks) {
   setupRenderingTest(hooks);
-  setupMotion(hooks);
+  setupChoreo(hooks);
 
   test('a deleted row flies to the bin', async function (assert) {
     await render(<template><Inbox /></template>);
