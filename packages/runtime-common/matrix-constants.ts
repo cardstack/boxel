@@ -202,44 +202,26 @@ export interface FallbackModelConfig {
 
 export const DEFAULT_FALLBACK_MODELS: readonly FallbackModelConfig[] = [
   {
+    modelId: 'anthropic/claude-opus-5.5',
+    displayName: 'Anthropic: Claude Opus 5.5',
+    toolsSupported: true,
+    inputModalities: ['text', 'image', 'file'],
+  },
+  {
     modelId: 'anthropic/claude-sonnet-4.6',
     displayName: 'Anthropic: Claude Sonnet 4.6',
     toolsSupported: true,
     inputModalities: ['text', 'image', 'file'],
   },
   {
-    modelId: 'anthropic/claude-opus-4.7',
-    displayName: 'Anthropic: Claude Opus 4.7',
-    toolsSupported: true,
-    inputModalities: ['text', 'image', 'file'],
-  },
-  {
-    modelId: 'google/gemini-3-flash-preview',
-    displayName: 'Google: Gemini 3 Flash Preview',
-    toolsSupported: true,
-    inputModalities: ['text', 'image', 'file', 'audio', 'video'],
-  },
-  {
-    modelId: 'google/gemini-3.1-pro-preview',
-    displayName: 'Google: Gemini 3.1 Pro Preview',
-    toolsSupported: true,
-    inputModalities: ['audio', 'file', 'image', 'text', 'video'],
-  },
-  {
-    modelId: 'openai/gpt-5.4',
-    displayName: 'OpenAI: GPT-5.4',
-    toolsSupported: true,
-    inputModalities: ['text', 'image', 'file'],
-  },
-  {
-    modelId: 'openai/gpt-5.5',
-    displayName: 'OpenAI: GPT-5.5',
+    modelId: 'openai/gpt-6-luna',
+    displayName: 'OpenAI: GPT-6 Luna',
     toolsSupported: true,
     inputModalities: ['file', 'image', 'text'],
   },
   {
-    modelId: 'openai/gpt-6-luna',
-    displayName: 'OpenAI: GPT-6 Luna',
+    modelId: 'openai/gpt-5.6-sol',
+    displayName: 'OpenAI: GPT-5.6 Sol',
     toolsSupported: true,
     inputModalities: ['file', 'image', 'text'],
   },
