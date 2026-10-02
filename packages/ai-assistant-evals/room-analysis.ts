@@ -23,12 +23,8 @@ export interface RoomAnalysis {
   failedToolCalls: { name: string; reason: string }[];
   // Requests the host never answered: the signature of a stuck host.
   unansweredToolCalls: number;
-  patchBlocks: number;
-  // realm.fs writes in run-realm-code calls the host applied — the tool that
-  // replaces SEARCH/REPLACE blocks.
+  // realm.fs writes in run-realm-code calls the host applied.
   realmCodeWrites: number;
-  gitStyleBlocks: number;
-  patchResults: { applied: number; failed: number };
   filesWritten: string[];
   showCardIds: string[];
   lastBotBody: string;
@@ -36,12 +32,9 @@ export interface RoomAnalysis {
 
 const BOT_MESSAGE_MSGTYPE = 'app.boxel.message';
 const TOOL_REQUESTS_KEY = 'app.boxel.toolRequests';
-const BOX_SEARCH_MARKER = '╔═══ SEARCH';
 // Every write call counts; the path is recorded only when it is a literal.
 const REALM_CODE_WRITE =
   /realm\.fs\.(?:writeText|replace)\(\s*(?:(['"`])([^'"`]+)\1)?/g;
-const FENCE_HEADER =
-  /```[a-z]*\n(https?:\/\/[^\s]+|@[a-z0-9-]+\/[^\s]+)(?: \(new\))?\n╔═══ SEARCH/g;
 
 function parseData(content: Record<string, any>): Record<string, any> {
   let data = content.data;
@@ -86,10 +79,7 @@ export function analyzeRoom(
     toolCalls: {},
     failedToolCalls: [],
     unansweredToolCalls: 0,
-    patchBlocks: 0,
     realmCodeWrites: 0,
-    gitStyleBlocks: 0,
-    patchResults: { applied: 0, failed: 0 },
     filesWritten: [],
     showCardIds: [],
     lastBotBody: '',
@@ -114,14 +104,6 @@ export function analyzeRoom(
           key: event.content['m.relates_to']?.key ?? 'unknown',
           reason: event.content.failureReason ?? '',
         });
-      }
-    }
-    if (event.type.startsWith('app.boxel.codePatchResult')) {
-      let key = event.content['m.relates_to']?.key;
-      if (key === 'applied') {
-        result.patchResults.applied++;
-      } else {
-        result.patchResults.failed++;
       }
     }
   }
@@ -169,11 +151,6 @@ export function analyzeRoom(
     let body: string = content.body ?? '';
     if (body) {
       result.lastBotBody = body;
-    }
-    result.patchBlocks += body.split(BOX_SEARCH_MARKER).length - 1;
-    result.gitStyleBlocks += body.split('<<<<<<< SEARCH').length - 1;
-    for (let match of body.matchAll(FENCE_HEADER)) {
-      result.filesWritten.push(match[1]);
     }
 
     for (let request of content[TOOL_REQUESTS_KEY] ?? []) {
