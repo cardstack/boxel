@@ -1,13 +1,15 @@
 ## What it is
 
-An **IconButton** that copies a string to the clipboard and confirms it by swapping its glyph to a green check. Use it next to any value a user will want to paste elsewhere — an id, a URL, an API key, a **Token**. If the thing to copy is a whole block of code, put one of these in its corner rather than making the block clickable. If the action is "share" rather than "copy", that is a **Menu** or a **Popover**.
+An **IconButton** that copies a string to the clipboard, swaps its glyph to a check (or a cross when the copy fails), and announces the result to screen readers. Use it next to any value a user will want to paste elsewhere — an id, a URL, an API key, a **Token**. If the thing to copy is a whole block of code, put one of these in its corner rather than making the block clickable. If the action is "share" rather than "copy", that is a **Menu** or a **Popover**.
 
 ## The contract
 
 ```
-@text: string | null | undefined   (required)
-@label?   (default 'Copy to clipboard')
-@variant? 'primary' | 'secondary' | 'ghost' | 'destructive'
+@text: string | null | undefined   (required; aliases @value, and @textToCopy as boxel-ui spells it)
+@label?   (default 'Copy to clipboard'; alias @ariaLabel as boxel-ui spells it)
+@variant?   (IconButton's variants)
+@size?: 'xs' | 's' | 'm' | 'l' | 'xl'   (default 'm'; the glyph scales with it)
+@disabled?
 Element: HTMLButtonElement
 ```
 
@@ -15,9 +17,11 @@ Element: HTMLButtonElement
 
 **The confirmation resets on `pointerleave` and `blur`, not on a timer.** Realm components own no timers, so the usual "revert after 2 seconds" is unavailable. What replaced it is arguably better: the confirmation lives exactly as long as the user's attention does. Move the pointer away or tab off, and it resets. A user who stays looking at the button keeps seeing "Copied".
 
-**`@label` becomes the accessible name and swaps with the state** — 'Copy to clipboard' → 'Copied'. Because it flows into IconButton's `@label`, it is applied as both `aria-label` and `title`.
+**`@label` is the accessible name, and it does not change with the result.** It flows into IconButton's `@label`, so it is applied as both `aria-label` and `title`. The result is written into a visually hidden `role="status"` region instead: 'Copied', or 'Copy failed'.
 
-Clipboard failures are caught and logged to the console rather than surfaced; the button simply does not confirm.
+**A failed copy is shown, not just logged.** `navigator.clipboard.writeText` rejects in insecure contexts, without permission, and when the document is not focused. The button then shows a cross in `--destructive-ink`, sets `data-state="failed"`, announces 'Copy failed', and logs the error to the console.
+
+**The status region renders after the button, as a sibling.** A button's children are presentational, so a live region inside it would not be announced. The region is absolutely positioned and 1px, so it takes no space in flex, grid or inline layout, but a caller's `:last-child` selector will match it rather than the button. ButtonGroup matches its children by class, so a CopyButton at either end of a group still gets the group's outer corners.
 
 ## Prior art
 
@@ -25,13 +29,20 @@ Clipboard failures are caught and logged to the console rather than surfaced; th
 
 **boxel-ui's own copy-button rides Tooltip via ember-velcro's wormhole**, which is on this kit's wart list — the portal escapes the theme island — so this is a fresh implementation rather than a wrap.
 
+### Differences from boxel-ui CopyButton
+
+- **No styled tooltip**, so `@tooltipText`, `@placement` and `@offset` are not accepted. The native `title` tooltip shows `@label`, and the glyph swap shows the result.
+- **The result resets on `pointerleave` and `blur`**, not after 2 seconds (above).
+- **The accessible name stays fixed.** boxel-ui swaps `aria-label` to 'Copied', which a screen reader does not announce; here the status region announces it.
+- **`@width` / `@height` are not accepted.** The glyph follows `@size`.
+- **The root element is the button**, not a Tooltip wrapper, so `...attributes` land on the button.
+
 Where Pretui differs and is arguably ahead: **attention-scoped confirmation** (above) instead of a fixed duration. Web Awesome's 1000ms is a guess that is too short if you looked away and too long if you are clicking several in a row; tying it to pointer and focus makes it correct in both cases.
 
 Where it is behind, plainly:
 
-- **No error state.** `navigator.clipboard.writeText` rejects in insecure contexts, without permission, and when the document is not focused. Web Awesome shows an error label; here the failure is a `console.error` and a button that silently did not confirm. The user is not told the copy failed, which is the worst of the three outcomes.
 - **No `from` equivalent** — you must have the string, not a reference to an element.
-- **No `variant`-independent success colouring beyond the check's `--success`.**
+- **The status text is fixed** ('Copied', 'Copy failed'); there is no `copy-label` / `success-label` / `error-label` equivalent.
 
 ## Accessibility
 
@@ -39,23 +50,21 @@ No APG pattern; a native `<button>`. Space and Enter both activate.
 
 What is right:
 
-- **The accessible name changes with state**, so a screen-reader user who re-reads the button after copying hears "Copied". The glyphs are `aria-hidden`, so the SVGs contribute nothing.
-- **The reset triggers include `blur`**, which means the state does not get stuck for keyboard users the way a pointer-only reset would.
+- **The result is announced.** A polite `role="status"` region, rendered from the start so assistive tech is already watching it, receives 'Copied' or 'Copy failed'.
+- **The accessible name is stable**, so a voice-control command such as "click copy to clipboard" keeps working after a copy. The glyphs sit inside IconButton's `aria-hidden` face, so the SVGs contribute nothing.
+- **The reset triggers include `blur`**, which means the state does not get stuck for keyboard users the way a pointer-only reset would. A reset empties the region, which announces nothing.
 
-Gaps, and the first is significant:
+Gaps and cautions:
 
-- **The success is not announced.** Changing `aria-label` on a button does not fire a live-region announcement — a screen-reader user who presses the button hears nothing at all and has no confirmation that anything happened. The change is only discovered if they navigate away and back. This is the component's most consequential gap, and the fix is a visually-hidden `role="status"` region that the confirmation text is written into.
-- **A failed copy announces nothing either** (above), so the user cannot distinguish "copied" from "failed" without checking the clipboard.
-- **`blur` resets the state**, which interacts badly with the announcement gap: if a live region were added, the message would need to survive the focus change that resets the label.
-- **APG's toggle-button guidance says a button's label must not change with state** — that rule is about `aria-pressed` toggles, and this is not one (it is a transient confirmation, not a persistent state), so changing the label is defensible here. But it does mean the button's name is unstable, which some voice-control users will find confusing: "click copy to clipboard" stops working for a moment after a copy.
+- **A second copy before a reset is not announced again**, because the region's text does not change. The glyph still shows the result.
 - **`title` is inherited from IconButton** and duplicates the `aria-label`, with the usual double-announcement risk.
-- **The check is `--success` at 13px** — a small green tick, and colour plus shape are the only visual confirmation. The shape change (clipboard → check) carries it without colour, which satisfies **WCAG 1.4.1**.
+- **The check is `--success-ink` and the cross `--destructive-ink`**, the hue tokens meant for ink on a neutral surface. On an `accent` fill they would lose contrast, so the glyph keeps the fill's paired foreground there. The shape change (clipboard → check or cross) carries the result without color, which satisfies **WCAG 1.4.1**.
 - Target size is IconButton's 28×28, clearing WCAG 2.5.8's minimum narrowly.
 
 ## Theming
 
-`--success` (the confirmation check) plus **IconButton**'s and **Button**'s full token set for the button itself — `--pretui-tone`/`--pretui-tone-on` per variant, `--radius`, `--hover`, `--border`, `--control-h`.
+`--success-ink` (the check) and `--destructive-ink` (the cross) plus **IconButton**'s and **Button**'s full token set for the button itself — `--pretui-tone`/`--pretui-tone-on` per variant, `--radius`, `--hover`, `--border`, `--control-h`.
 
-`data-state="copied"` is reflected on the button, so a season can dress the confirmed state beyond the glyph swap — a tinted background, for example — without touching the component. That is the intended extension point, and it is worth using: a colour-only-by-default confirmation on a 28px button is easy to miss.
+`data-state="copied"` or `data-state="failed"` is reflected on the button, so a season can dress the confirmed state beyond the glyph swap — a tinted background, for example — without touching the component. That is the intended extension point, and it is worth using: a glyph-only-by-default confirmation on a 28px button is easy to miss.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

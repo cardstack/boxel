@@ -1,29 +1,56 @@
 // Pretui — IconButton usage page.
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
+import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { FreestyleUsage } from './freestyle-usage';
 import { IconButton } from './icon-button';
 import type { ButtonVariant } from './button';
+import { PRETUI_SIZES } from '../pretui-primitives';
+import type { PretuiSize } from '../pretui-primitives';
 
 const ICON_VARIANTS = ['primary', 'secondary', 'ghost', 'destructive'];
+const SIZES = [...PRETUI_SIZES];
+
+const PlusIcon: TemplateOnlyComponent<{ Element: SVGSVGElement }> = <template>
+  <svg viewBox='0 0 14 14' ...attributes><path
+      d='M7 2v10M2 7h10'
+      fill='none'
+      stroke='currentColor'
+      stroke-width='1.5'
+      stroke-linecap='round'
+    /></svg>
+</template>;
 
 // ── IconButton ← icon-button/usage.gts ───────────────────────────────────
-// Dropped knobs: @icon (the glyph arrives as block content, not a component
-// ref — documented on the Yield row), @size (fixed 28px square), @loading
-// (no busy state on IconButton), @round (fixed radius), @disabled (not in
-// IconButtonSignature — splat the attribute if needed), @width / @height
-// (size the yielded svg directly).
+// Dropped knobs: @round (use @shape='pill'), @class (pass class directly).
+// @size takes Pret UI's scale rather than boxel-ui's fixed heights.
 export class IconButtonUsage extends Component {
   variantOptions = ICON_VARIANTS;
   @tracked labelText = 'Add item';
   @tracked variant = 'secondary';
+  @tracked size = 'm';
+  @tracked pressed: boolean | undefined;
+  @tracked busy = false;
+  @tracked disabled = false;
   setLabel = (v: string) => (this.labelText = v);
   setVariant = (v: string) => (this.variant = v);
+  setSize = (v: string) => (this.size = v);
+  setPressed = (v: boolean) => (this.pressed = v);
+  setBusy = (v: boolean) => (this.busy = v);
+  setDisabled = (v: boolean) => (this.disabled = v);
   get variantVal() {
     return this.variant as ButtonVariant;
   }
+  get sizeVal() {
+    return this.size as PretuiSize;
+  }
   get usage() {
-    return `<IconButton @label='${this.labelText}' @variant='${this.variant}'>…icon svg…</IconButton>`;
+    let bits = [`@label='${this.labelText}'`, `@variant='${this.variant}'`];
+    if (this.size !== 'm') bits.push(`@size='${this.size}'`);
+    if (this.pressed !== undefined) bits.push(`@pressed={{${this.pressed}}}`);
+    if (this.busy) bits.push('@busy={{true}}');
+    if (this.disabled) bits.push('@disabled={{true}}');
+    return `<IconButton ${bits.join(' ')} @icon={{PlusIcon}} />`;
   }
   <template>
     <FreestyleUsage
@@ -32,9 +59,15 @@ export class IconButtonUsage extends Component {
       @source={{this.usage}}
     >
       <:example>
-        <IconButton @label={{this.labelText}} @variant={{this.variantVal}}>
-          <svg width='14' height='14' viewBox='0 0 14 14' aria-hidden='true'><path d='M7 2v10M2 7h10' fill='none' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' /></svg>
-        </IconButton>
+        <IconButton
+          @label={{this.labelText}}
+          @variant={{this.variantVal}}
+          @size={{this.sizeVal}}
+          @pressed={{this.pressed}}
+          @busy={{this.busy}}
+          @disabled={{this.disabled}}
+          @icon={{PlusIcon}}
+        />
       </:example>
       <:api as |Args|>
         <Args.String
@@ -53,8 +86,42 @@ export class IconButtonUsage extends Component {
           @description='Legacy variant sugar over the tone + appearance axes.'
           @onInput={{this.setVariant}}
         />
+        <Args.String
+          @name='size'
+          @value={{this.size}}
+          @options={{SIZES}}
+          @defaultValue='m'
+          @description='Button size; the square and the @icon scale with it.'
+          @onInput={{this.setSize}}
+        />
+        <Args.Bool
+          @name='pressed'
+          @value={{this.pressed}}
+          @description='Toggle state, as aria-pressed; leave unset for a plain action.'
+          @onInput={{this.setPressed}}
+        />
+        <Args.Bool
+          @name='busy'
+          @value={{this.busy}}
+          @defaultValue={{false}}
+          @description="Button's busy state; @busyLabel joins the accessible name."
+          @onInput={{this.setBusy}}
+        />
+        <Args.Bool
+          @name='disabled'
+          @value={{this.disabled}}
+          @defaultValue={{false}}
+          @description='Disables the button.'
+          @onInput={{this.setDisabled}}
+        />
+        <Args.Base
+          @name='icon'
+          @typeLabel='Component'
+          @description='Icon component, sized by @size or @width / @height.'
+          @hideControls={{true}}
+        />
         <Args.Yield
-          @description="Yield for button content — the icon glyph as block content replaces boxel-ui's @icon component ref."
+          @description='The icon as block content, when it is not passed as @icon.'
         />
       </:api>
     </FreestyleUsage>
