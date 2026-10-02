@@ -10,6 +10,7 @@ import type {
   ChatCompletionMessageToolCall,
 } from 'openai/resources';
 import type { DelegatedUserRealmSessionManager } from './user-delegated-realm-server-session.ts';
+import { parseLenientJson } from './lenient-json.ts';
 
 let log = logger('ai-bot:read-realm-file');
 
@@ -96,7 +97,7 @@ export function selectReadRealmFileUrls(
 ): ReadRealmFileUrlSelection {
   let urls: unknown[] = [];
   try {
-    let parsed = JSON.parse(argumentsJson) as Partial<ReadRealmFileArgs>;
+    let parsed = parseLenientJson(argumentsJson) as Partial<ReadRealmFileArgs>;
     urls = Array.isArray(parsed?.urls) ? parsed.urls : [];
   } catch {
     let listStart = argumentsJson.indexOf('"urls"');

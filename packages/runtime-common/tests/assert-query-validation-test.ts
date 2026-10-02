@@ -35,6 +35,42 @@ const tests = Object.freeze({
     );
   },
 
+  'assertQuery rejects an empty code ref as a filter type': async (assert) => {
+    // The shape a model produces when it fills every schema property: an
+    // empty `type` beside the anchor it meant.
+    assert.throws(
+      () =>
+        assertQuery({
+          filter: {
+            on: sampleRef,
+            type: { module: '', name: '' },
+            any: [],
+          },
+        }),
+      (err: Error) =>
+        err instanceof InvalidQueryError &&
+        /filter\/type: module and name must not be empty/.test(err.message),
+      'the empty type is rejected, and the pointer names it',
+    );
+    assert.throws(
+      () =>
+        assertQuery({
+          filter: {
+            every: [
+              { on: sampleRef, eq: { status: 'open' } },
+              { on: { module: '', name: '' }, eq: { status: 'open' } },
+            ],
+          },
+        }),
+      (err: Error) =>
+        err instanceof InvalidQueryError &&
+        /filter\/every\/\[1\]\/on: module and name must not be empty/.test(
+          err.message,
+        ),
+      'an empty on inside a nested filter is rejected, and the pointer names it',
+    );
+  },
+
   'assertQuery validates every field path of a range filter': async (
     assert,
   ) => {

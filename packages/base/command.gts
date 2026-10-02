@@ -415,6 +415,23 @@ export class PatchCodeInput extends CardDef {
   @field roomId = contains(StringField);
 }
 
+export class RunRealmCodeInput extends CardDef {
+  @field code = contains(StringField);
+  @field realm = contains(StringField);
+  @field roomId = contains(StringField);
+}
+
+export class RealmCodeFileResult extends FieldDef {
+  @field fileUrl = contains(StringField);
+  @field status = contains(StringField);
+  @field detail = contains(StringField);
+}
+
+export class RunRealmCodeResult extends CardDef {
+  @field files = containsMany(RealmCodeFileResult);
+  @field scriptResult = contains(StringField);
+}
+
 export class CheckCorrectnessInput extends CardDef {
   @field targetType = contains(StringField);
   @field targetRef = contains(StringField);

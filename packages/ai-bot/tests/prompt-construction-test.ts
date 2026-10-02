@@ -3903,7 +3903,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
     );
     assert.true(
       messageText(messages![messages!.length - 1]).includes(
-        'Re-read the file and send a new block whose SEARCH lines are copied exactly from the current file. Do not send the same block again. Attempt 1 of 3.',
+        'Re-read the file and use the run-realm-code tool with the current contents. Do not repeat a failed edit. Attempt 1 of 3.',
       ),
       'the retry instruction rides the trailing message, not history',
     );
@@ -4098,7 +4098,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
     );
     let trailing = messageText(messages![messages!.length - 1]);
     assert.true(
-      trailing.includes('Re-read the file and send a new block'),
+      trailing.includes('Re-read the file and use the run-realm-code tool'),
       'the trailing message tells the model to retry',
     );
     assert.true(trailing.includes('Attempt 1 of 3.'), 'the attempt is counted');
@@ -4191,7 +4191,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
       'the third consecutive failure ends the retrying',
     );
     assert.false(
-      trailing.includes('Re-read the file and send a new block'),
+      trailing.includes('Re-read the file and use the run-realm-code tool'),
       'the retry instruction is gone',
     );
     const records = messages!.filter(
@@ -4228,7 +4228,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
     );
     let trailing = messageText(messages![messages!.length - 1]);
     assert.true(
-      trailing.includes('Re-read the file and send a new block'),
+      trailing.includes('Re-read the file and use the run-realm-code tool'),
       'the retry instruction is still given',
     );
     assert.true(
@@ -4285,7 +4285,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
     );
     let trailing = messageText(messages![messages!.length - 1]);
     assert.false(
-      trailing.includes('Re-read the file and send a new block'),
+      trailing.includes('Re-read the file and use the run-realm-code tool'),
       'no retry instruction after the fix landed',
     );
     assert.true(
