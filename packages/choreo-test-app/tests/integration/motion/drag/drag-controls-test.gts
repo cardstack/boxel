@@ -10,6 +10,7 @@ import { render } from '@ember/test-helpers';
 import { setupRenderingTest } from 'ember-qunit';
 import { createDragControls } from 'glimmer-motion/gestures/drag-controls';
 import motion from 'glimmer-motion/motion';
+import { setupMotion } from 'glimmer-motion/test-support';
 import { motionValue } from 'motion-dom';
 import { module, test } from 'qunit';
 
@@ -20,6 +21,7 @@ const INITIAL = { x: 100, y: 40 };
 
 module('Integration | motion | useDragControls', function (hooks) {
   setupRenderingTest(hooks);
+  setupMotion(hooks);
   setupFixtureViewport(hooks);
 
   test('snapToCursor centres the element under the pointer on every drag start', async function (assert) {

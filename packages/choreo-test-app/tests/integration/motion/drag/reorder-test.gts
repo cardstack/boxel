@@ -16,6 +16,7 @@ import Presence from 'glimmer-motion/presence';
 import type { PresenceHandle } from 'glimmer-motion/presence-types';
 import ReorderGroup from 'glimmer-motion/reorder/group';
 import ReorderItem from 'glimmer-motion/reorder/item';
+import { setupMotion } from 'glimmer-motion/test-support';
 import { animateMotionValue, type MotionValue, motionValue } from 'motion-dom';
 import { module, test } from 'qunit';
 
@@ -326,6 +327,7 @@ function scoped(css: string) {
 
 module('Integration | motion | cypress | Tabs demo', function (hooks) {
   setupRenderingTest(hooks);
+  setupMotion(hooks);
   setupFixtureViewport(hooks);
   const opacity = (sel: string) => getComputedStyle($(sel)).opacity;
 
@@ -578,6 +580,7 @@ const within = (assert: Assert, sel: string, e: Box) =>
 
 module('Integration | motion | cypress | Drag to reorder', function (hooks) {
   setupRenderingTest(hooks);
+  setupMotion(hooks);
   setupFixtureViewport(hooks);
 
   test('Y axis', async function (assert) {
@@ -736,6 +739,7 @@ module(
   'Integration | motion | cypress | Reorder release before the next frame',
   function (hooks) {
     setupRenderingTest(hooks);
+    setupMotion(hooks);
     setupFixtureViewport(hooks);
 
     test('Reorders when the final move arrives in the same frame as pointerup', async function (assert) {

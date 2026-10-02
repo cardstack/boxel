@@ -13,6 +13,7 @@ import { setupRenderingTest } from 'ember-qunit';
 import LayoutGroup from 'glimmer-motion/layout-group';
 import motion from 'glimmer-motion/motion';
 import Presence from 'glimmer-motion/presence';
+import { setupMotion } from 'glimmer-motion/test-support';
 import { motionValue } from 'motion-dom';
 import { module, test } from 'qunit';
 
@@ -471,6 +472,7 @@ function eq(a: unknown, b: unknown) {
 
 module('Integration | motion | cypress | Layout animation', function (hooks) {
   setupRenderingTest(hooks);
+  setupMotion(hooks);
   setupFixtureViewport(hooks);
 
   test('Correctly fires layout={true} animations and fires onLayoutAnimationStart and onLayoutAnimationComplete', async function (assert) {

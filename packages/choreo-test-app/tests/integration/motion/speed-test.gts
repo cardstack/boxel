@@ -20,6 +20,7 @@ import { setupRenderingTest } from 'ember-qunit';
 import { setMotionSpeed } from 'glimmer-motion';
 import LayoutGroup from 'glimmer-motion/layout-group';
 import motion from 'glimmer-motion/motion';
+import { setupMotion } from 'glimmer-motion/test-support';
 import { module, test } from 'qunit';
 
 import { setupFixtureViewport } from '../../helpers/layout-fixture';
@@ -50,8 +51,8 @@ async function timeLayoutAnimation(el: () => HTMLElement, kick: () => void) {
 
 module('Integration | motion | slow motion', function (hooks) {
   setupRenderingTest(hooks);
+  setupMotion(hooks);
   setupFixtureViewport(hooks);
-  hooks.afterEach(() => setMotionSpeed(1));
 
   test('a layout animation with no transition of its own still honours the divisor', async function (assert) {
     class App extends Component {

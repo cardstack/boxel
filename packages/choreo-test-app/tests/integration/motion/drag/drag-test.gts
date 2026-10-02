@@ -14,6 +14,7 @@ import { createDragControls } from 'glimmer-motion/gestures/drag-controls';
 import LayoutGroup from 'glimmer-motion/layout-group';
 import motion from 'glimmer-motion/motion';
 import { postRender } from 'glimmer-motion/scheduler';
+import { setupMotion } from 'glimmer-motion/test-support';
 import { motionValue } from 'motion-dom';
 import { module, test } from 'qunit';
 
@@ -290,6 +291,7 @@ for (const layout of [false, true]) {
     `Integration | motion | cypress | ${layout ? 'Drag & Layout' : 'Drag'}`,
     function (hooks) {
       setupRenderingTest(hooks);
+      setupMotion(hooks);
       setupFixtureViewport(hooks, { scroll: true });
       const D = "[data-testid='draggable']";
 
@@ -664,6 +666,7 @@ module(
   'Integration | motion | cypress | Drag Constraints Return',
   function (hooks) {
     setupRenderingTest(hooks);
+    setupMotion(hooks);
     setupFixtureViewport(hooks);
     const D = "[data-testid='draggable']";
     const within = (a: Parameters<Parameters<typeof should>[1]>[0]) => {

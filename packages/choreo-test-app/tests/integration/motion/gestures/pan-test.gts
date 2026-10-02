@@ -7,6 +7,7 @@ import { render } from '@ember/test-helpers';
 import { setupRenderingTest } from 'ember-qunit';
 import motion from 'glimmer-motion/motion';
 import { MotionConfig } from 'glimmer-motion/motion-config';
+import { setupMotion } from 'glimmer-motion/test-support';
 import type { PanInfo } from 'motion-dom';
 import { module, test } from 'qunit';
 
@@ -24,6 +25,7 @@ const el = () => document.querySelector('#el')!;
 
 module('Integration | motion | pan', function (hooks) {
   setupRenderingTest(hooks);
+  setupMotion(hooks);
   // runs even when a test times out waiting on a gesture that never ends
   hooks.afterEach(function () {
     delete (performance as { now?: unknown }).now;

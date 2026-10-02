@@ -9,6 +9,7 @@ import { find, render, settled } from '@ember/test-helpers';
 import { tracked } from '@glimmer/tracking';
 import { setupRenderingTest } from 'ember-qunit';
 import motion from 'glimmer-motion/motion';
+import { setupMotion } from 'glimmer-motion/test-support';
 import { frame, motionValue } from 'motion-dom';
 import { MotionGlobalConfig } from 'motion-utils';
 import { module, test } from 'qunit';
@@ -43,6 +44,7 @@ class Props {
 
 module('Integration | motion | animate prop as object', function (hooks) {
   setupRenderingTest(hooks);
+  setupMotion(hooks);
 
   const mount = (p: Props) =>
     render(

@@ -10,6 +10,7 @@
 import { render } from '@ember/test-helpers';
 import { setupRenderingTest } from 'ember-qunit';
 import motion from 'glimmer-motion/motion';
+import { setupMotion } from 'glimmer-motion/test-support';
 import { module, test } from 'qunit';
 
 import {
@@ -25,6 +26,7 @@ const isLocked = () => 'gmDragging' in document.documentElement.dataset;
 
 module('Integration | drag | text-select lock', function (hooks) {
   setupRenderingTest(hooks);
+  setupMotion(hooks);
   setupFixtureViewport(hooks);
 
   test('a drag holds the lock until pointerup', async function (assert) {

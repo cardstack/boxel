@@ -11,6 +11,7 @@ import motion from 'glimmer-motion/motion';
 import MotionConfig, {
   closestMotionConfig,
 } from 'glimmer-motion/motion-config';
+import { setupMotion } from 'glimmer-motion/test-support';
 import { motionValue, type Transition, visualElementStore } from 'motion-dom';
 import { module, test } from 'qunit';
 
@@ -35,6 +36,7 @@ const HALF = { opacity: 0.5 };
 
 module('Integration | motion | MotionConfig', function (hooks) {
   setupRenderingTest(hooks);
+  setupMotion(hooks);
 
   test('Passes down transition', async function (assert) {
     await render(

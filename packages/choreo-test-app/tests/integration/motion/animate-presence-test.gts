@@ -11,6 +11,7 @@ import { setupRenderingTest } from 'ember-qunit';
 import LayoutGroup from 'glimmer-motion/layout-group';
 import motion from 'glimmer-motion/motion';
 import Presence from 'glimmer-motion/presence';
+import { setupMotion } from 'glimmer-motion/test-support';
 import { frame, motionValue, type Variants } from 'motion-dom';
 import { module, test } from 'qunit';
 
@@ -73,6 +74,7 @@ class P {
 
 module('Integration | motion | AnimatePresence', function (hooks) {
   setupRenderingTest(hooks);
+  setupMotion(hooks);
 
   test('Allows initial animation if no `initial` prop defined', async function (assert) {
     const x = motionValue(0);
@@ -650,6 +652,7 @@ module(
   'Integration | motion | AnimatePresence with custom components',
   function (hooks) {
     setupRenderingTest(hooks);
+    setupMotion(hooks);
 
     test('Does nothing on initial render by default', async function (assert) {
       const x = motionValue(0);
