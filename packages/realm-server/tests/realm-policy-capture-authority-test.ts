@@ -6,8 +6,10 @@ import { basename, join } from 'path';
 import { dirSync } from 'tmp';
 import {
   SupportedMimeType,
+  archiveRealm,
   fetchRealmsNamingPolicy,
   rri,
+  unarchiveRealm,
 } from '@cardstack/runtime-common';
 import type {
   QueuePublisher,
@@ -743,5 +745,108 @@ module(basename(import.meta.filename), function (hooks) {
       captureSpec.viewport.height,
       "the other reader's drew no row",
     );
+  });
+  test('an archived realm seals a caller its policy judges only where it would serve them a stylesheet', async function (assert) {
+    let [path] = await stylesheetsServedFrom(REQUESTER, GRANTS);
+    assert.ok(path, 'Grants serves the requester a stylesheet');
+    let unknown = `${new URL(GRANTS).pathname}_scoped-css/schedule.gts.md5-${'0'.repeat(32)}.glimmer-scoped.css`;
+    let auth = createJWT(realms[GRANTS], REQUESTER, []);
+    let activeUnknown = await getStylesheet(unknown, auth);
+    assert.strictEqual(
+      activeUnknown.status,
+      404,
+      'a hash the realm holds no stylesheet for is not found',
+    );
+    await archiveRealm(db, new URL(GRANTS));
+    try {
+      let sealed = await getStylesheet(path, auth);
+      assert.strictEqual(
+        sealed.status,
+        403,
+        'a stylesheet it would serve meets the seal',
+      );
+      assert.strictEqual(
+        sealed.headers['x-boxel-realm-archived'],
+        'true',
+        'which says the realm is archived',
+      );
+      let archivedUnknown = await getStylesheet(unknown, auth);
+      assert.strictEqual(
+        archivedUnknown.status,
+        activeUnknown.status,
+        'a hash it holds no stylesheet for is answered as while active',
+      );
+      assert.notOk(
+        archivedUnknown.headers['x-boxel-realm-archived'],
+        'and says nothing of the seal',
+      );
+    } finally {
+      await unarchiveRealm(db, new URL(GRANTS));
+    }
+  });
+
+  test('the realms naming a policy leave out a blank pointer, a deleted config, and archived and published realms', async function (assert) {
+    let base = 'http://127.0.0.1:4444/capture-naming-';
+    let named = `${base}named/`;
+    let blank = `${base}blank/`;
+    let deleted = `${base}deleted/`;
+    let archived = `${base}archived/`;
+    let published = `${base}published/`;
+    let realmsHere = [named, blank, deleted, archived, published];
+    let pointer = (realm: string) => `${realm}policies/policy`;
+    let config: [string, string, boolean][] = [
+      [named, pointer(named), false],
+      [blank, ' \t\n', false],
+      [deleted, pointer(deleted), true],
+      [archived, pointer(archived), false],
+      [published, pointer(published), false],
+    ];
+    try {
+      for (let [realm, policy, isDeleted] of config) {
+        await db.execute(
+          `INSERT INTO realm_user_permissions (realm_url, username, read, write, realm_owner) VALUES ($1, $2, true, true, true)`,
+          { bind: [realm, OWNER] },
+        );
+        await db.execute(
+          `INSERT INTO boxel_index (url, file_alias, type, generation, realm_url, search_doc, is_deleted) VALUES ($1, $2, 'instance', 1, $3, $4::jsonb, $5)`,
+          {
+            bind: [
+              `${realm}realm.json`,
+              `${realm}realm`,
+              realm,
+              JSON.stringify({ policy }),
+              isDeleted,
+            ],
+          },
+        );
+      }
+      await archiveRealm(db, new URL(archived));
+      await db.execute(
+        `INSERT INTO realm_registry (url, kind, disk_id, owner_username, source_url) VALUES ($1, 'published', $2, $3, $4)`,
+        { bind: [published, 'capture-naming-published', OWNER, named] },
+      );
+      let naming = await fetchRealmsNamingPolicy(db);
+      assert.deepEqual(
+        realmsHere.filter((realm) => naming.includes(realm)),
+        [named],
+        'only the active, unpublished realm whose config names a policy',
+      );
+    } finally {
+      for (let realm of realmsHere) {
+        await db.execute(`DELETE FROM boxel_index WHERE realm_url = $1`, {
+          bind: [realm],
+        });
+        await db.execute(
+          `DELETE FROM realm_user_permissions WHERE realm_url = $1`,
+          { bind: [realm] },
+        );
+        await db.execute(`DELETE FROM realm_metadata WHERE url = $1`, {
+          bind: [realm],
+        });
+        await db.execute(`DELETE FROM realm_registry WHERE url = $1`, {
+          bind: [realm],
+        });
+      }
+    }
   });
 });

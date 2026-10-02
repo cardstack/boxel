@@ -213,10 +213,12 @@ const captureCard: Task<CaptureCardArgs, CapturePrerenderResponse> = ({
       //
       // A realm that names a policy can answer the user without their having
       // any permission there, and a render tab never signs in to a realm on
-      // its own, so each such realm the user holds no permission in gets a
-      // session carrying none. It grants nothing: it is what the realm's own
-      // sign-in hands any signed-in user, and lets the realm's policy judge the
-      // render's requests, such as the stylesheets of the rows it serves.
+      // its own, so each such realm gets a session carrying the user's
+      // effective permissions there, possibly none: the session the realm's
+      // own sign-in would hand them. The render's requests there are then
+      // judged by the realm's ACL and policy as the user's own would be,
+      // which is how it is served what a grant admits the user to, such as
+      // the rows a search answers with and their stylesheets.
       let auth: string;
       if (anonymous) {
         auth = JSON.stringify({});
@@ -225,7 +227,12 @@ const captureCard: Task<CaptureCardArgs, CapturePrerenderResponse> = ({
           userId: renderedAs,
         });
         for (let realm of await fetchRealmsNamingPolicy(dbAdapter)) {
-          allUserPermissions[realm] ??= [];
+          allUserPermissions[realm] = await fetchEffectiveRealmPermissions(
+            dbAdapter,
+            new URL(realm),
+            renderedAs,
+            matrixURL,
+          );
         }
         allUserPermissions[normalizedRealmURL] = userPermissions;
         auth = createPrerenderAuth(renderedAs, allUserPermissions);
