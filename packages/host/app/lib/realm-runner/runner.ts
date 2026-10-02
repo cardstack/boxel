@@ -47,13 +47,27 @@ function makeRealmWorker(absoluteURL: URL): Worker {
   // `self.location` is the `blob:` URL, which cannot be a base for a
   // root-relative path. So the Blob sets the global to the absolute assets
   // origin first, then imports the chunk. The import is dynamic because a
-  // static one would run before the assignment. A failed dynamic import does
-  // not fire the worker's `error` event, so it reports as the worker does.
+  // static one would run before the assignment.
+  //
+  // With a dynamic import the worker accepts messages as soon as the Blob
+  // module has run, before the chunk installs its `message` handler, so the
+  // `run` request posted right after construction would be dropped. The Blob
+  // holds messages until the chunk has loaded and then dispatches them again.
+  // A failed dynamic import does not fire the worker's `error` event, so it
+  // reports as the worker does.
   let blob = new Blob(
     [
       `globalThis.__boxelAssetsURL = ${JSON.stringify(assetsBaseURL().href)};\n`,
-      `import(${JSON.stringify(absoluteURL.href)}).catch((e) => `,
-      `self.postMessage({ type: 'error', error: 'Realm runner failed to load: ' + (e && e.message || e) }));\n`,
+      `const held = [];\n`,
+      `const hold = (event) => held.push(event.data);\n`,
+      `self.addEventListener('message', hold);\n`,
+      `import(${JSON.stringify(absoluteURL.href)}).then(\n`,
+      `  () => {\n`,
+      `    self.removeEventListener('message', hold);\n`,
+      `    for (const data of held) self.dispatchEvent(new MessageEvent('message', { data }));\n`,
+      `  },\n`,
+      `  (e) => self.postMessage({ type: 'error', error: 'Realm runner failed to load: ' + (e && e.message || e) }),\n`,
+      `);\n`,
     ],
     { type: 'text/javascript' },
   );
