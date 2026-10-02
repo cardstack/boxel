@@ -31,16 +31,28 @@ const HUE_PROPERTY = '--pretui-token-hue';
 // when `@hue` is cleared.
 //
 // The observer drains the record of each of the modifier's own writes as soon
-// as it makes one, so every record it delivers is a caller rewrite, and the
-// hue that rewrite leaves is the caller's hue, even when it equals `@hue`.
+// as it makes one. A record it delivers is either a caller rewrite or a
+// single-property write by something else on the element (boxel-ui's
+// `setCssVar`, passed through `...attributes`), which leaves our hue in place.
+// So the modifier remembers the hue it wrote, and never adopts that as the
+// caller's. A later caller rewrite that repeats our hue exactly is therefore
+// treated as ours, and clearing `@hue` afterwards removes it.
 const keepHue = modifier((el: HTMLElement, [hue]: [string | undefined]) => {
   let value = cssValue(hue);
   if (value === undefined) {
     return;
   }
   let read = () => el.style.getPropertyValue(HUE_PROPERTY).trim() || undefined;
+  let ours: string | undefined;
   let callerHue = read();
+  let readCaller = () => {
+    let current = read();
+    if (current === undefined || current !== ours) {
+      callerHue = current;
+    }
+  };
   let write = (observer?: MutationObserver) => {
+    ours = value;
     if (read() !== value) {
       el.style.setProperty(HUE_PROPERTY, value);
       observer?.takeRecords();
@@ -48,12 +60,14 @@ const keepHue = modifier((el: HTMLElement, [hue]: [string | undefined]) => {
   };
   write();
   let observer = new MutationObserver((_records, self) => {
-    callerHue = read();
+    readCaller();
     write(self);
   });
   observer.observe(el, { attributes: true, attributeFilter: ['style'] });
   return () => {
-    // A caller rewrite in the same render as this teardown is still queued.
+    // A record still queued here is a caller rewrite in the same render as
+    // this teardown, and what it left is the caller's, so nothing is put back
+    // over it.
     let rewritten = observer.takeRecords().length > 0;
     observer.disconnect();
     if (!rewritten && read() === value) {
