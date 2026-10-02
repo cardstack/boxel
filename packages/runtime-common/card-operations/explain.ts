@@ -56,12 +56,6 @@ import {
   type PolicyExplanationReason,
 } from './types.ts';
 
-// What an explain's gate decisions are recorded as having arrived on.
-const EXPLAIN_ROUTE: PolicyRoute = Object.freeze({
-  transport: 'explain' as const,
-  route: 'explain',
-});
-
 // ============================================================================
 // The explain operation.
 //
@@ -633,6 +627,12 @@ async function listedCards(
     total: doc.meta.page.total,
   };
 }
+
+// What an explain's gate decisions are recorded as having arrived on.
+const EXPLAIN_ROUTE: PolicyRoute = Object.freeze({
+  transport: 'explain' as const,
+  route: 'explain',
+});
 
 // The gate's decision for the question, and how it got there.
 async function explain(

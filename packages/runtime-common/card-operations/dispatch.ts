@@ -716,6 +716,13 @@ export async function resolveOperation(
   );
 }
 
+function sameTarget(a: OperationTarget, b: OperationTarget): boolean {
+  return a.kind === 'instance'
+    ? b.kind === 'instance' && a.url === b.url
+    : b.kind === 'type' &&
+        JSON.stringify(a.codeRef) === JSON.stringify(b.codeRef);
+}
+
 // The definition a gated operation runs, where the gate's decision lets it run
 // with no write lock to decide anything more (see `resolveOperation`).
 function admittedDefinition(
@@ -1277,9 +1284,14 @@ export async function runOperation(
     ...(canonical.seal ? { seal: canonical.seal } : {}),
     ...(canonical.route ? { route: canonical.route } : {}),
   });
-  let definition = opts.gated
-    ? admittedDefinition(opts.gated, target, canonical.name, scope)
-    : await resolveOperation(core, target, canonical.name, scope);
+  // A decision made in the same request is reused only for the target it was
+  // made about. The envelope canonicalizes the realm root to its index card for
+  // every name, and a stored-bytes read here keeps the root, so the two can
+  // differ.
+  let definition =
+    opts.gated && sameTarget(target, request.target)
+      ? admittedDefinition(opts.gated, target, canonical.name, scope)
+      : await resolveOperation(core, target, canonical.name, scope);
   // The four stages of an invocation, in the one order they run: the `input`
   // transform over the payload, the `params` check against what it produced,
   // the behavior, and the `output` transform over its result. The check runs
