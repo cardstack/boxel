@@ -4,14 +4,14 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { setupRenderingTest } from 'ember-qunit';
 import { Choreo, type ChoreoContext, motion } from 'glimmer-motion';
-import { setupMotion } from 'glimmer-motion/test-support';
+import { setupChoreo } from 'glimmer-motion/choreo/test-support';
 import { module, test } from 'qunit';
 
 import { nextFrame } from '../../helpers/motion';
 
 module('Integration | choreo | keyframe timing', function (hooks) {
   setupRenderingTest(hooks);
-  setupMotion(hooks);
+  setupChoreo(hooks);
   for (const repeat of [0, Infinity]) {
     test(`nonuniform offsets survive playback and reverse seeking (repeat ${repeat})`, async function (assert) {
       let ctx: ChoreoContext;

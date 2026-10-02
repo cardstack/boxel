@@ -64,7 +64,8 @@ export function measureBeacons(root: DOMRect): Map<string, Bounds> {
  * Forget every claimed name. The registry outlives any one owner, so a test
  * that tore down mid-flight would otherwise leave a dead element holding a
  * name the next test wants — first-wins turns into first-test-wins.
- * `setupMotion(hooks)` calls this; nothing in an app should.
+ * `setupChoreo(hooks)` runs this before and after every test; nothing in an
+ * app should.
  */
 export function resetBeacons() {
   registry.clear();

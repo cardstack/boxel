@@ -4,7 +4,7 @@ Choreo has four connected areas: an element binding over Motion, interactive sce
 
 ## Scope and Reading Depth
 
-The inventory covers the `glimmer-motion` root, the `glimmer-motion/film` subpath, the `glimmer-motion/test-support` subpath, and the separate `choreo-player` package. It also includes the components and queries yielded by ChoreoContext and FilmVocabulary. Each entry links to a substantial concept chapter with motivation, behavior, examples, and relevant constraints.
+The inventory covers the `glimmer-motion` root, the `glimmer-motion/film` subpath, the `glimmer-motion/test-support` and `glimmer-motion/choreo/test-support` subpaths, and the separate `choreo-player` package. It also includes the components and queries yielded by ChoreoContext and FilmVocabulary. Each entry links to a substantial concept chapter with motivation, behavior, examples, and relevant constraints.
 
 Related helpers, compatibility aliases, and supporting TypeScript types share the chapter about the behavior they describe. For example, a spring configuration and its argument type belong with spring transitions; the several query selectors belong with the changeset model. This avoids pretending that a type alias is an independent feature while still making every exported name discoverable.
 
@@ -303,25 +303,32 @@ Run `pnpm docs:check` after changing an export or a guide. The check compares th
 
 ### glimmer-motion/test-support
 
-| API                  | Guide                                          | Source                                                                                                            |
-| -------------------- | ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `isMotionIdle`       | [core-test-timing](/docs/core-test-timing)     | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/activity.ts)           |
-| `whatIsBusy`         | [core-test-timing](/docs/core-test-timing)     | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/activity.ts)           |
-| `Box`                | [core-test-geometry](/docs/core-test-geometry) | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/test-support/index.ts) |
-| `bounds`             | [core-test-geometry](/docs/core-test-geometry) | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/test-support/index.ts) |
-| `shape`              | [core-test-geometry](/docs/core-test-geometry) | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/test-support/index.ts) |
-| `boundsAndShape`     | [core-test-geometry](/docs/core-test-geometry) | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/test-support/index.ts) |
-| `SettleOptions`      | [core-test-timing](/docs/core-test-timing)     | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/test-support/index.ts) |
-| `animationsSettled`  | [core-test-timing](/docs/core-test-timing)     | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/test-support/index.ts) |
-| `advanceGate`        | [core-test-timing](/docs/core-test-timing)     | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/test-support/index.ts) |
-| `seekTo`             | [core-test-timing](/docs/core-test-timing)     | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/test-support/index.ts) |
-| `velocityOf`         | [core-test-geometry](/docs/core-test-geometry) | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/test-support/index.ts) |
-| `orphanCount`        | [core-test-geometry](/docs/core-test-geometry) | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/test-support/index.ts) |
-| `live`               | [core-test-geometry](/docs/core-test-geometry) | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/test-support/index.ts) |
-| `liveAll`            | [core-test-geometry](/docs/core-test-geometry) | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/test-support/index.ts) |
-| `strandedTransforms` | [core-test-geometry](/docs/core-test-geometry) | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/test-support/index.ts) |
-| `setupMotion`        | [core-test-timing](/docs/core-test-timing)     | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/test-support/index.ts) |
-| `resetMotion`        | [core-test-timing](/docs/core-test-timing)     | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/test-support/index.ts) |
+| API                   | Guide                                          | Source                                                                                                            |
+| --------------------- | ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `isMotionIdle`        | [core-test-timing](/docs/core-test-timing)     | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/activity.ts)           |
+| `whatIsBusy`          | [core-test-timing](/docs/core-test-timing)     | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/activity.ts)           |
+| `Box`                 | [core-test-geometry](/docs/core-test-geometry) | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/test-support/index.ts) |
+| `bounds`              | [core-test-geometry](/docs/core-test-geometry) | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/test-support/index.ts) |
+| `shape`               | [core-test-geometry](/docs/core-test-geometry) | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/test-support/index.ts) |
+| `boundsAndShape`      | [core-test-geometry](/docs/core-test-geometry) | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/test-support/index.ts) |
+| `SettleOptions`       | [core-test-timing](/docs/core-test-timing)     | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/test-support/index.ts) |
+| `animationsSettled`   | [core-test-timing](/docs/core-test-timing)     | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/test-support/index.ts) |
+| `velocityOf`          | [core-test-geometry](/docs/core-test-geometry) | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/test-support/index.ts) |
+| `setupMotion`         | [core-test-timing](/docs/core-test-timing)     | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/test-support/index.ts) |
+| `resetMotion`         | [core-test-timing](/docs/core-test-timing)     | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/test-support/index.ts) |
+| `registerMotionReset` | [core-test-timing](/docs/core-test-timing)     | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/test-support/index.ts) |
+
+### glimmer-motion/choreo/test-support
+
+| API                  | Guide                                          | Source                                                                                                                   |
+| -------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `setupChoreo`        | [core-test-timing](/docs/core-test-timing)     | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/test-support/index.ts) |
+| `advanceGate`        | [core-test-timing](/docs/core-test-timing)     | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/test-support/index.ts) |
+| `seekTo`             | [core-test-timing](/docs/core-test-timing)     | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/test-support/index.ts) |
+| `orphanCount`        | [core-test-geometry](/docs/core-test-geometry) | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/test-support/index.ts) |
+| `live`               | [core-test-geometry](/docs/core-test-geometry) | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/test-support/index.ts) |
+| `liveAll`            | [core-test-geometry](/docs/core-test-geometry) | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/test-support/index.ts) |
+| `strandedTransforms` | [core-test-geometry](/docs/core-test-geometry) | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/test-support/index.ts) |
 
 ### choreo-player
 

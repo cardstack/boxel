@@ -100,7 +100,7 @@ Mechanics (all in `src/choreo/far.ts`):
 
 Interruption across the barrier is the risky case: after clicking
 mid-flight, assert `orphanCount() === 0` and `strandedTransforms()` is
-empty (`motion-testing`). `setupMotion(hooks)` resets the far-match
+empty (`motion-testing`). `setupChoreo(hooks)` resets the far-match
 barrier between tests — required, or passes leak across tests.
 
 Ground truth: `test-app/app/components/examples/far-match.gts` (three bays,

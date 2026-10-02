@@ -15,12 +15,12 @@ import { tracked } from '@glimmer/tracking';
 import { setupRenderingTest } from 'ember-qunit';
 import { Choreo, type ChoreoContext, motion } from 'glimmer-motion';
 import {
-  animationsSettled,
   live,
   liveAll,
   orphanCount,
-  setupMotion,
-} from 'glimmer-motion/test-support';
+  setupChoreo,
+} from 'glimmer-motion/choreo/test-support';
+import { animationsSettled } from 'glimmer-motion/test-support';
 import { module, test } from 'qunit';
 
 import { setupFixtureViewport } from '../../helpers/layout-fixture';
@@ -36,7 +36,7 @@ const eq = (a: string, b: string) => a === b;
 module('Integration | choreo | live selectors', function (hooks) {
   setupRenderingTest(hooks);
   setupFixtureViewport(hooks);
-  setupMotion(hooks);
+  setupChoreo(hooks);
 
   class Pages extends Component {
     @tracked page: 'a' | 'b' = 'a';

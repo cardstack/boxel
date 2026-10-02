@@ -10,7 +10,7 @@
 import { render, settled, waitUntil } from '@ember/test-helpers';
 import { setupRenderingTest } from 'ember-qunit';
 import type { ChoreoRun } from 'glimmer-motion';
-import { setupMotion } from 'glimmer-motion/test-support';
+import { setupChoreo } from 'glimmer-motion/choreo/test-support';
 import { module, test } from 'qunit';
 import { BuildOrder } from 'test-app/components/examples/build-order';
 
@@ -49,7 +49,7 @@ const frames = (n: number) =>
 
 module('Integration | choreo | build-order transport', function (hooks) {
   setupRenderingTest(hooks);
-  setupMotion(hooks);
+  setupChoreo(hooks);
 
   test('a scrubbed still past a cue shows finals, not pins', async function (assert) {
     await render(<template><BuildOrder /></template>);
