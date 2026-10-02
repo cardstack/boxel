@@ -25,7 +25,7 @@ import {
   motion,
   type TimelineNode,
 } from 'glimmer-motion';
-import { setupMotion } from 'glimmer-motion/test-support';
+import { setupChoreo } from 'glimmer-motion/choreo/test-support';
 import { module, test } from 'qunit';
 
 const frames = (n: number) =>
@@ -113,7 +113,7 @@ const xOf = (transform: string): number => {
 
 module('Integration | choreo | lane spike', function (hooks) {
   setupRenderingTest(hooks);
-  setupMotion(hooks);
+  setupChoreo(hooks);
 
   test('a parent contributes a step; the child compiles it, and its clock can be driven', async function (assert) {
     let stage: Stage | undefined;

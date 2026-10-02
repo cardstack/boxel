@@ -1,6 +1,7 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
+import jwt from 'jsonwebtoken';
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -20,6 +21,7 @@ import type {
   VirtualNetwork as VirtualNetworkType,
 } from '@cardstack/runtime-common';
 import {
+  ANONYMOUS_RENDER,
   Deferred,
   MEDIA_CACHE_MAX_AGE_SECONDS,
   CAPTURE_PDF_MAX_BYTES,
@@ -38,6 +40,8 @@ import {
   parseCaptureSpecParams,
   parseCaptureRequestSpec,
   putMedia,
+  REALM_AUTHORITY_RENDER,
+  revokeUserSessions,
   query,
   captureCard,
   setCapturePerfSink,
@@ -822,6 +826,49 @@ module(basename(import.meta.filename), function () {
       );
     }
 
+    // A realm session for `user`, which a reader presents on the GET route.
+    function realmSession(user: string) {
+      return realm.createJWT(
+        {
+          user,
+          realm: realm.url,
+          permissions: ['read', 'write', 'realm-owner'],
+          sessionRoom: `session-room-for-${user}`,
+          realmServerURL: realm.realmServerURL,
+        },
+        '1d',
+      );
+    }
+
+    // A realm session issued a minute ago, so a revocation recorded now
+    // postdates it.
+    function craftSession(claims: Record<string, unknown>) {
+      let iat = Math.floor(Date.now() / 1000) - 60;
+      return jwt.sign(
+        {
+          sessionRoom: 'session-room',
+          realmServerURL: realm.realmServerURL,
+          ...claims,
+          iat,
+          exp: iat + 900,
+        },
+        realmSecretSeed,
+      );
+    }
+
+    async function seedCaptureDrawnAs(renderedAs: string) {
+      await putMedia(dbAdapter, adapter, {
+        renderedAs,
+        realmURL: REALM_URL,
+        sourceURL: `${REALM_URL}card-1`,
+        captureSpecHash: await captureSpecHash({ format: 'isolated' }),
+        sourceGeneration: 1,
+        bytes: PNG_BYTES,
+        contentType: 'image/png',
+        lane: 'on-demand',
+      });
+    }
+
     async function get(
       pathAndQuery: string,
       method = 'GET',
@@ -870,6 +917,7 @@ module(basename(import.meta.filename), function () {
     test('an already-captured spec serves on a gated realm with zero capture work', async function (assert) {
       await seedInstanceRow('card-1');
       await putMedia(dbAdapter, adapter, {
+        renderedAs: ANONYMOUS_RENDER,
         realmURL: REALM_URL,
         sourceURL: `${REALM_URL}card-1`,
         captureSpecHash: await captureSpecHash({ format: 'isolated' }),
@@ -932,6 +980,73 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(captureCalls, 1);
     });
 
+    // This realm is world-readable, so its read path takes a session without
+    // checking it. A capture is drawn as, and served to, only a reader the
+    // realm vouches for, so the checks it skipped run before one is.
+    test('a revoked session is served as a reader who authenticated nobody', async function (assert) {
+      await seedInstanceRow('card-1');
+      await seedCaptureDrawnAs('@revoked-reader:localhost');
+      let session = craftSession({
+        user: '@revoked-reader:localhost',
+        realm: REALM_URL,
+        permissions: [],
+      });
+
+      let before = await get('_capture/card-1', 'GET', {
+        Authorization: `Bearer ${session}`,
+      });
+      assert.strictEqual(
+        before.status,
+        200,
+        'the session is served the capture drawn as its user',
+      );
+
+      await revokeUserSessions(dbAdapter, '@revoked-reader:localhost');
+      let after = await get('_capture/card-1', 'GET', {
+        Authorization: `Bearer ${session}`,
+      });
+      assert.strictEqual(
+        after.status,
+        403,
+        "once revoked it isn't, and the closed gate renders nothing for a reader who authenticated nobody",
+      );
+      assert.strictEqual(captureCalls, 0, 'nothing renders');
+    });
+
+    test('a session delegated to another realm is served as a reader who authenticated nobody', async function (assert) {
+      await seedInstanceRow('card-1');
+      await seedCaptureDrawnAs('@delegated-reader:localhost');
+
+      let elsewhere = await get('_capture/card-1', 'GET', {
+        Authorization: `Bearer ${craftSession({
+          user: '@delegated-reader:localhost',
+          realm: 'http://another-realm.example/',
+          permissions: ['read'],
+          delegated: true,
+        })}`,
+      });
+      assert.strictEqual(
+        elsewhere.status,
+        403,
+        'a session bound to another realm reads nothing here as its user',
+      );
+
+      let here = await get('_capture/card-1', 'GET', {
+        Authorization: `Bearer ${craftSession({
+          user: '@delegated-reader:localhost',
+          realm: REALM_URL,
+          permissions: ['read'],
+          delegated: true,
+        })}`,
+      });
+      assert.strictEqual(
+        here.status,
+        200,
+        'while one delegated to this realm reads it as the user it acts for',
+      );
+      assert.strictEqual(captureCalls, 0, 'nothing renders');
+    });
+
     test('an open realm captures on demand, persists, and then serves hits', async function (assert) {
       await seedInstanceRow('card-1');
       await seedRealmConfigRow(true);
@@ -947,12 +1062,18 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(captureCalls, 1);
 
       let entry = await findMediaCacheEntry(dbAdapter, {
+        servedTo: ANONYMOUS_RENDER,
         realmURL: REALM_URL,
         sourceURL: `${REALM_URL}card-1`,
         captureSpecHash: await captureSpecHash({ format: 'embedded' }),
         sourceGeneration: 1,
       });
       assert.strictEqual(entry?.lane, 'on-demand');
+      assert.strictEqual(
+        entry?.renderedAs,
+        ANONYMOUS_RENDER,
+        'a reader who authenticated nobody is drawn as nobody',
+      );
 
       let second = await get('_capture/card-1?format=embedded');
       assert.strictEqual(second.status, 200);
@@ -1023,6 +1144,7 @@ module(basename(import.meta.filename), function () {
         sourceURL: `${REALM_URL}card-1`,
         captureSpecHash: await captureSpecHash({ format: 'isolated' }),
         sourceGeneration: 1,
+        servedTo: ANONYMOUS_RENDER,
       };
       let deadline = Date.now() + 10_000;
       while (
@@ -1060,6 +1182,7 @@ module(basename(import.meta.filename), function () {
       );
 
       let customEntry = await findMediaCacheEntry(dbAdapter, {
+        servedTo: ANONYMOUS_RENDER,
         realmURL: REALM_URL,
         sourceURL: `${REALM_URL}card-1`,
         captureSpecHash: await captureSpecHash({
@@ -1076,6 +1199,7 @@ module(basename(import.meta.filename), function () {
       );
       assert.strictEqual(
         await findMediaCacheEntry(dbAdapter, {
+          servedTo: ANONYMOUS_RENDER,
           realmURL: REALM_URL,
           sourceURL: `${REALM_URL}card-1`,
           captureSpecHash: await captureSpecHash({ format: 'isolated' }),
@@ -1136,6 +1260,7 @@ module(basename(import.meta.filename), function () {
       );
       assert.strictEqual(
         await findMediaCacheEntry(dbAdapter, {
+          servedTo: OWNER,
           realmURL: REALM_URL,
           sourceURL: `${REALM_URL}card-1`,
           captureSpecHash: await captureSpecHash({ format: 'isolated' }),
@@ -1179,6 +1304,7 @@ module(basename(import.meta.filename), function () {
       let result = await job.done;
       assert.strictEqual(result.status, 'ready');
       let entry = await findMediaCacheEntry(dbAdapter, {
+        servedTo: OWNER,
         realmURL: REALM_URL,
         sourceURL: `${REALM_URL}card-1`,
         captureSpecHash: pdfSpecHash,
@@ -1216,6 +1342,7 @@ module(basename(import.meta.filename), function () {
       // The pdf keys its own ledger entry; the same card's canonical png
       // identity stays uncaptured.
       let pdfEntry = await findMediaCacheEntry(dbAdapter, {
+        servedTo: ANONYMOUS_RENDER,
         realmURL: REALM_URL,
         sourceURL: `${REALM_URL}card-1`,
         captureSpecHash: await captureSpecHash({
@@ -1227,6 +1354,7 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(pdfEntry?.contentType, 'application/pdf');
       assert.strictEqual(
         await findMediaCacheEntry(dbAdapter, {
+          servedTo: ANONYMOUS_RENDER,
           realmURL: REALM_URL,
           sourceURL: `${REALM_URL}card-1`,
           captureSpecHash: await captureSpecHash({ format: 'isolated' }),
@@ -1281,6 +1409,7 @@ module(basename(import.meta.filename), function () {
       );
       assert.strictEqual(
         await findMediaCacheEntry(dbAdapter, {
+          servedTo: OWNER,
           realmURL: REALM_URL,
           sourceURL: `${REALM_URL}card-1`,
           captureSpecHash: await captureSpecHash({ format: 'isolated' }),
@@ -1364,6 +1493,7 @@ module(basename(import.meta.filename), function () {
       // answers a HEAD from the generic handlers, not this route.
       await seedInstanceRow('card-1');
       await putMedia(dbAdapter, adapter, {
+        renderedAs: ANONYMOUS_RENDER,
         realmURL: REALM_URL,
         sourceURL: `${REALM_URL}card-1`,
         captureSpecHash: await captureSpecHash({ format: 'isolated' }),
@@ -1405,6 +1535,7 @@ module(basename(import.meta.filename), function () {
     test('a declared name serves through the manifest join with zero capture work', async function (assert) {
       await seedInstanceRow('card-1');
       await putMedia(dbAdapter, adapter, {
+        renderedAs: REALM_AUTHORITY_RENDER,
         realmURL: REALM_URL,
         sourceURL: `${REALM_URL}card-1`,
         captureSpecHash: 'declared-hero-spec',
@@ -1465,6 +1596,7 @@ module(basename(import.meta.filename), function () {
       let olderBytes = PNG_BYTES;
       let newerBytes = new TextEncoder().encode('newer-png-bytes');
       await putMedia(dbAdapter, adapter, {
+        renderedAs: REALM_AUTHORITY_RENDER,
         realmURL: REALM_URL,
         sourceURL: `${REALM_URL}card-1`,
         captureSpecHash: 'declared-hero-spec',
@@ -1482,6 +1614,7 @@ module(basename(import.meta.filename), function () {
       // A fresher capture has persisted (media lands before its manifest
       // publishes), but the manifest still names the older artifact.
       await putMedia(dbAdapter, adapter, {
+        renderedAs: REALM_AUTHORITY_RENDER,
         realmURL: REALM_URL,
         sourceURL: `${REALM_URL}card-1`,
         captureSpecHash: 'declared-hero-spec',
@@ -1556,6 +1689,7 @@ module(basename(import.meta.filename), function () {
     test('a deleted instance stops serving its declared captures', async function (assert) {
       await seedInstanceRow('card-1');
       await putMedia(dbAdapter, adapter, {
+        renderedAs: REALM_AUTHORITY_RENDER,
         realmURL: REALM_URL,
         sourceURL: `${REALM_URL}card-1`,
         captureSpecHash: 'declared-hero-spec',
@@ -1611,6 +1745,7 @@ module(basename(import.meta.filename), function () {
         insert('boxel_index', nameExpressions, valueExpressions),
       );
       await putMedia(dbAdapter, adapter, {
+        renderedAs: REALM_AUTHORITY_RENDER,
         realmURL: REALM_URL,
         sourceURL: `${REALM_URL}card-2`,
         captureSpecHash: 'declared-hero-spec',
@@ -1745,7 +1880,7 @@ module(basename(import.meta.filename), function () {
       assert.deepEqual(perfEvents, [], 'addressing misses emit no telemetry');
     });
 
-    test('one custom capture satisfies both surfaces: a POST persists it, its GET URL serves it', async function (assert) {
+    test('a POSTed capture serves back to its requester on its GET URL, and to no other reader', async function (assert) {
       await seedInstanceRow('card-1');
       // The realm's capture gate stays closed: the POST surface captures
       // under realm-read trust, and the GET route serves existing ledger
@@ -1771,7 +1906,9 @@ module(basename(import.meta.filename), function () {
         'the served URL spells the spec in the GET grammar',
       );
 
-      let getResponse = await get(served.slice(REALM_URL.length));
+      let getResponse = await get(served.slice(REALM_URL.length), 'GET', {
+        Authorization: `Bearer ${realmSession(OWNER)}`,
+      });
       assert.strictEqual(getResponse.status, 200);
       assert.deepEqual(
         [...(await nodeStreamToBuffer(getResponse.nodeStream!))],
@@ -1780,8 +1917,20 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(
         captureCalls,
         1,
-        'the GET serve is a pure ledger hit on the POSTed capture',
+        "the requester's GET is a pure ledger hit on the POSTed capture",
       );
+      assert.true(
+        getResponse.headers.get('cache-control')?.startsWith('private,'),
+        `no shared cache may hold one reader's capture: ${getResponse.headers.get('cache-control')}`,
+      );
+
+      let anonymous = await get(served.slice(REALM_URL.length));
+      assert.strictEqual(
+        anonymous.status,
+        403,
+        "another reader isn't served it, and the closed gate renders nothing new for them",
+      );
+      assert.strictEqual(captureCalls, 1, 'nothing rendered for them either');
     });
 
     test('a timed-out custom-spec POST persists anyway; the retry answers from the ledger', async function (assert) {
@@ -1815,6 +1964,7 @@ module(basename(import.meta.filename), function () {
           ...captureSpec,
         }),
         sourceGeneration: 1,
+        servedTo: OWNER,
       };
       let deadline = Date.now() + 10_000;
       while (
@@ -1948,6 +2098,7 @@ module(basename(import.meta.filename), function () {
       test('a ledger hit is visibly the hit path: one request record, zero render attribution', async function (assert) {
         await seedInstanceRow('card-1');
         await putMedia(dbAdapter, adapter, {
+          renderedAs: ANONYMOUS_RENDER,
           realmURL: REALM_URL,
           sourceURL: `${REALM_URL}card-1`,
           captureSpecHash: await captureSpecHash({ format: 'isolated' }),

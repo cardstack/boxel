@@ -1,5 +1,5 @@
 /**
- * Port of Motion's packages/framer-motion/src/components/AnimatePresence/__tests__/AnimatePresence.test.tsx (motion@bbabb00).
+ * Port of Motion's packages/framer-motion/src/components/AnimatePresence/__tests__/AnimatePresence.test.tsx (motion@v13.4.6).
  *   <AnimatePresence>{cond && <motion.div key=… />}</AnimatePresence>
  *     → <Presence @items={{…}} @key={{keyOf}} as |it h|><div {{motion presence=h …}} /></Presence>
  * "custom components" wrapping a motion.div become nested elements; presence reaches them
@@ -11,6 +11,7 @@ import { setupRenderingTest } from 'ember-qunit';
 import LayoutGroup from 'glimmer-motion/layout-group';
 import motion from 'glimmer-motion/motion';
 import Presence from 'glimmer-motion/presence';
+import { setupMotion } from 'glimmer-motion/test-support';
 import { frame, motionValue, type Variants } from 'motion-dom';
 import { module, test } from 'qunit';
 
@@ -42,6 +43,7 @@ class P {
   @tracked showB = true;
   @tracked direction = 0;
   @tracked childOpen = true;
+  @tracked ids: string[] = [];
   constructor(p: Partial<P> = {}) {
     Object.assign(this, p);
   }
@@ -59,6 +61,9 @@ class P {
   get numItems() {
     return this.nums.map((n) => ({ key: String(n), n }));
   }
+  get idItems() {
+    return this.ids.map((id) => ({ key: id, id }));
+  }
   get ab() {
     return [
       ...(this.showA ? [{ key: 'a' }] : []),
@@ -69,6 +74,7 @@ class P {
 
 module('Integration | motion | AnimatePresence', function (hooks) {
   setupRenderingTest(hooks);
+  setupMotion(hooks);
 
   test('Allows initial animation if no `initial` prop defined', async function (assert) {
     const x = motionValue(0);
@@ -597,12 +603,56 @@ module('Integration | motion | AnimatePresence', function (hooks) {
       assert.strictEqual(opacity.get(), 1);
     });
   }
+
+  test("Exiting children don't reorder present children (#3746)", async function (assert) {
+    const initial = { opacity: 0 },
+      animate = { opacity: 1 },
+      exit = { opacity: 0 },
+      t = { duration: 10 };
+    const p = new P({ ids: ['a', 'persist', 'b'] });
+    await render(
+      <template>
+        <div id="root"><Presence
+            @items={{p.idItems}}
+            @key={{keyOf}}
+            as |it h|
+          ><div
+              data-id={{it.id}}
+              {{motion
+                presence=h
+                initial=initial
+                animate=animate
+                exit=exit
+                transition=t
+              }}
+            ></div></Presence></div>
+      </template>
+    );
+    await nextFrame();
+    const persist = root().querySelector('[data-id="persist"]');
+
+    // "a" and "b" exit, "c" and "d" enter, "persist" stays.
+    p.ids = ['c', 'd', 'persist'];
+    await settled();
+    await nextFrame();
+
+    const order = Array.from(root().querySelectorAll('[data-id]')).map((e) =>
+      e.getAttribute('data-id')
+    );
+    // Each exiting child holds its place relative to the children it sat
+    // between: "a" led the list, "b" followed "persist".
+    assert.strictEqual(order.indexOf('a'), 0);
+    assert.true(order.indexOf('b') > order.indexOf('persist'));
+    // The persisting child is the same element, never remounted.
+    assert.strictEqual(root().querySelector('[data-id="persist"]'), persist);
+  });
 });
 
 module(
   'Integration | motion | AnimatePresence with custom components',
   function (hooks) {
     setupRenderingTest(hooks);
+    setupMotion(hooks);
 
     test('Does nothing on initial render by default', async function (assert) {
       const x = motionValue(0);

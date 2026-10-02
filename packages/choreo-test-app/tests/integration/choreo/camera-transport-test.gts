@@ -15,6 +15,7 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { setupRenderingTest } from 'ember-qunit';
 import { Choreo, type ChoreoContext, motion } from 'glimmer-motion';
+import { setupChoreo } from 'glimmer-motion/choreo/test-support';
 import { animationsSettled } from 'glimmer-motion/test-support';
 import { module, test } from 'qunit';
 
@@ -91,6 +92,7 @@ async function mount() {
 module('Integration | choreo | camera transport', function (hooks) {
   setupRenderingTest(hooks);
   setupFixtureViewport(hooks);
+  setupChoreo(hooks);
 
   test('a direct seek into a wait holds the completed camera pose', async function (assert) {
     const { frame, run } = await mount();

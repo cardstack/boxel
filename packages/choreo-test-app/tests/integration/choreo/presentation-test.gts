@@ -11,7 +11,8 @@ import {
 } from '@ember/test-helpers';
 import { setupRenderingTest } from 'ember-qunit';
 import type { ChoreoRun } from 'glimmer-motion';
-import { animationsSettled, setupMotion } from 'glimmer-motion/test-support';
+import { setupChoreo } from 'glimmer-motion/choreo/test-support';
+import { animationsSettled } from 'glimmer-motion/test-support';
 import { module, test } from 'qunit';
 import { Presentation } from 'test-app/components/examples/presentation';
 
@@ -34,7 +35,7 @@ const opacityOf = (sel: string) =>
 
 module('Integration | choreo | presentation', function (hooks) {
   setupRenderingTest(hooks);
-  setupMotion(hooks);
+  setupChoreo(hooks);
 
   test('the kicker writes itself, then a mash completes the path', async function (assert) {
     await render(<template><Presentation /></template>);

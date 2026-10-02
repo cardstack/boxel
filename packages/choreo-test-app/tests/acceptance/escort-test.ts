@@ -13,6 +13,7 @@
  */
 import { click, find, visit } from '@ember/test-helpers';
 import { setupApplicationTest } from 'ember-qunit';
+import { setupChoreo } from 'glimmer-motion/choreo/test-support';
 import { module, test } from 'qunit';
 import { resetCrossing } from 'test-app/lib/crossing';
 import { setTempo } from 'test-app/lib/tempo';
@@ -61,6 +62,7 @@ const numberVar = (name: string) =>
 
 module('Acceptance | escort', function (hooks) {
   setupApplicationTest(hooks);
+  setupChoreo(hooks);
 
   // The default ember-testing container is half-scaled and content-sized,
   // and this page's layout is container-query driven: inside it the whole

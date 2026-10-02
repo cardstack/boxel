@@ -241,79 +241,81 @@ export class TableOfContents extends Component<TableOfContentsSignature> {
       </div>
     </nav>
     <style scoped>
-      .pretui-toc {
-        min-width: 0;
-        font-size: var(--text-ui-md, 12.5px);
-      }
-      .pretui-toc-track {
-        position: relative;
-        padding-left: var(--pretui-toc-rail-gap, 11px);
-      }
-      /* the rail the marker travels down */
-      .pretui-toc-track::before {
-        content: '';
-        position: absolute;
-        left: 0;
-        top: 0;
-        bottom: 0;
-        width: 1px;
-        background: var(--border);
-      }
-      .pretui-toc-list {
-        list-style: none;
-        margin: 0;
-        padding: 0;
-        display: grid;
-        gap: 1px;
-      }
-      .pretui-toc-marker {
-        position: absolute;
-        left: 0;
-        width: 2px;
-        border-radius: 1px;
-        background: var(--pretui-primary-ink, var(--primary));
-        top: var(--pretui-toc-marker-top, 0px);
-        height: var(--pretui-toc-marker-height, 0px);
-        opacity: var(--pretui-toc-marker-opacity, 0);
-        transition:
-          top 220ms var(--pretui-ease-snap, cubic-bezier(0.2, 0.8, 0.2, 1)),
-          height 220ms var(--pretui-ease-snap, cubic-bezier(0.2, 0.8, 0.2, 1));
-      }
-      .pretui-toc-row {
-        padding-left: calc(
-          var(--pretui-toc-indent, 11px) * (var(--_level, 1) - 1)
-        );
-        min-width: 0;
-      }
-      .pretui-toc-link {
-        display: block;
-        padding: 3px 6px;
-        border-radius: var(--radius-chip, 6px);
-        color: var(--muted-foreground);
-        text-decoration: none;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        transition: color 140ms var(--pretui-ease-snap, ease);
-      }
-      .pretui-toc-link:hover {
-        color: var(--foreground);
-        background: var(--hover, var(--boxel-100));
-      }
-      .pretui-toc-link[data-active='true'] {
-        color: var(--foreground);
-        font-weight: 500;
-      }
-      .pretui-toc-link:focus-visible {
-        outline: 2px solid var(--ring);
-        outline-offset: 1px;
-      }
-      /* Law 5 — reduced motion keeps the END state (the marker is already
-         parked on the active row), it just stops travelling */
-      @media (prefers-reduced-motion: reduce) {
-        .pretui-toc-marker,
+      @layer PretComponent {
+        .pretui-toc {
+          min-width: 0;
+          font-size: var(--text-ui-md, 12.5px);
+        }
+        .pretui-toc-track {
+          position: relative;
+          padding-left: var(--pretui-toc-rail-gap, 11px);
+        }
+        /* the rail the marker travels down */
+        .pretui-toc-track::before {
+          content: '';
+          position: absolute;
+          left: 0;
+          top: 0;
+          bottom: 0;
+          width: 1px;
+          background: var(--border);
+        }
+        .pretui-toc-list {
+          list-style: none;
+          margin: 0;
+          padding: 0;
+          display: grid;
+          gap: 1px;
+        }
+        .pretui-toc-marker {
+          position: absolute;
+          left: 0;
+          width: 2px;
+          border-radius: 1px;
+          background: var(--pretui-primary-ink, var(--primary));
+          top: var(--pretui-toc-marker-top, 0px);
+          height: var(--pretui-toc-marker-height, 0px);
+          opacity: var(--pretui-toc-marker-opacity, 0);
+          transition:
+            top 220ms var(--pretui-ease-snap, cubic-bezier(0.2, 0.8, 0.2, 1)),
+            height 220ms var(--pretui-ease-snap, cubic-bezier(0.2, 0.8, 0.2, 1));
+        }
+        .pretui-toc-row {
+          padding-left: calc(
+            var(--pretui-toc-indent, 11px) * (var(--_level, 1) - 1)
+          );
+          min-width: 0;
+        }
         .pretui-toc-link {
-          transition: none;
+          display: block;
+          padding: 3px 6px;
+          border-radius: var(--radius-chip, 6px);
+          color: var(--muted-foreground);
+          text-decoration: none;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          transition: color 140ms var(--pretui-ease-snap, ease);
+        }
+        .pretui-toc-link:hover {
+          color: var(--foreground);
+          background: var(--hover, var(--boxel-100));
+        }
+        .pretui-toc-link[data-active='true'] {
+          color: var(--foreground);
+          font-weight: 500;
+        }
+        .pretui-toc-link:focus-visible {
+          outline: 2px solid var(--ring);
+          outline-offset: 1px;
+        }
+        /* Law 5 — reduced motion keeps the END state (the marker is already
+           parked on the active row), it just stops travelling */
+        @media (prefers-reduced-motion: reduce) {
+          .pretui-toc-marker,
+          .pretui-toc-link {
+            transition: none;
+          }
         }
       }
     </style>

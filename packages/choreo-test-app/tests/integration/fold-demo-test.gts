@@ -13,6 +13,7 @@ import { concat } from '@ember/helper';
 import { htmlSafe } from '@ember/template';
 import { render, settled } from '@ember/test-helpers';
 import { setupRenderingTest } from 'ember-qunit';
+import { setupChoreo } from 'glimmer-motion/choreo/test-support';
 import { animationsSettled } from 'glimmer-motion/test-support';
 import { module, test } from 'qunit';
 import { Fold } from 'test-app/components/examples/fold';
@@ -82,6 +83,7 @@ async function fired(honours = true) {
 module('Integration | examples | fold', function (hooks) {
   setupRenderingTest(hooks);
   setupFixtureViewport(hooks);
+  setupChoreo(hooks);
 
   test('a seek to the end leaves the whole schedule applied', async function (assert) {
     const app = await fired();

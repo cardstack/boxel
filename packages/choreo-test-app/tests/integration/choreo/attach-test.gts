@@ -13,7 +13,7 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { setupRenderingTest } from 'ember-qunit';
 import { Choreo, type ChoreoContext, motion } from 'glimmer-motion';
-import { setupMotion } from 'glimmer-motion/test-support';
+import { setupChoreo } from 'glimmer-motion/choreo/test-support';
 import { module, test } from 'qunit';
 
 const frames = (n: number) =>
@@ -160,7 +160,7 @@ async function mount(
 
 module('Integration | choreo | attach', function (hooks) {
   setupRenderingTest(hooks);
-  setupMotion(hooks);
+  setupChoreo(hooks);
 
   test('driven equals seeked: the child is a pure function of the parent clock', async function (assert) {
     const { child, parent } = await mount();

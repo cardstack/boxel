@@ -102,26 +102,30 @@ export class DateRangePicker extends Component<DateRangePickerSignature> {
       </Popover>
     </div>
     <style scoped>
-      .pretui-daterange {
-        display: inline-block;
-      }
-      .pretui-daterange-trigger {
-        min-width: 230px;
-        cursor: pointer;
-      }
-      /* two one-month panels (222px each) + panel gap + popover padding;
-         viewport-capped so the calendar's container query can collapse it
-         to a single month on narrow screens. Sized through Popover's own
-         custom-property knobs (they inherit — no :deep()). */
-      .pretui-daterange {
-        --pretui-popover-width: calc(
-          444px + var(--space-5, 14px) + 2 * var(--space-4, 11px)
-        );
-        --pretui-popover-max-width: calc(100vw - 16px);
-        --pretui-popover-min-width: 0;
-      }
-      .pretui-daterange[data-months='1'] {
-        --pretui-popover-width: calc(222px + 2 * var(--space-4, 11px));
+      /* above Input's layer, so these win by layer order, not file order */
+      @layer PretComponent, PretComposite;
+      @layer PretComposite {
+        .pretui-daterange {
+          display: inline-block;
+        }
+        .pretui-daterange-trigger {
+          min-width: 230px;
+          cursor: pointer;
+        }
+        /* two one-month panels (222px each) + panel gap + popover padding;
+           viewport-capped so the calendar's container query can collapse it
+           to a single month on narrow screens. Sized through Popover's own
+           custom-property knobs (they inherit — no :deep()). */
+        .pretui-daterange {
+          --pretui-popover-width: calc(
+            444px + var(--space-5, 14px) + 2 * var(--space-4, 11px)
+          );
+          --pretui-popover-max-width: calc(100vw - 16px);
+          --pretui-popover-min-width: 0;
+        }
+        .pretui-daterange[data-months='1'] {
+          --pretui-popover-width: calc(222px + 2 * var(--space-4, 11px));
+        }
       }
     </style>
   </template>

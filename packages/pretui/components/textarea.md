@@ -47,3 +47,5 @@ Gaps, plainly:
 Forwarded into boxel-ui: `--boxel-form-control-height`, `--boxel-form-control-border-radius`, `--boxel-font-size-sm`, `--boxel-font-size-xs`, `--boxel-sp-xs`, `--boxel-sp-sm`, and — inline only — `--boxel-input-height`.
 
 Note the asymmetry with Input: because the metrics ride an inline `style`, a season **cannot** retune textarea height or padding through tokens. That is the accepted cost of the boxel-ui retrofit and the one place a season will find itself blocked.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

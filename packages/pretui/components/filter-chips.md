@@ -54,3 +54,5 @@ Remaining gaps:
 Per-option `hue` feeding **Chip**'s Law-2 derivation (`--pretui-chip-mix`, `--pretui-ink-mix`, mixed against `--card`, hairline against `--border`), plus `--foreground`, `--muted-foreground`, `--hover` for resting and hover states, the count's tabular-numeral dress, and `--text-ui-xs`/`--text-ui-md`.
 
 Because the selected chip and the unselected ones differ by fill strength within the same hue, a season that raises `--pretui-chip-mix` narrows that gap — the selected state can become hard to pick out in a row of tinted chips. Check the selected chip against its unselected neighbours, not against the page.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

@@ -14,6 +14,7 @@ import LayoutGroup from 'glimmer-motion/layout-group';
 import motion from 'glimmer-motion/motion';
 import Presence from 'glimmer-motion/presence';
 import { postRender } from 'glimmer-motion/scheduler';
+import { setupMotion } from 'glimmer-motion/test-support';
 import { animate } from 'motion';
 import { motionValue } from 'motion-dom';
 import { module, test } from 'qunit';
@@ -324,6 +325,7 @@ module(
   'Integration | motion | cypress | Layout exit animations',
   function (hooks) {
     setupRenderingTest(hooks);
+    setupMotion(hooks);
     setupFixtureViewport(hooks);
     test('Allows the animation to be marked complete', async function (assert) {
       await render(
@@ -344,6 +346,7 @@ module(
   'Integration | motion | cypress | Cancelled Animation',
   function (hooks) {
     setupRenderingTest(hooks);
+    setupMotion(hooks);
     setupFixtureViewport(hooks);
     test('Allows the animation to be marked complete', async function (assert) {
       await render(
@@ -368,6 +371,7 @@ module(
   'Integration | motion | cypress | Layout animation: Instant layout undo',
   function (hooks) {
     setupRenderingTest(hooks);
+    setupMotion(hooks);
     setupFixtureViewport(hooks);
     test('Correctly cancels animation', async function (assert) {
       await render(
@@ -392,6 +396,7 @@ module(
   'Integration | motion | cypress | Shared layout: Fragment',
   function (hooks) {
     setupRenderingTest(hooks);
+    setupMotion(hooks);
     setupFixtureViewport(hooks);
     test('Elements with layoutId inside a Fragment should animate from the correct starting position', async function (assert) {
       await render(
@@ -417,6 +422,7 @@ module(
   'Integration | motion | cypress | LayoutGroup inherit="id"',
   function (hooks) {
     setupRenderingTest(hooks);
+    setupMotion(hooks);
     setupFixtureViewport(hooks, { width: 500, height: 500 });
     const top = () => Math.round($('#button').getBoundingClientRect().top);
     // The upstream spec hard-codes the resting tops as 104 / 204. Chrome lays this DOM out 10px lower per flex
@@ -479,6 +485,7 @@ module(
 
 module('Integration | motion | cypress | Viewport jump', function (hooks) {
   setupRenderingTest(hooks);
+  setupMotion(hooks);
   setupFixtureViewport(hooks, { width: 1000, height: 600, scroll: true });
   test("If viewport jumps, don't trigger layout animation", async function (assert) {
     await render(
@@ -526,6 +533,7 @@ module(
   'Integration | motion | cypress | Time-defined spring with inherited velocity',
   function (hooks) {
     setupRenderingTest(hooks);
+    setupMotion(hooks);
     setupFixtureViewport(hooks);
     test("Doesn't wildly oscillate when velocity is inherited from interrupted animation", async function (assert) {
       await render(<template><AppearSpringBounce /></template>);

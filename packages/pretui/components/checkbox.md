@@ -47,6 +47,8 @@ Honest gaps:
 
 The 15px box, 5px radius and 9px tick are fixed; a season cannot scale the control. If a season sets `--primary` very light, the tick (painted `--primary-foreground`, usually white) disappears — define both together, as with Button's tone/on-tone pairs.
 
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
+
 ## React ecosystem
 
 Accept `isSelected` / `indeterminate` / `isDisabled`. Card-shaped

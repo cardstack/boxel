@@ -29,34 +29,36 @@ export class SkipLink extends Component<SkipLinkSignature> {
   <template>
     <a class='pretui-skip-link' href={{this.href}} data-test-pretui-skip-link ...attributes>{{this.label}}</a>
     <style scoped>
-      .pretui-skip-link {
-        position: absolute;
-        inset-block-start: var(--space-3, 0.5rem);
-        inset-inline-start: var(--space-3, 0.5rem);
-        z-index: var(--pretui-z-toast, 100);
-        padding: var(--space-2, 0.375rem) var(--space-4, 0.6875rem);
-        border-radius: var(--radius-control, 6px);
-        background: var(--primary);
-        color: var(--primary-foreground);
-        font-family: var(--font-sans);
-        font-size: var(--text-ui-md, 0.78rem);
-        font-weight: 600;
-        text-decoration: none;
-        box-shadow: var(--pretui-shadow-raised, 0 0 0 1px var(--border));
-      }
-      /* Off screen but in the tab order and the accessibility tree until it
-         has focus: the clip pattern, not display: none. */
-      .pretui-skip-link:not(:focus) {
-        inline-size: 1px;
-        block-size: 1px;
-        padding: 0;
-        overflow: hidden;
-        clip-path: inset(50%);
-        white-space: nowrap;
-      }
-      .pretui-skip-link:focus-visible {
-        outline: 2px solid var(--ring);
-        outline-offset: 2px;
+      @layer PretComponent {
+        .pretui-skip-link {
+          position: absolute;
+          inset-block-start: var(--space-3, 0.5rem);
+          inset-inline-start: var(--space-3, 0.5rem);
+          z-index: var(--pretui-z-toast, 100);
+          padding: var(--space-2, 0.375rem) var(--space-4, 0.6875rem);
+          border-radius: var(--radius-control, 6px);
+          background: var(--primary);
+          color: var(--primary-foreground);
+          font-family: var(--font-sans);
+          font-size: var(--text-ui-md, 0.78rem);
+          font-weight: 600;
+          text-decoration: none;
+          box-shadow: var(--pretui-shadow-raised, 0 0 0 1px var(--border));
+        }
+        /* Off screen but in the tab order and the accessibility tree until it
+           has focus: the clip pattern, not display: none. */
+        .pretui-skip-link:not(:focus) {
+          inline-size: 1px;
+          block-size: 1px;
+          padding: 0;
+          overflow: hidden;
+          clip-path: inset(50%);
+          white-space: nowrap;
+        }
+        .pretui-skip-link:focus-visible {
+          outline: 2px solid var(--ring);
+          outline-offset: 2px;
+        }
       }
     </style>
   </template>

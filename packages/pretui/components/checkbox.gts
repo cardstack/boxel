@@ -56,55 +56,67 @@ export class Checkbox extends Component<CheckboxSignature> {
       {{#if @label}}{{@label}}{{/if}}
     </label>
     <style scoped>
-      .pretui-choice {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        font-size: var(--text-ui-md, 12.5px);
-        cursor: pointer;
-      }
-      .pretui-checkbox {
-        appearance: none;
-        width: 15px;
-        height: 15px;
-        margin: 0;
-        border-radius: 5px;
-        background: var(
-          --pretui-control-rest,
-          var(--field, var(--boxel-light))
-        );
-        box-shadow: 0 0 0 1px var(--pretui-control-border, var(--input));
-        cursor: pointer;
-        display: inline-grid;
-        place-content: center;
-        flex: none;
-        transition: background var(--pretui-dur-snap, 180ms)
-          var(--pretui-ease-snap, ease);
-      }
-      .pretui-checkbox:hover:not(:checked):not(:disabled) {
-        background: var(--pretui-control-hover, var(--hover, var(--boxel-100)));
-      }
-      .pretui-checkbox:checked {
-        background: var(--primary);
-        box-shadow:
-          0 0 0 1px color-mix(in oklch, var(--primary) 70%, var(--border)),
-          var(--pretui-edge-highlight, inset 0 1px 0 rgb(255 255 255 / 0.14));
-      }
-      .pretui-checkbox:checked::before {
-        content: '';
-        width: 9px;
-        height: 9px;
-        background: var(--primary-foreground);
-        clip-path: polygon(14% 47%, 38% 70%, 86% 18%, 96% 30%, 39% 89%, 4% 58%);
-      }
-      .pretui-checkbox:disabled {
-        opacity: 0.45;
-        cursor: default;
-      }
-      /* appearance: none discards the UA focus ring with the native look */
-      .pretui-checkbox:focus-visible {
-        outline: 2px solid var(--ring);
-        outline-offset: 2px;
+      @layer PretComponent {
+        .pretui-choice {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          font-size: var(--text-ui-md, 12.5px);
+          cursor: pointer;
+        }
+        .pretui-checkbox {
+          appearance: none;
+          width: 15px;
+          height: 15px;
+          margin: 0;
+          border-radius: 5px;
+          background: var(
+            --pretui-control-rest,
+            var(--field, var(--boxel-light))
+          );
+          box-shadow: 0 0 0 1px var(--pretui-control-border, var(--input));
+          cursor: pointer;
+          display: inline-grid;
+          place-content: center;
+          flex: none;
+          transition: background var(--pretui-dur-snap, 180ms)
+            var(--pretui-ease-snap, ease);
+        }
+        .pretui-checkbox:hover:not(:checked):not(:disabled) {
+          background: var(
+            --pretui-control-hover,
+            var(--hover, var(--boxel-100))
+          );
+        }
+        .pretui-checkbox:checked {
+          background: var(--primary);
+          box-shadow:
+            0 0 0 1px color-mix(in oklch, var(--primary) 70%, var(--border)),
+            var(--pretui-edge-highlight, inset 0 1px 0 rgb(255 255 255 / 0.14));
+        }
+        .pretui-checkbox:checked::before {
+          content: '';
+          width: 9px;
+          height: 9px;
+          background: var(--primary-foreground);
+          clip-path: polygon(
+            14% 47%,
+            38% 70%,
+            86% 18%,
+            96% 30%,
+            39% 89%,
+            4% 58%
+          );
+        }
+        .pretui-checkbox:disabled {
+          opacity: 0.45;
+          cursor: default;
+        }
+        /* appearance: none discards the UA focus ring with the native look */
+        .pretui-checkbox:focus-visible {
+          outline: 2px solid var(--ring);
+          outline-offset: 2px;
+        }
       }
     </style>
   </template>

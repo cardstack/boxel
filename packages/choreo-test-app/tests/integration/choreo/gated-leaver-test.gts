@@ -27,7 +27,7 @@ import { on } from '@ember/modifier';
 import { click, render } from '@ember/test-helpers';
 import { tracked } from '@glimmer/tracking';
 import { Choreo, motion, Presence } from 'glimmer-motion';
-import { setupMotion } from 'glimmer-motion/test-support';
+import { setupChoreo } from 'glimmer-motion/choreo/test-support';
 import { module, test } from 'qunit';
 import { setupRenderingTest } from 'test-app/tests/helpers';
 
@@ -51,7 +51,7 @@ const left = () =>
 
 module('Integration | choreo | gated leaver', function (hooks) {
   setupRenderingTest(hooks);
-  setupMotion(hooks);
+  setupChoreo(hooks);
 
   test('a run parked at a gate hands its leavers back', async function (assert) {
     const state = new Shown();

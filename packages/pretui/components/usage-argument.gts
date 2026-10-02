@@ -63,40 +63,42 @@ export class UsageArgument extends Component<UsageArgumentSignature> {
       </tr>
     {{/if}}
     <style scoped>
-      .FreestyleUsageArgument-name {
-        font-family: var(--font-mono);
-        font-size: var(--text-ui, 12px);
-        white-space: nowrap;
-        width: 1%;
-      }
-      .u-sig {
-        color: var(--ink-3, var(--boxel-400));
-      }
-      .u-req {
-        color: var(--pretui-destructive-ink, var(--boxel-danger));
-      }
-      .FreestyleUsageArgument-type {
-        font-family: var(--font-mono);
-        font-size: var(--text-ui, 12px);
-        color: var(--muted-foreground);
-        white-space: nowrap;
-        width: 1%;
-        text-transform: lowercase;
-      }
-      .FreestyleUsageArgument-description {
-        color: var(--foreground);
-        max-width: 520px;
-      }
-      .FreestyleUsageArgument-default {
-        font-family: var(--font-mono);
-        font-size: var(--text-ui, 12px);
-        color: var(--muted-foreground);
-        text-align: right;
-        white-space: nowrap;
-        width: 1%;
-      }
-      .u-none {
-        color: var(--ink-3, var(--boxel-400));
+      @layer PretComponent {
+        .FreestyleUsageArgument-name {
+          font-family: var(--font-mono);
+          font-size: var(--text-ui, 12px);
+          white-space: nowrap;
+          width: 1%;
+        }
+        .u-sig {
+          color: var(--ink-3, var(--boxel-400));
+        }
+        .u-req {
+          color: var(--pretui-destructive-ink, var(--boxel-danger));
+        }
+        .FreestyleUsageArgument-type {
+          font-family: var(--font-mono);
+          font-size: var(--text-ui, 12px);
+          color: var(--muted-foreground);
+          white-space: nowrap;
+          width: 1%;
+          text-transform: lowercase;
+        }
+        .FreestyleUsageArgument-description {
+          color: var(--foreground);
+          max-width: 520px;
+        }
+        .FreestyleUsageArgument-default {
+          font-family: var(--font-mono);
+          font-size: var(--text-ui, 12px);
+          color: var(--muted-foreground);
+          text-align: right;
+          white-space: nowrap;
+          width: 1%;
+        }
+        .u-none {
+          color: var(--ink-3, var(--boxel-400));
+        }
       }
     </style>
   </template>

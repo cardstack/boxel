@@ -49,6 +49,8 @@ Gaps, and the heading one matters:
 
 A season retuning `--radius-surface` moves Panel, **Dialog** and **Drawer** together, which is intended — those three are the kit's surface vocabulary. `--pretui-shadow-card` is where a season expresses whether panels are outlined or elevated; it defaults to a 1px ring and a season can swap it for a real shadow without touching the component.
 
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
+
 ## React ecosystem
 
 Closest to Mantine `Paper` / a chromeless Card. Agents who want

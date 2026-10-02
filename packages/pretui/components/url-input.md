@@ -54,3 +54,5 @@ Consumed: `--field`, `--input`, `--primary` (focus ring via `--ring`), `--ink-3`
 Forwarded into boxel-ui through the `--boxel-*` channel, matching **Input**'s metrics exactly so the family aligns in a shared form.
 
 `--success` is the token to check per season here: unlike the rest of the family, this component has an affirmative state, and a season that tunes `--success` for a **Delta**'s 11.5px mono ink may find it too light as a field hairline. The invalid dress still arrives from an enclosing **Field** by repointing `--border`/`--background`, so error styling is a season concern defined once.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

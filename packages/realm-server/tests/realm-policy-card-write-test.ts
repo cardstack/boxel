@@ -582,6 +582,7 @@ module(basename(import.meta.filename), function (hooks) {
           predicateEvaluations: 3,
           pendingDischarges: 3,
           definitionLookups: 0,
+          snapshotReads: 0,
         },
         'each write’s predicate was evaluated once, under the lock',
       );
@@ -1460,6 +1461,7 @@ module(basename(import.meta.filename), function (hooks) {
         predicateEvaluations: 0,
         pendingDischarges: 0,
         definitionLookups: 0,
+        snapshotReads: 0,
       });
     });
   });

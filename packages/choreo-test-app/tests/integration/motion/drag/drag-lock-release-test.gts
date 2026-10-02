@@ -18,6 +18,7 @@ import { render } from '@ember/test-helpers';
 import { tracked } from '@glimmer/tracking';
 import { setupRenderingTest } from 'ember-qunit';
 import motion from 'glimmer-motion/motion';
+import { setupMotion } from 'glimmer-motion/test-support';
 import { module, test } from 'qunit';
 
 import {
@@ -47,6 +48,7 @@ async function dragButDoNotDrop(sel: string) {
 
 module('Integration | drag | global lock release', function (hooks) {
   setupRenderingTest(hooks);
+  setupMotion(hooks);
   setupFixtureViewport(hooks);
 
   test('an element unmounted mid-drag does not hold the lock', async function (assert) {

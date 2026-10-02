@@ -50,6 +50,8 @@ Trigger: **Input**'s tokens (`--field`, `--input`, `--primary` via `--ring`, `--
 
 Three components' token sets, no tokens of its own — which is the intended shape. The one thing a season must do here that it does not have to do elsewhere is **set `--pretui-popover-width` or `--pretui-popover-min-width` wide enough for a month grid**, since Calendar's inline-size containment means it takes its width from the panel rather than pushing the panel open.
 
+The styles sit in `@layer PretComposite`, above Input's `PretComponent` layer, so what this component sets on Input wins by layer order. A caller's unlayered CSS overrides both without a more specific selector.
+
 ## React ecosystem
 
 Date only (DateField, `YYYY-MM-DD`, no `T`). Date+time is

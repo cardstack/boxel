@@ -7,6 +7,7 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { setupRenderingTest } from 'ember-qunit';
 import { Choreo, motion } from 'glimmer-motion';
+import { setupChoreo } from 'glimmer-motion/choreo/test-support';
 import { animationsSettled, bounds } from 'glimmer-motion/test-support';
 import { module, test } from 'qunit';
 
@@ -16,6 +17,7 @@ import { nextFrame } from '../../helpers/motion';
 module('Integration | choreo | gesture', function (hooks) {
   setupRenderingTest(hooks);
   setupFixtureViewport(hooks);
+  setupChoreo(hooks);
 
   test('a Move from the gesture starts at the release point, not the resting box', async function (assert) {
     class App extends Component {

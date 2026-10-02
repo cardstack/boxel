@@ -46,3 +46,5 @@ Gaps, and the first two matter most because of where this component is used:
 `--foreground` (title), `--muted-foreground` (subtitle and meta), plus **Chip**'s full token set for the tag and whatever the visual brings. `data-variant` and `data-center` are reflected on the root, so a season can dress icon rows and thumbnail rows differently without the component exposing more args.
 
 The visual slot's icon and thumbnail sizes are fixed per variant. Because the tag is a real **Chip**, a season that retunes `--pretui-chip-mix` moves entity tags along with every other chip — which is the intent, and worth knowing if you were about to tune chips for a status list and forgot they also appear here.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

@@ -120,29 +120,33 @@ export class Select extends Component<SelectSignature> {
       </PoweredSelect>
     </div>
     <style scoped>
-      .pretui-selectwrap {
-        position: relative; /* anchors the in-place dropdown */
-        min-width: 0;
-        /* boxel-ui custom-property channel: route Pretui tokens through the
-           knobs BoxelSelect exposes (renderInPlace keeps these inheriting
-           straight down into the dropdown). Colors without a knob are
-           overridden in the :deep() rules below. */
-        --boxel-form-control-border-radius: var(--radius);
-        /* 10px, not 9px: this trigger spends its hairline as a box-shadow
-           with `border: 0`, so 9px of padding puts its text 9px from the box
-           edge — while a boxel-ui-backed Input draws a real 1px border and
-           puts its text at 1 + 9 = 10px. Stacked, the two were 1px out. */
-        --boxel-select-trigger-padding: 0 10px;
-        --boxel-select-trigger-gap: 6px;
-        --boxel-select-trigger-content-wrap: nowrap;
-        --boxel-select-background-color: var(--field, var(--boxel-light));
-        --boxel-select-text-color: var(--foreground);
-        --boxel-dropdown-background-color: var(--popover);
-        --boxel-dropdown-text-color: var(--foreground);
-        --boxel-dropdown-hover-color: var(--hover, var(--boxel-100));
-        --boxel-dropdown-highlight-color: var(--hover, var(--boxel-100));
-        --boxel-dropdown-selected-text-color: var(--foreground);
+      @layer PretComponent {
+        .pretui-selectwrap {
+          position: relative; /* anchors the in-place dropdown */
+          min-width: 0;
+          /* boxel-ui custom-property channel: route Pretui tokens through the
+             knobs BoxelSelect exposes (renderInPlace keeps these inheriting
+             straight down into the dropdown). Colors without a knob are
+             overridden in the :deep() rules below. */
+          --boxel-form-control-border-radius: var(--radius);
+          /* 10px, not 9px: this trigger spends its hairline as a box-shadow
+             with `border: 0`, so 9px of padding puts its text 9px from the box
+             edge — while a boxel-ui-backed Input draws a real 1px border and
+             puts its text at 1 + 9 = 10px. Stacked, the two were 1px out. */
+          --boxel-select-trigger-padding: 0 10px;
+          --boxel-select-trigger-gap: 6px;
+          --boxel-select-trigger-content-wrap: nowrap;
+          --boxel-select-background-color: var(--field, var(--boxel-light));
+          --boxel-select-text-color: var(--foreground);
+          --boxel-dropdown-background-color: var(--popover);
+          --boxel-dropdown-text-color: var(--foreground);
+          --boxel-dropdown-hover-color: var(--hover, var(--boxel-100));
+          --boxel-dropdown-highlight-color: var(--hover, var(--boxel-100));
+          --boxel-dropdown-selected-text-color: var(--foreground);
+        }
       }
+      /* Unlayered: BoxelSelect's own rules are unlayered, and unlayered CSS
+         beats any layer, so these overrides only win from outside one. */
       /* trigger — dressed to match .pretui-input exactly: hairline rides
          box-shadow (not border) so the box metrics stay identical */
       .pretui-selectwrap :deep(.pretui-selecttrigger) {

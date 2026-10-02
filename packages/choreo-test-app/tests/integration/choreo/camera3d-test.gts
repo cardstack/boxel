@@ -23,6 +23,7 @@ import {
   type ChoreoContext,
   motion,
 } from 'glimmer-motion';
+import { setupChoreo } from 'glimmer-motion/choreo/test-support';
 import { animationsSettled } from 'glimmer-motion/test-support';
 import { module, test } from 'qunit';
 
@@ -122,6 +123,7 @@ const at = async (t: number): Promise<Camera3DState> => {
 
 module('Integration | choreo | c.Camera3D', function (hooks) {
   setupRenderingTest(hooks);
+  setupChoreo(hooks);
   hooks.beforeEach(() => {
     shots = [];
     ctx = undefined;

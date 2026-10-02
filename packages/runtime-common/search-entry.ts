@@ -1206,7 +1206,9 @@ export interface SearchEntryWireQuery {
   scope?: SearchEntryScope;
 }
 
-function wireFilterFromFilter(filter: Filter): SearchEntryWireFilter {
+// A filter in the grammar the engine runs, written back in the grammar a
+// search request carries.
+export function wireFilterFromFilter(filter: Filter): SearchEntryWireFilter {
   let out: SearchEntryWireFilter = {};
   for (let [key, value] of Object.entries(filter)) {
     if (key === 'type' || key === 'on') {

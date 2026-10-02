@@ -9,6 +9,7 @@ import { find, render, settled } from '@ember/test-helpers';
 import { tracked } from '@glimmer/tracking';
 import { setupRenderingTest } from 'ember-qunit';
 import motion from 'glimmer-motion/motion';
+import { setupMotion } from 'glimmer-motion/test-support';
 import { motionValue } from 'motion-dom';
 import { module, test } from 'qunit';
 
@@ -28,6 +29,7 @@ class P {
 
 module('Integration | motion | style prop', function (hooks) {
   setupRenderingTest(hooks);
+  setupMotion(hooks);
 
   test('should remove non-set styles', async function (assert) {
     const p = new P({ style: { position: 'absolute' } });

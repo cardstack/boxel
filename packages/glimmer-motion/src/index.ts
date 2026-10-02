@@ -47,15 +47,6 @@ export type {
   Step,
   TimelineNode,
 } from './choreo/types.ts';
-export { scroll } from './dom/scroll/index.ts';
-export { scrollInfo } from './dom/scroll/track.ts';
-export type {
-  ScrollInfo,
-  ScrollOffset,
-  ScrollOptions,
-} from './dom/scroll/types.ts';
-export type { InViewOptions } from './dom/viewport.ts';
-export { inView } from './dom/viewport.ts';
 export { Film } from './film.ts';
 export type {
   Beat as FilmBeat,
@@ -102,6 +93,17 @@ export { default as motion, MotionModifier } from './motion.ts';
 export type { MotionConfigContext } from './motion-config.gts';
 export { closestMotionConfig, MotionConfig } from './motion-config.gts';
 export { flushPendingMounts, MotionNode } from './node.ts';
+export type {
+  MotionParticipant,
+  ParticipantArgs,
+  ParticipantHost,
+} from './participant.ts';
+export {
+  closestParticipantHost,
+  defineParticipantArg,
+  PARTICIPANT_HOST_ATTRIBUTE,
+  setParticipantHost,
+} from './participant.ts';
 export { Presence } from './presence.gts';
 export type { PresenceHandle } from './presence-types.ts';
 export { ReorderGroup } from './reorder/group.gts';
@@ -109,11 +111,23 @@ export { ReorderItem } from './reorder/item.gts';
 export type { ReorderAxis, ReorderContextProps } from './reorder/types.ts';
 export { postRender, setPostRender } from './scheduler.ts';
 export type {
+  InViewOptions,
+  ScrollInfo,
+  ScrollOffset,
+  ScrollOptions,
   ScrollValues,
   UseInViewOptions,
   UseScrollOptions,
 } from './scroll.ts';
-export { InView, scrollProgress, useInView, useScroll } from './scroll.ts';
+export {
+  InView,
+  inView,
+  scroll,
+  scrollInfo,
+  scrollProgress,
+  useInView,
+  useScroll,
+} from './scroll.ts';
 export {
   motionSpeed,
   onMotionSpeed,
@@ -126,3 +140,15 @@ export type {
   ViewTransitionUpdate,
 } from './view-transition.ts';
 export { animateView, viewTransition } from './view-transition.ts';
+// The engine's imperative surface, curated: realm cards reach motion-dom only
+// through these names, so each one is glimmer-motion API under semver. They are
+// the engine's own functions, not copies, so they share its frame loop with
+// `{{motion}}`. `animate` is the same function the `motion` package exports.
+export { animate } from 'framer-motion/dom';
+export {
+  frame,
+  type MotionValue,
+  motionValue,
+  styleEffect,
+  transformValue,
+} from 'motion-dom';

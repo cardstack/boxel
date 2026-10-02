@@ -52,6 +52,8 @@ APG **Disclosure Navigation Menu**.
 
 The panel spans the navigation's width. The link grid's 12rem minimum column is fixed.
 
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
+
 ## React ecosystem
 
 | Agent types                                          | Give them                                     |

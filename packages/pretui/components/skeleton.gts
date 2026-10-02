@@ -17,26 +17,28 @@ export class Skeleton extends Component<SkeletonSignature> {
   <template>
     <span class='pretui-skeleton' style={{this.style}} aria-hidden='true' data-test-pretui-skeleton ...attributes></span>
     <style scoped>
-      @keyframes pretui-shimmer {
-        from {
-          background-position: 200% 0;
+      @layer PretComponent {
+        @keyframes pretui-shimmer {
+          from {
+            background-position: 200% 0;
+          }
+          to {
+            background-position: -200% 0;
+          }
         }
-        to {
-          background-position: -200% 0;
-        }
-      }
-      .pretui-skeleton {
-        display: block;
-        width: var(--_w, 100%);
-        height: var(--_h, 12px);
-        border-radius: 6px;
-        background: linear-gradient(90deg, var(--inset, var(--boxel-100)) 40%, var(--hover, var(--boxel-100)) 50%, var(--inset, var(--boxel-100)) 60%);
-        background-size: 200% 100%;
-        animation: pretui-shimmer 1.6s linear infinite;
-      }
-      @media (prefers-reduced-motion: reduce) {
         .pretui-skeleton {
-          animation: none;
+          display: block;
+          width: var(--_w, 100%);
+          height: var(--_h, 12px);
+          border-radius: 6px;
+          background: linear-gradient(90deg, var(--inset, var(--boxel-100)) 40%, var(--hover, var(--boxel-100)) 50%, var(--inset, var(--boxel-100)) 60%);
+          background-size: 200% 100%;
+          animation: pretui-shimmer 1.6s linear infinite;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .pretui-skeleton {
+            animation: none;
+          }
         }
       }
     </style>

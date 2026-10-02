@@ -31,10 +31,9 @@ import type * as OperationsModule from '@cardstack/base/operations';
 // and they are stated as assertions rather than provoked in
 // `tests/unit/operation-ledger-test.ts`.
 //
-// No declaration here reads the actor: a request from an integration test
-// reaches the in-browser realm unauthenticated (the harness's `verifyJWT`
-// treats an unexpired token as expired), and an operation that reads the actor
-// is refused outright on such a request.
+// No declaration here reads the actor: this suite's realm answers the host's
+// requests as its own internal dispatch, which reads no session, and an
+// operation that reads the actor is refused outright on such a request.
 // ============================================================================
 
 let loader: Loader;

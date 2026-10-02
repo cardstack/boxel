@@ -233,96 +233,98 @@ export class Slider extends Component<SliderSignature> {
       {{/if}}
     </div>
     <style scoped>
-      .pretui-sliderwrap {
-        display: grid;
-        gap: 4px;
-      }
-      .pretui-slider {
-        appearance: none;
-        width: 100%;
-        height: 3px;
-        border-radius: 2px;
-        background: var(--line-strong, var(--boxel-400));
-        outline-offset: 4px;
-      }
-      .pretui-slider-single {
-        background: linear-gradient(
-          to right,
-          var(--primary) var(--pretui-slider-pct, 50%),
-          var(--line-strong, var(--boxel-400)) var(--pretui-slider-pct, 50%)
-        );
-      }
-      /* One thumb rule per engine. Firefox implements neither the WebKit
-         pseudo-element nor the track one, so styling only
-         ::-webkit-slider-thumb left every Firefox reader looking at the UA
-         default control — a visible break in a kit that claims one look. */
-      .pretui-slider::-webkit-slider-thumb {
-        appearance: none;
-        width: 14px;
-        height: 14px;
-        border-radius: 50%;
-        background: var(--card);
-        box-shadow: 0 0 0 1px var(--line-strong, var(--boxel-400)), 0 1px 3px var(--shadow-ink-mid, rgb(0 0 0 / 0.08));
-        cursor: pointer;
-        pointer-events: auto;
-      }
-      .pretui-slider::-moz-range-thumb {
-        appearance: none;
-        width: 14px;
-        height: 14px;
-        border: 0;
-        border-radius: 50%;
-        background: var(--card);
-        box-shadow: 0 0 0 1px var(--line-strong, var(--boxel-400)), 0 1px 3px var(--shadow-ink-mid, rgb(0 0 0 / 0.08));
-        cursor: pointer;
-        pointer-events: auto;
-      }
-      .pretui-slider::-moz-range-track {
-        height: 3px;
-        border-radius: 2px;
-        background: transparent;
-      }
-      /* Range mode: both inputs occupy the same 3px rail, which paints the
-         selected band; the inputs themselves are transparent and inert except
-         for their thumbs. */
-      .pretui-slider-rail {
-        position: relative;
-        display: grid;
-        height: 14px;
-        align-items: center;
-      }
-      .pretui-slider-rail::before {
-        content: '';
-        position: absolute;
-        inset-inline: 0;
-        height: 3px;
-        border-radius: 2px;
-        background: linear-gradient(
-          to right,
-          var(--line-strong, var(--boxel-400)) var(--pretui-slider-from, 0%),
-          var(--primary) var(--pretui-slider-from, 0%),
-          var(--primary) var(--pretui-slider-to, 100%),
-          var(--line-strong, var(--boxel-400)) var(--pretui-slider-to, 100%)
-        );
-      }
-      .pretui-slider-rail .pretui-slider {
-        grid-area: 1 / 1;
-        background: transparent;
-        /* the track ignores the pointer so the two stacked inputs never
-           swallow each other's drags; only the thumbs are hit targets */
-        pointer-events: none;
-      }
-      .pretui-slider-rail[data-raised='low'] .pretui-slider-low,
-      .pretui-slider-rail[data-raised='high'] .pretui-slider-high {
-        z-index: var(--pretui-z-raised, 1);
-      }
-      .pretui-ticks {
-        display: flex;
-        justify-content: space-between;
-        font-family: var(--font-mono);
-        font-size: 10px;
-        font-variant-numeric: tabular-nums;
-        color: var(--ink-3, var(--boxel-400));
+      @layer PretComponent {
+        .pretui-sliderwrap {
+          display: grid;
+          gap: 4px;
+        }
+        .pretui-slider {
+          appearance: none;
+          width: 100%;
+          height: 3px;
+          border-radius: 2px;
+          background: var(--line-strong, var(--boxel-400));
+          outline-offset: 4px;
+        }
+        .pretui-slider-single {
+          background: linear-gradient(
+            to right,
+            var(--primary) var(--pretui-slider-pct, 50%),
+            var(--line-strong, var(--boxel-400)) var(--pretui-slider-pct, 50%)
+          );
+        }
+        /* One thumb rule per engine. Firefox implements neither the WebKit
+           pseudo-element nor the track one, so styling only
+           ::-webkit-slider-thumb left every Firefox reader looking at the UA
+           default control — a visible break in a kit that claims one look. */
+        .pretui-slider::-webkit-slider-thumb {
+          appearance: none;
+          width: 14px;
+          height: 14px;
+          border-radius: 50%;
+          background: var(--card);
+          box-shadow: 0 0 0 1px var(--line-strong, var(--boxel-400)), 0 1px 3px var(--shadow-ink-mid, rgb(0 0 0 / 0.08));
+          cursor: pointer;
+          pointer-events: auto;
+        }
+        .pretui-slider::-moz-range-thumb {
+          appearance: none;
+          width: 14px;
+          height: 14px;
+          border: 0;
+          border-radius: 50%;
+          background: var(--card);
+          box-shadow: 0 0 0 1px var(--line-strong, var(--boxel-400)), 0 1px 3px var(--shadow-ink-mid, rgb(0 0 0 / 0.08));
+          cursor: pointer;
+          pointer-events: auto;
+        }
+        .pretui-slider::-moz-range-track {
+          height: 3px;
+          border-radius: 2px;
+          background: transparent;
+        }
+        /* Range mode: both inputs occupy the same 3px rail, which paints the
+           selected band; the inputs themselves are transparent and inert except
+           for their thumbs. */
+        .pretui-slider-rail {
+          position: relative;
+          display: grid;
+          height: 14px;
+          align-items: center;
+        }
+        .pretui-slider-rail::before {
+          content: '';
+          position: absolute;
+          inset-inline: 0;
+          height: 3px;
+          border-radius: 2px;
+          background: linear-gradient(
+            to right,
+            var(--line-strong, var(--boxel-400)) var(--pretui-slider-from, 0%),
+            var(--primary) var(--pretui-slider-from, 0%),
+            var(--primary) var(--pretui-slider-to, 100%),
+            var(--line-strong, var(--boxel-400)) var(--pretui-slider-to, 100%)
+          );
+        }
+        .pretui-slider-rail .pretui-slider {
+          grid-area: 1 / 1;
+          background: transparent;
+          /* the track ignores the pointer so the two stacked inputs never
+             swallow each other's drags; only the thumbs are hit targets */
+          pointer-events: none;
+        }
+        .pretui-slider-rail[data-raised='low'] .pretui-slider-low,
+        .pretui-slider-rail[data-raised='high'] .pretui-slider-high {
+          z-index: var(--pretui-z-raised, 1);
+        }
+        .pretui-ticks {
+          display: flex;
+          justify-content: space-between;
+          font-family: var(--font-mono);
+          font-size: 10px;
+          font-variant-numeric: tabular-nums;
+          color: var(--ink-3, var(--boxel-400));
+        }
       }
     </style>
   </template>

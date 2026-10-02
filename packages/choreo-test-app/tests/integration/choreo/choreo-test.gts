@@ -15,6 +15,7 @@ import {
   Presence,
   type Sprite,
 } from 'glimmer-motion';
+import { setupChoreo } from 'glimmer-motion/choreo/test-support';
 import { module, test } from 'qunit';
 
 import { setupFixtureViewport } from '../../helpers/layout-fixture';
@@ -34,6 +35,7 @@ module('Integration | choreo', function (hooks) {
   setupRenderingTest(hooks);
   // bounds are measured: an unscaled viewport, as the layout suites have
   setupFixtureViewport(hooks);
+  setupChoreo(hooks);
 
   test('a removed participant stays, locked where it was, for exactly its row', async function (assert) {
     class App extends Component {

@@ -32,8 +32,6 @@ import {
 } from 'motion-dom';
 
 import { registerBusyProbe } from './activity.ts';
-import { type ChoreoHost, closestChoreo } from './choreo/registry.ts';
-import type { ChoreoNode } from './choreo/types.ts';
 import { initFeatures } from './features.ts';
 import {
   afterSettle,
@@ -47,6 +45,13 @@ import {
   closestMotionConfig,
   type MotionConfigContext,
 } from './motion-config.gts';
+import {
+  closestParticipantHost,
+  type MotionParticipant,
+  type ParticipantArgs,
+  type ParticipantHost,
+} from './participant.ts';
+import { applyParticipantArgs } from './participant-args.ts';
 import type { PopMeasurable, PresenceHandle } from './presence-types.ts';
 import { postRender } from './scheduler.ts';
 import { motionSpeed, onMotionSpeed, slowed } from './speed.ts';
@@ -59,31 +64,25 @@ const DEFAULT_LAYOUT_TRANSITION = {
 } as const;
 
 /** React's HTMLMotionProps = MotionNodeOptions + style (static values and MotionValues) */
-export type MotionProps = Omit<MotionNodeOptions, 'dragConstraints'> & {
-  /** internal Framer props: route the drag gesture straight into these values */
-  _dragX?: MotionValue<number>;
-  _dragY?: MotionValue<number>;
-  /** React accepts a ref object; Glimmer has the element itself, so either is fine */
-  dragConstraints?: MotionNodeOptions['dragConstraints'] | Element | null;
-  /** choreography: identity across renders, and the group a <Choreo> step selects by */
-  id?: string;
-  /**
-   * How Choreo measures this element for a shape-matched flight.
-   * `'box'` (default) is the layout border box — right for plates, cards,
-   * stages. `'content'` is the shrink-wrap (the ink): a full-bleed title
-   * still matches as a word. Written as `data-choreo-pack`; an explicit
-   * `[data-choreo-substance]` descendant still wins.
-   */
-  pack?: 'box' | 'content';
-  presence?: PresenceHandle;
-  role?: string;
-  style?: Record<string, unknown>;
-  /** MotionConfig's transformPagePoint — passed per element here (React merges the config into props) */
-  transformPagePoint?: (p: { x: number; y: number }) => {
-    x: number;
-    y: number;
+export type MotionProps = Omit<MotionNodeOptions, 'dragConstraints'> &
+  ParticipantArgs & {
+    /** internal Framer props: route the drag gesture straight into these values */
+    _dragX?: MotionValue<number>;
+    _dragY?: MotionValue<number>;
+    /** React accepts a ref object; Glimmer has the element itself, so either is fine */
+    dragConstraints?: MotionNodeOptions['dragConstraints'] | Element | null;
+    /** participant identity across renders; an element with an `id` or a `role` joins the nearest participant host */
+    id?: string;
+    presence?: PresenceHandle;
+    /** the group a participant host selects this element by */
+    role?: string;
+    style?: Record<string, unknown>;
+    /** MotionConfig's transformPagePoint — passed per element here (React merges the config into props) */
+    transformPagePoint?: (p: { x: number; y: number }) => {
+      x: number;
+      y: number;
+    };
   };
-};
 
 /** motion.div … motion.circle: any element with an inline style */
 export type MotionEl = HTMLElement | SVGElement;
@@ -355,7 +354,7 @@ function describe(el: Element | undefined): string {
 
 let layoutPresenceId = 0;
 
-export class MotionNode implements ChoreoNode, PopMeasurable {
+export class MotionNode implements MotionParticipant, PopMeasurable {
   private ve?: HTMLVisualElement;
   private destroyed = false;
   /** this node's registration with its presence child (MeasureLayout registers per node) */
@@ -421,10 +420,10 @@ export class MotionNode implements ChoreoNode, PopMeasurable {
   /** the seat measured before the render that removed this element */
   private popSeat?: PopSeat;
   private unregisterPop?: () => void;
-  /** boxel-motion's sprite identity: a <Choreo> above selects this element by these */
+  /** participant identity: a participant host above selects this element by these */
   id: string | null = null;
   role: string | null = null;
-  private choreo?: ChoreoHost;
+  private host?: ParticipantHost;
   private presenceRegistered = false;
 
   constructor() {
@@ -433,14 +432,10 @@ export class MotionNode implements ChoreoNode, PopMeasurable {
 
   /** React render: the element's props for this pass */
   update(element: MotionEl, named: MotionProps) {
-    const { presence: ownPresence, id, role, pack, ...rest } = named;
+    const { presence: ownPresence, id, role, ...rest } = named;
     this.id = id ?? null;
     this.role = role ?? null;
-    if (pack === 'content') {
-      element.setAttribute('data-choreo-pack', 'content');
-    } else {
-      element.removeAttribute('data-choreo-pack');
-    }
+    applyParticipantArgs(element, rest);
     const props = { ...rest } as MotionNodeOptions;
     // dragConstraints given as an element → the ref object the gesture code expects
     if (named.dragConstraints instanceof Element) {
@@ -643,7 +638,7 @@ export class MotionNode implements ChoreoNode, PopMeasurable {
       ve.updateFeatures();
       ve.scheduleRenderMicrotask();
       if (this.id !== null || this.role !== null) {
-        this.joinChoreo(element, presenceContext);
+        this.joinHost(element, presenceContext);
       }
       if (ve.projection) {
         // its transition is resolved inside the projection tree, from props
@@ -773,18 +768,18 @@ export class MotionNode implements ChoreoNode, PopMeasurable {
     }
   }
 
-  /* ---- ChoreoNode: what a <Choreo> above needs from this element ---- */
+  /* ---- MotionParticipant: what a participant host above needs from this element ---- */
 
-  /** a participant registers with the nearest region, and with its Presence so a timeline can outlive a plain exit */
-  private joinChoreo(
+  /** a participant registers with the nearest host, and with its Presence so the host can outlive a plain exit */
+  private joinHost(
     element: MotionEl,
     presenceContext: PresenceContextProps | null,
   ) {
-    const host = closestChoreo(element);
+    const host = closestParticipantHost(element);
     if (!host) {
       return;
     }
-    this.choreo = host;
+    this.host = host;
     const leave = host.register(this);
     if (presenceContext?.register && !this.presenceRegistered) {
       const release = presenceContext.register(this.layoutPresenceKey);
@@ -810,7 +805,7 @@ export class MotionNode implements ChoreoNode, PopMeasurable {
     return this.layoutPresenceKey;
   }
 
-  /** for the region's @debug lints (§5.3) */
+  /** whether this element animates itself, beside whatever its host does */
   get ownAnimation(): boolean {
     const props = this.latest?.props as
       | { animate?: unknown; exit?: unknown; initial?: unknown }
@@ -828,14 +823,14 @@ export class MotionNode implements ChoreoNode, PopMeasurable {
     return presence ? presence.isPresent : true;
   }
 
-  /** the choreography is done with a leaving element: tell its Presence */
+  /** the host is done with a leaving element: tell its Presence */
   exitComplete() {
     const presence =
       this.latest?.ownPresence ?? (this.ve && presenceOf.get(this.ve));
     presence?.context.onExitComplete?.(this.layoutPresenceKey);
   }
 
-  /** the choreography is done with an element whose unmount it deferred */
+  /** the host is done with an element whose unmount it deferred */
   release() {
     const ve = this.ve;
     if (!ve) {
@@ -984,8 +979,8 @@ export class MotionNode implements ChoreoNode, PopMeasurable {
     ve.projection?.scheduleCheckAfterUnmount?.();
     this.unregister?.();
     this.popStyle?.remove();
-    // a removed participant may still have a row to play: the region unmounts it when that ends
-    if (this.choreo?.claim(this)) {
+    // a host may still need a removed participant: it unmounts it through release()
+    if (this.host?.claim(this)) {
       return;
     }
     ve.unmount();

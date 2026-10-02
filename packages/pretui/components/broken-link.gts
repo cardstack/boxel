@@ -18,26 +18,28 @@ export class BrokenLink extends Component<BrokenLinkSignature> {
       {{#if @refId}}<span class='pretui-broken-id'>{{@refId}}</span>{{/if}}
     </span>
     <style scoped>
-      .pretui-broken {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        padding: 2px 8px;
-        border-radius: 6px;
-        background: var(--inset, var(--boxel-100));
-        color: var(--ink-3, var(--boxel-400));
-        font-size: var(--text-ui-sm, 11.5px);
-        font-family: var(--font-mono);
-        outline: 1px dashed var(--line-strong, var(--boxel-400));
-        outline-offset: -1px;
-        text-decoration: line-through;
-        text-decoration-color: color-mix(in oklch, var(--ink-3, var(--boxel-400)) 50%, transparent);
-      }
-      .pretui-broken svg {
-        flex: none;
-      }
-      .pretui-broken-id {
-        opacity: 0.7;
+      @layer PretComponent {
+        .pretui-broken {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          padding: 2px 8px;
+          border-radius: 6px;
+          background: var(--inset, var(--boxel-100));
+          color: var(--ink-3, var(--boxel-400));
+          font-size: var(--text-ui-sm, 11.5px);
+          font-family: var(--font-mono);
+          outline: 1px dashed var(--line-strong, var(--boxel-400));
+          outline-offset: -1px;
+          text-decoration: line-through;
+          text-decoration-color: color-mix(in oklch, var(--ink-3, var(--boxel-400)) 50%, transparent);
+        }
+        .pretui-broken svg {
+          flex: none;
+        }
+        .pretui-broken-id {
+          opacity: 0.7;
+        }
       }
     </style>
   </template>

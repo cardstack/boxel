@@ -7,6 +7,7 @@ import { find, render, settled } from '@ember/test-helpers';
 import { tracked } from '@glimmer/tracking';
 import { setupRenderingTest } from 'ember-qunit';
 import motion from 'glimmer-motion/motion';
+import { setupMotion } from 'glimmer-motion/test-support';
 import { checkVariantsDidChange, motionValue } from 'motion-dom';
 import { module, test } from 'qunit';
 
@@ -23,6 +24,7 @@ class P {
 
 module('Integration | motion | keyframes transition', function (hooks) {
   setupRenderingTest(hooks);
+  setupMotion(hooks);
 
   test('keyframes as target', async function (assert) {
     const initial = { x: 0 },

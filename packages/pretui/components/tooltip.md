@@ -45,6 +45,8 @@ Do not ship a tooltip as the only name for an icon button until the association 
 
 `--tooltip` and `--tooltip-foreground` (the always-dark pair a season must define for _both_ modes, not just light), `--shadow-ink-strong`, `--text-ui-sm`. Radius (6px), padding and the 6px offset are hard-coded. A season that ships only a light palette for `--tooltip` will produce a light-on-light tooltip in dark mode — this is the one token here that is easy to get wrong.
 
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
+
 ## React ecosystem
 
 Short string only. Rich hover content is **HoverCard**. Accept `delayDuration`
