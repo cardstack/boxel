@@ -416,6 +416,9 @@ export function gateRefusal(
 // no policy, or a core that cannot read one.
 export interface LoadedPolicy {
   policy: CompiledRealmPolicy | undefined;
+  // When the caller started loading it, a `performance.now()` reading, so the
+  // gate's decision record counts the load as part of the decision.
+  started?: number;
 }
 
 // Load the realm's compiled policy for a caller the realm ACL declined, and
@@ -468,7 +471,7 @@ export async function gateOperation(
     return { kind: 'coarse' };
   }
   let notes = decisionNotes(scope);
-  let started = performance.now();
+  let started = loaded?.started ?? performance.now();
   let decision: GateDecision | GateRefusal;
   try {
     decision = await decide(

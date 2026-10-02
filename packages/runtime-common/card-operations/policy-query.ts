@@ -238,7 +238,7 @@ function typeLabel(type: CodeRef): string {
 }
 
 // What `policyQueryScope` answers, with the grants that contributed a filter
-// pushed onto `contributed`.
+// pushed onto `contributed`, type by type in the order the search names them.
 async function scopeFor(
   core: OperationCore,
   operation: string,
@@ -258,9 +258,16 @@ async function scopeFor(
       await typeScope(core, operation, distinct[0], actor, contributed),
     );
   }
+  // Each type's contributions are kept apart while the types are judged at
+  // once, and joined in order after, so a record's grants do not depend on
+  // which lookup finished first.
+  let perType = distinct.map((): MatchedGrant[] => []);
   let scopes = await Promise.all(
-    distinct.map((on) => typeScope(core, operation, on, actor, contributed)),
+    distinct.map((on, index) =>
+      typeScope(core, operation, on, actor, perType[index]),
+    ),
   );
+  contributed.push(...perType.flat());
   let filters: Filter[] = [];
   for (let [index, scope] of scopes.entries()) {
     if (scope.kind === 'scoped') {

@@ -312,7 +312,7 @@
           "type": "loki",
           "uid": "loki"
         },
-        "description": "Every real policy decision, by outcome. One record per decision: a read at the gate; a write the gate admits or refuses outright at the gate; a write left to the write lock under the lock (its gate record says pending and is left out here). Explain decisions are hypothetical and left out.",
+        "description": "Every real policy decision, by outcome. Gate: one record per decision \u2014 a read at the gate; a write the gate admits or refuses outright at the gate; a write left to the write lock under the lock (its gate record says pending and is left out here). Search: one record per realm a search consulted through its policy \u2014 scoped (some grant admits rows), none, or failed. Explain decisions are hypothetical and left out.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -363,8 +363,19 @@
             },
             "editorMode": "code",
             "expr": "sum by (outcome) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:operations\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:operations\" | kind=\"policy-decision\" | realmURL=~\".*${realm}.*\" | outcome=~\"allow|deny|error\" | hypothetical=\"false\" [$__interval]))",
-            "legendFormat": "{{outcome}}",
+            "legendFormat": "gate {{outcome}}",
             "refId": "A",
+            "queryType": "range"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "sum by (outcome) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:operations\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:operations\" | kind=\"policy-search-scope\" | realmURL=~\".*${realm}.*\" | hypothetical=\"false\" [$__interval]))",
+            "legendFormat": "search {{outcome}}",
+            "refId": "B",
             "queryType": "range"
           }
         ],
@@ -428,8 +439,19 @@
             },
             "editorMode": "code",
             "expr": "sum by (realmURL, coarseDeclined) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:operations\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:operations\" | kind=\"policy-decision\" | realmURL=~\".*${realm}.*\" | decidedAt=\"gate\" | hypothetical=\"false\" [$__interval]))",
-            "legendFormat": "{{realmURL}} ({{coarseDeclined}})",
+            "legendFormat": "{{realmURL}} gate ({{coarseDeclined}})",
             "refId": "A",
+            "queryType": "range"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "sum by (realmURL) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:operations\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:operations\" | kind=\"policy-search-scope\" | realmURL=~\".*${realm}.*\" | hypothetical=\"false\" [$__interval]))",
+            "legendFormat": "{{realmURL}} search",
+            "refId": "B",
             "queryType": "range"
           }
         ],
@@ -442,7 +464,7 @@
           "type": "loki",
           "uid": "loki"
         },
-        "description": "Denials over the selected range, by realm, the reason, the rules matched on the target's type and the grants in them for the operation. A `predicate` reason means every listed grant's predicate was evaluated and none held; an empty grant list means no grant names the operation.",
+        "description": "Denials over the selected range, by realm, the reason, the rules matched on the target's type and the grants in them for the operation. A `predicate` reason means every listed grant's predicate was evaluated and none held; an empty grant list means no grant names the operation. Query B adds searches a realm's policy scoped to nothing (search-lane outcome none), by realm and the query they ran.",
         "fieldConfig": {
           "defaults": {
             "custom": {
@@ -478,6 +500,18 @@
             "expr": "topk(25, sum by (realmURL, operation, reason, rules, grants) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:operations\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:operations\" | kind=\"policy-decision\" | realmURL=~\".*${realm}.*\" | outcome=\"deny\" | hypothetical=\"false\" [$__range])))",
             "legendFormat": "",
             "refId": "A",
+            "queryType": "instant",
+            "instant": true
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "topk(25, sum by (realmURL, operation, transport) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:operations\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:operations\" | kind=\"policy-search-scope\" | realmURL=~\".*${realm}.*\" | outcome=\"none\" | hypothetical=\"false\" [$__range])))",
+            "legendFormat": "",
+            "refId": "B",
             "queryType": "instant",
             "instant": true
           }
@@ -584,7 +618,7 @@
           "type": "loki",
           "uid": "loki"
         },
-        "description": "A: decisions where a predicate threw, from the decision records. B: the realm:policy fault warning, which logs at most one line per predicate per minute, so B undercounts and is the place to read the error itself.",
+        "description": "A: decisions where a predicate threw, from the decision records. B: the realm:policy fault warning, which logs at most one line per predicate per minute, so B undercounts and is the place to read the error itself. B also counts throws under an explain or a capability check, which A leaves out, so B can rise while A stays flat.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -645,7 +679,7 @@
               "uid": "loki"
             },
             "editorMode": "code",
-            "expr": "sum(count_over_time({service=\"realm-server\", env=\"$env\"} |= \"a predicate in the policy of realm\" [$__interval]))",
+            "expr": "sum(count_over_time({service=\"realm-server\", env=\"$env\"} |= \"a predicate in the policy of realm\" |= \"${realm}\" [$__interval]))",
             "legendFormat": "realm:policy fault lines",
             "refId": "B",
             "queryType": "range"
@@ -1085,7 +1119,7 @@
               "uid": "loki"
             },
             "editorMode": "code",
-            "expr": "max(quantile_over_time(0.5, {service=\"realm-server\", env=\"$env\"} |= \"boxel:operations\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:operations\" | kind=\"policy-decision\" | realmURL=~\".*${realm}.*\" | hypothetical=\"false\" | unwrap evaluationMs [$__interval]))",
+            "expr": "quantile_over_time(0.5, {service=\"realm-server\", env=\"$env\"} |= \"boxel:operations\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:operations\" | kind=\"policy-decision\" | realmURL=~\".*${realm}.*\" | hypothetical=\"false\" | unwrap evaluationMs [$__interval]) by ()",
             "legendFormat": "p50",
             "refId": "A",
             "queryType": "range"
@@ -1096,7 +1130,7 @@
               "uid": "loki"
             },
             "editorMode": "code",
-            "expr": "max(quantile_over_time(0.95, {service=\"realm-server\", env=\"$env\"} |= \"boxel:operations\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:operations\" | kind=\"policy-decision\" | realmURL=~\".*${realm}.*\" | hypothetical=\"false\" | unwrap evaluationMs [$__interval]))",
+            "expr": "quantile_over_time(0.95, {service=\"realm-server\", env=\"$env\"} |= \"boxel:operations\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:operations\" | kind=\"policy-decision\" | realmURL=~\".*${realm}.*\" | hypothetical=\"false\" | unwrap evaluationMs [$__interval]) by ()",
             "legendFormat": "p95",
             "refId": "B",
             "queryType": "range"
@@ -1162,7 +1196,7 @@
               "uid": "loki"
             },
             "editorMode": "code",
-            "expr": "max(quantile_over_time(0.5, {service=\"realm-server\", env=\"$env\"} |= \"boxel:operations\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:operations\" | kind=\"policy-decision\" | realmURL=~\".*${realm}.*\" | predicates > 0 | hypothetical=\"false\" | unwrap predicateMs [$__interval]))",
+            "expr": "quantile_over_time(0.5, {service=\"realm-server\", env=\"$env\"} |= \"boxel:operations\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:operations\" | kind=\"policy-decision\" | realmURL=~\".*${realm}.*\" | predicates > 0 | hypothetical=\"false\" | unwrap predicateMs [$__interval]) by ()",
             "legendFormat": "p50",
             "refId": "A",
             "queryType": "range"
@@ -1173,7 +1207,7 @@
               "uid": "loki"
             },
             "editorMode": "code",
-            "expr": "max(quantile_over_time(0.95, {service=\"realm-server\", env=\"$env\"} |= \"boxel:operations\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:operations\" | kind=\"policy-decision\" | realmURL=~\".*${realm}.*\" | predicates > 0 | hypothetical=\"false\" | unwrap predicateMs [$__interval]))",
+            "expr": "quantile_over_time(0.95, {service=\"realm-server\", env=\"$env\"} |= \"boxel:operations\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:operations\" | kind=\"policy-decision\" | realmURL=~\".*${realm}.*\" | predicates > 0 | hypothetical=\"false\" | unwrap predicateMs [$__interval]) by ()",
             "legendFormat": "p95",
             "refId": "B",
             "queryType": "range"
@@ -1239,7 +1273,7 @@
               "uid": "loki"
             },
             "editorMode": "code",
-            "expr": "max(quantile_over_time(0.5, {service=\"realm-server\", env=\"$env\"} |= \"boxel:operations\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:operations\" | kind=\"policy-search-scope\" | realmURL=~\".*${realm}.*\" | hypothetical=\"false\" | unwrap evaluationMs [$__interval]))",
+            "expr": "quantile_over_time(0.5, {service=\"realm-server\", env=\"$env\"} |= \"boxel:operations\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:operations\" | kind=\"policy-search-scope\" | realmURL=~\".*${realm}.*\" | hypothetical=\"false\" | unwrap evaluationMs [$__interval]) by ()",
             "legendFormat": "p50",
             "refId": "A",
             "queryType": "range"
@@ -1250,7 +1284,7 @@
               "uid": "loki"
             },
             "editorMode": "code",
-            "expr": "max(quantile_over_time(0.95, {service=\"realm-server\", env=\"$env\"} |= \"boxel:operations\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:operations\" | kind=\"policy-search-scope\" | realmURL=~\".*${realm}.*\" | hypothetical=\"false\" | unwrap evaluationMs [$__interval]))",
+            "expr": "quantile_over_time(0.95, {service=\"realm-server\", env=\"$env\"} |= \"boxel:operations\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:operations\" | kind=\"policy-search-scope\" | realmURL=~\".*${realm}.*\" | hypothetical=\"false\" | unwrap evaluationMs [$__interval]) by ()",
             "legendFormat": "p95",
             "refId": "B",
             "queryType": "range"
@@ -1381,7 +1415,7 @@
               "uid": "loki"
             },
             "editorMode": "code",
-            "expr": "max by (outcome) (quantile_over_time(0.95, {service=\"realm-server\", env=\"$env\"} |= \"boxel:operations\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:operations\" | kind=\"policy-compile\" | realmURL=~\".*${realm}.*\" | unwrap durationMs [$__interval]) by (outcome))",
+            "expr": "quantile_over_time(0.95, {service=\"realm-server\", env=\"$env\"} |= \"boxel:operations\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:operations\" | kind=\"policy-compile\" | realmURL=~\".*${realm}.*\" | unwrap durationMs [$__interval]) by (outcome)",
             "legendFormat": "{{outcome}}",
             "refId": "A",
             "queryType": "range"

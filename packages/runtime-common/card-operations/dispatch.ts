@@ -836,7 +836,7 @@ async function resolveAndGate(
     }
     let started = performance.now();
     try {
-      loaded = await loadPolicy(core);
+      loaded = { ...(await loadPolicy(core)), started };
     } catch (e: unknown) {
       recordPolicyLoadFailure(core, scope, name, started, e);
       throw e;
