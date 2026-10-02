@@ -39,6 +39,7 @@ import {
   realmSecretSeed,
   runTestRealmServerWithRealms,
   setupDB,
+  waitUntil,
 } from '../helpers/index.ts';
 import { setupCatalogTestSubset } from '../helpers/catalog-test-subset.ts';
 import { createJWT as createRealmServerJWT } from '../../utils/jwt.ts';
@@ -47,7 +48,7 @@ import { createJWT as createRealmServerJWT } from '../../utils/jwt.ts';
 // A search a realm's policy scopes: the grants a `query` policy compiled to
 // filters, composed into the query a realm runs for a caller its ACL declined.
 //
-// Seven realms on one server, one per answer a realm can give a caller it does
+// Eleven realms on one server, one per answer a realm can give a caller it does
 // not let read outright. The types live in a public library realm so every
 // other realm can hold cards of them.
 //
@@ -62,6 +63,14 @@ import { createJWT as createRealmServerJWT } from '../../utils/jwt.ts';
 //   every open schedule and every posted notice. It grants a read of a
 //   provider's own schedules only, and no read of a notice, so what a caller
 //   may find and what they may read differ in both directions.
+// - Missing: its `realm.json` names a policy card the realm does not hold.
+// - Withheld: its policy grants `query` over every open schedule, and a test
+//   withholds the latest index visit of its policy card.
+// - Borrowed: the same, with its policy card stored in the library realm, as
+//   a school's policy lives in its organization's realm.
+// - Subtypes: its policy admits a provider's own classrooms, and it holds
+//   classrooms of types descending from the rule's, one of which computes the
+//   owner its cards are indexed under.
 //
 // Every card a provider could be admitted to in one realm has a twin in the
 // realms that must not admit it, so a filter applied to the wrong realm's
@@ -75,6 +84,10 @@ const DENIES = 'http://127.0.0.1:4444/denies/';
 const UNFILTERABLE = 'http://127.0.0.1:4444/unfilterable/';
 const PRIVATE = 'http://127.0.0.1:4444/private/';
 const ENUMERABLE = 'http://127.0.0.1:4444/enumerable/';
+const MISSING = 'http://127.0.0.1:4444/missing/';
+const WITHHELD = 'http://127.0.0.1:4444/withheld/';
+const BORROWED = 'http://127.0.0.1:4444/borrowed/';
+const SUBTYPES = 'http://127.0.0.1:4444/subtypes/';
 
 const OWNER = '@owner:localhost';
 const PROVIDER_A = '@provider-a:localhost';
@@ -89,6 +102,8 @@ const REALM_POLICY = {
 
 const SCHEDULE = { module: `${LIB}schedule`, name: 'ServicePlanSchedule' };
 const NOTICE = { module: `${LIB}notice`, name: 'Notice' };
+const CLASSROOM = { module: `${LIB}classroom`, name: 'Classroom' };
+const ASSIGNED = { module: `${LIB}classroom`, name: 'AssignedClassroom' };
 
 // `listOpen` does not compare against the caller, so two callers asking it
 // of the same realms send the same request: whatever tells their answers
@@ -144,7 +159,64 @@ const NOTICE_MODULE = `
   }
 `;
 
+// Two types descending from `Classroom`. `AssignedClassroom` computes the
+// owner a card of it is indexed under, so the index holds provider A's id for
+// every one of them while their stored source holds none. `ReassignedClassroom`
+// does the same, and the realm starts with no card of it.
+// `ElectiveClassroom` adds a field and declares the owner as `Classroom` does.
+const CLASSROOM_MODULE = `
+  import { contains, field, CardDef } from "@cardstack/base/card-api";
+  import StringField from "@cardstack/base/string";
+  import NumberField from "@cardstack/base/number";
+  import { operation } from "@cardstack/base/operations";
+
+  export class Classroom extends CardDef {
+    @field title = contains(StringField);
+    @field ownerId = contains(StringField);
+    @field visibility = contains(StringField);
+    @field rank = contains(NumberField);
+
+    @operation static listClassrooms = {
+      base: 'query',
+      query: {
+        filter: { type: () => Classroom },
+        sort: [{ on: () => Classroom, by: 'rank', direction: 'asc' }],
+      },
+    };
+
+    @operation static listVisibleClassrooms = {
+      base: 'query',
+      query: {
+        filter: { type: () => Classroom },
+        sort: [{ on: () => Classroom, by: 'rank', direction: 'asc' }],
+      },
+    };
+  }
+
+  export class AssignedClassroom extends Classroom {
+    @field ownerId = contains(StringField, {
+      computeVia: function () {
+        return '${PROVIDER_A}';
+      },
+    });
+  }
+
+  export class ReassignedClassroom extends Classroom {
+    @field ownerId = contains(StringField, {
+      computeVia: function () {
+        return '${PROVIDER_A}';
+      },
+    });
+  }
+
+  export class ElectiveClassroom extends Classroom {
+    @field elective = contains(StringField);
+  }
+`;
+
 const OWN = '.providerId == actor()';
+const OWN_CLASSROOM = '.ownerId == actor()';
+const OWN_OR_PUBLIC_CLASSROOM = `${OWN_CLASSROOM} or .visibility == "public"`;
 const OPEN = '.status == "open"';
 const POSTED = '.status == "posted"';
 // Refused by the `predicate` profile, so its grant compiles no filter. It
@@ -286,6 +358,63 @@ const ENUMERABLE_CARDS: Record<string, string> = {
   }),
 };
 
+function classroom(
+  name: string,
+  attributes: {
+    title: string;
+    rank: number;
+    ownerId?: string;
+    visibility?: string;
+  },
+) {
+  return JSON.stringify({
+    data: {
+      type: 'card',
+      attributes,
+      meta: { adoptsFrom: { module: rri(CLASSROOM.module), name } },
+    },
+  });
+}
+
+// In rank order, provider A's own classrooms sit between cards of the type
+// that computes its owner, so a page filtered after the fact would come back
+// short.
+const SUBTYPE_CLASSROOMS: Record<string, string> = {
+  'classrooms/a-1.json': classroom('Classroom', {
+    title: 'A 1',
+    rank: 1,
+    ownerId: PROVIDER_A,
+  }),
+  'classrooms/assigned-2.json': classroom('AssignedClassroom', {
+    title: 'Assigned 2',
+    rank: 2,
+  }),
+  'classrooms/elective-3.json': classroom('ElectiveClassroom', {
+    title: 'Elective 3',
+    rank: 3,
+    ownerId: PROVIDER_A,
+  }),
+  'classrooms/assigned-4.json': classroom('AssignedClassroom', {
+    title: 'Assigned 4',
+    rank: 4,
+    visibility: 'public',
+  }),
+  'classrooms/b-5.json': classroom('Classroom', {
+    title: 'B 5',
+    rank: 5,
+    ownerId: PROVIDER_B,
+  }),
+  'classrooms/a-6.json': classroom('Classroom', {
+    title: 'A 6',
+    rank: 6,
+    ownerId: PROVIDER_A,
+  }),
+};
+
+const A_OWN_CLASSROOMS = ['a-1', 'elective-3', 'a-6'].map(
+  (name) => `${SUBTYPES}classrooms/${name}`,
+);
+
 // One of provider A's schedules, for a realm that must not admit it.
 function aOpen(title = 'A open') {
   return {
@@ -362,6 +491,10 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
             fileSystem: {
               'schedule.gts': SCHEDULE_MODULE,
               'notice.gts': NOTICE_MODULE,
+              'policies/borrowed.json': policyCard([
+                { operation: 'query', where: OPEN },
+              ]),
+              'classroom.gts': CLASSROOM_MODULE,
             },
             permissions: { ...owner, '*': ['read'] },
           },
@@ -442,6 +575,58 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
             },
             permissions: { ...owner },
           },
+          {
+            realmURL: new URL(MISSING),
+            fileSystem: {
+              'realm.json': withPolicy('Missing', MISSING),
+              ...aOpen(),
+            },
+            permissions: { ...owner },
+          },
+          {
+            realmURL: new URL(WITHHELD),
+            fileSystem: {
+              'realm.json': withPolicy('Withheld', WITHHELD),
+              'policies/policy.json': policyCard([
+                { operation: 'query', where: OPEN },
+              ]),
+              ...aOpen(),
+            },
+            permissions: { ...owner },
+          },
+          {
+            realmURL: new URL(BORROWED),
+            fileSystem: {
+              'realm.json': realmConfigCardJSON({
+                name: 'Borrowed',
+                policy: `${LIB}policies/borrowed`,
+              }),
+              ...aOpen(),
+            },
+            permissions: { ...owner },
+          },
+          {
+            realmURL: new URL(SUBTYPES),
+            fileSystem: {
+              'realm.json': withPolicy('Subtypes', SUBTYPES),
+              'policies/policy.json': policyRules([
+                {
+                  targetType: CLASSROOM,
+                  grants: [
+                    { operation: 'listClassrooms', where: OWN_CLASSROOM },
+                    { operation: 'query', where: OWN_CLASSROOM },
+                    { operation: 'read', where: OWN_CLASSROOM },
+                    {
+                      operation: 'listVisibleClassrooms',
+                      where: OWN_OR_PUBLIC_CLASSROOM,
+                    },
+                  ],
+                },
+              ]),
+              ...SUBTYPE_CLASSROOMS,
+            },
+            permissions: { ...owner },
+          },
         ],
         dbAdapter,
         publisher,
@@ -482,6 +667,8 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       },
     });
 
+    // `duringRender` sends the request as a realm's own render sends it: on
+    // the realm-authority session it renders under, from a tab that marks it.
     function federatedSearch(
       body: object,
       user?: string,
@@ -499,7 +686,11 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         req = req.set(
           'Authorization',
           `Bearer ${createRealmServerJWT(
-            { user, sessionRoom: `session-room-${user}` },
+            {
+              user,
+              sessionRoom: `session-room-${user}`,
+              ...(duringRender ? { realmAuthority: true as const } : {}),
+            },
             realmSecretSeed,
           )}`,
         );
@@ -895,6 +1086,218 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       });
     });
 
+    module('a type descending from the rule type', function () {
+      const CLASSROOMS = { 'item.on': CLASSROOM };
+
+      function listClassrooms(page?: object) {
+        return {
+          operation: 'listClassrooms',
+          on: CLASSROOM,
+          realms: [SUBTYPES],
+          ...(page ? { page } : {}),
+        };
+      }
+
+      function getAs(user: string, path: string) {
+        return request
+          .get(`${new URL(SUBTYPES).pathname}${path}`)
+          .set('Accept', SupportedMimeType.CardJson)
+          .set('Authorization', `Bearer ${createJWT(realms[SUBTYPES], user)}`);
+      }
+
+      test("a card whose type computes the field a grant's filter reads is not found through the grant, just as it is not readable through it", async function (assert) {
+        assert.strictEqual(
+          (await getAs(PROVIDER_A, 'classrooms/assigned-2')).status,
+          404,
+          'its stored source holds no owner, so the read grant refuses it',
+        );
+        assert.strictEqual(
+          (await getAs(PROVIDER_A, 'classrooms/a-1')).status,
+          200,
+          'while a plain classroom of their own is readable',
+        );
+        assert.strictEqual(
+          (await getAs(PROVIDER_A, 'classrooms/elective-3')).status,
+          200,
+          'and so is one of a descendant declaring the owner as `Classroom` does',
+        );
+
+        let named = await federatedSearch(listClassrooms(), PROVIDER_A);
+        assert.strictEqual(named.status, 200, 'HTTP 200 status');
+        assert.deepEqual(
+          ids(named),
+          A_OWN_CLASSROOMS,
+          'the named query finds their own classrooms, the elective among them, and neither assigned one, though the index holds their id as its owner',
+        );
+
+        let adHoc = await federatedSearch(
+          { filter: CLASSROOMS, realms: [SUBTYPES] },
+          PROVIDER_A,
+        );
+        assert.deepEqual(
+          ids(adHoc).sort(),
+          [...A_OWN_CLASSROOMS].sort(),
+          'and so does an ad-hoc search',
+        );
+
+        let own = await realmSearch(
+          SUBTYPES,
+          { filter: CLASSROOMS },
+          PROVIDER_A,
+        );
+        assert.deepEqual(
+          ids(own).sort(),
+          [...A_OWN_CLASSROOMS].sort(),
+          "and the realm's own search",
+        );
+
+        let onSubtype = await federatedSearch(
+          { filter: { 'item.on': ASSIGNED }, realms: [SUBTYPES] },
+          PROVIDER_A,
+        );
+        assert.deepEqual(
+          ids(onSubtype),
+          [],
+          'and a search anchored on the descendant itself finds none of its cards',
+        );
+
+        let owner = await federatedSearch(
+          { filter: CLASSROOMS, realms: [SUBTYPES] },
+          OWNER,
+        );
+        assert.deepEqual(
+          ids(owner).sort(),
+          Object.keys(SUBTYPE_CLASSROOMS)
+            .map((path) => `${SUBTYPES}${path.replace(/\.json$/, '')}`)
+            .sort(),
+          'a caller who reads the realm outright still finds every classroom',
+        );
+      });
+
+      test('a page of what the grant finds is full, not short by the cards it leaves out', async function (assert) {
+        let pages: string[][] = [];
+        let totals: number[] = [];
+        for (let number = 0; number < 2; number++) {
+          let response = await federatedSearch(
+            listClassrooms({ number, size: 2 }),
+            PROVIDER_A,
+          );
+          assert.strictEqual(response.status, 200, `page ${number}: HTTP 200`);
+          pages.push(ids(response));
+          totals.push(response.body.meta.page.total);
+        }
+        assert.deepEqual(pages, [
+          A_OWN_CLASSROOMS.slice(0, 2),
+          A_OWN_CLASSROOMS.slice(2),
+        ]);
+        assert.deepEqual(totals, [3, 3]);
+      });
+
+      test("a grant records as misreading a path the realm's own descendants that declare it differently, and a rule type with none composes as it did", async function (assert) {
+        let policy = await realms[SUBTYPES].getCompiledPolicy();
+        assert.deepEqual(policy?.issues, [], 'every grant compiles');
+        let assigned = [{ type: { name: 'AssignedClassroom' } }];
+        assert.deepEqual(
+          policy?.rules[0].grants.map((grant) => ({
+            operation: grant.operation,
+            misread: grant.misreadingTypes?.map(({ path, types }) => ({
+              path,
+              types: types.map(({ type }) => ({
+                type: { name: 'name' in type ? type.name : undefined },
+              })),
+            })),
+          })),
+          [
+            {
+              operation: 'listClassrooms',
+              misread: [{ path: 'ownerId', types: assigned }],
+            },
+            {
+              operation: 'query',
+              misread: [{ path: 'ownerId', types: assigned }],
+            },
+            { operation: 'read', misread: undefined },
+            {
+              operation: 'listVisibleClassrooms',
+              misread: [{ path: 'ownerId', types: assigned }],
+            },
+          ],
+          'each query grant records the one descendant the realm holds cards of that computes the owner, against the owner alone, and a read grant carries no filter to record anything against',
+        );
+
+        let grants = await realms[GRANTS].getCompiledPolicy();
+        assert.true(
+          grants?.rules
+            .flatMap((rule) => rule.grants)
+            .every((grant) => !('misreadingTypes' in grant)),
+          'a policy whose rule type has no descendant in its realm records nothing on any grant',
+        );
+      });
+
+      test("a card whose type misreads one branch of a grant's predicate is still found through a branch it reads alike", async function (assert) {
+        let asA = await federatedSearch(
+          {
+            operation: 'listVisibleClassrooms',
+            on: CLASSROOM,
+            realms: [SUBTYPES],
+          },
+          PROVIDER_A,
+        );
+        assert.strictEqual(asA.status, 200, 'HTTP 200 status');
+        assert.deepEqual(
+          ids(asA),
+          ['a-1', 'elective-3', 'assigned-4', 'a-6'].map(
+            (name) => `${SUBTYPES}classrooms/${name}`,
+          ),
+          'their own classrooms, and the public assigned one, found through `visibility`; not the assigned one that is not public, which only the owner branch could admit',
+        );
+
+        let asB = await federatedSearch(
+          {
+            operation: 'listVisibleClassrooms',
+            on: CLASSROOM,
+            realms: [SUBTYPES],
+          },
+          PROVIDER_B,
+        );
+        assert.deepEqual(
+          ids(asB),
+          ['assigned-4', 'b-5'].map((name) => `${SUBTYPES}classrooms/${name}`),
+          'another caller finds the public assigned classroom too, and their own',
+        );
+      });
+
+      test('a card of a descendant the realm held none of is left out once it is written', async function (assert) {
+        let path = 'classrooms/reassigned-7.json';
+        let id = `${SUBTYPES}classrooms/reassigned-7`;
+        await realms[SUBTYPES].write(
+          path,
+          classroom('ReassignedClassroom', { title: 'Reassigned 7', rank: 7 }),
+        );
+        try {
+          let owner = await federatedSearch(
+            { filter: CLASSROOMS, realms: [SUBTYPES] },
+            OWNER,
+          );
+          assert.true(ids(owner).includes(id), 'the card is indexed');
+
+          let named = await federatedSearch(listClassrooms(), PROVIDER_A);
+          assert.deepEqual(
+            ids(named),
+            A_OWN_CLASSROOMS,
+            'the named query does not find it, though the index holds their id as its owner',
+          );
+          let adHoc = await federatedSearch(
+            { filter: CLASSROOMS, realms: [SUBTYPES] },
+            PROVIDER_A,
+          );
+          assert.false(ids(adHoc).includes(id), 'nor does an ad-hoc search');
+        } finally {
+          await realms[SUBTYPES].delete(path);
+        }
+      });
+    });
+
     module('a batch target found by query', function () {
       function invokeRead(target: Record<string, unknown>) {
         return {
@@ -1062,6 +1465,135 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           { code: 'target-not-found', detail: 'no such target' },
           'the query found the notice, and the gate refused the read of it',
         );
+      });
+    });
+
+    // A realm that names a policy it cannot read as one. What such a policy
+    // would grant is unknown, which is not the same as nothing, so the realm
+    // answers as one that failed, as the gate answers such a caller with a
+    // 500.
+    module('a realm whose policy does not compile', function () {
+      const SCHEDULES = { 'item.on': SCHEDULE };
+
+      // What the index writer leaves when a visit fails for a reason outside
+      // the card: the row keeps the earlier visit's document and reads as
+      // healthy, and the verdict is recorded in its diagnostics.
+      async function withholdLatestVisit(card: string) {
+        await db.execute(
+          `UPDATE boxel_index
+           SET diagnostics = jsonb_set(
+             COALESCE(diagnostics, '{}'::jsonb),
+             '{gatewayFailure}',
+             '["instance"]'::jsonb
+           )
+           WHERE url = $1 AND type = 'instance'`,
+          { bind: [`${card}.json`] },
+        );
+      }
+
+      test('one whose policy card is missing is counted as failed, not as granting nothing', async function (assert) {
+        let response = await federatedSearch(
+          { filter: SCHEDULES, realms: [ENUMERABLE, MISSING] },
+          PROVIDER_A,
+        );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        assert.deepEqual(inRealm(MISSING, response), [], 'none from it');
+        assert.deepEqual(
+          inRealm(ENUMERABLE, response).sort(),
+          [`${ENUMERABLE}schedules/a-open`, `${ENUMERABLE}schedules/b-open`],
+          'and the realm beside it answers under its own policy',
+        );
+        assert.true(
+          response.body.meta.incomplete,
+          'the result says it is missing a realm, rather than passing that realm off as holding nothing',
+        );
+      });
+
+      test('its own search is refused as a read of one of its cards is', async function (assert) {
+        let card = await request
+          .get(`${new URL(MISSING).pathname}schedules/a-open`)
+          .set('Accept', SupportedMimeType.CardJson)
+          .set(
+            'Authorization',
+            `Bearer ${createJWT(realms[MISSING], PROVIDER_A)}`,
+          );
+        assert.strictEqual(card.status, 500, 'the read is refused');
+
+        let own = await realmSearch(MISSING, { filter: SCHEDULES }, PROVIDER_A);
+        assert.strictEqual(own.status, 500, 'and so is the search');
+        assert.strictEqual(
+          own.body.errors?.[0]?.title,
+          'Policy unavailable',
+          'with the refusal the gate gives',
+        );
+      });
+
+      // A search of `realm`, whose policy card is `card`, after that card's
+      // latest index visit is withheld: counted as failed, and answering
+      // again once the visit the search asked for lands, with no edit to the
+      // card.
+      async function withheldUntilVisited(
+        assert: Assert,
+        realm: string,
+        card: string,
+      ) {
+        await withholdLatestVisit(card);
+        // Dropped without a refresh, so the search below is the read that
+        // finds the row withheld.
+        realms[realm].__testOnlyClearCaches();
+
+        let response = await federatedSearch(
+          { filter: SCHEDULES, realms: [ENUMERABLE, realm] },
+          PROVIDER_A,
+        );
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        assert.deepEqual(inRealm(realm, response), [], 'none from it');
+        assert.deepEqual(
+          inRealm(ENUMERABLE, response).sort(),
+          [`${ENUMERABLE}schedules/a-open`, `${ENUMERABLE}schedules/b-open`],
+          'and the realm beside it answers under its own policy',
+        );
+        assert.true(
+          response.body.meta.incomplete,
+          'the result says it is missing a realm, rather than passing an earlier visit of the policy off as the policy',
+        );
+
+        let healed = await waitUntil(
+          async () => {
+            let next = await federatedSearch(
+              { filter: SCHEDULES, realms: [realm] },
+              PROVIDER_A,
+            );
+            return next.body.meta?.incomplete ? undefined : next;
+          },
+          {
+            timeout: 30_000,
+            timeoutMessage: 'the visit of the policy card lands',
+          },
+        );
+        assert.deepEqual(
+          ids(healed!),
+          [`${realm}schedules/a-open`],
+          'the realm answers with the rows its policy admits',
+        );
+        assert.strictEqual(
+          realms[realm].__testOnlyPolicyCacheStats().revisits,
+          1,
+          'one visit was asked for, however many searches found the card withheld',
+        );
+      }
+
+      test('one whose policy card’s latest visit was withheld is counted as failed, until the card is visited again', async function (assert) {
+        await withheldUntilVisited(
+          assert,
+          WITHHELD,
+          `${WITHHELD}policies/policy`,
+        );
+      });
+
+      test('the same, for a policy card stored in another realm, which is the realm visited', async function (assert) {
+        await withheldUntilVisited(assert, BORROWED, `${LIB}policies/borrowed`);
       });
     });
 
@@ -1260,7 +1792,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         assert.strictEqual(response.body.errors[0].code, 'unknown-operation');
       });
 
-      test('a named query a render is waiting on reads no declaration through a realm only a policy reaches, since no policy admits a render', async function (assert) {
+      test("a named query a realm's own render is waiting on reads no declaration through a realm only a policy reaches, since no policy admits a render", async function (assert) {
         let granted = await federatedSearch(listOpen([GRANTS]), PROVIDER_A, {
           duringRender: true,
         });

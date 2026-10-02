@@ -19,6 +19,7 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { setupRenderingTest } from 'ember-qunit';
 import { Choreo, motion } from 'glimmer-motion';
+import { setupChoreo } from 'glimmer-motion/choreo/test-support';
 import { animationsSettled } from 'glimmer-motion/test-support';
 import { module, test } from 'qunit';
 
@@ -32,6 +33,7 @@ const el = (sel: string) => document.querySelector(sel) as HTMLElement;
 module('Integration | choreo | continuity', function (hooks) {
   setupRenderingTest(hooks);
   setupFixtureViewport(hooks);
+  setupChoreo(hooks);
 
   test('a score replaced mid-flight carries the flight on, not to a snap', async function (assert) {
     class App extends Component {

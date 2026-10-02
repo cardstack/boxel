@@ -44,3 +44,5 @@ Gaps, and most belong to the page rather than the row:
 **Table**'s tokens for the row (`--card`, `--border`, `--stripe`, `--hover`, the mono eyebrow header voice) plus **Token**'s treatment for the type and default value, and `--muted-foreground` for the description.
 
 Nothing of its own. The type and default cells should use the mono voice — machine values as jewelry, Law 3 — so a reader can distinguish `'md'` the default from _md_ the prose.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

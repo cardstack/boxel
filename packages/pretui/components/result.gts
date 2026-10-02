@@ -139,63 +139,65 @@ export class Result extends Component<ResultSignature> {
       {{/if}}
     </section>
     <style scoped>
-      .pretui-result {
-        display: grid;
-        justify-items: center;
-        text-align: center;
-        gap: var(--space-3, 0.5rem);
-        padding: var(--space-9, 2.75rem) var(--space-6, 1.25rem);
-        min-inline-size: 0;
-      }
-      .pretui-result-mark {
-        display: grid;
-        place-items: center;
-        margin-block-end: var(--space-2, 0.375rem);
-        color: var(--pretui-result-hue);
-      }
-      .pretui-result-glyph {
-        display: grid;
-        place-items: center;
-        inline-size: 3.5rem;
-        block-size: 3.5rem;
-        border-radius: 50%;
-        font-size: 1.5rem;
-        font-weight: 600;
-        line-height: 1;
-        color: color-mix(in oklch, var(--foreground) 30%, var(--pretui-result-hue));
-        background: color-mix(in oklch, var(--pretui-result-hue) var(--pretui-chip-mix, 20%), var(--card));
-        box-shadow: 0 0 0 1px color-mix(in oklch, var(--pretui-result-hue) 45%, var(--border));
-      }
-      .pretui-result-code {
-        font-family: var(--font-serif);
-        font-size: var(--pretui-result-code-size, 4.5rem);
-        font-variant-numeric: tabular-nums;
-        line-height: 1;
-        letter-spacing: -0.02em;
-        color: color-mix(in oklch, var(--foreground) 25%, var(--pretui-result-hue));
-      }
-      .pretui-result-title {
-        font-family: var(--font-serif);
-        font-size: var(--text-heading, 1.1875rem);
-        color: var(--foreground);
-        max-inline-size: 36ch;
-      }
-      .pretui-result-desc {
-        margin: 0;
-        font-size: var(--text-ui-md, 0.8125rem);
-        color: var(--muted-foreground);
-        max-inline-size: 44ch;
-      }
-      .pretui-result-body {
-        inline-size: min(100%, 32rem);
-        text-align: start;
-      }
-      .pretui-result-extra {
-        display: flex;
-        flex-wrap: wrap;
-        justify-content: center;
-        gap: var(--space-3, 0.5rem);
-        margin-block-start: var(--space-3, 0.5rem);
+      @layer PretComponent {
+        .pretui-result {
+          display: grid;
+          justify-items: center;
+          text-align: center;
+          gap: var(--space-3, 0.5rem);
+          padding: var(--space-9, 2.75rem) var(--space-6, 1.25rem);
+          min-inline-size: 0;
+        }
+        .pretui-result-mark {
+          display: grid;
+          place-items: center;
+          margin-block-end: var(--space-2, 0.375rem);
+          color: var(--pretui-result-hue);
+        }
+        .pretui-result-glyph {
+          display: grid;
+          place-items: center;
+          inline-size: 3.5rem;
+          block-size: 3.5rem;
+          border-radius: 50%;
+          font-size: 1.5rem;
+          font-weight: 600;
+          line-height: 1;
+          color: color-mix(in oklch, var(--foreground) 30%, var(--pretui-result-hue));
+          background: color-mix(in oklch, var(--pretui-result-hue) var(--pretui-chip-mix, 20%), var(--card));
+          box-shadow: 0 0 0 1px color-mix(in oklch, var(--pretui-result-hue) 45%, var(--border));
+        }
+        .pretui-result-code {
+          font-family: var(--font-serif);
+          font-size: var(--pretui-result-code-size, 4.5rem);
+          font-variant-numeric: tabular-nums;
+          line-height: 1;
+          letter-spacing: -0.02em;
+          color: color-mix(in oklch, var(--foreground) 25%, var(--pretui-result-hue));
+        }
+        .pretui-result-title {
+          font-family: var(--font-serif);
+          font-size: var(--text-heading, 1.1875rem);
+          color: var(--foreground);
+          max-inline-size: 36ch;
+        }
+        .pretui-result-desc {
+          margin: 0;
+          font-size: var(--text-ui-md, 0.8125rem);
+          color: var(--muted-foreground);
+          max-inline-size: 44ch;
+        }
+        .pretui-result-body {
+          inline-size: min(100%, 32rem);
+          text-align: start;
+        }
+        .pretui-result-extra {
+          display: flex;
+          flex-wrap: wrap;
+          justify-content: center;
+          gap: var(--space-3, 0.5rem);
+          margin-block-start: var(--space-3, 0.5rem);
+        }
       }
     </style>
   </template>

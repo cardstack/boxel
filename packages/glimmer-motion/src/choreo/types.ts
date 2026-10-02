@@ -2,8 +2,7 @@
  * The vocabulary of a choreography — boxel-motion's Sprite / Changeset /
  * AnimationDefinition, as this binding keeps them. See docs/choreography.md.
  */
-import type { VisualElement } from 'motion-dom';
-
+import type { MotionParticipant } from '../participant.ts';
 import type { AnchorRef } from './anchors.ts';
 import type { BeaconRef } from './beacons.ts';
 import type { GestureRef } from './gesture.ts';
@@ -42,24 +41,8 @@ export interface Bounds {
   substance?: Rect;
 }
 
-/** what a choreography needs from one {{motion}} element */
-export interface ChoreoNode {
-  element?: Element;
-  /** the Presence it lives under has let it go, and this run is done with it */
-  exitComplete(): void;
-  id: string | null;
-  isPresent: boolean;
-  /** stable identity for this node, for bookkeeping keyed per element */
-  layoutKey: string;
-  /** carries its own animate/exit/initial — a second scheduler (§5.3) */
-  ownAnimation?: boolean;
-  /** wrapped by a <Presence> that manages it — double retention (§5.3) */
-  presenceManaged?: boolean;
-  /** unmount a VisualElement whose teardown was deferred to the choreography */
-  release(): void;
-  role: string | null;
-  visualElement?: VisualElement;
-}
+/** what a choreography needs from one {{motion}} element: a participant of the region it is in */
+export type ChoreoNode = MotionParticipant;
 
 export interface Sprite {
   /** this removed sprite's identity was claimed by an arriving element as its counterpart */

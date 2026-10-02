@@ -24,6 +24,10 @@
       "types": "./declarations/test-support/index.d.ts",
       "default": "./dist/test-support/index.js"
     },
+    "./choreo/test-support": {
+      "types": "./declarations/choreo/test-support/index.d.ts",
+      "default": "./dist/choreo/test-support/index.js"
+    },
     "./*": {
       "types": "./declarations/*.d.ts",
       "default": "./dist/*.js"
@@ -64,17 +68,17 @@
   },
   "dependencies": {
     "@embroider/addon-shim": "^1.8.9",
-    "decorator-transforms": "catalog:"
+    "decorator-transforms": "catalog:",
+    "framer-motion": "catalog:"
   },
   "devDependencies": {
     "@babel/core": "catalog:",
-    "@babel/eslint-parser": "^7.25.1",
     "@babel/plugin-transform-typescript": "catalog:",
     "@babel/runtime": "catalog:",
+    "@cardstack/choreo-eslint-config": "workspace:*",
     "@ember/library-tsconfig": "^1.1.3",
     "@ember/test-helpers": "^4.0.5",
     "@embroider/addon-dev": "^8.0.0",
-    "@eslint/js": "^9.39.4",
     "@glimmer/component": "catalog:",
     "@glimmer/tracking": "^1.1.2",
     "@glimmer/validator": "^0.95.0",
@@ -88,20 +92,12 @@
     "ember-template-lint": "catalog:",
     "esbuild": "^0.25.0",
     "eslint": "^9.39.4",
-    "eslint-config-prettier": "catalog:",
-    "eslint-plugin-ember": "catalog:",
-    "eslint-plugin-import": "catalog:",
-    "eslint-plugin-n": "catalog:",
-    "eslint-plugin-simple-import-sort": "^12.1.1",
-    "eslint-plugin-typescript-sort-keys": "catalog:",
-    "globals": "^15.15.0",
     "motion-dom": "catalog:",
     "motion-utils": "catalog:",
     "prettier": "catalog:",
     "prettier-plugin-ember-template-tag": "catalog:",
     "rollup": "catalog:",
-    "typescript": "catalog:",
-    "typescript-eslint": "catalog:"
+    "typescript": "catalog:"
   },
   "peerDependenciesMeta": {
     "@ember/test-helpers": {
@@ -120,7 +116,7 @@
     "@glimmer/tracking": "^1.1.2",
     "ember-modifier": "^4.3.0",
     "ember-source": ">=5.4.0",
-    "motion-dom": "^13.1.1",
-    "motion-utils": "^13.0.0"
+    "motion-dom": "^13.4.5",
+    "motion-utils": "^13.3.0"
   }
 }

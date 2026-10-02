@@ -70,50 +70,54 @@ class DockItem extends Component<DockItemSignature> {
       </span>
     </button>
     <style scoped>
-      .pretui-dock-item {
-        --pretui-dock-scale: 1;
-        width: calc(var(--pretui-dock-size, 40px) * var(--pretui-dock-scale));
-        height: calc(var(--pretui-dock-size, 40px) * var(--pretui-dock-scale));
-        flex: none;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        padding: 0;
-        border: 0;
-        border-radius: calc(var(--radius-surface, 10px) * 0.8);
-        background: var(--inset, var(--boxel-100));
-        color: var(--muted-foreground);
-        box-shadow: 0 0 0 1px var(--border);
-        cursor: pointer;
-        transition:
-          width var(--pretui-dur-snap, 180ms) var(--pretui-ease-snap, ease),
-          height var(--pretui-dur-snap, 180ms) var(--pretui-ease-snap, ease);
-      }
-      .pretui-dock-item:hover,
-      .pretui-dock-item:focus-visible {
-        --pretui-dock-scale: 1.4;
-        color: var(--foreground);
-      }
-      /* one-sibling falloff: next via `+`, previous via :has() */
-      .pretui-dock-item:hover + .pretui-dock-item,
-      .pretui-dock-item:has(+ .pretui-dock-item:hover) {
-        --pretui-dock-scale: 1.2;
-      }
-      .pretui-dock-item:focus-visible {
-        outline: 2px solid var(--ring);
-        outline-offset: 2px;
-      }
-      .pretui-dock-item-glyph {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        width: 55%;
-        height: 55%;
-        pointer-events: none;
-      }
-      @media (prefers-reduced-motion: reduce) {
+      @layer PretComponent {
         .pretui-dock-item {
-          transition: none;
+          --pretui-dock-scale: 1;
+          width: calc(var(--pretui-dock-size, 40px) * var(--pretui-dock-scale));
+          height: calc(
+            var(--pretui-dock-size, 40px) * var(--pretui-dock-scale)
+          );
+          flex: none;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          padding: 0;
+          border: 0;
+          border-radius: calc(var(--radius-surface, 10px) * 0.8);
+          background: var(--inset, var(--boxel-100));
+          color: var(--muted-foreground);
+          box-shadow: 0 0 0 1px var(--border);
+          cursor: pointer;
+          transition:
+            width var(--pretui-dur-snap, 180ms) var(--pretui-ease-snap, ease),
+            height var(--pretui-dur-snap, 180ms) var(--pretui-ease-snap, ease);
+        }
+        .pretui-dock-item:hover,
+        .pretui-dock-item:focus-visible {
+          --pretui-dock-scale: 1.4;
+          color: var(--foreground);
+        }
+        /* one-sibling falloff: next via `+`, previous via :has() */
+        .pretui-dock-item:hover + .pretui-dock-item,
+        .pretui-dock-item:has(+ .pretui-dock-item:hover) {
+          --pretui-dock-scale: 1.2;
+        }
+        .pretui-dock-item:focus-visible {
+          outline: 2px solid var(--ring);
+          outline-offset: 2px;
+        }
+        .pretui-dock-item-glyph {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 55%;
+          height: 55%;
+          pointer-events: none;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .pretui-dock-item {
+            transition: none;
+          }
         }
       }
     </style>
@@ -139,20 +143,22 @@ export class Dock extends Component<DockSignature> {
       {{yield (hash Item=DockItem)}}
     </div>
     <style scoped>
-      /* The rail's height is pinned to the RESTING item size; magnified
-         items grow upward past the rail top (overflow stays visible),
-         pushing siblings apart like the original's width animation. */
-      .pretui-dock {
-        display: inline-flex;
-        align-items: flex-end;
-        gap: var(--space-3, 8px);
-        height: calc(var(--pretui-dock-size, 40px) + 2 * var(--space-3, 8px));
-        padding: var(--space-3, 8px);
-        border-radius: var(--radius-surface, 10px);
-        background: var(--card);
-        box-shadow:
-          0 0 0 1px var(--border),
-          var(--pretui-shadow-card, 0 1px 3px rgba(20, 18, 26, 0.1));
+      @layer PretComponent {
+        /* The rail's height is pinned to the RESTING item size; magnified
+           items grow upward past the rail top (overflow stays visible),
+           pushing siblings apart like the original's width animation. */
+        .pretui-dock {
+          display: inline-flex;
+          align-items: flex-end;
+          gap: var(--space-3, 8px);
+          height: calc(var(--pretui-dock-size, 40px) + 2 * var(--space-3, 8px));
+          padding: var(--space-3, 8px);
+          border-radius: var(--radius-surface, 10px);
+          background: var(--card);
+          box-shadow:
+            0 0 0 1px var(--border),
+            var(--pretui-shadow-card, 0 1px 3px rgba(20, 18, 26, 0.1));
+        }
       }
     </style>
   </template>

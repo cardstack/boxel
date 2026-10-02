@@ -7,6 +7,7 @@ import Component from '@glimmer/component';
 import { setupRenderingTest } from 'ember-qunit';
 import LayoutGroup from 'glimmer-motion/layout-group';
 import motion from 'glimmer-motion/motion';
+import { setupMotion } from 'glimmer-motion/test-support';
 import { module, test } from 'qunit';
 
 import {
@@ -130,6 +131,7 @@ const variants: [string, boolean, boolean][] = [
 
 module('Integration | motion | cypress | Nested drag', function (hooks) {
   setupRenderingTest(hooks);
+  setupMotion(hooks);
   setupFixtureViewport(hooks);
 
   for (const [name, parentLayout, childLayout] of variants) {
@@ -238,6 +240,7 @@ module(
   'Integration | motion | cypress | Nested drag with constraints',
   function (hooks) {
     setupRenderingTest(hooks);
+    setupMotion(hooks);
     setupFixtureViewport(hooks);
 
     for (const [name, parentLayout, childLayout] of variants) {
@@ -322,6 +325,7 @@ module(
   'Integration | motion | cypress | Nested drag with alternate draggable axes',
   function (hooks) {
     setupRenderingTest(hooks);
+    setupMotion(hooks);
     setupFixtureViewport(hooks);
 
     for (const [name, parentLayout, childLayout] of variants) {
@@ -380,6 +384,7 @@ module(
   'Integration | motion | cypress | Nested drag with constraints and animation',
   function (hooks) {
     setupRenderingTest(hooks);
+    setupMotion(hooks);
     setupFixtureViewport(hooks);
 
     for (const [name, parentLayout, childLayout] of variants) {
@@ -458,6 +463,7 @@ module(
   'Integration | motion | cypress | Relative projection targets: Drag',
   function (hooks) {
     setupRenderingTest(hooks);
+    setupMotion(hooks);
     setupFixtureViewport(hooks);
 
     test('Child correctly follows parent', async function (assert) {

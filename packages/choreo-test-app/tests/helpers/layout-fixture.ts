@@ -214,6 +214,24 @@ export function trigger(
   return ev;
 }
 
+/**
+ * The `pointer(el, type, x, y)` of Motion's release-before-frame specs: a pointer event at viewport
+ * point (x, y), not relative to the element, with no `buttons` and not cancelable, as the specs build it.
+ */
+export function pointerAt(el: Element, type: string, x: number, y: number) {
+  el.dispatchEvent(
+    new PointerEvent(type, {
+      clientX: x,
+      clientY: y,
+      isPrimary: true,
+      bubbles: true,
+      pointerId: 1,
+      button: 0,
+      pointerType: 'mouse',
+    })
+  );
+}
+
 /** cy.click(): pointer + mouse down/up then click, at the element's centre */
 export async function cyClick(target: Element | string) {
   const el = typeof target === 'string' ? $(target) : target;

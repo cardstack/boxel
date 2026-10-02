@@ -163,201 +163,203 @@ export class MenuPanel extends Component<MenuPanelSignature> {
     </menu>
 
     <style scoped>
-      .pretui-menu {
-        /* anchored overlays must escape scroll clipping; measured on open
-           only — never during prerender (lint warns, accepted, same as
-           components/popup.gts) */
-        position: fixed;
-        top: 0;
-        left: 0;
-        /* Named, not invented. The kit's stacking components each picked their
-           own number, which is why none of them can be ordered against the
-           others; this consumes the shared scale and re-tints the moment the
-           token lands. The palette needs no z-index at all — a native
-           <dialog> lives in the top layer, above every stacking context. */
-        z-index: var(--pretui-z-dropdown, 60);
-        margin: 0;
-        padding: var(--pretui-menu-padding, 5px);
-        list-style: none;
-        min-width: var(--pretui-menu-min-width, 200px);
-        max-width: var(--pretui-menu-max-width, 320px);
-        max-height: min(60vh, 520px);
-        overflow-y: auto;
-        overscroll-behavior: contain;
-        background: var(--popover);
-        color: var(--foreground);
-        border-radius: var(--radius-surface, 10px);
-        box-shadow: var(
-          --pretui-shadow-overlay,
-          0 0 0 1px var(--border),
-          0 8px 28px rgb(0 0 0 / 0.16)
-        );
-        font-family: var(--font-sans);
-        font-size: var(--text-ui-md, 12.5px);
-        opacity: 1;
-        transform: none;
-        transition:
-          opacity 120ms cubic-bezier(0.23, 1, 0.32, 1),
-          transform 120ms cubic-bezier(0.23, 1, 0.32, 1);
-      }
-      @starting-style {
+      @layer PretComponent {
         .pretui-menu {
-          opacity: 0;
-          transform: translateY(-3px) scale(0.985);
+          /* anchored overlays must escape scroll clipping; measured on open
+             only — never during prerender (lint warns, accepted, same as
+             components/popup.gts) */
+          position: fixed;
+          top: 0;
+          left: 0;
+          /* Named, not invented. The kit's stacking components each picked their
+             own number, which is why none of them can be ordered against the
+             others; this consumes the shared scale and re-tints the moment the
+             token lands. The palette needs no z-index at all — a native
+             <dialog> lives in the top layer, above every stacking context. */
+          z-index: var(--pretui-z-dropdown, 60);
+          margin: 0;
+          padding: var(--pretui-menu-padding, 5px);
+          list-style: none;
+          min-width: var(--pretui-menu-min-width, 200px);
+          max-width: var(--pretui-menu-max-width, 320px);
+          max-height: min(60vh, 520px);
+          overflow-y: auto;
+          overscroll-behavior: contain;
+          background: var(--popover);
+          color: var(--foreground);
+          border-radius: var(--radius-surface, 10px);
+          box-shadow: var(
+            --pretui-shadow-overlay,
+            0 0 0 1px var(--border),
+            0 8px 28px rgb(0 0 0 / 0.16)
+          );
+          font-family: var(--font-sans);
+          font-size: var(--text-ui-md, 12.5px);
+          opacity: 1;
+          transform: none;
+          transition:
+            opacity 120ms cubic-bezier(0.23, 1, 0.32, 1),
+            transform 120ms cubic-bezier(0.23, 1, 0.32, 1);
         }
-      }
-      .pretui-menu menu {
-        margin: 0;
-        padding: 0;
-        list-style: none;
-      }
-      .pretui-menugroup {
-        display: block;
-      }
-      .pretui-menugroup[data-labelled='true'] {
-        padding-block-start: 3px;
-      }
-      .pretui-menugroup-label {
-        display: block;
-        padding-block: 3px;
-        padding-inline: 8px;
-        font-size: var(--text-ui-xs, 11px);
-        font-weight: 600;
-        letter-spacing: var(--track-eyebrow, 0.06em);
-        text-transform: uppercase;
-        color: var(--muted-foreground);
-      }
-      .pretui-menuitem {
-        position: relative;
-        display: grid;
-        grid-template-columns: 15px 1fr auto;
-        align-items: center;
-        gap: 8px;
-        min-height: var(--pretui-menu-item-height, 28px);
-        padding-block: 3px;
-        padding-inline: 6px 8px;
-        border-radius: var(--radius-control, 6px);
-        color: inherit;
-        cursor: default;
-        user-select: none;
-        scroll-margin: 6px;
-      }
-      .pretui-menuitem[data-submenu='true'] {
-        grid-template-columns: 15px 1fr auto auto;
-      }
-      .pretui-menuitem[data-default='true'] .pretui-menulabel {
-        font-weight: 600;
-      }
-      .pretui-menuitem[data-destructive='true'] {
-        color: var(--pretui-destructive-ink, var(--boxel-danger));
-      }
-      .pretui-menuitem[aria-disabled='true'] {
-        /* dimmed, still focusable, still announced — HIG's "dim, don't
-           remove", which the `disabled` attribute cannot express */
-        opacity: 0.42;
-      }
-      .pretui-menuitem[data-active='true']:not([aria-disabled='true']) {
-        background: var(--hover, var(--boxel-100));
-      }
-      .pretui-menuitem[data-active='true'][data-destructive='true'] {
-        background: color-mix(
-          in oklch,
-          var(--destructive) 12%,
-          var(--popover)
-        );
-      }
-      .pretui-menuitem:focus-visible {
-        outline: 2px solid var(--ring);
-        outline-offset: -2px;
-      }
-      .pretui-menulabel {
-        min-width: 0;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-      .pretui-menuicon {
-        width: 14px;
-        height: 14px;
-        color: var(--muted-foreground);
-      }
-      .pretui-menukbd {
-        font-family: var(--font-mono);
-        font-size: var(--text-ui-xs, 11px);
-        font-variant-numeric: tabular-nums;
-        color: var(--muted-foreground);
-        white-space: nowrap;
-      }
-      .pretui-menuitem[data-active='true'] .pretui-menukbd {
-        color: inherit;
-      }
-
-      /* The checkmark is drawn, not typed: a glyph inherits whatever the
-         reader's emoji font does to it and ignores currentColor. */
-      .pretui-menucheck {
-        position: relative;
-        width: 15px;
-        height: 15px;
-      }
-      .pretui-menuitem[data-check='on'] .pretui-menucheck::after {
-        content: '';
-        position: absolute;
-        inset-block-start: 2px;
-        inset-inline-start: 4px;
-        width: 5px;
-        height: 9px;
-        border: solid currentColor;
-        border-width: 0 1.75px 1.75px 0;
-        transform: rotate(43deg);
-      }
-      .pretui-menuitem[data-check='mixed'] .pretui-menucheck::after {
-        /* the partial state a multi-selection produces — a dash, with
-           aria-checked='mixed' carrying it to assistive tech */
-        content: '';
-        position: absolute;
-        inset-block-start: 6px;
-        inset-inline-start: 2px;
-        width: 9px;
-        height: 1.75px;
-        background: currentColor;
-        border-radius: 1px;
-      }
-      .pretui-menuchevron {
-        position: relative;
-        width: 10px;
-        height: 10px;
-        margin-inline-start: 2px;
-      }
-      .pretui-menuchevron::after {
-        content: '';
-        position: absolute;
-        inset-block-start: 2px;
-        inset-inline-start: 2px;
-        width: 5px;
-        height: 5px;
-        border: solid currentColor;
-        border-width: 1.5px 1.5px 0 0;
-        transform: rotate(45deg);
-        opacity: 0.75;
-      }
-      .pretui-menusep {
-        height: 1px;
-        margin-block: 4px;
-        margin-inline: 6px;
-        background: var(--border);
-      }
-
-      /* Touch: a 28px row is a miss target on a finger. */
-      @media (any-pointer: coarse) {
+        @starting-style {
+          .pretui-menu {
+            opacity: 0;
+            transform: translateY(-3px) scale(0.985);
+          }
+        }
+        .pretui-menu menu {
+          margin: 0;
+          padding: 0;
+          list-style: none;
+        }
+        .pretui-menugroup {
+          display: block;
+        }
+        .pretui-menugroup[data-labelled='true'] {
+          padding-block-start: 3px;
+        }
+        .pretui-menugroup-label {
+          display: block;
+          padding-block: 3px;
+          padding-inline: 8px;
+          font-size: var(--text-ui-xs, 11px);
+          font-weight: 600;
+          letter-spacing: var(--track-eyebrow, 0.06em);
+          text-transform: uppercase;
+          color: var(--muted-foreground);
+        }
         .pretui-menuitem {
-          min-height: 44px;
+          position: relative;
+          display: grid;
+          grid-template-columns: 15px 1fr auto;
+          align-items: center;
+          gap: 8px;
+          min-height: var(--pretui-menu-item-height, 28px);
+          padding-block: 3px;
+          padding-inline: 6px 8px;
+          border-radius: var(--radius-control, 6px);
+          color: inherit;
+          cursor: default;
+          user-select: none;
+          scroll-margin: 6px;
         }
-      }
-      /* Reduced motion lands on the end state: with no transition the
-         @starting-style values are never interpolated toward. */
-      @media (prefers-reduced-motion: reduce) {
-        .pretui-menu {
-          transition: none;
+        .pretui-menuitem[data-submenu='true'] {
+          grid-template-columns: 15px 1fr auto auto;
+        }
+        .pretui-menuitem[data-default='true'] .pretui-menulabel {
+          font-weight: 600;
+        }
+        .pretui-menuitem[data-destructive='true'] {
+          color: var(--pretui-destructive-ink, var(--boxel-danger));
+        }
+        .pretui-menuitem[aria-disabled='true'] {
+          /* dimmed, still focusable, still announced — HIG's "dim, don't
+             remove", which the `disabled` attribute cannot express */
+          opacity: 0.42;
+        }
+        .pretui-menuitem[data-active='true']:not([aria-disabled='true']) {
+          background: var(--hover, var(--boxel-100));
+        }
+        .pretui-menuitem[data-active='true'][data-destructive='true'] {
+          background: color-mix(
+            in oklch,
+            var(--destructive) 12%,
+            var(--popover)
+          );
+        }
+        .pretui-menuitem:focus-visible {
+          outline: 2px solid var(--ring);
+          outline-offset: -2px;
+        }
+        .pretui-menulabel {
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .pretui-menuicon {
+          width: 14px;
+          height: 14px;
+          color: var(--muted-foreground);
+        }
+        .pretui-menukbd {
+          font-family: var(--font-mono);
+          font-size: var(--text-ui-xs, 11px);
+          font-variant-numeric: tabular-nums;
+          color: var(--muted-foreground);
+          white-space: nowrap;
+        }
+        .pretui-menuitem[data-active='true'] .pretui-menukbd {
+          color: inherit;
+        }
+
+        /* The checkmark is drawn, not typed: a glyph inherits whatever the
+           reader's emoji font does to it and ignores currentColor. */
+        .pretui-menucheck {
+          position: relative;
+          width: 15px;
+          height: 15px;
+        }
+        .pretui-menuitem[data-check='on'] .pretui-menucheck::after {
+          content: '';
+          position: absolute;
+          inset-block-start: 2px;
+          inset-inline-start: 4px;
+          width: 5px;
+          height: 9px;
+          border: solid currentColor;
+          border-width: 0 1.75px 1.75px 0;
+          transform: rotate(43deg);
+        }
+        .pretui-menuitem[data-check='mixed'] .pretui-menucheck::after {
+          /* the partial state a multi-selection produces — a dash, with
+             aria-checked='mixed' carrying it to assistive tech */
+          content: '';
+          position: absolute;
+          inset-block-start: 6px;
+          inset-inline-start: 2px;
+          width: 9px;
+          height: 1.75px;
+          background: currentColor;
+          border-radius: 1px;
+        }
+        .pretui-menuchevron {
+          position: relative;
+          width: 10px;
+          height: 10px;
+          margin-inline-start: 2px;
+        }
+        .pretui-menuchevron::after {
+          content: '';
+          position: absolute;
+          inset-block-start: 2px;
+          inset-inline-start: 2px;
+          width: 5px;
+          height: 5px;
+          border: solid currentColor;
+          border-width: 1.5px 1.5px 0 0;
+          transform: rotate(45deg);
+          opacity: 0.75;
+        }
+        .pretui-menusep {
+          height: 1px;
+          margin-block: 4px;
+          margin-inline: 6px;
+          background: var(--border);
+        }
+
+        /* Touch: a 28px row is a miss target on a finger. */
+        @media (any-pointer: coarse) {
+          .pretui-menuitem {
+            min-height: 44px;
+          }
+        }
+        /* Reduced motion lands on the end state: with no transition the
+           @starting-style values are never interpolated toward. */
+        @media (prefers-reduced-motion: reduce) {
+          .pretui-menu {
+            transition: none;
+          }
         }
       }
     </style>

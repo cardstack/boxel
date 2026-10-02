@@ -12,7 +12,8 @@ import {
   waitUntil,
 } from '@ember/test-helpers';
 import { setupRenderingTest } from 'ember-qunit';
-import { animationsSettled, setupMotion } from 'glimmer-motion/test-support';
+import { setupChoreo } from 'glimmer-motion/choreo/test-support';
+import { animationsSettled } from 'glimmer-motion/test-support';
 import { module, test } from 'qunit';
 import { Wires } from 'test-app/components/examples/wires';
 
@@ -20,7 +21,7 @@ import { nextFrame } from '../../helpers/motion';
 
 module('Integration | choreo | wires', function (hooks) {
   setupRenderingTest(hooks);
-  setupMotion(hooks);
+  setupChoreo(hooks);
 
   /**
    * The resting threads are DERIVED geometry: the modifier waits a frame

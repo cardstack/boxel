@@ -16,6 +16,7 @@
  */
 import { render } from '@ember/test-helpers';
 import { setupRenderingTest } from 'ember-qunit';
+import { setupMotion } from 'glimmer-motion/test-support';
 import { module, test } from 'qunit';
 import { Grip } from 'test-app/components/examples/grip';
 
@@ -102,6 +103,7 @@ const centreOf = (index: number) => {
 
 module('Integration | table plan', function (hooks) {
   setupRenderingTest(hooks);
+  setupMotion(hooks);
   setupFixtureViewport(hooks);
 
   test('a guest dropped on a table takes a chair', async function (assert) {

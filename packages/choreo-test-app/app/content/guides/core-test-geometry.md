@@ -7,12 +7,8 @@ A moving interface can reach the correct endpoint while stretching its text, fla
 `bounds(element)` returns the element's rectangle relative to the test container. A raw viewport rectangle includes QUnit's own placement, which can change as the runner executes. `shape(element)` composes the linear transform through ancestors, and `boundsAndShape()` combines both views.
 
 ```ts title="Component logic excerpt"
-import {
-  bounds,
-  shape,
-  live,
-  animationsSettled,
-} from 'glimmer-motion/test-support';
+import { live } from 'glimmer-motion/choreo/test-support';
+import { animationsSettled, bounds, shape } from 'glimmer-motion/test-support';
 
 await animationsSettled();
 const card = live('[data-test-card]');
@@ -25,13 +21,13 @@ Use expected dimensions appropriate to the fixture. A shape assertion is useful 
 
 ## Selecting the Live Representation
 
-During a crossing, a departing counterpart can share an identity with the arriving live element. `live()` and `liveAll()` exclude elements in orphan layers. A bare querySelector may find the departing skin first, which can no longer respond to the click the test sends.
+During a crossing, a departing counterpart can share an identity with the arriving live element. `live()` and `liveAll()`, from `glimmer-motion/choreo/test-support`, exclude elements in orphan layers. A bare querySelector may find the departing skin first, which can no longer respond to the click the test sends.
 
 A raised participant is still live and should remain eligible. This is why excluding every element outside its original DOM position would be incorrect. Test the interaction through the same usable representation a person should see.
 
 ## Inspecting Motion and Cleanup
 
-`velocityOf()` samples movement over frames when momentum is part of the contract. `orphanCount()` reports retained departing elements, and `strandedTransforms()` looks for unexplained transforms left after settlement. Some resting transforms are legitimate: a camera can remain zoomed, and a shared-layout follower can remain projected onto its active lead.
+`velocityOf()` samples movement over frames when momentum is part of the contract. The Choreo invariants come from `glimmer-motion/choreo/test-support`: `orphanCount()` reports retained departing elements, and `strandedTransforms()` looks for unexplained transforms left after settlement. Some resting transforms are legitimate: a camera can remain zoomed, and a shared-layout follower can remain projected onto its active lead.
 
 Use these helpers at meaningful phases. Measure just before interruption, immediately after the new pass, and after settlement. A final orphan count of zero does not prove that the first arriving frame was correct, just as a good midpoint does not prove teardown succeeded.
 
@@ -41,6 +37,8 @@ Include an external scale and a clipped parent in fixtures for spatial or elevat
 
 ## API Coverage
 
-**glimmer-motion/test-support**: `Box`, `bounds`, `shape`, `boundsAndShape`, `velocityOf`, `orphanCount`, `live`, `liveAll`, `strandedTransforms`.
+**glimmer-motion/test-support**: `Box`, `bounds`, `shape`, `boundsAndShape`, `velocityOf`.
 
-Read the implementation: [`index.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/test-support/index.ts).
+**glimmer-motion/choreo/test-support**: `orphanCount`, `live`, `liveAll`, `strandedTransforms`.
+
+Read the implementation: [`test-support/index.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/test-support/index.ts), [`choreo/test-support/index.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/test-support/index.ts).

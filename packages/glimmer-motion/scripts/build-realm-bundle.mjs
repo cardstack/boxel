@@ -107,7 +107,7 @@ await esbuild.build({
     js:
       `/* eslint-disable */\n` +
       `// glimmer-motion — realm bundle (ESM, single file)\n` +
-      `// Contains: glimmer-motion + motion-dom + motion-utils, inlined.\n` +
+      `// Contains: glimmer-motion + framer-motion/dom + motion-dom + motion-utils, inlined.\n` +
       `// External: @ember/*, @glimmer/*, ember-modifier (host-provided).\n` +
       `// Regenerate: pnpm realm (from the monorepo root)\n`,
   },

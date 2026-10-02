@@ -69,48 +69,50 @@ export class LoadingOverlay extends Component<LoadingOverlaySignature> {
       {{/if}}
     </div>
     <style scoped>
-      .pretui-loading-overlay {
-        position: relative;
-        isolation: isolate;
-        min-inline-size: 0;
-      }
-      .pretui-lo-scrim {
-        position: absolute;
-        inset: 0;
-        z-index: 1;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        gap: var(--space-2, 0.5rem);
-        border-radius: inherit;
-        color: var(--foreground);
-        background: color-mix(in oklch, var(--card) var(--pretui-loading-overlay-mix, 72%), transparent);
-        animation: pretui-lo-in var(--pretui-dur-snap, 160ms) var(--pretui-ease-snap, ease-out) both;
-      }
-      .pretui-lo-scrim[data-blur='true'] {
-        backdrop-filter: blur(var(--pretui-loading-overlay-blur, 3px));
-      }
-      .pretui-lo-label {
-        font-size: var(--text-ui-sm, 0.8125rem);
-        color: var(--muted-foreground);
-      }
-      .pretui-lo-sr {
-        position: absolute;
-        inline-size: 1px;
-        block-size: 1px;
-        overflow: hidden;
-        clip-path: inset(50%);
-        white-space: nowrap;
-      }
-      @keyframes pretui-lo-in {
-        from {
-          opacity: 0;
+      @layer PretComponent {
+        .pretui-loading-overlay {
+          position: relative;
+          isolation: isolate;
+          min-inline-size: 0;
         }
-      }
-      @media (prefers-reduced-motion: reduce) {
         .pretui-lo-scrim {
-          animation: none;
+          position: absolute;
+          inset: 0;
+          z-index: 1;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: var(--space-2, 0.5rem);
+          border-radius: inherit;
+          color: var(--foreground);
+          background: color-mix(in oklch, var(--card) var(--pretui-loading-overlay-mix, 72%), transparent);
+          animation: pretui-lo-in var(--pretui-dur-snap, 160ms) var(--pretui-ease-snap, ease-out) both;
+        }
+        .pretui-lo-scrim[data-blur='true'] {
+          backdrop-filter: blur(var(--pretui-loading-overlay-blur, 3px));
+        }
+        .pretui-lo-label {
+          font-size: var(--text-ui-sm, 0.8125rem);
+          color: var(--muted-foreground);
+        }
+        .pretui-lo-sr {
+          position: absolute;
+          inline-size: 1px;
+          block-size: 1px;
+          overflow: hidden;
+          clip-path: inset(50%);
+          white-space: nowrap;
+        }
+        @keyframes pretui-lo-in {
+          from {
+            opacity: 0;
+          }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .pretui-lo-scrim {
+            animation: none;
+          }
         }
       }
     </style>

@@ -213,50 +213,52 @@ export class Rating extends Component<RatingSignature> {
       {{/each}}
     </div>
     <style scoped>
-      .pretui-rating {
-        display: inline-flex;
-        gap: var(--pretui-rating-gap, 2px);
-        cursor: pointer;
-        outline-offset: 4px;
-        border-radius: 4px;
-      }
-      .pretui-rating[data-readonly],
-      .pretui-rating[data-disabled] {
-        cursor: default;
-      }
-      .pretui-rating[data-disabled] {
-        opacity: 0.45;
-      }
-      .pretui-rating-symbol {
-        position: relative;
-        display: inline-grid;
-        width: var(--pretui-rating-size, 18px);
-        height: var(--pretui-rating-size, 18px);
-        transition: transform 120ms ease;
-      }
-      .pretui-rating-symbol[data-hover='true'] {
-        transform: scale(1.12);
-      }
-      .pretui-rating-symbol svg {
-        grid-area: 1 / 1;
-        width: 100%;
-        height: 100%;
-      }
-      .pretui-rating-base {
-        fill: none;
-        stroke: var(--pretui-rating-track, var(--line-strong, var(--boxel-400)));
-        stroke-width: 1.5;
-        stroke-linejoin: round;
-      }
-      .pretui-rating-fill {
-        fill: var(--pretui-rating-hue, var(--warning, var(--boxel-warning)));
-        stroke: var(--pretui-rating-hue, var(--warning, var(--boxel-warning)));
-        stroke-width: 1.5;
-        stroke-linejoin: round;
-      }
-      @media (prefers-reduced-motion: reduce) {
+      @layer PretComponent {
+        .pretui-rating {
+          display: inline-flex;
+          gap: var(--pretui-rating-gap, 2px);
+          cursor: pointer;
+          outline-offset: 4px;
+          border-radius: 4px;
+        }
+        .pretui-rating[data-readonly],
+        .pretui-rating[data-disabled] {
+          cursor: default;
+        }
+        .pretui-rating[data-disabled] {
+          opacity: 0.45;
+        }
         .pretui-rating-symbol {
-          transition: none;
+          position: relative;
+          display: inline-grid;
+          width: var(--pretui-rating-size, 18px);
+          height: var(--pretui-rating-size, 18px);
+          transition: transform 120ms ease;
+        }
+        .pretui-rating-symbol[data-hover='true'] {
+          transform: scale(1.12);
+        }
+        .pretui-rating-symbol svg {
+          grid-area: 1 / 1;
+          width: 100%;
+          height: 100%;
+        }
+        .pretui-rating-base {
+          fill: none;
+          stroke: var(--pretui-rating-track, var(--line-strong, var(--boxel-400)));
+          stroke-width: 1.5;
+          stroke-linejoin: round;
+        }
+        .pretui-rating-fill {
+          fill: var(--pretui-rating-hue, var(--warning, var(--boxel-warning)));
+          stroke: var(--pretui-rating-hue, var(--warning, var(--boxel-warning)));
+          stroke-width: 1.5;
+          stroke-linejoin: round;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .pretui-rating-symbol {
+            transition: none;
+          }
         }
       }
     </style>

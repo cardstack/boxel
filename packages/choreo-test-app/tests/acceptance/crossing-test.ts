@@ -12,6 +12,7 @@
  */
 import { click, currentURL, visit, waitUntil } from '@ember/test-helpers';
 import { setupApplicationTest } from 'ember-qunit';
+import { setupChoreo } from 'glimmer-motion/choreo/test-support';
 import { module, test } from 'qunit';
 import { crossingActive, resetCrossing } from 'test-app/lib/crossing';
 import { setTempo } from 'test-app/lib/tempo';
@@ -27,6 +28,7 @@ const frames = (n: number) =>
 
 module('Acceptance | crossing', function (hooks) {
   setupApplicationTest(hooks);
+  setupChoreo(hooks);
 
   hooks.beforeEach(function () {
     setTempo('smooth');

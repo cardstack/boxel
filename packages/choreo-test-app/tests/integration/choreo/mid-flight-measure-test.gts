@@ -16,6 +16,7 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { setupRenderingTest } from 'ember-qunit';
 import { Choreo, type ChoreoContext, motion } from 'glimmer-motion';
+import { setupChoreo } from 'glimmer-motion/choreo/test-support';
 import { animationsSettled } from 'glimmer-motion/test-support';
 import { module, test } from 'qunit';
 
@@ -105,6 +106,7 @@ async function landedPose(flipMidFlight: boolean): Promise<string> {
 module('Integration | choreo | mid-flight measure', function (hooks) {
   setupRenderingTest(hooks);
   setupFixtureViewport(hooks);
+  setupChoreo(hooks);
 
   test('a replacement compiled mid-camera-flight lands the same shot as one compiled at rest', async function (assert) {
     const atRest = await landedPose(false);

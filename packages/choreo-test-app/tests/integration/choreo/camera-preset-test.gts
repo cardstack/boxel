@@ -12,6 +12,7 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { setupRenderingTest } from 'ember-qunit';
 import { Choreo, type ChoreoContext, motion } from 'glimmer-motion';
+import { setupChoreo } from 'glimmer-motion/choreo/test-support';
 import { animationsSettled } from 'glimmer-motion/test-support';
 import { module, test } from 'qunit';
 
@@ -36,6 +37,7 @@ const translateOf = (transform: string): { x: number; y: number } => {
 module('Integration | choreo | camera presets', function (hooks) {
   setupRenderingTest(hooks);
   setupFixtureViewport(hooks);
+  setupChoreo(hooks);
 
   test('Frame is the fit camera, to the pixel', async function (assert) {
     const grabs: ChoreoContext[] = [];

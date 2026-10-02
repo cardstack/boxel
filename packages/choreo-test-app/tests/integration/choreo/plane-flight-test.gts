@@ -15,10 +15,11 @@ import { tracked } from '@glimmer/tracking';
 import { setupRenderingTest } from 'ember-qunit';
 import { Choreo, type ChoreoContext, motion } from 'glimmer-motion';
 import {
-  animationsSettled,
   orphanCount,
+  setupChoreo,
   strandedTransforms,
-} from 'glimmer-motion/test-support';
+} from 'glimmer-motion/choreo/test-support';
+import { animationsSettled } from 'glimmer-motion/test-support';
 import { module, test } from 'qunit';
 
 import { setupFixtureViewport } from '../../helpers/layout-fixture';
@@ -37,6 +38,7 @@ const rectOf = (sel: string) => {
 module('Integration | choreo | plane flight', function (hooks) {
   setupRenderingTest(hooks);
   setupFixtureViewport(hooks);
+  setupChoreo(hooks);
 
   test('a flight into a zoomed plane pins page-true and lands clean', async function (assert) {
     class App extends Component<{

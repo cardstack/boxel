@@ -317,137 +317,139 @@ export class Calendar extends Component<CalendarSignature> {
       </div>
     </div>
     <style scoped>
-      .pretui-calendar {
-        /* inline-size container so panels can collapse under narrow hosts;
-           containment means width comes from the parent, not the grid —
-           hosts (or popover panels) give the calendar an explicit width */
-        container-type: inline-size;
-        width: 100%;
-      }
-      .pretui-cal-panels {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: flex-start;
-        gap: var(--space-5, 14px);
-      }
-      .pretui-cal-panel {
-        display: grid;
-        gap: var(--space-3, 8px);
-      }
-      .pretui-cal-head {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: var(--space-3, 8px);
-      }
-      .pretui-cal-month {
-        font-family: var(--font-mono);
-        font-size: var(--text-ui-xs, 11px);
-        font-weight: 500;
-        letter-spacing: var(--track-eyebrow, 0.08em);
-        text-transform: uppercase;
-        color: var(--foreground);
-      }
-      .pretui-cal-nav {
-        width: 24px;
-        height: 24px;
-        border: 0;
-        padding: 0;
-        border-radius: 7px;
-        background: transparent;
-        color: var(--muted-foreground);
-        font-size: 14px;
-        line-height: 1;
-        display: inline-grid;
-        place-content: center;
-        cursor: pointer;
-      }
-      .pretui-cal-nav:hover {
-        background: var(--hover, var(--boxel-100));
-        color: var(--foreground);
-      }
-      /* multi-month: prev lives on the first panel, next on the last */
-      .pretui-cal-panel:not(:first-child) .pretui-cal-nav[data-dir='prev'],
-      .pretui-cal-panel:not(:last-child) .pretui-cal-nav[data-dir='next'] {
-        visibility: hidden;
-      }
-      .pretui-cal-weekdays,
-      .pretui-cal-grid {
-        display: grid;
-        grid-template-columns: repeat(7, 30px);
-        gap: 2px;
-      }
-      .pretui-cal-weekday {
-        display: inline-grid;
-        place-content: center;
-        height: 18px;
-        font-family: var(--font-mono);
-        font-size: 10px;
-        letter-spacing: var(--track-eyebrow, 0.08em);
-        text-transform: uppercase;
-        color: var(--muted-foreground);
-      }
-      .pretui-cal-day {
-        height: 28px;
-        border: 0;
-        padding: 0;
-        border-radius: 7px;
-        background: transparent;
-        font-size: var(--text-ui-md, 12.5px);
-        font-variant-numeric: tabular-nums;
-        color: var(--foreground);
-        cursor: pointer;
-      }
-      .pretui-cal-day:hover:not(:disabled) {
-        background: var(--hover, var(--boxel-100));
-      }
-      .pretui-cal-day:disabled {
-        color: var(--ink-3, var(--boxel-400));
-        opacity: 0.55;
-        cursor: default;
-      }
-      .pretui-cal-day[data-outside] {
-        color: var(--ink-3, var(--boxel-400));
-      }
-      /* side-by-side months: outside days would duplicate their neighbor's
-         in-month days, so they hide (still occupying their grid slot) */
-      .pretui-calendar[data-multi] .pretui-cal-day[data-outside] {
-        visibility: hidden;
-      }
-      .pretui-cal-day[data-today] {
-        box-shadow: inset 0 0 0 1px var(--line-strong, var(--boxel-400));
-      }
-      .pretui-cal-day[data-in-range] {
-        background: color-mix(in oklch, var(--primary) 14%, var(--card));
-        color: color-mix(in oklch, var(--foreground) 30%, var(--primary));
-        border-radius: 0;
-      }
-      .pretui-cal-day[data-selected],
-      .pretui-cal-day[data-range-start],
-      .pretui-cal-day[data-range-end] {
-        background: var(--primary);
-        color: var(--primary-foreground);
-        font-weight: 600;
-      }
-      .pretui-cal-day[data-range-start] {
-        border-radius: 7px 0 0 7px;
-      }
-      .pretui-cal-day[data-range-end] {
-        border-radius: 0 7px 7px 0;
-      }
-      .pretui-cal-day[data-range-start][data-range-end] {
-        border-radius: 7px;
-      }
-      .pretui-cal-day:focus-visible {
-        outline: 2px solid var(--ring);
-        outline-offset: 1px;
-      }
-      @container (max-width: 455px) {
-        .pretui-cal-panel:not(:first-child) {
-          display: none;
+      @layer PretComponent {
+        .pretui-calendar {
+          /* inline-size container so panels can collapse under narrow hosts;
+             containment means width comes from the parent, not the grid —
+             hosts (or popover panels) give the calendar an explicit width */
+          container-type: inline-size;
+          width: 100%;
         }
-        .pretui-cal-panel:first-child .pretui-cal-nav[data-dir='next'] {
-          visibility: visible;
+        .pretui-cal-panels {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: flex-start;
+          gap: var(--space-5, 14px);
+        }
+        .pretui-cal-panel {
+          display: grid;
+          gap: var(--space-3, 8px);
+        }
+        .pretui-cal-head {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: var(--space-3, 8px);
+        }
+        .pretui-cal-month {
+          font-family: var(--font-mono);
+          font-size: var(--text-ui-xs, 11px);
+          font-weight: 500;
+          letter-spacing: var(--track-eyebrow, 0.08em);
+          text-transform: uppercase;
+          color: var(--foreground);
+        }
+        .pretui-cal-nav {
+          width: 24px;
+          height: 24px;
+          border: 0;
+          padding: 0;
+          border-radius: 7px;
+          background: transparent;
+          color: var(--muted-foreground);
+          font-size: 14px;
+          line-height: 1;
+          display: inline-grid;
+          place-content: center;
+          cursor: pointer;
+        }
+        .pretui-cal-nav:hover {
+          background: var(--hover, var(--boxel-100));
+          color: var(--foreground);
+        }
+        /* multi-month: prev lives on the first panel, next on the last */
+        .pretui-cal-panel:not(:first-child) .pretui-cal-nav[data-dir='prev'],
+        .pretui-cal-panel:not(:last-child) .pretui-cal-nav[data-dir='next'] {
+          visibility: hidden;
+        }
+        .pretui-cal-weekdays,
+        .pretui-cal-grid {
+          display: grid;
+          grid-template-columns: repeat(7, 30px);
+          gap: 2px;
+        }
+        .pretui-cal-weekday {
+          display: inline-grid;
+          place-content: center;
+          height: 18px;
+          font-family: var(--font-mono);
+          font-size: 10px;
+          letter-spacing: var(--track-eyebrow, 0.08em);
+          text-transform: uppercase;
+          color: var(--muted-foreground);
+        }
+        .pretui-cal-day {
+          height: 28px;
+          border: 0;
+          padding: 0;
+          border-radius: 7px;
+          background: transparent;
+          font-size: var(--text-ui-md, 12.5px);
+          font-variant-numeric: tabular-nums;
+          color: var(--foreground);
+          cursor: pointer;
+        }
+        .pretui-cal-day:hover:not(:disabled) {
+          background: var(--hover, var(--boxel-100));
+        }
+        .pretui-cal-day:disabled {
+          color: var(--ink-3, var(--boxel-400));
+          opacity: 0.55;
+          cursor: default;
+        }
+        .pretui-cal-day[data-outside] {
+          color: var(--ink-3, var(--boxel-400));
+        }
+        /* side-by-side months: outside days would duplicate their neighbor's
+           in-month days, so they hide (still occupying their grid slot) */
+        .pretui-calendar[data-multi] .pretui-cal-day[data-outside] {
+          visibility: hidden;
+        }
+        .pretui-cal-day[data-today] {
+          box-shadow: inset 0 0 0 1px var(--line-strong, var(--boxel-400));
+        }
+        .pretui-cal-day[data-in-range] {
+          background: color-mix(in oklch, var(--primary) 14%, var(--card));
+          color: color-mix(in oklch, var(--foreground) 30%, var(--primary));
+          border-radius: 0;
+        }
+        .pretui-cal-day[data-selected],
+        .pretui-cal-day[data-range-start],
+        .pretui-cal-day[data-range-end] {
+          background: var(--primary);
+          color: var(--primary-foreground);
+          font-weight: 600;
+        }
+        .pretui-cal-day[data-range-start] {
+          border-radius: 7px 0 0 7px;
+        }
+        .pretui-cal-day[data-range-end] {
+          border-radius: 0 7px 7px 0;
+        }
+        .pretui-cal-day[data-range-start][data-range-end] {
+          border-radius: 7px;
+        }
+        .pretui-cal-day:focus-visible {
+          outline: 2px solid var(--ring);
+          outline-offset: 1px;
+        }
+        @container (max-width: 455px) {
+          .pretui-cal-panel:not(:first-child) {
+            display: none;
+          }
+          .pretui-cal-panel:first-child .pretui-cal-nav[data-dir='next'] {
+            visibility: visible;
+          }
         }
       }
     </style>

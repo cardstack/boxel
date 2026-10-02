@@ -561,177 +561,179 @@ export class Sidebar extends Component<SidebarSignature> {
     </div>
 
     <style scoped>
-      /* One grid, not a viewport-pinned panel plus an in-flow ghost spacer.
-         shadcn needs the ghost because its rail is pinned to the VIEWPORT and
-         therefore out of flow; inside a card that is simply wrong, and a grid
-         track animates exactly the same way with one element instead of
-         three. (The phrase this comment is avoiding trips the kit's own
-         no-css-position-fixed lint rule, which scans comment text too.) */
-      .pretui-sidebar-shell {
-        --pretui-sidebar-width: 16rem;
-        --pretui-sidebar-rail-width: 3.25rem;
-        display: grid;
-        grid-template-columns: var(--pretui-sidebar-track) minmax(0, 1fr);
-        --pretui-sidebar-track: var(--pretui-sidebar-width);
-        min-inline-size: 0;
-        min-block-size: 0;
-        inline-size: 100%;
-        block-size: 100%;
-        position: relative;
-        container-type: inline-size;
-        font-size: var(--text-ui-md, 12.5px);
-        letter-spacing: var(--track-ui, 0.01em);
-        color: var(--foreground);
-        transition: grid-template-columns var(--pretui-dur-morph, 300ms)
-          var(--pretui-ease-morph, cubic-bezier(0.3, 0.7, 0.2, 1.02));
-      }
-      /* Logical: `end` swaps the tracks and moves the rail to column 2. In RTL
-         the whole thing mirrors with no second stylesheet — the `rotate-180`
-         on an empty spacer that shadcn uses to fake this has no analogue
-         because there is nothing to fake. */
-      .pretui-sidebar-shell[data-placement='end'] {
-        grid-template-columns: minmax(0, 1fr) var(--pretui-sidebar-track);
-      }
-      .pretui-sidebar-shell[data-placement='end'] .pretui-sidebar-rail {
-        grid-column: 2;
-        grid-row: 1;
-      }
-      .pretui-sidebar-shell[data-placement='end'] .pretui-sidebar-content {
-        grid-column: 1;
-        grid-row: 1;
-      }
-      .pretui-sidebar-shell[data-state='collapsed'][data-collapsible='rail'] {
-        --pretui-sidebar-track: var(--pretui-sidebar-rail-width);
-      }
-      .pretui-sidebar-shell[data-state='collapsed'][data-collapsible='offcanvas'] {
-        --pretui-sidebar-track: 0px;
-      }
-      /* In the drawer mode the rail is in the top layer, so the grid is one
-         column and the content takes all of it. */
-      .pretui-sidebar-shell[data-mobile='true'] {
-        --pretui-sidebar-track: 0px;
-        grid-template-columns: minmax(0, 1fr);
-      }
-      .pretui-sidebar-rail {
-        grid-column: 1;
-        grid-row: 1;
-        display: flex;
-        flex-direction: column;
-        min-inline-size: 0;
-        min-block-size: 0;
-        overflow: hidden;
-        background: var(--pretui-sidebar-bg, var(--inset, var(--boxel-100)));
-      }
-      .pretui-sidebar-shell[data-bordered='true'] .pretui-sidebar-rail {
-        box-shadow: inset -1px 0 0 var(--border);
-      }
-      .pretui-sidebar-shell[data-bordered='true'][data-placement='end']
+      @layer PretComponent {
+        /* One grid, not a viewport-pinned panel plus an in-flow ghost spacer.
+           shadcn needs the ghost because its rail is pinned to the VIEWPORT and
+           therefore out of flow; inside a card that is simply wrong, and a grid
+           track animates exactly the same way with one element instead of
+           three. (The phrase this comment is avoiding trips the kit's own
+           no-css-position-fixed lint rule, which scans comment text too.) */
+        .pretui-sidebar-shell {
+          --pretui-sidebar-width: 16rem;
+          --pretui-sidebar-rail-width: 3.25rem;
+          display: grid;
+          grid-template-columns: var(--pretui-sidebar-track) minmax(0, 1fr);
+          --pretui-sidebar-track: var(--pretui-sidebar-width);
+          min-inline-size: 0;
+          min-block-size: 0;
+          inline-size: 100%;
+          block-size: 100%;
+          position: relative;
+          container-type: inline-size;
+          font-size: var(--text-ui-md, 12.5px);
+          letter-spacing: var(--track-ui, 0.01em);
+          color: var(--foreground);
+          transition: grid-template-columns var(--pretui-dur-morph, 300ms)
+            var(--pretui-ease-morph, cubic-bezier(0.3, 0.7, 0.2, 1.02));
+        }
+        /* Logical: `end` swaps the tracks and moves the rail to column 2. In RTL
+           the whole thing mirrors with no second stylesheet — the `rotate-180`
+           on an empty spacer that shadcn uses to fake this has no analogue
+           because there is nothing to fake. */
+        .pretui-sidebar-shell[data-placement='end'] {
+          grid-template-columns: minmax(0, 1fr) var(--pretui-sidebar-track);
+        }
+        .pretui-sidebar-shell[data-placement='end'] .pretui-sidebar-rail {
+          grid-column: 2;
+          grid-row: 1;
+        }
+        .pretui-sidebar-shell[data-placement='end'] .pretui-sidebar-content {
+          grid-column: 1;
+          grid-row: 1;
+        }
+        .pretui-sidebar-shell[data-state='collapsed'][data-collapsible='rail'] {
+          --pretui-sidebar-track: var(--pretui-sidebar-rail-width);
+        }
+        .pretui-sidebar-shell[data-state='collapsed'][data-collapsible='offcanvas'] {
+          --pretui-sidebar-track: 0px;
+        }
+        /* In the drawer mode the rail is in the top layer, so the grid is one
+           column and the content takes all of it. */
+        .pretui-sidebar-shell[data-mobile='true'] {
+          --pretui-sidebar-track: 0px;
+          grid-template-columns: minmax(0, 1fr);
+        }
         .pretui-sidebar-rail {
-        box-shadow: inset 1px 0 0 var(--border);
-      }
-      /* An offcanvas rail leaves the tab order and the accessibility tree.
-         Mantine's AppShell only translates its navbar off screen, so a
-         "hidden" navbar is still tabbable and still read aloud. */
-      .pretui-sidebar-shell[data-state='collapsed'][data-collapsible='offcanvas']
-        .pretui-sidebar-rail {
-        visibility: hidden;
-      }
-      /* The drawer's own rail is not a grid child — it lives inside a
-         <dialog> in the top layer. */
-      .pretui-sidebar-rail[data-mobile='true'] {
-        display: flex;
-        block-size: 100%;
-        background: none;
-        box-shadow: none;
-      }
-      .pretui-sidebar-head,
-      .pretui-sidebar-foot {
-        flex: none;
-        min-inline-size: 0;
-        padding: var(--space-3, 8px);
-      }
-      .pretui-sidebar-foot {
-        box-shadow: 0 -1px 0 var(--border);
-      }
-      .pretui-sidebar-head {
-        box-shadow: 0 1px 0 var(--border);
-      }
-      .pretui-sidebar-body {
-        flex: 1 1 auto;
-        min-block-size: 0;
-        min-inline-size: 0;
-        overflow-y: auto;
-        overscroll-behavior: contain;
-        scrollbar-width: thin;
-        padding: var(--space-3, 8px);
-        display: grid;
-        gap: var(--space-3, 8px);
-        align-content: start;
-      }
-      .pretui-sidebar-content {
-        grid-column: 2;
-        grid-row: 1;
-        min-inline-size: 0;
-        min-block-size: 0;
-      }
-      .pretui-sidebar-shell[data-mobile='true'] .pretui-sidebar-content {
-        grid-column: 1;
-      }
-      /* The handle straddles the seam. 44px of hit area on a coarse pointer
-         (Appendix L), a 2px painted line, and a resize-style cursor so the
-         affordance reads before it is pressed. */
-      .pretui-sidebar-handle {
-        position: absolute;
-        inset-block: 0;
-        inset-inline-start: calc(var(--pretui-sidebar-track) - 0.5rem);
-        inline-size: 1rem;
-        z-index: var(--pretui-z-raised, 1);
-        display: grid;
-        place-items: center;
-        padding: 0;
-        border: 0;
-        background: none;
-        cursor: ew-resize;
-        transition: inset-inline-start var(--pretui-dur-morph, 300ms)
-          var(--pretui-ease-morph, cubic-bezier(0.3, 0.7, 0.2, 1.02));
-      }
-      .pretui-sidebar-shell[data-placement='end'] .pretui-sidebar-handle {
-        inset-inline-start: auto;
-        inset-inline-end: calc(var(--pretui-sidebar-track) - 0.5rem);
-      }
-      .pretui-sidebar-handle-line {
-        inline-size: 2px;
-        block-size: 100%;
-        border-radius: 2px;
-        background: transparent;
-        transition: background var(--pretui-dur-snap, 180ms)
-          var(--pretui-ease-snap, ease);
-      }
-      .pretui-sidebar-handle:hover .pretui-sidebar-handle-line {
-        background: var(--primary);
-      }
-      .pretui-sidebar-handle:focus-visible {
-        outline: 2px solid var(--ring);
-        outline-offset: -2px;
-        border-radius: var(--radius-chip, 6px);
-      }
-      /* Coarse pointers get a real target rather than a 16px sliver. */
-      @media (any-pointer: coarse) {
+          grid-column: 1;
+          grid-row: 1;
+          display: flex;
+          flex-direction: column;
+          min-inline-size: 0;
+          min-block-size: 0;
+          overflow: hidden;
+          background: var(--pretui-sidebar-bg, var(--inset, var(--boxel-100)));
+        }
+        .pretui-sidebar-shell[data-bordered='true'] .pretui-sidebar-rail {
+          box-shadow: inset -1px 0 0 var(--border);
+        }
+        .pretui-sidebar-shell[data-bordered='true'][data-placement='end']
+          .pretui-sidebar-rail {
+          box-shadow: inset 1px 0 0 var(--border);
+        }
+        /* An offcanvas rail leaves the tab order and the accessibility tree.
+           Mantine's AppShell only translates its navbar off screen, so a
+           "hidden" navbar is still tabbable and still read aloud. */
+        .pretui-sidebar-shell[data-state='collapsed'][data-collapsible='offcanvas']
+          .pretui-sidebar-rail {
+          visibility: hidden;
+        }
+        /* The drawer's own rail is not a grid child — it lives inside a
+           <dialog> in the top layer. */
+        .pretui-sidebar-rail[data-mobile='true'] {
+          display: flex;
+          block-size: 100%;
+          background: none;
+          box-shadow: none;
+        }
+        .pretui-sidebar-head,
+        .pretui-sidebar-foot {
+          flex: none;
+          min-inline-size: 0;
+          padding: var(--space-3, 8px);
+        }
+        .pretui-sidebar-foot {
+          box-shadow: 0 -1px 0 var(--border);
+        }
+        .pretui-sidebar-head {
+          box-shadow: 0 1px 0 var(--border);
+        }
+        .pretui-sidebar-body {
+          flex: 1 1 auto;
+          min-block-size: 0;
+          min-inline-size: 0;
+          overflow-y: auto;
+          overscroll-behavior: contain;
+          scrollbar-width: thin;
+          padding: var(--space-3, 8px);
+          display: grid;
+          gap: var(--space-3, 8px);
+          align-content: start;
+        }
+        .pretui-sidebar-content {
+          grid-column: 2;
+          grid-row: 1;
+          min-inline-size: 0;
+          min-block-size: 0;
+        }
+        .pretui-sidebar-shell[data-mobile='true'] .pretui-sidebar-content {
+          grid-column: 1;
+        }
+        /* The handle straddles the seam. 44px of hit area on a coarse pointer
+           (Appendix L), a 2px painted line, and a resize-style cursor so the
+           affordance reads before it is pressed. */
         .pretui-sidebar-handle {
-          inline-size: 44px;
-          inset-inline-start: calc(var(--pretui-sidebar-track) - 22px);
+          position: absolute;
+          inset-block: 0;
+          inset-inline-start: calc(var(--pretui-sidebar-track) - 0.5rem);
+          inline-size: 1rem;
+          z-index: var(--pretui-z-raised, 1);
+          display: grid;
+          place-items: center;
+          padding: 0;
+          border: 0;
+          background: none;
+          cursor: ew-resize;
+          transition: inset-inline-start var(--pretui-dur-morph, 300ms)
+            var(--pretui-ease-morph, cubic-bezier(0.3, 0.7, 0.2, 1.02));
         }
         .pretui-sidebar-shell[data-placement='end'] .pretui-sidebar-handle {
-          inset-inline-end: calc(var(--pretui-sidebar-track) - 22px);
+          inset-inline-start: auto;
+          inset-inline-end: calc(var(--pretui-sidebar-track) - 0.5rem);
         }
-      }
-      /* Reduced motion lands on the end state: the rail is at its width, the
-         handle is at the seam, nothing is mid-slide. */
-      @media (prefers-reduced-motion: reduce) {
-        .pretui-sidebar-shell,
-        .pretui-sidebar-handle,
         .pretui-sidebar-handle-line {
-          transition: none;
+          inline-size: 2px;
+          block-size: 100%;
+          border-radius: 2px;
+          background: transparent;
+          transition: background var(--pretui-dur-snap, 180ms)
+            var(--pretui-ease-snap, ease);
+        }
+        .pretui-sidebar-handle:hover .pretui-sidebar-handle-line {
+          background: var(--primary);
+        }
+        .pretui-sidebar-handle:focus-visible {
+          outline: 2px solid var(--ring);
+          outline-offset: -2px;
+          border-radius: var(--radius-chip, 6px);
+        }
+        /* Coarse pointers get a real target rather than a 16px sliver. */
+        @media (any-pointer: coarse) {
+          .pretui-sidebar-handle {
+            inline-size: 44px;
+            inset-inline-start: calc(var(--pretui-sidebar-track) - 22px);
+          }
+          .pretui-sidebar-shell[data-placement='end'] .pretui-sidebar-handle {
+            inset-inline-end: calc(var(--pretui-sidebar-track) - 22px);
+          }
+        }
+        /* Reduced motion lands on the end state: the rail is at its width, the
+           handle is at the seam, nothing is mid-slide. */
+        @media (prefers-reduced-motion: reduce) {
+          .pretui-sidebar-shell,
+          .pretui-sidebar-handle,
+          .pretui-sidebar-handle-line {
+            transition: none;
+          }
         }
       }
     </style>
@@ -790,48 +792,50 @@ export class SidebarTrigger extends Component<SidebarTriggerSignature> {
       {{/if}}
     </button>
     <style scoped>
-      .pretui-sidebar-trigger {
-        display: inline-grid;
-        place-items: center;
-        inline-size: 2.24em;
-        block-size: 2.24em;
-        padding: 0;
-        border: 0;
-        border-radius: var(--radius-chip, 6px);
-        background: none;
-        color: var(--muted-foreground);
-        font-size: var(--pretui-size-m, var(--text-ui-md, 0.78rem));
-        cursor: pointer;
-      }
-      .pretui-sidebar-trigger[data-size='xs'] {
-        font-size: var(--pretui-size-xs, var(--text-ui-xs, 0.66rem));
-      }
-      .pretui-sidebar-trigger[data-size='s'] {
-        font-size: var(--pretui-size-s, var(--text-ui-sm, 0.72rem));
-      }
-      .pretui-sidebar-trigger[data-size='l'] {
-        font-size: var(--pretui-size-l, var(--text-ui-lg, 0.875rem));
-      }
-      .pretui-sidebar-trigger[data-size='xl'] {
-        font-size: var(--pretui-size-xl, var(--text-ui-xl, 1rem));
-      }
-      .pretui-sidebar-trigger:hover {
-        background: var(--hover, var(--boxel-100));
-        color: var(--foreground);
-      }
-      .pretui-sidebar-trigger:focus-visible {
-        outline: 2px solid var(--ring);
-        outline-offset: 1px;
-      }
-      /* Three bars with the first one short — a rail glyph, drawn rather than
-         imported, so the component has no icon dependency. */
-      .pretui-sidebar-trigger-glyph {
-        inline-size: 1em;
-        block-size: 0.75em;
-        border-inline-start: 0.28em solid currentColor;
-        border-inline-end: 1.5px solid currentColor;
-        border-block: 1.5px solid currentColor;
-        border-radius: 2px;
+      @layer PretComponent {
+        .pretui-sidebar-trigger {
+          display: inline-grid;
+          place-items: center;
+          inline-size: 2.24em;
+          block-size: 2.24em;
+          padding: 0;
+          border: 0;
+          border-radius: var(--radius-chip, 6px);
+          background: none;
+          color: var(--muted-foreground);
+          font-size: var(--pretui-size-m, var(--text-ui-md, 0.78rem));
+          cursor: pointer;
+        }
+        .pretui-sidebar-trigger[data-size='xs'] {
+          font-size: var(--pretui-size-xs, var(--text-ui-xs, 0.66rem));
+        }
+        .pretui-sidebar-trigger[data-size='s'] {
+          font-size: var(--pretui-size-s, var(--text-ui-sm, 0.72rem));
+        }
+        .pretui-sidebar-trigger[data-size='l'] {
+          font-size: var(--pretui-size-l, var(--text-ui-lg, 0.875rem));
+        }
+        .pretui-sidebar-trigger[data-size='xl'] {
+          font-size: var(--pretui-size-xl, var(--text-ui-xl, 1rem));
+        }
+        .pretui-sidebar-trigger:hover {
+          background: var(--hover, var(--boxel-100));
+          color: var(--foreground);
+        }
+        .pretui-sidebar-trigger:focus-visible {
+          outline: 2px solid var(--ring);
+          outline-offset: 1px;
+        }
+        /* Three bars with the first one short — a rail glyph, drawn rather than
+           imported, so the component has no icon dependency. */
+        .pretui-sidebar-trigger-glyph {
+          inline-size: 1em;
+          block-size: 0.75em;
+          border-inline-start: 0.28em solid currentColor;
+          border-inline-end: 1.5px solid currentColor;
+          border-block: 1.5px solid currentColor;
+          border-radius: 2px;
+        }
       }
     </style>
   </template>
@@ -884,49 +888,51 @@ export class SidebarGroup extends Component<SidebarGroupSignature> {
       <div class='pretui-sbgroup-body'>{{yield}}</div>
     </div>
     <style scoped>
-      .pretui-sbgroup {
-        display: grid;
-        gap: 2px;
-        min-inline-size: 0;
-      }
-      .pretui-sbgroup-head {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: var(--space-2, 6px);
-        padding: var(--space-2, 6px) var(--space-2, 6px) 2px;
-        min-inline-size: 0;
-      }
-      .pretui-sbgroup-label {
-        font-family: var(--font-mono);
-        font-size: var(--text-ui-xs, 11px);
-        font-weight: 500;
-        letter-spacing: var(--track-eyebrow, 0.08em);
-        text-transform: uppercase;
-        color: var(--muted-foreground);
-        min-inline-size: 0;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-      /* Visually gone, still the accessible name — the opposite of a label
-         parked off screen with opacity, which stays announced but describes
-         nothing the reader can find. */
-      .pretui-sbgroup-label[data-hidden='true'] {
-        position: absolute;
-        inline-size: 1px;
-        block-size: 1px;
-        overflow: hidden;
-        clip-path: inset(50%);
-        white-space: nowrap;
-      }
-      .pretui-sbgroup-action {
-        flex: none;
-      }
-      .pretui-sbgroup-body {
-        display: grid;
-        gap: 1px;
-        min-inline-size: 0;
+      @layer PretComponent {
+        .pretui-sbgroup {
+          display: grid;
+          gap: 2px;
+          min-inline-size: 0;
+        }
+        .pretui-sbgroup-head {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: var(--space-2, 6px);
+          padding: var(--space-2, 6px) var(--space-2, 6px) 2px;
+          min-inline-size: 0;
+        }
+        .pretui-sbgroup-label {
+          font-family: var(--font-mono);
+          font-size: var(--text-ui-xs, 11px);
+          font-weight: 500;
+          letter-spacing: var(--track-eyebrow, 0.08em);
+          text-transform: uppercase;
+          color: var(--muted-foreground);
+          min-inline-size: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        /* Visually gone, still the accessible name — the opposite of a label
+           parked off screen with opacity, which stays announced but describes
+           nothing the reader can find. */
+        .pretui-sbgroup-label[data-hidden='true'] {
+          position: absolute;
+          inline-size: 1px;
+          block-size: 1px;
+          overflow: hidden;
+          clip-path: inset(50%);
+          white-space: nowrap;
+        }
+        .pretui-sbgroup-action {
+          flex: none;
+        }
+        .pretui-sbgroup-body {
+          display: grid;
+          gap: 1px;
+          min-inline-size: 0;
+        }
       }
     </style>
   </template>
@@ -1059,95 +1065,99 @@ export class SidebarItem extends Component<SidebarItemSignature> {
       </button>
     {{/if}}
     <style scoped>
-      /* The Tooltip wrapper is a child component; the scope attribute rides
-         `...attributes` to its root, so this rule reaches it with no
-         `:deep()`. Verified mechanism, see the file header of
-         structure-layout.gts. */
-      .pretui-sbitem-tip {
-        display: block;
-        inline-size: 100%;
-      }
-      .pretui-sbitem {
-        display: flex;
-        align-items: center;
-        gap: 0.6em;
-        inline-size: 100%;
-        min-inline-size: 0;
-        min-block-size: var(--control-h, 28px);
-        padding: 0 0.6em;
-        border: 0;
-        border-radius: var(--radius-chip, 6px);
-        background: none;
-        color: var(--muted-foreground);
-        font: inherit;
-        letter-spacing: inherit;
-        text-align: start;
-        text-decoration: none;
-        cursor: pointer;
-        box-sizing: border-box;
-        transition: background var(--pretui-dur-snap, 180ms)
-          var(--pretui-ease-snap, ease);
-      }
-      .pretui-sbitem[data-collapsed='true'] {
-        justify-content: center;
-        padding: 0;
-      }
-      .pretui-sbitem:hover {
-        background: var(--hover, var(--boxel-100));
-        color: var(--foreground);
-      }
-      .pretui-sbitem:focus-visible {
-        outline: 2px solid var(--ring);
-        outline-offset: -2px;
-      }
-      .pretui-sbitem:active {
-        transform: scale(0.985);
-      }
-      .pretui-sbitem[data-active='true'] {
-        background: var(--pretui-selected, var(--boxel-100));
-        color: var(--pretui-primary-ink, var(--primary));
-        font-weight: 600;
-      }
-      .pretui-sbitem[aria-disabled='true'] {
-        opacity: 0.45;
-        cursor: default;
-      }
-      .pretui-sbitem[aria-disabled='true']:hover {
-        background: none;
-      }
-      .pretui-sbitem-icon {
-        flex: none;
-        display: grid;
-        place-items: center;
-        inline-size: 1.15em;
-        block-size: 1.15em;
-      }
-      .pretui-sbitem-label {
-        flex: 1 1 auto;
-        min-inline-size: 0;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-      .pretui-sbitem-badge {
-        flex: none;
-        font-variant-numeric: tabular-nums;
-        font-size: 0.9em;
-        color: var(--ink-3, var(--boxel-400));
-      }
-      /* A coarse pointer gets the 44px row the guideline asks for; a fine
-         pointer keeps the kit's 28px rhythm. */
-      @media (any-pointer: coarse) {
-        .pretui-sbitem {
-          min-block-size: 44px;
+      /* above Tooltip's layer, so these win by layer order, not file order */
+      @layer PretComponent, PretComposite;
+      @layer PretComposite {
+        /* The Tooltip wrapper is a child component; the scope attribute rides
+           `...attributes` to its root, so this rule reaches it with no
+           `:deep()`. Verified mechanism, see the file header of
+           structure-layout.gts. */
+        .pretui-sbitem-tip {
+          display: block;
+          inline-size: 100%;
         }
-      }
-      @media (prefers-reduced-motion: reduce) {
         .pretui-sbitem {
-          transition: none;
+          display: flex;
+          align-items: center;
+          gap: 0.6em;
+          inline-size: 100%;
+          min-inline-size: 0;
+          min-block-size: var(--control-h, 28px);
+          padding: 0 0.6em;
+          border: 0;
+          border-radius: var(--radius-chip, 6px);
+          background: none;
+          color: var(--muted-foreground);
+          font: inherit;
+          letter-spacing: inherit;
+          text-align: start;
+          text-decoration: none;
+          cursor: pointer;
+          box-sizing: border-box;
+          transition: background var(--pretui-dur-snap, 180ms)
+            var(--pretui-ease-snap, ease);
+        }
+        .pretui-sbitem[data-collapsed='true'] {
+          justify-content: center;
+          padding: 0;
+        }
+        .pretui-sbitem:hover {
+          background: var(--hover, var(--boxel-100));
+          color: var(--foreground);
+        }
+        .pretui-sbitem:focus-visible {
+          outline: 2px solid var(--ring);
+          outline-offset: -2px;
         }
         .pretui-sbitem:active {
-          transform: none;
+          transform: scale(0.985);
+        }
+        .pretui-sbitem[data-active='true'] {
+          background: var(--pretui-selected, var(--boxel-100));
+          color: var(--pretui-primary-ink, var(--primary));
+          font-weight: 600;
+        }
+        .pretui-sbitem[aria-disabled='true'] {
+          opacity: 0.45;
+          cursor: default;
+        }
+        .pretui-sbitem[aria-disabled='true']:hover {
+          background: none;
+        }
+        .pretui-sbitem-icon {
+          flex: none;
+          display: grid;
+          place-items: center;
+          inline-size: 1.15em;
+          block-size: 1.15em;
+        }
+        .pretui-sbitem-label {
+          flex: 1 1 auto;
+          min-inline-size: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .pretui-sbitem-badge {
+          flex: none;
+          font-variant-numeric: tabular-nums;
+          font-size: 0.9em;
+          color: var(--ink-3, var(--boxel-400));
+        }
+        /* A coarse pointer gets the 44px row the guideline asks for; a fine
+           pointer keeps the kit's 28px rhythm. */
+        @media (any-pointer: coarse) {
+          .pretui-sbitem {
+            min-block-size: 44px;
+          }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .pretui-sbitem {
+            transition: none;
+          }
+          .pretui-sbitem:active {
+            transform: none;
+          }
         }
       }
     </style>

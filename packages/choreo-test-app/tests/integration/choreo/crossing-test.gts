@@ -10,6 +10,7 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { setupRenderingTest } from 'ember-qunit';
 import { Choreo, motion } from 'glimmer-motion';
+import { setupChoreo } from 'glimmer-motion/choreo/test-support';
 import { animationsSettled, bounds } from 'glimmer-motion/test-support';
 import { module, test } from 'qunit';
 
@@ -436,6 +437,7 @@ let nested: NestedPages;
 module('Integration | choreo | crossing', function (hooks) {
   setupRenderingTest(hooks);
   setupFixtureViewport(hooks);
+  setupChoreo(hooks);
 
   test('the crossing: leaves fade, the flight carries the identity, arrivals land late', async function (assert) {
     await render(<template><Pages /></template>);

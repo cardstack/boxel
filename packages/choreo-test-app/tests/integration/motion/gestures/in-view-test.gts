@@ -5,6 +5,7 @@
 import { render } from '@ember/test-helpers';
 import { setupRenderingTest } from 'ember-qunit';
 import motion from 'glimmer-motion/motion';
+import { setupMotion } from 'glimmer-motion/test-support';
 import { motionValue, type Transition } from 'motion-dom';
 import { module, test } from 'qunit';
 
@@ -19,6 +20,7 @@ const waitForObserver = () => sleep(100);
 
 module('Integration | motion | whileInView', function (hooks) {
   setupRenderingTest(hooks);
+  setupMotion(hooks);
 
   test('whileInView applies when the element scrolls into view and unapplies when it leaves', async function (assert) {
     const opacity = motionValue(0);

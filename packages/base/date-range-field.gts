@@ -69,6 +69,12 @@ class Edit extends Component<typeof DateRangeField> {
     return resolveConfiguredDate(this.config?.maxDate);
   }
 
+  // Read from the same clock as a `'today'` bound, so the month the
+  // calendar opens on is the month that bound falls in.
+  get today(): Date {
+    return nowDate();
+  }
+
   @action onSelect(selected: any) {
     this.range = selected.date;
   }
@@ -116,6 +122,7 @@ class Edit extends Component<typeof DateRangeField> {
         <div class='dropdown-content'>
           <div>
             <DateRangePicker
+              @defaultCenter={{this.today}}
               @start={{this.range.start}}
               @end={{this.range.end}}
               @onSelect={{this.onSelect}}

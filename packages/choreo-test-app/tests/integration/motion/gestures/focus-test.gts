@@ -5,6 +5,7 @@
 import { render } from '@ember/test-helpers';
 import { setupRenderingTest } from 'ember-qunit';
 import motion from 'glimmer-motion/motion';
+import { setupMotion } from 'glimmer-motion/test-support';
 import { frame, motionValue, type Transition } from 'motion-dom';
 import { module, test } from 'qunit';
 
@@ -18,6 +19,7 @@ const el = () =>
 
 module('Integration | motion | focus', function (hooks) {
   setupRenderingTest(hooks);
+  setupMotion(hooks);
 
   test('whileFocus applied', async function (assert) {
     const opacity = motionValue(1);

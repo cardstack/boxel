@@ -8,6 +8,7 @@ import { find, findAll, render, settled } from '@ember/test-helpers';
 import { tracked } from '@glimmer/tracking';
 import { setupRenderingTest } from 'ember-qunit';
 import motion from 'glimmer-motion/motion';
+import { setupMotion } from 'glimmer-motion/test-support';
 import {
   frame,
   motionValue,
@@ -46,6 +47,7 @@ class P {
 
 module('Integration | motion | animate prop as variant', function (hooks) {
   setupRenderingTest(hooks);
+  setupMotion(hooks);
 
   test('animates to set variant', async function (assert) {
     const variants: Variants = {

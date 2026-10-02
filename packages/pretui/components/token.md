@@ -55,3 +55,5 @@ Notes and gaps:
 The 8% / 26% / 30% mix ratios, the 4px radius, 5px padding and `0.35ch` margins are fixed — unlike **Chip**, whose mixes are tokenised. A season wanting quieter or louder tokens must change `--pretui-primary-ink`, which is the only lever.
 
 Note that `--pretui-primary-ink` is meant to be a _readable-on-light-surfaces_ variant of `--primary`; a season that leaves it undefined falls back to `--primary` neat, and a saturated brand colour at 26% ink mix on an 8% fill is usually too light. Defining `--pretui-primary-ink` is effectively required for this component.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

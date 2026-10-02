@@ -47,6 +47,8 @@ Practical guidance: render Toast inside a host-owned region that carries the liv
 
 Because the surface is `--popover` rather than `--card`, a toast matches **Menu** and **Popover** rather than **Panel** — the "floating above" vocabulary. A season must keep `--popover` distinct from the page background, since the only other separation is a shadow, and shadows disappear on dark surfaces.
 
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
+
 ## React ecosystem
 
 Toast is **presentation only** — no stack, duration, or live region.

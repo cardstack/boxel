@@ -43,3 +43,5 @@ Where it is thinner: no fuzzy-match scoring controls, no command groups or scopi
 The palette takes the kit's overlay, input and menu tokens; the shortcut faces take **Kbd**'s.
 
 Sharing the menu tokens is what makes a command look the same in the palette as it does in the menubar — which is the visible half of the shared-tree design.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

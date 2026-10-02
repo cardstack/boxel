@@ -1,3 +1,5 @@
+import stableStringify from 'safe-stable-stringify';
+
 import type { ResolvedCodeRef } from '../code-ref.ts';
 import { isResolvedCodeRef } from '../card-document-shape.ts';
 import type { Definition, FieldDefinition } from '../definitions.ts';
@@ -51,16 +53,26 @@ import type { OperationQueryFilterTemplate } from './types.ts';
 //   wrote a link would match the index, and never the URL the predicate
 //   reads.
 //
+// A filter is compiled against the rule's type, and `item.on` also admits a
+// card whose type descends from it. A descendant can declare a field the
+// predicate reads differently, computed where the rule's type stores it, and
+// the index then holds what that type makes of it. So the compiled policy
+// also records, for each path a grant's filter compares, the descendants the
+// governed realm holds cards of that read that path differently
+// (`readsPathAlike`), and a search keeps each comparison of the path from
+// judging their cards (`withoutMisreadings`). The rest of the filter judges
+// them as it judges any card.
+//
 // What the checks do not reach:
 //
-// - Other types. A filter is compiled against the rule's type and the types
-//   its path names for contained values. `item.on` also admits a card whose
-//   type descends from the rule's, and a contained value can be of a subtype
-//   of its field's type. Either can declare a field the predicate reads
-//   differently, computed where the rule's type stores it, and the index
-//   then holds what that type makes of it. The paths a filter reads are the
-//   keys of its `eq` and `range` members, so they can be checked against any
-//   other type's definition.
+// - A contained value of a subtype of its field's type. A card of the rule's
+//   type can store, in `.address`, a value whose type descends from the
+//   field's and computes `city`, and the index then holds what that value's
+//   type makes of it. The index records the type of a card, not of a value
+//   it contains, so no filter can tell such a card apart from one whose
+//   value reads `city` as stored. Only a writer of the card can store such a
+//   value, and a writer can already move a card into or out of a grant by
+//   writing the fields its predicate reads.
 // - A number field whose stored value is not a number. The index holds what
 //   the field makes of the stored value, so the string "150" is indexed as
 //   150, while BXL compares the string. Only a writer of the card can store
@@ -109,7 +121,7 @@ export async function compilePolicyFilter(
     .filter((issue) => issue.severity === 'error');
   if (refusals.length > 0) {
     return {
-      problem: `the \`predicate\` profile refuses it: ${refusals
+      problem: `it uses something a search filter can't use: ${refusals
         .map((issue) => `${issue.code}: ${issue.message}`)
         .join('; ')}`,
     };
@@ -124,6 +136,122 @@ export async function compilePolicyFilter(
     }
     throw e;
   }
+}
+
+// The paths a compiled filter compares, each once, as the index names them:
+// every key of its field-keyed members, `item.` left off. A filter's other
+// members read no field: `item.on` names a type, and `any`, `every` and `not`
+// only combine what they hold.
+export function pathsFilterReads(filter: Filter): string[] {
+  let paths = new Set<string>();
+  let visit = (node: Filter) => {
+    for (let operator of FIELD_KEYED_OPERATORS) {
+      for (let path of Object.keys(node[operator] ?? {})) {
+        paths.add(path.replace(/^item\./, ''));
+      }
+    }
+    node.any?.forEach(visit);
+    node.every?.forEach(visit);
+    if (node.not) {
+      visit(node.not);
+    }
+  };
+  visit(filter);
+  return [...paths].sort();
+}
+
+// The members of a filter that compare fields, in either grammar a filter
+// is held in.
+export const FIELD_KEYED_OPERATORS = ['eq', 'contains', 'in', 'range'] as const;
+
+// Whether a card of the type `other` defines reads `path` as a card of the
+// rule's type does, so a comparison compiled against the rule's type means
+// for it what it means for the rule's own cards.
+//
+// Each field on the path is compared by its declaration in the two types,
+// and a difference in anything that decides what the index holds for it
+// counts, whether or not the compiler would have accepted it: being computed,
+// being filled by a query, being a list rather than a single value, or being
+// absent. So does the type of a primitive, since a subclass of a base field
+// can index something else. A compound value's type counts only through the
+// fields the path goes on to read, which are compared in the two types'
+// definitions of it; where the two name one type, the rest of the path reads
+// alike. A link read only for its `id` reads the id of whatever card it links
+// to, so its target type does not count. `searchable` decides what the index
+// holds of a linked card's fields, which a filter never reads. Treating a
+// difference as one only makes the filter narrower.
+//
+// A predicate annotated `snapshot: true` reads what the index holds, as the
+// filter does, so for it a field computed in one type and stored in the other
+// is read alike.
+export async function readsPathAlike(
+  ruleType: Definition,
+  other: Definition,
+  path: string,
+  snapshot: boolean,
+  lookupDefinition: (
+    codeRef: ResolvedCodeRef,
+  ) => Promise<Definition | undefined>,
+): Promise<boolean> {
+  let names = path.split('.');
+  let [ours, theirs] = [ruleType, other];
+  for (let [index, name] of names.entries()) {
+    let declared = fieldOf(ours, name);
+    let redeclared = fieldOf(theirs, name);
+    if (!declared || !redeclared) {
+      return false;
+    }
+    let last = index === names.length - 1;
+    let idOfLink =
+      (declared.type === 'linksTo' || declared.type === 'linksToMany') &&
+      index === names.length - 2 &&
+      names[index + 1] === 'id';
+    let throughCompound = !last && !idOfLink && !declared.isPrimitive;
+    let reading = (field: FieldDefinition) => {
+      let { searchable: _searchable, ...rest } = field;
+      return stableStringify({
+        ...rest,
+        ...(snapshot ? { isComputed: false } : {}),
+        ...(idOfLink || throughCompound ? { fieldOrCard: undefined } : {}),
+      });
+    };
+    if (reading(declared) !== reading(redeclared)) {
+      return false;
+    }
+    if (last || idOfLink) {
+      return true;
+    }
+    if (
+      stableStringify(declared.fieldOrCard) ===
+      stableStringify(redeclared.fieldOrCard)
+    ) {
+      return true;
+    }
+    let [ourType, theirType] = await Promise.all(
+      [declared, redeclared].map((field) =>
+        isResolvedCodeRef(field.fieldOrCard)
+          ? lookupDefinition(field.fieldOrCard)
+          : undefined,
+      ),
+    );
+    if (!ourType || !theirType) {
+      return false;
+    }
+    [ours, theirs] = [ourType, theirType];
+  }
+  return false;
+}
+
+function fieldOf(
+  definition: Definition,
+  name: string,
+): FieldDefinition | undefined {
+  let id = hasOwn(definition.fields, name)
+    ? definition.fields[name]
+    : undefined;
+  return id !== undefined && hasOwn(definition.fieldDefs, id)
+    ? definition.fieldDefs[id]
+    : undefined;
 }
 
 // Where the caller stands in a filter: the marker a declared query uses for
@@ -244,7 +372,7 @@ class FilterCompiler {
     }
     if (!path || !constant) {
       return refuse(
-        `\`${written}\` must compare a field with a constant, and ${operandProblem(left, right)}`,
+        `\`${written}\` has to compare a field with a fixed value, and ${operandProblem(left, right)}`,
       );
     }
     let field = await this.field(path);
@@ -252,7 +380,7 @@ class FilterCompiler {
       let eqPolarity = operator === '!=' ? flip(polarity) : polarity;
       if (field.kind === 'identity' && eqPolarity === 'negative') {
         return refuse(
-          `\`${field.path}\` is a card's id, and an id is compiled only where it admits a card, not inside a \`not\` or a \`!=\`: the index and the stored source can spell one id two ways`,
+          `\`${field.path}\` is a card's id, and a search filter can't check that an id is different (inside \`not\` or with \`!=\`): the index and the saved card can write the same id two different ways`,
         );
       }
       if (field.kind === 'identity' && constant.kind !== 'null') {
@@ -264,7 +392,7 @@ class FilterCompiler {
     }
     if (field.kind !== 'number' || constant.kind !== 'number') {
       return refuse(
-        `\`${written}\` is compiled only between a number field and a number, and \`${field.path}\` ${field.kind === 'number' ? `is compared with ${describeConstant(constant)}` : `is not a number field`}`,
+        `\`${written}\` works in a search filter only between a number field and a number, and \`${field.path}\` ${field.kind === 'number' ? `is compared with ${describeConstant(constant)}` : `is not a number field`}`,
       );
     }
     return {
@@ -281,19 +409,19 @@ class FilterCompiler {
     let path = asFieldPath(collection);
     if (!path) {
       return refuse(
-        `membership must test a field of the card: ${describeNode(collection)} is not one`,
+        `a membership test has to check a field of the card, and ${describeNode(collection)} isn't one`,
       );
     }
     if (polarity === 'negative') {
       return refuse(
-        `membership in ${describeNode(collection)} is compiled only where it admits a card, not inside a \`not\`: the index answers \`not\` element by element, so it would admit a card as soon as any one element differs`,
+        `a search filter can't check that ${describeNode(collection)} does not include something (inside \`not\`): the index checks a list one item at a time, so it would let a card in as soon as any one item is different`,
       );
     }
     let list = await this.list(path, through);
     let constant = readConstant(member);
     if (constant?.kind !== 'string') {
       return refuse(
-        `membership in \`${list.path}\` must test for a string or \`actor()\`, not ${constant ? describeConstant(constant) : describeNode(member)}`,
+        `a membership test on \`${list.path}\` has to look for a text value or \`actor()\`, not ${constant ? describeConstant(constant) : describeNode(member)}`,
       );
     }
     if (through === 'id') {
@@ -318,12 +446,12 @@ class FilterCompiler {
           return { path: `${dotted}.id`, kind: 'identity' };
         }
         return refuse(
-          `\`${dotted}\` is a link, and a filter compares only the id of the card it links to: \`.${dotted}.id\``,
+          `\`${dotted}\` is a link, and a search filter can compare only the id of the card it links to: \`.${dotted}.id\``,
         );
       }
       if (field.type === 'containsMany' || field.type === 'linksToMany') {
         return refuse(
-          `\`${dotted}\` is a list, and \`==\` compares a whole list; test one member with \`.${dotted} | any(${field.type === 'linksToMany' ? '.id' : '.'} == value)\``,
+          `\`${dotted}\` is a list, and \`==\` compares a whole list. To check one item of it, use \`.${dotted} | any(${field.type === 'linksToMany' ? '.id' : '.'} == value)\``,
         );
       }
       if (field.isPrimitive) {
@@ -339,12 +467,12 @@ class FilterCompiler {
       }
       if (last) {
         return refuse(
-          `\`${dotted}\` is a compound value, and a filter compares one of its fields`,
+          `\`${dotted}\` is a group of fields, and a search filter compares one of those fields, not the whole group`,
         );
       }
       definition = await this.#compoundDefinition(field, dotted);
     }
-    return refuse('a comparison must read a field of the card');
+    return refuse('a comparison has to use a field of the card');
   }
 
   // A list a membership test reads: a list of strings the card contains, or a
@@ -363,7 +491,7 @@ class FilterCompiler {
         if (field.type === 'linksToMany') {
           if (through !== 'id') {
             return refuse(
-              `\`${dotted}\` is a list of links, and a filter tests one by the id of the card it links to: \`.${dotted} | any(.id == value)\``,
+              `\`${dotted}\` is a list of links, and a search filter checks one by the id of the card it links to: \`.${dotted} | any(.id == value)\``,
             );
           }
           return { path: `${dotted}.id` };
@@ -371,28 +499,28 @@ class FilterCompiler {
         if (field.type === 'containsMany' && field.isPrimitive) {
           if (through !== 'value') {
             return refuse(
-              `\`${dotted}\` is a list of values, and a filter tests one as it is: \`.${dotted} | any(. == value)\``,
+              `\`${dotted}\` is a list of values, and a search filter checks each value directly: \`.${dotted} | any(. == value)\``,
             );
           }
           if (fieldHolds(field, dotted) !== 'string') {
             return refuse(
-              `\`${dotted}\` is a list of numbers, and a filter tests membership only in a list of strings or of links`,
+              `\`${dotted}\` is a list of numbers, and a search filter can only check lists of text or of links`,
             );
           }
           return { path: dotted };
         }
         return refuse(
-          `\`${dotted}\` is not a list of strings or of links, which is all a filter tests membership in`,
+          `\`${dotted}\` isn't a list of text or of links, which are the only lists a search filter can check`,
         );
       }
       if (field.type !== 'contains' || field.isPrimitive) {
         return refuse(
-          `\`${dotted}\` is not a compound value, so the path cannot continue past it`,
+          `\`${dotted}\` is a link, a list or a single value, and a membership test can only go through fields grouped directly on the card, so nothing can come after it in the path`,
         );
       }
       definition = await this.#compoundDefinition(field, dotted);
     }
-    return refuse('membership must test a field of the card');
+    return refuse('a membership test has to check a field of the card');
   }
 
   #immediateField(
@@ -420,12 +548,12 @@ class FilterCompiler {
     // compared.
     if (field.isComputed && !this.#snapshot) {
       return refuse(
-        `\`${dotted}\` is computed, so the card's stored source, which the predicate reads, does not hold it; a \`where\` annotated \`snapshot: true\` reads computed values`,
+        `\`${dotted}\` is computed, so the saved card, which the condition checks, doesn't have it. A \`where\` written with \`snapshot: true\` can use computed values`,
       );
     }
     if (field.query) {
       return refuse(
-        `\`${dotted}\` is filled by a query, so the card's stored source, which the predicate reads, does not hold it`,
+        `\`${dotted}\` is filled in by a search, so the saved card, which the condition checks, doesn't have it`,
       );
     }
     return field;
@@ -439,7 +567,7 @@ class FilterCompiler {
       ? await this.#env.lookupDefinition(field.fieldOrCard)
       : undefined;
     if (!definition) {
-      return refuse(`no definition was found for the type of \`${dotted}\``);
+      return refuse(`the definition of \`${dotted}\`'s type can't be found`);
     }
     return definition;
   }
@@ -490,7 +618,7 @@ function fieldHolds(
   );
   if (!compared) {
     return refuse(
-      `\`${dotted}\` is a ${type ? (type.name === 'default' ? type.module : type.name) : 'custom'} field, and a filter compares only the base string and number fields, which the index holds as their stored source does`,
+      `\`${dotted}\` is a ${type ? (type.name === 'default' ? type.module : type.name) : 'custom'} field, and a search filter can compare only plain text and number fields, which the index stores exactly as the saved card does`,
     );
   }
   return compared.holds;
@@ -503,7 +631,7 @@ function assertURL(path: string, constant: Constant): void {
     typeof constant.value === 'string' ? parseURL(constant.value) : undefined;
   if (url?.protocol !== 'http:' && url?.protocol !== 'https:') {
     refuse(
-      `\`${path}\` is a card's id, and an id is compared only with an absolute URL, which is how the predicate reads one; ${describeConstant(constant)} is not one`,
+      `\`${path}\` is a card's id, and an id can be compared only with a full URL, which is how the condition sees one. ${describeConstant(constant)} isn't one`,
     );
   }
 }
@@ -526,7 +654,7 @@ function assertComparable(
   let holds = field.kind === 'number' ? 'number' : 'string';
   if (constant.kind !== holds) {
     refuse(
-      `\`${field.path}\` holds a ${holds}, and is compared with ${describeConstant(constant)}`,
+      `\`${field.path}\` holds ${holds === 'number' ? 'a number' : 'text'}, and is compared with ${describeConstant(constant)}`,
     );
   }
 }
@@ -624,8 +752,8 @@ function fieldNames(parts: PathPart[]): string[] {
     }
     return refuse(
       part.type === 'index'
-        ? 'the predicate reads one element of a list by its position, which a filter cannot address'
-        : 'the predicate reads a path a filter cannot address',
+        ? "the condition picks one item of a list by its position, which a search filter can't do"
+        : "the condition uses a path a search filter can't follow",
     );
   });
 }
@@ -691,7 +819,7 @@ function readConstant(node: unknown): Constant | undefined {
         return { kind: 'null', value: null };
       case 'boolean':
         return refuse(
-          '`true` and `false` are not compared in a filter: a boolean field holds its unset value in the index as `false`, which the stored source does not',
+          "a search filter can't compare with `true` or `false`: the index stores an empty yes/no field as `false`, while the saved card leaves it empty",
         );
     }
     return undefined;
@@ -768,34 +896,34 @@ function operandProblem(left: unknown, right: unknown): string {
   for (let side of [left, right]) {
     let binary = asBinary(side);
     if (binary && ['+', '-', '*', '/', '%'].includes(binary.operator)) {
-      return `\`${binary.operator}\` is arithmetic, which a filter cannot do`;
+      return `\`${binary.operator}\` is arithmetic, which a search filter can't do`;
     }
     if (binary?.operator === '//') {
-      return '`//` supplies a default value, which a filter cannot do';
+      return "`//` fills in a default value, which a search filter can't do";
     }
   }
   if (asFieldPath(left) && asFieldPath(right)) {
-    return 'both sides are fields, and a filter compares a field only with a constant';
+    return 'both sides are fields, and a search filter can compare a field only with a fixed value';
   }
   if (!asFieldPath(left) && !asFieldPath(right)) {
     return 'neither side is a field of the card';
   }
-  return `${describeNode(asFieldPath(left) ? right : left)} is not a constant`;
+  return `${describeNode(asFieldPath(left) ? right : left)} isn't a fixed value`;
 }
 
 function notAPredicate(node: unknown): string {
   if (isNode(node) && node.type === 'if') {
-    return 'a filter has no conditional, and `if` is one';
+    return "a search filter can't use `if`";
   }
   if (asPath(node)) {
-    return `${describeNode(node)} is a field, not a condition; compare it with a value`;
+    return `${describeNode(node)} is a field, not a condition. Compare it with a value`;
   }
-  return `${describeNode(node)} is not a comparison, a membership test, or a combination of those with \`and\`, \`or\` and \`not\``;
+  return `${describeNode(node)} isn't a comparison or a membership test, or several of those joined with \`and\`, \`or\` and \`not\``;
 }
 
 function describeNode(node: unknown): string {
   if (!isNode(node)) {
-    return 'the expression';
+    return 'that part of the condition';
   }
   let parts = asPath(node);
   if (parts) {
@@ -808,10 +936,16 @@ function describeNode(node: unknown): string {
     return `\`${String(node.name)}(…)\``;
   }
   if (node.type === 'literal') {
-    return `the ${String(node.valueType)} literal`;
+    return `the ${LITERAL_KINDS[String(node.valueType)] ?? String(node.valueType)} value`;
   }
-  return `the ${node.type} expression`;
+  return 'that part of the condition';
 }
+
+// How a written value's kind reads to someone who doesn't program.
+const LITERAL_KINDS: Record<string, string> = {
+  string: 'text',
+  boolean: 'yes/no',
+};
 
 function describeConstant(constant: Constant): string {
   switch (constant.kind) {
@@ -821,7 +955,7 @@ function describeConstant(constant: Constant): string {
       return '`null`';
     case 'string':
       return typeof constant.value === 'string'
-        ? `the string ${JSON.stringify(constant.value)}`
+        ? `the text ${JSON.stringify(constant.value)}`
         : '`actor()`';
   }
 }

@@ -121,161 +121,163 @@ export class CtaBand extends Component<CtaBandSignature> {
     </section>
 
     <style scoped>
-      .pretui-cta {
-        container-type: inline-size;
-        display: block;
-        border-radius: var(--radius-surface, 10px);
-        padding: var(--pretui-cta-pad, var(--space-9, 45px) var(--space-6, 19px));
-        color: var(--pretui-band-ink, var(--foreground));
-      }
-      .pretui-cta-inner {
-        display: grid;
-        gap: var(--space-4, 11px);
-        max-width: var(--pretui-cta-measure, 60ch);
-      }
-      .pretui-cta[data-align='center'] .pretui-cta-inner {
-        justify-items: center;
-        text-align: center;
-        margin-inline: auto;
-      }
-      .pretui-cta[data-align='start'] .pretui-cta-inner {
-        justify-items: start;
-        text-align: start;
-      }
-      .pretui-cta-eyebrow {
-        margin: 0;
-        font-family: var(--font-mono);
-        font-size: var(--text-ui-xs, 11px);
-        font-weight: 500;
-        letter-spacing: var(--track-eyebrow, 0.08em);
-        text-transform: uppercase;
-        color: var(--pretui-band-ink-quiet, var(--muted-foreground));
-      }
-      .pretui-cta-headline {
-        margin: 0;
-        font-family: var(--font-serif);
-        font-size: var(--pretui-cta-headline-size, var(--text-heading, 19px));
-        font-weight: 400;
-        line-height: 1.18;
-        letter-spacing: var(--track-heading, -0.02em);
-        color: var(--pretui-band-ink, var(--foreground));
-        text-wrap: balance;
-      }
-      .pretui-cta-lead {
-        margin: 0;
-        font-size: var(--text-body, 15px);
-        line-height: 1.5;
-        color: var(--pretui-band-ink-quiet, var(--muted-foreground));
-      }
-      .pretui-cta-actions {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: var(--space-3, 8px);
-        margin-top: var(--space-1, 3px);
-      }
-
-      /* ── Appendix E, axis 1: tone sets two custom properties. Nothing
-         else in this stylesheet knows a hue. ── */
-      .pretui-cta[data-tone='neutral'] {
-        --pretui-tone: var(--foreground);
-        --pretui-tone-on: var(--pretui-on-neutral, var(--background));
-      }
-      .pretui-cta[data-tone='primary'] {
-        --pretui-tone: var(--primary);
-        --pretui-tone-on: var(--primary-foreground);
-      }
-      .pretui-cta[data-tone='info'] {
-        --pretui-tone: var(--pretui-info, var(--boxel-blue));
-        --pretui-tone-on: var(--pretui-on-info, var(--background));
-      }
-      .pretui-cta[data-tone='success'] {
-        --pretui-tone: var(--success, var(--boxel-success));
-        --pretui-tone-on: var(--pretui-on-success, var(--background));
-      }
-      .pretui-cta[data-tone='warning'] {
-        --pretui-tone: var(--warning, var(--boxel-warning));
-        --pretui-tone-on: var(--pretui-on-warning, var(--background));
-      }
-      .pretui-cta[data-tone='danger'] {
-        --pretui-tone: var(--destructive);
-        --pretui-tone-on: var(--destructive-foreground);
-      }
-      .pretui-cta[data-tone='attention'] {
-        --pretui-tone: var(--pretui-attention, var(--boxel-fuschia));
-        --pretui-tone-on: var(--pretui-on-attention, var(--background));
-      }
-
-      /* ── Appendix E, axis 2: the recipes. Written once, reading the two
-         properties above — Law 2 generalised. `--pretui-band-ink` and
-         `--pretui-band-ink-quiet` are what the type reads, so the eyebrow
-         and lead follow the recipe without a second set of rules. ── */
-      .pretui-cta[data-appearance='accent'] {
-        background: var(--pretui-tone);
-        --pretui-band-ink: var(--pretui-tone-on);
-        --pretui-band-ink-quiet: color-mix(
-          in oklch,
-          var(--pretui-tone-on) 72%,
-          var(--pretui-tone)
-        );
-        box-shadow: 0 0 0 1px
-            color-mix(in oklch, var(--pretui-tone) 70%, var(--border)),
-          var(--pretui-edge-highlight, inset 0 1px 0 rgb(255 255 255 / 0.14));
-      }
-      .pretui-cta[data-appearance='filled'] {
-        background: color-mix(in oklch, var(--pretui-tone) 15%, var(--card));
-        --pretui-band-ink: color-mix(
-          in oklch,
-          var(--pretui-tone) 60%,
-          var(--foreground)
-        );
-        --pretui-band-ink-quiet: color-mix(
-          in oklch,
-          var(--pretui-tone) 30%,
-          var(--muted-foreground)
-        );
-      }
-      .pretui-cta[data-appearance='outlined'] {
-        background: var(--card);
-        --pretui-band-ink: color-mix(
-          in oklch,
-          var(--pretui-tone) 55%,
-          var(--foreground)
-        );
-        --pretui-band-ink-quiet: var(--muted-foreground);
-        box-shadow: 0 0 0 1px
-          color-mix(in oklch, var(--pretui-tone) 45%, var(--border));
-      }
-      .pretui-cta[data-appearance='filled-outlined'] {
-        background: color-mix(in oklch, var(--pretui-tone) 12%, var(--card));
-        --pretui-band-ink: color-mix(
-          in oklch,
-          var(--pretui-tone) 60%,
-          var(--foreground)
-        );
-        --pretui-band-ink-quiet: color-mix(
-          in oklch,
-          var(--pretui-tone) 30%,
-          var(--muted-foreground)
-        );
-        box-shadow: 0 0 0 1px
-          color-mix(in oklch, var(--pretui-tone) 40%, var(--border));
-      }
-      .pretui-cta[data-appearance='plain'] {
-        background: transparent;
-        --pretui-band-ink: var(--foreground);
-        --pretui-band-ink-quiet: var(--muted-foreground);
-      }
-
-      @container (max-width: 34rem) {
+      @layer PretComponent {
         .pretui-cta {
-          padding: var(
-            --pretui-cta-pad-narrow,
-            var(--space-6, 19px) var(--space-4, 11px)
-          );
+          container-type: inline-size;
+          display: block;
+          border-radius: var(--radius-surface, 10px);
+          padding: var(--pretui-cta-pad, var(--space-9, 45px) var(--space-6, 19px));
+          color: var(--pretui-band-ink, var(--foreground));
+        }
+        .pretui-cta-inner {
+          display: grid;
+          gap: var(--space-4, 11px);
+          max-width: var(--pretui-cta-measure, 60ch);
+        }
+        .pretui-cta[data-align='center'] .pretui-cta-inner {
+          justify-items: center;
+          text-align: center;
+          margin-inline: auto;
+        }
+        .pretui-cta[data-align='start'] .pretui-cta-inner {
+          justify-items: start;
+          text-align: start;
+        }
+        .pretui-cta-eyebrow {
+          margin: 0;
+          font-family: var(--font-mono);
+          font-size: var(--text-ui-xs, 11px);
+          font-weight: 500;
+          letter-spacing: var(--track-eyebrow, 0.08em);
+          text-transform: uppercase;
+          color: var(--pretui-band-ink-quiet, var(--muted-foreground));
+        }
+        .pretui-cta-headline {
+          margin: 0;
+          font-family: var(--font-serif);
+          font-size: var(--pretui-cta-headline-size, var(--text-heading, 19px));
+          font-weight: 400;
+          line-height: 1.18;
+          letter-spacing: var(--track-heading, -0.02em);
+          color: var(--pretui-band-ink, var(--foreground));
+          text-wrap: balance;
+        }
+        .pretui-cta-lead {
+          margin: 0;
+          font-size: var(--text-body, 15px);
+          line-height: 1.5;
+          color: var(--pretui-band-ink-quiet, var(--muted-foreground));
         }
         .pretui-cta-actions {
-          width: 100%;
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          gap: var(--space-3, 8px);
+          margin-top: var(--space-1, 3px);
+        }
+
+        /* ── Appendix E, axis 1: tone sets two custom properties. Nothing
+           else in this stylesheet knows a hue. ── */
+        .pretui-cta[data-tone='neutral'] {
+          --pretui-tone: var(--foreground);
+          --pretui-tone-on: var(--pretui-on-neutral, var(--background));
+        }
+        .pretui-cta[data-tone='primary'] {
+          --pretui-tone: var(--primary);
+          --pretui-tone-on: var(--primary-foreground);
+        }
+        .pretui-cta[data-tone='info'] {
+          --pretui-tone: var(--pretui-info, var(--boxel-blue));
+          --pretui-tone-on: var(--pretui-on-info, var(--background));
+        }
+        .pretui-cta[data-tone='success'] {
+          --pretui-tone: var(--success, var(--boxel-success));
+          --pretui-tone-on: var(--pretui-on-success, var(--background));
+        }
+        .pretui-cta[data-tone='warning'] {
+          --pretui-tone: var(--warning, var(--boxel-warning));
+          --pretui-tone-on: var(--pretui-on-warning, var(--background));
+        }
+        .pretui-cta[data-tone='danger'] {
+          --pretui-tone: var(--destructive);
+          --pretui-tone-on: var(--destructive-foreground);
+        }
+        .pretui-cta[data-tone='attention'] {
+          --pretui-tone: var(--pretui-attention, var(--boxel-fuschia));
+          --pretui-tone-on: var(--pretui-on-attention, var(--background));
+        }
+
+        /* ── Appendix E, axis 2: the recipes. Written once, reading the two
+           properties above — Law 2 generalised. `--pretui-band-ink` and
+           `--pretui-band-ink-quiet` are what the type reads, so the eyebrow
+           and lead follow the recipe without a second set of rules. ── */
+        .pretui-cta[data-appearance='accent'] {
+          background: var(--pretui-tone);
+          --pretui-band-ink: var(--pretui-tone-on);
+          --pretui-band-ink-quiet: color-mix(
+            in oklch,
+            var(--pretui-tone-on) 72%,
+            var(--pretui-tone)
+          );
+          box-shadow: 0 0 0 1px
+              color-mix(in oklch, var(--pretui-tone) 70%, var(--border)),
+            var(--pretui-edge-highlight, inset 0 1px 0 rgb(255 255 255 / 0.14));
+        }
+        .pretui-cta[data-appearance='filled'] {
+          background: color-mix(in oklch, var(--pretui-tone) 15%, var(--card));
+          --pretui-band-ink: color-mix(
+            in oklch,
+            var(--pretui-tone) 60%,
+            var(--foreground)
+          );
+          --pretui-band-ink-quiet: color-mix(
+            in oklch,
+            var(--pretui-tone) 30%,
+            var(--muted-foreground)
+          );
+        }
+        .pretui-cta[data-appearance='outlined'] {
+          background: var(--card);
+          --pretui-band-ink: color-mix(
+            in oklch,
+            var(--pretui-tone) 55%,
+            var(--foreground)
+          );
+          --pretui-band-ink-quiet: var(--muted-foreground);
+          box-shadow: 0 0 0 1px
+            color-mix(in oklch, var(--pretui-tone) 45%, var(--border));
+        }
+        .pretui-cta[data-appearance='filled-outlined'] {
+          background: color-mix(in oklch, var(--pretui-tone) 12%, var(--card));
+          --pretui-band-ink: color-mix(
+            in oklch,
+            var(--pretui-tone) 60%,
+            var(--foreground)
+          );
+          --pretui-band-ink-quiet: color-mix(
+            in oklch,
+            var(--pretui-tone) 30%,
+            var(--muted-foreground)
+          );
+          box-shadow: 0 0 0 1px
+            color-mix(in oklch, var(--pretui-tone) 40%, var(--border));
+        }
+        .pretui-cta[data-appearance='plain'] {
+          background: transparent;
+          --pretui-band-ink: var(--foreground);
+          --pretui-band-ink-quiet: var(--muted-foreground);
+        }
+
+        @container (max-width: 34rem) {
+          .pretui-cta {
+            padding: var(
+              --pretui-cta-pad-narrow,
+              var(--space-6, 19px) var(--space-4, 11px)
+            );
+          }
+          .pretui-cta-actions {
+            width: 100%;
+          }
         }
       }
     </style>
