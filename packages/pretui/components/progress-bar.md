@@ -14,7 +14,7 @@ Quantitative completion: how much of a known task is done. Two renders from one 
 
 `@count` is a _display override_, not the value: pass `'3 / 6'` and the header shows that instead of `50%`. The header only renders when `@label` or `@count` is present, so a bare bar has no chrome.
 
-**The root element is the `progressbar`.** Attributes passed to the component land on the widget itself, so a bar with no visible header is named with `aria-label='Time left before the SLA breaches'`, or pointed at a heading with `aria-labelledby`. `@label` both shows the header text and names the bar; a caller's `aria-label` wins over it.
+**The root element is the `progressbar`.** Attributes passed to the component land on the widget itself, so a bar with no visible header is named with `aria-label='Time left before the SLA breaches'`, or pointed at a heading with `aria-labelledby`. `@label` both shows the header text and names the bar; a caller's `aria-label` wins over it. A bar named by none of these is called "Progress", as boxel-ui's ProgressBar is, so it never renders as a nameless `progressbar`.
 
 `@valueText` is the announced reading of the value when the number alone would mislead (a run that ended early fills every segment, but "6 of 6" is not what happened). It changes what assistive tech hears, not what the header shows. In stepped mode it defaults to `@count`; a continuous bar announces a percentage unless `@valueText` is given, since its count ("300 files") need not carry the total.
 
@@ -37,7 +37,7 @@ Governing role: `progressbar` with `aria-valuemin`, `aria-valuemax`, `aria-value
 What it does:
 
 - **The root element carries `role="progressbar"`** with `aria-valuemin="0"`, `aria-valuenow` and `aria-valuemax`, so `...attributes` reach the widget: `aria-label` and `aria-labelledby` name it directly.
-- **`@label` is the accessible name** as well as the visible header text. A bar with neither `@label` nor an `aria-label` / `aria-labelledby` is unnamed, and a screen-reader user hears "progress bar, 60" with no idea what is progressing — always name it.
+- **`@label` is the accessible name** as well as the visible header text. A caller's `aria-label` replaces it, and a caller's `aria-labelledby` takes precedence over both. A bar with none of these falls back to the name "Progress", so it passes the role's required-name rule, but a screen-reader user still hears "Progress, 60%" with no idea what is progressing — name it.
 - **`aria-valuetext`** is `@valueText` when given. In stepped mode it falls back to `@count`, so the bar announces "3 / 6" where "3" alone would be meaningless. A continuous bar does not fall back to its count, which can drop the total ("300 files"), so with no `@valueText` assistive tech derives a percentage from the value range.
 - **The visible header is inside the widget and `aria-hidden`.** The name and value already say what the label and count show, so they are not announced a second time as loose text.
 
@@ -45,14 +45,14 @@ Gaps, and they are the kind that pass review by looking present:
 
 - **`aria-valuenow` is the raw `@value`.** The fill and the visible count are clamped to the range, but the announced value is not, so `@value={{180}}` against a max of 100 is announced as 180.
 - **No announcement on change.** A progress bar that advances silently is correct for a fast operation and unhelpful for a slow one; there is no live region and no hook for one.
-- **Stepped mode conveys state by fill colour alone.** `data-on` changes `background-color` from `--inset` to the fill (`--pretui-progress-hue`, default `--primary`) with no shape, border or glyph difference — a WCAG **1.4.1 Use of Colour** risk if the fill and `--inset` are close in luminance.
+- **The fill fails WCAG 1.4.11 Non-text Contrast (3:1) against its track in the shipped light seasons.** The fill (`--pretui-progress-hue`, default `--primary`) sits on `--inset` with no border, and stepped mode tells lit from unlit segments by that colour alone. Measured against light `--inset`: the default `--primary` is 1.20:1 in SS26 (3.37:1 in AW26, 4.84:1 in SS27); `--warning` is 2.14, 1.58 and 2.01:1; AW26's `--pretui-attention` is 1.45:1 and its `--destructive` 2.90:1; SS26's `--success` and `--pretui-info` are 2.55 and 2.70:1. Every dark-mode pair passes, at 5.20:1 or higher. Tracked in [CS-13466](https://linear.app/cardstack/issue/CS-13466/pret-ui-progressbar-the-fill-fails-non-text-contrast-against-its-track).
 - The 4px bar height is below any comfortable pointer target, but nothing here is interactive, so 2.5.8 does not apply.
 
 ## Theming
 
 `--pretui-progress-hue` (the fill and lit segments; defaults to `--primary`, set by `@hue` or on any ancestor), `--inset` (track and unlit segments), `--muted-foreground` (label), `--foreground` (count), `--font-mono` + `--text-ui-xs` (the count's tabular-figure voice), `--text-ui-sm`, `--pretui-dur-morph` / `--pretui-ease-morph` (the fill transition, shared with the kit's other value animations).
 
-The 4px height, 2px radius and 3px step gap are fixed. A season must keep `--primary` (and a caller any `--pretui-progress-hue` it sets) and `--inset` clearly separable in luminance, not just in hue — that separation is the entire signal in stepped mode, and it is the one most likely to be lost in a dark season where `--inset` drifts toward mid-grey.
+The 4px height, 2px radius and 3px step gap are fixed. A season must keep `--primary` (and a caller any `--pretui-progress-hue` it sets) and `--inset` clearly separable in luminance, not just in hue — that separation is the entire signal in stepped mode. The shipped light seasons do not yet meet 3:1 there (see Accessibility); their dark modes do.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
 

@@ -19,9 +19,10 @@ export interface ProgressBarSignature {
 // Quantitative completion. Stepped mode for small discrete totals ("3 / 6").
 //
 // The root element is the `progressbar`, so `aria-label` and `aria-labelledby`
-// passed as attributes name it directly; `@label` names it otherwise. The
-// visible header sits inside the widget and is hidden from assistive tech,
-// which hears the name and value from the ARIA attributes instead.
+// passed as attributes name it directly; `@label` names it otherwise, and a bar
+// with neither is named "Progress". The visible header sits inside the widget
+// and is hidden from assistive tech, which hears the name and value from the
+// ARIA attributes instead.
 export class ProgressBar extends Component<ProgressBarSignature> {
   get max() {
     return this.args.max ?? 100;
@@ -45,6 +46,14 @@ export class ProgressBar extends Component<ProgressBarSignature> {
     }
     return out;
   }
+  // A `progressbar` must have an accessible name, so an unnamed bar falls back
+  // to a generic one, as boxel-ui's ProgressBar does. A caller's `aria-label`
+  // replaces it (`...attributes` comes after it on the root), and a caller's
+  // `aria-labelledby` takes precedence over any `aria-label` in the
+  // accessible-name computation.
+  get accessibleLabel() {
+    return this.args.label || 'Progress';
+  }
   get showHeader() {
     return this.args.label || this.args.count !== undefined;
   }
@@ -62,7 +71,7 @@ export class ProgressBar extends Component<ProgressBarSignature> {
     <div
       class='pretui-progresswrap'
       role='progressbar'
-      aria-label={{@label}}
+      aria-label={{this.accessibleLabel}}
       aria-valuemin='0'
       aria-valuenow={{@value}}
       aria-valuemax={{this.max}}

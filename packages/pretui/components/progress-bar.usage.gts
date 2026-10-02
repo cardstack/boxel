@@ -4,15 +4,17 @@ import { tracked } from '@glimmer/tracking';
 import { FreestyleUsage } from './freestyle-usage';
 import { ProgressBar } from './progress-bar';
 
-// The hue knob's choices: the default plus the contract's state hues.
+// The hue knob's choices: the default plus the state hues every season
+// defines. Info and attention are the kit's `--pretui-*` tokens; the seasons
+// do not define a bare `--info` or `--attention`.
 const DEFAULT_HUE = 'var(--primary)';
 const HUES = [
   DEFAULT_HUE,
   'var(--success)',
   'var(--warning)',
-  'var(--attention)',
+  'var(--pretui-attention)',
   'var(--destructive)',
-  'var(--info)',
+  'var(--pretui-info)',
 ];
 
 // ── ProgressBar ← progress-bar/usage.gts ─────────────────────────────────
@@ -116,7 +118,7 @@ class ProgressBarUsage extends GlimmerComponent {
         />
         <Args.String
           @name='label'
-          @description='Visible label, and the progress bar’s accessible name. Without it, name the bar with aria-label or aria-labelledby, which land on the progressbar element.'
+          @description='Visible label, and the progress bar’s accessible name. Without it the bar is named “Progress”; for a specific name with no header, pass aria-label or aria-labelledby, which land on the progressbar element.'
           @value={{this.label}}
           @onInput={{this.setLabel}}
         />

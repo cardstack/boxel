@@ -25,6 +25,19 @@ function px(el: HTMLElement, prop: string): string | undefined {
 function bar(sel = '[role="progressbar"]'): HTMLElement {
   return q(sel);
 }
+// The accessible name by the accname precedence that applies to these bars:
+// `aria-labelledby` first (the referenced elements' text), then `aria-label`.
+function accessibleName(el: HTMLElement): string | undefined {
+  let ids = el.getAttribute('aria-labelledby')?.trim();
+  if (ids) {
+    return ids
+      .split(/\s+/)
+      .map((id) => document.getElementById(id)?.textContent?.trim() ?? '')
+      .join(' ')
+      .trim();
+  }
+  return el.getAttribute('aria-label') ?? undefined;
+}
 
 module('Pretui | components/progress-bar', function (hooks) {
   setupCardTest(hooks);
@@ -43,6 +56,35 @@ module('Pretui | components/progress-bar', function (hooks) {
     assert.false(el.hasAttribute('aria-valuetext'), 'with no words for the value, assistive tech derives a percentage');
     assert.strictEqual(px(q('.pretui-progress-fill'), 'width'), '40%');
     assert.notOk(q('.pretui-progress-head'), 'no header without a label or count');
+  });
+
+  test('an unnamed bar is named "Progress", and every caller-supplied name wins over it', async function (assert) {
+    await render(
+      <template>
+        <ProgressBar @value={{40}} data-test-bare />
+        <ProgressBar @value={{40}} @label='Upload' data-test-label />
+        <ProgressBar @value={{40}} aria-label='Time left before the SLA breaches' data-test-aria-label />
+        <span id='quota-heading'>Storage quota</span>
+        <ProgressBar @value={{40}} aria-labelledby='quota-heading' data-test-aria-labelledby />
+      </template>,
+    );
+    assert.strictEqual(
+      accessibleName(bar('[data-test-bare]')),
+      'Progress',
+      'a progressbar must have a name, so a bare bar gets the generic one boxel-ui gives it',
+    );
+    assert.notOk(q('[data-test-bare] .pretui-progress-head'), 'the fallback name adds no visible header');
+    assert.strictEqual(accessibleName(bar('[data-test-label]')), 'Upload', '@label replaces the fallback');
+    assert.strictEqual(
+      bar('[data-test-aria-label]').getAttribute('aria-label'),
+      'Time left before the SLA breaches',
+      "a caller's aria-label replaces the fallback",
+    );
+    assert.strictEqual(
+      accessibleName(bar('[data-test-aria-labelledby]')),
+      'Storage quota',
+      "a caller's aria-labelledby names the bar, ahead of the fallback aria-label",
+    );
   });
 
   test('@label names the progressbar and the visible header is not announced twice', async function (assert) {
