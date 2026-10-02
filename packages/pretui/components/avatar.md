@@ -6,7 +6,7 @@ A person or entity as a circle: a photo if there is one, hashed initials if ther
 
 ```
 @name: string   (required)
-@src?, @hue?, @size? (default 24)
+@src?, @hue?, @size? (px at a 16px root, written as rem; default 24, i.e. 1.5rem)
 Element: HTMLSpanElement
 ```
 
@@ -16,7 +16,17 @@ Element: HTMLSpanElement
 
 **The hue is `statusHue(@name)`** — the same 32-bit hash used by **StatusChip**, over the name — so a given person is the same colour on every card and in every realm, with no registry. Everything else derives from that hue by `color-mix`: a 16% fill over `--card`, a 20% ink mix, a 28% hairline. Same Law 2 recipe as **Chip**, tuned lighter.
 
-`@size` sets width, height **and** font size (`round(size * 0.42)`), so initials scale correctly rather than staying 11px in a 48px circle.
+`@size` sets width, height **and** font size (`round(size * 0.42)` to the whole pixel), so initials scale correctly rather than staying 11px in a 48px circle. The number is the diameter in px at a 16px root, and Avatar writes it as `--pretui-avatar-size` in rem (`@size={{40}}` is `2.5rem`), so it follows the root font size. Without `@size`, nothing is written and the size is `--pretui-avatar-size` from the cascade, `1.5rem` by default, so a class, a container query or an ancestor can set it:
+
+```css
+@container (min-width: 400px) {
+  .owner-avatar {
+    --pretui-avatar-size: 3rem;
+  }
+}
+```
+
+**`@hue`, `@size` and a caller's `style` work together.** Glimmer lets a caller's `style` attribute replace a component's own, so Avatar also writes `--pretui-avatar-size` and `--pretui-chip-hue` as single properties on top of whatever style the element ends up with, and writes them again if the caller's style changes later. The caller's own declarations are kept. If the caller's style sets one of them too, `@size` and `@hue` win, and the caller's value comes back when the arg is cleared. The name-derived hue is a default rather than an arg, so a `--pretui-chip-hue` in the caller's style wins over it.
 
 ## Prior art
 
@@ -48,9 +58,9 @@ Gaps:
 
 ## Theming
 
-`--pretui-chip-hue` (set per instance from the name hash — note it reuses **Chip**'s property name, so an ancestor setting `--pretui-chip-hue` for a chip will _not_ affect an Avatar, because the inline style wins), `--card` (mix base and the group ring), `--foreground` (mixed into initials), `--border` (mixed into the hairline), `--primary` (the fallback hue when the name is empty), `--font-mono`.
+`--pretui-chip-hue` (set per instance from the name hash — note it reuses **Chip**'s property name, so an ancestor setting `--pretui-chip-hue` for a chip will _not_ affect an Avatar, because the inline style wins), `--pretui-avatar-size` (the diameter; inline only when `@size` is given, otherwise from the cascade with a `1.5rem` fallback), `--card` (mix base and the group ring), `--foreground` (mixed into initials), `--border` (mixed into the hairline), `--primary` (the fallback hue when the name is empty), `--font-mono`.
 
-The 16% / 20% / 28% mix ratios are fixed — unlike **Chip**, whose ratios are tokenised — so a season cannot make avatars more or less saturated. `@size` is an arg, not a token, so a season cannot set a default size either. As with **StatusChip**, the palette that matters is `--chart-1` … `--chart-5`, and they must work as a mutually distinguishable set at 16% tint behind small mono type.
+The 16% / 20% / 28% mix ratios are fixed — unlike **Chip**, whose ratios are tokenised — so a season cannot make avatars more or less saturated. A season or a card can set a default size through `--pretui-avatar-size`; `@size` wins over it. As with **StatusChip**, the palette that matters is `--chart-1` … `--chart-5`, and they must work as a mutually distinguishable set at 16% tint behind small mono type.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
 

@@ -63,14 +63,14 @@ class AvatarUsage extends GlimmerComponent {
         />
         <Args.String
           @name='hue'
-          @description='Override the name-derived hue (Pretui addition).'
+          @description='Override the name-derived hue; sets --pretui-chip-hue, and stays set when the caller also passes a style attribute (Pretui addition).'
           @options={{HUE_OPTIONS}}
           @value={{this.hue}}
           @onInput={{this.setHue}}
         />
         <Args.Number
           @name='size'
-          @description='Avatar diameter in px (Pretui addition).'
+          @description='Avatar diameter in px at a 16px root, written as rem; sets the width, height and font size, and stays set when the caller also passes a style attribute (Pretui addition).'
           @defaultValue={{24}}
           @value={{this.size}}
           @min={{16}}
@@ -79,6 +79,19 @@ class AvatarUsage extends GlimmerComponent {
           @onInput={{this.setSize}}
         />
       </:api>
+      <:cssVars as |Css|>
+        <Css.Basic
+          @name='pretui-avatar-size'
+          @type='dimension'
+          @description='Diameter for an Avatar with no @size; the font size is 0.42 of it. Set on the Avatar or any ancestor, through a class or a container query; @size wins over it.'
+          @defaultValue='1.5rem'
+        />
+        <Css.Basic
+          @name='pretui-chip-hue'
+          @type='color'
+          @description='Colour the fill, initials and hairline are mixed from. Set per instance to one of --chart-1 to --chart-5 from the name hash, or through @hue; a value in the caller style wins over the name hash. Falls back to --primary when @hue is rejected.'
+        />
+      </:cssVars>
     </FreestyleUsage>
   </template>
 }

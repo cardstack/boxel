@@ -1,0 +1,168 @@
+// Avatar unit tests for its size and hue next to a caller's `style`. No
+// assertion reads a computed style: the host test harness stamps the
+// scoped-css attribute and delivers no stylesheet. What Avatar promises is the
+// `--pretui-avatar-size` and `--pretui-chip-hue` properties the stylesheet
+// sizes and paints from, so those are read off the DOM directly.
+import { module, test } from 'qunit';
+import { render, settled } from '@ember/test-helpers';
+import { tracked } from '@glimmer/tracking';
+import { htmlSafe } from '@ember/template';
+import { setupCardTest } from '@cardstack/host/tests/helpers';
+import { Avatar } from './avatar';
+import { statusHue } from '../internal/ink';
+
+function q(sel: string): HTMLElement {
+  return document.querySelector(sel) as HTMLElement;
+}
+function size(el: HTMLElement): string {
+  return el.style.getPropertyValue('--pretui-avatar-size').trim();
+}
+function hue(el: HTMLElement): string {
+  return el.style.getPropertyValue('--pretui-chip-hue').trim();
+}
+// Caller styles as a card would pass them: a bound SafeString.
+const RING_STYLE = htmlSafe('--status-ring: var(--chart-2); margin: 2px');
+const CALLER_HUE_STYLE = htmlSafe('--pretui-chip-hue: var(--muted-foreground)');
+const CALLER_SIZE_STYLE = htmlSafe('--pretui-avatar-size: 3rem');
+
+module('Pretui | components/avatar', function (hooks) {
+  setupCardTest(hooks);
+
+  test('@size is written as rem, and no size is written without it', async function (assert) {
+    await render(
+      <template>
+        <Avatar @name='Ada Lovelace' data-test-default />
+        <Avatar @name='Ada Lovelace' @size={{40}} data-test-40 />
+        <Avatar @name='Ada Lovelace' @size={{28}} data-test-28 />
+        <Avatar @name='Ada Lovelace' @size={{0}} data-test-zero />
+      </template>,
+    );
+    let plain = q('[data-test-default]');
+    assert.strictEqual(
+      size(plain),
+      '',
+      'without @size the stylesheet default (1.5rem) applies, so a class or container query can set the size',
+    );
+    assert.notOk(
+      plain.getAttribute('style')?.includes('px'),
+      'no px size is written inline',
+    );
+    assert.strictEqual(size(q('[data-test-40]')), '2.5rem', '40px at a 16px root');
+    assert.strictEqual(size(q('[data-test-28]')), '1.75rem');
+    assert.strictEqual(size(q('[data-test-zero]')), '', 'a zero size falls back to the default');
+  });
+
+  test("the size and the name's hue survive a caller's style, which keeps its own declarations", async function (assert) {
+    await render(
+      <template>
+        <Avatar @name='Grace Hopper' @size={{52}} style={{RING_STYLE}} />
+      </template>,
+    );
+    let el = q('[data-test-pretui-avatar]');
+    assert.strictEqual(size(el), '3.25rem', 'the size is still on the element');
+    assert.strictEqual(hue(el), statusHue('Grace Hopper'), 'the hue is still the name hash');
+    assert.strictEqual(
+      el.style.getPropertyValue('--status-ring').trim(),
+      'var(--chart-2)',
+      "the caller's declarations are kept",
+    );
+    assert.strictEqual(el.style.margin, '2px');
+  });
+
+  test("@hue survives a caller's style", async function (assert) {
+    await render(
+      <template>
+        <Avatar @name='Ada' @hue='var(--primary-ink)' style={{RING_STYLE}} />
+      </template>,
+    );
+    assert.strictEqual(hue(q('[data-test-pretui-avatar]')), 'var(--primary-ink)');
+  });
+
+  test("a hue in the caller's style wins over the name's hue when @hue is not given", async function (assert) {
+    await render(<template><Avatar @name='Ada' style={{CALLER_HUE_STYLE}} /></template>);
+    assert.strictEqual(hue(q('[data-test-pretui-avatar]')), 'var(--muted-foreground)');
+  });
+
+  test("@hue wins over a hue in the caller's style, which comes back when @hue is cleared", async function (assert) {
+    class State {
+      @tracked hue: string | undefined = 'var(--chart-2)';
+    }
+    let state = new State();
+    await render(<template><Avatar @name='Ada' @hue={{state.hue}} style={{CALLER_HUE_STYLE}} /></template>);
+    let el = q('[data-test-pretui-avatar]');
+    assert.strictEqual(hue(el), 'var(--chart-2)', '@hue wins');
+
+    state.hue = 'var(--chart-4)';
+    await settled();
+    assert.strictEqual(hue(el), 'var(--chart-4)', 'a new @hue still wins');
+
+    state.hue = undefined;
+    await settled();
+    assert.strictEqual(hue(el), 'var(--muted-foreground)', "the caller's hue is back");
+  });
+
+  test("@size wins over a size in the caller's style, which comes back when @size is cleared", async function (assert) {
+    class State {
+      @tracked size: number | undefined = 40;
+    }
+    let state = new State();
+    await render(<template><Avatar @name='Ada' @size={{state.size}} style={{CALLER_SIZE_STYLE}} /></template>);
+    let el = q('[data-test-pretui-avatar]');
+    assert.strictEqual(size(el), '2.5rem', '@size wins');
+
+    state.size = undefined;
+    await settled();
+    assert.strictEqual(size(el), '3rem', "the caller's size is back");
+  });
+
+  test("the size and hue are put back after a later change to the caller's style", async function (assert) {
+    class State {
+      @tracked style = RING_STYLE;
+    }
+    let state = new State();
+    await render(<template><Avatar @name='Alan Turing' @size={{36}} style={{state.style}} /></template>);
+    let el = q('[data-test-pretui-avatar]');
+
+    state.style = htmlSafe('--status-ring: var(--chart-5); letter-spacing: 1px');
+    await settled();
+    assert.strictEqual(el.style.letterSpacing, '1px', 'the new caller style is applied');
+    assert.strictEqual(size(el), '2.25rem', 'the size is put back');
+    assert.strictEqual(hue(el), statusHue('Alan Turing'), 'the hue is put back');
+
+    state.style = CALLER_HUE_STYLE;
+    await settled();
+    assert.strictEqual(hue(el), 'var(--muted-foreground)', 'a hue the caller adds later wins over the name hash');
+    assert.strictEqual(size(el), '2.25rem');
+  });
+
+  test("with no caller style, @size and @hue change and clear through Avatar's own style", async function (assert) {
+    class State {
+      @tracked size: number | undefined = 40;
+      @tracked hue: string | undefined = 'var(--chart-1)';
+    }
+    let state = new State();
+    await render(<template><Avatar @name='Ada' @size={{state.size}} @hue={{state.hue}} /></template>);
+    let el = q('[data-test-pretui-avatar]');
+    assert.strictEqual(size(el), '2.5rem');
+    assert.strictEqual(hue(el), 'var(--chart-1)');
+
+    state.size = 48;
+    state.hue = 'var(--chart-3)';
+    await settled();
+    assert.strictEqual(size(el), '3rem');
+    assert.strictEqual(hue(el), 'var(--chart-3)');
+
+    state.size = undefined;
+    state.hue = undefined;
+    await settled();
+    assert.strictEqual(size(el), '', 'no size is left behind');
+    assert.strictEqual(hue(el), statusHue('Ada'), 'the hue goes back to the name hash');
+  });
+
+  test('refuses a hue that carries its own declaration', async function (assert) {
+    await render(<template><Avatar @name='Ada' @hue='red; background: url(https://example.com/x)' style={{RING_STYLE}} /></template>);
+    let el = q('[data-test-pretui-avatar]');
+    assert.strictEqual(hue(el), '', 'the hue is dropped whole');
+    assert.notOk(el.getAttribute('style')?.includes('url('), 'nothing from the rejected value reaches the element');
+  });
+});
