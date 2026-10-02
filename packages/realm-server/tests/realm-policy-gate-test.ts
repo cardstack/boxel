@@ -6,7 +6,6 @@ import { basename, join } from 'path';
 import { dirSync } from 'tmp';
 import {
   archiveRealm,
-  logger,
   rri,
   SupportedMimeType,
 } from '@cardstack/runtime-common';
@@ -34,6 +33,7 @@ import {
   setupDB,
 } from './helpers/index.ts';
 import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
+import { policyWarningsDuring } from './helpers/policy-log.ts';
 
 // The worked example's topology. The Education realm holds the cards a policy
 // governs, and its policy card lives in an Org realm nobody the Education
@@ -152,38 +152,6 @@ const SYLLABUS_MODULE = `
     @field title = contains(StringField);
   }
 `;
-
-// Every warning the gate logs on `realm:policy` while `fn` runs. The gate and
-// this suite share the named logger, so a tap on its method factory sees
-// exactly what the gate writes. The level is held at `warn` or louder for the
-// duration, so a quieter LOG_LEVELS setting cannot hide the line a test is
-// looking for.
-async function policyWarningsDuring(
-  fn: () => Promise<void>,
-): Promise<string[]> {
-  let log = logger('realm:policy');
-  let warnings: string[] = [];
-  let originalFactory = log.methodFactory;
-  let originalLevel = log.getLevel();
-  log.methodFactory = (methodName, level, loggerName) => {
-    let raw = originalFactory(methodName, level, loggerName);
-    return (...args: unknown[]) => {
-      if (methodName === 'warn') {
-        warnings.push(args.map(String).join(' '));
-      }
-      raw(...args);
-    };
-  };
-  // Rebinds the logger's methods, which is what puts the tap in place.
-  log.setLevel(originalLevel > log.levels.WARN ? 'warn' : originalLevel);
-  try {
-    await fn();
-  } finally {
-    log.methodFactory = originalFactory;
-    log.setLevel(originalLevel);
-  }
-  return warnings;
-}
 
 type Grant = { operation: string; where?: unknown };
 type Rule = { targetType: { module: string; name: string }; grants: Grant[] };

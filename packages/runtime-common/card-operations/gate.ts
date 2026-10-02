@@ -230,10 +230,12 @@ export type GateRefusal =
 // admits it, or why none does.
 type Admission = MatchedGrant | typeof GATE_REFUSED | typeof GATE_FAULTED;
 
-// One grant the gate matched, with the rule it came from.
+// One grant the gate matched, with the rule and the compiled policy it came
+// from.
 export interface MatchedGrant {
   rule: CompiledPolicyRule;
   grant: CompiledOperationGrant;
+  policy: CompiledRealmPolicy;
 }
 
 // What the gate decided about one invocation.
@@ -1058,7 +1060,7 @@ async function firstHolding(
     // are.
     let judged = where.snapshot ? await subject.snapshot?.() : subject;
     let outcome = judged
-      ? await evaluate(core, candidate.grant, where, judged, actor)
+      ? await evaluate(core, candidate, where, judged, actor)
       : 'fails';
     let said: GateTraceOutcome =
       outcome === 'holds'
@@ -1296,7 +1298,7 @@ export async function matchingGrants(
     let grants = rule.grants.filter((grant) => grant.operation === name);
     trace?.ruleMatched(rule, grants);
     for (let grant of grants) {
-      matched.push({ rule, grant });
+      matched.push({ rule, grant, policy });
     }
   }
   return matched;
@@ -1778,7 +1780,7 @@ async function projector(
 // when the card's pass lands.
 async function evaluate(
   core: OperationCore,
-  grant: CompiledOperationGrant,
+  matched: MatchedGrant,
   where: CompiledPolicyPredicate,
   subject: PredicateSubject,
   actor: string | undefined,
@@ -1804,9 +1806,9 @@ async function evaluate(
       return 'fails';
     }
     let judged = subject.instance?.id;
-    await logThrow(
+    logThrow(
       core,
-      grant,
+      matched,
       where,
       typeof judged === 'string' ? judged : 'its target',
       actor,
@@ -1829,32 +1831,33 @@ async function evaluate(
 // The line carries no card content and no predicate source. BXL's message
 // quotes the value it failed on, which can be a whole stored field of the
 // governed card, so only the error's kind is logged. The grant's path in the
-// policy card names the predicate without quoting it.
-async function logThrow(
+// card the policy was compiled from names the predicate without quoting it.
+//
+// A draft's throw is not logged. The draft is in force nowhere, so it is no
+// fault in the realm's policy, and the explain that judged it answers
+// `predicate-threw` to the one caller who asked.
+function logThrow(
   core: OperationCore,
-  grant: CompiledOperationGrant,
+  { grant, policy }: MatchedGrant,
   where: CompiledPolicyPredicate,
   judged: string,
   actor: string | undefined,
   e: unknown,
-): Promise<void> {
+): void {
+  if (policy.draft) {
+    return;
+  }
   let at = now();
   let last = lastLoggedThrow.get(where);
   if (last !== undefined && at - last < THROW_LOG_INTERVAL_MS) {
     return;
   }
   lastLoggedThrow.set(where, at);
-  let policyCard: string | undefined;
-  try {
-    policyCard = await core.policy?.policyCard();
-  } catch {
-    policyCard = undefined;
-  }
   policyLog.warn(
     `a predicate in the policy of realm ${core.realmURL} threw while ` +
       `deciding whether ${actor ?? 'an anonymous caller'} may invoke ` +
       `"${grant.operation}" on ${judged}: the grant at ${grant.path} of ` +
-      `${policyCard ?? 'its policy card'} threw ${errorKind(e)}`,
+      `${policy.card} threw ${errorKind(e)}`,
   );
 }
 

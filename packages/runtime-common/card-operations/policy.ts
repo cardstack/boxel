@@ -73,6 +73,9 @@ export interface CompiledRealmPolicy {
   // policy and cannot say what it grants, so the gate refuses every caller it
   // judges exactly as it refuses one when the realm's policy card is missing.
   uncompilable?: true;
+  // Set on a draft compiled for an explain (see `compileDraftPolicy`), which
+  // no realm holds in force.
+  draft?: true;
 }
 
 export interface CompiledPolicyRule {
@@ -776,7 +779,7 @@ export async function compileDraftPolicy(
     env,
     () => {},
   );
-  return { compiled, reads: inputs };
+  return { compiled: { ...compiled, draft: true }, reads: inputs };
 }
 
 // The rules a policy card's attributes hold, compiled.
