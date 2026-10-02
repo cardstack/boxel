@@ -206,7 +206,10 @@ echo "Test realms ready. Dumping index tables..."
 # Tables that make up the cache. This is the single source of truth: the same
 # list drives pg_dump's -t args and the completeness check in the separate
 # "Verify index cache" CI step (via the sidecar written below). Keep the
-# TRUNCATE list in scripts/import-cached-index.sh in sync. The *_pending
+# TRUNCATE lists in scripts/import-cached-index.sh and
+# .devcontainer/claude-web-import-index.sh in sync — both replay this
+# artifact, and a table a replay does not clear first collides with the
+# incoming COPY on its primary key. The *_pending
 # tables are deliberately excluded — they are transient UNLOGGED scratch space.
 #
 # `scoped_css` holds the stylesheet bytes that the dumped rows' hashed
@@ -326,7 +329,7 @@ done
          FROM information_schema.columns
         WHERE table_schema = 'public' AND table_name = '${t}'")
     if [ -z "$cols" ]; then
-      echo "::error title=Host index cache incomplete::Table '${t}' has no columns in information_schema — it was likely renamed or removed by a migration. Update CACHE_TABLES here and the TRUNCATE list in scripts/import-cached-index.sh." >&2
+      echo "::error title=Host index cache incomplete::Table '${t}' has no columns in information_schema — it was likely renamed or removed by a migration. Update CACHE_TABLES here and the TRUNCATE lists in scripts/import-cached-index.sh and .devcontainer/claude-web-import-index.sh." >&2
       exit 1
     fi
     echo "COPY public.${t} (${cols}) FROM stdin;"
@@ -366,6 +369,18 @@ for realm in test node-test; do
   fi
   echo "  /${realm}/: ${row_count} boxel_index rows"
 done
+
+# The test-realm snapshot dumps the same tables, so its `scoped_css` needs the
+# same guard as the `boxel` one above: these realms' rows reference stylesheets
+# they interned themselves, so an empty table here is the identical silent 404,
+# scoped to /test/ and /node-test/.
+test_scoped_css_rows=$(docker exec boxel-pg psql -U postgres -d "$TEST_DB" -tAc \
+  "SELECT count(*) FROM scoped_css")
+if [ "${test_scoped_css_rows:-0}" -eq 0 ]; then
+  echo "::error title=Test index cache incomplete::No scoped_css rows in ${TEST_DB}. The dumped rows' hashed scoped-CSS deps would resolve to nothing, and every request under a test realm's _scoped-css/ space would answer 404."
+  exit 1
+fi
+echo "  scoped_css: ${test_scoped_css_rows} interned stylesheets in ${TEST_DB}"
 
 docker exec boxel-pg pg_dump -U postgres --data-only \
   "${DUMP_ARGS[@]}" \
