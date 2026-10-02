@@ -85,10 +85,18 @@ module('Pretui | components/progress-bar', function (hooks) {
     assert.strictEqual(labelled.getAttribute('aria-labelledby'), 'quota-heading');
   });
 
-  test('aria-valuetext takes @valueText, then the visible @count', async function (assert) {
+  test('aria-valuetext takes @valueText, then the visible @count in stepped mode only', async function (assert) {
     await render(
       <template>
         <ProgressBar @value={{3}} @max={{6}} @count='3 / 6' data-test-count />
+        <ProgressBar @value={{300}} @max={{1200}} @count='300 files' data-test-continuous-count />
+        <ProgressBar
+          @value={{300}}
+          @max={{1200}}
+          @count='300 files'
+          @valueText='300 of 1,200 files'
+          data-test-continuous-value-text
+        />
         <ProgressBar
           @value={{6}}
           @max={{6}}
@@ -101,7 +109,16 @@ module('Pretui | components/progress-bar', function (hooks) {
     assert.strictEqual(
       bar('[data-test-count]').getAttribute('aria-valuetext'),
       '3 / 6',
-      'the count is already the human reading of the value',
+      'a stepped count is already the human reading of the value, total included',
+    );
+    assert.false(
+      bar('[data-test-continuous-count]').hasAttribute('aria-valuetext'),
+      'a continuous count can omit the total, so assistive tech keeps deriving a percentage',
+    );
+    assert.strictEqual(
+      bar('[data-test-continuous-value-text]').getAttribute('aria-valuetext'),
+      '300 of 1,200 files',
+      'a continuous bar announces @valueText when one is given',
     );
     assert.strictEqual(
       bar('[data-test-value-text]').getAttribute('aria-valuetext'),
@@ -115,20 +132,20 @@ module('Pretui | components/progress-bar', function (hooks) {
     );
   });
 
-  test('@fill sets the fill knob on the root, and an unsafe value is dropped', async function (assert) {
+  test('@hue sets the fill knob on the root, and an unsafe value is dropped', async function (assert) {
     await render(
       <template>
-        <ProgressBar @value={{80}} @fill='var(--warning)' data-test-warning />
-        <ProgressBar @value={{2}} @max={{4}} @steps={{true}} @fill='var(--destructive)' data-test-stepped />
-        <ProgressBar @value={{80}} @fill='red; width: 0' data-test-unsafe />
+        <ProgressBar @value={{80}} @hue='var(--warning)' data-test-warning />
+        <ProgressBar @value={{2}} @max={{4}} @steps={{true}} @hue='var(--destructive)' data-test-stepped />
+        <ProgressBar @value={{80}} @hue='red; width: 0' data-test-unsafe />
         <ProgressBar @value={{80}} data-test-default />
       </template>,
     );
-    assert.strictEqual(px(bar('[data-test-warning]'), '--pretui-progress-fill'), 'var(--warning)');
+    assert.strictEqual(px(bar('[data-test-warning]'), '--pretui-progress-hue'), 'var(--warning)');
     assert.strictEqual(
-      px(bar('[data-test-stepped]'), '--pretui-progress-fill'),
+      px(bar('[data-test-stepped]'), '--pretui-progress-hue'),
       'var(--destructive)',
-      'the stepped track reads the same knob',
+      'the knob is written on the root in stepped mode too',
     );
     assert.false(
       bar('[data-test-unsafe]').hasAttribute('style'),
@@ -136,7 +153,7 @@ module('Pretui | components/progress-bar', function (hooks) {
     );
     assert.false(
       bar('[data-test-default]').hasAttribute('style'),
-      'without @fill nothing is written, so a --pretui-progress-fill set on an ancestor still reaches the fill',
+      'without @hue nothing is written, so a --pretui-progress-hue set on an ancestor still reaches the fill',
     );
   });
 

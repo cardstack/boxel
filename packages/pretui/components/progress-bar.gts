@@ -1,7 +1,7 @@
 // Pretui — ProgressBar: quantitative progress along a track.
 import Component from '@glimmer/component';
 import { htmlSafe } from '@ember/template';
-import { cssStyle } from '../pretui-css';
+import { hueStyle } from '../internal/ink';
 
 export interface ProgressBarSignature {
   Args: {
@@ -10,7 +10,7 @@ export interface ProgressBarSignature {
     label?: string;
     count?: string;
     valueText?: string;
-    fill?: string;
+    hue?: string;
     steps?: boolean;
   };
   Element: HTMLDivElement;
@@ -48,17 +48,15 @@ export class ProgressBar extends Component<ProgressBarSignature> {
   get showHeader() {
     return this.args.label || this.args.count !== undefined;
   }
-  // A caller's words for the value win; the visible count is next, since it is
-  // already the human reading ("3 / 6"). With neither, assistive tech derives
-  // a percentage from the value range itself.
+  // A caller's words for the value win. In stepped mode the visible count is
+  // next, since it is already the human reading and carries the total
+  // ("3 / 6"). A continuous bar's count can omit the total ("300 files"), so
+  // there assistive tech keeps deriving a percentage from the value range.
   get valueText() {
-    return this.args.valueText ?? this.args.count;
+    return this.args.valueText ?? (this.stepped ? this.args.count : undefined);
   }
-  // `@fill` is a caller string, so it goes through the kit-wide allowlist
-  // before it reaches htmlSafe. A rejected value drops the override and the
-  // stylesheet's own `--primary` paints.
-  get fillKnobStyle() {
-    return cssStyle('--pretui-progress-fill', this.args.fill);
+  get style() {
+    return hueStyle('--pretui-progress-hue', this.args.hue);
   }
   <template>
     <div
@@ -69,7 +67,7 @@ export class ProgressBar extends Component<ProgressBarSignature> {
       aria-valuenow={{@value}}
       aria-valuemax={{this.max}}
       aria-valuetext={{this.valueText}}
-      style={{this.fillKnobStyle}}
+      style={{this.style}}
       data-test-pretui-progress
       ...attributes
     >
@@ -119,7 +117,7 @@ export class ProgressBar extends Component<ProgressBarSignature> {
         .pretui-progress-fill {
           height: 100%;
           border-radius: 2px;
-          background-color: var(--pretui-progress-fill, var(--primary));
+          background-color: var(--pretui-progress-hue, var(--primary));
           transition: width var(--pretui-dur-morph, 300ms) var(--pretui-ease-morph, ease);
         }
         .pretui-progress-steps {
@@ -134,7 +132,7 @@ export class ProgressBar extends Component<ProgressBarSignature> {
           transition: background var(--pretui-dur-morph, 300ms) var(--pretui-ease-morph, ease);
         }
         .pretui-progress-step[data-on] {
-          background-color: var(--pretui-progress-fill, var(--primary));
+          background-color: var(--pretui-progress-hue, var(--primary));
         }
       }
     </style>

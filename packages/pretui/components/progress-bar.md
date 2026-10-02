@@ -6,7 +6,7 @@ Quantitative completion: how much of a known task is done. Two renders from one 
 
 ```
 @value: number   (required)
-@max? (100), @label?, @count?, @valueText?, @fill?, @steps?
+@max? (100), @label?, @count?, @valueText?, @hue?, @steps?
 ...attributes → the progressbar element (aria-label, aria-labelledby, …)
 ```
 
@@ -16,9 +16,9 @@ Quantitative completion: how much of a known task is done. Two renders from one 
 
 **The root element is the `progressbar`.** Attributes passed to the component land on the widget itself, so a bar with no visible header is named with `aria-label='Time left before the SLA breaches'`, or pointed at a heading with `aria-labelledby`. `@label` both shows the header text and names the bar; a caller's `aria-label` wins over it.
 
-`@valueText` is the announced reading of the value when the number alone would mislead (a run that ended early fills every segment, but "6 of 6" is not what happened). It changes what assistive tech hears, not what the header shows.
+`@valueText` is the announced reading of the value when the number alone would mislead (a run that ended early fills every segment, but "6 of 6" is not what happened). It changes what assistive tech hears, not what the header shows. In stepped mode it defaults to `@count`; a continuous bar announces a percentage unless `@valueText` is given, since its count ("300 files") need not carry the total.
 
-`@fill` paints the fill (and the lit segments) in any CSS colour, typically a state hue: `@fill='var(--warning)'`. It writes the `--pretui-progress-fill` custom property on the root, so the same knob can also be set on any ancestor, or in a caller's `style`. A caller's `style` attribute replaces the component's own, so a bar that takes a `style` carries the knob in it rather than in `@fill`.
+`@hue` paints the fill (and the lit segments) in any CSS colour, typically a state hue: `@hue='var(--warning)'`. It is the same one-colour arg as Meter's and Chip's `@hue`, and like theirs it writes a per-component custom property, `--pretui-progress-hue`, on the root, so the same knob can also be set on any ancestor, or in a caller's `style`. A caller's `style` attribute replaces the component's own, so a bar that takes a `style` carries the knob in it rather than in `@hue`.
 
 `min-width: 4px` on a non-zero fill is the detail that stops 1% from rendering as nothing — a bar that shows no progress when progress exists is worse than no bar.
 
@@ -38,21 +38,21 @@ What it does:
 
 - **The root element carries `role="progressbar"`** with `aria-valuemin="0"`, `aria-valuenow` and `aria-valuemax`, so `...attributes` reach the widget: `aria-label` and `aria-labelledby` name it directly.
 - **`@label` is the accessible name** as well as the visible header text. A bar with neither `@label` nor an `aria-label` / `aria-labelledby` is unnamed, and a screen-reader user hears "progress bar, 60" with no idea what is progressing — always name it.
-- **`aria-valuetext`** is `@valueText` when given, else `@count`, so the stepped mode announces "3 / 6" where "3" alone would be meaningless. With neither, assistive tech derives a percentage from the value range.
+- **`aria-valuetext`** is `@valueText` when given. In stepped mode it falls back to `@count`, so the bar announces "3 / 6" where "3" alone would be meaningless. A continuous bar does not fall back to its count, which can drop the total ("300 files"), so with no `@valueText` assistive tech derives a percentage from the value range.
 - **The visible header is inside the widget and `aria-hidden`.** The name and value already say what the label and count show, so they are not announced a second time as loose text.
 
 Gaps, and they are the kind that pass review by looking present:
 
 - **`aria-valuenow` is the raw `@value`.** The fill and the visible count are clamped to the range, but the announced value is not, so `@value={{180}}` against a max of 100 is announced as 180.
 - **No announcement on change.** A progress bar that advances silently is correct for a fast operation and unhelpful for a slow one; there is no live region and no hook for one.
-- **Stepped mode conveys state by fill colour alone.** `data-on` changes `background-color` from `--inset` to the fill (`--pretui-progress-fill`, default `--primary`) with no shape, border or glyph difference — a WCAG **1.4.1 Use of Colour** risk if the fill and `--inset` are close in luminance.
+- **Stepped mode conveys state by fill colour alone.** `data-on` changes `background-color` from `--inset` to the fill (`--pretui-progress-hue`, default `--primary`) with no shape, border or glyph difference — a WCAG **1.4.1 Use of Colour** risk if the fill and `--inset` are close in luminance.
 - The 4px bar height is below any comfortable pointer target, but nothing here is interactive, so 2.5.8 does not apply.
 
 ## Theming
 
-`--pretui-progress-fill` (the fill and lit segments; defaults to `--primary`, set by `@fill` or on any ancestor), `--inset` (track and unlit segments), `--muted-foreground` (label), `--foreground` (count), `--font-mono` + `--text-ui-xs` (the count's tabular-figure voice), `--text-ui-sm`, `--pretui-dur-morph` / `--pretui-ease-morph` (the fill transition, shared with the kit's other value animations).
+`--pretui-progress-hue` (the fill and lit segments; defaults to `--primary`, set by `@hue` or on any ancestor), `--inset` (track and unlit segments), `--muted-foreground` (label), `--foreground` (count), `--font-mono` + `--text-ui-xs` (the count's tabular-figure voice), `--text-ui-sm`, `--pretui-dur-morph` / `--pretui-ease-morph` (the fill transition, shared with the kit's other value animations).
 
-The 4px height, 2px radius and 3px step gap are fixed. A season must keep `--primary` (and a caller any `--pretui-progress-fill` it sets) and `--inset` clearly separable in luminance, not just in hue — that separation is the entire signal in stepped mode, and it is the one most likely to be lost in a dark season where `--inset` drifts toward mid-grey.
+The 4px height, 2px radius and 3px step gap are fixed. A season must keep `--primary` (and a caller any `--pretui-progress-hue` it sets) and `--inset` clearly separable in luminance, not just in hue — that separation is the entire signal in stepped mode, and it is the one most likely to be lost in a dark season where `--inset` drifts toward mid-grey.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
 

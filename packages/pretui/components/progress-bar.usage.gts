@@ -4,10 +4,10 @@ import { tracked } from '@glimmer/tracking';
 import { FreestyleUsage } from './freestyle-usage';
 import { ProgressBar } from './progress-bar';
 
-// The fill knob's choices: the default plus the contract's state hues.
-const DEFAULT_FILL = 'var(--primary)';
-const FILLS = [
-  DEFAULT_FILL,
+// The hue knob's choices: the default plus the contract's state hues.
+const DEFAULT_HUE = 'var(--primary)';
+const HUES = [
+  DEFAULT_HUE,
   'var(--success)',
   'var(--warning)',
   'var(--attention)',
@@ -24,7 +24,7 @@ class ProgressBarUsage extends GlimmerComponent {
   @tracked label = 'Task progress';
   @tracked count = '';
   @tracked valueText = '';
-  @tracked fill = DEFAULT_FILL;
+  @tracked hue = DEFAULT_HUE;
   @tracked steps = false;
   setValue = (v: number | null) => {
     if (v !== null) {
@@ -39,7 +39,7 @@ class ProgressBarUsage extends GlimmerComponent {
   setLabel = (v: string) => (this.label = v);
   setCount = (v: string) => (this.count = v);
   setValueText = (v: string) => (this.valueText = v);
-  setFill = (v: string) => (this.fill = v);
+  setHue = (v: string) => (this.hue = v);
   toggleSteps = (v: boolean) => (this.steps = v);
   get labelVal() {
     return this.label || undefined;
@@ -50,8 +50,8 @@ class ProgressBarUsage extends GlimmerComponent {
   get valueTextVal() {
     return this.valueText || undefined;
   }
-  get fillVal() {
-    return this.fill === DEFAULT_FILL ? undefined : this.fill;
+  get hueVal() {
+    return this.hue === DEFAULT_HUE ? undefined : this.hue;
   }
   get usage() {
     let bits = [`@value={{${this.value}}}`];
@@ -67,8 +67,8 @@ class ProgressBarUsage extends GlimmerComponent {
     if (this.valueText) {
       bits.push(`@valueText='${this.valueText}'`);
     }
-    if (this.fillVal) {
-      bits.push(`@fill='${this.fillVal}'`);
+    if (this.hueVal) {
+      bits.push(`@hue='${this.hueVal}'`);
     }
     if (this.steps) {
       bits.push('@steps={{true}}');
@@ -89,7 +89,7 @@ class ProgressBarUsage extends GlimmerComponent {
             @label={{this.labelVal}}
             @count={{this.countVal}}
             @valueText={{this.valueTextVal}}
-            @fill={{this.fillVal}}
+            @hue={{this.hueVal}}
             @steps={{this.steps}}
           />
         </div>
@@ -128,17 +128,17 @@ class ProgressBarUsage extends GlimmerComponent {
         />
         <Args.String
           @name='valueText'
-          @description='Announced reading of the value (aria-valuetext) when the number alone would mislead — defaults to @count (Pretui addition).'
+          @description='Announced reading of the value (aria-valuetext) when the number alone would mislead — defaults to @count in stepped mode; a continuous bar announces a percentage (Pretui addition).'
           @value={{this.valueText}}
           @onInput={{this.setValueText}}
         />
         <Args.String
-          @name='fill'
-          @description='Any CSS colour for the fill and lit segments, typically a state hue. Sets --pretui-progress-fill, which can also be set on any ancestor; defaults to --primary (Pretui addition).'
-          @value={{this.fill}}
-          @options={{FILLS}}
-          @defaultValue={{DEFAULT_FILL}}
-          @onInput={{this.setFill}}
+          @name='hue'
+          @description='Any CSS colour for the fill and lit segments, typically a state hue. Sets --pretui-progress-hue, which can also be set on any ancestor; defaults to --primary (Pretui addition).'
+          @value={{this.hue}}
+          @options={{HUES}}
+          @defaultValue={{DEFAULT_HUE}}
+          @onInput={{this.setHue}}
         />
         <Args.Bool
           @name='steps'
@@ -150,9 +150,9 @@ class ProgressBarUsage extends GlimmerComponent {
       </:api>
       <:cssVars as |Css|>
         <Css.Basic
-          @name='pretui-progress-fill'
+          @name='pretui-progress-hue'
           @type='color'
-          @description='Colour of the fill and the lit segments. Set on the bar or any ancestor, or through @fill.'
+          @description='Colour of the fill and the lit segments. Set on the bar or any ancestor, or through @hue.'
           @defaultValue='var(--primary)'
         />
       </:cssVars>
