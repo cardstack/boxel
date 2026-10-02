@@ -27,6 +27,7 @@ export type { CapabilityAnswer, CapabilityCheck } from './capability-wire.ts';
 export {
   policyQueryScope,
   principalQueryScope,
+  withoutMisreadings,
   RealmAuthorityPolicyScopeError,
   searchPrincipal,
 } from './policy-query.ts';
@@ -51,6 +52,7 @@ export {
   scopeCallerFor,
   pathsFor,
   readPlan,
+  htmlDeclarationOf,
   resolveFacadeWrite,
   resolveGatedOperation,
   resolveOperation,
@@ -68,6 +70,7 @@ export type {
   ScopeInvocation,
   OperationStoredFile,
   OperationStoredFileMeta,
+  HtmlDeclarationAnswer,
   ReadPlan,
   ReadShape,
   RunOperationOptions,
@@ -116,8 +119,10 @@ export {
   OPERATIONS_CHANNEL,
   emitCapabilityCheck,
   emitOperationPerf,
+  emitPolicySnapshotRead,
   setCapabilityCheckSink,
   setOperationPerfSink,
+  setPolicySnapshotReadSink,
 } from './telemetry.ts';
 export type {
   CapabilityCheckEvent,
@@ -127,6 +132,7 @@ export type {
   OperationOutcome,
   OperationPerfEvent,
   OperationReadLayer,
+  PolicySnapshotReadEvent,
 } from './telemetry.ts';
 export {
   MalformedCardSourceError,
@@ -201,19 +207,24 @@ export type {
 } from './query.ts';
 export {
   DEFINITION_FREE_BASE_OPERATIONS,
+  EXPLAIN_CAP,
   OperationFailure,
   isDefinitionFreeBaseOperation,
   isDocumentResult,
+  isExplainListingResult,
   isExplainResult,
+  isValidateResult,
   isHeadResult,
   isIdentityResult,
   effectiveLinkStrategy,
+  isHtmlDeclaration,
   isLinkStrategy,
   isOperationFailure,
   isSourceResult,
   isWrite,
   linkStrategyOf,
   refusalForNonReader,
+  unshareableFormatsOf,
 } from './types.ts';
 export type {
   BaseOperation,
@@ -222,10 +233,13 @@ export type {
   OperationDefinition,
   ExplainedGrant,
   ExplainedGrantOutcome,
+  ExplainedIndexLag,
   ExplainedRule,
+  ExplainedSearch,
   OperationDocumentResult,
   OperationError,
   OperationErrorCode,
+  OperationExplainListingResult,
   OperationExplainResult,
   OperationHeadResult,
   OperationIdentityResult,
@@ -242,5 +256,12 @@ export type {
   OperationTemplate,
   PolicyExplanation,
   PolicyExplanationDecision,
+  PolicyExplanationListing,
   PolicyExplanationReason,
+  OperationValidateResult,
+  PolicyValidation,
+  ValidatedGrant,
+  ValidatedGrantInertia,
+  ValidatedPolicyIssue,
+  ValidatedRule,
 } from './types.ts';

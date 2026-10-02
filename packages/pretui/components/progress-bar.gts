@@ -61,48 +61,50 @@ export class ProgressBar extends Component<ProgressBarSignature> {
       {{/if}}
     </div>
     <style scoped>
-      .pretui-progresswrap {
-        display: grid;
-        gap: 5px;
-      }
-      .pretui-progress-head {
-        display: flex;
-        justify-content: space-between;
-        align-items: last baseline;
-        font-size: var(--text-ui-sm, 11.5px);
-        color: var(--muted-foreground);
-      }
-      .pretui-progress-count {
-        font-family: var(--font-mono);
-        font-size: var(--text-ui-xs, 11px);
-        font-variant-numeric: tabular-nums;
-        color: var(--foreground);
-      }
-      .pretui-progress {
-        height: 4px;
-        border-radius: 2px;
-        background: var(--inset, var(--boxel-100));
-        overflow: hidden;
-      }
-      .pretui-progress-fill {
-        height: 100%;
-        border-radius: 2px;
-        background: var(--primary);
-        transition: width var(--pretui-dur-morph, 300ms) var(--pretui-ease-morph, ease);
-      }
-      .pretui-progress-steps {
-        display: flex;
-        gap: 3px;
-      }
-      .pretui-progress-step {
-        flex: 1;
-        height: 4px;
-        border-radius: 2px;
-        background: var(--inset, var(--boxel-100));
-        transition: background var(--pretui-dur-morph, 300ms) var(--pretui-ease-morph, ease);
-      }
-      .pretui-progress-step[data-on] {
-        background: var(--primary);
+      @layer PretComponent {
+        .pretui-progresswrap {
+          display: grid;
+          gap: 5px;
+        }
+        .pretui-progress-head {
+          display: flex;
+          justify-content: space-between;
+          align-items: last baseline;
+          font-size: var(--text-ui-sm, 11.5px);
+          color: var(--muted-foreground);
+        }
+        .pretui-progress-count {
+          font-family: var(--font-mono);
+          font-size: var(--text-ui-xs, 11px);
+          font-variant-numeric: tabular-nums;
+          color: var(--foreground);
+        }
+        .pretui-progress {
+          height: 4px;
+          border-radius: 2px;
+          background: var(--inset, var(--boxel-100));
+          overflow: hidden;
+        }
+        .pretui-progress-fill {
+          height: 100%;
+          border-radius: 2px;
+          background: var(--primary);
+          transition: width var(--pretui-dur-morph, 300ms) var(--pretui-ease-morph, ease);
+        }
+        .pretui-progress-steps {
+          display: flex;
+          gap: 3px;
+        }
+        .pretui-progress-step {
+          flex: 1;
+          height: 4px;
+          border-radius: 2px;
+          background: var(--inset, var(--boxel-100));
+          transition: background var(--pretui-dur-morph, 300ms) var(--pretui-ease-morph, ease);
+        }
+        .pretui-progress-step[data-on] {
+          background: var(--primary);
+        }
       }
     </style>
   </template>

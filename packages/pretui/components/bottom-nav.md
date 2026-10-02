@@ -51,6 +51,8 @@ No APG widget pattern. It is a navigation landmark with links or buttons.
 
 The current indicator (a 2px bar at the top of the item) and the 3.5rem height are fixed.
 
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
+
 ## React ecosystem
 
 | Agent types                                     | Give them                             |

@@ -5,6 +5,7 @@ import {
   type CardResource,
   type CodeRef,
   type Diagnostics,
+  type ResolvedCodeRef,
   baseCardRef,
   internalKeyFor,
   isResolvedCodeRef,
@@ -288,6 +289,9 @@ export interface IndexedInstance {
 // An instance's row as its index visit left it, and nothing from its render.
 // `error` is set when the visit itself failed, and `instance` otherwise.
 export interface IndexedInstanceSource {
+  // The row's own URL: the file the instance is stored in, which is what an
+  // index visit of it is asked to visit.
+  url: string;
   realmURL: string;
   generation: number;
   sourceContentHash: string | null;
@@ -656,7 +660,7 @@ export class IndexQueryEngine {
     opts?: GetEntryOptions,
   ): Promise<IndexedInstanceSource | undefined> {
     let rows = (await this.#query([
-      'SELECT i.realm_url, i.generation, i.source_content_hash, i.types, i.pristine_doc, i.has_error, i.error_doc, i.diagnostics',
+      'SELECT i.url, i.realm_url, i.generation, i.source_content_hash, i.types, i.pristine_doc, i.has_error, i.error_doc, i.diagnostics',
       `FROM ${tableFromOpts(opts)} AS i`,
       'WHERE',
       ...every([
@@ -669,6 +673,7 @@ export class IndexQueryEngine {
       ]),
       'LIMIT 1',
     ] as Expression)) as unknown as {
+      url: string;
       realm_url: string;
       generation: number;
       source_content_hash: string | null;
@@ -683,6 +688,7 @@ export class IndexQueryEngine {
       return undefined;
     }
     return {
+      url: row.url,
       realmURL: row.realm_url,
       generation: Number(row.generation),
       sourceContentHash: row.source_content_hash ?? null,
@@ -1032,6 +1038,38 @@ export class IndexQueryEngine {
       'LIMIT 1',
     ] as Expression)) as unknown as { 1: number }[];
     return rows.length > 0;
+  }
+
+  // The types a realm holds cards of that descend from `ref`: the first entry
+  // of the adoption chain of every live instance row whose chain carries one
+  // of the ref's keys, once each. A row of the ref's own type contributes its
+  // own key. Rows whose visit failed count too, since a search that includes
+  // errors can return them.
+  async instanceTypesUnder(
+    realmURL: URL,
+    ref: ResolvedCodeRef,
+  ): Promise<string[]> {
+    let typeKeys = await this.typeKeysFor(ref);
+    let rows = (await this.#query([
+      'SELECT DISTINCT',
+      dbExpression({
+        pg: `i.types->>0`,
+        sqlite: `json_extract(i.types, '$[0]')`,
+      }),
+      'AS type_key',
+      'FROM boxel_index AS i',
+      'WHERE',
+      ...every([
+        ['i.realm_url =', param(realmURL.href)],
+        ['i.type =', param('instance')],
+        any([['i.is_deleted = FALSE'], ['i.is_deleted IS NULL']]),
+        any(typeKeys.map((typeKey) => [typesContains(typeKey)])),
+      ]),
+    ] as Expression)) as unknown as { type_key: string | null }[];
+    return rows
+      .map(({ type_key }) => type_key)
+      .filter((key): key is string => typeof key === 'string')
+      .sort();
   }
 
   private async getDefinition(codeRef: CodeRef): Promise<Definition> {

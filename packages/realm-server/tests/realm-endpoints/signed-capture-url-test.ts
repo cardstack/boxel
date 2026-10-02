@@ -68,6 +68,16 @@ function craftToken(
   );
 }
 
+// A realm session for `user`, issued a minute ago, so a revocation recorded
+// now postdates it.
+function craftSession(claims: Record<string, unknown>): string {
+  let iat = Math.floor(Date.now() / 1000) - 60;
+  return jwt.sign(
+    { sessionRoom: 'session-room', ...claims, iat, exp: iat + 900 },
+    realmSecretSeed,
+  );
+}
+
 function tokenFrom(signedUrl: string): string {
   let token = new URL(signedUrl).searchParams.get(CAPTURE_URL_TOKEN_PARAM);
   if (!token) {
@@ -398,6 +408,7 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
   module('on a world-readable realm', function (hooks) {
     let testRealm: Realm;
     let request: SuperTest<Test>;
+    let dbAdapter: PgAdapter;
 
     setupPermissionedRealmCached(hooks, {
       fixture: 'blank',
@@ -409,6 +420,7 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       onRealmSetup: (args) => {
         testRealm = args.testRealm;
         request = args.request;
+        dbAdapter = args.dbAdapter;
       },
     });
 
@@ -437,6 +449,61 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
         new URL(response.body.signed[0].signedUrl).searchParams.has(
           CAPTURE_URL_TOKEN_PARAM,
         ),
+      );
+    });
+
+    // A token binds the reader a capture on its URL is drawn as and served
+    // to, so it is minted only for a reader the realm vouches for. This
+    // realm's read path takes a session without checking it, so minting
+    // runs the checks it skipped.
+    test('a revoked session gets the URLs echoed back unsigned', async function (assert) {
+      let url = `${testRealm.url}_capture/some-card`;
+      let session = craftSession({
+        user: '@revoked-reader:localhost',
+        realm: testRealm.url,
+        permissions: [],
+        realmServerURL: testRealm.realmServerURL,
+      });
+      await revokeUserSessions(dbAdapter, '@revoked-reader:localhost');
+      let response = await mint(request, [url], session);
+      assert.strictEqual(response.status, 200);
+      assert.deepEqual(
+        response.body.signed[0],
+        { url, signedUrl: url, expiresAt: null },
+        'no token is bound to a user whose sessions were revoked',
+      );
+    });
+
+    test('a session delegated to another realm gets the URLs echoed back unsigned', async function (assert) {
+      let url = `${testRealm.url}_capture/some-card`;
+      let session = craftSession({
+        user: '@delegated-reader:localhost',
+        realm: 'http://another-realm.example/',
+        permissions: ['read'],
+        realmServerURL: testRealm.realmServerURL,
+        delegated: true,
+      });
+      let response = await mint(request, [url], session);
+      assert.strictEqual(response.status, 200);
+      assert.deepEqual(
+        response.body.signed[0],
+        { url, signedUrl: url, expiresAt: null },
+        'a session bound to another realm reads nothing here as its user',
+      );
+
+      let here = craftSession({
+        user: '@delegated-reader:localhost',
+        realm: testRealm.url,
+        permissions: ['read'],
+        realmServerURL: testRealm.realmServerURL,
+        delegated: true,
+      });
+      let bound = await mint(request, [url], here);
+      assert.true(
+        new URL(bound.body.signed[0].signedUrl).searchParams.has(
+          CAPTURE_URL_TOKEN_PARAM,
+        ),
+        'while one delegated to this realm reads it as the user it acts for',
       );
     });
 

@@ -56,6 +56,7 @@ import {
   getTools,
   isMarkdownSkillFile,
   parseMarkdownSkill,
+  sessionSkillFeatures,
   skillCardsToMessages,
   SKILL_INSTRUCTIONS_MESSAGE,
 } from '@cardstack/runtime-common/ai';
@@ -3903,7 +3904,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
     );
     assert.true(
       messageText(messages![messages!.length - 1]).includes(
-        'Re-read the file and send a new block whose SEARCH lines are copied exactly from the current file. Do not send the same block again. Attempt 1 of 3.',
+        'Re-read the file and use the run-realm-code tool with the current contents. Do not repeat a failed edit. Attempt 1 of 3.',
       ),
       'the retry instruction rides the trailing message, not history',
     );
@@ -4098,7 +4099,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
     );
     let trailing = messageText(messages![messages!.length - 1]);
     assert.true(
-      trailing.includes('Re-read the file and send a new block'),
+      trailing.includes('Re-read the file and use the run-realm-code tool'),
       'the trailing message tells the model to retry',
     );
     assert.true(trailing.includes('Attempt 1 of 3.'), 'the attempt is counted');
@@ -4191,7 +4192,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
       'the third consecutive failure ends the retrying',
     );
     assert.false(
-      trailing.includes('Re-read the file and send a new block'),
+      trailing.includes('Re-read the file and use the run-realm-code tool'),
       'the retry instruction is gone',
     );
     const records = messages!.filter(
@@ -4228,7 +4229,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
     );
     let trailing = messageText(messages![messages!.length - 1]);
     assert.true(
-      trailing.includes('Re-read the file and send a new block'),
+      trailing.includes('Re-read the file and use the run-realm-code tool'),
       'the retry instruction is still given',
     );
     assert.true(
@@ -4285,7 +4286,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
     );
     let trailing = messageText(messages![messages!.length - 1]);
     assert.false(
-      trailing.includes('Re-read the file and send a new block'),
+      trailing.includes('Re-read the file and use the run-realm-code tool'),
       'no retry instruction after the fix landed',
     );
     assert.true(
@@ -9003,6 +9004,74 @@ module('absolutizeSkillLinks', () => {
         '[boxel](https://localhost:4201/skills/skills/boxel/SKILL.md)',
       ),
       'the prompt carries a copy-ready absolute url',
+    );
+  });
+});
+
+module('skill feature sections', () => {
+  const INDEX = 'https://localhost:4201/skills/index.md';
+  const instructions = [
+    'Before.',
+    '',
+    '<!-- feature:catalog-reuse -->',
+    'Search the catalog first.',
+    '<!-- /feature:catalog-reuse -->',
+    '',
+    'After.',
+  ].join('\n');
+  const skill = {
+    id: INDEX,
+    attributes: { title: 'Index', instructions },
+  };
+
+  test('leaves out a feature section when its feature is disabled', () => {
+    let [message] = skillCardsToMessages([skill]);
+    assert.false(message.includes('Search the catalog first.'));
+    assert.false(message.includes('feature:'), 'the markers are removed too');
+    assert.true(message.includes('Before.'));
+    assert.true(message.includes('After.'));
+  });
+
+  test('keeps a feature section, without its markers, when its feature is enabled', () => {
+    let [message] = skillCardsToMessages([skill], ['catalog-reuse']);
+    assert.true(message.includes('Search the catalog first.'));
+    assert.false(message.includes('feature:'), 'the markers are removed');
+  });
+
+  test('a room enables and disables a feature with boxel-debug:feature messages', () => {
+    const message = (sender: string, body: string) => ({
+      type: 'm.room.message',
+      sender,
+      content: { body },
+    });
+    const bot = '@aibot:localhost';
+    const user = '@user:localhost';
+    assert.deepEqual(sessionSkillFeatures([], bot), []);
+    assert.deepEqual(
+      sessionSkillFeatures(
+        [message(user, 'boxel-debug:feature:enable:catalog-reuse')],
+        bot,
+      ),
+      ['catalog-reuse'],
+    );
+    assert.deepEqual(
+      sessionSkillFeatures(
+        [
+          message(user, 'boxel-debug:feature:enable:catalog-reuse'),
+          message(user, 'boxel-debug:feature:disable:catalog-reuse'),
+        ],
+        bot,
+      ),
+      [],
+      'a later disable wins',
+    );
+    assert.deepEqual(
+      sessionSkillFeatures(
+        [message(bot, 'boxel-debug:feature:enable:catalog-reuse')],
+        bot,
+      ),
+      [],
+      'the bot cannot enable a feature',
     );
   });
 });

@@ -14,7 +14,12 @@ import {
 } from './dispatch.ts';
 import type { SearchPrincipal } from './policy-query.ts';
 import { lowerQueryOperation } from './query.ts';
-import { linkStrategyOf, OperationFailure } from './types.ts';
+import {
+  linkStrategyOf,
+  OperationFailure,
+  unshareableFormatsOf,
+} from './types.ts';
+import type { PrerenderedHtmlFormat } from '../prerendered-html-format.ts';
 import type { LinkStrategy } from '@cardstack/base/operations';
 
 // ============================================================================
@@ -153,11 +158,18 @@ export interface ResolvedNamedQuery {
   // the query rather than in it because it shapes the answer rather than which
   // rows match, and the search grammar has no member for it.
   links: LinkStrategy;
+  // The prerendered formats the declaration serves data-only, none where it
+  // declares none. Every row of the answer is served without its markup for
+  // these, whatever type the row is — the declaration's `html` governs the
+  // query's rows as its `links` does. It travels beside the query for the
+  // same reason `links` does. A render's search does not apply it: the
+  // endpoint serving one leaves every format's markup on its rows.
+  unshareableFormats: PrerenderedHtmlFormat[];
 }
 
-// The ad-hoc search request a named one resolves to, and the link strategy its
-// results are served under. Every refusal is an `OperationFailure` carrying the
-// status it is answered with.
+// The ad-hoc search request a named one resolves to, and the link strategy and
+// data-only formats its results are served under. Every refusal is an
+// `OperationFailure` carrying the status it is answered with.
 //
 // Where the declaration names a member, the declaration's stands; where it
 // names none, the caller's fills it. The filter is the exception: it is the
@@ -243,6 +255,9 @@ export async function resolveNamedQuery(
     // have refused to store serves as the narrowest strategy rather than as
     // the widest.
     links: linkStrategyOf(definition.links),
+    // Read the same way, so a declaration lowering would have refused to
+    // store serves every format data-only rather than every format's markup.
+    unshareableFormats: unshareableFormatsOf(definition.html),
   };
 }
 

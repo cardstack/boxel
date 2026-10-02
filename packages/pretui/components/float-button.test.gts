@@ -2,8 +2,7 @@
 // and the speed dial's disclosure contract — expanded state, Escape, outside
 // click and choosing an action all close it and give focus back.
 //
-// Local-only test file, kept off the realm by `.boxelignore` (`*.test.gts`);
-// run with `boxel test`.
+// Run with `boxel test`; deployment leaves `*.test.gts` off the realm.
 import { module, test } from 'qunit';
 import { click, render, triggerEvent, triggerKeyEvent } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';

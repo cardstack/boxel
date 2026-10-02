@@ -64,7 +64,7 @@ This workflow is ideal for rapid iteration and testing of catalog content:
 
 4. **Deploy to staging** happens automatically when the PR is merged
 
-5. **Tag the commit** to release to production
+5. **Deploy to production** with boxel-catalog's "Deploy to production" workflow, or let the next boxel production deploy carry it (see [Deployment Pipeline](#deployment-pipeline))
 
 ## Linting
 
@@ -96,9 +96,10 @@ These commands run locally in this monorepo's `packages/catalog` package. If you
 
 ### Catalog lint in boxel CI
 
-The catalog type-checks and lints its cards against this monorepo, so a platform change here (removing a field from a command input, tightening a type, adding a lint rule) can break the catalog's lint without failing anything in boxel. The **Lint Catalog** job in boxel's CI Lint workflow guards against that: it checks out boxel-catalog into `contents/` and runs this package's lint against the change, using `scripts/lint-sweep.ts`.
+The catalog type-checks and lints its cards against this monorepo, so a platform change here (removing a field from a command input, tightening a type, adding a lint rule) can break the catalog's lint without failing anything in boxel. The **Lint Catalog** workflow (`.github/workflows/lint-catalog.yaml`) guards against that: it checks out boxel-catalog into `contents/` and runs this package's lint against the change, using `scripts/lint-sweep.ts`.
 
-- It lints boxel-catalog `main`, unless boxel-catalog has a branch with the same name as the boxel pull request's branch, in which case it lints that branch. That is how a boxel change and the catalog change it needs are validated together: push the catalog fix to a same-named boxel-catalog branch, and merge its catalog pull request before or alongside the boxel one.
+- It lints boxel-catalog `main`, unless the boxel pull request's description pairs it with a boxel-catalog pull request, in which case it lints that pull request's head. A pair is a line in each description naming the other, keyed by merge order (`Merges before:` on the one that lands first, `Merges after:` on the other), and `scripts/pairing.ts` checks it from both sides. A pull request in a pair targets `main`, or is stacked on an open pull request of its own repository, and is retargeted to `main` once that pull request merges. The `catalog-pairing` skill describes the protocol. Editing the description re-runs the workflow.
+- With a pair, it lints catalog `main` against the change as well. The catalog's own CI Lint always lints against boxel `main`, so a catalog fix for a breaking boxel change can't pass there until the boxel change merges, and until the catalog pull request then merges, catalog `main` fails with whatever the boxel change broke. A catalog pull request the change merges after has to land first, so until it does the job fails, waiting on it. Otherwise, errors the change adds to catalog `main` pass only while a catalog pull request the change merges before is open, ready for review, and approved, by GitHub's own review decision. While either of the two is stacked on a parent, this fails too, because the stacked one lands on its parent's branch rather than `main`; retarget it once the parent merges. Once the catalog pull request is approved and neither is stacked, re-run the job, then merge the catalog pull request right after the boxel one. A change on the catalog side, including a push, doesn't re-run this job, so re-run it by hand. Without a pair, errors the change adds to catalog `main` fail, and the job says which lines to add to pair the change with a catalog fix.
 - It fails only on errors the change introduces. When linting the catalog against the change finds errors, the job lints the same catalog revision against the pull request's base branch too, and errors that appear in both runs are listed as already present rather than failing the check. On pushes to `main` there is no base to compare with, so any error fails.
 - The job summary lists each error, linking catalog files to their line in boxel-catalog.
 
@@ -109,8 +110,12 @@ To reproduce it locally, run `pnpm lint` here with the boxel-catalog revision th
 1. **Development**: Edit catalog content locally or remotely
 2. **Pull Request**: Submit changes to boxel-catalog repository
 3. **Review**: Code review process in GitHub
-4. **Merge**: Changes automatically deployed to staging
-5. **Tag**: Create a git tag to trigger production deployment
+4. **Merge**: Changes automatically deployed to staging, which runs boxel `main`
+5. **Production**: boxel-catalog's "Deploy to production" workflow deploys the catalog, in one of two ways:
+   - **In lockstep with boxel.** Manual Deploy [boxel] to production deploys the catalog revision the deployed boxel pins in `test-subset.json` twice. The run before the release ships the catalog changes the new boxel needs, and the run after it ships the rest. Neither moves production's catalog backwards.
+   - **Ahead of boxel.** Run the workflow by hand from boxel-catalog's Actions tab to deploy catalog `main`, for changes that need nothing new from boxel.
+
+   Before it changes anything, the deploy checks each catalog pull request since the last production deploy. It refuses when one says `Merges after: cardstack/boxel#N` and production doesn't run #N yet, and it names both pull requests. The script is `scripts/catalog-deploy-check.ts`, and the `catalog-deploy` skill (`.claude/skills/catalog-deploy/SKILL.md`) explains how to read a refusal.
 
 ## Troubleshooting
 

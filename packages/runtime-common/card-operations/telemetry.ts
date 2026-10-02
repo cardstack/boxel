@@ -203,3 +203,71 @@ export function emitCapabilityCheck(event: CapabilityCheckEvent): void {
     JSON.stringify({ channel: OPERATIONS_CHANNEL, ...event }),
   );
 }
+
+// ============================================================================
+// Per-evaluation telemetry for a policy predicate judged against a snapshot.
+//
+// A predicate annotated `snapshot: true` reads the target's computed values or
+// its linked cards' values from the index, which lags the card's stored
+// source. Each such grant is a window, measured in index latency, during which
+// a card that no longer satisfies the predicate is still admitted. This record
+// is what lets an operator count the windows a realm has accepted: one line
+// each time such a predicate decides an invocation, at the gate or under the
+// write lock.
+//
+// A capability check records nothing, and neither does a prediction of what
+// the lock would decide, such as what a refused caller may be told: neither
+// decides anything, and a view asks a capability check at the rate it
+// renders. An explain decides nothing either. Its
+// evaluation at the gate is recorded with `hypothetical` set, so a panel can
+// leave it out.
+//
+// No card content, no target, and no predicate source: the rule's type and the
+// grant's place in the policy card say which window was used.
+// ============================================================================
+
+export interface PolicySnapshotReadEvent {
+  kind: 'policy-snapshot-read';
+  realmURL: string;
+  // The caller the predicate was judged for, as `actor()` resolves it. Null
+  // where the request authenticated nobody.
+  actor: string | null;
+  // The operation the grant admits.
+  operation: string;
+  // The type the grant's rule governs.
+  targetType: { module: string; name: string };
+  // Where the grant is in the policy card, as `rules[2].grants[1]`.
+  grant: string;
+  // Where the predicate decided: at the gate, for a read, or under the write
+  // lock, for a write.
+  decidedAt: 'gate' | 'lock';
+  outcome: 'held' | 'did-not-hold' | 'threw';
+  // Whether the target had an index row to read. A predicate judged against
+  // a card with none does not hold.
+  indexed: boolean;
+  // Set for an explain, which runs the gate for a named actor rather than for
+  // a caller.
+  hypothetical: boolean;
+}
+
+let policySnapshotReadSink:
+  | ((event: PolicySnapshotReadEvent) => void)
+  | undefined;
+
+export function setPolicySnapshotReadSink(
+  sink: ((event: PolicySnapshotReadEvent) => void) | undefined,
+): void {
+  policySnapshotReadSink = sink;
+}
+
+let policySnapshotReadLog: ReturnType<typeof logger> | undefined;
+
+export function emitPolicySnapshotRead(event: PolicySnapshotReadEvent): void {
+  if (policySnapshotReadSink) {
+    policySnapshotReadSink(event);
+    return;
+  }
+  (policySnapshotReadLog ??= logger(OPERATIONS_CHANNEL)).info(
+    JSON.stringify({ channel: OPERATIONS_CHANNEL, ...event }),
+  );
+}

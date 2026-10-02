@@ -51,3 +51,5 @@ Consumed: `--field`, `--input`, `--primary` (focus ring via `--ring`), `--ink-3`
 Forwarded into boxel-ui through the `--boxel-*` channel — the same height, radius, type-size and spacing knobs **Input** sets, so a phone field and a text field in the same form are pixel-identical.
 
 An inline `style` carries font inheritance (the UA font on native controls is one of the two places the token channel cannot reach). The invalid dress arrives from an enclosing **Field** by repointing `--border` and `--background`, so it works here without this component knowing about it — and the same mechanism means a season redefines "invalid" once for the whole family.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

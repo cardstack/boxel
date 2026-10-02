@@ -10,6 +10,7 @@
  */
 import { render, settled } from '@ember/test-helpers';
 import { setupRenderingTest } from 'ember-qunit';
+import { setupChoreo } from 'glimmer-motion/choreo/test-support';
 import { module, test } from 'qunit';
 import { Hang, RUNWAY } from 'test-app/components/examples/hang';
 
@@ -94,6 +95,7 @@ async function takeShot(ms: number, steps: number) {
 module('Integration | hang', function (hooks) {
   setupRenderingTest(hooks);
   setupFixtureViewport(hooks);
+  setupChoreo(hooks);
 
   test('a flick carries the puck out of the pen under its own speed', async function (assert) {
     await render(<template><Hang /></template>);

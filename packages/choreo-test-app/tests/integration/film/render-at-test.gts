@@ -18,6 +18,7 @@
  */
 import { render, waitUntil } from '@ember/test-helpers';
 import { setupRenderingTest } from 'ember-qunit';
+import { setupChoreo } from 'glimmer-motion/choreo/test-support';
 import { Film, IframePicture } from 'glimmer-motion/film';
 import { module, test } from 'qunit';
 
@@ -51,6 +52,7 @@ function yaw(): number {
 
 module('Integration | film | renderAt', function (hooks) {
   setupRenderingTest(hooks);
+  setupChoreo(hooks);
 
   hooks.afterEach(function () {
     delete (window as unknown as { __choreo?: Record<string, Handle> })

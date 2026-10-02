@@ -1,5 +1,6 @@
 import { render } from '@ember/test-helpers';
 import motion from 'glimmer-motion/motion';
+import { setupMotion } from 'glimmer-motion/test-support';
 import { module, test } from 'qunit';
 import { setupRenderingTest } from 'test-app/tests/helpers';
 
@@ -12,6 +13,7 @@ import { setupRenderingTest } from 'test-app/tests/helpers';
  */
 module('Integration | motion | drag touch-action', function (hooks) {
   setupRenderingTest(hooks);
+  setupMotion(hooks);
 
   const of = () =>
     document.querySelector<HTMLElement>('[data-testid="box"]')!.style

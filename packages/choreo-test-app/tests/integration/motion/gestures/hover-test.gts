@@ -5,6 +5,7 @@
 import { render } from '@ember/test-helpers';
 import { setupRenderingTest } from 'ember-qunit';
 import motion from 'glimmer-motion/motion';
+import { setupMotion } from 'glimmer-motion/test-support';
 import {
   frame,
   isDragging,
@@ -29,6 +30,7 @@ const el = () => document.querySelector('#el')!;
 
 module('Integration | motion | hover', function (hooks) {
   setupRenderingTest(hooks);
+  setupMotion(hooks);
 
   test('hover event listeners fire', async function (assert) {
     const hoverIn = spy(),

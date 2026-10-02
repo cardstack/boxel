@@ -7,6 +7,7 @@ A compact row of mutually exclusive options, all visible, with a pill that slide
 ```
 @options: { value, label }[]   (required)
 @value?, @defaultValue?, @onValueChange?(value: string)
+@disabled?    — disables every segment
 ```
 
 Hybrid controlled/uncontrolled: `@value ?? @internal`, initialised from `@defaultValue ?? options[0].value`. Unlike RadioGroup there is no empty state — a segmented control always has a selection, which is the semantic difference from a set of toggle buttons.
@@ -46,3 +47,5 @@ Other gaps, secondary to the above:
 Rail and segments consume `--muted-foreground` and `--foreground` for inactive/active ink and `--text-ui-md` for type; the pill itself is **SlidingHighlight**'s, so its fill, radius and shadow are that component's tokens. The 2px inter-segment gap and the rail's `inline-flex` metrics are fixed.
 
 Because active state is carried by the traveling pill plus an ink shift, a season that makes the pill low-contrast against the rail leaves the control reading as four equal buttons. Check the pill fill against the rail background, not against the page.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

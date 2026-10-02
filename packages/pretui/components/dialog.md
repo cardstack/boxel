@@ -43,6 +43,8 @@ Honest gaps:
 
 `--card`, `--foreground`, `--radius-surface`, `--pretui-shadow-overlay`, `--pretui-overlay-scrim` (the `::backdrop` fill), `--font-sans`, `--text-body`, `--text-heading`, `--weight-heading`, `--track-heading`, `--space-3/4/6`, `--border`, `--muted-foreground`, `--leading-body`. Widths are hard-capped at `min(400|560|760px, 100vw - 32px)` and height at `100dvh - 64px`; a season cannot retune those without a variant. `--pretui-overlay-scrim` is the token most seasons get wrong — it must read as a scrim in both light and dark, not simply invert.
 
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
+
 ## React ecosystem
 
 Ant/Mantine/MUI agents will type **Modal** (alias stub). Destructive

@@ -163,7 +163,8 @@ export interface AppBoxelResponseStreamContent {
   // Same wire shape as APP_BOXEL_TOOL_REQUESTS_KEY on the room event: ai-bot
   // runs previews through the same normalization, so each request is
   // `{ id, name, arguments: <object> }`. `arguments` is `{}` while the tool
-  // call's JSON is still incomplete mid-stream.
+  // call's JSON is still incomplete mid-stream; `argumentsText` then carries
+  // the raw text received so far, for display only.
   toolRequests: unknown[];
 }
 

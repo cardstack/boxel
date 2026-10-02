@@ -11,7 +11,7 @@ description: >-
 
 ## Drag (`{{motion drag=…}}`)
 
-Motion's pan/drag session, vendored verbatim:
+Motion's own pan/drag session, inlined from framer-motion's build:
 
 ```gts
 <div {{motion drag=true dragConstraints=this.container dragElastic=0.2}} />

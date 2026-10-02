@@ -24,11 +24,11 @@ import { render, settled } from '@ember/test-helpers';
 import { setupRenderingTest } from 'ember-qunit';
 import { setMotionSpeed } from 'glimmer-motion';
 import {
-  animationsSettled,
   orphanCount,
-  setupMotion,
+  setupChoreo,
   strandedTransforms,
-} from 'glimmer-motion/test-support';
+} from 'glimmer-motion/choreo/test-support';
+import { animationsSettled } from 'glimmer-motion/test-support';
 import { module, test } from 'qunit';
 import { Enter } from 'test-app/components/examples/enter';
 import { FarMatch } from 'test-app/components/examples/far-match';
@@ -181,7 +181,7 @@ const stages: Stage[] = [
 module('Integration | choreo | rapid interruption', function (hooks) {
   setupRenderingTest(hooks);
   setupFixtureViewport(hooks);
-  setupMotion(hooks);
+  setupChoreo(hooks);
 
   for (const stage of stages) {
     // three gaps: inside the first phase, mid-flight, and around the end of a

@@ -12,6 +12,7 @@
  */
 import { find, visit } from '@ember/test-helpers';
 import { setupApplicationTest } from 'ember-qunit';
+import { setupChoreo } from 'glimmer-motion/choreo/test-support';
 import { module, test } from 'qunit';
 
 interface ReelHandle {
@@ -51,6 +52,7 @@ const visuallyGone = (sel: string) => {
 
 module('Acceptance | feature reel transport', function (hooks) {
   setupApplicationTest(hooks);
+  setupChoreo(hooks);
 
   test('the preview PLAYS: WAAPI composites the camera, and cues fire with no recorder', async function (assert) {
     await visit('/_feature-reel');

@@ -22,10 +22,11 @@ import { tracked } from '@glimmer/tracking';
 import { setupRenderingTest } from 'ember-qunit';
 import { Choreo, type ChoreoContext, motion } from 'glimmer-motion';
 import {
-  animationsSettled,
   orphanCount,
+  setupChoreo,
   strandedTransforms,
-} from 'glimmer-motion/test-support';
+} from 'glimmer-motion/choreo/test-support';
+import { animationsSettled } from 'glimmer-motion/test-support';
 import { module, test } from 'qunit';
 
 import { setupFixtureViewport } from '../../helpers/layout-fixture';
@@ -151,6 +152,7 @@ const array = (...xs: number[]) => xs;
 module('Integration | choreo | world dock', function (hooks) {
   setupRenderingTest(hooks);
   setupFixtureViewport(hooks);
+  setupChoreo(hooks);
 
   test("a dock into a camera'd world under an external clock pins page-true and lands camera'd", async function (assert) {
     let app: DockApp | undefined;

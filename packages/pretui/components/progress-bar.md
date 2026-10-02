@@ -43,6 +43,8 @@ Gaps, and they are the kind that pass review by looking present:
 
 The 4px height, 2px radius and 3px step gap are fixed. A season must keep `--primary` and `--inset` clearly separable in luminance, not just in hue — that separation is the entire signal in stepped mode, and it is the one most likely to be lost in a dark season where `--inset` drifts toward mid-grey.
 
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
+
 ## React ecosystem
 
 shadcn `Progress`. Ant `Progress`. Aria `ProgressBar`. Indeterminate

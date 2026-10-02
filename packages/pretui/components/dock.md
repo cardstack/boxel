@@ -38,3 +38,5 @@ Where it is thinner: no drag-to-reorder, no running indicators, no separators, a
 `--pretui-dock-size` (from `@size`) and `--pretui-dock-scale` (the magnification factor), over the shared `--pretui-dur-snap` and `--pretui-ease-snap`.
 
 Keeping the scale as a token lets a season dial the effect down — or to 1, which turns the dock into a plain toolbar without the caller changing anything.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

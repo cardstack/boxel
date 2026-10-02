@@ -45,6 +45,17 @@ export const pointerDown = (el: Element, init: PointerEventInit = {}) =>
       ...init,
     })
   );
+export const pointerMove = (el: Element, init: PointerEventInit = {}) =>
+  el.dispatchEvent(
+    pointer('pointermove', {
+      isPrimary: true,
+      pointerId: 1,
+      pointerType: 'mouse',
+      button: 0,
+      buttons: 1,
+      ...init,
+    })
+  );
 export const pointerUp = (el: Element, init: PointerEventInit = {}) =>
   el.dispatchEvent(
     pointer('pointerup', {

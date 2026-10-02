@@ -17,6 +17,7 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { setupRenderingTest } from 'ember-qunit';
 import { Choreo, type ChoreoContext, motion } from 'glimmer-motion';
+import { setupChoreo } from 'glimmer-motion/choreo/test-support';
 import { animationsSettled } from 'glimmer-motion/test-support';
 import { module, test } from 'qunit';
 
@@ -81,6 +82,7 @@ module('Integration | choreo | a held run and the next pass', function (hooks) {
   // ember-testing renders inside a 50%-scaled container; unscale it so a
   // measurement is of the run and not of the harness
   setupFixtureViewport(hooks);
+  setupChoreo(hooks);
 
   test('a layout change lands even when the run is parked at the pose it compiled to', async function (assert) {
     await render(<template><Held @seize={{seize}} /></template>);

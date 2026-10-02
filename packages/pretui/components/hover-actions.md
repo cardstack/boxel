@@ -51,3 +51,5 @@ Where it is thinner: no keyboard-only reveal distinct from focus, no per-action 
 The cluster takes the kit's control tokens at `@size`, defaulting to the small scale; overlay and reserve differ in layout rather than in treatment.
 
 Keeping both modes on one token set means a product can switch a table from overlay to reserve for density reasons without the buttons changing appearance.
+
+The styles sit in `@layer PretComposite`, above Button's `PretComponent` layer, so what this component sets on Button wins by layer order. A caller's unlayered CSS overrides both without a more specific selector.

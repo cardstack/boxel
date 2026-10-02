@@ -19,24 +19,26 @@ export class Token extends Component<TokenSignature> {
       {{#if @value}}{{@value}}{{else}}{{yield}}{{/if}}
     </code>
     <style scoped>
-      .pretui-token {
-        --_th: var(--pretui-token-hue, var(--pretui-primary-ink, var(--primary)));
-        display: inline-block;
-        margin-inline: 0.35ch;
-        vertical-align: baseline;
-        font-family: var(--font-mono);
-        font-size: calc(var(--text-body, 15px) - 3.5px);
-        line-height: 1.5;
-        padding: 0 5px;
-        border-radius: 4px;
-        background: color-mix(in oklch, var(--_th) 8%, var(--card));
-        color: color-mix(in oklch, var(--foreground) 26%, var(--_th));
-        box-shadow: 0 0 0 1px color-mix(in oklch, var(--_th) 30%, var(--border));
-        white-space: nowrap;
-        font-variant-numeric: tabular-nums;
-      }
-      :where(td, dd) > .pretui-token {
-        margin-inline: 0;
+      @layer PretComponent {
+        .pretui-token {
+          --_th: var(--pretui-token-hue, var(--pretui-primary-ink, var(--primary)));
+          display: inline-block;
+          margin-inline: 0.35ch;
+          vertical-align: baseline;
+          font-family: var(--font-mono);
+          font-size: calc(var(--text-body, 15px) - 3.5px);
+          line-height: 1.5;
+          padding: 0 5px;
+          border-radius: 4px;
+          background: color-mix(in oklch, var(--_th) 8%, var(--card));
+          color: color-mix(in oklch, var(--foreground) 26%, var(--_th));
+          box-shadow: 0 0 0 1px color-mix(in oklch, var(--_th) 30%, var(--border));
+          white-space: nowrap;
+          font-variant-numeric: tabular-nums;
+        }
+        :where(td, dd) > .pretui-token {
+          margin-inline: 0;
+        }
       }
     </style>
   </template>

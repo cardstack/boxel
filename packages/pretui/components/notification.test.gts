@@ -1,8 +1,7 @@
 // Pretui — Notification unit tests: tone resolution, the opt-in live region,
 // the busy state, the inline action and the named dismiss button.
 //
-// Local-only test file, kept off the realm by `.boxelignore` (`*.test.gts`);
-// run with `boxel test`.
+// Run with `boxel test`; deployment leaves `*.test.gts` off the realm.
 import { module, test } from 'qunit';
 import { click, render } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';

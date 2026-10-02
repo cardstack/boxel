@@ -1,8 +1,9 @@
 /**
- * Ports of the remaining Motion drag Cypress specs (motion@bbabb00):
+ * Ports of the remaining Motion drag Cypress specs (motion@bbabb00 unless noted):
  * drag-input-propagation, drag-momentum, drag-framer-page, drag-rotated-parent, drag-scaled-parent,
  * drag-scroll-while-drag, drag-ref-constraints-{absolute-scrolled,element-resize,resize-handle},
- * drag-snap-animate-presence-exit, drag-snap-layout-id-swap, drag-layout-reorder-strict.
+ * drag-snap-animate-presence-exit, drag-snap-layout-id-swap, drag-layout-reorder-strict,
+ * drag-snap-to-cursor-initial and drag-release-before-frame (motion@v13.4.6).
  * React refs → {current} refs filled by {{captureEl}}; MotionConfig transformPagePoint → the arg on the
  * draggable; window.expandFolder/hoverFolder → a module-level handle the fixture component fills.
  */
@@ -12,11 +13,14 @@ import { click, render } from '@ember/test-helpers';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { setupRenderingTest } from 'ember-qunit';
+import { createDragControls } from 'glimmer-motion/gestures/drag-controls';
 import { correctParentTransform } from 'glimmer-motion/gestures/transform-page-point';
+import { layoutChange } from 'glimmer-motion/layout';
 import LayoutGroup from 'glimmer-motion/layout-group';
 import motion from 'glimmer-motion/motion';
 import Presence from 'glimmer-motion/presence';
-import { motionValue, transformValue } from 'motion-dom';
+import { setupMotion } from 'glimmer-motion/test-support';
+import { motionValue, type PanInfo, transformValue } from 'motion-dom';
 import { module, test } from 'qunit';
 
 import {
@@ -27,11 +31,13 @@ import {
 import {
   $,
   expectBbox,
+  pointerAt,
   setupFixtureViewport,
   should,
   trigger,
   wait,
 } from '../../../helpers/layout-fixture';
+import { nextFrame } from '../../../helpers/motion';
 
 const D = "[data-testid='draggable']";
 const rect = (sel = D) => $(sel).getBoundingClientRect();
@@ -101,6 +107,7 @@ module(
   'Integration | motion | cypress | Drag Input Propagation',
   function (hooks) {
     setupRenderingTest(hooks);
+    setupMotion(hooks);
     setupFixtureViewport(hooks);
 
     const atStart = (assert: Assert) =>
@@ -188,6 +195,7 @@ const Momentum = <template>
 
 module('Integration | motion | cypress | Drag Momentum', function (hooks) {
   setupRenderingTest(hooks);
+  setupMotion(hooks);
   setupFixtureViewport(hooks, { scroll: true });
 
   test('Fast flick after hold produces momentum', async function (assert) {
@@ -319,6 +327,7 @@ class FramerPage extends Component {
 
 module('Integration | motion | cypress | Nested Scroll/Page', function (hooks) {
   setupRenderingTest(hooks);
+  setupMotion(hooks);
   setupFixtureViewport(hooks);
 
   test('correctly positions children after dragging', async function (assert) {
@@ -400,6 +409,7 @@ module(
   'Integration | motion | cypress | Drag with rotated parent',
   function (hooks) {
     setupRenderingTest(hooks);
+    setupMotion(hooks);
     setupFixtureViewport(hooks);
 
     test('Element follows cursor when parent is rotated 180deg', async function (assert) {
@@ -428,6 +438,7 @@ module(
   'Integration | motion | cypress | Drag with scaled parent',
   function (hooks) {
     setupRenderingTest(hooks);
+    setupMotion(hooks);
     setupFixtureViewport(hooks);
 
     for (const scale of [0.5, 2]) {
@@ -494,6 +505,7 @@ for (const win of [false, true]) {
     `Integration | motion | cypress | Drag with ${win ? 'window' : 'element'} scroll during drag`,
     function (hooks) {
       setupRenderingTest(hooks);
+      setupMotion(hooks);
       setupFixtureViewport(hooks, { scroll: true });
       const scrollBy = (amount: number) => {
         if (win) {
@@ -624,6 +636,7 @@ module(
   'Integration | motion | cypress | Drag with ref constraints on absolute element after scroll',
   function (hooks) {
     setupRenderingTest(hooks);
+    setupMotion(hooks);
     setupFixtureViewport(hooks, { width: 1000, height: 800, scroll: true });
 
     test('Allows dragging to the visible bottom of the viewport after scroll', async function (assert) {
@@ -758,6 +771,7 @@ module(
   'Integration | motion | cypress | Drag Constraints Update on Element Resize',
   function (hooks) {
     setupRenderingTest(hooks);
+    setupMotion(hooks);
     setupFixtureViewport(hooks);
 
     test('Constrains drag correctly before resize', async function (assert) {
@@ -805,6 +819,7 @@ module(
   'Integration | motion | cypress | Drag Constraints Update on Imperative Resize',
   function (hooks) {
     setupRenderingTest(hooks);
+    setupMotion(hooks);
     setupFixtureViewport(hooks);
 
     test('Updates drag constraints when element grows via direct DOM mutation', async function (assert) {
@@ -882,6 +897,7 @@ module(
   'Integration | motion | cypress | drag + dragSnapToOrigin + AnimatePresence exit',
   function (hooks) {
     setupRenderingTest(hooks);
+    setupMotion(hooks);
     setupFixtureViewport(hooks);
 
     test('exits cleanly after a drag and re-enters without a stranded transform', async function (assert) {
@@ -1028,6 +1044,7 @@ module(
   'Integration | motion | cypress | drag + dragSnapToOrigin + layoutId horizontal swap',
   function (hooks) {
     setupRenderingTest(hooks);
+    setupMotion(hooks);
     setupFixtureViewport(hooks);
 
     test('does not strand the drag transform after a same-row swap', async function (assert) {
@@ -1206,6 +1223,7 @@ module(
   'Integration | motion | cypress | Drag layout reorder in StrictMode',
   function (hooks) {
     setupRenderingTest(hooks);
+    setupMotion(hooks);
     setupFixtureViewport(hooks);
     const F = "[data-testid='file-File1']";
 
@@ -1262,6 +1280,194 @@ module(
         );
       });
       trigger(F, 'pointerup');
+    });
+  }
+);
+
+/* ---------- drag-snap-to-cursor-initial.tsx ---------- */
+const SNAP_INITIAL = { x: 100, y: 40 };
+const SNAP_BOX = {
+  position: 'absolute',
+  top: 0,
+  left: 500,
+  width: 100,
+  height: 100,
+  background: 'red',
+};
+class SnapToCursorInitial extends Component<{ Args: { rerender?: boolean } }> {
+  controls = createDragControls();
+  @tracked dragCount = 0;
+  startDrag = (e: PointerEvent) =>
+    this.controls.start(e, { snapToCursor: true });
+  // React re-renders the motion.div, and every commit re-measures its projection: layoutChange is that commit
+  countDrag = () => layoutChange(() => this.dragCount++);
+  get onDragEnd() {
+    return this.args.rerender ? this.countDrag : undefined;
+  }
+  <template>
+    <div
+      id="trigger"
+      data-drag-count={{this.dragCount}}
+      style="position:absolute;top:0;left:0;width:400px;height:400px;background:#eee"
+      {{on "pointerdown" this.startDrag}}
+    ></div>
+    <div
+      id="box"
+      {{motion
+        drag=true
+        dragControls=this.controls
+        dragListener=false
+        dragMomentum=false
+        initial=SNAP_INITIAL
+        onDragEnd=this.onDragEnd
+        style=SNAP_BOX
+      }}
+    ></div>
+  </template>
+}
+
+module(
+  'Integration | motion | cypress | snapToCursor with initial coordinates',
+  function (hooks) {
+    setupRenderingTest(hooks);
+    setupMotion(hooks);
+    setupFixtureViewport(hooks);
+
+    // cy.get().then(): measured once, no retry
+    const expectBoxCenteredAt = (assert: Assert, x: number, y: number) => {
+      const { left, top, width, height } = rect('#box');
+      const cx = left + width / 2,
+        cy = top + height / 2;
+      assert.true(Math.abs(cx - x) <= 1, `centre x ${cx} within 1 of ${x}`);
+      assert.true(Math.abs(cy - y) <= 1, `centre y ${cy} within 1 of ${y}`);
+    };
+
+    const snapAndDrag = async (assert: Assert) => {
+      trigger('#trigger', 'pointerdown', 50, 50);
+      await nextFrame();
+      await wait(50);
+      expectBoxCenteredAt(assert, 50, 50);
+
+      trigger('#trigger', 'pointermove', 60, 60);
+      await nextFrame();
+      await wait(50);
+      trigger('#trigger', 'pointermove', 200, 100);
+      await nextFrame();
+      await wait(50);
+      expectBoxCenteredAt(assert, 200, 100);
+
+      trigger('#trigger', 'pointerup', 200, 100);
+      await wait(50);
+      expectBoxCenteredAt(assert, 200, 100);
+    };
+
+    test('centres the element under the pointer on every drag start', async function (assert) {
+      await render(<template><SnapToCursorInitial /></template>);
+      await wait(200);
+      await nextFrame();
+      await nextFrame();
+      expectBoxCenteredAt(assert, 650, 90);
+
+      await snapAndDrag(assert);
+      await snapAndDrag(assert);
+      await snapAndDrag(assert);
+    });
+
+    test('centres the element under the pointer after re-renders', async function (assert) {
+      await render(
+        <template><SnapToCursorInitial @rerender={{true}} /></template>
+      );
+      await wait(200);
+      await nextFrame();
+      await nextFrame();
+      expectBoxCenteredAt(assert, 650, 90);
+
+      const dragCount = () => $('#trigger').getAttribute('data-drag-count');
+      await snapAndDrag(assert);
+      await should(assert, (a) => a.strictEqual(dragCount(), '1'));
+      await snapAndDrag(assert);
+      await should(assert, (a) => a.strictEqual(dragCount(), '2'));
+      await snapAndDrag(assert);
+    });
+  }
+);
+
+/* ---------- drag-release-before-frame.tsx ---------- */
+const RELEASE_BOX = { width: 50, height: 50, background: 'red' };
+class ReleaseBeforeFrame extends Component {
+  @tracked offset = '';
+  // React re-renders the motion.div on setOffset, and every commit re-measures its projection: layoutChange is that commit
+  onDragEnd = (_: PointerEvent, info: PanInfo) =>
+    layoutChange(() => (this.offset = `${info.offset.x},${info.offset.y}`));
+  <template>
+    <div style="padding:100px">
+      <div
+        data-testid="draggable"
+        {{motion
+          drag=true
+          dragElastic=0
+          dragMomentum=false
+          onDragEnd=this.onDragEnd
+          style=RELEASE_BOX
+        }}
+      ></div>
+      <div id="drag-end-offset">{{this.offset}}</div>
+    </div>
+  </template>
+}
+
+module(
+  'Integration | motion | cypress | Drag release before the next frame',
+  function (hooks) {
+    setupRenderingTest(hooks);
+    setupMotion(hooks);
+    setupFixtureViewport(hooks);
+
+    async function startDrag(assert: Assert) {
+      await render(<template><ReleaseBeforeFrame /></template>);
+      await nextFrame();
+      await nextFrame();
+      const start = rect();
+      pointerAt($(D), 'pointerdown', start.left + 5, start.top + 5);
+      pointerAt($(D), 'pointermove', start.left + 15, start.top + 15);
+      await nextFrame();
+      await nextFrame();
+      const { left, top } = rect();
+      assert.strictEqual(left - start.left, 10, 'x offset after first move');
+      assert.strictEqual(top - start.top, 10, 'y offset after first move');
+      return start;
+    }
+
+    async function expectRestingAt(
+      assert: Assert,
+      start: DOMRect,
+      x: number,
+      y: number
+    ) {
+      await nextFrame();
+      await nextFrame();
+      await should(assert, (a) =>
+        a.strictEqual($('#drag-end-offset').textContent, `${x},${y}`)
+      );
+      const { left, top } = rect();
+      assert.strictEqual(left - start.left, x, 'x offset at rest');
+      assert.strictEqual(top - start.top, y, 'y offset at rest');
+    }
+
+    test('Applies a pointermove followed by pointerup within the same frame', async function (assert) {
+      const start = await startDrag(assert);
+      pointerAt($(D), 'pointermove', start.left + 105, start.top + 105);
+      pointerAt($(D), 'pointerup', start.left + 105, start.top + 105);
+      await expectRestingAt(assert, start, 100, 100);
+    });
+
+    // The frame applies the move before pointerup, so this rest position holds with or without the pointerup flush
+    test('Applies a pointermove when a frame runs before pointerup', async function (assert) {
+      const start = await startDrag(assert);
+      pointerAt($(D), 'pointermove', start.left + 105, start.top + 105);
+      await nextFrame();
+      pointerAt($(D), 'pointerup', start.left + 105, start.top + 105);
+      await expectRestingAt(assert, start, 100, 100);
     });
   }
 );

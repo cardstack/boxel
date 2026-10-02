@@ -178,67 +178,69 @@ export class SlidingHighlight extends Component<SlidingHighlightSignature> {
       ...attributes
     >{{yield}}</span>
     <style scoped>
-      .pretui-highlight {
-        position: absolute;
-        inset-block-start: 0;
-        inset-inline-start: 0;
-        width: var(--pretui-highlight-w, 0px);
-        height: var(--pretui-highlight-h, 0px);
-        transform: translate(
-          var(--pretui-highlight-x, 0px),
-          var(--pretui-highlight-y, 0px)
-        );
-        opacity: var(--pretui-highlight-on, 0);
-        border-radius: var(--pretui-highlight-radius, var(--radius));
-        pointer-events: none;
-        z-index: 0;
-        transition-property: transform, width, height, opacity;
-        /* --init is present only for the first measurement (see the
-           modifier); the chain then falls through to the caller's duration,
-           then to the kit's snap default. */
-        transition-duration: var(
-          --pretui-highlight-init,
-          var(--pretui-highlight-duration, var(--pretui-dur-snap, 180ms))
-        );
-        transition-timing-function: var(
-          --pretui-highlight-ease,
-          var(--pretui-ease-snap, cubic-bezier(0.23, 1, 0.32, 1))
-        );
-      }
-      .pretui-highlight[data-variant='pill'] {
-        background: var(--card);
-        box-shadow: var(
-          --pretui-shadow-control,
-          0 0 0 1px var(--border),
-          0 1px 2px rgb(16 24 40 / 0.1)
-        );
-      }
-      .pretui-highlight[data-variant='soft'] {
-        background: color-mix(
-          in oklch,
-          var(--primary) 14%,
-          var(--card)
-        );
-      }
-      .pretui-highlight[data-variant='outline'] {
-        box-shadow: 0 0 0 1px var(--primary);
-      }
-      .pretui-highlight[data-variant='underline'] {
-        height: var(--pretui-highlight-thickness, 2px);
-        border-radius: var(--pretui-highlight-radius, 1px);
-        background: var(--primary);
-        /* ride the bottom edge of the active item's box */
-        transform: translate(
-          var(--pretui-highlight-x, 0px),
-          calc(
-            var(--pretui-highlight-y, 0px) + var(--pretui-highlight-h, 0px) -
-              var(--pretui-highlight-thickness, 2px)
-          )
-        );
-      }
-      @media (prefers-reduced-motion: reduce) {
+      @layer PretComponent {
         .pretui-highlight {
-          transition-property: none;
+          position: absolute;
+          inset-block-start: 0;
+          inset-inline-start: 0;
+          width: var(--pretui-highlight-w, 0px);
+          height: var(--pretui-highlight-h, 0px);
+          transform: translate(
+            var(--pretui-highlight-x, 0px),
+            var(--pretui-highlight-y, 0px)
+          );
+          opacity: var(--pretui-highlight-on, 0);
+          border-radius: var(--pretui-highlight-radius, var(--radius));
+          pointer-events: none;
+          z-index: 0;
+          transition-property: transform, width, height, opacity;
+          /* --init is present only for the first measurement (see the
+             modifier); the chain then falls through to the caller's duration,
+             then to the kit's snap default. */
+          transition-duration: var(
+            --pretui-highlight-init,
+            var(--pretui-highlight-duration, var(--pretui-dur-snap, 180ms))
+          );
+          transition-timing-function: var(
+            --pretui-highlight-ease,
+            var(--pretui-ease-snap, cubic-bezier(0.23, 1, 0.32, 1))
+          );
+        }
+        .pretui-highlight[data-variant='pill'] {
+          background: var(--card);
+          box-shadow: var(
+            --pretui-shadow-control,
+            0 0 0 1px var(--border),
+            0 1px 2px rgb(16 24 40 / 0.1)
+          );
+        }
+        .pretui-highlight[data-variant='soft'] {
+          background: color-mix(
+            in oklch,
+            var(--primary) 14%,
+            var(--card)
+          );
+        }
+        .pretui-highlight[data-variant='outline'] {
+          box-shadow: 0 0 0 1px var(--primary);
+        }
+        .pretui-highlight[data-variant='underline'] {
+          height: var(--pretui-highlight-thickness, 2px);
+          border-radius: var(--pretui-highlight-radius, 1px);
+          background: var(--primary);
+          /* ride the bottom edge of the active item's box */
+          transform: translate(
+            var(--pretui-highlight-x, 0px),
+            calc(
+              var(--pretui-highlight-y, 0px) + var(--pretui-highlight-h, 0px) -
+                var(--pretui-highlight-thickness, 2px)
+            )
+          );
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .pretui-highlight {
+            transition-property: none;
+          }
         }
       }
     </style>

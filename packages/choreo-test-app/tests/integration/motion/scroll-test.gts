@@ -1,7 +1,7 @@
 /**
  * useInView: port of Motion's packages/framer-motion/src/utils/__tests__/use-in-view.test.tsx (motion@bbabb00),
  * with a real IntersectionObserver (a scrolling container) instead of the mocked observer.
- * useScroll: a contract test over the vendored scroll() — upstream's use-scroll.test only covers the
+ * useScroll: a contract test over framer-motion/dom's scroll() — upstream's use-scroll.test only covers the
  * ScrollTimeline `accelerate` hint, which these helpers don't set (scroll() with a callback is used).
  */
 import { render } from '@ember/test-helpers';

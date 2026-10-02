@@ -697,6 +697,7 @@ module(basename(import.meta.filename), function (hooks) {
           predicateEvaluations: 1,
           pendingDischarges: 1,
           definitionLookups: 0,
+          snapshotReads: 0,
         },
         'only the rename reached the policy',
       );
@@ -785,6 +786,7 @@ module(basename(import.meta.filename), function (hooks) {
         predicateEvaluations: 0,
         pendingDischarges: 0,
         definitionLookups: 0,
+        snapshotReads: 0,
       });
     });
 

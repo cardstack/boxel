@@ -88,8 +88,8 @@ registerBusyProbe(() => booked && 'far-match barrier booked');
 /**
  * Drop a barrier that will never run. A test torn down between `join` and the
  * post-render callback leaves a destroyed region parked in `intents`, and the
- * next test's first pass would try to measure it. `setupMotion(hooks)` calls
- * this.
+ * next test's first pass would try to measure it. `setupChoreo(hooks)` runs
+ * this before and after every test.
  */
 export function resetBarrier() {
   intents.clear();

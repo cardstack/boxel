@@ -42,12 +42,11 @@ import {
   toMs,
 } from 'glimmer-motion';
 import {
-  animationsSettled,
-  bounds,
   orphanCount,
-  setupMotion,
+  setupChoreo,
   strandedTransforms,
-} from 'glimmer-motion/test-support';
+} from 'glimmer-motion/choreo/test-support';
+import { animationsSettled, bounds } from 'glimmer-motion/test-support';
 import { module, test } from 'qunit';
 
 import { setupFixtureViewport } from '../../helpers/layout-fixture';
@@ -69,7 +68,7 @@ const grabCtx = (c: ChoreoContext) => {
 module('Integration | choreo | contract', function (hooks) {
   setupRenderingTest(hooks);
   setupFixtureViewport(hooks);
-  setupMotion(hooks);
+  setupChoreo(hooks);
 
   /* ------------------------------------------------------------------ *
    * Anchors — a block is a step's equal

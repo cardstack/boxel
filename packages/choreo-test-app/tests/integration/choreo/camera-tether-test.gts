@@ -6,6 +6,7 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { setupRenderingTest } from 'ember-qunit';
 import { Choreo, type ChoreoContext, motion, type Rect } from 'glimmer-motion';
+import { setupChoreo } from 'glimmer-motion/choreo/test-support';
 import { animationsSettled } from 'glimmer-motion/test-support';
 import { module, test } from 'qunit';
 
@@ -24,6 +25,7 @@ const grab = (c: ChoreoContext) => {
 module('Integration | choreo | camera and tether', function (hooks) {
   setupRenderingTest(hooks);
   setupFixtureViewport(hooks);
+  setupChoreo(hooks);
 
   test('a camera step drives the frame; steady sprites hold, damped; c.camera lands at boundaries', async function (assert) {
     class App extends Component {

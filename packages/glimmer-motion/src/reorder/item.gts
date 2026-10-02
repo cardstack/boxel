@@ -13,9 +13,12 @@ import {
   type Transition,
 } from 'motion-dom';
 
+import {
+  autoScrollIfNeeded,
+  resetAutoScrollState,
+} from '../framer-motion-internals.ts';
 import motion from '../motion.ts';
 import type { PresenceHandle } from '../presence-types.ts';
-import { autoScrollIfNeeded, resetAutoScrollState } from './auto-scroll.ts';
 import type { ReorderContextProps } from './types.ts';
 
 type DragInfo = {

@@ -1,5 +1,4 @@
-// Pretui — TableOfContents unit tests. Imports from ../structure-data; when
-// TableOfContents moves to its own file only the import path changes. The
+// Pretui — TableOfContents unit tests. The
 // scroll spy is passed `@spy={{false}}` and would be inert anyway: these
 // tests render no elements carrying the item ids, so `sectionSpy` returns
 // before constructing its IntersectionObserver. Asserted: the nav semantics,
@@ -7,10 +6,10 @@
 // marker's inline geometry (offsetTop/offsetHeight are real here). A spy test
 // that renders the target headings is the open follow-up.
 //
-// Local-only test file, kept off the realm by `.boxelignore` (`*.test.gts`);
-// run with `boxel test`. No assertion touches a computed style: the
-// component's own `<style scoped>` is inert in this harness (the scoped-css
-// attribute is stamped, the rules are not applied).
+// Run with `boxel test`; deployment leaves `*.test.gts` off the realm.
+// No assertion touches a computed style: the component's own `<style scoped>`
+// is inert in this harness (the scoped-css attribute is stamped, the rules
+// are not applied).
 import { module, test } from 'qunit';
 import { render, click } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';

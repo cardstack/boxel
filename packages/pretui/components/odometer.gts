@@ -272,74 +272,76 @@ export class Odometer extends Component<OdometerSignature> {
       {{yield to='after'}}
     </span>
     <style scoped>
-      .pretui-odometer {
-        display: inline-flex;
-        align-items: baseline;
-        font-variant-numeric: tabular-nums;
-        line-height: var(--pretui-odo-cell, 1em);
-      }
-      .pretui-odometer[data-empty='true'] {
-        color: var(--muted-foreground);
-      }
-      .pretui-odo-track {
-        display: inline-flex;
-        align-items: baseline;
-      }
-      .pretui-odo-char {
-        white-space: pre;
-      }
-      .pretui-odo-digit {
-        position: relative;
-        display: inline-block;
-        /* clip-path, not overflow: hidden — an overflow-clipped inline-block
-           synthesises its baseline from the bottom margin edge, which drops
-           the digits below the surrounding text. Clipping keeps the strut's
-           real baseline. The small vertical bleed is intentional: display
-           fonts can paint cap/bowl antialiasing just outside their fractional
-           line box (Space Grotesk's 5 is the visible case). A zero inset
-           sheared that ink off at every Odometer size. Horizontal clipping
-           remains exact, so adjacent digit columns cannot overlap. */
-        clip-path: inset(-0.08em 0);
-      }
-      .pretui-odo-strut {
-        visibility: hidden;
-      }
-      .pretui-odo-ring {
-        position: absolute;
-        inset-inline: 0;
-        top: 0;
-        transform: translateY(
-          calc(var(--pretui-odo-rest, 0) * var(--pretui-odo-cell, 1em) * -1)
-        );
-        animation: pretui-odo-roll var(--pretui-odo-duration, 0.5s)
-          var(--pretui-odo-ease, cubic-bezier(0.16, 1, 0.3, 1)) backwards;
-        animation-delay: calc(
-          var(--pretui-odo-i, 0) * var(--pretui-odo-stagger, 0.03s)
-        );
-      }
-      @keyframes pretui-odo-roll {
-        from {
+      @layer PretComponent {
+        .pretui-odometer {
+          display: inline-flex;
+          align-items: baseline;
+          font-variant-numeric: tabular-nums;
+          line-height: var(--pretui-odo-cell, 1em);
+        }
+        .pretui-odometer[data-empty='true'] {
+          color: var(--muted-foreground);
+        }
+        .pretui-odo-track {
+          display: inline-flex;
+          align-items: baseline;
+        }
+        .pretui-odo-char {
+          white-space: pre;
+        }
+        .pretui-odo-digit {
+          position: relative;
+          display: inline-block;
+          /* clip-path, not overflow: hidden — an overflow-clipped inline-block
+             synthesises its baseline from the bottom margin edge, which drops
+             the digits below the surrounding text. Clipping keeps the strut's
+             real baseline. The small vertical bleed is intentional: display
+             fonts can paint cap/bowl antialiasing just outside their fractional
+             line box (Space Grotesk's 5 is the visible case). A zero inset
+             sheared that ink off at every Odometer size. Horizontal clipping
+             remains exact, so adjacent digit columns cannot overlap. */
+          clip-path: inset(-0.08em 0);
+        }
+        .pretui-odo-strut {
+          visibility: hidden;
+        }
+        .pretui-odo-ring {
+          position: absolute;
+          inset-inline: 0;
+          top: 0;
           transform: translateY(
-            calc(var(--pretui-odo-start, 0) * var(--pretui-odo-cell, 1em) * -1)
+            calc(var(--pretui-odo-rest, 0) * var(--pretui-odo-cell, 1em) * -1)
+          );
+          animation: pretui-odo-roll var(--pretui-odo-duration, 0.5s)
+            var(--pretui-odo-ease, cubic-bezier(0.16, 1, 0.3, 1)) backwards;
+          animation-delay: calc(
+            var(--pretui-odo-i, 0) * var(--pretui-odo-stagger, 0.03s)
           );
         }
-      }
-      .pretui-odo-cell {
-        display: block;
-        height: var(--pretui-odo-cell, 1em);
-        line-height: var(--pretui-odo-cell, 1em);
-        text-align: center;
-      }
-      .pretui-odo-sr {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        overflow: hidden;
-        clip: rect(0 0 0 0);
-      }
-      @media (prefers-reduced-motion: reduce) {
-        .pretui-odo-ring {
-          animation: none;
+        @keyframes pretui-odo-roll {
+          from {
+            transform: translateY(
+              calc(var(--pretui-odo-start, 0) * var(--pretui-odo-cell, 1em) * -1)
+            );
+          }
+        }
+        .pretui-odo-cell {
+          display: block;
+          height: var(--pretui-odo-cell, 1em);
+          line-height: var(--pretui-odo-cell, 1em);
+          text-align: center;
+        }
+        .pretui-odo-sr {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          overflow: hidden;
+          clip: rect(0 0 0 0);
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .pretui-odo-ring {
+            animation: none;
+          }
         }
       }
     </style>
