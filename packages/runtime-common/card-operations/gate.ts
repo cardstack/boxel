@@ -230,10 +230,12 @@ export type GateRefusal =
 // admits it, or why none does.
 type Admission = MatchedGrant | typeof GATE_REFUSED | typeof GATE_FAULTED;
 
-// One grant the gate matched, with the rule it came from.
+// One grant the gate matched, with the rule and the compiled policy it came
+// from.
 export interface MatchedGrant {
   rule: CompiledPolicyRule;
   grant: CompiledOperationGrant;
+  policy: CompiledRealmPolicy;
 }
 
 // What the gate decided about one invocation.
@@ -1058,7 +1060,7 @@ async function firstHolding(
     // are.
     let judged = where.snapshot ? await subject.snapshot?.() : subject;
     let outcome = judged
-      ? await evaluate(core, candidate.grant.operation, where, judged, actor)
+      ? await evaluate(core, candidate, where, judged, actor)
       : 'fails';
     let said: GateTraceOutcome =
       outcome === 'holds'
@@ -1296,7 +1298,7 @@ export async function matchingGrants(
     let grants = rule.grants.filter((grant) => grant.operation === name);
     trace?.ruleMatched(rule, grants);
     for (let grant of grants) {
-      matched.push({ rule, grant });
+      matched.push({ rule, grant, policy });
     }
   }
   return matched;
@@ -1778,7 +1780,7 @@ async function projector(
 // when the card's pass lands.
 async function evaluate(
   core: OperationCore,
-  operation: string,
+  matched: MatchedGrant,
   where: CompiledPolicyPredicate,
   subject: PredicateSubject,
   actor: string | undefined,
@@ -1806,7 +1808,7 @@ async function evaluate(
     let judged = subject.instance?.id;
     logThrow(
       core,
-      operation,
+      matched,
       where,
       typeof judged === 'string' ? judged : 'its target',
       actor,
@@ -1823,36 +1825,55 @@ async function evaluate(
 // evaluates a predicate once for each card it is asked about, and a view asks
 // again as it re-renders, so a line for every throw would put the whole view
 // into the log at the rate it renders. One line says what the author needs:
-// that the predicate throws, on what, and why, and an explain answers which
-// card it throws on. The error is cut short because BXL's quotes the value it
-// failed on, which can be a whole stored field.
+// that the predicate throws, on what, and where in the policy card it is. An
+// explain answers which card it throws on.
+//
+// The line carries no card content and no predicate source. BXL's message
+// quotes the value it failed on, which can be a whole stored field of the
+// governed card, so only the error's kind is logged. The grant's path in the
+// card the policy was compiled from names the predicate without quoting it.
+//
+// A draft's throw is not logged. The draft is in force nowhere, so it is no
+// fault in the realm's policy, and the explain that judged it answers
+// `predicate-threw` to the one caller who asked.
 function logThrow(
   core: OperationCore,
-  operation: string,
+  { grant, policy }: MatchedGrant,
   where: CompiledPolicyPredicate,
   judged: string,
   actor: string | undefined,
   e: unknown,
 ): void {
+  if (policy.draft) {
+    return;
+  }
   let at = now();
   let last = lastLoggedThrow.get(where);
   if (last !== undefined && at - last < THROW_LOG_INTERVAL_MS) {
     return;
   }
   lastLoggedThrow.set(where, at);
-  let error = e instanceof Error ? e.message : String(e);
-  if (error.length > THROW_ERROR_LENGTH) {
-    error = `${error.slice(0, THROW_ERROR_LENGTH)}…`;
-  }
   policyLog.warn(
     `a predicate in the policy of realm ${core.realmURL} threw while ` +
       `deciding whether ${actor ?? 'an anonymous caller'} may invoke ` +
-      `"${operation}" on ${judged}: ${where.source}: ${error}`,
+      `"${grant.operation}" on ${judged}: the grant at ${grant.path} of ` +
+      `${policy.card} threw ${errorKind(e)}`,
   );
 }
 
+// What kind of error a predicate threw, without its message. A transform's
+// error carries the phase it failed in, which separates a predicate that
+// cannot run at all from one that failed on the values it was handed.
+function errorKind(e: unknown): string {
+  if (!(e instanceof Error)) {
+    return typeof e;
+  }
+  let name = e.name !== 'Error' ? e.name : e.constructor.name;
+  let phase = (e as { phase?: unknown }).phase;
+  return typeof phase === 'string' ? `${name} (${phase})` : name;
+}
+
 const THROW_LOG_INTERVAL_MS = 60_000;
-const THROW_ERROR_LENGTH = 200;
 
 // When each compiled predicate last logged a throw. Keyed on the compiled
 // predicate, so a policy compiled again starts over.

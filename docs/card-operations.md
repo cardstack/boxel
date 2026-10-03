@@ -935,9 +935,12 @@ Four worth recognizing:
   realm is told this. A caller who may not gets the same 404 as for a card
   that does not exist. Whether a predicate throws depends on the card's stored
   values, so a 500 would say that the card is there and something about what
-  it holds. The realm logs the fault on its `realm:policy` channel, and an
-  explain reports it as `predicate-threw`. Write predicates that cannot throw
-  on any value the card can store.
+  it holds. The realm logs the fault on its `realm:policy` channel, at most
+  once a minute for each predicate, and an explain reports it as
+  `predicate-threw`. The line names the realm, the caller, the operation, the
+  card, the grant's path in the policy card (`rules[3].grants[0]`) and the
+  kind of error, and quotes neither the predicate nor anything the card
+  stores. Write predicates that cannot throw on any value the card can store.
 
 ## The card routes and a realm's policy
 
