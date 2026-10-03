@@ -1,6 +1,6 @@
 ---
 name: catalog-deploy
-description: How a boxel-catalog change reaches staging and production, and how to deploy the catalog to production — every catalog merge syncs staging; production gets the catalog only from boxel-catalog's "Deploy to production" workflow, started either by hand (to ship catalog work ahead of boxel) or by Manual Deploy [boxel] to production (which deploys the catalog revision the deployed boxel pins, once before its release and once after). Covers what the deploy checks before it changes anything (catalog pull requests that declare `Merges after:` a boxel pull request production doesn't run yet), how to read its refusal and its "nothing to do" skip, how to find which boxel and catalog revisions production runs, and what to do when a catalog change needs a boxel deploy. Use when asked to deploy, release or ship the catalog, when a catalog change merged but isn't in production, when "Deploy to production" or a "Deploy the pinned catalog" job fails, when CATALOG_DEPLOY_DISPATCH_TOKEN is missing, rejected or about to expire, or before merging a catalog change that needs platform code production doesn't run yet.
+description: How a boxel-catalog change reaches staging and production, and how to deploy the catalog to production — every catalog merge syncs staging; production gets the catalog only from boxel-catalog's "Deploy to production" workflow, started either by hand from Discord's `/deploy app catalog` or the Actions tab (to ship catalog work ahead of boxel) or by Manual Deploy [boxel] to production (which deploys the catalog revision the deployed boxel pins, once before its release and once after). Covers what the deploy checks before it changes anything (catalog pull requests that declare `Merges after:` a boxel pull request production doesn't run yet), how to read its refusal and its "nothing to do" skip, how to find which boxel and catalog revisions production runs, and what to do when a catalog change needs a boxel deploy. Use when asked to deploy, release or ship the catalog, when a catalog change merged but isn't in production, when "Deploy to production" or a "Deploy the pinned catalog" job fails, when CATALOG_DEPLOY_DISPATCH_TOKEN is missing, rejected or about to expire, or before merging a catalog change that needs platform code production doesn't run yet.
 ---
 
 # Deploying the catalog
@@ -20,9 +20,19 @@ The catalog realm (`/catalog/`) serves boxel-catalog's files, and its cards impo
 
   When production's catalog is already at the pin, both do nothing. When a single range holds catalog changes the new boxel needs _and_ ones that need the new boxel, the run before the release refuses, so the first kind reaches production only after the release.
 
-- **Ahead of boxel, by hand.** A catalog change that needs nothing new from boxel doesn't have to wait for a boxel deploy. Run **Deploy to production** from boxel-catalog's Actions tab with `revision` empty, which deploys catalog `main`'s head, or with a catalog `main` SHA.
+- **Ahead of boxel, by hand.** A catalog change that needs nothing new from boxel doesn't have to wait for a boxel deploy. Run **Deploy to production** with `revision` empty, which deploys catalog `main`'s head, or with a catalog `main` SHA. Start it from Discord (see below) or from boxel-catalog's Actions tab.
 
 Both go through the same check, and neither moves production's catalog backwards.
+
+## Starting a catalog deploy from Discord
+
+The `/deploy` command that starts Manual Deploy [boxel] also starts the catalog's deploys, on boxel-catalog `main`:
+
+- `/deploy app:catalog environment:production` runs **Deploy to production** at `main`'s head. Its reason names who started it.
+- `/deploy app:catalog environment:production revision:<sha>` deploys that catalog `main` commit.
+- `/deploy app:catalog environment:staging` re-runs **Deploy to staging**. Do this when a staging sync failed or flaked.
+
+The bot links the run and reports its result. When the run fails, it also posts the run's `catalog deploy` errors, so a refusal shows the pull requests it names (see [Reading a refusal](#reading-a-refusal)). The bot is `cardstack/cardie`. `app:catalog` is configured under `deploy.github.apps` in its `config.*.json`.
 
 ## What the deploy checks
 
