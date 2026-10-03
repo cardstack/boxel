@@ -22,6 +22,10 @@ export type RealmRunnerRequest =
       code: string;
       realmURL: string;
       timeoutMs: number;
+      // Absolute URL of QuickJS's WASM file. The host resolves it because the
+      // worker cannot: started from a `blob:` URL, it has no base to resolve
+      // a root-relative asset path against.
+      wasmURL: string;
     }
   | {
       type: 'callResult';

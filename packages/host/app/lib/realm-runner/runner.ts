@@ -1,3 +1,9 @@
+// The worker's QuickJS glue comes from `quickjs-emscripten`, which pins this
+// variant package exactly. The glue calls the binary's exports by minified
+// name, so the two must be the same version: package.json pins both packages
+// exactly, and they move together.
+import QuickJSWasmURL from '@jitl/quickjs-wasmfile-release-sync/wasm?url';
+
 import WorkerURL from './worker?worker&url';
 
 import type {
@@ -14,13 +20,14 @@ import type {
 // generous ceiling so a slow start is never charged to the submitted code.
 const BOOT_TIMEOUT_MS = 60_000;
 
-// The worker chunk is served from the host's assets origin, which is not the
-// origin serving the page: realm-server serves the app HTML from the realm
-// origin and points it at the host assets elsewhere. In a build, vite's
-// `renderBuiltUrl` hook already prefixes this URL with the assets origin; in
-// dev it stays root-relative, so resolving it against the document would ask
-// the realm origin for a file only the asset origin has.
-function resolveWorkerURL(workerURL: string): URL {
+// The worker chunk and the QuickJS WASM are served from the host's assets
+// origin, which is not the origin serving the page: realm-server serves the
+// app HTML from the realm origin and points it at the host assets elsewhere.
+// In a build, vite's `renderBuiltUrl` hook already prefixes these URLs with
+// the assets origin; in dev they stay root-relative, so resolving them against
+// the document would ask the realm origin for a file only the asset origin
+// has.
+function resolveAssetURL(assetURL: string): URL {
   let assetsURL = (
     globalThis as typeof globalThis & {
       __boxelAssetsURL?: string;
@@ -29,7 +36,7 @@ function resolveWorkerURL(workerURL: string): URL {
   let base = assetsURL
     ? new URL(assetsURL, window.location.href)
     : window.location.href;
-  return new URL(workerURL, base);
+  return new URL(assetURL, base);
 }
 
 function makeRealmWorker(absoluteURL: URL): Worker {
@@ -38,9 +45,10 @@ function makeRealmWorker(absoluteURL: URL): Worker {
   }
 
   // A worker's own script must be same-origin, so a cross-origin chunk cannot
-  // be passed to the constructor. A same-origin Blob module may import it,
-  // and the imported module keeps its real URL — which is what lets QuickJS
-  // find `emscripten-module.wasm` next to itself.
+  // be passed to the constructor. A same-origin Blob module may import it.
+  // Inside that worker `self.location` is the `blob:` URL, so the worker
+  // cannot resolve its own asset URLs; the `run` request carries the WASM URL
+  // resolved here.
   let blob = new Blob([`import ${JSON.stringify(absoluteURL.href)};`], {
     type: 'text/javascript',
   });
@@ -58,12 +66,15 @@ function makeRealmWorker(absoluteURL: URL): Worker {
 // rejects with the signal's reason, so a caller with its own deadline is never
 // outlived by the run.
 export default function runRealmCode(
-  request: Omit<Extract<RealmRunnerRequest, { type: 'run' }>, 'type'>,
+  request: Omit<
+    Extract<RealmRunnerRequest, { type: 'run' }>,
+    'type' | 'wasmURL'
+  >,
   onCall: RealmRunnerCallHandler,
   signal?: AbortSignal,
 ): Promise<RealmRunnerResult> {
   return new Promise((resolve, reject) => {
-    let workerURL = resolveWorkerURL(WorkerURL);
+    let workerURL = resolveAssetURL(WorkerURL);
     let worker = makeRealmWorker(workerURL);
     let timer: number;
     let settled = false;
@@ -160,6 +171,10 @@ export default function runRealmCode(
       );
     };
 
-    answer({ type: 'run', ...request });
+    answer({
+      type: 'run',
+      ...request,
+      wasmURL: resolveAssetURL(QuickJSWasmURL).href,
+    });
   });
 }
