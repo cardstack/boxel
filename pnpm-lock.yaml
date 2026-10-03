@@ -568,8 +568,8 @@ catalogs:
       specifier: ^0.52.2
       version: 0.52.2
     motion:
-      specifier: 13.4.6
-      version: 13.4.6
+      specifier: 13.5.0
+      version: 13.5.0
     ms:
       specifier: ^2.1.3
       version: 2.1.3
@@ -716,9 +716,9 @@ catalogs:
       version: 17.7.2
 
 overrides:
-  framer-motion: 13.4.6
-  motion-dom: 13.4.5
-  motion-utils: 13.3.0
+  framer-motion: 13.5.0
+  motion-dom: 13.5.0
+  motion-utils: 13.5.0
   '@types/eslint': 8.56.5
   '@embroider/util': 1.13.1
   '@glimmer/tracking>@glimmer/validator': 0.84.3
@@ -1719,7 +1719,7 @@ importers:
         version: 8.67.0(eslint@9.39.5(supports-color@8.1.1))(supports-color@8.1.1)(typescript@5.9.3)
       vite:
         specifier: ^8.0.10
-        version: 8.0.16(@types/node@26.1.2)(esbuild@0.25.12)(terser@5.49.0)(yaml@2.9.0)
+        version: 8.0.16(@types/node@26.1.2)(terser@5.49.0)(yaml@2.9.0)
 
   packages/boxel-ui/docs-app:
     dependencies:
@@ -2161,7 +2161,7 @@ importers:
         version: 2.4.0(@babel/core@7.29.7(supports-color@8.1.1))
       dialkit:
         specifier: ^2.0.0
-        version: 2.0.2(motion@13.4.6)
+        version: 2.0.2(motion@13.5.0)
       ember-modifier:
         specifier: ^4.1.0
         version: 4.3.0(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1)
@@ -2173,10 +2173,10 @@ importers:
         version: 18.0.14
       motion:
         specifier: 'catalog:'
-        version: 13.4.6
+        version: 13.5.0
       motion-dom:
-        specifier: 13.4.5
-        version: 13.4.5
+        specifier: 13.5.0
+        version: 13.5.0
       three:
         specifier: ^0.185.1
         version: 0.185.1
@@ -2303,7 +2303,7 @@ importers:
         version: link:../choreo-player
       dialkit:
         specifier: ^2.0.0
-        version: 2.0.2(motion@13.4.6)
+        version: 2.0.2(motion@13.5.0)
       glimmer-motion:
         specifier: workspace:*
         version: link:../glimmer-motion
@@ -2312,13 +2312,13 @@ importers:
         version: 18.0.14
       motion:
         specifier: 'catalog:'
-        version: 13.4.6
+        version: 13.5.0
       motion-dom:
-        specifier: 13.4.5
-        version: 13.4.5
+        specifier: 13.5.0
+        version: 13.5.0
       motion-utils:
-        specifier: 13.3.0
-        version: 13.3.0
+        specifier: 13.5.0
+        version: 13.5.0
       three:
         specifier: ^0.185.1
         version: 0.185.1
@@ -2624,8 +2624,8 @@ importers:
         specifier: 'catalog:'
         version: 2.4.0(@babel/core@7.29.7(supports-color@8.1.1))
       framer-motion:
-        specifier: 13.4.6
-        version: 13.4.6
+        specifier: 13.5.0
+        version: 13.5.0
     devDependencies:
       '@babel/core':
         specifier: 'catalog:'
@@ -2688,11 +2688,11 @@ importers:
         specifier: ^9.39.4
         version: 9.39.5(supports-color@8.1.1)
       motion-dom:
-        specifier: 13.4.5
-        version: 13.4.5
+        specifier: 13.5.0
+        version: 13.5.0
       motion-utils:
-        specifier: 13.3.0
-        version: 13.3.0
+        specifier: 13.5.0
+        version: 13.5.0
       prettier:
         specifier: 'catalog:'
         version: 3.8.4
@@ -2819,7 +2819,7 @@ importers:
         version: 1.21.1(@babel/core@7.29.7(supports-color@8.1.1))(@glint/template@1.7.7)(supports-color@8.1.1)
       '@embroider/vite':
         specifier: ^1.1.1
-        version: 1.7.13(@embroider/core@4.6.7(@glint/template@1.7.7)(supports-color@8.1.1))(@glint/template@1.7.7)(supports-color@8.1.1)(vite@8.0.16(@types/node@26.1.2)(esbuild@0.25.12)(terser@5.49.0)(yaml@2.9.0))
+        version: 1.7.13(@embroider/core@4.6.7(@glint/template@1.7.7)(supports-color@8.1.1))(@glint/template@1.7.7)(supports-color@8.1.1)(vite@8.0.16(@types/node@26.1.2)(terser@5.49.0)(yaml@2.9.0))
       '@floating-ui/dom':
         specifier: 'catalog:'
         version: 1.7.6
@@ -2846,7 +2846,7 @@ importers:
         version: 1.32.11(supports-color@8.1.1)(typescript@5.9.3)
       '@percy/ember':
         specifier: 'catalog:'
-        version: 5.0.1(@babel/core@7.29.7(supports-color@8.1.1))(@glint/template@1.7.7)(supports-color@8.1.1)(webpack@5.107.2(csso@5.0.5)(esbuild@0.25.12)(lightningcss@1.32.0)(uglify-js@3.19.3))
+        version: 5.0.1(@babel/core@7.29.7(supports-color@8.1.1))(@glint/template@1.7.7)(supports-color@8.1.1)(webpack@5.107.2(csso@5.0.5)(lightningcss@1.32.0)(uglify-js@3.19.3))
       '@rollup/plugin-babel':
         specifier: ^6.0.4
         version: 6.1.0(@babel/core@7.29.7(supports-color@8.1.1))(@types/babel__core@7.20.5)(rollup@4.62.0)(supports-color@8.1.1)
@@ -2954,7 +2954,7 @@ importers:
         version: 1.0.3(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1(supports-color@8.1.1))(rsvp@4.8.5)(supports-color@8.1.1))(supports-color@8.1.1)
       ember-auto-import:
         specifier: ^2.7.2
-        version: 2.13.1(@glint/template@1.7.7)(supports-color@8.1.1)(webpack@5.107.2(csso@5.0.5)(esbuild@0.25.12)(lightningcss@1.32.0)(uglify-js@3.19.3))
+        version: 2.13.1(@glint/template@1.7.7)(supports-color@8.1.1)(webpack@5.107.2(csso@5.0.5)(lightningcss@1.32.0)(uglify-js@3.19.3))
       ember-basic-dropdown:
         specifier: ^9.0.0
         version: 9.0.0(@babel/core@7.29.7(supports-color@8.1.1))(@ember/test-helpers@5.4.3(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1))(@embroider/macros@1.21.1(@babel/core@7.29.7(supports-color@8.1.1))(@glint/template@1.7.7)(supports-color@8.1.1))(@glimmer/component@2.1.1(supports-color@8.1.1))(supports-color@8.1.1)
@@ -3008,13 +3008,13 @@ importers:
         version: 0.14.6(patch_hash=364c7e71472801c87618bf2b2cdabd256358166bbe107f29d321ab35d0a53425)(@babel/eslint-parser@7.29.7(@babel/core@7.29.7(supports-color@8.1.1))(eslint@8.57.1(supports-color@8.1.1)))(@typescript-eslint/parser@8.67.0(eslint@8.57.1(supports-color@8.1.1))(supports-color@8.1.1)(typescript@5.9.3))(typescript@5.9.3)
       ember-exam:
         specifier: ^10.1.0
-        version: 10.1.0(@glint/template@1.7.7)(ember-qunit@9.1.0(@ember/test-helpers@5.4.3(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1))(qunit@2.26.0)(supports-color@8.1.1))(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1(supports-color@8.1.1))(rsvp@4.8.5)(supports-color@8.1.1))(qunit@2.26.0)(supports-color@8.1.1)(webpack@5.107.2(csso@5.0.5)(esbuild@0.25.12)(lightningcss@1.32.0)(uglify-js@3.19.3))
+        version: 10.1.0(@glint/template@1.7.7)(ember-qunit@9.1.0(@ember/test-helpers@5.4.3(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1))(qunit@2.26.0)(supports-color@8.1.1))(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1(supports-color@8.1.1))(rsvp@4.8.5)(supports-color@8.1.1))(qunit@2.26.0)(supports-color@8.1.1)(webpack@5.107.2(csso@5.0.5)(lightningcss@1.32.0)(uglify-js@3.19.3))
       ember-focus-trap:
         specifier: ^1.0.1
         version: 1.2.0(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1)
       ember-freestyle:
         specifier: 'catalog:'
-        version: 0.24.0(@babel/core@7.29.7(supports-color@8.1.1))(@ember/string@4.0.1)(@glint/template@1.7.7)(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1(supports-color@8.1.1))(rsvp@4.8.5)(supports-color@8.1.1))(supports-color@8.1.1)(webpack@5.107.2(csso@5.0.5)(esbuild@0.25.12)(lightningcss@1.32.0)(uglify-js@3.19.3))
+        version: 0.24.0(@babel/core@7.29.7(supports-color@8.1.1))(@ember/string@4.0.1)(@glint/template@1.7.7)(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1(supports-color@8.1.1))(rsvp@4.8.5)(supports-color@8.1.1))(supports-color@8.1.1)(webpack@5.107.2(csso@5.0.5)(lightningcss@1.32.0)(uglify-js@3.19.3))
       ember-keyboard:
         specifier: 'catalog:'
         version: 9.0.4(@babel/core@7.29.7(supports-color@8.1.1))(@ember/test-helpers@5.4.3(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1))(supports-color@8.1.1)
@@ -3209,7 +3209,7 @@ importers:
         version: 9.0.1
       vite:
         specifier: ^8.0.8
-        version: 8.0.16(@types/node@26.1.2)(esbuild@0.25.12)(terser@5.49.0)(yaml@2.9.0)
+        version: 8.0.16(@types/node@26.1.2)(terser@5.49.0)(yaml@2.9.0)
       wait-for-localhost-cli:
         specifier: 'catalog:'
         version: 3.2.0
@@ -8379,11 +8379,6 @@ packages:
 
   ajv-formats@2.1.1:
     resolution: {integrity: sha512-Wx0Kx52hxE7C18hkMEggYlEifqWZtYaRgouJor+WMdPnQyEK13vgEWyVNup7SoeeoLMsr4kf5h6dOW11I15MUA==}
-    peerDependencies:
-      ajv: ^8.0.0
-    peerDependenciesMeta:
-      ajv:
-        optional: true
 
   ajv-formats@3.0.1:
     resolution: {integrity: sha512-8iUql50EUR+uUcdRQ3HDqa6EVyo3docL8g5WJ3FNcWmu62IbkGUue/pEyLBW8VGKKucTPgqeks4fIU1DA4yowQ==}
@@ -11563,8 +11558,8 @@ packages:
     resolution: {integrity: sha512-GMBAbW9antB8iZRHLoGw0b3HANt57diZYFO/HL1JGIC1MjKrdmhxvrJbupnVvpys0zsz7yBApXdQyfepKly2kA==}
     engines: {node: '>=0.10.0'}
 
-  framer-motion@13.4.6:
-    resolution: {integrity: sha512-TwKWt2CC8rjhARzwV00TZIh04ipumSAqyKM/JZmS+urdncSHg6wTF/mfj/Fd6Oi2W01TZSWsiA3uxXDrXZtKyw==}
+  framer-motion@13.5.0:
+    resolution: {integrity: sha512-5KDKvhGTKKEQPWl8xg2mZRC+pGsenooz9v+ar6BpoXcD1mae4wdhvjxLaK+3jvFbge0jk4C8JeIjIC8m98z7hg==}
     peerDependencies:
       react: ^18.0.0 || ^19.0.0
       react-dom: ^18.0.0 || ^19.0.0
@@ -13449,14 +13444,14 @@ packages:
   morphdom@2.7.8:
     resolution: {integrity: sha512-D/fR4xgGUyVRbdMGU6Nejea1RFzYxYtyurG4Fbv2Fi/daKlWKuXGLOdXtl+3eIwL110cI2hz1ZojGICjjFLgTg==}
 
-  motion-dom@13.4.5:
-    resolution: {integrity: sha512-p63p2Doq+US/O5wADauIPUVx0/eONHMLPzsudBM9XMWRuBQLXogdxH0vwIA8WYQZw864pyzoV723xoDqakwWTg==}
+  motion-dom@13.5.0:
+    resolution: {integrity: sha512-mSdelbdqc1LDi3m7RkYgnMgdys0qSDsNFpdf0Hjyf8U5Ln0AcjSeApKD4Q4Er3sBPFDzdLehDj4SLgwBf39poQ==}
 
-  motion-utils@13.3.0:
-    resolution: {integrity: sha512-sgSschQp7EseHInIlR7hBbMuvet3RA0bs28KPZAXJcGKGdxHGvh1ogpYDilY3bOMtl73EqPNmp75sAKHYPU5sg==}
+  motion-utils@13.5.0:
+    resolution: {integrity: sha512-Hqe/sqjIKliPZg8sVjWAkdySDPJNIeKH+euVkDOG8ri3DUUU7ZjndmHsGqEPz2iHpiyVaV5I22iguCMHU2he+Q==}
 
-  motion@13.4.6:
-    resolution: {integrity: sha512-zDXi6lIdyhda6wZlTsv9QgT2ed6UExAfRegtl/akQmZb5iaeLlArXr9Gmo/hx3iTx2y4R7tmdb9k9koFQmV+NQ==}
+  motion@13.5.0:
+    resolution: {integrity: sha512-W/Vj6RDg9f9yJoaS+ohRYtl1j3Rb86fOCCjzn3M3M10Dg7ap3M7sMUeQs9wTsLQwHHmhioYsJLRRRTXxvhtHDA==}
     peerDependencies:
       react: ^18.0.0 || ^19.0.0
       react-dom: ^18.0.0 || ^19.0.0
@@ -18499,32 +18494,6 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  '@embroider/vite@1.7.13(@embroider/core@4.6.7(@glint/template@1.7.7)(supports-color@8.1.1))(@glint/template@1.7.7)(supports-color@8.1.1)(vite@8.0.16(@types/node@26.1.2)(esbuild@0.25.12)(terser@5.49.0)(yaml@2.9.0))':
-    dependencies:
-      '@babel/core': 7.29.7(supports-color@8.1.1)
-      '@embroider/core': 4.6.7(@glint/template@1.7.7)(supports-color@8.1.1)
-      '@embroider/macros': 1.21.1(@babel/core@7.29.7(supports-color@8.1.1))(@glint/template@1.7.7)(supports-color@8.1.1)
-      '@embroider/reverse-exports': 0.2.0
-      assert-never: 1.4.0
-      browserslist: 4.28.7
-      browserslist-to-esbuild: 2.1.1(browserslist@4.28.7)
-      chalk: 5.6.2
-      content-tag: 4.2.0
-      debug: 4.4.3(supports-color@8.1.1)
-      fast-glob: 3.3.3
-      fs-extra: 10.1.0
-      jsdom: 25.0.1(supports-color@8.1.1)
-      send: 1.2.1(supports-color@8.1.1)
-      source-map-url: 0.4.1
-      terser: 5.49.0
-      vite: 8.0.16(@types/node@26.1.2)(esbuild@0.25.12)(terser@5.49.0)(yaml@2.9.0)
-    transitivePeerDependencies:
-      - '@glint/template'
-      - bufferutil
-      - canvas
-      - supports-color
-      - utf-8-validate
-
   '@embroider/vite@1.7.13(@embroider/core@4.6.7(@glint/template@1.7.7)(supports-color@8.1.1))(@glint/template@1.7.7)(supports-color@8.1.1)(vite@8.0.16(@types/node@26.1.2)(terser@5.49.0)(yaml@2.9.0))':
     dependencies:
       '@babel/core': 7.29.7(supports-color@8.1.1)
@@ -20183,10 +20152,10 @@ snapshots:
 
   '@percy/dom@1.32.11': {}
 
-  '@percy/ember@5.0.1(@babel/core@7.29.7(supports-color@8.1.1))(@glint/template@1.7.7)(supports-color@8.1.1)(webpack@5.107.2(csso@5.0.5)(esbuild@0.25.12)(lightningcss@1.32.0)(uglify-js@3.19.3))':
+  '@percy/ember@5.0.1(@babel/core@7.29.7(supports-color@8.1.1))(@glint/template@1.7.7)(supports-color@8.1.1)(webpack@5.107.2(csso@5.0.5)(lightningcss@1.32.0)(uglify-js@3.19.3))':
     dependencies:
       '@percy/sdk-utils': 1.31.14(supports-color@8.1.1)
-      ember-auto-import: 2.13.1(@glint/template@1.7.7)(supports-color@8.1.1)(webpack@5.107.2(csso@5.0.5)(esbuild@0.25.12)(lightningcss@1.32.0)(uglify-js@3.19.3))
+      ember-auto-import: 2.13.1(@glint/template@1.7.7)(supports-color@8.1.1)(webpack@5.107.2(csso@5.0.5)(lightningcss@1.32.0)(uglify-js@3.19.3))
       ember-cli-babel: 8.3.1(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1)
     transitivePeerDependencies:
       - '@babel/core'
@@ -21900,8 +21869,8 @@ snapshots:
       clean-stack: 2.2.0
       indent-string: 4.0.0
 
-  ajv-formats@2.1.1(ajv@8.20.0):
-    optionalDependencies:
+  ajv-formats@2.1.1:
+    dependencies:
       ajv: 8.20.0
 
   ajv-formats@3.0.1:
@@ -23905,9 +23874,9 @@ snapshots:
       asap: 2.0.6
       wrappy: 1.0.2
 
-  dialkit@2.0.2(motion@13.4.6):
+  dialkit@2.0.2(motion@13.5.0):
     optionalDependencies:
-      motion: 13.4.6
+      motion: 13.5.0
 
   diff-sequences@29.6.3: {}
 
@@ -25044,13 +25013,13 @@ snapshots:
       content-tag: 4.2.0
       oxc-parser: 0.130.0
 
-  ember-exam@10.1.0(@glint/template@1.7.7)(ember-qunit@9.1.0(@ember/test-helpers@5.4.3(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1))(qunit@2.26.0)(supports-color@8.1.1))(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1(supports-color@8.1.1))(rsvp@4.8.5)(supports-color@8.1.1))(qunit@2.26.0)(supports-color@8.1.1)(webpack@5.107.2(csso@5.0.5)(esbuild@0.25.12)(lightningcss@1.32.0)(uglify-js@3.19.3)):
+  ember-exam@10.1.0(@glint/template@1.7.7)(ember-qunit@9.1.0(@ember/test-helpers@5.4.3(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1))(qunit@2.26.0)(supports-color@8.1.1))(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1(supports-color@8.1.1))(rsvp@4.8.5)(supports-color@8.1.1))(qunit@2.26.0)(supports-color@8.1.1)(webpack@5.107.2(csso@5.0.5)(lightningcss@1.32.0)(uglify-js@3.19.3)):
     dependencies:
       '@babel/core': 7.29.7(supports-color@8.1.1)
       chalk: 5.6.2
       cli-table3: 0.6.5
       debug: 4.4.3(supports-color@8.1.1)
-      ember-auto-import: 2.13.1(@glint/template@1.7.7)(supports-color@8.1.1)(webpack@5.107.2(csso@5.0.5)(esbuild@0.25.12)(lightningcss@1.32.0)(uglify-js@3.19.3))
+      ember-auto-import: 2.13.1(@glint/template@1.7.7)(supports-color@8.1.1)(webpack@5.107.2(csso@5.0.5)(lightningcss@1.32.0)(uglify-js@3.19.3))
       ember-cli-babel: 8.3.1(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1)
       ember-qunit: 9.1.0(@ember/test-helpers@5.4.3(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1))(qunit@2.26.0)(supports-color@8.1.1)
       ember-source: 6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1(supports-color@8.1.1))(rsvp@4.8.5)(supports-color@8.1.1)
@@ -25075,29 +25044,6 @@ snapshots:
     transitivePeerDependencies:
       - '@babel/core'
       - supports-color
-
-  ember-freestyle@0.24.0(@babel/core@7.29.7(supports-color@8.1.1))(@ember/string@4.0.1)(@glint/template@1.7.7)(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1(supports-color@8.1.1))(rsvp@4.8.5)(supports-color@8.1.1))(supports-color@8.1.1)(webpack@5.107.2(csso@5.0.5)(esbuild@0.25.12)(lightningcss@1.32.0)(uglify-js@3.19.3)):
-    dependencies:
-      '@ember/string': 4.0.1
-      '@glimmer/component': 2.1.1(supports-color@8.1.1)
-      '@glimmer/tracking': 1.1.2
-      ember-auto-import: 2.13.1(@glint/template@1.7.7)(supports-color@8.1.1)(webpack@5.107.2(csso@5.0.5)(esbuild@0.25.12)(lightningcss@1.32.0)(uglify-js@3.19.3))
-      ember-cli-babel: 8.3.1(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1)
-      ember-cli-htmlbars: 6.3.0(supports-color@8.1.1)
-      ember-cli-typescript: 5.3.0(supports-color@8.1.1)
-      ember-focus-trap: 1.2.0(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1)
-      ember-modifier: 4.3.0(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1)
-      ember-truth-helpers: 4.0.3(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1(supports-color@8.1.1))(rsvp@4.8.5)(supports-color@8.1.1))(supports-color@8.1.1)
-      json-formatter-js: 2.5.23
-      macro-decorators: 0.1.2
-      strip-indent: 3.0.0
-      tracked-built-ins: 4.1.2(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1)
-    transitivePeerDependencies:
-      - '@babel/core'
-      - '@glint/template'
-      - ember-source
-      - supports-color
-      - webpack
 
   ember-freestyle@0.24.0(@babel/core@7.29.7(supports-color@8.1.1))(@ember/string@4.0.1)(@glint/template@1.7.7)(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1(supports-color@8.1.1))(rsvp@4.8.5)(supports-color@8.1.1))(supports-color@8.1.1)(webpack@5.107.2(csso@5.0.5)(lightningcss@1.32.0)(postcss@8.5.28)(uglify-js@3.19.3)):
     dependencies:
@@ -26794,10 +26740,10 @@ snapshots:
     dependencies:
       map-cache: 0.2.2
 
-  framer-motion@13.4.6:
+  framer-motion@13.5.0:
     dependencies:
-      motion-dom: 13.4.5
-      motion-utils: 13.3.0
+      motion-dom: 13.5.0
+      motion-utils: 13.5.0
       tslib: 2.8.1
 
   fresh@0.5.2: {}
@@ -28884,15 +28830,15 @@ snapshots:
 
   morphdom@2.7.8: {}
 
-  motion-dom@13.4.5:
+  motion-dom@13.5.0:
     dependencies:
-      motion-utils: 13.3.0
+      motion-utils: 13.5.0
 
-  motion-utils@13.3.0: {}
+  motion-utils@13.5.0: {}
 
-  motion@13.4.6:
+  motion@13.5.0:
     dependencies:
-      framer-motion: 13.4.6
+      framer-motion: 13.5.0
       tslib: 2.8.1
 
   mri@1.2.0: {}
@@ -30540,7 +30486,7 @@ snapshots:
     dependencies:
       '@types/json-schema': 7.0.15
       ajv: 8.20.0
-      ajv-formats: 2.1.1(ajv@8.20.0)
+      ajv-formats: 2.1.1
       ajv-keywords: 5.1.0(ajv@8.20.0)
 
   sdp-transform@2.15.0: {}
@@ -32107,20 +32053,6 @@ snapshots:
       tinyglobby: 0.2.17
     optionalDependencies:
       '@types/node': 24.13.2
-      fsevents: 2.3.3
-      terser: 5.49.0
-      yaml: 2.9.0
-
-  vite@8.0.16(@types/node@26.1.2)(esbuild@0.25.12)(terser@5.49.0)(yaml@2.9.0):
-    dependencies:
-      lightningcss: 1.32.0
-      picomatch: 4.0.4
-      postcss: 8.5.28
-      rolldown: 1.0.3
-      tinyglobby: 0.2.17
-    optionalDependencies:
-      '@types/node': 26.1.2
-      esbuild: 0.25.12
       fsevents: 2.3.3
       terser: 5.49.0
       yaml: 2.9.0
