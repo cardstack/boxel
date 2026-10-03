@@ -132,7 +132,7 @@ const ROSTER_MODULE = `
   }
 
   export class GuardedRoster extends Roster {
-    @operation static read = { base: 'read', links: 'none' };
+    @operation static read = { base: 'read', links: 'ids' };
   }
 `;
 
@@ -601,7 +601,7 @@ module(basename(import.meta.filename), function (hooks) {
   module('whose declaration a row is served under', function () {
     test('every row is served under the query’s declaration, not its own type’s read', async function (assert) {
       // Stated rather than implied. `GuardedRoster` narrows its own `read` to
-      // `none`, and a `full` query still carries its row whole: a row's type's
+      // `ids`, and a `full` query still carries its row whole: a row's type's
       // `read` governs reads of that card, and is not consulted while a query's
       // results are assembled — so a narrowing holds on a query only when the
       // query declares it.
@@ -609,11 +609,11 @@ module(basename(import.meta.filename), function (hooks) {
       assert.deepEqual(
         namedTargets(items(full).get(BIOLOGY)),
         [BEN, CY],
-        'the guarded roster names the students its own read withholds',
+        'the guarded roster names its students',
       );
       assert.true(
         closure(full).includes(CY),
-        'and carries the student only it links to',
+        'and carries the student only it links to, which its own read leaves unassembled',
       );
 
       // The other direction: a narrowing query narrows every row alike,

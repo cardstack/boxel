@@ -571,7 +571,8 @@ export interface DeleteOperationDeclaration extends OperationCommon {
 //     `included[]`. The default.
 //   * `ids`  — the card's relationships name their targets and nothing is
 //     assembled. A consumer fetches each target on its own request.
-//   * `none` — no relationship data is assembled or named.
+//   * `none` — no relationship data is assembled or named. A `query` only; a
+//     `read` may not declare it (see `ReadLinkStrategy`).
 //
 // On a `read` it governs reads of this card — the document a read rooted here
 // serves. When the card turns up inside another card's closure, that read's
@@ -604,6 +605,21 @@ const LINK_STRATEGY_SET: Record<LinkStrategy, true> = {
   none: true,
 };
 const LINK_STRATEGIES = Object.keys(LINK_STRATEGY_SET) as LinkStrategy[];
+
+// The strategies a `read` may declare. A read's strategy governs the card's
+// plain `GET`, which is what the host loads a card with to render and edit it
+// live, so under `none` the host is never told what the card links to and
+// shows its link fields empty. Editing one then saves what the editor showed
+// over the stored links: a `linksToMany` edit replaces the whole list, and a
+// `linksTo` edit overwrites a target the writer never saw. `ids` narrows a read
+// without that cost — it names each link's target, so the host shows and edits
+// the links and fetches each target on its own request. A query's `none` rows
+// carry no such risk, because the host never adopts them as live cards.
+export type ReadLinkStrategy = Exclude<LinkStrategy, 'none'>;
+
+const READ_LINK_STRATEGIES = LINK_STRATEGIES.filter(
+  (strategy): strategy is ReadLinkStrategy => strategy !== 'none',
+);
 
 // Whether a format's prerendered HTML may be served alongside the data a read
 // or a query answers with.
@@ -662,7 +678,7 @@ export type HtmlDeclaration = {
 export interface ReadOperationDeclaration extends OperationCommon {
   readonly base: 'read';
   // How much of the card's link graph this read carries. Absent is `full`.
-  readonly links?: LinkStrategy;
+  readonly links?: ReadLinkStrategy;
   // Which of the card's prerendered formats reads rooted here serve
   // data-only. Absent, every format is shareable.
   readonly html?: HtmlDeclaration;
@@ -1313,17 +1329,22 @@ function assertValidDeclaration(
   ) {
     throw new Error(`${label}: \`nonGrantable\` must be a boolean`);
   }
-  if (
-    declaration.links !== undefined &&
-    !LINK_STRATEGIES.includes(declaration.links as LinkStrategy)
-  ) {
-    throw new Error(
-      `${label}: \`links\` must name how much of the card's link graph ${
-        base === 'query'
-          ? "each of this query's results carries"
-          : 'this read carries'
-      } — one of ${quoteList(LINK_STRATEGIES)}`,
-    );
+  if (declaration.links !== undefined) {
+    let strategies: readonly string[] =
+      base === 'query' ? LINK_STRATEGIES : READ_LINK_STRATEGIES;
+    if (!strategies.includes(declaration.links as string)) {
+      throw new Error(
+        `${label}: \`links\` must name how much of the card's link graph ${
+          base === 'query'
+            ? "each of this query's results carries"
+            : 'this read carries'
+        } — one of ${quoteList(strategies)}${
+          base === 'read' && declaration.links === 'none'
+            ? `. A read's strategy governs the card's plain GET, which the host loads the card with to render and edit it, so under "none" an edit to a link field would replace the stored links the editor was never shown; "ids" narrows a read without hiding them`
+            : ''
+        }`,
+      );
+    }
   }
   if (declaration.html !== undefined) {
     assertValidHtmlDeclaration(label, base, declaration.html);

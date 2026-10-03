@@ -33,13 +33,13 @@ import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
 //
 // A read assembles the transitive closure of its target's links by default, so
 // a caller admitted to one row is admitted to everything that row points at.
-// An operation may declare how much of that to carry — `full`, `ids`, `none` —
-// and the declaration belongs to the operation rather than to the caller: a
+// A read may declare how much of that to carry — `full` or `ids` — and the
+// declaration belongs to the operation rather than to the caller: a
 // realm writer and a caller reached by a policy grant are served the same
 // document by the same request.
 //
 // The topology is the worked example's, cut to what this question needs. The
-// Education realm holds three rosters that differ only in what their `read`
+// Education realm holds two rosters that differ only in what their `read`
 // declares; the teacher who reads them holds no permission on that realm at
 // all and is admitted by a grant on the type they all descend from. The
 // students those rosters link to are granted to nobody, which is what makes
@@ -78,7 +78,7 @@ const STUDENT_MODULE = `
   }
 `;
 
-// One shape, three declarations. `roll` is computed from the linked students,
+// One shape, two declarations. `roll` is computed from the linked students,
 // which is what makes it the probe for the one thing no strategy narrows: it is
 // computed when the card is indexed, under the realm's own authority, and lands
 // in the card's own attributes rather than in the link closure.
@@ -114,14 +114,7 @@ const ROSTER_MODULE = `
     };
   }
 
-  export class NoneRoster extends Roster {
-    @operation static read = {
-      base: 'read',
-      links: 'none',
-    };
-  }
-
-  // Declares nothing, and links to a roster that declares \`none\`. What a read
+  // Declares nothing, and links to a roster that declares \`ids\`. What a read
   // of it carries is decided by its own read alone.
   export class Section extends CardDef {
     @field teacherIds = containsMany(StringField);
@@ -132,7 +125,7 @@ const ROSTER_MODULE = `
 type Grant = { operation: string; where?: unknown };
 type Rule = { targetType: { module: string; name: string }; grants: Grant[] };
 
-// One rule, on the type the three rosters descend from. Nothing grants a read
+// One rule, on the type the two rosters descend from. Nothing grants a read
 // of a `Student`, so every student the teacher ends up holding arrived as part
 // of a roster's representation rather than on its own merits.
 const RULES: Rule[] = [
@@ -193,7 +186,6 @@ function envelope(...operations: unknown[]) {
 
 const FULL = `${EDUCATION}rosters/full`;
 const IDS = `${EDUCATION}rosters/ids`;
-const NONE = `${EDUCATION}rosters/none`;
 const SECTION_1 = `${EDUCATION}sections/s1`;
 const ADA = `${EDUCATION}students/ada`;
 const BEN = `${EDUCATION}students/ben`;
@@ -247,8 +239,7 @@ module(basename(import.meta.filename), function (hooks) {
             'students/ben.json': student('Ben'),
             'rosters/full.json': roster('FullRoster', 'Full', ['ada', 'ben']),
             'rosters/ids.json': roster('IdsRoster', 'Ids', ['ada', 'ben']),
-            'rosters/none.json': roster('NoneRoster', 'None', ['ada', 'ben']),
-            'sections/s1.json': section('none'),
+            'sections/s1.json': section('ids'),
           },
           permissions: {
             [ADMIN]: ['read', 'write', 'realm-owner'],
@@ -451,35 +442,27 @@ module(basename(import.meta.filename), function (hooks) {
     });
   });
 
-  module('none', function () {
-    test('no relationship data is assembled or named', async function (assert) {
-      let body = await read(NONE, AUTH.teacher());
-      assert.deepEqual(body.data.relationships, undefined, 'nothing named');
-      assert.strictEqual(body.included, undefined, 'nothing assembled');
-    });
-  });
-
   module('scope', function () {
     test('a declaration narrows reads of its own card, not the card inside another read', async function (assert) {
-      // Stated rather than implied. The roster declares `none`, and a `full`
+      // Stated rather than implied. The roster declares `ids`, and a `full`
       // read of a card that links to it still carries it whole: a linked
       // type's declaration is not consulted while a closure is assembled, so
       // a narrowing only holds on the type that is read.
       let body = await read(SECTION_1, AUTH.teacher());
       let roster = (body.included ?? []).find(
         (resource) =>
-          resource.id && new URL(resource.id, SECTION_1).href === NONE,
+          resource.id && new URL(resource.id, SECTION_1).href === IDS,
       );
-      assert.ok(roster, 'the none-declared roster is in the closure');
+      assert.ok(roster, 'the ids-declared roster is in the closure');
       assert.deepEqual(
         namedTargets(roster?.relationships, SECTION_1),
         [ADA, BEN].sort(),
-        'carrying the relationships its own read withholds',
+        'carrying its relationships',
       );
       assert.deepEqual(
         includedIds(body, SECTION_1),
-        [ADA, BEN, NONE].sort(),
-        'and the students behind them',
+        [ADA, BEN, IDS].sort(),
+        'and the students behind them, which its own read leaves unassembled',
       );
     });
   });
@@ -489,7 +472,6 @@ module(basename(import.meta.filename), function (hooks) {
       for (let [url, label] of [
         [FULL, 'full'],
         [IDS, 'ids'],
-        [NONE, 'none'],
       ] as const) {
         assert.deepEqual(
           await read(url, AUTH.teacher()),
@@ -505,7 +487,6 @@ module(basename(import.meta.filename), function (hooks) {
       for (let [url, label] of [
         [FULL, 'full'],
         [IDS, 'ids'],
-        [NONE, 'none'],
       ] as const) {
         let body = await read(url, AUTH.teacher());
         assert.strictEqual(
@@ -522,7 +503,6 @@ module(basename(import.meta.filename), function (hooks) {
       for (let [url, label] of [
         [FULL, 'full'],
         [IDS, 'ids'],
-        [NONE, 'none'],
       ] as const) {
         let first = await getCard(url, AUTH.admin());
         assert.strictEqual(
@@ -545,19 +525,19 @@ module(basename(import.meta.filename), function (hooks) {
       }
     });
 
-    test('the three strategies never share a validator', async function (assert) {
+    test('the two strategies never share a validator', async function (assert) {
       // The part after the colon is the variant, which is where the shape is
       // named; the part before it is the index generation, which differs
-      // between three separate cards anyway and would hide a collision.
+      // between two separate cards anyway and would hide a collision.
       let variants = await Promise.all(
-        [FULL, IDS, NONE].map(
+        [FULL, IDS].map(
           async (url) =>
             (await getCard(url, AUTH.admin())).headers.etag.split(':')[1],
         ),
       );
       assert.strictEqual(
         new Set(variants).size,
-        3,
+        2,
         `each strategy names its own shape: ${variants.join(' / ')}`,
       );
     });
@@ -571,7 +551,6 @@ module(basename(import.meta.filename), function (hooks) {
       for (let [url, label] of [
         [FULL, 'full'],
         [IDS, 'ids'],
-        [NONE, 'none'],
       ] as const) {
         let first = await getCard(url, AUTH.admin()).set(
           X_BOXEL_LINK_SHAPE_HEADER,
@@ -598,7 +577,7 @@ module(basename(import.meta.filename), function (hooks) {
   });
 
   module('composition with the request', function () {
-    test('a request may narrow a full read, and may not widen a narrowed one', async function (assert) {
+    test('a request may narrow a full read', async function (assert) {
       let narrowed = await getCard(FULL, AUTH.admin()).set(
         X_BOXEL_LINK_SHAPE_HEADER,
         'links-only',
@@ -610,18 +589,6 @@ module(basename(import.meta.filename), function (hooks) {
         'a caller asking for less than the declaration gets less',
       );
       assert.strictEqual(body.included, undefined, 'and nothing is assembled');
-
-      // The other direction is the one that matters: the request asks for the
-      // links to be named, and the declaration withholds even that.
-      let asked = await getCard(NONE, AUTH.admin()).set(
-        X_BOXEL_LINK_SHAPE_HEADER,
-        'links-only',
-      );
-      assert.deepEqual(
-        (asked.body as CardBody).data.relationships,
-        undefined,
-        'a request never widens what the operation declared',
-      );
     });
   });
 
@@ -630,7 +597,6 @@ module(basename(import.meta.filename), function (hooks) {
       for (let [url, expected, label] of [
         [FULL, [ADA, BEN].sort(), 'full'],
         [IDS, [], 'ids'],
-        [NONE, [], 'none'],
       ] as const) {
         let response = await invokeRead(url, AUTH.teacher());
         assert.strictEqual(
