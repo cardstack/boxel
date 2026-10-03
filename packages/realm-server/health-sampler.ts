@@ -1,5 +1,5 @@
 import { monitorEventLoopDelay, type IntervalHistogram } from 'node:perf_hooks';
-import { logger } from '@cardstack/runtime-common';
+import { logger, takeModuleCompileStats } from '@cardstack/runtime-common';
 import {
   getBusiestRealmSearchRequestLoad,
   getSearchInFlight,
@@ -86,6 +86,10 @@ export function startHealthSampler(
     // on the used/limit ratio, which survives a task resize or a Node bump.
     let heap = heapTelemetry();
     let connections = opts.connectionStats?.();
+    // Module compiles finished in this window. A compile holds the event loop
+    // for its whole duration, so lag that matches `transpileMs` was spent
+    // compiling, not waiting on searches or the database.
+    let compiles = takeModuleCompileStats();
     log.info(
       `eventLoopLagMs(mean/p99/max)=${meanLagMs.toFixed(0)}/${p99LagMs.toFixed(0)}/${maxLagMs.toFixed(0)} ` +
         `inFlightSearch=${inFlightSearch} searchRequests=${searchRequests} ` +
@@ -96,6 +100,8 @@ export function startHealthSampler(
             `dbWaiting=${connections.waiting} ` +
             `dbWaitingAtShare=${connections.waitingAtShare} `
           : '') +
+        `transpiles=${compiles.count} ` +
+        `transpileMs(total/max)=${compiles.totalMs.toFixed(0)}/${compiles.maxMs.toFixed(0)} ` +
         `${formatHeapTelemetry(heap)}`,
     );
   }, intervalMs);
