@@ -5,6 +5,7 @@ import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { on } from '@ember/modifier';
 import { guidFor } from '@ember/object/internals';
 import { themeScope, themeScopedCss } from '@cardstack/boxel-ui/helpers';
+import { realmURL } from 'https://cardstack.com/base/card-api';
 import { Popover } from './popover';
 import { Select } from './select';
 import { SegmentedControl } from './segmented-control';
@@ -41,6 +42,7 @@ const THEME_MODES = [
 
 interface ThemeLike {
   id?: string;
+  [realmURL]?: URL;
   cssVariables?: string | null;
   // `cardTitle`, not `title` — CardDef exposes no `title`, so reading `.title`
   // silently yields undefined and every theme labels itself "Untitled theme".
@@ -191,9 +193,8 @@ export class ThemeFrame extends Component<ThemeFrameSignature> {
   setMode = (v: string) => (this.mode = v);
   pickTheme = (v: string) => (this.selectedThemeId = v);
 
-  // All Theme instances in the page card's realm (derived from the linked
-  // theme's id — themes live one directory below the realm root). Absent
-  // context (prerender, tests) degrades to the linked theme only.
+  // All Theme instances in the linked theme's realm. Absent context
+  // (prerender, tests) degrades to the linked theme only.
   themesResource = this.args.context?.getCards?.(
     this,
     () => ({
@@ -206,9 +207,10 @@ export class ThemeFrame extends Component<ThemeFrameSignature> {
       },
     }),
     () => {
-      // theme id .../pretui/Theme/<slug> → realm root .../pretui/
-      let id = this.args.theme?.id;
-      return id ? [new URL('../', id).href] : undefined;
+      // the theme id may be prefix-form, which is not a URL base, so the
+      // realm comes from the theme card itself
+      let realm = this.args.theme?.[realmURL];
+      return realm ? [realm.href] : undefined;
     },
   );
 
