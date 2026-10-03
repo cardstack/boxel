@@ -3,14 +3,10 @@
  * These pin the placement math the constructs proposal specifies —
  * anchors (§4.2), repeat, keyframe values, stagger — without a render.
  */
-import { after, at } from 'glimmer-motion';
-import Changeset from 'glimmer-motion/choreo/changeset';
-import compile from 'glimmer-motion/choreo/compile';
-import type {
-  ChoreoNode,
-  Sprite,
-  TimelineNode,
-} from 'glimmer-motion/choreo/types';
+import { after, at } from '@cardstack/choreo';
+import Changeset from '@cardstack/choreo/changeset';
+import compile from '@cardstack/choreo/compile';
+import type { ChoreoNode, Sprite, TimelineNode } from '@cardstack/choreo/types';
 import { module, test } from 'qunit';
 
 function sprite(id: string): Sprite {
@@ -240,8 +236,8 @@ module('Unit | choreo | compile', function () {
   });
 });
 
-import { ladder } from 'glimmer-motion/choreo/compile';
-import { windows } from 'glimmer-motion/choreo/deliver';
+import { ladder } from '@cardstack/choreo/compile';
+import { windows } from '@cardstack/choreo/deliver';
 
 module('Unit | choreo | delivery math', function () {
   test('the ladder orders delivery: forward, reverse, center', function (assert) {

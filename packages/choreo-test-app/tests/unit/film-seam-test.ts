@@ -5,7 +5,7 @@
  * the seam read backwards. `Seam.hold` is the gate that fixed it, and
  * these are its three promises.
  */
-import { Seam } from 'glimmer-motion/film';
+import { Seam } from '@cardstack/choreo/film';
 import { module, test } from 'qunit';
 
 /** a real one-pixel GIF, so the browser has something to actually decode */

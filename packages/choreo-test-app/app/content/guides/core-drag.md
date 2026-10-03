@@ -38,7 +38,9 @@ If the object moves twice as far as the pointer under a scaled parent, the relea
 
 ## API Coverage
 
-**glimmer-motion**: `GestureRef`, `InertiaArgs`, `inertia`.
+**@cardstack/choreo**: `GestureRef`.
+
+**glimmer-motion**: `InertiaArgs`, `inertia`.
 
 **ChoreoContext**: `c.gesture`.
 

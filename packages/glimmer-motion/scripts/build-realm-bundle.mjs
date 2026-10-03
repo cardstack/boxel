@@ -1,7 +1,9 @@
 /**
- * Build glimmer-motion as hashed realm modules and publish them with
- * boxel-cli. Pattern taken from @cardstack/bxl's realm bundle, plus a
- * content-hash so a bad build is one import change from rolling back.
+ * Build glimmer-motion and @cardstack/choreo as one hashed realm module and
+ * publish it with boxel-cli. The module exports both packages' roots, plus
+ * `Film`, so cards import the motion layer and Choreo from the same place.
+ * Pattern taken from @cardstack/bxl's realm bundle, plus a content-hash so a
+ * bad build is one import change from rolling back.
  *
  * Layout in the target realm:
  *
@@ -15,7 +17,8 @@
  *   @ember/*, @glimmer/*, ember-modifier
  * Output is `.ts` so the realm babel-compiles `precompileTemplate`.
  *
- * Usage (from packages/glimmer-motion, after `pnpm build`):
+ * Usage (from packages/glimmer-motion, after `pnpm build` here and in
+ * packages/choreo):
  *   node scripts/build-realm-bundle.mjs                  # build + mirror + push
  *   node scripts/build-realm-bundle.mjs --no-sync        # build + mirror only
  *   node scripts/build-realm-bundle.mjs --no-mirror      # stage only
@@ -45,7 +48,12 @@ import * as esbuild from 'esbuild';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const pkgRoot = resolve(__dirname, '..');
 const repoRoot = resolve(pkgRoot, '../..');
-const entry = join(pkgRoot, 'dist/index.js');
+const choreoRoot = resolve(pkgRoot, '../choreo');
+const entries = [
+  join(pkgRoot, 'dist/index.js'),
+  join(choreoRoot, 'dist/index.js'),
+];
+const filmEntry = join(choreoRoot, 'dist/film.js');
 const EXTERNAL = [/^@ember\//, /^@glimmer\//, /^ember-modifier$/];
 
 const argv = process.argv.slice(2);
@@ -59,10 +67,12 @@ const workspace =
       ? null
       : loadConfig().workspace;
 
-if (!existsSync(entry)) {
-  throw new Error(
-    `Missing ${entry}. Run the addon build first: pnpm --filter glimmer-motion build`,
-  );
+for (const entry of [...entries, filmEntry]) {
+  if (!existsSync(entry)) {
+    throw new Error(
+      `Missing ${entry}. Run the addon builds first: pnpm --filter glimmer-motion build && pnpm --filter @cardstack/choreo build`,
+    );
+  }
 }
 
 const stagingRoot = join(pkgRoot, 'dist-realm');
@@ -71,13 +81,23 @@ mkdirSync(stagingRoot, { recursive: true });
 const stagedPlain = join(stagingRoot, 'choreo.ts');
 
 await esbuild.build({
-  entryPoints: [entry],
+  stdin: {
+    contents: [
+      ...entries.map((entry) => `export * from ${JSON.stringify(entry)};`),
+      `export { Film } from ${JSON.stringify(filmEntry)};`,
+    ].join('\n'),
+    resolveDir: pkgRoot,
+    sourcefile: 'realm-entry.js',
+  },
   bundle: true,
   format: 'esm',
   platform: 'browser',
   target: 'es2022',
   mainFields: ['module', 'main'],
   conditions: ['import', 'module', 'default'],
+  // choreo's tsconfig.json maps glimmer-motion to its source for
+  // type-checking. The realm bundles the built output, so skip it.
+  tsconfigRaw: {},
   // Syntax minification rewrites `strictMode: true` to `!0` inside the
   // precompileTemplate options, which the realm's template-compilation
   // plugin rejects ("can only accept static options"). Whitespace and
@@ -106,8 +126,8 @@ await esbuild.build({
   banner: {
     js:
       `/* eslint-disable */\n` +
-      `// glimmer-motion — realm bundle (ESM, single file)\n` +
-      `// Contains: glimmer-motion + framer-motion/dom + motion-dom + motion-utils, inlined.\n` +
+      `// glimmer-motion + @cardstack/choreo — realm bundle (ESM, single file)\n` +
+      `// Contains: glimmer-motion + @cardstack/choreo + framer-motion/dom + motion-dom + motion-utils, inlined.\n` +
       `// External: @ember/*, @glimmer/*, ember-modifier (host-provided).\n` +
       `// Regenerate: pnpm realm (from the monorepo root)\n`,
   },

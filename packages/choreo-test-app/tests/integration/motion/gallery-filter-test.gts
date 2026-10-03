@@ -1,5 +1,5 @@
+import { setupChoreo } from '@cardstack/choreo/test-support';
 import { click, render } from '@ember/test-helpers';
-import { setupChoreo } from 'glimmer-motion/choreo/test-support';
 import { module, test } from 'qunit';
 import { Gallery } from 'test-app/components/gallery';
 import { catalog } from 'test-app/lib/catalog';

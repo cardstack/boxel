@@ -23,11 +23,12 @@
  * popLayout they stayed lifted out of flow, invisible and still clickable, and
  * clicking one demo opened a different one.
  */
+import { Choreo } from '@cardstack/choreo';
+import { setupChoreo } from '@cardstack/choreo/test-support';
 import { on } from '@ember/modifier';
 import { click, render } from '@ember/test-helpers';
 import { tracked } from '@glimmer/tracking';
-import { Choreo, motion, Presence } from 'glimmer-motion';
-import { setupChoreo } from 'glimmer-motion/choreo/test-support';
+import { motion, Presence } from 'glimmer-motion';
 import { module, test } from 'qunit';
 import { setupRenderingTest } from 'test-app/tests/helpers';
 

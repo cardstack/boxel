@@ -7,7 +7,7 @@ Every compiled Choreo pass produces a run. The run is the concrete object a tran
 The context exposes `c.run`, which can be null between passes. A live run has a duration, a settable time in seconds, and a playback speed. Pause before assigning an explicit time when you want a stable inspection frame. Use play to resume its clock and cancel to relinquish the current work.
 
 ```ts title="Component logic excerpt"
-import type { ChoreoRun } from 'glimmer-motion';
+import type { ChoreoRun } from '@cardstack/choreo';
 
 function inspect(run: ChoreoRun, seconds: number) {
   run.pause();
@@ -35,7 +35,7 @@ The key invariant is that state changes remain responsive while the visual expla
 
 ## API Coverage
 
-**glimmer-motion**: `ChoreoRun`.
+**@cardstack/choreo**: `ChoreoRun`.
 
 **ChoreoContext**: `c.run`.
 

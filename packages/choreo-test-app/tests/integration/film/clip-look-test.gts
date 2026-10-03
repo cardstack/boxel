@@ -9,9 +9,9 @@
  * film because the film draws the clip layer, and collected by the CLIP
  * rather than by the beat.
  */
+import { type CompiledGraph, FilmGraph } from '@cardstack/choreo/film';
 import { render, waitUntil } from '@ember/test-helpers';
 import { setupRenderingTest } from 'ember-qunit';
-import { type CompiledGraph, FilmGraph } from 'glimmer-motion/film';
 import { module, test } from 'qunit';
 
 module('Integration | film | a look held on a clip', function (hooks) {

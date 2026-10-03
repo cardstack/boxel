@@ -10,12 +10,12 @@
  * in-flight run KEEPS that run. Unrelated renders must not restart a
  * region's clock.
  */
+import type { ChoreoRun } from '@cardstack/choreo';
+import { setupChoreo } from '@cardstack/choreo/test-support';
 import { render, waitUntil } from '@ember/test-helpers';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { setupRenderingTest } from 'ember-qunit';
-import type { ChoreoRun } from 'glimmer-motion';
-import { setupChoreo } from 'glimmer-motion/choreo/test-support';
 import { module, test } from 'qunit';
 import { BuildOrder } from 'test-app/components/examples/build-order';
 

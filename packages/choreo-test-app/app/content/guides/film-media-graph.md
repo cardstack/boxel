@@ -32,7 +32,7 @@ For export, verify the actual source frame after a direct seek. A visually corre
 
 ## API Coverage
 
-**glimmer-motion/film**: `Freeze`, `GraphAttach`, `GraphInsert`, `Video`.
+**@cardstack/choreo/film**: `Freeze`, `GraphAttach`, `GraphInsert`, `Video`.
 
 **FilmVocabulary**: `f.Attach`, `f.Freeze`, `f.Insert`, `f.Inset`, `f.Video`.
 

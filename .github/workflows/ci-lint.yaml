@@ -161,6 +161,10 @@ jobs:
         if: ${{ !cancelled() }}
         run: pnpm run lint
         working-directory: packages/glimmer-motion
+      - name: Lint Choreo
+        if: ${{ !cancelled() }}
+        run: pnpm run lint
+        working-directory: packages/choreo
       - name: Lint Choreo Player
         if: ${{ !cancelled() }}
         run: pnpm run lint
