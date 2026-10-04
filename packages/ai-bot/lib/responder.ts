@@ -95,6 +95,12 @@ export class Responder {
 
   responseState = new ResponseState();
 
+  // Holds readUrl calls of URLs the room hasn't given for the user's
+  // approval (see collectPreapprovedUrls).
+  setReadUrlApproval(needsApproval: (url: string) => boolean) {
+    this.matrixResponsePublisher.readUrlNeedsApproval = needsApproval;
+  }
+
   needsMessageSend = false;
 
   // The event id of the bot message this turn streamed into. ai-bot relates the
@@ -185,6 +191,8 @@ export class Responder {
         .map((toolCall) =>
           toCommandRequest(toolCall as ChatCompletionMessageFunctionToolCall, {
             argumentsText: true,
+            readUrlNeedsApproval:
+              this.matrixResponsePublisher.readUrlNeedsApproval,
           }),
         ),
     };

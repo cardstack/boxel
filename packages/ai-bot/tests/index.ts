@@ -20,6 +20,7 @@ import './read-realm-file-test.ts';
 import './read-realm-file-fulfillment-test.ts';
 import './read-url-test.ts';
 import './read-url-fulfillment-test.ts';
+import './read-url-approval-test.ts';
 import './chat-completion-request-test.ts';
 import './lenient-json-test.ts';
 

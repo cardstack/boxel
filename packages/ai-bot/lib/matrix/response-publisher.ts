@@ -40,7 +40,12 @@ let log = logger('ai-bot');
 // JSON is complete on every channel, so nothing can run a half-written call.
 export function toCommandRequest(
   toolCall: ChatCompletionMessageFunctionToolCall,
-  opts?: { argumentsText?: boolean; finished?: boolean },
+  opts?: {
+    argumentsText?: boolean;
+    finished?: boolean;
+    // Whether a readUrl of this URL waits for the user's approval.
+    readUrlNeedsApproval?: (url: string) => boolean;
+  },
 ): Partial<ToolRequest> {
   let { id, function: f } = toolCall;
   let result = {} as Partial<ToolRequest>;
@@ -95,15 +100,18 @@ export function toCommandRequest(
       ),
     };
   }
-  // readUrl is fulfilled by ai-bot too, labeled with the page it reads.
+  // readUrl is fulfilled by ai-bot too, labeled with the full URL it reads.
+  // A URL the room hasn't given is held for the user's approval.
   if (result.name === READ_URL_TOOL_NAME) {
+    let url = f.arguments ? urlFromReadUrlArguments(f.arguments) : undefined;
     result.executedBy = AI_BOT_EXECUTOR;
     result.arguments = {
       ...(result.arguments ?? {}),
-      description: readUrlLabel(
-        f.arguments ? urlFromReadUrlArguments(f.arguments) : undefined,
-      ),
+      description: readUrlLabel(url),
     };
+    if (url && opts?.readUrlNeedsApproval?.(url)) {
+      result.approvalRequired = true;
+    }
   }
   return result;
 }
@@ -162,6 +170,10 @@ export default class MatrixResponsePublisher {
   get initialMessageSent() {
     return !!this.originalResponseEventId;
   }
+
+  // Whether a readUrl of a URL waits for the user's approval; set once the
+  // room's preapproved URLs are known, before generation starts.
+  readUrlNeedsApproval: ((url: string) => boolean) | undefined;
 
   constructor(
     client: MatrixClient,
@@ -295,7 +307,10 @@ export default class MatrixResponsePublisher {
           .map((toolCall) =>
             toCommandRequest(
               toolCall as ChatCompletionMessageFunctionToolCall,
-              { finished: responseStateSnapshot.isStreamingFinished },
+              {
+                finished: responseStateSnapshot.isStreamingFinished,
+                readUrlNeedsApproval: this.readUrlNeedsApproval,
+              },
             ),
           ),
         contentAndReasoning.reasoning,

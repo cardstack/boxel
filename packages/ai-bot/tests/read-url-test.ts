@@ -579,10 +579,10 @@ module('readUrl helpers', () => {
     assert.strictEqual(urlFromReadUrlArguments('{}'), undefined);
   });
 
-  test('readUrlLabel names the host and path', () => {
+  test('readUrlLabel shows the full URL', () => {
     assert.strictEqual(
       readUrlLabel('https://example.com/docs/page?x=1'),
-      'Read web page: example.com/docs/page',
+      'Read web page: https://example.com/docs/page?x=1',
     );
     assert.strictEqual(readUrlLabel(undefined), 'Read web page');
   });

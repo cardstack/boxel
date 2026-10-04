@@ -42,7 +42,15 @@ import {
   READ_REALM_FILE_TOOL_NAME,
 } from './lib/read-realm-file.ts';
 import { fulfillReadRealmFileCalls } from './lib/read-realm-file-fulfillment.ts';
-import { knownRealmOrigins, READ_URL_TOOL_NAME } from './lib/read-url.ts';
+import {
+  collectPreapprovedUrls,
+  knownRealmOrigins,
+  READ_URL_TOOL_NAME,
+  readUrlCallReleasedByApproval,
+  urlFromReadUrlArguments,
+} from './lib/read-url.ts';
+import { downloadFile } from '@cardstack/runtime-common/ai';
+import type { SerializedFileDef } from '@cardstack/base/file-api';
 import { fulfillReadUrlCalls } from './lib/read-url-fulfillment.ts';
 import { Responder } from './lib/responder.ts';
 import { buildChatCompletionRequest } from './lib/chat-completion-request.ts';
@@ -388,6 +396,9 @@ Common issues are:
         let pendingFulfillRequestEventId: string | undefined;
         let pendingFulfillAgentId: string | undefined;
         let pendingRealmOrigins: Set<string> = new Set();
+        // Whether a readUrl of a URL waits for the user's approval; known
+        // once the room's preapproved URLs are collected.
+        let readUrlNeedsApproval: (url: string) => boolean = () => true;
 
         try {
           log.info(
@@ -463,6 +474,28 @@ Common issues are:
               ? JSON.parse(event.getContent().data)
               : event.getContent().data;
           const agentId = contentData.context?.agentId;
+
+          // The user approved a readUrl call the bot held for approval: read
+          // it now. The approval is not the call's outcome, so it starts no
+          // turn of its own (getShouldRespond ignores it); the read's result,
+          // published after the room lock is released, starts the
+          // continuation as any bot tool result does.
+          let releasedReadUrl = urlReadingAllowed
+            ? readUrlCallReleasedByApproval(
+                eventList,
+                { sender: event.getSender(), content: event.getContent() },
+                aiBotUserId,
+              )
+            : undefined;
+          if (releasedReadUrl) {
+            pendingFulfillBotToolCalls = [
+              releasedReadUrl.call as (typeof pendingFulfillBotToolCalls)[number],
+            ];
+            pendingFulfillRequestEventId = releasedReadUrl.requestEventId;
+            pendingFulfillAgentId = agentId;
+            pendingRealmOrigins = knownRealmOrigins(eventList, aiBotUserId);
+            return;
+          }
           // Route to-device streaming previews (see AI_BOT_STREAMING_MODE
           // handling in Responder) at the device that composed the prompt for
           // this turn. A continuation triggered by a tool / code-patch result
@@ -525,6 +558,15 @@ Common issues are:
               ...(realmFileReadingAllowed ? [READ_REALM_FILE_TOOL_NAME] : []),
               ...(urlReadingAllowed ? [READ_URL_TOOL_NAME] : []),
             ]);
+            if (urlReadingAllowed) {
+              let preapproved = await collectPreapprovedUrls(
+                eventList,
+                aiBotUserId,
+                (file) => downloadFile(client, file as SerializedFileDef),
+              );
+              readUrlNeedsApproval = (url) => !preapproved.has(url);
+              responder.setReadUrlApproval(readUrlNeedsApproval);
+            }
             if (promptParts.pendingCodePatchCorrectnessChecks) {
               return await publishCodePatchCorrectnessMessage(
                 promptParts.pendingCodePatchCorrectnessChecks,
@@ -710,13 +752,22 @@ Common issues are:
             let { botToolCalls } = message
               ? classifyToolCalls(message)
               : { botToolCalls: [] };
-            // Only the bot tools this room was offered are run.
-            botToolCalls = botToolCalls.filter((call) =>
-              call.type === 'function' &&
-              call.function.name === READ_URL_TOOL_NAME
-                ? urlReadingAllowed
-                : realmFileReadingAllowed,
-            );
+            // Only the bot tools this room was offered are run, and a readUrl
+            // held for approval waits for it.
+            botToolCalls = botToolCalls.filter((call) => {
+              if (
+                call.type === 'function' &&
+                call.function.name === READ_URL_TOOL_NAME
+              ) {
+                let url = urlFromReadUrlArguments(call.function.arguments);
+                return (
+                  urlReadingAllowed &&
+                  url !== undefined &&
+                  !readUrlNeedsApproval(url)
+                );
+              }
+              return realmFileReadingAllowed;
+            });
             if (botToolCalls.length > 0 && responder.responseEventId) {
               // Defer fulfillment until after the room lock is released
               // (see the finally below): fulfilling posts a result event

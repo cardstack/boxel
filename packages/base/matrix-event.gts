@@ -365,7 +365,10 @@ export interface ToolDefinitionSchema {
   tool: Tool;
 }
 
-export type ToolResultStatus = 'applied' | 'failed' | 'invalid';
+// 'approved' is not an outcome: the user approved a call ai-bot holds for
+// approval (see ToolRequest.approvalRequired), and ai-bot answers it with the
+// call's real result.
+export type ToolResultStatus = 'applied' | 'failed' | 'invalid' | 'approved';
 
 // One tool definition the bot discovered by reading a skill markdown file
 // (readRealmFile): the entry from the skill's indexed frontmatter, tagged
