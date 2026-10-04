@@ -463,6 +463,9 @@ export class ViewVisuallyResult extends CardDef {
   @field sourceUrl = contains(StringField);
   @field kind = contains(StringField); // 'card' | 'file'
   @field format = contains(StringField);
+  // Set when the attached image shows less than the capture (a full-page
+  // capture cut to its top).
+  @field note = contains(StringField);
   @field attachedImages = containsMany(AttachedImageField);
 }
 

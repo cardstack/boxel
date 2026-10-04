@@ -46,6 +46,8 @@ module('Integration | tools | view-visually', function (hooks) {
 
   let requests: any[];
   let respondWith: () => Response;
+  // The capture the endpoint answers with; a test may swap in another image.
+  let captureBase64 = PNG_BASE64;
 
   setupRealmServerEndpoints(hooks, [
     {
@@ -66,7 +68,7 @@ module('Integration | tools | view-visually', function (hooks) {
           type: 'capture-card-result',
           attributes: {
             status: 'ready',
-            base64: PNG_BASE64,
+            base64: captureBase64,
             width: 1,
             height: 1,
             contentType: 'image/png',
@@ -77,7 +79,7 @@ module('Integration | tools | view-visually', function (hooks) {
                 width: 1,
                 height: 1,
                 deviceScaleFactor: null,
-                base64: PNG_BASE64,
+                base64: captureBase64,
               },
             ],
           },
@@ -94,12 +96,29 @@ module('Integration | tools | view-visually', function (hooks) {
     getOwner(this)!.register('service:realm', StubRealmService);
     requests = [];
     respondWith = ready;
+    captureBase64 = PNG_BASE64;
     await withCachedRealmSetup(async () =>
       setupIntegrationTestRealm({
         mockMatrixUtils,
         realmURL: testRealmURL,
         contents: {
           'brand.html': '<!doctype html><h1>Brand</h1>',
+          'config.json': '{ "theme": "dark" }',
+          'pet.gts': `
+            import { contains, field, CardDef } from "@cardstack/base/card-api";
+            import StringField from "@cardstack/base/string";
+            export class Pet extends CardDef {
+              static displayName = 'Pet';
+              @field firstName = contains(StringField);
+            }
+          `,
+          'Pet/mango.json': {
+            data: {
+              type: 'card',
+              attributes: { firstName: 'Mango' },
+              meta: { adoptsFrom: { module: '../pet', name: 'Pet' } },
+            },
+          },
         },
       }),
     );
@@ -155,6 +174,50 @@ module('Integration | tools | view-visually', function (hooks) {
     assert.strictEqual(result.kind, 'file');
   });
 
+  test("a card's .json is captured as the card, a plain JSON file as a file", async function (assert) {
+    let card = await tool().execute({ url: `${testRealmURL}Pet/mango.json` });
+    let file = await tool().execute({ url: `${testRealmURL}config.json` });
+
+    assert.strictEqual(card.kind, 'card');
+    assert.strictEqual(
+      requests[0].data.attributes.cardId,
+      `${testRealmURL}Pet/mango.json`,
+    );
+    assert.strictEqual(file.kind, 'file');
+    assert.strictEqual(
+      requests[1].data.attributes.fileURL,
+      `${testRealmURL}config.json`,
+    );
+  });
+
+  test('a capture taller than the edge bound keeps its width and is cut to its top', async function (assert) {
+    let canvas = new OffscreenCanvas(1000, 9000);
+    let context = canvas.getContext('2d')!;
+    context.fillStyle = 'rgb(200, 40, 40)';
+    context.fillRect(0, 0, 1000, 9000);
+    let bytes = new Uint8Array(
+      await (await canvas.convertToBlob({ type: 'image/png' })).arrayBuffer(),
+    );
+    captureBase64 = btoa(String.fromCharCode(...bytes));
+
+    let result = await tool().execute({
+      url: `${testRealmURL}Pet/mango`,
+      fullPage: true,
+    });
+
+    let [image] = result.attachedImages;
+    assert.strictEqual(image.width, 1000, 'the width is kept');
+    assert.strictEqual(image.height, 4096, 'the height is cut to the bound');
+    assert.true(
+      (image.contentSize ?? 0) <= 3.75 * 1024 * 1024,
+      'the image fits what the prompt sends',
+    );
+    assert.strictEqual(
+      result.note,
+      'Only the top 4096px of the 9000px-tall capture is shown.',
+    );
+  });
+
   test('something outside every workspace is refused with what to do instead', async function (assert) {
     await assert.rejects(
       tool().execute({ url: 'https://example.com/page.html' }),
@@ -166,7 +229,7 @@ module('Integration | tools | view-visually', function (hooks) {
   test('a file attached to the chat is refused with what to do instead', async function (assert) {
     await assert.rejects(
       tool().execute({ url: 'boxel-local://upload/brand.html' }),
-      /attached image is already visible to you.*attach a screenshot/,
+      /attached image is visible to you in the turn it was sent.*attach a screenshot/,
     );
     assert.strictEqual(requests.length, 0, 'no capture is attempted');
   });

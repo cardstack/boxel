@@ -2,25 +2,28 @@ import { service } from '@ember/service';
 
 import HostBaseTool from '../lib/host-base-tool';
 import {
+  captureDeadline,
   captureForAgent,
   resolveViewTarget,
   type ViewFormat,
 } from '../lib/visual-capture';
 
 import type MatrixService from '../services/matrix-service';
+import type NetworkService from '../services/network';
 import type RealmService from '../services/realm';
 import type RealmServerService from '../services/realm-server';
 import type * as BaseToolModule from '@cardstack/base/command';
 
-// The whole call stays under the tool service's own timeout, with room for
-// uploading the image after the capture answers.
-const VIEW_DEADLINE_MS = 90_000;
+// The whole call — capture, fitting and upload — is done by then, under the
+// tool service's own execute timeout.
+const VIEW_DEADLINE_MS = 100_000;
 
 export default class ViewVisuallyTool extends HostBaseTool<
   typeof BaseToolModule.ViewVisuallyInput,
   typeof BaseToolModule.ViewVisuallyResult
 > {
   @service declare private matrixService: MatrixService;
+  @service declare private network: NetworkService;
   @service declare private realm: RealmService;
   @service declare private realmServer: RealmServerService;
 
@@ -32,7 +35,9 @@ export default class ViewVisuallyTool extends HostBaseTool<
     'at it. Use it to check what something looks like and to check your own ' +
     'work after you change it. Takes the URL of a card or a workspace file ' +
     '(HTML, markdown, images, PDFs and other files are captured through ' +
-    'their file view).';
+    'their file view; a .gts URL shows the module source, so view an ' +
+    'instance to see a card). A full-page capture taller than 4096px is ' +
+    'cut to its top.';
 
   async getInputType() {
     let commandModule = await this.loadToolModule();
@@ -48,10 +53,12 @@ export default class ViewVisuallyTool extends HostBaseTool<
     let services = {
       loaderService: this.loaderService,
       matrixService: this.matrixService,
+      network: this.network,
       realm: this.realm,
       realmServer: this.realmServer,
     };
-    let target = resolveViewTarget(input.url, services);
+    let start = Date.now();
+    let target = await resolveViewTarget(input.url, services);
     let viewed = await captureForAgent(
       target,
       {
@@ -61,7 +68,7 @@ export default class ViewVisuallyTool extends HostBaseTool<
         fullPage: input.fullPage ?? undefined,
       },
       services,
-      { deadline: Date.now() + VIEW_DEADLINE_MS },
+      { deadline: captureDeadline(start + VIEW_DEADLINE_MS) },
     );
     let commandModule = await this.loadToolModule();
     const { ViewVisuallyResult, AttachedImageField } = commandModule;
@@ -69,6 +76,7 @@ export default class ViewVisuallyTool extends HostBaseTool<
       sourceUrl: viewed.sourceUrl,
       kind: viewed.kind,
       format: viewed.format,
+      note: viewed.note,
       attachedImages: [
         new AttachedImageField({
           name: viewed.file.name,

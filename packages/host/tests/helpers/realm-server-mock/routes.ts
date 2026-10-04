@@ -78,6 +78,12 @@ export function registerRealmServerRoute(route: RealmServerMockRoute) {
   realmServerRoutes.set(normalizeRoutePath(route.path), route);
 }
 
+// For a test that stands in one endpoint for its own duration: remove the
+// route when the test is done, so it never answers another test's request.
+export function unregisterRealmServerRoute(path: string) {
+  realmServerRoutes.delete(normalizeRoutePath(path));
+}
+
 export function getRealmServerRoute(
   url: URL,
 ): RealmServerMockRoute | undefined {

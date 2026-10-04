@@ -90,13 +90,15 @@ module('Integration | tools | run-realm-code', function (hooks) {
     });
 
     assert.strictEqual(captureRequests.length, 1, 'one capture request');
+    // `task.json` is plain JSON, not a card instance, so it is captured
+    // through its file view.
     assert.strictEqual(
-      captureRequests[0].data.attributes.cardId,
+      captureRequests[0].data.attributes.fileURL,
       `${testRealmURL}task.json`,
     );
     assert.deepEqual(JSON.parse(result.scriptResult!), {
       path: 'task.json',
-      kind: 'card',
+      kind: 'file',
       format: 'isolated',
       width: 1,
       height: 1,

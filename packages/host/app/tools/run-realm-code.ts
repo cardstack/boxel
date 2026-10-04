@@ -5,8 +5,10 @@ import { logger, rri } from '@cardstack/runtime-common';
 import HostBaseTool from '../lib/host-base-tool';
 import runRealmCode from '../lib/realm-runner/runner';
 import {
+  captureDeadline,
   captureForAgent,
   resolveViewTarget,
+  UPLOAD_RESERVE_MS,
   type ViewedImage,
   type ViewOptions,
 } from '../lib/visual-capture';
@@ -42,15 +44,19 @@ const MAX_VIEWS = 3;
 // A view must finish this long before the run's own time limit, so the
 // script still has time to use what it saw and return.
 const VIEW_MARGIN_MS = 3_000;
-// A view started with less time than this left in the run is refused
-// rather than left to time out mid-capture.
-const MIN_VIEW_BUDGET_MS = 8_000;
+// A view started with less time than this left before its own deadline is
+// refused: the capture needs a few seconds after the upload reserve. A view
+// that is admitted still cannot overrun, because its capture request is
+// aborted at its deadline.
+const MIN_VIEW_BUDGET_MS = UPLOAD_RESERVE_MS + 5_000;
 
-// Captures one realm URL and uploads the image, finishing by `deadline`.
+// Captures one realm URL and uploads the image, done by `doneBy`, or stopped
+// when `signal` aborts.
 type ViewURL = (
   url: string,
   options: ViewOptions,
-  deadline: number,
+  doneBy: number,
+  signal: AbortSignal,
 ) => Promise<ViewedImage>;
 
 // Saves one file and returns the content that was saved (lint may reformat
@@ -83,6 +89,9 @@ class RealmFsSession {
   // and a write still in flight is not saved, so nothing lands after the tool
   // has reported.
   private closed = false;
+  // Aborted when the run ends, so a view still capturing stops there rather
+  // than uploading after the tool has reported.
+  private viewsInFlight = new AbortController();
 
   constructor(
     private realmURL: string,
@@ -109,6 +118,7 @@ class RealmFsSession {
 
   close() {
     this.closed = true;
+    this.viewsInFlight.abort();
   }
 
   // Settles once every call already made has finished or been refused.
@@ -191,13 +201,18 @@ class RealmFsSession {
             `realm.view may capture at most ${MAX_VIEWS} times in one run; use the view-visually tool for more`,
           );
         }
-        let deadline = this.runEndsAt - VIEW_MARGIN_MS;
-        if (deadline - Date.now() < MIN_VIEW_BUDGET_MS) {
+        let doneBy = this.runEndsAt - VIEW_MARGIN_MS;
+        if (doneBy - Date.now() < MIN_VIEW_BUDGET_MS) {
           throw new Error(
             `Not enough time left in this run to capture ${url}; use the view-visually tool instead`,
           );
         }
-        let viewed = await this.viewURL(url, viewOptions(args[1]), deadline);
+        let viewed = await this.viewURL(
+          url,
+          viewOptions(args[1]),
+          doneBy,
+          this.viewsInFlight.signal,
+        );
         if (this.closed) {
           this.refusedAfterClose += 1;
           throw new Error(`The run has ended; the view of ${url} was dropped`);
@@ -211,6 +226,7 @@ class RealmFsSession {
           format: viewed.format,
           width: viewed.width ?? null,
           height: viewed.height ?? null,
+          ...(viewed.note ? { note: viewed.note } : {}),
           attached: true,
         };
       }
@@ -364,7 +380,8 @@ export default class RunRealmCodeTool extends HostBaseTool<
       (url) => this.cardService.getSource(new URL(url)),
       (url, content, expected) =>
         this.writeFile(roomId, url, content, expected),
-      (url, options, deadline) => this.viewURL(url, options, deadline),
+      (url, options, doneBy, signal) =>
+        this.viewURL(url, options, doneBy, signal),
     );
     let runnerResult;
     let deadline = new AbortController();
@@ -449,19 +466,21 @@ export default class RunRealmCodeTool extends HostBaseTool<
   private async viewURL(
     url: string,
     options: ViewOptions,
-    deadline: number,
+    doneBy: number,
+    signal: AbortSignal,
   ): Promise<ViewedImage> {
     let services = {
       loaderService: this.loaderService,
       matrixService: this.matrixService,
+      network: this.network,
       realm: this.realm,
       realmServer: this.realmServer,
     };
     return await captureForAgent(
-      resolveViewTarget(url, services),
+      await resolveViewTarget(url, services),
       options,
       services,
-      { deadline },
+      { deadline: captureDeadline(doneBy), signal },
     );
   }
 

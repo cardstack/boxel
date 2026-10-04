@@ -1,7 +1,9 @@
 import { rri, urlNamesFile } from '@cardstack/runtime-common';
+import { MAX_TOOL_RESULT_MEDIA_FILE_BYTES } from '@cardstack/runtime-common/ai';
 
 import type LoaderService from '../services/loader-service';
 import type MatrixService from '../services/matrix-service';
+import type NetworkService from '../services/network';
 import type RealmService from '../services/realm';
 import type RealmServerService from '../services/realm-server';
 import type { FileDef } from '@cardstack/base/file-api';
@@ -36,6 +38,9 @@ export interface ViewedImage {
   format: ViewFormat;
   width: number | undefined;
   height: number | undefined;
+  // Set when the image shows less than the capture did (a full-page capture
+  // cut to its top); says what was left out.
+  note: string | undefined;
   // The uploaded image, ready to attach to a tool result.
   file: FileDef;
 }
@@ -43,6 +48,7 @@ export interface ViewedImage {
 interface Services {
   loaderService: LoaderService;
   matrixService: MatrixService;
+  network: NetworkService;
   realm: RealmService;
   realmServer: RealmServerService;
 }
@@ -52,10 +58,18 @@ interface Services {
 const DEFAULT_VIEWPORT = { width: 1280, height: 800 };
 
 // Bounds on the image handed to the model. Providers refuse an image past
-// roughly 8000px on an edge or 5 MiB, and the prompt omits a tool-result image
-// over 5 MiB; these leave headroom under both.
+// roughly 8000px on an edge; the prompt omits a tool-result image larger than
+// `MAX_TOOL_RESULT_MEDIA_FILE_BYTES` of raw bytes.
 const MAX_IMAGE_EDGE = 4096;
-const MAX_IMAGE_BYTES = 3.5 * 1024 * 1024;
+const MAX_IMAGE_BYTES = MAX_TOOL_RESULT_MEDIA_FILE_BYTES;
+
+// The time kept back after the capture answers, for fitting and uploading
+// the image. A capture request is aborted at its deadline, so a view always
+// leaves this much for the rest of its work.
+export const UPLOAD_RESERVE_MS = 10_000;
+// Least time worth retrying a 503 in: the retry is normally answered from the
+// stored capture, so it needs only a short window past the server's hint.
+const MIN_RETRY_WINDOW_MS = 2_000;
 
 const LOCAL_SOURCE_PREFIX = 'boxel-local://';
 
@@ -66,17 +80,23 @@ function notInWorkspace(reference: string): VisualCaptureError {
     `Cannot capture ${reference}: it is not in a workspace the user can read, ` +
       'and only cards and files in a workspace can be captured. If the user ' +
       'attached it to the chat from their computer: an attached image is ' +
-      'already visible to you as it is; any other attached file (an HTML ' +
-      'page, for example) reaches you only as its source, so tell the user ' +
-      'you cannot see how it renders, and ask them to attach a screenshot or ' +
-      'to upload the file into a workspace so you can capture it yourself.',
+      'visible to you in the turn it was sent, and to look at it again you ' +
+      'need them to attach it again or upload it into a workspace; any other ' +
+      'attached file (an HTML page, for example) reaches you only as its ' +
+      'source, so tell the user you cannot see how it renders, and ask them ' +
+      'to attach a screenshot or to upload the file into a workspace so you ' +
+      'can capture it yourself.',
   );
 }
 
-export function resolveViewTarget(
+export async function resolveViewTarget(
   reference: string,
-  { loaderService, realm }: Pick<Services, 'loaderService' | 'realm'>,
-): ViewTarget {
+  {
+    loaderService,
+    network,
+    realm,
+  }: Pick<Services, 'loaderService' | 'network' | 'realm'>,
+): Promise<ViewTarget> {
   let trimmed = reference?.trim();
   if (!trimmed) {
     throw new VisualCaptureError('A URL to view is required.');
@@ -108,18 +128,40 @@ export function resolveViewTarget(
       `Cannot capture ${href}: the user has no read access to its workspace ${realmURL}.`,
     );
   }
-  // A card instance is named by its id or its `.json` file; anything else
-  // with a registered file extension is a file, captured through its FileDef.
-  let kind: ViewKind =
-    !href.endsWith('.json') && urlNamesFile(url) ? 'file' : 'card';
+  // A card instance is named by its id or by its `.json` file, and a `.json`
+  // is a card only when the realm serves it as one — a plain JSON file is a
+  // file. Anything else with a registered file extension is a file, captured
+  // through its FileDef.
+  let kind: ViewKind;
+  if (href.endsWith('.json')) {
+    kind = (await servesAsCard(href, network)) ? 'card' : 'file';
+  } else {
+    kind = urlNamesFile(url) ? 'file' : 'card';
+  }
   return { url: href, realmURL, kind };
+}
+
+async function servesAsCard(
+  jsonURL: string,
+  network: NetworkService,
+): Promise<boolean> {
+  try {
+    let response = await network.authedFetch(jsonURL.replace(/\.json$/, ''), {
+      headers: { Accept: 'application/vnd.card+json' },
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
 }
 
 export async function captureForAgent(
   target: ViewTarget,
   options: ViewOptions,
   services: Services,
-  { deadline }: { deadline: number },
+  // `deadline` is when the capture must have answered; fitting and uploading
+  // the image follow it. `signal` lets the caller abandon the view early.
+  { deadline, signal }: { deadline: number; signal?: AbortSignal },
 ): Promise<ViewedImage> {
   let { loaderService, realm, realmServer, matrixService } = services;
   let format: ViewFormat = options.format ?? 'isolated';
@@ -175,24 +217,45 @@ export async function captureForAgent(
   // A 503 means the capture is still rendering; the job keeps going and lands
   // its capture in the ledger, so a retry after the server's hint is answered
   // from there.
+  let stillRendering = () =>
+    new VisualCaptureError(
+      `The capture of ${target.url} is still rendering; try viewing it again shortly.`,
+    );
   let attrs: any;
   for (;;) {
-    let response = await vn.fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        Accept: 'application/vnd.api+json',
-        'Content-Type': 'application/vnd.api+json',
-        Authorization: `Bearer ${token}`,
-      },
-      body,
-    });
+    if (deadline <= Date.now()) {
+      throw stillRendering();
+    }
+    let attempt = AbortSignal.any([
+      AbortSignal.timeout(deadline - Date.now()),
+      ...(signal ? [signal] : []),
+    ]);
+    let response: Response;
+    try {
+      response = await vn.fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/vnd.api+json',
+          'Content-Type': 'application/vnd.api+json',
+          Authorization: `Bearer ${token}`,
+        },
+        body,
+        signal: attempt,
+      });
+    } catch (error) {
+      if (signal?.aborted) {
+        throw new VisualCaptureError(`The view of ${target.url} was stopped.`);
+      }
+      if (attempt.aborted) {
+        throw stillRendering();
+      }
+      throw error;
+    }
     if (response.status === 503) {
       let retryAfterMs =
         Math.max(1, Number(response.headers.get('retry-after')) || 1) * 1000;
-      if (Date.now() + retryAfterMs >= deadline) {
-        throw new VisualCaptureError(
-          `The capture of ${target.url} is still rendering; try viewing it again shortly.`,
-        );
+      if (deadline - Date.now() - retryAfterMs < MIN_RETRY_WINDOW_MS) {
+        throw stillRendering();
       }
       await new Promise((resolve) => setTimeout(resolve, retryAfterMs));
       continue;
@@ -223,6 +286,9 @@ export async function captureForAgent(
     base64ToBytes(base64),
     attrs.contentType ?? 'image/png',
   );
+  if (signal?.aborted) {
+    throw new VisualCaptureError(`The view of ${target.url} was stopped.`);
+  }
 
   await matrixService.ready;
   let name = `${baseName(target.url)} (${format}).${extensionFor(
@@ -247,13 +313,21 @@ export async function captureForAgent(
     format,
     width: image.width ?? attrs.width ?? undefined,
     height: image.height ?? attrs.height ?? undefined,
+    note: image.note,
     file: file as FileDef,
   };
 }
 
+// When the capture must answer for a view that has to be done by `doneBy`.
+export function captureDeadline(doneBy: number): number {
+  return doneBy - UPLOAD_RESERVE_MS;
+}
+
 // The capture as the model can take it: unchanged when it is within the edge
 // and byte bounds, otherwise scaled down (and re-encoded as JPEG when PNG
-// stays too heavy) until it is.
+// stays too heavy) until it is. A page much taller than it is wide keeps its
+// width, scaled only to the edge bound, and is cut to its top instead of
+// being shrunk to an unreadable strip.
 async function fitImage(
   bytes: Uint8Array,
   contentType: string,
@@ -262,56 +336,62 @@ async function fitImage(
   contentType: string;
   width?: number;
   height?: number;
+  note?: string;
 }> {
-  if (
-    bytes.byteLength <= MAX_IMAGE_BYTES &&
-    !(await exceedsEdge(bytes, contentType))
-  ) {
-    return { bytes, contentType };
-  }
   let bitmap = await createImageBitmap(
     new Blob([bytes as BlobPart], { type: contentType }),
   );
-  let scale = Math.min(
-    1,
-    MAX_IMAGE_EDGE / Math.max(bitmap.width, bitmap.height),
-  );
-  for (let attempt = 0; attempt < 6; attempt++) {
-    let width = Math.max(1, Math.round(bitmap.width * scale));
-    let height = Math.max(1, Math.round(bitmap.height * scale));
-    let canvas = new OffscreenCanvas(width, height);
-    canvas.getContext('2d')!.drawImage(bitmap, 0, 0, width, height);
-    let type = attempt === 0 ? 'image/png' : 'image/jpeg';
-    let blob = await canvas.convertToBlob({ type, quality: 0.85 });
-    if (blob.size <= MAX_IMAGE_BYTES) {
-      bitmap.close();
-      return {
-        bytes: new Uint8Array(await blob.arrayBuffer()),
-        contentType: type,
-        width,
-        height,
-      };
+  try {
+    if (
+      bytes.byteLength <= MAX_IMAGE_BYTES &&
+      Math.max(bitmap.width, bitmap.height) <= MAX_IMAGE_EDGE
+    ) {
+      return { bytes, contentType };
     }
-    if (attempt > 0) {
-      scale *= 0.75;
+    let scale = Math.min(1, MAX_IMAGE_EDGE / bitmap.width);
+    let sourceHeight = Math.min(bitmap.height, MAX_IMAGE_EDGE / scale);
+    let note =
+      sourceHeight < bitmap.height
+        ? `Only the top ${Math.round(sourceHeight)}px of the ${bitmap.height}px-tall capture is shown.`
+        : undefined;
+    for (let attempt = 0; attempt < 6; attempt++) {
+      let width = Math.max(1, Math.round(bitmap.width * scale));
+      let height = Math.max(1, Math.round(sourceHeight * scale));
+      let canvas = new OffscreenCanvas(width, height);
+      canvas
+        .getContext('2d')!
+        .drawImage(
+          bitmap,
+          0,
+          0,
+          bitmap.width,
+          sourceHeight,
+          0,
+          0,
+          width,
+          height,
+        );
+      let type = attempt === 0 ? 'image/png' : 'image/jpeg';
+      let blob = await canvas.convertToBlob({ type, quality: 0.85 });
+      if (blob.size <= MAX_IMAGE_BYTES) {
+        return {
+          bytes: new Uint8Array(await blob.arrayBuffer()),
+          contentType: type,
+          width,
+          height,
+          note,
+        };
+      }
+      if (attempt > 0) {
+        scale *= 0.75;
+      }
     }
+    throw new VisualCaptureError(
+      'The capture is too large to show the model, even scaled down.',
+    );
+  } finally {
+    bitmap.close();
   }
-  bitmap.close();
-  throw new VisualCaptureError(
-    'The capture is too large to show the model, even scaled down.',
-  );
-}
-
-async function exceedsEdge(
-  bytes: Uint8Array,
-  contentType: string,
-): Promise<boolean> {
-  let bitmap = await createImageBitmap(
-    new Blob([bytes as BlobPart], { type: contentType }),
-  );
-  let exceeds = Math.max(bitmap.width, bitmap.height) > MAX_IMAGE_EDGE;
-  bitmap.close();
-  return exceeds;
 }
 
 function base64ToBytes(base64: string): Uint8Array {
