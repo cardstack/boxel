@@ -32,7 +32,9 @@
 // synapse uses whichever checkout started it, so another checkout's database
 // can be compacted while synapse keeps running.
 //
-// Pass --no-backup to skip copying the database aside first.
+// The database is copied aside first, and the copy is deleted once the
+// compacted file is in place; a failed run leaves it for recovery. Pass
+// --keep-backup to keep it anyway, or --no-backup to skip it.
 
 import { DatabaseSync } from 'node:sqlite';
 import { execFileSync } from 'child_process';
@@ -56,7 +58,9 @@ const TABLE = 'device_lists_changes_in_room';
 const CURSOR_TABLE = 'device_lists_changes_converted_stream_position';
 const KEPT_TABLE = 'compact_kept_device_list_changes';
 
-let backup = !process.argv.slice(2).includes('--no-backup');
+let args = process.argv.slice(2);
+let backup = !args.includes('--no-backup');
+let keepBackup = args.includes('--keep-backup');
 let dataDir = process.env.SYNAPSE_DATA_DIR
   ? resolve(process.env.SYNAPSE_DATA_DIR)
   : resolve(
@@ -118,8 +122,9 @@ let db = new DatabaseSync(dbPath);
 db.exec('PRAGMA wal_checkpoint(TRUNCATE)');
 db.close();
 
+let backupPath: string | undefined;
 if (backup) {
-  let backupPath = `${dbPath}.bak-${Date.now()}`;
+  backupPath = `${dbPath}.bak-${Date.now()}`;
   console.log(`Backing up to ${backupPath}`);
   copyFileSync(dbPath, backupPath);
 }
@@ -228,6 +233,14 @@ db.close();
 rmSync(`${dbPath}-wal`, { force: true });
 rmSync(`${dbPath}-shm`, { force: true });
 renameSync(compactPath, dbPath);
+
+if (backupPath) {
+  if (keepBackup) {
+    console.log(`Kept the backup at ${backupPath}`);
+  } else {
+    rmSync(backupPath);
+  }
+}
 
 console.log(
   `Done: ${gigabytes(dbPath)}. If you stopped synapse for this, start it again with \`pnpm start:synapse\`.`,
