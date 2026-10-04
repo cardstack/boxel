@@ -18,8 +18,6 @@
 //   precedent). It does NOT auto-tick: the realm forbids timers.
 // Visual values flow through theme tokens only; fallbacks declared per root.
 //
-// (the reading-extras group)
-
 // Pretui — shared date math for the date components (pure: no deps, no timers).
 
 // ── shared date math (pure — no deps, no timers) ─────────────────────────

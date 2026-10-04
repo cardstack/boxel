@@ -55,8 +55,6 @@
 // is an indent level this module computed and clamped, routed through
 // `cssStyle` regardless.
 //
-// (the json-tree group)
-
 // Pretui — the shared base and vocabulary for JsonTree and JsonEditor: flat rows, roving focus, type badges.
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';

@@ -25,11 +25,6 @@
 // current column is marked with `aria-current` and a caret rather than a tint.
 // All three survive the greyscale screenshot test.
 //
-// Every component here lives in its own module under components/; this
-// module re-exports them so existing imports keep working.
-//
-// (the toggle-controls group)
-
 // Pretui — primitives shared by ToggleGroup, ToggleMatrix and HoverActions.
 import { modifier } from 'ember-modifier';
 

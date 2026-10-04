@@ -38,11 +38,6 @@
 // `:deep()`, no `:global()`, no dark-mode branches (Appendix F), unnamed
 // container queries only, every colour a token with a light fallback.
 //
-// Every component here lives in its own module under components/; this
-// module re-exports them so existing imports keep working.
-//
-// (the structure-layout group)
-
 // Pretui — the layout vocabulary shared by Stack, Card, Collapsible and StackDivider: the size and orientation alias maps.
 import type { PretuiSize } from '../pretui-primitives';
 

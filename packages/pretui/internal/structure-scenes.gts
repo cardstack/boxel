@@ -15,11 +15,6 @@
 // var(--token, lightFallback); prefers-reduced-motion honored wherever
 // anything moves. Per-component delta notes sit on each section.
 //
-// Every component here lives in its own module under components/; this
-// module re-exports them so existing imports keep working.
-//
-// (the structure-scenes group)
-
 // Pretui — shared helpers for the scene components.
 
 export function clamp01to100(v: number): number {

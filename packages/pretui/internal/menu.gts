@@ -65,8 +65,6 @@
 // belongs to an `OwnedTimers` set that an `ember-modifier` adopts and
 // releases. Nothing here calls `Date.now()` or `Math.random()`.
 //
-// (the menu group)
-
 // Pretui — the menu tree model shared by Menu, MenuPanel, Menubar and
 // CommandPalette: the node taxonomy, shortcut parsing and rendering, and the
 // row model a level is drawn from. Not a component.

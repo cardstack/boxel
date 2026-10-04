@@ -9,8 +9,6 @@
 // @starting-style (Motion Rule: encodes open state; reduced-motion gets the
 // end state).
 //
-// (the overlay group)
-
 // Pretui — overlay plumbing shared by Popup, Dialog, Drawer and Popover:
 // placement aliases, the measuring anchor modifier, the open-arg aliases and
 // the native <dialog> modal behaviour. Not a component.

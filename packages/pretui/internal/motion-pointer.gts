@@ -64,11 +64,6 @@
 // blocked; prefers-reduced-motion collapses each effect to its END state
 // (never a frozen midpoint).
 //
-// Every component here lives in its own module under components/; this
-// module re-exports them so existing imports keep working.
-//
-// (the motion-pointer group)
-
 // Pretui — pointerField, the shared pointer-to-custom-property modifier behind the pointer effects.
 // type-only gap: 'ember-modifier' resolves at realm runtime; glint can't
 // see it here (accepted parse baseline)

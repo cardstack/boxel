@@ -20,11 +20,6 @@
 // there is listed against the block that inherits the idea, with what this
 // cut does instead.
 //
-// Every component here lives in its own module under components/; this
-// module re-exports them so existing imports keep working.
-//
-// (the blocks group)
-
 // Pretui — the heading-level contract every block shares.
 
 /** Heading level a block's own headline should occupy in the host page.
