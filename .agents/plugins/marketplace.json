@@ -17,6 +17,21 @@
         "products": ["CODEX"]
       },
       "category": "Developer Tools"
+    },
+    {
+      "name": "boxel-skills",
+      "source": {
+        "source": "url",
+        "url": "https://github.com/cardstack/boxel-skills.git",
+        "ref": "v0.1.6"
+      },
+      "description": "Official Boxel card-building skills, from cardstack/boxel-skills. Install alongside boxel-cli.",
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL",
+        "products": ["CODEX"]
+      },
+      "category": "Developer Tools"
     }
   ]
 }

@@ -6,6 +6,7 @@ import type {
   ProjectData,
   ResolvedSkill,
 } from './factory-agent/index.ts';
+import { boxelSkillsDir } from '../../boxel-cli/scripts/boxel-skills.mts';
 import { logger } from './logger.ts';
 import { startSpan } from './run-trace.ts';
 
@@ -34,29 +35,32 @@ const DEFAULT_SKILLS_DIR = join(PACKAGE_ROOT, '.agents', 'skills-orchestrator');
  * Additional skill search directories, checked in order when a skill is not
  * found in the primary directory.
  *
- * - `packages/boxel-cli/plugin/skills/` hosts the boxel-cli Claude Code
- *   plugin skills (`boxel`, `boxel-api`, `boxel-command`, `boxel-file-def`,
- *   etc.) — boxel-cli owns the entire Boxel API surface, so its skills
- *   describe the platform. Same directory the plugin distributes to end
- *   users; these skills and `ember-best-practices` /
- *   `boxel-ui-component-discovery` are built from the boxel-skills repo by
- *   `pnpm build:skills`.
+ * - `packages/boxel-cli/plugin/skills/` hosts the skills the boxel-cli plugin
+ *   authors itself (`boxel-api`, `boxel-command`, `boxel-file-structure`,
+ *   `realm-sync`, …) — boxel-cli owns the Boxel API surface, so its skills
+ *   describe the platform.
+ * - `boxelSkillsDir()` is the local clone of the pinned cardstack/boxel-skills
+ *   release (`boxel`, `boxel-file-def`, `catalog-reuse`,
+ *   `boxel-ui-component-discovery`, `ember-best-practices`, …), the same
+ *   release the plugin marketplace installs for end users. `pnpm
+ *   factory:setup` clones it, and preflight refuses a run without it.
  * - The monorepo root `.agents/skills/` is a fallback slot for shared domain
  *   skills, read directly by agents that follow the `.agents/skills`
- *   convention. It holds `boxel-workspace-cardinal-rules`, which the plugin
- *   dir above also carries: the plugin dir is searched first, so the copy
- *   this loader resolves is the generated one, and editing the root copy does
- *   not change what a factory run reads. Content changes to that skill belong
- *   upstream in boxel-skills, which the plugin dir is generated from.
+ *   convention. It holds `boxel-workspace-cardinal-rules`, which boxel-skills
+ *   also carries: the boxel-skills clone is searched first, so the copy this
+ *   loader resolves is the released one, and editing the root copy does not
+ *   change what a factory run reads. Content changes to that skill belong
+ *   upstream in boxel-skills.
  */
 const DEFAULT_FALLBACK_DIRS = [
   join(MONOREPO_ROOT, 'packages', 'boxel-cli', 'plugin', 'skills'),
+  boxelSkillsDir(),
   join(MONOREPO_ROOT, '.agents', 'skills'),
   // Package-local interactive skills (`packages/software-factory/.agents/skills`)
   // are the primary skill set for the runbook (interactive Claude Code) loop.
   // Listing them here lets the orchestrator's resolver pick them up too.
   // The reuse skills (`catalog-reuse`, `boxel-ui-component-discovery`)
-  // resolve from the plugin dir above, not from here.
+  // resolve from the boxel-skills clone above, not from here.
   join(PACKAGE_ROOT, '.agents', 'skills'),
 ];
 
@@ -143,11 +147,11 @@ export const ALWAYS_LOAD_REFERENCES: readonly string[] = [
 ];
 
 /**
- * Curated reference names not yet present in the built `boxel` skill —
+ * Curated reference names not yet present in the pinned `boxel` skill —
  * listed ahead of a boxel-skills release that adds them. Missing names are
  * harmless at runtime (`filterBoxelRefs` filters what's actually on disk),
  * and the validation test uses this set strictly: once a name ships in the
- * built skill, the test fails until it is removed from here.
+ * pinned skill, the test fails until it is removed from here.
  *
  * Empty: `qunit-testing.md` shipped in boxel-skills v0.0.30.
  */
