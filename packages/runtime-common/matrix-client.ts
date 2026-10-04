@@ -7,6 +7,16 @@ type JoinedRoomsResponse = { joined_rooms: string[] };
 
 const joinedRoomsRequests = new WeakMap<object, Promise<JoinedRoomsResponse>>();
 
+// Every login from this client reuses one device per matrix user. A login
+// without a device_id makes synapse mint a new device, and each new device
+// writes a device-list change row for every room the user has joined, rows
+// synapse never prunes. Server users join a session room per user they
+// authenticate, so fresh devices grow that table with logins × rooms. Logging
+// in to an existing device writes no change rows, and each login still gets
+// its own access token, so concurrent processes sharing the device don't
+// invalidate each other.
+export const SERVER_MATRIX_DEVICE_ID = 'boxel-server';
+
 export interface MatrixAccess {
   accessToken: string;
   deviceId: string;
@@ -47,6 +57,10 @@ export class MatrixClient {
 
   getUserId() {
     return this.access?.userId;
+  }
+
+  getDeviceId() {
+    return this.access?.deviceId;
   }
 
   isLoggedIn() {
@@ -122,6 +136,7 @@ export class MatrixClient {
           },
           password,
           type: 'm.login.password',
+          device_id: SERVER_MATRIX_DEVICE_ID,
         }),
       },
       false,
