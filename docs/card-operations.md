@@ -1002,6 +1002,28 @@ those are module source, a data file or a card's whole document, and a verbatim
 replacement can change a card's type out from under the grant that admitted it.
 The administration routes do not act on a card at all.
 
+The realm's reads that come straight from its index answer on its own
+permissions alone too, so a caller the realm admits only through a grant is
+refused them:
+
+- the `card+html`, `file-meta+html`, `markdown` and `file-meta` reads of a path.
+  They serve what the index holds for it without running an operation, so no
+  `read` grant is consulted and no projection it declares narrows them. Such a
+  caller reads the card through `card+json` or `_search`, which resolve the read
+  through the policy.
+- `_types`, `_mtimes`, `_publishability` and `_indexing-errors`, which answer for
+  the whole realm at once. A grant reaches a card, not the realm.
+- `_dependencies`, `_card-dependencies` and `_lint`, which read the realm's
+  modules. Modules are code, and no grant reaches code.
+- `_sign-capture-urls`, which signs URLs for the capture serve, and the capture
+  serve itself.
+
+`_info` is the exception. It answers any signed-in caller in a realm that names
+a policy, since it carries the realm's name and icon, which a view of a granted
+card shows. It does not carry the policy's pointer. A caller who authenticated
+nobody is still told to authenticate, and in a realm with no policy `_info`
+answers as the realm's permissions say.
+
 ### Stored bytes, and code
 
 A `readSource` grant is honored on the routes that serve a path's bytes, the

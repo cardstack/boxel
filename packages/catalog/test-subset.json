@@ -34,6 +34,7 @@
       "realm-policy-explain-test",
       "realm-policy-gate-test",
       "realm-policy-html-sharing-test",
+      "realm-policy-index-read-test",
       "realm-policy-non-grantable-test",
       "realm-policy-publish-test",
       "realm-policy-query-filter-test",
