@@ -1,4 +1,5 @@
 import { click, waitFor } from '@ember/test-helpers';
+import GlimmerComponent from '@glimmer/component';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
@@ -12,6 +13,7 @@ import {
 import { isCardErrorJSONAPI } from '@cardstack/runtime-common/error';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
+import OperatorMode from '@cardstack/host/components/operator-mode/container';
 import type CapabilitiesService from '@cardstack/host/services/capabilities';
 
 import {
@@ -21,11 +23,12 @@ import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
   settleRealmRenders,
+  setupOperatorModeStateCleanup,
   testRealmURL,
 } from '../helpers';
 import { setupCatalogTestSubset } from '../helpers/catalog-test-subset';
 import { setupMockMatrix } from '../helpers/mock-matrix';
-import { renderCard } from '../helpers/render-component';
+import { renderCard, renderComponent } from '../helpers/render-component';
 import { setupRenderingTest } from '../helpers/setup';
 
 import type { TestRealmAdapter } from '../helpers/adapter';
@@ -49,6 +52,7 @@ const COLLEAGUE = '@colleague:localhost';
 const SCHOOL_ADMIN = '@school-admin:localhost';
 
 const ROOM_204 = `${SCHOOL}classrooms/room-204`;
+const SCHOOL_ICON = 'https://boxel-images.boxel.ai/icons/Letter-s.png';
 const ROOM_205 = `${SCHOOL}classrooms/room-205`;
 
 // Is the caller one of the classroom's teachers.
@@ -142,12 +146,15 @@ function classroom(title: string, teacherIds: string[]) {
 
 module('Integration | a realm that checks permissions', function (hooks) {
   setupRenderingTest(hooks);
+  setupOperatorModeStateCleanup(hooks);
   setupCatalogTestSubset(hooks);
   setupLocalIndexing(hooks);
 
   let loader: Loader;
   let operations: (typeof OperationsModule)['operations'];
   let hostTransport: unknown;
+
+  let noop = () => {};
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: TEST_USER,
@@ -193,6 +200,7 @@ module('Integration | a realm that checks permissions', function (hooks) {
       contents: {
         'realm.json': realmConfigCardJSON({
           name: 'School',
+          iconURL: SCHOOL_ICON,
           policy: `${SCHOOL}policies/classrooms`,
         }),
         'classrooms/room-204.json': classroom('Room 204', [TEST_USER]),
@@ -236,6 +244,96 @@ module('Integration | a realm that checks permissions', function (hooks) {
     let file = await adapter.openFile(localPath);
     return JSON.parse(file!.content as string).data.attributes.title;
   }
+
+  test('a user the policy admits opens a classroom in the host, and its header shows the realm', async function (assert) {
+    await setupSchool({ enforcePermissions: true });
+    // Sign in again as the host does on its first contact with a realm,
+    // holding nothing for it yet: no session, and no realm info.
+    let realmService = getService('realm');
+    realmService.removeRealm(SCHOOL);
+    await realmService.login(SCHOOL);
+    assert.false(
+      realmService.canRead(SCHOOL),
+      'the school realm’s ACL gives the test user nothing',
+    );
+    assert.strictEqual(
+      realmService.info(SCHOOL).name,
+      'School',
+      'and the realm’s info is loaded',
+    );
+
+    getService('operator-mode-state-service').restore({
+      stacks: [[{ id: ROOM_204, format: 'isolated' }]],
+    });
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+    await waitFor(`[data-test-stack-card="${ROOM_204}"]`);
+    assert
+      .dom(`[data-test-stack-card="${ROOM_204}"] [data-test-classroom-title]`)
+      .hasText('Room 204', 'the classroom the policy grants renders');
+    assert
+      .dom(
+        `[data-test-stack-card-header] [data-test-card-header-realm-icon="${SCHOOL_ICON}"]`,
+      )
+      .exists('with the realm’s icon in its header');
+  });
+
+  test('a sign-in that fails is reported, and the next one tries again', async function (assert) {
+    // A realm with no policy whose ACL gives the test user nothing: its
+    // `_info` refuses them, so signing in to it fails.
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      realmURL: SCHOOL,
+      enforcePermissions: true,
+      permissions: { [SCHOOL_ADMIN]: ['read', 'write', 'realm-owner'] },
+      contents: {
+        'realm.json': realmConfigCardJSON({ name: 'School' }),
+      },
+    });
+    let infoRequests = 0;
+    getService('network').virtualNetwork.mount(
+      async (request: Request) => {
+        if (request.url === `${SCHOOL}_info`) {
+          infoRequests++;
+        }
+        return null;
+      },
+      { prepend: true },
+    );
+    // A realm the host holds nothing for yet, so signing in fetches its info.
+    let realmService = getService('realm');
+    realmService.removeRealm(SCHOOL);
+
+    let [first, joined] = [
+      realmService.reauthenticate(SCHOOL),
+      realmService.reauthenticate(SCHOOL),
+    ];
+    for (let [label, attempt] of [
+      ['the sign-in', first],
+      ['a caller that joined it', joined],
+    ] as const) {
+      await assert.rejects(
+        attempt,
+        /Failed to fetch realm info/,
+        `${label} is told it failed`,
+      );
+    }
+    assert.strictEqual(infoRequests, 1, 'the two callers shared one sign-in');
+
+    await assert.rejects(
+      realmService.reauthenticate(SCHOOL),
+      /Failed to fetch realm info/,
+      'the next sign-in fails on its own account',
+    );
+    assert.strictEqual(
+      infoRequests,
+      2,
+      'rather than waiting on the one that failed',
+    );
+  });
 
   test("a control gated on canInvoke shows on the card the policy's predicate admits, and not on one it does not", async function (assert) {
     await setupSchool({ enforcePermissions: true });
