@@ -3,6 +3,7 @@ const { module, test } = QUnit;
 import supertest from 'supertest';
 import type { Test, SuperTest } from 'supertest';
 import { basename, join } from 'path';
+import { colorCoverage } from './helpers/png.ts';
 import { dirSync } from 'tmp';
 import {
   SupportedMimeType,
@@ -347,6 +348,10 @@ module(basename(import.meta.filename), function (hooks) {
             'schedules/open.json': schedule('Private open', OWNER),
             'notes/private-notes.md':
               '# Private notes\n\nOnly its readers see this.\n',
+            // A page whose body is a color no file chrome uses, so a capture
+            // shows whether the HTML itself was drawn.
+            'notes/swatch.html':
+              '<!doctype html><html><body style="margin:0;background:rgb(255,0,254);height:2000px"></body></html>',
           },
           permissions: { ...owner, [REQUESTER]: ['read'] },
         },
@@ -553,6 +558,26 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
+  test('a file capture through the endpoint draws the rendered HTML of an HTML file', async function (assert) {
+    let response = await postFileCapture(
+      REQUESTER,
+      PRIVATE,
+      `${PRIVATE}notes/swatch.html`,
+    );
+    assert.strictEqual(response.status, 201, JSON.stringify(response.body));
+    let attrs = response.body.data.attributes;
+    assert.strictEqual(attrs.status, 'ready', `rendered: ${attrs.error}`);
+    let coverage = colorCoverage(attrs.captures[0].base64, [255, 0, 254]);
+    assert.true(
+      coverage > 0.33,
+      `the page's own body color fills the preview (${Math.round(coverage * 100)}% of the capture)`,
+    );
+  });
+
+  // The caller who cannot read the realm is refused before any tab runs: the
+  // task finds no permissions for them there. A reader's in-tab read of the
+  // file uses the same per-user session the card branch's reads do, which the
+  // card tests above pin.
   test('a file capture draws the file for a reader of its realm and nothing for anyone else', async function (assert) {
     let fileURL = `${PRIVATE}notes/private-notes.md`;
 
