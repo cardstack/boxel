@@ -103,6 +103,13 @@ const readProbes: Probe[] = [
     send: (r) =>
       r.get('/person-1.json').set('Accept', SupportedMimeType.CardSource),
   },
+  // A hash this realm never interned, so the serve's own answer is a 404.
+  {
+    label: 'GET a hashed scoped stylesheet',
+    consumes: true,
+    send: (r) =>
+      r.get(`/_scoped-css/person.gts.md5-${'0'.repeat(32)}.glimmer-scoped.css`),
+  },
   {
     label: 'GET raw file',
     consumes: true,
@@ -483,8 +490,9 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           `QUERY ${SupportedMimeType.JSONAPI} /_operations`,
           `GET ${SupportedMimeType.RealmInfo} /_info`,
           `QUERY ${SupportedMimeType.RealmInfo} /_info`,
+          'GET * /_scoped-css/*',
         ].sort(),
-        'the consumer set is the card+json read and writes, the search, the operations envelope, the capability check and the realm info',
+        'the consumer set is the card+json read and writes, the search, the operations envelope, the capability check, the realm info and the hashed stylesheet serve',
       );
       let nonConsumers = testRealm
         .routeDescriptions()
@@ -594,8 +602,9 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           `QUERY ${SupportedMimeType.JSONAPI} /_operations`,
           `GET ${SupportedMimeType.RealmInfo} /_info`,
           `QUERY ${SupportedMimeType.RealmInfo} /_info`,
+          'GET * /_scoped-css/*',
         ].sort(),
-        'the card+json read and writes, the search, the operations envelope, the capability check, and the realm info, which applies it by never sealing',
+        'the card+json read and writes, the search, the operations envelope, the capability check, the realm info, which applies it by never sealing, and the hashed stylesheet serve',
       );
       assert.deepEqual(
         testRealm
@@ -869,12 +878,13 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
     });
 
     test('every consuming route hands an admitted caller to the policy gate', async function (assert) {
-      // Three consumers answer an admitted caller with something other than a
+      // Four consumers answer an admitted caller with something other than a
       // refusal, and each is pinned on its own. The search hands them to the
       // policy's query lane, which answers with rows (below). The capability
       // check answers a decision per pair, a 200 with denials in it (its own
       // module). The realm info resolves no operation, and answers them with
-      // the info (below).
+      // the info (below). The hashed stylesheet serve hands them nothing to
+      // judge and serves the stylesheet (the capture-authority module).
       let consumers = testRealm
         .routeDescriptions()
         .filter((route) => route.consumesCoarseOutcome)
@@ -882,7 +892,8 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           (route) =>
             route.path !== '/_search' &&
             route.path !== '/_capabilities' &&
-            route.path !== '/_info',
+            route.path !== '/_info' &&
+            route.path !== '/_scoped-css/*',
         )
         .map((route) => `${route.method} ${route.mimeType}`)
         .filter((route) => route !== `HEAD ${SupportedMimeType.CardJson}`)

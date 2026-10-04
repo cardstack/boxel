@@ -31,7 +31,7 @@ Where it is behind, plainly:
 
 - **No error state.** `navigator.clipboard.writeText` rejects in insecure contexts, without permission, and when the document is not focused. Web Awesome shows an error label; here the failure is a `console.error` and a button that silently did not confirm. The user is not told the copy failed, which is the worst of the three outcomes.
 - **No `from` equivalent** — you must have the string, not a reference to an element.
-- **No `variant`-independent success colouring beyond the check's `--success`.**
+- **No `variant`-independent success colouring beyond the check's `--success-ink`.**
 
 ## Accessibility
 
@@ -49,12 +49,12 @@ Gaps, and the first is significant:
 - **`blur` resets the state**, which interacts badly with the announcement gap: if a live region were added, the message would need to survive the focus change that resets the label.
 - **APG's toggle-button guidance says a button's label must not change with state** — that rule is about `aria-pressed` toggles, and this is not one (it is a transient confirmation, not a persistent state), so changing the label is defensible here. But it does mean the button's name is unstable, which some voice-control users will find confusing: "click copy to clipboard" stops working for a moment after a copy.
 - **`title` is inherited from IconButton** and duplicates the `aria-label`, with the usual double-announcement risk.
-- **The check is `--success` at 13px** — a small green tick, and colour plus shape are the only visual confirmation. The shape change (clipboard → check) carries it without colour, which satisfies **WCAG 1.4.1**.
+- **The check is `--success-ink` at 13px** — a small green tick, and colour plus shape are the only visual confirmation. The shape change (clipboard → check) carries it without colour, which satisfies **WCAG 1.4.1**.
 - Target size is IconButton's 28×28, clearing WCAG 2.5.8's minimum narrowly.
 
 ## Theming
 
-`--success` (the confirmation check) plus **IconButton**'s and **Button**'s full token set for the button itself — `--pretui-tone`/`--pretui-tone-on` per variant, `--radius`, `--hover`, `--border`, `--control-h`.
+`--success-ink` (the confirmation check) plus **IconButton**'s and **Button**'s full token set for the button itself — `--pretui-tone`/`--pretui-tone-on` per variant, `--radius`, `--hover`, `--border`, `--control-h`.
 
 `data-state="copied"` is reflected on the button, so a season can dress the confirmed state beyond the glyph swap — a tinted background, for example — without touching the component. That is the intended extension point, and it is worth using: a colour-only-by-default confirmation on a 28px button is easy to miss.
 
