@@ -28,4 +28,102 @@ module('Pretui | components/table', function (hooks) {
     assert.ok(table.querySelector('thead [data-test-th]'), 'the head block lands in thead');
     assert.ok(table.querySelector('tbody [data-test-td]'), 'and the body block in tbody');
   });
+
+  test('with no caption and no label the table carries neither', async function (assert) {
+    await render(
+      <template>
+        <Table>
+          <:head><tr><th>Lot</th></tr></:head>
+          <:body><tr><td>Keemun</td></tr></:body>
+        </Table>
+      </template>,
+    );
+    let table = q('[data-test-pretui-table] table');
+    assert.notOk(table.querySelector('caption'), 'no caption element');
+    assert.notOk(table.hasAttribute('aria-label'), 'and no aria-label');
+  });
+
+  test('@caption renders a real caption as the first child of the table', async function (assert) {
+    await render(
+      <template>
+        <Table @caption='Lots in the warehouse'>
+          <:head><tr><th>Lot</th></tr></:head>
+          <:body><tr><td>Keemun</td></tr></:body>
+        </Table>
+      </template>,
+    );
+    let table = q('[data-test-pretui-table] table');
+    let caption = table.firstElementChild as HTMLElement;
+    assert.strictEqual(caption?.tagName, 'CAPTION', 'the caption leads the table, where HTML requires it');
+    assert.strictEqual(caption.textContent?.trim(), 'Lots in the warehouse');
+    assert.strictEqual(table.querySelectorAll('caption').length, 1, 'exactly one caption');
+  });
+
+  test('the caption block renders inside the caption with its markup kept', async function (assert) {
+    await render(
+      <template>
+        <Table>
+          <:caption>Lots from <strong data-test-origin>Fujian</strong></:caption>
+          <:head><tr><th>Lot</th></tr></:head>
+          <:body><tr><td>Lapsang</td></tr></:body>
+        </Table>
+      </template>,
+    );
+    let table = q('[data-test-pretui-table] table');
+    let caption = table.firstElementChild as HTMLElement;
+    assert.strictEqual(caption?.tagName, 'CAPTION', 'the block lands in a real caption');
+    assert.ok(caption.querySelector('[data-test-origin]'), 'the markup survives');
+    assert.strictEqual(caption.textContent?.replace(/\s+/g, ' ').trim(), 'Lots from Fujian');
+  });
+
+  test('the caption block wins over @caption', async function (assert) {
+    await render(
+      <template>
+        <Table @caption='From the arg'>
+          <:caption>From the block</:caption>
+          <:head><tr><th>Lot</th></tr></:head>
+          <:body><tr><td>Lapsang</td></tr></:body>
+        </Table>
+      </template>,
+    );
+    let captions = document.querySelectorAll('[data-test-pretui-table] caption');
+    assert.strictEqual(captions.length, 1, 'one caption, not two');
+    assert.strictEqual(captions[0]?.textContent?.trim(), 'From the block');
+  });
+
+  test('@label names the table when no caption renders', async function (assert) {
+    await render(
+      <template>
+        <Table @label='Targets'>
+          <:head><tr><th scope='col'>Priority</th></tr></:head>
+          <:body><tr><th scope='row'>Urgent</th></tr></:body>
+        </Table>
+      </template>,
+    );
+    let table = q('[data-test-pretui-table] table');
+    assert.strictEqual(table.getAttribute('aria-label'), 'Targets', 'aria-label lands on the table, not the wrapper');
+    assert.notOk(table.querySelector('caption'), 'with no visible caption');
+    assert.notOk(q('[data-test-pretui-table]').hasAttribute('aria-label'), 'the wrapper stays unnamed');
+  });
+
+  test('a caption wins over @label', async function (assert) {
+    await render(
+      <template>
+        <Table @caption='Visible name' @label='Hidden name' data-test-arg>
+          <:head><tr><th>Lot</th></tr></:head>
+          <:body><tr><td>Keemun</td></tr></:body>
+        </Table>
+        <Table @label='Hidden name' data-test-block>
+          <:caption>Block name</:caption>
+          <:head><tr><th>Lot</th></tr></:head>
+          <:body><tr><td>Keemun</td></tr></:body>
+        </Table>
+      </template>,
+    );
+    for (let which of ['arg', 'block']) {
+      let table = q(`[data-test-${which}] table`);
+      assert.ok(table.querySelector('caption'), `${which}: the caption renders`);
+      assert.notOk(table.hasAttribute('aria-label'), `${which}: and @label does not override it`);
+    }
+  });
 });
