@@ -17,6 +17,7 @@ import type { Command, ToolContext } from '@cardstack/runtime-common';
 import {
   Deferred,
   ToolContextStamp,
+  buildToolFunctionNameFromResolvedRef,
   delay,
   getClass,
   identifyCard,
@@ -123,6 +124,16 @@ async function withTimeout<T>(
     clearTimeout(timer!);
   }
 }
+
+// The function names of the two host tools whose results carry captures.
+const VIEW_VISUALLY_TOOL_NAME = buildToolFunctionNameFromResolvedRef({
+  module: '@cardstack/boxel-host/tools/view-visually',
+  name: 'default',
+});
+const RUN_REALM_CODE_TOOL_NAME = buildToolFunctionNameFromResolvedRef({
+  module: '@cardstack/boxel-host/tools/run-realm-code',
+  name: 'default',
+});
 
 // An uploaded capture a tool result carries (base's `AttachedImageField`).
 interface AttachedImage {
@@ -1254,12 +1265,14 @@ export default class ToolService extends Service {
   });
 
   // The files a tool result attaches for the model: the source files a
-  // run-realm-code call saved, and the captures the two capturing tools took
-  // for the model to look at (view-visually's `attachedImages`,
-  // run-realm-code's `views`). Images are read only from those tools'
-  // results, so a command from a realm can't put a media item of its choosing
-  // in front of the model as what it is looking at. They are already uploaded
-  // to the room's media, so they ride as they are.
+  // run-realm-code call saved, and the captures the two host capturing tools
+  // took for the model to look at (view-visually's `attachedImages`,
+  // run-realm-code's `views`). Those fields are read only from those two
+  // tools' results, matched by their exact function names, so another
+  // command cannot attach images through them. (A command can still attach a
+  // file through `FileForAttachmentCard`, which is handled separately.) The
+  // images are already uploaded to the room's media, so they ride as they
+  // are.
   private attachedFilesForToolResult(
     toolName: string | undefined,
     resultCard: CardDef | undefined,
@@ -1287,8 +1300,8 @@ export default class ToolService extends Service {
           })
         : [];
     let capturing =
-      toolName?.startsWith('view-visually_') ||
-      toolName?.startsWith('run-realm-code_');
+      toolName === VIEW_VISUALLY_TOOL_NAME ||
+      toolName === RUN_REALM_CODE_TOOL_NAME;
     let images = (
       capturing
         ? [

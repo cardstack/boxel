@@ -45,9 +45,10 @@ const MAX_VIEWS = 3;
 // script still has time to use what it saw and return.
 const VIEW_MARGIN_MS = 3_000;
 // A view started with less time than this left before its own deadline is
-// refused: the capture needs a few seconds after the upload reserve. A view
-// that is admitted still cannot overrun, because its capture request is
-// aborted at its deadline.
+// refused: the capture needs a few seconds after the upload reserve. An
+// admitted view is bounded: its card probe has a short timeout of its own,
+// its capture request is aborted at its deadline, and ending the run stops
+// every step that waits.
 const MIN_VIEW_BUDGET_MS = UPLOAD_RESERVE_MS + 5_000;
 
 // Captures one realm URL and uploads the image, done by `doneBy`, or stopped
@@ -477,7 +478,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
       realmServer: this.realmServer,
     };
     return await captureForAgent(
-      await resolveViewTarget(url, services),
+      await resolveViewTarget(url, services, { signal }),
       options,
       services,
       { deadline: captureDeadline(doneBy), signal },

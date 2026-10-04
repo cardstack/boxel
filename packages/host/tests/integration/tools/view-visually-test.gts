@@ -4,6 +4,12 @@ import type { RenderingTestContext } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
+import { MAX_TOOL_RESULT_MEDIA_FILE_BYTES } from '@cardstack/runtime-common/ai';
+
+import {
+  captureForAgent,
+  resolveViewTarget,
+} from '@cardstack/host/lib/visual-capture';
 import RealmService from '@cardstack/host/services/realm';
 import ViewVisuallyTool from '@cardstack/host/tools/view-visually';
 
@@ -129,6 +135,34 @@ module('Integration | tools | view-visually', function (hooks) {
     return new ViewVisuallyTool(getService('tool-service').toolContext);
   }
 
+  // A PNG of the given size, as base64. `noise` fills it with random pixels,
+  // which compress poorly, so the PNG is heavy for its size.
+  async function pngBase64(width: number, height: number, noise = false) {
+    let canvas = new OffscreenCanvas(width, height);
+    let context = canvas.getContext('2d')!;
+    if (noise) {
+      let image = context.createImageData(width, height);
+      crypto.getRandomValues(image.data.subarray(0, 65536));
+      for (let i = 65536; i < image.data.length; i += 65536) {
+        crypto.getRandomValues(
+          image.data.subarray(i, Math.min(i + 65536, image.data.length)),
+        );
+      }
+      context.putImageData(image, 0, 0);
+    } else {
+      context.fillStyle = 'rgb(200, 40, 40)';
+      context.fillRect(0, 0, width, height);
+    }
+    let bytes = new Uint8Array(
+      await (await canvas.convertToBlob({ type: 'image/png' })).arrayBuffer(),
+    );
+    let binary = '';
+    for (let i = 0; i < bytes.length; i += 0x8000) {
+      binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+    }
+    return { base64: btoa(binary), byteLength: bytes.byteLength };
+  }
+
   test('a card is captured by its id, as an image attached to the result', async function (assert) {
     let result = await tool().execute({ url: `${testRealmURL}Pet/mango` });
 
@@ -191,18 +225,7 @@ module('Integration | tools | view-visually', function (hooks) {
   });
 
   test('a capture taller than the edge bound keeps its width and is cut to its top', async function (assert) {
-    let canvas = new OffscreenCanvas(1000, 9000);
-    let context = canvas.getContext('2d')!;
-    context.fillStyle = 'rgb(200, 40, 40)';
-    context.fillRect(0, 0, 1000, 9000);
-    let bytes = new Uint8Array(
-      await (await canvas.convertToBlob({ type: 'image/png' })).arrayBuffer(),
-    );
-    let binary = '';
-    for (let i = 0; i < bytes.length; i += 0x8000) {
-      binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-    }
-    captureBase64 = btoa(binary);
+    captureBase64 = (await pngBase64(1000, 9000)).base64;
 
     let result = await tool().execute({
       url: `${testRealmURL}Pet/mango`,
@@ -212,14 +235,73 @@ module('Integration | tools | view-visually', function (hooks) {
     let [image] = result.attachedImages;
     assert.strictEqual(image.width, 1000, 'the width is kept');
     assert.strictEqual(image.height, 4096, 'the height is cut to the bound');
-    assert.true(
-      (image.contentSize ?? 0) <= 3.75 * 1024 * 1024,
-      'the image fits what the prompt sends',
-    );
     assert.strictEqual(
       result.note,
       'Only the top 4096px of the 9000px-tall capture is shown.',
     );
+  });
+
+  test('a capture that fits the edge bound but is too heavy is re-encoded as JPEG under the bound', async function (assert) {
+    let heavy = await pngBase64(1400, 1400, true);
+    assert.true(
+      heavy.byteLength > MAX_TOOL_RESULT_MEDIA_FILE_BYTES,
+      'the fixture is heavier than the prompt sends',
+    );
+    captureBase64 = heavy.base64;
+
+    let result = await tool().execute({ url: `${testRealmURL}Pet/mango` });
+
+    let [image] = result.attachedImages;
+    assert.strictEqual(image.contentType, 'image/jpeg');
+    assert.strictEqual(image.width, 1400, 'its size is kept');
+    assert.true(
+      (image.contentSize ?? Infinity) <= MAX_TOOL_RESULT_MEDIA_FILE_BYTES,
+      'it fits what the prompt sends',
+    );
+    assert.strictEqual(result.note, undefined, 'nothing was cut');
+  });
+
+  test('a capture still rendering is given up when the server asks for more time than is left', async function (assert) {
+    respondWith = () =>
+      new Response(null, { status: 503, headers: { 'retry-after': '600' } });
+
+    await assert.rejects(
+      tool().execute({ url: `${testRealmURL}Pet/mango` }),
+      /still rendering; try viewing it again shortly/,
+    );
+    assert.strictEqual(requests.length, 1, 'no retry is attempted');
+  });
+
+  test('a view whose caller stops it uploads nothing', async function (assert) {
+    let services = {
+      loaderService: getService('loader-service'),
+      matrixService: getService('matrix-service'),
+      network: getService('network'),
+      realm: getService('realm'),
+      realmServer: getService('realm-server'),
+    };
+    let stop = new AbortController();
+    stop.abort();
+    let uploads = 0;
+    let uploadFiles = services.matrixService.uploadFiles;
+    services.matrixService.uploadFiles = async (...args) => {
+      uploads++;
+      return uploadFiles.apply(services.matrixService, args);
+    };
+    try {
+      await assert.rejects(
+        captureForAgent(
+          await resolveViewTarget(`${testRealmURL}Pet/mango`, services),
+          {},
+          services,
+          { deadline: Date.now() + 30_000, signal: stop.signal },
+        ),
+        /was stopped/,
+      );
+    } finally {
+      services.matrixService.uploadFiles = uploadFiles;
+    }
+    assert.strictEqual(uploads, 0, 'nothing is uploaded');
   });
 
   test('something outside every workspace is refused with what to do instead', async function (assert) {
@@ -233,7 +315,7 @@ module('Integration | tools | view-visually', function (hooks) {
   test('a file attached to the chat is refused with what to do instead', async function (assert) {
     await assert.rejects(
       tool().execute({ url: 'boxel-local://upload/brand.html' }),
-      /attached image is visible to you in the turn it was sent.*attach a screenshot/,
+      /attached image or PDF is visible to you in the turn it was sent.*attach a screenshot/,
     );
     assert.strictEqual(requests.length, 0, 'no capture is attempted');
   });

@@ -10,6 +10,7 @@ import * as SendBotTriggerEventToolModule from './bot-requests/send-bot-trigger-
 import * as CanReadRealmToolModule from './can-read-realm';
 import * as CancelIndexingJobToolModule from './cancel-indexing-job';
 import * as CaptureToolModule from './capture';
+import * as CaptureCardToolModule from './capture-card';
 import * as CheckCorrectnessToolModule from './check-correctness';
 import * as CheckDomainAvailabilityToolModule from './check-domain-availability';
 import * as CopyAndEditToolModule from './copy-and-edit';
@@ -416,7 +417,7 @@ export function shimHostTools(virtualNetwork: VirtualNetwork) {
   );
   shimHostToolModule(virtualNetwork, 'capture', CaptureToolModule);
   // The tool's former module name, which realm content imports.
-  shimHostToolModule(virtualNetwork, 'capture-card', CaptureToolModule);
+  shimHostToolModule(virtualNetwork, 'capture-card', CaptureCardToolModule);
   shimHostToolModule(virtualNetwork, 'view-visually', ViewVisuallyToolModule);
   shimHostToolModule(virtualNetwork, 'get-card', GetCardToolModule);
   shimHostToolModule(

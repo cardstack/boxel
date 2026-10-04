@@ -67,6 +67,9 @@ const MAX_IMAGE_BYTES = MAX_TOOL_RESULT_MEDIA_FILE_BYTES;
 // the image. A capture request is aborted at its deadline, so a view always
 // leaves this much for the rest of its work.
 export const UPLOAD_RESERVE_MS = 10_000;
+// How much taller than wide a capture must be to count as a page that is cut
+// to its top rather than scaled to fit whole.
+const TALL_PAGE_RATIO = 2;
 // Least time worth retrying a 503 in: the retry is normally answered from the
 // stored capture, so it needs only a short window past the server's hint.
 const MIN_RETRY_WINDOW_MS = 2_000;
@@ -79,13 +82,13 @@ function notInWorkspace(reference: string): VisualCaptureError {
   return new VisualCaptureError(
     `Cannot capture ${reference}: it is not in a workspace the user can read, ` +
       'and only cards and files in a workspace can be captured. If the user ' +
-      'attached it to the chat from their computer: an attached image is ' +
-      'visible to you in the turn it was sent, and to look at it again you ' +
-      'need them to attach it again or upload it into a workspace; any other ' +
-      'attached file (an HTML page, for example) reaches you only as its ' +
-      'source, so tell the user you cannot see how it renders, and ask them ' +
-      'to attach a screenshot or to upload the file into a workspace so you ' +
-      'can capture it yourself.',
+      'attached it to the chat from their computer: an attached image or ' +
+      'PDF is visible to you in the turn it was sent, and to look at it ' +
+      'again you need them to attach it again or upload it into a ' +
+      'workspace; any other attached file (an HTML page, for example) ' +
+      'reaches you only as its source, so tell the user you cannot see how ' +
+      'it renders, and ask them to attach a screenshot or to upload the file ' +
+      'into a workspace so you can capture it yourself.',
   );
 }
 
@@ -96,6 +99,7 @@ export async function resolveViewTarget(
     network,
     realm,
   }: Pick<Services, 'loaderService' | 'network' | 'realm'>,
+  { signal }: { signal?: AbortSignal } = {},
 ): Promise<ViewTarget> {
   let trimmed = reference?.trim();
   if (!trimmed) {
@@ -134,20 +138,29 @@ export async function resolveViewTarget(
   // through its FileDef.
   let kind: ViewKind;
   if (href.endsWith('.json')) {
-    kind = (await servesAsCard(href, network)) ? 'card' : 'file';
+    kind = (await servesAsCard(href, network, signal)) ? 'card' : 'file';
   } else {
     kind = urlNamesFile(url) ? 'file' : 'card';
   }
   return { url: href, realmURL, kind };
 }
 
+// The probe is bounded so it never holds up the capture behind it: one that
+// cannot answer in time reads as "not a card".
+const CARD_PROBE_TIMEOUT_MS = 5_000;
+
 async function servesAsCard(
   jsonURL: string,
   network: NetworkService,
+  signal?: AbortSignal,
 ): Promise<boolean> {
   try {
     let response = await network.authedFetch(jsonURL.replace(/\.json$/, ''), {
       headers: { Accept: 'application/vnd.card+json' },
+      signal: AbortSignal.any([
+        AbortSignal.timeout(CARD_PROBE_TIMEOUT_MS),
+        ...(signal ? [signal] : []),
+      ]),
     });
     return response.ok;
   } catch {
@@ -222,15 +235,19 @@ export async function captureForAgent(
       `The capture of ${target.url} is still rendering; try viewing it again shortly.`,
     );
   let attrs: any;
+  let stopped = () =>
+    new VisualCaptureError(`The view of ${target.url} was stopped.`);
   for (;;) {
-    if (deadline <= Date.now()) {
+    let timeLeft = deadline - Date.now();
+    if (timeLeft <= 0) {
       throw stillRendering();
     }
     let attempt = AbortSignal.any([
-      AbortSignal.timeout(deadline - Date.now()),
+      AbortSignal.timeout(timeLeft),
       ...(signal ? [signal] : []),
     ]);
     let response: Response;
+    let payload: any;
     try {
       response = await vn.fetch(endpoint, {
         method: 'POST',
@@ -242,9 +259,11 @@ export async function captureForAgent(
         body,
         signal: attempt,
       });
+      // The attempt's signal bounds the body read as well.
+      payload = response.ok ? await response.json() : undefined;
     } catch (error) {
       if (signal?.aborted) {
-        throw new VisualCaptureError(`The view of ${target.url} was stopped.`);
+        throw stopped();
       }
       if (attempt.aborted) {
         throw stillRendering();
@@ -257,7 +276,10 @@ export async function captureForAgent(
       if (deadline - Date.now() - retryAfterMs < MIN_RETRY_WINDOW_MS) {
         throw stillRendering();
       }
-      await new Promise((resolve) => setTimeout(resolve, retryAfterMs));
+      await abortableSleep(retryAfterMs, signal);
+      if (signal?.aborted) {
+        throw stopped();
+      }
       continue;
     }
     if (!response.ok) {
@@ -266,7 +288,7 @@ export async function captureForAgent(
         `Capturing ${target.url} failed (${response.status} ${response.statusText}): ${text}`,
       );
     }
-    attrs = (await response.json())?.data?.attributes;
+    attrs = payload?.data?.attributes;
     break;
   }
   if (!attrs || attrs.status !== 'ready') {
@@ -287,7 +309,7 @@ export async function captureForAgent(
     attrs.contentType ?? 'image/png',
   );
   if (signal?.aborted) {
-    throw new VisualCaptureError(`The view of ${target.url} was stopped.`);
+    throw stopped();
   }
 
   await matrixService.ready;
@@ -325,9 +347,10 @@ export function captureDeadline(doneBy: number): number {
 
 // The capture as the model can take it: unchanged when it is within the edge
 // and byte bounds, otherwise scaled down (and re-encoded as JPEG when PNG
-// stays too heavy) until it is. A page much taller than it is wide keeps its
-// width, scaled only to the edge bound, and is cut to its top instead of
-// being shrunk to an unreadable strip.
+// stays too heavy) until it is. A page more than twice as tall as it is wide
+// keeps its width, scaled only to the edge bound, and is cut to its top
+// instead of being shrunk to an unreadable strip; anything else is scaled to
+// fit whole.
 async function fitImage(
   bytes: Uint8Array,
   contentType: string,
@@ -348,7 +371,10 @@ async function fitImage(
     ) {
       return { bytes, contentType };
     }
-    let scale = Math.min(1, MAX_IMAGE_EDGE / bitmap.width);
+    let tallPage = bitmap.height > bitmap.width * TALL_PAGE_RATIO;
+    let scale = tallPage
+      ? Math.min(1, MAX_IMAGE_EDGE / bitmap.width)
+      : Math.min(1, MAX_IMAGE_EDGE / Math.max(bitmap.width, bitmap.height));
     let sourceHeight = Math.min(bitmap.height, MAX_IMAGE_EDGE / scale);
     let note =
       sourceHeight < bitmap.height
@@ -396,6 +422,18 @@ async function fitImage(
   } finally {
     bitmap.close();
   }
+}
+
+function abortableSleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    let timer = setTimeout(done, ms);
+    function done() {
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', done);
+      resolve();
+    }
+    signal?.addEventListener('abort', done, { once: true });
+  });
 }
 
 function base64ToBytes(base64: string): Uint8Array {
