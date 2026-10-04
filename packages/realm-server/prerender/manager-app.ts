@@ -874,15 +874,26 @@ export function buildPrerenderManagerApp(options?: {
     return a.lastAssignedAt < b.lastAssignedAt;
   }
 
+  // Assigns `affinityKey` to `url` on top of `base` (the affinity's current
+  // assignment unless the caller narrowed it), keeping at most `multiplex`
+  // servers. A server that drops out of the assignment also stops counting
+  // the affinity against its capacity.
   function assignAffinityToServer(
     affinityKey: string,
     url: string,
     info: ServerInfo,
+    base: readonly string[] = registry.affinities.get(affinityKey) ?? [],
   ) {
-    let list = registry.affinities.get(affinityKey) || [];
+    let previous = registry.affinities.get(affinityKey) ?? [];
+    let list = [...base];
     if (!list.includes(url)) list.push(url);
     if (list.length > multiplex) list = list.slice(-multiplex);
     registry.affinities.set(affinityKey, list);
+    for (let dropped of previous) {
+      if (!list.includes(dropped)) {
+        registry.servers.get(dropped)?.activeAffinities.delete(affinityKey);
+      }
+    }
     info.activeAffinities.add(affinityKey);
     info.lastAssignedAt = now();
   }
@@ -916,16 +927,26 @@ export function buildPrerenderManagerApp(options?: {
       incomingPriority,
     );
     if (candidate) {
-      let list = [...assigned];
-      if (!list.includes(candidate)) list.push(candidate);
-      if (list.length > multiplex) list = list.slice(-multiplex);
-      registry.affinities.set(affinityKey, list);
       let info = registry.servers.get(candidate);
       if (info) {
-        info.activeAffinities.add(affinityKey);
-        info.lastAssignedAt = now();
+        assignAffinityToServer(affinityKey, candidate, info, assigned);
       }
       return candidate;
+    }
+    // Every server is full and none reports a warm tab for this affinity yet.
+    // An affinity that already holds a slot on a usable server keeps it:
+    // evicting to make room would free nothing it doesn't already have.
+    let held = assigned.find((url) => {
+      let info = registry.servers.get(url);
+      return (
+        info !== undefined &&
+        isServerUsable(info) &&
+        info.activeAffinities.has(affinityKey)
+      );
+    });
+    if (held) {
+      registry.servers.get(held)!.lastAssignedAt = now();
+      return held;
     }
     // Pressure mode: free a slot by evicting the least recently used affinity
     // that is still assigned to a usable server, so successive evictions
@@ -935,6 +956,7 @@ export function buildPrerenderManagerApp(options?: {
     // pressure mode.
     let byAge = [...registry.lastAccessByAffinity].sort((a, b) => a[1] - b[1]);
     for (let [lruAffinity] of byAge) {
+      if (lruAffinity === affinityKey) continue;
       let assigned = registry.affinities.get(lruAffinity) ?? [];
       let url = assigned.find((u) => {
         let info = registry.servers.get(u);
@@ -1400,15 +1422,14 @@ export function buildPrerenderManagerApp(options?: {
         }
 
         // on success, mark last access and active affinity
+        // Only an affinity still assigned to the server that answered gets an
+        // access time: one evicted while this request was in flight has no
+        // slot left to rank for eviction.
         if (res.ok) {
-          registry.lastAccessByAffinity.set(affinityKey, now());
-          // ensure active affinity marks include this assignment
           let assigned = registry.affinities.get(affinityKey) || [];
-          for (let url of assigned) {
-            if (url === target) {
-              registry.servers.get(url)?.activeAffinities.add(affinityKey);
-              break;
-            }
+          if (assigned.includes(target)) {
+            registry.lastAccessByAffinity.set(affinityKey, now());
+            registry.servers.get(target)?.activeAffinities.add(affinityKey);
           }
         }
         ctxt.status = res.status;

@@ -1138,6 +1138,186 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('a disposed affinity leaves no access time behind for pressure mode to trip over', async function (assert) {
+      process.env.PRERENDER_MULTIPLEX = '1';
+      let { app, registry } = buildPrerenderManagerApp();
+      let request: SuperTest<Test> = supertest(app.callback());
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: { capacity: 1, url: serverUrlA },
+        },
+      });
+      let realm = 'https://realm.example/R';
+      let affinityKey = realmAffinityKey(realm);
+      let response = await request
+        .post('/prerender-visit')
+        .send(makeBody(realm, `${realm}/1`));
+      assert.strictEqual(response.status, 201, 'proxied');
+      assert.true(
+        registry.lastAccessByAffinity.has(affinityKey),
+        'a served affinity has an access time',
+      );
+
+      let disposal = await request
+        .delete(
+          `/prerender-servers/affinities/${encodeURIComponent(affinityKey)}`,
+        )
+        .query({ url: serverUrlA as string });
+      assert.strictEqual(disposal.status, 204, 'disposal 204');
+      assert.false(registry.affinities.has(affinityKey), 'assignment removed');
+      assert.false(
+        registry.lastAccessByAffinity.has(affinityKey),
+        'access time removed with the assignment',
+      );
+    });
+
+    test('a request that completes after its affinity was evicted does not record an access time', async function (assert) {
+      process.env.PRERENDER_MULTIPLEX = '1';
+      let { app, registry, chooseServerForAffinity } =
+        buildPrerenderManagerApp();
+      let request: SuperTest<Test> = supertest(app.callback());
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: { capacity: 1, url: serverUrlA },
+        },
+      });
+      let realm = 'https://realm.example/R';
+      let affinityKey = realmAffinityKey(realm);
+      let first = await request
+        .post('/prerender-visit')
+        .send(makeBody(realm, `${realm}/1`));
+      assert.strictEqual(first.status, 201, 'first visit proxied');
+
+      // Hold the next visit on the server while another affinity takes R's
+      // slot.
+      let started = new Deferred<void>();
+      let release = new Deferred<void>();
+      mockPrerenderA?.setResponder(async (ctxt) => {
+        started.fulfill();
+        await release.promise;
+        ctxt.status = 201;
+        ctxt.set('Content-Type', 'application/vnd.api+json');
+        ctxt.body = JSON.stringify({ data: { attributes: {} } });
+      });
+      let held = request
+        .post('/prerender-visit')
+        .send(makeBody(realm, `${realm}/2`))
+        .then((r) => r);
+      await started.promise;
+
+      let other = chooseServerForAffinity(
+        'realm',
+        'https://realm.example/Other',
+      );
+      assert.strictEqual(
+        other,
+        serverUrlA,
+        'the other affinity takes R’s slot',
+      );
+      assert.false(registry.affinities.has(affinityKey), 'R was evicted');
+
+      release.fulfill();
+      let second = await held;
+      assert.strictEqual(second.status, 201, 'the held visit still succeeds');
+      assert.false(
+        registry.lastAccessByAffinity.has(affinityKey),
+        'no access time for an affinity with no assignment',
+      );
+      assert.deepEqual(
+        [...registry.servers.get(serverUrlA!)!.activeAffinities],
+        [realmAffinityKey('https://realm.example/Other')],
+        'the server still counts only the affinity that holds its slot',
+      );
+    });
+
+    test('an affinity that already holds a slot keeps it when every server is full', async function (assert) {
+      process.env.PRERENDER_MULTIPLEX = '1';
+      let { app, registry, chooseServerForAffinity } =
+        buildPrerenderManagerApp();
+      let request: SuperTest<Test> = supertest(app.callback());
+      for (let url of [serverUrlA, serverUrlB]) {
+        await request.post('/prerender-servers').send({
+          data: {
+            type: 'prerender-server',
+            attributes: { capacity: 1, url },
+          },
+        });
+      }
+      let x1 = 'https://realm.example/X1';
+      let x2 = 'https://realm.example/X2';
+      let home1 = chooseServerForAffinity('realm', x1)!;
+      let home2 = chooseServerForAffinity('realm', x2)!;
+      assert.notStrictEqual(home1, home2, 'each affinity has its own server');
+
+      // Neither server reports a warm tab yet, so vacancy scoring sees both
+      // as cold and full. X2 is the least recently used.
+      registry.lastAccessByAffinity.set(realmAffinityKey(x2), 1);
+      registry.lastAccessByAffinity.set(realmAffinityKey(x1), 2);
+      assert.strictEqual(
+        chooseServerForAffinity('realm', x1),
+        home1,
+        'X1 stays on its own server',
+      );
+      assert.deepEqual(
+        registry.affinities.get(realmAffinityKey(x2)),
+        [home2],
+        'X2 is not evicted to make room for an affinity that has a slot',
+      );
+      assert.deepEqual(
+        [...registry.servers.get(home1)!.activeAffinities],
+        [realmAffinityKey(x1)],
+        'X1’s server counts X1 once',
+      );
+
+      // X1 is now the least recently used; it still keeps its own slot.
+      registry.lastAccessByAffinity.set(realmAffinityKey(x1), 0);
+      assert.strictEqual(
+        chooseServerForAffinity('realm', x1),
+        home1,
+        'X1 stays on its own server when it is the oldest',
+      );
+      assert.true(
+        registry.lastAccessByAffinity.has(realmAffinityKey(x1)),
+        'X1 keeps its access time',
+      );
+    });
+
+    test('moving an affinity off a server frees the slot it held there', async function (assert) {
+      process.env.PRERENDER_MULTIPLEX = '1';
+      let { app, registry, chooseServerForAffinity } =
+        buildPrerenderManagerApp();
+      let request: SuperTest<Test> = supertest(app.callback());
+      for (let url of [serverUrlA, serverUrlB]) {
+        await request.post('/prerender-servers').send({
+          data: {
+            type: 'prerender-server',
+            attributes: { capacity: 2, url },
+          },
+        });
+      }
+      let realm = 'https://realm.example/R';
+      let affinityKey = realmAffinityKey(realm);
+      let first = chooseServerForAffinity('realm', realm)!;
+      let other = first === serverUrlA ? serverUrlB! : serverUrlA!;
+      let moved = chooseServerForAffinity('realm', realm, { exclude: [first] });
+      assert.strictEqual(
+        moved,
+        other,
+        'the affinity moves to the other server',
+      );
+      assert.deepEqual(
+        registry.affinities.get(affinityKey),
+        [other],
+        'the assignment names only the new server',
+      );
+      assert.false(
+        registry.servers.get(first)!.activeAffinities.has(affinityKey),
+        'the server it left no longer counts it',
+      );
+    });
+
     test('unreachable server is removed by health sweep', async function (assert) {
       process.env.PRERENDER_MULTIPLEX = '2';
       let { app, sweepServers } = buildPrerenderManagerApp();
