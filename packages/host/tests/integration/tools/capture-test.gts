@@ -5,7 +5,7 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import RealmService from '@cardstack/host/services/realm';
-import CaptureCardTool from '@cardstack/host/tools/capture-card';
+import CaptureTool from '@cardstack/host/tools/capture';
 
 import {
   setupIntegrationTestRealm,
@@ -41,7 +41,7 @@ interface CapturedRequest {
   body: any;
 }
 
-module('Integration | tools | capture-card', function (hooks) {
+module('Integration | tools | capture', function (hooks) {
   setupRenderingTest(hooks);
   setupBaseRealm(hooks);
   setupLocalIndexing(hooks);
@@ -74,7 +74,7 @@ module('Integration | tools | capture-card', function (hooks) {
   function readyResponse(attributes: Record<string, unknown>): Response {
     return new Response(
       JSON.stringify({
-        data: { type: 'capture-card-result', attributes },
+        data: { type: 'capture-result', attributes },
       }),
       {
         status: 201,
@@ -143,7 +143,7 @@ module('Integration | tools | capture-card', function (hooks) {
   test('canonical capture posts format-only body with a realm-scoped JWT and returns the served URL', async function (assert) {
     let toolService = getService('tool-service');
     let realmServer = getService('realm-server');
-    let command = new CaptureCardTool(toolService.toolContext);
+    let command = new CaptureTool(toolService.toolContext);
 
     let result = await command.execute({
       card: await getPet(),
@@ -228,7 +228,7 @@ module('Integration | tools | capture-card', function (hooks) {
         ],
       });
 
-    let command = new CaptureCardTool(getService('tool-service').toolContext);
+    let command = new CaptureTool(getService('tool-service').toolContext);
     let result = await command.execute({
       card: await getPet(),
       format: 'embedded',
@@ -259,7 +259,7 @@ module('Integration | tools | capture-card', function (hooks) {
   });
 
   test('a clip region is sent only when all four edges are provided', async function (assert) {
-    let command = new CaptureCardTool(getService('tool-service').toolContext);
+    let command = new CaptureTool(getService('tool-service').toolContext);
     await command.execute({
       card: await getPet(),
       format: 'isolated',
@@ -276,7 +276,7 @@ module('Integration | tools | capture-card', function (hooks) {
   });
 
   test('a half-specified viewport is rejected before any request', async function (assert) {
-    let command = new CaptureCardTool(getService('tool-service').toolContext);
+    let command = new CaptureTool(getService('tool-service').toolContext);
     await assert.rejects(
       command.execute({
         card: await getPet(),
@@ -289,7 +289,7 @@ module('Integration | tools | capture-card', function (hooks) {
   });
 
   test('a partial clip region is rejected before any request', async function (assert) {
-    let command = new CaptureCardTool(getService('tool-service').toolContext);
+    let command = new CaptureTool(getService('tool-service').toolContext);
     await assert.rejects(
       command.execute({
         card: await getPet(),
@@ -303,7 +303,7 @@ module('Integration | tools | capture-card', function (hooks) {
   });
 
   test('an invalid format is rejected before any request', async function (assert) {
-    let command = new CaptureCardTool(getService('tool-service').toolContext);
+    let command = new CaptureTool(getService('tool-service').toolContext);
     await assert.rejects(
       command.execute({ card: await getPet(), format: 'fitted' }),
       /Format must be "isolated" or "embedded"/,
@@ -331,7 +331,7 @@ module('Integration | tools | capture-card', function (hooks) {
       value: true,
     });
 
-    let command = new CaptureCardTool(getService('tool-service').toolContext);
+    let command = new CaptureTool(getService('tool-service').toolContext);
     let result = await command.execute({ card, format: 'isolated' });
 
     assert.deepEqual(
@@ -361,7 +361,7 @@ module('Integration | tools | capture-card', function (hooks) {
       value: true,
     });
 
-    let command = new CaptureCardTool(getService('tool-service').toolContext);
+    let command = new CaptureTool(getService('tool-service').toolContext);
     await assert.rejects(
       command.execute({ card, format: 'isolated' }),
       /no session for realm/,
@@ -383,7 +383,7 @@ module('Integration | tools | capture-card', function (hooks) {
     };
     Object.defineProperty(realmServer, 'hasClient', { value: false });
 
-    let command = new CaptureCardTool(getService('tool-service').toolContext);
+    let command = new CaptureTool(getService('tool-service').toolContext);
     await assert.rejects(
       command.execute({ card, format: 'isolated' }),
       /no session for realm/,
@@ -400,7 +400,7 @@ module('Integration | tools | capture-card', function (hooks) {
         captures: [],
       });
 
-    let command = new CaptureCardTool(getService('tool-service').toolContext);
+    let command = new CaptureTool(getService('tool-service').toolContext);
     await assert.rejects(
       command.execute({ card: await getPet(), format: 'isolated' }),
       /Capture job did not produce a PNG: render failed: card threw during isolated render/,
@@ -425,7 +425,7 @@ module('Integration | tools | capture-card', function (hooks) {
         ],
       });
 
-    let command = new CaptureCardTool(getService('tool-service').toolContext);
+    let command = new CaptureTool(getService('tool-service').toolContext);
     await assert.rejects(
       command.execute({ card: await getPet(), format: 'isolated' }),
       /could not be persisted .*retry once indexing completes/,
@@ -436,7 +436,7 @@ module('Integration | tools | capture-card', function (hooks) {
     respondWith = async () =>
       new Response(null, { status: 503, headers: { 'retry-after': '3' } });
 
-    let command = new CaptureCardTool(getService('tool-service').toolContext);
+    let command = new CaptureTool(getService('tool-service').toolContext);
     await assert.rejects(
       command.execute({ card: await getPet(), format: 'isolated' }),
       /still rendering; retry after 3s/,

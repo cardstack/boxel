@@ -38,7 +38,7 @@ module('Integration | tools | run-realm-code', function (hooks) {
         return new Response(
           JSON.stringify({
             data: {
-              type: 'capture-card-result',
+              type: 'capture-result',
               attributes: {
                 status: 'ready',
                 base64: PNG_BASE64,

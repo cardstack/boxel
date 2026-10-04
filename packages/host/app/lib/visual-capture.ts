@@ -185,7 +185,7 @@ export async function captureForAgent(
 
   // The capture endpoint verifies a realm session the same as a realm-server
   // one, so the target realm's token authorizes the request (see the
-  // capture-card tool for why a missing token is minted only with a client).
+  // capture tool for why a missing token is minted only with a client).
   let token = realm.token(target.realmURL);
   if (!token && realmServer.hasClient) {
     await realm.login(target.realmURL);
@@ -201,7 +201,7 @@ export async function captureForAgent(
   let endpoint = new URL('/_capture', realmServer.url).href;
   let body = JSON.stringify({
     data: {
-      type: 'capture-card',
+      type: 'capture',
       attributes: {
         realmURL: target.realmURL,
         ...(target.kind === 'file'

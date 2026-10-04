@@ -252,7 +252,7 @@ export class GenerateThumbnailOutput extends CardDef {
   @field imageDefIdentifier = contains(StringField);
 }
 
-export class CaptureCardInput extends CardDef {
+export class CaptureInput extends CardDef {
   @field card = linksTo(CardDef);
   @field format = contains(StringField); // 'isolated' | 'embedded'
   // The capture surface, exposed one JSON-primitive field per parameter.
@@ -285,12 +285,12 @@ export class Capture extends FieldDef {
   @field height = contains(NumberField);
 }
 
-export class CaptureCardOutput extends CardDef {
+export class CaptureOutput extends CardDef {
   static displayName = 'Capture Result';
 
   @field captures = containsMany(Capture);
 
-  static embedded = class Embedded extends Component<typeof CaptureCardOutput> {
+  static embedded = class Embedded extends Component<typeof CaptureOutput> {
     <template>
       <div class='capture-result'>
         {{#each @model.captures as |capture|}}
@@ -453,7 +453,7 @@ export class ViewVisuallyInput extends CardDef {
   // A card instance or a file in a workspace, by URL.
   @field url = contains(StringField);
   @field format = contains(StringField); // 'isolated' | 'embedded'
-  // Flat JSON-primitive geometry, for the reason `CaptureCardInput` gives.
+  // Flat JSON-primitive geometry, for the reason `CaptureInput` gives.
   @field viewportWidth = contains(NumberField);
   @field viewportHeight = contains(NumberField);
   @field fullPage = contains(BooleanField);

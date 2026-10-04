@@ -65,7 +65,7 @@ module('Integration | tools | view-visually', function (hooks) {
     return new Response(
       JSON.stringify({
         data: {
-          type: 'capture-card-result',
+          type: 'capture-result',
           attributes: {
             status: 'ready',
             base64: captureBase64,
@@ -198,7 +198,11 @@ module('Integration | tools | view-visually', function (hooks) {
     let bytes = new Uint8Array(
       await (await canvas.convertToBlob({ type: 'image/png' })).arrayBuffer(),
     );
-    captureBase64 = btoa(String.fromCharCode(...bytes));
+    let binary = '';
+    for (let i = 0; i < bytes.length; i += 0x8000) {
+      binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+    }
+    captureBase64 = btoa(binary);
 
     let result = await tool().execute({
       url: `${testRealmURL}Pet/mango`,

@@ -1481,7 +1481,7 @@ module('Acceptance | Tools tests', function (hooks) {
         new Response(
           JSON.stringify({
             data: {
-              type: 'capture-card-result',
+              type: 'capture-result',
               attributes: {
                 status: 'ready',
                 base64: png,

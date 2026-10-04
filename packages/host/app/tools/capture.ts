@@ -31,9 +31,9 @@ interface EndpointCapture {
   deviceScaleFactor: number | null;
 }
 
-export default class CaptureCardTool extends HostBaseTool<
-  typeof BaseToolModule.CaptureCardInput,
-  typeof BaseToolModule.CaptureCardOutput
+export default class CaptureTool extends HostBaseTool<
+  typeof BaseToolModule.CaptureInput,
+  typeof BaseToolModule.CaptureOutput
 > {
   @service declare private realm: RealmService;
   @service declare private realmServer: RealmServerService;
@@ -46,15 +46,15 @@ export default class CaptureCardTool extends HostBaseTool<
 
   async getInputType() {
     let commandModule = await this.loadToolModule();
-    const { CaptureCardInput } = commandModule;
-    return CaptureCardInput;
+    const { CaptureInput } = commandModule;
+    return CaptureInput;
   }
 
   requireInputFields = ['card', 'format'];
 
   protected async run(
-    input: BaseToolModule.CaptureCardInput,
-  ): Promise<BaseToolModule.CaptureCardOutput> {
+    input: BaseToolModule.CaptureInput,
+  ): Promise<BaseToolModule.CaptureOutput> {
     let { card, format } = input;
     let normalizedFormat = format?.trim();
     if (!card) {
@@ -135,7 +135,7 @@ export default class CaptureCardTool extends HostBaseTool<
       headers,
       body: JSON.stringify({
         data: {
-          type: 'capture-card',
+          type: 'capture',
           attributes: {
             realmURL: cardRealm,
             cardId: cardURL,
@@ -190,7 +190,7 @@ export default class CaptureCardTool extends HostBaseTool<
     }
 
     let commandModule = await this.loadToolModule();
-    const { CaptureCardOutput, Capture } = commandModule;
+    const { CaptureOutput, Capture } = commandModule;
     // The endpoint names only declared-slot captures; the canonical captures
     // this tool requests come back unnamed. Synthesize a name from what the
     // tool knows — it becomes the rendered image's alt text in the room.
@@ -206,7 +206,7 @@ export default class CaptureCardTool extends HostBaseTool<
         }),
     );
 
-    return new CaptureCardOutput({ captures });
+    return new CaptureOutput({ captures });
   }
 
   // Fold the flat primitive input fields back into the endpoint's nested
@@ -218,7 +218,7 @@ export default class CaptureCardTool extends HostBaseTool<
   // before the capture identity is derived anyway (see `elideDefaults` in
   // capture-spec.ts), so an explicit false adds nothing.
   private buildCaptureSpec(
-    input: BaseToolModule.CaptureCardInput,
+    input: BaseToolModule.CaptureInput,
   ): CaptureSpecBody {
     let {
       viewportWidth,
@@ -268,6 +268,6 @@ export default class CaptureCardTool extends HostBaseTool<
   }
 }
 
-// Pre-rename spellings: realm content references these classes by named
-// export in imports and codeRefs, so the old names stay importable.
-export { CaptureCardTool as CaptureCardCommand };
+// Former names: realm content references these classes by named export in
+// imports and codeRefs, so the old names stay importable.
+export { CaptureTool as CaptureCardTool, CaptureTool as CaptureCardCommand };
