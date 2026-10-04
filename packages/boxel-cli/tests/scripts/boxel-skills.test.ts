@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs';
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'fs';
 import { tmpdir } from 'os';
 import { join, resolve } from 'path';
 import {
@@ -82,13 +88,21 @@ describe('the repo marketplaces', () => {
   // Codex plugin at all. This is the gate that refuses such a pin.
   it('pin a boxel-skills release whose Codex manifest version is its tag', () => {
     ensureBoxelSkills();
-    const manifest = JSON.parse(
-      readFileSync(
-        join(boxelSkillsRoot(), '.codex-plugin', 'plugin.json'),
-        'utf8',
-      ),
+    const pin = boxelSkillsPin();
+    const manifestPath = join(
+      boxelSkillsRoot(),
+      '.codex-plugin',
+      'plugin.json',
     );
-    expect(`v${manifest.version}`).toBe(boxelSkillsPin());
+    expect(
+      existsSync(manifestPath),
+      `boxel-skills ${pin} has no .codex-plugin/plugin.json, so Codex cannot install it. Pin a boxel-skills release that ships the Codex manifest.`,
+    ).toBe(true);
+    const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+    expect(
+      `v${manifest.version}`,
+      `boxel-skills ${pin} carries Codex manifest version ${manifest.version}; it must equal the tag, or Codex users never see the release.`,
+    ).toBe(pin);
   }, 120_000);
 
   it('list every plugin the boxel-cli plugin depends on', () => {
