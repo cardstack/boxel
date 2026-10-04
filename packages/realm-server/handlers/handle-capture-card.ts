@@ -215,13 +215,14 @@ export default function handleCaptureCard({
     if (!realmURL || typeof realmURL !== 'string') {
       return sendResponseForBadRequest(ctxt, 'realmURL is required');
     }
-    if (cardId !== undefined && fileURL !== undefined) {
+    // A JSON `null` reads as absent, the same as an omitted field.
+    if (cardId != null && fileURL != null) {
       return sendResponseForBadRequest(
         ctxt,
         'cardId and fileURL are mutually exclusive',
       );
     }
-    let kind: CaptureSourceKind = fileURL !== undefined ? 'file' : 'card';
+    let kind: CaptureSourceKind = fileURL != null ? 'file' : 'card';
     let target: unknown = kind === 'file' ? fileURL : cardId;
     if (!target || typeof target !== 'string') {
       return sendResponseForBadRequest(ctxt, 'cardId or fileURL is required');
