@@ -109,11 +109,15 @@ function capture(
   taskArgs: TaskArgs,
   persist: CapturePersistArgs | null = null,
   runAs = '@alice:localhost',
+  target: { cardId: string; sourceKind: 'card' | 'file' } = {
+    cardId: CARD_ID,
+    sourceKind: 'card',
+  },
 ) {
   return captureCard(taskArgs)({
     realmURL: REALM_URL,
     runAs,
-    cardId: CARD_ID,
+    ...target,
     format: 'isolated',
     captureSpec: null,
     persist,
@@ -299,6 +303,52 @@ const tests = Object.freeze({
       renderArgs?.renderOptions,
       { loaderEpoch: 'epoch-2' },
       'the capture carries the realm’s current loader epoch',
+    );
+  },
+
+  // A file is captured the way indexing renders it: extracted through the
+  // FileDef its extension maps to, then rendered from that resource.
+  'a file capture asks for the extract and render of its FileDef': async (
+    assert,
+  ) => {
+    assert.expect(3);
+    let renderArgs: any;
+
+    let result = await capture(
+      makeTaskArgs({
+        dbRows: [
+          {
+            username: '*',
+            realm_url: REALM_URL,
+            read: true,
+            write: false,
+            realm_owner: false,
+          },
+        ],
+        loaderEpoch: 'epoch-2',
+        onPrerenderCapture: (args) => {
+          renderArgs = args;
+        },
+      }),
+      null,
+      '@alice:localhost',
+      { cardId: `${REALM_URL}brand/guide.html`, sourceKind: 'file' },
+    );
+
+    assert.strictEqual(result.status, 'ready');
+    assert.strictEqual(renderArgs?.url, `${REALM_URL}brand/guide.html`);
+    assert.deepEqual(
+      renderArgs?.renderOptions,
+      {
+        loaderEpoch: 'epoch-2',
+        fileExtract: true,
+        fileRender: true,
+        fileDefCodeRef: {
+          module: 'https://cardstack.com/base/html-file-def',
+          name: 'HtmlDef',
+        },
+      },
+      'the render extracts and renders the file through the HTML FileDef',
     );
   },
 

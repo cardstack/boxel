@@ -176,6 +176,7 @@ module(basename(import.meta.filename), function () {
         realmUsername: '@someone:localhost',
         runAs: '@someone:localhost',
         cardId,
+        sourceKind: 'card',
         format: 'isolated',
         captureSpec: null,
         // The POST surface returns the capture in its response body rather
@@ -884,6 +885,91 @@ module(basename(import.meta.filename), function () {
       assert.ok(response.text.includes('cardId must be within realmURL'));
       assert.deepEqual(published, [], 'does not enqueue any job');
     });
+
+    test('a fileURL enqueues a file capture of that file', async function (assert) {
+      let { queue, published } = makeQueue({ status: 'ready' });
+      let app = buildApp(buildArgs(makeDbAdapter(), queue));
+      let token = createJWT(
+        { user: '@someone:localhost', sessionRoom: '!room:localhost' },
+        realmSecretSeed,
+      );
+      let fileURL = 'http://example.test/brand/guide.html';
+
+      await supertest(app.callback())
+        .post('/_capture-card')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          data: {
+            attributes: {
+              realmURL: 'http://example.test/',
+              fileURL,
+              format: 'isolated',
+            },
+          },
+        })
+        .expect(201);
+
+      assert.strictEqual(published.length, 1, 'published exactly one job');
+      let args = published[0]?.args as Record<string, unknown>;
+      assert.strictEqual(args.cardId, fileURL, 'the job captures the file');
+      assert.strictEqual(args.sourceKind, 'file', 'as a file rendering');
+      assert.strictEqual(args.runAs, '@someone:localhost', 'as the requester');
+    });
+
+    test('rejects cardId and fileURL together', async function (assert) {
+      let { queue, published } = makeQueue({ status: 'ready' });
+      let app = buildApp(buildArgs(makeDbAdapter(), queue));
+      let token = createJWT(
+        { user: '@someone:localhost', sessionRoom: '!room:localhost' },
+        realmSecretSeed,
+      );
+
+      let response = await supertest(app.callback())
+        .post('/_capture-card')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          data: {
+            attributes: {
+              realmURL: 'http://example.test/',
+              cardId: 'http://example.test/Person/fadhlan',
+              fileURL: 'http://example.test/brand/guide.html',
+              format: 'isolated',
+            },
+          },
+        });
+
+      assert.strictEqual(response.status, 400);
+      assert.ok(
+        response.text.includes('cardId and fileURL are mutually exclusive'),
+      );
+      assert.deepEqual(published, [], 'does not enqueue any job');
+    });
+
+    test('rejects a fileURL outside the realm', async function (assert) {
+      let { queue, published } = makeQueue({ status: 'ready' });
+      let app = buildApp(buildArgs(makeDbAdapter(), queue));
+      let token = createJWT(
+        { user: '@someone:localhost', sessionRoom: '!room:localhost' },
+        realmSecretSeed,
+      );
+
+      let response = await supertest(app.callback())
+        .post('/_capture-card')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          data: {
+            attributes: {
+              realmURL: 'http://example.test/',
+              fileURL: 'http://other.test/brand/guide.html',
+              format: 'isolated',
+            },
+          },
+        });
+
+      assert.strictEqual(response.status, 400);
+      assert.ok(response.text.includes('fileURL must be within realmURL'));
+      assert.deepEqual(published, [], 'does not enqueue any job');
+    });
     // Posts a request with the given format + captureSpec and returns the raw
     // supertest response plus the published-job list, so envelope tests can
     // assert on either the 201 forward or the 400 rejection.
@@ -1436,6 +1522,108 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    const FILE_URL = `${REALM_URL}brand/guide.html`;
+
+    async function seedFileRow(generation = 1) {
+      let { nameExpressions, valueExpressions } = asExpressions(
+        {
+          url: FILE_URL,
+          file_alias: FILE_URL,
+          realm_url: REALM_URL,
+          type: 'file',
+          generation,
+          last_modified: Date.now(),
+          resource_created_at: Date.now(),
+          is_deleted: false,
+          pristine_doc: { attributes: {} },
+        },
+        { jsonFields: ['pristine_doc'] },
+      );
+      await query(
+        dbAdapter,
+        insert('boxel_index', nameExpressions, valueExpressions),
+      );
+    }
+
+    test('a capture of an indexed file persists under the file row and answers with bytes, not a served URL', async function (assert) {
+      await seedFileRow(3);
+      let { queue, published } = makePersistQueue('ready');
+
+      let response = await post(persistApp(queue), {
+        realmURL: REALM_URL,
+        fileURL: FILE_URL,
+        format: 'isolated',
+      }).expect(201);
+
+      let args = published[0]?.args as any;
+      assert.strictEqual(args?.sourceKind, 'file');
+      assert.deepEqual(
+        args?.persist,
+        {
+          realmURL: REALM_URL,
+          sourceURL: FILE_URL,
+          captureSpecHash: await captureSpecHash({ format: 'isolated' }),
+          sourceGeneration: 3,
+          lane: 'on-demand',
+        },
+        "the file is keyed by its own URL and its row's generation",
+      );
+      assert.deepEqual(response.body.data.attributes.captures, [
+        {
+          name: null,
+          url: null,
+          width: 800,
+          height: 600,
+          deviceScaleFactor: null,
+          base64: PNG_BASE64,
+        },
+      ]);
+    });
+
+    test('a file capture answers from its ledger entry with zero render work', async function (assert) {
+      await seedFileRow();
+      await putMedia(dbAdapter, adapter, {
+        renderedAs: REQUESTER,
+        realmURL: REALM_URL,
+        sourceURL: FILE_URL,
+        captureSpecHash: await captureSpecHash({ format: 'isolated' }),
+        sourceGeneration: 1,
+        bytes: PNG_BYTES,
+        contentType: 'image/png',
+        lane: 'on-demand',
+        width: 800,
+        height: 600,
+      });
+      let { queue, published } = makePersistQueue('ready');
+
+      let response = await post(persistApp(queue), {
+        realmURL: REALM_URL,
+        fileURL: FILE_URL,
+        format: 'isolated',
+      }).expect(201);
+
+      assert.deepEqual(published, [], 'no job was enqueued');
+      let attrs = response.body.data.attributes;
+      assert.strictEqual(attrs.base64, PNG_BASE64, 'bytes come from the store');
+      assert.strictEqual(attrs.captures[0].url, null, 'no served URL');
+    });
+
+    test("an instance row does not stand in for a file's liveness", async function (assert) {
+      // A card's own row is not the file row a file capture is keyed by, so
+      // naming the card's `.json` as a file finds no live file and persists
+      // nothing.
+      await seedInstanceRow();
+      let { queue, published } = makePersistQueue('ready');
+
+      await post(persistApp(queue), {
+        realmURL: REALM_URL,
+        fileURL: `${CARD_ID}.json`,
+        format: 'isolated',
+      }).expect(201);
+
+      assert.strictEqual((published[0]?.args as any)?.persist, null);
+    });
+
     test('a default-valued captureSpec still answers from the ledger', async function (assert) {
       // `{ fullPage: false, deviceScaleFactor: 1 }` is the canonical capture
       // spelled explicitly — it must keep the ledger fast path rather than
@@ -1975,6 +2163,17 @@ module(basename(import.meta.filename), function () {
         persist: { ...PERSIST, captureSpecHash: 'custom456' },
       };
     }
+
+    test('a card capture and a file capture of one URL are never twins', function (assert) {
+      let decision = chooseCaptureCardCoalesceDecision({
+        incoming: jobSpec({ ...canonicalArgs(), sourceKind: 'file' }),
+        candidates: [
+          { ...jobSpec({ ...canonicalArgs(), sourceKind: 'card' }), id: 7 },
+        ],
+        inFlightCandidates: [],
+      });
+      assert.deepEqual(decision, { type: 'insert' });
+    });
 
     test('same-spec custom captures join like canonical ones', function (assert) {
       let decision = chooseCaptureCardCoalesceDecision({

@@ -1236,6 +1236,7 @@ module(basename(import.meta.filename), function () {
           realmUsername: OWNER,
           runAs: OWNER,
           cardId: `${REALM_URL}card-1`,
+          sourceKind: 'card',
           format: 'isolated',
           captureSpec: { viewport: { width: 1280, height: 800 } },
           persist: {
@@ -1285,6 +1286,7 @@ module(basename(import.meta.filename), function () {
           realmUsername: OWNER,
           runAs: OWNER,
           cardId: `${REALM_URL}card-1`,
+          sourceKind: 'card',
           format: 'isolated',
           captureSpec: { type: 'pdf' },
           persist: {
@@ -1385,6 +1387,7 @@ module(basename(import.meta.filename), function () {
           realmUsername: OWNER,
           runAs: OWNER,
           cardId: `${REALM_URL}card-1`,
+          sourceKind: 'card',
           format: 'isolated',
           captureSpec: { target: '.avatar' },
           persist: {

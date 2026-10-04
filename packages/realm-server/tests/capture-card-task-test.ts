@@ -22,6 +22,10 @@ module(basename(import.meta.filename), function () {
       await runSharedTest(captureCardTaskTests, assert, {});
     });
 
+    test('a file capture asks for the extract and render of its FileDef', async function (assert) {
+      await runSharedTest(captureCardTaskTests, assert, {});
+    });
+
     test("a capture renders on its requester's ordinary session, whether or not it persists", async function (assert) {
       await runSharedTest(captureCardTaskTests, assert, {});
     });

@@ -9644,6 +9644,7 @@ export class Realm {
         realmUsername: await this.getRealmOwnerUserId(),
         runAs: reader,
         cardId: entryKey.sourceURL,
+        sourceKind: 'card',
         format: spec.format,
         // The spec's geometry overrides (viewport / dsf / fullPage / clip)
         // ride to the capture engine; the entry key's `captureSpecHash`

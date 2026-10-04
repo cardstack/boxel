@@ -30,9 +30,10 @@ export const CAPTURE_CARD_JOB_TIMEOUT_SEC = 60;
 // concurrency group serializes execution but does not dedupe, so without
 // this two simultaneous misses for the same spec would each run a full
 // render (the store's dedupe-on-write only saves the second upload, not the
-// Chrome work). A twin must match the whole capture identity — card, format,
-// render identity, captureSpec, and persist target — since joining hands the
-// incoming caller the twin's result verbatim. Queued and in-flight twins
+// Chrome work). A twin must match the whole capture identity — card or file
+// (and which of the two it is), format, render identity, captureSpec, and
+// persist target — since joining hands the incoming caller the twin's result
+// verbatim. Queued and in-flight twins
 // both join; an in-flight join just registers a late waiter on the running
 // job.
 //
@@ -68,6 +69,8 @@ export function chooseCaptureCardCoalesceDecision(
     return (
       candidateArgs !== undefined &&
       candidateArgs.cardId === incomingArgs.cardId &&
+      (candidateArgs.sourceKind ?? 'card') ===
+        (incomingArgs.sourceKind ?? 'card') &&
       candidateArgs.format === incomingArgs.format &&
       candidateArgs.runAs === incomingArgs.runAs &&
       sameCaptureIdentity(

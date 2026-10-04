@@ -1630,10 +1630,11 @@ export type CapturePrerenderArgs = {
   format: OnDemandCaptureFormat;
   // Optional per-capture overrides (viewport, scale, fullPage, clip).
   captureSpec?: CaptureRequestSpec;
-  // Render-route options for the capture. The capture path always renders a
-  // card (`cardRender`), so only `loaderEpoch` is meaningful here today: it
-  // synchronizes the pooled tab's module graph to the realm's current
-  // timeline, exactly as an indexing visit's `renderOptions` do.
+  // Render-route options for the capture. Three fields are read:
+  // `loaderEpoch` synchronizes the pooled tab's module graph to the realm's
+  // current timeline, exactly as an indexing visit's `renderOptions` do; and
+  // `fileRender` with its `fileDefCodeRef` makes `url` a file, which is
+  // extracted and rendered through that FileDef instead of the card branch.
   renderOptions?: RenderRouteOptions;
   // Worker-job priority threaded through from the producer side. See
   // ModulePrerenderArgs for the contract.

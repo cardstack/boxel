@@ -4,6 +4,7 @@ import type { Task } from './index.ts';
 
 import {
   ANONYMOUS_RENDER,
+  captureLedgerSourceURL,
   captureSpecHash,
   fetchEffectiveRealmPermissions,
   fetchRealmPermissions,
@@ -13,6 +14,7 @@ import {
   jobIdentity,
   putMedia,
   readRealmLoaderEpoch,
+  resolveFileDefCodeRef,
   updateMediaCacheDiagnostics,
   emitCapturePerf,
   type MediaCacheLane,
@@ -22,6 +24,7 @@ import {
   type OnDemandCaptureFormat,
   type CapturePrerenderResponse,
   type CaptureRequestSurface,
+  type RenderRouteOptions,
   ensureFullMatrixUserId,
   ensureTrailingSlash,
 } from '../index.ts';
@@ -43,7 +46,14 @@ export interface CaptureCardArgs extends JSONTypes.Object {
   // The reader the capture renders as: the user who asked for it, or
   // `ANONYMOUS_RENDER` for a reader who authenticated nobody.
   runAs: string;
+  // The URL of what is captured: a card instance, or — when `sourceKind` is
+  // 'file' — a file in the realm, captured through its FileDef rendering.
   cardId: string;
+  // Which rendering captures `cardId`. A card renders through the card
+  // branch; a file is extracted and rendered through its FileDef, the way
+  // indexing renders it. `null` means a card, the only kind a job carried
+  // before files could be captured.
+  sourceKind: CaptureSourceKind | null;
   format: OnDemandCaptureFormat;
   // Optional per-capture overrides (viewport, scale, fullPage, clip). Typed as
   // `| null` rather than `?:` because `JSONTypes.Object`'s index signature
@@ -74,6 +84,8 @@ export interface CaptureCardArgs extends JSONTypes.Object {
   loggingCorrelationId: string | null;
 }
 
+export type CaptureSourceKind = 'card' | 'file';
+
 export { captureCard };
 
 const captureCard: Task<CaptureCardArgs, CapturePrerenderResponse> = ({
@@ -84,6 +96,7 @@ const captureCard: Task<CaptureCardArgs, CapturePrerenderResponse> = ({
   createPrerenderAuth,
   matrixURL,
   mediaCacheAdapter,
+  virtualNetwork,
 }) =>
   async function (args) {
     let {
@@ -91,18 +104,21 @@ const captureCard: Task<CaptureCardArgs, CapturePrerenderResponse> = ({
       realmURL,
       runAs,
       cardId,
+      sourceKind,
       format,
       captureSpec,
       persist,
       surface,
       loggingCorrelationId,
     } = args;
+    let kind: CaptureSourceKind = sourceKind ?? 'card';
     let taskStart = Date.now();
     log.debug(
       `${jobIdentity(jobInfo)} starting capture-card for job: ${JSON.stringify({
         realmURL,
         runAs,
         cardId,
+        kind,
         format,
         captureSpec,
       })}`,
@@ -123,7 +139,9 @@ const captureCard: Task<CaptureCardArgs, CapturePrerenderResponse> = ({
       eventType: 'capture',
       surface: surface ?? 'post',
       realmURL: normalizedRealmURL,
-      sourceURL: persist?.sourceURL ?? cardId.replace(/\.json$/, ''),
+      sourceURL:
+        persist?.sourceURL ??
+        captureLedgerSourceURL(cardId, kind === 'file' ? 'file' : 'instance'),
       captureSpecHash: persist?.captureSpecHash ?? null,
       sourceGeneration: persist?.sourceGeneration ?? null,
       lane: persist?.lane ?? null,
@@ -253,6 +271,22 @@ const captureCard: Task<CaptureCardArgs, CapturePrerenderResponse> = ({
         dbAdapter,
         normalizedRealmURL,
       );
+      // A file renders the way indexing renders it: the tab extracts the
+      // file's resource through its FileDef, then renders that resource. The
+      // extract fetches the file in the tab, under the session built above,
+      // so the realm judges that read as the requester's own.
+      let renderOptions: RenderRouteOptions =
+        kind === 'file'
+          ? {
+              loaderEpoch,
+              fileExtract: true,
+              fileRender: true,
+              fileDefCodeRef: resolveFileDefCodeRef(
+                new URL(cardId),
+                virtualNetwork,
+              ),
+            }
+          : { loaderEpoch };
       prerenderStart = Date.now();
       let result = await prerenderer.prerenderCapture({
         realm: normalizedRealmURL,
@@ -261,7 +295,7 @@ const captureCard: Task<CaptureCardArgs, CapturePrerenderResponse> = ({
         format,
         ...(captureSpec ? { captureSpec } : {}),
         priority: jobInfo?.priority,
-        renderOptions: { loaderEpoch },
+        renderOptions,
         // Joins the prerender server's and manager's logs for this render
         // back to the worker job (forwarded as the x-boxel-job-id header by
         // the remote prerenderer; in-process prerenderers ignore it).

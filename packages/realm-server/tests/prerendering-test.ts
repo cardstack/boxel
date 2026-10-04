@@ -33,6 +33,7 @@ import {
   baseRealmRRI,
   baseRRI,
   executableExtensions,
+  FILEDEF_CODE_REF_BY_EXTENSION,
 } from '@cardstack/runtime-common';
 import {
   installDelayedRuntimeRealmSearchPatch,
@@ -1103,6 +1104,40 @@ module(basename(import.meta.filename), function () {
         ...(captureSpec ? { captureSpec } : {}),
       });
 
+    // A file capture: the file is extracted and rendered through the FileDef
+    // its extension maps to, as the capture-card task asks for one.
+    let captureFile = (fileURL: string) =>
+      prerenderer.prerenderCapture({
+        realm: realmURL,
+        url: fileURL,
+        auth: auth(),
+        format: 'isolated',
+        renderOptions: {
+          fileExtract: true,
+          fileRender: true,
+          fileDefCodeRef:
+            FILEDEF_CODE_REF_BY_EXTENSION[
+              fileURL.slice(fileURL.lastIndexOf('.'))
+            ],
+        },
+      });
+
+    // Whether any pixel of the capture is the given color, give or take
+    // antialiasing.
+    let hasColor = (base64: string, [r, g, b]: [number, number, number]) => {
+      let { data } = decodePngRGBA(base64);
+      for (let i = 0; i < data.length; i += 4) {
+        if (
+          Math.abs(data[i] - r) <= 2 &&
+          Math.abs(data[i + 1] - g) <= 2 &&
+          Math.abs(data[i + 2] - b) <= 2
+        ) {
+          return true;
+        }
+      }
+      return false;
+    };
+
     hooks.before(async () => {
       prerenderer = getPrerendererForTesting({
         maxPages: 2,
@@ -1140,6 +1175,10 @@ module(basename(import.meta.filename), function () {
                 }
               }
             `,
+            // A page whose rendered body is a solid color no shell chrome
+            // uses, so a capture shows whether the HTML itself was drawn.
+            'swatch.html': `<!doctype html><html><head><title>Swatch</title></head><body style="margin:0;background:rgb(255,0,254);height:2000px"><h1>Swatch</h1></body></html>`,
+            'notes.md': `# Release notes\n\nThe capture draws this markdown file.\n`,
             'long.gts': `
               import { CardDef, field, contains, StringField, Component } from '@cardstack/base/card-api';
               export class Long extends CardDef {
@@ -1342,6 +1381,35 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(png.height, 600, 'PNG is 600px tall');
       assert.strictEqual(response.width, 800, 'reports 800 CSS px wide');
       assert.strictEqual(response.height, 600, 'reports 600 CSS px tall');
+    });
+
+    test('a file capture draws the rendered HTML of an HTML file', async function (assert) {
+      let { response } = await captureFile(`${realmURL}swatch.html`);
+      assert.strictEqual(response.status, 'ready', 'capture succeeded');
+      let png = decodePng(response.base64!);
+      assert.true(png.isPng, 'payload is a PNG');
+      assert.strictEqual(png.width, 800, 'PNG is 800px wide');
+      assert.true(
+        hasColor(response.base64!, [255, 0, 254]),
+        "the capture shows the page's own body color",
+      );
+    });
+
+    test('a file capture draws a markdown file', async function (assert) {
+      let { response } = await captureFile(`${realmURL}notes.md`);
+      assert.strictEqual(response.status, 'ready', 'capture succeeded');
+      assert.true(decodePng(response.base64!).isPng, 'payload is a PNG');
+    });
+
+    test('a card capture on a tab that just captured a file renders the card', async function (assert) {
+      let fileCapture = await captureFile(`${realmURL}swatch.html`);
+      assert.strictEqual(fileCapture.response.status, 'ready');
+      let { response } = await capture(`${realmURL}1`);
+      assert.strictEqual(response.status, 'ready', 'card capture succeeded');
+      assert.false(
+        hasColor(response.base64!, [255, 0, 254]),
+        "the card capture shows none of the file's page",
+      );
     });
 
     test('viewport override widens the capture to 1280', async function (assert) {
