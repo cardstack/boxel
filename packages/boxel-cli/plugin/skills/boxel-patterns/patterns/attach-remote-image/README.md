@@ -126,7 +126,7 @@ The relationship link points at a real ImageDef instance in the realm — never 
 
 ## Source
 
-- Pattern shape from base `cardInfo`: `~/Projects/boxel/packages/base/card-api.gts:2892-2893` (cardThumbnail + cardThumbnailURL).
+- Pattern shape from base `cardInfo`: the `cardThumbnail` and `cardThumbnailURL` fields in `packages/base/card-api.gts`.
 - Real-world application across 10 schemas in the institutional-meerkat realm, 2026-05-22 (after diagnosing the realm-bricking bug). Affected fields: `events/event.gts heroImage`, `events/speaker.gts portraitImage`, `events/venue.gts heroImage`, `real-estate/agent.gts headshot`, `real-estate/property.gts heroImage + galleryImages`, `marketing/campaign.gts heroImage`, `hr/employee-stub.gts photo`, `hr/candidate.gts portraitImage`, `loyalty/merchant.gts logo`, `loyalty/reward.gts heroImage`.
 
 ## See also

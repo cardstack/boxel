@@ -53,7 +53,7 @@ A ThemeCard is an instance of a card definition that inherits from `@cardstack/b
 | Detailed Style Reference | `@cardstack/base/detailed-style-reference` | Extends `StyleReference`. Adds long-form guidance for context, palette, typography, geometry, material, composition, motion, components, voice, technical specs, scenarios, quality standards, and design mindset. Use for a complete design system without logo/mark assets. |
 | Brand Guide | `@cardstack/base/brand-guide` | Extends `DetailedStyleReference`. Adds `brandColorPalette`, `functionalPalette`, `typography`, `markUsage` for logo/mark material, and `customCssVariables` for tokens outside the contract. Use whenever brand assets or brand governance matter. |
 
-> **When creating a Theme card:** Start from `StructuredTheme` at minimum, never the bare `Theme`. If the design needs custom variables outside the token contract, use `BrandGuide`; it is the only shipped structured theme shape with dedicated fields for them. Prefer `BrandGuide` if the output has a brand, logo, marks, or other brand material. Prefer `DetailedStyleReference` for a rich visual system without logo material. Use `StructuredTheme` only for a minimal token-only theme. At minimum, fill in `rootVariables` and `typography`. Font stylesheets are derived: `cssImports` is computed from the theme's font stacks (Google Fonts), so do not write it by hand. Only a stylesheet that cannot be derived, such as Adobe Fonts, goes in `customCssImports`. Templates never `@import` a font.
+> **When creating a Theme card:** Start from `StructuredTheme` at minimum, never the bare `Theme`. If the design needs custom variables outside the token contract, use `BrandGuide`; it is the only shipped structured theme shape with dedicated fields for them. Prefer `BrandGuide` if the output has a brand, logo, marks, or other brand material. Prefer `DetailedStyleReference` for a rich visual system without logo material. Use `StructuredTheme` only for a minimal token-only theme. At minimum, fill in `rootVariables` and `typography`. `cssImports` is derived from the font stacks, never hand-written; see `boxel-ui-guidelines/references/font-loading-theme-card-owns-imports.md`.
 
 #### Brand Guide Pattern
 
@@ -96,7 +96,7 @@ The built-in Boxel Brand Guide lives at `@cardstack/base/Theme/boxel-brand-guide
 
 Current Boxel Brand Guide palette variables include `--boxel-teal`, `--boxel-cyan`, `--boxel-slate`, `--boxel-light`, `--boxel-black`, `--boxel-dove`, `--cardstack-red`, `--cardstack-lime`, `--cardstack-magenta`, `--cardstack-purple`, and `--cardstack-dark-blue`. Treat these as brand identity variables; ordinary UI should still prefer semantic roles like `--primary`, `--accent`, `--background`, and `--foreground`.
 
-Token semantics matter: `--primary`, `--secondary`, `--accent`, and sidebar primary/accent tokens are backgrounds or state indicators, not default text colors. This is especially important for Boxel Teal, which is suitable as an action fill or selection indicator but can fail as text on light backgrounds. Use `--foreground` for ordinary text and the matching `--*-foreground` token on semantic surfaces. For component-level mapping details, see `boxel-theme-development/references/shadcn-boxel-token-mapping.md`.
+Token semantics matter: `--primary` and the other semantic fills are surfaces, not text colors ("Colors" in the token contract, linked below). Boxel Teal is the usual casualty: a fine action fill or selection indicator that fails as text on light backgrounds. For how each Boxel UI component consumes a token, see `boxel-theme-development/references/shadcn-boxel-token-mapping.md`.
 
 #### Host Theme Commands
 
@@ -114,9 +114,9 @@ Use the variables directly (do not wrap with `hsl(var(...))`). Pair backgrounds 
 
 Our design system is compatible with shadcn css variables.
 
-When assigning values, remember that Boxel UI treats shadcn-style tokens as paired surface/foreground contracts. `--spacing` is also normalized by the runtime: `CardContainer` derives `--boxel-sp` from `calc(var(--spacing) * 4)`, so a desired 16px base unit should usually be stored as `--spacing: 0.25rem`.
+When assigning values, remember that Boxel UI treats shadcn-style tokens as paired surface/foreground contracts. `--spacing` is a quarter-unit the runtime multiplies by 4 (see "Spacing" in the token contract, linked below).
 
-The complete token inventory — color roles and their paired foregrounds, status fills, neutral surfaces, hue-as-ink tokens, borders, charts, sidebar, fonts, typography roles (`heading`, `sectionHeading`, `subheading`, `body`, `caption`, `label`, `eyebrow`), spacing, radius, and shadows — is maintained in one file: `skills/boxel-ui-guidelines/references/theme-token-contract.md`. It also explains the boundary reset (a theme only sets what it changes; everything else falls back to `theme.css`) and why custom variables outside the contract are a `BrandGuide`-only escape hatch with real costs. Do not duplicate the list here.
+The complete token inventory — color roles and their paired foregrounds, status fills, neutral surfaces, hue-as-ink tokens, borders, charts, sidebar, fonts, typography roles (`heading`, `sectionHeading`, `subheading`, `body`, `caption`, `label`, `eyebrow`), spacing, radius, and shadows — is maintained in one file: `skills/boxel-ui-guidelines/references/theme-token-contract.md`. It also explains the boundary reset (a theme only sets what it changes; everything else falls back to `theme.css`) and what custom variables outside the contract (a `BrandGuide`'s fields, or an extended theme card definition) give up. Do not duplicate the list here.
 
 #### CSS Usage Examples:
 

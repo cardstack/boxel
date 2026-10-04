@@ -18,6 +18,7 @@ Additional fields added by subtype:
 | ---------------------------------------------------------------------- | --------------------------------------------------------------------------- |
 | `ImageDef` + all image subtypes                                        | `width` (px), `height` (px)                                                 |
 | `MarkdownDef`, `TextFileDef`, `TsFileDef`, `GtsFileDef`, `JsonFileDef` | `title`, `excerpt`, `content` (full text)                                   |
+| `LogFile`, `JSONLFile`                                                 | inherited from `TextFileDef`                                                |
 | `CsvFileDef`                                                           | `title`, `excerpt`, `content`, `columns` (array), `columnCount`, `rowCount` |
 
 ---

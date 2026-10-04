@@ -56,7 +56,7 @@ Use this form when:
 
 When the filter depends on tracked UI state — a search box, a selected tab, a range the user is dragging — query from the component using the host-injected `getCards`. (Both forms track realm changes on a loaded card; state-dependent filters are what Option A cannot express, since its query is fixed at the schema.)
 
-**🔴 Critical — `getCards` is NOT a free function from card-api.** The card-api module exports it only as a `type`. Importing `{ getCards }` as a value compiles cleanly (TS resolves the type-only export) and then crashes at runtime with `getCards is not a function`. Verified against `~/Projects/boxel/packages/base/card-api.gts:72` (type re-export, no value export) and against the live host bundle (Apr 2026 staging).
+**🔴 Critical — `getCards` is NOT a free function from card-api.** The card-api module exports it only as a `type`. Importing `{ getCards }` as a value compiles cleanly (TS resolves the type-only export) and then crashes at runtime with `getCards is not a function`. Verified against the `type getCards` re-export in `packages/base/card-api.gts` (no value export) and against the live host bundle (Apr 2026 staging).
 
 **The only working call signature** is the context-injected one:
 
@@ -102,7 +102,7 @@ static isolated = class extends Component<typeof MyCard> {
 
 **Why callbacks for query + realms:** the host treats both as autotracked. Reading `model.id` and `model[realmURL]` inside the callbacks lets the query rerun cleanly when the host card is replaced or the realm changes.
 
-**Source proven correct against:** `~/Projects/boxel/packages/catalog-realm/sprint-planner/components/base-task-planner.gts:214-235`, `~/Projects/boxel/packages/catalog-realm/calendar/calendar.gts:496`, `~/Projects/boxel/packages/catalog-realm/gaming-hub/gaming-hub.gts:121`, and ~10 other catalog cards. Every working in-component query in the catalog uses this exact signature.
+**Source proven correct against:** `packages/experiments-realm/components/base-task-planner.gts:214-235` in the boxel monorepo, the catalog's [`components/calendar.gts`](https://github.com/cardstack/boxel-catalog/blob/main/components/calendar.gts), the [gaming-hub card](https://github.com/cardstack/boxel-catalog/blob/118b7ea/gaming-hub/gaming-hub.gts#L124) as last published, and ~10 other catalog cards. Every working in-component query in the catalog uses this exact signature.
 
 **Critical — what NOT to do:**
 - ❌ `import { getCards } from '@cardstack/base/card-api';` — compiles but `getCards` is undefined at runtime; it's only re-exported as a type.
@@ -115,7 +115,7 @@ static isolated = class extends Component<typeof MyCard> {
 - The query callback returning `undefined` skips the query (useful while the card is initializing — `model.id` is undefined briefly).
 - `model[realmURL]` returns a `URL` object — wrap with `String(...)` because `getCards` expects `string[]`.
 - `import.meta.url` works inside `.gts` files at runtime; needs `@ts-expect-error` for the TS check.
-- The returned object exposes `instances`, `isLoading`, `instancesByRealm`, `meta` — see `~/Projects/boxel/packages/runtime-common/index.ts:860` for the type definition.
+- The returned object exposes `instances`, `isLoading`, `instancesByRealm`, `meta` — see the `getCards` type in `packages/runtime-common/index.ts` for the definition.
 
 ### Circular `linksTo` (parent ↔ child both ways) — `cardOrThunk was undefined`
 
@@ -170,9 +170,9 @@ Mark each kit-internal link in the DataModelPlan with a ● in a "thunk" column.
 - **Bare `linksTo(X)` without thunk** when X is a kit-local class with any back-edge — see above.
 
 **Source:**
-- **Option A (schema-level, preferred):** `~/Projects/boxel/packages/experiments-realm/query-field-playground.gts` (single + many), `nested-query-field-playground.gts` (inside a FieldDef).
-- **Option B (component-level, context-injected — the only working in-component variant):** `~/Projects/boxel/packages/catalog-realm/sprint-planner/components/base-task-planner.gts:214-235`, `~/Projects/boxel/packages/catalog-realm/calendar/calendar.gts:496`, plus ~10 other catalog cards.
-- **Type-only re-export (the trap):** `~/Projects/boxel/packages/base/card-api.gts:72` exports `type getCards` but no value of that name.
-- **SearchResource type:** `~/Projects/boxel/packages/runtime-common/index.ts:860`.
+- **Option A (schema-level, preferred):** `packages/experiments-realm/query-field-playground.gts` (single + many), `nested-query-field-playground.gts` (inside a FieldDef).
+- **Option B (component-level, context-injected — the only working in-component variant):** `packages/experiments-realm/components/base-task-planner.gts:214-235`, the catalog's [`components/calendar.gts`](https://github.com/cardstack/boxel-catalog/blob/main/components/calendar.gts), plus ~10 other catalog cards.
+- **Type-only re-export (the trap):** `packages/base/card-api.gts` exports `type getCards` but no value of that name.
+- **Return type:** the `getCards` type in `packages/runtime-common/index.ts`.
 
 **See also:** `show-table-from-query`, `boxel/references/query-systems.md`.

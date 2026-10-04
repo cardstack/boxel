@@ -111,16 +111,15 @@ Before generating ANY command call, verify:
 {
   "name": "switch-submode_dd88",
   "payload": {
-    "description": "Open code mode on a new file in the target realm",
+    "description": "Open code mode on a file in the target realm",
     "attributes": {
       "submode": "code",
-      "createFile": true,
       "codePath": "https://realm-url/product-catalog.gts"
     }
   }
 }
 ```
-**Note:** `codePath` pins code mode to the target realm — a bare `submode` switch stays in whatever realm the UI last showed. It is a plain file URL: the `(new)` marker belongs after the URL in a SEARCH/REPLACE block, never inside a tool argument.
+**Note:** `codePath` pins code mode to the target realm — a bare `submode` switch stays in whatever realm the UI last showed. It is a plain file URL. Do not pass `createFile: true` before writing a new file with `run-realm-code`: it creates an empty file, and `realm.fs.writeText` then refuses it.
 
 ### Example 3: Empty attributes (when no params needed)
 ```json

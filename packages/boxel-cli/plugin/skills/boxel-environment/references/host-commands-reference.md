@@ -80,9 +80,8 @@ Quick lookup of every command available to this skill, what it does, and notable
 
 ## Editing
 
-- **SEARCH/REPLACE** — The way to create or edit files, `.gts` and `.json` alike. Streams as visible text so the user sees real-time progress, and runs through the code-patch pipeline with correctness checking. Create a new file by marking its URL line with `(new)`.
-- There is no file-writing tool. Every text file — `.gts`, `.json`, `.md`, `README`, anything — is written with SEARCH/REPLACE, adding `(new)` after the URL to create one. A tool call cannot stream, so the UI sits frozen through a long generation and the write skips the code-patch pipeline; SEARCH/REPLACE streams as it is produced and goes through lint and correctness checks.
-- `patch-fields_3e67` — Field updates on an indexed card the user is looking at, with their approval. Not for repairing a file you just wrote or one that failed a check: that card may not be indexed yet, so the tool applies to nothing — edit the `.json` with a SEARCH/REPLACE block instead.
+- **`run-realm-code`** — The way to create or edit source files. It runs a script that saves each file as it writes it, and triggers correctness checks after indexing. Use `realm.fs.writeText` for a new file and `realm.fs.replace` for an existing one.
+- `patch-fields_3e67` — Field updates on an indexed card the user is looking at, with their approval. Not for repairing a file you just wrote or one that failed a check: that card may not be indexed yet, so the tool applies to nothing — edit the `.json` with `run-realm-code` instead.
 - `patchCardInstance` — Update card data only.
 - `ApplyMarkdownEditCommand_c112` — Edit long markdown fields (>500 chars) surgically without truncation (requires approval).
 - `copy-card_eefc` — Duplicate a card (requires approval).
@@ -96,7 +95,7 @@ Quick lookup of every command available to this skill, what it does, and notable
 
 ## Navigation
 
-- `switch-submode_dd88` — Toggle interact/code modes. Navigation only: it never writes, and it is not a step of creating or editing a file (SEARCH/REPLACE does that; `(new)` creates). Call it at most once per task, and never when the tab is already in code mode on that file — the last tool result's `context.submode` and `context.codeMode.currentFile` tell you where you are. A bare `submode: "code"` opens code mode in whatever realm the UI last showed — when the task targets a specific realm, pass `codePath` with a plain file URL in that realm (never append `(new)` to it; add `createFile: true` only when the file doesn't exist yet).
+- `switch-submode_dd88` — Toggle interact/code modes. Navigation only: it never writes, and it is not a step of creating or editing a file (`run-realm-code` does that). Call it at most once per task, and never when the tab is already in code mode on that file — the last tool result's `context.submode` and `context.codeMode.currentFile` tell you where you are. A bare `submode: "code"` opens code mode in whatever realm the UI last showed — when the task targets a specific realm, pass `codePath` with a plain file URL in that realm (never pass `createFile: true` before writing a new file: it creates an empty file, and `realm.fs.writeText` then refuses it because the file exists).
 - `show-card_566f` — Display a card instance in the current mode. `cardId` is the instance id: its URL without the `.json` extension. A `.gts` path is a definition, not a card — passing one opens the definition's own module in the base realm, which is never what you want. To open a file in the editor, use `switch-submode_dd88` with `codePath`.
 - `preview-format_cb94` — Open module + preview card (code mode; use after edits).
 - `update-code-path-with-selection_f749` — Open file in code editor.

@@ -61,7 +61,7 @@ When in doubt, treat the import as untrusted and verify against the published li
 
 ## How to verify before importing
 
-**🔴 The CDN is the source of truth, not the monorepo.** The host loads icons at runtime from `https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/<name>.js`. The local monorepo source (`~/Projects/boxel/packages/boxel-icons/src/icons/`) may have icons that aren't published to the CDN yet — and `check-square` is a real example of this divergence: the source file exists, but the CDN returns 403/404. An agent that imports `check-square` because grep finds it locally will produce a card that 404s in the live app.
+**🔴 The CDN is the source of truth, not the monorepo.** The host loads icons at runtime from `https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/<name>.js`. The local monorepo source (`packages/boxel-icons/src/icons/`) may have icons that aren't published to the CDN yet — and `check-square` is a real example of this divergence: the source file exists, but the CDN returns 403/404. An agent that imports `check-square` because grep finds it locally will produce a card that 404s in the live app.
 
 **Always verify against the CDN before importing:**
 
@@ -87,7 +87,7 @@ grep -hE "@cardstack/boxel-icons/[a-z0-9-]+" *.gts \
 
 Anything not `200` means the host will 404 the icon at render time — replace it with a verified alternative before pushing.
 
-The local monorepo source is useful for *browsing names* (`ls ~/Projects/boxel/packages/boxel-icons/src/icons/ | grep -i check`) to find candidates, but always confirm against the CDN before committing to one. The Lucide picker at https://lucide.dev/icons/ is also a useful browser — Lucide icon names map to boxel-icons names — but again, verify each pick against the CDN.
+The local monorepo source is useful for *browsing names* (`ls packages/boxel-icons/src/icons/ | grep -i check` from a monorepo checkout) to find candidates, but always confirm against the CDN before committing to one. The Lucide picker at https://lucide.dev/icons/ is also a useful browser — Lucide icon names map to boxel-icons names — but again, verify each pick against the CDN.
 
 **Known CDN gaps (as of 2026-05):**
 
@@ -104,7 +104,7 @@ If a once-working icon starts 404ing in production, the CDN deploy might have dr
 A **starter kit** — not an index. The bundle has ~6,400 icons; this table can't enumerate them. If your domain isn't covered here, search the monorepo:
 
 ```sh
-ls ~/Projects/boxel/packages/boxel-icons/src/icons/ | grep -i <keyword>
+ls packages/boxel-icons/src/icons/ | grep -i <keyword>
 ```
 
 …and then CDN-verify your top 1-2 picks per the curl recipe above before committing. Don't paste every match into your card — pick deliberately.

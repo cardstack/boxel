@@ -152,7 +152,9 @@ you. See the count-tile and table patterns in
 [`boxel-patterns`](../boxel-patterns/SKILL.md).
 
 > **Rule of thumb:** a query-backed field is for a relationship the card
-> _reasons over_; a search component is for a list the card _renders_.
+> _reasons over_, and for a home or app section that lists a type's cards
+> with delegated render; a search component is for a list that can grow past
+> a few hundred cards, or needs search or filter UI.
 
 ## `eager: false`
 

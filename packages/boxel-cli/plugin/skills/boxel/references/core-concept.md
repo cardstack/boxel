@@ -147,6 +147,8 @@ This is **schema-level** and resolves against the index, so it reflects any card
 
 **⚠️ `getCards` is NOT a free import.** It's exported only as a *type* from `card-api`. Importing `{ getCards }` as a value compiles cleanly and then crashes at runtime with `getCards is not a function`. The host injects the working function via `this.args.context.getCards`.
 
+**⚠️ What it returns is a resource, not a promise.** Hold it as a class field and read `.instances` / `.isLoading` from the template or a getter. Never `await` it, `.then` it, copy `.instances` into a `@tracked` field, or poll it until it looks done — each of those freezes a snapshot and throws away the loading and error state. Same for `getCard` and `getCardCollection`. See pattern `resource-consume-from-context`.
+
 #### Common traps
 
 - **Computed accessing a relationship can throw if the link is broken.** A `linksTo` returning `null` mid-walk crashes a naive `this.foo.bar`. Wrap in `try/catch` or use `?.` everywhere.

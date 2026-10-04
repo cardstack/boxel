@@ -94,7 +94,6 @@ const result = await new WriteBinaryFileCommand(this.toolContext).execute({
   path: 'GeneratedImages/result.png',
   realm: input.realm,
   base64Content,
-  contentType: 'image/png',
   useNonConflictingFilename: true,
 });
 ```

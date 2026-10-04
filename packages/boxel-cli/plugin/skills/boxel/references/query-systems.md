@@ -40,7 +40,7 @@ Rule of thumb: `on` appears *inside* `eq` / `contains` / `range` / `not` / `ever
 
 #### 2. Custom sort fields require `on: ref` — only three field names work without it
 
-Only `lastModified`, `createdAt`, and `cardURL` are valid sort keys without a scope (see `generalSortFields` in `~/Projects/boxel/packages/runtime-common/index-query-engine.ts`). Every other sort field — `lastName`, `dates.start`, `name`, anything custom — needs `on: ref` in the sort expression, or the query is rejected.
+Only `lastModified`, `createdAt`, and `cardURL` are valid sort keys without a scope (see `generalSortFields` in `packages/runtime-common/index-query-engine.ts`). Every other sort field — `lastName`, `dates.start`, `name`, anything custom — needs `on: ref` in the sort expression, or the query is rejected.
 
 ```ts
 // ❌ Rejected — `lastName` isn't a generalSortField
@@ -198,9 +198,9 @@ So:
 - Add `searchable: true` to that declared link only when the rollup reads fields *of* the targets (summing `item.price`, not counting items) — that is what puts target data in the doc, and what makes each target a dependency.
 
 **When to use what to query cards:**
-- Efficient display-only → `@context.searchResultsComponent` (the `<SearchResults>` surface)
+- A section of an app or home card that lists a type's cards (a few hundred at most) → a `linksToMany` field (query-backed to include every card of the type) rendered with delegated render, `{{#each @fields.items as |Item|}}<Item @format='fitted' />{{/each}}`. This is the default for a home.
+- A long list, or one with search or filter UI → `@context.searchResultsComponent` (the `<SearchResults>` surface)
 - Need data manipulation → `getCards`
-- Treat query result as a field → query-backed fields
 
 ### No `@isLive` on result lists
 
@@ -228,9 +228,24 @@ For benchmark-style coverage, exercise both common query surfaces across the set
 The newer display surface for a list of results (the `<SearchResults>` component). Declare an **`entry`-rooted** query and render the yielded entries; each `entry.component` renders itself — prerendered HTML (inert, hydrated lazily on interaction) or a live card — so the card never branches on which.
 
 **When to use what to query cards** (this is a **cost** decision — the display surface is cheap, the instance getters hydrate every row; see the pattern `show-list-prefer-prerendered`):
-- Display a list of results (cards or files) → `@context.searchResultsComponent`. Prerendered HTML, hydrated lazily per row. **Default for anything you only render.**
+- Display a long list of results (cards or files), or one with search or filter UI → `@context.searchResultsComponent`. Prerendered HTML, hydrated lazily per row. For a home or app section of a few hundred cards at most, a `linksToMany` field with delegated render is simpler and is the default (see the pattern `app-card-home-with-search`).
 - Need the instances in JS (read / manipulate / mutate) → `getCards` / `getCardCollection` (reactive) or `@context.store.search` (imperative). These trigger server `loadLinks` + serialization + Store hydration for every matching row — reserve for genuine read/mutate, and scope to the current realm (`this.args.model?.[realmURL]?.href`), not the whole federation.
 - Treat a query result as a field → query-backed fields (`linksTo` / `linksToMany` with a `query`).
+
+**Consuming what the reactive getters return.** `getCards`, `getCard` and `getCardCollection` return **resources, not promises**: properties that start empty and fill in as the data arrives, read synchronously and re-rendered by Glimmer when they change. Hold the resource as a class field and render straight off it:
+
+```gts
+skills = this.args.context?.getCards(this, () => query, () => [this.realm], { isLive: true });
+get featured() { return (this.skills?.instances ?? []).slice(0, 3); } // derive with a getter, never a copy
+```
+
+```hbs
+{{#if this.skills.isLoading}}Loading…{{else}}{{#each this.featured as |card|}}…{{/each}}{{/if}}
+```
+
+`getCards` exposes `instances` / `instancesByRealm` / `meta` and `isLoading`; `getCard` exposes `card` and `isLoaded` + `cardError` (`isLoaded` is also true for a failed card, so check `cardError` first); `getCardCollection` exposes `cards` and `isLoaded` + `cardErrors`. `getCards` has no error property — a failed search looks empty except that `meta.incomplete` is set, so check it before reporting a count. An `undefined` id or id list reports `isLoaded: false` forever, so check your own input before showing a loading state. `getCards` is not live unless you pass `{ isLive: true }`.
+
+Smells — any of these means the resource is being fought instead of read: awaiting a resource; calling `.then` on one; copying `.instances` / `.card` / `.cards` into a `@tracked` field; holding a promise for one; polling one on a timer or racing it against a timeout; reading one from a constructor; creating one inside a getter (a new search per read); swallowing its error. A genuinely one-shot read inside a click handler or command uses the promise API instead — `await @context.store.search(...)` / `store.get(id)`; `store.get` resolves to the card or its error, so check which before using it. Full recipe for all three getters and the smell list: pattern `resource-consume-from-context`.
 
 ```gts
 import { CardDef, Component } from '@cardstack/base/card-api';

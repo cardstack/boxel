@@ -1,5 +1,5 @@
 {
-  "version": "v0.1.5",
+  "version": "v0.1.6",
   "skills": [
     "boxel",
     "boxel-create-edit-cards",
@@ -21,6 +21,7 @@
     "ember-best-practices",
     "glossary.md",
     "query-backed-relationships",
+    "realm-policy-authoring",
     "rich-markdown-reports",
     "source-code-editing"
   ]

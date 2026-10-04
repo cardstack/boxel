@@ -15,6 +15,8 @@ import AvifDef from '@cardstack/base/avif-image-def';
 // Document / text types
 import MarkdownDef from '@cardstack/base/markdown-file-def';
 import TextFileDef from '@cardstack/base/text-file-def';
+import LogFile from '@cardstack/base/log-file-def';
+import JSONLFile from '@cardstack/base/jsonl-file-def';
 import TsFileDef from '@cardstack/base/ts-file-def';
 import GtsFileDef from '@cardstack/base/gts-file-def';
 import JsonFileDef from '@cardstack/base/json-file-def';

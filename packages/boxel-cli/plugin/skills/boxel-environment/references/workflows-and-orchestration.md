@@ -4,21 +4,21 @@
 ```json
 `read-file-for-ai-assistant_a831` with `attributes.fileUrl` set to e.g. "https://[domain]/user/card.gts"
 → Prompt "improve code structure"
-→ Emit a code patch search/replace block
+→ Emit a code patch `run-realm-code` tool call
 ```
 
 ### 2. Data-Driven Schema Generation
 ```json
 `read-file-for-ai-assistant_a831` with `attributes.fileUrl` set to e.g. "data.csv"
 → Prompt "generate CardDef from CSV"
-→ Emit a code patch search/replace block
+→ Emit a code patch `run-realm-code` tool call
 ```
 
 ### 3. Live Preview Development
 ```json
 `show-card_566f` with `attributes.cardId` set to e.g. "https://[domain]/user/Card/instance"
 → Prompt "enhance UX for this card"
-→ Emit a code patch search/replace block
+→ Emit a code patch `run-realm-code` tool call
 → `show-card_566f` with `attributes.cardId` set to e.g. "https://[domain]/user/Card/instance"
 ```
 
@@ -26,7 +26,7 @@
 ```json
 `SearchCardsByQueryCommand_847d` with `attributes.query` set to valid query JSON that includes a filter
 → Prompt "detect relationship patterns"
-→ Emit a code patch search/replace block to create a transformation command
+→ Emit a code patch `run-realm-code` tool call to create a transformation command
 → `transform-cards_33d7` with `attributes.query` and `attributes.commandRef` set to perform a bulk update
 ```
 
@@ -34,7 +34,7 @@
 ```json
 `read-file-for-ai-assistant_a831` with `attributes.fileUrl` set to e.g. "https://[domain]/user/schema.gts"
 → `SearchCardsByQueryCommand_847d` with `attributes.query` set to valid query json with a filter specified
-→ Emit a code patch search/replace block creating a migration command
+→ Emit a code patch `run-realm-code` tool call creating a migration command
 → `transform-cards_33d7` with `attributes.query` and `attributes.commandRef` set to perform bulk migration
 ```
 
@@ -43,16 +43,16 @@
 `read-file-for-ai-assistant_a831` with `attributes.fileUrl` set to "https://[domain]/user/card.gts"
 → `read-file-for-ai-assistant_a831` with `attributes.fileUrl` set to "https://[domain]/user/Card/instance.json"
 → `SearchCardsByQueryCommand_847d` with `attributes.query` set to e.g. '{"filter": {"contains": {"imports": "card"}}}'
-→ Emit a code patch search/replace block
+→ Emit a code patch `run-realm-code` tool call
 ```
 
 ### Code Generation
-Two replies at most. First reply: `read-file-for-ai-assistant_a831` with `attributes.fileUrl` set to the file, so the SEARCH block matches its current content (skip this when you already have the content). Second reply, right after the result: one line of prose, then the SEARCH/REPLACE block(s), then — if the user should see the result — a `show-card_566f` call for the instance, all in that same reply.
+Two replies at most. First reply: `read-file-for-ai-assistant_a831` with `attributes.fileUrl` set to the file, so the `realm.fs.replace` search text matches its current content (skip this when you already have the content, or read it with `realm.fs.readText` in the script). Second reply, right after the result: one line of prose, then the `run-realm-code` call, then — if the user should see the result — a `show-card_566f` call for the instance, all in that same reply.
 
 Switching to code mode is optional navigation for the user's benefit — at most once per task, with `switch-submode_dd88` (`attributes.submode` "code", `attributes.codePath` the file URL), and only when the tab is not already in code mode on that file. It is never a step of writing, and it never needs a reply of its own.
 
 ### Card Creation
-One reply: a SEARCH/REPLACE block per file with `(new)` after each file URL — the definition and every instance together — plus, if wanted, a `show-card_566f` call with `attributes.cardId` set to an instance's URL (the `.json` path without the extension). The blocks create the files; no mode switch and no placeholder call comes first. If you switch to code mode so the user can watch, do it once, before the reply that carries the blocks.
+One `run-realm-code` call that writes every file with `realm.fs.writeText` — the definition and every instance together — plus, if wanted, a `show-card_566f` call with `attributes.cardId` set to an instance's URL (the `.json` path without the extension). That call creates the files; no mode switch and no placeholder call comes first. If you switch to code mode so the user can watch, do it once, before the `run-realm-code` call.
 
 ### Search & Modify
 ```json
@@ -63,7 +63,7 @@ One reply: a SEARCH/REPLACE block per file with `(new)` after each file URL — 
 ### Schema Migration
 1. Update schema with breaking changes:
 ```json
-→ Emit a code patch search/replace block
+→ Emit a code patch `run-realm-code` tool call
 ```
 2. Add migration command to same file:
 ```typescript

@@ -15,43 +15,45 @@
 
 ## The 16 named sizes — verify against ALL of them
 
+This file, `skills/boxel/references/fitted-formats.md`, is the only copy of the size table; every other skill points here instead of repeating it. Source of record: `FITTED_FORMATS` in `packages/boxel-ui/src/utils/fitted-formats.ts`, mirrored in `packages/runtime-common/formats.ts`, which is the copy BFM `::card[... | <id>]` directives resolve against.
+
 The host previews fitted cards at 16 specific size boxes when validating a CardDef. A fitted layout that looks great at one size and breaks at another isn't done. Walk through every cell below and confirm content fits, type is hierarchically legible, and nothing overflows.
 
 ### Badges (≤150 × ≤105)
 
-| Name | Width × Height | Use |
-|---|---|---|
-| Small Badge | 150 × 40 | One-line label / chip |
-| Medium Badge | 150 × 65 | Title + one-line meta |
-| Large Badge | 150 × 105 | Title + 2 meta lines or a small media bug |
+| Name | `id` | Width × Height | Use |
+|---|---|---|---|
+| Small Badge | `small-badge` | 150 × 40 | One-line label / chip |
+| Medium Badge | `medium-badge` | 150 × 65 | Title + one-line meta |
+| Large Badge | `large-badge` | 150 × 105 | Title + 2 meta lines or a small media bug |
 
 ### Strips (250+ wide, ≤105 tall)
 
-| Name | Width × Height | Use |
-|---|---|---|
-| Single Strip | 250 × 40 | One-line row — a chooser entry |
-| Double Strip | 250 × 65 | Title + one-line meta — list-row default |
-| Triple Strip | 250 × 105 | Title + 2 meta lines + status |
-| Double Wide Strip | 400 × 65 | Magazine-spread two-line row |
-| Triple Wide Strip | 400 × 105 | Magazine-spread three-line row |
+| Name | `id` | Width × Height | Use |
+|---|---|---|---|
+| Single Strip | `single-strip` | 250 × 40 | One-line row — a chooser entry |
+| Double Strip | `double-strip` | 250 × 65 | Title + one-line meta — list-row default |
+| Triple Strip | `triple-strip` | 250 × 105 | Title + 2 meta lines + status |
+| Double Wide Strip | `double-wide-strip` | 400 × 65 | Magazine-spread two-line row |
+| Triple Wide Strip | `triple-wide-strip` | 400 × 105 | Magazine-spread three-line row |
 
 ### Tiles (≤250 wide, ≥170 tall)
 
-| Name | Width × Height | Use |
-|---|---|---|
-| Small Tile | 150 × 170 | Grid thumbnail — square-ish |
-| Regular Tile | 250 × 170 | Wider thumbnail |
-| CardsGrid Tile | 170 × 250 | Portrait thumbnail — the default tile in a workspace's card lists |
-| Tall Tile | 150 × 275 | Tall thumbnail |
-| Large Tile | 250 × 275 | Full tile |
+| Name | `id` | Width × Height | Use |
+|---|---|---|---|
+| Small Tile | `small-tile` | 150 × 170 | Grid thumbnail — square-ish |
+| Regular Tile | `regular-tile` | 250 × 170 | Wider thumbnail |
+| CardsGrid Tile | `cardsgrid-tile` | 170 × 250 | Portrait thumbnail — the default tile in a workspace's card lists |
+| Tall Tile | `tall-tile` | 150 × 275 | Tall thumbnail |
+| Large Tile | `large-tile` | 250 × 275 | Full tile |
 
 ### Cards (400 wide, ≥170 tall)
 
-| Name | Width × Height | Use |
-|---|---|---|
-| Compact Card | 400 × 170 | Wide list row with thumbnail |
-| Full Card | 400 × 275 | Standard fitted card |
-| Expanded Card | 400 × 445 | Tallest fitted size — supports rich layout |
+| Name | `id` | Width × Height | Use |
+|---|---|---|---|
+| Compact Card | `compact-card` | 400 × 170 | Wide list row with thumbnail |
+| Full Card | `full-card` | 400 × 275 | Standard fitted card |
+| Expanded Card | `expanded-card` | 400 × 445 | Tallest fitted size — supports rich layout |
 
 ## Container query skeleton
 

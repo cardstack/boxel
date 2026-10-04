@@ -208,7 +208,7 @@ The literal `black` there is deliberate, not an exception to the no-hardcoded-co
 
 ### Spacing Tokens
 
-**Important:** The `spacing` value set in the theme's `rootVariables` is multiplied by 4 at runtime to produce `--boxel-sp`. Set it accordingly — e.g. to get a 16px base unit, set `spacing: 0.25rem` (not `1rem`), because `0.25rem × 4 = 1rem = 16px`.
+**Important:** the theme's `spacing` is multiplied by 4 at runtime to produce `--boxel-sp` (a 16px base is stored as `0.25rem`); see "Spacing" in `skills/boxel-ui-guidelines/references/theme-token-contract.md`.
 
 Do not copy a shadcn, Tailwind, or DESIGN.md base spacing value directly into Boxel `--spacing` without normalization. If the source system says the base spacing rhythm is `1rem`, Boxel usually wants `spacing: 0.25rem`.
 

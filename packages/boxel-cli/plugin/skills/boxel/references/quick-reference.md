@@ -50,6 +50,8 @@ import WebpDef from '@cardstack/base/webp-image-def';      // .webp
 import AvifDef from '@cardstack/base/avif-image-def';      // .avif
 import MarkdownDef from '@cardstack/base/markdown-file-def'; // .md (NOT same as MarkdownField)
 import TextFileDef from '@cardstack/base/text-file-def';   // .txt
+import LogFile from '@cardstack/base/log-file-def';        // .log
+import JSONLFile from '@cardstack/base/jsonl-file-def';    // .jsonl
 import TsFileDef from '@cardstack/base/ts-file-def';       // .ts
 import GtsFileDef from '@cardstack/base/gts-file-def';     // .gts
 import JsonFileDef from '@cardstack/base/json-file-def';   // .json

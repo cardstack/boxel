@@ -24,8 +24,8 @@ Sources to re-check when this model changes:
 - Always set the paired foreground when setting a semantic surface: `--primary-foreground`, `--secondary-foreground`, `--accent-foreground`, `--destructive-foreground`, `--success-foreground`, `--warning-foreground`, `--info-foreground`, `--attention-foreground`, `--sidebar-primary-foreground`, and `--sidebar-accent-foreground`.
 - A hue used *as* ink on a neutral surface is a separate token: `--primary-ink`, `--success-ink`, etc. Each defaults to the hue mixed 60% toward `--foreground`, so setting only the fill yields a readable ink; set the ink explicitly only when the brand wants a specific text shade.
 - The neutral surfaces `--canvas`, `--inset`, `--field`, `--hover`, `--stripe`, and `--selected` carry no `-foreground`: `--foreground` must read on all of them, so keep them close in lightness to `--background`. `--hover` should be translucent so it composes over any surface.
-- Every token above has a `theme.css` default and is reset at each themed-card boundary; a theme only has to set what it changes. Tokens the contract does not name (motion, shape) need a `BrandGuide` (`customCssVariables`, `brandColorPalette`) or an extended theme card definition, and lose both guarantees: they leak into nested cards and vanish when a different theme card is linked.
-- Boxel Teal and other bright brand colors may be valid `--primary` values, but they are often poor text colors on light surfaces. Put them behind text or use them for strokes/progress/selection only after checking contrast.
+- Every token above has a `theme.css` default and is reset at each themed-card boundary; a theme only has to set what it changes. Tokens the contract does not name come from a `BrandGuide` (`customCssVariables`, `brandColorPalette`) or an extended theme card definition, at a cost spelled out under "Not part of the contract" in `skills/boxel-ui-guidelines/references/theme-token-contract.md`.
+- Boxel Teal and other bright brand colors may be valid `--primary` values, but they are often poor text colors on light surfaces. Use them as fills (behind text, progress, selection) paired with `--primary-foreground`; a stroke or mark on a neutral surface uses `--primary-ink`.
 - `--spacing` is not the desired base gap directly. Boxel computes `--boxel-sp` from `calc(var(--spacing) * 4)`.
 
 ## Component Consumption
@@ -53,7 +53,7 @@ Sources to re-check when this model changes:
 
 ## Spacing Normalization
 
-Boxel's themed container does this:
+The rule itself is stated once, under "Spacing" in the token contract. Boxel's themed container does this:
 
 ```css
 --theme-spacing: calc(var(--spacing) * 4);
@@ -76,7 +76,7 @@ Use `0.25rem` unless the source system has a strong reason to be more compact or
 
 ## Primary Is Not Text
 
-The historical failure mode is mapping a bright brand primary, such as light teal, into `--primary` and then using `color: var(--primary)` for labels, links, or body copy. That can be unreadable on `--background`.
+The rule is stated once, under "Colors" in the token contract; this section is the theme-author's view of it. The historical failure mode is mapping a bright brand primary, such as light teal, into `--primary` and then using `color: var(--primary)` for labels, links, or body copy. That can be unreadable on `--background`.
 
 Use these instead:
 

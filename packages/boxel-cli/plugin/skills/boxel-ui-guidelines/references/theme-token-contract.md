@@ -8,11 +8,11 @@ Source of record: `packages/boxel-ui/src/styles/theme.css` (every token's defaul
 
 Reference tokens directly. Never wrap them in `hsl(var(...))`; Boxel stores resolved colors, not channel triples.
 
-**Which card holds the contract.** Never create a theme from the bare `Theme` card (`@cardstack/base/card-api`), and never subclass it directly. Its `cssVariables` is a free-form string: nothing checks it against the contract, nothing supplies defaults for what it omits, and the theme editors and previews cannot read it. Start from `StructuredTheme` at minimum; step up to `StyleReference` or `DetailedStyleReference` for a documented visual system, and to `BrandGuide` when brand assets are involved or when custom variables outside the contract are required.
+**Which card holds the contract.** Only `StructuredTheme` and its subclasses declare these tokens as fields; the bare `Theme` card's free-form `cssVariables` string bypasses everything on this page. Which subclass to start from is decided once, in the ThemeCard Types table of `skills/boxel/references/theme-design-system.md`.
 
 ### Colors
 
-Surface tokens name a background. Each pairs with its own `-foreground`, which is the only color guaranteed to read on it.
+Surface tokens name a background. Each pairs with its own `-foreground`, which is the only color guaranteed to read on it. That makes `--primary`, `--secondary`, `--accent`, `--destructive`, the status fills, and the sidebar primary/accent tokens fills and indicators, never ordinary text, icon, stroke, or border colors: on a neutral surface use `--foreground`, `--muted-foreground`, or the hue's `-ink` token below. This is the one statement of that rule; other files point here.
 
 ```css
 /* core surfaces */
@@ -181,7 +181,7 @@ Consequences for templates: an isolated root does not repeat the background/fore
 
 ### Font loading
 
-`StructuredTheme` computes `cssImports`: it derives the Google Fonts stylesheet links from every font stack the theme names (`--font-sans/serif/mono` in both schemes and each typography slot's family), so those never drift from the fields. Stylesheets that cannot be derived, such as Adobe Fonts or a self-hosted face, go in the theme's `customCssImports` list and are appended ahead of the derived ones. `CardContainer` links `cssImports` wherever the theme applies; templates never `@import` a font.
+`cssImports` is computed from the theme's font stacks; only a stylesheet that cannot be derived goes in `customCssImports`, and templates never `@import` a font. The rule is spelled out in `font-loading-theme-card-owns-imports.md`.
 
 ### Not part of the contract
 

@@ -199,6 +199,8 @@ These extend `FileDef` and must be used with `linksTo`, never `contains`. See `b
 | `GtsFileDef` | `'@cardstack/base/gts-file-def'` | `.gts` source file (for tooling/preview cards). |
 | `TsFileDef` | `'@cardstack/base/ts-file-def'` | `.ts` source file. |
 | `TextFileDef` | `'@cardstack/base/text-file-def'` | Generic text file. |
+| `LogFile` | `'@cardstack/base/log-file-def'` | `.log` file. Declares `record`, an append whose line the realm stamps with the time and the caller. |
+| `JSONLFile` | `'@cardstack/base/jsonl-file-def'` | `.jsonl` (JSON Lines) file. Declares `record`, an append of one JSON entry the realm stamps with the time and the caller. |
 
 ## Metadata / schema
 
@@ -265,4 +267,4 @@ Need to point at another realm?
 └── RealmField
 ```
 
-**Source:** `~/Projects/boxel/packages/base/*.gts` — every field with a `displayName` + `extends FieldDef` is importable from `@cardstack/base/<file-stem>`.
+**Source:** `packages/base/*.gts` in the boxel monorepo — every field with a `displayName` + `extends FieldDef` is importable from `@cardstack/base/<file-stem>`.

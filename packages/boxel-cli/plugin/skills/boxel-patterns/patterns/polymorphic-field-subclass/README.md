@@ -97,6 +97,6 @@ export class Drawing extends CardDef {
 - For `linksTo`/`linksToMany` (CardDef relationships), you don't subclass — you link to a different card type entirely. This pattern is specifically for `contains(FieldDef)`.
 - Don't override `displayName` and forget to override it — the field's identity for the host's lookup uses the displayName + class chain.
 
-**Source:** `~/Projects/boxel/packages/experiments-realm/polymorphic-field.gts` — `TestField` → `SubTestField`, and a `CardWithSpecialFields` whose component mutates `this.args.model.specialField = new SubTestField({})` from a button click. The pattern is tested in the host as the canonical polymorphic-FieldDef behavior.
+**Source:** `packages/experiments-realm/polymorphic-field.gts` in the boxel monorepo — `TestField` → `SubTestField`, and a `CardWithSpecialFields` whose component mutates `this.args.model.specialField = new SubTestField({})` from a button click. The pattern is tested in the host as the canonical polymorphic-FieldDef behavior.
 
 **See also:** `format-morph-shared-component` (different reuse axis — same component across formats vs. different subclasses in same slot), `organize-variant-field-dispatcher` (the dispatch-by-discriminator alternative when you'd rather match on a tag field than on subclass identity).

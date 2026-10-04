@@ -117,6 +117,6 @@ When the parent card flips formats and re-renders, the Vibe field component stay
 - Type the args correctly: `FieldsTypeFor<MyCard>` for the `@fields` slot, `Format` for `@format`, `EditCardFn` for the optional `@editCard` invocation.
 - Apply CSS transitions to the morphable properties (`padding`, `gap`, `font-size`, `border-radius`), not to layout-changing ones (`display`, `grid-template-*` — those snap).
 
-**Source:** `~/Projects/boxel/packages/experiments-realm/format-morph.gts`. The `Vibe` field there also illustrates how `static [primitive]: string` makes a primitive-backed FieldDef.
+**Source:** `packages/experiments-realm/format-morph.gts` in the boxel monorepo. The `Vibe` field there also illustrates how `static [primitive]: string` makes a primitive-backed FieldDef.
 
 **See also:** `containsmany-sorted-render` (component-side rendering tricks).

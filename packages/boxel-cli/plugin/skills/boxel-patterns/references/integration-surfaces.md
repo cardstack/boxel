@@ -32,7 +32,7 @@ The Boxel base realm. Always available. Imports live at `@cardstack/base/<name>`
 | `base64-image` | `Base64ImageField` (legacy — avoid) | Inlined base64 image. **Don't use for new cards** — embeds binary in JSON. Use FileDef subtypes instead. |
 | `image-file-def`, `png-image-def`, `svg-image-def`, `gif-image-def`, `webp-image-def`, `avif-image-def`, `jpg-image-def` | `ImageDef`, `PngDef`, etc. | File-backed image fields (use `linksTo`). |
 | `markdown-file-def` | `MarkdownDef` | File-backed markdown asset (different from MarkdownField — that's a value, this is a file). |
-| `text-file-def`, `ts-file-def`, `gts-file-def`, `json-file-def`, `csv-file-def` | File-backed text-format assets | Linked file assets. |
+| `text-file-def`, `log-file-def`, `jsonl-file-def`, `ts-file-def`, `gts-file-def`, `json-file-def`, `csv-file-def` | File-backed text-format assets | Linked file assets. |
 | `file-api` | `FileDef` | Generic file-backed field base. |
 | `shared-state` | `sharedState()` | Cross-component reactive state. |
 | `skill`, `skill-plus`, `skill-set` | `Skill`, `SkillPlusMarkdown`, `SkillSet`, `SkillReference` | Boxel skill cards. |
@@ -65,7 +65,7 @@ The shared runtime layer. Available in any `.gts` or `.ts` in the realm.
 | `logger('namespace:operation')` | Realm-side structured logging. |
 | `join` | URL join helper. |
 | `loadCommandModule`, `ToolContext`, `Loader` | Command-loading internals. |
-| `baseRealm`, `devSkillLocalPath`, `envSkillLocalPath` | Base-realm constants. |
+| `baseRealm` | Base-realm constants. |
 
 ---
 
@@ -73,7 +73,7 @@ The shared runtime layer. Available in any `.gts` or `.ts` in the realm.
 
 Available only inside the running Boxel app. Each is a default-export `Command` class.
 
-**Live audit:** verify command names against your Boxel checkout's `packages/host/app/tools/index.ts` shim list. Older audits run against a stale checkout reported `write-binary-file`, `screenshot-card`, and `generate-thumbnail` missing — they're present in the current mainline (lines 400 / 420 / 424 of the shim list at the time of writing, May 2026). When something looks "missing," check the freshness of the checkout you audited (`git log -1` in that worktree) before concluding the command isn't live.
+**Live audit:** verify command names against your Boxel checkout's `packages/host/app/tools/index.ts` shim list. Older audits run against a stale checkout reported `write-binary-file`, `capture-card`, and `generate-thumbnail` missing — they're present in the current mainline (lines 400 / 420 / 424 of the shim list at the time of writing, May 2026). When something looks "missing," check the freshness of the checkout you audited (`git log -1` in that worktree) before concluding the command isn't live.
 
 | Path | Purpose |
 |---|---|
@@ -88,7 +88,7 @@ Available only inside the running Boxel app. Each is a default-export `Command` 
 | `patch-fields` | Surgical field updates on an instance (requires approval). |
 | `patch-card-instance` | Full-card replace (use sparingly). |
 | `apply-markdown-edit` | Targeted edits in long markdown fields (requires approval). |
-| `write-text-file` | Avoid — create and edit files with SEARCH/REPLACE instead (tool calls don't stream; UI freezes). |
+| `write-text-file` | Avoid — create and edit files with the `run-realm-code` tool instead. |
 | `copy-card`, `copy-source`, `copy-file-to-realm` | Duplicate a card, source file, or FileDef-backed asset (requires approval where applicable). |
 | `transform-cards` | Bulk command-applied transform (requires approval). |
 | `read-file-for-ai-assistant`, `read-card-for-ai-assistant` | Load file or card content into context. |
@@ -119,13 +119,13 @@ Available only inside the running Boxel app. Each is a default-export `Command` 
 
 These are the HTTP endpoints the host commands map to. Useful when scripting via `curl` or `boxel-cli`:
 
-OpenRouter calls go through `/_request-forward` to the external `https://openrouter.ai/api/v1/chat/completions` URL. There is no live `/_openrouter/chat/completions` endpoint in the current monorepo checkout (the screenshot endpoints below *are* live — an older audit that predates them was stale).
+OpenRouter calls go through `/_request-forward` to the external `https://openrouter.ai/api/v1/chat/completions` URL. There is no live `/_openrouter/chat/completions` endpoint in the current monorepo checkout (the capture endpoints below *are* live — an older audit that predates them was stale).
 
 | Endpoint | Method | Purpose |
 |---|---|---|
-| `/_screenshot-card` | POST | Capture a settled render of a card — PNG (default) or paged PDF (`captureSpec.type: 'pdf'`, `media: 'screen' \| 'print'`). Backs `ScreenshotCardTool` (whose input is PNG-only; pass `captureSpec.type`/`media` when POSTing directly). Pattern: `integrate-screenshot-card-format`. |
-| `{realm}_screenshot/{path}?…` | GET | Durable serving URL for an on-demand capture — `?type=pdf[&media=print]` yields an always-current PDF (ledger hit on repeat, re-capture after an edit); embed instead of storing base64. Requires realm read: an `Authorization` header, or a `?token=` minted by `_sign-capture-urls` for the loads the service worker can't reach (`<object>`/`<embed>`, new-tab navigation). |
-| `{realm}_sign-capture-urls` | QUERY | Mint signed capture URLs: body `{ "urls": [ …1–100 of this realm's `_screenshot/` URLs… ] }` → `{ "signed": [{ "url", "signedUrl", "expiresAt" }] }`. Realm-read gate (grants nothing the caller lacks); 15-minute single-URL tokens; anonymous callers on a public realm get URLs echoed unsigned. Card code uses the `SignedCaptureLink`/`SignedCapture` components instead of calling this. Pattern: `integrate-screenshot-card-format`. |
+| `/_capture-card` | POST | Capture a settled render of a card — PNG (default) or paged PDF (`captureSpec.type: 'pdf'`, `media: 'screen' \| 'print'`). Backs `CaptureCardTool` (whose input is PNG-only; pass `captureSpec.type`/`media` when POSTing directly). Pattern: `integrate-capture-card-format`. |
+| `{realm}_capture/{path}?…` | GET | Durable serving URL for an on-demand capture — `?type=pdf[&media=print]` yields an always-current PDF (ledger hit on repeat, re-capture after an edit); embed instead of storing base64. Requires realm read: an `Authorization` header, or a `?token=` minted by `_sign-capture-urls` for the loads the service worker can't reach (`<object>`/`<embed>`, new-tab navigation). |
+| `{realm}_sign-capture-urls` | QUERY | Mint signed capture URLs: body `{ "urls": [ …1–100 of this realm's `_capture/` URLs… ] }` → `{ "signed": [{ "url", "signedUrl", "expiresAt" }] }`. Realm-read gate (grants nothing the caller lacks); 15-minute single-URL tokens; anonymous callers on a public realm get URLs echoed unsigned. Card code uses the `SignedCaptureLink`/`SignedCapture` components instead of calling this. Pattern: `integrate-capture-card-format`. |
 | `/_federated-search` | QUERY | Cross-realm search (used by `npx boxel search` + `SearchCardsByQueryCommand` when crossing realms). |
 | `/_federated-search-prerendered` | QUERY | Same with prerendered card results. |
 | `/_federated-info` | GET | Cross-realm realm metadata. |
@@ -315,7 +315,7 @@ Headings, lists, code fences, tables, alerts (`> [!NOTE]`), task lists, striketh
 
 Local CLI for realm sync, watching, checkpoints, federated search, and scripted host commands.
 
-> **Note on versions.** If `/usr/local/bin/boxel --help` shows a smaller surface (just `realm create/pull/push/sync` + `profile` + `run-command`), that's a stale install. The full set below comes from the source at `~/Projects/boxel/packages/boxel-cli`. Rebuild + relink to get all commands.
+> **Note on versions.** If `/usr/local/bin/boxel --help` shows a smaller surface (just `realm create/pull/push/sync` + `profile` + `run-command`), that's a stale install. The full set below comes from the source at `packages/boxel-cli` in the boxel monorepo. Rebuild + relink to get all commands.
 
 ### Full subcommand surface
 

@@ -27,12 +27,7 @@ Use this for the theme artifact itself. Use `boxel-design` when the task is prim
    - Audit: compare an existing theme card against Boxel fields, DESIGN.md rules, accessibility, and downstream template needs.
    - Patch: preserve the existing theme class and structured fields while improving values and prose.
 
-2. **Choose the narrowest correct card type.**
-   - `StructuredTheme`: token-only theme with structured root/dark variables and typography.
-   - `StyleReference`: visual DNA, inspirations, and wallpaper imagery matter.
-   - `DetailedStyleReference`: a complete design system needs documented palette, type, layout, motion, components, voice, and quality rules.
-   - `BrandGuide`: logo/mark usage, official brand colors, functional palette, typography, or brand governance matters.
-   - Boxel built-in feature work: use `@cardstack/base/Theme/boxel-brand-guide` as the source of truth.
+2. **Choose the narrowest correct card type** from the ThemeCard Types table in `boxel/references/theme-design-system.md` (`StructuredTheme` floor, `StyleReference`, `DetailedStyleReference`, `BrandGuide`). Boxel built-in feature work uses `@cardstack/base/Theme/boxel-brand-guide` as the source of truth.
 
 3. **Gather source material.**
    - Existing Theme/BrandGuide JSON, if present.
@@ -42,18 +37,16 @@ Use this for the theme artifact itself. Use `boxel-design` when the task is prim
 4. **Map values before writing.**
    - Tokens are exact implementation values.
    - Prose explains why and when to use them.
-   - Put logo and mark material in `markUsage`; never invent miscellaneous string fields for brand assets.
-   - Put brand colors in `brandColorPalette` and role colors in `functionalPalette`.
-   - Put semantic UI values in `rootVariables` and `darkModeVariables`.
-   - Treat shadcn-style tokens as paired surface/foreground contracts: `--primary` is an action fill or indicator, not ordinary text. Same for the muted pair: `--muted` is a pale *surface* (table stripes, wells) and `--muted-foreground` is quiet-but-readable *text*; defining both as dark grays yields dark-on-dark tables in long-form Markdown.
-   - Normalize `rootVariables.spacing` for Boxel's runtime `--spacing * 4` mapping. Use `0.25rem` for a 16px `--boxel-sp` base unless there is a deliberate reason to diverge.
+   - Place brand material where the Brand Guide Pattern in `boxel/references/theme-design-system.md` says: marks in `markUsage`, brand colors in `brandColorPalette`, role colors in `functionalPalette`, semantic UI values in `rootVariables` and `darkModeVariables`. Never invent miscellaneous string fields for brand assets.
+   - Treat each paired surface token as a surface/foreground pair ("Colors" in the token contract; the neutral surfaces such as `--canvas` and `--field` have no pair and must read under `--foreground`): `--primary` is a fill, not text, and `--muted` is a pale *surface* while `--muted-foreground` is quiet-but-readable *text*; defining both as dark grays yields dark-on-dark tables in long-form Markdown.
+   - Normalize `rootVariables.spacing` for the runtime's `--spacing * 4` rule ("Spacing" in the token contract; conversion table in `references/shadcn-boxel-token-mapping.md`).
    - Put design rationale in `visualDNA` and the DetailedStyleReference markdown fields.
 
 5. **Build or patch the Theme card.**
    - Preserve rich theme structure. Do not flatten `BrandGuide` or `StyleReference` into raw `cssVariables`, and never build on the bare `Theme` card: `StructuredTheme` is the minimum, `BrandGuide` when custom variables outside the contract are needed.
    - Include `attributes.cardInfo` for name, summary, thumbnail, and notes.
    - Omit `relationships["cardInfo.theme"]` on Theme cards themselves.
-   - Do not write `cssImports` on a StructuredTheme; it is derived from the font fields. Hand-added stylesheets go in `customCssImports`. Never inline `@import` in templates.
+   - Do not write `cssImports`; it is derived from the font fields (`boxel-ui-guidelines/references/font-loading-theme-card-owns-imports.md`).
    - Never nest `@media` blocks inside `cssVariables` — the theme parser silently skips those declarations. Dark-mode values belong in `darkModeVariables`.
    - Use absolute URLs for cross-realm theme links unless a relative path has been verified.
 

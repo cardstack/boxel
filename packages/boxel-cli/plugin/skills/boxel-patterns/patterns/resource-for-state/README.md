@@ -15,7 +15,7 @@ validated: source-proven
 When NOT to use:
 - A pure synchronous derivation of one field → another field — that's `computeVia`, not a Resource.
 - A query whose result you want server-side reactive — that's `linksTo`/`linksToMany` with `query:` (see `automate-linked-to-me-lookup`).
-- A one-shot async load on mount — a Component `constructor()` + `@tracked` is simpler.
+- A one-shot async load on mount — a Component `constructor()` + `@tracked` is simpler. This does **not** extend to `@context.getCards` / `getCard` / `getCardCollection`: those already are resources — hold one as a field and render off it (see `resource-consume-from-context`).
 
 **The insight:** `ember-modify-based-class-resource` provides `Resource<Args>` — a class whose `modify(positional, named)` hook is invoked whenever any tracked input changes. State you assign as `@tracked` properties or instance fields persists across re-runs (unless `modify` overwrites them). You consume the Resource via a factory function that calls `Resource.from(parent, () => ({ named: {...} }))`.
 
@@ -138,8 +138,8 @@ The key trick: `commit()` walks BOTH the existing column order AND the new cards
 **New kanban note:** For new drag-and-drop kanban boards, prefer `layout-kanban-drag-drop` and `KanbanPlane` from `@cardstack/boxel-ui/components`. The `DndColumn` resource recipe above is useful legacy context for CRM/sprint-planner code, but new boards should persist placements separately and let `KanbanPlane` own pointer/keyboard drag behavior.
 
 **Source:**
-- `~/Projects/boxel/packages/experiments-realm/kanban-resource.gts` — DndColumn-based kanban with stable ordering.
-- `~/Projects/boxel/packages/experiments-realm/chess-game.gts:160-220` — wrapping `chess.js` with history navigation.
-- `~/Projects/boxel/packages/experiments-realm/components/base-task-planner.gts` — kanban consumer.
+- `packages/experiments-realm/kanban-resource.gts` — DndColumn-based kanban with stable ordering.
+- `packages/experiments-realm/chess-game.gts` — wrapping `chess.js` with history navigation.
+- `packages/experiments-realm/components/base-task-planner.gts` — kanban consumer.
 
-**See also:** `automate-linked-to-me-lookup` (use a query-backed link instead when the state IS the search result), `command-data-resource` (the `commandData<T>` helper, a higher-level wrapper for command-driven async state), `integrate-chess-js-via-cdn` (the CDN loader for chess.js itself).
+**See also:** `resource-consume-from-context` (reading a resource from a consumer — the same rules hold for one you author here), `automate-linked-to-me-lookup` (use a query-backed link instead when the state IS the search result), `command-data-resource` (the `commandData<T>` helper, a higher-level wrapper for command-driven async state), `integrate-chess-js-via-cdn` (the CDN loader for chess.js itself).

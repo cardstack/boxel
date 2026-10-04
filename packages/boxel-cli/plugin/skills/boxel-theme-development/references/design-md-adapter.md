@@ -83,7 +83,7 @@ Do not install or download the CLI without approval when network access is restr
 
 - Before assigning semantic tokens, apply `shadcn-boxel-token-mapping.md`; Boxel UI consumes these as component contracts, not raw brand swatches.
 - Prefer semantic Boxel variables for UI consumption: `--background`, `--foreground`, `--card`, `--card-foreground`, `--primary`, `--primary-foreground`, `--secondary`, `--secondary-foreground`, `--accent`, `--accent-foreground`, `--muted`, `--muted-foreground`, `--border`, `--ring`, `--font-sans`, `--radius`, `--spacing`.
-- Map `colors.primary` to `functionalPalette.primary` and usually `rootVariables.primary`, but only as a high-emphasis action surface or indicator. Do not map it to ordinary text.
+- Map `colors.primary` to `functionalPalette.primary` and usually `rootVariables.primary`. It becomes a fill, never a text color ("Colors" in the token contract).
 - Map `colors.secondary` to `functionalPalette.secondary` and usually `rootVariables.secondary`.
 - Map an interaction or highlight color to `functionalPalette.accent` and `rootVariables.accent`.
 - Map light/dark brand anchors to `functionalPalette.light` and `functionalPalette.dark` when available.
@@ -117,7 +117,7 @@ Never inline media bytes or data URLs. Store logo files as realm files or durabl
 - [ ] Markdown sections appear in DESIGN.md order if exporting.
 - [ ] Unknown sections are preserved in an appropriate DetailedStyleReference field or notes.
 - [ ] Semantic color pairs have readable contrast.
-- [ ] `colors.primary` has not become ordinary text; text uses `--foreground`, `--muted-foreground`, or a paired `--*-foreground`.
+- [ ] `colors.primary` has not become ordinary text (token contract, "Colors").
 - [ ] Spacing was normalized for Boxel's `--spacing * 4` runtime rule.
 - [ ] Boxel templates can be written using semantic tokens; brand-specific tokens are reserved for identity moments.
 - [ ] Theme card itself has `attributes.cardInfo` but no `relationships["cardInfo.theme"]`.

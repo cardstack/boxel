@@ -3,11 +3,11 @@ import {
   Component,
   contains,
   field,
-  type ScreenshotSpec,
+  type CaptureSpec,
 } from '@cardstack/base/card-api';
 import StringField from '@cardstack/base/string';
 
-// 🧩 PATTERN: declared screenshots — self-refreshing capture slots on the class.
+// 🧩 PATTERN: declared captures — self-refreshing capture slots on the class.
 //
 // Two slots are declared below:
 //   thumb  — captures the card's own embedded format at the standard grid-tile
@@ -17,7 +17,7 @@ import StringField from '@cardstack/base/string';
 //            renders in the app; only the capture engine draws it.
 
 // Capture-only component. Full author surface (@model / @fields / linked
-// data), but referenced only from the `static screenshots` declaration.
+// data), but referenced only from the `static captures` declaration.
 // Keep captured markup deterministic: no timestamps-relative-to-now, no
 // randomness, no mid-flight animations — unchanged data should produce
 // identical pixels so re-indexes dedupe instead of re-uploading.
@@ -52,9 +52,9 @@ export class Recipe extends CardDef {
   @field title = contains(StringField);
   @field tagline = contains(StringField);
 
-  // ⚠️ The annotation is required: a bare `static screenshots = {...}`
+  // ⚠️ The annotation is required: a bare `static captures = {...}`
   // widens 'embedded' to string and fails type-checking (TS2417).
-  static screenshots: Record<string, ScreenshotSpec> = {
+  static captures: Record<string, CaptureSpec> = {
     // 170×250 is the standard grid-tile box (at the default dsf of 2).
     // `embedded` (not `fitted`) as the thumbnail source: the default fitted
     // template renders cardThumbnailURL itself, so a fitted capture would
@@ -96,15 +96,15 @@ export class Recipe extends CardDef {
         <h1>{{@model.title}}</h1>
         <p>{{@model.tagline}}</p>
 
-        {{! Consuming a slot: screenshotURLs is a reserved getter with one
+        {{! Consuming a slot: captureURLs is a reserved getter with one
             key per declared slot. The value is undefined until a capture
             exists (new instance, capture in flight, or capture failed) —
             ALWAYS guard: Glimmer omits the src for undefined, but the
             src-less <img> still renders (alt text and a layout hole). }}
-        {{#if @model.screenshotURLs.social}}
+        {{#if @model.captureURLs.social}}
           <img
-            class='screenshot'
-            src={{@model.screenshotURLs.social}}
+            class='capture'
+            src={{@model.captureURLs.social}}
             alt='Share preview for {{@model.title}}'
           />
         {{/if}}
@@ -113,7 +113,7 @@ export class Recipe extends CardDef {
         .article {
           padding: 1.5rem;
         }
-        .screenshot {
+        .capture {
           margin-top: 1.5rem;
           border: 1px solid var(--border);
           border-radius: var(--boxel-border-radius-sm);

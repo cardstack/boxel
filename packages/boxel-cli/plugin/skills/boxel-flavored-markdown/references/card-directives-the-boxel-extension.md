@@ -36,15 +36,7 @@ The optional `| spec` after the URL controls size/format. The grammar:
 | `<named>`                        | Bare named constant (fitted implied), e.g. `strip`                     |
 | `w:<N> h:<N>` (or either alone)  | Explicit width/height in px. Width accepts `%`, e.g. `w:50% h:200`     |
 
-**Named size constants** map to preset dimensions:
-
-| Category | Constants |
-| -------- | --------- |
-| Shorthand aliases | `strip` (→ `single-strip`, 250×40), `tile` (→ `regular-tile`, 250×170), `grid-tile` (→ `cardsgrid-tile`, 170×250) |
-| Badges            | `small-badge` 150×40, `medium-badge` 150×65, `large-badge` 150×105 |
-| Strips            | `single-strip` 250×40, `double-strip` 250×65, `triple-strip` 250×105, `double-wide-strip` 400×65, `triple-wide-strip` 400×105 |
-| Tiles             | `small-tile` 150×170, `regular-tile` 250×170, `cardsgrid-tile` 170×250, `tall-tile` 150×275, `large-tile` 250×275 |
-| Cards             | `compact-card` 400×170, `full-card` 400×275, `expanded-card` 400×445 |
+**Named size constants** are the 16 fitted format ids (`small-badge` … `expanded-card`), plus three shorthand aliases: `strip` (→ `single-strip`), `tile` (→ `regular-tile`), `grid-tile` (→ `cardsgrid-tile`). Ids and their pixel sizes are listed once, in `skills/boxel/references/fitted-formats.md`.
 
 ```md
 Featured authors:

@@ -85,27 +85,16 @@ delete: asking that card to delete itself archives it.
 answers it before it would consult a stored definition, so a declaration under
 it would never be reached.
 
-**A file's operations are the ones its class declares, and its class is the
-realm's to say.** A stored file names its type by its extension, and a realm
-binds an extension to a class of its own with `fileTypes` on the `RealmConfig`
-card at `realm.json`:
-
-```json
-"fileTypes": {
-  ".log": { "module": "./clinical/audit-log", "name": "AuditLog" }
-}
-```
-
-The class extends a base file class and declares operations like any card:
+**A file's operations are the ones its class declares, and its class comes from
+its extension.** The platform maps each file extension to a base file class, and
+a realm does not configure it. Two of those classes carry a declared operation:
+every stored `.log` is `LogFile` and every stored `.jsonl` is `JSONLFile`, and
+each declares `record`, an `appendLine` whose line the realm composes rather
+than the caller:
 
 ```ts
-export class AuditLog extends TextFileDef {
-  static displayName = 'Audit Log';
-  // Restated rather than inherited: `TextFileDef` accepts `.txt`/`.text`, so
-  // inheriting its list would leave the file picker unable to see the very
-  // files this type is for.
-  static acceptTypes = '.log,text/plain';
-
+// @cardstack/base/log-file-def
+export class LogFile extends TextFileDef {
   @operation static record = {
     base: 'appendLine',
     params: { what: StringField },
@@ -114,23 +103,32 @@ export class AuditLog extends TextFileDef {
 }
 ```
 
+`JSONLFile.record` takes the same `what` and appends
+`{"at": …, "actor": …, "what": …}` as one line, so the file stays parseable
+entry by entry. Link the file with the class that declares the operation, and
+invoke it by name on the linked instance:
+
+```ts
+@field auditLog = linksTo(LogFile);
+```
+
 ```ts
 b.on(this.record.auditLog).record({ what: 'transferred to intensive care' });
 ```
 
-**Without a binding a declaration is unreachable rather than broken.** An
-unbound extension resolves to a base file class, whose only writes are the base
-`update` and `appendLine`. A declaration on an author's own subclass then
-lowers, indexes, and is never found by name — and the instance carries no such
-member either, so the call throws before any request is made.
+The linked instance is a `LogFile` because its extension says so, whatever
+class the field names. Naming `LogFile` (not `TextFileDef` or `FileDef`) on the
+field is what types `record` on the linked value and keeps the file picker to
+`.log` files. The base `update` and `appendLine` stay available on every file
+alongside it.
 
-A realm binds only the extensions of content it stores: one the platform
-already reads as a file, and not the platform's own — a module's source or a
-card's stored `.json`. Anything else in the map is refused, along with a key
-that is not an extension and a value that is not a `{ module, name }` ref.
-**A refused binding behaves exactly like no binding**, and says so only in the
-realm's log — which from the author's side looks identical to an operation that
-does not exist, so read the log when a declared file operation is not found.
+**A declaration on your own `FileDef` subclass is unreachable rather than
+broken.** No stored file resolves to an author's subclass, so an operation
+declared on one lowers, indexes, and is never found by name — and the instance
+carries no such member either, so the call throws before any request is made.
+For an append-only record, store it as a `.log` or `.jsonl` and use `record`;
+for anything the realm must compute on a card, declare the operation on the
+card.
 
 The names `atomic`, `on`, `find`, `parallel` and `serial` belong to the
 invocation surface and cannot name an operation. Neither can a name that already
@@ -346,7 +344,7 @@ supplied the state, and reconciling against the version is the common case. A
 await this.ops.atomic((b) => {
   let consult = b.requestConsult({ specialty, question });
   b.addConsult({ consult });
-  b.on(this.record.auditLog).appendLine({ line: auditLine });
+  b.on(this.record.auditLog).record({ what: 'consult requested' });
 });
 ```
 
@@ -524,11 +522,14 @@ a member of a group.
 
 ## 6. Access posture
 
-**Operations are not access-enforced beyond the realm's own read/write
-permissions.** Any caller who can write the realm can invoke any mutating
-operation on it; any caller who can read it can invoke any read. An operation
-that grants access by appending to a list *performs* that mutation — nothing
-verifies the caller was entitled to ask.
+**The realm's own read/write permissions come first.** Any caller who can write
+the realm can invoke any mutating operation on it; any caller who can read it
+can invoke any read. A realm that names a policy can widen that for callers its
+permissions decline, one operation and card type at a time, and never narrow
+it — see [`realm-policy-authoring`](../realm-policy-authoring/SKILL.md). An
+operation that grants access by appending to a list *performs* that mutation;
+nothing verifies the caller was entitled to ask beyond those permissions and
+the policy's grants.
 
 An `output` projection shapes an operation's answer and nothing more. A field
 left out of one is still reachable through the card's plain read, its stored
@@ -543,8 +544,8 @@ text.
 `packages/experiments-realm/clinical/` is a realm driven entirely by named
 operations: a program-guarded `transform`, an arithmetic one, a declarative
 `assert` over a link collection, a named `create` that links back through
-`instance('id')`, an `appendContainsMany` vitals log, a declared `appendLine` on
-a realm-bound `FileDef` subclass whose `input` program stamps the timestamp and
+`instance('id')`, an `appendContainsMany` vitals log, base `LogFile`'s `record`
+on a linked `.log` audit file, whose `input` program stamps the timestamp and
 the actor, a create-and-link `atomic` batch, a parallel transfer across three
 cards, and two saved searches rendered through
 `@context.searchResultsComponent`.

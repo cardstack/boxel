@@ -24,4 +24,4 @@ PDF.js needs three non-obvious pieces in Boxel:
 - Canvas pixels and CSS pixels differ on Retina displays; render with `devicePixelRatio`, but store annotation bounds relative to the text layer.
 - Store annotations as data, not DOM. Re-render highlights whenever the page or zoom changes.
 
-**Source:** `packages/catalog-realm/annotation/annotation.gts:426-694`, `:1320-1376`, `:3675-3690`, adapted to FileDef storage per the workspace no-inline-media rule.
+**Source:** the catalog Annotation card as last published ([`annotation/annotation.gts`](https://github.com/cardstack/boxel-catalog/blob/94f469c/annotation/annotation.gts), lines 426-694, 1320-1376, 3675-3690), adapted to FileDef storage per the workspace no-inline-media rule.

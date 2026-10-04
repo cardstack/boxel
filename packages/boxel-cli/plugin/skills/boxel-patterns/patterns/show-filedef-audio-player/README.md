@@ -19,4 +19,4 @@ The catalog `AudioField` has useful presentation variants, but its upload/edit m
 - Do not persist `URL.createObjectURL(file)` output. Object URLs are browser-local and die with the session.
 - If audio is generated, write bytes with `WriteBinaryFileCommand` first, then link the returned file identifier.
 
-**Source:** A Million Dreams karaoke FileDef example in `boxel-file-def/references/no-inline-binary.md` and `boxel-file-def/references/using-filedef-in-cards.md`; catalog audio field variants in `packages/catalog-realm/fields/audio.gts` and `field-spec/audio-field-spec.gts`.
+**Source:** A Million Dreams karaoke FileDef example in `boxel-file-def/references/no-inline-binary.md` and `boxel-file-def/references/using-filedef-in-cards.md`; catalog audio field variants in [`fields/audio/audio.gts`](https://github.com/cardstack/boxel-catalog/blob/main/fields/audio/audio.gts) and [`fields/audio/Spec/audio-field-spec.gts`](https://github.com/cardstack/boxel-catalog/blob/main/fields/audio/Spec/audio-field-spec.gts).

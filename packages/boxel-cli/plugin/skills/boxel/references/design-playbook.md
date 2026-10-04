@@ -199,7 +199,7 @@ The production agent copies these specs. Without them, fitted/embedded/atom land
 | Stage | Goal | Deliverable | Variables? |
 |---|---|---|---|
 | 1. Mockup | Make it look right at full size | `static isolated` template, hardcoded everything | NO |
-| 2. Extract | Capture the design DNA | A Theme card whose `cssVariables` ARE the mockup's palette | — |
+| 2. Extract | Capture the design DNA | A `StructuredTheme` (or richer) whose `rootVariables` ARE the mockup's palette | — |
 | 3. Tokenize | Make it editable through the theme | Rewrite isolated to consume `var(--*)` references | YES (now) |
 | 4. Derive | Take the identity to constrained formats | `fitted` + `embedded` + (optional) `atom`, all consuming the theme. **Fitted MUST feature the card's media.** | YES |
 
@@ -268,7 +268,7 @@ If any answer is "no", iterate before stage 2.
 
 Scan your stage-1 CSS and pull every distinct decision into the theme. The Theme card you write here IS the design DNA — the actual values that made the mockup work, not a guess at good defaults.
 
-**Use a `StructuredTheme` (or richer), never the bare `Theme` card.** The bare card's `cssVariables` string bypasses the token contract: nothing fills in what you omit, nothing validates it, and the theme editors cannot read it. Write your values into `rootVariables` / `darkModeVariables` / `typography` under the contract's names, listed in `boxel-ui-guidelines/references/theme-token-contract.md`. Step up to `StyleReference` or `DetailedStyleReference` when the visual language deserves prose, and to `BrandGuide` when the design has marks or needs custom variables the contract does not name.
+**Use a `StructuredTheme` (or richer), never the bare `Theme` card.** Write your values into `rootVariables` / `darkModeVariables` / `typography` under the contract's names, listed in `boxel-ui-guidelines/references/theme-token-contract.md`. Which subclass to start from (`StyleReference`, `DetailedStyleReference`, `BrandGuide`) is decided in the ThemeCard Types table of `boxel/references/theme-design-system.md`.
 
 **Map each decision onto a contract role — don't invent names:**
 
@@ -298,7 +298,7 @@ Scan your stage-1 CSS and pull every distinct decision into the theme. The Theme
 }
 ```
 
-`cssImports` is computed from the font stacks; only a non-Google stylesheet needs a `customCssImports` entry. Push the theme card.
+`cssImports` is derived from the font stacks (`boxel-ui-guidelines/references/font-loading-theme-card-owns-imports.md`). Push the theme card.
 
 ---
 
@@ -329,19 +329,7 @@ Now you have the design language (in the theme) and the flagship layout (in isol
 
 This rule is what lets a parent (like the Row & Rail Programme showcase) embed your card and override the chrome to match its design language. If your `isolated` adds `border-radius: 8px` to its outer `<article>`, it fights every parent that tries to override.
 
-Per format, outer-element rules. `CardContainer` — which wraps every card render — already applies the theme's `background-color`, `color`, and the full `body` typography role (family, size, weight, line-height, letter-spacing), plus heading roles on `h1`–`h3` and caption on `small` (see stage 3); all inherited for free. Don't declare these on the root unless deviating: `font-family` only for a non-sans card voice (such as `--font-serif`); `background-color`/`color` only when a pairing other than the theme's main background/foreground is preferred. `fitted` and `embedded` may make that switch (e.g. `--card` + `--card-foreground`); `isolated` and CardDef `edit` keep the theme's pair.
-
-| Format | OK on outermost | NOT OK |
-|---|---|---|
-| `isolated` | `height: 100%; overflow-y: auto` (fills the fixed-height container and scrolls; `min-height` clips instead), `font-family` (only if not `--font-sans`), inner padding, inner grid/flex | `border-radius`, `border`, `box-shadow`, `overflow: hidden`, `min-height` in place of `height: 100%`, background/foreground overrides (use the theme's) |
-| `embedded` | same — plus a different background/foreground pairing (e.g. `--card` + `--card-foreground`) | `border-radius`, `border`, `box-shadow`, `overflow`, `width/height/max-width` |
-| `fitted` | a different background/foreground pairing (e.g. `--card` + `--card-foreground`), `font-family` (only if not `--font-sans`), inner padding, inner grid template | `border-radius`, `border`, `box-shadow`, `width/height/min/max-height`, `container-type`, `container-name` |
-| `atom` | inline content only | `padding`, `border`, `border-radius`, `background`, any `display:` other than default |
-| `edit` | form field spacing, internal layout | same as isolated (keep the theme's background/foreground) |
-
-Compound-field `embedded`/`edit` templates are the exception: nested inside a card surface, they may choose a different background/foreground combo to distinguish themselves — usually `--card` + `--card-foreground`.
-
-**If the brand demands a specific outer treatment** (sharp corners, custom border), put it on the **Theme card** (`--background`, `--border`, `--radius` — the wrapper's corner and the inner `--boxel-border-radius-*` scale both follow `--radius`). The CardContainer reads those tokens directly, so every linked card gets it for free — without format CSS contention.
+The per-format table of what is and is not allowed on the outermost element, the compound-field exception, and the self-check live in that reference ("Per format — what's safe and what isn't on the outermost element"). Two consequences for this stage: `CardContainer` already paints the theme's background/foreground pair and body type role, so a root declares neither unless deviating; and a brand-specific outer treatment (sharp corners, a custom border) goes on the Theme card as `--radius`, `--background`, `--border`, where every linked card inherits it.
 
 **Fitted — start from `<FittedCard>` for standard compositions.** For standard compositions (image + eyebrow + title + subtitle + meta + footer + badges), use the `FittedCard` component from `@cardstack/boxel-ui/components` and carry the design identity through its `--fc-*` variables and slot content — see the "Prefer `<FittedCard>`" section of `container-query-fitted-layout.md`. When the design calls for a special fitted template (barcode ticket stub, terminal ticker, boarding pass, magazine spread — the kind in that guide's File Inventory), skip `FittedCard` and hand-roll per the guide.
 

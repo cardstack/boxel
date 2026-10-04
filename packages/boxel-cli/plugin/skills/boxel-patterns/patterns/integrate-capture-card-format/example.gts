@@ -11,22 +11,22 @@ import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 
-import ScreenshotCardTool from '@cardstack/boxel-host/tools/screenshot-card';
+import CaptureCardTool from '@cardstack/boxel-host/tools/capture-card';
 import { Button } from '@cardstack/boxel-ui/components';
 
-type ScreenshotFormat = 'isolated' | 'embedded';
+type OnDemandCaptureFormat = 'isolated' | 'embedded';
 
 // Built-in enum field — atom view shows the current value as plain text;
 // edit view renders a BoxelSelect dropdown of the configured options.
 const FormatField = enumField(StringField, {
   options: ['isolated', 'embedded'],
-  displayName: 'Screenshot Format',
+  displayName: 'Capture Format',
 });
 
-class Isolated extends Component<typeof ScreenshotCardDemo> {
+class Isolated extends Component<typeof CaptureCardDemo> {
   @tracked isRunning = false;
   @tracked errorMessage: string | null = null;
-  @tracked screenshotUrl: string | null = null;
+  @tracked captureUrl: string | null = null;
 
   get hasToolContext() {
     return Boolean(this.args.context?.toolContext);
@@ -40,13 +40,13 @@ class Isolated extends Component<typeof ScreenshotCardDemo> {
     return this.isRunning || !this.hasToolContext || !this.hasLinkedCard;
   }
 
-  get effectiveFormat(): ScreenshotFormat {
+  get effectiveFormat(): OnDemandCaptureFormat {
     let raw = (this.args.model as any)?.format?.trim?.();
     return raw === 'embedded' ? 'embedded' : 'isolated';
   }
 
   @action
-  async takeScreenshot() {
+  async takeCapture() {
     let toolContext = this.args.context?.toolContext;
     let card = (this.args.model as any)?.card;
     if (!toolContext) {
@@ -55,19 +55,19 @@ class Isolated extends Component<typeof ScreenshotCardDemo> {
       return;
     }
     if (!card) {
-      this.errorMessage = 'Link a card before taking a screenshot.';
+      this.errorMessage = 'Link a card before taking a capture.';
       return;
     }
 
     this.isRunning = true;
     this.errorMessage = null;
-    this.screenshotUrl = null;
+    this.captureUrl = null;
     try {
-      let result = await new ScreenshotCardTool(toolContext).execute({
+      let result = await new CaptureCardTool(toolContext).execute({
         card,
         format: this.effectiveFormat,
       });
-      this.screenshotUrl = result.captures?.[0]?.url ?? null;
+      this.captureUrl = result.captures?.[0]?.url ?? null;
     } catch (error) {
       this.errorMessage =
         error instanceof Error ? error.message : String(error);
@@ -77,9 +77,9 @@ class Isolated extends Component<typeof ScreenshotCardDemo> {
   }
 
   <template>
-    <article class='screenshot-card-demo'>
+    <article class='capture-card-demo'>
       <header>
-        <h2>Screenshot Card Demo</h2>
+        <h2>Capture Card Demo</h2>
         <p>
           Pick a card and a format, then capture a settled PNG. The result
           is a durable served URL from the media cache.
@@ -87,7 +87,7 @@ class Isolated extends Component<typeof ScreenshotCardDemo> {
       </header>
 
       <section class='field'>
-        <label>Card to screenshot</label>
+        <label>Card to capture</label>
         <@fields.card />
       </section>
 
@@ -98,19 +98,19 @@ class Isolated extends Component<typeof ScreenshotCardDemo> {
 
       <section class='actions'>
         <Button
-          data-test-take-screenshot
+          data-test-take-capture
           @disabled={{this.isDisabled}}
-          {{on 'click' this.takeScreenshot}}
+          {{on 'click' this.takeCapture}}
         >
-          {{if this.isRunning 'Taking screenshot…' 'Take Screenshot'}}
+          {{if this.isRunning 'Taking capture…' 'Take Capture'}}
         </Button>
       </section>
 
-      {{#if this.screenshotUrl}}
+      {{#if this.captureUrl}}
         <section class='result'>
           <p>Served at:</p>
-          <code class='url'>{{this.screenshotUrl}}</code>
-          <img src={{this.screenshotUrl}} alt='Card screenshot' />
+          <code class='url'>{{this.captureUrl}}</code>
+          <img src={{this.captureUrl}} alt='Card capture' />
         </section>
       {{/if}}
 
@@ -120,7 +120,7 @@ class Isolated extends Component<typeof ScreenshotCardDemo> {
     </article>
 
     <style scoped>
-      .screenshot-card-demo {
+      .capture-card-demo {
         display: flex;
         flex-direction: column;
         gap: var(--boxel-sp-lg);
@@ -173,8 +173,8 @@ class Isolated extends Component<typeof ScreenshotCardDemo> {
   </template>
 }
 
-export class ScreenshotCardDemo extends CardDef {
-  static displayName = 'Screenshot Card Demo';
+export class CaptureCardDemo extends CardDef {
+  static displayName = 'Capture Card Demo';
 
   @field card = linksTo(CardDef);
   @field format = contains(FormatField);

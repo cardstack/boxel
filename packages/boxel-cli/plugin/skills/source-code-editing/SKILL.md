@@ -1,145 +1,18 @@
 ---
 name: source-code-editing
-description: Use when editing existing .gts or .json files via SEARCH/REPLACE blocks. Defines exact block format, matching rules, and recovery from failed matches. Required before issuing any code edit.
+description: Use the run-realm-code tool to create and edit source files in a Boxel realm.
 boxel:
   kind: skill
+  tools:
+    - codeRef:
+        module: '@cardstack/boxel-host/tools/run-realm-code'
+        name: default
 ---
 
 # Source Code Editing
 
-## Pair with
+Use the `run-realm-code` tool for every source-file creation or edit. Do not emit file edits as prose. The tool executes JavaScript in the isolated realm runner. Each `realm.fs` call goes to the host, which reads files in the given realm and saves each write before the call returns.
 
-- **`boxel`** — to know *what* to change. This skill only describes the edit transport.
-- **`boxel-environment`** — when the edit happens inside the live Boxel app (mode switching, file URL discovery).
-- **`boxel-ui-guidelines`** — when the edit is a template change.
+Before editing, read the current contents of every target file, with another tool or with `await realm.fs.readText(path)` in the script. Pass the workspace realm URL and room ID supplied by the host. Use `await realm.fs.replace(path, exactCurrentText, replacement)` for an existing file. Use `await realm.fs.writeText(path, content)` for a new file; it refuses a file that already exists. `path` is relative to the realm root, such as `person.gts`; a full file URL inside the realm also works. File content often contains backticks and `${`, for example a BXL `fx` expression or a template string in a computed field. If you put such content inside a JavaScript template literal, escape each backslash in it as `\\` first, then each backtick as `` \` `` and each `${` as `\${`. Without this, the script does not parse, or it saves different text without an error: `/\d+/` becomes `/d+/`, and `${name}` is replaced with a value. Escape the `exactCurrentText` argument of `realm.fs.replace` the same way, or it does not match the file. Use `await realm.fs.exists(path)` to check whether a file exists. Await every call. Write all files of a build in one call, within the limits of one call: at most 20 files (each path given to any `realm.fs` method counts), a script of at most 100,000 characters, and 55 seconds. Split a larger build across calls. A `.gts` or `.ts` write with lint errors that autofix cannot repair is refused, and the script stops there. Each write is saved when its call returns, so if the script fails partway, the files written before the failure stay saved; the error names them.
 
-## Don't use for
-
-- Writing brand-new files where the schema is still undecided. Decide the schema with `boxel` first.
-- Nothing about instances is out of scope: an instance is its `.json` file, and a field fix, a removed key, or a repair after a failed check is a SEARCH/REPLACE block against that file. Do not reach for `patch-fields` to repair a file you just wrote — the card may not be indexed yet, and the tool applies to nothing.
-
-When you infer that the user wants to make changes to the attached files, which is usually a card definition, or create new files, you must use a SEARCH/REPLACE block — for .gts and .json files alike; never use write-text-file. SEARCH/REPLACE blocks stream as visible text (the user sees progress), while tool calls like write-text-file do NOT stream (the UI appears frozen with "Thinking" / "Preparing tool call" while generating the full file content).
-
-A SEARCH/REPLACE block has 2 sections: a section of code to search for, and the code to replace it with. All code within the SEARCH will be replaced. A SEARCH/REPLACE block can be used to either edit an existing file, or create a new file. 
-
-This is ABSOLUTELY CRUCIAL, WITHOUT THIS THE CODE PATCH WON'T WORK: in the beginning of the code block, before ╔═══ SEARCH ════╗ marker, add a line with the file url. If you are editing, this should be the attached file's url. If you are creating a new file, come up with a file name, and add it at the end of the provided realm url so that you form a file url, and use that.
-
-Example adding an import:
-
-```gts
-https://example.com/attached-file-example.gts
-╔═══ SEARCH ════╗
-import { Component } from '@cardstack/base/card-api';
-import { or } from '@cardstack/boxel-ui/helpers';
-╠═══════════════╣
-import { Component } from '@cardstack/base/card-api';
-import { MarkdownField } from '@cardstack/base/markdown';
-import { or } from '@cardstack/boxel-ui/helpers';
-╚═══ REPLACE ═══╝
-```
-
-Example deleting a field by not including it in the replace block:
-
-```gts
-https://example.com/attached-file-example.gts
-╔═══ SEARCH ════╗
-  @field description = contains(StringField);
-  @field categories = containsMany(Category);
-  @field attemptsRemaining = contains(NumberField, {
-    computeVia: function() {
-      return 4; // Start with 4 attempts
-    }
-  });
-╠═══════════════╣
-  @field description = contains(StringField);
-  @field categories = containsMany(Category);
-╚═══ REPLACE ═══╝
-```
-
-Example changing text within a template:
-
-```gts
-https://example.com/attached-file-example.gts
-╔═══ SEARCH ════╗
-      <template>
-      <div class="connections-game">
-        <header class="game-header">
-          <h1 class="game-title">Connections</h1>
-          <div class="game-description">{{@model.description}}</div>
-        </header>
-╠═══════════════╣
-      <template>
-      <div class="connections-game">
-        <header class="game-header">
-          <h1 class="game-title">Connections Game</h1>
-          <div class="game-description">{{@model.description}}</div>
-        </header>
-╚═══ REPLACE ═══╝
-```
-
-Example creating a new file (in this case it is *CRUCIAL* to include "(new)" in the file URL line, after the URL, otherwise the SEARCH/REPLACE block WILL NOT be interpreted correctly:
-
-```gts
-http://users-realm/new-file-example.gts (new)
-╔═══ SEARCH ════╗
-╠═══════════════╣
-import { CardDef } from '@cardstack/base/card-api';
-import { Component } from '@cardstack/base/card-api';
-export class NewFileExample extends CardDef {
-  static displayName = "New file example";
-}
-╚═══ REPLACE ═══╝
-```
-
-Every *SEARCH/REPLACE block* must use this format:
-1. The opening fence and code language, eg: ```gts — on a line of its own. Never end a sentence with the fence: `Let's write the block!```gts` is not a code block, the whole patch renders as plain text, and nothing is applied. Finish the sentence, start a new line, then open the fence.
-2. File url. If you are creating a new file, add '(new)', for example: https://example.com/file.gts (new). If you are editing an existing file, output just the url, without '(new') 
-4. In a new line, the start of search block: ╔═══ SEARCH ════╗
-3. A contiguous chunk of lines to search for in the existing source code
-4. The dividing line: ╠═══════════════╣
-5. The lines to replace into the source code
-6. The end of the replace block: ╚═══ REPLACE ═══╝
-7. The closing fence: ```
-
-Each of the three markers appears *EXACTLY ONCE* per block: one ╔═══ SEARCH ════╗, one ╠═══════════════╣ dividing line, one ╚═══ REPLACE ═══╝. Never repeat the dividing line. Do NOT add a second ╠═══════════════╣ (or any marker) before the closing ╚═══ REPLACE ═══╝ — the replace section ends at ╚═══ REPLACE ═══╝, and anything you put after your replacement lines is treated as file content, so a stray marker gets written into the file as a literal line of box-drawing characters.
-
-Every *SEARCH* section must *EXACTLY MATCH* the existing file content, character for character, including all comments, docstrings, etc.
-If the file contains code or other data wrapped/escaped in json/xml/quotes or other containers, you need to propose edits to the literal contents of the file, including the container markup.
-
-*SEARCH/REPLACE* blocks will *only* replace the first match occurrence.
-
-**When a block was not applied**, the next user message names the block, the file, and the reason. "Search pattern not found" means the SEARCH section does not match the file as it is now, and the message names the first SEARCH line that occurs nowhere in the file. Recover in one step: re-read the file, then send a new block whose SEARCH lines are copied from that fresh content — including trailing commas, closing brackets, and lines you did not write yourself (the realm adds `realmURL` under `meta`, for example). Never resend a block unchanged: the file did not change, so it fails again. Check also that the sections are in the right order — SEARCH holds the current file content, REPLACE holds the new content; a block whose SEARCH holds the code you intend to write fails with this same message.
-
-**Put every file a piece of work needs in one reply.** Building three cards means three blocks in the same answer, not one card per turn. The grouped apply runs every block of the reply in order, and the correctness check then runs once over the finished result. The user can also preview or apply any single block on its own, so each block must also stand alone against the attached file (see below).
-
-Handing back after each file is what breaks a multi-file build. Each file you finish ends your turn, and what happens next is decided by the events that turn produced — so a plan you described earlier is not resumed for you. A build announced as three files and delivered one file at a time routinely stops after the first.
-
-Include enough lines in each SEARCH section to uniquely match each set of lines that need to change.
-
-Keep *SEARCH/REPLACE* blocks concise.
-Break large *SEARCH/REPLACE* blocks into a series of smaller blocks that each change a small portion of the file.
-Include just the changing lines, and a few surrounding lines if needed for uniqueness.
-Do not include long runs of unchanging lines in *SEARCH/REPLACE* blocks.
-
-To move code within a file, use 2 *SEARCH/REPLACE* blocks: 1 to delete it from its current location, 1 to insert it in the new location. This works only when the two regions do not touch in the attached file. When the old and new locations are adjacent or overlap, use one block that covers both and rewrites them in a single replacement.
-
-**Every block must match the attached file on its own.** When a reply carries several blocks for one file, the grouped apply runs them in order, but each block is also previewed on its own, and the user can apply a single block alone. A block whose SEARCH only exists after another block of the same reply has run shows a broken diff and fails with "search pattern not found" when applied alone. So:
-- Never write a block that depends on another block of the same reply. For an edit block, the SEARCH must be lines that exist in the attached file as it is now. A `(new)` block's SEARCH stays empty.
-- Blocks for one file must not overlap. Two edits to different lines of the same import list or template section are fine as two small blocks. Two blocks that touch the same lines are not: do not add a line in one block and remove or rewrite it in a later block. Decide the final content of a spot first, then write one block for it.
-- If you change your mind about an edit while writing, rewrite the earlier block instead of adding a correcting block after it.
-
-Pay attention to which filenames the user wants you to edit, especially if they are asking you to create a new file. 
-
-Avoid detailed description of the SEARCH/REPLACE blocks. For every SEARCH/REPLACE block write 1 sentence description max. 
-
-If you propose a search/replace block for file edits, it must be for the currently attached file(s), and not for those attached before the most recent one (unless you ask and get the user's approval). 
-
-Your new SEARCH/REPLACE blocks must target ONLY the content of currently attached files - the search portion must not target any of your previous suggestions, from this reply or an earlier one, since it is not guaranteed that those blocks were applied. If you do not have the contents of the gts file you want to update, you must first use the tool read-file-for-ai-assistant_[hash] tool to get the files contents, and only after that is complete, attempt to generate a SEARCH?REPLACe change.
-
-If you recognize the user wants to edit a template, do a visual change to a card, or describe a certain implementation or style, then you must use a SEARCH/REPLACE block to perform an edit to the attached gts file, by default in the isolated template. Do not default to using the patchCardInstance tool function, unless the user asks you to change the supporting data of the card. 
-
-When you respond with a SEARCH/REPLACE block, do not refer to it as a SEARCH/REPLACE block in your prose responses, as this is an internal code structure that will get shown to user in a different format. If you need to refer to it, talk about it in a semantic way. For example, do not say 'I'll use a SEARCH/REPLACE block to add a template', but rather 'I'll add a border around the section'.
-
-After emitting one or more SEARCH/REPLACE blocks, the user will need to apply the changes. Therefore, end your response after emitting all your SEARCH/REPLACE blocks instead of summarizing. You will be notified when the blocks have been applied, and you can summarize the updates that have been made then.
-
-Never respond with '[Omitting previously suggested code change]', or '[Omitting previously suggested and applied code change]'. If you see that in historic context it means it was used to reduce its payload, but you should always respond with actual code when you are suggesting changes.
+Keep the script deterministic and narrowly scoped. Do not access browser globals, network services, credentials, or files outside the given realm. After the tool returns, inspect its result and address any correctness errors with another tool call.

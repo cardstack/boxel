@@ -186,28 +186,9 @@ static fitted = class Fitted extends Component<typeof this> {
 };
 ```
 
-### All 16 fitted formats (from `fitted-formats.ts`)
+### All 16 fitted formats
 
-The runtime defines 16 named formats. Sizes are exact spec values (width × height in px):
-
-| Format | Width | Height |
-|---|---|---|
-| small-badge | 150 | 40 |
-| medium-badge | 150 | 65 |
-| large-badge | 150 | 105 |
-| single-strip | 250 | 40 |
-| double-strip | 250 | 65 |
-| triple-strip | 250 | 105 |
-| double-wide-strip | 400 | 65 |
-| triple-wide-strip | 400 | 105 |
-| small-tile | 150 | 170 |
-| regular-tile | 250 | 170 |
-| cardsgrid-tile | 170 | 250 |
-| tall-tile | 150 | 275 |
-| large-tile | 250 | 275 |
-| compact-card | 400 | 170 |
-| full-card | 400 | 275 |
-| expanded-card | 400 | 445 |
+The runtime defines 16 named formats (`FITTED_FORMATS` in boxel-ui). The table of ids and exact pixel sizes lives in `skills/boxel/references/fitted-formats.md`; verify a fitted template against every row there.
 
 ### Form fields
 

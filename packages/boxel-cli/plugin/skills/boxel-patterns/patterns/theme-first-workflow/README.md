@@ -10,7 +10,7 @@ validated: source-proven
 
 **The insight:** `boxel-ui`'s `theme.css` supplies defaults for the complete token contract, so cards render with Boxel defaults without a Theme relationship. When a card needs a specific visual identity, Boxel can override those defaults through `cardInfo.theme` — a `linksTo(Theme)` field on every CardDef. The Theme card holds:
 - theme variables — structured `rootVariables`, `darkModeVariables`, `typography`, and (for `BrandGuide`) palette/mark fields that compute `cssVariables`. Avoid the bare `Theme` card’s free-form `cssVariables` string, which bypasses the token contract.
-- `cssImports` — `<link>` stylesheet URLs. On a StructuredTheme this is computed from the font stacks; hand-added links go in `customCssImports`.
+- `cssImports` — `<link>` stylesheet URLs, computed from the font stacks (see `boxel-ui-guidelines/references/font-loading-theme-card-owns-imports.md`).
 
 When a card has `cardInfo.theme` set, the CardContainer injects that Theme's CSS variable overrides and imports its fonts. Without one, the same `var(--background)`, `var(--foreground)`, `var(--primary)`, `var(--font-sans)` references resolve to the defaults from `theme.css`.
 
@@ -25,12 +25,12 @@ If you skip this step and build the card with hard-coded colors, you've wasted t
 Use Boxel defaults when the card does not need a distinct visual or brand identity; do not create or link a Theme in that case. When a specific Theme is wanted, choose among these options in order of preference:
 
 1. **Reuse an existing Theme.** Most realms already have a couple. Browse `<realm>/Theme/*.json` or search with `npx boxel search` filtered on the Theme class. Pick by `styleName` / `visualDNA` fields.
-2. **Copy and edit.** Take an existing structured Theme (`StyleReference`, `DetailedStyleReference`, `BrandGuide` — anything descending from `StructuredTheme`), `copy-card` it, and edit its structured fields (`rootVariables`, `darkModeVariables`, `typography`, and on a `BrandGuide` the palette and mark fields). On those cards `cssVariables` and `cssImports` are computed from the structured fields, so never edit them directly; stylesheets that cannot be derived from the font stacks go in `customCssImports`. A bare `Theme` card has only the free-form `cssVariables` string — prefer copying a structured one. Catalog Themes have a "Copy and Edit" menu item built in.
+2. **Copy and edit.** Take an existing structured Theme (`StyleReference`, `DetailedStyleReference`, `BrandGuide` — anything descending from `StructuredTheme`), `copy-card` it, and edit its structured fields (`rootVariables`, `darkModeVariables`, `typography`, and on a `BrandGuide` the palette and mark fields). On those cards `cssVariables` and `cssImports` are computed from the structured fields, so never edit them directly. Catalog Themes have a "Copy and Edit" menu item built in.
 3. **Author a new Theme.** Choose the narrowest base that preserves the design intent:
-   - `@cardstack/base/brand-guide` for a full brand system with logo/mark usage, functional palette, color palette, typography, voice, and detailed style guidance. It is also the only shipped structured theme shape with dedicated fields for custom CSS variables outside the token contract (`customCssVariables`, `brandColorPalette`). Use it when custom variables are needed, but know the cost: they have no `theme.css` default and no boundary reset, and linking a different theme drops them, so any template that reads one needs a fallback (see `boxel-ui-guidelines/references/theme-token-contract.md`).
+   - `@cardstack/base/brand-guide` for a full brand system with logo/mark usage, functional palette, color palette, typography, voice, and detailed style guidance. It is also the only shipped structured theme shape with fields for custom CSS variables outside the token contract, which come at a cost spelled out under "Not part of the contract" in `boxel-ui-guidelines/references/theme-token-contract.md`.
    - `@cardstack/base/detailed-style-reference` for a full style system without logo/mark material.
    - `@cardstack/base/style-reference` for a compact visual DNA reference with inspirations and wallpapers.
-   - `@cardstack/base/structured-theme` for a token-only theme. This is the floor: never adopt from or subclass the bare `Theme` in `@cardstack/base/card-api`, whose free-form `cssVariables` string bypasses the token contract.
+   - `@cardstack/base/structured-theme` for a token-only theme. This is the floor: never adopt from or subclass the bare `Theme` (ThemeCard Types in `boxel/references/theme-design-system.md`).
 
 ### Step 1 — Link a specific Theme where it applies
 
@@ -124,8 +124,8 @@ After writing the card and a sample instance, preview it in the live app (see `s
 - **Never set `cardInfo.theme` on a Theme card itself.** Theme → Theme is circular; the realm rejects it. Omit the relationship entirely on Theme instances.
 - **`cardInfo.theme` is a `linksTo`, not a `contains`.** Always `"self": null` for empty, never `[]` (which is for linksToMany only).
 - **Without a resolved `cardTheme`, CSS variables fall back to Boxel defaults** (the `--boxel-*` chain). Your card won't crash, but it won't look distinctive.
-- **Do not flatten rich themes unnecessarily.** Minimal Themes can store raw `cssVariables`, but `StructuredTheme`, `StyleReference`, `DetailedStyleReference`, and `BrandGuide` carry structured fields that compute `cssVariables`. Preserve those fields when editing.
-- **Brand assets live on Brand Guide, not arbitrary strings.** Logo and mark material belongs in `markUsage`; brand colors belong in `brandColorPalette` and `functionalPalette`; templates consume the generated `--brand-*` variables and semantic theme variables.
+- **Do not flatten rich themes.** `StructuredTheme`, `StyleReference`, `DetailedStyleReference`, and `BrandGuide` carry structured fields that compute `cssVariables`. Preserve those fields when editing; never write `cssVariables` directly.
+- **Brand assets live on Brand Guide, not arbitrary strings.** Which field holds what is in the Brand Guide Pattern section of `boxel/references/theme-design-system.md`.
 - **Boxel built-in feature work uses the Boxel Brand Guide.** For base cards, host-facing UI, and Boxel-branded catalog material, start from `@cardstack/base/Theme/boxel-brand-guide` and its style rules.
 
 **Source:** `boxel-catalog/blog-app/Theme/{modern-magazine,warm-editorial,neon-brutalist}.json` (production Themes), `packages/base/theme.gts`, `packages/base/structured-theme.gts`, `packages/base/style-reference.gts`, `packages/base/detailed-style-reference.gts`, `packages/base/brand-guide.gts`, `packages/base/brand-logo.gts`, `packages/base/brand-functional-palette.gts`, `packages/base/structured-theme-variables.gts`, and `packages/base/Theme/boxel-brand-guide.json`.

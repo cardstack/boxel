@@ -11,6 +11,8 @@ FileDef                          → any file
   │     └── AvifDef              → .avif files
   ├── MarkdownDef                → .md / .markdown (adds title, excerpt, content)
   ├── TextFileDef                → .txt (adds title, excerpt, content)
+  │     ├── LogFile              → .log (declares a `record` operation that appends a stamped line)
+  │     └── JSONLFile            → .jsonl (declares a `record` operation that appends a stamped JSON entry)
   ├── TsFileDef                  → .ts (adds title, excerpt, content)
   ├── GtsFileDef                 → .gts (extends TsFileDef)
   ├── JsonFileDef                → .json (adds title, excerpt, content)

@@ -4,16 +4,156 @@ validated: source-proven
 
 # app-card-home-with-search — Every card family needs a home
 
-**What this gives you:** A `Home` CardDef (typically named after the brand — `Surge`, `RowAndRail`, `BoxelHome`) that sits at the top of a card family and uses `@context.searchResultsComponent` to dynamically list every Meet / Listing / Project / etc. in the realm. `prefersWideFormat = true` so it opens edge-to-edge. The user lands on it, sees the realm at a glance, drills in from there.
+**What this gives you:** A `Home` CardDef (typically named after the brand — `Surge`, `RowAndRail`, `BoxelHome`) that sits at the top of a card family and lists every Meet / Listing / Project / etc. in the realm. Each list is a `linksToMany` field on the home, rendered with delegated render, one item at a time (`{{#each @fields.meets as |Meet|}}<Meet @format='fitted' />{{/each}}`). `prefersWideFormat = true` so it opens edge-to-edge. The user lands on it, sees the realm at a glance, drills in from there.
 
 **When to use:** Whenever you build a card *family* — 2+ related CardDefs (Meet + Swimmer + Club, Project + Task + Person, Show + Listing + Venue, etc.). Building a single utility card? Skip this pattern. Building anything where the user will accumulate instances over time? Build the home.
 
 **Why it matters:**
 - **Discoverability.** A workspace with 5 CardDefs and no home falls back to its default index card, which lists everything the workspace holds under one Library view. That is a competent inventory, not a pitch: it can't say which of the five types a visitor should open first, or why. A home puts the brand voice up front and arranges the suite the way the designer intended.
 - **Editorial framing.** The home is where you set the typography pairing, the eyebrow voice, the color story. Children inherit through the theme cascade.
-- **Live by construction.** `@context.searchResultsComponent` re-runs as the realm changes — new instances appear automatically, no manual relationship-wiring on the home.
+- **Plain fields, no query plumbing.** A section is a field like any other: the schema says what the home shows, the template renders it with `<@fields.… />`, and there is no hand-built query, `codeRef`, or `realmURL` code in the template.
+
+**Pick the field form per section:**
+
+| The section shows | Field |
+|---|---|
+| Every card of a type in the realm, and new ones should appear by themselves | Query-backed: `linksToMany(() => Meet, { query: { sort: [...] } })` |
+| A curated set the user picks and orders | Plain `linksToMany(() => Meet)`, links set in the home's JSON |
+| A searchable or filterable list, or one that can grow past a few hundred cards | `@context.searchResultsComponent` — see [the search-results variant](#variant-search-results-for-search-ui-or-very-large-lists) below |
+
+A query-backed field with no `filter` matches every card of its declared type in the realm that holds the home, and a `sort` on one of that type's fields needs no `on` — the field adds both. It holds a bounded page (500 by default); see [`query-backed-relationships`](../../../query-backed-relationships/SKILL.md) before relying on it for large sets.
 
 **Recipe shape:**
+
+```ts
+// surge.gts (or row-and-rail.gts, or whatever the brand demands)
+import { CardDef, Component, field, contains, linksTo, linksToMany } from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import TextAreaField from '@cardstack/base/text-area';
+import BoltIcon from '@cardstack/boxel-icons/bolt';
+import { Meet } from './meet';
+import { Swimmer } from './swimmer';
+
+export class Surge extends CardDef {
+  static displayName = 'Surge';
+  static icon = BoltIcon;
+  static prefersWideFormat = true;             // ← edge-to-edge home
+
+  @field welcome = contains(StringField);
+  @field tagline = contains(TextAreaField);
+  @field headlineMeet = linksTo(() => Meet);   // optional spotlight pin
+
+  // Every Meet in the realm, newest first. Live: a new meet appears without
+  // anyone editing the home.
+  @field meets = linksToMany(() => Meet, {
+    query: { sort: [{ by: 'dates.start', direction: 'desc' }] },
+  });
+  @field swimmers = linksToMany(() => Swimmer, {
+    query: { sort: [{ by: 'lastName', direction: 'asc' }] },
+  });
+
+  @field cardTitle = contains(StringField, {
+    computeVia: function (this: Surge) {
+      return this.cardInfo?.name?.trim()?.length
+        ? this.cardInfo.name
+        : (this.welcome ?? 'SURGE');
+    },
+  });
+
+  static isolated = class Isolated extends Component<typeof Surge> {
+    <template>
+      <article class='sg'>
+        <header class='sg-mast'>
+          <h1 class='sg-wordmark'><@fields.cardTitle /></h1>
+          {{#if @model.tagline}}<p class='sg-tagline'><@fields.tagline /></p>{{/if}}
+        </header>
+
+        {{#if @model.headlineMeet}}
+          <section class='sg-featured'>
+            <@fields.headlineMeet @format='embedded' class='sg-featured-card' />
+          </section>
+        {{/if}}
+
+        <section class='sg-section'>
+          <h2 class='sg-section-title'>The calendar</h2>
+          {{!-- Loop the field so each card is a grid cell: the one-tag
+               render wraps items in containers a class cannot reach. --}}
+          <div class='sg-grid'>
+            {{#each @fields.meets as |Meet|}}
+              <Meet @format='fitted' class='sg-cell' />
+            {{else}}
+              <p class='sg-status'>No meets yet.</p>
+            {{/each}}
+          </div>
+        </section>
+
+        <section class='sg-section'>
+          <h2 class='sg-section-title'>Swimmers</h2>
+          <div class='sg-grid'>
+            {{#each @fields.swimmers as |Swimmer|}}
+              <Swimmer @format='fitted' class='sg-cell' />
+            {{/each}}
+          </div>
+        </section>
+      </article>
+
+      <style scoped>
+        /* Outer chrome — leave radius / border / shadow / bg / font to the host */
+        .sg {
+          --sg-cell-min-width: 17.5rem;
+          --sg-cell-height: 12.5rem;
+          height: 100%;
+          overflow-y: auto;
+        }
+        .sg-status {
+          margin: 0;
+          color: var(--muted-foreground);
+        }
+        .sg-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(var(--sg-cell-min-width), 1fr));
+          gap: var(--boxel-sp);
+        }
+        /* Fixed height: a fitted card picks its layout by container query, so
+           the cell must have a size. The class lands on each card's own
+           container. */
+        .sg-cell { height: var(--sg-cell-height); }
+      </style>
+    </template>
+  };
+
+  static embedded = class Embedded extends Component<typeof Surge> { /* brand card */ };
+  static fitted   = class Fitted   extends Component<typeof Surge> { /* mini wordmark */ };
+}
+```
+
+For a grid of fitted cards, loop the field (`{{#each @fields.meets as |Meet|}}`) and put the class on each item, as above. A one-tag render (`<@fields.meets @format='fitted' />`) is fine when the host's default stacking is what you want. The wrapper trap, `@displayContainer`, and the other delegated-render rules are in [`delegated-render-control.md`](../../../boxel-ui-guidelines/references/delegated-render-control.md).
+
+```json
+// Surge/home.json — the canonical home instance. Query-backed fields hold no
+// links in the JSON; only the spotlight pin and the theme do.
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "welcome": "SURGE",
+      "tagline": "The youth swim meet platform.",
+      "cardInfo": { "name": "SURGE — Home", "summary": "Realm home." }
+    },
+    "relationships": {
+      "headlineMeet": { "links": { "self": "../Meet/mid-atlantic-senior-sectionals-2026" } },
+      "cardInfo.theme": { "links": { "self": "../Theme/surge" } }
+    },
+    "meta": { "adoptsFrom": { "module": "../surge", "name": "Surge" } }
+  }
+}
+```
+
+## Variant: search results, for search UI or very large lists
+
+Reach for `@context.searchResultsComponent` instead of a field when a section needs search or filter controls, or when it can hold more cards than a field's page (a few hundred and up). It runs on prerendered HTML and pages lazily, but it needs a hand-built query in the template.
+
+**Search-results recipe:**
 
 ```ts
 // surge.gts (or row-and-rail.gts, or whatever the brand demands)
@@ -139,7 +279,7 @@ export class Surge extends CardDef {
           </@context.searchResultsComponent>
         </section>
 
-        {{!-- Add one @context.searchResultsComponent section per CardDef in the family --}}
+        {{!-- Use this form only for the sections that need it; the rest stay fields --}}
       </article>
 
       <style scoped>
@@ -178,25 +318,6 @@ export class Surge extends CardDef {
 }
 ```
 
-```json
-// Surge/home.json — the canonical home instance
-{
-  "data": {
-    "type": "card",
-    "attributes": {
-      "welcome": "SURGE",
-      "tagline": "The youth swim meet platform.",
-      "cardInfo": { "name": "SURGE — Home", "summary": "Realm home." }
-    },
-    "relationships": {
-      "headlineMeet": { "links": { "self": "../Meet/mid-atlantic-senior-sectionals-2026" } },
-      "cardInfo.theme": { "links": { "self": "../Theme/surge" } }
-    },
-    "meta": { "adoptsFrom": { "module": "../surge", "name": "Surge" } }
-  }
-}
-```
-
 **`@context.searchResultsComponent` is live by construction — mind the cost on multi-section homes.**
 
 Each `@context.searchResultsComponent` section subscribes its query to realm change events. Every time ANY card in the realm is created, edited, or deleted, the matching sections re-fetch and re-render. For a Home with 4 result-list sections, editing a single Swimmer somewhere else in the realm can fire re-fetches across every section whose query might be affected — even though only one section's data actually changed. With the host's autosave on each keystroke, this can make unrelated edit forms feel sluggish because the Home tab is consuming CPU on every reindex.
@@ -225,7 +346,7 @@ Keep the number of live sections on a single Home modest, and prefer `@mode='non
 | Reading model values to compute aggregates (counts, sums, charts) | `getCards` |
 | Both — list and aggregate | `getCards`, then render with `<@fields ...>` |
 
-The home almost always wants the first. The host pre-renders each result on the realm side, so the home doesn't pay the cost of loading every model into memory. For a realm with hundreds of swimmers, this is the difference between snappy and unusable.
+For a home section of a normal size, a linked field (the main recipe above) is simpler and is the default. The search-results surface earns its query plumbing when the list is large: the host pre-renders each result on the realm side, so the home doesn't load every model into memory. For a realm with hundreds of swimmers, this is the difference between snappy and unusable.
 
 **Critical — apply the chrome contract:**
 
@@ -241,7 +362,7 @@ The home's outermost element (`.sg` in the example) MUST leave decoration to the
 2. **Custom-field sorts require `on: ref`.** Only `lastModified`, `createdAt`, and `cardURL` are valid sort keys without `on` (the `generalSortFields` list). Sorting on `lastName`, `dates.start`, anything custom — the sort expression MUST include `on: ref`.
 3. **Use `codeRef(here, path, name)`, not raw URL construction.** And import `realmURL` as a Symbol from `runtime-common` — don't write `Symbol.for('realmURL')` (it produces a different Symbol that doesn't match what the host injected).
 
-See `boxel/references/query-systems.md` for the canonical reference and `~/Projects/boxel/packages/runtime-common/query.ts` for the type definitions.
+See `boxel/references/query-systems.md` for the canonical reference and `packages/runtime-common/query.ts` for the type definitions.
 
 **Other gotchas:**
 - `import.meta.url` works in `.gts` at runtime but TS complains — declare `const here: string = import.meta.url;` once at top with `@ts-expect-error` on the line above.

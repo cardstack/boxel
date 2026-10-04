@@ -399,6 +399,11 @@ place to check a detail or add a case:
 - Why a card failed to index or holds broken links —
   [`boxel-environment`](../boxel-environment/references/diagnosing-broken-links.md).
 
+- A `where` predicate in a realm policy, which validates against the `policy`
+  profile rather than `derive` — membership spelling, the refused partial-match
+  builtins, and what compiles to a search filter —
+  [`realm-policy-authoring`](../realm-policy-authoring/SKILL.md) §5–§7.
+
 The engine itself — the compiler, the jq runtime, the formula libraries, the
 mutation and authorization profiles — is documented in `packages/bxl/docs/` and
 is not this skill's subject.

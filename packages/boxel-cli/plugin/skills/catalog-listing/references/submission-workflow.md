@@ -126,10 +126,10 @@ There is no live `retry-submission-workflow` host command in the current monorep
 
 ## Source Pointers
 
-- Listing menu: `packages/catalog-realm/catalog-app/listing/listing.gts`
+- Listing menu: [`catalog-app/listing/listing.gts`](https://github.com/cardstack/boxel-catalog/blob/main/catalog-app/listing/listing.gts) in cardstack/boxel-catalog
 - Workflow command: `packages/host/app/tools/create-submission-workflow.ts`
 - Open wrapper: `packages/host/app/tools/create-and-open-submission-workflow-card.ts`
-- Workflow card: `packages/catalog-realm/submission-workflow-card/submission-workflow-card.gts`
-- File collection: `packages/catalog-realm/commands/collect-submission-files.ts`
+- Workflow card: [`submission-workflow-card/submission-workflow-card.gts`](https://github.com/cardstack/boxel-catalog/blob/main/submission-workflow-card/submission-workflow-card.gts) in cardstack/boxel-catalog
+- File collection: [`commands/collect-submission-files.ts`](https://github.com/cardstack/boxel-catalog/blob/main/commands/collect-submission-files.ts) in cardstack/boxel-catalog
 - Bot workflow: `packages/bot-runner/lib/pr-listing/pr-listing-workflow-handler.ts`
 - GitHub PR writer: `packages/bot-runner/lib/pr-listing/create-listing-pr-handler.ts`
