@@ -4,6 +4,12 @@ import { logger, rri } from '@cardstack/runtime-common';
 
 import HostBaseTool from '../lib/host-base-tool';
 import runRealmCode from '../lib/realm-runner/runner';
+import {
+  captureForAgent,
+  resolveViewTarget,
+  type ViewedImage,
+  type ViewOptions,
+} from '../lib/visual-capture';
 
 import LintAndFixTool from './lint-and-fix';
 
@@ -14,6 +20,7 @@ import type MatrixService from '../services/matrix-service';
 import type NetworkService from '../services/network';
 import type OperatorModeStateService from '../services/operator-mode-state-service';
 import type RealmService from '../services/realm';
+import type RealmServerService from '../services/realm-server';
 import type ToolService from '../services/tool-service';
 import type * as BaseToolModule from '@cardstack/base/command';
 
@@ -30,6 +37,21 @@ const RUN_TIMEOUT_MS = 55_000;
 // timeout, so this tool always reports first, with every file it saved, and
 // nothing is saved after that report.
 const CALL_DEADLINE_MS = 100_000;
+// How many captures one run may attach with `realm.view`.
+const MAX_VIEWS = 3;
+// A view must finish this long before the run's own time limit, so the
+// script still has time to use what it saw and return.
+const VIEW_MARGIN_MS = 3_000;
+// A view started with less time than this left in the run is refused
+// rather than left to time out mid-capture.
+const MIN_VIEW_BUDGET_MS = 8_000;
+
+// Captures one realm URL and uploads the image, finishing by `deadline`.
+type ViewURL = (
+  url: string,
+  options: ViewOptions,
+  deadline: number,
+) => Promise<ViewedImage>;
 
 // Saves one file and returns the content that was saved (lint may reformat
 // it). `expected` is the content the script last saw, undefined for a file
@@ -50,6 +72,10 @@ class RealmFsSession {
   private known = new Map<string, string | undefined>();
   // Files saved by this run, in the order of their first save.
   readonly saved = new Set<string>();
+  // Captures `realm.view` attached, in the order they were taken.
+  readonly views: ViewedImage[] = [];
+  // When the script's own time limit runs out; set as the run starts.
+  runEndsAt = Number.POSITIVE_INFINITY;
   // Calls and saves refused because the run had already ended.
   refusedAfterClose = 0;
   private queue: Promise<unknown> = Promise.resolve();
@@ -64,6 +90,7 @@ class RealmFsSession {
       url: string,
     ) => Promise<{ status: number; content: string }>,
     private writeFile: WriteFile,
+    private viewURL: ViewURL,
   ) {}
 
   // Calls run one at a time, so two unawaited calls cannot race over the same
@@ -157,6 +184,36 @@ class RealmFsSession {
         await this.save(url, content, undefined);
         return { path: this.relative(url), saved: true };
       }
+      case 'view': {
+        let url = this.resolve(method, args[0]);
+        if (this.views.length >= MAX_VIEWS) {
+          throw new Error(
+            `realm.view may capture at most ${MAX_VIEWS} times in one run; use the view-visually tool for more`,
+          );
+        }
+        let deadline = this.runEndsAt - VIEW_MARGIN_MS;
+        if (deadline - Date.now() < MIN_VIEW_BUDGET_MS) {
+          throw new Error(
+            `Not enough time left in this run to capture ${url}; use the view-visually tool instead`,
+          );
+        }
+        let viewed = await this.viewURL(url, viewOptions(args[1]), deadline);
+        if (this.closed) {
+          this.refusedAfterClose += 1;
+          throw new Error(`The run has ended; the view of ${url} was dropped`);
+        }
+        this.views.push(viewed);
+        // The image itself goes to the model with the tool result; the
+        // script gets only what it needs to carry on.
+        return {
+          path: this.relative(url),
+          kind: viewed.kind,
+          format: viewed.format,
+          width: viewed.width ?? null,
+          height: viewed.height ?? null,
+          attached: true,
+        };
+      }
       default:
         throw new Error(`Unknown realm call: ${String(method)}`);
     }
@@ -230,6 +287,27 @@ class RealmFsSession {
   }
 }
 
+// The options a script may pass to `realm.view`, taken field by field so
+// nothing else reaches the capture.
+function viewOptions(raw: unknown): ViewOptions {
+  let options = (raw && typeof raw === 'object' ? raw : {}) as Record<
+    string,
+    unknown
+  >;
+  return {
+    ...(typeof options.format === 'string'
+      ? { format: options.format as ViewOptions['format'] }
+      : {}),
+    ...(typeof options.viewportWidth === 'number'
+      ? { viewportWidth: options.viewportWidth }
+      : {}),
+    ...(typeof options.viewportHeight === 'number'
+      ? { viewportHeight: options.viewportHeight }
+      : {}),
+    ...(options.fullPage === true ? { fullPage: true } : {}),
+  };
+}
+
 export default class RunRealmCodeTool extends HostBaseTool<
   typeof BaseToolModule.RunRealmCodeInput,
   typeof BaseToolModule.RunRealmCodeResult
@@ -239,9 +317,12 @@ export default class RunRealmCodeTool extends HostBaseTool<
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private network: NetworkService;
   @service declare private realm: RealmService;
+  @service declare private realmServer: RealmServerService;
   @service declare private toolService: ToolService;
 
-  description = 'Run safe Realm code that reads and edits realm source files.';
+  description =
+    'Run safe Realm code that reads and edits realm source files, and can ' +
+    'look at what it made with realm.view.';
   static actionVerb = 'Run';
 
   async getInputType() {
@@ -283,6 +364,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
       (url) => this.cardService.getSource(new URL(url)),
       (url, content, expected) =>
         this.writeFile(roomId, url, content, expected),
+      (url, options, deadline) => this.viewURL(url, options, deadline),
     );
     let runnerResult;
     let deadline = new AbortController();
@@ -295,6 +377,10 @@ export default class RunRealmCodeTool extends HostBaseTool<
         ),
       CALL_DEADLINE_MS,
     );
+    // The worker allows the script `RUN_TIMEOUT_MS` once QuickJS is ready;
+    // measured from here it is a conservative end, since sandbox start only
+    // pushes the real one later.
+    session.runEndsAt = Date.now() + RUN_TIMEOUT_MS;
     try {
       runnerResult = await runRealmCode(
         {
@@ -344,7 +430,39 @@ export default class RunRealmCodeTool extends HostBaseTool<
           }),
       ),
       scriptResult: runnerResult.scriptResult,
+      views: session.views.map(
+        (viewed) =>
+          new commandModule.AttachedImageField({
+            name: viewed.file.name,
+            sourceUrl: viewed.file.sourceUrl,
+            url: viewed.file.url,
+            contentType: viewed.file.contentType,
+            contentHash: viewed.file.contentHash,
+            contentSize: viewed.file.contentSize,
+            width: viewed.width,
+            height: viewed.height,
+          }),
+      ),
     });
+  }
+
+  private async viewURL(
+    url: string,
+    options: ViewOptions,
+    deadline: number,
+  ): Promise<ViewedImage> {
+    let services = {
+      loaderService: this.loaderService,
+      matrixService: this.matrixService,
+      realm: this.realm,
+      realmServer: this.realmServer,
+    };
+    return await captureForAgent(
+      resolveViewTarget(url, services),
+      options,
+      services,
+      { deadline },
+    );
   }
 
   // Lints a .gts/.ts file, checks the realm still holds what the script last

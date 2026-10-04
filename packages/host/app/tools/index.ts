@@ -97,6 +97,7 @@ import * as UpdatePlaygroundSelectionToolModule from './update-playground-select
 import * as UpdateRoomSkillsToolModule from './update-room-skills';
 import * as CommandUtilsModule from './utils';
 import * as ValidateRealmToolModule from './validate-realm';
+import * as ViewVisuallyToolModule from './view-visually';
 import * as WriteBinaryFileToolModule from './write-binary-file';
 import * as WriteTextFileToolModule from './write-text-file';
 
@@ -414,6 +415,7 @@ export function shimHostTools(virtualNetwork: VirtualNetwork) {
     GenerateThumbnailToolModule,
   );
   shimHostToolModule(virtualNetwork, 'capture-card', CaptureCardToolModule);
+  shimHostToolModule(virtualNetwork, 'view-visually', ViewVisuallyToolModule);
   shimHostToolModule(virtualNetwork, 'get-card', GetCardToolModule);
   shimHostToolModule(
     virtualNetwork,
@@ -577,6 +579,7 @@ export const HostToolClasses: (typeof HostBaseTool<any, any>)[] = [
   UpdateRoomSkillsToolModule.default,
   UseAiAssistantToolModule.default,
   ValidateRealmToolModule.default,
+  ViewVisuallyToolModule.default,
   MigrateSkillToolModule.default,
   WriteBinaryFileToolModule.default,
   WriteTextFileToolModule.default,

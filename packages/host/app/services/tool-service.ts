@@ -124,6 +124,16 @@ async function withTimeout<T>(
   }
 }
 
+// An uploaded capture a tool result carries (base's `AttachedImageField`).
+interface AttachedImage {
+  name?: string;
+  sourceUrl?: string;
+  url?: string;
+  contentType?: string;
+  contentHash?: string;
+  contentSize?: number;
+}
+
 type GenericCommand = Command<
   typeof CardDef | undefined,
   typeof CardDef | undefined
@@ -1243,32 +1253,54 @@ export default class ToolService extends Service {
     }
   });
 
+  // The files a tool result attaches for the model: the source files a
+  // run-realm-code call saved, and any image a tool captured for the model
+  // to look at (`attachedImages`, and run-realm-code's `views`). The images
+  // are already uploaded to the room's media, so they ride as they are.
   private attachedFilesForToolResult(
     toolName: string | undefined,
     resultCard: CardDef | undefined,
   ): FileDef[] {
-    if (!resultCard || !toolName?.startsWith('run-realm-code_')) {
+    if (!resultCard) {
       return [];
     }
-    let files = (
-      resultCard as CardDef & {
-        files?: Array<{ fileUrl?: string; status?: string }>;
-      }
-    ).files;
-    if (!Array.isArray(files)) {
-      return [];
-    }
-    return files.flatMap((file) => {
-      if (!file.fileUrl || file.status !== 'saved') {
-        return [];
-      }
-      return [
-        this.matrixService.fileAPI.createFileDef({
-          sourceUrl: file.fileUrl,
-          name: file.fileUrl.split('/').pop(),
-        }),
-      ];
-    });
+    let result = resultCard as CardDef & {
+      files?: Array<{ fileUrl?: string; status?: string }>;
+      attachedImages?: AttachedImage[];
+      views?: AttachedImage[];
+    };
+    let savedFiles =
+      toolName?.startsWith('run-realm-code_') && Array.isArray(result.files)
+        ? result.files.flatMap((file) => {
+            if (!file.fileUrl || file.status !== 'saved') {
+              return [];
+            }
+            return [
+              this.matrixService.fileAPI.createFileDef({
+                sourceUrl: file.fileUrl,
+                name: file.fileUrl.split('/').pop(),
+              }),
+            ];
+          })
+        : [];
+    let images = [
+      ...(Array.isArray(result.attachedImages) ? result.attachedImages : []),
+      ...(Array.isArray(result.views) ? result.views : []),
+    ].flatMap((image) =>
+      image?.url && image.sourceUrl
+        ? [
+            this.matrixService.fileAPI.createFileDef({
+              sourceUrl: image.sourceUrl,
+              url: image.url,
+              name: image.name,
+              contentType: image.contentType,
+              contentHash: image.contentHash,
+              contentSize: image.contentSize,
+            }),
+          ]
+        : [],
+    );
+    return [...savedFiles, ...images];
   }
 
   // Which step each in-flight validation is on, for the slow-validation log.

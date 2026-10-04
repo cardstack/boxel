@@ -12,6 +12,7 @@ import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
   setupRealmCacheTeardown,
+  setupRealmServerEndpoints,
   withCachedRealmSetup,
 } from '../../helpers';
 import { setupBaseRealm } from '../../helpers/base-realm';
@@ -24,7 +25,43 @@ module('Integration | tools | run-realm-code', function (hooks) {
   setupLocalIndexing(hooks);
   let mockMatrixUtils = setupMockMatrix(hooks, { autostart: true });
 
+  // `realm.view` captures through the realm server; this answers every
+  // capture with a 1×1 PNG and records what was asked for.
+  let captureRequests: any[] = [];
+  const PNG_BASE64 =
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+  setupRealmServerEndpoints(hooks, [
+    {
+      route: '_capture-card',
+      getResponse: async (req: Request) => {
+        captureRequests.push(await req.clone().json());
+        return new Response(
+          JSON.stringify({
+            data: {
+              type: 'capture-card-result',
+              attributes: {
+                status: 'ready',
+                base64: PNG_BASE64,
+                width: 1,
+                height: 1,
+                contentType: 'image/png',
+              },
+            },
+          }),
+          {
+            status: 201,
+            headers: { 'Content-Type': 'application/vnd.api+json' },
+          },
+        );
+      },
+    },
+  ]);
+
   setupRealmCacheTeardown(hooks);
+
+  hooks.beforeEach(function () {
+    captureRequests = [];
+  });
 
   hooks.beforeEach(async function () {
     await withCachedRealmSetup(async () =>
@@ -40,6 +77,64 @@ module('Integration | tools | run-realm-code', function (hooks) {
       }),
     );
     await getService('realm').login(testRealmURL);
+  });
+
+  test('realm.view attaches a capture to the result and tells the script only what it needs', async function (assert) {
+    let toolService = getService('tool-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+
+    let result = await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `return await realm.view('task.json');`,
+    });
+
+    assert.strictEqual(captureRequests.length, 1, 'one capture request');
+    assert.strictEqual(
+      captureRequests[0].data.attributes.cardId,
+      `${testRealmURL}task.json`,
+    );
+    assert.deepEqual(JSON.parse(result.scriptResult!), {
+      path: 'task.json',
+      kind: 'card',
+      format: 'isolated',
+      width: 1,
+      height: 1,
+      attached: true,
+    });
+    assert.strictEqual(result.views.length, 1, 'the capture rides the result');
+    assert.strictEqual(result.views[0].contentType, 'image/png');
+    assert.true(result.views[0].url?.startsWith('mxc://'));
+  });
+
+  test('realm.view refuses a fourth capture in one run', async function (assert) {
+    let toolService = getService('tool-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+
+    await assert.rejects(
+      command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: `for (let i = 0; i < 4; i++) { await realm.view('task.json'); }`,
+      }),
+      /realm\.view may capture at most 3 times in one run/,
+    );
+    assert.strictEqual(captureRequests.length, 3, 'three captures were taken');
+  });
+
+  test('realm.view refuses a path outside the realm', async function (assert) {
+    let toolService = getService('tool-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+
+    await assert.rejects(
+      command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: `await realm.view('https://example.com/page.html');`,
+      }),
+      /Path is outside this realm/,
+    );
+    assert.strictEqual(captureRequests.length, 0, 'no capture is attempted');
   });
 
   test('replays a replacement against the source that was read', async function (assert) {

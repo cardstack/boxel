@@ -427,9 +427,43 @@ export class RealmCodeFileResult extends FieldDef {
   @field detail = contains(StringField);
 }
 
+// A capture the assistant looked at, already uploaded to the room's media.
+// The tool result that carries it attaches the image, which is how the model
+// receives it as image input; `sourceUrl` names what was captured.
+export class AttachedImageField extends FieldDef {
+  @field name = contains(StringField);
+  @field sourceUrl = contains(StringField);
+  @field url = contains(StringField);
+  @field contentType = contains(StringField);
+  @field contentHash = contains(StringField);
+  @field contentSize = contains(NumberField);
+  @field width = contains(NumberField);
+  @field height = contains(NumberField);
+}
+
 export class RunRealmCodeResult extends CardDef {
   @field files = containsMany(RealmCodeFileResult);
   @field scriptResult = contains(StringField);
+  // What the script looked at with `realm.view`: each capture rides the tool
+  // result as an attached image, so the model sees it.
+  @field views = containsMany(AttachedImageField);
+}
+
+export class ViewVisuallyInput extends CardDef {
+  // A card instance or a file in a workspace, by URL.
+  @field url = contains(StringField);
+  @field format = contains(StringField); // 'isolated' | 'embedded'
+  // Flat JSON-primitive geometry, for the reason `CaptureCardInput` gives.
+  @field viewportWidth = contains(NumberField);
+  @field viewportHeight = contains(NumberField);
+  @field fullPage = contains(BooleanField);
+}
+
+export class ViewVisuallyResult extends CardDef {
+  @field sourceUrl = contains(StringField);
+  @field kind = contains(StringField); // 'card' | 'file'
+  @field format = contains(StringField);
+  @field attachedImages = containsMany(AttachedImageField);
 }
 
 export class CheckCorrectnessInput extends CardDef {
