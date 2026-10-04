@@ -10,6 +10,15 @@
       "name": "boxel-cli",
       "source": "./packages/boxel-cli/plugin",
       "description": "Skills for working with Boxel realms via @cardstack/boxel-cli."
+    },
+    {
+      "name": "boxel-skills",
+      "source": {
+        "source": "github",
+        "repo": "cardstack/boxel-skills",
+        "ref": "v0.1.7"
+      },
+      "description": "Official Boxel card-building skills, from cardstack/boxel-skills. Installed automatically with boxel-cli."
     }
   ]
 }
