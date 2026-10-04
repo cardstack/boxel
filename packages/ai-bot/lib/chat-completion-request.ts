@@ -2,6 +2,7 @@ import type { PromptParts } from '@cardstack/runtime-common/ai';
 import type { ChatCompletionMessageParam } from 'openai/resources';
 import type { ChatCompletionStreamParams } from 'openai/lib/ChatCompletionStream';
 import { readRealmFileTool } from './read-realm-file.ts';
+import { readUrlTool } from './read-url.ts';
 
 // The OpenAI request shape plus the OpenRouter-only options we set. OpenRouter
 // accepts and ignores unknown fields, and the OpenAI client forwards them.
@@ -20,6 +21,9 @@ export function buildChatCompletionRequest(
   // (delegation configured + a single-human room); the bot never advertises
   // a tool it won't run.
   offerRealmFileRead = false,
+  // Whether to offer the bot-fulfilled readUrl tool. The caller decides (a
+  // single-human room, where the bot's own result can start the next turn).
+  offerUrlRead = false,
 ): ChatCompletionRequest {
   if (!prompt.model) {
     throw new Error('Model is required');
@@ -76,6 +80,9 @@ export function buildChatCompletionRequest(
   // in rooms that carry no other tools.
   if (prompt.toolsSupported === true && offerRealmFileRead) {
     request.tools = [...(request.tools ?? []), readRealmFileTool];
+  }
+  if (prompt.toolsSupported === true && offerUrlRead) {
+    request.tools = [...(request.tools ?? []), readUrlTool];
   }
 
   if (senderMatrixUserId) {

@@ -42,6 +42,8 @@ import {
   READ_REALM_FILE_TOOL_NAME,
 } from './lib/read-realm-file.ts';
 import { fulfillReadRealmFileCalls } from './lib/read-realm-file-fulfillment.ts';
+import { knownRealmOrigins, READ_URL_TOOL_NAME } from './lib/read-url.ts';
+import { fulfillReadUrlCalls } from './lib/read-url-fulfillment.ts';
 import { Responder } from './lib/responder.ts';
 import { buildChatCompletionRequest } from './lib/chat-completion-request.ts';
 import {
@@ -117,12 +119,14 @@ class Assistant {
     prompt: PromptParts,
     senderMatrixUserId?: string,
     offerRealmFileRead = false,
+    offerUrlRead = false,
   ) {
     return this.openai.chat.completions.stream(
       buildChatCompletionRequest(
         prompt,
         senderMatrixUserId,
         offerRealmFileRead,
+        offerUrlRead,
       ),
     );
   }
@@ -254,6 +258,11 @@ Common issues are:
         let realmFileReadingAllowed =
           assistant.delegatedUserRealmSessions.enabled &&
           humanRoomMemberCount === 1;
+        // readUrl reads the public web and acts on no one's behalf, so it
+        // needs no delegation. It does need a single-human room: the bot
+        // starts the continuation turn from its own result event only when
+        // it can attribute that event to the room's one human (see below).
+        let urlReadingAllowed = humanRoomMemberCount === 1;
 
         if (event.event.origin_server_ts! < startTime) {
           return;
@@ -262,13 +271,14 @@ Common issues are:
           return; // don't print paginated results
         }
 
-        // A continuation the bot triggered with its own readRealmFile result
-        // event arrives with sender = the bot. Re-attribute it to the single
-        // human in the room so the guard below lets it through and all per-user
-        // logic (billing, the delegated read's onBehalfOf, request.user) acts on
-        // the user's behalf rather than the bot's. Only single-human rooms
-        // fulfill reads, so the human is unambiguous; every other bot-sent event
-        // keeps sender = bot and is ignored by the guard. getShouldRespond still
+        // A continuation the bot triggered with the result event of a tool it
+        // runs itself (readRealmFile, readUrl) arrives with sender = the bot.
+        // Re-attribute it to the single human in the room so the guard below
+        // lets it through and all per-user logic (billing, the delegated
+        // read's onBehalfOf, request.user) acts on the user's behalf rather
+        // than the bot's. Only single-human rooms fulfill bot tools, so the
+        // human is unambiguous; every other bot-sent event keeps sender = bot
+        // and is ignored by the guard. getShouldRespond still
         // decides whether we actually generate, so this can't loop on its own
         // answer.
         if (
@@ -377,6 +387,7 @@ Common issues are:
         >['botToolCalls'] = [];
         let pendingFulfillRequestEventId: string | undefined;
         let pendingFulfillAgentId: string | undefined;
+        let pendingRealmOrigins: Set<string> = new Set();
 
         try {
           log.info(
@@ -512,6 +523,7 @@ Common issues are:
               // promptParts.tools, so allow it explicitly when this room may use
               // it — otherwise the surfaced tool call would be filtered out.
               ...(realmFileReadingAllowed ? [READ_REALM_FILE_TOOL_NAME] : []),
+              ...(urlReadingAllowed ? [READ_URL_TOOL_NAME] : []),
             ]);
             if (promptParts.pendingCodePatchCorrectnessChecks) {
               return await publishCodePatchCorrectnessMessage(
@@ -618,6 +630,7 @@ Common issues are:
                 promptParts,
                 senderMatrixUserId,
                 realmFileReadingAllowed,
+                urlReadingAllowed,
               )
               .on('chunk', async (chunk, snapshot) => {
                 log.info(`[${eventId}] Received chunk %s`, chunk.id);
@@ -697,11 +710,14 @@ Common issues are:
             let { botToolCalls } = message
               ? classifyToolCalls(message)
               : { botToolCalls: [] };
-            if (
-              realmFileReadingAllowed &&
-              botToolCalls.length > 0 &&
-              responder.responseEventId
-            ) {
+            // Only the bot tools this room was offered are run.
+            botToolCalls = botToolCalls.filter((call) =>
+              call.type === 'function' &&
+              call.function.name === READ_URL_TOOL_NAME
+                ? urlReadingAllowed
+                : realmFileReadingAllowed,
+            );
+            if (botToolCalls.length > 0 && responder.responseEventId) {
               // Defer fulfillment until after the room lock is released
               // (see the finally below): fulfilling posts a result event
               // that re-triggers the bot, and that re-trigger needs the
@@ -709,6 +725,7 @@ Common issues are:
               pendingFulfillBotToolCalls = botToolCalls;
               pendingFulfillRequestEventId = responder.responseEventId;
               pendingFulfillAgentId = agentId;
+              pendingRealmOrigins = knownRealmOrigins(eventList, aiBotUserId);
             }
           } catch (error) {
             // Aborting the runner always surfaces as APIUserAbortError, but
@@ -841,14 +858,38 @@ Common issues are:
             pendingFulfillRequestEventId &&
             pendingFulfillBotToolCalls.length > 0
           ) {
-            await fulfillReadRealmFileCalls(pendingFulfillBotToolCalls, {
-              client,
-              roomId: room.roomId,
-              requestEventId: pendingFulfillRequestEventId,
-              agentId: pendingFulfillAgentId,
-              onBehalfOf: senderMatrixUserId,
-              delegatedUserRealmSessions: assistant.delegatedUserRealmSessions,
-            });
+            let isUrlRead = (
+              call: (typeof pendingFulfillBotToolCalls)[number],
+            ) =>
+              call.type === 'function' &&
+              call.function.name === READ_URL_TOOL_NAME;
+            let realmFileReads = pendingFulfillBotToolCalls.filter(
+              (call) => !isUrlRead(call),
+            );
+            let urlReads = pendingFulfillBotToolCalls.filter(isUrlRead);
+            if (realmFileReads.length > 0) {
+              await fulfillReadRealmFileCalls(realmFileReads, {
+                client,
+                roomId: room.roomId,
+                requestEventId: pendingFulfillRequestEventId,
+                agentId: pendingFulfillAgentId,
+                onBehalfOf: senderMatrixUserId,
+                delegatedUserRealmSessions:
+                  assistant.delegatedUserRealmSessions,
+              });
+            }
+            if (urlReads.length > 0) {
+              await fulfillReadUrlCalls(urlReads, {
+                client,
+                roomId: room.roomId,
+                requestEventId: pendingFulfillRequestEventId,
+                agentId: pendingFulfillAgentId,
+                readOptions: {
+                  realmOrigins: pendingRealmOrigins,
+                  realmFileReadingAllowed,
+                },
+              });
+            }
           }
         }
       } catch (e) {

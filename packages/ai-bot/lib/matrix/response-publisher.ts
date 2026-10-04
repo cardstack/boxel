@@ -7,6 +7,11 @@ import {
   urlsFromReadRealmFileArguments,
 } from '../read-realm-file.ts';
 import {
+  READ_URL_TOOL_NAME,
+  readUrlLabel,
+  urlFromReadUrlArguments,
+} from '../read-url.ts';
+import {
   maxOutputTokensDuringFileReadErrorMessage,
   maxOutputTokensErrorMessage,
   thinkingMessage,
@@ -87,6 +92,16 @@ export function toCommandRequest(
       ...(result.arguments ?? {}),
       description: readFilesLabel(
         f.arguments ? urlsFromReadRealmFileArguments(f.arguments) : undefined,
+      ),
+    };
+  }
+  // readUrl is fulfilled by ai-bot too, labeled with the page it reads.
+  if (result.name === READ_URL_TOOL_NAME) {
+    result.executedBy = AI_BOT_EXECUTOR;
+    result.arguments = {
+      ...(result.arguments ?? {}),
+      description: readUrlLabel(
+        f.arguments ? urlFromReadUrlArguments(f.arguments) : undefined,
       ),
     };
   }

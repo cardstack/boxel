@@ -123,6 +123,32 @@ module('chat completion request', () => {
     assert.strictEqual(both.tool_choice, 'auto');
   });
 
+  test('offers the readUrl tool independently of realm file reads', () => {
+    let urlOnly = buildChatCompletionRequest(
+      promptParts(),
+      undefined,
+      false,
+      true,
+    );
+    assert.deepEqual(toolNames(urlOnly), ['readUrl']);
+
+    let both = buildChatCompletionRequest(
+      promptParts({ tools: [tool] }),
+      undefined,
+      true,
+      true,
+    );
+    assert.deepEqual(toolNames(both), ['doThing', 'readRealmFile', 'readUrl']);
+
+    let unsupported = buildChatCompletionRequest(
+      promptParts({ toolsSupported: false }),
+      undefined,
+      false,
+      true,
+    );
+    assert.false('tools' in unsupported);
+  });
+
   test('withholds the readRealmFile offer from models without tool support', () => {
     let unsupported = buildChatCompletionRequest(
       promptParts({ toolsSupported: false }),

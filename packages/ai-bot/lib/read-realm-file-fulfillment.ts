@@ -64,17 +64,25 @@ export interface ReadRealmFileFulfillmentOutcome {
 
 // Upload bytes to the Matrix media repo and return an http download URL that
 // both the bot and the host can fetch. Dedupes identical content by hash.
-async function uploadTextToMatrix(
+// Shared by every tool ai-bot fulfills itself.
+export async function uploadToMatrix(
   client: MatrixClient,
-  content: string,
+  content: string | Uint8Array,
   contentType: string,
 ): Promise<string> {
-  let hash = createHash('sha256').update(content).digest('hex');
+  let hash = createHash('sha256')
+    .update(contentType)
+    .update('\0')
+    .update(content)
+    .digest('hex');
   let cached = uploadedContentUrlByHash.get(hash);
   if (cached) {
     return cached;
   }
-  let uploaded = await client.uploadContent(content, { type: contentType });
+  let uploaded = await client.uploadContent(
+    typeof content === 'string' ? content : Buffer.from(content),
+    { type: contentType },
+  );
   let url = client.mxcUrlToHttp(
     uploaded.content_uri,
     undefined,
@@ -114,7 +122,7 @@ export async function fulfillReadRealmFileCalls(
   let upload =
     deps.uploadText ??
     ((content: string, contentType: string) =>
-      uploadTextToMatrix(deps.client, content, contentType));
+      uploadToMatrix(deps.client, content, contentType));
   // One call at a time, on purpose. Every published result re-triggers the
   // bot, and that handler decides whether the turn is complete by fetching
   // the room history from the server and splicing in the one result it was
@@ -335,20 +343,33 @@ async function publish(
   deps: ReadRealmFileFulfillmentDeps,
   content: Record<string, any>,
 ): Promise<void> {
+  await publishToolResult(deps.client, deps.roomId, content, 'readRealmFile');
+}
+
+// Publishes a tool-result event for a call ai-bot fulfilled itself — the
+// same shape a host command result takes, so prompt reconstruction pairs it
+// with the request and the event re-triggers the bot for the continuation
+// turn. Never throws: a publish failure is logged so the turn still settles.
+export async function publishToolResult(
+  client: MatrixClient,
+  roomId: string,
+  content: Record<string, any>,
+  toolName: string,
+): Promise<void> {
   try {
     // eventIdToReplace must stay undefined: sendMatrixEvent overwrites
     // m.relates_to with an m.replace relation when it's set, which would clobber
     // the command-result relation we build here.
     await sendMatrixEvent(
-      deps.client,
-      deps.roomId,
+      client,
+      roomId,
       APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
       content,
       undefined,
     );
   } catch (e: any) {
     log.error(
-      `readRealmFile: failed to publish result for ${content.commandRequestId}: ${
+      `${toolName}: failed to publish result for ${content.commandRequestId}: ${
         e?.message ?? e
       }`,
     );

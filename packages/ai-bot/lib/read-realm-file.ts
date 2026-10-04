@@ -11,6 +11,7 @@ import type {
 } from 'openai/resources';
 import type { DelegatedUserRealmSessionManager } from './user-delegated-realm-server-session.ts';
 import { parseLenientJson } from './lenient-json.ts';
+import { READ_URL_TOOL_NAME } from './read-url.ts';
 
 let log = logger('ai-bot:read-realm-file');
 
@@ -408,15 +409,21 @@ async function fetchRealmFile(
   return { ok: true, body: await authed.text() };
 }
 
+// The tools ai-bot runs itself rather than leaving to the host.
+export const BOT_EXECUTED_TOOL_NAMES: ReadonlySet<string> = new Set([
+  READ_REALM_FILE_TOOL_NAME,
+  READ_URL_TOOL_NAME,
+]);
+
 export interface ClassifiedToolCalls {
-  // Tool calls ai-bot runs itself (readRealmFile).
+  // Tool calls ai-bot runs itself (see BOT_EXECUTED_TOOL_NAMES).
   botToolCalls: ChatCompletionMessageToolCall[];
   // Tool calls the host runs (everything else).
   hostToolCalls: ChatCompletionMessageToolCall[];
 }
 
 // Split a completion's tool calls into the ones ai-bot fulfills itself
-// (readRealmFile) and the ones the host fulfills. Both kinds now resolve the
+// (readRealmFile, readUrl) and the ones the host fulfills. Both kinds now resolve the
 // same way — as command requests answered by a command-result event on a later
 // turn — so a single response may freely contain both; the caller fulfills the
 // bot ones and leaves the rest to the host.
@@ -428,7 +435,7 @@ export function classifyToolCalls(
   for (let call of assistantMessage.tool_calls ?? []) {
     if (
       call.type === 'function' &&
-      call.function.name === READ_REALM_FILE_TOOL_NAME
+      BOT_EXECUTED_TOOL_NAMES.has(call.function.name)
     ) {
       botToolCalls.push(call);
     } else {
