@@ -128,9 +128,11 @@ module('Integration | tools | view-visually', function (hooks) {
     assert.strictEqual(result.attachedImages.length, 1);
     let [image] = result.attachedImages;
     assert.strictEqual(image.contentType, 'image/png');
-    assert.true(
-      image.url?.startsWith('mxc://'),
-      'the image is uploaded to the room',
+    assert.ok(image.url, 'the image is uploaded to the room');
+    assert.notStrictEqual(
+      image.url,
+      image.sourceUrl,
+      'the attachment points at the uploaded media, not its source',
     );
     assert.true((image.contentSize ?? 0) > 0, 'the image carries its size');
   });

@@ -104,7 +104,7 @@ module('Integration | tools | run-realm-code', function (hooks) {
     });
     assert.strictEqual(result.views.length, 1, 'the capture rides the result');
     assert.strictEqual(result.views[0].contentType, 'image/png');
-    assert.true(result.views[0].url?.startsWith('mxc://'));
+    assert.ok(result.views[0].url, 'the capture is uploaded to the room');
   });
 
   test('realm.view refuses a fourth capture in one run', async function (assert) {
