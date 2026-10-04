@@ -17,10 +17,10 @@ import {
   setCapturePerfSink,
 } from '@cardstack/runtime-common';
 import {
-  chooseCaptureCardCoalesceDecision,
+  chooseCaptureCoalesceDecision,
   estimateCaptureQueueWait,
-  CAPTURE_CARD_JOB_TIMEOUT_SEC,
-} from '@cardstack/runtime-common/jobs/capture-card';
+  CAPTURE_JOB_TIMEOUT_SEC,
+} from '@cardstack/runtime-common/jobs/capture';
 import type {
   DBAdapter,
   QueuePublisher,
@@ -35,7 +35,7 @@ import type { QueueJobSpec } from '@cardstack/runtime-common/queue';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import type { PgAdapter } from '@cardstack/postgres';
 
-import handleCaptureCard from '../handlers/handle-capture-card.ts';
+import handleCapture from '../handlers/handle-capture.ts';
 import type { CreateRoutesArgs } from '../routes.ts';
 import { jwtMiddleware } from '../middleware/index.ts';
 import { createJWT } from '../utils/jwt.ts';
@@ -43,7 +43,7 @@ import { FakeMediaCacheAdapter } from './helpers/fake-media-cache-adapter.ts';
 import { realmSecretSeed, setupDB } from './helpers/index.ts';
 
 module(basename(import.meta.filename), function () {
-  module('/_capture-card endpoint', function () {
+  module('/_capture endpoint', function () {
     function makeDbAdapter(): DBAdapter {
       return {
         kind: 'pg',
@@ -105,7 +105,7 @@ module(basename(import.meta.filename), function () {
       dbAdapter: DBAdapter,
       queue: QueuePublisher,
     ): CreateRoutesArgs {
-      // The capture-card handler only reads dbAdapter + queue from
+      // The capture handler only reads dbAdapter + queue from
       // CreateRoutesArgs, so we cast a minimal shape rather than spinning up
       // the full realm server.
       return {
@@ -120,13 +120,13 @@ module(basename(import.meta.filename), function () {
       router.post(
         '/_capture',
         jwtMiddleware(realmSecretSeed, args.dbAdapter),
-        handleCaptureCard(args),
+        handleCapture(args),
       );
       app.use(router.routes());
       return app;
     }
 
-    test('enqueues a capture-card job and forwards the result', async function (assert) {
+    test('enqueues a capture job and forwards the result', async function (assert) {
       let dbAdapter = makeDbAdapter();
       let stubResult: CapturePrerenderResponse = {
         status: 'ready',
@@ -152,7 +152,7 @@ module(basename(import.meta.filename), function () {
         .set('Authorization', `Bearer ${token}`)
         .send({
           data: {
-            type: 'capture-card',
+            type: 'capture',
             attributes: { realmURL, cardId, format: 'isolated' },
           },
         })
@@ -162,14 +162,14 @@ module(basename(import.meta.filename), function () {
         response.body,
         {
           data: {
-            type: 'capture-card-result',
+            type: 'capture-result',
             attributes: stubResult,
           },
         },
-        'returns the capture-card-result envelope from the job',
+        'returns the capture-result envelope from the job',
       );
       assert.strictEqual(published.length, 1, 'published exactly one job');
-      assert.strictEqual(published[0]?.jobType, 'capture-card');
+      assert.strictEqual(published[0]?.jobType, 'capture');
       assert.strictEqual(published[0]?.concurrencyGroup, `capture:${realmURL}`);
       assert.deepEqual(published[0]?.args, {
         realmURL,
@@ -213,7 +213,7 @@ module(basename(import.meta.filename), function () {
         .set('Authorization', `Bearer ${token}`)
         .send({
           data: {
-            type: 'capture-card',
+            type: 'capture',
             attributes: { realmURL, cardId, format: 'isolated', captureSpec },
           },
         })
@@ -248,7 +248,7 @@ module(basename(import.meta.filename), function () {
         .set('Authorization', `Bearer ${token}`)
         .send({
           data: {
-            type: 'capture-card',
+            type: 'capture',
             attributes: {
               realmURL,
               cardId,
@@ -285,7 +285,7 @@ module(basename(import.meta.filename), function () {
         .set('Authorization', `Bearer ${token}`)
         .send({
           data: {
-            type: 'capture-card',
+            type: 'capture',
             attributes: {
               realmURL,
               cardId,
@@ -348,7 +348,7 @@ module(basename(import.meta.filename), function () {
         .set('Authorization', `Bearer ${token}`)
         .send({
           data: {
-            type: 'capture-card',
+            type: 'capture',
             attributes: {
               realmURL,
               cardId,
@@ -390,7 +390,7 @@ module(basename(import.meta.filename), function () {
         .set('Authorization', `Bearer ${token}`)
         .send({
           data: {
-            type: 'capture-card',
+            type: 'capture',
             attributes: {
               realmURL,
               cardId: `${realmURL}Person/fadhlan`,
@@ -459,7 +459,7 @@ module(basename(import.meta.filename), function () {
         .set('Authorization', `Bearer ${token}`)
         .send({
           data: {
-            type: 'capture-card',
+            type: 'capture',
             attributes: {
               realmURL,
               cardId: `${realmURL}Person/fadhlan`,
@@ -583,7 +583,7 @@ module(basename(import.meta.filename), function () {
         .set('Authorization', `Bearer ${token}`)
         .send({
           data: {
-            type: 'capture-card',
+            type: 'capture',
             attributes: {
               realmURL,
               cardId: `${realmURL}Person/fadhlan`,
@@ -600,7 +600,7 @@ module(basename(import.meta.filename), function () {
 
       assert.strictEqual(
         published[0]?.timeout,
-        CAPTURE_CARD_JOB_TIMEOUT_SEC,
+        CAPTURE_JOB_TIMEOUT_SEC,
         'a full 12-entry batch enqueues at the flat 60s timeout',
       );
     });
@@ -622,7 +622,7 @@ module(basename(import.meta.filename), function () {
         .set('Authorization', `Bearer ${token}`)
         .send({
           data: {
-            type: 'capture-card',
+            type: 'capture',
             attributes: {
               realmURL: 'http://example.test/',
               cardId: 'http://example.test/Person/fadhlan',
@@ -1017,7 +1017,7 @@ module(basename(import.meta.filename), function () {
         .set('Authorization', `Bearer ${token}`)
         .send({
           data: {
-            type: 'capture-card',
+            type: 'capture',
             attributes: {
               realmURL: 'http://example.test/',
               cardId: 'http://example.test/Person/fadhlan',
@@ -1177,7 +1177,7 @@ module(basename(import.meta.filename), function () {
     });
   });
 
-  module('/_capture-card persistence', function (hooks) {
+  module('/_capture persistence', function (hooks) {
     const REALM_URL = 'http://example.test/';
     const CARD_ID = `${REALM_URL}Person/fadhlan`;
     // Who `post` sends as by default.
@@ -1256,7 +1256,7 @@ module(basename(import.meta.filename), function () {
       router.post(
         '/_capture',
         jwtMiddleware(realmSecretSeed, dbAdapter),
-        handleCaptureCard({
+        handleCapture({
           dbAdapter,
           queue,
           matrixClient,
@@ -1307,7 +1307,7 @@ module(basename(import.meta.filename), function () {
       return supertest(app.callback())
         .post('/_capture')
         .set('Authorization', `Bearer ${token}`)
-        .send({ data: { type: 'capture-card', attributes } });
+        .send({ data: { type: 'capture', attributes } });
     }
 
     test('a capture of an indexed card enqueues with the DSL-matching persist identity and returns a served URL', async function (assert) {
@@ -2124,7 +2124,7 @@ module(basename(import.meta.filename), function () {
       };
       let { nameExpressions, valueExpressions } = asExpressions(
         {
-          job_type: 'capture-card',
+          job_type: 'capture',
           concurrency_group: concurrencyGroup,
           args: {
             cardId: persist.sourceURL,
@@ -2168,7 +2168,7 @@ module(basename(import.meta.filename), function () {
     });
   });
 
-  module('capture-card coalesce decision', function () {
+  module('capture coalesce decision', function () {
     const PERSIST = {
       realmURL: 'http://example.test/',
       sourceURL: 'http://example.test/Person/fadhlan',
@@ -2179,7 +2179,7 @@ module(basename(import.meta.filename), function () {
 
     function jobSpec(args: Record<string, unknown>): QueueJobSpec {
       return {
-        jobType: 'capture-card',
+        jobType: 'capture',
         concurrencyGroup: 'capture:http://example.test/',
         timeout: 60,
         priority: 0,
@@ -2198,7 +2198,7 @@ module(basename(import.meta.filename), function () {
     }
 
     test('canonical persist-carrying twins join', function (assert) {
-      let decision = chooseCaptureCardCoalesceDecision({
+      let decision = chooseCaptureCoalesceDecision({
         incoming: jobSpec(canonicalArgs()),
         candidates: [{ ...jobSpec(canonicalArgs()), id: 7 }],
         inFlightCandidates: [],
@@ -2217,7 +2217,7 @@ module(basename(import.meta.filename), function () {
     }
 
     test('a card capture and a file capture of one URL are never twins', function (assert) {
-      let decision = chooseCaptureCardCoalesceDecision({
+      let decision = chooseCaptureCoalesceDecision({
         incoming: jobSpec({ ...canonicalArgs(), sourceKind: 'file' }),
         candidates: [
           { ...jobSpec({ ...canonicalArgs(), sourceKind: 'card' }), id: 7 },
@@ -2228,7 +2228,7 @@ module(basename(import.meta.filename), function () {
     });
 
     test('same-spec custom captures join like canonical ones', function (assert) {
-      let decision = chooseCaptureCardCoalesceDecision({
+      let decision = chooseCaptureCoalesceDecision({
         incoming: jobSpec(customSpecArgs()),
         candidates: [{ ...jobSpec(customSpecArgs()), id: 7 }],
         inFlightCandidates: [],
@@ -2240,7 +2240,7 @@ module(basename(import.meta.filename), function () {
       // Belt-and-braces against a producer whose spec and hash disagree:
       // joining hands the caller the twin's render verbatim, so the specs
       // themselves must match, not just their claimed hash.
-      let decision = chooseCaptureCardCoalesceDecision({
+      let decision = chooseCaptureCoalesceDecision({
         incoming: jobSpec(customSpecArgs()),
         candidates: [
           {
@@ -2257,7 +2257,7 @@ module(basename(import.meta.filename), function () {
     });
 
     test('a custom capture never joins a canonical twin', function (assert) {
-      let decision = chooseCaptureCardCoalesceDecision({
+      let decision = chooseCaptureCoalesceDecision({
         incoming: jobSpec(customSpecArgs()),
         candidates: [{ ...jobSpec(canonicalArgs()), id: 7 }],
         inFlightCandidates: [],
@@ -2272,7 +2272,7 @@ module(basename(import.meta.filename), function () {
       // png render (or a print-media render onto a screen one).
       for (let extra of [{ type: 'pdf' }, { media: 'print' }]) {
         let base = customSpecArgs();
-        let decision = chooseCaptureCardCoalesceDecision({
+        let decision = chooseCaptureCoalesceDecision({
           incoming: jobSpec({
             ...base,
             captureSpec: { ...(base.captureSpec as object), ...extra },
@@ -2293,7 +2293,7 @@ module(basename(import.meta.filename), function () {
       // it), so two element-crop jobs on the same card share a ledger
       // identity — the comparator is all that keeps one caller from being
       // handed the other's element crop.
-      let decision = chooseCaptureCardCoalesceDecision({
+      let decision = chooseCaptureCoalesceDecision({
         incoming: jobSpec({
           ...customSpecArgs(),
           captureSpec: { target: '.header' },

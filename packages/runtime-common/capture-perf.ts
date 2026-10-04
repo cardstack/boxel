@@ -18,7 +18,7 @@
 //     `generationLookupMs` slot carries the manifest lookup (its liveness
 //     read plays the same role).
 //
-//   - `capture` — emitted by the worker's `capture-card` task when a job
+//   - `capture` — emitted by the worker's `capture` task when a job
 //     finishes: queue wait, the prerender stage breakdown, and the persist
 //     leg. The same record is persisted onto the capture's
 //     `media_cache_ledger.diagnostics` row, so a completed capture's

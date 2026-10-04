@@ -225,7 +225,7 @@ export const DEFAULT_CAPTURE_VIEWPORT = {
 // grows later) cannot ride into the identity and silently hash two distinct
 // captures onto one ledger key. Widening the identity means changing this
 // pick, `canonicalCaptureIdentityString` / `canonicalCaptureIdentityQuery` below,
-// and `sameCaptureIdentity` (jobs/capture-card.ts) together — and the
+// and `sameCaptureIdentity` (jobs/capture.ts) together — and the
 // exhaustive destructure in `canonicalOverrides` refuses to compile until
 // the widened pick is actually handled there.
 export interface CaptureIdentity extends Pick<
@@ -238,7 +238,7 @@ export interface CaptureIdentity extends Pick<
 // The geometry overrides a spec carries beyond the engine defaults — the
 // portion of the identity the prerenderer must be told about (`format` rides
 // separately on the job args). Null when the spec is all-defaults, matching
-// the `CaptureCardArgs.captureSpec: ... | null` contract.
+// the `CaptureArgs.captureSpec: ... | null` contract.
 export function captureIdentityOverrides(
   spec: CaptureIdentity,
 ): CaptureRequestSpec | null {

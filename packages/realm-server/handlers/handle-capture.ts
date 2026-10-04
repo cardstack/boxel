@@ -26,12 +26,12 @@ import {
 } from '@cardstack/runtime-common';
 import RealmPermissionChecker from '@cardstack/runtime-common/realm-permission-checker';
 import {
-  enqueueCaptureCardJob,
+  enqueueCaptureJob,
   estimateCaptureQueueWait,
   CAPTURE_SYNC_WAIT_BUDGET_MS,
-} from '@cardstack/runtime-common/jobs/capture-card';
+} from '@cardstack/runtime-common/jobs/capture';
 import { userInitiatedPriority } from '@cardstack/runtime-common/queue';
-import type { CaptureSourceKind } from '@cardstack/runtime-common/tasks/capture-card';
+import type { CaptureSourceKind } from '@cardstack/runtime-common/tasks/capture';
 
 import {
   fetchRequestFromContext,
@@ -118,7 +118,7 @@ interface CaptureResult {
  * ```json
  * {
  *   "data": {
- *     "type": "capture-card",
+ *     "type": "capture",
  *     "attributes": {
  *       "realmURL": "https://realm.example/user/workspace/",
  *       "cardId": "https://realm.example/user/workspace/Person/fadhlan",
@@ -187,7 +187,7 @@ interface CaptureResult {
 // (runtime-common) so this handler and the prerender server's capture
 // route validate identically; see the constants and rules there.
 
-export default function handleCaptureCard({
+export default function handleCapture({
   dbAdapter,
   queue,
   matrixClient,
@@ -424,7 +424,7 @@ export default function handleCaptureCard({
       // job's default concurrency group) so this surface and the GET lane —
       // which keys off the realm's own URL — share one lane per realm.
       let enqueueStart = Date.now();
-      let job = await enqueueCaptureCardJob(
+      let job = await enqueueCaptureJob(
         {
           realmURL: normalizedRealmURL,
           realmUsername: userId,
@@ -565,7 +565,7 @@ export default function handleCaptureCard({
         new Response(
           JSON.stringify({
             data: {
-              type: 'capture-card-result',
+              type: 'capture-result',
               attributes,
             },
           }),
@@ -576,7 +576,7 @@ export default function handleCaptureCard({
         ),
       );
     } catch (error) {
-      console.error('Failed to execute capture-card job:', error);
+      console.error('Failed to execute capture job:', error);
       return sendResponseForSystemError(ctxt, 'Capture job failed');
     }
   };
@@ -689,7 +689,7 @@ async function respondFromLedger({
   };
   return new Response(
     JSON.stringify({
-      data: { type: 'capture-card-result', attributes },
+      data: { type: 'capture-result', attributes },
     }),
     {
       status: 201,
