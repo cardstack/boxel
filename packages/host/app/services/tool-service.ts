@@ -1254,9 +1254,12 @@ export default class ToolService extends Service {
   });
 
   // The files a tool result attaches for the model: the source files a
-  // run-realm-code call saved, and any image a tool captured for the model
-  // to look at (`attachedImages`, and run-realm-code's `views`). The images
-  // are already uploaded to the room's media, so they ride as they are.
+  // run-realm-code call saved, and the captures the two capturing tools took
+  // for the model to look at (view-visually's `attachedImages`,
+  // run-realm-code's `views`). Images are read only from those tools'
+  // results, so a command from a realm can't put a media item of its choosing
+  // in front of the model as what it is looking at. They are already uploaded
+  // to the room's media, so they ride as they are.
   private attachedFilesForToolResult(
     toolName: string | undefined,
     resultCard: CardDef | undefined,
@@ -1283,10 +1286,19 @@ export default class ToolService extends Service {
             ];
           })
         : [];
-    let images = [
-      ...(Array.isArray(result.attachedImages) ? result.attachedImages : []),
-      ...(Array.isArray(result.views) ? result.views : []),
-    ].flatMap((image) =>
+    let capturing =
+      toolName?.startsWith('view-visually_') ||
+      toolName?.startsWith('run-realm-code_');
+    let images = (
+      capturing
+        ? [
+            ...(Array.isArray(result.attachedImages)
+              ? result.attachedImages
+              : []),
+            ...(Array.isArray(result.views) ? result.views : []),
+          ]
+        : []
+    ).flatMap((image) =>
       image?.url && image.sourceUrl
         ? [
             this.matrixService.fileAPI.createFileDef({

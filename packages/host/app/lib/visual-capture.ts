@@ -354,7 +354,11 @@ async function fitImage(
       sourceHeight < bitmap.height
         ? `Only the top ${Math.round(sourceHeight)}px of the ${bitmap.height}px-tall capture is shown.`
         : undefined;
-    for (let attempt = 0; attempt < 6; attempt++) {
+    // A PNG re-encoded at the same size is rarely smaller than the
+    // browser's own, so when only the byte bound is exceeded the fit starts
+    // at JPEG.
+    let resized = scale < 1 || sourceHeight < bitmap.height;
+    for (let attempt = resized ? 0 : 1; attempt < 6; attempt++) {
       let width = Math.max(1, Math.round(bitmap.width * scale));
       let height = Math.max(1, Math.round(sourceHeight * scale));
       let canvas = new OffscreenCanvas(width, height);
