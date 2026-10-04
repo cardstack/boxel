@@ -11,6 +11,7 @@ import type {
 } from './types.ts';
 import { constructHistory } from './history.ts';
 import {
+  canonicalizeMatrixMediaKey,
   downloadFile,
   downloadFileAsBase64DataUrl,
   extractCodePatchBlocks,
@@ -2410,14 +2411,17 @@ function isHumanMessage(
 // re-downloads and re-encodes each embedded file, so both the count and the
 // bytes must stay bounded however many results a tool loop produces:
 // - at most MAX_CURRENT_TURN_TOOL_RESULT_MEDIA files, the newest kept;
-// - no single file over MAX_TOOL_RESULT_MEDIA_FILE_BYTES, which is the
-//   per-image limit of the strictest provider the bot routes to (Anthropic
-//   rejects a larger image, failing the whole request);
-// - at most MAX_CURRENT_TURN_TOOL_RESULT_MEDIA_BYTES across the turn. Base64
-//   grows bytes by a third, so this embeds about 21 MiB, leaving the rest of
-//   a 32 MB provider request limit for the conversation itself.
+// - no single file over MAX_TOOL_RESULT_MEDIA_FILE_BYTES. Anthropic, the
+//   strictest provider the bot routes to, rejects an image whose base64
+//   encoding exceeds 5 MiB, failing the whole request; base64 grows bytes by
+//   a third, so the raw limit is three quarters of that;
+// - at most MAX_CURRENT_TURN_TOOL_RESULT_MEDIA_BYTES across the turn, which
+//   base64 grows to about 21 MiB, leaving the rest of a 32 MB provider
+//   request limit for the conversation itself.
 export const MAX_CURRENT_TURN_TOOL_RESULT_MEDIA = 8;
-export const MAX_TOOL_RESULT_MEDIA_FILE_BYTES = 5 * 1024 * 1024;
+export const MAX_TOOL_RESULT_MEDIA_FILE_BYTES = Math.floor(
+  (5 * 1024 * 1024 * 3) / 4,
+);
 export const MAX_CURRENT_TURN_TOOL_RESULT_MEDIA_BYTES = 16 * 1024 * 1024;
 
 export interface CurrentTurnToolResultMedia {
@@ -2500,7 +2504,34 @@ export function currentTurnToolResultMedia(
 }
 
 function formatMiB(bytes: number): string {
-  return `${bytes / (1024 * 1024)} MiB`;
+  return `${Math.round((bytes / (1024 * 1024)) * 100) / 100} MiB`;
+}
+
+// The homeserver media URL a tool-result attachment is downloaded from. The
+// download carries the bot's Matrix access token, and a tool result's file
+// URL can come from a tool's own output, so the URL is never fetched as
+// given: it must name a Matrix media item, and the item is fetched from the
+// homeserver's own media endpoint. Undefined when the URL names no media
+// item.
+function toolResultMediaDownloadUrl(
+  client: MatrixClient,
+  url: string,
+): string | undefined {
+  let key = canonicalizeMatrixMediaKey(url);
+  if (!key?.startsWith('mxc://')) {
+    return undefined;
+  }
+  return (
+    client.mxcUrlToHttp(
+      key,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      true,
+    ) ?? undefined
+  );
 }
 
 // Downloads the current turn's media attachments (images, PDFs, audio,
@@ -2537,9 +2568,22 @@ export const buildCurrentTurnMediaParts = async (
       fromToolResult: true,
     })),
   ];
+  let omittedAtDownload: CurrentTurnToolResultMedia['omitted'] = [];
   for (let { file: f, fromToolResult } of files) {
     if (!f.url) {
       continue;
+    }
+    let downloadUrl = f.url;
+    if (fromToolResult) {
+      let mediaUrl = toolResultMediaDownloadUrl(client, f.url);
+      if (!mediaUrl) {
+        omittedAtDownload.push({
+          file: f,
+          reason: 'it is not a file stored in this conversation',
+        });
+        continue;
+      }
+      downloadUrl = mediaUrl;
     }
     // Check model capability before downloading
     let modality = requiredModality(f.contentType);
@@ -2554,23 +2598,31 @@ export const buildCurrentTurnMediaParts = async (
       continue;
     }
     let partCountBefore = mediaParts.length;
+    // A tool result's declared size is the tool's word for it, so the bytes
+    // actually downloaded are held to the per-file limit too.
+    let download = async () => {
+      let dataUrl = await downloadFileAsBase64DataUrl(
+        client,
+        downloadUrl,
+        f.contentType!,
+      );
+      if (
+        fromToolResult &&
+        base64DataUrlByteLength(dataUrl) > MAX_TOOL_RESULT_MEDIA_FILE_BYTES
+      ) {
+        throw new OversizedToolResultMediaError();
+      }
+      return dataUrl;
+    };
     try {
       if (isImageContentType(f.contentType)) {
-        let dataUrl = await downloadFileAsBase64DataUrl(
-          client,
-          f.url,
-          f.contentType!,
-        );
+        let dataUrl = await download();
         mediaParts.push({
           type: 'image_url',
           image_url: { url: dataUrl },
         });
       } else if (isPdfContentType(f.contentType)) {
-        let dataUrl = await downloadFileAsBase64DataUrl(
-          client,
-          f.url,
-          f.contentType!,
-        );
+        let dataUrl = await download();
         mediaParts.push({
           type: 'file',
           file: {
@@ -2584,11 +2636,7 @@ export const buildCurrentTurnMediaParts = async (
           getLog().error(`Unsupported audio format: ${f.contentType}`);
           continue;
         }
-        let dataUrl = await downloadFileAsBase64DataUrl(
-          client,
-          f.url,
-          f.contentType!,
-        );
+        let dataUrl = await download();
         // Strip data URL prefix — OpenRouter expects raw base64 for audio
         let base64 = dataUrl.replace(/^data:[^;]+;base64,/, '');
         mediaParts.push({
@@ -2596,17 +2644,20 @@ export const buildCurrentTurnMediaParts = async (
           input_audio: { data: base64, format },
         });
       } else if (isVideoContentType(f.contentType)) {
-        let dataUrl = await downloadFileAsBase64DataUrl(
-          client,
-          f.url,
-          f.contentType!,
-        );
+        let dataUrl = await download();
         mediaParts.push({
           type: 'video_url',
           video_url: { url: dataUrl },
         });
       }
     } catch (e) {
+      if (e instanceof OversizedToolResultMediaError) {
+        omittedAtDownload.push({
+          file: f,
+          reason: `it is larger than ${formatMiB(MAX_TOOL_RESULT_MEDIA_FILE_BYTES)}`,
+        });
+        continue;
+      }
       // A failed download only affects this turn's volatile message; the
       // file's metadata is still in history, so nothing byte-stable drifts.
       getLog().error(`Failed to download media file ${f.url}:`, e);
@@ -2627,8 +2678,9 @@ export const buildCurrentTurnMediaParts = async (
       `Note: The following files were not sent to the model because it does not support their input type, so you cannot see them: ${fileList}. Do not guess at their contents; tell the user you cannot view them with the current model.`,
     );
   }
-  if (toolResultMedia.omitted.length > 0) {
-    let fileList = toolResultMedia.omitted
+  let omitted = [...toolResultMedia.omitted, ...omittedAtDownload];
+  if (omitted.length > 0) {
+    let fileList = omitted
       .map(({ file, reason }) => `${mediaFileLabel(file)}: ${reason}`)
       .join('; ');
     notes.push(
@@ -2638,6 +2690,15 @@ export const buildCurrentTurnMediaParts = async (
   let unsupportedNote = notes.length ? notes.join('\n\n') : undefined;
   return { mediaParts, unsupportedNote };
 };
+
+class OversizedToolResultMediaError extends Error {}
+
+// The number of bytes a base64 data URL encodes.
+function base64DataUrlByteLength(dataUrl: string): number {
+  let base64 = dataUrl.slice(dataUrl.indexOf(',') + 1);
+  let padding = base64.endsWith('==') ? 2 : base64.endsWith('=') ? 1 : 0;
+  return (base64.length * 3) / 4 - padding;
+}
 
 function mediaFileLabel(file: SerializedFileDef): string {
   let name = file.name ?? 'unnamed file';
