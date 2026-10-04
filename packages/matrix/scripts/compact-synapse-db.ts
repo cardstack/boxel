@@ -5,14 +5,21 @@
 // has joined each time one of their devices changes, and never deletes those
 // rows. A user that gets a new device on every login and sits in thousands of
 // session rooms grows the table into tens of gigabytes. The rows are a change
-// feed, not room or user data: once synapse has fanned a row out to remote
-// servers (`converted_to_destinations`), it only reads it to answer "which
-// users' devices changed since sync token X?", and it answers a token older
-// than the table's oldest row with a full device-list resync. So the converted
-// rows can go, except the newest change: synapse reads an empty table's oldest
-// row as stream 0, which would make every old token look current and answer
-// it with "no changes" instead of a resync. The unconverted rows are kept for
-// synapse to process.
+// feed, not room or user data. Synapse reads them for two things:
+//
+// - Converting each change into outbound pokes for the other homeservers in
+//   the room, in (stream_id, room_id) order up to a cursor kept in
+//   `device_lists_changes_converted_stream_position`.
+// - Answering "which users' devices changed since sync token X?". A token
+//   older than the table's oldest stream id gets a full device-list resync.
+//
+// So the script deletes only a prefix: every row before a boundary stream.
+// That keeps the oldest-stream check sound, since every token the deleted rows
+// could answer is now older than the table and gets a resync. When no room
+// has a member on another homeserver, converting writes nothing but the
+// cursor, so the boundary is the newest stream and the cursor moves to it.
+// Otherwise the boundary is the cursor's stream, so no unconverted row is
+// lost.
 //
 // Synapse caches the table's oldest stream id, so no running synapse may be
 // using the database. The script refuses while a running container mounts the
@@ -32,19 +39,22 @@ import { execFileSync } from 'child_process';
 import {
   copyFileSync,
   existsSync,
+  readFileSync,
   realpathSync,
   renameSync,
   rmSync,
   statSync,
 } from 'fs';
 import { join, resolve } from 'path';
+import yaml from 'yaml';
 import {
   getEnvironmentSlug,
   isEnvironmentMode,
 } from '../support/environment-config.ts';
 
 const TABLE = 'device_lists_changes_in_room';
-const UNCONVERTED_INDEX = 'device_lists_changes_in_stream_id_unconverted';
+const CURSOR_TABLE = 'device_lists_changes_converted_stream_position';
+const KEPT_TABLE = 'compact_kept_device_list_changes';
 
 let backup = !process.argv.slice(2).includes('--no-backup');
 let dataDir = process.env.SYNAPSE_DATA_DIR
@@ -115,35 +125,96 @@ if (backup) {
 }
 
 db = new DatabaseSync(dbPath);
-let hasUnconvertedIndex = Boolean(
-  db
-    .prepare(`SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = ?`)
-    .get(UNCONVERTED_INDEX),
-);
-// The partial index holds only unconverted rows, so reading through it avoids
-// scanning the whole table. The newest change is found through the
-// (stream_id, room_id) index.
-let indexedBy = hasUnconvertedIndex ? `INDEXED BY ${UNCONVERTED_INDEX}` : '';
 
-console.log(`Pruning converted rows from ${TABLE}`);
-db.exec('BEGIN');
-try {
-  db.exec(
-    `CREATE TEMP TABLE kept_device_list_changes AS
-       SELECT * FROM ${TABLE} ${indexedBy} WHERE NOT converted_to_destinations
-       UNION
-       SELECT * FROM ${TABLE}
-         WHERE stream_id = (SELECT MAX(stream_id) FROM ${TABLE})`,
+function hasTable(name: string) {
+  return Boolean(
+    db
+      .prepare(`SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?`)
+      .get(name),
   );
-  // An unconditional DELETE lets SQLite drop the table's pages wholesale
-  // instead of deleting row by row.
-  db.exec(`DELETE FROM ${TABLE}`);
-  db.exec(`INSERT INTO ${TABLE} SELECT * FROM kept_device_list_changes`);
-  db.exec('DROP TABLE kept_device_list_changes');
-  db.exec('COMMIT');
-} catch (e) {
-  db.exec('ROLLBACK');
-  throw e;
+}
+
+// True when some room has a member on another homeserver, or is still
+// joining one over federation; also when the local server can't be told
+// apart from remote ones.
+function federates() {
+  let configPath = join(dataDir, 'homeserver.yaml');
+  let serverName: unknown = existsSync(configPath)
+    ? yaml.parse(readFileSync(configPath, 'utf8'))?.server_name
+    : undefined;
+  if (typeof serverName !== 'string') {
+    return true;
+  }
+  if (
+    hasTable('partial_state_rooms') &&
+    db.prepare('SELECT 1 FROM partial_state_rooms LIMIT 1').get()
+  ) {
+    return true;
+  }
+  // A user id is @localpart:server, and a localpart can't contain a colon.
+  return Boolean(
+    db
+      .prepare(
+        `SELECT 1 FROM current_state_events
+           WHERE type = 'm.room.member' AND membership = 'join'
+             AND substr(state_key, instr(state_key, ':') + 1) != ?
+           LIMIT 1`,
+      )
+      .get(serverName),
+  );
+}
+
+let newest = db
+  .prepare(
+    `SELECT stream_id, MAX(room_id) AS room_id FROM ${TABLE}
+       WHERE stream_id = (SELECT MAX(stream_id) FROM ${TABLE})`,
+  )
+  .get() as { stream_id: number | null; room_id: string | null };
+let cursor = db
+  .prepare(`SELECT MIN(stream_id) AS stream_id FROM ${CURSOR_TABLE}`)
+  .get() as { stream_id: number | null };
+
+if (newest.stream_id === null) {
+  console.log(`${TABLE} is empty; nothing to prune`);
+} else {
+  let boundary: number;
+  let advanceCursor = !federates();
+  if (advanceCursor) {
+    // No other homeserver shares a room, so converting a row writes no
+    // outbound pokes and only advances the cursor; do that directly.
+    boundary = newest.stream_id;
+  } else {
+    // Rows before the cursor's stream are already converted.
+    boundary = cursor.stream_id ?? 0;
+  }
+
+  console.log(
+    `Pruning ${TABLE} rows before stream ${boundary} (newest is ${newest.stream_id})`,
+  );
+  db.exec('BEGIN');
+  try {
+    if (advanceCursor) {
+      db.prepare(
+        `UPDATE ${CURSOR_TABLE} SET stream_id = ?, room_id = ?
+           WHERE (stream_id, room_id) < (?, ?)`,
+      ).run(newest.stream_id, newest.room_id, newest.stream_id, newest.room_id);
+    }
+    // Copy the kept rows aside and empty the table with an unconditional
+    // DELETE, which drops its pages wholesale instead of deleting row by row.
+    // The copy is a table in the database file rather than a TEMP table, so a
+    // large one doesn't land in a memory-backed temp directory.
+    db.exec(`DROP TABLE IF EXISTS ${KEPT_TABLE}`);
+    db.prepare(
+      `CREATE TABLE ${KEPT_TABLE} AS SELECT * FROM ${TABLE} WHERE stream_id >= ?`,
+    ).run(boundary);
+    db.exec(`DELETE FROM ${TABLE}`);
+    db.exec(`INSERT INTO ${TABLE} SELECT * FROM ${KEPT_TABLE}`);
+    db.exec(`DROP TABLE ${KEPT_TABLE}`);
+    db.exec('COMMIT');
+  } catch (e) {
+    db.exec('ROLLBACK');
+    throw e;
+  }
 }
 
 let compactPath = `${dbPath}.compact`;
