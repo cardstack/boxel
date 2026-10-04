@@ -345,6 +345,8 @@ module(basename(import.meta.filename), function (hooks) {
           realmURL: new URL(PRIVATE),
           fileSystem: {
             'schedules/open.json': schedule('Private open', OWNER),
+            'notes/private-notes.md':
+              '# Private notes\n\nOnly its readers see this.\n',
           },
           permissions: { ...owner, [REQUESTER]: ['read'] },
         },
@@ -443,6 +445,27 @@ module(basename(import.meta.filename), function (hooks) {
       });
   }
 
+  // A POST of a file capture: the file is named by `fileURL` in its realm.
+  function postFileCapture(user: string, realmURL: string, fileURL: string) {
+    return request
+      .post('/_capture')
+      .set('Accept', 'application/vnd.api+json')
+      .set('Content-Type', 'application/vnd.api+json')
+      .set(
+        'Authorization',
+        `Bearer ${createRealmServerJWT(
+          { user, sessionRoom: `session-room-${user}` },
+          realmSecretSeed,
+        )}`,
+      )
+      .send({
+        data: {
+          type: 'capture-card',
+          attributes: { realmURL, fileURL, format: 'isolated' },
+        },
+      });
+  }
+
   // A reader's GET of a capture URL on the board's realm, with their own
   // session there.
   function getCapture(user: string, url: string) {
@@ -527,6 +550,41 @@ module(basename(import.meta.filename), function (hooks) {
       pngHeight(servedToOther.body as Buffer),
       otherCapture.height,
       'the capture drawn as them, never the requester’s',
+    );
+  });
+
+  test('a file capture draws the file for a reader of its realm and nothing for anyone else', async function (assert) {
+    let fileURL = `${PRIVATE}notes/private-notes.md`;
+
+    let reader = await postFileCapture(REQUESTER, PRIVATE, fileURL);
+    assert.strictEqual(reader.status, 201, JSON.stringify(reader.body));
+    assert.strictEqual(
+      reader.body.data.attributes.status,
+      'ready',
+      `a reader of the realm is drawn the file: ${reader.body.data.attributes.error}`,
+    );
+    assert.ok(
+      reader.body.data.attributes.captures[0].base64,
+      'and handed its image',
+    );
+
+    let outsider = await postFileCapture(OTHER_READER, PRIVATE, fileURL);
+    assert.notStrictEqual(
+      outsider.body?.data?.attributes?.status,
+      'ready',
+      `a caller who cannot read the realm is drawn nothing: ${JSON.stringify(outsider.body)}`,
+    );
+    assert.notOk(
+      outsider.body?.data?.attributes?.base64,
+      'and handed no image',
+    );
+    let persistedForOutsider = await db.execute(
+      `SELECT 1 FROM media_cache_ledger WHERE source_url = '${fileURL}' AND rendered_as LIKE '${OTHER_READER}%'`,
+    );
+    assert.strictEqual(
+      persistedForOutsider.length,
+      0,
+      'and nothing is stored for them',
     );
   });
 

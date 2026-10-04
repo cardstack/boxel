@@ -916,6 +916,35 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(args.runAs, '@someone:localhost', 'as the requester');
     });
 
+    test('a null cardId beside a fileURL reads as absent', async function (assert) {
+      let { queue, published } = makeQueue({ status: 'ready' });
+      let app = buildApp(buildArgs(makeDbAdapter(), queue));
+      let token = createJWT(
+        { user: '@someone:localhost', sessionRoom: '!room:localhost' },
+        realmSecretSeed,
+      );
+
+      await supertest(app.callback())
+        .post('/_capture')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          data: {
+            attributes: {
+              realmURL: 'http://example.test/',
+              cardId: null,
+              fileURL: 'http://example.test/brand/guide.html',
+              format: 'isolated',
+            },
+          },
+        })
+        .expect(201);
+
+      assert.strictEqual(
+        (published[0]?.args as Record<string, unknown>)?.sourceKind,
+        'file',
+      );
+    });
+
     test('rejects cardId and fileURL together', async function (assert) {
       let { queue, published } = makeQueue({ status: 'ready' });
       let app = buildApp(buildArgs(makeDbAdapter(), queue));
