@@ -416,9 +416,9 @@ module('Integration | Component | RoomMessage', function (hooks) {
     await click(
       '[data-test-tool-call-id="read-url-1"] [data-test-apply-state="ready"]',
     );
-    await waitUntil(() => sentToolResults(testScenario.roomId).length > 0);
+    await waitUntil(() => sentToolResults(testScenario.roomId!).length > 0);
 
-    let [approval] = sentToolResults(testScenario.roomId);
+    let [approval] = sentToolResults(testScenario.roomId!);
     assert.strictEqual(approval.content['m.relates_to'].key, 'approved');
     assert.strictEqual(approval.content.failureReason, undefined);
 
@@ -442,9 +442,9 @@ module('Integration | Component | RoomMessage', function (hooks) {
     await click(
       '[data-test-tool-call-id="read-url-1"] [data-test-alert-action-button="Decline"]',
     );
-    await waitUntil(() => sentToolResults(testScenario.roomId).length > 0);
+    await waitUntil(() => sentToolResults(testScenario.roomId!).length > 0);
 
-    let [decline] = sentToolResults(testScenario.roomId);
+    let [decline] = sentToolResults(testScenario.roomId!);
     assert.strictEqual(decline.content['m.relates_to'].key, 'invalid');
     assert.ok(
       decline.content.failureReason.includes(

@@ -1057,7 +1057,10 @@ export default class ToolService extends Service {
           command.message.roomId,
           command.toolRequest.id,
         ) ?? command.eventId;
-      let url = command.arguments?.url;
+      // The request's own arguments: `command.arguments` nests top-level
+      // fields under `attributes` for host tools, which a bot call has none
+      // of.
+      let url = command.toolRequest.arguments?.url;
       await this.matrixService.sendToolResultEvent({
         roomId: command.message.roomId,
         invokedToolFromEventId,
