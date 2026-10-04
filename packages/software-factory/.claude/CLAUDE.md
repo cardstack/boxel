@@ -40,15 +40,15 @@ Two parallel skill paths exist, one per factory run mode:
 Fallback dirs for both modes (skills that aren't software-factory
 specific):
 
-1. `packages/boxel-cli/plugin/skills/` — boxel-cli Claude Code
-   plugin skills (`boxel`, `boxel-api`, `boxel-command`,
-   `boxel-file-structure`, `boxel-file-def`); same directory
-   the plugin distributes to end users. The `boxel` skill and
-   its references are built from the boxel-skills repo by
-   `pnpm build:skills`.
-2. monorepo root `.agents/skills/` — a fallback slot for shared
-   domain skills, currently empty (`ember-best-practices` now ships
-   from boxel-skills via the plugin dir above).
+1. `packages/boxel-cli/plugin/skills/` — the skills the boxel-cli
+   Claude Code plugin authors itself (`boxel-api`, `boxel-command`,
+   `boxel-file-structure`, `realm-sync`, …).
+2. The local clone of the pinned cardstack/boxel-skills release
+   (`boxel`, `boxel-file-def`, `ember-best-practices`, …) — the
+   release the plugin marketplace installs for end users as the
+   `boxel-skills` plugin. `pnpm factory:setup` clones it.
+3. monorepo root `.agents/skills/` — a fallback slot for shared
+   domain skills.
 
 The two software-factory skill sets diverged during CS-11149. They
 stay separated until the SDK orchestrator is retired; at that

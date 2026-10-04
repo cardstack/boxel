@@ -119,9 +119,16 @@ export {
   OPERATIONS_CHANNEL,
   emitCapabilityCheck,
   emitOperationPerf,
+  INTERNAL_ROUTE,
+  emitPolicyCompile,
+  emitPolicyDecision,
+  emitPolicySearchScope,
   emitPolicySnapshotRead,
   setCapabilityCheckSink,
   setOperationPerfSink,
+  setPolicyCompileSink,
+  setPolicyDecisionSink,
+  setPolicySearchScopeSink,
   setPolicySnapshotReadSink,
 } from './telemetry.ts';
 export type {
@@ -132,7 +139,13 @@ export type {
   OperationOutcome,
   OperationPerfEvent,
   OperationReadLayer,
+  PolicyCompileEvent,
+  PolicyDecisionEvent,
+  PolicyDecisionReason,
+  PolicyRoute,
+  PolicySearchScopeEvent,
   PolicySnapshotReadEvent,
+  PolicyTransport,
 } from './telemetry.ts';
 export {
   MalformedCardSourceError,

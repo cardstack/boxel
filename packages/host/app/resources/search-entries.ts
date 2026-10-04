@@ -56,6 +56,7 @@ import { searchErrorEntry } from '../lib/search-error-entry';
 
 import type LoaderService from '../services/loader-service';
 import type NetworkService from '../services/network';
+import type RealmService from '../services/realm';
 import type RealmServerService from '../services/realm-server';
 import type StoreService from '../services/store';
 import type {
@@ -117,6 +118,7 @@ interface Args {
 export class SearchEntriesResource extends Resource<Args> {
   @service declare private loaderService: LoaderService;
   @service declare private network: NetworkService;
+  @service declare private realm: RealmService;
   @service declare private realmServer: RealmServerService;
   @service declare private store: StoreService;
 
@@ -383,11 +385,15 @@ export class SearchEntriesResource extends Resource<Args> {
           // re-querying the whole realm. Full-text (matches) queries,
           // paginated queries, composite/sparse selections, and a malformed
           // event (no usable generation to judge staleness by) can't refresh
-          // in isolation and fall through to the coarse re-run.
+          // in isolation and fall through to the coarse re-run. So does an
+          // event from a realm the session may not read: the realm answers
+          // the card+html GET on its own permissions alone, so a member a
+          // policy grant let the search return is refused there.
           if (
             event.eventName === 'prerender_html' &&
             typeof event.generation === 'number' &&
-            this.#canSelectivelyRefresh()
+            this.#canSelectivelyRefresh() &&
+            !this.#sessionCannotRead(realm)
           ) {
             this.#log.info(
               `prerender_html event on ${realm}; scheduling selective per-member refresh`,
@@ -713,6 +719,15 @@ export class SearchEntriesResource extends Resource<Args> {
     // The GET's ?fields= serves only html / item / html,item; a sparse
     // item.<field> selection has no query-string spelling.
     return this.#fieldsetIsRefreshable(query.fields?.entry);
+  }
+
+  // Whether the session is known not to read `realm`: the host holds a
+  // session for it whose permissions leave out `read`. A realm the host holds
+  // no session for, such as a public one it never signed in to, or one whose
+  // info it loaded without signing in, is not known either way, and its
+  // card+html GET is answered as it always is.
+  #sessionCannotRead(realm: string): boolean {
+    return this.realm.token(realm) !== undefined && !this.realm.canRead(realm);
   }
 
   // Refreshable = the html branch is in play (the default resolution or an

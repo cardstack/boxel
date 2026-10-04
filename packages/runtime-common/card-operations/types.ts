@@ -10,7 +10,7 @@ import type {
   SearchEntryWireQuery,
 } from '../search-entry.ts';
 import { CAPABILITY_CHECK_CAP } from './capability-wire.ts';
-import type { OperationDiagnostics } from './telemetry.ts';
+import type { OperationDiagnostics, PolicyRoute } from './telemetry.ts';
 import {
   PRERENDERED_HTML_FORMATS,
   type PrerenderedHtmlFormat,
@@ -692,6 +692,9 @@ export interface OperationRequest {
   // running. One the gate refuses is refused as it is in an active realm, so
   // a caller no grant admits is not told the realm is archived.
   seal?: Error;
+  // The request surface and route the invocation arrived on, which a policy
+  // decision record names. Absent for a dispatch the realm makes itself.
+  route?: PolicyRoute;
 }
 
 // A read's answer: the assembled JSON:API document, exactly as the card+json
