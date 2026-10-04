@@ -33,13 +33,15 @@ interface Signature {
   Args: {
     initialRealmURL?: string;
     selectedFile?: LocalPath;
+    multiSelect?: boolean;
+    selectedFiles?: LocalPath[];
     fileTypeFilter?: CodeRef;
     fileFieldFilter?: Record<string, unknown>;
     acceptTypes?: string;
     onRealmChange?: (realm: FileChooserRealm) => void;
     onFileSelected?: (path: LocalPath) => void;
     onFileConfirmed?: (path: LocalPath) => void;
-    onUploadComplete: (file: FileDef) => void;
+    onUploadComplete: (file: FileDef, realm: FileChooserRealm) => void;
   };
   Blocks: {
     default: [
@@ -51,6 +53,8 @@ interface Signature {
         FileTree: WithBoundArgs<
           typeof IndexedFileTree,
           | 'selectedFile'
+          | 'multiSelect'
+          | 'selectedFiles'
           | 'fileTypeFilter'
           | 'fileFieldFilter'
           | 'onFileSelected'
@@ -158,7 +162,7 @@ export default class FileChooser extends Component<Signature> {
       realm: this.selectedRealm.id,
       acceptTypes: this.args.acceptTypes,
     });
-    this.beginUpload(task);
+    this.beginUpload(this.selectedRealm, task);
   }
 
   @action
@@ -222,15 +226,15 @@ export default class FileChooser extends Component<Signature> {
       realm: this.selectedRealm.id,
       file,
     });
-    this.beginUpload(task);
+    this.beginUpload(this.selectedRealm, task);
   }
 
-  private beginUpload(task: FileUploadTask) {
+  private beginUpload(realm: FileChooserRealm, task: FileUploadTask) {
     this.currentUpload = task;
     task.result.then((fileDef) => {
       if (fileDef) {
         this.currentUpload = undefined;
-        this.args.onUploadComplete(fileDef);
+        this.args.onUploadComplete(fileDef, realm);
       } else if (task.state !== 'error') {
         this.currentUpload = undefined;
       }
@@ -256,6 +260,8 @@ export default class FileChooser extends Component<Signature> {
         FileTree=(component
           IndexedFileTree
           selectedFile=@selectedFile
+          multiSelect=@multiSelect
+          selectedFiles=@selectedFiles
           fileTypeFilter=@fileTypeFilter
           fileFieldFilter=@fileFieldFilter
           onFileSelected=this.handleFileSelected

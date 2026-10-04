@@ -9,8 +9,8 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
 import { task } from 'ember-concurrency';
-import perform from 'ember-concurrency/helpers/perform';
 import onKeyMod from 'ember-keyboard/modifiers/on-key';
+import pluralize from 'pluralize';
 
 import {
   BoxelButton,
@@ -26,6 +26,7 @@ import {
   isCardErrorJSONAPI,
   loadCardDef,
   type CodeRef,
+  type FileChooserOpts,
   type LocalPath,
 } from '@cardstack/runtime-common';
 
@@ -44,8 +45,9 @@ interface Signature {
 }
 
 export default class FileChooserModal extends Component<Signature> {
-  @tracked deferred?: Deferred<FileDef | undefined>;
-  @tracked selectedFile?: LocalPath;
+  @tracked deferred?: Deferred<FileDef[] | undefined>;
+  @tracked multiSelect = false;
+  @tracked selectedFiles: LocalPath[] = [];
   @tracked fileTypeFilter?: CodeRef;
   @tracked fileFieldFilter?: Record<string, unknown>;
   @tracked fileTypeName?: string;
@@ -68,21 +70,29 @@ export default class FileChooserModal extends Component<Signature> {
     if (this.fileTypeName) {
       return `Choose ${this.fileTypeName}`;
     }
-    return 'Choose a File';
+    return this.multiSelect ? 'Choose Files' : 'Choose a File';
+  }
+
+  private get addButtonText(): string {
+    let count = this.selectedFiles.length;
+    if (!this.multiSelect || count === 0) {
+      return 'Add';
+    }
+    return `Add ${count} ${pluralize('File', count)}`;
   }
 
   // public API
-  async chooseFile<T extends FileDef>(opts?: {
-    fileType?: CodeRef;
-    fileTypeName?: string;
-    fileFieldFilter?: Record<string, unknown>;
-  }): Promise<undefined | T> {
+  async chooseFile<T extends FileDef>(
+    opts?: FileChooserOpts & { multiSelect?: boolean },
+  ): Promise<undefined | T | T[]> {
+    let multiSelect = opts?.multiSelect ?? false;
     this.deferred = new Deferred();
+    this.multiSelect = multiSelect;
     this.fileTypeFilter = opts?.fileType;
     this.fileFieldFilter = opts?.fileFieldFilter;
     this.fileTypeName = opts?.fileTypeName;
     this.acceptTypes = undefined;
-    this.selectedFile = undefined;
+    this.selectedFiles = [];
     this.initialRealmURL = this.operatorModeStateService.realmURL?.toString();
 
     if (opts?.fileType) {
@@ -96,35 +106,49 @@ export default class FileChooserModal extends Component<Signature> {
       }
     }
 
-    let file = await this.deferred.promise;
-    if (file) {
-      return file as T;
-    } else {
+    let files = (await this.deferred.promise) as T[] | undefined;
+    if (!files?.length) {
       return undefined;
     }
+    return multiSelect ? files : files[0];
   }
 
+  // `uploaded` holds files already loaded by an upload; they are returned
+  // after the picked paths, skipping any the paths already produced.
   private pickTask = task(
     async (
       selectedRealm: FileChooserRealm | undefined,
-      path: LocalPath | undefined,
+      paths: LocalPath[],
+      uploaded: FileDef[],
     ) => {
       let deferred = this.deferred;
       try {
-        if (deferred && selectedRealm && path) {
-          let fileId = new RealmPaths(selectedRealm.id).fileRRI(path);
-          let file = await this.store.get(fileId, {
-            type: 'file-meta',
-          });
-          if (isCardErrorJSONAPI(file)) {
-            deferred.reject(
-              new Error(
-                `file-chooser/modal: failed to load file meta for ${fileId}`,
-              ),
-            );
-            return;
+        if (deferred && selectedRealm && (paths.length || uploaded.length)) {
+          let realmPaths = new RealmPaths(selectedRealm.id);
+          let fileIds = paths.map((path) => realmPaths.fileRRI(path));
+          let loaded = await Promise.all(
+            fileIds.map((fileId) =>
+              this.store.get(fileId, { type: 'file-meta' }),
+            ),
+          );
+          let picked: FileDef[] = [];
+          for (let [index, file] of loaded.entries()) {
+            if (isCardErrorJSONAPI(file)) {
+              deferred.reject(
+                new Error(
+                  `file-chooser/modal: failed to load file meta for ${fileIds[index]}`,
+                ),
+              );
+              return;
+            }
+            picked.push(file);
           }
-          deferred.fulfill(file);
+          for (let file of uploaded) {
+            if (!picked.some((p) => p.id === file.id)) {
+              picked.push(file);
+            }
+          }
+          deferred.fulfill(picked);
         } else {
           // Cancel / Escape / close with no selection: settle the promise with
           // undefined so callers awaiting chooseFile() resume. Otherwise the
@@ -140,26 +164,66 @@ export default class FileChooserModal extends Component<Signature> {
 
   @action
   private handleFileSelected(path: LocalPath) {
-    this.selectedFile = path;
+    if (!this.multiSelect) {
+      this.selectedFiles = [path];
+    } else if (this.selectedFiles.includes(path)) {
+      this.selectedFiles = this.selectedFiles.filter((p) => p !== path);
+    } else {
+      this.selectedFiles = [...this.selectedFiles, path];
+    }
+  }
+
+  // Enter on a file in the tree. In multi-select it confirms the current
+  // selection, falling back to the file under the cursor when nothing is
+  // selected yet.
+  @action
+  private handleFileConfirmed(
+    selectedRealm: FileChooserRealm | undefined,
+    path: LocalPath,
+  ) {
+    let paths =
+      this.multiSelect && this.selectedFiles.length
+        ? this.selectedFiles
+        : [path];
+    this.pickTask.perform(selectedRealm, paths, []);
+  }
+
+  @action
+  private addSelectedFiles(selectedRealm: FileChooserRealm | undefined) {
+    this.pickTask.perform(selectedRealm, this.selectedFiles, []);
+  }
+
+  @action
+  private cancel() {
+    this.pickTask.perform(undefined, [], []);
   }
 
   @action
   private handleRealmChange() {
     // Stage cleared on workspace switch — the previous pick lived in a
     // different realm.
-    this.selectedFile = undefined;
+    this.selectedFiles = [];
   }
 
+  // An upload confirms the chooser. In multi-select the files already
+  // selected are kept alongside the uploaded one; the selection is always in
+  // the realm the upload went to, since switching realms clears it.
   @action
-  private handleUploadComplete(fileDef: FileDef) {
-    if (this.deferred) {
-      this.deferred.fulfill(fileDef);
-      this.resetState();
+  private handleUploadComplete(fileDef: FileDef, realm: FileChooserRealm) {
+    if (!this.deferred) {
+      return;
     }
+    if (this.multiSelect) {
+      this.pickTask.perform(realm, this.selectedFiles, [fileDef]);
+      return;
+    }
+    this.deferred.fulfill([fileDef]);
+    this.resetState();
   }
 
   private resetState() {
-    this.selectedFile = undefined;
+    this.multiSelect = false;
+    this.selectedFiles = [];
     this.fileTypeFilter = undefined;
     this.fileFieldFilter = undefined;
     this.fileTypeName = undefined;
@@ -171,7 +235,7 @@ export default class FileChooserModal extends Component<Signature> {
   @action private handleKeydown(event: Event) {
     let kbEvent = event as KeyboardEvent;
     if (kbEvent.key === 'Escape') {
-      this.pickTask.perform(undefined, undefined);
+      this.cancel();
       return;
     }
     if (kbEvent.key === 'Tab') {
@@ -348,6 +412,8 @@ export default class FileChooserModal extends Component<Signature> {
         @fileTypeFilter={{this.fileTypeFilter}}
         @fileFieldFilter={{this.fileFieldFilter}}
         @acceptTypes={{this.acceptTypes}}
+        @multiSelect={{this.multiSelect}}
+        @selectedFiles={{this.selectedFiles}}
         @onRealmChange={{this.handleRealmChange}}
         @onFileSelected={{this.handleFileSelected}}
         @onUploadComplete={{this.handleUploadComplete}}
@@ -355,11 +421,7 @@ export default class FileChooserModal extends Component<Signature> {
       >
         <ModalContainer
           @title={{this.modalTitle}}
-          @onClose={{fn
-            (perform this.pickTask)
-            chooser.selectedRealm
-            undefined
-          }}
+          @onClose={{this.cancel}}
           @size='medium'
           @centered={{true}}
           {{on 'keydown' this.handleKeydown}}
@@ -391,7 +453,7 @@ export default class FileChooserModal extends Component<Signature> {
                   <chooser.FileTree
                     @realmURL={{chooser.selectedRealm.id}}
                     @onFileConfirmed={{fn
-                      (perform this.pickTask)
+                      this.handleFileConfirmed
                       chooser.selectedRealm
                     }}
                     @autoFocus={{true}}
@@ -448,10 +510,7 @@ export default class FileChooserModal extends Component<Signature> {
               <div class='footer-buttons'>
                 <BoxelButton
                   @size='tall'
-                  {{on
-                    'click'
-                    (fn (perform this.pickTask) chooser.selectedRealm undefined)
-                  }}
+                  {{on 'click' this.cancel}}
                   {{onKeyMod 'Escape'}}
                   data-test-choose-file-modal-cancel-button
                 >
@@ -463,16 +522,12 @@ export default class FileChooserModal extends Component<Signature> {
                   @disabled={{chooser.isUploadBusy}}
                   {{on
                     'click'
-                    (fn
-                      (perform this.pickTask)
-                      chooser.selectedRealm
-                      this.selectedFile
-                    )
+                    (fn this.addSelectedFiles chooser.selectedRealm)
                   }}
                   {{onKeyMod 'Enter'}}
                   data-test-choose-file-modal-add-button
                 >
-                  Add
+                  {{this.addButtonText}}
                 </BoxelButton>
               </div>
             </div>

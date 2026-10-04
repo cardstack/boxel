@@ -163,11 +163,13 @@ export default class AttachButton extends Component<Signature> {
   });
 
   private doChooseFile = restartableTask(async () => {
-    let chosenFile: FileDef | undefined = await chooseFile();
-    if (chosenFile) {
-      await this.args.chooseFile(chosenFile);
+    let chosenFiles: FileDef[] | undefined = await chooseFile({
+      multiSelect: true,
+    });
+    for (let file of chosenFiles ?? []) {
+      await this.args.chooseFile(file);
     }
-    return chosenFile;
+    return chosenFiles;
   });
 
   private doChooseLocalFile = restartableTask(async () => {
