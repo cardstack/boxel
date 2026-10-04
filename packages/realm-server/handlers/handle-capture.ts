@@ -8,6 +8,7 @@ import {
   ensureTrailingSlash,
   fetchRealmPermissions,
   findLiveRowGeneration,
+  urlNamesFile,
   findMediaCacheEntry,
   isCanonicalCaptureFormat,
   isOnDemandCaptureFormat,
@@ -274,6 +275,11 @@ export default function handleCapture({
       normalizedTarget,
       kind === 'file' ? 'file' : 'instance',
     );
+    // A file without a registered extension shares its spelling with a card
+    // id — `X` beside the instance `X.json` — so its ledger key would be the
+    // card capture's key whenever the two rows carry one generation. Such a
+    // file is captured but never persisted.
+    let persistable = kind === 'card' || urlNamesFile(new URL(sourceURL));
     // The durable served URL exists only for an instance: the GET
     // `_capture/` route resolves instances, not files.
     let servedLocalPath =
@@ -322,7 +328,7 @@ export default function handleCapture({
       let entryKey: MediaCacheCaptureKey | undefined;
       let generationLookupMs: number | undefined;
       let ledgerLookupMs: number | undefined;
-      if (mediaCacheAdapter && spec) {
+      if (mediaCacheAdapter && spec && persistable) {
         // The ledger fast path and the generation probe feeding it answer
         // from the store before any job exists, so the worker task's
         // permission check never covers them — realm read is enforced here
