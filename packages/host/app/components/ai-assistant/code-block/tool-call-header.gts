@@ -2,8 +2,8 @@ import { on } from '@ember/modifier';
 
 import Component from '@glimmer/component';
 
-import { CopyButton } from '@cardstack/boxel-ui/components';
-import { cn } from '@cardstack/boxel-ui/helpers';
+import { BoxelButton, CopyButton } from '@cardstack/boxel-ui/components';
+import { cn, eq } from '@cardstack/boxel-ui/helpers';
 
 import ApplyButton, { type ApplyButtonState } from '../apply-button';
 
@@ -20,6 +20,10 @@ export interface CodeBlockToolCallHeaderSignature {
     isDisplayingCode?: boolean;
     isCompact?: boolean;
     toggleCode?: () => void;
+    // A second choice offered beside the action while the call is ready,
+    // e.g. Decline next to Approve.
+    secondaryAction?: () => void;
+    secondaryActionVerb?: string;
   };
   Blocks: { default: [] };
   Element: HTMLElement;
@@ -48,6 +52,19 @@ export default class CodeBlockToolCallHeader extends Component<CodeBlockToolCall
             />
           {{/if}}
         {{/unless}}
+        {{#if @secondaryAction}}
+          {{#if (eq @toolCallState 'ready')}}
+            <BoxelButton
+              @kind='secondary'
+              @size='auto'
+              class='secondary-action'
+              {{on 'click' @secondaryAction}}
+              data-test-tool-call-secondary-action={{@secondaryActionVerb}}
+            >
+              {{@secondaryActionVerb}}
+            </BoxelButton>
+          {{/if}}
+        {{/if}}
         <ApplyButton
           class='tool-action'
           @actionVerb={{@actionVerb}}
@@ -108,6 +125,16 @@ export default class CodeBlockToolCallHeader extends Component<CodeBlockToolCall
         margin-left: 0;
       }
       .tool-action {
+        margin-left: var(--boxel-sp-5xs);
+      }
+      /* Sized like the apply button it sits beside. */
+      .secondary-action {
+        --boxel-button-font: 600 var(--boxel-font-xs);
+        padding: 3px 10px;
+        min-width: inherit;
+        min-height: inherit;
+        height: 1.5rem;
+        border-radius: 100px;
         margin-left: var(--boxel-sp-5xs);
       }
     </style>

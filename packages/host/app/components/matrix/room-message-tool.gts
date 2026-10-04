@@ -344,6 +344,8 @@ export default class RoomMessageTool extends Component<Signature> {
           <codeBlock.commandHeader
             @commandDescription={{@messageTool.description}}
             @action={{@runCommand}}
+            @secondaryAction={{if @messageTool.awaitsApproval @declineCommand}}
+            @secondaryActionVerb='Decline'
             @actionVerb={{@messageTool.actionVerb}}
             @code={{this.previewCommandCode}}
             @toolCallState={{this.applyButtonState}}
@@ -356,18 +358,10 @@ export default class RoomMessageTool extends Component<Signature> {
           {{/if}}
         </CodeBlock>
         {{#if @messageTool.awaitsApproval}}
-          <Alert @type='warning' data-test-tool-call-approval as |Alert|>
-            <Alert.Messages
-              @messages={{array
-                'The assistant wants to read a web page nobody in this conversation linked to. Check the full URL above and approve it only if it contains nothing from your conversation.'
-              }}
-            />
-            <Alert.Action
-              @action={{@declineCommand}}
-              @actionName='Decline'
-              data-test-tool-call-decline
-            />
-          </Alert>
+          <p class='approval-note' data-test-tool-call-approval>
+            Nobody in this conversation linked to this page. Approve it only if
+            the URL contains nothing from your conversation.
+          </p>
         {{/if}}
         {{#if this.failedToolState}}
           <Alert @type='error' as |Alert|>
@@ -423,6 +417,12 @@ export default class RoomMessageTool extends Component<Signature> {
       }
       .tool-result-card-preview {
         margin-top: var(--boxel-sp);
+      }
+      .approval-note {
+        margin: 0;
+        padding: 0 var(--boxel-sp-xxs);
+        font: var(--boxel-font-xs);
+        color: var(--boxel-450);
       }
       .tool-result-card-header {
         --boxel-label-color: var(--boxel-450);

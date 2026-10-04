@@ -403,7 +403,12 @@ module('Integration | Component | RoomMessage', function (hooks) {
       .dom(`${tool} [data-test-apply-state="ready"]`)
       .hasText('Approve', 'approval is never automatic');
     assert.dom(`${tool} [data-test-tool-call-approval]`).exists();
-    assert.dom(`${tool} [data-test-alert-action-button="Decline"]`).exists();
+    assert
+      .dom(`${tool} [data-test-tool-call-secondary-action="Decline"]`)
+      .hasText('Decline', 'Decline sits beside Approve in the header');
+    assert
+      .dom(`${tool} .code-block-header [data-test-apply-state="ready"]`)
+      .exists();
     assert
       .dom('[data-test-message-idx="0"]')
       .doesNotHaveClass('bot-tools-only');
@@ -440,7 +445,7 @@ module('Integration | Component | RoomMessage', function (hooks) {
     await renderRoomMessageComponent(testScenario);
 
     await click(
-      '[data-test-tool-call-id="read-url-1"] [data-test-alert-action-button="Decline"]',
+      '[data-test-tool-call-id="read-url-1"] [data-test-tool-call-secondary-action="Decline"]',
     );
     await waitUntil(() => sentToolResults(testScenario.roomId!).length > 0);
 
