@@ -223,6 +223,7 @@ export {
   isSourceResult,
   isWrite,
   linkStrategyOf,
+  readLinkStrategyOf,
   refusalForNonReader,
   unshareableFormatsOf,
 } from './types.ts';

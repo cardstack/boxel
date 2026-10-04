@@ -28,6 +28,7 @@ import {
 import {
   isDefinitionFreeBaseOperation,
   linkStrategyOf,
+  readLinkStrategyOf,
   policyIssueSeverity,
   unshareableFormatsOf,
   type BaseOperation,
@@ -1328,7 +1329,7 @@ function reachLane(
   if (base === 'read') {
     return {
       governedBy: 'read',
-      links: linkStrategyOf(declared?.links),
+      links: readLinkStrategyOf(declared?.links),
       rendered: false,
     };
   }

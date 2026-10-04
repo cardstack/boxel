@@ -1850,6 +1850,75 @@ module('Unit | operation lowering', function (hooks) {
     );
   });
 
+  test('`none` is a query strategy, and a read declaring it is recorded', async function (assert) {
+    let { field, contains, CardDef } = api;
+    class Roster extends CardDef {
+      static displayName = 'Roster';
+      @field title = contains(StringField);
+    }
+    shim({ Roster });
+    let lower = (
+      declarations: Record<string, unknown>,
+    ): ReturnType<typeof lowerOperationDeclarations> =>
+      lowerOperationDeclarations(
+        declarations as unknown as Record<
+          string,
+          OperationsModule.OperationDeclaration
+        >,
+        {
+          definition: buildDefinition(Roster as unknown as typeof BaseDef),
+          lookupDefinition,
+          identifyCard: (target) => identifyCard(target),
+        },
+      );
+
+    // The decorator refuses this where it is written, so one only ever reaches
+    // a stored entry. A read's strategy governs the card's plain GET, which the
+    // host loads the card with to render and edit it, so a read served without
+    // its links would have them replaced by the first edit to a link field.
+    for (let name of ['read', 'summary']) {
+      let none = await lower({ [name]: { base: 'read', links: 'none' } });
+      assert.deepEqual(
+        codes(none),
+        ['invalid-link-strategy'],
+        `a read named "${name}" may not withhold its links`,
+      );
+      assert.true(
+        none.operations[name].invalid,
+        `and "${name}" is refused rather than served without them`,
+      );
+      assert.strictEqual(
+        none.operations[name].links,
+        undefined,
+        `and no narrowing is stored for "${name}"`,
+      );
+    }
+
+    for (let links of ['full', 'ids']) {
+      let narrowed = await lower({ read: { base: 'read', links } });
+      assert.deepEqual(codes(narrowed), [], `a read may declare "${links}"`);
+      assert.strictEqual(
+        narrowed.operations.read.links,
+        links,
+        `and "${links}" is stored for the realm to serve`,
+      );
+    }
+
+    let query = await lower({
+      roll: {
+        base: 'query',
+        query: { filter: { on: Roster, eq: { title: 'x' } } },
+        links: 'none',
+      },
+    });
+    assert.deepEqual(codes(query), [], 'a query may declare "none"');
+    assert.strictEqual(
+      query.operations.roll.links,
+      'none',
+      'and its rows are served under it',
+    );
+  });
+
   test('an html declaration is carried onto a read or a query and recorded on anything else', async function (assert) {
     let { field, contains, CardDef } = api;
     class Roster extends CardDef {
