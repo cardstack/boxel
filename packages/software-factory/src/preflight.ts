@@ -22,6 +22,15 @@ import { existsSync, readdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
+// A plain script on Node builtins, not the boxel-cli bundle: safe to import on
+// a checkout where nothing has been built.
+import {
+  boxelSkillsPin,
+  boxelSkillsPresent,
+} from '../../boxel-cli/scripts/boxel-skills.mts';
+
+export { boxelSkillsPresent };
+
 export const MIN_NODE_MAJOR = 24;
 // Matches `.nvmrc` and root package.json `devEngines.runtime`.
 export const PINNED_NODE = '24.17.0';
@@ -37,7 +46,12 @@ export function wantsFactoryEntrypointHelp(argv: string[]): boolean {
 }
 
 export interface Prerequisite {
-  id: 'node' | 'boxel-cli-api' | 'host-dist' | 'playwright-chromium';
+  id:
+    | 'node'
+    | 'boxel-cli-api'
+    | 'boxel-skills'
+    | 'host-dist'
+    | 'playwright-chromium';
   label: string;
   satisfied: boolean;
   /** The single command that provisions this prerequisite on its own. */
@@ -143,6 +157,12 @@ export function checkPrerequisites(): Prerequisite[] {
       label: 'boxel-cli API bundle (packages/boxel-cli/dist/api.js)',
       satisfied: boxelCliApiJsExists(),
       fix: 'pnpm --filter @cardstack/boxel-cli build:api',
+    },
+    {
+      id: 'boxel-skills',
+      label: `boxel-skills ${boxelSkillsPin()} clone (packages/boxel-cli/.boxel-skills-cache/)`,
+      satisfied: boxelSkillsPresent(),
+      fix: 'pnpm --filter @cardstack/boxel-cli fetch:skills',
     },
     {
       id: 'host-dist',

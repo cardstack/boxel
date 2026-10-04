@@ -18,7 +18,7 @@ bundled-test-harness/
 # Shipped via the `files` array in package.json; never in git.
 bundled-realms/
 
-# Cached shallow clone of cardstack/boxel-skills used by scripts/build-skills.ts
+# Clones of the pinned cardstack/boxel-skills tag, made by scripts/boxel-skills.mts
 .boxel-skills-cache/
 
 # Dependencies

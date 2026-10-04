@@ -162,6 +162,11 @@ jobs:
             boxel-cli:
               - *shared
               - 'packages/boxel-cli/**'
+              # The boxel-skills pin lives in the marketplaces, and the
+              # boxel-cli suite checks it (both refs agree, the pinned release
+              # is installable), so a pin-only change has to run that suite.
+              - '.claude-plugin/marketplace.json'
+              - '.agents/plugins/marketplace.json'
             bxl:
               # The suite is self-contained — plain objects under Node, no
               # stack and no browser — so it stays cheap even when the
@@ -169,9 +174,10 @@ jobs:
               - *shared
               - 'packages/bxl/**'
               # The card-authoring skill's claims are pinned by a BXL suite
-              # that reads the skill file, so an edit to the skill has to run
-              # that suite too.
-              - 'packages/boxel-cli/plugin/skills/bxl-authoring/**'
+              # that reads the skill from the pinned boxel-skills release, so
+              # moving the pin has to run that suite too.
+              - '.claude-plugin/marketplace.json'
+              - 'packages/boxel-cli/scripts/boxel-skills.mts'
               # That suite also asserts the host suites the skill cites still
               # exist. `bxl-test` runs unconditionally on main, so without
               # these a host-only rename would merge green and redden main on
