@@ -162,6 +162,11 @@ jobs:
             boxel-cli:
               - *shared
               - 'packages/boxel-cli/**'
+              # The boxel-skills pin lives in the marketplaces, and the
+              # boxel-cli suite checks it (both refs agree, the pinned release
+              # is installable), so a pin-only change has to run that suite.
+              - '.claude-plugin/marketplace.json'
+              - '.agents/plugins/marketplace.json'
             bxl:
               # The suite is self-contained — plain objects under Node, no
               # stack and no browser — so it stays cheap even when the

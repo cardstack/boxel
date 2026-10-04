@@ -5,6 +5,9 @@ import { join, resolve } from 'path';
 import {
   CLAUDE_MARKETPLACE_PATH,
   CODEX_MARKETPLACE_PATH,
+  boxelSkillsPin,
+  boxelSkillsRoot,
+  ensureBoxelSkills,
   readBoxelSkillsRef,
 } from '../../scripts/boxel-skills.mts';
 
@@ -72,6 +75,21 @@ describe('the repo marketplaces', () => {
       readBoxelSkillsRef(CLAUDE_MARKETPLACE_PATH),
     );
   });
+
+  // Codex keys its plugin cache on the manifest version, so a release whose
+  // Codex manifest version differs from its tag reaches Codex users as the
+  // copy they already have, and a release without the manifest is not a
+  // Codex plugin at all. This is the gate that refuses such a pin.
+  it('pin a boxel-skills release whose Codex manifest version is its tag', () => {
+    ensureBoxelSkills();
+    const manifest = JSON.parse(
+      readFileSync(
+        join(boxelSkillsRoot(), '.codex-plugin', 'plugin.json'),
+        'utf8',
+      ),
+    );
+    expect(`v${manifest.version}`).toBe(boxelSkillsPin());
+  }, 120_000);
 
   it('list every plugin the boxel-cli plugin depends on', () => {
     const manifest = JSON.parse(readFileSync(PLUGIN_MANIFEST_PATH, 'utf8'));

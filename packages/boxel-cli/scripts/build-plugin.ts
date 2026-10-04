@@ -224,7 +224,7 @@ function syncCodexManifest(): boolean {
       category: 'Developer Tools',
       capabilities: ['Interactive', 'Read', 'Write'],
       defaultPrompt: [
-        'Create a Boxel card for the data I describe',
+        'Search my Boxel realms for cards that match what I describe',
         'Pull my Boxel workspace down so I can edit it locally',
       ],
       websiteURL: 'https://boxel.ai',

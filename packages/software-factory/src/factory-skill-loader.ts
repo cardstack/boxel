@@ -45,12 +45,9 @@ const DEFAULT_SKILLS_DIR = join(PACKAGE_ROOT, '.agents', 'skills-orchestrator');
  *   release the plugin marketplace installs for end users. `pnpm
  *   factory:setup` clones it, and preflight refuses a run without it.
  * - The monorepo root `.agents/skills/` is a fallback slot for shared domain
- *   skills, read directly by agents that follow the `.agents/skills`
- *   convention. It holds `boxel-workspace-cardinal-rules`, which boxel-skills
- *   also carries: the boxel-skills clone is searched first, so the copy this
- *   loader resolves is the released one, and editing the root copy does not
- *   change what a factory run reads. Content changes to that skill belong
- *   upstream in boxel-skills.
+ *   skills that agents following the `.agents/skills` convention read
+ *   directly. Searched after the boxel-skills clone, so it cannot shadow a
+ *   released skill.
  */
 const DEFAULT_FALLBACK_DIRS = [
   join(MONOREPO_ROOT, 'packages', 'boxel-cli', 'plugin', 'skills'),
