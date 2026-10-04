@@ -41,6 +41,10 @@ import { nextFrame, sleep } from '../../helpers/motion';
  * delivers two animation frames a millisecond apart, the element barely moves
  * between them, and at five times slower that reads as stopped mid-flight.
  *
+ * Arriving counts only after a frame caught the element between its old and
+ * new seats. A layout change that snaps instead of animating reports -1, so
+ * it fails as "did not animate" rather than timing as instantaneous.
+ *
  * `trace` is every sampled frame as `ms:travelled`, for the failure message.
  */
 async function timeLayoutAnimation(el: () => HTMLElement, kick: () => void) {
@@ -52,13 +56,18 @@ async function timeLayoutAnimation(el: () => HTMLElement, kick: () => void) {
   await settled();
   const distance = el().offsetLeft - from;
   trace.push(`distance=${distance}`);
+  let midFlight = false;
   for (;;) {
     await nextFrame();
     const elapsed = performance.now() - start;
     const travelled = el().getBoundingClientRect().left - startLeft;
     trace.push(`${Math.round(elapsed)}:${travelled.toFixed(2)}`);
-    if (distance !== 0 && Math.abs(distance - travelled) < 0.5) {
-      return { ms: elapsed, trace: trace.join(' ') };
+    const remaining = Math.abs(distance - travelled);
+    if (distance !== 0 && remaining < 0.5) {
+      return { ms: midFlight ? elapsed : -1, trace: trace.join(' ') };
+    }
+    if (Math.abs(travelled) >= 0.5) {
+      midFlight = true;
     }
     if (elapsed > 12000) {
       return { ms: -1, trace: trace.join(' ') };
