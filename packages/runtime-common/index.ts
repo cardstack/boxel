@@ -1605,7 +1605,7 @@ export type CaptureRequestEntry = CaptureRequestOverrides & {
 
 // Optional per-capture overrides for a capture render. All fields are
 // JSON-serializable so this rides through the worker queue on
-// `CaptureCardArgs`. Bounds are enforced by the shared strict parse in
+// `CaptureArgs`. Bounds are enforced by the shared strict parse in
 // `capture-spec.ts` before the job is enqueued (both the realm-server POST
 // body and the prerender server's capture route run it); the capture path
 // (`runCapture`) treats these as already-validated but still rejects
@@ -1692,8 +1692,8 @@ export interface Prerenderer {
   releaseBatch?(args: ReleaseBatchArgs): Promise<void>;
   // Optional: capture a settled card render to a PNG. Optional so test
   // stubs and older Prerenderer implementations are not forced to
-  // implement it; the capture-card worker task
-  // (`runtime-common/tasks/capture-card.ts`) probes for this method at
+  // implement it; the capture worker task
+  // (`runtime-common/tasks/capture.ts`) probes for this method at
   // runtime and surfaces a useful error if the configured prerenderer
   // doesn't support it.
   prerenderCapture?(

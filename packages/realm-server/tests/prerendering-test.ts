@@ -1105,7 +1105,7 @@ module(basename(import.meta.filename), function () {
       });
 
     // A file capture: the file is extracted and rendered through the FileDef
-    // its extension maps to, as the capture-card task asks for one.
+    // its extension maps to, as the capture task asks for one.
     let captureFile = (fileURL: string) =>
       prerenderer.prerenderCapture({
         realm: realmURL,
