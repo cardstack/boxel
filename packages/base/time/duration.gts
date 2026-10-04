@@ -141,10 +141,10 @@ class DurationFieldEdit extends Component<typeof DurationField> {
         gap: 0.375rem;
         padding: 0.5rem 0.75rem;
         background: rgba(239, 68, 68, 0.1);
-        border: 1px solid var(--destructive, #ef4444);
+        border: 1px solid var(--destructive);
         border-radius: var(--radius, 0.375rem);
         font-size: 0.75rem;
-        color: var(--destructive, #ef4444);
+        color: var(--destructive-ink);
       }
 
       .error-icon {
