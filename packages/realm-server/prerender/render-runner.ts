@@ -714,6 +714,15 @@ export class RenderRunner {
           ? { loaderEpoch: callerRenderOptions.loaderEpoch }
           : {};
       let isFileCapture = callerRenderOptions?.fileRender === true;
+      // A file capture's extract and render share the one time limit a card
+      // capture's render has, so the capture as a whole stays inside the
+      // request and job deadlines sized for a single render, and running out
+      // reads as a render timeout either way.
+      let captureDeadline = Date.now() + (opts?.timeoutMs ?? cardRenderTimeout);
+      let remainingOpts = () => ({
+        ...opts,
+        timeoutMs: Math.max(1, captureDeadline - Date.now()),
+      });
       let extractError: RenderError | undefined;
       let renderOptions: RenderRouteOptions | undefined;
       if (isFileCapture) {
@@ -727,7 +736,7 @@ export class RenderRunner {
                 fileDefCodeRef,
                 ...loaderEpochOption,
               },
-              opts,
+              opts: remainingOpts(),
               affinityKey,
               signal,
             })
@@ -743,7 +752,9 @@ export class RenderRunner {
         } else {
           // The render route reads a file render's model from this stash,
           // with the realm alongside it (a file render has no response
-          // header to learn its realm from).
+          // header to learn its realm from). It stays on the tab after this
+          // render; every capture and every visit clears both stashes before
+          // its own render, so no later render reads it.
           await abortable(signal, () =>
             page.evaluate(
               (data) => {
@@ -768,13 +779,14 @@ export class RenderRunner {
       } else {
         let nonce = String(isFileCapture ? ++this.#nonce : this.#nonce);
         let serializedOptions = serializeRenderRouteOptions(renderOptions);
+        let renderOpts = isFileCapture ? remainingOpts() : opts;
         const captureOptions: CaptureOptions = {
           // A card render reports the extensionless card id; a file render
           // reports the file's own URL.
           expectedId: isFileCapture ? url : url.replace(/\.json$/i, ''),
           expectedNonce: nonce,
-          simulateTimeoutMs: opts?.simulateTimeoutMs,
-          timeoutMs: opts?.timeoutMs,
+          simulateTimeoutMs: renderOpts?.simulateTimeoutMs,
+          timeoutMs: renderOpts?.timeoutMs,
           ...(captureSpec ? { captureSpec } : {}),
         };
         capture = await withTimeout(
@@ -791,7 +803,7 @@ export class RenderRunner {
             );
             return await runCapture(page, format, 0, captureOptions);
           },
-          opts?.timeoutMs,
+          renderOpts?.timeoutMs,
           this.#profileContext(affinityKey, url, `capture ${format}`),
           signal,
         );
@@ -846,15 +858,6 @@ export class RenderRunner {
         pool: poolInfo,
       };
     } finally {
-      // A file capture's stash names this render's file; a later render on
-      // this pooled tab must never read it.
-      if (callerRenderOptions?.fileRender) {
-        await page
-          .evaluate(() => {
-            delete (globalThis as any).__boxelFileRenderData;
-          })
-          .catch(() => undefined);
-      }
       release();
     }
   }

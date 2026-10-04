@@ -51,8 +51,8 @@ export interface CaptureCardArgs extends JSONTypes.Object {
   cardId: string;
   // Which rendering captures `cardId`. A card renders through the card
   // branch; a file is extracted and rendered through its FileDef, the way
-  // indexing renders it. `null` means a card, the only kind a job carried
-  // before files could be captured.
+  // indexing renders it. `null` means a card, so a job that carries no kind
+  // renders through the card branch.
   sourceKind: CaptureSourceKind | null;
   format: OnDemandCaptureFormat;
   // Optional per-capture overrides (viewport, scale, fullPage, clip). Typed as
