@@ -388,7 +388,7 @@
           "type": "loki",
           "uid": "loki"
         },
-        "description": "How often callers the realm ACL declined reach the policy gate, by realm and by what the ACL declined (all, or writes only). A caller the ACL allows never reaches the gate and records nothing, so a realm whose callers are all realm-authorized should sit at zero; traffic here for such a realm means the ordering guarantee broke. Capability checks are excluded: they are their own kind.",
+        "description": "How often callers the realm ACL declined reach the policy gate, by realm and by what the ACL declined (all, or writes only). A caller the ACL allows never reaches the gate and records nothing, so a realm whose callers are all realm-authorized should sit at zero; traffic here for such a realm means the ordering guarantee broke. Capability checks are excluded: they are their own kind. A write the gate leaves to the lock counts here once, as its gate-time pending record; a pending record with no lock record after it is a write whose request ended before the lock (a failed batch, an aborted request, an explain), not a backlog.",
         "fieldConfig": {
           "defaults": {
             "color": {

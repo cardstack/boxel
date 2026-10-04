@@ -20,7 +20,7 @@ import {
   readsPathAlike,
 } from './policy-filter.ts';
 import { classifyPredicateTiers } from './policy-tiers.ts';
-import { elapsedMs, emitPolicyCompile } from './telemetry.ts';
+import { elapsedMs, emitPolicyCompile, recordSafely } from './telemetry.ts';
 import {
   reachIssues,
   type ReachingGrant,
@@ -366,17 +366,19 @@ export class RealmPolicyCache {
       logIssues(card, compilation.compiled.issues);
     }
     let { compiled } = compilation;
-    emitPolicyCompile({
-      kind: 'policy-compile',
-      realmURL: this.#env.realmURL,
-      card,
-      outcome: compilation === current ? 'revalidated' : 'compiled',
-      uncompilable: compiled.uncompilable === true,
-      rules: compiled.rules.length,
-      grants: compiled.rules.reduce((n, rule) => n + rule.grants.length, 0),
-      issues: compiled.issues.length,
-      durationMs: elapsedMs(started),
-    });
+    recordSafely('policy-compile', () =>
+      emitPolicyCompile({
+        kind: 'policy-compile',
+        realmURL: this.#env.realmURL,
+        card,
+        outcome: compilation === current ? 'revalidated' : 'compiled',
+        uncompilable: compiled.uncompilable === true,
+        rules: compiled.rules.length,
+        grants: compiled.rules.reduce((n, rule) => n + rule.grants.length, 0),
+        issues: compiled.issues.length,
+        durationMs: elapsedMs(started),
+      }),
+    );
     if (row?.failureWithheld) {
       this.#revisitWithheld(card, row);
     }

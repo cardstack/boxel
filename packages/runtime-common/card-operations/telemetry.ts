@@ -501,6 +501,23 @@ export function emitPolicyCompile(event: PolicyCompileEvent): void {
   );
 }
 
+// Build and write one record, logging and swallowing anything that throws on
+// the way. A record describes a decision and never changes one: a sink or a
+// log transport that throws must not turn an admitted invocation into a 500,
+// or replace the error the decision itself raised.
+export function recordSafely(kind: string, record: () => void): void {
+  try {
+    record();
+  } catch (e: unknown) {
+    (recordFailureLog ??= logger('realm:policy')).warn(
+      `could not record a ${kind} on ${OPERATIONS_CHANNEL}: ` +
+        (e instanceof Error ? e.message : String(e)),
+    );
+  }
+}
+
+let recordFailureLog: ReturnType<typeof logger> | undefined;
+
 // Elapsed milliseconds since `started`, a `performance.now()` reading, to the
 // hundredth. A decision is commonly well under a millisecond, which a whole
 // number would report as nothing.

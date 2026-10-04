@@ -22,6 +22,7 @@ import type {
 import {
   elapsedMs,
   emitPolicyDecision,
+  recordSafely,
   emitPolicySnapshotRead,
   type PolicyDecisionEvent,
   type PolicyDecisionReason,
@@ -783,68 +784,70 @@ function recordDecision(
     failed?: unknown;
   },
 ): void {
-  let decision = how.decision;
-  let outcome: PolicyDecisionEvent['outcome'];
-  let reason: PolicyDecisionReason;
-  let admitted: MatchedGrant | undefined;
-  if (how.failed !== undefined || !decision) {
-    outcome = 'error';
-    reason = isPolicyUnavailable(how.failed)
-      ? 'policy-unavailable'
-      : 'gate-failed';
-  } else if ('grant' in decision && !('kind' in decision)) {
-    // An admission under the lock.
-    outcome = 'allow';
-    reason = 'granted';
-    admitted = decision;
-  } else if (
-    decision.kind === 'pending' ||
-    (decision.kind === 'granted' && leavesToLock(decision))
-  ) {
-    outcome = 'pending';
-    reason = 'pending';
-  } else if (decision.kind === 'granted') {
-    outcome = 'allow';
-    reason = 'granted';
-    admitted = decision.grant;
-  } else if (decision.kind === GATE_MISSING.kind) {
-    outcome = 'deny';
-    reason = 'target-missing';
-  } else if (decision.kind === GATE_FAULTED.kind) {
-    outcome = 'error';
-    reason = 'predicate-threw';
-  } else if (decision.kind === GATE_REFUSED.kind) {
-    outcome = 'deny';
-    reason = notes.refusal ?? 'predicate';
-  } else {
-    // A caller the ACL allowed, which records nothing.
-    return;
-  }
-  let caller = scope.caller;
-  emitPolicyDecision({
-    kind: 'policy-decision',
-    realmURL: core.realmURL,
-    actor: caller.kind === 'user' ? caller.actor : null,
-    operation: name,
-    base,
-    targetType: notes.targetType ?? null,
-    transport: scope.route.transport,
-    route: scope.route.route,
-    coarseDeclined: scope.coarseDeclined === 'all' ? 'all' : 'writes',
-    decidedAt: how.decidedAt,
-    outcome,
-    reason,
-    rule: admitted?.rule.path ?? null,
-    grant: admitted?.grant.path ?? null,
-    rules: notes.rules.join(','),
-    grants: notes.grants.join(','),
-    tier: notes.tier,
-    predicates: notes.predicates,
-    predicateMs: Math.round(notes.predicateMs * 100) / 100,
-    evaluationMs: elapsedMs(started),
-    // An explain carries a trace and is not advisory. A capability check
-    // carries one too, and records nothing.
-    hypothetical: scope.trace !== undefined,
+  recordSafely('policy-decision', () => {
+    let decision = how.decision;
+    let outcome: PolicyDecisionEvent['outcome'];
+    let reason: PolicyDecisionReason;
+    let admitted: MatchedGrant | undefined;
+    if (how.failed !== undefined || !decision) {
+      outcome = 'error';
+      reason = isPolicyUnavailable(how.failed)
+        ? 'policy-unavailable'
+        : 'gate-failed';
+    } else if ('grant' in decision && !('kind' in decision)) {
+      // An admission under the lock.
+      outcome = 'allow';
+      reason = 'granted';
+      admitted = decision;
+    } else if (
+      decision.kind === 'pending' ||
+      (decision.kind === 'granted' && leavesToLock(decision))
+    ) {
+      outcome = 'pending';
+      reason = 'pending';
+    } else if (decision.kind === 'granted') {
+      outcome = 'allow';
+      reason = 'granted';
+      admitted = decision.grant;
+    } else if (decision.kind === GATE_MISSING.kind) {
+      outcome = 'deny';
+      reason = 'target-missing';
+    } else if (decision.kind === GATE_FAULTED.kind) {
+      outcome = 'error';
+      reason = 'predicate-threw';
+    } else if (decision.kind === GATE_REFUSED.kind) {
+      outcome = 'deny';
+      reason = notes.refusal ?? 'predicate';
+    } else {
+      // A caller the ACL allowed, which records nothing.
+      return;
+    }
+    let caller = scope.caller;
+    emitPolicyDecision({
+      kind: 'policy-decision',
+      realmURL: core.realmURL,
+      actor: caller.kind === 'user' ? caller.actor : null,
+      operation: name,
+      base,
+      targetType: notes.targetType ?? null,
+      transport: scope.route.transport,
+      route: scope.route.route,
+      coarseDeclined: scope.coarseDeclined === 'all' ? 'all' : 'writes',
+      decidedAt: how.decidedAt,
+      outcome,
+      reason,
+      rule: admitted?.rule.path ?? null,
+      grant: admitted?.grant.path ?? null,
+      rules: notes.rules.join(','),
+      grants: notes.grants.join(','),
+      tier: notes.tier,
+      predicates: notes.predicates,
+      predicateMs: Math.round(notes.predicateMs * 100) / 100,
+      evaluationMs: elapsedMs(started),
+      // An explain carries a trace and is not advisory. A capability check
+      // carries one too, and records nothing.
+      hypothetical: scope.trace !== undefined,
+    });
   });
 }
 
@@ -1198,20 +1201,22 @@ function recordLockDecision(
   started: number,
   how: { decision?: Admission; failed?: unknown },
 ): void {
-  let matchedOn = decision.matchedOn;
-  notes.typed(matchedOn?.targetType ?? decision.stored?.matchedType);
-  if (decision.kind === 'pending') {
-    for (let { grant } of decision.grants) {
-      notes.grants.push(grant.path);
+  recordSafely('policy-decision', () => {
+    let matchedOn = decision.matchedOn;
+    notes.typed(matchedOn?.targetType ?? decision.stored?.matchedType);
+    if (decision.kind === 'pending') {
+      for (let { grant } of decision.grants) {
+        notes.grants.push(grant.path);
+      }
+      notes.rules = [...new Set(decision.grants.map(({ rule }) => rule.path))];
+    } else {
+      notes.rules = [decision.grant.rule.path];
+      notes.grants = [decision.grant.grant.path];
     }
-    notes.rules = [...new Set(decision.grants.map(({ rule }) => rule.path))];
-  } else {
-    notes.rules = [decision.grant.rule.path];
-    notes.grants = [decision.grant.grant.path];
-  }
-  recordDecision(core, scope, name, matchedOn?.base ?? null, notes, started, {
-    decidedAt: 'lock',
-    ...how,
+    recordDecision(core, scope, name, matchedOn?.base ?? null, notes, started, {
+      decidedAt: 'lock',
+      ...how,
+    });
   });
 }
 

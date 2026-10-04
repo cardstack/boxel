@@ -13,6 +13,7 @@ import {
 import {
   elapsedMs,
   emitPolicySearchScope,
+  recordSafely,
   type PolicySearchScopeEvent,
 } from './telemetry.ts';
 import { FIELD_KEYED_OPERATORS } from './policy-filter.ts';
@@ -192,19 +193,21 @@ export async function policyQueryScope(
     if (invocation.advisory) {
       return;
     }
-    emitPolicySearchScope({
-      kind: 'policy-search-scope',
-      realmURL: core.realmURL,
-      actor: principal.user,
-      operation,
-      types: types.map(typeLabel).join(','),
-      transport: invocation.transport ?? 'search',
-      outcome,
-      rules: [...new Set(contributed.map(({ rule }) => rule.path))].join(','),
-      grants: contributed.map(({ grant }) => grant.path).join(','),
-      evaluationMs: elapsedMs(started),
-      hypothetical: invocation.hypothetical ?? false,
-    });
+    recordSafely('policy-search-scope', () =>
+      emitPolicySearchScope({
+        kind: 'policy-search-scope',
+        realmURL: core.realmURL,
+        actor: principal.user,
+        operation,
+        types: types.map(typeLabel).join(','),
+        transport: invocation.transport ?? 'search',
+        outcome,
+        rules: [...new Set(contributed.map(({ rule }) => rule.path))].join(','),
+        grants: contributed.map(({ grant }) => grant.path).join(','),
+        evaluationMs: elapsedMs(started),
+        hypothetical: invocation.hypothetical ?? false,
+      }),
+    );
   };
   let scope: PolicyQueryScope;
   try {

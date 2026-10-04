@@ -459,6 +459,27 @@ module(basename(import.meta.filename), function (hooks) {
     assertNothingRecordedFromContent(assert);
   });
 
+  test('a record that cannot be written changes no decision', async function (assert) {
+    let fail = () => {
+      throw new Error('the sink is down');
+    };
+    setPolicyDecisionSink(fail);
+    setPolicySearchScopeSink(fail);
+    setPolicyCompileSink(fail);
+    assert.strictEqual(
+      (await getCard(BULLETIN_1, AUTH.teacher())).status,
+      200,
+      'an admitted read is still served',
+    );
+    assert.strictEqual(
+      (await getCard(ROOM_3, AUTH.teacher())).status,
+      404,
+      'a refusal is still told as it was',
+    );
+    let search = await federatedSearch(TEACHER, [EDUCATION]);
+    assert.strictEqual(search.status, 200, search.text);
+  });
+
   test('an allow names the rule and grant that admitted it', async function (assert) {
     let response = await getCard(BULLETIN_1, AUTH.teacher());
     assert.strictEqual(response.status, 200);
