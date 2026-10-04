@@ -102,8 +102,10 @@ export class MatrixClient {
       // Every process shares one device, so deleting it revokes all of
       // their tokens at once. Logging in again recreates the device.
       // A concurrent request may already have logged in again; reuse that.
+      // Otherwise drop the settled login, which login() would return as is.
       if (this.access?.accessToken === accessToken) {
         this.access = undefined;
+        this.loginPromise = undefined;
       }
       if (!this.access) {
         await this.login();
