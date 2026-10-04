@@ -445,9 +445,13 @@ export async function findLiveInstanceGeneration(
 
 // The generation of a live index row of either type: an instance (see
 // `findLiveInstanceGeneration`) or a file's own row, which is what keys an
-// on-demand capture of a workspace file. The predicate is the query engine's
-// `#liveRowConditions` for the same type, so a file is live here exactly when
-// the engine's file-row capture gates read it as live.
+// on-demand capture of a workspace file. Otherwise the predicate is the
+// query engine's `#liveRowConditions` for the same type. An instance is
+// addressable by its `file_alias` (the extensionless id) as well as its URL,
+// but a file only by its own URL: a file row's alias drops `.json` and
+// executable extensions, so matching it would let an extensionless file
+// request land on the row of `<that>.json` or `<that>.gts` and key its
+// capture exactly as a card capture of that id is keyed.
 export async function findLiveRowGeneration(
   dbAdapter: DBAdapter,
   {
@@ -460,8 +464,7 @@ export async function findLiveRowGeneration(
     `SELECT i.generation FROM boxel_index AS i ${prerenderedJoin()}
      WHERE (i.url =`,
     param(url),
-    `OR i.file_alias =`,
-    param(url),
+    ...(type === 'instance' ? [`OR i.file_alias =`, param(url)] : []),
     `) AND i.realm_url =`,
     param(realmURL),
     `AND i.type =`,

@@ -1524,11 +1524,17 @@ module(basename(import.meta.filename), function () {
 
     const FILE_URL = `${REALM_URL}brand/guide.html`;
 
-    async function seedFileRow(generation = 1) {
+    async function seedFileRow(
+      generation = 1,
+      {
+        url = FILE_URL,
+        alias = FILE_URL,
+      }: { url?: string; alias?: string } = {},
+    ) {
       let { nameExpressions, valueExpressions } = asExpressions(
         {
-          url: FILE_URL,
-          file_alias: FILE_URL,
+          url,
+          file_alias: alias,
           realm_url: REALM_URL,
           type: 'file',
           generation,
@@ -1606,6 +1612,23 @@ module(basename(import.meta.filename), function () {
       let attrs = response.body.data.attributes;
       assert.strictEqual(attrs.base64, PNG_BASE64, 'bytes come from the store');
       assert.strictEqual(attrs.captures[0].url, null, 'no served URL');
+    });
+
+    test('an extensionless fileURL does not resolve to a file row by its alias', async function (assert) {
+      // A `.json` file's row carries the extensionless id as its alias — the
+      // spelling a card capture of that id is keyed by. A file request in that
+      // spelling must not find the row, or it would key its capture as the
+      // card's.
+      await seedFileRow(1, { url: `${CARD_ID}.json`, alias: CARD_ID });
+      let { queue, published } = makePersistQueue('ready');
+
+      await post(persistApp(queue), {
+        realmURL: REALM_URL,
+        fileURL: CARD_ID,
+        format: 'isolated',
+      }).expect(201);
+
+      assert.strictEqual((published[0]?.args as any)?.persist, null);
     });
 
     test("an instance row does not stand in for a file's liveness", async function (assert) {
