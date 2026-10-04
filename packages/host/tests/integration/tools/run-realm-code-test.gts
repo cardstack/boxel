@@ -1,3 +1,5 @@
+import { settled } from '@ember/test-helpers';
+
 import { getService } from '@universal-ember/test-support';
 
 import { module, test } from 'qunit';
@@ -212,25 +214,50 @@ return found;`,
     assert.strictEqual(source.status, 200);
   });
 
-  test('a realm call the script does not await fails the run and saves nothing', async function (assert) {
+  test('a realm call the script does not await fails the run, and the report says whether it saved', async function (assert) {
     let toolService = getService('tool-service');
     let cardService = getService('card-service');
     let command = new RunRealmCodeTool(toolService.toolContext);
 
-    await assert.rejects(
-      command.execute({
+    let error: Error | undefined;
+    try {
+      await command.execute({
         realm: testRealmURL,
         roomId: '!room:example.com',
         code: `realm.fs.writeText('late.json', '{}');`,
-      }),
-      /await every realm call.*No file was saved/,
+      });
+    } catch (e) {
+      error = e as Error;
+    }
+    assert.ok(error, 'the run rejected');
+    assert.true(
+      /await every realm call/.test(error?.message ?? ''),
+      `the error says to await every realm call: ${error?.message}`,
     );
-    // The write was still in flight when the run failed; the session stops
-    // it, so it does not land after the report.
+    // The write races the end of the run: it is saved if it reaches the save
+    // before the session closes, and refused if it does not. Either is
+    // correct. What must hold is that the report and the realm agree, and
+    // that nothing lands after the report.
+    let reportedSaved = /Files already saved by this run: .*late\.json/.test(
+      error?.message ?? '',
+    );
+    let reportedNoneSaved = /No file was saved/.test(error?.message ?? '');
+    assert.notStrictEqual(
+      reportedSaved,
+      reportedNoneSaved,
+      `the report says either that late.json was saved or that nothing was: ${error?.message}`,
+    );
+    await settled();
     let source = await cardService.getSource(
       new URL(`${testRealmURL}late.json`),
     );
-    assert.strictEqual(source.status, 404);
+    assert.strictEqual(
+      source.status,
+      reportedSaved ? 200 : 404,
+      reportedSaved
+        ? 'the file the report names as saved is in the realm'
+        : 'the report said nothing was saved, and nothing landed after it',
+    );
   });
 
   test('a script that never returns is stopped by the sandbox, not by the caller', async function (assert) {
