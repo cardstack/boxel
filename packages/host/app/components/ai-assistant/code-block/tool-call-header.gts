@@ -127,8 +127,13 @@ export default class CodeBlockToolCallHeader extends Component<CodeBlockToolCall
       .tool-action {
         margin-left: var(--boxel-sp-5xs);
       }
-      /* Sized like the apply button it sits beside. */
-      .secondary-action {
+      /* Sized like the apply button it sits beside, outlined in light so
+        it reads on the dark header. The header class outranks the button
+        kind's own colors. */
+      .code-block-header .secondary-action {
+        --boxel-button-color: transparent;
+        --boxel-button-text-color: var(--boxel-light);
+        --boxel-button-border: 1px solid var(--boxel-light);
         --boxel-button-font: 600 var(--boxel-font-xs);
         padding: 3px 10px;
         min-width: inherit;
